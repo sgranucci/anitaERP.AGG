@@ -166,6 +166,7 @@ class Voucher_GuiaRepository implements Voucher_GuiaRepositoryInterface
 								->whereNotExists(function ($query) {
 									$query->select(DB::raw(1))
 											->from('rendicionreceptivo')
+											->where('deleted_at', null)
 											->whereColumn('voucher_guia.ordenservicio_id', 'rendicionreceptivo.ordenservicio_id');
 								})
 								->get();

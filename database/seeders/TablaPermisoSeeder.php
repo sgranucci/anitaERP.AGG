@@ -16,14 +16,14 @@ class TablaPermisoSeeder extends Seeder
     public function run()
     {
         $now = Carbon::now()->toDateTimeString();
-        $permisos = [
-            array('id' => '565', 'nombre' => 'Ingresa rendicion receptivo', 'slug' => 'crea-rendicion-receptivo', 'created_at' => $now, 'updated_at' => $now),
-            array('id' => '566', 'nombre' => 'Lista rendicion receptivo', 'slug' => 'lista-rendicion-receptivo', 'created_at' => $now, 'updated_at' => $now),
-            array('id' => '567', 'nombre' => 'Edita rendicion receptivo', 'slug' => 'edita-rendicion-receptivo', 'created_at' => $now, 'updated_at' => $now),
-            array('id' => '568', 'nombre' => 'Actualiza rendicion receptivo', 'slug' => 'actualiza-rendicion-receptivo', 'created_at' => $now, 'updated_at' => $now),
-            array('id' => '569', 'nombre' => 'Borra rendicion receptivo', 'slug' => 'borra-rendicion-receptivo', 'created_at' => $now, 'updated_at' => $now),
+        $permiso = [
+            array('id' => '3076', 'nombre' => 'Ingresa cliente uif', 'slug' => 'crea-cliente-uif', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '3077', 'nombre' => 'Lista cliente uif', 'slug' => 'lista-cliente-uif', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '3078', 'nombre' => 'Edita cliente uif', 'slug' => 'edita-cliente-uif', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '3079', 'nombre' => 'Actualiza cliente uif', 'slug' => 'actualiza-cliente-uif', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '3080', 'nombre' => 'Borra cliente uif', 'slug' => 'borra-cliente-uif', 'created_at' => $now, 'updated_at' => $now),
 
         ];
-        DB::table('permiso')->insert($permisos);
+        DB::table('permiso')->insert($permiso);
     }
 }

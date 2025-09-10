@@ -25,6 +25,7 @@ if (!function_exists('canUser')) {
                     $query->where('rol_id', session()->get('rol_id'));
                 })->get()->pluck('slug')->toArray();
             });
+
             if (!in_array($permiso, $permisos)) {
                 if ($redirect) {
                     if (!request()->ajax())
@@ -163,3 +164,32 @@ function calculaCoeficienteMoneda($aMoneda, $deMoneda, $cotizacion)
 
     return 1.;
 }
+
+function chequeaPermisoTicket()
+{
+    // Verifica permisos
+    $flUsuario = $flTecnico = $flSupervisor = $flEncargado = false;
+
+    $rolId = session()->get('rol_id');
+    $permisos = cache()->tags('Permiso')->rememberForever("Permiso.rolid.$rolId", function () {
+            return Permiso::whereHas('roles', function ($query) {
+                $query->where('rol_id', session()->get('rol_id'));
+            })->get()->pluck('slug')->toArray();
+        });
+    $permiso = '';
+    if (in_array('usuario-ticket', $permisos)) 
+        $permiso = 'usuario';        
+
+    if (in_array('tecnico-ticket', $permisos))   
+        $permiso = 'tecnico';
+
+    if (in_array('encargado-ticket', $permisos))   
+        $permiso = 'encargado';
+
+    if (in_array('supervisor-ticket', $permisos))   
+        $permiso = 'supervisor';
+
+    return $permiso;
+}
+
+

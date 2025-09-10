@@ -7,7 +7,7 @@
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
 
 <script>
-    function eliminarPedido(event) {
+    function eliminarVoucher(event) {
         var opcion = confirm("Desea eliminar el pedido?");
         if(!opcion) {
             event.preventDefault();
@@ -88,7 +88,7 @@
                        			@if (can('borrar-voucher', false))
                                 <form action="{{route('eliminar_voucher', ['id' => $data->id])}}" class="d-inline form-eliminar" method="POST">
                                     @csrf @method("delete")
-                                    <button type="submit" onclick="eliminarPedido(event)" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">
+                                    <button type="submit" onclick="eliminarVoucher(event)" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">
                                         <i class="fa fa-times-circle text-danger"></i>
                                     </button>
                                 </form>

@@ -26,33 +26,35 @@
 	</select>
 </div>
 <div class="form-group row">
-    <label for="codigo" class="col-lg-3 col-form-label requerido">C&oacute;digo lista</label>
+    <label for="codigo" class="col-lg-3 col-form-label requerido">C&oacute;digo ANITA</label>
     <div class="col-lg-8">
     	<input type="number" name="codigo" id="codigo" class="form-control" value="{{old('codigo', $data->codigo ?? '')}}" required/>
     </div>
 </div>
-<div class="form-group row">
-	<label for="desdetalle" class="col-lg-3 col-form-label requerido">Desde talle</label>
-	<div class="col-lg-2">
-		<input type="text" name="desdetalle" id="desdetalle" class="form-control" value="{{old('desdetalle', $data->desdetalle)}}" required/>
+@if (config('app.empresa') == 'Calzados Ferli')
+	<div class="form-group row">
+		<label for="desdetalle" class="col-lg-3 col-form-label requerido">Desde talle</label>
+		<div class="col-lg-2">
+			<input type="text" name="desdetalle" id="desdetalle" class="form-control" value="{{old('desdetalle', $data->desdetalle)}}" required/>
+		</div>
 	</div>
-</div>
-<div class="form-group row">
-	<label for="hastatalle" class="col-lg-3 col-form-label requerido">Hasta talle</label>
-	<div class="col-lg-2">
-		<input type="text" name="hastatalle" id="hastatalle" class="form-control" value="{{old('hastatalle', $data->hastatalle)}}" required/>
+	<div class="form-group row">
+		<label for="hastatalle" class="col-lg-3 col-form-label requerido">Hasta talle</label>
+		<div class="col-lg-2">
+			<input type="text" name="hastatalle" id="hastatalle" class="form-control" value="{{old('hastatalle', $data->hastatalle)}}" required/>
+		</div>
 	</div>
-</div>
-<div class="form-group row">
-    <label for="tiponumeracion_id" class="col-lg-3 col-form-label requerido">Tipo de numeraci&oacute;n</label>
-	<select name="tiponumeracion_id" class="col-lg-3 form-control">
-		<option value="">-- Elija tipo de numeraci&oacute;n --</option>
-		@foreach ($tiponumeracion_query as $tiponumeracion)
-			<option value="{{ $tiponumeracion->id }}"
-				@if (old('tiponumeracion', $linea->tiponumeracion_id ?? '') == $tiponumeracion->id) selected @endif
-				>{{ $tiponumeracion->nombre }}
-			</option>
-		@endforeach
-	</select>
-</div>
+	<div class="form-group row">
+		<label for="tiponumeracion_id" class="col-lg-3 col-form-label requerido">Tipo de numeraci&oacute;n</label>
+		<select name="tiponumeracion_id" class="col-lg-3 form-control">
+			<option value="">-- Elija tipo de numeraci&oacute;n --</option>
+			@foreach ($tiponumeracion_query as $tiponumeracion)
+				<option value="{{ $tiponumeracion->id }}"
+					@if (old('tiponumeracion', $linea->tiponumeracion_id ?? '') == $tiponumeracion->id) selected @endif
+					>{{ $tiponumeracion->nombre }}
+				</option>
+			@endforeach
+		</select>
+	</div>
+@endif
 

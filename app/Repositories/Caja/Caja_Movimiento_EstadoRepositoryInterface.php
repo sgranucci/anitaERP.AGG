@@ -10,6 +10,6 @@ interface Caja_Movimiento_EstadoRepositoryInterface
     public function update(array $data, $id);
     public function find($id);
     public function findOrFail($id);
-    public function delete($asiento_id, $codigo);
+    public function delete($caja_movimiento_id, $codigo);
 }
 

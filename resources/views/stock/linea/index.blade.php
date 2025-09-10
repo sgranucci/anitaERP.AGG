@@ -45,11 +45,13 @@ M&oacute;dulos
                             <th class="width20">ID</th>
                             <th>Nombre</th>
                             <th>C&oacute;digo ANITA</th>
-                            <th>Tipo numeraci&oacute;n</th>
-                            <th>Max.Hormas</th>
-                            <th>Numeraci&oacute;n</th>
-                            <th>Lista WEB</th>
-                            <th>Modulos</th>
+							@if (config('app.empresa') == 'Calzados Ferli')
+								<th>Tipo numeraci&oacute;n</th>
+								<th>Max.Hormas</th>
+								<th>Numeraci&oacute;n</th>
+								<th>Lista WEB</th>
+								<th>Modulos</th>
+							@endif
                             <th class="width80" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -65,25 +67,27 @@ M&oacute;dulos
         						<td>
             						{{ $linea->codigo ?? '' }}
         						</td>
-        						<td>
-            						{{ $linea->tiponumeraciones->nombre ?? '' }}
-        						</td>
-        						<td>
-            						{{ $linea->maxhorma ?? '' }}
-        						</td>
-        						<td>
-            						{{ $linea->numeraciones->nombre ?? '' }}
-        						</td>
-        						<td>
-            						{{ $linea->listaprecios->nombre ?? '' }}
-        						</td>
-        						<td>
-            						<ul>
-									@foreach($linea->modulos as $item)
-                						<li>{{ $item->nombre }}</li>
-            						@endforeach
-            						</ul>
-        						</td>
+								@if (config('app.empresa') == 'Calzados Ferli')
+									<td>
+										{{ $linea->tiponumeraciones->nombre ?? '' }}
+									</td>
+									<td>
+										{{ $linea->maxhorma ?? '' }}
+									</td>
+									<td>
+										{{ $linea->numeraciones->nombre ?? '' }}
+									</td>
+									<td>
+										{{ $linea->listaprecios->nombre ?? '' }}
+									</td>
+									<td>
+										<ul>
+										@foreach($linea->modulos as $item)
+											<li>{{ $item->nombre }}</li>
+										@endforeach
+										</ul>
+									</td>
+								@endif
         						<td>
                        			@if (can('editar-lineas', false))
                                 	<a href="{{route('editar_linea', ['id' => $linea->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">

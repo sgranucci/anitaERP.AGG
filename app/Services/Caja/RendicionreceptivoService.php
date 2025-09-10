@@ -92,6 +92,8 @@ class RendicionreceptivoService
             // Guarda tablas asociadas
             if ($rendicionreceptivo)
             {
+                $id = $rendicionreceptivo->id;
+                
                 $rendicionreceptivo_caja_movimiento = $this->rendicionreceptivo_caja_movimientoRepository->create($data, $rendicionreceptivo->id);
                 $rendicionreceptivo_voucher = $this->rendicionreceptivo_voucherRepository->create($data, $rendicionreceptivo->id);
                 $rendicionreceptivo_formapago = $this->rendicionreceptivo_formapagoRepository->create($data, $rendicionreceptivo->id);
@@ -484,13 +486,28 @@ class RendicionreceptivoService
         $voucher = $this->voucher_guiaRepository->leeOrdenServicioVoucher();
 
         $caja_movimiento = $this->caja_movimientoRepository->leeOrdenServicioCajaMovimiento();
-
         $ordenservicio_ids = [];
         foreach($voucher as $orden)
-            $ordenservicio_ids[] = $orden->ordenservicio_id;
+        {
+            for ($i = 0, $flEncontro = false; $i < count($ordenservicio_ids); $i++)
+            {
+                if ($ordenservicio_ids[$i] == $orden->ordenservicio_id)
+                    $flEncontro = true;
+            }
+            if (!$flEncontro)
+                $ordenservicio_ids[] = $orden->ordenservicio_id;
+        }
         
         foreach($caja_movimiento as $orden)
-            $ordenservicio_ids[] = $orden->ordenservicio_id;
+        {
+            for ($i = 0, $flEncontro = false; $i < count($ordenservicio_ids); $i++)
+            {
+                if ($ordenservicio_ids[$i] == $orden->ordenservicio_id)
+                    $flEncontro = true;
+            }
+            if (!$flEncontro)
+                $ordenservicio_ids[] = $orden->ordenservicio_id;
+        }            
 
         return $ordenservicio_ids;
     }

@@ -128,15 +128,15 @@ class Caja_Movimiento_CuentacajaRepository implements Caja_Movimiento_Cuentacaja
 			}
 			else
 				$i = 0;
-
 			for ($i_movimiento = $i; $i_movimiento < count($cuentacaja_ids); $i_movimiento++)
 			{
 				if ($cuentacaja_ids[$i_movimiento] != '') 
 				{
+					if (!isset($observaciones[$i_movimiento]))
+						$observaciones[$i_movimiento] = ' ';
 					$monto = 0;
 					if ($montos[$i_movimiento] != null && $montos[$i_movimiento] != 0)
 						$monto = $montos[$i_movimiento] * $signo;
-
 					$caja_movimiento_cuentacaja = $this->model->create([
 						"caja_movimiento_id" => $id,
 						"fecha" => $fecha,

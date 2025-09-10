@@ -30,6 +30,7 @@
                         <tr>
                             <th class="width20">ID</th>
                             <th>Nombre</th>
+                            <th>Abreviatura</th>
                             <th class="width80" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -38,6 +39,7 @@
                         <tr>
                             <td>{{$data->id}}</td>
                             <td>{{$data->nombre}}</td>
+                            <td>{{$data->abreviatura}}</td>
                             <td>
                        			@if (can('editar-tipo-articulo', false))
                                 	<a href="{{route('editar_tipoarticulo', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">

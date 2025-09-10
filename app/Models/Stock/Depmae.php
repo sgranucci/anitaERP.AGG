@@ -5,11 +5,14 @@ namespace App\Models\Stock;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use App\Traits\Stock\DepmaeTrait;
 use App\ApiAnita;
 
 class Depmae extends Model
 {
-    protected $fillable = ['nombre'];
+    use DepmaeTrait;
+
+    protected $fillable = ['nombre', 'tipodeposito', 'codigo'];
     protected $table = 'depmae';
     protected $keyField = 'depm_deposito';
 
@@ -37,9 +40,8 @@ class Depmae extends Model
             'acc' => 'list', 'tabla' => $this->table, 
             'campos' => '
                 depm_deposito,
-		depm_desc,
-		depm_maneja_part,
-		depm_cta_contable
+                depm_desc,
+                depm_tipo_deposito
             ' , 
             'whereArmado' => " WHERE ".$this->keyField." = '".$key."' " 
         );
@@ -47,9 +49,14 @@ class Depmae extends Model
 
         if (count($dataAnita) > 0) {
             $data = $dataAnita[0];
+
+            $tipoDeposito = array_search($data->depm_tipo_deposito, 
+                array_column(Depmae::$enumTipoDeposito, 'valor', 'nombre'));
+
             Depmae::create([
-                "id" => $key,
-                "nombre" => $data->depm_desc
+                "nombre" => $data->depm_desc,
+                "tipodeposito" => $tipoDeposito,
+                "codigo" => $key
             ]);
         }
     }
@@ -57,23 +64,49 @@ class Depmae extends Model
 	public function guardarAnita($request, $id) {
         $apiAnita = new ApiAnita();
 
-        $data = array( 'tabla' => 'depmae', 'acc' => 'insert',
-            'campos' => ' depm_deposito, depm_desc, depm_maneja_part, depm_cta_contable ',
-            'valores' => " '".$id."', '".$request->nombre."', 'S', 0"
-        );
+        if (config('app.empresa') == 'Calzados Ferli')
+            $data = array( 'tabla' => 'depmae', 'acc' => 'insert',
+                'campos' => ' depm_deposito, depm_desc, depm_maneja_part, depm_cta_contable ',
+                'valores' => " '".$id."', '".$request->nombre."', 'S', 0"
+            );
+        else
+        {
+            $tipoDeposito = array_search($request->tipodeposito, 
+                array_column(Depmae::$enumTipoDeposito, 'nombre', 'valor'));
+
+            $data = array( 'tabla' => 'depmae', 'acc' => 'insert',
+                'campos' => ' depm_deposito, depm_desc, depm_maneja_part, depm_tipo_deposito ',
+                'valores' => " '".$request->codigo."', '".$request->nombre."', 'S', '".$tipoDeposito."' "
+            );
+        }
         $apiAnita->apiCall($data);
 	}
 
 	public function actualizarAnita($request, $id) {
         $apiAnita = new ApiAnita();
-		$data = array( 'acc' => 'update', 'tabla' => 'depmae', 'valores' => " depm_desc = '".
-					$request->nombre."' ", 'whereArmado' => " WHERE depm_deposito = '".$id."' " );
+
+        if (config('app.empresa') == 'Calzados Ferli')
+            $data = array( 'acc' => 'update', 'tabla' => 'depmae', 'valores' => " depm_desc = '".
+                        $request->nombre."' ", 'whereArmado' => " WHERE depm_deposito = '".$id."' " );
+        else
+        {
+            $tipoDeposito = array_search($request->tipodeposito, 
+                array_column(Depmae::$enumTipoDeposito, 'nombre', 'valor'));
+
+            $data = array( 'acc' => 'update', 'tabla' => 'depmae', 'valores' => 
+                        " depm_desc = '".$request->nombre."',
+                          depm_tipo_deposito = '".$tipoDeposito."' ", 
+                        'whereArmado' => " WHERE depm_deposito = '".$request->codigo."' " );            
+        }
         $apiAnita->apiCall($data);
 	}
 
 	public function eliminarAnita($id) {
         $apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'delete', 'tabla' => 'depmae', 'whereArmado' => " WHERE depm_deposito = '".$id."' " );
+        if (config('app.empresa') == 'Calzados Ferli')
+            $data = array( 'acc' => 'delete', 'tabla' => 'depmae', 'whereArmado' => " WHERE depm_deposito = '".$id."' " );
+        else
+            $data = array( 'acc' => 'delete', 'tabla' => 'depmae', 'whereArmado' => " WHERE depm_deposito = '".$id."' " );
         $apiAnita->apiCall($data);
 	}
 }

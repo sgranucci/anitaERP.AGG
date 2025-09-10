@@ -491,9 +491,9 @@
 		let incluido = parseInt($(ptrElemento).parents('tr').find(".incluido").val());
 		let opcional = parseInt($(ptrElemento).parents('tr').find(".opcional").val());
 
-		if (free + incluido + opcional > limitePax)
+		if (free + incluido + opcional > pax)
 		{
-			alert("No puede superar máximo de pasajeros de la reserva ("+limitePax+" Pax)");
+			alert("No puede superar máximo de pasajeros de la reserva ("+pax+" Pax)");
 
 			$(ptrElemento).val(0);
 		}

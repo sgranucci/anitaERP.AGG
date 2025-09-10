@@ -36,9 +36,9 @@ class Caja_Movimiento_EstadoRepository implements Caja_Movimiento_EstadoReposito
 		return self::guardarCaja_Movimiento_Estado($data, 'update', $id);
     }
 
-    public function delete($asiento_id, $codigo)
+    public function delete($caja_movimiento_id, $codigo)
     {
-        return $this->model->where('asiento_id', $asiento_id)->delete();
+        return $this->model->where('caja_movimiento_id', $caja_movimiento_id)->delete();
     }
 
     public function find($id)

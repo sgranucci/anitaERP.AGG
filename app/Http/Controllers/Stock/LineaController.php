@@ -172,8 +172,8 @@ class LineaController extends Controller
 			$linea = Linea::findOrFail($id);
 
 			// Elimina anita
-			//$Linea = new Linea();
-        	//$Linea->eliminarAnita($linea->codigo);
+			$Linea = new Linea();
+        	$Linea->eliminarAnita($linea->codigo);
 
 			$fl_borro = false;
 			$linea->modulos()->detach();

@@ -15,7 +15,7 @@
                 </tr>
             </thead>
             <tbody id="tbody-rendicionreceptivo-adelanto-table" class="container-adelanto">
-            @if ($data->rendicionreceptivo_adelantos ?? '') 
+            @if (count($data->rendicionreceptivo_adelantos) > 0) 
                 @foreach (old('adelanto', $data->rendicionreceptivo_adelantos->count() ? $data->rendicionreceptivo_adelantos : ['']) as $adelanto)
                     @foreach($adelanto->caja_movimientos->caja_movimiento_cuentacajas as $adelantocuentacaja)
                         <tr class="item-rendicionreceptivo-adelanto">

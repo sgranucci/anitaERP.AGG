@@ -30,6 +30,8 @@ Dep&oacute;sitos
                         <tr>
                             <th class="width20">ID</th>
                             <th>Nombre</th>
+                            <th>Tipo de depósito</th>
+                            <th>Código ANITA</th>
                             <th class="width80" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -38,6 +40,8 @@ Dep&oacute;sitos
                         <tr>
                             <td>{{$data->id}}</td>
                             <td>{{$data->nombre}}</td>
+                            <td>{{$data->tipodeposito}}</td>
+                            <td>{{$data->codigo}}</td>
                             <td>
                        			@if (can('editar-depositos', false))
                                 	<a href="{{route('editar_depmae', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">

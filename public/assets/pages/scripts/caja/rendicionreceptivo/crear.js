@@ -779,7 +779,7 @@ var montoComision=[];
 
 		$("#tbody-rendicionreceptivo-voucher-table .montovoucher").each(function() {
             let valor = parseFloat($(this).val());
-			let moneda = $(this).parents("tr").find('.monedavoucher').val();
+			let moneda = $(this).parents("tr").find('.monedavoucher_id').val();
 
 			totalMoneda[moneda] += valor;
         });
@@ -795,14 +795,14 @@ var montoComision=[];
             let valor = parseFloat($(this).val());
 			let moneda = $(this).parents("tr").find('.monedaadelanto_id').val();
 
-			totalMoneda[moneda] -= valor;
+			totalMoneda[moneda] += valor;
         });
 
 		$("#tbody-rendicionreceptivo-comision-table .montocomision").each(function() {
             let valor = parseFloat($(this).val());
 			let moneda = $(this).parents("tr").find('.monedacomision_id').val();
 
-			totalMoneda[moneda] += valor;
+			totalMoneda[moneda] -= valor;
         });
 
 		// Muestra totales por moneda

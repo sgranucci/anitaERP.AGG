@@ -9,13 +9,14 @@ use App\ApiAnita;
 
 class Mventa extends Model
 {
-    protected $fillable = ['nombre'];
+    protected $fillable = ['nombre', 'codigo'];
     protected $table = 'mventa';
-    protected $keyField = 'mvta_mventa';
+    protected $tablaAnita = 'marmae';
+    protected $keyField = 'marm_marca';
 
     public function sincronizarConAnita(){
         $apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'list', 'campos' => $this->keyField, 'tabla' => $this->table );
+        $data = array( 'acc' => 'list', 'campos' => $this->keyField, 'tabla' => $this->tablaAnita );
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
         $datosLocal = Mventa::all();
@@ -34,10 +35,10 @@ class Mventa extends Model
     public function traerRegistroDeAnita($key){
         $apiAnita = new ApiAnita();
         $data = array( 
-            'acc' => 'list', 'tabla' => $this->table, 
+            'acc' => 'list', 'tabla' => $this->tablaAnita, 
             'campos' => '
-                mvta_mventa,
-                mvta_desc
+                marm_marca,
+                marm_desc
             ' , 
             'whereArmado' => " WHERE ".$this->keyField." = '".$key."' " 
         );
@@ -45,9 +46,12 @@ class Mventa extends Model
 
         if (count($dataAnita) > 0) {
             $data = $dataAnita[0];
+
+            $codigo = ltrim($data->marm_marca, '0');
+
             Mventa::create([
-                "id" => $key,
-                "nombre" => $data->mvta_desc
+                "nombre" => $data->marm_desc,
+                "codigo" => $codigo
             ]);
         }
     }
@@ -55,23 +59,29 @@ class Mventa extends Model
 	public function guardarAnita($request, $id) {
         $apiAnita = new ApiAnita();
 
-        $data = array( 'tabla' => 'mventa', 'acc' => 'insert',
-            'campos' => ' mvta_mventa, mvta_desc ',
-            'valores' => " '".$id."', '".$request->nombre."' "
+        $data = array( 'tabla' => 'marmae', 'acc' => 'insert',
+            'campos' => ' marm_marca, marm_desc ',
+            'valores' => " '".str_pad($request->codigo, 8, "0", STR_PAD_LEFT)
+                                ."', '".$request->nombre."' "
         );
         $apiAnita->apiCall($data);
 	}
 
 	public function actualizarAnita($request, $id) {
         $apiAnita = new ApiAnita();
-		$data = array( 'acc' => 'update', 'tabla' => 'mventa', 'valores' => " mvta_desc = '".
-					$request->nombre."' ", 'whereArmado' => " WHERE mvta_mventa = '".$id."' " );
+
+        $codigo = str_pad($request->codigo, 8, "0", STR_PAD_LEFT);
+		$data = array( 'acc' => 'update', 'tabla' => 'marmae', 'valores' => " marm_desc = '".
+					$request->nombre."' ", 'whereArmado' => " WHERE marm_marca = '".$codigo."' " );
         $apiAnita->apiCall($data);
 	}
 
-	public function eliminarAnita($id) {
+	public function eliminarAnita($codigo) {
         $apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'delete', 'tabla' => 'mventa', 'whereArmado' => " WHERE mvta_mventa = '".$id."' " );
+
+        $codigo = str_pad($request->codigo, 8, "0", STR_PAD_LEFT);
+
+        $data = array( 'acc' => 'delete', 'tabla' => 'marmae', 'whereArmado' => " WHERE marm_marca = '".$codigo."' " );
         $apiAnita->apiCall($data);
 	}
 }

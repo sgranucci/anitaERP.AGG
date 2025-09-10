@@ -701,5 +701,162 @@ class AppServiceProvider extends ServiceProvider
         	'App\Repositories\Caja\Caja_Movimiento_ArchivoRepository',
     	);
 
+		// Modulo de tickets
+		$this->app->bind(
+        	'App\Repositories\Ticket\Turno_TicketRepositoryInterface',
+        	'App\Repositories\Ticket\Turno_TicketRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Ticket\AreadestinoRepositoryInterface',
+        	'App\Repositories\Ticket\AreadestinoRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Ticket\Tarea_TicketRepositoryInterface',
+        	'App\Repositories\Ticket\Tarea_TicketRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Ticket\Sector_TicketRepositoryInterface',
+        	'App\Repositories\Ticket\Sector_TicketRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Ticket\Tecnico_TicketRepositoryInterface',
+        	'App\Repositories\Ticket\Tecnico_TicketRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Ticket\Categoria_TicketRepositoryInterface',
+        	'App\Repositories\Ticket\Categoria_TicketRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Ticket\Subcategoria_TicketRepositoryInterface',
+        	'App\Repositories\Ticket\Subcategoria_TicketRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Ticket\TicketRepositoryInterface',
+        	'App\Repositories\Ticket\TicketRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Ticket\Ticket_EstadoRepositoryInterface',
+        	'App\Repositories\Ticket\Ticket_EstadoRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Ticket\Ticket_ArchivoRepositoryInterface',
+        	'App\Repositories\Ticket\Ticket_ArchivoRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Ticket\Ticket_TareaRepositoryInterface',
+        	'App\Repositories\Ticket\Ticket_TareaRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Ticket\Ticket_ArticuloRepositoryInterface',
+        	'App\Repositories\Ticket\Ticket_ArticuloRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Ticket\Ticket_Tarea_NovedadRepositoryInterface',
+        	'App\Repositories\Ticket\Ticket_Tarea_NovedadRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Queries\Ticket\TicketQueryInterface',
+        	'App\Queries\Ticket\TicketQuery',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Configuracion\SalaRepositoryInterface',
+        	'App\Repositories\Configuracion\SalaRepository',
+    	);
+
+		// Modulo UIF
+		$this->app->bind(
+        	'App\Repositories\Uif\Actividad_UifRepositoryInterface',
+        	'App\Repositories\Uif\Actividad_UifRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Uif\Pais_UifRepositoryInterface',
+        	'App\Repositories\Uif\Pais_UifRepository',
+    	);		
+
+		$this->app->bind(
+        	'App\Repositories\Uif\Pep_UifRepositoryInterface',
+        	'App\Repositories\Uif\Pep_UifRepository',
+    	);		
+
+		$this->app->bind(
+        	'App\Repositories\Uif\So_UifRepositoryInterface',
+        	'App\Repositories\Uif\So_UifRepository',
+    	);	
+		
+		$this->app->bind(
+        	'App\Repositories\Uif\Provincia_UifRepositoryInterface',
+        	'App\Repositories\Uif\Provincia_UifRepository',
+    	);	
+		
+		$this->app->bind(
+        	'App\Repositories\Uif\Frecuencia_UifRepositoryInterface',
+        	'App\Repositories\Uif\Frecuencia_UifRepository',
+    	);	
+		
+		$this->app->bind(
+        	'App\Repositories\Uif\Juego_UifRepositoryInterface',
+        	'App\Repositories\Uif\Juego_UifRepository',
+    	);
+		
+		$this->app->bind(
+        	'App\Repositories\Uif\Inusualidad_UifRepositoryInterface',
+        	'App\Repositories\Uif\Inusualidad_UifRepository',
+    	);		
+
+		$this->app->bind(
+        	'App\Repositories\Uif\Monto_UifRepositoryInterface',
+        	'App\Repositories\Uif\Monto_UifRepository',
+    	);	
+		
+		$this->app->bind(
+        	'App\Repositories\Uif\Factorriesgo_UifRepositoryInterface',
+        	'App\Repositories\Uif\Factorriesgo_UifRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Uif\Puntaje_UifRepositoryInterface',
+        	'App\Repositories\Uif\Puntaje_UifRepository',
+    	);	
+		
+		$this->app->bind(
+        	'App\Repositories\Uif\Localidad_UifRepositoryInterface',
+        	'App\Repositories\Uif\Localidad_UifRepository',
+    	);		
+		
+		$this->app->bind(
+        	'App\Repositories\Uif\Profesion_UifRepositoryInterface',
+        	'App\Repositories\Uif\Profesion_UifRepository',
+    	);			
+		
+		$this->app->bind(
+        	'App\Repositories\Uif\Nivelsocioeconomico_UifRepositoryInterface',
+        	'App\Repositories\Uif\Nivelsocioeconomico_UifRepository',
+    	);	
+		
+		$this->app->bind(
+        	'App\Repositories\Uif\Estadocivil_UifRepositoryInterface',
+        	'App\Repositories\Uif\Estadocivil_UifRepository',
+    	);		
+		
+		$this->app->bind(
+        	'App\Repositories\Uif\Cliente_UifRepositoryInterface',
+        	'App\Repositories\Uif\Cliente_UifRepository',
+    	);		
+					
     }
 }

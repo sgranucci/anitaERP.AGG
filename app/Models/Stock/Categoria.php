@@ -45,10 +45,7 @@ class Categoria extends Model
             'acc' => 'list', 'tabla' => $this->tableAnita, 
             'campos' => '
                 stka_agrupacion,
-				stka_desc,
-				stka_copiaot,
-				stka_tipo_art,
-				stka_id
+				stka_desc
             ' , 
             'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
         );
@@ -57,20 +54,13 @@ class Categoria extends Model
         if (count($dataAnita) > 0) {
             $data = $dataAnita[0];
 
-			// Traigo id del tipo de articulo 
-			if ($data->stka_tipo_art == 'B')
-				$tipoarticulo_id = 2;
-			else
-				$tipoarticulo_id = 1;
-
 			$codigo = ltrim($data->stka_agrupacion, '0');
 
             Categoria::create([
-                "id" => $data->stka_id,
                 "nombre" => $data->stka_desc,
                 "codigo" => $codigo,
-				"copiaot" => $data->stka_copiaot,
-				"tipoarticulo_id" => $tipoarticulo_id
+				"copiaot" => '',
+				"tipoarticulo_id" => 1
             ]);
         }
     }
@@ -87,8 +77,8 @@ class Categoria extends Model
 		$codigo = str_pad($request->codigo, 4, "0", STR_PAD_LEFT);
 
         $data = array( 'tabla' => $this->tableAnita, 'acc' => 'insert',
-            'campos' => ' stka_agrupacion, stka_desc, stka_copiaot, stka_tipo_art, stka_id',
-            'valores' => " '".$codigo."', '".$request->nombre."', '".$request->copiaot."', '".$tipoarticulo."', '".$id."' "
+            'campos' => ' stka_agrupacion, stka_desc',
+            'valores' => " '".$codigo."', '".$request->nombre."' "
         );
         $apiAnita->apiCall($data);
 	}
@@ -105,7 +95,7 @@ class Categoria extends Model
 		$codigo = str_pad($request->codigo, 4, "0", STR_PAD_LEFT);
 
         $data = array( 'tabla' => $this->tableAnita, 'acc' => 'update',
-					'valores' => " stka_desc = '".  $request->nombre."' , stka_copiaot = '".$request->copiaot."' , stka_tipo_art = '".$tipoarticulo."' , stka_id = '".$request->id."'", 
+					'valores' => " stka_desc = '".  $request->nombre."'", 
 					'whereArmado' => " WHERE stka_agrupacion = '".$codigo."' " );
         $apiAnita->apiCall($data);
 	}

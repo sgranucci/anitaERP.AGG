@@ -9,6 +9,6 @@ use App\ApiAnita;
 
 class Tipoarticulo extends Model
 {
-    protected $fillable = ['nombre'];
+    protected $fillable = ['nombre', 'abreviatura'];
     protected $table = 'tipoarticulo';
 }

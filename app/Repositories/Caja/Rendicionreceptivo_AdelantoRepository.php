@@ -68,7 +68,7 @@ class Rendicionreceptivo_AdelantoRepository implements Rendicionreceptivo_Adelan
 		}
 
 		// Graba cuentas contables
-		if (isset($data))
+		if (isset($data['idadelantos']))
 		{
 			$adelanto_ids = array_unique($data['idadelantos']);
 

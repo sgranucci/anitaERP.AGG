@@ -175,15 +175,19 @@ class Articulo extends Model
         	$this->traerRegistroDeAnita($dataAnita[$ii]->sku, true);
 		}*/
 
-        /*foreach ($dataAnita as $value) {
-            if (!in_array(ltrim($value->{$this->keyField}, '0'), $datosLocalArray)) {
-                $this->traerRegistroDeAnita($value->{$this->keyFieldAnita}, true);
-            }
-			else
+        foreach ($dataAnita as $value) {
+			if (substr($value->{$this->keyFieldAnita},8,8) != 'V' &&
+				substr($value->{$this->keyFieldAnita},8,8) != 'I')
 			{
-                $this->traerRegistroDeAnita($value->{$this->keyFieldAnita}, false);
+				if (!in_array(ltrim($value->{$this->keyField}, '0'), $datosLocalArray)) {
+					$this->traerRegistroDeAnita($value->{$this->keyFieldAnita}, true);
+				}
+				else
+				{
+					$this->traerRegistroDeAnita($value->{$this->keyFieldAnita}, false);
+				}
 			}
-        }*/
+        }
     }
 
     public function traerRegistroDeAnita($key, $fl_crea_registro){
@@ -227,16 +231,14 @@ class Articulo extends Model
     		stkm_cod_umd,
     		stkm_cod_umd_alter,
     		stkm_fecha_alta,
-    		stkm_cod_nomenc,
+    		stkm_area,
     		stkm_tipo_articulo,
-    		stkm_tipo_corte,
-    		stkm_puntera,
-    		stkm_contrafuerte,
-    		stkm_tipo_cortefo,
-    		stkm_forro,
-    		stkm_compfondo,
-    		stkm_clave_orden,
-    		stkm_subcategoria
+    		stkm_period_compra,
+    		stkm_tiempo_entr,
+    		stkm_cond_entrega,
+    		stkm_cod_mon_co1,
+    		stkm_cod_mon_co2,
+    		stkm_cod_mon_co3 
 			',
             'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
         );
@@ -259,7 +261,6 @@ class Articulo extends Model
 			else
 				$linea_id = NULL;
 	
-			$mventa_id = ($data->stkm_o_compra == '0' ? NULL : $data->stkm_o_compra);
 			$impuesto_id = ($data->stkm_cod_impuesto == '0' ? 1 : $data->stkm_cod_impuesto);
 
         	$cuenta = Cuentacontable::select('id', 'codigo')->where('codigo' , $data->stkm_cta_contable)->first();
@@ -294,48 +295,68 @@ class Articulo extends Model
 			else
 				$unidadmedidaalternativa_id = NULL;
 	
-        	$material = Material::select('id', 'codigo')->where('codigo' , ltrim($data->stkm_marca, '0'))->first();
-			if ($material)
-				$material_id = $material->id;
+			if (config('app.empresa') == 'Calzados Ferli')
+			{
+				$material = Material::select('id', 'codigo')->where('codigo' , ltrim($data->stkm_marca, '0'))->first();
+				if ($material)
+					$material_id = $material->id;
+				else
+					$material_id = NULL;
+		
+				$subcategoria = Subcategoria::select('id', 'codigo')->where('codigo' , ltrim($data->stkm_subcategoria, '0'))->first();
+				if ($subcategoria)
+					$subcategoria_id = $subcategoria->id;
+				else
+					$subcategoria_id = NULL;
+
+				$tipocorte_id = $data->stkm_tipo_corte;
+
+				$articulo = Articulo::select('id', 'descripcion', 'sku')->where('sku' , ltrim($data->stkm_puntera, '0'))->first();
+				$puntera_id = NULL;
+				if ($articulo)
+				{
+					$puntera = Puntera::select('id', 'articulo_id')->where('articulo_id', $articulo->id)->first();
+
+					if ($puntera)
+						$puntera_id = $puntera->id;
+				}
+		
+				$articulo = Articulo::select('id', 'descripcion', 'sku')->where('sku' , ltrim($data->stkm_contrafuerte, '0'))->first();
+				$contrafuerte_id = NULL;
+				if ($articulo)
+				{
+					$contrafuerte = Contrafuerte::select('id', 'articulo_id')->where('articulo_id', $articulo->id)->first();
+					if ($contrafuerte)
+						$contrafuerte_id = $contrafuerte->id;
+				}
+		
+				$tipocorteforro_id = $data->stkm_tipo_cortefo;
+
+				$forro_id = $data->stkm_forro;
+				$compfondo_id = $data->stkm_compfondo;
+
+				$codigoNomenclador = $data->stkm_cod_nomenc;
+			}
 			else
-				$material_id = NULL;
-	
-        	$subcategoria = Subcategoria::select('id', 'codigo')->where('codigo' , ltrim($data->stkm_subcategoria, '0'))->first();
-			if ($subcategoria)
-				$subcategoria_id = $subcategoria->id;
-			else
+			{
 				$subcategoria_id = NULL;
-	
-			$tipocorte_id = $data->stkm_tipo_corte;
-	
-        	$articulo = Articulo::select('id', 'descripcion', 'sku')->where('sku' , ltrim($data->stkm_puntera, '0'))->first();
-			$puntera_id = NULL;
-			if ($articulo)
-			{
-        		$puntera = Puntera::select('id', 'articulo_id')->where('articulo_id', $articulo->id)->first();
 
-				if ($puntera)
-					$puntera_id = $puntera->id;
+				$tipocorte_id = NULL;
+
+				$mventa = Mventa::select('id', 'codigo')->where('codigo' , ltrim($data->stkm_marca, '0'))->first();
+				if ($mventa)
+					$mventa_id = $mventa->id;
+				else
+					$mventa_id = NULL;
+
+				$codigoNomenclador = NULL;
+				$usoarticulo_id = 1;
 			}
 	
-        	$articulo = Articulo::select('id', 'descripcion', 'sku')->where('sku' , ltrim($data->stkm_contrafuerte, '0'))->first();
-			$contrafuerte_id = NULL;
-			if ($articulo)
-			{
-        		$contrafuerte = Contrafuerte::select('id', 'articulo_id')->where('articulo_id', $articulo->id)->first();
-				if ($contrafuerte)
-					$contrafuerte_id = $contrafuerte->id;
-			}
-	
-			$tipocorteforro_id = $data->stkm_tipo_cortefo;
-
 			if ($data->stkm_fe_ult_compra < 19000000)
 				$data->stkm_fe_ult_compra = 20100101;
 			$fechaultimacompra = date('Y-m-d', strtotime($data->stkm_fe_ult_compra));
 	
-			$forro_id = $data->stkm_forro;
-			$compfondo_id = $data->stkm_compfondo;
-
 			if ($fl_crea_registro)
 			{
             	Articulo::create([
@@ -353,7 +374,7 @@ class Articulo extends Model
 				"nofactura" => $data->stkm_fl_no_factura,
 				"impuesto_id" => $impuesto_id,
 				"formula" => $data->stkm_formula,
-				"nomenclador" => $data->stkm_cod_nomenc,
+				"nomenclador" => $codigoNomenclador,
 				"foto" => $data->stkm_nombre_foto,
 				"unidadmedida_id" => $unidadmedida_id > 0 ? $unidadmedida_id : NULL,
 				"unidadmedidaalternativa_id" => $unidadmedidaalternativa_id > 0 ? $unidadmedidaalternativa_id : NULL,
@@ -361,17 +382,9 @@ class Articulo extends Model
 				"cuentacontablecompra_id" => $cuentacontablecompra_id > 0 ? $cuentacontablecompra_id : NULL,
 				"cuentacontableimpinterno_id" => $cuentacontableimpinterno_id > 0 ? $cuentacontableimpinterno_id : NULL,
 				"ppp" => $data->stkm_ppp,
-				"usoarticulo_id" => $usoarticulo_id > 0 ? $usoarticulo_id : NULL,
-				"material_id" => $material_id > 0 ? $material_id : NULL,
-				"tipocorte_id" => $tipocorte_id > 0 ? $tipocorte_id : NULL,
-				"puntera_id" => $puntera_id > 0 ? $puntera_id : NULL,
-				"contrafuerte_id" => $contrafuerte_id > 0 ? $contrafuerte_id : NULL,
-				"tipocorteforro_id" => $tipocorteforro_id > 0 ? $tipocorteforro_id : NULL,
-				"forro_id" => $forro_id > 0 ? $forro_id : NULL,
-				"compfondo_id" => $compfondo_id > 0 ? $compfondo_id : NULL,
-				"claveorden" => $data->stkm_clave_orden,
 				"usuario_id" => $usuario_id,
 				"fechaultimacompra" => $fechaultimacompra,
+				"usoarticulo_id" => $usoarticulo_id > 0 ? $usoarticulo_id : NULL,
             	]);
 			}
 			else
@@ -391,7 +404,7 @@ class Articulo extends Model
 				"nofactura" => $data->stkm_fl_no_factura,
 				"impuesto_id" => $impuesto_id,
 				"formula" => $data->stkm_formula,
-				"nomenclador" => $data->stkm_cod_nomenc,
+				"nomenclador" => $codigoNomenclador,
 				"foto" => $data->stkm_nombre_foto,
 				"unidadmedida_id" => $unidadmedida_id > 0 ? $unidadmedida_id : NULL,
 				"unidadmedidaalternativa_id" => $unidadmedidaalternativa_id > 0 ? $unidadmedidaalternativa_id : NULL,
@@ -400,14 +413,6 @@ class Articulo extends Model
 				"cuentacontableimpinterno_id" => $cuentacontableimpinterno_id > 0 ? $cuentacontableimpinterno_id : NULL,
 				"ppp" => $data->stkm_ppp,
 				"usoarticulo_id" => $usoarticulo_id > 0 ? $usoarticulo_id : NULL,
-				"material_id" => $material_id > 0 ? $material_id : NULL,
-				"tipocorte_id" => $tipocorte_id > 0 ? $tipocorte_id : NULL,
-				"puntera_id" => $puntera_id > 0 ? $puntera_id : NULL,
-				"contrafuerte_id" => $contrafuerte_id > 0 ? $contrafuerte_id : NULL,
-				"tipocorteforro_id" => $tipocorteforro_id > 0 ? $tipocorteforro_id : NULL,
-				"forro_id" => $forro_id > 0 ? $forro_id : NULL,
-				"compfondo_id" => $compfondo_id > 0 ? $compfondo_id : NULL,
-				"claveorden" => $data->stkm_clave_orden,
 				"usuario_id" => $usuario_id,
 				"fechaultimacompra" => $fechaultimacompra,
             	]);

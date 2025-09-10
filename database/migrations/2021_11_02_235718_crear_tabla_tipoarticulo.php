@@ -16,6 +16,7 @@ class CrearTablaTipoarticulo extends Migration
         Schema::create('tipoarticulo', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->string('nombre',50);
+            $table->string('abreviatura',10);
             $table->timestamps();
             $table->charset = 'utf8mb4';
             $table->collation = 'utf8mb4_spanish_ci';

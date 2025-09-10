@@ -25,6 +25,7 @@ class ValidacionTipoarticulo extends FormRequest
     {
         return [
             'nombre' => 'required|max:50|unique:tipoarticulo,nombre,' . $this->route('id'),
+            'abreviatura' => 'required|max:10|unique:tipoarticulo,abreviatura,' . $this->route('id'),
         ];
     }
 }

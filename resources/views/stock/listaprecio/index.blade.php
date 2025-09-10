@@ -33,9 +33,11 @@ Listas de precio
                             <th>F&oacute;rmula</th>
                             <th class="width80">Incluye Impuesto</th>
                             <th class="width80">C&oacute;digo lista</th>
-                            <th>Desde talle</th>
-                            <th>Hasta talle</th>
-                            <th>Tipo numeraci&oacute;n</th>
+                            @if (config('app.empresa') == 'Calzados Ferli')
+                                <th>Desde talle</th>
+                                <th>Hasta talle</th>
+                                <th>Tipo numeraci&oacute;n</th>
+                            @endif
                             <th class="width80" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -47,9 +49,11 @@ Listas de precio
                             <td>{{$data->formula}}</td>
                             <td>{{($data->incluyeimpuesto == '1' ? 'S' : 'N')}}</td>
                             <td>{{$data->codigo}}</td>
-                            <td>{{$data->desdetalle}}</td>
-                            <td>{{$data->hastatalle}}</td>
-                            <td>{{$data->tiposnumeracion->nombre ?? ''}}</td>
+                            @if (config('app.empresa') == 'Calzados Ferli')
+                                <td>{{$data->desdetalle}}</td>
+                                <td>{{$data->hastatalle}}</td>
+                                <td>{{$data->tiposnumeracion->nombre ?? ''}}</td>
+                            @endif
                             <td>
                        			@if (can('editar-listaprecio', false))
                                 	<a href="{{route('editar_listaprecio', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">

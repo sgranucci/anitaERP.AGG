@@ -34,6 +34,10 @@ Route::group(['prefix' => 'admin', 'namespace' => 'Admin', 'middleware' => ['aut
     Route::get('usuario/{id}/editar', 'UsuarioController@editar')->name('editar_usuario');
     Route::put('usuario/{id}', 'UsuarioController@actualizar')->name('actualizar_usuario');
     Route::delete('usuario/{id}', 'UsuarioController@eliminar')->name('eliminar_usuario');
+
+    Route::post('usuario/crearusuarioremoto', 'UsuarioController@crearUsuarioRemoto')->name('crear_usuario_remoto');
+    Route::get('usuario/leerusuario', 'UsuarioController@leerUsuario')->name('leer_usuario');
+    
     /*RUTAS DE PERMISO*/
     Route::get('permiso', 'PermisoController@index')->name('permiso');
     Route::get('permiso/crear', 'PermisoController@crear')->name('crear_permiso');
@@ -588,7 +592,7 @@ Route::post('contable/cuentacontable', 'Contable\CuentacontableController@guarda
 Route::get('contable/cuentacontable/{id}/editar', 'Contable\CuentacontableController@editar')->name('editar_cuentacontable');
 Route::put('contable/cuentacontable/{id}', 'Contable\CuentacontableController@actualizar')->name('actualizar_cuentacontable');
 Route::get('contable/cuentacontable/{id}/eliminar', 'Contable\CuentacontableController@eliminar')->name('eliminar_cuentacontable');
-Route::post('contable/cuentacontable/guardar-orden', 'Contable\CuentacontableController@guardarOrden')->name('guardar_orden');
+Route::post('contable/cuentacontable/guardarorden', 'Contable\CuentacontableController@guardarOrden')->name('guardar_orden_contable');
 
 // Rutas de consulta de cuentas contables
 Route::post('contable/cuentacontable/consultacuentacontable', 'Contable\CuentacontableController@consultaCuentaContable')->name('consulta_cuentacontable');
@@ -1460,3 +1464,322 @@ Route::get('compras/leerproveedor/{proveedor_id}', 'Compras\ProveedorController@
  Route::get('receptivo/leereserva/{reserva}', 'Receptivo\ReservaController@leeReserva')->name('lee_reserva');
  Route::get('receptivo/leereservaporidservicioterrestre/{reserva}/{servicioterrestre_id}', 'Receptivo\ReservaController@leeReservaPorIdServicioTerrestre')->name('lee_reserva_por_id_servicioterrestre');
  Route::post('receptivo/reserva/consultareserva', 'Receptivo\ReservaController@consultaReserva')->name('consulta_reserva');
+
+/* 
+ * Modulo de tickets
+ */
+
+/* 
+ * Turnos
+ */
+
+ Route::get('ticket/turno_ticket', 'Ticket\Turno_TicketController@index')->name('consulta_turno_ticket');
+ Route::get('ticket/turno_ticket/crear', 'Ticket\Turno_TicketController@crear')->name('crea_turno_ticket');
+ Route::post('ticket/turno_ticket', 'Ticket\Turno_TicketController@guardar')->name('guarda_turno_ticket');
+ Route::get('ticket/turno_ticket/{id}/editar', 'Ticket\Turno_TicketController@editar')->name('edita_turno_ticket');
+ Route::put('ticket/turno_ticket/{id}', 'Ticket\Turno_TicketController@actualizar')->name('actualiza_turno_ticket');
+ Route::delete('ticket/turno_ticket/{id}', 'Ticket\Turno_TicketController@eliminar')->name('elimina_turno_ticket');
+ 
+/* 
+ * Areas de destino
+ */
+
+ Route::get('ticket/areadestino', 'Ticket\AreadestinoController@index')->name('consulta_areadestino');
+ Route::get('ticket/areadestino/crear', 'Ticket\AreadestinoController@crear')->name('crea_areadestino');
+ Route::post('ticket/areadestino', 'Ticket\AreadestinoController@guardar')->name('guarda_areadestino');
+ Route::get('ticket/areadestino/{id}/editar', 'Ticket\AreadestinoController@editar')->name('edita_areadestino');
+ Route::put('ticket/areadestino/{id}', 'Ticket\AreadestinoController@actualizar')->name('actualiza_areadestino');
+ Route::delete('ticket/areadestino/{id}', 'Ticket\AreadestinoController@eliminar')->name('elimina_areadestino');
+  
+/* 
+ * Tareas
+ */
+
+ Route::get('ticket/tarea_ticket', 'Ticket\Tarea_TicketController@index')->name('consulta_tarea_ticket');
+ Route::get('ticket/tarea_ticket/crear', 'Ticket\Tarea_TicketController@crear')->name('crea_tarea_ticket');
+ Route::post('ticket/tarea_ticket', 'Ticket\Tarea_TicketController@guardar')->name('guarda_tarea_ticket');
+ Route::get('ticket/tarea_ticket/{id}/editar', 'Ticket\Tarea_TicketController@editar')->name('edita_tarea_ticket');
+ Route::put('ticket/tarea_ticket/{id}', 'Ticket\Tarea_TicketController@actualizar')->name('actualiza_tarea_ticket');
+ Route::delete('ticket/tarea_ticket/{id}', 'Ticket\Tarea_TicketController@eliminar')->name('elimina_tarea_ticket');
+ 
+ Route::post('ticket/consultatarea_ticket', 'Ticket\Tarea_TicketController@consultaTarea_Ticket')->name('consultar_tarea_ticket');
+ Route::get('ticket/leertarea_ticket/{tarea_ticket_id}', 'Ticket\Tarea_TicketController@leeTarea_Ticket')->name('leer_tarea_ticket');
+
+/* 
+ * Sectores
+ */
+
+ Route::get('ticket/sector_ticket', 'Ticket\Sector_TicketController@index')->name('consulta_sector_ticket');
+ Route::get('ticket/sector_ticket/crear', 'Ticket\Sector_TicketController@crear')->name('crea_sector_ticket');
+ Route::post('ticket/sector_ticket', 'Ticket\Sector_TicketController@guardar')->name('guarda_sector_ticket');
+ Route::get('ticket/sector_ticket/{id}/editar', 'Ticket\Sector_TicketController@editar')->name('edita_sector_ticket');
+ Route::put('ticket/sector_ticket/{id}', 'Ticket\Sector_TicketController@actualizar')->name('actualiza_sector_ticket');
+ Route::delete('ticket/sector_ticket/{id}', 'Ticket\Sector_TicketController@eliminar')->name('elimina_sector_ticket');
+   
+/* 
+ * Tecnicos
+ */
+
+ Route::get('ticket/tecnico_ticket', 'Ticket\Tecnico_TicketController@index')->name('consulta_tecnico_ticket');
+ Route::get('ticket/tecnico_ticket/crear', 'Ticket\Tecnico_TicketController@crear')->name('crea_tecnico_ticket');
+ Route::post('ticket/tecnico_ticket', 'Ticket\Tecnico_TicketController@guardar')->name('guarda_tecnico_ticket');
+ Route::get('ticket/tecnico_ticket/{id}/editar', 'Ticket\Tecnico_TicketController@editar')->name('edita_tecnico_ticket');
+ Route::put('ticket/tecnico_ticket/{id}', 'Ticket\Tecnico_TicketController@actualizar')->name('actualiza_tecnico_ticket');
+ Route::delete('ticket/tecnico_ticket/{id}', 'Ticket\Tecnico_TicketController@eliminar')->name('elimina_tecnico_ticket');
+    
+ Route::post('ticket/consultatecnico_ticket', 'Ticket\Tecnico_TicketController@consultaTecnico_Ticket')->name('consultar_tecnico_ticket');
+ Route::get('ticket/leertecnico_ticket/{tecnico_ticket_id}', 'Ticket\Tecnico_TicketController@leeTecnico_Ticket')->name('leer_tecnico_ticket');
+
+/* 
+ * Categoria
+ */
+
+ Route::get('ticket/categoria_ticket', 'Ticket\Categoria_TicketController@index')->name('consulta_categoria_ticket');
+ Route::get('ticket/categoria_ticket/crear', 'Ticket\Categoria_TicketController@crear')->name('crea_categoria_ticket');
+ Route::post('ticket/categoria_ticket', 'Ticket\Categoria_TicketController@guardar')->name('guarda_categoria_ticket');
+ Route::get('ticket/categoria_ticket/{id}/editar', 'Ticket\Categoria_TicketController@editar')->name('edita_categoria_ticket');
+ Route::put('ticket/categoria_ticket/{id}', 'Ticket\Categoria_TicketController@actualizar')->name('actualiza_categoria_ticket');
+ Route::delete('ticket/categoria_ticket/{id}', 'Ticket\Categoria_TicketController@eliminar')->name('elimina_categoria_ticket');
+     
+ Route::post('ticket/consultacategoria_ticket', 'Ticket\Categoria_TicketController@consultaCategoria_Ticket')->name('consultar_categoria_ticket');
+ Route::get('ticket/leercategoria_ticket/{categoria_ticket_id}', 'Ticket\Categoria_TicketController@leeCategoria_Ticket')->name('leer_categoria_ticket');
+ 
+ Route::post('ticket/consultasubcategoria_ticket', 'Ticket\Categoria_TicketController@consultaSubCategoria_Ticket')->name('consultar_subcategoria_ticket');
+ Route::get('ticket/leersubcategoria_ticket/{subcategoria_ticket_id}', 'Ticket\Categoria_TicketController@leeSubCategoria_Ticket')->name('leer_subcategoria_ticket'); 
+
+/* 
+ * Tickets
+ */
+
+ Route::get('ticket/ticket', 'Ticket\TicketController@index')->name('consulta_ticket');
+ Route::get('ticket/ticket/crear', 'Ticket\TicketController@crear')->name('crea_ticket');
+ Route::post('ticket/ticket', 'Ticket\TicketController@guardar')->name('guarda_ticket');
+ Route::get('ticket/ticket/{id}/editar', 'Ticket\TicketController@editar')->name('edita_ticket');
+ Route::put('ticket/ticket/{id}', 'Ticket\TicketController@actualizar')->name('actualiza_ticket');
+ Route::delete('ticket/ticket/{id}', 'Ticket\TicketController@eliminar')->name('elimina_ticket');
+ Route::get('ticket/listaticket/{formato?}/{busqueda?}', 'Ticket\TicketController@listar')->name('lista_ticket');
+
+/* 
+ * Administracion de Tickets
+ */
+
+ Route::get('ticket/administracion_ticket', 'Ticket\Administracion_TicketController@index')->name('consulta_administracion_ticket');
+ Route::get('ticket/administracion_ticket/crear', 'Ticket\Administracion_TicketController@crear')->name('crea_administracion_ticket');
+ Route::post('ticket/administracion_ticket', 'Ticket\Administracion_TicketController@guardar')->name('guarda_administracion_ticket');
+ Route::get('ticket/administracion_ticket/{id}/editar', 'Ticket\Administracion_TicketController@editar')->name('edita_administracion_ticket');
+ Route::put('ticket/administracion_ticket/{id}', 'Ticket\Administracion_TicketController@actualizar')->name('actualiza_administracion_ticket');
+ Route::delete('ticket/administracion_ticket/{id}', 'Ticket\Administracion_TicketController@eliminar')->name('elimina_administracion_ticket');
+ Route::get('ticket/listaadministracion_ticket/{formato?}/{busqueda?}', 'Ticket\Administracion_TicketController@listar')->name('lista_administracion_ticket');
+ 
+ Route::post('ticket/guardar_ticket_tarea_novedad', 'Ticket\Administracion_TicketController@guardarTicketTareaNovedad')->name('guarda_ticket_tarea_novedad');
+ Route::get('ticket/leer_ticket_tarea_novedad/{ticket_tarea_id}', 'Ticket\Administracion_TicketController@leerTicketTareaNovedad')->name('lee_ticket_tarea_novedad');
+ Route::get('ticket/leer_historia_ticket/{ticket_id}', 'Ticket\Administracion_TicketController@leerHistoriaTicket')->name('lee_historia_ticket');
+ Route::get('ticket/cambiar_tecnico/{ticket_tarea_id}/{tecnico_ticket_id}', 'Ticket\Administracion_TicketController@cambiarTecnico')->name('cambiar_tecnico');
+ Route::get('ticket/finalizar_tarea/{ticket_tarea_id}/{fechafinalizacion}/{tiempoinsumido}', 'Ticket\Administracion_TicketController@finalizarTarea')->name('finalizar_tarea');
+/* 
+ * Salas
+ */
+
+ Route::get('configuracion/sala', 'Configuracion\SalaController@index')->name('consulta_sala');
+ Route::get('configuracion/sala/crear', 'Configuracion\SalaController@crear')->name('crea_sala');
+ Route::post('configuracion/sala', 'Configuracion\SalaController@guardar')->name('guarda_sala');
+ Route::get('configuracion/sala/{id}/editar', 'Configuracion\SalaController@editar')->name('edita_sala');
+ Route::put('configuracion/sala/{id}', 'Configuracion\SalaController@actualizar')->name('actualiza_sala');
+ Route::delete('configuracion/sala/{id}', 'Configuracion\SalaController@eliminar')->name('elimina_sala');
+
+/* Modulo UIF */
+/* 
+ * Actividades
+ */
+
+ Route::get('uif/actividad_uif', 'Uif\Actividad_UifController@index')->name('consulta_actividad_uif');
+ Route::get('uif/actividad_uif/crear', 'Uif\Actividad_UifController@crear')->name('crea_actividad_uif');
+ Route::post('uif/actividad_uif', 'Uif\Actividad_UifController@guardar')->name('guarda_actividad_uif');
+ Route::get('uif/actividad_uif/{id}/editar', 'Uif\Actividad_UifController@editar')->name('edita_actividad_uif');
+ Route::put('uif/actividad_uif/{id}', 'Uif\Actividad_UifController@actualizar')->name('actualiza_actividad_uif');
+ Route::delete('uif/actividad_uif/{id}', 'Uif\Actividad_UifController@eliminar')->name('elimina_actividad_uif');
+ 
+ Route::post('uif/consultaactividad_uif', 'Uif\Actividad_UifController@consultaActividad_Uif')->name('consultar_actividad_uif');
+ Route::get('uif/leeractividad_uif/{actividad_uif_id}', 'Uif\Actividad_UifController@leeActividad_Uif')->name('leer_actividad_uif');
+
+/* 
+ * Paises UIF
+ */
+
+ Route::get('uif/pais_uif', 'Uif\Pais_UifController@index')->name('consulta_pais_uif');
+ Route::get('uif/pais_uif/crear', 'Uif\Pais_UifController@crear')->name('crea_pais_uif');
+ Route::post('uif/pais_uif', 'Uif\Pais_UifController@guardar')->name('guarda_pais_uif');
+ Route::get('uif/pais_uif/{id}/editar', 'Uif\Pais_UifController@editar')->name('edita_pais_uif');
+ Route::put('uif/pais_uif/{id}', 'Uif\Pais_UifController@actualizar')->name('actualiza_pais_uif');
+ Route::delete('uif/pais_uif/{id}', 'Uif\Pais_UifController@eliminar')->name('elimina_pais_uif');
+ 
+ Route::post('uif/consultapais_uif', 'Uif\Pais_UifController@consultaPais_Uif')->name('consultar_pais_uif');
+ Route::get('uif/leerpais_uif/{pais_uif_id}', 'Uif\Pais_UifController@leePais_Uif')->name('leer_pais_uif'); 
+
+/* 
+ * Pep UIF
+ */
+
+ Route::get('uif/pep_uif', 'Uif\Pep_UifController@index')->name('consulta_pep_uif');
+ Route::get('uif/pep_uif/crear', 'Uif\Pep_UifController@crear')->name('crea_pep_uif');
+ Route::post('uif/pep_uif', 'Uif\Pep_UifController@guardar')->name('guarda_pep_uif');
+ Route::get('uif/pep_uif/{id}/editar', 'Uif\Pep_UifController@editar')->name('edita_pep_uif');
+ Route::put('uif/pep_uif/{id}', 'Uif\Pep_UifController@actualizar')->name('actualiza_pep_uif');
+ Route::delete('uif/pep_uif/{id}', 'Uif\Pep_UifController@eliminar')->name('elimina_pep_uif');
+ 
+/* 
+ * So UIF
+ */
+
+ Route::get('uif/so_uif', 'Uif\So_UifController@index')->name('consulta_so_uif');
+ Route::get('uif/so_uif/crear', 'Uif\So_UifController@crear')->name('crea_so_uif');
+ Route::post('uif/so_uif', 'Uif\So_UifController@guardar')->name('guarda_so_uif');
+ Route::get('uif/so_uif/{id}/editar', 'Uif\So_UifController@editar')->name('edita_so_uif');
+ Route::put('uif/so_uif/{id}', 'Uif\So_UifController@actualizar')->name('actualiza_so_uif');
+ Route::delete('uif/so_uif/{id}', 'Uif\So_UifController@eliminar')->name('elimina_so_uif');
+   
+/* 
+ * Provincia UIF
+ */
+
+ Route::get('uif/provincia_uif', 'Uif\Provincia_UifController@index')->name('consulta_provincia_uif');
+ Route::get('uif/provincia_uif/crear', 'Uif\Provincia_UifController@crear')->name('crea_provincia_uif');
+ Route::post('uif/provincia_uif', 'Uif\Provincia_UifController@guardar')->name('guarda_provincia_uif');
+ Route::get('uif/provincia_uif/{id}/editar', 'Uif\Provincia_UifController@editar')->name('edita_provincia_uif');
+ Route::put('uif/provincia_uif/{id}', 'Uif\Provincia_UifController@actualizar')->name('actualiza_provincia_uif');
+ Route::delete('uif/provincia_uif/{id}', 'Uif\Provincia_UifController@eliminar')->name('elimina_provincia_uif');
+ 
+ Route::post('uif/consultaprovincia_uif', 'Uif\Provincia_UifController@consultaProvincia_Uif')->name('consultar_provincia_uif');
+ Route::get('uif/leerprovincia_uif/{provincia_uif_id}', 'Uif\Provincia_UifController@leeProvincia_Uif')->name('leer_provincia_uif'); 
+
+/* 
+ * Frecuencia UIF
+ */
+
+ Route::get('uif/frecuencia_uif', 'Uif\Frecuencia_UifController@index')->name('consulta_frecuencia_uif');
+ Route::get('uif/frecuencia_uif/crear', 'Uif\Frecuencia_UifController@crear')->name('crea_frecuencia_uif');
+ Route::post('uif/frecuencia_uif', 'Uif\Frecuencia_UifController@guardar')->name('guarda_frecuencia_uif');
+ Route::get('uif/frecuencia_uif/{id}/editar', 'Uif\Frecuencia_UifController@editar')->name('edita_frecuencia_uif');
+ Route::put('uif/frecuencia_uif/{id}', 'Uif\Frecuencia_UifController@actualizar')->name('actualiza_frecuencia_uif');
+ Route::delete('uif/frecuencia_uif/{id}', 'Uif\Frecuencia_UifController@eliminar')->name('elimina_frecuencia_uif');
+    
+/* 
+ * Juego UIF
+ */
+
+ Route::get('uif/juego_uif', 'Uif\Juego_UifController@index')->name('consulta_juego_uif');
+ Route::get('uif/juego_uif/crear', 'Uif\Juego_UifController@crear')->name('crea_juego_uif');
+ Route::post('uif/juego_uif', 'Uif\Juego_UifController@guardar')->name('guarda_juego_uif');
+ Route::get('uif/juego_uif/{id}/editar', 'Uif\Juego_UifController@editar')->name('edita_juego_uif');
+ Route::put('uif/juego_uif/{id}', 'Uif\Juego_UifController@actualizar')->name('actualiza_juego_uif');
+ Route::delete('uif/juego_uif/{id}', 'Uif\Juego_UifController@eliminar')->name('elimina_juego_uif');
+    
+/* 
+ * Inusualidad UIF
+ */
+
+ Route::get('uif/inusualidad_uif', 'Uif\Inusualidad_UifController@index')->name('consulta_inusualidad_uif');
+ Route::get('uif/inusualidad_uif/crear', 'Uif\Inusualidad_UifController@crear')->name('crea_inusualidad_uif');
+ Route::post('uif/inusualidad_uif', 'Uif\Inusualidad_UifController@guardar')->name('guarda_inusualidad_uif');
+ Route::get('uif/inusualidad_uif/{id}/editar', 'Uif\Inusualidad_UifController@editar')->name('edita_inusualidad_uif');
+ Route::put('uif/inusualidad_uif/{id}', 'Uif\Inusualidad_UifController@actualizar')->name('actualiza_inusualidad_uif');
+ Route::delete('uif/inusualidad_uif/{id}', 'Uif\Inusualidad_UifController@eliminar')->name('elimina_inusualidad_uif');
+
+/* 
+ * Monto UIF
+ */
+
+ Route::get('uif/monto_uif', 'Uif\Monto_UifController@index')->name('consulta_monto_uif');
+ Route::get('uif/monto_uif/crear', 'Uif\Monto_UifController@crear')->name('crea_monto_uif');
+ Route::post('uif/monto_uif', 'Uif\Monto_UifController@guardar')->name('guarda_monto_uif');
+ Route::get('uif/monto_uif/{id}/editar', 'Uif\Monto_UifController@editar')->name('edita_monto_uif');
+ Route::put('uif/monto_uif/{id}', 'Uif\Monto_UifController@actualizar')->name('actualiza_monto_uif');
+ Route::delete('uif/monto_uif/{id}', 'Uif\Monto_UifController@eliminar')->name('elimina_monto_uif');
+     
+/* 
+ * Factor Riesgo UIF
+ */
+
+ Route::get('uif/factorriesgo_uif', 'Uif\Factorriesgo_UifController@index')->name('consulta_factorriesgo_uif');
+ Route::get('uif/factorriesgo_uif/crear', 'Uif\Factorriesgo_UifController@crear')->name('crea_factorriesgo_uif');
+ Route::post('uif/factorriesgo_uif', 'Uif\Factorriesgo_UifController@guardar')->name('guarda_factorriesgo_uif');
+ Route::get('uif/factorriesgo_uif/{id}/editar', 'Uif\Factorriesgo_UifController@editar')->name('edita_factorriesgo_uif');
+ Route::put('uif/factorriesgo_uif/{id}', 'Uif\Factorriesgo_UifController@actualizar')->name('actualiza_factorriesgo_uif');
+ Route::delete('uif/factorriesgo_uif/{id}', 'Uif\Factorriesgo_UifController@eliminar')->name('elimina_factorriesgo_uif');
+      
+     
+/* 
+ * Puntaje UIF
+ */
+
+ Route::get('uif/puntaje_uif', 'Uif\Puntaje_UifController@index')->name('consulta_puntaje_uif');
+ Route::get('uif/puntaje_uif/crear', 'Uif\Puntaje_UifController@crear')->name('crea_puntaje_uif');
+ Route::post('uif/puntaje_uif', 'Uif\Puntaje_UifController@guardar')->name('guarda_puntaje_uif');
+ Route::get('uif/puntaje_uif/{id}/editar', 'Uif\Puntaje_UifController@editar')->name('edita_puntaje_uif');
+ Route::put('uif/puntaje_uif/{id}', 'Uif\Puntaje_UifController@actualizar')->name('actualiza_puntaje_uif');
+ Route::delete('uif/puntaje_uif/{id}', 'Uif\Puntaje_UifController@eliminar')->name('elimina_puntaje_uif');
+       
+/* 
+ * Localidad UIF
+ */
+
+ Route::get('uif/localidad_uif', 'Uif\Localidad_UifController@index')->name('consulta_localidad_uif');
+ Route::get('uif/localidad_uif/crear', 'Uif\Localidad_UifController@crear')->name('crea_localidad_uif');
+ Route::post('uif/localidad_uif', 'Uif\Localidad_UifController@guardar')->name('guarda_localidad_uif');
+ Route::get('uif/localidad_uif/{id}/editar', 'Uif\Localidad_UifController@editar')->name('edita_localidad_uif');
+ Route::put('uif/localidad_uif/{id}', 'Uif\Localidad_UifController@actualizar')->name('actualiza_localidad_uif');
+ Route::delete('uif/localidad_uif/{id}', 'Uif\Localidad_UifController@eliminar')->name('elimina_localidad_uif');
+ 
+ Route::post('uif/consultalocalidad_uif', 'Uif\Localidad_UifController@consultaLocalidad_Uif')->name('consultar_localidad_uif');
+ Route::get('uif/leerlocalidad_uif/{localidad_uif_id}', 'Uif\Localidad_UifController@leeLocalidad_Uif')->name('leer_localidad_uif'); 
+
+/* 
+ * Profesion UIF
+ */
+
+ Route::get('uif/profesion_uif', 'Uif\Profesion_UifController@index')->name('consulta_profesion_uif');
+ Route::get('uif/profesion_uif/crear', 'Uif\Profesion_UifController@crear')->name('crea_profesion_uif');
+ Route::post('uif/profesion_uif', 'Uif\Profesion_UifController@guardar')->name('guarda_profesion_uif');
+ Route::get('uif/profesion_uif/{id}/editar', 'Uif\Profesion_UifController@editar')->name('edita_profesion_uif');
+ Route::put('uif/profesion_uif/{id}', 'Uif\Profesion_UifController@actualizar')->name('actualiza_profesion_uif');
+ Route::delete('uif/profesion_uif/{id}', 'Uif\Profesion_UifController@eliminar')->name('elimina_profesion_uif');
+ 
+ Route::post('uif/consultaprofesion_uif', 'Uif\Profesion_UifController@consultaProfesion_Uif')->name('consultar_profesion_uif');
+ Route::get('uif/leerprofesion_uif/{profesion_uif_id}', 'Uif\Profesion_UifController@leeProfesion_Uif')->name('leer_profesion_uif'); 
+
+     
+/* 
+ * Nivel Socioeconomico UIF
+ */
+
+ Route::get('uif/nivelsocioeconomico_uif', 'Uif\Nivelsocioeconomico_UifController@index')->name('consulta_nivelsocioeconomico_uif');
+ Route::get('uif/nivelsocioeconomico_uif/crear', 'Uif\Nivelsocioeconomico_UifController@crear')->name('crea_nivelsocioeconomico_uif');
+ Route::post('uif/nivelsocioeconomico_uif', 'Uif\Nivelsocioeconomico_UifController@guardar')->name('guarda_nivelsocioeconomico_uif');
+ Route::get('uif/nivelsocioeconomico_uif/{id}/editar', 'Uif\Nivelsocioeconomico_UifController@editar')->name('edita_nivelsocioeconomico_uif');
+ Route::put('uif/nivelsocioeconomico_uif/{id}', 'Uif\Nivelsocioeconomico_UifController@actualizar')->name('actualiza_nivelsocioeconomico_uif');
+ Route::delete('uif/nivelsocioeconomico_uif/{id}', 'Uif\Nivelsocioeconomico_UifController@eliminar')->name('elimina_nivelsocioeconomico_uif');
+      
+/* 
+ * Estado civil UIF
+ */
+
+ Route::get('uif/estadocivil_uif', 'Uif\Estadocivil_UifController@index')->name('consulta_estadocivil_uif');
+ Route::get('uif/estadocivil_uif/crear', 'Uif\Estadocivil_UifController@crear')->name('crea_estadocivil_uif');
+ Route::post('uif/estadocivil_uif', 'Uif\Estadocivil_UifController@guardar')->name('guarda_estadocivil_uif');
+ Route::get('uif/estadocivil_uif/{id}/editar', 'Uif\Estadocivil_UifController@editar')->name('edita_estadocivil_uif');
+ Route::put('uif/estadocivil_uif/{id}', 'Uif\Estadocivil_UifController@actualizar')->name('actualiza_estadocivil_uif');
+ Route::delete('uif/estadocivil_uif/{id}', 'Uif\Estadocivil_UifController@eliminar')->name('elimina_estadocivil_uif');
+      
+/* 
+ * Clientes UIF
+ */
+
+ Route::get('uif/cliente_uif', 'Uif\Cliente_UifController@index')->name('consulta_cliente_uif');
+ Route::get('uif/cliente_uif/crear', 'Uif\Cliente_UifController@crear')->name('crea_cliente_uif');
+ Route::post('uif/cliente_uif', 'Uif\Cliente_UifController@guardar')->name('guarda_cliente_uif');
+ Route::get('uif/cliente_uif/{id}/editar', 'Uif\Cliente_UifController@editar')->name('edita_cliente_uif');
+ Route::put('uif/cliente_uif/{id}', 'Uif\Cliente_UifController@actualizar')->name('actualiza_cliente_uif');
+ Route::delete('uif/cliente_uif/{id}', 'Uif\Cliente_UifController@eliminar')->name('elimina_cliente_uif');
+ 
+ Route::post('uif/consultacliente_uif', 'Uif\Cliente_UifController@consultaCliente_Uif')->name('consultar_cliente_uif');
+ Route::get('uif/leercliente_uif/{cliente_uif_id}', 'Uif\Cliente_UifController@leeCliente_Uif')->name('leer_cliente_uif'); 

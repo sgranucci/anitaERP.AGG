@@ -197,6 +197,7 @@ class Caja_MovimientoRepository implements Caja_MovimientoRepositoryInterface
 						->whereNotExists(function ($query) {
 							$query->select(DB::raw(1))
 									->from('rendicionreceptivo')
+									->where('deleted_at', null)
 									->whereColumn('caja_movimiento.ordenservicio_id', 'rendicionreceptivo.ordenservicio_id');
 						})
 						->where('caja_movimiento.ordenservicio_id', '!=', null)

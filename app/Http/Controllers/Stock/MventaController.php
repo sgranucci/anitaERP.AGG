@@ -104,7 +104,7 @@ class MventaController extends Controller
 
 		// Elimina anita
 		$Mventa = new Mventa();
-        $Mventa->eliminarAnita($id);
+        $Mventa->eliminarAnita($request->codigo);
 
         if ($request->ajax()) {
             if (Mventa::destroy($id)) {

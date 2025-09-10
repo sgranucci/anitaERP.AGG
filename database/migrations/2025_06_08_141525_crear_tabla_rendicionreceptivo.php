@@ -35,7 +35,7 @@ class CrearTablaRendicionreceptivo extends Migration
             $table->timestamps();
             $table->charset = 'utf8mb4';
             $table->collation = 'utf8mb4_spanish_ci';
-            $table->index(['emrpesa_id', 'numerotalonario']);
+            $table->index(['empresa_id', 'numerotalonario']);
         });    
     }
 

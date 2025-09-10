@@ -20,13 +20,13 @@ class SubcategoriaController extends Controller
         can('listar-subcategorias');
         $datas = Subcategoria::orderBy('id')->get();
 
-		if ($datas->isEmpty())
-		{
-			$Subcategoria = new Subcategoria();
-        	$Subcategoria->sincronizarConAnita();
+		//if ($datas->isEmpty())
+		//{
+		//	$Subcategoria = new Subcategoria();
+        //	$Subcategoria->sincronizarConAnita();
 	
-        	$datas = Subcategoria::orderBy('id')->get();
-		}
+        //	$datas = Subcategoria::orderBy('id')->get();
+		//}
 
         return view('stock.subcategoria.index', compact('datas'));
     }

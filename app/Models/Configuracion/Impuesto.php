@@ -9,7 +9,7 @@ use App\ApiAnita;
 
 class Impuesto extends Model
 {
-    protected $fillable = ['nombre', 'valor', 'fechavigencia'];
+    protected $fillable = ['nombre', 'valor', 'fechavigencia', 'codigo'];
     protected $table = 'impuesto';
 
 }

@@ -69,7 +69,7 @@ class Rendicionreceptivo_Caja_MovimientoRepository implements Rendicionreceptivo
 		}
 
 		// Graba cuentas contables
-		if (isset($data))
+		if (isset($data['idgastoanteriores']))
 		{
 			$caja_movimiento_gastoanterior_ids = array_unique($data['idgastoanteriores']);
 

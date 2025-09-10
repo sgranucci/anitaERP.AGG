@@ -71,38 +71,44 @@ class ArticuloController extends Controller
         	$Articulo = new Articulo();
         	$Articulo->sincronizarConAnita();
 		}
-        $hay_combinaciones = Combinacion::first();
-		if (!$hay_combinaciones)
+		if (config('app.empresa') == 'Calzados Ferli')
 		{
-			$Combinacion = new Combinacion();
-        	$Combinacion->sincronizarConAnita();
+			$hay_combinaciones = Combinacion::first();
+			if (!$hay_combinaciones)
+			{
+				$Combinacion = new Combinacion();
+				$Combinacion->sincronizarConAnita();
+			}
+			$hay_capeart = Capeart::first();
+			if (!$hay_capeart)
+			{
+				$Capeart = new Capeart();
+				$Capeart->sincronizarConAnita();
+			}
+			$hay_avioart = Avioart::first();
+			if (!$hay_avioart)
+			{
+				$Avioart = new Avioart();
+				$Avioart->sincronizarConAnita();
+			}
+			$hay_articulo_caja = Articulo_Caja::first();
+			if (!$hay_articulo_caja)
+			{
+				$Articulo_Caja = new Articulo_Caja();
+				$Articulo_Caja->sincronizarConAnita();
+			}
+			$hay_articulo_costo = Articulo_Costo::first();
+			if (!$hay_articulo_costo)
+			{
+				$this->articulo_costoRepository->sincronizarConAnita();
+			}
+		
+        	$combinaciones = Combinacion::where("estado", "I")->count();
+        	$inactive = ( $combinaciones > 0 )?true:false;
 		}
-        $hay_capeart = Capeart::first();
-		if (!$hay_capeart)
-		{
-			$Capeart = new Capeart();
-        	$Capeart->sincronizarConAnita();
-		}
-        $hay_avioart = Avioart::first();
-		if (!$hay_avioart)
-		{
-			$Avioart = new Avioart();
-        	$Avioart->sincronizarConAnita();
-		}
-        $hay_articulo_caja = Articulo_Caja::first();
-		if (!$hay_articulo_caja)
-		{
-        	$Articulo_Caja = new Articulo_Caja();
-        	$Articulo_Caja->sincronizarConAnita();
-		}
-        $hay_articulo_costo = Articulo_Costo::first();
-		if (!$hay_articulo_costo)
-		{
-        	$this->articulo_costoRepository->sincronizarConAnita();
-		}
+		else	
+			$inactive = true;
 
-        $combinaciones = Combinacion::where("estado", "I")->count();
-        $inactive = ( $combinaciones > 0 )?true:false;
         $usosArticulos = Usoarticulo::all();
 
         $art_query = Articulo::select('articulo.id as id', 'sku as stkm_articulo', 'descripcion as stkm_desc', 
@@ -196,15 +202,17 @@ class ArticuloController extends Controller
 		}
 		else
 		{
-			$query = $art_query->whereExists(function($query)
+			if (config('app.empresa') == 'Calzados Ferli')
+			{
+				$query = $art_query->whereExists(function($query)
 					{
     					$query->select(DB::raw(1))
 							->from("combinacion")
           					->whereRaw("combinacion.articulo_id=articulo.id and combinacion.estado='A'");
 					});
+			}
 		}
-
-		$articulos = $art_query->get();
+		$articulos = $art_query->paginate(10);
 
         return view("stock.product.list",compact('inactive', 'articulos', 'usosArticulos', 'filtros'));
     }
@@ -707,7 +715,7 @@ class ArticuloController extends Controller
 				{
 					$output['data'] .= '<td class="'.$columnsOut[$i].'">' . $row[$columnsOut[$i]] . '</td>';	
 				}
-				$output['data'] .= '<td><a class="btn btn-warning btn-sm eligeconsulta">Elegir</a></td>';
+				$output['data'] .= '<td><a class="btn btn-warning btn-sm eligeconsultaarticulo">Elegir</a></td>';
 				$output['data'] .= '</tr>';
 			}
 		}

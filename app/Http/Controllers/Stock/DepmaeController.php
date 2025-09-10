@@ -39,7 +39,10 @@ class DepmaeController extends Controller
     public function crear()
     {
         can('crear-depositos');
-        return view('stock.depmae.crear');
+
+        $tipodeposito_enum = Depmae::$enumTipoDeposito;
+
+        return view('stock.depmae.crear', compact('tipodeposito_enum'));
     }
 
     /**
@@ -70,7 +73,9 @@ class DepmaeController extends Controller
     {
         can('editar-depositos');
         $data = Depmae::findOrFail($id);
-        return view('stock.depmae.editar', compact('data'));
+        $tipodeposito_enum = Depmae::$enumTipoDeposito;
+
+        return view('stock.depmae.editar', compact('data', 'tipodeposito_enum'));
     }
 
     /**
@@ -103,8 +108,11 @@ class DepmaeController extends Controller
         can('borrar-depositos');
 
 		// Elimina anita
-		$Depmae = new Depmae();
-        $Depmae->eliminarAnita($id);
+        $Depmae = new Depmae();
+        if (config('app.empresa') == 'Calzados Ferli')
+            $Depmae->eliminarAnita($id);
+        else
+            $Depmae->eliminarAnita($request->codigo);
 
         if ($request->ajax()) {
             if (Depmae::destroy($id)) {
