@@ -36,15 +36,11 @@ class Localidad extends Model
 
 		if ($dataAnita)
 		{
-		for ($_ii = 0; $_ii < count($dataAnita); $_ii++)
-		{
-        	$this->traerRegistroDeAnita($_ii);
-		}
-        	/*foreach ($dataAnita as $value) {
+        	foreach ($dataAnita as $value) {
             	if (!in_array($value->{$this->keyFieldAnita}, $datosLocalArray)) {
                 	$this->traerRegistroDeAnita($value->{$this->keyFieldAnita});
             	}
-        	}*/
+        	}
 		}
     }
 
@@ -57,7 +53,6 @@ class Localidad extends Model
                 loc_localidad,
 				loc_provincia,
 				loc_desc,
-				loc_cod_externo,
 				loc_cod_postal
             ' , 
             'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
@@ -70,7 +65,7 @@ class Localidad extends Model
                 "id" => $key,
                 "nombre" => $data->loc_desc,
                 "codigopostal" => $data->loc_cod_postal,
-                "codigo" => $data->loc_cod_externo,
+                "codigo" => $data->loc_localidad,
                 "provincia_id" => ($data->loc_provincia > 0 ? $data->loc_provincia : NULL)
             ]);
         }
@@ -82,11 +77,10 @@ class Localidad extends Model
         $data = array( 'tabla' => $this->table, 
                         'sistema' => 'shared',
 						'acc' => 'insert',
-            			'campos' => ' loc_localidad, loc_provincia, loc_desc, loc_cod_externo, loc_cod_postal',
-            			'valores' => " '".$id."', 
+            			'campos' => ' loc_localidad, loc_provincia, loc_desc, loc_cod_postal',
+            			'valores' => " '".$request->codigo."', 
 										'".($request->provincia_id == NULL ? 0 : $request->provincia_id)."',
 										'".$request->nombre."',  
-										'".$request->codigo."',
 										'".$request->codpostal."' "
         );
         $apiAnita->apiCall($data);
@@ -100,9 +94,8 @@ class Localidad extends Model
 						'valores' => " 
 						    loc_provincia = '".($request->provincia_id == NULL ? 0 : $request->provincia_id)."',
 							loc_desc = '".$request->nombre."',
-							loc_cod_externo = '".$request->codigo."',
                 			loc_cod_postal =	'".$request->codpostal."'",
-						'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$id."' " );
+						'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$request->codigo."' " );
         $apiAnita->apiCall($data);
 	}
 
@@ -111,7 +104,7 @@ class Localidad extends Model
         $data = array( 'acc' => 'delete', 
                     'sistema' => 'shared',
 					'tabla' => $this->table,
-					'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$id."' " );
+					'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$request->codigo."' " );
         $apiAnita->apiCall($data);
 	}
 }

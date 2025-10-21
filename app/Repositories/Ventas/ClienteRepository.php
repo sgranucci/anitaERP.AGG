@@ -87,7 +87,9 @@ class ClienteRepository implements ClienteRepositoryInterface
 
     public function find($id)
     {
-        if (null == $cliente = $this->model->with("cliente_entregas")->with("cliente_archivos")->with("tipossuspensioncliente")->find($id)) {
+        if (null == $cliente = $this->model->with("cliente_entregas")->with("cliente_archivos")
+										->with("provincias")->with("localidades")->with("paises")->with("tipossuspensioncliente")->find($id)) 
+		{
             throw new ModelNotFoundException("Registro no encontrado");
         }
 
@@ -486,9 +488,10 @@ class ClienteRepository implements ClienteRepositoryInterface
 				'0',
 				' ',
 				'0',
-                '".$request['email']."' "
+                '".$request['email']."',
+				'".'FAX'."' "
         );
-        $apiAnita->apiCall($data);
+        $climae = $apiAnita->apiCall($data);
 
 		// Graba leyenda
 		$leyenda = explode("\n", $request['leyenda']);
@@ -512,7 +515,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 		}
 
 		// Graba comisiones
-		if ($request['vendedor_id'] > 0)
+		if ($request['vendedor_id'] > 0 && config('app.empresa', 'Calzados Ferli'))
 		{
 			$mventa = Mventa::all();
 			foreach ($mventa as $marca)
@@ -662,15 +665,21 @@ class ClienteRepository implements ClienteRepositoryInterface
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'list', 
 				'tabla' => $this->tableAnita[0], 
-				'campos' => " max(clim_cliente) as $this->keyFieldAnita "
+				'sistema' => 'ventas',
+				'campos' => " max(clim_cliente) as $this->keyFieldAnita ",
+				'whereArmado' => " WHERE clim_cliente[1,3] = 'ERP' " 
 				);
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
-        if (count($dataAnita) > 0) 
+		if ($dataAnita[0]->{$this->keyFieldAnita} != '')
 		{
-			$codigo = ltrim($dataAnita[0]->{$this->keyFieldAnita}, '0');
-			$codigo = $codigo + 1;
+			$numero = filter_var($dataAnita[0]->{$this->keyFieldAnita}, FILTER_SANITIZE_NUMBER_INT);
+			$numero = $numero + 1;
+
+			$codigo = 'ERP'.str_pad($numero, 3, "0", STR_PAD_LEFT);
 		}
+		else
+			$codigo = 'ERP001';
 	}
 
 	private function setCamposAnita($request, &$cuentacontable, &$condicioniva, &$condicioniibb, &$codigotransporte) {
@@ -720,4 +729,90 @@ class ClienteRepository implements ClienteRepositoryInterface
 			break;
 		}
 	}
+
+	public function leeCliente($busqueda, $flPaginando = null)
+    {
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+        $cliente = $this->model->select('cliente.id as id',
+                                        'cliente.nombre as nombre',
+                                        'cliente.fantasia as fantasia',
+										'cliente.nroinscripcion as nroinscripcion',
+                                        'cliente.domicilio as domicilio',
+										'cliente.codigo as codigo',
+                                        'localidad.nombre as nombrelocalidad')
+                                ->leftjoin('localidad', 'localidad.id', '=', 'cliente.localidad_id')
+                                ->where('cliente.id', $busqueda)
+                                ->orWhere('cliente.nombre', 'like', '%'.$busqueda.'%')
+                                ->orWhere('cliente.fantasia', 'like', '%'.$busqueda.'%')
+								->orWhere('cliente.nroinscripcion', 'like', '%'.$busqueda.'%')
+								->orWhere('cliente.domicilio', 'like', '%'.$busqueda.'%')
+								->orWhere('cliente.codigo', 'like', '%'.$busqueda.'%')
+								->orWhere('localidad.nombre', 'like', '%'.$busqueda.'%')
+                                ->orderby('id', 'DESC');
+                                
+        if (isset($flPaginando))
+        {
+            if ($flPaginando)
+                $cliente = $cliente->paginate(10);
+            else
+                $cliente = $cliente->get();
+        }
+        else
+            $cliente = $cliente->get();
+
+        return $cliente;
+    }
+
+	public function consultaCliente($consulta)
+    {
+		$columns = ['cliente.id', 'cliente.nombre', 'condicioniva.nombre', 'cliente.domicilio', 'provincia.nombre', 'localidad.nombre'];
+        $columnsOut = ['id', 'nombre', 'condicioniva', 'domicilio', 'provincia', 'localidad'];
+
+		$consulta = strtoupper($consulta);
+
+		$count = count($columns);
+		$data = $this->model->select('cliente.id as id',
+									'cliente.nombre as nombre',
+                                    'condicioniva.nombre as condicioniva',
+									'cliente.domicilio as domicilio',
+									'provincia.nombre as provincia',
+									'localidad.nombre as localidad')
+                            ->leftjoin('condicioniva', 'condicioniva.id', '=', 'cliente.condicioniva_id')
+							->leftjoin('provincia', 'provincia.id', '=', 'cliente.provincia_id')
+							->leftjoin('localidad', 'localidad.id', '=', 'cliente.localidad_id')
+							->where('deleted_at', null);
+
+		$data = $data->Where(function ($query) use ($count, $consulta, $columns) {
+                        			for ($i = 0; $i < $count; $i++)
+                            			$query->orWhere($columns[$i], "LIKE", '%'. $consulta . '%');
+                            })	
+                            ->get();								
+
+        $output = [];
+		$output['data'] = '';	
+        $flSinDatos = true;
+        $count = count($columns);
+		if (count($data) > 0)
+		{
+			foreach ($data as $row)
+			{
+                $flSinDatos = false;
+                $output['data'] .= '<tr>';
+                for ($i = 0; $i < $count; $i++)
+                    $output['data'] .= '<td class="'.$columnsOut[$i].'">' . $row->{$columnsOut[$i]} . '</td>';	
+                $output['data'] .= '<td><a class="btn btn-warning btn-sm eligeconsultacliente">Elegir</a></td>';
+                $output['data'] .= '</tr>';
+			}
+		}
+
+        if ($flSinDatos)
+		{
+			$output['data'] .= '<tr>';
+			$output['data'] .= '<td>Sin resultados</td>';
+			$output['data'] .= '</tr>';
+		}
+		return(json_encode($output, JSON_UNESCAPED_UNICODE));
+    }    
+
 }

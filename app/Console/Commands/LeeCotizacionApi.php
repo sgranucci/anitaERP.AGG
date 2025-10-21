@@ -67,7 +67,10 @@ class LeeCotizacionApi extends Command
             // Verifica si ya esta grabada la cotizacion del dia
             $cotizacion = $this->cotizacionQuery->leeCotizacionDiaria($fecha, $moneda_id);
 
-            $fechaUltimaCotizacion = date('Ymd', strtotime($cotizacion->fecha));
+            if (isset($cotizacion->fecha))
+                $fechaUltimaCotizacion = date('Ymd', strtotime($cotizacion->fecha));
+            else
+                $fechaUltimaCotizacion = '';
 
             if ($cotizacion ? $fechaUltimaCotizacion != $fecha : true)
             {

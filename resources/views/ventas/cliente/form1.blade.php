@@ -146,6 +146,8 @@
 		<input type="hidden" id="tipoalta" name="tipoalta" value="{{$tipoalta ?? ''}}" >
 		<input type="hidden" id="tiposuspension_id" name="tiposuspension_id" value="{{$data->tiposuspension_id ?? ''}}" >
 		<input type="hidden" id="tiposuspensioncliente_query" value="{{$tiposuspensioncliente_query ?? ''}}" >
+		<input type="hidden" name="urlOrigen" value="{{$urlOrigen ?? ''}}" >
+		<input type="hidden" name="idRemoto" value="{{$idRemoto ?? ''}}" >
 </div>
 
 

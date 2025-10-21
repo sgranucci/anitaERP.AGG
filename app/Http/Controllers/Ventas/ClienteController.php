@@ -25,6 +25,7 @@ use App\Repositories\Ventas\ClienteRepositoryInterface;
 use App\Repositories\Ventas\Cliente_EntregaRepositoryInterface;
 use App\Repositories\Ventas\Cliente_ArchivoRepositoryInterface;
 use App\Repositories\Ventas\TiposuspensionclienteRepositoryInterface;
+use App\Repositories\Ordenventa\OrdenventaRepositoryInterface;
 use App\Queries\Ventas\ClienteQueryInterface;
 use App\Queries\Ventas\Cliente_EntregaQueryInterface;
 use App\Services\Configuracion\IIBBService;
@@ -43,6 +44,7 @@ class ClienteController extends Controller
 	private $iibbService;
 	private $clienteQuery;
 	private $cliente_entregaQuery;
+    private $ordenventaRepository;
 
     public function __construct(
 		ClienteRepositoryInterface $clienteRepository, 
@@ -51,7 +53,8 @@ class ClienteController extends Controller
 		IIBBService $iibbService,
 		ClienteQueryInterface $clientequery,
         TiposuspensionclienteRepositoryInterface $tiposuspensionclienterepository,
-        Cliente_EntregaQueryInterface $cliente_entregaquery)
+        Cliente_EntregaQueryInterface $cliente_entregaquery,
+        OrdenventaRepositoryInterface $ordenventarepository)
     {
         $this->clienteRepository = $clienteRepository;
         $this->cliente_entregaRepository = $cliente_entregaRepository;
@@ -61,6 +64,8 @@ class ClienteController extends Controller
 
         $this->clienteQuery = $clientequery;
         $this->cliente_entregaQuery = $cliente_entregaquery;
+
+        $this->ordenventaRepository = $ordenventarepository;
     }
 
     /**
@@ -68,23 +73,68 @@ class ClienteController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function index()
+    public function index(Request $request)
     {
         can('listar-clientes');
 
+        $busqueda = $request->busqueda;
 
-        $hay_clientes = $this->clienteQuery->first();
+		$clientes = $this->clienteRepository->leeCliente($busqueda, true);
 
-		if (!$hay_clientes)
+        if ($clientes->isEmpty())
 		{
-			$this->clienteRepository->sincronizarConAnita();
-			$this->cliente_entregaRepository->sincronizarConAnita();
+        	$this->clienteRepository->sincronizarConAnita();
+			//$this->cliente_entregaRepository->sincronizarConAnita();
 			$this->cliente_archivoRepository->sincronizarConAnita();
+	
+            $clientes = $this->clienteRepository->leeCliente($busqueda, true);
 		}
 
-		$datas = $this->clienteQuery->all();
+        $datas = ['clientes' => $clientes, 'busqueda' => $busqueda];
 
-        return view('ventas.cliente.index', compact('datas'));
+        return view('ventas.cliente.index', $datas);
+    }
+
+    public function listar(Request $request, $formato = null, $busqueda = null)
+    {
+        can('listar-clientes'); 
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        switch($formato)
+        {
+        case 'PDF':
+            $cliente = $this->clienteRepository->leeCliente($busqueda, false);
+
+            $view =  \View::make('ventas.cliente.listado', compact('cliente'))
+                        ->render();
+            $path = storage_path('pdf/listados');
+            $nombre_pdf = 'listado_cliente';
+
+            $pdf = \App::make('dompdf.wrapper');
+            $pdf->setPaper('legal','landscape');
+            $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
+
+            return response()->download($path.'/'.$nombre_pdf.'.pdf');
+            break;
+
+        case 'EXCEL':
+            return (new ClienteExport($this->clienteRepository))
+                        ->parametros($busqueda)
+                        ->download('cliente.xlsx');
+            break;
+
+        case 'CSV':
+            return (new ClienteExport($this->clienteRepository))
+                        ->parametros($busqueda)
+                        ->download('cliente.csv', \Maatwebsite\Excel\Excel::CSV);
+            break;            
+        }   
+
+        $datas = ['cliente' => $cliente, 'busqueda' => $busqueda];
+
+		return view('ventas.cliente.indexp', $datas);       
     }
 
 	public function leerCliente_Entrega($cliente_id)
@@ -122,6 +172,37 @@ class ClienteController extends Controller
             'modofacturacion_enum', 'cajaespecial_enum'));
     }
 
+    public function crearRemoto(Request $request, $id)
+    {
+        can('crear-clientes');
+
+        // Trae variables remotas
+        $urlOrigen = request()->headers->get('referer');
+
+        // Lee datos de origen
+        if (str_contains($urlOrigen, 'ordenventa'))
+        {
+            $data = $this->ordenventaRepository->find($id);
+            $data->nombre = $data->nombrecliente;
+        }
+
+        $idRemoto = $id;
+
+		$this->armaTablasVista($pais_query, $provincia_query, $condicioniva_query, $zonavta_query,
+        	$subzonavta_query, $vendedor_query, $transporte_query, $condicionventa_query, $listaprecio_query,
+        	$cuentacontable_query, $retieneiva_enum, $condicioniibb_enum, $vaweb_enum, $estado_enum, '', $tasaarba,
+			$tasacaba, $modofacturacion_enum, $cajaespecial_enum, 'crear'); 
+
+        if (!isset($tipoalta))
+            $tipoalta = config('cliente.tipoalta')['DEFINITIVO'][0];
+
+        return view('ventas.cliente.crear', compact('data', 'pais_query', 'provincia_query',
+			'condicioniva_query', 'zonavta_query', 'subzonavta_query', 'vendedor_query', 'transporte_query',
+			'condicionventa_query', 'listaprecio_query', 'retieneiva_enum', 'condicioniibb_enum', 'cuentacontable_query',
+			'vaweb_enum', 'tasaarba', 'tasacaba', 'estado_enum', 'tipoalta',
+            'modofacturacion_enum', 'cajaespecial_enum', 'urlOrigen', 'idRemoto'));
+    }
+
     /**
      * Store a newly created resource in storage.
      *
@@ -141,6 +222,13 @@ class ClienteController extends Controller
                 $cliente_entrega = $this->cliente_entregaRepository->create($request->all(), $cliente->id);
 
                 $cliente_archivo = $this->cliente_archivoRepository->create($request, $cliente->id);
+
+                if (isset($request->urlOrigen))
+                {       
+                    if (str_contains($request->urlOrigen, 'ordenventa'))
+                        $this->ordenventaRepository->find($request->idRemoto)->update(['cliente_id' => $cliente->id]);
+
+                }
             }
             DB::commit();
         } catch (\Exception $e) {
@@ -148,7 +236,10 @@ class ClienteController extends Controller
             return ['errores' => $e->getMessage()];
         }
 
-        return redirect('ventas/cliente')->with('mensaje', 'Cliente creado con exito');
+        if (isset($request->urlOrigen))
+            return redirect($request->urlOrigen);
+
+        return redirect('ventas/cliente')->with('mensaje', 'Cliente creado con éxito');
     }
 
     public function guardarClienteProvisorio(ValidacionClienteProvisorio $request)
@@ -359,4 +450,13 @@ class ClienteController extends Controller
                 ->download('cliente.'.$extension);
     }
     
+    public function consultaCliente(Request $request)
+    {
+        return ($this->clienteRepository->consultaCliente($request->consulta));
+	}
+
+    public function leeUnCliente($cliente_id)
+    {
+        return ($this->clienteRepository->find($cliente_id));
+	}
 }

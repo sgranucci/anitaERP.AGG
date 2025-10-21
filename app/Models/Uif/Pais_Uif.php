@@ -13,7 +13,7 @@ class Pais_Uif extends Model implements Auditable
     use \OwenIt\Auditing\Auditable;
     use Pais_UifTrait;
 
-    protected $fillable = ['nombre', 'riesgo', 'puntaje'];
+    protected $fillable = ['nombre', 'riesgo', 'puntaje', 'codigo'];
     protected $table = 'pais_uif';
 
 }

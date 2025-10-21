@@ -16,6 +16,9 @@ class CrearTablaSala extends Migration
         Schema::create('sala', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->string('nombre',255);
+            $table->string('codigo',10)->nullable();
+            $table->unsignedBigInteger('empresa_id');
+            $table->foreign('empresa_id', 'fk_sala_empresa')->references('id')->on('empresa')->onDelete('restrict')->onUpdate('restrict');
             $table->timestamps();
             $table->charset = 'utf8mb4';
             $table->collation = 'utf8mb4_spanish_ci';

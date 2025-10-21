@@ -53,7 +53,7 @@ class CrearTablaCliente extends Migration
             $table->foreign('cuentacontable_id', 'fk_cliente_cuentacontable')->references('id')->on('cuentacontable')->onDelete('set null')->onUpdate('set null');
             $table->string('vaweb',1);
             $table->string('estado',1);
-            $table->string('leyenda',2048);
+            $table->string('leyenda',2048)->nullable();
             $table->string('modofacturacion',1);
             $table->string('cajaespecial',1);
 			$table->unsignedBigInteger('usuario_id')->nullable();

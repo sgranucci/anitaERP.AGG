@@ -80,7 +80,7 @@ class PadronarbaRepository implements PadronarbaRepositoryInterface
         );
         $datas = json_decode($apiAnita->apiCall($data));
 		$tasa = '';
-		if (isset($datas))
+		if (count($datas) > 0)
 			$tasa = ($tipo == "percepcion" ? $datas[0]->percepcion : $datas[0]->retencion);
 
         return $tasa;

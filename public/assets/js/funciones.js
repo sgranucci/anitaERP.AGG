@@ -79,3 +79,15 @@ function calculaCoeficienteMoneda(aMoneda, deMoneda, Cotizacion)
     return 1.;
 }
 
+// Recibe fecha YYYY-MM-DD y saca fecha DD-MM-YYYY
+
+function formateaFecha(fecha)
+{
+    let anio = fecha.substring(0, 4);
+    let mes = fecha.substring(5, 7);
+    let dia = fecha.substring(8, 10);
+
+    let fechaFormateada = dia + "-" + mes + "-" + anio;
+
+    return fechaFormateada;
+}

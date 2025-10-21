@@ -113,7 +113,6 @@ class BancoRepository implements BancoRepositoryInterface
         foreach ($datosLocal as $value) {
             $datosLocalArray[] = $value->{$this->keyField};
         }
-
         foreach ($dataAnita as $value) {
             if (!in_array(ltrim($value->{$this->keyField}, '0'), $datosLocalArray)) {
                 $this->traerRegistroDeAnita($value->{$this->keyFieldAnita});

@@ -10,6 +10,9 @@
     $(function () {
         activa_eventos_consultaprovincia_uif()
     });
+    $( ".botonsubmit" ).click(function() {
+		$( "#form-general" ).submit();
+	});
 </script>
 @endsection
 
@@ -22,7 +25,7 @@
             <div class="card-header">
                 <h3 class="card-title">Crear Localidad UIF</h3>
                 <div class="card-tools">
-                    <a href="{{route('localidad_uif')}}" class="btn btn-outline-info btn-sm">
+                    <a href="{{route('consulta_localidad_uif')}}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
                 </div>

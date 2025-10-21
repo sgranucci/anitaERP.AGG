@@ -30,6 +30,8 @@ Usuarios
                             <th>Foto</th>
                             <th>Email</th>
                             <th>Roles</th>
+                            <th>Empresas</th>
+                            <th>Centro de Costo</th>
                             <th class="width80"></th>
                         </tr>
                     </thead>
@@ -46,6 +48,12 @@ Usuarios
                                     {{$loop->last ? $rol->nombre : $rol->nombre . ', '}}
                                 @endforeach
                             </td>
+                            <td>
+                                @foreach ($data->usuario_empresas as $empresa)
+                                    {{$loop->last ? $empresa->nombre : $empresa->nombre . ', '}}
+                                @endforeach
+                            </td>
+                            <td>{{$data->centrocostos->nombre??''}}</td>
                             <td>
                                 <a href="{{route('editar_usuario', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                     <i class="fa fa-edit"></i>

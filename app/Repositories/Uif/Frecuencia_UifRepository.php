@@ -69,4 +69,11 @@ class Frecuencia_UifRepository implements Frecuencia_UifRepositoryInterface
         return $frecuencia_uif;
     }
 
+    public function findPorFrecuencia($frecuencia)
+    {
+        return $this->model->select('puntaje')
+                            ->where('desdeoperacion', '<=', $frecuencia)
+                            ->where('hastaoperacion', '>=', $frecuencia)
+                            ->get();
+    }    
 }

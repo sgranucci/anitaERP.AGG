@@ -12,6 +12,8 @@ use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\View;
 use Illuminate\Pagination\Paginator;
 use App\Models\Admin\Menu;
+use App;
+use Carbon\Carbon;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -31,6 +33,9 @@ class AppServiceProvider extends ServiceProvider
         });
         View::share('theme', 'lte');
 
+		App::setLocale('es');
+    	Carbon::setLocale('es');
+
 		Pedido_Combinacion::observe(Pedido_CombinacionObserver::class);
 		Ordentrabajo_Tarea::observe(Ordentrabajo_TareaObserver::class);
 		Pedido_Combinacion_Estado::observe(Pedido_Combinacion_EstadoObserver::class);
@@ -44,6 +49,11 @@ class AppServiceProvider extends ServiceProvider
     public function register()
     {
         //
+		$this->app->bind(
+        	'App\Repositories\Admin\UsuarioRepositoryInterface',
+        	'App\Repositories\Admin\UsuarioRepository',
+		);
+
 	    $this->app->bind(
         	'App\Repositories\Configuracion\RepositoryInterface',
         	'App\Repositories\Configuracion\CondicionivaRepository',
@@ -459,6 +469,21 @@ class AppServiceProvider extends ServiceProvider
         	'App\Repositories\Configuracion\Cotizacion_MonedaRepository',
     	);
 
+		$this->app->bind(
+        	'App\Repositories\Configuracion\ArbolaprobacionRepositoryInterface',
+        	'App\Repositories\Configuracion\ArbolaprobacionRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Configuracion\Arbolaprobacion_NivelRepositoryInterface',
+        	'App\Repositories\Configuracion\Arbolaprobacion_NivelRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Configuracion\Arbolaprobacion_MovimientoRepositoryInterface',
+        	'App\Repositories\Configuracion\Arbolaprobacion_MovimientoRepository',
+    	);
+
 	    $this->app->bind(
         	'App\Repositories\Stock\MaterialcapelladaRepositoryInterface',
         	'App\Repositories\Stock\MaterialcapelladaRepository',
@@ -535,6 +560,16 @@ class AppServiceProvider extends ServiceProvider
 		$this->app->bind(
         	'App\Repositories\Configuracion\ProvinciaRepositoryInterface',
         	'App\Repositories\Configuracion\ProvinciaRepository',
+    	);
+		
+		$this->app->bind(
+        	'App\Repositories\Configuracion\PaisRepositoryInterface',
+        	'App\Repositories\Configuracion\PaisRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Configuracion\LocalidadRepositoryInterface',
+        	'App\Repositories\Configuracion\LocalidadRepository',
     	);
 
 		$this->app->bind(
@@ -857,6 +892,57 @@ class AppServiceProvider extends ServiceProvider
         	'App\Repositories\Uif\Cliente_UifRepositoryInterface',
         	'App\Repositories\Uif\Cliente_UifRepository',
     	);		
-					
+
+		$this->app->bind(
+        	'App\Repositories\Uif\Cliente_Archivo_UifRepositoryInterface',
+        	'App\Repositories\Uif\Cliente_Archivo_UifRepository',
+    	);		
+
+		$this->app->bind(
+        	'App\Repositories\Uif\Cliente_Premio_UifRepositoryInterface',
+        	'App\Repositories\Uif\Cliente_Premio_UifRepository',
+    	);		
+	
+		$this->app->bind(
+        	'App\Repositories\Uif\Cliente_Premio_Archivo_UifRepositoryInterface',
+        	'App\Repositories\Uif\Cliente_Premio_Archivo_UifRepository',
+    	);		
+									
+		$this->app->bind(
+        	'App\Repositories\Uif\Cliente_Riesgo_UifRepositoryInterface',
+        	'App\Repositories\Uif\Cliente_Riesgo_UifRepository',
+    	);		
+			
+		$this->app->bind(
+        	'App\Repositories\Uif\Cliente_Congelado_UifRepositoryInterface',
+        	'App\Repositories\Uif\Cliente_Congelado_UifRepository',
+    	);
+
+		// Modulo ordenes de venta
+		$this->app->bind(
+        	'App\Repositories\Ordenventa\OrdenventaRepositoryInterface',
+        	'App\Repositories\Ordenventa\OrdenventaRepository',
+    	);		
+
+		$this->app->bind(
+        	'App\Repositories\Ordenventa\Ordenventa_CuotaRepositoryInterface',
+        	'App\Repositories\Ordenventa\Ordenventa_CuotaRepository',
+    	);		
+			
+		$this->app->bind(
+        	'App\Repositories\Ordenventa\Ordenventa_EstadoRepositoryInterface',
+        	'App\Repositories\Ordenventa\Ordenventa_EstadoRepository',
+    	);		
+				
+		$this->app->bind(
+        	'App\Repositories\Ordenventa\Ordenventa_ArchivoRepositoryInterface',
+        	'App\Repositories\Ordenventa\Ordenventa_ArchivoRepository',
+    	);		
+
+		$this->app->bind(
+        	'App\Queries\Ordenventa\OrdenventaQueryInterface',
+        	'App\Queries\Ordenventa\OrdenventaQuery',
+    	);		
+			
     }
 }

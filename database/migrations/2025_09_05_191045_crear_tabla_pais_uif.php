@@ -18,6 +18,7 @@ class CrearTablaPaisUif extends Migration
             $table->string('nombre', 255);
             $table->string('riesgo', 50);
             $table->unsignedBigInteger('puntaje');
+            $table->string('codigo', 10);
             $table->timestamps();
             $table->charset = 'utf8mb4';
             $table->collation = 'utf8mb4_spanish_ci';

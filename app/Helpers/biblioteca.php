@@ -1,6 +1,8 @@
 <?php
 
 use App\Models\Admin\Permiso;
+use Illuminate\Support\Facades\Request;
+use Carbon\Carbon;
 
 if (!function_exists('getMenuActivo')) {
     function getMenuActivo($ruta)
@@ -16,6 +18,11 @@ if (!function_exists('getMenuActivo')) {
 if (!function_exists('canUser')) {
     function can($permiso, $redirect = true)
     {
+        $url = Request::url();
+        $urlPermitida = "anitaERP/public/ordenventa/visualizar";
+        $pos = strpos($url, $urlPermitida);
+        if ($pos !== false)
+            return(true);
         if (session()->get('rol_nombre') == 'administrador') {
             return true;
         } else {
@@ -38,6 +45,18 @@ if (!function_exists('canUser')) {
             return true;
         }
     }
+}
+
+function traePermisosUsuario()
+{
+    $rolId = session()->get('rol_id');
+    $permisos = cache()->tags('Permiso')->rememberForever("Permiso.rolid.$rolId", function () {
+        return Permiso::whereHas('roles', function ($query) {
+            $query->where('rol_id', session()->get('rol_id'));
+        })->get()->pluck('slug')->toArray();
+    });
+
+    return ['rol_id' => $rolId, 'permisos' => $permisos];
 }
 
 /**
@@ -190,6 +209,57 @@ function chequeaPermisoTicket()
         $permiso = 'supervisor';
 
     return $permiso;
+}
+
+function validarHora($hora, $formato = 'H:i') {
+    $d = DateTime::createFromFormat($formato, $hora);
+    return $d && $d->format($formato) === $hora;
+}
+
+function validarFormatoHora(string $hora): bool {
+    // La expresión regular busca un patrón H:M:S
+    // HH: 00 a 23
+    // MM: 00 a 59
+    // SS: 00 a 59
+    $patron = '/^([01]\d|2[0-3]):([0-5]\d):([0-5]\d)$/';
+    return preg_match($patron, $hora) === 1;
+}
+
+function conviertePeriodoEnRangoFecha($periodo, $flHora = null)
+{
+    // En base al periodo arma rango de fechas
+    if (strpos($periodo, "-") !== false)
+        $per = explode('-', $periodo);
+    else
+        $per = explode('/', $periodo);
+    $anio = (int) $per[1];
+    $mes = (int) $per[0];
+    $dias = cal_days_in_month(CAL_GREGORIAN, $mes, $anio);
+    $fecha = $anio.'-'.$mes.'-01';
+    if ($flHora)
+    {
+        $hora_string = '00:00:00';
+        $desdeFecha = Carbon::createFromFormat('Y-m-d H:i:s', $fecha.' '.$hora_string); // Pasa a formato fecha
+    }
+    else
+    {
+        $fechaFormateada = Carbon::createFromFormat('Y-m-d', $fecha); // Pasa a formato fecha
+        $desdeFecha = $fechaFormateada->format('Y-m-d');
+    }
+
+    $fecha = $anio.'-'.$mes.'-'.$dias;
+    if ($flHora)
+    {
+        $hora_string = '23:59:59';
+        $hastaFecha = Carbon::createFromFormat('Y-m-d H:i:s', $fecha.' '.$hora_string); // Pasa a formato fecha
+    }
+    else
+    {
+        $fechaFormateada = Carbon::createFromFormat('Y-m-d', $fecha); // Pasa a formato fecha
+        $hastaFecha = $fechaFormateada->format('Y-m-d');
+    }
+
+    return ['desdefecha' => $desdeFecha, 'hastafecha' => $hastaFecha];
 }
 
 

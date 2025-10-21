@@ -8,14 +8,18 @@ use App\Models\Configuracion\Sala;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Requests\ValidacionSala;
 use App\Repositories\Configuracion\SalaRepositoryInterface;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 
 class SalaController extends Controller
 {
 	private $repository;
+    private $empresaRepository;
 
-    public function __construct(SalaRepositoryInterface $repository)
+    public function __construct(SalaRepositoryInterface $repository,
+                                EmpresaRepositoryInterface $empresarepository)
     {
         $this->repository = $repository;
+        $this->empresaRepository = $empresarepository;
     }
 
     /**
@@ -39,8 +43,9 @@ class SalaController extends Controller
     public function crear()
     {
         can('crear-sala');
+        $empresa_query = $this->empresaRepository->all();
 
-        return view('configuracion.sala.crear');
+        return view('configuracion.sala.crear', compact('empresa_query'));
     }
 
     /**
@@ -67,8 +72,9 @@ class SalaController extends Controller
     {
         can('editar-sala');
         $data = $this->repository->findOrFail($id);
+        $empresa_query = $this->empresaRepository->all();
 
-        return view('configuracion.sala.editar', compact('data'));
+        return view('configuracion.sala.editar', compact('data', 'empresa_query'));
     }
 
     /**

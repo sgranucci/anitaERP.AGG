@@ -88,6 +88,13 @@ class CentrocostoRepository implements CentrocostoRepositoryInterface
         return $centrocosto;
     }
 
+    public function findPorNombre($nombre)
+    {
+        $centrocosto = $this->model->where('nombre', 'LIKE', '%'.$nombre.'%')->pluck('id')->toArray();
+
+        return $centrocosto;
+    }
+
     public function findOrFail($id)
     {
         if (null == $centrocosto = $this->model->findOrFail($id)) {

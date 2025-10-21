@@ -4,8 +4,24 @@ namespace App\Http\Controllers\Uif;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionCliente_Uif;
-use App\Services\Caja\RendicionreceptivoService;
-use App\Exports\Caja\RendicionreceptivoExport;
+use App\Services\Uif\Cliente_UifService;
+use App\Exports\Uif\Cliente_UifExport;
+use App\Models\Uif\Cliente_Uif;
+use App\Repositories\Uif\Cliente_UifRepositoryInterface;
+use App\Repositories\Uif\Localidad_UifRepositoryInterface;
+use App\Repositories\Uif\Provincia_UifRepositoryInterface;
+use App\Repositories\Uif\Actividad_UifRepositoryInterface;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Repositories\Configuracion\SalaRepositoryInterface;
+use App\Repositories\Configuracion\TipodocumentoRepositoryInterface;
+use App\Repositories\Uif\Estadocivil_UifRepositoryInterface;
+use App\Repositories\Uif\Factorriesgo_UifRepositoryInterface;
+use App\Repositories\Uif\Inusualidad_UifRepositoryInterface;
+use App\Repositories\Uif\Juego_UifRepositoryInterface;
+use App\Repositories\Uif\Nivelsocioeconomico_UifRepositoryInterface;
+use App\Repositories\Uif\Pais_UifRepositoryInterface;
+use App\Repositories\Uif\Pep_UifRepositoryInterface;
+use App\Repositories\Uif\So_UifRepositoryInterface;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Arr;
@@ -14,43 +30,56 @@ use DB;
 
 class Cliente_UifController extends Controller
 {
-    private $rendicionreceptivo_caja_movimientoRepository;
-    private $rendicionreceptivo_voucherRepository;
-    private $rendicionreceptivo_formapagoRepository;
-    private $cuentacajaRepository;
-    private $conceptogastoRepository;
-    private $cajaRepository;
-    private $guiaRepository;
-    private $movilRepository;
-    private $monedaRepository;
+    private $cliente_uifService;
+    private $cliente_uifRepository;
+    private $localidad_uifRepository;
+    private $provincia_uifRepository;
+    private $actividad_uifRepository;
     private $empresaRepository;
-    private $rendicionreceptivoService;
+    private $salaRepository;
+    private $estadocivil_uifRepository;
+    private $factorriesgo_uifRepository;
+    private $inusualidad_uifRepository;
+    private $juego_uifRepository;
+    private $nivelsocioeconomico_uifRepository;
+    private $pais_uifRepository;
+    private $pep_uifRepository;
+    private $so_uifRepository;
+    private $tipodocumentoRepository;
 
-	public function __construct(Rendicionreceptivo_Caja_MovimientoRepositoryInterface $rendicionreceptivo_caja_movimientorepository,
-                                RendicionreceptivoRepositoryInterface $rendicionreceptivorepository,
-                                rendicionreceptivo_VoucherRepositoryInterface $rendicionreceptivo_voucherrepository,
-                                Rendicionreceptivo_FormapagoRepositoryInterface $rendicionreceptivo_formapagorepository,
-                                CuentacajaRepositoryInterface $cuentacajarepository,
-                                ConceptogastoRepositoryInterface $conceptogastorepository,
+	public function __construct(Cliente_UifService $cliente_uifservice,
+                                Cliente_UifRepositoryInterface $cliente_uifrepository,
+                                Localidad_UifRepositoryInterface $localidad_uifrepository,
+                                Provincia_UifRepositoryInterface $provincia_uifrepository,
+                                Actividad_UifRepositoryInterface $actividad_uifRepository,
                                 EmpresaRepositoryInterface $empresarepository,
-                                GuiaRepositoryInterface $guiarepository,
-                                MovilRepositoryInterface $movilrepository,
-                                MonedaRepositoryInterface $monedarepository,
-                                CajaRepositoryInterface $cajarepository,
-                                RendicionreceptivoService $rendicionreceptivoservice)
+                                SalaRepositoryInterface $salarepository,
+                                Estadocivil_UifRepositoryInterface $estadocivil_uifrepository,
+                                Factorriesgo_UifRepositoryInterface $factorriesgo_uifrepository,
+                                Inusualidad_UifRepositoryInterface $inusualidad_uifrepository,
+                                Juego_UifRepositoryInterface $juego_uifrepository,
+                                Nivelsocioeconomico_UifRepositoryInterface $nivelsocioeconomico_uifrepository,
+                                Pais_UifRepositoryInterface $pais_uifrepository,
+                                Pep_UifRepositoryInterface $pep_uifrepository,
+                                So_UifRepositoryInterface $so_uifrepository,
+                                TIpodocumentoRepositoryInterface $tipodocumentorepository)
     {
-        $this->rendicionreceptivo_caja_movimientoRepository = $rendicionreceptivo_caja_movimientorepository;
-        $this->rendicionreceptivo_voucherRepository = $rendicionreceptivo_voucherrepository;
-        $this->rendicionreceptivo_formapagoRepository = $rendicionreceptivo_formapagorepository;
-        $this->rendicionreceptivoRepository = $rendicionreceptivorepository;
-        $this->cuentacajaRepository = $cuentacajarepository;
-        $this->conceptogastoRepository = $conceptogastorepository;
-        $this->guiaRepository = $guiarepository;
-        $this->movilRepository = $movilrepository;
-        $this->monedaRepository = $monedarepository;
+        $this->cliente_uifService = $cliente_uifservice;
+        $this->cliente_uifRepository = $cliente_uifrepository;
+        $this->localidad_uifRepository = $localidad_uifrepository;
+        $this->provincia_uifRepository = $provincia_uifrepository;
+        $this->actividad_uifRepository = $actividad_uifRepository;
         $this->empresaRepository = $empresarepository;
-        $this->cajaRepository = $cajarepository;
-        $this->rendicionreceptivoService = $rendicionreceptivoservice;
+        $this->salaRepository = $salarepository;
+        $this->estadocivil_uifRepository = $estadocivil_uifrepository;
+        $this->factorriesgo_uifRepository = $factorriesgo_uifrepository;
+        $this->inusualidad_uifRepository = $inusualidad_uifrepository;
+        $this->juego_uifRepository = $juego_uifrepository;
+        $this->nivelsocioeconomico_uifRepository = $nivelsocioeconomico_uifrepository;
+        $this->pais_uifRepository = $pais_uifrepository;
+        $this->pep_uifRepository = $pep_uifrepository;
+        $this->so_uifRepository = $so_uifrepository;
+        $this->tipodocumentoRepository = $tipodocumentorepository;
     }
 
     /**
@@ -60,20 +89,27 @@ class Cliente_UifController extends Controller
      */
     public function index(Request $request)
     {
-        can('listar-rendicion-receptivo');
-		
+        can('listar-cliente-uif');
+
         $busqueda = $request->busqueda;
 
-		$rendicionreceptivos = $this->rendicionreceptivoRepository->leeRendicionreceptivo($busqueda, true);
+		$cliente_uifs = $this->cliente_uifRepository->leeCliente_Uif($busqueda, true);
 
-        $datas = ['rendicionreceptivos' => $rendicionreceptivos, 'busqueda' => $busqueda];
+        if ($cliente_uifs->isEmpty())
+		{
+        	$this->cliente_uifRepository->sincronizarConAnita();
+	
+            $cliente_uifs = $this->cliente_uifRepository->leeCliente_Uif($busqueda, true);
+		}
 
-        return view('caja.rendicionreceptivo.index', $datas);
+        $datas = ['cliente_uifs' => $cliente_uifs, 'busqueda' => $busqueda];
+
+        return view('uif.cliente_uif.index', $datas);
     }
 
     public function listar(Request $request, $formato = null, $busqueda = null)
     {
-        can('listar-rendicion-receptivo'); 
+        can('listar-cliente-uif'); 
 
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
@@ -81,12 +117,12 @@ class Cliente_UifController extends Controller
         switch($formato)
         {
         case 'PDF':
-            $rendicionreceptivos = $this->rendicionreceptivoRepository->leeRendicionreceptivo($busqueda, false);
+            $cliente_uifs = $this->cliente_uifRepository->leeCliente_Uif($busqueda, false);
 
-            $view =  \View::make('caja.rendicionreceptivo.listado', compact('rendicionreceptivos'))
+            $view =  \View::make('uif.cliente_uif.listado', compact('cliente_uifs'))
                         ->render();
             $path = storage_path('pdf/listados');
-            $nombre_pdf = 'listado_rendicionreceptivo';
+            $nombre_pdf = 'listado_cliente_uif';
 
             $pdf = \App::make('dompdf.wrapper');
             $pdf->setPaper('legal','landscape');
@@ -96,21 +132,21 @@ class Cliente_UifController extends Controller
             break;
 
         case 'EXCEL':
-            return (new RendicionreceptivoExport($this->rendicionreceptivoRepository))
+            return (new Cliente_UifExport($this->cliente_uifRepository))
                         ->parametros($busqueda)
-                        ->download('rendicionreceptivo.xlsx');
+                        ->download('cliente_uif.xlsx');
             break;
 
         case 'CSV':
-            return (new RendicionreceptivoExport($this->rendicionreceptivoRepository))
+            return (new Cliente_UifExport($this->cliente_uifRepository))
                         ->parametros($busqueda)
-                        ->download('rendicionreceptivo.csv', \Maatwebsite\Excel\Excel::CSV);
+                        ->download('cliente_uif.csv', \Maatwebsite\Excel\Excel::CSV);
             break;            
         }   
 
-        $datas = ['rendicionreceptivos' => $rendicionreceptivos, 'busqueda' => $busqueda];
+        $datas = ['cliente_uifs' => $cliente_uifs, 'busqueda' => $busqueda];
 
-		return view('caja.rendicionreceptivo.indexp', $datas);       
+		return view('uif.cliente_uif.indexp', $datas);       
     }
 
     /**
@@ -118,35 +154,45 @@ class Cliente_UifController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function crear($caja_id = null)
+    public function crear($uif_id = null)
     {
-        can('crear-rendicion-receptivo');
+        can('crear-cliente-uif');
 
-        $moneda_query = $this->monedaRepository->all();
-        $guia_query = $this->guiaRepository->all();
-        $movil_query = $this->movilRepository->all();
+        $localidad_uif_query = $this->localidad_uifRepository->all();
+        $provincia_uif_query = $this->provincia_uifRepository->all();
+        $actividad_uif_query = $this->actividad_uifRepository->all();
         $empresa_query = $this->empresaRepository->all();
-        $cuentacaja_query = $this->cuentacajaRepository->all();
-        $conceptogasto_query = $this->conceptogastoRepository->all();
-        $ordenservicio_id_query = $this->rendicionreceptivoService->leeOrdenServicioPendiente();
-        $ordenservicio_id_query = Arr::sort($ordenservicio_id_query);
+        $sala_query = $this->salaRepository->allFiltrado();
+        $estadocivil_uif_query = $this->estadocivil_uifRepository->all();
+        $factorriesgo_uif_query = $this->factorriesgo_uifRepository->all();
+        $inusualidad_uif_query = $this->inusualidad_uifRepository->all();
+        $juego_uif_query = $this->juego_uifRepository->all();
+        $nivelsocioeconomico_uif_query = $this->nivelsocioeconomico_uifRepository->all();
+        $pais_uif_query = $this->pais_uifRepository->all();
+        $pep_uif_query = $this->pep_uifRepository->all();
+        $so_uif_query = $this->so_uifRepository->all();
+        $tipodocumento_query = $this->tipodocumentoRepository->all();
+        $sexo_enum = Cliente_Uif::$enumSexo;
+        $resideparaisofiscal_enum = Cliente_Uif::$enumResideParaisoFiscal;
+	    $resideexterior_enum = Cliente_Uif::$enumResideExterior;
+	    $cumplenormativaso_enum = Cliente_Uif::$enumCumpleNormativaSo;
+	    $firmodeclaracionjurada_enum = Cliente_Uif::$enumFirmoDeclaracionJurada;
+        $riesgopep_enum = Cliente_Uif::$enumRiesgoPep;
 
-        $nombreCaja = '';
-        $origen = 'rendicionreceptivo';
-        if (isset($caja_id))
-        {
-            $caja = $this->cajaRepository->find($caja_id);
+        $essupervisor = 'N';
+        $permisos = traePermisosUsuario();
 
-            if ($caja)
-                $nombreCaja = $caja->nombre;
+        if (in_array('supervisor-uif', $permisos['permisos']))  
+            $essupervisor = 'S';
 
-            $origen = 'movimientocaja';
-        }
-        
-        return view('caja.rendicionreceptivo.crear', compact('moneda_query', 'guia_query', 'movil_query',
-                                                            'cuentacaja_query', 'conceptogasto_query',
-                                                            'ordenservicio_id_query',
-                                                            'caja_id', 'nombreCaja', 'origen'));
+        return view('uif.cliente_uif.crear', compact('localidad_uif_query', 'provincia_uif_query', 'actividad_uif_query',
+                                                            'empresa_query', 'estadocivil_uif_query', 'sala_query',
+                                                            'factorriesgo_uif_query', 'inusualidad_uif_query',
+                                                            'juego_uif_query', 'nivelsocioeconomico_uif_query',
+                                                            'pais_uif_query', 'pep_uif_query', 'so_uif_query', 'tipodocumento_query',
+                                                            'sexo_enum', 'resideparaisofiscal_enum', 'resideexterior_enum',
+                                                            'cumplenormativaso_enum', 'firmodeclaracionjurada_enum',
+                                                            'riesgopep_enum', 'essupervisor'));
     }
 
     /**
@@ -155,11 +201,13 @@ class Cliente_UifController extends Controller
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
      */
-    public function guardar(ValidacionRendicionreceptivo $request)
+    public function guardar(ValidacionCliente_Uif $request)
     {
         session(['empresa_id' => $request->empresa_id]);
-        
-        return $this->rendicionreceptivoService->guardaRendicionreceptivo($request);
+
+        $this->cliente_uifService->guardaCliente_Uif($request);
+
+        return redirect('uif/cliente_uif')->with('mensaje', 'Cliente creado con éxito');
 	}
 
     /**
@@ -170,37 +218,49 @@ class Cliente_UifController extends Controller
      */
     public function editar($id, $origen = null)
     {
-        can('editar-rendicion-receptivo');
+        can('editar-cliente-uif');
 
         if (!isset($origen))
-            $origen = 'rendicionreceptivo';
+            $origen = 'cliente_uif';
 
-		$data = $this->rendicionreceptivoRepository->find($id);
-        $moneda_query = $this->monedaRepository->all();
-        $guia_query = $this->guiaRepository->all();
-        $movil_query = $this->movilRepository->all();
+		$data = $this->cliente_uifRepository->find($id);
+
+        $localidad_uif_query = $this->localidad_uifRepository->all();
+        $provincia_uif_query = $this->provincia_uifRepository->all();
+        $actividad_uif_query = $this->actividad_uifRepository->all();
         $empresa_query = $this->empresaRepository->all();
-        $cuentacaja_query = $this->cuentacajaRepository->all();
-        $conceptogasto_query = $this->conceptogastoRepository->all();
-        $ordenservicio_id_query = $this->rendicionreceptivoService->leeOrdenServicioPendiente();
-        $ordenservicio_id_query[] = $data->ordenservicio_id;
-        $ordenservicio_id_query = Arr::sort($ordenservicio_id_query);
-        $caja_id = $data->caja_id;
+        $sala_query = $this->salaRepository->allFiltrado();
+        $estadocivil_uif_query = $this->estadocivil_uifRepository->all();
+        $factorriesgo_uif_query = $this->factorriesgo_uifRepository->all();
+        $inusualidad_uif_query = $this->inusualidad_uifRepository->all();
+        $juego_uif_query = $this->juego_uifRepository->all();
+        $nivelsocioeconomico_uif_query = $this->nivelsocioeconomico_uifRepository->all();
+        $pais_uif_query = $this->pais_uifRepository->all();
+        $pep_uif_query = $this->pep_uifRepository->all();
+        $so_uif_query = $this->so_uifRepository->all();
+        $tipodocumento_query = $this->tipodocumentoRepository->all();
+        $sexo_enum = Cliente_Uif::$enumSexo;
+        $resideparaisofiscal_enum = Cliente_Uif::$enumResideParaisoFiscal;
+	    $resideexterior_enum = Cliente_Uif::$enumResideExterior;
+	    $cumplenormativaso_enum = Cliente_Uif::$enumCumpleNormativaSo;
+	    $firmodeclaracionjurada_enum = Cliente_Uif::$enumFirmoDeclaracionJurada;
+        $riesgopep_enum = Cliente_Uif::$enumRiesgoPep;
 
-        $nombreCaja = '';
-        if (isset($caja_id))
-        {
-            $caja = $this->cajaRepository->find($caja_id);
+        $essupervisor = 'N';
+        $permisos = traePermisosUsuario();
 
-            if ($caja)
-                $nombreCaja = $caja->nombre;
-        }
+        if (in_array('supervisor-uif', $permisos['permisos']))  
+            $essupervisor = 'S';
 //dd($data);
-        return view('caja.rendicionreceptivo.editar', compact('data', 
-                                                    'moneda_query', 'guia_query', 'movil_query',
-                                                    'cuentacaja_query', 'conceptogasto_query',
-                                                    'ordenservicio_id_query',
-                                                    'caja_id', 'nombreCaja', 'origen'));
+        return view('uif.cliente_uif.editar', compact('data', 
+                                                    'localidad_uif_query', 'provincia_uif_query', 'actividad_uif_query',
+                                                    'empresa_query', 'estadocivil_uif_query', 'sala_query',
+                                                    'factorriesgo_uif_query', 'inusualidad_uif_query',
+                                                    'juego_uif_query', 'nivelsocioeconomico_uif_query',
+                                                    'pais_uif_query', 'pep_uif_query', 'so_uif_query', 'tipodocumento_query',
+                                                    'sexo_enum', 'resideparaisofiscal_enum', 'resideexterior_enum',
+                                                    'cumplenormativaso_enum', 'firmodeclaracionjurada_enum', 'riesgopep_enum',
+                                                    'essupervisor'));
     }
 
     /**
@@ -210,13 +270,15 @@ class Cliente_UifController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function actualizar(ValidacionRendicionreceptivo $request, $id)
+    public function actualizar(ValidacionCliente_Uif $request, $id)
     {
-        can('actualizar-rendicion-receptivo');
+        can('actualizar-cliente-uif');
 
         session(['empresa_id' => $request->empresa_id]);
         
-        return $this->rendicionreceptivoService->actualizaRendicionreceptivo($request, $id);
+        $this->cliente_uifService->actualizaCliente_Uif($request, $id);
+
+        return redirect('uif/cliente_uif')->with('mensaje', 'Cliente actualizado con éxito');
     }
 
     /**
@@ -227,13 +289,18 @@ class Cliente_UifController extends Controller
      */
     public function eliminar(Request $request, $id, $origen = null)
     {
-        can('borrar-rendicion-receptivo');
+        can('borrar-cliente-uif');
 
         if ($request->ajax()) 
 		{
 			$fl_borro = false;
-			if ($this->rendicionreceptivoRepository->delete($id))
+            $cliente_uif = $this->cliente_uifRepository->find($id);
+
+			if ($this->cliente_uifRepository->delete($id))
+            {
+                Storage::disk('public')->delete("imagenes/fotos_documentos_uif/$cliente_uif->fotodocumento");
 				$fl_borro = true;
+            }
 
             if ($fl_borro) {
                 return response()->json(['mensaje' => 'ok']);
@@ -241,25 +308,61 @@ class Cliente_UifController extends Controller
                 return response()->json(['mensaje' => 'ng']);
             }
         } else {
-            if ($this->rendicionreceptivoRepository->delete($id))
-                $mensaje = 'Rendición de receptivo borrada con éxito';
+            if ($this->cliente_uifRepository->delete($id))
+                $mensaje = 'Cliente UIF borrado con éxito';
             else 	
                 $mensaje = 'error';
 
-            if ($origen == 'movimientocaja')
-                return redirect('caja/movimientocaja')->with('mensaje', $mensaje);
-
-            return redirect('caja/rendicionreceptivo')->with('mensaje', $mensaje);
+            return redirect('uif/cliente_uif')->with('mensaje', $mensaje);
         }
     }
 
-    public function leeGastoAnterior(Request $request)
+    public function leeCliente_Uif(Request $request)
     {
-        return $this->rendicionreceptivoService->leeGastoAnterior($request->ordenservicio_id);
+        return $this->cliente_uifService->leeCliente();
     }
 
-    public function leeVoucher(Request $request)
+    // Calcula riesgo del cliente UIF
+
+    public function calculaRiesgo($cliente_uif_id, $periodo, $inusualidad_uif_id)
     {
-        return $this->rendicionreceptivoService->leeVoucher($request->guia_id, $request->ordenservicio_id);
+        return $this->cliente_uifService->calculaRiesgo($cliente_uif_id, $periodo, $inusualidad_uif_id);
     }
+
+    public function crearExportaOperacion()
+    {
+        return view('uif.exportaoperacion.crear');        
+    }    
+
+    // Genera exportacion operaciones UIF
+
+    public function generaExportaOperacion(Request $request)
+    {
+        $cliente_premio_uifs = $this->cliente_uifService->generaExportaOperacion($request->periodo, $request->limiteinformeuif);
+        
+        $periodo = $request->periodo;
+
+        if (strpos($periodo, "/") !== false)
+            $periodo = preg_replace('/\//', '-', $periodo);
+
+        $limiteinformeuif = $request->limiteinformeuif;
+
+        return view('uif.exportaoperacion.index', compact('cliente_premio_uifs', 'periodo', 'limiteinformeuif'));
+    }
+
+    // Exporta operaciones UIF
+
+    public function exportaOperacion($periodo, $limiteinformeuif)
+    {
+        $this->cliente_uifService->exportaOperacion($periodo, $limiteinformeuif);
+
+        $cliente_premio_uifs = $this->cliente_uifService->generaExportaOperacion($periodo, $limiteinformeuif);
+
+        if (strpos($periodo, "/") !== false)
+            $periodo = preg_replace('/\//', '-', $periodo);
+
+        return view('uif.exportaoperacion.index', compact('cliente_premio_uifs', 'periodo', 'limiteinformeuif'));
+    }
+
+
 }

@@ -59,10 +59,12 @@ class TicketService
 		$data['usuario_ids'][] = Auth::user()->id;
 	   	$data['observacionestados'][] = "Alta de Ticket";
 
+		// Estado del ticket en el alta como "pendiente"
+		$data['estado_ticket'] = Ticket_Estado::$enumEstado[0]['nombre'];
 		DB::beginTransaction();
 		try
 		{
-			$ticket = $this->ticketRepository->create($request->all());
+			$ticket = $this->ticketRepository->create($data);
 
 			if ($ticket == 'Error')
 				throw new Exception('Error en grabacion');

@@ -32,6 +32,7 @@
                             <th>Nombre</th>
                             <th>Riesgo</th>
                             <th>Puntaje</th>
+                            <th>Código Anita</th>
                             <th class="width80" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -42,6 +43,7 @@
                             <td>{{$data->nombre}}</td>
                             <td>{{$data->riesgo}}</td>
                             <td>{{$data->puntaje}}</td>
+                            <td>{{$data->codigo}}</td>
                             <td>
                        			@if (can('editar-pais-uif', false))
                                 	<a href="{{route('edita_pais_uif', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">

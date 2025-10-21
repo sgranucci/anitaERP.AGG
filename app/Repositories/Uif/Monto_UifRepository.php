@@ -69,4 +69,11 @@ class Monto_UifRepository implements Monto_UifRepositoryInterface
         return $monto_uif;
     }
 
+    public function findPorMonto($monto)
+    {
+        return $this->model->select('puntaje')
+                            ->where('desdemonto', '<=', $monto)
+                            ->where('hastamonto', '>=', $monto)
+                            ->get();
+    }
 }

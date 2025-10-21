@@ -5,9 +5,12 @@ namespace App\Repositories\Contable;
 use App\Models\Contable\Cuentacontable;
 use App\Repositories\Contable\Cuentacontable_CentrocostoRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Repositories\Caja\ConceptogastoRepositoryInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
 use Auth;
+use Exception;
 
 class CuentacontableRepository implements CuentacontableRepositoryInterface
 {
@@ -18,6 +21,8 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
 
     private $centrocostoRepository;
     private $cuentacontable_centrocostoRepository;
+    private $conceptogastoRepository;
+    private $empresaRepository;
 
     /**
      * PostRepository constructor.
@@ -25,10 +30,14 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
      * @param Post $post
      */
     public function __construct(Cuentacontable $cuentacontable,
+                                EmpresaRepositoryInterface $empresarepository,
+                                ConceptogastoRepositoryInterface $conceptogastorepository,
                                 CentrocostoRepositoryInterface $centrocostorepository,
                                 Cuentacontable_CentrocostoRepositoryInterface $cuentacontable_centrocostorepository)
     {
         $this->model = $cuentacontable;
+        $this->empresaRepository = $empresarepository;
+        $this->conceptogastoRepository = $conceptogastorepository;
         $this->centrocostoRepository = $centrocostorepository;
         $this->cuentacontable_centrocostoRepository = $cuentacontable_centrocostorepository;
     }
@@ -194,30 +203,45 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
             $conceptogasto_id = null;
             if (count($dataAnitaConc) > 0)
             {
-                // Busca concepto por codigo
-                $conceptogasto = Conceptogasto::find($dataAnitaConc);
+                $dataConc = $dataAnitaConc[0];
 
-                if ($conceptogasto)
-                    $conceptogasto_id = $conceptogasto->id;
-                else    
+                // Busca concepto por codigo
+                try {
+                    $conceptogasto = $this->conceptogastoRepository->find($dataConc->ctaco_concepto);
+
+                    if ($conceptogasto)
+                        $conceptogasto_id = $conceptogasto->id;
+                    else    
+                        $conceptogasto_id = null;
+                } catch (Exception $e) {
                     $conceptogasto_id = null;
+                }
             }
 
-            $cuentacontable = Self::create([
-                "empresa_id" => $data->ctam_empresa,
-                "rubrocontable_id" => $data->ctam_rubro,
-				"nivel" => $data->ctam_nivel,
-                "nombre" => $data->ctam_desc,
-                "codigo" => $data->ctam_cuenta,
-                "tipocuenta" => $tipocuenta,
-                "monetaria" => $data->ctam_ajustable,
-                "manejaccosto" => $data->ctam_fl_ccosto,
-				"usuarioultcambio_id" => $usuario_id,
-                "ajustamonedaextranjera" => $data->ctam_aju_mon_ext,
-                "conceptogasto_id" => $conceptogasto_id,
-                "cuentacontable_difcambio_id" => $data->ctam_cta_dif_cbio
-            ]);
+            $empresa_id = null;
+            $empresa = $this->empresaRepository->findPorCodigo($data->ctam_empresa);
 
+            if ($empresa)
+                $empresa_id = $empresa->id;
+
+            try {
+                $cuentacontable = $this->model->create([
+                    "empresa_id" => $empresa_id,
+                    "rubrocontable_id" => $data->ctam_rubro,
+                    "nivel" => $data->ctam_nivel,
+                    "nombre" => $data->ctam_desc,
+                    "codigo" => $data->ctam_cuenta,
+                    "tipocuenta" => $tipocuenta,
+                    "monetaria" => $data->ctam_ajustable,
+                    "manejaccosto" => $data->ctam_fl_ccosto,
+                    "usuarioultcambio_id" => $usuario_id,
+                    "ajustamonedaextranjera" => $data->ctam_aju_mon_ext,
+                    "conceptogasto_id" => $conceptogasto_id,
+                    "cuentacontable_difcambio_id" => $data->ctam_cta_dif_cbio
+                ]);
+            } catch (Exception $e) {
+                dd($e);
+            }
 			$data = array( 
 				'acc' => 'list', 'tabla' => $this->tableAnita[2], 
 				'sistema' => 'contab',
@@ -234,16 +258,20 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
 			foreach ($dataAnita as $cuentacontable_centrocosto)
 			{
 				// Busca centro de costo
-				$centrocosto = $this->centrocostoRepository->findPorCodigo($cuentacontable_centrocosto->ccosv_ccosto);
-				if ($centrocosto)
-                {
-					$centrocosto_id = $centrocosto->id;
-				
-                    $arr_cuentacontable_centrocosto = [
-                        "cuentacontable_id" => $cuentacontable->id,
-                        "centrocosto_id" => $centrocosto_id
-                    ];
-                    $this->cuentacontable_centrocostoRepository->createUnRegistro($arr_cuentacontable_centrocosto);
+                try {
+                    $centrocosto = $this->centrocostoRepository->findPorCodigo($cuentacontable_centrocosto->ccosv_ccosto);
+                    if ($centrocosto)
+                    {
+                        $centrocosto_id = $centrocosto->id;
+                    
+                        $arr_cuentacontable_centrocosto = [
+                            "cuentacontable_id" => $cuentacontable->id,
+                            "centrocosto_id" => $centrocosto_id
+                        ];
+                        $this->cuentacontable_centrocostoRepository->createUnRegistro($arr_cuentacontable_centrocosto);
+                    }
+                } catch (Exception $e) {
+
                 }
 			}
         }

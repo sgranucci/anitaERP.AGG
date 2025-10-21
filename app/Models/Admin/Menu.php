@@ -3,9 +3,11 @@
 namespace App\Models\Admin;
 
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Menu extends Model
+class Menu extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = "menu";
     protected $fillable = ['nombre', 'url', 'icono'];
 

@@ -69,6 +69,15 @@ class Provincia_UifRepository implements Provincia_UifRepositoryInterface
         return $provincia_uif;
     }
 
+    public function findPorCodigo($codigo)
+    {
+        if (null == $provincia_uif = $this->model->where('codigo', $codigo)->first()) {
+            throw new ModelNotFoundException("Registro no encontrado");
+        }
+
+        return $provincia_uif;
+    }
+
     public function leeProvincia_Uif($consulta, $provincia_uif_id = null)
     {
 		$columns = ['provincia_uif.id', 'provincia_uif.nombre', 'provincia_uif.riesgo', 'provincia_uif.puntaje'];

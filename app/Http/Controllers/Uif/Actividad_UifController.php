@@ -118,7 +118,7 @@ class Actividad_UifController extends Controller
         return ($this->repository->leeActividad_Uif($request->consulta));
 	}
 
-    public function leeActividad_Uif($actividad_uif_id)
+    public function leeUnaActividad_Uif($actividad_uif_id)
     {
         return ($this->repository->find($actividad_uif_id));
 	}

@@ -76,6 +76,26 @@ class Localidad_UifRepository implements Localidad_UifRepositoryInterface
         return $localidad_uif;
     }
 
+    public function findPorCodigo($codigo)
+    {
+        if (null == $localidad_uif = $this->model->where('codigo', $codigo)->with('provincias')->first()) {
+            throw new ModelNotFoundException("Registro no encontrado");
+        }
+
+        return $localidad_uif;
+    }
+
+	public function leerLocalidades($id)
+    {
+        return $this->model->select('id','nombre')->where('provincia_uif_id',$id)->orderBy('nombre','asc')->get()->toArray();
+    }
+
+    public function leerCodigoPostal($id)
+    {
+        $cp = $this->model->select('codigopostal')->where('id',$id)->get();
+        return $cp[0]->codigopostal;
+    }    
+
     public function sincronizarConAnita(){
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'list', 
@@ -85,13 +105,9 @@ class Localidad_UifRepository implements Localidad_UifRepositoryInterface
 					'tabla' => $this->table );
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
-		if ($dataAnita)
-		{
-		    for ($_ii = 0; $_ii < count($dataAnita); $_ii++)
-		    {
-            	$this->traerRegistroDeAnita($_ii);
-	    	}
-		}
+        foreach ($dataAnita as $value) {
+            $this->traerRegistroDeAnita($value->{$this->keyFieldAnita});
+        }
     }
 
     public function traerRegistroDeAnita($key){

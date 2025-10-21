@@ -24,7 +24,7 @@ class ApiAnita {
         $data["IFX_DB_PATH"] = env('ANITA_BDD_PATH')."/".env('ANITA_BDD');
         //dd($data);
         $curl = curl_init();        
-        $url = "http://".$this->servidorAnita."/api.php";
+        $url = "http://".$this->servidorAnita."/apiERP.php";
         //dd("url", $url);
         $fl = false;
         $data = json_encode($data);
@@ -56,7 +56,7 @@ class ApiAnita {
         File::put(base_path() . '/storage/logs/'.$this->fecha.".sql", $sql);
         
         shell_exec('scp '.$portSCP.' '.$pathArch.' sergio@'.$this->servidorAnita.':/home/sergio/tmp/'.$nomArch.' > /dev/null');
-        shell_exec('ssh '.$portSSH.' sergio@'.$this->servidorAnita.' "cd /usr2/www/htdocs; ./api.php '.env('ANITA_BDD').' /home/sergio/tmp/'.$nomArch.' '.$this->fecha.' > /dev/null"');         
+        shell_exec('ssh '.$portSSH.' sergio@'.$this->servidorAnita.' "cd /usr2/www/htdocs; ./apiERP.php '.env('ANITA_BDD').' /home/sergio/tmp/'.$nomArch.' '.$this->fecha.' > /dev/null"');         
         shell_exec("ssh ".$portSSH." sergio@".$this->servidorAnita." \"rm /home/sergio/tmp/".$nomArch." > /dev/null\"");
         
         if($data['acc'] == "list" || $data['acc'] == "customSql"){

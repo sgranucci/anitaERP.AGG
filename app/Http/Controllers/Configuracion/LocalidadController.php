@@ -5,36 +5,95 @@ namespace App\Http\Controllers\Configuracion;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Models\Configuracion\Localidad;
+use App\Repositories\Configuracion\LocalidadRepositoryInterface;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Requests\ValidacionLocalidad;
 use App\Models\Configuracion\Provincia;
+use App\Exports\Configuracion\LocalidadExport;
 
 class LocalidadController extends Controller
 {
+    private $localidadRepository;
+
+    public function __construct(
+            LocalidadRepositoryInterface $localidadRepository
+            )
+    {
+        $this->localidadRepository = $localidadRepository;    
+    }
     /**
      * Display a listing of the resource.
      *
      * @return \Illuminate\Http\Response
      */
-    public function index()
-    {
-	  	ini_set('memory_limit', '512M');
-        can('listar-localidades');
-        $datas = Localidad::with('provincias')->orderBy('nombre')->paginate(15);
 
-		if ($datas->isEmpty())
+    public function index(Request $request)
+    {
+        can('listar-localidades');
+
+        $busqueda = $request->busqueda;
+
+		$localidades = $this->localidadRepository->leeLocalidad($busqueda, true);
+
+        if ($localidades->isEmpty())
 		{
 			$Localidad = new Localidad();
         	$Localidad->sincronizarConAnita();
 	
-        	$datas = Localidad::with('provincias')->orderBy('nombre')->paginate(15);
+            $localidades = $this->localidadRepository->leeLocalidad($busqueda, true);
 		}
-        return view('configuracion.localidad.index', compact('datas'));
+
+        $datas = ['localidades' => $localidades, 'busqueda' => $busqueda];
+
+        return view('configuracion.localidad.index', $datas);
     }
+    
 
 	public function leerLocalidades($id)
     {
         return Localidad::select('id','nombre')->where('provincia_id',$id)->orderBy('nombre','asc')->get()->toArray();
+    }
+
+    public function listar(Request $request, $formato = null, $busqueda = null)
+    {
+        can('listar-localidades'); 
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        switch($formato)
+        {
+        case 'PDF':
+            $localidades = $this->localidadRepository->leeLocalidad($busqueda, false);
+
+            $view =  \View::make('configuracion.localidad.listado', compact('localidades'))
+                        ->render();
+            $path = storage_path('pdf/listados');
+            $nombre_pdf = 'listado_localidad';
+
+            $pdf = \App::make('dompdf.wrapper');
+            $pdf->setPaper('legal','landscape');
+            $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
+
+            return response()->download($path.'/'.$nombre_pdf.'.pdf');
+            break;
+
+        case 'EXCEL':
+            return (new LocalidadExport($this->localidadRepository))
+                        ->parametros($busqueda)
+                        ->download('localidad.xlsx');
+            break;
+
+        case 'CSV':
+            return (new LocalidadExport($this->localidadRepository))
+                        ->parametros($busqueda)
+                        ->download('localidad.csv', \Maatwebsite\Excel\Excel::CSV);
+            break;            
+        }   
+
+        $datas = ['localidades' => $localidades, 'busqueda' => $busqueda];
+
+		return view('configuracion.localidad.index', $datas);       
     }
 
     public function leerCodigoPostal($id)

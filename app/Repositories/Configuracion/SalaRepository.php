@@ -4,6 +4,8 @@ namespace App\Repositories\Configuracion;
 
 use App\Models\Configuracion\Sala;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Collection;
 use Auth;
 
 class SalaRepository implements SalaRepositoryInterface
@@ -25,7 +27,20 @@ class SalaRepository implements SalaRepositoryInterface
     {
         $sala = $this->model;
 
-        return $sala->orderBy('nombre')->get();
+        return $sala->with('empresas')->orderBy('nombre')->get();
+    }
+
+    public function allFiltrado()
+    {
+        // Extrae las empresas asignadas
+        $empresas = collect(Session::get('usuario_empresas'))->pluck('id')->toArray();
+
+        if (count($empresas) > 1)
+            $sala = $this->model->with('empresas')->whereIn('empresa_id', $empresas)->orderBy('nombre')->get();
+        else
+            $sala = $this->model->with('empresas')->orderBy('nombre')->get();
+
+        return $sala;
     }
 
     public function create(array $data)
@@ -53,7 +68,7 @@ class SalaRepository implements SalaRepositoryInterface
 
     public function find($id)
     {
-        if (null == $sala = $this->model->find($id)) {
+        if (null == $sala = $this->model->with('empresas')->find($id)) {
             throw new ModelNotFoundException("Registro no encontrado");
         }
 
@@ -62,7 +77,7 @@ class SalaRepository implements SalaRepositoryInterface
 
     public function findOrFail($id)
     {
-        if (null == $sala = $this->model->findOrFail($id)) {
+        if (null == $sala = $this->model->with('empresas')->findOrFail($id)) {
             throw new ModelNotFoundException("Registro no encontrado");
         }
 

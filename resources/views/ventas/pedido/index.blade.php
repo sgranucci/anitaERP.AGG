@@ -48,7 +48,7 @@ function eliminarPedido(event) {
                 <div class="card-tools">
 					@if (session()->get('filtrosPedidos') == '')
 						<a href="javascript:void(0)" class="btn btn-outline-secondary btn-sm" id='btn_advanced_filter' data-url-parameter='' 
-							title='Filtros y b£squedas avanzadas' class="btn btn-sm btn-default ">
+							title='Filtros y búsquedas avanzadas' class="btn btn-sm btn-default ">
 								<i class="fa fa-filter"></i> Filtros
 						</a>
 					@endif

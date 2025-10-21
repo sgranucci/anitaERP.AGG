@@ -31,7 +31,7 @@ class MonedaRepository implements MonedaRepositoryInterface
         if (!$hay_moneda)
 			self::sincronizarConAnita();
 
-        return $this->model->orderBy('nombre','ASC')->get();
+        return $this->model->orderBy('id','ASC')->get();
     }
 
     public function allOrdenadoPorId()

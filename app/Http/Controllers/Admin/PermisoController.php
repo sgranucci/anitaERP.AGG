@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Models\Admin\Permiso;
 use App\Http\Requests\ValidarPermiso;
+use App\Models\Admin\Permiso_Rol;
 
 class PermisoController extends Controller
 {

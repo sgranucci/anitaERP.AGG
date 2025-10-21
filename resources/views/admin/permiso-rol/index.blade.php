@@ -5,6 +5,10 @@ Permiso - Rol
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/permiso-rol/index.js")}}" type="text/javascript"></script>
+<script src="https://unpkg.com/sticky-table-headers"></script>
+<script>
+    $('table').stickyTableHeaders();
+</script>
 @endsection
 
 @section('contenido')
@@ -14,6 +18,19 @@ Permiso - Rol
         <div class="card card-success">
             <div class="card-header">
                 <h3 class="card-title">Permiso - Rol</h3>
+                <div class="d-md-flex justify-content-md-end">
+					<form action="{{ route('permiso_rol') }}" method="GET">
+						<div class="btn-group">
+							<input type="text" name="permiso" class="form-control" placeholder="Filtra Permiso ..."> 
+						</div>
+						<div class="btn-group">
+							<input type="text" name="centrocosto" class="form-control" placeholder="Filtra C.Costo ..."> 
+							<button type="submit" class="btn btn-default">
+								<span class="fa fa-search"></span>
+							</button>
+						</div>
+					</form>
+                </div>                
             </div>
             <div class="card-body table-responsive p-0">
                 @csrf

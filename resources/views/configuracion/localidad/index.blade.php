@@ -23,29 +23,38 @@ Localidades
 						@endif
                     </a>
                 </div>
+                <div class="d-md-flex justify-content-md-end">
+					<form action="{{ route('localidad') }}" method="GET">
+						<div class="btn-group">
+							<input type="text" name="busqueda" class="form-control" placeholder="Busqueda ..."> 
+							<button type="submit" class="btn btn-default">
+								<span class="fa fa-search"></span>
+							</button>
+						</div>
+					</form>
+                </div>
             </div>
             <div class="card-body table-responsive p-0">
-                <table class="table table-striped table-bordered table-hover" id="tabla-data">
+                @include('includes.exportar-tabla', ['ruta' => 'lista_localidad', 'busqueda' => $busqueda])
+                <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead>
                         <tr>
                             <th class="width20">ID</th>
                             <th>Nombre</th>
-                            <th>Abreviatura</th>
-                            <th>Jurisdiccion</th>
-                            <th>C&oacute;digo</th>
+                            <th>Código Postal</th>
+                            <th>Código Anita</th>
                             <th>Provincia</th>
                             <th class="width80" data-orderable="false"></th>
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach ($datas as $data)
+                        @foreach ($localidades as $data)
                         <tr>
                             <td>{{$data->id}}</td>
                             <td>{{$data->nombre}}</td>
-                            <td>{{$data->abreviatura}}</td>
-                            <td>{{$data->jurisdiccion}}</td>
+                            <td>{{$data->codigopostal}}</td>
                             <td>{{$data->codigo}}</td>
-                            <td>{{$data->provincias->nombre??''}}</td>
+                            <td>{{$data->nombreprovincia??''}}</td>
                             <td>
                        			@if (can('editar-localidades', false))
                                 	<a href="{{route('editar_localidad', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
@@ -69,4 +78,5 @@ Localidades
         </div>
     </div>
 </div>
+{{ $localidades->appends(['busqueda' => $busqueda])->links() }}
 @endsection

@@ -22,6 +22,8 @@ Route::post('password/reset', 'Auth\ResetPasswordController@reset')->name('passw
 
 Route::get('/', 'InicioController@index')->name('inicio');
 Route::get('seguridad/login', 'Seguridad\LoginController@index')->name('login');
+Route::get('seguridad/cambia_password', 'Seguridad\HomeController@cambiaPassword')->name('cambia_password');
+Route::post('seguridad/graba_password', 'Seguridad\HomeController@grabaPassword')->name('graba_password');
 Route::post('seguridad/login', 'Seguridad\LoginController@login')->name('login_post');
 Route::get('seguridad/logout', 'Seguridad\LoginController@logout')->name('logout');
 Route::post('ajax-sesion', 'AjaxController@setSession')->name('ajax')->middleware('auth');
@@ -35,9 +37,6 @@ Route::group(['prefix' => 'admin', 'namespace' => 'Admin', 'middleware' => ['aut
     Route::put('usuario/{id}', 'UsuarioController@actualizar')->name('actualizar_usuario');
     Route::delete('usuario/{id}', 'UsuarioController@eliminar')->name('eliminar_usuario');
 
-    Route::post('usuario/crearusuarioremoto', 'UsuarioController@crearUsuarioRemoto')->name('crear_usuario_remoto');
-    Route::get('usuario/leerusuario', 'UsuarioController@leerUsuario')->name('leer_usuario');
-    
     /*RUTAS DE PERMISO*/
     Route::get('permiso', 'PermisoController@index')->name('permiso');
     Route::get('permiso/crear', 'PermisoController@crear')->name('crear_permiso');
@@ -69,6 +68,11 @@ Route::group(['prefix' => 'admin', 'namespace' => 'Admin', 'middleware' => ['aut
 });
 
 /* Rutas de configuracion */
+
+Route::post('configuracion/crearusuarioremoto', 'Admin\UsuarioController@crearUsuarioRemoto')->name('crear_usuario_remoto');
+Route::get('configuracion/leerusuario', 'Admin\UsuarioController@leerUsuario')->name('leer_usuario');
+Route::post('configuracion/consultausuario', 'Admin\UsuarioController@consultaUsuario')->name('consultar_usuario');
+Route::get('configuracion/leerunusuario/{usuario_id}', 'Admin\UsuarioController@leeUnUsuario')->name('leer_un_usuario');
 
 /* 
  * Salidas
@@ -142,6 +146,8 @@ Route::put('configuracion/localidad/{id}', 'Configuracion\LocalidadController@ac
 Route::delete('configuracion/localidad/{id}', 'Configuracion\LocalidadController@eliminar')->name('eliminar_localidad');
 Route::get('configuracion/leerlocalidades/{id}', 'Configuracion\LocalidadController@leerLocalidades')->name('leer_localidad');
 Route::get('configuracion/leercodigopostal/{id}', 'Configuracion\LocalidadController@leerCodigoPostal')->name('leer_codigo_postal');
+
+Route::get('configuracion/listalocalidad/{formato?}/{busqueda?}', 'Configuracion\LocalidadController@listar')->name('lista_localidad');
 
 /* 
  * Condiciones de iva
@@ -561,6 +567,22 @@ Route::put('configuracion/empresa/{id}', 'Configuracion\EmpresaController@actual
 Route::delete('configuracion/empresa/{id}', 'Configuracion\EmpresaController@eliminar')->name('eliminar_empresa');
 
 /* 
+ * Arbol de aprobacion
+ */
+
+ Route::get('configuracion/arbolaprobacion', 'Configuracion\ArbolaprobacionController@index')->name('consulta_arbolaprobacion');
+ Route::get('configuracion/arbolaprobacion/crear', 'Configuracion\ArbolaprobacionController@crear')->name('crea_arbolaprobacion');
+ Route::post('configuracion/arbolaprobacion', 'Configuracion\ArbolaprobacionController@guardar')->name('guarda_arbolaprobacion');
+ Route::get('configuracion/arbolaprobacion/{id}/editar', 'Configuracion\ArbolaprobacionController@editar')->name('edita_arbolaprobacion');
+ Route::put('configuracion/arbolaprobacion/{id}', 'Configuracion\ArbolaprobacionController@actualizar')->name('actualiza_arbolaprobacion');
+ Route::delete('configuracion/arbolaprobacion/{id}', 'Configuracion\ArbolaprobacionController@eliminar')->name('elimina_arbolaprobacion');
+
+ Route::get('arbolaprobacion/aprobar/{tipocomprobante}/{comprobante_id}/{hash}', 'Configuracion\ArbolaprobacionController@aprobar');
+ Route::get('arbolaprobacion/buscarechazo/{tipocomprobante}/{comprobante_id}/{hash}', 'Configuracion\ArbolaprobacionController@buscaRechazo')->name('busca_rechazo');
+ Route::put('arbolaprobacion/rechazar', 'Configuracion\ArbolaprobacionController@rechazar')->name('rechazar');
+
+ Route::get('arbolaprobacion/leer_movimiento_aprobacion/{tipocomprobante}/{ordenventa_id}', 'Configuracion\ArbolaprobacionController@leerMovimientoAprobacion')->name('lee_movimiento_aprobacion');
+/* 
  * Rubros contables
  */
 
@@ -858,6 +880,12 @@ Route::put('ventas/cliente/{id}', 'Ventas\ClienteController@actualizar')->name('
 Route::delete('ventas/cliente/{id}', 'Ventas\ClienteController@eliminar')->name('eliminar_cliente');
 Route::get('ventas/leercliente_entrega/{cliente_id}', 'Ventas\ClienteController@leerCliente_Entrega')->name('leer_cliente_entrega');
 Route::get('ventas/leercliente/{cliente_id}', 'Ventas\ClienteController@leerCliente')->name('leer_cliente');
+
+Route::get('ventas/listacliente/{formato?}/{busqueda?}', 'Ventas\ClienteController@listar')->name('lista_cliente');
+Route::post('ventas/consultacliente', 'Ventas\ClienteController@consultaCliente')->name('consultar_cliente');
+Route::get('ventas/leeruncliente/{cliente_id}', 'Ventas\ClienteController@leeUnCliente')->name('leer_un_cliente');
+
+Route::get('ventas/cliente/crearremoto/{id}', 'Ventas\ClienteController@crearRemoto')->name('crear_cliente_remoto');
 
 /* 
  * Pedidos
@@ -1600,7 +1628,7 @@ Route::get('compras/leerproveedor/{proveedor_id}', 'Compras\ProveedorController@
  Route::delete('uif/actividad_uif/{id}', 'Uif\Actividad_UifController@eliminar')->name('elimina_actividad_uif');
  
  Route::post('uif/consultaactividad_uif', 'Uif\Actividad_UifController@consultaActividad_Uif')->name('consultar_actividad_uif');
- Route::get('uif/leeractividad_uif/{actividad_uif_id}', 'Uif\Actividad_UifController@leeActividad_Uif')->name('leer_actividad_uif');
+ Route::get('uif/leerunaactividad_uif/{actividad_uif_id}', 'Uif\Actividad_UifController@leeUnaActividad_Uif')->name('leer_una_actividad_uif');
 
 /* 
  * Paises UIF
@@ -1733,6 +1761,8 @@ Route::get('compras/leerproveedor/{proveedor_id}', 'Compras\ProveedorController@
  Route::post('uif/consultalocalidad_uif', 'Uif\Localidad_UifController@consultaLocalidad_Uif')->name('consultar_localidad_uif');
  Route::get('uif/leerlocalidad_uif/{localidad_uif_id}', 'Uif\Localidad_UifController@leeLocalidad_Uif')->name('leer_localidad_uif'); 
 
+ Route::get('uif/leerlocalidadesuif/{id}', 'Uif\Localidad_UifController@leerLocalidades')->name('leer_localidad_uif');
+Route::get('uif/leercodigopostaluif/{id}', 'Uif\Localidad_UifController@leerCodigoPostal')->name('leer_codigo_postal_uif');
 /* 
  * Profesion UIF
  */
@@ -1780,6 +1810,62 @@ Route::get('compras/leerproveedor/{proveedor_id}', 'Compras\ProveedorController@
  Route::get('uif/cliente_uif/{id}/editar', 'Uif\Cliente_UifController@editar')->name('edita_cliente_uif');
  Route::put('uif/cliente_uif/{id}', 'Uif\Cliente_UifController@actualizar')->name('actualiza_cliente_uif');
  Route::delete('uif/cliente_uif/{id}', 'Uif\Cliente_UifController@eliminar')->name('elimina_cliente_uif');
- 
+
+ Route::get('uif/listacliente_uif/{formato?}/{busqueda?}', 'Uif\Cliente_UifController@listar')->name('lista_cliente_uif');
  Route::post('uif/consultacliente_uif', 'Uif\Cliente_UifController@consultaCliente_Uif')->name('consultar_cliente_uif');
  Route::get('uif/leercliente_uif/{cliente_uif_id}', 'Uif\Cliente_UifController@leeCliente_Uif')->name('leer_cliente_uif'); 
+ Route::get('uif/calculariesgo_uif/{cliente_uif_id}/{periodo}/{inusualidad_uif_id}', 'Uif\Cliente_UifController@calculaRiesgo')->name('calcula_riesgo_cliente_uif'); 
+
+ Route::get('uif/crearexportaoperacion', 'Uif\Cliente_UifController@crearExportaOperacion')->name('crear_exporta_operacion'); 
+ Route::post('uif/generaexportaoperacion', 'Uif\Cliente_UifController@generaExportaOperacion')->name('generar_exporta_operacion');
+ Route::get('uif/exportaoperacion/{periodo}/{limiteinformeuif}', 'Uif\Cliente_UifController@exportaOperacion')->name('exporta_cliente_uif');
+
+/* 
+ * Premios UIF
+ */ 
+
+ Route::get('uif/premio_uif', 'Uif\Cliente_Premio_UifController@index')->name('consulta_cliente_premio_uif');
+ Route::get('uif/premio_uif/crear/{id}', 'Uif\Cliente_Premio_UifController@crear')->name('crea_cliente_premio_uif');
+ Route::post('uif/premio_uif', 'Uif\Cliente_Premio_UifController@guardar')->name('guarda_cliente_premio_uif');
+ Route::get('uif/premio_uif/{id}/editar', 'Uif\Cliente_Premio_UifController@editar')->name('edita_cliente_premio_uif');
+ Route::put('uif/premio_uif/{id}', 'Uif\Cliente_Premio_UifController@actualizar')->name('actualiza_cliente_premio_uif');
+ Route::delete('uif/premio_uif/{id}', 'Uif\Cliente_Premio_UifController@eliminar')->name('elimina_cliente_premio_uif');
+ Route::post('uif/elimina_premio_uif', 'Uif\Cliente_Premio_UifController@eliminarExterno')->name('elimina_externo_cliente_premio_uif');
+
+ Route::get('uif/premio_uif/lista_un_premio_uif/{id}', 'Uif\Cliente_Premio_UifController@listarUnPremio')->name('lista_un_cliente_premio_uif'); 
+ Route::get('uif/premio_uif/mostrar_foto/{id}', 'Uif\Cliente_Premio_UifController@mostrarFoto')->name('muestra_foto_cliente_premio_uif');
+ Route::get('uif/premio_uif/{formato?}/{busqueda?}', 'Uif\Cliente_Premio_UifController@listar')->name('lista_cliente_premio_uif'); 
+
+/* 
+ * Actividades
+ */
+
+ Route::get('uif/cliente_congelado_uif', 'Uif\Cliente_Congelado_UifController@index')->name('consulta_cliente_congelado_uif');
+ Route::get('uif/cliente_congelado_uif/crear', 'Uif\Cliente_Congelado_UifController@crear')->name('crea_cliente_congelado_uif');
+ Route::post('uif/cliente_congelado_uif', 'Uif\Cliente_Congelado_UifController@guardar')->name('guarda_cliente_congelado_uif');
+ Route::get('uif/cliente_congelado_uif/{id}/editar', 'Uif\Cliente_Congelado_UifController@editar')->name('edita_cliente_congelado_uif');
+ Route::put('uif/cliente_congelado_uif/{id}', 'Uif\Cliente_Congelado_UifController@actualizar')->name('actualiza_cliente_congelado_uif');
+ Route::delete('uif/cliente_congelado_uif/{id}', 'Uif\Cliente_Congelado_UifController@eliminar')->name('elimina_cliente_congelado_uif');
+ 
+ Route::post('uif/consultacliente_congelado_uif', 'Uif\Cliente_Congelado_UifController@consultaCliente_Congelado_Uif')->name('consultar_cliente_congelado_uif');
+ Route::get('uif/leeruncliente_congelado_uif/{cliente_congelado_uif_id}', 'Uif\Cliente_Congelado_UifController@leeUnCliente_Congelado_Uif')->name('leer_un_cliente_congelado_uif');
+ Route::get('uif/crea_importacion_cliente_congelado_uif', 'Uif\Cliente_Congelado_UifController@crearImportacionCliente_Congelado_Uif')->name('crear_importacion_cliente_congelado_uif');
+ Route::get('uif/importa_cliente_congelado_uif', 'Uif\Cliente_Congelado_UifController@importaCliente_Congelado_Uif')->name('importar_cliente_congelado_uif');
+
+ 
+// Modulo de ordenes de venta
+/* 
+ * Ordenes de venta
+ */
+
+ Route::get('ordenventa/ordenventa', 'Ordenventa\OrdenventaController@index')->name('consulta_ordenventa');
+ Route::get('ordenventa/ordenventa/crear', 'Ordenventa\OrdenventaController@crear')->name('crea_ordenventa');
+ Route::post('ordenventa/ordenventa', 'Ordenventa\OrdenventaController@guardar')->name('guarda_ordenventa');
+ Route::get('ordenventa/ordenventa/{id}/editar', 'Ordenventa\OrdenventaController@editar')->name('edita_ordenventa');
+ Route::put('ordenventa/ordenventa/{id}', 'Ordenventa\OrdenventaController@actualizar')->name('actualiza_ordenventa');
+ Route::delete('ordenventa/ordenventa/{id}', 'Ordenventa\OrdenventaController@eliminar')->name('elimina_ordenventa');
+ Route::get('ordenventa/listaordenventa/{formato?}/{busqueda?}', 'Ordenventa\OrdenventaController@listar')->name('lista_ordenventa');
+ 
+ Route::get('ordenventa/leer_historia_ordenventa/{ordenventa_id}', 'Ordenventa\OrdenventaController@leerHistoriaOrdenventa')->name('lee_historia_ordenventa');
+
+ Route::get('ordenventa/visualizar/{id}/{hash}', 'Ordenventa\OrdenventaController@visualizar');

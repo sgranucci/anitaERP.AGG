@@ -185,7 +185,6 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
                     tesm_cod_mon,
                     tesm_cta_destino,
                     tesm_fl_boleta_cl,
-                    tesm_nro_cbu,
                     tesm_empresa 
 			',
             'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
@@ -198,6 +197,23 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
 
             Self::convierteDatosDeAnita($data, $cuentacontable_id, $banco_id, $empresa_id, $tipoCuenta);
 
+            $apiAnita = new ApiAnita();
+            $datac = array( 
+                'acc' => 'list', 'tabla' => 'tesmcbu', 
+                'sistema' => 'che_ban',
+                'campos' => '
+                        tesmc_cuenta,
+                        tesmc_nro_cbu
+                ',
+                'whereArmado' => " WHERE tesmc_cuenta = '".$data->tesm_cuenta."' " 
+            );            
+            $dataAnita = json_decode($apiAnita->apiCall($datac));
+
+            if (isset($dataAnita[0]))
+                $numeroCbu = $dataAnita[0]->tesmc_nro_cbu;
+            else
+                $numeroCbu = '';
+
             $arr_campos = [
                 "nombre" => $data->tesm_desc,
                 "codigo" => ltrim($data->tesm_cuenta, '0'),
@@ -206,7 +222,7 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
                 "empresa_id" => $empresa_id,
                 "cuentacontable_id" => $cuentacontable_id,
                 "moneda_id" => $data->tesm_cod_mon,
-                "cbu" => $data->tesm_nro_cbu
+                "cbu" => $numeroCbu
                 ];
 
             $this->model->create($arr_campos);
@@ -233,7 +249,6 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
                 tesm_cod_mon,
                 tesm_cta_destino,
                 tesm_fl_boleta_cl,
-                tesm_nro_cbu,
                 tesm_empresa 
 				',
             'valores' => " 
@@ -249,12 +264,23 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
                 '".$moneda."',
                 '0',
                 '0',
-                '".$request['cbu']."',
 				'".$empresa."' "
         );
         $anita = $apiAnita->apiCall($data);
 
-        return $anita;
+        $data = array( 'tabla' => 'tesmcbu', 'acc' => 'insert',
+			'sistema' => 'che_ban',
+            'campos' => ' 
+                tesmc_cuenta,
+                tesmc_nro_cbu
+                ',
+            'valores' => "
+                '".str_pad($request['codigo'], 8, "0", STR_PAD_LEFT)."', 
+                '".$request['cbu']."' "
+        );
+        $anita2 = $apiAnita->apiCall($data);
+
+        return $anita && $anita2;
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -276,7 +302,16 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
 				'whereArmado' => " WHERE tesm_cuenta = '".str_pad($request['codigo'], 8, "0", STR_PAD_LEFT)."' " );
         $anita = $apiAnita->apiCall($data);
 
-        return $anita;
+        $data = array( 'tabla' => 'tesmcbu', 'acc' => 'update',
+			'sistema' => 'che_ban',
+            'valores' => "
+                tesmc_cuenta   = '".str_pad($request['codigo'], 8, "0", STR_PAD_LEFT)."' ,
+                tesmc_nro_cbu  = '".$request['cbu']."' "
+            ,
+            'whereArmado' => " WHERE tesmc_cuenta = '".str_pad($request['codigo'], 8, "0", STR_PAD_LEFT)."' " );
+        $anita2 = $apiAnita->apiCall($data);
+
+        return $anita && $anita2;
 	}
 
 	public function eliminarAnita($id) {
@@ -285,8 +320,13 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
 				'sistema' => 'che_ban',
 				'whereArmado' => " WHERE tesm_cuenta = '".str_pad($id, 8, "0", STR_PAD_LEFT)."' " );
         $anita = $apiAnita->apiCall($data);
+
+        $data = array( 'acc' => 'delete', 'tabla' => 'tesmcbu',
+				'sistema' => 'che_ban',
+				'whereArmado' => " WHERE tesmc_cuenta = '".str_pad($id, 8, "0", STR_PAD_LEFT)."' " );
+        $anita2 = $apiAnita->apiCall($data);        
         
-        return $anita;
+        return $anita&&$anita2;
 	}
 
     private function convierteDatosDeAnita($data, &$cuentacontable_id, &$banco_id, &$empresa_id, &$tipocuenta)

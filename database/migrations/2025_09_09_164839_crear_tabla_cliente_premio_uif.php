@@ -15,11 +15,13 @@ class CrearTablaClientePremioUif extends Migration
     {
         Schema::create('cliente_premio_uif', function (Blueprint $table) {
             $table->bigIncrements('id');
-			$table->unsignedBigInteger('cliente_if');
-            $table->foreign('cliente_if', 'fk_cliente_premio_uif_cliente_uif')->references('id')->on('cliente_uif')->onDelete('cascade')->onUpdate('cascade');
-			$table->unsignedBigInteger('juego_id')->nullable();
-            $table->foreign('juego_id', 'fk_cliente_premio_uif_juego_uif')->references('id')->on('juego_uif')->onDelete('restrict')->onUpdate('restrict');
-            $table->date('fechaentrega');
+			$table->unsignedBigInteger('cliente_uif_id');
+            $table->foreign('cliente_uif_id', 'fk_cliente_premio_uif_cliente_uif')->references('id')->on('cliente_uif')->onDelete('cascade')->onUpdate('cascade');
+            $table->unsignedBigInteger('sala_id')->nullable();
+            $table->foreign('sala_id', 'fk_cliente_premio_uif_sala')->references('id')->on('sala')->onDelete('restrict')->onUpdate('restrict');
+			$table->unsignedBigInteger('juego_uif_id')->nullable();
+            $table->foreign('juego_uif_id', 'fk_cliente_premio_uif_juego_uif')->references('id')->on('juego_uif')->onDelete('restrict')->onUpdate('restrict');
+            $table->dateTime('fechaentrega');
             $table->string('detalle', 255)->nullable();
             $table->decimal('monto',22,4);
 			$table->unsignedBigInteger('moneda_id');
@@ -29,7 +31,8 @@ class CrearTablaClientePremioUif extends Migration
             $table->date('fechatito')->nullable();
 			$table->unsignedBigInteger('mediopago_id')->nullable();
             $table->foreign('mediopago_id', 'fk_cliente_premio_uif_mediopago')->references('id')->on('mediopago')->onDelete('restrict')->onUpdate('restrict');
-            $table->string('piderecibopago', 10)->nullable();
+            $table->string('piderecibopago', 50)->nullable();
+            $table->string('foto', 255)->nullable();
             $table->unsignedBigInteger('creousuario_id');
             $table->foreign('creousuario_id', 'fk_cliente_premio_uif_usuario')->references('id')->on('usuario')->onDelete('restrict')->onUpdate('restrict');
             $table->softDeletes();

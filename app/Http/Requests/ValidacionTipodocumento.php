@@ -25,7 +25,7 @@ class ValidacionTipodocumento extends FormRequest
     {
         return [
             'nombre' => 'required|max:255|unique:tipodocumento,nombre,' . $this->route('id'),
-            'abreviatura' => 'required|max:5|unique:tipodocumento,abreviatura,' . $this->route('id'),
+            'abreviatura' => 'required|max:10|unique:tipodocumento,abreviatura,' . $this->route('id'),
         ];
     }
 }

@@ -1,7 +1,8 @@
 <?php
-// Constantes de comando de lectura de cotizacion automatica
+// Constantes de lectura automatica de cotizaciones y moneda default del sistema 
 
 return [
 	"monedaIdCommand" => 2,
-    'usuarioIdCommand' => 1
+    'usuarioIdCommand' => 1,
+    "ID_MONEDA_DEFAULT" => 1,
     ];

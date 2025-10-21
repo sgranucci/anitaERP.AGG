@@ -16,7 +16,7 @@ class CrearTablaLocalidadUif extends Migration
         Schema::create('localidad_uif', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->string('nombre', 255);
-            $table->string('codigopostal', 50);
+            $table->string('codigopostal', 50)->nullable();
             $table->unsignedBigInteger('provincia_uif_id')->nullable();
             $table->foreign('provincia_uif_id', 'fk_localidad_uif_provincia_uif')->references('id')->on('provincia_uif')->onDelete('restrict')->onUpdate('restrict');
             $table->string('codigo', 10);

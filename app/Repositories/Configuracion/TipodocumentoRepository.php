@@ -67,4 +67,12 @@ class TipodocumentoRepository implements TipodocumentoRepositoryInterface
         return $tipodocumento;
     }
 
+    public function findPorAbreviatura($abreviatura)
+    {
+        if (null == $tipodocumento = $this->model->where('abreviatura', $abreviatura)->first()) {
+            throw new ModelNotFoundException("Registro no encontrado");
+        }
+        return $tipodocumento;
+    }
+
 }

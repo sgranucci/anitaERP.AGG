@@ -69,6 +69,15 @@ class Pais_UifRepository implements Pais_UifRepositoryInterface
         return $pais_uif;
     }
 
+    public function findPorCodigo($codigo)
+    {
+        if (null == $pais_uif = $this->model->where('codigo', $codigo)->first()) {
+            throw new ModelNotFoundException("Registro no encontrado");
+        }
+
+        return $pais_uif;
+    }
+
     public function leePais_Uif($consulta, $pais_uif_id = null)
     {
 		$columns = ['pais_uif.id', 'pais_uif.nombre', 'pais_uif.riesgo', 'pais_uif.puntaje'];

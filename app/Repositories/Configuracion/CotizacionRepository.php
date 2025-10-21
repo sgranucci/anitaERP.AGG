@@ -203,7 +203,7 @@ class CotizacionRepository implements CotizacionRepositoryInterface
 					$flEncontro = false;
 					for ($i = 0; $i < count($cotizaciones); $i++)
 					{
-						if ($cotizaciones[$i]->moneda == $mon)
+						if ($cotizaciones[$i]['moneda'] == $mon)
 						{
 							$flEncontro = true;
 							$cotizaciones[$i]['cotizacioncompra'] = $data->{$variable};

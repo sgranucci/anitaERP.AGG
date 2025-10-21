@@ -4,14 +4,28 @@ namespace App\Http\Controllers\Admin;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
-use Illuminate\Support\Facades\Hash;
 use App\Models\Seguridad\Usuario;
+use App\Repositories\Admin\UsuarioRepositoryInterface;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Models\Admin\Rol;
 use App\Http\Requests\ValidacionUsuario;
 
 class UsuarioController extends Controller
 {
+    private $empresaRepository;
+    private $centrocostoRepository;
+    private $usuarioRepository;
 
+    public function __construct(EmpresaRepositoryInterface $empresarepository,
+                                CentrocostoRepositoryInterface $centrocostorepository,
+                                UsuarioRepositoryInterface $usuariorepository)
+    {
+        $this->empresaRepository = $empresarepository;
+        $this->centrocostoRepository = $centrocostorepository;
+        $this->usuarioRepository = $usuariorepository;
+    }
+    
     public function index()
     {
         $datas = Usuario::with('roles:id,nombre')->orderBy('id')->get();
@@ -21,9 +35,11 @@ class UsuarioController extends Controller
     public function crear()
     {
         $rols = Rol::orderBy('id')->pluck('nombre', 'id')->toArray();
-        return view('admin.usuario.crear', compact('rols'));
-    }
+        $empresa_query = $this->empresaRepository->all()->pluck('nombre', 'id')->toArray();
+        $centrocosto_query = $this->centrocostoRepository->all()->pluck('nombre', 'id')->toArray();
 
+        return view('admin.usuario.crear', compact('rols', 'empresa_query', 'centrocosto_query'));
+    }
 
     public function guardar(ValidacionUsuario $request)
     {
@@ -32,25 +48,35 @@ class UsuarioController extends Controller
 
         $usuario = Usuario::create($request->all());
         $usuario->roles()->sync($request->rol_id);
-        return redirect('admin/usuario')->with('mensaje', 'Usuario creado con exito');
-    }
 
+        // Actualiza las empresas
+        $usuario->usuario_empresas()->sync($request->empresa_ids);
+        
+        return redirect('admin/usuario')->with('mensaje', 'Usuario creado con éxito');
+    }
 
     public function editar($id)
     {
         $rols = Rol::orderBy('id')->pluck('nombre', 'id')->toArray();
-        $data = Usuario::with('roles')->findOrFail($id);
-        return view('admin.usuario.editar', compact('data', 'rols'));
+        $data = Usuario::with('roles')->with('usuario_empresas')->findOrFail($id);
+        $empresa_query = $this->empresaRepository->all()->pluck('nombre', 'id')->toArray();
+        $centrocosto_query = $this->centrocostoRepository->all()->pluck('nombre', 'id')->toArray();
+        
+        return view('admin.usuario.editar', compact('data', 'rols', 'empresa_query', 'centrocosto_query'));
     }
-
 
     public function actualizar(ValidacionUsuario $request, $id)
     {
         $usuario = Usuario::findOrFail($id);
         if ($foto = Usuario::setFoto($request->foto_up, $usuario->foto))
             $request->request->add(['foto' => $foto]);
+
         $usuario->update(array_filter($request->all()));
         $usuario->roles()->sync($request->rol_id);
+
+        // Actualiza las empresas
+        $usuario->usuario_empresas()->sync($request->empresa_ids);
+
         return redirect('admin/usuario')->with('mensaje', 'Usuario actualizado con exito');
     }
 
@@ -86,7 +112,6 @@ class UsuarioController extends Controller
         if (!$data)
         {
             $password = config('ticket.passwordNuevoUsuario');
-            $passwordHash = Hash::make($password);
 
             // Busca el rol
             $rolId = 1;
@@ -96,7 +121,7 @@ class UsuarioController extends Controller
                     $rolId = $areadestino['rol_id'];
             }
             $dataUsuario = ['usuario' => $login,
-                            'password' => $passwordHash,
+                            'password' => $password,
                             'nombre' => $request->nombre,
                             'email' => $login.config('ticket.dominioEmail')
                             ];
@@ -110,4 +135,14 @@ class UsuarioController extends Controller
     {
         return Usuario::with('roles:id,nombre')->orderBy('id')->get();
     }
+
+    public function consultaUsuario(Request $request)
+    {
+        return ($this->usuarioRepository->consultaUsuario($request->consulta, $request->empresa_id, $request->centrocosto_id));
+	}
+
+    public function leeUnUsuario($usuario_id)
+    {
+        return ($this->usuarioRepository->find($usuario_id));
+	}
 }

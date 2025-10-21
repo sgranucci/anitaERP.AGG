@@ -139,7 +139,7 @@ class ProvinciaRepository implements ProvinciaRepositoryInterface
 				provi_desc,
 				provi_abrev,
 				provi_jurisdiccion,
-				provi_cod_externo
+				provi_letra
             ' , 
             'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
         );
@@ -148,11 +148,11 @@ class ProvinciaRepository implements ProvinciaRepositoryInterface
         if (count($dataAnita) > 0) {
             $data = $dataAnita[0];
             Provincia::create([
-                "id" => $key,
+                "id" => $data->provi_provincia,
                 "nombre" => $data->provi_desc,
                 "abreviatura" => $data->provi_abrev,
                 "jurisdiccion" => $data->provi_jurisdiccion,
-                "codigo" => $data->provi_cod_externo,
+                "codigo" => $data->provi_provincia,
                 "pais_id" => 1
             ]);
         }
@@ -164,12 +164,11 @@ class ProvinciaRepository implements ProvinciaRepositoryInterface
         $data = array( 'tabla' => $this->tableAnita, 
 						'acc' => 'insert',
                         'sistema' => 'shared',
-            			'campos' => ' provi_provincia, provi_desc, provi_abrev, provi_jurisdiccion, provi_cod_externo',
+            			'campos' => ' provi_provincia, provi_desc, provi_abrev, provi_jurisdiccion',
             			'valores' => " '".$id."', 
 										'".$request['nombre']."',  
 										'".$request['abreviatura']."',
-										'".$request['jurisdiccion']."',
-										'".$request['codigo']."' "
+										'".$request['jurisdiccion']."' "
         );
         $apiAnita->apiCall($data);
 	}
@@ -182,9 +181,8 @@ class ProvinciaRepository implements ProvinciaRepositoryInterface
 						'valores' => 
 							" provi_desc = '".$request['nombre']."',
 							provi_abrev = '".$request['abreviatura']."',
-							provi_jurisdiccion = '".$request['jurisdiccion']."',
-                			provi_cod_externo =	'".$request['codigo']."'",
-						'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$id."' " );
+							provi_jurisdiccion = '".$request['jurisdiccion']."' ",
+						'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$request['codigo']."' " );
         $apiAnita->apiCall($data);
 	}
 
@@ -193,7 +191,7 @@ class ProvinciaRepository implements ProvinciaRepositoryInterface
         $data = array( 'acc' => 'delete', 
                     'sistema' => 'shared',
 					'tabla' => $this->tableAnita,
-					'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$id."' " );
+					'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$request['codigo']."' " );
         $apiAnita->apiCall($data);
 	}
 }

@@ -13,6 +13,7 @@ interface EmpresaRepositoryInterface extends RepositoryInterface
 	public function eliminarAnita($id);
     public function findPorId($id);
     public function findPorCodigo($codigo);
+    public function traeEmpresasAsignadas();
 
 }
 

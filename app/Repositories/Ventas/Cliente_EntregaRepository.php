@@ -93,104 +93,107 @@ class Cliente_EntregaRepository implements Cliente_EntregaRepositoryInterface
 		if (!array_key_exists('nombre', $data))
 			return 'No hay lugares de entrega';
 			
-		$nombres = $data['nombres'];
-		$domicilios = $data['domicilios'];
-
-		if ($data['localidades_id'] ?? '')
-			$localidades_id = $data['localidades_id'];
-		else
-			$localidades_id = $data['localidad_id_previas'];
-
-		$provincias_id = $data['provincias_id'];
-		$codigospostales = $data['codigospostales'];
-		$transportes_id = $data['transportes_id'];
-
-   		$cliente = $this->modelCliente->find($id);
-		if ($cliente)
+		if (isset($data['nombres']))
 		{
-			$zonavta_id = $cliente->zonavta_id;
-		  	$subzonavta_id = $cliente->subzonavta_id;
-			$vendedor_id = $cliente->vendedor_id;
-		}
+			$nombres = $data['nombres'];
+			$domicilios = $data['domicilios'];
 
-		// Borra de anita
-		self::eliminarAnita($data['codigo']);
+			if ($data['localidades_id'] ?? '')
+				$localidades_id = $data['localidades_id'];
+			else
+				$localidades_id = $data['localidad_id_previas'];
 
-		if ($funcion == 'update')
-		{
-			$_id = $cliente_entrega;
+			$provincias_id = $data['provincias_id'];
+			$codigospostales = $data['codigospostales'];
+			$transportes_id = $data['transportes_id'];
 
-			// Borra los que sobran
-			if ($q_cliente_entrega > count($nombres))
+			$cliente = $this->modelCliente->find($id);
+			if ($cliente)
 			{
-				for ($d = count($nombres); $d < $q_cliente_entrega; $d++)
-        			$this->model->find($_id[$d])->delete();
+				$zonavta_id = $cliente->zonavta_id;
+				$subzonavta_id = $cliente->subzonavta_id;
+				$vendedor_id = $cliente->vendedor_id;
 			}
 
-			// Actualiza los que ya existian
-			for ($i = 0; $i < $q_cliente_entrega && $i < count($nombres); $i++)
-			{
-				if ($i < count($nombres))
-				{
-					$provincia = Provincia::find($provincias_id[$i])->first();
-					if ($provincia)
-		  				$pais_id = $provincia->pais_id;
-					else
-		  				$pais_id = 1;
+			// Borra de anita
+			self::eliminarAnita($data['codigo']);
 
-					$cliente_entrega = $this->model->findOrFail($_id[$i])->update([
-								'cliente_id' => $id,
-								'nombre' => $nombres[$i],
-								'codigo' => $i,
-								'domicilio' => $domicilios[$i],
-								'localidad_id' => $localidades_id[$i],
-								'provincia_id' => $provincias_id[$i],
-								'pais_id' => $pais_id,
-								'codigopostal' => $codigospostales[$i],
-								'zonavta_id' => $zonavta_id,
-								'subzonavta_id' => $subzonavta_id,
-								'vendedor_id' => $vendedor_id,
-								'transporte_id' => $transportes_id[$i],
-								]);
+			if ($funcion == 'update')
+			{
+				$_id = $cliente_entrega;
+
+				// Borra los que sobran
+				if ($q_cliente_entrega > count($nombres))
+				{
+					for ($d = count($nombres); $d < $q_cliente_entrega; $d++)
+						$this->model->find($_id[$d])->delete();
+				}
+
+				// Actualiza los que ya existian
+				for ($i = 0; $i < $q_cliente_entrega && $i < count($nombres); $i++)
+				{
+					if ($i < count($nombres))
+					{
+						$provincia = Provincia::find($provincias_id[$i])->first();
+						if ($provincia)
+							$pais_id = $provincia->pais_id;
+						else
+							$pais_id = 1;
+
+						$cliente_entrega = $this->model->findOrFail($_id[$i])->update([
+									'cliente_id' => $id,
+									'nombre' => $nombres[$i],
+									'codigo' => $i,
+									'domicilio' => $domicilios[$i],
+									'localidad_id' => $localidades_id[$i],
+									'provincia_id' => $provincias_id[$i],
+									'pais_id' => $pais_id,
+									'codigopostal' => $codigospostales[$i],
+									'zonavta_id' => $zonavta_id,
+									'subzonavta_id' => $subzonavta_id,
+									'vendedor_id' => $vendedor_id,
+									'transporte_id' => $transportes_id[$i],
+									]);
+
+						// Guarda en anita
+						self::guardarAnita($data, $i);
+					}
+				}
+				if ($q_cliente_entrega > count($nombres))
+					$i = $d; 
+			}
+			else
+				$i = 0;
+
+			for ($i_entrega = $i; $i_entrega < count($nombres); $i_entrega++)
+			{
+				//* Valida si se cargo el lugar de entrega
+				if ($nombres[$i_entrega] != '') 
+				{
+					$provincia = Provincia::find($provincias_id[$i_entrega])->first();
+					if ($provincia)
+						$pais_id = $provincia->pais_id;
+					else
+						$pais_id = 1;
+		
+					$cliente_entrega = $this->model->create([
+									'cliente_id' => $id,
+									'nombre' => $nombres[$i_entrega],
+									'codigo' => $i_entrega,
+									'domicilio' => $domicilios[$i_entrega],
+									'localidad_id' => $localidades_id[$i_entrega],
+									'provincia_id' => $provincias_id[$i_entrega],
+									'pais_id' => $pais_id,
+									'codigopostal' => $codigospostales[$i_entrega],
+									'zonavta_id' => $zonavta_id,
+									'subzonavta_id' => $subzonavta_id,
+									'vendedor_id' => $vendedor_id,
+									'transporte_id' => $transportes_id[$i_entrega],
+									]);
 
 					// Guarda en anita
-					self::guardarAnita($data, $i);
+					self::guardarAnita($data, $i_entrega);
 				}
-			}
-			if ($q_cliente_entrega > count($nombres))
-				$i = $d; 
-		}
-		else
-			$i = 0;
-
-		for ($i_entrega = $i; $i_entrega < count($nombres); $i_entrega++)
-		{
-		 	//* Valida si se cargo el lugar de entrega
-		 	if ($nombres[$i_entrega] != '') 
-			{
-				$provincia = Provincia::find($provincias_id[$i_entrega])->first();
-				if ($provincia)
-		  			$pais_id = $provincia->pais_id;
-				else
-		  			$pais_id = 1;
-	
-				$cliente_entrega = $this->model->create([
-								'cliente_id' => $id,
-								'nombre' => $nombres[$i_entrega],
-								'codigo' => $i_entrega,
-								'domicilio' => $domicilios[$i_entrega],
-								'localidad_id' => $localidades_id[$i_entrega],
-								'provincia_id' => $provincias_id[$i_entrega],
-								'pais_id' => $pais_id,
-								'codigopostal' => $codigospostales[$i_entrega],
-								'zonavta_id' => $zonavta_id,
-								'subzonavta_id' => $subzonavta_id,
-								'vendedor_id' => $vendedor_id,
-								'transporte_id' => $transportes_id[$i_entrega],
-								]);
-
-				// Guarda en anita
-				self::guardarAnita($data, $i_entrega);
 			}
 		}
 	}

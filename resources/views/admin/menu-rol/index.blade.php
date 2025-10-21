@@ -5,6 +5,10 @@ Menú - Rol
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/menu-rol/index.js")}}" type="text/javascript"></script>
+<script src="https://unpkg.com/sticky-table-headers"></script>
+<script>
+    $('table').stickyTableHeaders();
+</script>
 @endsection
 
 @section('contenido')
@@ -14,10 +18,20 @@ Menú - Rol
         <div class="card card-success">
             <div class="card-header">
                 <h3 class="card-title">Menús - Rol</h3>
+                <div class="d-md-flex justify-content-md-end">
+					<form action="{{ route('menu_rol') }}" method="GET">
+						<div class="btn-group">
+							<input type="text" name="centrocosto" class="form-control" placeholder="Filtra C.Costo ..."> 
+							<button type="submit" class="btn btn-default">
+								<span class="fa fa-search"></span>
+							</button>
+						</div>
+					</form>
+                </div>
             </div>
             <div class="card-body table-responsive p-0">
                 @csrf
-                <table class="table table-striped table-bordered table-hover" id="tabla-data">
+                <table class="table table-striped table-bordered table-hover tabla-menu-rol" id="tabla-data">
                     <thead>
                         <tr>
                             <th>Menú</th>
@@ -90,7 +104,7 @@ Menú - Rol
                                 @endforeach
                             @endforeach
                         @endforeach
-                    </tbody>
+                    </tbodys=>
                 </table>
             </div>
         </div>

@@ -125,4 +125,16 @@ class Localidad_UifController extends Controller
         return ($this->repository->find($localidad_uif_id));
 	}
     
+	public function leerLocalidades($id)
+    {
+        return $this->repository->leerLocalidades($id);
+    }
+
+    public function leerCodigoPostal($id)
+    {
+        $cp = $this->repository->leerCodigoPostal($id);
+        
+        return $cp;
+    }
+
 }

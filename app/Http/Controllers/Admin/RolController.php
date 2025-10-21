@@ -4,12 +4,19 @@ namespace App\Http\Controllers\Admin;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
+use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Http\Requests\ValidacionRol;
 use App\Models\Admin\Rol;
 
-
 class RolController extends Controller
 {
+    private $centrocostoRepository;
+
+    public function __construct(CentrocostoRepositoryInterface $centrocostorepository)
+    {
+        $this->centrocostoRepository = $centrocostorepository;
+    }
+    
     /**
      * Display a listing of the resource.
      *
@@ -28,7 +35,9 @@ class RolController extends Controller
      */
     public function crear()
     {
-        return view('admin.rol.crear');
+        $centrocosto_query = $this->centrocostoRepository->all()->pluck('nombre', 'id')->toArray();
+
+        return view('admin.rol.crear', compact('centrocosto_query'));
     }
 
     /**
@@ -53,7 +62,9 @@ class RolController extends Controller
     public function editar($id)
     {
         $data = Rol::findOrFail($id);
-        return view('admin.rol.editar', compact('data'));
+        $centrocosto_query = $this->centrocostoRepository->all()->pluck('nombre', 'id')->toArray();
+
+        return view('admin.rol.editar', compact('data', 'centrocosto_query'));
     }
 
     /**

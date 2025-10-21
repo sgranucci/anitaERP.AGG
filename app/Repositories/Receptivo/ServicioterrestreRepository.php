@@ -46,7 +46,7 @@ class ServicioterrestreRepository implements ServicioterrestreRepositoryInterfac
         // Graba anita
 		self::guardarAnita($data);
 
-		return $idioma;
+		return $servicioterrestre;
     }
 
     public function update(array $data, $id)

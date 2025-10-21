@@ -30,6 +30,8 @@
                         <tr>
                             <th class="width20">ID</th>
                             <th>Nombre</th>
+                            <th>Código</th>
+                            <th>Empresa</th>
                             <th class="width80" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -38,6 +40,8 @@
                         <tr>
                             <td>{{$data->id}}</td>
                             <td>{{$data->nombre}}</td>
+                            <td>{{$data->codigo}}</td>
+                            <td>{{$data->empresas->nombre ?? ''}}</td>
                             <td>
                        			@if (can('edita-sala', false))
                                 	<a href="{{route('edita_sala', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">

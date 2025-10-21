@@ -4,6 +4,7 @@ namespace App\Repositories\Configuracion;
 
 use App\Models\Configuracion\Empresa;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\Session;
 use App\ApiAnita;
 use Auth;
 
@@ -31,7 +32,26 @@ class EmpresaRepository implements EmpresaRepositoryInterface
         if (!$hay_empresa)
 			self::sincronizarConAnita();
 
-        return $this->model->orderBy('nombre','ASC')->get();
+        return $this->model->orderBy('id','ASC')->get();
+    }
+
+    public function traeEmpresasAsignadas()
+    {
+        // Extrae las empresas asignadas
+        return collect(Session::get('usuario_empresas'))->pluck('id')->toArray();
+    }
+    
+    public function allFiltrado()
+    {
+        // Extrae las empresas asignadas
+        $empresas = collect(Session::get('usuario_empresas'))->pluck('id')->toArray();
+
+        if (count($empresas) > 1)
+            $empresa = $this->model->whereIn('id', $empresas)->orderBy('id', 'ASC')->get();
+        else
+            $empresa = $this->model->orderBy('id', 'ASC')->get();
+
+        return $empresa;
     }
 
     public function create(array $data)

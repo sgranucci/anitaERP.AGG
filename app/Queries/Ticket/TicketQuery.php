@@ -126,7 +126,7 @@ class TicketQuery implements TicketQueryInterface
                     'clausula' => 'LIKE'];    
         $columns[] = ['columna' => 'usuario.nombre',
                     'clausula' => 'LIKE'];            
-        $columns[] = ['columna' => 'estado',
+        $columns[] = ['columna' => 'estado_ticket',
                     'clausula' => 'LIKE'];                                                            
         $columns[] = ['columna' => 'ticket.id',
                     'clausula' => '='];
@@ -136,19 +136,19 @@ class TicketQuery implements TicketQueryInterface
 
         $tickets->where('deleted_at', null);
 
+        // Filtra tickets por tipo de usuario
+        if ($flEncargado) // Encargado ve todo lo de su area
+            $tickets->where('ticket.areadestino_id', $areadestino_id);
+
+        if ($flTecnico) // Tecnico ve solo sus tickets de su area
+            $tickets->where('ticket.areadestino_id', $areadestino_id)
+                    ->where('ticket.usuario_id', $usuario_id);
+
+        if ($flUsuario) // Usuario ve solo sus tickets de cualquier area
+            $tickets->where('ticket.usuario_id', $usuario_id);
+
         $tickets->where(function ($query) use ($count, $busqueda, $columns, $flSupervisor, $flTecnico, $flUsuario, $flEncargado,
                                                 $usuario_id, $areadestino_id) {
-
-                                    // Filtra tickets por tipo de usuario
-                                    if ($flEncargado) // Encargado ve todo lo de su area
-                                        $query->where('ticket.areadestino_id', $areadestino_id);
-
-                                    if ($flTecnico) // Tecnico ve solo sus tickets de su area
-                                        $query->where('ticket.areadestino_id', $areadestino_id)
-                                                ->where('ticket.usuario_id', $usuario_id);
-
-                                    if ($flUsuario) // Usuario ve solo sus tickets de cualquier area
-                                        $query->where('ticket.usuario_id', $usuario_id);
 
                         			for ($i = 0; $i < $count; $i++)
                                     {

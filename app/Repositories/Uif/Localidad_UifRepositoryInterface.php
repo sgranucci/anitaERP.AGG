@@ -6,6 +6,6 @@ interface Localidad_UifRepositoryInterface extends RepositoryInterface
 {
 
     public function all();
-
+    public function findPorCodigo($codigo);
 }
 

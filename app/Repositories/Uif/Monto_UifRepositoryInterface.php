@@ -6,6 +6,7 @@ interface Monto_UifRepositoryInterface extends RepositoryInterface
 {
 
     public function all();
+    public function findPorMonto($monto);
 
 }
 

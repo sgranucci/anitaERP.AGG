@@ -72,7 +72,7 @@ class Voucher_FormapagoRepository implements Voucher_FormapagoRepositoryInterfac
 			$q_voucher_formapago = count($voucher_formapago);
 		}
 
-		// Graba exclusiones
+		// Graba forma de pago
 		if (isset($data['cuentacaja_ids']))
 		{
 			$cuentacaja_ids = $data['cuentacaja_ids'];

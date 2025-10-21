@@ -24,9 +24,16 @@ use Carbon\Carbon;
     <ul class="navbar-nav ml-auto">
         <!-- Messages Dropdown Menu -->
         <!-- Notifications Dropdown Menu -->
+        @if (Auth::check())
+            <li class="nav-item dropdown">
+                <a href="{{route('cambia_password')}}" class="nav-link">
+                    <i class="fa fa-lock"></i> Cambia password
+                </a>
+            </li>
+        @endif
         <li class="nav-item dropdown">
             <a class="nav-link" data-toggle="dropdown" href="#">
-                <i class="far fa-user"></i> {{session()->get('nombre_usuario', 'Inivitado')}} - {{session()->get('rol_nombre', 'Guest')}}
+                <i class="far fa-user"></i> {{session()->get('nombre_usuario', 'Invitado')}} - {{session()->get('rol_nombre', 'Guest')}}
             </a>
             <div class="dropdown-menu dropdown-menu-lg dropdown-menu-right">
                 @guest

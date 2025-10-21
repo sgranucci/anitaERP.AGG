@@ -15,8 +15,9 @@ class CrearTablaClienteRiesgoUif extends Migration
     {
         Schema::create('cliente_riesgo_uif', function (Blueprint $table) {
             $table->bigIncrements('id');
-			$table->unsignedBigInteger('cliente_uif_if');
-            $table->foreign('cliente_uif_if', 'fk_cliente_riesgo_uif_cliente_uif')->references('id')->on('cliente_uif')->onDelete('cascade')->onUpdate('cascade');
+			$table->unsignedBigInteger('cliente_uif_id');
+            $table->foreign('cliente_uif_id', 'fk_cliente_riesgo_uif_cliente_uif')->references('id')->on('cliente_uif')->onDelete('cascade')->onUpdate('cascade');
+            $table->string('periodo', 10);
 			$table->unsignedBigInteger('inusualidad_uif_id')->nullable();
             $table->foreign('inusualidad_uif_id', 'fk_cliente_riesgo_uif_inusualidad_uif')->references('id')->on('inusualidad_uif')->onDelete('restrict')->onUpdate('restrict');
             $table->string('riesgo', 10)->nullable();

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Seguridad;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use Illuminate\Foundation\Auth\AuthenticatesUsers;
+use App\Models\Seguridad\Usuario;
 
 class LoginController extends Controller
 {
@@ -24,8 +25,9 @@ class LoginController extends Controller
     protected function authenticated(Request $request, $user)
     {
         $roles = $user->roles()->get();
+        $empresas = $user->usuario_empresas()->get();
         if ($roles->isNotEmpty()) {
-            $user->setSession($roles->toArray());
+            $user->setSession($roles->toArray(), $empresas->toArray());
         } else {
             $this->guard()->logout();
             $request->session()->invalidate();

@@ -32,9 +32,15 @@ $( "#botonform0" ).click(function() {
             <div class="card-header">
                 <h3 class="card-title">Crear Cliente @if ($tipoalta == 'P') Provisorio @endif</h3>
                 <div class="card-tools">
-                    <a href="{{route('cliente')}}" class="btn btn-outline-info btn-sm">
-                        <i class="fa fa-fw fa-reply-all"></i> Volver al listado
-                    </a>
+                    @if (isset($urlOrigen))
+                        <a href="javascript:history.back()" class="btn btn-outline-info btn-sm">
+                            <i class="fa fa-fw fa-reply-all"></i> Volver a consulta
+                        </a>
+                    @else
+                        <a href="{{route('cliente')}}" class="btn btn-outline-info btn-sm">
+                            <i class="fa fa-fw fa-reply-all"></i> Volver al listado
+                        </a>
+                    @endif
                 </div>
             </div>
             @if ($tipoalta == 'P')

@@ -69,4 +69,11 @@ class Puntaje_UifRepository implements Puntaje_UifRepositoryInterface
         return $puntaje_uif;
     }
 
+    public function findPorPuntaje($valorpuntaje)
+    {
+        return $this->model->select('riesgo')
+                            ->where('desdepuntaje', '<=', $valorpuntaje)
+                            ->where('hastapuntaje', '>=', $valorpuntaje)
+                            ->first();
+    }
 }

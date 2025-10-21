@@ -26,6 +26,7 @@ Roles
                         <tr>
                             <th class="width20">ID</th>
                             <th>Nombre</th>
+                            <th>Centro de Costo</th>
                             <th class="width80"></th>
                         </tr>
                     </thead>
@@ -34,6 +35,7 @@ Roles
                         <tr>
                             <td>{{$data->id}}</td>
                             <td>{{$data->nombre}}</td>
+                            <td>{{$data->centrocostos->nombre??''}}</td>
                             <td>
                                 <a href="{{route('editar_rol', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                     <i class="fa fa-edit"></i>
