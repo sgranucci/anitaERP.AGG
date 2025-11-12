@@ -39,11 +39,11 @@ class ValidacionCliente extends FormRequest
             'condicionventa_id' => ['integer', 'nullable'],
             'listaprecio_id' => ['integer', 'nullable'],
             'cuentacontable_id' => 'required',
-            'nroinscripcion' => ['required', new RuleCliente('nroinscripcion')],
+            'numerodocumento' => ['required', new RuleCliente('numerodocumento')],
             'retieneiva' => ['required', new RuleCliente('retieneiva')],
             'nroiibb' => 'required|max:100|',
             'condicioniibb' => ['required', new RuleCliente('condicioniibb')],
-            'vaweb' => ['required', new RuleCliente('vaweb')],
+            //'vaweb' => ['required', new RuleCliente('vaweb')],
         ];
     }
 }

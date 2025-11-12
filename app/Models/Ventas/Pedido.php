@@ -3,7 +3,6 @@
 namespace App\Models\Ventas;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use App\Models\Stock\Mventa;
 use App\Models\Stock\Lote;
@@ -15,11 +14,12 @@ use App\Models\Ventas\Pedido_Combinacion;
 use App\Models\Ventas\Transporte;
 use App\Models\Seguridad\Usuario;
 use App\Traits\Ventas\PedidoTrait;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Pedido extends Model
+class Pedido extends Model implements Auditable
 {
-	use SoftDeletes;
 	use PedidoTrait;
+    use \OwenIt\Auditing\Auditable;
 
     protected $fillable = ['fecha', 'fechaentrega', 'cliente_id', 'condicionventa_id', 'vendedor_id', 'transporte_id', 
 							'mventa_id', 'estado', 'usuario_id', 'leyenda', 'descuento', 'descuentointegrado', 
@@ -40,6 +40,20 @@ class Pedido extends Model
                     ->with('pedido_combinacion_estados')
                     ->with('ordenestrabajo')
                     ->with('lotes');
+	}
+
+	public function pedido_articulos()
+	{
+    	return $this->hasMany(Pedido_Articulo::class, 'pedido_id')
+                    ->with('articulos')
+                    ->with('pedido_articulo_estados')
+                    ->with('lotes')
+                    ->with('descuentoventa_ids');
+	}
+
+	public function pedido_articulo_cajas()
+	{
+    	return $this->hasMany(Pedido_Articulo_Caja::class, 'pedido_id')->with("pedido_articulos");
 	}
 
     public function clientes()

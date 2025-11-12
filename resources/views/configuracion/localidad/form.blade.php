@@ -28,3 +28,9 @@
 		@endforeach
 	</select>
 </div>
+<div class="form-group row">
+    <label for="codigosenasa" class="col-lg-3 col-form-label">C&oacute;digo SENASA</label>
+    <div class="col-lg-2">
+    <input type="text" name="codigosenasa" id="codigosenasa" class="form-control" value="{{old('codigosenasa', $data->codigosenasa ?? '')}}">
+    </div>
+</div>

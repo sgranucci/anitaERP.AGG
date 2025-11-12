@@ -130,7 +130,6 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
         foreach ($datosLocal as $value) {
             $datosLocalArray[] = $value->{$this->keyField};
         }
-        
 		if ($dataAnita)
 		{
         	foreach ($dataAnita as $value) {
@@ -168,7 +167,7 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
         );
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
-		$usuario_id = Auth::user()->id;
+        $usuario_id = Auth::user()->id;
 
         if (count($dataAnita) > 0) {
             $data = $dataAnita[0];

@@ -31,10 +31,8 @@
 
                                     <div class='col-sm-5'>
 										<select id="estado" name="filter_column[0][value]" class="filter-value form-control">
-                        					<option value="">-- Selecciona estado --</option>
                                 			<option value="P">Pendientes</option>    
                                 			<option value="F">Facturados</option>    
-                                			<option value="E">En produccion</option>  
                                             <option value="A">Anulados</option>  
                     					</select>
 										<!-- 
@@ -73,6 +71,52 @@
                                             <option  value='asc' selected>- - -</option>
                                         </select>
                                     </div><!--END_COL_SM_2-->
+                                </div>
+                                <div class='row-filter-combo row'>
+
+                                    <div class="col-sm-2">
+                                        <strong>Repartos</strong>
+                                    </div>
+
+                                    <div class='col-sm-6'>
+                                        
+                                        <div class='input-group '>
+                                            <input type='hidden' name='filter_column[1][column]' value='reparto'>
+                                            <input type='hidden' name='filter_column[1][type]' value='='>
+                                            <input type='text' id='filtro-reparto' class='form-control' placeholder='Repartos'
+                                                    name='filter_column[1][value][]' value=''>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class='row-filter-combo row'>
+                                    <div class="col-sm-2">
+                                        <strong>Fecha de entrega</strong>
+                                    </div>
+                                    <div class='row between-group'>
+                                        <div class='col-sm-6'>
+                                            <div class='input-group '>
+                                                <input type='hidden' name='filter_column[2][column]' value='fechaentrega'>
+                                                <input type='hidden' name='filter_column[2][type]' value='/'>
+                                                <span class="input-group-addon">Desde:</span>
+                                                <input
+                                                        type='date'
+                                                        class='filter-value-between form-control timepicker'
+                                                        placeholder='Entrega Desde'
+                                                        name='filter_column[2][value][]' value=''>
+                                            </div>
+                                        </div>
+                                        <div class='col-sm-6'>
+                                            <div class='input-group '>
+                                                <span class="input-group-addon">Hasta:</span>
+                                                <input
+                                                        type='date'
+                                                        class='filter-value-between form-control timepicker'
+                                                        placeholder='Entrega Hasta'
+                                                        name='filter_column[2][value][]' value=''>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>

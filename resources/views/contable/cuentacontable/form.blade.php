@@ -109,19 +109,35 @@
 			</select>
 		</div>
 		<div class="form-group row">
-			<label for="conceptogasto_id" class="col-lg-3 col-form-label requerido">Concepto Cash Flow</label>
-			<div class="col-lg-8">
-				<select name="conceptogasto_id" id="conceptogasto_id" class="form-control" required>
-					<option value="">Seleccione el concepto gasto</option>
-					@foreach($conceptogasto_query as $id => $conceptogasto)
-						@if( isset($data) && (int) $conceptogasto->id == (int) $data->conceptogasto_id )
-							<option value="{{$conceptogasto->id}}" selected>{{$conceptogasto->nombre}}</option>
-						@else
-							<option value="{{$conceptogasto->id}}">{{$conceptogasto->nombre}}</option>
-						@endif
-					@endforeach
-				</select>
-			</div>
+			@if (config('app.empresa') == "AGG")
+				<label for="conceptogasto_id" class="col-lg-3 col-form-label requerido">Concepto Cash Flow</label>
+				<div class="col-lg-8">
+					<select name="conceptogasto_id" id="conceptogasto_id" class="form-control" required>
+						<option value="">Seleccione el concepto gasto</option>
+						@foreach($conceptogasto_query as $id => $conceptogasto)
+							@if( isset($data) && (int) $conceptogasto->id == (int) $data->conceptogasto_id )
+								<option value="{{$conceptogasto->id}}" selected>{{$conceptogasto->nombre}}</option>
+							@else
+								<option value="{{$conceptogasto->id}}">{{$conceptogasto->nombre}}</option>
+							@endif
+						@endforeach
+					</select>
+				</div>
+			@else
+				<label for="conceptogasto_id" class="col-lg-3 col-form-label">Concepto Cash Flow</label>
+				<div class="col-lg-8">
+					<select name="conceptogasto_id" id="conceptogasto_id" class="form-control">
+						<option value="">Seleccione el concepto gasto</option>
+						@foreach($conceptogasto_query as $id => $conceptogasto)
+							@if( isset($data) && (int) $conceptogasto->id == (int) $data->conceptogasto_id )
+								<option value="{{$conceptogasto->id}}" selected>{{$conceptogasto->nombre}}</option>
+							@else
+								<option value="{{$conceptogasto->id}}">{{$conceptogasto->nombre}}</option>
+							@endif
+						@endforeach
+					</select>
+				</div>
+			@endif
 		</div>
 		<div class="form-group row">
 			<label for="cuentacontable_difcambio_id" class="col-lg-3 col-form-label">Cuenta contable dif. cbio.</label>

@@ -11,7 +11,11 @@ use App\Models\Ventas\Zonavta;
 use App\Models\Ventas\Subzonavta;
 use App\Models\Ventas\Vendedor;
 use App\Models\Ventas\Transporte;
+use App\Models\Ventas\Abasto;
+use App\Models\Ventas\Coeficiente;
 use App\Models\Ventas\Condicionventa;
+use App\Models\Ventas\Distribuidor;
+use App\Models\Ventas\Descuentoventa;
 use App\Models\Stock\Listaprecio;
 use App\Models\Contable\Cuentacontable;
 use App\Models\Configuracion\Pais;
@@ -23,8 +27,12 @@ use App\Http\Requests\ValidacionCliente;
 use App\Http\Requests\ValidacionClienteProvisorio;
 use App\Repositories\Ventas\ClienteRepositoryInterface;
 use App\Repositories\Ventas\Cliente_EntregaRepositoryInterface;
+use App\Repositories\Ventas\Cliente_SeguimientoRepositoryInterface;
+use App\Repositories\Ventas\Cliente_Articulo_SuspendidoRepositoryInterface;
 use App\Repositories\Ventas\Cliente_ArchivoRepositoryInterface;
 use App\Repositories\Ventas\TiposuspensionclienteRepositoryInterface;
+use App\Repositories\Ventas\DescuentoventaRepositoryInterface;
+use App\Repositories\Configuracion\TipodocumentoRepositoryInterface;
 use App\Repositories\Ordenventa\OrdenventaRepositoryInterface;
 use App\Queries\Ventas\ClienteQueryInterface;
 use App\Queries\Ventas\Cliente_EntregaQueryInterface;
@@ -39,8 +47,12 @@ class ClienteController extends Controller
 {
 	private $clienteRepository;
 	private $cliente_entregaRepository;
+    private $cliente_seguimientoRepository;
+    private $cliente_articulo_suspendidoRepository;
 	private $cliente_archivoRepository;
+    private $descuentoventaRepository;
     private $tiposuspensionclienteRepository;
+    private $tipodocumentoRepository;
 	private $iibbService;
 	private $clienteQuery;
 	private $cliente_entregaQuery;
@@ -50,6 +62,10 @@ class ClienteController extends Controller
 		ClienteRepositoryInterface $clienteRepository, 
 		Cliente_EntregaRepositoryInterface $cliente_entregaRepository, 
 		Cliente_ArchivoRepositoryInterface $cliente_archivoRepository, 
+        Cliente_SeguimientoRepositoryInterface $cliente_seguimientorepository,
+        Cliente_Articulo_SuspendidoRepositoryInterface $cliente_articulo_suspendidorepository,
+        DescuentoventaRepositoryInterface $descuentoventarepository,
+        TipodocumentoRepositoryInterface $tipodocumentoRepository,
 		IIBBService $iibbService,
 		ClienteQueryInterface $clientequery,
         TiposuspensionclienteRepositoryInterface $tiposuspensionclienterepository,
@@ -58,9 +74,13 @@ class ClienteController extends Controller
     {
         $this->clienteRepository = $clienteRepository;
         $this->cliente_entregaRepository = $cliente_entregaRepository;
+        $this->cliente_seguimientoRepository = $cliente_seguimientorepository;
+        $this->cliente_articulo_suspendidoRepository = $cliente_articulo_suspendidorepository;
         $this->cliente_archivoRepository = $cliente_archivoRepository;
+        $this->descuentoventaRepository = $descuentoventarepository;
         $this->tiposuspensionclienteRepository = $tiposuspensionclienterepository;
         $this->iibbService = $iibbService;
+        $this->tipodocumentoRepository = $tipodocumentoRepository;
 
         $this->clienteQuery = $clientequery;
         $this->cliente_entregaQuery = $cliente_entregaquery;
@@ -144,7 +164,7 @@ class ClienteController extends Controller
 
 	public function leerCliente($cliente_id)
     {
-        return $this->clienteQuery->traeClienteporId($cliente_id, ['id','vendedor_id','transporte_id','condicionventa_id','descuento','tiposuspension_id'])->toArray();
+        return $this->clienteQuery->traeClienteporId($cliente_id, ['id','vendedor_id','transporte_id','condicionventa_id','descuento','tiposuspension_id','lugarentrega'])->toArray();
     }
 
     /**
@@ -160,7 +180,11 @@ class ClienteController extends Controller
 		$this->armaTablasVista($pais_query, $provincia_query, $condicioniva_query, $zonavta_query,
         	$subzonavta_query, $vendedor_query, $transporte_query, $condicionventa_query, $listaprecio_query,
         	$cuentacontable_query, $retieneiva_enum, $condicioniibb_enum, $vaweb_enum, $estado_enum, '', $tasaarba,
-			$tasacaba, $modofacturacion_enum, $cajaespecial_enum, 'crear'); 
+			$tasacaba, $modofacturacion_enum, $cajaespecial_enum, $abasto_query, $coeficiente_query, 
+            $distribuidor_query,
+            $emitecertificado_enum, $emitenotadecredito_enum, $agregabonificacion_enum, $descuentoventa_query,
+            $tipodocumento_query,
+            'crear'); 
 
         if (!isset($tipoalta))
             $tipoalta = config('cliente.tipoalta')['DEFINITIVO'][0];
@@ -169,7 +193,9 @@ class ClienteController extends Controller
 			'condicioniva_query', 'zonavta_query', 'subzonavta_query', 'vendedor_query', 'transporte_query',
 			'condicionventa_query', 'listaprecio_query', 'retieneiva_enum', 'condicioniibb_enum', 'cuentacontable_query',
 			'vaweb_enum', 'tasaarba', 'tasacaba', 'estado_enum', 'tipoalta',
-            'modofacturacion_enum', 'cajaespecial_enum'));
+            'modofacturacion_enum', 'cajaespecial_enum', 'abasto_query', 'coeficiente_query', 'distribuidor_query',
+            'emitecertificado_enum', 'emitenotadecredito_enum', 'agregabonificacion_enum', 'descuentoventa_query',
+            'tipodocumento_query'));
     }
 
     public function crearRemoto(Request $request, $id)
@@ -191,7 +217,11 @@ class ClienteController extends Controller
 		$this->armaTablasVista($pais_query, $provincia_query, $condicioniva_query, $zonavta_query,
         	$subzonavta_query, $vendedor_query, $transporte_query, $condicionventa_query, $listaprecio_query,
         	$cuentacontable_query, $retieneiva_enum, $condicioniibb_enum, $vaweb_enum, $estado_enum, '', $tasaarba,
-			$tasacaba, $modofacturacion_enum, $cajaespecial_enum, 'crear'); 
+			$tasacaba, $modofacturacion_enum, $cajaespecial_enum, $abasto_query, $coeficiente_query, 
+            $distribuidor_query,
+            $emitecertificado_enum, $emitenotadecredito_enum, $agregabonificacion_enum, $descuentoventa_query,
+            $tipodocumento_query,
+            'crear'); 
 
         if (!isset($tipoalta))
             $tipoalta = config('cliente.tipoalta')['DEFINITIVO'][0];
@@ -200,7 +230,9 @@ class ClienteController extends Controller
 			'condicioniva_query', 'zonavta_query', 'subzonavta_query', 'vendedor_query', 'transporte_query',
 			'condicionventa_query', 'listaprecio_query', 'retieneiva_enum', 'condicioniibb_enum', 'cuentacontable_query',
 			'vaweb_enum', 'tasaarba', 'tasacaba', 'estado_enum', 'tipoalta',
-            'modofacturacion_enum', 'cajaespecial_enum', 'urlOrigen', 'idRemoto'));
+            'modofacturacion_enum', 'cajaespecial_enum', 'urlOrigen', 'idRemoto', 'abasto_query', 'coeficiente_query', 
+            'emitecertificado_enum', 'emitenotadecredito_enum', 'agregabonificacion_enum',
+            'distribuidor_query', 'descuentoventa_query', 'tipodocumento_query'));
     }
 
     /**
@@ -220,6 +252,10 @@ class ClienteController extends Controller
             if ($cliente)
             {
                 $cliente_entrega = $this->cliente_entregaRepository->create($request->all(), $cliente->id);
+
+                $cliente_seguimiento = $this->cliente_seguimientoRepository->create($request->all(), $cliente->id);
+
+                $cliente_articulo_suspendido = $this->cliente_articulo_suspendidoRepository->create($request->all(), $cliente->id);
 
                 $cliente_archivo = $this->cliente_archivoRepository->create($request, $cliente->id);
 
@@ -254,6 +290,10 @@ class ClienteController extends Controller
             {
                 $cliente_entrega = $this->cliente_entregaRepository->create($request->all(), $cliente->id);
 
+                $cliente_seguimiento = $this->cliente_seguimientoRepository->create($request->all(), $cliente->id);
+
+                $cliente_articulo_suspendido = $this->cliente_articulo_suspendidoRepository->create($request->all(), $cliente->id);
+
                 $cliente_archivo = $this->cliente_archivoRepository->create($request, $cliente->id);
             }
             DB::commit();
@@ -263,7 +303,7 @@ class ClienteController extends Controller
         }
 
         // Procesa envio del correo para aprobacion del cliente provisorio
-        $receivers = "pedidos@ferli.com.ar";
+        $receivers = config('cliente.MAIL_CLIENTE_PROVISORIO');
 
         Mail::to($receivers)->send(new ClienteProvisorio($request));
 
@@ -281,10 +321,14 @@ class ClienteController extends Controller
         can('editar-clientes');
         $data = $this->clienteRepository->findOrFail($id);
 
-		$this->armaTablasVista($pais_query, $provincia_query, $condicioniva_query, $zonavta_query,
+        $this->armaTablasVista($pais_query, $provincia_query, $condicioniva_query, $zonavta_query,
         	$subzonavta_query, $vendedor_query, $transporte_query, $condicionventa_query, $listaprecio_query,
-        	$cuentacontable_query, $retieneiva_enum, $condicioniibb_enum, $vaweb_enum, $estado_enum, 
-			$data->nroinscripcion, $tasaarba, $tasacaba, $modofacturacion_enum, $cajaespecial_enum, 'editar'); 
+        	$cuentacontable_query, $retieneiva_enum, $condicioniibb_enum, $vaweb_enum, $estado_enum, '', $tasaarba,
+			$tasacaba, $modofacturacion_enum, $cajaespecial_enum, $abasto_query, $coeficiente_query, 
+            $distribuidor_query,
+            $emitecertificado_enum, $emitenotadecredito_enum, $agregabonificacion_enum, $descuentoventa_query,
+            $tipodocumento_query,
+            'editar'); 
 
         $tiposuspensioncliente_query = $this->tiposuspensionclienteRepository->all();
         
@@ -297,7 +341,9 @@ class ClienteController extends Controller
 			'condicionventa_query', 'listaprecio_query', 'retieneiva_enum', 'condicioniibb_enum', 'cuentacontable_query',
 			'vaweb_enum', 'tasaarba', 'tasacaba', 'estado_enum', 'tipoalta', 'modofacturacion_enum',
             'cajaespecial_enum',
-            'tiposuspensioncliente_query'));
+            'tiposuspensioncliente_query', 'abasto_query', 'coeficiente_query',
+            'emitecertificado_enum', 'emitenotadecredito_enum', 'agregabonificacion_enum', 'distribuidor_query', 'descuentoventa_query',
+            'tipodocumento_query'));
     }
 
     /**
@@ -315,10 +361,14 @@ class ClienteController extends Controller
         try
         {
             // Graba cliente
-            $this->clienteRepository->update($request->all(), $id);
+            $cliente = $this->clienteRepository->update($request->all(), $id);
 
             // Graba lugares de entrega
             $this->cliente_entregaRepository->update($request->all(), $id);
+
+            $cliente_seguimiento = $this->cliente_seguimientoRepository->update($request->all(), $id);
+
+            $cliente_articulo_suspendido = $this->cliente_articulo_suspendidoRepository->update($request->all(), $id);
 
             // Graba archivos asociados
             $this->cliente_archivoRepository->update($request, $id);
@@ -367,7 +417,11 @@ class ClienteController extends Controller
 	private function armaTablasVista(&$pais_query, &$provincia_query, &$condicioniva_query, &$zonavta_query,
         	&$subzonavta_query, &$vendedor_query, &$transporte_query, &$condicionventa_query, &$listaprecio_query,
         	&$cuentacontable_query, &$retieneiva_enum, &$condicioniibb_enum, &$vaweb_enum, &$estado_enum, 
-			$nroinscripcion, &$tasaarba, &$tasacaba, &$modofacturacion_enum, &$cajaespecial_enum, $funcion)
+			$nroinscripcion, &$tasaarba, &$tasacaba, &$modofacturacion_enum, &$cajaespecial_enum, &$abasto_query, &$coeficiente_query,
+            &$distribuidor_query, 
+            &$emitecertificado_enum, &$emitenotadecredito_enum, &$agregabonificacion_enum, &$descuentoventa_query,
+            &$tipodocumento_query,
+            $funcion)
 	{
         $pais_query = Pais::orderBy('nombre')->get();
         $provincia_query = Provincia::orderBy('nombre')->get();
@@ -379,12 +433,20 @@ class ClienteController extends Controller
         $condicionventa_query = Condicionventa::orderBy('nombre')->get();
         $listaprecio_query = Listaprecio::orderBy('nombre')->get();
         $cuentacontable_query = Cuentacontable::orderBy('nombre')->get();
+        $abasto_query = Abasto::orderBy('nombre')->get();
+        $coeficiente_query = Coeficiente::orderBy('nombre')->get();
+        $distribuidor_query = Distribuidor::orderBy('nombre')->get();
+        $descuentoventa_query = Descuentoventa::orderBy('nombre')->get();
+        $tipodocumento_query = $this->tipodocumentoRepository->all();
 		$retieneiva_enum = Cliente::$enumRetieneiva;
 		$condicioniibb_enum = Cliente::$enumCondicioniibb;
 		$vaweb_enum = Cliente::$enumVaweb;
 		$estado_enum = Cliente::$enumEstado;
         $modofacturacion_enum = Cliente::$enumModoFacturacion;
         $cajaespecial_enum = Cliente::$enumCajaEspecial;
+        $emitecertificado_enum = Cliente::$enumEmiteCertificado;
+        $emitenotadecredito_enum = Cliente::$enumEmiteNotaDeCredito;
+        $agregabonificacion_enum = Cliente::$enumAgregaBonificacion;
 
 		if ($funcion == 'editar')
 		{
@@ -459,4 +521,16 @@ class ClienteController extends Controller
     {
         return ($this->clienteRepository->find($cliente_id));
 	}
+
+    public function leeUnClientePorCodigo($cliente_id)
+    {
+        return ($this->clienteRepository->findPorCodigo($cliente_id));
+	}
+
+    public function emiteNc($cliente_id)
+    {
+        $cliente = $this->clienteRepository->updateEmiteNc($cliente_id);
+
+        return 'success';
+    }
 }

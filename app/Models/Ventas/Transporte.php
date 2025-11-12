@@ -7,10 +7,13 @@ use Illuminate\Support\Facades\Storage;
 use App\Models\Configuracion\Localidad;
 use App\Models\Configuracion\Provincia;
 use App\Models\Configuracion\Condicioniva;
+use App\Traits\Ventas\TransporteTrait;
 
 class Transporte extends Model
 {
-    protected $fillable = ['nombre', 'codigo', 'domicilio', 'provincia_id', 'localidad_id', 'codigopostal', 'telefono', 'email', 'nroinscripcion', 'condicioniva_id', 'patentevehiculo', 'patenteacoplado', 'horarioentrega'];
+    use TransporteTrait;
+    protected $fillable = ['nombre', 'codigo', 'domicilio', 'provincia_id', 'localidad_id', 'codigopostal', 'telefono', 'email', 'nroinscripcion', 'condicioniva_id', 'patentevehiculo', 'patenteacoplado', 'horarioentrega',
+                            'tipoexpreso', 'copiaremito', 'copiapedido'];
 
     protected $table = 'transporte';
 

@@ -23,7 +23,7 @@
           <thead>
               <th>ID</th>
               <th>Nombre</th>
-              <th>Condición de Iva</th>
+              <th>Código Anita</th>
               <th>Domicilio</th>
               <th>Provincia</th>
               <th>Localidad</th>

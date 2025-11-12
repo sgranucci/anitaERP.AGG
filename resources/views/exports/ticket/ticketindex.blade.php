@@ -1,4 +1,4 @@
-<h2> Tickets </h2>s
+<h2> Tickets </h2>
 <table> 
 	<thead>
 	<tr>

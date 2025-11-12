@@ -31,7 +31,8 @@ class ProvinciaRepository implements ProvinciaRepositoryInterface
         if (!$hay_provincia)
 			self::sincronizarConAnita();
 
-        return $this->model->with('paises:id,nombre')->orderBy('nombre','ASC')->get();
+        return $this->model->with('paises:id,nombre')->with('provincia_tasaiibbs')
+                    ->with('provincia_cuentacontableiibbs')->orderBy('nombre','ASC')->get();
     }
 
     public function create(array $data)
@@ -40,6 +41,8 @@ class ProvinciaRepository implements ProvinciaRepositoryInterface
 		//
 		// Graba anita
 		self::guardarAnita($data, $data['codigo']);
+
+        return $provincia;
     }
 
     public function update(array $data, $id)
@@ -67,7 +70,8 @@ class ProvinciaRepository implements ProvinciaRepositoryInterface
 
     public function find($id)
     {
-        if (null == $provincia = $this->model->with('paises:id,nombre')->find($id)) {
+        if (null == $provincia = $this->model->with('paises:id,nombre')->with('provincia_tasaiibbs')
+                                        ->with('provincia_cuentacontableiibbs')->find($id)) {
             throw new ModelNotFoundException("Registro no encontrado");
         }
 
@@ -76,28 +80,32 @@ class ProvinciaRepository implements ProvinciaRepositoryInterface
 
     public function findPorId($id)
     {
-        $provincia = $this->model->with('paises:id,nombre')->where('id', $id)->first();
+        $provincia = $this->model->with('paises:id,nombre')->with('provincia_tasaiibbs')
+                            ->with('provincia_cuentacontableiibbs')->where('id', $id)->first();
 
         return $provincia;
     }
 
     public function findPorCodigo($codigo)
     {
-        $provincia = $this->model->with('paises:id,nombre')->where('codigo', $codigo)->first();
+        $provincia = $this->model->with('paises:id,nombre')->with('provincia_tasaiibbs')
+                                    ->with('provincia_cuentacontableiibbs')->where('codigo', $codigo)->first();
 
         return $provincia;
     }
 
     public function findPorJurisdiccion($jurisdiccion)
     {
-        $provincia = $this->model->with('paises:id,nombre')->where('jurisdiccion', $jurisdiccion)->first();
+        $provincia = $this->model->with('paises:id,nombre')->with('provincia_tasaiibbs')
+                                    ->with('provincia_cuentacontableiibbs')->where('jurisdiccion', $jurisdiccion)->first();
 
         return $provincia;
     }
 
     public function findOrFail($id)
     {
-        if (null == $provincia = $this->model->with('paises:id,nombre')->findOrFail($id)) {
+        if (null == $provincia = $this->model->with('paises:id,nombre')->with('provincia_tasaiibbs')
+                                                ->with('provincia_cuentacontableiibbs')->findOrFail($id)) {
             throw new ModelNotFoundException("Registro no encontrado");
         }
 
@@ -131,29 +139,50 @@ class ProvinciaRepository implements ProvinciaRepositoryInterface
 
     public function traerRegistroDeAnita($key){
         $apiAnita = new ApiAnita();
-        $data = array( 
-            'acc' => 'list', 'tabla' => $this->tableAnita, 
-            'sistema' => 'shared',
-            'campos' => '
-                provi_provincia,
-				provi_desc,
-				provi_abrev,
-				provi_jurisdiccion,
-				provi_letra
-            ' , 
-            'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
-        );
+        if (config('app.empresa') == 'EL BIERZO')
+            $data = array( 
+                'acc' => 'list', 'tabla' => $this->tableAnita, 
+                'sistema' => 'shared',
+                'campos' => '
+                    provi_provincia,
+                    provi_desc,
+                    provi_abrev,
+                    provi_jurisdiccion,
+                    provi_cod_externo
+                ' , 
+                'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
+            );
+        else
+            $data = array( 
+                'acc' => 'list', 'tabla' => $this->tableAnita, 
+                'sistema' => 'shared',
+                'campos' => '
+                    provi_provincia,
+                    provi_desc,
+                    provi_abrev,
+                    provi_jurisdiccion,
+                    provi_letra
+                ' , 
+                'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
+            );            
         $dataAnita = json_decode($apiAnita->apiCall($data));
-
+        
         if (count($dataAnita) > 0) {
             $data = $dataAnita[0];
+
+            if (config('app.empresa') == 'EL BIERZO')
+                $codigoExterno = $data->provi_cod_externo;
+            else
+                $codigoExterno = $data->provi_provincia;
+
             Provincia::create([
                 "id" => $data->provi_provincia,
                 "nombre" => $data->provi_desc,
                 "abreviatura" => $data->provi_abrev,
                 "jurisdiccion" => $data->provi_jurisdiccion,
                 "codigo" => $data->provi_provincia,
-                "pais_id" => 1
+                "pais_id" => 1,
+                "codigoexterno" => $codigoExterno
             ]);
         }
     }
@@ -161,7 +190,19 @@ class ProvinciaRepository implements ProvinciaRepositoryInterface
 	public function guardarAnita($request, $id) {
         $apiAnita = new ApiAnita();
 
-        $data = array( 'tabla' => $this->tableAnita, 
+        if (config('app.empresa') == 'EL BIERZO')
+            $data = array( 'tabla' => $this->tableAnita, 
+						'acc' => 'insert',
+                        'sistema' => 'shared',
+            			'campos' => ' provi_provincia, provi_desc, provi_abrev, provi_jurisdiccion, provi_cod_externo',
+            			'valores' => " '".$id."', 
+										'".$request['nombre']."',  
+										'".$request['abreviatura']."',
+                                        '".$request['jurisdiccion']."',
+										'".$request['codigoexterno']."' "
+            );
+        else
+            $data = array( 'tabla' => $this->tableAnita, 
 						'acc' => 'insert',
                         'sistema' => 'shared',
             			'campos' => ' provi_provincia, provi_desc, provi_abrev, provi_jurisdiccion',
@@ -169,20 +210,31 @@ class ProvinciaRepository implements ProvinciaRepositoryInterface
 										'".$request['nombre']."',  
 										'".$request['abreviatura']."',
 										'".$request['jurisdiccion']."' "
-        );
+            );
         $apiAnita->apiCall($data);
 	}
 
 	public function actualizarAnita($request, $id) {
         $apiAnita = new ApiAnita();
-		$data = array( 'acc' => 'update', 
+        if (config('app.empresa') == 'EL BIERZO')
+		    $data = array( 'acc' => 'update', 
+                        'sistema' => 'shared',
+						'tabla' => $this->tableAnita, 
+						'valores' => 
+							" provi_desc = '".$request['nombre']."',
+							provi_abrev = '".$request['abreviatura']."',
+                            provi_jurisdiccion = '".$request['jurisdiccion']."',
+							provi_cod_externo = '".$request['codigoexterno']."' ",
+						'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$request['codigo']."' " );
+        else
+            $data = array( 'acc' => 'update', 
                         'sistema' => 'shared',
 						'tabla' => $this->tableAnita, 
 						'valores' => 
 							" provi_desc = '".$request['nombre']."',
 							provi_abrev = '".$request['abreviatura']."',
 							provi_jurisdiccion = '".$request['jurisdiccion']."' ",
-						'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$request['codigo']."' " );
+						'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$request['codigo']."' " );            
         $apiAnita->apiCall($data);
 	}
 

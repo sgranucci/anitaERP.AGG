@@ -45,8 +45,9 @@ class TransporteController extends Controller
 
         $provincias_query = Provincia::orderBy('nombre')->get();
         $condicionesiva_query = Condicioniva::orderBy('nombre')->get();
+        $tipoexpresoEnum = Transporte::$enumTipoExpreso;
 
-        return view('ventas.transporte.crear', compact('provincias_query', 'condicionesiva_query'));
+        return view('ventas.transporte.crear', compact('provincias_query', 'condicionesiva_query', 'tipoexpresoEnum'));
     }
 
     /**
@@ -76,8 +77,9 @@ class TransporteController extends Controller
 
         $provincias_query = Provincia::orderBy('nombre')->get();
         $condicionesiva_query = Condicioniva::orderBy('nombre')->get();
+        $tipoexpresoEnum = Transporte::$enumTipoExpreso;
 
-        return view('ventas.transporte.editar', compact('data', 'provincias_query', 'condicionesiva_query'));
+        return view('ventas.transporte.editar', compact('data', 'provincias_query', 'condicionesiva_query', 'tipoexpresoEnum'));
     }
 
     /**
@@ -115,4 +117,14 @@ class TransporteController extends Controller
             abort(404);
         }
     }
+
+    public function consultaTransporte(Request $request)
+    {
+        return ($this->repository->leeTransporte($request->consulta));
+	}
+
+    public function leeTransporte($codigoTransporte)
+    {
+        return ($this->repository->findPorCodigo($codigoTransporte));
+	}    
 }

@@ -30,6 +30,7 @@ Zonas de venta
                         <tr>
                             <th class="width20">ID</th>
                             <th>Nombre</th>
+                            <th>Código Anita</th>
                             <th class="width80" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -38,6 +39,7 @@ Zonas de venta
                         <tr>
                             <td>{{$data->id}}</td>
                             <td>{{$data->nombre}}</td>
+                            <td>{{$data->codigo}}</td>
                             <td>
                        			@if (can('editar-zonas-de-venta', false))
                                 	<a href="{{route('editar_zonavta', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">

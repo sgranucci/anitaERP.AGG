@@ -4,14 +4,23 @@ namespace App\Models\Ventas;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
+use App\Models\Configuracion\Empresa;
 use Illuminate\Support\Str;
+use App\Traits\Ventas\VendedorTrait;
 use App\ApiAnita;
 
 class Vendedor extends Model
 {
-    protected $fillable = ['nombre', 'comisionventa', 'comisioncobranza'];
+    use VendedorTrait;
+    protected $fillable = ['nombre', 'comisionventa', 'comisioncobranza', 'aplicasobre', 'empresa_id', 'legajo_id', 'email',
+                            'codigo', 'estado'];
     protected $table = 'vendedor';
     protected $keyField = 'vend_codigo';
+
+    public function empresas()
+    {
+        return $this->belongsTo(Empresa::class, 'empresa_id');
+    }
 
     public function sincronizarConAnita(){
         $apiAnita = new ApiAnita();
@@ -43,7 +52,12 @@ class Vendedor extends Model
                 vend_codigo,
 				vend_nombre,
 				vend_comision_vta,
-				vend_comision_cob
+				vend_comision_cob,
+                vend_aplicacion,
+                vend_empresa,
+                vend_legajo,
+                vend_email,
+                vend_estado
             ' , 
             'whereArmado' => " WHERE ".$this->keyField." = '".$key."' " 
         );
@@ -51,11 +65,31 @@ class Vendedor extends Model
 
         if (count($dataAnita) > 0) {
             $data = $dataAnita[0];
+
+            if ($data->vend_aplicacion == 'B')
+                $aplicaSobre = "Sobre Bruto";
+            else
+                $aplicaSobre = "Sobre Neto";
+
+            if ($data->vend_empresa == 0)
+                $data->vend_empresa = null;
+
+            if ($data->vend_estado == 'N')
+                $estado = "No Carga Clientes";
+            else
+                $estado = "Activo";
+
             Vendedor::create([
                 "id" => $key,
                 "nombre" => $data->vend_nombre,
                 "comisionventa" => $data->vend_comision_vta,
-                "comisioncobranza" => $data->vend_comision_cob
+                "comisioncobranza" => $data->vend_comision_cob,
+                "aplicasobre" => $aplicaSobre,
+                "empresa_id" => $data->vend_empresa,
+                "legajo_id" => $data->vend_legajo,
+                "email" => $data->vend_email,
+                "codigo" => $data->vend_codigo,
+                "estado" => $estado
             ]);
         }
     }
@@ -63,31 +97,51 @@ class Vendedor extends Model
 	public function guardarAnita($request, $id) {
         $apiAnita = new ApiAnita();
 
+        if ($request->aplcaSobre == "Sobre Neto")
+            $aplicaSobre = 'N';
+        else
+            $aplicaSobre = 'B';
         $data = array( 'tabla' => 'vendedor', 'acc' => 'insert',
             'sistema' => 'ventas',
-            'campos' => ' vend_codigo, vend_nombre, vend_comision_vta, vend_aplicacion, vend_empresa, vend_letra, vend_comision_cob, vend_mercaderia ',
+            'campos' => ' vend_codigo, vend_nombre, vend_comision_vta, vend_aplicacion, vend_empresa, vend_legajo, vend_comision_cob, vend_mercaderia, vend_email, vend_estado ',
             'valores' => " '".$id."', 
 						   '".$request->nombre."',
 						   '".$request->comisionventa."',
-						   'B',
-						   '0',
-						   '0',
+						   '".$aplicaSobre."',
+						   '".$request->empresa_id."',
+						   '".$request->legajo_id."',
             			   '".$request->comisioncobranza."',
-						   ' '"
+						   ' ',
+                           '".$request->email."',
+                           '".' '."' "
         );
-        $apiAnita->apiCall($data);
+        return $apiAnita->apiCall($data);
 	}
 
 	public function actualizarAnita($request, $id) {
         $apiAnita = new ApiAnita();
+        if ($request->aplicaSobre == "Sobre Neto")
+            $aplicaSobre = 'N';
+        else
+            $aplicaSobre = 'B';
+        if ($request->estado == "Activo")
+            $estado = ' ';
+        else
+            $estado = 'N';
 		$data = array( 'acc' => 'update', 'tabla' => 'vendedor', 
                     'sistema' => 'ventas',
 					'valores' => " 
 								vend_nombre = '".  $request->nombre."',
 								vend_comision_vta = '".  $request->comisionventa."', 
-								vend_comision_cob = '".  $request->comisioncobranza."' ", 
+								vend_comision_cob = '".  $request->comisioncobranza."',
+                                vend_aplicacion = '". $aplicaSobre."',
+                                vend_empresa = '".$request->empresa_id."',
+                                vend_legajo = '".$request->legajo_id."',
+                                vend_codigo = '".$request->codigo."',
+                                vend_estado = '".$estado."',
+                                vend_email = '".$request->email."' ", 
 					'whereArmado' => " WHERE vend_codigo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        return $apiAnita->apiCall($data);
 	}
 
 	public function eliminarAnita($id) {

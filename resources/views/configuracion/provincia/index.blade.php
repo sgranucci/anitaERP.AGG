@@ -31,9 +31,11 @@ Provincias
                             <th class="width20">ID</th>
                             <th>Nombre</th>
                             <th>Abreviatura</th>
-                            <th>Jurisdiccion</th>
+                            <th>Juris.</th>
                             <th>C&oacute;digo</th>
                             <th>Pa&iacute;s</th>
+                            <th>Tasas por Condición IIBB</th>
+                            <th>Cuentas Contables</th>
                             <th class="width80" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -46,6 +48,20 @@ Provincias
                             <td>{{$data->jurisdiccion}}</td>
                             <td>{{$data->codigo}}</td>
                             <td>{{$data->paises->nombre}}</td>
+                            <td>                                
+                                <ul>
+                                    @foreach($data->provincia_tasaiibbs as $tasa)
+                                        <li>{{ $tasa->condicioniibbs->nombre }} {{ number_format($tasa->tasa,2) }} % Min.Neto {{ number_format($tasa->minimoneto,2)}} Min.Perc.{{ number_format($tasa->minimopercepcion,2)}}</li>
+                                    @endforeach
+                                </ul>
+                            </td>
+                            <td>                                
+                                <ul>
+                                    @foreach($data->provincia_cuentacontableiibbs as $cuentacontable)
+                                        <li>{{$cuentacontable->empresas->nombre}} {{$cuentacontable->cuentacontables->codigo}}-{{ $cuentacontable->cuentacontables->nombre }}</li>
+                                    @endforeach
+                                </ul>
+                            </td>                            
                             <td>
                        			@if (can('editar-provincias', false))
                                 	<a href="{{route('editar_provincia', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">

@@ -3,6 +3,7 @@
 namespace App\Models\Ventas;
 
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Zonavta;
 use App\Models\Ventas\Subzonavta;
@@ -12,8 +13,9 @@ use App\Models\Configuracion\Localidad;
 use App\Models\Configuracion\Provincia;
 use App\Models\Configuracion\Pais;
 
-class Cliente_Entrega extends Model
+class Cliente_Entrega extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['cliente_id', 'nombre', 'codigo', 'domicilio', 'localidad_id', 'provincia_id', 
 		'pais_id', 'codigopostal', 'zonavta_id', 'subzonavta_id', 'vendedor_id', 'transporte_id'];
     protected $table = 'cliente_entrega';

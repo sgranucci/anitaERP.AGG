@@ -13,6 +13,8 @@ use App\Models\Stock\Articulo;
 use App\Models\Stock\Talle;
 use App\Models\Stock\Listaprecio;
 use App\Models\Configuracion\Moneda;
+use App\Repositories\Ventas\ClienteRepositoryInterface;
+use App\Repositories\Stock\ArticuloRepositoryInterface;
 use App\Http\Requests\ValidacionPrecio;
 use Maatwebsite\Excel\Facades\Excel;
 use Maatwebsite\Excel\HeadingRowImport;
@@ -23,10 +25,16 @@ use Auth;
 class PrecioController extends Controller
 {
     protected $precioService;
+    private $clienteRepository;
+    private $articuloRepository;
 
-    public function __construct(PrecioService $precioservice)
+    public function __construct(PrecioService $precioservice,
+                                ArticuloRepositoryInterface $articulorepository,
+                                ClienteRepositoryInterface $clienterepository)
     {
 		$this->precioService = $precioservice;
+        $this->articuloRepository = $articulorepository;
+        $this->clienteRepository = $clienterepository;
     }
     
     /**
@@ -91,22 +99,23 @@ class PrecioController extends Controller
                     ->whereRaw("combinacion.articulo_id = precio.articulo_id");
         })->get();
 
-		//if ($datas->isEmpty())
-		//{
-			//$Precio = new Precio();
-        	//$Precio->sincronizarConAnita();
+		if ($datas->isEmpty())
+		{
+			$Precio = new Precio();
+        	$Precio->sincronizarConAnita();
 	
-        	//$datas = Precio::with('articulos')->with('listaprecios')->with('monedas')->with('usuarios')->get();
-		//}
+        	$datas = Precio::with('articulos')->with('listaprecios')->with('monedas')->with('usuarios')->get();
+		}
         return view('stock.precio.index', compact('datas'));
     }
 
-	public function asignaPrecio($articulo_id, $talle_id)
+	public function asignaPrecioPorTalle($articulo_id, $talle_id)
 	{
         $fechaHoy = Carbon::now();
         
 		$talle_id = preg_replace('([^A-Za-z0-9,])', '', $talle_id);
 		$array_talle = explode(',', $talle_id);
+        $array_precio = [];
 		if ($talle_id)
 		{
 			$talle = Talle::select('nombre', 'id')->whereIn('id', $array_talle)->get();
@@ -141,6 +150,53 @@ class PrecioController extends Controller
 		return($array_precio);
 	}
 
+	public function asignaPrecioPorCliente($articulo_id, $codigocliente)
+	{
+        $fechaHoy = Carbon::now();
+
+        $cliente = $this->clienteRepository->findPorCodigo($codigocliente);
+
+        $listaprecio_id = config('precio.listaprecio_default_id');
+
+        // Asigna la lista del cliente, o deja lista precio default
+        if ($cliente)
+        {
+            if ($cliente->listaprecio_id != null)
+            {
+                $listaprecio = Listaprecio::find($cliente->listaprecio_id);
+
+                if ($listaprecio)
+                    $listaprecio_id = $cliente->listaprecio_id;
+            }
+        }
+
+        $precio = $this->precioService->asignaPrecioPorLista($articulo_id, $listaprecio_id, $fechaHoy);
+
+        if (count($precio) > 0)
+        {
+            $precio_talle = $precio[0]['precio'];
+            $listaprecio_id = $precio[0]['listaprecio_id'];
+            $moneda_id = $precio[0]['moneda_id'];
+            $incluyeimpuesto = $precio[0]['incluyeimpuesto'];
+        }
+        else
+        {
+            $precio_talle = 0;
+            $listaprecio_id = 0;
+            $moneda_id = 1;
+            $incluyeimpuesto = 1;
+        }
+
+        $array_precio[] = [
+                            'precio'=>$precio_talle,
+                            'listaprecio_id'=>$listaprecio_id,
+                            'moneda_id'=>$moneda_id,
+                            'incluyeimpuesto'=>$incluyeimpuesto,
+                            ];
+
+        return($array_precio);
+	}
+
     /**
      * Show the form for creating a new resource.
      *
@@ -149,14 +205,7 @@ class PrecioController extends Controller
     public function crear()
     {
         can('crear-precios');
-		$articulo_query = Articulo::where('usoarticulo_id','1')
-							->whereExists(function($query)
-                    		{
-                        		$query->select(DB::raw(1))
-                                		->from('combinacion')
-                                		->whereRaw("combinacion.articulo_id = articulo.id AND combinacion.estado='A'");
-                    		})->get();
-
+		$articulo_query = Articulo::where('usoarticulo_id','1')->get();
 		$listaprecio_query = Listaprecio::all();
 		$moneda_query = Moneda::all();
 

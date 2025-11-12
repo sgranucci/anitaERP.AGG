@@ -15,6 +15,7 @@ use App\Repositories\Ventas\PuntoventaRepositoryInterface;
 use App\Repositories\Ventas\TipotransaccionRepositoryInterface;
 use App\Repositories\Ventas\IncotermRepositoryInterface;
 use App\Repositories\Ventas\FormapagoRepositoryInterface;
+use App\Repositories\Ventas\DescuentoventaRepositoryInterface;
 use App\Services\Ventas\PedidoService;
 use App\Models\Configuracion\Moneda;
 use App\Models\Ventas\Cliente;
@@ -24,6 +25,7 @@ use App\Models\Stock\Linea;
 use App\Models\Stock\Color;
 use App\Models\Stock\Fondo;
 use App\Models\Stock\Modulo;
+use App\Models\Stock\Unidadmedida;
 use App\Models\Stock\Materialcapellada;
 use App\Models\Stock\Materialavio;
 use App\Models\Stock\Listaprecio;
@@ -35,6 +37,7 @@ use App\Exports\Ventas\GeneralPedidoExport;
 use App\Exports\Ventas\ConsumoMaterialExport;
 use Illuminate\Pagination\Paginator;
 use DB;
+use Carbon\Carbon;
 
 class PedidoController extends Controller
 {
@@ -42,6 +45,7 @@ class PedidoController extends Controller
 	private $clienteQuery;
 	private $transporteRepository;
 	private $tiposuspensionclienteRepository;
+	private $descuentoventaRepository;
 	private $motivocierrepedidoRepository;
 	private $loteRepository;
 	private $puntoventaRepository;
@@ -54,6 +58,7 @@ class PedidoController extends Controller
 								TiposuspensionclienteRepositoryInterface $tiposuspensionclienteRepository,
 								MotivocierrepedidoRepositoryInterface $motivocierrepedidoRepository,
 								ClienteQueryInterface $clientequery,
+								DescuentoventaRepositoryInterface $descuentoventarepository,
 								LoteRepositoryInterface $loterepository,
 								PuntoventaRepositoryInterface $puntoventarepository,
 								TipotransaccionRepositoryInterface $tipotransaccionrepository,
@@ -65,6 +70,7 @@ class PedidoController extends Controller
 		$this->tiposuspencionclienteRepository = $tiposuspensionclienteRepository;
 		$this->motivocierrepedidoRepository = $motivocierrepedidoRepository;
         $this->clienteQuery = $clientequery;
+		$this->descuentoventaRepository = $descuentoventarepository;
 		$this->loteRepository = $loterepository;
 		$this->puntoventaRepository = $puntoventarepository;
 		$this->tipotransaccionRepository = $tipotransaccionrepository;
@@ -105,24 +111,12 @@ class PedidoController extends Controller
 
 				if ($filtros['filter_column'][$ii]['column'] == 'estado' &&
 					$filtros['filter_column'][$ii]['type'] == '=')
-				{
-					switch($filtros['filter_column'][$ii]['value'])
-					{
-					case 'P':
-						$datas = $this->pedidoService->leePedidosPorEstado($cliente_id, 'P');
-						break;
-					case 'F':
-						$datas = $this->pedidoService->leePedidosPorEstado($cliente_id, 'F');
-						break;
-					case 'E':
-						$datas = $this->pedidoService->leePedidosPorEstado($cliente_id, 'E');
-						break;
-					case 'A':
-						$datas = $this->pedidoService->leePedidosPorEstado($cliente_id, 'A');
-						break;
-					}
-				}
+					$estado = $filtros['filter_column'][$ii]['value'];
+					
+				if ($filtros['filter_column'][$ii]['column'] == 'reparto')
+					$repartos = $filtros['filter_column'][$ii]['value'];
 			}
+			$datas = $this->pedidoService->leePedidosPorEstado($cliente_id, 'P');
 		}
 		else
 			$datas = $this->pedidoService->leePedidosPorEstado($cliente_id, 'P');
@@ -136,9 +130,49 @@ class PedidoController extends Controller
     {
 		can('listar-pedidos');
 
-        $busqueda = $request->busqueda;
-        
-		$pedidos = $this->pedidoService->leePedidosPorEstadoPaginando($busqueda);
+		$filtros = [];
+		if ($request->url() != $request->fullUrl())
+		{
+			$url = urldecode($request->fullUrl());
+			$components = parse_url($url);
+			parse_str($components['query'], $filtros);
+
+			session(['filtrosPedidos' => $filtros]);
+		}
+		else
+		{
+			$filtros = session('filtrosPedidos');
+		}
+
+		$busqueda = $request->busqueda;
+		// Aplica los filtros si es que hay definidos
+		$estado = $reparto = '';
+		$fechaEntrega = Carbon::now();
+		if ($filtros != '' && isset($filtros['filter_column']))
+		{
+			for ($ii = 0; $ii < count($filtros['filter_column']); $ii++)
+			{
+				if ($filtros['filter_column'][$ii]['type'] == '')
+					continue;
+
+				if ($filtros['filter_column'][$ii]['value'] != '')
+				if ($filtros['filter_column'][$ii]['column'] == 'estado' &&
+					$filtros['filter_column'][$ii]['type'] == '=')
+					$estado = $filtros['filter_column'][$ii]['value'];
+					
+				if ($filtros['filter_column'][$ii]['column'] == 'reparto')
+					$reparto = $filtros['filter_column'][$ii]['value'];
+
+				if ($filtros['filter_column'][$ii]['column'] == 'fechaentrega' &&
+					$filtros['filter_column'][$ii]['value'][0] != '')
+				{
+					$fechaEntrega = $filtros['filter_column'][$ii]['value'][0].'/'.
+									$filtros['filter_column'][$ii]['value'][1];
+				}
+			}
+		}
+
+		$pedidos = $this->pedidoService->leePedidosPorEstadoPaginando($busqueda, $estado, $reparto, $fechaEntrega);
 
 		$datas = ['pedidos' => $pedidos, 'busqueda' => $busqueda];
 
@@ -481,23 +515,25 @@ class PedidoController extends Controller
         can('crear-pedidos');
 
 		$this->armarTablasVista($cliente_query, $condicionventa_query, $vendedor_query, 
-							$transporte_query, $mventa_query, $articulo_query, $modulo_query, 
-							$listaprecio_query, $moneda_query, $articuloall_query, $articuloxsku_query,
+							$listaprecio_query, $moneda_query, 
 							$tiposuspensioncliente_query, $motivocierrepedido_query, $lote_query,
-							$puntoventa_query, $tipotransaccion_query, $formapago_query, $incoterm_query);
+							$puntoventa_query, $tipotransaccion_query, $formapago_query, $incoterm_query,
+							$unidadmedida_query);
 		
 		$puntoventadefault_id = cache()->get(generaKey('puntoventa'));
 		$puntoventaremitodefault_id = cache()->get(generaKey('puntoventaremito'));
 		$tipotransacciondefault_id = cache()->get(generaKey('tipotransaccion'));
 		$formapago_query = $this->formapagoRepository->all();
 		$incoterm_query = $this->incotermRepository->all();
+		$descuentoventa_query = $this->descuentoventaRepository->all();
 			
         return view('ventas.pedido.crear', compact('cliente_query', 'condicionventa_query', 'vendedor_query',
-			'transporte_query', 'mventa_query', 'articulo_query', 'modulo_query', 'listaprecio_query', 'moneda_query', 
-			'articuloall_query', 'articuloxsku_query', 'tiposuspensioncliente_query',
+			'listaprecio_query', 'moneda_query', 
+			'tiposuspensioncliente_query',
 			'motivocierrepedido_query', 'lote_query',
 			'puntoventa_query', 'puntoventadefault_id', 'tipotransaccion_query', 
-			'tipotransacciondefault_id', 'puntoventaremitodefault_id', 'formapago_query', 'incoterm_query'));
+			'tipotransacciondefault_id', 'puntoventaremitodefault_id', 'formapago_query', 'incoterm_query',
+			'descuentoventa_query', 'unidadmedida_query'));
     }
 
     /**
@@ -531,12 +567,13 @@ class PedidoController extends Controller
         can('editar-pedidos');
 
     	$pedido = $this->pedidoService->leePedido($id);
-		$this->armarTablasVista($cliente_query, $condicionventa_query, $vendedor_query, $transporte_query,
-							$mventa_query, $articulo_query, $modulo_query, $listaprecio_query, 
-							$moneda_query, $articuloall_query, $articuloxsku_query, 
-							$tiposuspensioncliente_query, $motivocierrepedido_query, $lote_query, 
-							$puntoventa_query, $tipotransaccion_query, $formapago_query, $incoterm_query, $pedido);
 
+		$this->armarTablasVista($cliente_query, $condicionventa_query, $vendedor_query, 
+							$listaprecio_query, $moneda_query, 
+							$tiposuspensioncliente_query, $motivocierrepedido_query, $lote_query, 
+							$puntoventa_query, $tipotransaccion_query, $formapago_query, $incoterm_query,
+							$unidadmedida_query, $pedido);
+//dd($pedido);
 		// Busca el cliente en select
 		$flEncontro = false;
 		foreach($cliente_query as $cliente)
@@ -553,13 +590,15 @@ class PedidoController extends Controller
 		$puntoventadefault_id = cache()->get(generaKey('puntoventa'));
 		$puntoventaremitodefault_id = cache()->get(generaKey('puntoventaremito'));
 		$tipotransacciondefault_id = cache()->get(generaKey('tipotransaccion'));
+		$descuentoventa_query = $this->descuentoventaRepository->all();
 		
         return view('ventas.pedido.editar', compact('pedido', 'cliente_query', 'condicionventa_query', 
-			'vendedor_query', 'transporte_query', 'mventa_query', 'articulo_query', 'modulo_query', 
-			'listaprecio_query', 'moneda_query', 'articuloall_query', 'articuloxsku_query', 
+			'vendedor_query', 
+			'listaprecio_query', 'moneda_query', 
 			'tiposuspensioncliente_query', 'motivocierrepedido_query', 'lote_query',
-			'puntoventa_query', 'puntoventadefault_id', 'tipotransaccion_query', 
-			'tipotransacciondefault_id', 'puntoventaremitodefault_id', 'formapago_query', 'incoterm_query'));
+			'puntoventa_query', 'puntoventadefault_id', 'tipotransaccion_query', 'descuentoventa_query',
+			'tipotransacciondefault_id', 'puntoventaremitodefault_id', 'formapago_query', 'incoterm_query',
+			'unidadmedida_query'));
     }
 
     /**
@@ -655,23 +694,23 @@ class PedidoController extends Controller
 	 * Arma tablas de select para enviar a vista
 	 */
 	private function armarTablasVista(&$cliente_query, &$condicionventa_query, &$vendedor_query, 
-				&$transporte_query, &$mventa_query, &$articulo_query, &$modulo_query, &$listaprecio_query, 
-				&$moneda_query, &$articuloall_query, &$articuloxsku_query, 
+				&$listaprecio_query, 
+				&$moneda_query,
 				&$tiposuspensioncliente_query, &$motivocierrepedido_query, &$lote_query, 
-				&$puntoventa_query, &$tipotransaccion_query, &$formapago_query, &$incoterm_query, $pedido = null)
+				&$puntoventa_query, &$tipotransaccion_query, &$formapago_query, &$incoterm_query, 
+				&$unidadmedida_query, $pedido = null)
 	{
 		$cliente_query = $this->clienteQuery->allQueryCargaPedido(['id','nombre','codigo']);
 		$tiposuspensioncliente_query = $this->tiposuspencionclienteRepository->all();
 		$motivocierrepedido_query = $this->motivocierrepedidoRepository->all();
 		$condicionventa_query = Condicionventa::all();
 		$vendedor_query = Vendedor::orderBy('nombre','ASC')->get();
-		$transporte_query = $this->transporteRepository->all();
-		$mventa_query = Mventa::all();
 		$lote_query = $this->loteRepository->all();
 		$puntoventa_query = $this->puntoventaRepository->all('A');
 		$tipotransaccion_query = $this->tipotransaccionRepository->all(['V','C'], ['A']);
 		$formapago_query = $this->formapagoRepository->all();
 		$incoterm_query = $this->incotermRepository->all();
+		$unidadmedida_query = Unidadmedida::all();
 		
 		$articulo_ids = Array();
 		if ($pedido != null)	
@@ -684,30 +723,6 @@ class PedidoController extends Controller
 		else
 		  	$articulo_ids[] = 0;
 
-        $articulo_query = Articulo::select('id', 'sku', 'descripcion', 'mventa_id')
-		  							->orderBy('descripcion','ASC')
-									->whereExists(function($query) 
-									{
-    									$query->select(DB::raw(1))
-											->from("combinacion")
-          									->whereRaw("combinacion.articulo_id=articulo.id and combinacion.estado = 'A'");
-									})
-									->orWhereIn('id', $articulo_ids)
-									->get();
-
-        $articuloall_query = Articulo::select('id', 'sku', 'descripcion', 'mventa_id')
-		  							->orderBy('descripcion','ASC')
-									->whereExists(function($query) 
-									{
-    									$query->select(DB::raw(1))
-											->from("combinacion")
-          									->whereRaw("combinacion.articulo_id=articulo.id");
-									})
-									->get();
-
-		$articuloxsku_query = $articulo_query->sortBy('sku');
-
-		$modulo_query = Modulo::all();
 		$listaprecio_query = Listaprecio::all();
 		$moneda_query = Moneda::all();
 	}

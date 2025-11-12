@@ -129,17 +129,30 @@ class CentrocostoRepository implements CentrocostoRepositoryInterface
 
     public function traerRegistroDeAnita($key){
         $apiAnita = new ApiAnita();
-        $data = array( 
-            'acc' => 'list', 'tabla' => $this->tableAnita, 
-            'sistema' => 'contab',
-            'campos' => '
-			ccos_codigo,
-    		ccos_desc,
-            ccos_grupo,
-            ccos_abreviatura
-			',
-            'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
-        );
+
+        if (config('app.empresa') == "EL BIERZO")
+            $data = array( 
+                'acc' => 'list', 'tabla' => $this->tableAnita, 
+                'sistema' => 'contab',
+                'campos' => '
+                ccos_codigo,
+                ccos_desc,
+                ccos_grupo
+                ',
+                'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
+            );
+        else
+             $data = array( 
+                'acc' => 'list', 'tabla' => $this->tableAnita, 
+                'sistema' => 'contab',
+                'campos' => '
+                ccos_codigo,
+                ccos_desc,
+                ccos_grupo,
+                ccos_abreviatura
+                ',
+                'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
+            );           
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
         $usuario_id = Auth::user()->id;
@@ -147,10 +160,15 @@ class CentrocostoRepository implements CentrocostoRepositoryInterface
         if (count($dataAnita) > 0) {
             $data = $dataAnita[0];
 
+            if (config('app.empresa') == "EL BIERZO")
+                $abreviatura = substr($data->ccos_desc,0,5);
+            else
+                $abreviatura = $data->ccos_abreviatura;
+
 			$arr_campos = [
 				"nombre" => $data->ccos_desc,
 				"codigo" => $data->ccos_codigo,
-                "abreviatura" => $data->ccos_abreviatura
+                "abreviatura" => $abreviatura
             	];
 	
         	$centrocosto = $this->model->create($arr_campos);
@@ -160,35 +178,59 @@ class CentrocostoRepository implements CentrocostoRepositoryInterface
 	public function guardarAnita($request) {
         $apiAnita = new ApiAnita();
 
-        $data = array( 'tabla' => $this->tableAnita, 'acc' => 'insert',
-            'sistema' => 'contab',
-            'campos' => ' 
-				ccos_codigo,
-				ccos_desc,
-                ccos_grupo
-                ccos_abreviatura
-				',
-            'valores' => " 
-				'".$request['codigo']."', 
-                '".$request['nombre']."',
-                '0',
-				'".$request['abreviatura']."' "
-        );
+        if (config('app.empresa') == "EL BIERZO")
+            $data = array( 'tabla' => $this->tableAnita, 'acc' => 'insert',
+                'sistema' => 'contab',
+                'campos' => ' 
+                    ccos_codigo,
+                    ccos_desc,
+                    ccos_grupo
+                    ',
+                'valores' => " 
+                    '".$request['codigo']."', 
+                    '".$request['nombre']."',
+                    '0' "
+            );
+        else
+            $data = array( 'tabla' => $this->tableAnita, 'acc' => 'insert',
+                'sistema' => 'contab',
+                'campos' => ' 
+                    ccos_codigo,
+                    ccos_desc,
+                    ccos_grupo,
+                    ccos_abreviatura
+                    ',
+                'valores' => " 
+                    '".$request['codigo']."', 
+                    '".$request['nombre']."',
+                    '0',
+                    '".$request['abreviatura']."' "
+            );            
         $apiAnita->apiCall($data);
 	}
 
 	public function actualizarAnita($request, $id) {
         $apiAnita = new ApiAnita();
 
-		$data = array( 'acc' => 'update', 'tabla' => $this->tableAnita, 
-                'sistema' => 'contab',
-				'valores' => " 
-                ccos_codigo 	                = '".$request['codigo']."',
-                ccos_desc 	                    = '".$request['nombre']."',
-                ccos_grupo 	                    = '0',
-                ccos_abreviatura 	            = '".$request['abreviatura']."' "
-					,
-				'whereArmado' => " WHERE ccos_codigo = '".$id."' " );
+        if (config('app.empresa') == "EL BIERZO")
+            $data = array( 'acc' => 'update', 'tabla' => $this->tableAnita, 
+                    'sistema' => 'contab',
+                    'valores' => " 
+                    ccos_codigo 	                = '".$request['codigo']."',
+                    ccos_desc 	                    = '".$request['nombre']."',
+                    ccos_grupo 	                    = '0'"
+                        ,
+                    'whereArmado' => " WHERE ccos_codigo = '".$id."' " );
+        else
+            $data = array( 'acc' => 'update', 'tabla' => $this->tableAnita, 
+                    'sistema' => 'contab',
+                    'valores' => " 
+                    ccos_codigo 	                = '".$request['codigo']."',
+                    ccos_desc 	                    = '".$request['nombre']."',
+                    ccos_grupo 	                    = '0',
+                    ccos_abreviatura 	            = '".$request['abreviatura']."' "
+                        ,
+                    'whereArmado' => " WHERE ccos_codigo = '".$id."' " );            
         $apiAnita->apiCall($data);
 	}
 

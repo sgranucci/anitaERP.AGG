@@ -88,7 +88,7 @@ class Listaprecio extends Model
 				"formula" => $data->prem_formula,
 				"incluyeimpuesto" => $this->graba_id_incl_impuesto($data->prem_incl_impuesto),
 				"codigo" => $data->prem_lista,
-                "tiponumeracion_id" => 1,
+                "tiponumeracion_id" => null,
 				"usuarioultcambio_id" => $usuario_id
             ]);
         }

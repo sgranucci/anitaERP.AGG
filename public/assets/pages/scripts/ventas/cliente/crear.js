@@ -52,6 +52,8 @@
             $(".form3").hide();
             $(".form4").hide();
             $(".form5").hide();
+            $(".form6").hide();
+            $(".form7").hide();
         });
 
         $("#botonform2").click(function(){
@@ -60,6 +62,8 @@
             $(".form3").hide();
             $(".form4").hide();
             $(".form5").hide();
+            $(".form6").hide();
+            $(".form7").hide();
 
 			$("#titulo").html("");
 			$("#titulo").html("<span class='fa fa-cash-register'></span> Datos facturac&oacute;n");
@@ -71,6 +75,8 @@
             $(".form3").show();
             $(".form4").hide();
             $(".form5").hide();
+            $(".form6").hide();
+            $(".form7").hide();            
 
 			activaEventoEntrega();
 
@@ -95,6 +101,8 @@
             $(".form3").hide();
             $(".form4").show();
             $(".form5").hide();
+            $(".form6").hide();
+            $(".form7").hide();
 
 		 	// Hace foco en el campo de la leyenda
 			$("#leyenda").focus();
@@ -106,8 +114,60 @@
             $(".form3").hide();
             $(".form4").hide();
             $(".form5").show();
+            $(".form6").hide();
+            $(".form7").hide();            
         });
-	
+
+        $("#botonform6").click(function(){
+            $(".form1").hide();
+            $(".form2").hide();
+            $(".form3").hide();
+            $(".form4").hide();
+            $(".form5").hide();
+            $(".form6").show();
+            $(".form7").hide();     
+            
+		 	// Hace foco en el campo de la leyenda
+			$("#leyenda").focus();            
+        });
+	       
+        $("#botonform7").click(function(){
+            $(".form1").hide();
+            $(".form2").hide();
+            $(".form3").hide();
+            $(".form4").hide();
+            $(".form5").hide();
+            $(".form6").hide();
+            $(".form7").show();            
+        });
+	             
+        muestraEmiteNotaDeCredito();
+
+        $("#botonemitenc").click(function(){
+            let cliente_id = $('#cliente_id').val();
+            let url = '/anitaERP/public/ventas/cliente/emitenc/'+cliente_id;
+
+            $.get(url, function(data, textStatus){
+				if (textStatus == 'success')
+				{
+                    if ($('#botonemitenc').hasClass('btn-danger'))
+                    {
+                        $('#botonemitenc').removeClass('btn-danger').addClass('btn-success'); 
+                        $('#iconoemitenc').removeClass('fa-times').addClass('fa-check'); 
+                    }
+                    else
+                    {
+                        $('#botonemitenc').removeClass('btn-success').addClass('btn-danger'); 
+                        $('#iconoemitenc').removeClass('fa-check').addClass('fa-times');
+                    }                    
+				}
+				else	
+					alert('Ha ocurrido un error modificando el cliente')
+			});
+        });
+	                     
+        activa_eventos(true);        
+
         // Controla apertura modal de anulacion
         $('#suspensionModal').on('show.bs.modal', function (event) {
             var modal = $(this);
@@ -150,7 +210,44 @@
         $(document).on('click', '.eliminar', borraRenglon);
         $('#agrega_renglon_archivo').on('click', agregaRenglonArchivo);
         $(document).on('click', '.eliminararchivo', borraRenglonArchivo);
+        $('#agrega_renglon_seguimiento').on('click', agregaRenglonSeguimiento);
+        $(document).on('click', '.eliminar_seguimiento', borraRenglonSeguimiento);
+        $('#agrega_renglon_articulo_suspendido').on('click', agregaRenglonArticuloSuspendido);
+        $(document).on('click', '.eliminar_articulo_suspendido', borraRenglonArticuloSuspendido);        
     });
+
+	function activa_eventos(flInicio)
+	{
+		// Si esta agregando items desactiva los eventos
+		if (!flInicio)
+		{
+		}
+
+		// Activa eventos de consulta
+		activa_eventos_consultaarticulo();
+        activa_eventos_consultalocalidad();
+    }
+
+    function muestraEmiteNotaDeCredito()
+    {
+        let emiteNotaDeCredito = $("#emitenotadecredito").val();
+
+        $('#botonemitenc').removeClass('btn-danger'); 
+        $('#iconoemitenc').removeClass('fa-times'); 
+        $('#botonemitenc').removeClass('btn-success'); 
+        $('#iconoemitenc').removeClass('fa-check');
+
+        if (emiteNotaDeCredito == 'Emite Nota de Credito')
+        {
+            $('#botonemitenc').addClass('btn-success'); 
+            $('#iconoemitenc').addClass('fa-check'); 
+        }
+        else
+        {
+            $('#botonemitenc').addClass('btn-danger'); 
+            $('#iconoemitenc').addClass('fa-times');
+        }
+    }
 
     function muestraTipoSuspension()
     {
@@ -206,7 +303,7 @@
     	$("#tbody-tabla-archivo").append(renglon);
     }
 
-    function borraRenglonArchivo() {
+    function borraRenglonArchivo(event) {
     	event.preventDefault();
     	$(this).parents('tr').remove();
     }
@@ -218,3 +315,42 @@
 		$(elem).parents("tr").find(".nombresanteriores").val(filename);
 	}
 
+   function agregaRenglonSeguimiento(){
+    	event.preventDefault();
+    	var renglon = $('#template-renglon-seguimiento').html();
+
+    	$("#tbody-tabla-seguimiento").append(renglon);
+    }
+
+    function borraRenglonSeguimiento(event) {
+    	event.preventDefault();
+    	$(this).parents('tr').remove();
+    }
+
+    function actualizaSeguimiento(elem) {
+    	var item = 1;
+
+    	$("#tbody-tabla-seguimiento .iiseguimiento").each(function() {
+    		$(this).val(item++);
+    	});
+	}
+
+   function agregaRenglonArticuloSuspendido(){
+    	event.preventDefault();
+    	var renglon = $('#template-renglon-articulo-suspendido').html();
+
+    	$("#tbody-tabla-articulo-suspendido").append(renglon);
+    }
+
+    function borraRenglonArticuloSuspendido(event) {
+    	event.preventDefault();
+    	$(this).parents('tr').remove();
+    }
+
+    function actualizaArticuloSuspendido(elem) {
+    	var item = 1;
+
+    	$("#tbody-tabla-articulo-suspendido .iiarticulo-suspendido").each(function() {
+    		$(this).val(item++);
+    	});
+	}    

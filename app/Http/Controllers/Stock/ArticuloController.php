@@ -32,8 +32,10 @@ use App\Models\Stock\Horma;
 use App\Models\Produccion\Tarea;
 use App\Models\Configuracion\Impuesto;
 use App\Services\Stock\PrecioService;
+use App\Repositories\Stock\ArticuloRepositoryInterface;
 use App\Repositories\Stock\Articulo_CajaRepositoryInterface;
 use App\Repositories\Stock\Articulo_CostoRepositoryInterface;
+use App\Repositories\Ventas\DescuentoventaRepositoryInterface;
 use App\Http\Controllers\Controller;
 use QrCode;
 use Illuminate\Support\Facades\Validator;
@@ -50,171 +52,85 @@ use Mail;
 
 class ArticuloController extends Controller
 {
+	private $articuloRepository;
 	private $articulo_cajaRepository;
 	private $articulo_costoRepository;
+	private $descuentoventaRepository;
 	protected $precioService;
 
     public function __construct(Articulo_CajaRepositoryInterface $articulo_cajaRepository,
 								Articulo_CostoRepositoryInterface $articulo_costoRepository,
+								ArticuloRepositoryInterface $articuloRepository,
+								DescuentoventaRepositoryInterface $descuentoventarepository,
 								PrecioService $precioservice)
     {
         $this->articulo_cajaRepository = $articulo_cajaRepository;
 		$this->articulo_costoRepository = $articulo_costoRepository;
+		$this->articuloRepository = $articuloRepository;
+		$this->descuentoventaRepository = $descuentoventarepository;
 		$this->precioService = $precioservice;
     }
     
     public function index(Request $request){
 
-        $hay_articulos = Articulo::first();
-		if (!$hay_articulos)
-		{
-        	$Articulo = new Articulo();
-        	$Articulo->sincronizarConAnita();
-		}
-		if (config('app.empresa') == 'Calzados Ferli')
-		{
-			$hay_combinaciones = Combinacion::first();
-			if (!$hay_combinaciones)
-			{
-				$Combinacion = new Combinacion();
-				$Combinacion->sincronizarConAnita();
-			}
-			$hay_capeart = Capeart::first();
-			if (!$hay_capeart)
-			{
-				$Capeart = new Capeart();
-				$Capeart->sincronizarConAnita();
-			}
-			$hay_avioart = Avioart::first();
-			if (!$hay_avioart)
-			{
-				$Avioart = new Avioart();
-				$Avioart->sincronizarConAnita();
-			}
-			$hay_articulo_caja = Articulo_Caja::first();
-			if (!$hay_articulo_caja)
-			{
-				$Articulo_Caja = new Articulo_Caja();
-				$Articulo_Caja->sincronizarConAnita();
-			}
-			$hay_articulo_costo = Articulo_Costo::first();
-			if (!$hay_articulo_costo)
-			{
-				$this->articulo_costoRepository->sincronizarConAnita();
-			}
-		
-        	$combinaciones = Combinacion::where("estado", "I")->count();
-        	$inactive = ( $combinaciones > 0 )?true:false;
-		}
-		else	
-			$inactive = true;
+		can('listar-articulo');
 
-        $usosArticulos = Usoarticulo::all();
+		$busqueda = $request->busqueda;
 
-        $art_query = Articulo::select('articulo.id as id', 'sku as stkm_articulo', 'descripcion as stkm_desc', 
-					'unidadmedida.nombre as stkm_unidad_medida', 'categoria.nombre as stkm_agrupacion', 'mventa.nombre as stkm_marca', 'linea.nombre as stkm_linea', 
-					'usoarticulo_id', 'nofactura')
-                    ->leftJoin('categoria','articulo.categoria_id','=','categoria.id')
-                    ->leftJoin('unidadmedida','articulo.unidadmedida_id','=','unidadmedida.id')
-                    ->leftJoin('mventa','articulo.mventa_id','=','mventa.id')
-                    ->leftJoin('linea','articulo.linea_id','=','linea.id');
+		$articulos = $this->articuloRepository->leeArticulo($busqueda, true);
 
-		$filtros = [];
-		if ($request->url() != $request->fullUrl())
+        if ($articulos->isEmpty())
 		{
-			$url = urldecode($request->fullUrl());
-			$components = parse_url($url);
-			parse_str($components['query'], $filtros);
-
-			session(['filtros' => $filtros]);
-		}
-		else
-		{
-			$filtros = session('filtros');
+        	$this->articuloRepository->sincronizarConAnita();
+	
+            $articulos = $this->articuloRepository->leeArticulo($busqueda, true);
 		}
 
-		// Aplica los filtros si es que hay definidos
-		if ($filtros != '' && $filtros['filter_column'] ?? '')
-		{
-			for ($ii = 1; $ii <= count($filtros['filter_column']); $ii++)
-			{
-				if ($filtros['filter_column'][$ii]['type'] == '')
-					continue;
+        $datas = ['articulos' => $articulos, 'busqueda' => $busqueda];
 
-				if ($filtros['filter_column'][$ii]['column'] == 'estado' &&
-					$filtros['filter_column'][$ii]['type'] == '=')
-				{
-					if ($filtros['filter_column'][$ii]['value'] == 'S')
-					{
-						$query = $art_query->whereNotExists(function($query)
-							{
-    							$query->select(DB::raw(1))
-									->from("combinacion")
-          							->whereRaw("combinacion.articulo_id=articulo.id");
-							})->where('usoarticulo_id','=','1');
-					}
-					elseif ($filtros['filter_column'][$ii]['value'] == 'A' ||
-							$filtros['filter_column'][$ii]['value'] == 'I')
-					{
-						$estado = $filtros['filter_column'][$ii]['value'];
-						$query = $art_query->whereExists(function($query) use($estado)
-							{
-    							$query->select(DB::raw(1))
-									->from("combinacion")
-          							->whereRaw("combinacion.articulo_id=articulo.id and combinacion.estado='".$estado."'");
-							});
-					}
-				}
-				else
-				{
-					switch($filtros['filter_column'][$ii]['type'])
-					{
-					case 'in':
-						$query = $art_query->whereIn($filtros['filter_column'][$ii]['column'], explode(',', $filtros['filter_column'][$ii]['value']));
-						break;
-					case 'not in':
-						$query = $art_query->whereNotIn($filtros['filter_column'][$ii]['column'], explode(',', $filtros['filter_column'][$ii]['value']));
-						break;
-					case 'like':
-					case 'not like':
-						$query = $art_query->where($filtros['filter_column'][$ii]['column'], $filtros['filter_column'][$ii]['type'], '%'.$filtros['filter_column'][$ii]['value'].'%');
-						break;
-					case '';
-						$query = $art_query->whereExists(function($query)
-								{
-    								$query->select(DB::raw(1))
-										->from("combinacion")
-          								->whereRaw("combinacion.articulo_id=articulo.id and combinacion.estado='A'");
-								});
-						break;
-					default:
-						if ($filtros['filter_column'][$ii]['value'])
-							$query = $art_query->where($filtros['filter_column'][$ii]['column'], $filtros['filter_column'][$ii]['type'], $filtros['filter_column'][$ii]['value']);
-						break;
-					}
-				}
+        return view('stock.product.list', $datas);
+    }
 
-				if($filtros['filter_column'][$ii]['sorting'] != '')
-				{
-					$query = $art_query->orderBy('sku', $filtros['filter_column'][$ii]['sorting']);
-				}
-			}
-		}
-		else
-		{
-			if (config('app.empresa') == 'Calzados Ferli')
-			{
-				$query = $art_query->whereExists(function($query)
-					{
-    					$query->select(DB::raw(1))
-							->from("combinacion")
-          					->whereRaw("combinacion.articulo_id=articulo.id and combinacion.estado='A'");
-					});
-			}
-		}
-		$articulos = $art_query->paginate(10);
+    public function listar(Request $request, $formato = null, $busqueda = null)
+    {
+        can('listar-articulos'); 
 
-        return view("stock.product.list",compact('inactive', 'articulos', 'usosArticulos', 'filtros'));
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        switch($formato)
+        {
+        case 'PDF':
+            $articulo = $this->articuloRepository->leeArticulo($busqueda, false);
+
+            $view =  \View::make('stock.articulo.listado', compact('articulo'))
+                        ->render();
+            $path = storage_path('pdf/listados');
+            $nombre_pdf = 'listado_articulo';
+
+            $pdf = \App::make('dompdf.wrapper');
+            $pdf->setPaper('legal','landscape');
+            $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
+
+            return response()->download($path.'/'.$nombre_pdf.'.pdf');
+            break;
+
+        case 'EXCEL':
+            return (new ArticuloExport($this->articuloRepository))
+                        ->parametros($busqueda)
+                        ->download('articulo.xlsx');
+            break;
+
+        case 'CSV':
+            return (new ArticuloExport($this->articuloRepository))
+                        ->parametros($busqueda)
+                        ->download('articulo.csv', \Maatwebsite\Excel\Excel::CSV);
+            break;            
+        }   
+
+        $datas = ['articulo' => $articulo, 'busqueda' => $busqueda];
+
+		return view('stock.articulo.indexp', $datas);       
     }
 
 	public function limpiafiltro(Request $request) {
@@ -493,6 +409,11 @@ class ArticuloController extends Controller
     						->with('compfondos')
     						->with('articulos_caja')
 							->with('articulos_costo')
+							->with('codigosenasas')
+							->with('salaproducciones')
+							->with('tipoproducciones')
+							->with('sectorsellados')
+							->with('tipoarticulos')
 							->where('id', $id)->get()->first();
 		$categoria = Categoria::orderBy('nombre')->get();
         $subcategoria = Subcategoria::orderBy('nombre')->get();
@@ -682,12 +603,15 @@ class ArticuloController extends Controller
 
 	public function consultaArticulo(Request $request)
 	{
-		$columns = ['articulo.id', 'sku', 'descripcion', 'mventa.nombre', 'linea.nombre'];
-		$columnsOut = ['articulo_id', 'sku', 'descripcion', 'nombremarca', 'nombrelinea'];
+		$columns = ['articulo.id', 'sku', 'descripcion', 'unidadmedida.abreviatura', 'categoria.nombre', 'articulo.unidadmedida_id', 'articulo.categoria_id', 'articulo.subcategoria_id'];
+		$columnsOut = ['articulo_id', 'sku', 'descripcion', 'unidadmedida', 'nombrecategoria', 'idunidadmedida', 'categoria_id', 'subcategoria_id'];
+		$muestraColumnas = [true, true, true, true, true, false, false, false];
 
-		$query = Articulo::select('articulo.id as articulo_id', 'sku', 'descripcion', 
-				'mventa.nombre as nombremarca', 'linea.nombre as nombrelinea')
-				->leftJoin('mventa','articulo.mventa_id','=','mventa.id')
+		$query = Articulo::select('articulo.id as articulo_id', 'sku', 'descripcion', 'unidadmedida.abreviatura as unidadmedida',
+				'categoria.nombre as nombrecategoria', 'articulo.unidadmedida_id as idunidadmedida',
+				'articulo.categoria_id as categoria_id', 'articulo.subcategoria_id as subcategoria_id')
+				->leftJoin('unidadmedida','articulo.unidadmedida_id','=','unidadmedida.id')
+				->leftJoin('categoria','articulo.categoria_id','=','categoria.id')
 				->leftJoin('linea','articulo.linea_id','=','linea.id');
 
 		$consulta = $request->consulta;
@@ -713,7 +637,10 @@ class ArticuloController extends Controller
 				$output['data'] .= '<tr>';
 				for ($i = 0; $i < $cont; $i++)
 				{
-					$output['data'] .= '<td class="'.$columnsOut[$i].'">' . $row[$columnsOut[$i]] . '</td>';	
+					if ($muestraColumnas[$i])
+						$output['data'] .= '<td class="'.$columnsOut[$i].'">' . $row[$columnsOut[$i]] . '</td>';	
+					else
+						$output['data'] .= '<input type="hidden" class="'.$columnsOut[$i].'" value="'.$row[$columnsOut[$i]].'">';
 				}
 				$output['data'] .= '<td><a class="btn btn-warning btn-sm eligeconsultaarticulo">Elegir</a></td>';
 				$output['data'] .= '</tr>';
@@ -726,6 +653,145 @@ class ArticuloController extends Controller
 			$output['data'] .= '</tr>';
 		}
 		return(json_encode($output, JSON_UNESCAPED_UNICODE));
+	}
+
+    public function leeUnArticulo($articulo_id)
+    {
+        return $this->articuloRepository->find($articulo_id);
+	}
+
+    public function leeUnArticuloPorSku($sku)
+    {
+        return $this->articuloRepository->findPorSku($sku);
+	}
+
+	public function redondeaCaja($articulo_id, $unidadmedida, $caja, $pieza, $kilo, $descuentoventa_id, $opcion)
+	{
+		// Lee el articulo
+		$articulo = $this->articuloRepository->find($articulo_id);
+
+		$cajaCalculo = $piezaCalculo = $kiloCalculo = 0;
+		if ($articulo)
+		{
+			$unidadesxenvase = $articulo->unidadesxenvase;
+			$peso = $articulo->peso;
+
+			$kilo = floatval($kilo);
+			$peso = floatval($peso);
+			$caja = floatval($caja);
+
+			switch($opcion)
+			{
+			case 1: // ingresa cajas
+				$cajaCalculo = $caja;
+				$piezaCalculo = $cajaCalculo * $unidadesxenvase;
+				$kiloCalculo = $piezaCalculo * $peso;
+				break;
+			case 2: // ingresa unidades
+				// Convierte unidades a cajas
+				if (strtoupper($unidadmedida) == 'CAJ' || strtoupper($unidadmedida) == 'CJ' || strtoupper($unidadmedida) == 'C')
+					Self::redondeaPieza($pieza, $peso, $unidadesxenvase, $cajaCalculo, $piezaCalculo, $kiloCalculo);
+				else
+				{
+					$piezaCalculo = $pieza;
+					$kiloCalculo = $pieza * $peso;
+
+					if ($peso != 0 && $unidadesxenvase != 0)
+						$cajaCalculo = $kiloCalculo / $peso / $unidadesxenvase;
+					else
+						$cajaCalculo = 0;
+				}				
+				break;
+			case 3: // ingresa kilos
+				// Convierte los kilos a cajas
+				if (strtoupper($unidadmedida) == 'CAJ' || strtoupper($unidadmedida) == 'CJ' || strtoupper($unidadmedida) == 'C')
+				{
+					if ($peso != 0 && $unidadesxenvase != 0)
+						$cajas = $kilo / $peso / $unidadesxenvase;
+					else
+						$cajas = 0;
+
+					// Si el resto no da 0 ajusta a la siguiente caja
+					if ($cajas != floor($cajas))
+						$cajaCalculo = floor($cajas) + 1;
+					else
+						$cajaCalculo = $cajas;
+
+					$piezaCalculo = $cajaCalculo * $unidadesxenvase;
+					$kiloCalculo = $piezaCalculo * $peso;
+				}
+				else
+				{
+					$kiloCalculo = $kilo;
+
+					if ($peso != 0)
+					{
+						$piezaCalculo = $kilo / $peso;
+
+						// Redondea piezas
+						if ($piezaCalculo != floor($piezaCalculo))
+							$piezaCalculo = floor($piezaCalculo) + 1;
+					}
+
+					if ($unidadesxenvase != 0)
+						$cajaCalculo = $piezaCalculo / $unidadesxenvase;
+				}
+				break;
+			}
+		}
+
+		// Agrega el descuento
+		if ($descuentoventa_id > 0)
+		{
+			if ($piezaCalculo != 0)
+			{
+				$descuentoventa = $this->descuentoventaRepository->find($descuentoventa_id);
+
+				if ($descuentoventa)
+				{
+					if ($descuentoventa->tipodescuento == 'POR CANTIDAD VENDIDA')
+					{
+						$cantidadVenta = $descuentoventa->cantidadventa;
+						$cantidadDescuento = $descuentoventa->cantidaddescuento;
+
+						// Calcula el descuento
+						$piezaDescuento = ($piezaCalculo / $cantidadVenta) * $cantidadDescuento;
+
+						// Lo suma a las piezas calculadas
+						$pieza = $piezaCalculo + $piezaDescuento;
+
+						// Redondea las piezas a caja
+						if (strtoupper($unidadmedida) == 'CAJ' || strtoupper($unidadmedida) == 'CJ' || strtoupper($unidadmedida) == 'C')
+							Self::redondeaPieza($pieza, $peso, $unidadesxenvase, $cajaCalculo, $piezaCalculo, $kiloCalculo);
+						else
+						{
+							$piezaCalculo = $pieza;
+							$kiloCalculo = $piezaCalculo * $peso;
+						}
+					}
+				}
+			}
+		}
+
+		return ['caja' => $cajaCalculo, 'pieza' => $piezaCalculo, 'kilo' => $kiloCalculo];
+	}
+
+	private function redondeaPieza($pieza, $peso, $unidadesxenvase, &$cajaCalculo, &$piezaCalculo, &$kiloCalculo)
+	{
+		$kilo = $pieza * $peso;
+		if ($peso != 0 && $unidadesxenvase != 0)
+			$cajas = $kilo / $peso / $unidadesxenvase;
+		else
+			$cajas = 0;
+
+		// Si el resto no da 0 ajusta a la siguiente caja
+		if ($cajas != floor($cajas))
+			$cajaCalculo = floor($cajas) + 1;
+		else
+			$cajaCalculo = $cajas;
+
+		$piezaCalculo = $cajaCalculo * $unidadesxenvase;
+		$kiloCalculo = $piezaCalculo * $peso;	
 	}
 }
 

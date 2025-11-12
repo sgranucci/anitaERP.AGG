@@ -7,6 +7,7 @@
 		<th>Código Postal</th>
 		<th>Código Anita</th>
 		<th>Provincia</th>
+		<th>Código SENASA</th>
 	</tr>
   	</thead>
     <tbody>
@@ -17,6 +18,7 @@
 				<td>{{$data->codigopostal}}</td>
 				<td>{{$data->codigo}}</td>
 				<td>{{$data->nombreprovincia??''}}</td>
+				<td>{{$data->codigosenasa}}</td>
 			</tr>
 		@endforeach
 	</tbody>

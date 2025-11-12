@@ -9,7 +9,7 @@ use App\ApiAnita;
 
 class Localidad extends Model
 {
-    protected $fillable = ['nombre', 'codigopostal', 'codigo', 'provincia_id'];
+    protected $fillable = ['nombre', 'codigopostal', 'codigo', 'provincia_id', 'codigosenasa'];
     protected $table = 'localidad';
     protected $keyField = 'id';
     protected $keyFieldAnita = 'loc_localidad';
@@ -53,7 +53,8 @@ class Localidad extends Model
                 loc_localidad,
 				loc_provincia,
 				loc_desc,
-				loc_cod_postal
+				loc_cod_postal,
+                loc_cod_senasa
             ' , 
             'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
         );
@@ -66,7 +67,8 @@ class Localidad extends Model
                 "nombre" => $data->loc_desc,
                 "codigopostal" => $data->loc_cod_postal,
                 "codigo" => $data->loc_localidad,
-                "provincia_id" => ($data->loc_provincia > 0 ? $data->loc_provincia : NULL)
+                "provincia_id" => ($data->loc_provincia > 0 ? $data->loc_provincia : NULL),
+                "codigosenasa" => $data->loc_cod_senasa
             ]);
         }
     }
@@ -77,11 +79,12 @@ class Localidad extends Model
         $data = array( 'tabla' => $this->table, 
                         'sistema' => 'shared',
 						'acc' => 'insert',
-            			'campos' => ' loc_localidad, loc_provincia, loc_desc, loc_cod_postal',
+            			'campos' => ' loc_localidad, loc_provincia, loc_desc, loc_cod_postal, loc_cod_senasa',
             			'valores' => " '".$request->codigo."', 
 										'".($request->provincia_id == NULL ? 0 : $request->provincia_id)."',
 										'".$request->nombre."',  
-										'".$request->codpostal."' "
+										'".$request->codigopostal."',
+                                        '".$request->codigosenasa."' "
         );
         $apiAnita->apiCall($data);
 	}
@@ -94,7 +97,8 @@ class Localidad extends Model
 						'valores' => " 
 						    loc_provincia = '".($request->provincia_id == NULL ? 0 : $request->provincia_id)."',
 							loc_desc = '".$request->nombre."',
-                			loc_cod_postal =	'".$request->codpostal."'",
+                			loc_cod_postal =	'".$request->codigopostal."',
+                            loc_cod_senasa = '".$request->codigosenasa."' ",
 						'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$request->codigo."' " );
         $apiAnita->apiCall($data);
 	}

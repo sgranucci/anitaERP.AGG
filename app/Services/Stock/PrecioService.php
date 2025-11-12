@@ -148,20 +148,31 @@ class PrecioService
 	public static function asignaPrecioPorLista($articulo_id, $listaprecio_id, $fechavigencia)
 	{
 		// Asigna precio por vigencia
-		$precios = Precio::select('articulo_id', 'listaprecio_id', 'fechavigencia', 'precio')
+		$precios = Precio::select('articulo_id', 'listaprecio_id', 'fechavigencia', 'precio', 'moneda_id', 'listaprecio.incluyeimpuesto')
+						->join('listaprecio', 'listaprecio.id', 'precio.listaprecio_id')
 						->where('articulo_id', '=', $articulo_id)
 						->where('listaprecio_id', '=', $listaprecio_id)
 						->orderBy('fechavigencia')
 						->get();
 
 		$precioRet = 0;
+		$array_precio = [];
 		foreach($precios as $precio)
 		{
 			if ($precio->fechavigencia <= $fechavigencia)
+			{
 				$precioRet = $precio->precio;
+
+				$array_precio[] = [
+						'precio'=>$precioRet,
+						'listaprecio_id'=>$precio->listaprecio_id,
+						'moneda_id'=>$precio->moneda_id,
+						'incluyeimpuesto'=>$precio->incluyeimpuesto,
+						];
+			}
 		}
 
-		return($precioRet);
+		return($array_precio);
 	}
 
 	public function generaDatosRepListaPrecio($estado, $mventa_id,

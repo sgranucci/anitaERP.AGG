@@ -9,7 +9,7 @@ use App\ApiAnita;
 
 class Zonavta extends Model
 {
-    protected $fillable = ['nombre'];
+    protected $fillable = ['nombre', 'codigo'];
     protected $table = 'zonavta';
     protected $keyField = 'zonv_codigo';
 
@@ -52,6 +52,7 @@ class Zonavta extends Model
             Zonavta::create([
                 "id" => $key,
                 "nombre" => $data->zonv_desc,
+                "codigo" => $data->zonv_codigo
             ]);
         }
     }
@@ -86,4 +87,5 @@ class Zonavta extends Model
 						'whereArmado' => " WHERE zonv_codigo = '".$id."' " );
         $apiAnita->apiCall($data);
 	}
+    
 }

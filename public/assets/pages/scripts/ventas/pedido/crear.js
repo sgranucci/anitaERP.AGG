@@ -247,10 +247,13 @@
 		cantidadmodal_txt = "";
 	}
 
-	function asignaPrecio(Particulo_id, Ptalle_id)
+	function asignaPrecio(ptr, Particulo_id, Ptalle_id)
 	{
-		// Lee talles del modulo
-        $.get('/anitaERP/public/stock/asignaprecio/'+Particulo_id+'/'+Ptalle_id, function(data){
+		let codigocliente = $('#codigocliente').val();
+		let articulo_id = $(ptr).parents("tr").find(".articulo_id").val();
+		var precio, listaprecio_id, incluyeimpuesto, moneda_id;
+
+        $.get('/anitaERP/public/stock/asignapreciocliente/'+articulo_id+'/'+codigocliente, function(data){
            	var prec = $.map(data, function(value, index){
                	return [value];
            	});
@@ -259,11 +262,24 @@
 			dii=[];
 			dmo=[];
            	$.each(prec, function(index,value){
-				dpr.push(value.precio);
-				dlp.push(value.listaprecio_id);
-				dii.push(value.incluyeimpuesto);
-				dmo.push(value.moneda_id);
+				precio = parseFloat(value.precio);
+				listaprecio_id = value.listaprecio_id;
+				incluyeimpuesto = value.incluyeimpuesto;
+				moneda_id = value.moneda_id;
 			});
+
+			if (typeof precio != 'string')
+			{
+				let precioRedondeado = redondearDecimales(precio, 2);
+
+				$(ptr).parents("tr").find(".precio").val(precioRedondeado);
+			}
+			else
+				$(ptr).parents("tr").find(".precio").val(precio);
+
+			$(ptr).parents("tr").find(".listaprecio_id").val(listaprecio_id);
+			$(ptr).parents("tr").find(".incluyeimpuesto").val(incluyeimpuesto);
+			$(ptr).parents("tr").find(".moneda_id").val(moneda_id);
 		});
         setTimeout(() => {
 			return(precio);
@@ -289,7 +305,9 @@
 		// Marca items como facturados, completa combinaciones y modulos al abrir pedido
 		marcaItemFacturado();
 		activa_eventos(true);
-		TotalParesPedido();
+		TotalPedido();
+
+		$("#codigocliente").focus();
 	});
 
 	function marcaItemFacturado()
@@ -336,11 +354,18 @@
 		if (!flInicio)
 		{
 			$('.articulo').off('click');
+			$('.codigocliente').off('change');
 			$('.articulo').off('change');
-        	$(".modulo").off('change');
+        	$(".caja").off('change');
+			$(".unidadmedida_id").off('change');
+			$(".botonsincargo").off('click');
+			$(".pieza").off('change');
+			$(".kilo").off('change');
+			$(".pesada").off('change');
+			$(".precio").off('change');
+			$(".descuentoventa_id").off('change');
 			$(".checkImpresion").off('change');
-        	$(".cantidad").off('click keydown');
-    		$('.consultaSKU').off('click');
+        	$(".kilo").off('click keydown');
 			$('#aceptaarticuloxskuModal').off('click');
 			$('#medidasModal').off('show.bs.modal');
 			$('#cierraModal').off('click');
@@ -353,13 +378,22 @@
 			$(document).off('change', '.cantidadesportalles');
 		}
 
-		$('.articulo').on('click', function (event) {
+		activa_eventos_consultacliente();
+		activa_eventos_consultaarticulo();
+		activa_eventos_consultatransporte();
 
-			armaSelectArticulo(this, this, 1);
+		$('.codigocliente').on('change', function (event) {
+			event.preventDefault();
+			var cliente_id = $(this);
 
-		});
+			$(".precio").each(function() {
+				let ptr = $(this);
 
-		$('.articulo').on('change', function (event) {
+				asignaPrecio(ptr, '', '');
+			});
+        });
+
+		$('.codigoarticulolocal').on('change', function (event) {
 			event.preventDefault();
 			var articulo = $(this);
 			var articulo_ant = $(this).parents("tr").find(".articulo_id_previo").val();
@@ -367,11 +401,12 @@
 
 			if (articulo_nuevo != articulo_ant)
 			{
-            	completarCombinaciones(articulo, 0, false);
-            	completarModulos(articulo, 0);
-
-				//* Asigna nuevo articulo
-				$(this).parents("tr").find(".articulo_id_previo").val(articulo_nuevo);
+				// Blanquea cantidades
+				$(this).parents("tr").find(".caja").val('');
+				$(this).parents("tr").find(".pieza").val('');
+				$(this).parents("tr").find(".kilo").val('');
+				$(this).parents("tr").find(".pesada").val('');
+				$(this).parents("tr").find(".descuentoventa_id").val('');
 			}
         });
 
@@ -383,7 +418,7 @@
 				let ordentrabajo = $(this).parents("tr").find(".otcodigo").val();
 				let tilde = this;
 				let cliente_id = $("#cliente_id").val();
-				let estadocliente = $("#estadocliente").va/czl();
+				let estadocliente = $("#estadocliente").val();
 				let tiposuspensioncliente_id = $("#tiposuspensioncliente_id").val();
 				let nombretiposuspensioncliente = $("#nombretiposuspensioncliente").val();
 				let pedido_combinacion_id = $(this).parents("tr").find(".ids").val();
@@ -438,237 +473,101 @@
 			}
         });
 
-    	$('.consultaSKU').on('click', function (event) {
-        	articuloxsku = $(this).parents("tr").find(".articulo");
+        $(".unidadmedida_id").on('change', function() {
+			// Blanquea cantidades
+			$(this).parents("tr").find(".caja").val('');
+			$(this).parents("tr").find(".pieza").val('');
+			$(this).parents("tr").find(".kilo").val('');
+			$(this).parents("tr").find(".pesada").val('');
+			$(this).parents("tr").find(".descuentoventa_id").val('');
 
-        	// Abre modal de consulta
-        	$("#articuloxskuModal").modal('show');
-	
-			var selectxsku = $("#articuloxsku_id");
-        	armaSelectArticulo(selectxsku, articuloxsku, 2);
-    	});
+			var unidadmedida = $(this).find('option:selected').text();
 
-    	$('#aceptaarticuloxskuModal').on('click', function () {
-        	var articulo_id = $('#articuloxsku_id').val();
+			$(this).parents("tr").find(".unidadmedida").val(unidadmedida);
 
-        	$(articuloxsku).val(articulo_id);
+			if (unidadmedida.toUpperCase() == 'CAJ')
+				$(this).parents("tr").find(".caja").focus();
+			
+			if (unidadmedida.toUpperCase() == 'UN')
+				$(this).parents("tr").find(".pieza").focus();
 
-        	armaSelectArticulo(articuloxsku, articuloxsku, 2);
-
-            completarCombinaciones(articuloxsku, 0, false);
-            completarModulos(articuloxsku, 0);
-
-			//* Asigna nuevo articulo
-			$(this).parents("tr").find(".articulo_id_previo").val($(articuloxsku).val());
-	
-        	$('#articuloxskuModal').modal('hide');
-    	});
-
-        $(".modulo").on('change', function() {
-			modulo_id = $(this).parents("tr").find(".modulo").val();
-		  	moduloElegido_id = modulo_id;
-
-			// Blanquea medidas
-			$(this).parents("tr").find(".medidas").val("");
+			if (unidadmedida.toUpperCase() == 'KG')
+				$(this).parents("tr").find(".kilo").focus();
 		});
 
-		// Con click sobre cantidad abre modal de medidas
-        $(".cantidad").on('click keydown', function() {
-			cantidad = $(this);
+        $(".caja").on('change', function() {
+			// Redondea caja
+			redondeaCaja(this, 1);
+		});
 
-			articulo_id = $(this).parents("tr").find(".articulo").val();
-			descripcion_articulo = $(this).parents("tr").find(".articulo option:selected").text();
-			modulo_id = $(this).parents("tr").find(".modulo").val();
-			combinacion_id = $(this).parents("tr").find(".combinacion").val();
-			nombre_combinacion = $(this).parents("tr").find(".combinacion option:selected").text();
-
-			// Lee tabla de medidas
-			var val_medida = $(this).parents("tr").find(".medidas").val();
-
-			medidas=[];
-			cantidades=[];
-			precios=[];
-
-			if (val_medida != '')
-			{
-				var tbl_medidas = JSON.parse(val_medida);
-
-           		$.each(tbl_medidas, function(index,value){
-					medidas.push(value.talle_id);
-					cantidades.push(value.cantidad);
-					precios.push(value.precio);
-				});
-			}
-
-			completarTalles(modulo_id, 0, medidas, cantidades, precios);
-
-        	setTimeout(() => {
-				$("#medidasModal").modal('show');
-			}, 300);
+        $(".pieza").on('change', function() {
+			// Redondea caja
+			redondeaCaja(this, 2);
         });
 
-		// Controla apertura modal de medidas
-		$('#medidasModal').on('show.bs.modal', function (event) {
-  			var modal = $(this);
-			modalActivo = "medidasModal";
+        $(".kilo").on('change', function() {
+			// Redondea caja
+			redondeaCaja(this, 3);
+        });
 
-  			modal.find('.modal-title').text('Medidas item '+descripcion_articulo+' Combinacion '+nombre_combinacion+' Modulo '+nombre_modulo);
-  			modal.find('#medidasModal').empty();
-  			modal.find('#medidasModal').append(talles_txt+medidas_txt+precios_txt+tallesid_txt);
-			sumaPares(modalActivo, 'cantidadesportalles');
-			muestraTotalPares();
+        $(".pesada").on('change', function() {
+			TotalPedido();
 		});
 
-		// Autofocus en modal de medidas
-		$(document).on('shown.bs.modal', '.modal', function() {
-		  	// Si es modulo manual hace foco en cantidades 
-		  	if (moduloElegido_id == 30)
-  				$(this).find('[autofocus]').focus();
-			else
-  				$("#cantmodulo").focus();
+        $(".descuentoventa_id").on('change', function() {
+			let categoria_secos_id = $("#categoria_secos_id").val();
+			let subcategoria_maquina_id = $("#subcategoria_maquina_id").val();
+			let subcategoria_tira_id = $("#subcategoria_tira_id").val();
+			
+			let categoria_id = $(this).parents("tr").find(".categoria_id").val();
+			let subcategoria_id = $(this).parents("tr").find(".subcategoria_id").val();
+			let pieza = $(this).parents("tr").find(".pieza").val();
+			let selectDescuento = $(this).parents("tr").find(".descuentoventa_id option:selected").text();
+			let cantidadDescuento = selectDescuento.substring(0, 2); // Saca la cantidad del descuento del texto del select
 
-			var _cant = 1;
-
-			if (modulo_actual != 1)
-        		$("#cantmodulo").val(modulo_actual);
-			else
-				$("#cantmodulo").val(_cant);
-
-        	$("#cantmodulo").off('change');
-
-			$("#cantmodulo").on('change', function () {
-
-				// Multiplica por la cantidad de modulos a cada cantidad por talle
-				$("#medidasModal .cantidadesportalles").each(function(index) {
-					var cantidad = $(this).val();
-					var cantmodulo = $("#cantmodulo").val();
-					
-					if (cantidad != '')
-					{
-						if (modulo_actual > 0 && modulo_actual != cantmodulo)
-						{
-							var cantidad_base = parseFloat(cantidad) / modulo_actual;
-							var nueva_cantidad = cantidad_base * parseFloat(cantmodulo);
-						}
-						else	
-							var nueva_cantidad = arseFloat(cantidad)*parseFloat(cantmodulo);
-
-				  		$(this).val(nueva_cantidad);
-						sumaPares(modalActivo, 'cantidadesportalles');
-						muestraTotalPares();
-					}
-				});
-
-			});
-
-		});
-
-	  	// Cierra modal medidas 
-		$('#cierraModal').on('click', function () {
-		});
-
-		// Acepta modal de medidas
-		$('#aceptaModal').on('click', function () {
-		  	let jsonObject = new Array();
-
-			med = [];
-			$(".medidasportalles").each(function() {
-            	med.push($(this).val());
-			});
-			talleid = [];
-			$(".tallesid").each(function() {
-            	talleid.push($(this).val());
-			});
-			cant = [];
-			$(".cantidadesportalles").each(function() {
-            	cant.push($(this).val());
-			});
-        	prec = []
-        	$(".preciosportalles").each(function(){
-            	prec.push($(this).val());
-        	});
-
-			let jsonTallesId = JSON.stringify(talleid); 
-
-			asignaPrecio(articulo_id, jsonTallesId);
-
-			off = 0;
-		    var flError = false;
-        	setTimeout(() => {
-			for (let i in med) 
+			// Si es categoria secos y subcategoria maquina no permite descuento con piezas menores a cantidad del descuento
+			if (categoria_id == categoria_secos_id && subcategoria_id == subcategoria_maquina_id && 
+				parseFloat(pieza) < parseFloat(cantidadDescuento))
 			{
-				if (cant[i] == '')
-					cant[i] = 0;
-			  	jsonObject.push({
-					medida: med[i],
-				  	cantidad: cant[i],
-				  	precio: dpr[i],
-				  	listaprecio: dlp[i],
-				  	incluyeimpuesto: dii[i],
-				  	moneda: dmo[i],
-				  	talle_id: talleid[i]
-				});
-			  	// Valida cantidades que tengan precio
-			    if (cant[i] > 0 && dpr[i] == 0)
-			  	{
-					flError = true;	  	
-					// Pedido por gaby 27/6 porque todos los articulos de la expo no tienen precio
-				    //alert('Medida '+med[i]+' Cantidad '+cant[i]+' No tiene precio asignado');
-			  	}
-				if (dpr[i] > 0)
-					off = i;		
+				alert('No puede usar descuento mayor a las piezas pedidas. Descuento Piezas '+cantidadDescuento+' Piezas Pedidas '+pieza);
+
+				$(this).parents("tr").find(".descuentoventa_id").val('');
+				$(this).parents("tr").find(".descuentoventaanterior_id").val('');
 			}
+			else
+			{
+				let descuentoventa_id = $(this).parents("tr").find('.descuentoventa_id').val();
+				
+				$(this).parents("tr").find(".descuentoventaanterior_id").val(descuentoventa_id);
+				$(this).parents("tr").find(".descuentoventa_id").attr('disabled', 'disabled');
 
-			let jsonString = JSON.stringify(jsonObject); 
+				// Redondea caja calculando por pieza el descuento
+				redondeaCaja(this, 2);
+			}
+        });
 
-			// Asigna medidas, cantidades y precios
-			$(cantidad).parents('tr').find('.medidas').val(jsonString);
+		$(".botonsincargo").on('click', function() {
+			let kilo = $(this).parents("tr").find(".kilo").val();
+			let articulo_id = $(this).parents("tr").find(".articulo_id").val();
 
-			// Asigna variables de precio
-			var pre = fNumero(dpr[off], 2);
-			var lis = fNumero(dlp[off], 0);
-			var inc = fNumero(dii[off], 0);
-			var mon = fNumero(dmo[off], 0);
-			if (pre === 'NaN' || pre < 0 || pre > 9999999999)
-			  	pre = 0;
-	
-			$(cantidad).parents('tr').find('.precio').val(pre);
-			$(cantidad).parents('tr').find('.listaprecio_id').val(lis);
-			$(cantidad).parents('tr').find('.incluyeimpuesto').val(inc);
-			$(cantidad).parents('tr').find('.moneda_id').val(mon);
-	
-        	}, 300);
+			if (kilo > 0 && articulo_id > 0)
+			{
+				$(this).parents("tr").find(".sincargo").val('S');
 
-			$('#medidasModal').modal('hide');
-
-			// Asigna total de pares a la cantidad del item en el formulario
-			sumaPares(modalActivo, 'cantidadesportalles');
-			muestraTotalPares();
-			$(cantidad).val(totPares);
-			TotalParesPedido();
-		});
-
-		$('#medidasModal').on('hidden.bs.modal', function () {
-
-			// Inicializa variables modal
-			talles_txt = "";
-			medidas_txt = "";
-			precios_txt = "";
-			tallesid_txt = "";
-		});
-
-		// Llena variable desc_combinacion
-		$(document).on('change', '.desc_combinacion', function(event) {
-     		$(this).val($(".combinacion option:selected").text());
-		});
-		// Llena variable desc_modulo
-		$(document).on('change', '.desc_modulo', function(event) {
-     		$(this).val($(".modulo option:selected").text());
-		});
-		$(document).on('change', '.cantidadesportalles', function(event) {
-			sumaPares(modalActivo, 'cantidadesportalles');
-			muestraTotalPares();
-		});
+				if (controlDescuento(this))
+				{
+					$(this).parents("tr").find(".precio").val(0);
+					$(this).parents("tr").find(".codigoarticulo").attr('readonly', true);
+					$(this).parents("tr").find(".caja").attr('readonly', true);
+					$(this).parents("tr").find(".pieza").attr('readonly', true);
+					$(this).parents("tr").find(".kilo").attr('readonly', true);
+					$(this).parents("tr").find(".unidadmedida_id").attr('readonly', true);
+					$(this).parents("tr").find(".descuentoventa_id").attr('readonly', true);
+				}
+				else
+					$(this).parents("tr").find(".sincargo").val('N');
+			}
+        });
 
         // Acepta modal OT
         $('#aceptaOrdenTrabajoModal').on('click', function () {
@@ -767,63 +666,11 @@
 				$(this).val(lote_id);
 			});
 		});
+
+		// Control de pesada
 	}
 
-	function armaSelectArticulo(ptrselect, ptrarticulo, opdata)
-	{
-		var select = $(ptrselect);
-      	var options = select.children();
-		var articulo_id = $(ptrarticulo).val();
-		var mventa_id = $('#mventa_id').val();
-		var mventa_nombre = $("#mventa_id option:selected").text();
-		var fl_todos_los_articulos = $(ptrarticulo).parents("tr").find('input:checkbox[class=checkSinFiltro]:checked').val();
-
-		// elige articulos x descripcion o por sku
-		if (fl_todos_los_articulos == 'on')
-			var sel_articulos = JSON.parse(document.querySelector('#marca').dataset.articuloall);
-		else
-			var sel_articulos = JSON.parse(document.querySelector('#marca').dataset.articulo);
-		if (opdata == 2)
-		{
-			sel_articulos.sort(function(a, b) {
-    				var textA = a.sku;
-    				var textB = b.sku;
-    				return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
-				});
-		}
-
-		select.empty();
-
-		if (mventa_nombre === "-- Seleccionar marca --")
-			select.append('<option value="">-- Articulos sin filrar --</option>');
-		else
-			select.append('<option value="">-- Articulos ' + mventa_nombre + ' --</option>');
-
-		$.each(sel_articulos, function(obj, item) {
-			if (articulo_id == item.id)
-				op = 'selected="selected"';
-			else
-				op = '';
-			if (mventa_id == undefined || mventa_id == '')
-				select.append('<option value="' + item.id + '"'+op+'>' + (opdata == 2 ? item.sku + '-' + item.descripcion : item_descripcion + '-' + item.sku) + '</option>');
-			else
-			{
-				if (item.mventa_id == mventa_id)
-					select.append('<option value="' + item.id + '"'+op+'>' + (opdata == 2 ? item.sku + '-' + item.descripcion : item.descripcion + '-' + item.sku) + '</option>');
-			}
-		});
-
-		if (articulo_id > 0)
-		{
-			select.value = articulo_id;
-
-			select.children().filter(function(){
-   				return this.text == articulo_id;
-			}).prop('selected', true);
-		}
-	}
-
-	function sumaPares(modalactivo, clasetalle)
+	function sumaKilos(modalactivo, clasetalle)
 	{
 		totPares = 0;
 
@@ -841,15 +688,33 @@
 			$("#facturartotpares").val(totPares.toFixed(0));
 	}
 
-	function TotalParesPedido()
+	function TotalPedido()
 	{
-		totPares = 0;
+		let totCaja = 0;
+		let totPieza = 0;
+		let totKilo = 0;
+		let totPesada = 0;
 
-		$(".cantidad").each(function() {
+		$(".caja").each(function() {
 			if (parseFloat($(this).val()) >= 1 && parseFloat($(this).val()) <= 999999)
-				totPares += parseFloat($(this).val());
+				totCaja += parseFloat($(this).val());
 		});
-		$("#totalparespedido").val(totPares.toFixed(0));
+		$("#totalcajaspedido").val(totCaja.toFixed(2));		
+		$(".pieza").each(function() {
+			if (parseFloat($(this).val()) >= 1 && parseFloat($(this).val()) <= 999999)
+				totPieza += parseFloat($(this).val());
+		});
+		$("#totalpiezaspedido").val(totPieza.toFixed(2));		
+		$(".kilo").each(function() {
+			if (parseFloat($(this).val()) >= 1 && parseFloat($(this).val()) <= 999999)
+				totKilo += parseFloat($(this).val());
+		});
+		$("#totalkilospedido").val(totKilo.toFixed(2));
+		$(".pesada").each(function() {
+			if (parseFloat($(this).val()) >= 1 && parseFloat($(this).val()) <= 999999)
+				totPesada += parseFloat($(this).val());
+		});
+		$("#totalkilospesados").val(totPesada.toFixed(2));
 	}
 
 	function sumaanulacionPares()
@@ -906,8 +771,6 @@
     $(function () {
         $('#agrega_renglon').on('click', agregaRenglon);
         $(document).on('click', '.eliminar', borraRenglon);
-        $(document).on('click', '.generaot', generaOt);
-        $(document).on('click', '.imprimeot', imprimeOt);
         $(document).on('click', '.anulaitem', anulaItem);
 		$(document).on('click', '.historiaitem', historiaItem);
 
@@ -920,6 +783,8 @@
 			$("#divlote").show();
 		else
 			$("#divlote").hide();
+
+		$("#codigocliente").focus();
     });
 
     function agregaRenglon(){
@@ -931,54 +796,9 @@
         actualizaRenglones();
 
 		activa_eventos(false);
+
+		$('#itemspedido-table').find('tr').last().find('.codigoarticulo').focus();
     }
-
-    function imprimeOt() {
-		var ot = $(this).parents("tr").find(".ot").val();
-        var listarUri = "/anitaERP/public/ventas/crearemisionot";
-		
-		if (ot == 0 || ot == -1)
-			alert("No puede listar OT");
-		else
-			$.post(listarUri, {_token: $('input[name=_token]').val(), ordenestrabajo: ot, tipoemision: "COMPLETA"}, function(data)
-			{ 
-				alert("OT EMITIDA CORRECTAMENTE"); 
-			});
-	}
-
-    function generaOt() {
-		var ot = $(this).parents("tr").find(".ot").val();
-		var tiposuspension_id = $('#tiposuspension_id').val();
-		var tipoalta = $('#tipoalta').val();
-
-        pedido_combinacion = $(this).parents("tr").find(".ids");
-		if (ot > 0)
-			alert("No puede volver a generar OT");
-		else
-		{
-			if (tiposuspension_id == 3)
-				alert('No puede generar ot a cliente moroso');
-			else
-			{
-				if (tipoalta == 'P')
-					alert('No puede generar ot a cliente provisorio');
-				else
-				{
-					if (pedido_combinacion.val() == 0)
-					{
-						alert('No puede generar ot sin grabar el nuevo item');
-					}
-					else
-					{
-						var leyenda = $(this).parents("tr").find(".observacion").val();
-						$("#leyendaot").val(leyenda);
-		
-						$("#crearOrdenTrabajoModal").modal('show');
-					}
-				}
-			}
-		}
-	}
 
 	// Anula item 
     function anulaItem() {
@@ -1195,7 +1015,7 @@
 					$(this).parents('tr').remove();
 					actualizaRenglones();
 				}
-				TotalParesPedido();
+				TotalPedido();
 			}
 		}, 300);
 	}
@@ -1425,7 +1245,7 @@
 			
 		});
 		
-		sumaPares(modalActivo, 'cantidadesportalles');
+		sumaKilos(modalActivo, 'cantidadesportalles');
 		muestraTotalPares();
 	});
 
@@ -1539,6 +1359,17 @@
 		});
 	}
 
+	function completaDatosCliente()
+	{
+		var cliente_id = $("#cliente_id").val();
+
+		completarCliente_Entrega(cliente_id);
+		asignaDatosCliente(cliente_id, true);
+		setTimeout(() => {
+			muestraTipoSuspension();			
+		}, 1500);
+	}
+
    	function asignaDatosCliente(cliente_id, flCambioCliente){
         $.get('/anitaERP/public/ventas/leercliente/'+cliente_id, function(data){
             var datoscli = $.map(data, function(value, index){
@@ -1549,6 +1380,7 @@
             const condicionventa_id = datoscli[3];
             const descuento = datoscli[4];
 			const tiposuspension_id = datoscli[5];
+			const lugarentrega = datoscli[6];
 
 			if (flCambioCliente)
 			{
@@ -1556,6 +1388,7 @@
 				$('#transporte_id').val(transporte_id);
 				$('#condicionventa_id').val(condicionventa_id);
 				$('#descuento').val(descuento);
+				$('#lugarentrega').val(lugarentrega);
 			}
 			$('#tiposuspension_id').val(tiposuspension_id);
 		});
@@ -1607,5 +1440,245 @@
 			}
 
 		});
+
+	}
+
+	function redondeaCaja(ptr, opcion)
+	{
+		let caja = $(ptr).parents("tr").find(".caja").val();
+		let pieza = $(ptr).parents("tr").find(".pieza").val();
+		let kilo = $(ptr).parents("tr").find(".kilo").val();
+		let articulo_id = $(ptr).parents("tr").find(".articulo_id").val();
+		let descuentoventa_id = $(ptr).parents("tr").find(".descuentoventa_id").val();
+		var unidadmedida = $(ptr).parents("tr").find(".unidadmedida").val();
+
+		$(ptr).parents("tr").find(".unidadmedida").val(unidadmedida);
+
+		if (caja == '')
+			caja = 0;
+		if (pieza == '')
+			pieza = 0;
+		if (kilo == '')
+			kilo = 0;
+		if (descuentoventa_id == '')
+			descuentoventa_id = 0;
+
+		if (opcion > 0)
+		{
+			let url = '/anitaERP/public/stock/redondeacaja/'+articulo_id+'/'+unidadmedida+'/'+caja+'/'+pieza+'/'+kilo+'/'+descuentoventa_id+'/'+opcion;
+
+			$.get(url, function(data){
+				if (typeof data.caja != 'string')
+					var caja = redondearDecimales(data.caja, 2);
+				else
+					var caja = data.caja;
+
+				if (typeof data.pieza != 'string')
+					var pieza = redondearDecimales(data.pieza, 2);
+				else	
+					var pieza = data.pieza;
+
+				if (typeof data.kilo != 'string')
+					var kilo = redondearDecimales(data.kilo, 2);
+				else
+					var kilo = data.kilo;
+
+				$(ptr).parents("tr").find(".caja").val(caja);
+				$(ptr).parents("tr").find(".pieza").val(pieza);
+				$(ptr).parents("tr").find(".kilo").val(kilo);
+
+				TotalPedido();
+
+				$(ptr).parents("tr").find(".descuentoventa_id").focus();
+			});
+			setTimeout(() => {
+			}, 300);
+		}
+	}
+
+	function pesada()
+	{
+		$("#pesadaModal").modal('show');
+	}
+
+	$('#pesadaModal').on('show.bs.modal', function (event) {
+		setTimeout(() => {
+			$(this).find('#lecturaqrpesada').focus();
+
+			// Activa evento de borrar renglon
+			$(document).on('click', '.eliminarpesada', borraRenglonPesada);
+			
+			$('#lecturaqrpesada').on('change', function () {
+				// Asigna valores de pesada
+				let codigoQR = $(this).val();
+				let camposQR = codigoQR.split(";"); // caja id / sku / piezas / kilos / lote / vencimiento
+				let flError = false;
+
+				// Busca si la caja ya fue leida
+				$("#tbody-tabla-pesada .numerocajapesada").each(function(index) {
+					let numerocajapesada = $(this).val();
+
+					if (numerocajapesada == camposQR[0])
+					{
+						alert("La caja Nro."+camposQR[0]+" ya fue leida");
+						flError = true;
+					}
+				});
+
+				// Busca el articulo
+				if (!flError)
+				{
+					$("#tbody-tabla .articulo_id").each(function(index) {
+						let articulo_id = $(this).val();
+						let codigoarticulo = $(this).parents("tr").find(".codigoarticulo").val();
+						let descripcionarticulo = $(this).parents("tr").find(".descripcionarticulo").val();
+						let pedido_articulo_id = $(this).parents("tr").find(".ids").val();
+						let unidadmedida = $(this).parents("tr").find(".unidadmedida_id").find(':selected').text();
+						let kilo = $(this).parents("tr").find(".kilo").val();
+						let pesada = $(this).parents("tr").find(".pesada").val();
+
+						if (codigoarticulo == camposQR[1] && parseFloat(kilo) > parseFloat(pesada)) // Si encuentra el articulo
+						{
+							let fechas = camposQR[5].split("/");
+
+							if (fechas[2].length == 1)
+								fechas[2] = "0"+fechas[2];
+							
+							if (fechas[1].length == 1)
+								fechas[1] = "0"+fechas[1];
+							
+							if (fechas[0].length == 1)
+								fechas[0] = "0"+fechas[0];
+							
+							let fechaFormateada = "20"+fechas[2]+"-"+fechas[1]+"-"+fechas[0];
+
+							agregaRenglonPesada(event);
+
+							$('#pesadapedido-table').find('tr').last().find('.numerocajapesada').val(camposQR[0]);
+							$('#pesadapedido-table').find('tr').last().find('.pedido_articulo_id').val(pedido_articulo_id);
+							$('#pesadapedido-table').find('tr').last().find('.articulopesada_id').val(articulo_id);
+							$('#pesadapedido-table').find('tr').last().find('.codigoarticulopesada').val(codigoarticulo);
+							$('#pesadapedido-table').find('tr').last().find('.descripcionarticulopesada').val(descripcionarticulo);
+							$('#pesadapedido-table').find('tr').last().find('.unidadmedidapesada').val(unidadmedida);
+							$('#pesadapedido-table').find('tr').last().find('.piezapesada').val(camposQR[2]);
+							$('#pesadapedido-table').find('tr').last().find('.kilopesada').val(camposQR[3]);
+							$('#pesadapedido-table').find('tr').last().find('.lotepesada').val(camposQR[4]);
+							$('#pesadapedido-table').find('tr').last().find('.fechavencimientopesada').val(fechaFormateada);
+
+							// Asigna pesada
+							let pesada = $(this).parents("tr").find(".pesada").val();
+							let totalPesada = parseFloat(pesada) + parseFloat(camposQR[3]);
+
+							$(this).parents("tr").find(".pesada").val(totalPesada);;
+
+							$('#lecturaqrpesada').val('');
+							$('#lecturaqrpesada').focus();
+						}
+						else
+						{
+							if (parseFloat(kilo) < parseFloat(pesada))
+								alert("Superó los kilos pedidos del artículo "+codigoarticulo+" "+descripcionarticulo
+								+" - Kilos pedidos: "+kilo+" Kilos pesados: "+pesada);
+							else
+								alert('No existe el articulo');
+
+							$('#lecturaqrpesada').val('');
+							$('#lecturaqrpesada').focus();
+						}
+					});
+				}
+			});
+
+		}, 300);
+	});
+
+	$('#aceptaPesadaModal').on('click', function () {
+		$('#pesadaModal').modal('hide');
+	});
+
+	$('#pesadaModal').on('hidden.bs.modal', function () {
+	});
+
+	// Agrega renglon pesada
+    function agregaRenglonPesada(event){
+		if (event != undefined)
+        	event.preventDefault();
+        var renglon = $('#template-renglon-pesada').html();
+
+        $("#tbody-tabla-pesada").append(renglon);
+    }
+
+    function borraRenglonPesada() {
+        event.preventDefault();
+		setTimeout(() => {
+			if (confirm("¿Desea borrar renglon?"))
+			{
+				$(this).parents('tr').remove();
+			}
+		}, 300);
+	}
+
+	function controlDescuento(ptr)
+	{
+		let topedescuento = $("#topedescuento").val();
+		var articuloDescuento_id = $(ptr).parents("tr").find(".articulo_id").val();
+		var kiloActual = $(ptr).parents("tr").find(".kilo").val();
+		var totalKiloConCargo = 0;
+		var totalKiloSinCargo = parseFloat(kiloActual);
+		var itemActual = $(ptr).parents("tr").find(".item").val();
+
+		// Busca el articulo si existe
+		$("#tbody-tabla .articulo_id").each(function(index) {
+			let articulo_id = $(this).val();
+			let sinCargo = $(this).parents("tr").find(".sincargo").val();
+			var item = $(this).parents("tr").find(".item").val();
+
+			// Suma si el articulo kilos sin descuento
+			if (articulo_id == articuloDescuento_id && item != itemActual)
+			{
+				let kilo = $(this).parents("tr").find(".kilo").val();
+
+				if (parseFloat(kilo) >= 0 && parseFloat(kilo) <= 99999999)
+				{
+					if (sinCargo == 'N')
+						totalKiloConCargo += parseFloat(kilo);
+					else
+						totalKiloSinCargo += parseFloat(kilo);
+				}
+			}
+		});
+
+		if (totalKiloConCargo > 0)
+		{
+			let diferencia = parseFloat(totalKiloSinCargo / totalKiloConCargo * 100);
+
+			if (diferencia > parseFloat(topedescuento))
+			{
+				var dif = redondearDecimales(diferencia, 2);
+
+				alert("No puede tener artículos sin cargo por mas del "+topedescuento+"%. Kilos "+totalKiloConCargo+" Sin Cargo "+
+						totalKiloSinCargo+" Diferencia "+dif+"%")
+
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	function armaSelectDescuentoVenta(ptr)
+	{
+		let categoria_secos_id = $("#categoria_secos_id").val();
+		let subcategoria_tira_id = $("#subcategoria_tira_id").val();
+			
+		let categoria_id = $(ptr).parents("tr").find(".categoria_id").val();
+		let subcategoria_id = $(ptr).parents("tr").find(".subcategoria_id").val();
+
+		if (categoria_id == categoria_secos_id && subcategoria_id == subcategoria_tira_id)
+		{
+			// Elimina las opciones que no van para grupo 1 / tiras
+			$(ptr).parents("tr").find('.descuentoventa_id option[value="1"]').remove();
+			$(ptr).parents("tr").find('.descuentoventa_id option[value="3"]').remove();
+		}
 
 	}

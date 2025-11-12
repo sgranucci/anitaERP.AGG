@@ -6,10 +6,19 @@ use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Models\Ventas\Vendedor;
 use Illuminate\Support\Facades\Storage;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Http\Requests\ValidacionVendedor;
+use App\ApiAnita;
 
 class VendedorController extends Controller
 {
+    private $empresaRepository;
+    
+	public function __construct(EmpresaRepositoryInterface $empresarepository)
+    {
+        $this->empresaRepository = $empresarepository;
+    }
+
     /**
      * Display a listing of the resource.
      *
@@ -39,7 +48,12 @@ class VendedorController extends Controller
     public function crear()
     {
         can('crear-vendedores');
-        return view('ventas.vendedor.crear');
+
+        $empresa_query = $this->empresaRepository->allFiltrado();
+        $aplicasobre_enum = Vendedor::$enumAplicaSobre;
+        $estado_enum = Vendedor::$enumEstado;
+
+        return view('ventas.vendedor.crear', compact('empresa_query', 'aplicasobre_enum', 'estado_enum'));
     }
 
     /**
@@ -50,11 +64,17 @@ class VendedorController extends Controller
      */
     public function guardar(ValidacionVendedor $request)
     {
-        $vendedor = Vendedor::create($request->all());
+        $codigo = '';
+		self::ultimoCodigo($codigo);
+
+        $data = $request->all();
+        $data['codigo'] = $codigo;
+
+        $vendedor = Vendedor::create($data);
 
 		// Graba anita
 		$Vendedor = new Vendedor();
-        $Vendedor->guardarAnita($request, $vendedor->id);
+        $Vendedor->guardarAnita($request, $codigo);
 
         return redirect('ventas/vendedor')->with('mensaje', 'Vendedor creado con exito');
     }
@@ -70,7 +90,11 @@ class VendedorController extends Controller
     {
         can('editar-vendedores');
         $data = Vendedor::findOrFail($id);
-        return view('ventas.vendedor.editar', compact('data'));
+        $empresa_query = $this->empresaRepository->allFiltrado();
+        $aplicasobre_enum = Vendedor::$enumAplicaSobre;
+        $estado_enum = Vendedor::$enumEstado;
+
+        return view('ventas.vendedor.editar', compact('data', 'empresa_query', 'aplicasobre_enum', 'estado_enum'));
     }
 
     /**
@@ -87,7 +111,7 @@ class VendedorController extends Controller
 
 		// Actualiza anita
 		$Vendedor = new Vendedor();
-        $Vendedor->actualizarAnita($request, $id);
+        $Vendedor->actualizarAnita($request, $request->codigo);
 
         return redirect('ventas/vendedor')->with('mensaje', 'Vendedor actualizado con exito');
     }
@@ -102,9 +126,13 @@ class VendedorController extends Controller
     {
         can('borrar-vendedores');
 
+        $vendedor = Vendedor::findOrFail($id);
+
+        $codigo = $vendedor->codigo;
+
 		// Elimina anita
 		$Vendedor = new Vendedor();
-        $Vendedor->eliminarAnita($id);
+        $Vendedor->eliminarAnita($codigo);
 
         if ($request->ajax()) {
             if (Vendedor::destroy($id)) {
@@ -116,4 +144,26 @@ class VendedorController extends Controller
             abort(404);
         }
     }
+
+    // Devuelve ultimo codigo de zonavta + 1 para agregar nuevos en Anita
+
+	private function ultimoCodigo(&$codigo) {
+        $apiAnita = new ApiAnita();
+        $data = array( 'acc' => 'list', 
+				'tabla' => 'vendedor', 
+				'sistema' => 'ventas',
+				'campos' => " max(vend_codigo) as codigo "
+				);
+        $dataAnita = json_decode($apiAnita->apiCall($data));
+
+		if ($dataAnita[0]->codigo != '')
+		{
+			$numero = filter_var($dataAnita[0]->codigo, FILTER_SANITIZE_NUMBER_INT);
+			$numero = $numero + 1;
+
+			$codigo = $numero;
+		}
+		else
+			$codigo = 1;
+	}    
 }

@@ -1,6 +1,10 @@
             $(function () {
                 $('#btn_advanced_filter').click(function () {
                     $('#advanced_filter_modal').modal('show');
+
+                    setTimeout(() => {
+                        $('#filtro-reparto').focus();
+                    }, 500);
                 })
 
                 $(".filter-combo").change(function () {

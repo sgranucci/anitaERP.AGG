@@ -262,4 +262,14 @@ function conviertePeriodoEnRangoFecha($periodo, $flHora = null)
     return ['desdefecha' => $desdeFecha, 'hastafecha' => $hastaFecha];
 }
 
+function specialChars($str, $chars = null) {
+
+    if ($chars)
+        $specialChars = $chars;
+    else
+        $specialChars = '!@#$%^&*()-_=+[{]};:\'",<.>/?\\|';
+    
+    return strpbrk($str, $specialChars) !== false;
+}
+
 

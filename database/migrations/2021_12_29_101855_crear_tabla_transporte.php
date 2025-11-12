@@ -25,7 +25,7 @@ class CrearTablaTransporte extends Migration
             $table->string('codigopostal',50)->nullable();
             $table->string('telefono',255)->nullable();
             $table->string('email', 255)->nullable();
-            $table->string('nroinscripcion',100);
+            $table->string('nroinscripcion',100)->nullable();
 			$table->unsignedBigInteger('condicioniva_id');
             $table->foreign('condicioniva_id', 'fk_transporte_condicioniva')->references('id')->on('condicioniva')->onDelete('restrict')->onUpdate('restrict');
             $table->string('patentevehiculo', 20)->nullable();

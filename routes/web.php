@@ -148,6 +148,9 @@ Route::get('configuracion/leerlocalidades/{id}', 'Configuracion\LocalidadControl
 Route::get('configuracion/leercodigopostal/{id}', 'Configuracion\LocalidadController@leerCodigoPostal')->name('leer_codigo_postal');
 
 Route::get('configuracion/listalocalidad/{formato?}/{busqueda?}', 'Configuracion\LocalidadController@listar')->name('lista_localidad');
+Route::post('configuracion/localidad/consultalocalidad', 'Configuracion\LocalidadController@consultaLocalidad')->name('consulta_localidad');
+Route::get('configuracion/leerlocalidad/{localidad_id}', 'Configuracion\LocalidadController@leeUnaLocalidad')->name('leer_localidad');
+
 
 /* 
  * Condiciones de iva
@@ -182,6 +185,38 @@ Route::delete('configuracion/condicioniva/{id}', 'Configuracion\CondicionivaCont
  Route::put('configuracion/tipodocumento/{id}', 'Configuracion\TipodocumentoController@actualizar')->name('actualizar_tipodocumento');
  Route::delete('configuracion/tipodocumento/{id}', 'Configuracion\TipodocumentoController@eliminar')->name('eliminar_tipodocumento');
  
+/* 
+ * Padron Mipyme
+ */
+
+ Route::get('configuracion/padron_mipyme', 'Configuracion\Padron_MipymeController@index')->name('padron_mipyme');
+ Route::get('configuracion/padron_mipyme/crear', 'Configuracion\Padron_MipymeController@crear')->name('crear_padron_mipyme');
+ Route::post('configuracion/padron_mipyme', 'Configuracion\Padron_MipymeController@guardar')->name('guardar_padron_mipyme');
+ Route::get('configuracion/padron_mipyme/{id}/editar', 'Configuracion\Padron_MipymeController@editar')->name('editar_padron_mipyme');
+ Route::put('configuracion/padron_mipyme/{id}', 'Configuracion\Padron_MipymeController@actualizar')->name('actualizar_padron_mipyme');
+ Route::delete('configuracion/padron_mipyme/{id}', 'Configuracion\Padron_MipymeController@eliminar')->name('eliminar_padron_mipyme');
+ 
+ Route::get('configuracion/listapadron_mipyme/{formato?}/{busqueda?}', 'Configuracion\Padron_MipymeController@listar')->name('lista_padron_mipyme'); 
+
+ Route::get('configuracion/crea_importacion_padron_mipyme', 'Configuracion\Padron_MipymeController@crearImportacionPadron_Mipyme')->name('crear_importacion_padron_mipyme');
+ Route::post('configuracion/importa_padron_mipyme', 'Configuracion\Padron_MipymeController@importarPadron_Mipyme')->name('importar_padron_mipyme');
+
+/* 
+ * Padron Exclusion Percepcion Iva
+ */
+
+ Route::get('configuracion/padron_exclusionpercepcioniva', 'Configuracion\Padron_ExclusionpercepcionivaController@index')->name('padron_exclusionpercepcioniva');
+ Route::get('configuracion/padron_exclusionpercepcioniva/crear', 'Configuracion\Padron_ExclusionpercepcionivaController@crear')->name('crear_padron_exclusionpercepcioniva');
+ Route::post('configuracion/padron_exclusionpercepcioniva', 'Configuracion\Padron_ExclusionpercepcionivaController@guardar')->name('guardar_padron_exclusionpercepcioniva');
+ Route::get('configuracion/padron_exclusionpercepcioniva/{id}/editar', 'Configuracion\Padron_ExclusionpercepcionivaController@editar')->name('editar_padron_exclusionpercepcioniva');
+ Route::put('configuracion/padron_exclusionpercepcioniva/{id}', 'Configuracion\Padron_ExclusionpercepcionivaController@actualizar')->name('actualizar_padron_exclusionpercepcioniva');
+ Route::delete('configuracion/padron_exclusionpercepcioniva/{id}', 'Configuracion\Padron_ExclusionpercepcionivaController@eliminar')->name('eliminar_padron_exclusionpercepcioniva');
+ 
+ Route::get('configuracion/listapadron_exclusionpercepcioniva/{formato?}/{busqueda?}', 'Configuracion\Padron_ExclusionpercepcionivaController@listar')->name('lista_padron_exclusionpercepcioniva'); 
+
+ Route::get('configuracion/crea_importacion_padron_exclusionpercepcioniva', 'Configuracion\Padron_ExclusionpercepcionivaController@crearImportacionPadron_Exclusionpercepcioniva')->name('crear_importacion_padron_exclusionpercepcioniva');
+ Route::post('configuracion/importa_padron_exclusionpercepcioniva', 'Configuracion\Padron_ExclusionpercepcionivaController@importarPadron_Exclusionpercepcioniva')->name('importar_padron_exclusionpercepcioniva');
+
 /* 
  * Fondos
  */
@@ -435,6 +470,7 @@ Route::get('stock/precio/{id}/editar', 'Stock\PrecioController@editar')->name('e
 Route::put('stock/precio/{id}', 'Stock\PrecioController@actualizar')->name('actualizar_precio');
 Route::delete('stock/precio/{id}', 'Stock\PrecioController@eliminar')->name('eliminar_precio');
 Route::get('stock/asignaprecio/{id}/{talle?}', 'Stock\PrecioController@asignaPrecio')->name('asigna_precio');
+Route::get('stock/asignapreciocliente/{articulo_id}/{cliente_id}', 'Stock\PrecioController@asignaPrecioPorCliente')->name('asigna_precio_cliente');
 Route::get('stock/precio/crearimportacionprecio', 'Stock\PrecioController@crearImportacion')->name('crear_importacion_precio');
 Route::post('stock/importarprecio', 'Stock\PrecioController@importar')->name('importar_precio');
 Route::post('stock/precio/limpiafiltro', 'Stock\PrecioController@limpiafiltro')->name('precio.limpiafiltro');
@@ -673,6 +709,11 @@ Route::delete('stock/product/delete/{id}', 'Stock\ArticuloController@delete')->n
 Route::post('stock/product/limpiafiltro', 'Stock\ArticuloController@limpiafiltro')->name('product.limpiafiltro');
 Route::post('stock/product/consultaarticulo', 'Stock\ArticuloController@consultaArticulo')->name('consulta_articulo');
 
+Route::get('stock/leerunarticulo/{articulo_id}', 'Stock\ArticuloController@leeUnArticulo')->name('leer_un_articulo');
+Route::get('stock/leerunarticuloporsku/{sku}', 'Stock\ArticuloController@leeUnArticuloPorSku')->name('leer_un_articulo_por_sku');
+
+Route::get('stock/listaarticulo/{formato?}/{busqueda?}', 'Stock\ArticuloController@listar')->name('lista_articulo');
+
 Route::get('stock/leercombinaciones/{id}', 'Stock\CombinacionController@leerCombinaciones')->name('leer_combinaciones');
 Route::get('stock/leercombinacionesactivas/{id}', 'Stock\CombinacionController@leerCombinacionesActivas')->name('leer_combinaciones_activas');
 Route::get('stock/leermodulos/{id}/{modulo?}', 'Stock\LineaController@leerModulos')->name('leer_modulos');
@@ -798,6 +839,9 @@ Route::get('ventas/transporte/{id}/editar', 'Ventas\TransporteController@editar'
 Route::put('ventas/transporte/{id}', 'Ventas\TransporteController@actualizar')->name('actualizar_transporte');
 Route::delete('ventas/transporte/{id}', 'Ventas\TransporteController@eliminar')->name('eliminar_transporte');
 
+Route::post('ventas/transporte/consultatransporte', 'Ventas\TransporteController@consultaTransporte')->name('consulta_transporte');
+Route::get('ventas/leertransporte/{transporte_id}', 'Ventas\TransporteController@leeTransporte')->name('leer_transporte');
+
 /* 
  * Motivos de cierre de pedido
  */
@@ -884,8 +928,10 @@ Route::get('ventas/leercliente/{cliente_id}', 'Ventas\ClienteController@leerClie
 Route::get('ventas/listacliente/{formato?}/{busqueda?}', 'Ventas\ClienteController@listar')->name('lista_cliente');
 Route::post('ventas/consultacliente', 'Ventas\ClienteController@consultaCliente')->name('consultar_cliente');
 Route::get('ventas/leeruncliente/{cliente_id}', 'Ventas\ClienteController@leeUnCliente')->name('leer_un_cliente');
+Route::get('ventas/leerunclienteporcodigo/{codigo}', 'Ventas\ClienteController@leeUnClientePorCodigo')->name('leer_un_cliente_por_codigo');
 
 Route::get('ventas/cliente/crearremoto/{id}', 'Ventas\ClienteController@crearRemoto')->name('crear_cliente_remoto');
+Route::get('ventas/cliente/emitenc/{cliente_id}', 'Ventas\ClienteController@emiteNc')->name('emite_nc');
 
 /* 
  * Pedidos
@@ -938,6 +984,7 @@ Route::post('ventas/factura', 'Ventas\FacturacionController@guardar')->name('gua
 Route::get('ventas/factura/{id}/editar', 'Ventas\FacturacionController@editar')->name('editar_factura');
 Route::delete('ventas/factura/{id}', 'Ventas\FacturacionController@eliminar')->name('eliminar_factura');
 Route::get('ventas/listafactura/{formato?}/{busqueda?}', 'Ventas\FacturacionController@listar')->name('listar_factura');
+
 
 /* PRODUCCION */
 
@@ -1869,3 +1916,108 @@ Route::get('uif/leercodigopostaluif/{id}', 'Uif\Localidad_UifController@leerCodi
  Route::get('ordenventa/leer_historia_ordenventa/{ordenventa_id}', 'Ordenventa\OrdenventaController@leerHistoriaOrdenventa')->name('lee_historia_ordenventa');
 
  Route::get('ordenventa/visualizar/{id}/{hash}', 'Ordenventa\OrdenventaController@visualizar');
+
+// Bierzo
+
+/* 
+ * Abasto
+ */
+
+ Route::get('ventas/abasto', 'Ventas\AbastoController@index')->name('consultar_abasto');
+ Route::get('ventas/abasto/crear', 'Ventas\AbastoController@crear')->name('crear_abasto');
+ Route::post('ventas/abasto', 'Ventas\AbastoController@guardar')->name('guardar_abasto');
+ Route::get('ventas/abasto/{id}/editar', 'Ventas\AbastoController@editar')->name('editar_abasto');
+ Route::put('ventas/abasto/{id}', 'Ventas\AbastoController@actualizar')->name('actualizar_abasto');
+ Route::delete('ventas/abasto/{id}', 'Ventas\AbastoController@eliminar')->name('eliminar_abasto');
+
+/* 
+ * Coeficiente
+ */
+
+ Route::get('ventas/coeficiente', 'Ventas\CoeficienteController@index')->name('consultar_coeficiente');
+ Route::get('ventas/coeficiente/crear', 'Ventas\CoeficienteController@crear')->name('crear_coeficiente');
+ Route::post('ventas/coeficiente', 'Ventas\CoeficienteController@guardar')->name('guardar_coeficiente');
+ Route::get('ventas/coeficiente/{id}/editar', 'Ventas\CoeficienteController@editar')->name('editar_coeficiente');
+ Route::put('ventas/coeficiente/{id}', 'Ventas\CoeficienteController@actualizar')->name('actualizar_coeficiente');
+ Route::delete('ventas/coeficiente/{id}', 'Ventas\CoeficienteController@eliminar')->name('eliminar_coeficiente');
+
+/* 
+ * Distribuidor
+ */
+
+ Route::get('ventas/distribuidor', 'Ventas\DistribuidorController@index')->name('consultar_distribuidor');
+ Route::get('ventas/distribuidor/crear', 'Ventas\DistribuidorController@crear')->name('crear_distribuidor');
+ Route::post('ventas/distribuidor', 'Ventas\DistribuidorController@guardar')->name('guardar_distribuidor');
+ Route::get('ventas/distribuidor/{id}/editar', 'Ventas\DistribuidorController@editar')->name('editar_distribuidor');
+ Route::put('ventas/distribuidor/{id}', 'Ventas\DistribuidorController@actualizar')->name('actualizar_distribuidor');
+ Route::delete('ventas/distribuidor/{id}', 'Ventas\DistribuidorController@eliminar')->name('eliminar_distribuidor');
+
+/* 
+ * Descuento venta
+ */
+
+ Route::get('ventas/descuentoventa', 'Ventas\DescuentoventaController@index')->name('consultar_descuentoventa');
+ Route::get('ventas/descuentoventa/crear', 'Ventas\DescuentoventaController@crear')->name('crear_descuentoventa');
+ Route::post('ventas/descuentoventa', 'Ventas\DescuentoventaController@guardar')->name('guardar_descuentoventa');
+ Route::get('ventas/descuentoventa/{id}/editar', 'Ventas\DescuentoventaController@editar')->name('editar_descuentoventa');
+ Route::put('ventas/descuentoventa/{id}', 'Ventas\DescuentoventaController@actualizar')->name('actualizar_descuentoventa');
+ Route::delete('ventas/descuentoventa/{id}', 'Ventas\DescuentoventaController@eliminar')->name('eliminar_descuentoventa');
+
+/* 
+ * Envase senasa
+ */
+
+ Route::get('stock/envasesenasa', 'Stock\EnvasesenasaController@index')->name('consultar_envasesenasa');
+ Route::get('stock/envasesenasa/crear', 'Stock\EnvasesenasaController@crear')->name('crear_envasesenasa');
+ Route::post('stock/envasesenasa', 'Stock\EnvasesenasaController@guardar')->name('guardar_envasesenasa');
+ Route::get('stock/envasesenasa/{id}/editar', 'Stock\EnvasesenasaController@editar')->name('editar_envasesenasa');
+ Route::put('stock/envasesenasa/{id}', 'Stock\EnvasesenasaController@actualizar')->name('actualizar_envasesenasa');
+ Route::delete('stock/envasesenasa/{id}', 'Stock\EnvasesenasaController@eliminar')->name('eliminar_envasesenasa');
+
+/* 
+ * Codigos senasa
+ */
+
+ Route::get('stock/codigosenasa', 'Stock\CodigosenasaController@index')->name('consultar_codigosenasa');
+ Route::get('stock/codigosenasa/crear', 'Stock\CodigosenasaController@crear')->name('crear_codigosenasa');
+ Route::post('stock/codigosenasa', 'Stock\CodigosenasaController@guardar')->name('guardar_codigosenasa');
+ Route::get('stock/codigosenasa/{id}/editar', 'Stock\CodigosenasaController@editar')->name('editar_codigosenasa');
+ Route::put('stock/codigosenasa/{id}', 'Stock\CodigosenasaController@actualizar')->name('actualizar_codigosenasa');
+ Route::delete('stock/codigosenasa/{id}', 'Stock\CodigosenasaController@eliminar')->name('eliminar_codigosenasa');
+
+/* Produccion
+ * Tipo de produccion
+ */
+
+ Route::get('produccion/tipoproduccion', 'Produccion\TipoproduccionController@index')->name('consultar_tipoproduccion');
+ Route::get('produccion/tipoproduccion/crear', 'Produccion\TipoproduccionController@crear')->name('crear_tipoproduccion');
+ Route::post('produccion/tipoproduccion', 'Produccion\TipoproduccionController@guardar')->name('guardar_tipoproduccion');
+ Route::get('produccion/tipoproduccion/{id}/editar', 'Produccion\TipoproduccionController@editar')->name('editar_tipoproduccion');
+ Route::put('produccion/tipoproduccion/{id}', 'Produccion\TipoproduccionController@actualizar')->name('actualizar_tipoproduccion');
+ Route::delete('produccion/tipoproduccion/{id}', 'Produccion\TipoproduccionController@eliminar')->name('eliminar_tipoproduccion');
+
+/* 
+ * Sector de sellado
+ */
+
+ Route::get('produccion/sectorsellado', 'Produccion\SectorselladoController@index')->name('consultar_sectorsellado');
+ Route::get('produccion/sectorsellado/crear', 'Produccion\SectorselladoController@crear')->name('crear_sectorsellado');
+ Route::post('produccion/sectorsellado', 'Produccion\SectorselladoController@guardar')->name('guardar_sectorsellado');
+ Route::get('produccion/sectorsellado/{id}/editar', 'Produccion\SectorselladoController@editar')->name('editar_sectorsellado');
+ Route::put('produccion/sectorsellado/{id}', 'Produccion\SectorselladoController@actualizar')->name('actualizar_sectorsellado');
+ Route::delete('produccion/sectorsellado/{id}', 'Produccion\SectorselladoController@eliminar')->name('eliminar_sectorsellado');
+
+/* 
+ * Sala de produccion
+ */
+
+ Route::get('produccion/salaproduccion', 'Produccion\SalaproduccionController@index')->name('consultar_salaproduccion');
+ Route::get('produccion/salaproduccion/crear', 'Produccion\SalaproduccionController@crear')->name('crear_salaproduccion');
+ Route::post('produccion/salaproduccion', 'Produccion\SalaproduccionController@guardar')->name('guardar_salaproduccion');
+ Route::get('produccion/salaproduccion/{id}/editar', 'Produccion\SalaproduccionController@editar')->name('editar_salaproduccion');
+ Route::put('produccion/salaproduccion/{id}', 'Produccion\SalaproduccionController@actualizar')->name('actualizar_salaproduccion');
+ Route::delete('produccion/salaproduccion/{id}', 'Produccion\SalaproduccionController@eliminar')->name('eliminar_salaproduccion');
+
+// Redodea cajas
+ Route::get('stock/redondeacaja/{articulo_id}/{unidadmedida}/{caja}/{pieza}/{kilo}/{descuento_id}/{opcion}', 'Stock\ArticuloController@redondeaCaja')->name('redondea_caja');
+

@@ -17,7 +17,7 @@ class CrearTablaLinea extends Migration
             $table->bigIncrements('id');
     		$table->string('nombre', 100);
     		$table->string('codigo', 50);
-			$table->unsignedBigInteger('tiponumeracion_id');
+			$table->unsignedBigInteger('tiponumeracion_id')->nullable()->default(NULL);
             $table->foreign('tiponumeracion_id', 'fk_linea_tiponumeracion')->references('id')->on('tiponumeracion')->onDelete('restrict')->onUpdate('restrict');
     		$table->unsignedInteger('maxhorma');
 			$table->unsignedBigInteger('numeracion_id')->nullable()->default(NULL);

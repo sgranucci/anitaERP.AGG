@@ -76,8 +76,7 @@ function eliminarPedido(event) {
                             <th class="width20">ID</th>
                             <th>Fecha</th>
                             <th class="width50">Cliente</th>
-                            <th>Marca</th>
-                            <th>Pares</th>
+                            <th>Kilos</th>
 							<th>Estado</th>
                             <th class="width80" data-orderable="false"></th>
                         </tr>
@@ -93,9 +92,6 @@ function eliminarPedido(event) {
         						</td>
         						<td>
             						<b>{{ $pedido['nombrecliente'] ?? '' }}</b>
-        						</td>
-        						<td>
-            						{{ $pedido['nombremarca'] ?? '' }}
         						</td>
         						<td>
 									{{ $pedido['pares'] }}

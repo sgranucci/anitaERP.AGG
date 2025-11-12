@@ -140,7 +140,7 @@ class Linea extends Model
 					"id" => $key,
 					"nombre" => $data->linm_desc,
 					"codigo" => $codigo,
-					"tiponumeracion_id" => 1,
+					"tiponumeracion_id" => null,
 					"maxhorma" => 0
 				]);
 			}

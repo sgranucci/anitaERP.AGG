@@ -6,8 +6,8 @@ trait ValidacionCuit {
 
 	private function ValidacionCuit($cuit)
 	{
-		if (strlen($cuit) != 13) return false;
-		
+		if (strlen($cuit) != 13 && strlen($cuit) != 11) return false;
+
 		$rv = false;
 		$resultado = 0;
 		$cuit_nro = str_replace("-", "", $cuit);
@@ -28,6 +28,7 @@ trait ValidacionCuit {
 		}
 		$resultado = intVal($resultado) % 11;
 		$rv = $resultado == $verificador;
+
 		return $rv;
 	}
 }

@@ -45,6 +45,17 @@ function eliminarPedido(event) {
             <div class="card-header">
                 <h3 class="card-title">Pedidos de clientes</h3>
                 <div class="card-tools">
+					@if (session()->get('filtrosPedidos') == '')
+						<a href="javascript:void(0)" class="btn btn-outline-secondary btn-sm" id='btn_advanced_filter' data-url-parameter='' 
+							title='Filtros y búsquedas avanzadas' class="btn btn-sm btn-default ">
+								<i class="fa fa-filter"></i> Filtros
+						</a>
+					@endif
+					@if (session()->get('filtrosPedidos') != '') 
+                    	<span id="container-button-state">
+                            <button class="btn btn-outline-secondary btn-sm" style="color:white" onclick="limpiaFiltros()">Limpiar filtros</button>
+                    	</span>
+					@endif					
                     <a href="{{route('cerrar_pedido')}}" class="btn btn-danger btn-sm">
                        	@if (can('cierre-de-pedidos', false))
                         	<i class="fa fa-fw fa-times-circle"></i> Cierre de pedidos
@@ -74,9 +85,13 @@ function eliminarPedido(event) {
                         <tr>
                             <th class="width20">ID</th>
                             <th>Fecha</th>
+							<th>Fecha entrega</th>
                             <th class="width50">Cliente</th>
-                            <th>Marca</th>
-                            <th>Pares</th>
+							<th>Cajas</th>
+							<th>Piezas</th>
+                            <th>Kilos</th>
+							<th>Pesada</th>
+							<th>Reparto</th>
 							<th class="width60">Estado</th>
                             <th class="width40" data-orderable="false"></th>
                         </tr>
@@ -88,25 +103,43 @@ function eliminarPedido(event) {
             						{{ $pedido['id'] ?? '' }}
         						</td>
         						<td>
-            						{{date("Y-m-d", strtotime($pedido['fecha'] ?? ''))}} 
+            						{{date("d-m-Y", strtotime($pedido['fecha'] ?? ''))}} 
         						</td>
+        						<td>
+            						{{date("d-m-Y", strtotime($pedido['fechaentrega'] ?? ''))}} 
+        						</td>								
         						<td>
             						<b>{{ $pedido['nombrecliente'] ?? '' }}</b>
         						</td>
         						<td>
-            						{{ $pedido->pedido_combinaciones[0]->articulos->mventas->nombre ?? '' }}
-        						</td>
+									@php $caja = 0; @endphp
+            						@foreach ($pedido->pedido_articulos as $item)
+										@php $caja = $caja + $item->caja @endphp
+									@endforeach
+									{{$caja}}
+								</td>		
+	        					<td>
+									@php $pieza = 0; @endphp
+            						@foreach ($pedido->pedido_articulos as $item)
+										@php $pieza = $pieza + $item->pieza @endphp
+									@endforeach
+									{{$pieza}}
+								</td>															
         						<td>
-									@php
-										$pares = 0.;
-									@endphp
-									@foreach($pedido->pedido_combinaciones as $item)
-										@php
-											$pares += ($item->cantidad);
-										@endphp
-            						@endforeach
-            						{{ $pares ?? '' }}
+									@php $kilo = 0; @endphp
+            						@foreach ($pedido->pedido_articulos as $item)
+										@php $kilo = $kilo + $item->kilo @endphp
+									@endforeach
+									{{$kilo}}
 								</td>
+	        					<td>
+									@php $pesada = 0; @endphp
+            						@foreach ($pedido->pedido_articulos as $item)
+										@php $pesada = $pesada + $item->pesada @endphp
+									@endforeach
+									{{$pesada}}
+								</td>									
+								<td>{{ $pedido->nombretransporte ?? ''}}</td>
 								<td>
 									{{ $pedido['estado'] }}
 								</td>
@@ -138,6 +171,7 @@ function eliminarPedido(event) {
         </div>
     </div>
 </div>
+@include('includes.filtropedido')
 {{ $pedidos->appends(['busqueda' => $busqueda])->links() }}
 
 @endsection

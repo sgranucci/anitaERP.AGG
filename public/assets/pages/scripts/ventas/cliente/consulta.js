@@ -74,16 +74,20 @@ function activa_eventos_consultacliente()
         
         let seleccion = $(this).parents("tr").children().html();
         let nombre = $(this).parents("tr").find(".nombre").html();
+        let codigo = $(this).parents("tr").find(".codigo").html();
 
         $(ptrcliente_id).val(seleccion);
         $(ptrnombrecliente).val(nombre);
 
-        leeUnCliente(seleccion);
+        leeUnCliente(seleccion, 0)
 
         $("#cliente_id").val(seleccion);
         $("#nombrecliente").val(nombre);
+        $("#codigocliente").val(codigo);
 
         $('#consultaclienteModal').modal('hide');
+        
+        $("#codigotransporte").focus();
     });
 
     // Si cambia el filtro blanquea el modal
@@ -101,7 +105,22 @@ function activa_eventos_consultacliente()
 
         if ($.isNumeric(cliente_id))
         {
-            leeUnCliente(cliente_id);
+            leeUnCliente(cliente_id, 0)
+        } 
+        else
+            $("#nombrecliente").val("");
+    });
+
+    $('#codigocliente').on('change', function (event) {
+        event.preventDefault();
+
+        let codigocliente = $("#codigocliente").val();
+
+        if ($.isNumeric(codigocliente))
+        {
+            leeUnCliente(0, codigocliente);
+
+            $("#codigotransporte").focus();
         } 
         else
             $("#nombrecliente").val("");
@@ -116,6 +135,7 @@ function activa_eventos_consultacliente()
         let url_res = '/anitaERP/public/ventas/leeruncliente/'+cliente_id;
 
         $(ptrrenglon).parents("tr").find(".cliente_id").val("");
+        $(ptrrenglon).parents("tr").find(".codigocliente").val("");
 		$(ptrrenglon).parents("tr").find(".nombrecliente").val("");        
 
         $("#cliente_id").val("");
@@ -129,6 +149,7 @@ function activa_eventos_consultacliente()
                 else
                 {
                     $(ptrrenglon).parents("tr").find(".cliente_id").val(data.id);
+                    $(ptrrenglon).parents("tr").find(".cliente_id").val(data.codigo);
                     $(ptrrenglon).parents("tr").find(".nombrecliente").val(data.nombre);
 
                     $("#cliente_id").val(data.id);
@@ -144,42 +165,57 @@ function activa_eventos_consultacliente()
 
 }
 
-function leeUnCliente(cliente_id)
+function leeUnCliente(cliente_id, codigocliente)
 {
     if ($.isNumeric(cliente_id))
     {
-        let url_res = '/anitaERP/public/ventas/leeruncliente/'+cliente_id;
+        if (cliente_id > 0)
+            var url_res = '/anitaERP/public/ventas/leeruncliente/'+cliente_id;
+        else
+            var url_res = '/anitaERP/public/ventas/leerunclienteporcodigo/'+codigocliente;
 
         $.get(url_res, function(data){
             if (data)
             {
-                $("#cliente_id").val(data.id);
-                $("#nombrecliente").val(data.nombre);
-                $("#domicilio").val(data.domicilio);
-                $("#codigopostal").val(data.codigopostal);
-                $("#nroinscripcion").val(data.nroinscripcion);
-                $("#telefono").val(data.telefono);
-                $("#email").val(data.email);
-                $("#localidad_id").val(data.localidad_id);
-
-                if (data.localidades != null)
+                if (data.estado != '0')
                 {
-                    $("#desc_localidad").val(data.localidad_id);
-
-                    $("#localidad_id").empty();
-			        $("#localidad_id").append('<option value=""></option>');
-                    $("#localidad_id").append('<option value="'+data.localidad_id+'"selected>'+data.localidades['nombre']+'</option>');
+                    alert('Cliente '+data.nombre+' no activo');
+                    $('#codigocliente').val('');
+                    $('#nombrecliente').val('');
+                    $('#codigocliente').focus();
                 }
+                else
+                {
+                    $("#cliente_id").val(data.id);
+                    $("#nombrecliente").val(data.nombre);
+                    $("#domicilio").val(data.domicilio);
+                    $("#codigopostal").val(data.codigopostal);
+                    $("#nroinscripcion").val(data.nroinscripcion);
+                    $("#telefono").val(data.telefono);
+                    $("#email").val(data.email);
+                    $("#localidad_id").val(data.localidad_id);
 
-                $("#provincia_id").val(data.provincia_id);
+                    if (data.localidades != null)
+                    {
+                        $("#desc_localidad").val(data.localidad_id);
 
-                if (data.provincias != null)
-                    $("#desc_provincia").val(data.provincias['nombre']);
+                        $("#localidad_id").empty();
+                        $("#localidad_id").append('<option value=""></option>');
+                        $("#localidad_id").append('<option value="'+data.localidad_id+'"selected>'+data.localidades['nombre']+'</option>');
+                    }
 
-                $("#pais_id").val(data.pais_id);
+                    $("#provincia_id").val(data.provincia_id);
 
-                if (data.paises != null)
-                    $("#desc_pais").val(data.paises['nombre']);
+                    if (data.provincias != null)
+                        $("#desc_provincia").val(data.provincias['nombre']);
+
+                    $("#pais_id").val(data.pais_id);
+
+                    if (data.paises != null)
+                        $("#desc_pais").val(data.paises['nombre']);
+
+                    completaDatosCliente();
+                }
             }
         });
 

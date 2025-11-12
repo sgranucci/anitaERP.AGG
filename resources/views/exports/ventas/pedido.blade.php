@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="es">
 <head>
-    <link rel="stylesheet" href="{{asset("assets/$theme/dist/css/adminlte.min.css")}}">
+    <link rel="stylesheet" href="{{"assets/$theme/dist/css/adminlte.min.css"}}">
     <meta charset="UTF-8">
     <meta name="viewport"
 	    content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
@@ -12,15 +12,15 @@
 <body>
 <table class="table borderless">
 	<thead>
-    <tr>
-		<th>
-        	<img style="margin: 12px;" width=300px src="{{ asset("storage/imagenes/logos/logo".$pedido->mventas->nombre.".jpg") }}">
-		</th>
-		<th>
-			<strong>Pedido Nro.: {{$pedido->id ?? ''}}</strong><br>
-			<strong>Fecha: {{date("d/m/Y", strtotime($pedido->fecha ?? ''))}} </strong>
-		</th>
-	</tr>
+		<tr>
+			<th>
+				<h5><strong>EL BIERZO</strong></h5>
+			</th>
+			<th>
+				<strong>Pedido Nro.: {{$pedido->id ?? ''}}</strong><br>
+				<strong>Fecha: {{date("d/m/Y", strtotime($pedido->fecha ?? ''))}} </strong>
+			</th>
+		</tr>
 	</thead>
 </table>
 <div class="row">
@@ -30,39 +30,57 @@
 		<strong>Transporte: {{ $pedido->transportes->nombre ?? ''}}</strong><br>
 		<strong>Lugar de entrega: {{ $pedido->lugarentrega ?? ''}}</strong><br>
 	</div>
-	<table class="table table-sm table-bordered table-striped">
+	<table class="table table-sm table-bordered table-striped" style="font-size: 12px;">> 
 		<thead>
     	<tr>
-       		<th>Sku</th>
-       		<th>Descripcion</th>
-       		<th>Combinacion</th>
-       		<th>Modulo</th>
-       		<th>Pares</th>
+       		<th style="width: 6%;">Sku</th>
+       		<th style="width: 25%;">Descripción</th>
+       		<th>UMD</th>
+       		<th style="width: 9%;">Cajas</th>
+       		<th style="width: 9%;">Piezas</th>
+			<th style="width: 9%;">Kilos</th>
+			<th style="width: 9%;">Peso Real</th>
+			<th>Descuento</th>
        		<th>Precio</th>
     	</tr>
   		</thead>
     	<tbody>
-		@foreach ($pedido->pedido_combinaciones as $item)
+		@foreach ($pedido->pedido_articulos as $item)
         	<tr>
 				<td>{{ $item->articulos->sku }}</td>
 				<td>{{ $item->articulos->descripcion }}</td>
-				<td>{{ $item->combinaciones->codigo }}-{{ $item->combinaciones->nombre }}</td>
-				<td>{{ $item->modulos->nombre }}</td>
-				<td>{{ number_format($item->cantidad, 0) }}</td>
+				<td>{{ $item->articulos->unidadesdemedidas->abreviatura}}</td>
+				<td>{{ number_format($item->caja, 2) }}</td>
+				<td>{{ number_format($item->pieza, 2) }}</td>
+				<td>{{ number_format($item->kilo, 2) }}</td>
+				<td>{{ number_format($item->pesada, 2) }}</td>
+				<td>{{ $item->descuentoventa_ids->nombre??'' }}</td>
 				<td>{{ number_format($item->precio, 2) }}</td>
         	</tr>
     	@endforeach
         	<tr>
+				<td><strong>Totales</strong></td>
 				@php
-					$pares = 0.;
+					$kilos = 0.;
+					$cajas = 0.;
+					$piezas = 0.;
+					$pesada = 0.;
 				@endphp
-				@foreach ($pedido->pedido_combinaciones as $item)
+				@foreach ($pedido->pedido_articulos as $item)
 				@php
-					$pares += ($item->cantidad);
+					$kilos += ($item->kilo);
+					$piezas += ($item->pieza);
+					$cajas += ($item->caja);
+					$pesada += ($item->pesada);
 				@endphp
             	@endforeach
-				<td><strong>Total pares</strong></td><td><strong>{{ $pares }}</strong></td>
-        	</tr>
+				<td></td>
+				<td></td>
+				<td><strong>{{number_format($cajas,2)}}</strong></td>
+				<td><strong>{{number_format($piezas,2)}}</strong></td>
+				<td><strong>{{number_format($kilos,2)}}</strong></td>
+				<td><strong>{{number_format($pesada,2)}}</strong></td>
+			</tr>
 		</tbody>
 	</table>
     <div class="form-group">

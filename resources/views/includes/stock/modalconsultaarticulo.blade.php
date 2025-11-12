@@ -24,8 +24,8 @@
               <th>ID</th>
               <th>SKU</th>
               <th>Descripción</th>
-              <th>Marca</th>
-              <th>Línea</th>
+              <th>UMD</th>
+              <th>Categoría</th>
               <th>Acci&oacute;n</th>
           </thead>
           <tbody id="datos"></tbody>

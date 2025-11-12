@@ -5,6 +5,9 @@
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/ventas/cliente/consulta.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/stock/articulo/consulta.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/ventas/transporte/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/pedido/crear.js")}}" type="text/javascript"></script>
 
 <script>
@@ -15,34 +18,6 @@
 
 	function sub()
 	{
-        // Validar precio en 0
-        $(".precio").each(function(){
-            precio = $(this).val();
-
-			//if (precio == 0)
-			//{
-			  	//alert("No puede generar pedidos con precio 0");
-				//return false;
-			//}
-        });
-
-   		// Cuenta los articulos para validar cantidad maxima
-        var cantidadArticulo = 0;
-		$("#tbody-tabla .articulo").each(function(index) {
-			cantidadArticulo = cantidadArticulo + 1;
-
-			let articulo = $(this);
-			let combinacion = $(this).parents("tr").find(".combinacion");
-
-			articulo.prop('disabled', false);
-			combinacion.prop('disabled', false);
-		});
-
-        if (cantidadArticulo > 42)
-        {
-            alert("No puede generar pedidos con mas de 42 ítems");
-            return false;
-        }
         $('#formgeneral').submit();
     }
 
@@ -91,9 +66,9 @@
                     <a href="{{route('pedido')}}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
-					<button type="submit" onclick="preparaPreFactura()" class="btn btn-primary">
-                    	<i class="fa fa-fw fa-print"></i>
-						Pre-Factura
+					<button type="submit" onclick="pesada()" class="btn btn-primary">
+                    	<i class="fa fa-fw fa-check"></i>
+						Pesada
 					</button>
                     <button type="submit" onclick="preparaFactura()" class="btn btn-primary">
                     	<i class="fa fa-fw fa-print"></i>
@@ -113,10 +88,6 @@
                     <div class="row">
                         <div class="col-lg-6">
 							<button type="submit" onclick="sub()" class="btn btn-success">Actualizar</button>
-							<button type="submit" onclick="imprimePreFactura()" style="display:none;" id="imprimePreFactura" class="btn btn-success">
-                            	<i class="fa fa-print"></i>
-								Imprime pre-factura
-							</button>
                             <button type="submit" onclick="generaFactura()" style="display:none;" id="generaFactura" class="btn btn-success">
                             	<i class="fa fa-print"></i>
 								Genera factura

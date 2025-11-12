@@ -48,19 +48,21 @@
     					<input type="text" name="urlweb" id="urlweb" class="form-control" value="{{old('urlweb', $data->urlweb ?? '')}}">
     				</div>
     			</div>
-				<div class="form-group row">
-    				<label for="vaweb" class="col-lg-4 col-form-label requerido">Va a web</label>
-					<select name="vaweb" class="col-lg-3 form-control" required>
-    					<option value="">-- Elija si va a web --</option>
-        				@foreach($vaweb_enum as $value => $vaweb)
-        					@if( (int) $value == old('vaweb', $data->vaweb ?? ''))
-        						<option value="{{ $value }}" selected="select">{{ $vaweb }}</option>    
-        					@else
-        						<option value="{{ $value }}">{{ $vaweb }}</option>    
-        					@endif
-        				@endforeach
-					</select>
-				</div>
+				@if (strtoupper(config('app.empresa')) == 'CALZADOS FERLI')
+					<div class="form-group row">
+						<label for="vaweb" class="col-lg-4 col-form-label requerido">Va a web</label>
+						<select name="vaweb" class="col-lg-3 form-control">
+							<option value="">-- Elija si va a web --</option>
+							@foreach($vaweb_enum as $value => $vaweb)
+								@if( (int) $value == old('vaweb', $data->vaweb ?? ''))
+									<option value="{{ $value }}" selected="select">{{ $vaweb }}</option>    
+								@else
+									<option value="{{ $value }}">{{ $vaweb }}</option>    
+								@endif
+							@endforeach
+						</select>
+					</div>
+				@endif
 			</div>
 		</div>
 		<h3>Domicilio</h3>
@@ -100,18 +102,18 @@
         		<div class="col-md-3" id='loc'>
         			<div class="form-group">
         				<label>Localidad</label>
-        				<select name="localidad_id" id='localidad_id' data-placeholder="Localidad" class="form-control" data-fouc>
-        					@if($data->localidad_id ?? '')
-								@if($data->localidad_id == "")
-        							<option selected></option>
-        						@else
-        							<option value="{{old('localidad_id', $data['localidad_id'])}}" selected>{{$data['desc_localidad']}}</option>
-								@endif
-        					@endif
-        				</select>
-        				<input type="hidden" id="localidad_id_previa" name="localidad_id_previa" value="{{old('localidad_id', $data->localidad_id ?? '')}}" >
-        				<input type="hidden" id="desc_localidad" name="desc_localidad" value="{{old('desc_localidad', $data->desc_localidad ?? '')}}" >
-        			</div>
+						<div class="form-group row">
+							<input type="hidden" id="localidad_id_previa" name="localidad_id_previa" value="{{old('localidad_id', $data->localidad_id ?? '')}}" >
+							<input type="hidden" id="desc_localidad" name="desc_localidad" value="{{old('desc_localidad', $data->desc_localidad ?? '')}}" >
+							<input type="hidden" class="col-form-label localidad_id" id="localidad_id" name="localidad_id" value="{{$data->localidad_id ?? ''}}" >
+							<input type="text" class="form-control col-lg-3 codigolocalidad" id="codigolocalidad" name="codigolocalidad" value="{{$data->localidades->codigo ?? ''}}" >
+							<input type="text" class="form-control col-lg-8 nombrelocalidad" id="nombrelocalidad" name="nombrelocalidad" value="{{$data->localidades->nombre ?? ''}}" readonly>
+							<button type="button" title="Consulta localidades" style="padding:1;" class="btn-accion-tabla consultalocalidad tooltipsC">
+								<i class="fa fa-search text-primary"></i>
+							</button>
+							<input type="hidden" name="nombrelocalidad" id="nombrelocalidad" class="form-control" value="{{old('nombrelocalidad', $data->localidades->nombre ?? '')}}">
+						</div>
+					</div>					
         		</div>
         		<div class="col-md-3">
         			<div class="form-group">
@@ -148,7 +150,8 @@
 		<input type="hidden" id="tiposuspensioncliente_query" value="{{$tiposuspensioncliente_query ?? ''}}" >
 		<input type="hidden" name="urlOrigen" value="{{$urlOrigen ?? ''}}" >
 		<input type="hidden" name="idRemoto" value="{{$idRemoto ?? ''}}" >
+		<input type="hidden" id="cliente_id" value="{{$data->id ?? ''}}" >
 </div>
-
+@include('includes.configuracion.modalconsultalocalidad')
 
 

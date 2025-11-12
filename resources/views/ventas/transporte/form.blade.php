@@ -33,6 +33,25 @@
         				@endforeach
         			</select>
         		</div>
+				<div class="form-group row">
+					<label for="tipoexpreso" class="col-lg-3 col-form-label requerido">Tipo de expreso</label>
+					<select name="tipoexpreso" class="col-lg-3 form-control" required>
+						<option value="">-- Elija tipo de expreso --</option>
+						@foreach($tipoexpresoEnum as $value => $tipoexpreso)
+							@if( $value == old('tipoexpreso', $data->tipoexpreso ?? ''))
+								<option value="{{ $value }}" selected="select">{{ $tipoexpreso }}</option>    
+							@else
+								<option value="{{ $value }}">{{ $tipoexpreso }}</option>    
+							@endif
+						@endforeach
+					</select>
+				</div>
+				<div class="form-group row">
+					<label for="copiapedido" class="col-lg-4 col-form-label">Copia Pedido</label>
+					<div class="col-lg-2">
+						<input type="number" name="copiapedido" id="copiapedido" class="form-control" value="{{old('copiapedido', $data->copiapedido ?? '1')}}">
+					</div>
+				</div>
 			</div>
 			<div class="col-sm-6">
 				<div class="form-group row">
@@ -66,6 +85,12 @@
     				<div class="col-lg-8">
     					<input type="text" name="horarioentrega" id="horarioentrega" class="form-control" value="{{old('horarioentrega', $data->horarioentrega ?? '')}}">
     				</div>
+				</div>
+				<div class="form-group row">
+					<label for="copiaremito" class="col-lg-4 col-form-label">Copia Remito</label>
+					<div class="col-lg-2">
+						<input type="number" name="copiaremito" id="copiaremito" class="form-control" value="{{old('copiaremito', $data->copiaremito ?? '1')}}">
+					</div>
 				</div>
 			</div>
 		</div>

@@ -94,6 +94,11 @@ class TransporteRepository implements TransporteRepositoryInterface
         return $transporte;
     }
 
+    public function findPorCodigo($codigo)
+    {
+		return $this->model->where('codigo', $codigo)->first();
+    }
+
     public function sincronizarConAnita(){
 		ini_set('max_execution_time', '300');
 
@@ -118,8 +123,10 @@ class TransporteRepository implements TransporteRepositoryInterface
 
     public function traerRegistroDeAnita($key){
         $apiAnita = new ApiAnita();
+		// Formato El Bierzo
         $data = array( 
             'acc' => 'list', 'tabla' => $this->tableAnita, 
+			'sistema' => 'ventas',
             'campos' => '
 			expr_codigo,
     		expr_nombre,
@@ -131,9 +138,19 @@ class TransporteRepository implements TransporteRepositoryInterface
     		expr_cuit,
     		expr_cond_iva,
     		expr_nro_interno,
-			expr_pat_vehiculo,
-			expr_pag_acoplado,
-			expr_hs_entrega
+			expr_hab_senasa,
+			expr_patente,
+			expr_tipo_expr,
+			expr_copias_remito,
+			expr_nro_ing_bruto,
+			expr_jurisdiccion,
+			expr_cod_loc,
+			expr_cod_depto,
+			expr_copia_pedido,
+			expr_dom_camion,
+			expr_dom_acoplado,
+			expr_cuit_chofer,
+			expr_estab_nro
 			',
             'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
         );
@@ -184,9 +201,12 @@ class TransporteRepository implements TransporteRepositoryInterface
 				"email" => '',
 				"nroinscripcion" => $data->expr_cuit,
 				"condicioniva_id" => $condicioniva_id,
-				"patentevehiculo" => $data->expr_pat_vehiculo,
-				"patenteacoplado" => $data->expr_pag_acoplado,
-				"horarioentrega" => $data->expr_hs_entrega,
+				"patentevehiculo" => $data->expr_dom_camion,
+				"patenteacoplado" => $data->expr_dom_acoplado,
+				"horarioentrega" => ' ',
+				"tipoexpreso" => $data->expr_tipo_expr,
+				"copiaremito" => $data->expr_copias_remito,
+				"copiapedido" => $data->expr_copia_pedido
             	];
 	
         	$transporte = $this->model->create($arr_campos);
@@ -208,11 +228,21 @@ class TransporteRepository implements TransporteRepositoryInterface
     			expr_cod_postal,
     			expr_telefono,
     			expr_cuit,
-    			expr_cond_iva,
-    			expr_nro_interno,
-				expr_pat_vehiculo,
-				expr_pag_acoplado,
-				expr_hs_entrega
+				expr_cond_iva,
+				expr_nro_interno,
+				expr_hab_senasa,
+				expr_patente,
+				expr_tipo_expr,
+				expr_copias_remito,
+				expr_nro_ing_bruto,
+				expr_jurisdiccion,
+				expr_cod_loc,
+				expr_cod_depto,
+				expr_copia_pedido,
+				expr_dom_camion,
+				expr_dom_acoplado,
+				expr_cuit_chofer,
+				expr_estab_nro				
 				',
             'valores' => " 
 				'".$request['codigo']."', 
@@ -225,9 +255,19 @@ class TransporteRepository implements TransporteRepositoryInterface
 				'".$request['nroinscripcion']."',
 				'".$condicioniva_id."',
 				'0',
+				' ',
+				' ',
+				'".$request['tipoexpreso']."',
+				'".$request['copiaremito']."',
+				' ',
+				' ',
+				' ',
+				' ',
+				'".$request['copiapedido']."',
 				'".$request['patentevehiculo']."',
 				'".$request['patenteacoplado']."',
-				'".$request['horarioentrega']."' "
+				' ',
+				' '"
         );
         $apiAnita->apiCall($data);
 	}
@@ -237,7 +277,7 @@ class TransporteRepository implements TransporteRepositoryInterface
 
 		$this->setCondicionIvaAnita($request, $condicioniva);
 
-		$data = array( 'acc' => 'update', 'tabla' => $this->tableAnita, 
+		$data = array( 'acc' => 'update', 'sistema' => 'ventas', 'tabla' => $this->tableAnita, 
 				'valores' => " 
                 expr_codigo 	                = '".$request['codigo']."',
                 expr_nombre 	                = '".$request['nombre']."',
@@ -248,9 +288,11 @@ class TransporteRepository implements TransporteRepositoryInterface
                 expr_telefono 	                = '".$request['telefono']."',
                 expr_cuit 	                    = '".$request['nroinscripcion']."',
                 expr_cond_iva 	                = '".$condicioniva."',
-                expr_pat_vehiculo 	            = '".$request['patentevehiculo']."',
-                expr_pag_acoplado 	            = '".$request['patenteacoplado']."',
-                expr_hs_entrega	                = '".$request['horarioentrega']."' "
+                expr_dom_camion 	            = '".$request['patentevehiculo']."',
+                expr_dom_acoplado 	            = '".$request['patenteacoplado']."',
+				expr_copias_remito              = '".$request['copiaremito']."',
+				expr_copias_pedido              = '".$request['copiapedido']."',
+                expr_tipo_expr	                = '".$request['tipoexpreso']."' "
 					,
 				'whereArmado' => " WHERE expr_codigo = '".$id."' " );
         $apiAnita->apiCall($data);
@@ -258,7 +300,7 @@ class TransporteRepository implements TransporteRepositoryInterface
 
 	public function eliminarAnita($id) {
         $apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita, 
+        $data = array( 'acc' => 'delete', 'sistema' => 'ventas', 'tabla' => $this->tableAnita, 
 				'whereArmado' => " WHERE expr_codigo = '".$id."' " );
         $apiAnita->apiCall($data);
 	}
@@ -300,4 +342,52 @@ class TransporteRepository implements TransporteRepositoryInterface
 		}
 	}
 	
+    public function leeTransporte($consulta)
+    {
+		$columns = ['transporte.id', 'transporte.nombre', 'transporte.codigo', 'transporte.domicilio', 'localidad.nombre', 'provincia.nombre', 'transporte.telefono'];
+        $columnsOut = ['id', 'nombre', 'codigo', 'domicilio', 'nombrelocalidad', 'nombreprovincia', 'telefono'];
+
+		$consulta = strtoupper($consulta);
+
+		$count = count($columns);
+		$data = $this->model->select('transporte.id as id',
+									'transporte.nombre as nombre',
+									'transporte.codigo as codigo',
+									'transporte.domicilio as domicilio',
+									'localidad.nombre as nombrelocalidad',
+									'provincia.nombre as nombreprovincia',
+									'transporte.telefono as telefono')
+							->leftJoin('localidad', 'localidad.id', 'transporte.localidad_id')
+							->leftJoin('provincia', 'provincia.id', 'transporte.provincia_id')
+							->orWhere(function ($query) use ($count, $consulta, $columns) {
+                        			for ($i = 0; $i < $count; $i++)
+                            			$query->orWhere($columns[$i], "LIKE", '%'. $consulta . '%');
+                })	
+				->get();								
+
+        $output = [];
+		$output['data'] = '';	
+        $flSinDatos = true;
+        $count = count($columns);
+		if (count($data) > 0)
+		{
+			foreach ($data as $row)
+			{
+                $flSinDatos = false;
+                $output['data'] .= '<tr>';
+                for ($i = 0; $i < $count; $i++)
+                    $output['data'] .= '<td class="'.$columnsOut[$i].'">' . $row->{$columnsOut[$i]} . '</td>';	
+                $output['data'] .= '<td><a class="btn btn-warning btn-sm eligeconsultatransporte">Elegir</a></td>';
+                $output['data'] .= '</tr>';
+			}
+		}
+
+        if ($flSinDatos)
+		{
+			$output['data'] .= '<tr>';
+			$output['data'] .= '<td>Sin resultados</td>';
+			$output['data'] .= '</tr>';
+		}
+		return(json_encode($output, JSON_UNESCAPED_UNICODE));
+    }	
 }

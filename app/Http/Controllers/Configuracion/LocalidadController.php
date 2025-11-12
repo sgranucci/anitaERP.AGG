@@ -47,7 +47,6 @@ class LocalidadController extends Controller
 
         return view('configuracion.localidad.index', $datas);
     }
-    
 
 	public function leerLocalidades($id)
     {
@@ -191,4 +190,14 @@ class LocalidadController extends Controller
             abort(404);
         }
     }
+
+    public function consultaLocalidad(Request $request)
+    {
+        return ($this->localidadRepository->consultaLocalidad($request->consulta, $request->provincia_id));
+	}
+
+    public function leeUnaLocalidad($codigoLocalidad)
+    {
+        return ($this->localidadRepository->findPorCodigo($codigoLocalidad));
+	}    
 }

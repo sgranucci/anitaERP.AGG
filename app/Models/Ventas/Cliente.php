@@ -18,26 +18,46 @@ use App\Models\Ventas\Subzonavta;
 use App\Models\Ventas\Vendedor;
 use App\Models\Ventas\Condicionventa;
 use App\Models\Configuracion\Condicioniva;
+use App\Models\Configuracion\Tipodocumento;
 use App\Models\Stock\Listaprecio;
 use App\Models\Ventas\Tiposuspensioncliente;
 use App\Traits\Ventas\ClienteTrait;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Cliente extends Model
+class Cliente extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
 	use SoftDeletes;
 	use ClienteTrait;
 
     protected $fillable = ['nombre','codigo','contacto','fantasia','email','telefono','urlweb','domicilio','localidad_id',
-							'provincia_id','pais_id','zonavta_id','subzonavta_id','vendedor_id','nroinscripcion','condicioniva_id',
+							'provincia_id','pais_id','zonavta_id','subzonavta_id','vendedor_id','numerodocumento','condicioniva_id',
 							'retieneiva','nroiibb','condicioniibb','condicionventa_id','listaprecio_id','cuentacontable_id','vaweb',
 							'estado','usuario_id','codigopostal','transporte_id','descuento','leyenda','tiposuspension_id',
-                            'tipoalta','modofacturacion', 'cajaespecial'];
+                            'tipoalta','modofacturacion', 'cajaespecial',
+                            // El Bierzo
+                            'abasto_id', 'coeficiente_id', 'porcentajelogistica', 'emitecertificado', 'emitenotadecredito',
+                            'coeficienteextra', 'agregabonificacion', 'desdefecha_exclusionpercepcioniva',
+                            'hastafecha_exclusionpercepcioniva', 'distribuidor_id', 'descuentoventa_id', 'tipodocumento_id',
+                            'lugarentrega'
+                        ];
+
     protected $table = 'cliente';
 	protected $dates = ['deleted_at'];
 
 	public function cliente_entregas()
 	{
     	return $this->hasMany(Cliente_Entrega::class, 'cliente_id')->with('localidades')->with('provincias')->with('transportes');
+	}
+
+	public function cliente_seguimientos()
+	{
+    	return $this->hasMany(Cliente_Seguimiento::class, 'cliente_id');
+	}
+
+    public function cliente_articulo_suspendidos()
+	{
+    	return $this->hasMany(Cliente_Articulo_Suspendido::class, 'cliente_id');
 	}
 
 	public function cliente_archivos()
@@ -103,6 +123,31 @@ class Cliente extends Model
     public function transportes()
     {
         return $this->belongsTo(Transporte::class, 'transporte_id');
+    }
+
+    public function abastos()
+    {
+        return $this->belongsTo(Abasto::class, 'abasto_id');
+    }
+
+    public function coeficientes()
+    {
+        return $this->belongsTo(Coeficiente::class, 'coeficiente_id');
+    }
+
+    public function distribuidores()
+    {
+        return $this->belongsTo(Distribuidor::class, 'distribuidor_id');
+    }
+
+    public function descuentoventas()
+    {
+        return $this->belongsTo(Descuentoventa::class, 'descuentoventa_id');
+    }
+
+    public function tipodocumentos()
+    {
+        return $this->belongsTo(Tipodocumento::class, 'tipodocumento_id');
     }
 
     public function usuarios()

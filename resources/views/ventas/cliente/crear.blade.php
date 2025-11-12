@@ -15,6 +15,8 @@ input:invalid {
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/domicilio.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/cliente/domicilioentrega.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/stock/articulo/consulta.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/configuracion/localidad/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/cliente/crear.js")}}" type="text/javascript"></script>
 <script>
 $( "#botonform0" ).click(function() {
@@ -49,12 +51,37 @@ $( "#botonform0" ).click(function() {
                 <form action="{{route('guardar_cliente')}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
             @endif
                 @csrf
+                <div align="center" style="margin: 5px;">
+                    <button type="button" id="botonform1" class="btn btn-primary btn-sm">
+                        <i class="fa fa-user"></i> Datos principales
+                    </button>
+                    <button type="button" id="botonform2" class="btn btn-info btn-sm">
+                        <span class="fa fa-copy"></span> Datos facturaci&oacute;n
+                    </button>
+                    <button type="button" id="botonform3" class="btn btn-info btn-sm">
+                        <span class="fa fa-copy"></span> Lugares de entrega
+                    </button>
+                    <button type="button" id="botonform4" class="btn btn-info btn-sm">
+                        <span class="fa fa-copy"></span> Leyendas
+                    </button>
+                    <button type="button" id="botonform5" class="btn btn-info btn-sm">
+                        <span class="fa fa-copy"></span> Archivos asociados
+                    </button>
+                    <button type="button" id="botonform6" class="btn btn-info btn-sm">
+                        <span class="fa fa-copy"></span> Seguimiento
+                    </button>                    
+                    <button type="button" id="botonform7" class="btn btn-info btn-sm">
+                        <span class="fa fa-copy"></span> Articulos suspendidos
+                    </button>
+                </div>                
                 <div class="card-body" style="padding-bottom: 0; padding-top: 5px;">
                     @include('ventas.cliente.form1')
                     @include('ventas.cliente.form2')
                     @include('ventas.cliente.form3')
                     @include('ventas.cliente.form4')
                     @include('ventas.cliente.form5')
+                    @include('ventas.cliente.form6')
+                    @include('ventas.cliente.form7')
                 </div>
                 <div class="card-footer">
                 	<div class="row">
@@ -63,23 +90,6 @@ $( "#botonform0" ).click(function() {
 						   	<i class="fa fa-save"></i> Guardar
 							</button>
                     	</div>
-            			<div class="col-lg-8" align="right">
-							<button type="button" id="botonform1" class="btn btn-primary btn-sm">
-						   	<i class="fa fa-user"></i> Datos principales
-							</button>
-							<button type="button" id="botonform2" class="btn btn-info btn-sm">
-         						<span class="fa fa-cash-register"></span> Datos facturac&oacute;n
-      						</button>
-							<button type="button" id="botonform3" class="btn btn-info btn-sm">
-         						<span class="fa fa-truck"></span> Lugares de entrega
-      						</button>
-							<button type="button" id="botonform4" class="btn btn-info btn-sm">
-         						<span class="fa fa-comment"></span> Leyendas
-      						</button>
-							<button type="button" id="botonform5" class="btn btn-info btn-sm">
-         						<span class="fa fa-copy"></span> Archivos asociados
-      						</button>
-            			</div>
             		</div>
             	</div>
             </form>

@@ -18,7 +18,7 @@ class Depmae extends Model
 
     public function sincronizarConAnita(){
         $apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'list', 'campos' => $this->keyField, 'tabla' => $this->table );
+        $data = array( 'acc' => 'list', 'sistmea' => 'ventas', 'campos' => $this->keyField, 'tabla' => $this->table );
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
         $datosLocal = Depmae::all();
@@ -34,24 +34,44 @@ class Depmae extends Model
         }
     }
 
-    public function traerRegistroDeAnita($key){
+	public function traerRegistroDeAnita($key)
+	{
         $apiAnita = new ApiAnita();
-        $data = array( 
-            'acc' => 'list', 'tabla' => $this->table, 
-            'campos' => '
-                depm_deposito,
-                depm_desc,
-                depm_tipo_deposito
-            ' , 
-            'whereArmado' => " WHERE ".$this->keyField." = '".$key."' " 
-        );
+		if (config('app.empresa') == 'Calzados Ferli' ||
+	    	config('app.empresa') == 'EL BIERZO')
+        	$data = array( 
+            	'acc' => 'list', 'tabla' => $this->table, 
+            	'campos' => '
+                	depm_deposito,
+                	depm_desc,
+					depm_maneja_part,
+					depm_cta_contable
+            	' , 
+            	'whereArmado' => " WHERE ".$this->keyField." = '".$key."' " 
+        	);
+		else
+        	$data = array( 
+            	'acc' => 'list', 'tabla' => $this->table, 
+            	'campos' => '
+                	depm_deposito,
+                	depm_desc,
+					depm_maneja_part,
+					depm_tipo_deposito
+            	' , 
+            	'whereArmado' => " WHERE ".$this->keyField." = '".$key."' " 
+        	);
+
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
-        if (count($dataAnita) > 0) {
+		if (count($dataAnita) > 0) 
+		{
             $data = $dataAnita[0];
 
-            $tipoDeposito = array_search($data->depm_tipo_deposito, 
-                array_column(Depmae::$enumTipoDeposito, 'valor', 'nombre'));
+			if (config('app.empresa') == 'AGG')
+            	$tipoDeposito = array_search($data->depm_tipo_deposito, 
+                	array_column(Depmae::$enumTipoDeposito, 'valor', 'nombre'));
+	   		else 
+	    		$tipoDeposito = 'N';
 
             Depmae::create([
                 "nombre" => $data->depm_desc,
@@ -64,7 +84,8 @@ class Depmae extends Model
 	public function guardarAnita($request, $id) {
         $apiAnita = new ApiAnita();
 
-        if (config('app.empresa') == 'Calzados Ferli')
+	if (config('app.empresa') == 'Calzados Ferli' ||
+	    config('app.empresa') == 'EL BIERZO')
             $data = array( 'tabla' => 'depmae', 'acc' => 'insert',
                 'campos' => ' depm_deposito, depm_desc, depm_maneja_part, depm_cta_contable ',
                 'valores' => " '".$id."', '".$request->nombre."', 'S', 0"
@@ -85,7 +106,8 @@ class Depmae extends Model
 	public function actualizarAnita($request, $id) {
         $apiAnita = new ApiAnita();
 
-        if (config('app.empresa') == 'Calzados Ferli')
+        if (config('app.empresa') == 'Calzados Ferli' ||
+	    	config('app.empresa') == 'EL BIERZO')
             $data = array( 'acc' => 'update', 'tabla' => 'depmae', 'valores' => " depm_desc = '".
                         $request->nombre."' ", 'whereArmado' => " WHERE depm_deposito = '".$id."' " );
         else
@@ -103,7 +125,8 @@ class Depmae extends Model
 
 	public function eliminarAnita($id) {
         $apiAnita = new ApiAnita();
-        if (config('app.empresa') == 'Calzados Ferli')
+        if (config('app.empresa') == 'Calzados Ferli' ||
+	    	config('app.empresa') == 'EL BIERZO')
             $data = array( 'acc' => 'delete', 'tabla' => 'depmae', 'whereArmado' => " WHERE depm_deposito = '".$id."' " );
         else
             $data = array( 'acc' => 'delete', 'tabla' => 'depmae', 'whereArmado' => " WHERE depm_deposito = '".$id."' " );

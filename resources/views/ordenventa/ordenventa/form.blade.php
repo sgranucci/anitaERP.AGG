@@ -10,7 +10,7 @@
             </div>
             <div class="form-group row">
                 <label for="empresa" class="col-lg-3 col-form-label">Empresa</label>
-                <select name="empresa_id" id="empresa_id" data-placeholder="Sala" class="col-lg-7 form-control required" data-fouc required>
+                <select name="empresa_id" id="empresa_id" data-placeholder="Empresa" class="col-lg-7 form-control required" data-fouc required>
                     @foreach($empresa_query as $key => $value)
                         @if( (int) $value->id == (int) old('empresa_id', $data->empresa_id ?? ''))
                             <option value="{{ $value->id }}" selected="select">{{ $value->id }} {{ $value->nombre }}</option>    

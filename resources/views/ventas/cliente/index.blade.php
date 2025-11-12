@@ -41,7 +41,7 @@ Clientes
                         <tr>
                             <th class="width10">ID</th>
                             <th>Nombre</th>
-                            <th>Nombre de Fantas&iacute;a</th>
+                            <th>Reparto</th>
                             <th>C.U.I.T.</th>
                             <th>Domicilio</th>
                             <th>Localidad</th>
@@ -59,8 +59,8 @@ Clientes
 							@endif
                             <td>{{$data->id}}</td>
                             <td>{{$data->nombre}}</td>
-                            <td>{{$data->fantasia}}</td>
-                            <td><small>{{$data->nroinscripcion}}</small></td>
+                            <td>{{$data->ctransporte}}-{{$data->nombretransporte}}</td>
+                            <td><small>{{$data->numerodocumento}}</small></td>
                             <td><small>{{$data->domicilio}}</small></td>
                             <td><small>{{$data->nombrelocalidad ?? ''}}</small></td>
                             <td><small>{{$data->nombreprovincia ?? ''}}</small></td>
@@ -72,12 +72,12 @@ Clientes
                                 	</a>
 								@endif
                        			@if (can('borrar-clientes', false))
-                                <form action="{{route('eliminar_cliente', ['id' => $data->id])}}" class="d-inline form-eliminar" method="POST">
-                                    @csrf @method("delete")
-                                    <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">
-                                        <i class="fa fa-times-circle text-danger"></i>
-                                    </button>
-                                </form>
+                                    <form action="{{route('eliminar_cliente', ['id' => $data->id])}}" class="d-inline form-eliminar" method="POST">
+                                        @csrf @method("delete")
+                                        <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">
+                                            <i class="fa fa-times-circle text-danger"></i>
+                                        </button>
+                                    </form>
 								@endif
                             </td>
                         </tr>

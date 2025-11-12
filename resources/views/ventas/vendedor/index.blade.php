@@ -30,8 +30,14 @@ Vendedores
                         <tr>
                             <th class="width20">ID</th>
                             <th>Nombre</th>
-                            <th>Comisi&oacute;n venta</th>
-                            <th>Comisi&oacute;n cobranza</th>
+                            <th>Comis.venta</th>
+                            <th>Comis.cobranza</th>
+                            <th>Aplica sobre</th>
+                            <th>Email</th>
+                            <th>Empresa</th>
+                            <th>Legajo</th>
+                            <th>Código Anita</th>
+                            <th>Estado</th>
                             <th class="width80" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -42,6 +48,12 @@ Vendedores
                             <td>{{$data->nombre}}</td>
                             <td>{{$data->comisionventa}}</td>
                             <td>{{$data->comisioncobranza}}</td>
+                            <td>{{$data->aplicasobre}}</td>
+                            <td>{{$data->email}}</td>
+                            <td>{{$data->empresas->nombre??''}}</td>
+                            <td>{{$data->legajo_id}}</td>
+                            <td>{{$data->codigo}}</td>
+                            <td>{{$data->estado}}</td>
                             <td>
                        			@if (can('editar-vendedores', false))
                                 	<a href="{{route('editar_vendedor', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">

@@ -155,6 +155,11 @@ class AppServiceProvider extends ServiceProvider
     	);
 
 	    $this->app->bind(
+        	'App\Repositories\Stock\ArticuloRepositoryInterface',
+        	'App\Repositories\Stock\ArticuloRepository',
+    	);
+				
+	    $this->app->bind(
         	'App\Repositories\Stock\Articulo_CajaRepositoryInterface',
         	'App\Repositories\Stock\Articulo_CajaRepository',
     	);
@@ -519,8 +524,23 @@ class AppServiceProvider extends ServiceProvider
     	);
 
 	    $this->app->bind(
+        	'App\Repositories\Ventas\Pedido_ArticuloRepositoryInterface',
+        	'App\Repositories\Ventas\Pedido_ArticuloRepository',
+    	);
+
+	    $this->app->bind(
+        	'App\Repositories\Ventas\Pedido_Articulo_CajaRepositoryInterface',
+        	'App\Repositories\Ventas\Pedido_Articulo_CajaRepository',
+    	);
+
+	    $this->app->bind(
         	'App\Repositories\Ventas\Pedido_Combinacion_EstadoRepositoryInterface',
         	'App\Repositories\Ventas\Pedido_Combinacion_EstadoRepository',
+    	);
+
+	    $this->app->bind(
+        	'App\Repositories\Ventas\Pedido_Articulo_EstadoRepositoryInterface',
+        	'App\Repositories\Ventas\Pedido_Articulo_EstadoRepository',
     	);
 
 	    $this->app->bind(
@@ -536,6 +556,11 @@ class AppServiceProvider extends ServiceProvider
 	    $this->app->bind(
         	'App\Queries\Ventas\Pedido_CombinacionQueryInterface',
         	'App\Queries\Ventas\Pedido_CombinacionQuery',
+    	);
+
+	    $this->app->bind(
+        	'App\Queries\Ventas\Pedido_ArticuloQueryInterface',
+        	'App\Queries\Ventas\Pedido_ArticuloQuery',
     	);
 
 		$this->app->bind(
@@ -575,6 +600,26 @@ class AppServiceProvider extends ServiceProvider
 		$this->app->bind(
         	'App\Repositories\Configuracion\ImpuestoRepositoryInterface',
         	'App\Repositories\Configuracion\ImpuestoRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Configuracion\Padron_MipymeRepositoryInterface',
+        	'App\Repositories\Configuracion\Padron_MipymeRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Configuracion\Padron_ExclusionpercepcionivaRepositoryInterface',
+        	'App\Repositories\Configuracion\Padron_ExclusionpercepcionivaRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Configuracion\Provincia_TasaiibbRepositoryInterface',
+        	'App\Repositories\Configuracion\Provincia_TasaiibbRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Configuracion\Provincia_CuentacontableiibbRepositoryInterface',
+        	'App\Repositories\Configuracion\Provincia_CuentacontableiibbRepository',
     	);
 
 	    $this->app->bind(
@@ -943,6 +988,64 @@ class AppServiceProvider extends ServiceProvider
         	'App\Queries\Ordenventa\OrdenventaQueryInterface',
         	'App\Queries\Ordenventa\OrdenventaQuery',
     	);		
-			
+	
+		// Bierzo
+
+		$this->app->bind(
+        	'App\Repositories\Ventas\AbastoRepositoryInterface',
+        	'App\Repositories\Ventas\AbastoRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Ventas\CoeficienteRepositoryInterface',
+        	'App\Repositories\Ventas\CoeficienteRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Ventas\Cliente_SeguimientoRepositoryInterface',
+        	'App\Repositories\Ventas\Cliente_SeguimientoRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Ventas\Cliente_Articulo_SuspendidoRepositoryInterface',
+        	'App\Repositories\Ventas\Cliente_Articulo_SuspendidoRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Ventas\DistribuidorRepositoryInterface',
+        	'App\Repositories\Ventas\DistribuidorRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Ventas\DescuentoventaRepositoryInterface',
+        	'App\Repositories\Ventas\DescuentoventaRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Stock\EnvasesenasaRepositoryInterface',
+        	'App\Repositories\Stock\EnvasesenasaRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Stock\CodigosenasaRepositoryInterface',
+        	'App\Repositories\Stock\CodigosenasaRepository',
+    	);		
+
+		// Produccion
+
+		$this->app->bind(
+        	'App\Repositories\Produccion\TipoproduccionRepositoryInterface',
+        	'App\Repositories\Produccion\TipoproduccionRepository',
+    	);	
+		
+		$this->app->bind(
+        	'App\Repositories\Produccion\SectorselladoRepositoryInterface',
+        	'App\Repositories\Produccion\SectorselladoRepository',
+    	);				
+
+		$this->app->bind(
+        	'App\Repositories\Produccion\SalaproduccionRepositoryInterface',
+        	'App\Repositories\Produccion\SalaproduccionRepository',
+    	);				
     }
 }

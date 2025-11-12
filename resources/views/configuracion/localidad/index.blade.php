@@ -44,6 +44,7 @@ Localidades
                             <th>Código Postal</th>
                             <th>Código Anita</th>
                             <th>Provincia</th>
+                            <th>Código SENASA</th>
                             <th class="width80" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -55,6 +56,7 @@ Localidades
                             <td>{{$data->codigopostal}}</td>
                             <td>{{$data->codigo}}</td>
                             <td>{{$data->nombreprovincia??''}}</td>
+                            <td>{{$data->codigosenasa}}</td>
                             <td>
                        			@if (can('editar-localidades', false))
                                 	<a href="{{route('editar_localidad', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">

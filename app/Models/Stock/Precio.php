@@ -40,10 +40,12 @@ class Precio extends Model
     }
 
     public function sincronizarConAnita(){
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
         $apiAnita = new ApiAnita();
         $data = array( 
             'acc' => 'list', 'tabla' => $this->tableAnita, 
-            'whereArmado' => " WHERE stkp_lista in (1,2,3,5) ",
             'campos' => '
                 stkp_articulo,
                 stkp_lista,

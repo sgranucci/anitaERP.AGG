@@ -1,5 +1,11 @@
 <div class="card form3" style="display: none">
     <div class="card-body">
+		<div class="form-group row">
+			<label for="lugarentrega" class="col-lg-3 col-form-label">Lugar de Entrega</label>
+			<div class="col-lg-6">
+				<input type="text" name="lugarentrega" id="lugarentrega" class="form-control" value="{{old('lugarentrega', $data->lugarentrega ?? '')}}"/>
+			</div>
+		</div>
     	<table class="table" id="cuotas-table">
     		<thead>
     			<tr>

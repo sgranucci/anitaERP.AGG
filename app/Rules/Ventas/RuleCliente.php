@@ -34,8 +34,11 @@ class RuleCliente implements Rule
 		$cc = true;
 		switch($this->campo)
 		{
-		case 'nroinscripcion':
+		case 'numerodocumento':
 			$cc = $this->ValidacionCuit($value);
+
+			if (!$cc && (strlen($value) != 11 && strlen($value) != 13))
+				$cc = true;
 			break;
 		case 'retieneiva':
 			$cc = Arr::has(Cliente::$enumRetieneiva, $value);
@@ -43,7 +46,7 @@ class RuleCliente implements Rule
 		case 'condicioniibb':
 			$cc = Arr::has(Cliente::$enumCondicioniibb, $value);
 			break;
-    }
+    	}
 		return($cc);
     }
 

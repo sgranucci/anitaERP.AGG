@@ -24,37 +24,85 @@ class PedidoQuery implements PedidoQueryInterface
 
     public function allPedidoIndex($cliente_id, $opcion)
     {
-        ini_set('memory_limit', '512M');
-        ini_set('max_execution_time', '2400');
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
 
         $pedidos = $this->model->with('clientes:id,nombre')->with('mventas:id,nombre')
                                 ->orderBy('id','desc')
                                 ->with('pedido_combinaciones')
+                                ->with('pedido_articulos')
                                 ->get();
         return $pedidos;
     }
     
-    public function allPedidoIndexPaginando($busqueda)
+    public function allPedidoIndexPaginando($busqueda, $estado, $reparto, $fechaentrega)
     {
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
         $pedidos = $this->model->select('pedido.id as id',
                                 'pedido.fecha as fecha',
+                                'pedido.fechaentrega as fechaentrega',
                                 'cliente.nombre as nombrecliente',
                                 'pedido.codigo as codigo',
-                                'pedido.estadopedido as estado')
+                                'pedido.estadopedido as estado',
+                                'pedido.transporte_id as transporte_id',
+                                'transporte.nombre as nombretransporte',
+                                'transporte.codigo as codigotransporte')
                                 ->join('cliente', 'cliente.id', '=', 'pedido.cliente_id')
-                                ->with('pedido_combinaciones')
-                                ->where('cliente.nombre', 'like', '%'.$busqueda.'%')
-                                ->orwhere('pedido.fecha', $busqueda)
-                                ->orwhere('pedido.id', $busqueda)
-                                ->orWhere('pedido.estadopedido', 'like', '%'.$busqueda.'%')
-                                ->orWhereHas('mventas', function ($query) use ($busqueda) {
-                                    $query->where('nombre', 'like', '%'.$busqueda.'%');
-                                })
-                                ->orderBy('id','desc') 
-                                ->paginate(10);
+                                ->join('transporte', 'transporte.id', 'pedido.transporte_id')
+                                ->with('pedido_articulos');
+
+        if ($estado != '')
+        {
+            $pedidos = $pedidos->where('pedido.estado', $estado);
+        }
+
+        if (isset($reparto[0]) && $reparto[0] != '')
+        {
+            // Verifica si vienen rangos o repartos en particular (/ o ,;)
+            if (specialChars($reparto[0], '/'))
+            {
+                $repartos = explode("/", $reparto[0]);
+
+                $pedidos = $pedidos->whereBetween('transporte.codigo', $repartos);
+            }
+            else if (specialChars($reparto[0], ',;'))
+            {
+                $repartos = explode(",", $reparto[0]);
+
+                if (count($repartos) == 0)
+                    $repartos = explode(";", $reparto[0]);
+
+                $pedidos = $pedidos->whereIn('transporte.codigo', $repartos);
+            }
+            else
+                $pedidos = $pedidos->where('transporte.codigo', $reparto[0]);
+        }
+
+        if ($fechaentrega != '')
+        {
+            if (gettype($fechaentrega) != 'string')
+                $pedidos = $pedidos->where('pedido.fechaentrega', '>=', $fechaentrega->format('Y-m-d'));
+            else
+            {
+                $fechasEntrega = explode("/", $fechaentrega);
+                $pedidos = $pedidos->whereBetween('pedido.fechaentrega', $fechasEntrega);
+            }
+        }
+
+        $pedidos = $pedidos->where(function ($query) use ($busqueda) {
+                            $query->orwhere('cliente.nombre', 'like', '%'.$busqueda.'%')
+                                    ->orwhere('pedido.fecha', $busqueda)
+                                    ->orwhere('pedido.id', $busqueda)
+                                    ->orWhere('pedido.estado', 'like', '%'.$busqueda.'%')
+                                    ->orWhere('transporte.nombre', 'like', '%'.$busqueda.'%');
+                            });
+
+
+        $pedidos = $pedidos->orderBy('id','desc')
+                ->paginate(10);
+
         return $pedidos;
     }
 
@@ -85,9 +133,9 @@ class PedidoQuery implements PedidoQueryInterface
     public function allPendiente($cliente_id = null)
     {
 		if ($cliente_id)
-			$mod = $this->model->with('clientes:id,nombre')->with('mventas:id,nombre')->with('transportes:id,nombre')->with('pedido_combinaciones')->where('estado','0')->where('cliente_id',$cliente_id)->get();
+			$mod = $this->model->with('clientes:id,nombre')->with('mventas:id,nombre')->with('transportes:id,nombre')->with('pedido_combinaciones')->where('estado','P')->where('cliente_id',$cliente_id)->get();
 		else
-			$mod = $this->model->with('clientes:id,nombre')->with('mventas:id,nombre')->with('transportes:id,nombre')->with('pedido_combinaciones')->where('estado','0')->get();
+			$mod = $this->model->with('clientes:id,nombre')->with('mventas:id,nombre')->with('transportes:id,nombre')->with('pedido_combinaciones')->where('estado','P')->get();
 
 		return $mod;
     }
@@ -110,9 +158,9 @@ class PedidoQuery implements PedidoQueryInterface
 
     public function leePedidoporId($id)
     {
-      $mod = $this->model->with('clientes:id,nombre')->with('mventas:id,nombre')->with('transportes:id,nombre')->with('pedido_combinaciones')->where('estado','0')->where('id',$id)->get();
+        $mod = $this->model->with('clientes:id,nombre')->with('mventas:id,nombre')->with('transportes:id,nombre')->with('pedido_articulos')->where('id',$id)->get();
 
-      return $mod;
+        return $mod;
     }
 
     public function first()

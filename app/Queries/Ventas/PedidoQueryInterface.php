@@ -8,7 +8,7 @@ interface PedidoQueryInterface
     public function first();
     public function allPendiente($cliente_id = null);
     public function allPedidoIndex($cliente_id, $estado);
-    public function allPedidoIndexPaginando($busqueda);
+    public function allPedidoIndexPaginando($busqueda, $estado, $reparto, $fechaentrega);
     public function allPedidoIndexSinPaginar($busqueda);
     public function allPendienteOt($articulo_id, $combinacion_id);
     public function leePedidoporCodigo($codigo);

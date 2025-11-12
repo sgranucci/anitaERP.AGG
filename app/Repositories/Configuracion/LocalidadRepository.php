@@ -105,7 +105,8 @@ class LocalidadRepository implements LocalidadRepositoryInterface
                                         'localidad.nombre as nombre',
 										'localidad.codigopostal as codigopostal',
                                         'provincia.nombre as nombreprovincia',
-										'localidad.codigo as codigo')
+										'localidad.codigo as codigo',
+                                        'localidad.codigosenasa as codigosenasa')
                                 ->join('provincia', 'provincia.id', '=', 'localidad.provincia_id')
                                 ->where('localidad.id', $busqueda)
                                 ->orWhere('localidad.nombre', 'like', '%'.$busqueda.'%')
@@ -125,6 +126,61 @@ class LocalidadRepository implements LocalidadRepositoryInterface
             $localidad = $localidad->get();
 
         return $localidad;
+    }
+
+    public function consultaLocalidad($consulta, $provincia_id)
+    {
+        ini_set('max_execution_time', '300');
+	  	ini_set('memory_limit', '512M');
+
+		$columns = ['localidad.id', 'localidad.nombre', 'localidad.codigopostal', 'localidad.codigo', 'localidad.provincia_id', 'provincia.nombre', 'localidad.codigosenasa'];
+        $columnsOut = ['id', 'nombre', 'codigopostal', 'codigo', 'provincia_id', 'nombreprovincia', 'codigosenasa'];
+
+		$consulta = strtoupper($consulta);
+
+		$count = count($columns);
+		$data = $this->model->select('localidad.id as id',
+									'localidad.nombre as nombre',
+									'localidad.codigopostal as codigopostal',
+									'localidad.codigo as codigo',
+									'localidad.provincia_id as provincia_id',
+                                    'provincia.nombre as nombreprovincia', 
+                                    'localidad.codigosenasa as codigosenasa')
+                            ->join('provincia', 'provincia.id', 'localidad.provincia_id')
+                            ->where('localidad.provincia_id', $provincia_id)
+							->where(function ($query) use ($count, $consulta, $columns) {
+                        			for ($i = 0; $i < $count; $i++)
+                                    {
+                                        if ($columns[$i] != 'provincia.nombre')
+                            			    $query->orWhere($columns[$i], "LIKE", '%'. $consulta . '%');
+                                    }
+                })	
+				->get();								
+
+        $output = [];
+		$output['data'] = '';	
+        $flSinDatos = true;
+        $count = count($columns);
+		if (count($data) > 0)
+		{
+			foreach ($data as $row)
+			{
+                $flSinDatos = false;
+                $output['data'] .= '<tr>';
+                for ($i = 0; $i < $count; $i++)
+                    $output['data'] .= '<td class="'.$columnsOut[$i].'">' . $row->{$columnsOut[$i]} . '</td>';	
+                $output['data'] .= '<td><a class="btn btn-warning btn-sm eligeconsultalocalidad">Elegir</a></td>';
+                $output['data'] .= '</tr>';
+			}
+		}
+
+        if ($flSinDatos)
+		{
+			$output['data'] .= '<tr>';
+			$output['data'] .= '<td>Sin resultados</td>';
+			$output['data'] .= '</tr>';
+		}
+		return(json_encode($output, JSON_UNESCAPED_UNICODE));
     }
 
 }
