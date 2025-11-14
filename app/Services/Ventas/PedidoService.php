@@ -584,7 +584,7 @@ class PedidoService
 				}
 				else
 				{
-					$pedido_articulo_caja = $this->pedido_articulo_cajaRepository->borraPorPedidoId('pedido_id', $id);
+					$pedido_articulo_caja = $this->pedido_articulo_cajaRepository->deletePorPedidoId('pedido_id', $id);
 				}
 			}
 

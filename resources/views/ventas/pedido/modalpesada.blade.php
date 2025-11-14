@@ -29,6 +29,7 @@
 					</tr>
 				</thead>
 				<tbody id="tbody-tabla-pesada">     
+					@if (isset($pedido))
 			 		@if (count($pedido->pedido_articulo_cajas) > 0) 
 						@foreach (old('items', $pedido->pedido_articulo_cajas->count() ? $pedido->pedido_articulo_cajas : ['']) as $pesada)
 							<tr class="item-pesada">
@@ -67,6 +68,7 @@
 							</tr>
 						@endforeach
 					@endif
+				@endif
 				</tbody>       
 				</table>
 			</div>
