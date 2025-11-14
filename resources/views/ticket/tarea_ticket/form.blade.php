@@ -31,7 +31,7 @@
 	</select>
 </div>
 <div class="form-group row">
-    <label for="tiempoestimado" class="col-lg-3 col-form-label requerido">Tiempo estimado en horas</label>
+    <label for="tiempoestimado" class="col-lg-3 col-form-label requerido">Tiempo estimado en minutos</label>
     <div class="col-lg-2">
        <input type="text" name="tiempoestimado" id="tiempoestimado" class="form-control" value="{{old('tiempoestimado', $data->tiempoestimado ?? '')}}" required/>
     </div>

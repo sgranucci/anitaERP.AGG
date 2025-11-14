@@ -5,7 +5,7 @@
             <div class="form-group row">
                 <label for="fecha" class="col-lg-3 col-form-label">Fecha</label>
                 <div class="col-lg-3">
-                    <input type="date" name="fecha" id="fecha" class="form-control" value="{{old('fecha', $data->fecha ?? date('Y-m-d'))}}">
+                    <input type="date" name="fecha" id="fecha" class="form-control" value="{{old('fecha', $data->fecha ?? date('Y-m-d'))}}" readonly>
                 </div>
             </div>
             <div class="form-group row">
@@ -65,6 +65,10 @@
                 </button>
                 <input type="text" class="col-lg-6 nombresubcategoria_ticket form-control" id="nombresubcategoria_ticket" name="nombresubcategoria_ticket" value="{{$data->subcategoria_tickets->nombre??''}}" >
             </div>
+            <div class="form-group row">
+                <label for="estado_ticket" class="col-lg-3 col-form-label">Estado del ticket</label>
+                <input type="text" class="col-lg-3 estado_ticket form-control" id="estado_ticket" name="estado_ticket" value="{{$data->estado_ticket??''}}" readonly>
+            </div>       
         </div>        
     </div>
     <div class="col-md-6">

@@ -7,7 +7,7 @@
             <input type="date" name="desdefechas[]" class="desdefecha" value="{{date('Y-m-d')}}">
         </td>
         <td>
-            <input type="date" name="hastafechas[]" class="hastafecha" value="">
+            <input type="date" name="hastafechas[]" class="hastafecha" value="{{date('Y-m-d')}}">
         </td>
         <td>
             <input type="text" style="WIDTH: 450px;HEIGHT: 29px" name="comentarios[]" class="comentario" value="">

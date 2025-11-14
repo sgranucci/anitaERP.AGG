@@ -51,6 +51,7 @@ $( "#botonform0" ).click(function() {
                 <form action="{{route('guardar_cliente')}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
             @endif
                 @csrf
+                <input type="hidden" id="emitenotadecredito" name="emitenotadecredito" value="{{old('emitenotadecredito', $data->emitenotadecredito ?? '')}}" >
                 <div align="center" style="margin: 5px;">
                     <button type="button" id="botonform1" class="btn btn-primary btn-sm">
                         <i class="fa fa-user"></i> Datos principales

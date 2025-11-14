@@ -11,6 +11,7 @@
     			</tr>
     		</thead>
     		<tbody id="tbody-tabla-seguimiento">
+				@if (isset($data))
 				@if (count($data->cliente_seguimientos) > 0)
 					@if ($data->cliente_seguimientos ?? '') 
 						@foreach (old('seguimientos', $data->cliente_seguimientos->count() ? $data->cliente_seguimientos : ['']) as $seguimiento)
@@ -18,7 +19,7 @@
 								<td>
 									<input type="hidden" name="seguimientos[]" class="form-control iiseguimiento" readonly value="{{ $loop->index+1 }}" />
 									<input type="date" name="fechas[]" class="form-control"
-										value="{{ (old('fechas.' . $loop->index, $seguimiento->fecha ?? '') }}" />
+										value="{{ old('fechas.' . $loop->index, $seguimiento->fecha ?? '') }}" />
 								</td>
 								<td>
 									<input type="text" name="observaciones[]" value="{{old('observaciones.' . $loop->index, $seguimiento->observaciones ?? '')}}" class="form-control observacion" placeholder="Observación">
@@ -41,6 +42,7 @@
 							</tr>
 						@endforeach
 					@endif
+				@endif
 				@endif
        		</tbody>
        	</table>

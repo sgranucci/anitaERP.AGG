@@ -74,7 +74,7 @@
                 <select name="estado_ticket" id="estado_ticket" data-placeholder="Estado del ticket" class="col-lg-3 form-control required" data-fouc required>
                     <option value="">-- Seleccionar --</option>
                     @foreach($estado_enum as $value)
-                        @if( $value['nombre'] == old('estado', $data->estado ?? ''))
+                        @if( $value['nombre'] == old('estado', $data->estado_ticket ?? ''))
                             <option value="{{ $value['nombre'] }}" selected="select">{{ $value['nombre'] }}</option>    
                         @else
                             <option value="{{ $value['nombre'] }}">{{ $value['nombre'] }}</option>    
@@ -101,7 +101,7 @@
                 <th style="width: 18%;">Técnico</th>
                 <th style="width: 5%;">Turno</th>
                 <th>Fecha finalización</th>
-                <th style="width: 7%;">Tiempo</th>
+                <th style="width: 7%;">Minutos</th>
                 <th>Estado</th>
                 <th style="width: 8%;"></th>
             </tr>
@@ -124,7 +124,7 @@
                             </div>
                         </td>
                         <td>
-                            <input type="date" name="fechacargas[]" class="form-control fechacarga" value="{{old('fechacargas', $tarea->fechacarga ?? date('Y-m-d'))}}" required>
+                            <input type="date" name="fechacargas[]" class="form-control fechacarga" value="{{old('fechacargas', $tarea->fechacarga ?? date('Y-m-d'))}}" readonly>
                         </td>
                         <td>
                             <input type="date" name="fechaprogramaciones[]" class="form-control fechaprogramacion" value="{{old('fechaprogramaciones', $tarea->fechaprogramacion ?? '')}}" required>
@@ -152,7 +152,7 @@
                             </select>
                         </td>     
                         <td>
-                            <input type="date" name="fechafinalizaciones[]" class="form-control fechafinalizacion requerido" value="{{old('fechafinalizaciones', $tarea->fechafinalizacion ?? '')}}">
+                            <input type="date" name="fechafinalizaciones[]" class="form-control fechafinalizacion requerido" value="{{old('fechafinalizaciones', $tarea->fechafinalizacion ?? '')}}" readonly>
                         </td>          
                         <td>
                             <input type="number" style="font-size: 12px;" name="tiempoinsumidos[]" class="form-control tiempoinsumido" value="{{old('tiempoinsumido', $tarea->tiempoinsumido ?? '')}}" readonly>

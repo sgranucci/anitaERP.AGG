@@ -74,7 +74,7 @@ class Cliente_Articulo_SuspendidoRepository implements Cliente_Articulo_Suspendi
 		}
 
 		// Graba premios
-		if (isset($data))
+		if (isset($data) && isset($data['articulo_ids']))
 		{
 			$articulo_ids = $data['articulo_ids'];
 

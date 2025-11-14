@@ -18,11 +18,11 @@ class ModificaTablaClienteBierzo extends Migration
             $table->foreign('abasto_id', 'fk_cliente_abasto')->references('id')->on('abasto')->onDelete('restrict')->onUpdate('restrict');
             $table->unsignedBigInteger('coeficiente_id')->after('abasto_id')->nullable();
             $table->foreign('coeficiente_id', 'fk_cliente_coeficiente')->references('id')->on('coeficiente')->onDelete('restrict')->onUpdate('restrict');
-            $table->float('porcentajelogistica')->after('coeficiente_id');
-            $table->string('emitecertificado', 50)->after('porcentajelogistica');
-            $table->string('emitenotadecredito', 50)->after('emitecertificado');
-            $table->float('coeficienteextra')->after('emitenotadecredito');
-            $table->string('agregabonificacion', 50)->after('coeficienteextra');
+            $table->float('porcentajelogistica')->after('coeficiente_id')->nullable();
+            $table->string('emitecertificado', 50)->after('porcentajelogistica')->nullable();
+            $table->string('emitenotadecredito', 50)->after('emitecertificado')->nullable();
+            $table->float('coeficienteextra')->after('emitenotadecredito')->nullable();
+            $table->string('agregabonificacion', 50)->after('coeficienteextra')->nullable();
             $table->date('desdefecha_exclusionpercepcioniva')->after('agregabonificacion')->nullable();
             $table->date('hastafecha_exclusionpercepcioniva')->after('desdefecha_exclusionpercepcioniva')->nullable();
         });

@@ -35,7 +35,7 @@ class ModificaTablaArticuloBierzo extends Migration
             $table->foreign('tipoproduccion_id', 'fk_articulo_tipoproduccion')->references('id')->on('tipoproduccion')->onDelete('restrict')->onUpdate('restrict');
             $table->unsignedBigInteger('sectorsellado_id')->after('tipoproduccion_id')->nullable();
             $table->foreign('sectorsellado_id', 'fk_articulo_sectorsellado')->references('id')->on('sectorsellado')->onDelete('restrict')->onUpdate('restrict');
-            $table->unsignedBigInteger('tipoarticulo_id');
+            $table->unsignedBigInteger('tipoarticulo_id')->nullable();
             $table->foreign('tipoarticulo_id', 'fk_articulo_tipoarticulo')->references('id')->on('tipoarticulo')->onDelete('restrict')->onUpdate('restrict');
         });
     }

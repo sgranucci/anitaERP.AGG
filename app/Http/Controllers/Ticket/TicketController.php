@@ -158,8 +158,9 @@ class TicketController extends Controller
         $areadestino_query = $this->areadestinoRepository->all();
         $sector_query = $this->sector_ticketRepository->all();
         $sala_query = $this->salaRepository->all();
+        $estado_enum = Ticket_Estado::$enumEstado;
 
-        return view('ticket.ticket.editar', compact('data', 'areadestino_query', 'sector_query', 'sala_query'));
+        return view('ticket.ticket.editar', compact('data', 'areadestino_query', 'sector_query', 'sala_query', 'estado_enum'));
     }
 
     /**

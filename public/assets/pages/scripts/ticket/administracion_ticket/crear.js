@@ -169,6 +169,19 @@ var ptrAbreNovedad;
 			if (fechaFinalizacion.length != 0)
 				alert("No puede dar nuevamente finalizacion de tarea");
 
+			$(this).parents("tr").find(".tiempoinsumido").attr('readonly', false);
+			$(this).parents("tr").find(".tiempoinsumido").attr('required', 'required');
+			$(this).parents("tr").find(".tiempoinsumido").focus();
+		});
+
+		// Previene Enter en comentario de novedades
+		$( ".comentario" ).on( "keydown", function( event ) {
+			if ( event.key === "Enter" ) {
+				event.preventDefault();
+			}
+		});
+
+		$(document).on('change', '.tiempoinsumido', function (event) {
 			let fecha = new Date();
 			let day = fecha.getDate();
 			let month = fecha.getMonth() + 1;
@@ -179,28 +192,27 @@ var ptrAbreNovedad;
 			else
 				var formateada = year + '-' + month + '-' + day;
 
-			$(this).parents("tr").find(".fechafinalizacion").val(formateada);
-			$(this).parents("tr").find(".tiempoinsumido").attr('readonly', false);
-			$(this).parents("tr").find(".tiempoinsumido").attr('required', 'required');
-			$(this).parents("tr").find(".tiempoinsumido").focus();
-		});
-
-		$(document).on('change', '.tiempoinsumido', function (event) {
+			$(this).parents("tr").find(".fechafinalizacion").val(formateada);			
 			let ticket_tarea_id = $(this).parents("tr").find(".ticket_tarea_id").val();
 			let fechafinalizacion = $(this).parents("tr").find(".fechafinalizacion").val();
 			let tiempoinsumido = $(this).parents("tr").find(".tiempoinsumido").val();
 
-			let url = '/anitaERP/public/ticket/finalizar_tarea/'+ticket_tarea_id+'/'+fechafinalizacion+'/'+tiempoinsumido;
+			if (tiempoinsumido > 0)
+			{
+				$(this).parents("tr").find(".estadotarea").val("Finalizada");
 
-			$.get(url, function(data, textStatus){
-				if (textStatus == 'success')
-				{
-					calculaEstadoTicket();
-					alert('Tarea finalizada con éxito')
-				}
-				else	
-					alert('Ha ocurrido un error finalizando la tarea')
-			});
+				let url = '/anitaERP/public/ticket/finalizar_tarea/'+ticket_tarea_id+'/'+fechafinalizacion+'/'+tiempoinsumido;
+
+				$.get(url, function(data, textStatus){
+					if (textStatus == 'success')
+					{
+						calculaEstadoTicket();
+						alert('Tarea finalizada con éxito')
+					}
+					else	
+						alert('Ha ocurrido un error finalizando la tarea')
+				});
+			}
 		});
 	}
 
@@ -482,50 +494,28 @@ var ptrAbreNovedad;
 	function calculaEstadoTicket()
 	{
 		let estadoTicket = $('#estado_ticket').val();
-		let flFinalizada = true;
 
 		if (estadoTicket != 'Baja' && estadoTicket != 'Suspendido')
 		{
-			estadoTicket = 'Pendiente';
+			estadoTicket = 'Finalizado';
 
 			// Verifica si tiene tareas
 			$("#tarea-ticket-table .item-tarea-ticket").each(function() {
 				let ticket_tarea_id = $(this).find('.ticket_tarea_id').val();
-				let ptrTarea = this;
-				let ultimoEstado = '';
-				
-				estadoTicket = 'Asignado';
+				let estadotarea = $(this).find('.estadotarea').val();
+				let tiempoinsumido = $(this).find(".tiempoinsumido").val();
 
-				// Busca estado de la tarea con la ultima novedad
-				url = '/anitaERP/public/ticket/leer_ticket_tarea_novedad/'+ticket_tarea_id;
-				
-				$.get(url, function(novedades){
+				if (tiempoinsumido > 0)
+				{
+					estadotarea = 'Finalizada';
+					$(this).find(".estadotarea").val("Finalizada");
+				}
 
-					var nov = $.map(novedades, function(value, index){
-						return [value];
-					});
-					ultimoEstado = "Pendiente";
-					$.each(nov, function(index,value){
-						ultimoEstado = value.estado;
-					});
-					if (ultimoEstado != 'Finalizada')
-						flFinalizada = false;
-					$(ptrTarea).find(".estadotarea").val(ultimoEstado);
-				});
-				setTimeout(() => {
-					if (flFinalizada)
-						estadoTicket = 'Finalizado';
-					else
-					{
-						if (ultimoEstado != '')
-							estadoTicket = 'En ejecucion';
-						if (ultimoEstado == 'Reasignar')
-							estadoTicket = 'Reasignar';
-					}
-				}, 1000);
+				if (estadotarea != 'Finalizada')
+					estadoTicket = 'Asignado';
 			});		
+			$('#estado_ticket').val(estadoTicket);
 		}
-		$('#estado_ticket').val(estadoTicket);
 	}
 		
 

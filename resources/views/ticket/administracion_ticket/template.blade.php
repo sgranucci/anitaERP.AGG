@@ -13,10 +13,10 @@
             </div>
         </td>
         <td>
-            <input type="date" name="fechacargas[]" class="form-control fechacarga requerido" value="{{date('Y-m-d')}}" required>
+            <input type="date" name="fechacargas[]" class="form-control fechacarga requerido" value="{{date('Y-m-d')}}" readonly>
         </td>
         <td>
-            <input type="date" name="fechaprogramaciones[]" class="form-control fechaprogramacion requerido" value="" required>
+            <input type="date" name="fechaprogramaciones[]" class="form-control fechaprogramacion requerido" value="{{date('Y-m-d')}}" required>
         </td>
         <td>
             <div class="form-group row" id="tecnico_ticket">
@@ -38,7 +38,7 @@
             <input type="hidden" name="creousuario_ids[]" class="form-control creousuario_id" value="{{ auth()->id() }}" />
         </td>
         <td>
-            <input type="date" name="fechafinalizaciones[]" class="form-control fechafinalizacion requerido" value="">
+            <input type="date" name="fechafinalizaciones[]" class="form-control fechafinalizacion requerido" value="" readonly>
         </td>          
         <td>
             <input type="text" name="tiempoinsumidos[]" class="form-control tiempoinsumido" value="">

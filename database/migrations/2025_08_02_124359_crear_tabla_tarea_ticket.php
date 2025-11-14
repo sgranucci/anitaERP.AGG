@@ -19,7 +19,7 @@ class CrearTablaTareaTicket extends Migration
             $table->string('tipotarea',1);
             $table->unsignedBigInteger('areadestino_id');
             $table->foreign('areadestino_id', 'fk_tarea_ticket_areadestino')->references('id')->on('areadestino')->onDelete('restrict')->onUpdate('restrict');
-            $table->decimal('tiempoestimado',4,2);            
+            $table->float('tiempoestimado');   
             $table->string('enviacorreo',1);
             $table->timestamps();
             $table->charset = 'utf8mb4';

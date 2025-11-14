@@ -35,6 +35,11 @@ class Ticket extends Model implements Auditable
     	return $this->hasMany(Ticket_Articulo::class, 'ticket_id');
 	}
 
+    public function ticket_archivos()
+	{
+    	return $this->hasMany(Ticket_Archivo::class, 'ticket_id');
+	}
+
     public function salas()
 	{
     	return $this->belongsTo(Sala::class, 'sala_id');

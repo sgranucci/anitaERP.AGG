@@ -15,7 +15,7 @@
 				</select>
 				<input type="hidden" id="condicioniva_query" value="{{$condicioniva_query}}">
 				<span class="input-group-text">#</span>
-				<input type="text" name="numerodocumento" id="numerodocumento" class="col-lg-3 form-control" value="{{$data->numerodocumento}}">
+				<input type="text" name="numerodocumento" id="numerodocumento" class="col-lg-3 form-control" value="{{$data->numerodocumento??''}}">
 			</div>			
 			<div class="form-group row">
 				@if ($tipoalta != 'P')
@@ -228,7 +228,9 @@
 				<select name="cuentacontable_id" id="cuentacontable_id" data-placeholder="Cuenta contable para imputaciones" class="col-lg-8 form-control" data-fouc @if ($tipoalta != 'P') required @endif>
 					<option value="">-- Seleccionar Cta. Contable --</option>
 					@foreach($cuentacontable_query as $key => $value)
-						@if( (int) $value->id == (int) old('cuentacontable_id', $data->cuentacontable_id ?? ''))
+						@if (isset($data->cuentacontable_id) ? 
+							(int) $value->id == (int) old('cuentacontable_id', $data->cuentacontable_id ?? '') : 
+							config('cliente.DEUDORES_POR_VENTAS') == $value->codigo)
 							<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
 						@else
 							<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
@@ -276,7 +278,7 @@
 						<label for="coeficienteextra" class="col-lg-3 col-form-label">Coeficiente Extra</label>
 						<span class="input-group-text"><i class="fas fa-percent"></i></span>
 						<div class="col-lg-3">
-							<input type="number" min="1" max="100" name="coeficienteextra" id="coeficienteextra" class="form-control" value="{{old('coeficienteextra', $data->coeficienteextra ?? '0')}}">
+							<input type="number" min="0" max="100" name="coeficienteextra" id="coeficienteextra" class="form-control" value="{{old('coeficienteextra', $data->coeficienteextra ?? '0')}}">
 						</div>
 					</div>
 				@endif
