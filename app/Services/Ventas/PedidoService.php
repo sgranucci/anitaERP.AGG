@@ -444,7 +444,7 @@ class PedidoService
 						if ($q_pedido_articulo > count($articulos))
 						{
 							for ($d = count($articulos); $d < $q_pedido_articulo; $d++)
-								$this->pedido_articuloRepository->find($_id[$d])->delete();
+								$this->pedido_articuloRepository->delete($_id[$d]);
 						}
 
 						// Actualiza los que ya existian
@@ -539,7 +539,7 @@ class PedidoService
 						if ($q_pedido_articulo_caja > count($pedido_articulo_ids))
 						{
 							for ($d = count($pedido_articulo_ids); $d < $q_pedido_articulo_caja; $d++)
-								$this->pedido_articulo_cajaRepository->find($_id[$d])->delete();
+								$pedido_articulo_caja = $this->pedido_articulo_cajaRepository->delete($_id[$d]);
 						}
 
 						// Actualiza los que ya existian

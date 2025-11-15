@@ -1522,6 +1522,8 @@
 					{
 						alert("La caja Nro."+camposQR[0]+" ya fue leida");
 						flError = true;
+						$('#lecturaqrpesada').val('');
+						$('#lecturaqrpesada').focus();
 					}
 				});
 
@@ -1569,16 +1571,19 @@
 							let pesada = $(this).parents("tr").find(".pesada").val();
 							let totalPesada = parseFloat(pesada) + parseFloat(camposQR[3]);
 
-							$(this).parents("tr").find(".pesada").val(totalPesada);;
+							$(this).parents("tr").find(".pesada").val(totalPesada);
 
 							$('#lecturaqrpesada').val('');
 							$('#lecturaqrpesada').focus();
 						}
 						else
 						{
-							if (parseFloat(kilo) < parseFloat(pesada))
-								alert("Superó los kilos pedidos del artículo "+codigoarticulo+" "+descripcionarticulo
-								+" - Kilos pedidos: "+kilo+" Kilos pesados: "+pesada);
+							if (codigoarticulo == camposQR[1])
+							{
+								if (parseFloat(kilo) < parseFloat(pesada))
+									alert("Superó los kilos pedidos del artículo "+codigoarticulo+" "+descripcionarticulo+
+									" - Kilos pedidos: "+kilo+" Kilos pesados: "+pesada);
+							}
 							else
 								alert('No existe el articulo');
 
