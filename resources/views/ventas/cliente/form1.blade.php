@@ -8,8 +8,8 @@
     				</div>
 				</div>
 				<div class="form-group row">
-    				<label for="codigo" class="col-lg-3 col-form-label">C&oacute;digo Anita</label>
-    				<div class="col-lg-2">
+					<div class="col-lg-2">
+						<label for="codigo" class="col-lg-3 col-form-label">Código Anita</label>
     					<input type="text" name="codigo" id="codigo" class="form-control" value="{{old('codigo', $data->codigo ?? '')}}" readonly>
     				</div>
 				</div>
