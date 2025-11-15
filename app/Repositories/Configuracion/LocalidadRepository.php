@@ -101,7 +101,9 @@ class LocalidadRepository implements LocalidadRepositoryInterface
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $localidad = Localidad::select('localidad.id as id',
+        if (config('app.empresa') == "EL BIERZO")
+        {
+            $localidad = Localidad::select('localidad.id as id',
                                         'localidad.nombre as nombre',
 										'localidad.codigopostal as codigopostal',
                                         'provincia.nombre as nombreprovincia',
@@ -114,6 +116,22 @@ class LocalidadRepository implements LocalidadRepositoryInterface
 								->orWhere('provincia.nombre', 'like', '%'.$busqueda,'%')
                                 ->orWhere('localidad.codigo', 'like', '%'.$busqueda,'%')
                                 ->orderby('id', 'DESC');
+        }
+        else
+        {
+            $localidad = Localidad::select('localidad.id as id',
+                            'localidad.nombre as nombre',
+                            'localidad.codigopostal as codigopostal',
+                            'provincia.nombre as nombreprovincia',
+                            'localidad.codigo as codigo')
+                    ->join('provincia', 'provincia.id', '=', 'localidad.provincia_id')
+                    ->where('localidad.id', $busqueda)
+                    ->orWhere('localidad.nombre', 'like', '%'.$busqueda.'%')
+                    ->orWhere('localidad.codigopostal', 'like', '%'.$busqueda.'%')
+                    ->orWhere('provincia.nombre', 'like', '%'.$busqueda,'%')
+                    ->orWhere('localidad.codigo', 'like', '%'.$busqueda,'%')
+                    ->orderby('id', 'DESC');
+        }
                                 
         if (isset($flPaginando))
         {
@@ -133,20 +151,30 @@ class LocalidadRepository implements LocalidadRepositoryInterface
         ini_set('max_execution_time', '300');
 	  	ini_set('memory_limit', '512M');
 
-		$columns = ['localidad.id', 'localidad.nombre', 'localidad.codigopostal', 'localidad.codigo', 'localidad.provincia_id', 'provincia.nombre', 'localidad.codigosenasa'];
-        $columnsOut = ['id', 'nombre', 'codigopostal', 'codigo', 'provincia_id', 'nombreprovincia', 'codigosenasa'];
+        if (config('app.empresa') == "EL BIERZO")
+        {
+            $columns = ['localidad.id', 'localidad.nombre', 'localidad.codigopostal', 'localidad.codigo', 'localidad.provincia_id', 'provincia.nombre', 'localidad.codigosenasa'];
+            $columnsOut = ['id', 'nombre', 'codigopostal', 'codigo', 'provincia_id', 'nombreprovincia', 'codigosenasa'];
+        }
+        else
+        {
+            $columns = ['localidad.id', 'localidad.nombre', 'localidad.codigopostal', 'localidad.codigo', 'localidad.provincia_id', 'provincia.nombre'];
+            $columnsOut = ['id', 'nombre', 'codigopostal', 'codigo', 'provincia_id', 'nombreprovincia'];            
+        }
 
 		$consulta = strtoupper($consulta);
 
 		$count = count($columns);
-		$data = $this->model->select('localidad.id as id',
+        if (config('app.empresa') == "EL BIERZO")
+        {
+		    $data = $this->model->select('localidad.id as id',
 									'localidad.nombre as nombre',
 									'localidad.codigopostal as codigopostal',
 									'localidad.codigo as codigo',
 									'localidad.provincia_id as provincia_id',
                                     'provincia.nombre as nombreprovincia', 
                                     'localidad.codigosenasa as codigosenasa')
-                            ->join('provincia', 'provincia.id', 'localidad.provincia_id')
+                            ->leftjoin('provincia', 'provincia.id', 'localidad.provincia_id')
                             ->where('localidad.provincia_id', $provincia_id)
 							->where(function ($query) use ($count, $consulta, $columns) {
                         			for ($i = 0; $i < $count; $i++)
@@ -156,7 +184,26 @@ class LocalidadRepository implements LocalidadRepositoryInterface
                                     }
                 })	
 				->get();								
-
+        }
+        else
+        {
+		    $data = $this->model->select('localidad.id as id',
+									'localidad.nombre as nombre',
+									'localidad.codigopostal as codigopostal',
+									'localidad.codigo as codigo',
+									'localidad.provincia_id as provincia_id',
+                                    'provincia.nombre as nombreprovincia')
+                            ->leftjoin('provincia', 'provincia.id', 'localidad.provincia_id')
+                            ->where('localidad.provincia_id', $provincia_id)
+							->where(function ($query) use ($count, $consulta, $columns) {
+                        			for ($i = 0; $i < $count; $i++)
+                                    {
+                                        if ($columns[$i] != 'provincia.nombre')
+                            			    $query->orWhere($columns[$i], "LIKE", '%'. $consulta . '%');
+                                    }
+                })	
+				->get();	
+        }
         $output = [];
 		$output['data'] = '';	
         $flSinDatos = true;

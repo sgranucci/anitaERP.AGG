@@ -41,7 +41,6 @@ class ValidacionCliente extends FormRequest
             'cuentacontable_id' => 'required',
             'numerodocumento' => ['required', new RuleCliente('numerodocumento')],
             'retieneiva' => ['required', new RuleCliente('retieneiva')],
-            'nroiibb' => 'required|max:100|',
             'condicioniibb' => ['required', new RuleCliente('condicioniibb')],
             //'vaweb' => ['required', new RuleCliente('vaweb')],
         ];

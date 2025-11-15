@@ -52,13 +52,9 @@
 				@endif
 			</div>
 			<div class="form-group row">
-				@if ($tipoalta != 'P')
-					<label for="nroiibb" class="col-lg-4 col-form-label requerido">Nro.IIBB</label>
-				@else
-					<label for="nroiibb" class="col-lg-4 col-form-label">Nro.IIBB</label>
-				@endif
+				<label for="nroiibb" class="col-lg-4 col-form-label">Nro.IIBB</label>
 				<div class="col-lg-3">
-					<input type="text" name="nroiibb" id="nroiibb" class="form-control" value="{{old('nroiibb', $data->nroiibb ?? '')}}" @if ($tipoalta != 'P') required @endif/>
+					<input type="text" name="nroiibb" id="nroiibb" class="form-control" value="{{old('nroiibb', $data->nroiibb ?? '')}}"/>
 				</div>
 				@if (config('app.empresa') == 'EL BIERZO')
 					<label for="emitecertificado" class="col-lg-2 col-form-label">Emite Cert.</label>
@@ -257,6 +253,8 @@
 						<input type="text" name="descuento" id="descuento" class="form-control" value="{{old('descuento', $data->descuento ?? '0')}}">
 					</div>								
 				</div>
+			@else
+				<input type="hidden" name="descuento" id="descuento" class="form-control" value="{{old('descuento', $data->descuento ?? '0')}}">
 			@endif
 			@if (config('app.empresa') == 'EL BIERZO')
 				<input type="hidden" name="descuentoventa_id" id="descuentoventa_id" class="form-control" value="{{old('descuentoventa_id', $data->descuentoventa_id ?? '')}}">
