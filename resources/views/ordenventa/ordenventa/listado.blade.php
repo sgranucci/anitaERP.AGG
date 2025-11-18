@@ -19,7 +19,7 @@
 		</style>
 	</head>
 	<body>
-		<h2>Tickets</h2>
+		<h2>Ordenes de Venta</h2>
 		<table class="table table-striped table-bordered table-hover">
 			<thead>
 				<tr>
@@ -38,7 +38,7 @@
 				</tr>
 			</thead>
 			<tbody>
-				@foreach ($ticket as $data)
+				@foreach ($ordenventa as $data)
 				<tr>
 					<td>{{$data->id}}</td>
 					<td>{{date("d/m/Y", strtotime($data->fecha ?? ''))}}</td>
