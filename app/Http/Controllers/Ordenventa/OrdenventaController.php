@@ -110,13 +110,13 @@ class OrdenventaController extends Controller
             break;
 
         case 'EXCEL':
-            return (new administracionOrdenventaExport($this->ordenventaQuery))
+            return (new OrdenventaExport($this->ordenventaQuery))
                         ->parametros($busqueda)
                         ->download('ordenventa.xlsx');
             break;
 
         case 'CSV':
-            return (new administracionOrdenventaExport($this->ordenventaQuery))
+            return (new OrdenventaExport($this->ordenventaQuery))
                         ->parametros($busqueda)
                         ->download('ordenventa.csv', \Maatwebsite\Excel\Excel::CSV);
             break;            
