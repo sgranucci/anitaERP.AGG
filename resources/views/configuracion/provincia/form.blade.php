@@ -36,9 +36,15 @@
         </select>
     </div>
     <div class="form-group row">
-        <label for="codigo" class="col-lg-3 col-form-label">Codigo Externo</label>
+        <label for="codigoexterno" class="col-lg-3 col-form-label">Codigo Externo</label>
         <div class="col-lg-2">
         <input type="text" name="codigoexterno" id="codigoexterno" class="form-control" value="{{old('codigoexterno', $data->codigoexterno ?? '')}}">
+        </div>
+    </div>
+    <div class="form-group row">
+        <label for="minimocoeficientecm05" class="col-lg-3 col-form-label">Mínimo Coef. CM05</label>
+        <div class="col-lg-2">
+        <input type="text" name="minimocoeficientecm05" id="minimocoeficientecm05" class="form-control" value="{{old('minimocoeficientecm05', $data->minimocoeficientecm05 ?? '')}}">
         </div>
     </div>
 </div>

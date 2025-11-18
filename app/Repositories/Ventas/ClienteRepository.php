@@ -113,6 +113,7 @@ class ClienteRepository implements ClienteRepositoryInterface
     public function find($id)
     {
         if (null == $cliente = $this->model->with("cliente_entregas")->with("cliente_seguimientos")
+										->with("cliente_cm05s")
 										->with("cliente_articulo_suspendidos")->with("cliente_archivos")
 										->with("provincias")->with("localidades")->with("paises")
 										->with("tipossuspensioncliente")
@@ -128,6 +129,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 	public function findPorCodigo($codigo)
     {
         if (null == $cliente = $this->model->with("cliente_entregas")->with("cliente_seguimientos")
+										->with("cliente_cm05s")
 										->with("cliente_articulo_suspendidos")->with("cliente_archivos")
 										->with("provincias")->with("localidades")->with("paises")
 										->with("tipossuspensioncliente")
@@ -143,6 +145,7 @@ class ClienteRepository implements ClienteRepositoryInterface
     public function findOrFail($id)
     {
         if (null == $cliente = $this->model->with("cliente_entregas")->with("cliente_seguimientos")
+											->with("cliente_cm05s")
 											->with("cliente_articulo_suspendidos")->with("cliente_archivos")
 											->with("provincias")->with("localidades")->with("paises")
 											->with("tipossuspensioncliente")

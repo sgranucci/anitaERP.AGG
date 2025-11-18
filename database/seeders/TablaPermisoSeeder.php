@@ -17,12 +17,12 @@ class TablaPermisoSeeder extends Seeder
     {
         $now = Carbon::now()->toDateTimeString();
         $permiso = [
-            array('id' => '890', 'nombre' => 'Ingresa padron exclusion percepcion iva', 'slug' => 'crear-padron-exclusion-percepcion-iva', 'created_at' => $now, 'updated_at' => $now),
-            array('id' => '891', 'nombre' => 'Lista padron exclusion percepcion iva', 'slug' => 'listar-padron-exclusion-percepcion-iva', 'created_at' => $now, 'updated_at' => $now),
-            array('id' => '892', 'nombre' => 'Edita padron exclusion percepcion iva', 'slug' => 'editar-padron-exclusion-percepcion-iva', 'created_at' => $now, 'updated_at' => $now),
-            array('id' => '893', 'nombre' => 'Actualiza padron exclusion percepcion iva', 'slug' => 'actualizar-padron-exclusion-percepcion-iva', 'created_at' => $now, 'updated_at' => $now),
-            array('id' => '894', 'nombre' => 'Borra padron exclusion percepcion iva', 'slug' => 'borrar-padron-exclusion-percepcion-iva', 'created_at' => $now, 'updated_at' => $now),
-            array('id' => '895', 'nombre' => 'Importar padron exclusion percepcion iva', 'slug' => 'importar-padron-exclusion-percepcion-iva', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '896', 'nombre' => 'Ingresa padron iibb', 'slug' => 'crear-padron-iibb', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '897', 'nombre' => 'Lista padron iibb', 'slug' => 'listar-padron-iibb', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '898', 'nombre' => 'Edita padron iibb', 'slug' => 'editar-padron-iibb', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '899', 'nombre' => 'Actualiza padron iibb', 'slug' => 'actualizar-padron-iibb', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '900', 'nombre' => 'Borra padron iibb', 'slug' => 'borrar-padron-iibb', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '901', 'nombre' => 'Importar padron iibb', 'slug' => 'importar-padron-iibb', 'created_at' => $now, 'updated_at' => $now),
         ];
         DB::table('permiso')->insert($permiso);
     }

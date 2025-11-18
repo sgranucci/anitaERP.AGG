@@ -304,6 +304,9 @@
 
 		// Marca items como facturados, completa combinaciones y modulos al abrir pedido
 		marcaItemFacturado();
+
+		marcaDescuento();
+
 		activa_eventos(true);
 		TotalPedido();
 
@@ -1530,6 +1533,8 @@
 				// Busca el articulo
 				if (!flError)
 				{
+					let flAsigno = false;
+
 					$("#tbody-tabla .articulo_id").each(function(index) {
 						let articulo_id = $(this).val();
 						let codigoarticulo = $(this).parents("tr").find(".codigoarticulo").val();
@@ -1539,56 +1544,63 @@
 						let kilo = $(this).parents("tr").find(".kilo").val();
 						let pesada = $(this).parents("tr").find(".pesada").val();
 
-						if (codigoarticulo == camposQR[1] && parseFloat(kilo) > parseFloat(pesada)) // Si encuentra el articulo
+						if (!flAsigno)
 						{
-							let fechas = camposQR[5].split("/");
-
-							if (fechas[2].length == 1)
-								fechas[2] = "0"+fechas[2];
-							
-							if (fechas[1].length == 1)
-								fechas[1] = "0"+fechas[1];
-							
-							if (fechas[0].length == 1)
-								fechas[0] = "0"+fechas[0];
-							
-							let fechaFormateada = "20"+fechas[2]+"-"+fechas[1]+"-"+fechas[0];
-
-							agregaRenglonPesada(event);
-
-							$('#pesadapedido-table').find('tr').last().find('.numerocajapesada').val(camposQR[0]);
-							$('#pesadapedido-table').find('tr').last().find('.pedido_articulo_id').val(pedido_articulo_id);
-							$('#pesadapedido-table').find('tr').last().find('.articulopesada_id').val(articulo_id);
-							$('#pesadapedido-table').find('tr').last().find('.codigoarticulopesada').val(codigoarticulo);
-							$('#pesadapedido-table').find('tr').last().find('.descripcionarticulopesada').val(descripcionarticulo);
-							$('#pesadapedido-table').find('tr').last().find('.unidadmedidapesada').val(unidadmedida);
-							$('#pesadapedido-table').find('tr').last().find('.piezapesada').val(camposQR[2]);
-							$('#pesadapedido-table').find('tr').last().find('.kilopesada').val(camposQR[3]);
-							$('#pesadapedido-table').find('tr').last().find('.lotepesada').val(camposQR[4]);
-							$('#pesadapedido-table').find('tr').last().find('.fechavencimientopesada').val(fechaFormateada);
-
-							// Asigna pesada
-							let pesada = $(this).parents("tr").find(".pesada").val();
-							let totalPesada = parseFloat(pesada) + parseFloat(camposQR[3]);
-
-							$(this).parents("tr").find(".pesada").val(totalPesada);
-
-							$('#lecturaqrpesada').val('');
-							$('#lecturaqrpesada').focus();
-						}
-						else
-						{
-							if (codigoarticulo == camposQR[1])
+							if (codigoarticulo == camposQR[1] && parseFloat(kilo) > parseFloat(pesada)) // Si encuentra el articulo
 							{
-								if (parseFloat(kilo) < parseFloat(pesada))
-									alert("Superó los kilos pedidos del artículo "+codigoarticulo+" "+descripcionarticulo+
-									" - Kilos pedidos: "+kilo+" Kilos pesados: "+pesada);
+								let fechas = camposQR[5].split("/");
+
+								if (fechas[2].length == 1)
+									fechas[2] = "0"+fechas[2];
+								
+								if (fechas[1].length == 1)
+									fechas[1] = "0"+fechas[1];
+								
+								if (fechas[0].length == 1)
+									fechas[0] = "0"+fechas[0];
+								
+								let fechaFormateada = "20"+fechas[2]+"-"+fechas[1]+"-"+fechas[0];
+
+								agregaRenglonPesada(event);
+
+								$('#pesadapedido-table').find('tr').last().find('.numerocajapesada').val(camposQR[0]);
+								$('#pesadapedido-table').find('tr').last().find('.pedido_articulo_id').val(pedido_articulo_id);
+								$('#pesadapedido-table').find('tr').last().find('.articulopesada_id').val(articulo_id);
+								$('#pesadapedido-table').find('tr').last().find('.codigoarticulopesada').val(codigoarticulo);
+								$('#pesadapedido-table').find('tr').last().find('.descripcionarticulopesada').val(descripcionarticulo);
+								$('#pesadapedido-table').find('tr').last().find('.unidadmedidapesada').val(unidadmedida);
+								$('#pesadapedido-table').find('tr').last().find('.piezapesada').val(camposQR[2]);
+								$('#pesadapedido-table').find('tr').last().find('.kilopesada').val(camposQR[3]);
+								$('#pesadapedido-table').find('tr').last().find('.lotepesada').val(camposQR[4]);
+								$('#pesadapedido-table').find('tr').last().find('.fechavencimientopesada').val(fechaFormateada);
+
+								// Asigna pesada
+								let pesada = $(this).parents("tr").find(".pesada").val();
+								let totalPesada = parseFloat(pesada) + parseFloat(camposQR[3]);
+
+								$(this).parents("tr").find(".pesada").val(totalPesada);
+
+								$('#lecturaqrpesada').val('');
+								$('#lecturaqrpesada').focus();
+
+								flAsigno = true;
 							}
 							else
-								alert('No existe el articulo');
+							{
+								if (codigoarticulo == camposQR[1])
+								{
+									if (parseFloat(kilo) < parseFloat(pesada))
+										alert("Superó los kilos pedidos del artículo "+codigoarticulo+" "+descripcionarticulo+
+										" - Kilos pedidos: "+kilo+" Kilos pesados: "+pesada);
+								}
+								else
+									alert('No existe el articulo');
 
-							$('#lecturaqrpesada').val('');
-							$('#lecturaqrpesada').focus();
+								$('#lecturaqrpesada').val('');
+								$('#lecturaqrpesada').focus();
+
+								flAsigno = false;
+							}
 						}
 					});
 				}
@@ -1682,8 +1694,18 @@
 		if (categoria_id == categoria_secos_id && subcategoria_id == subcategoria_tira_id)
 		{
 			// Elimina las opciones que no van para grupo 1 / tiras
-			$(ptr).parents("tr").find('.descuentoventa_id option[value="1"]').remove();
 			$(ptr).parents("tr").find('.descuentoventa_id option[value="3"]').remove();
+			$(ptr).parents("tr").find('.descuentoventa_id option[value="4"]').remove();
 		}
 
+	}
+
+	function marcaDescuento()
+	{
+		$("#tbody-tabla .descuentoventa_id").each(function(index) {
+			let descuentoventa_id = $(this).val();
+
+			if (descuentoventa_id > 0)
+				$(this).attr('disabled', 'disabled');
+		});
 	}

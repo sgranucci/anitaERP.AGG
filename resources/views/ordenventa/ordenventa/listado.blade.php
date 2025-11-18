@@ -25,11 +25,13 @@
 				<tr>
 					<th class="width20">ID</th>
 					<th>Fecha</th>
-					<th>Sala</th>
-					<th>Sector</th>
-					<th>Area de destino</th>
-					<th>Categoría</th>
-					<th>Subcategoría</th>
+					<th>Nro. Orden Vta.</th>
+					<th>Empresa</th>
+					<th>Tratamiento</th>
+					<th>Centro de Costo</th>
+					<th>Cliente</th>
+					<th>Monto</th>
+					<th>Moneda</th>
 					<th>Estado</th>
 					<th>Detalle</th>
 					<th class="width40" data-orderable="false"></th>
@@ -40,11 +42,13 @@
 				<tr>
 					<td>{{$data->id}}</td>
 					<td>{{date("d/m/Y", strtotime($data->fecha ?? ''))}}</td>
-					<td>{{$data->nombresala ?? ''}}</td>
-					<td>{{$data->nombresector ?? ''}}</td>
-					<td>{{$data->nombreareadestino ?? ''}}</td>
-					<td>{{$data->nombrecategoria_ticket ?? ''}}</td>
-					<td>{{$data->nombresubcategoria_ticket ?? ''}}</td>
+					<td>{{$data->numeroordenventa ?? ''}}</td>
+					<td>{{$data->nombreempresa ?? ''}}</td>
+					<td>{{$data->tratamiento ?? ''}}</td>
+					<td>{{$data->nombrecentrocosto ?? '' }}</td>
+					<td>{{$data->nombrecliente ?? ''}}</td>
+					<td>{{number_format($data->monto,2) ?? ''}}</td>
+					<td>{{$data->abreviaturamoneda}}</td>
 					<td>{{$data->estado}}</td>
 					<td>{{$data->detalle}}</td>
 				</tr>

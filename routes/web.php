@@ -134,6 +134,10 @@ Route::get('configuracion/provincia/{id}/editar', 'Configuracion\ProvinciaContro
 Route::put('configuracion/provincia/{id}', 'Configuracion\ProvinciaController@actualizar')->name('actualizar_provincia');
 Route::delete('configuracion/provincia/{id}', 'Configuracion\ProvinciaController@eliminar')->name('eliminar_provincia');
 
+Route::get('configuracion/listaprovincia/{formato?}/{busqueda?}', 'Configuracion\ProvinciaController@listar')->name('lista_provincia');
+Route::post('configuracion/provincia/consultaprovincia', 'Configuracion\ProvinciaController@consultaProvincia')->name('consulta_provincia');
+Route::get('configuracion/leerunaprovincia/{provincia_id}', 'Configuracion\ProvinciaController@leeUnaProvincia')->name('leer_una_provincia');
+
 /* 
  * Localidades
  */
@@ -216,6 +220,22 @@ Route::delete('configuracion/condicioniva/{id}', 'Configuracion\CondicionivaCont
 
  Route::get('configuracion/crea_importacion_padron_exclusionpercepcioniva', 'Configuracion\Padron_ExclusionpercepcionivaController@crearImportacionPadron_Exclusionpercepcioniva')->name('crear_importacion_padron_exclusionpercepcioniva');
  Route::post('configuracion/importa_padron_exclusionpercepcioniva', 'Configuracion\Padron_ExclusionpercepcionivaController@importarPadron_Exclusionpercepcioniva')->name('importar_padron_exclusionpercepcioniva');
+
+/* 
+ * Padron Tasas IIBB
+ */
+
+ Route::get('configuracion/padron_iibb', 'Configuracion\Padron_IibbController@index')->name('padron_iibb');
+ Route::get('configuracion/padron_iibb/crear', 'Configuracion\Padron_IibbController@crear')->name('crear_padron_iibb');
+ Route::post('configuracion/padron_iibb', 'Configuracion\Padron_IibbController@guardar')->name('guardar_padron_iibb');
+ Route::get('configuracion/padron_iibb/{id}/editar', 'Configuracion\Padron_IibbController@editar')->name('editar_padron_iibb');
+ Route::put('configuracion/padron_iibb/{id}', 'Configuracion\Padron_IibbController@actualizar')->name('actualizar_padron_iibb');
+ Route::delete('configuracion/padron_iibb/{id}', 'Configuracion\Padron_IibbController@eliminar')->name('eliminar_padron_iibb');
+ 
+ Route::get('configuracion/listapadron_iibb/{formato?}/{busqueda?}', 'Configuracion\Padron_IibbController@listar')->name('lista_padron_iibb'); 
+
+ Route::get('configuracion/crea_importacion_padron_iibb', 'Configuracion\Padron_IibbController@crearImportacionPadron_Iibb')->name('crear_importacion_padron_iibb');
+ Route::post('configuracion/importa_padron_iibb', 'Configuracion\Padron_IibbController@importarPadron_Iibb')->name('importar_padron_iibb');
 
 /* 
  * Fondos

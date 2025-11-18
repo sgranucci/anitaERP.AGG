@@ -30,10 +30,11 @@ Provincias
                         <tr>
                             <th class="width20">ID</th>
                             <th>Nombre</th>
-                            <th>Abreviatura</th>
+                            <th>Abrev.</th>
                             <th>Juris.</th>
                             <th>C&oacute;digo</th>
                             <th>Pa&iacute;s</th>
+                            <th>Mínimo Coef. CM05</th>
                             <th>Tasas por Condición IIBB</th>
                             <th>Cuentas Contables</th>
                             <th class="width80" data-orderable="false"></th>
@@ -48,6 +49,7 @@ Provincias
                             <td>{{$data->jurisdiccion}}</td>
                             <td>{{$data->codigo}}</td>
                             <td>{{$data->paises->nombre}}</td>
+                            <td>{{$data->minimocoeficientecm05}}</td>
                             <td>                                
                                 <ul>
                                     @foreach($data->provincia_tasaiibbs as $tasa)

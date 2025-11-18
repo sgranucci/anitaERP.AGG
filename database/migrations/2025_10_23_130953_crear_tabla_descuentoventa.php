@@ -17,7 +17,7 @@ class CrearTablaDescuentoventa extends Migration
             $table->bigIncrements('id');
             $table->string('nombre',255);
             $table->string('tipodescuento', 50);
-            $table->decimal('porcentajedescuento', 5, 4)->nullable();
+            $table->float('porcentajedescuento')->nullable();
             $table->decimal('montodescuento', 22, 4)->nullable();
             $table->decimal('cantidadventa', 22, 4)->nullable();
             $table->decimal('cantidaddescuento', 22, 4)->nullable();

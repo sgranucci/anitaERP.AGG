@@ -1,25 +1,19 @@
 <?php
 namespace App\Services\Configuracion;
 
-use App\Models\Configuracion\Padronarba;
-use App\Models\Configuracion\Padroncaba;
 use App\Models\Configuracion\Provincia;
-use App\Repositories\Configuracion\PadronarbaRepositoryInterface;
-use App\Repositories\Configuracion\PadroncabaRepositoryInterface;
+use App\Repositories\Configuracion\Padron_IibbRepositoryInterface;
 
 class IIBBService 
 {
-	protected $padronarbaRepository;
-	protected $padroncabaRepository;
+	protected $padron_iibbRepository;
 
 	private $tasapercepcion;
 	private $flLeyoPadron;
 
-	public function __construct(PadronarbaRepositoryInterface $padronarbaRepository, 
-								PadroncabaRepositoryInterface $padroncabaRepository)
+	public function __construct(Padron_IibbRepositoryInterface $padron_iibbRepository)
 	{
-		$this->padronarbaRepository = $padronarbaRepository;
-		$this->padroncabaRepository = $padroncabaRepository;
+		$this->padron_iibbRepository = $padron_iibbRepository;
 	}
 
 	public function leeTasaPercepcion($nroinscripcion, $jurisdiccion)
@@ -27,19 +21,9 @@ class IIBBService
 		$tasapercepcion = 0;
 		$this->flLeyoPadron = false;
 
-		switch($jurisdiccion)
-		{
-		case '901':
-			$tasapercepcion = $this->padroncabaRepository->leePadronCaba($nroinscripcion, 'percepcion');
-			if ($tasapercepcion)
-				$this->flLeyoPadron = true;
-			break;
-		case '902':
-			$tasapercepcion = $this->padronarbaRepository->leePadronArba($nroinscripcion, 'percepcion');
-			if ($tasapercepcion)
-				$this->flLeyoPadron = true;
-			break;
-		}
+		$tasapercepcion = $this->padron_iibbRepository->leePadronIibb($nroinscripcion, 'percepcion', $jurisdiccion);
+		if ($tasapercepcion)
+			$this->flLeyoPadron = true;
 
 		return $tasapercepcion;
 	}

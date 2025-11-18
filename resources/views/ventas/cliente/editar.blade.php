@@ -10,6 +10,7 @@
 <script src="{{asset("assets/pages/scripts/ventas/cliente/domicilioentrega.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/articulo/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/configuracion/localidad/consulta.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/configuracion/provincia/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/cliente/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/imprimirHtml.js")}}" type="text/javascript"></script>
 <script>
@@ -90,6 +91,9 @@
                     <button type="button" id="botonform7" class="btn btn-info btn-sm">
                         <span class="fa fa-copy"></span> Articulos suspendidos
                     </button>
+                    <button type="button" id="botonform8" class="btn btn-info btn-sm">
+                        <span class="fa fa-copy"></span> CM05
+                    </button>                    
                 </div>     
                 <div class="card-body" style="padding-bottom: 0; padding-top: 5px;">
                     @include('ventas.cliente.form1')
@@ -99,6 +103,7 @@
                     @include('ventas.cliente.form5')
                     @include('ventas.cliente.form6')
                     @include('ventas.cliente.form7')
+                    @include('ventas.cliente.form8')
                     @include('ventas.cliente.suspensionmodal')
                 </div>
                 <div class="card-footer" style="padding-top: 0">

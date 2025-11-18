@@ -54,6 +54,7 @@
             $(".form5").hide();
             $(".form6").hide();
             $(".form7").hide();
+            $(".form8").hide();
         });
 
         $("#botonform2").click(function(){
@@ -64,6 +65,7 @@
             $(".form5").hide();
             $(".form6").hide();
             $(".form7").hide();
+            $(".form8").hide();
 
 			$("#titulo").html("");
 			$("#titulo").html("<span class='fa fa-cash-register'></span> Datos facturac&oacute;n");
@@ -76,7 +78,8 @@
             $(".form4").hide();
             $(".form5").hide();
             $(".form6").hide();
-            $(".form7").hide();            
+            $(".form7").hide();
+            $(".form8").hide();            
 
 			activaEventoEntrega();
 
@@ -103,6 +106,7 @@
             $(".form5").hide();
             $(".form6").hide();
             $(".form7").hide();
+            $(".form8").hide();
 
 		 	// Hace foco en el campo de la leyenda
 			$("#leyenda").focus();
@@ -115,7 +119,8 @@
             $(".form4").hide();
             $(".form5").show();
             $(".form6").hide();
-            $(".form7").hide();            
+            $(".form7").hide();
+            $(".form8").hide();            
         });
 
         $("#botonform6").click(function(){
@@ -125,7 +130,8 @@
             $(".form4").hide();
             $(".form5").hide();
             $(".form6").show();
-            $(".form7").hide();     
+            $(".form7").hide();
+            $(".form8").hide();     
             
 		 	// Hace foco en el campo de la leyenda
 			$("#leyenda").focus();            
@@ -138,9 +144,25 @@
             $(".form4").hide();
             $(".form5").hide();
             $(".form6").hide();
-            $(".form7").show();            
+            $(".form7").show();
+            $(".form8").hide();      
+            
+            $('#articulo-suspendido-table').find('tr').last().find('.codigoarticulo').focus();
         });
 	             
+        $("#botonform8").click(function(){
+            $(".form1").hide();
+            $(".form2").hide();
+            $(".form3").hide();
+            $(".form4").hide();
+            $(".form5").hide();
+            $(".form6").hide();
+            $(".form7").hide();
+            $(".form8").show();   
+            
+            $('#cm05-table').find('tr').last().find('.codigoprovincia').focus();
+        });
+	                     
         muestraEmiteNotaDeCredito();
 
         $("#botonemitenc").click(function(){
@@ -214,6 +236,8 @@
         $(document).on('click', '.eliminar_seguimiento', borraRenglonSeguimiento);
         $('#agrega_renglon_articulo_suspendido').on('click', agregaRenglonArticuloSuspendido);
         $(document).on('click', '.eliminar_articulo_suspendido', borraRenglonArticuloSuspendido);        
+        $('#agrega_renglon_cm05').on('click', agregaRenglonCm05);
+        $(document).on('click', '.eliminar_cm05', borraRenglonCm05);  
     });
 
 	function activa_eventos(flInicio)
@@ -226,6 +250,7 @@
 		// Activa eventos de consulta
 		activa_eventos_consultaarticulo();
         activa_eventos_consultalocalidad();
+        activa_eventos_consultaprovincia();
     }
 
     function muestraEmiteNotaDeCredito()
@@ -279,6 +304,8 @@
     	$("#tbody-tabla").append(renglon);
     	actualizaRenglones();
 		activaEventoEntrega();
+
+        activa_eventos(false);
     }
 
     function borraRenglon() {
@@ -301,6 +328,7 @@
     	var renglon = $('#template-renglon-archivo').html();
 
     	$("#tbody-tabla-archivo").append(renglon);
+        activa_eventos(false);
     }
 
     function borraRenglonArchivo(event) {
@@ -320,6 +348,7 @@
     	var renglon = $('#template-renglon-seguimiento').html();
 
     	$("#tbody-tabla-seguimiento").append(renglon);
+        activa_eventos(false);
     }
 
     function borraRenglonSeguimiento(event) {
@@ -335,11 +364,14 @@
     	});
 	}
 
-   function agregaRenglonArticuloSuspendido(){
+   function agregaRenglonArticuloSuspendido(event){
     	event.preventDefault();
     	var renglon = $('#template-renglon-articulo-suspendido').html();
 
     	$("#tbody-tabla-articulo-suspendido").append(renglon);
+        activa_eventos(false);
+
+        $('#articulo-suspendido-table').find('tr').last().find('.codigoarticulo').focus();
     }
 
     function borraRenglonArticuloSuspendido(event) {
@@ -351,6 +383,29 @@
     	var item = 1;
 
     	$("#tbody-tabla-articulo-suspendido .iiarticulo-suspendido").each(function() {
+    		$(this).val(item++);
+    	});
+	}    
+
+    function agregaRenglonCm05(){
+    	event.preventDefault();
+    	var renglon = $('#template-renglon-cm05').html();
+
+    	$("#tbody-tabla-cm05").append(renglon);
+        activa_eventos(false);
+
+        $('#cm05-table').find('tr').last().find('.codigoprovincia').focus();
+    }
+
+    function borraRenglonCm05(event) {
+    	event.preventDefault();
+    	$(this).parents('tr').remove();
+    }
+
+    function actualizaCm05(elem) {
+    	var item = 1;
+
+    	$("#tbody-tabla-cm05 .iicm05").each(function() {
     		$(this).val(item++);
     	});
 	}    

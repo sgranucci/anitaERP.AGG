@@ -767,6 +767,9 @@ class ArticuloController extends Controller
 						{
 							$piezaCalculo = $pieza;
 							$kiloCalculo = $piezaCalculo * $peso;
+
+							if ($unidadesxenvase != 0)
+								$cajaCalculo = $piezaCalculo / $unidadesxenvase;
 						}
 					}
 				}

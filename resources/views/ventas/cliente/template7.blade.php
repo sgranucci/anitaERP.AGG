@@ -13,7 +13,7 @@
             </div>
         </td>							
         <td>
-            <input type="text" style="WIDTH: 250px; HEIGHT: 38px" class="descripcionarticulo form-control" name="descripcionarticulos[]" value="" readonly>
+            <input type="text" style="WIDTH: 350px; HEIGHT: 38px" class="descripcionarticulo form-control" name="descripcionarticulos[]" value="" readonly>
         </td>
         <td>
             <input type="datetime" class="fechasuspension form-control" name="fechasuspensiones[]" value="{{date('d-m-Y H:i:s')}}" readonly>
@@ -23,7 +23,7 @@
 			<input type="text" name="creousuario_articulo_suspendidos[]" class="form-control creousuario_articulo_suspendido" value="{{ auth()->user()->name }}" readonly/>
 		</td>        
         <td>
-            <button style="width: 7%;" type="button" title="Elimina esta linea" class="btn-accion-tabla eliminar_ticket_articulo tooltipsC">
+            <button style="width: 7%;" type="button" title="Elimina esta linea" class="btn-accion-tabla eliminar_articulo_suspendido tooltipsC">
                 <i class="fa fa-times-circle text-danger"></i>
             </button>
             <input type="hidden" name="creousuarioarticulo_ids[]" class="form-control creousuarioarticulo_id" value="{{ auth()->id() }}" />

@@ -235,4 +235,14 @@ class ProvinciaController extends Controller
         }
         return redirect('configuracion/provincia')->with('mensaje', 'Provincia eliminada con exito');
     }
+    
+    public function consultaProvincia(Request $request)
+    {
+        return ($this->provinciaRepository->consultaProvincia($request->consulta));
+	}
+
+    public function leeUnaProvincia($codigoProvincia)
+    {
+        return ($this->provinciaRepository->findPorCodigo($codigoProvincia));
+	}    
 }

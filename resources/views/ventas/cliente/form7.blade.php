@@ -33,7 +33,7 @@
 								<input type="datetime" class="fechasuspension form-control" name="fechasuspensiones[]" value="{{$suspendido->created_at ?? date('d-m-Y H:i:s')}}" readonly>
 							</td>
 							<td>
-								<input type="hidden" name="creousuario_articulo_suspendido_ids[]" class="form-control creousuario_articulo_suspendido_riesgo_id" value="{{ $suspendido->creousuario_id ?? ''}}"/>
+								<input type="hidden" name="creousuario_articulo_suspendido_ids[]" class="form-control creousuario_articulo_suspendido_riesgo_id" value="{{ $suspendido->creousuario_id ?? auth()->id()}}"/>
 								<input type="text" name="creousuario_articulo_suspendidos[]" class="form-control creousuario_articulo_suspendido" value="{{ $suspendido->creousuarios->nombre ?? '' }}" readonly/>
 							</td>												
                 			<td>
@@ -46,10 +46,10 @@
 				@endif
        		</tbody>
        	</table>
-		@include('ventas.cliente.template6')
+		@include('ventas.cliente.template7')
         <div class="row">
         	<div class="col-md-12">
-        		<button id="agrega_renglon_articulo_suspendio" class="pull-right btn btn-danger">+ Agrega rengl&oacute;n</button>
+        		<button id="agrega_renglon_articulo_suspendido" class="pull-right btn btn-danger">+ Agrega rengl&oacute;n</button>
         	</div>
         </div>
     </div>

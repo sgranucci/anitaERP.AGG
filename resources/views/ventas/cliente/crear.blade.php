@@ -17,6 +17,7 @@ input:invalid {
 <script src="{{asset("assets/pages/scripts/ventas/cliente/domicilioentrega.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/articulo/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/configuracion/localidad/consulta.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/configuracion/provincia/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/cliente/crear.js")}}" type="text/javascript"></script>
 <script>
 $( "#botonform0" ).click(function() {
@@ -74,6 +75,9 @@ $( "#botonform0" ).click(function() {
                     <button type="button" id="botonform7" class="btn btn-info btn-sm">
                         <span class="fa fa-copy"></span> Articulos suspendidos
                     </button>
+                    <button type="button" id="botonform8" class="btn btn-info btn-sm">
+                        <span class="fa fa-copy"></span> CM05
+                    </button>                       
                 </div>                
                 <div class="card-body" style="padding-bottom: 0; padding-top: 5px;">
                     @include('ventas.cliente.form1')
@@ -83,6 +87,7 @@ $( "#botonform0" ).click(function() {
                     @include('ventas.cliente.form5')
                     @include('ventas.cliente.form6')
                     @include('ventas.cliente.form7')
+                    @include('ventas.cliente.form8')
                 </div>
                 <div class="card-footer">
                 	<div class="row">

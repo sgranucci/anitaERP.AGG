@@ -75,6 +75,11 @@ class AppServiceProvider extends ServiceProvider
     	);
 
 	    $this->app->bind(
+        	'App\Repositories\Ventas\Cliente_Cm05RepositoryInterface',
+        	'App\Repositories\Ventas\Cliente_Cm05Repository',
+    	);
+
+	    $this->app->bind(
         	'App\Queries\Ventas\ClienteQueryInterface',
         	'App\Queries\Ventas\ClienteQuery',
     	);
@@ -437,6 +442,16 @@ class AppServiceProvider extends ServiceProvider
 		$this->app->bind(
         	'App\Repositories\Configuracion\SeteosalidaRepositoryInterface',
         	'App\Repositories\Configuracion\SeteosalidaRepository',
+    	);
+
+	    $this->app->bind(
+        	'App\Repositories\Configuracion\Padron_IibbRepositoryInterface',
+        	'App\Repositories\Configuracion\Padron_IibbRepository',
+    	);
+
+	    $this->app->bind(
+        	'App\Repositories\Configuracion\Padron_Iibb_TasaRepositoryInterface',
+        	'App\Repositories\Configuracion\Padron_Iibb_TasaRepository',
     	);
 
 	    $this->app->bind(

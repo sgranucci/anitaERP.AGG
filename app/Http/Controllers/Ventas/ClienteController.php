@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Cliente_Entrega;
 use App\Models\Ventas\Cliente_Archivo;
+use App\Models\Ventas\Cliente_Cm05;
 use App\Models\Ventas\Zonavta;
 use App\Models\Ventas\Subzonavta;
 use App\Models\Ventas\Vendedor;
@@ -28,6 +29,7 @@ use App\Http\Requests\ValidacionClienteProvisorio;
 use App\Repositories\Ventas\ClienteRepositoryInterface;
 use App\Repositories\Ventas\Cliente_EntregaRepositoryInterface;
 use App\Repositories\Ventas\Cliente_SeguimientoRepositoryInterface;
+use App\Repositories\Ventas\Cliente_Cm05RepositoryInterface;
 use App\Repositories\Ventas\Cliente_Articulo_SuspendidoRepositoryInterface;
 use App\Repositories\Ventas\Cliente_ArchivoRepositoryInterface;
 use App\Repositories\Ventas\TiposuspensionclienteRepositoryInterface;
@@ -48,6 +50,7 @@ class ClienteController extends Controller
 	private $clienteRepository;
 	private $cliente_entregaRepository;
     private $cliente_seguimientoRepository;
+    private $cliente_cm05Repository;
     private $cliente_articulo_suspendidoRepository;
 	private $cliente_archivoRepository;
     private $descuentoventaRepository;
@@ -63,6 +66,7 @@ class ClienteController extends Controller
 		Cliente_EntregaRepositoryInterface $cliente_entregaRepository, 
 		Cliente_ArchivoRepositoryInterface $cliente_archivoRepository, 
         Cliente_SeguimientoRepositoryInterface $cliente_seguimientorepository,
+        Cliente_Cm05RepositoryInterface $cliente_cm05repository,
         Cliente_Articulo_SuspendidoRepositoryInterface $cliente_articulo_suspendidorepository,
         DescuentoventaRepositoryInterface $descuentoventarepository,
         TipodocumentoRepositoryInterface $tipodocumentoRepository,
@@ -75,6 +79,7 @@ class ClienteController extends Controller
         $this->clienteRepository = $clienteRepository;
         $this->cliente_entregaRepository = $cliente_entregaRepository;
         $this->cliente_seguimientoRepository = $cliente_seguimientorepository;
+        $this->cliente_cm05Repository = $cliente_cm05repository;
         $this->cliente_articulo_suspendidoRepository = $cliente_articulo_suspendidorepository;
         $this->cliente_archivoRepository = $cliente_archivoRepository;
         $this->descuentoventaRepository = $descuentoventarepository;
@@ -220,7 +225,7 @@ class ClienteController extends Controller
 			$tasacaba, $modofacturacion_enum, $cajaespecial_enum, $abasto_query, $coeficiente_query, 
             $distribuidor_query,
             $emitecertificado_enum, $emitenotadecredito_enum, $agregabonificacion_enum, $descuentoventa_query,
-            $tipodocumento_query,
+            $tipodocumento_query, $tipopercepcion_enum, $certificadonoretencion_enum,
             'crear'); 
 
         if (!isset($tipoalta))
@@ -232,7 +237,7 @@ class ClienteController extends Controller
 			'vaweb_enum', 'tasaarba', 'tasacaba', 'estado_enum', 'tipoalta',
             'modofacturacion_enum', 'cajaespecial_enum', 'urlOrigen', 'idRemoto', 'abasto_query', 'coeficiente_query', 
             'emitecertificado_enum', 'emitenotadecredito_enum', 'agregabonificacion_enum',
-            'distribuidor_query', 'descuentoventa_query', 'tipodocumento_query'));
+            'distribuidor_query', 'descuentoventa_query', 'tipodocumento_query', 'tipopercepcion_enum', 'certificadonoretencion_enum'));
     }
 
     /**
@@ -254,6 +259,8 @@ class ClienteController extends Controller
                 $cliente_entrega = $this->cliente_entregaRepository->create($request->all(), $cliente->id);
 
                 $cliente_seguimiento = $this->cliente_seguimientoRepository->create($request->all(), $cliente->id);
+
+                $cliente_cm05 = $this->cliente_cm05Repository->create($request->all(), $cliente->id);
 
                 $cliente_articulo_suspendido = $this->cliente_articulo_suspendidoRepository->create($request->all(), $cliente->id);
 
@@ -292,6 +299,8 @@ class ClienteController extends Controller
 
                 $cliente_seguimiento = $this->cliente_seguimientoRepository->create($request->all(), $cliente->id);
 
+                $cliente_cm05 = $this->cliente_cm05Repository->create($request->all(), $cliente->id);
+
                 $cliente_articulo_suspendido = $this->cliente_articulo_suspendidoRepository->create($request->all(), $cliente->id);
 
                 $cliente_archivo = $this->cliente_archivoRepository->create($request, $cliente->id);
@@ -327,7 +336,7 @@ class ClienteController extends Controller
 			$tasacaba, $modofacturacion_enum, $cajaespecial_enum, $abasto_query, $coeficiente_query, 
             $distribuidor_query,
             $emitecertificado_enum, $emitenotadecredito_enum, $agregabonificacion_enum, $descuentoventa_query,
-            $tipodocumento_query,
+            $tipodocumento_query, $tipopercepcion_enum, $certificadonoretencion_enum,
             'editar'); 
 
         $tiposuspensioncliente_query = $this->tiposuspensionclienteRepository->all();
@@ -343,7 +352,7 @@ class ClienteController extends Controller
             'cajaespecial_enum',
             'tiposuspensioncliente_query', 'abasto_query', 'coeficiente_query',
             'emitecertificado_enum', 'emitenotadecredito_enum', 'agregabonificacion_enum', 'distribuidor_query', 'descuentoventa_query',
-            'tipodocumento_query'));
+            'tipodocumento_query', 'tipopercepcion_enum', 'certificadonoretencion_enum'));
     }
 
     /**
@@ -367,6 +376,8 @@ class ClienteController extends Controller
             $this->cliente_entregaRepository->update($request->all(), $id);
 
             $cliente_seguimiento = $this->cliente_seguimientoRepository->update($request->all(), $id);
+            
+            $cliente_cm05 = $this->cliente_cm05Repository->update($request->all(), $id);
 
             $cliente_articulo_suspendido = $this->cliente_articulo_suspendidoRepository->update($request->all(), $id);
 
@@ -420,7 +431,7 @@ class ClienteController extends Controller
 			$nroinscripcion, &$tasaarba, &$tasacaba, &$modofacturacion_enum, &$cajaespecial_enum, &$abasto_query, &$coeficiente_query,
             &$distribuidor_query, 
             &$emitecertificado_enum, &$emitenotadecredito_enum, &$agregabonificacion_enum, &$descuentoventa_query,
-            &$tipodocumento_query,
+            &$tipodocumento_query, &$tipopercepcion_enum, &$certificadonoretencion_enum,
             $funcion)
 	{
         $pais_query = Pais::orderBy('nombre')->get();
@@ -447,20 +458,23 @@ class ClienteController extends Controller
         $emitecertificado_enum = Cliente::$enumEmiteCertificado;
         $emitenotadecredito_enum = Cliente::$enumEmiteNotaDeCredito;
         $agregabonificacion_enum = Cliente::$enumAgregaBonificacion;
+        $tipopercepcion_enum = Cliente_Cm05::$enumTipoPercepcion;
+        $certificadonoretencion_enum = Cliente_Cm05::$enumCertificadoNoRetencion;
 
 		if ($funcion == 'editar')
 		{
-			$tasaarba = $this->iibbService->leeTasaPercepcion($nroinscripcion, '902');
-            $tasacaba = $this->iibbService->leeTasaPercepcion($nroinscripcion, '901');
+			$tasaIibbArba = $this->iibbService->leeTasaPercepcion($nroinscripcion, '902');
+            $tasaIibbCaba = $this->iibbService->leeTasaPercepcion($nroinscripcion, '901');
 
-            if ($tasaarba == '')
+            if ($tasaIibbArba == '')
 				$tasaarba = 'No esta en padron';
             else    
-                $tasaarba = round($tasaarba, 2).'%';
-			if ($tasacaba == '' || $tasacaba < 0.00001)
+                $tasaarba = round($tasaIibbArba['tasa'], 2).'%';
+
+			if ($tasaIibbCaba == '' || $tasaIibbCaba['tasa'] < 0.00001)
 				$tasacaba = 'No esta en padron';
             else
-                $tasacaba = round($tasacaba, 2).'%';
+                $tasacaba = round($tasaIibbCaba, 2).'%';
 		}
 		else
 			$tasaarba = $tasacaba = '';

@@ -246,4 +246,52 @@ class ProvinciaRepository implements ProvinciaRepositoryInterface
 					'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$request['codigo']."' " );
         $apiAnita->apiCall($data);
 	}
+
+    public function consultaProvincia($consulta)
+    {
+        ini_set('max_execution_time', '300');
+	  	ini_set('memory_limit', '512M');
+
+        $columns = ['provincia.id', 'provincia.nombre', 'provincia.codigo', 'provincia.jurisdiccion'];
+        $columnsOut = ['id', 'nombre', 'codigo', 'jurisdiccion'];   
+
+		$consulta = strtoupper($consulta);
+
+		$count = count($columns);
+        $data = $this->model->select('provincia.id as id',
+                                'provincia.nombre as nombre',
+                                'provincia.codigo as codigo',
+                                'provincia.jurisdiccion as jurisdiccion')
+                        ->where(function ($query) use ($count, $consulta, $columns) {
+                                for ($i = 0; $i < $count; $i++)
+                                    $query->orWhere($columns[$i], "LIKE", '%'. $consulta . '%');
+            })	
+            ->get();	
+    
+        $output = [];
+		$output['data'] = '';	
+        $flSinDatos = true;
+        $count = count($columns);
+		if (count($data) > 0)
+		{
+			foreach ($data as $row)
+			{
+                $flSinDatos = false;
+                $output['data'] .= '<tr>';
+                for ($i = 0; $i < $count; $i++)
+                    $output['data'] .= '<td class="'.$columnsOut[$i].'">' . $row->{$columnsOut[$i]} . '</td>';	
+                $output['data'] .= '<td><a class="btn btn-warning btn-sm eligeconsultaprovincia">Elegir</a></td>';
+                $output['data'] .= '</tr>';
+			}
+		}
+
+        if ($flSinDatos)
+		{
+			$output['data'] .= '<tr>';
+			$output['data'] .= '<td>Sin resultados</td>';
+			$output['data'] .= '</tr>';
+		}
+		return(json_encode($output, JSON_UNESCAPED_UNICODE));
+    }
+
 }

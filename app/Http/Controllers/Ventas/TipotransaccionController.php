@@ -90,6 +90,7 @@ class TipotransaccionController extends Controller
     public function actualizar(ValidacionTipotransaccion $request, $id)
     {
         can('actualizar-tipos-transacciones');
+
         $this->repository->update($request->all(), $id);
 
         return redirect('ventas/tipotransaccion')->with('mensaje', 'Tipo de transacción actualizada con exito');

@@ -85,7 +85,7 @@
 	</table>
     <div class="form-group">
     	<label>Leyendas</label>
-       	<textarea name="leyenda" class="form-control" rows="3" placeholder="Leyendas ..." value="{{old('leyenda', $pedido->leyenda ?? '')}}"></textarea>
+		<p>{{$pedido->leyenda}}</p1>
     </div>
 </div>
 </div>

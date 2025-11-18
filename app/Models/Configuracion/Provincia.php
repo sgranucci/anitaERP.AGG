@@ -9,7 +9,7 @@ use App\ApiAnita;
 
 class Provincia extends Model
 {
-    protected $fillable = ['nombre', 'abreviatura', 'jurisdiccion', 'codigo', 'pais_id', 'codigoexterno'];
+    protected $fillable = ['nombre', 'abreviatura', 'jurisdiccion', 'codigo', 'pais_id', 'codigoexterno', 'minimocoeficientecm05'];
     protected $table = 'provincia';
 
     public function paises()

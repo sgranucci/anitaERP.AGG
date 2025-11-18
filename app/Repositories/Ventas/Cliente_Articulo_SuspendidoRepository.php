@@ -77,7 +77,7 @@ class Cliente_Articulo_SuspendidoRepository implements Cliente_Articulo_Suspendi
 		if (isset($data) && isset($data['articulo_ids']))
 		{
 			$articulo_ids = $data['articulo_ids'];
-
+			$creousuario_ids = $data['creousuario_articulo_suspendido_ids'];
 			if ($funcion == 'update')
 			{
 				$_id = $cliente_articulo_suspendido;
@@ -97,6 +97,7 @@ class Cliente_Articulo_SuspendidoRepository implements Cliente_Articulo_Suspendi
 						$cliente_articulo_suspendido = $this->model->findOrFail($_id[$i])->update([
 									"cliente_id" => $id,
 									"articulo_id" => $articulo_ids[$i],
+									"creousuario_id" => $creousuario_ids[$i]
 									]);
 					}
 				}
@@ -112,7 +113,8 @@ class Cliente_Articulo_SuspendidoRepository implements Cliente_Articulo_Suspendi
 				{
 					$cliente_articulo_suspendido = $this->model->create([
 						"cliente_id" => $id,
-						"articulo_id" => $articulo_ids[$i_movimiento]
+						"articulo_id" => $articulo_ids[$i_movimiento],
+						"creousuario_id" => $creousuario_ids[$i_movimiento]
 						]);
 				}
 			}

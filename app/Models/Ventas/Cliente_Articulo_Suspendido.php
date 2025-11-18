@@ -5,6 +5,7 @@ namespace App\Models\Ventas;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Stock\Articulo;
 use OwenIt\Auditing\Contracts\Auditable;
+use App\Models\Seguridad\Usuario;
 
 class Cliente_Articulo_Suspendido extends Model implements Auditable
 {
