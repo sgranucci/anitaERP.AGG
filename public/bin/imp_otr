@@ -1,0 +1,12 @@
+
+TMP2=ifpu$$
+
+convert $2 $2.eps
+
+scp -i /etc/id_rsa -o BatchMode=yes -o StrictHostKeyChecking=no -oKexAlgorithms=+diffie-hellman-group1-sha1 $1 sergio@160.132.0.254:/usr2/ferli/ventas/$TMP2
+scp -i /etc/id_rsa -o BatchMode=yes -o StrictHostKeyChecking=no -oKexAlgorithms=+diffie-hellman-group1-sha1 $2.eps sergio@160.132.0.254:/usr2/ferli/spool/forms
+
+ssh -i /etc/id_rsa -o BatchMode=yes -o StrictHostKeyChecking=no -oKexAlgorithms=+diffie-hellman-group1-sha1 sergio@160.132.0.254 "/usr2/ferli/bin/imp_ot $TMP2 $2.eps $3 $4"
+#ssh sergio@160.132.0.254 "/usr2/ferli/bin/imp_ot $TMP2 arch_qr_7469_24273.bmp.eps $3"
+
+rm -f $TMP2 $2 $2.eps

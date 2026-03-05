@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <link rel="stylesheet" href="{{asset("assets/$theme/dist/css/adminlte.min.css")}}">
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Cat&aacute;logo de productos Calzados Ferli S.A.</title>
+	<h1>&nbsp;&nbsp;L&iacute;nea: {{$items[0]['linea'] ?? ''}}</h1>
+	<style type="text/css">
+	</style>
+</head>
+<body>
+<div class="row">
+<div class="card-body table-responsive p-0">
+	@php
+		$linea_actual = '';
+		$idx = 0;
+	@endphp
+    @foreach ($items ?? '' as $data)
+		@if ($data['linea_id'] != $linea_actual)
+			@if ($idx == 1)
+				@include('exports.stock.impitemcatalogo')
+				@php 
+					$idx = 0; 
+					for ($i = 0; $i < 2; $i++)
+					{
+						$foto[$i] = $sku[$i] = $codigo[$i] = $nombre[$i] = '';
+						$precio1[$i] = $precio2[$i] = $precio3[$i] = $precio4[$i] = '';
+						$nombrelista1[$i] = $nombrelista2[$i] = $nombrelista3[$i] = $nombrelista4[$i] = '';
+					}
+				@endphp
+			@endif
+			@if ($linea_actual != '')
+    			<tbody>
+				</table>
+				</div>
+				<div style="page-break-after:always;"></div>
+			@endif
+			@php $linea_actual = $data['linea_id']; @endphp
+            <div class="mt-5">
+				<strong>&nbsp;&nbsp;&nbsp;&nbsp;Numeraci&oacute;n: {{$data['numeracion'] ?? ''}}</strong><br>
+				<strong>&nbsp;&nbsp;&nbsp;&nbsp;Capellada: {{$data['material'] ?? ''}}</strong><br>
+				<strong>&nbsp;&nbsp;&nbsp;&nbsp;Forro: {{$data['forro'] ?? ''}}</strong><br>
+				<strong>&nbsp;&nbsp;&nbsp;&nbsp;Fondo: {{$data['fondo'] ?? ''}}</strong>
+			</div>
+			<table class="table table-sm table-bordered table-striped">
+    		@foreach ($modulos ?? '' as $mod)
+    				<tr>
+						<th scope="row">M&oacute;dulo</th>
+					@php $tit = ""; $cant = ""; @endphp
+					@foreach ($mod as $talles)
+						<th width="10">{{$talles->talle}}</th>
+						@php $modulo_nombre = $talles->modulo_nombre; @endphp
+					@endforeach
+					</tr>
+					<tr>
+						<th>{{$modulo_nombre}}</th>
+					@foreach ($mod as $talles)
+						<th width="10">{{$talles->cantidad}}</th>
+					@endforeach
+					</tr>
+			@endforeach
+			</table>
+
+			<div class="table-responsive">
+			<table class="table table-striped">
+			<thead>
+			</thead>
+    		<tbody>
+		@endif
+		@php 
+			$foto[$idx] = $data['foto']; 
+			$sku[$idx] = $data['sku']; 
+			$codigo[$idx] = $data['codigo']; 
+			$nombre[$idx] = $data['nombre']; 
+			$precio1[$idx] = $data['precio1'];
+			$precio2[$idx] = $data['precio2'];
+			$precio3[$idx] = $data['precio3'];
+			$precio4[$idx] = $data['precio4'];
+			$nombrelista1[$idx] = $data['nombrelista1'];
+			$nombrelista2[$idx] = $data['nombrelista2'];
+			$nombrelista3[$idx] = $data['nombrelista3'];
+			$nombrelista4[$idx] = $data['nombrelista4'];
+			$idx++;
+		@endphp
+		@if ($idx == 2)
+			@include('exports.stock.impitemcatalogo')
+			@php 
+				$idx = 0; 
+				for ($i = 0; $i < 2; $i++)
+				{
+					$foto[$i] = $sku[$i] = $codigo[$i] = $nombre[$i] = '';
+					$precio1[$i] = $precio2[$i] = $precio3[$i] = $precio4[$i] = '';
+					$nombrelista1[$i] = $nombrelista2[$i] = $nombrelista3[$i] = $nombrelista4[$i] = '';
+				}
+			@endphp
+		@endif
+	@endforeach
+	@if ($idx == 1)
+		@php 
+			$foto[1] = $sku[1] = $codigo[1] = $nombre[1] = '';
+			$precio1[1] = $precio2[1] = $precio3[1] = $precio4[1] = 0;
+			$nombrelista1[1] = $nombrelista2[1] = $nombrelista3[1] = $nombrelista4[1] = '';
+		@endphp
+	
+		@include('exports.stock.impitemcatalogo')
+
+		@php 
+			$idx = 0; 
+			for ($i = 0; $i < 2; $i++)
+			{
+				$foto[$i] = $sku[$i] = $codigo[$i] = $nombre[$i] = '';
+				$precio1[$i] = $precio2[$i] = $precio3[$i] = $precio4[$i] = '';
+				$nombrelista1[$i] = $nombrelista2[$i] = $nombrelista3[$i] = $nombrelista4[$i] = '';
+			}
+		@endphp
+	@endif
+    <tbody>
+	</table>
+	</div>
+</div>
+</div>
+</body>
+</html>

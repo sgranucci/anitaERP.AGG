@@ -1,0 +1,106 @@
+:
+#
+# Permite la impresion de facturas y resumenes con el agregado de 
+# Codigo de Barras
+#
+
+TMP=/tmp/ifpu$$
+TMP2=ifpu$$
+PS=/tmp/ps$$
+SPOOL="../spool/forms"
+DIR_PATH=".."
+GS="/usr/bin/gs"
+PAPER=a4
+SERVER='160.132.0.209'
+USER=$LOGNAME
+BASE_DIR="/usr2/ferli"
+
+# Selecciona el modo de impresion (PDF, GS, LPT)
+#PRINTER="PDF"
+PRINTER="GS"
+#PRINTER="LPT"
+
+# Habilita la copia de los archivo PS para IMPREPOST
+CP_TO_IPOST=0
+
+PDF_FILE="pdf$$.pdf"
+PDF="../spool/forms/$PDF_FILE"
+
+# Copia los Documentos para el CRM
+CRM=""
+
+# Extrae nombre del formulario
+FORM=`grep 'set form ' $1 | tail -1 | sed 's/set form //g'`
+
+# Filtra parentesis
+cat $1 | sed 's/(/ /g' > $1.sed
+cat $1.sed | sed 's/)/ /g' > $1.sed2
+mv $1.sed2 $1
+rm -f $1.sed
+
+## QR
+#$BASE_DIR/bin/sam2p $SPOOL/$2 EPS: $SPOOL/$2.eps 1>&2 2>/dev/null
+cp $2 $SPOOL
+
+cp /usr/local/forms/$FORM $SPOOL
+
+cat $SPOOL/$FORM | sed "s/^showpage/save\n10 295 translate\n.10 .10 scale\n   \/showpage {} bind def\n   (\/var\/www\/html\/anitaERP\/spool\/forms\/$2) run\n2 2 scale\nrestore\n\nshowpage\n/g" > $SPOOL/$FORM.sed
+
+cat $SPOOL/$FORM.sed | sed "s/^showpage/save\n10 505 translate\n.10 .10 scale\n   \/showpage {} bind def\n   (\/var\/www\/html\/anitaERP\/spool\/forms\/$2) run\n2 2 scale\nrestore\n\nshowpage\n/g" > $SPOOL/$FORM.sed2
+
+cat $SPOOL/$FORM.sed2 | sed "s/^showpage/save\n10 700 translate\n.10 .10 scale\n   \/showpage {} bind def\n   (\/var\/www\/html\/anitaERP\/spool\/forms\/$2) run\n2 2 scale\nrestore\n\nshowpage\n/g" > $SPOOL/$FORM.sed3
+
+cat $SPOOL/$FORM.sed3 | sed "s/^showpage/save\n10 80 translate\n.10 .10 scale\n   \/showpage {} bind def\n   (\/var\/www\/html\/anitaERP\/spool\/forms\/$2) run\n2 2 scale\nrestore\n\nshowpage\n/g" > $SPOOL/$FORM.sed4
+
+mv $SPOOL/$FORM.sed4 $SPOOL/$FORM 
+
+# reemplazo primer linea del EPS
+cat $SPOOL/$2 | sed "1d" > $SPOOL/$2.sed
+echo "%!PS" > $SPOOL/$2.sed2
+cat $SPOOL/$2.sed >> $SPOOL/$2.sed2
+mv $SPOOL/$2.sed2 $SPOOL/$2
+rm -f $SPOOL/$2.sed
+
+## 
+
+# Convierto el archivo
+#$DIR_PATH/bin/ncifpu < $1 > $TMP
+scp $1 160.132.0.254:./$TMP2
+ssh -oKexAlgorithms=+diffie-hellman-group1-sha1 160.132.0.254 bash -c "/usr2/ferli/bin/ncifpu < $TMP2 > $TMP2.ifpu"
+scp -oKexAlgorithms=+diffie-hellman-group1-sha1 160.132.0.254:$TMP2.ifpu .
+mv $TMP2.ifpu $TMP
+
+# Setea el nombre del archivo a imprimir
+FILE_TO_PRINT=$TMP 
+
+# Imprime el archivo en funcion del tipo de impresora definida
+if [ "$PRINTER" = "GS" ]; then
+	# Ejecuta el Ghostscript
+	$GS -q -dNOSAFER -dNOPAUSE -sPAPERSIZE=$PAPER  -sDEVICE=ljet4 -sOutputFile=$PS - < $TMP
+
+	# Setea el nombres del archivo a imprimir
+	FILE_TO_PRINT=$PS 
+
+#elif [ "$PRINTER" = "PDF" ]; then
+else
+	# Si no existe el PDF lo Genera
+	if [ ! -s $PDF ]; then
+		# Genero el archivo PDF
+		$GS -q -dNOSAFER -dNOPAUSE -sPAPERSIZE=$PAPER  -sDEVICE=pdfwrite -sOutputFile=$PDF - < $TMP
+
+		mv $PDF /home/$USER/$PDF_FILE
+
+		if [ "$ANITA" = "TRUE" ]; then
+			echo -e "\033[30;1y\0134\0134$SERVER\0134$USER\0134$PDF_FILE\033\0134\c"
+		fi
+	fi
+fi
+
+# Imprime comprobante
+if [ "$PRINTER" != "PDF" ]; then
+	lp -s -c -o nobanner -d $3 $FILE_TO_PRINT 
+	#../bin/ps $FILE_TO_PRINT
+fi
+
+# bOrra temporarios
+rm -f $TMP $PS $FILE_TO_PRINT

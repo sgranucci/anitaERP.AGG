@@ -1,0 +1,19 @@
+#!/bin/bash
+
+TMP2=ifpu$$
+
+QR=$(echo $2 | tr ";" "\n")
+
+for qr in $QR
+do
+	if [ "$qr" != "STOCK" ]; then
+		convert $qr $qr.eps
+		scp -i /etc/id_rsa -o BatchMode=yes -o StrictHostKeyChecking=no -oKexAlgorithms=+diffie-hellman-group1-sha1 $qr.eps sergio@160.132.0.254:/usr2/ferli/spool/forms
+	fi
+done
+
+scp -i /etc/id_rsa -o BatchMode=yes -o StrictHostKeyChecking=no -oKexAlgorithms=+diffie-hellman-group1-sha1 $1 sergio@160.132.0.254:/usr2/ferli/ventas/$TMP2
+
+ssh -i /etc/id_rsa -o BatchMode=yes -o StrictHostKeyChecking=no -oKexAlgorithms=+diffie-hellman-group1-sha1 sergio@160.132.0.254 "/usr2/ferli/bin/imp_otS $TMP2 $2 $3"
+
+rm -f $TMP2 $2 $2.eps

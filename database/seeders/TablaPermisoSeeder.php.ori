@@ -1,0 +1,28 @@
+<?php
+
+namespace Database\Seeders;
+
+use Carbon\Carbon;
+use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
+
+class TablaPermisoSeeder extends Seeder
+{
+    /**
+     * Run the database seeds.
+     *
+     * @return void
+     */
+    public function run()
+    {
+        $now = Carbon::now()->toDateTimeString();
+        $permiso = [
+            array('id' => '701', 'nombre' => 'Ingresa arbol de aprobacion', 'slug' => 'crea-arbol-de-aprobacion', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '702', 'nombre' => 'Lista arbol de aprobacion', 'slug' => 'lista-arbol-de-aprobacion', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '703', 'nombre' => 'Edita arbol de aprobacion', 'slug' => 'edita-arbol-de-aprobacion', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '704', 'nombre' => 'Actualiza arbol de aprobacion', 'slug' => 'actualiza-arbol-de-aprobacion', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '705', 'nombre' => 'Borra arbol de aprobacion', 'slug' => 'borra-arbol-de-aprobacion', 'created_at' => $now, 'updated_at' => $now),
+        ];
+        DB::table('permiso')->insert($permiso);
+    }
+}

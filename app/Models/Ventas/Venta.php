@@ -1,0 +1,113 @@
+<?php
+
+namespace App\Models\Ventas;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Models\Configuracion\Moneda;
+use App\Models\Configuracion\Actividad_Arca;
+use App\Models\Ventas\Tipotransaccion;
+use App\Models\Ventas\Puntoventa;
+use App\Models\Ventas\Cliente;
+use App\Models\Contable\Asiento;
+use App\Models\Ordenventa\Ordenventa;
+use OwenIt\Auditing\Contracts\Auditable;
+
+class Venta extends Model implements Auditable
+{
+    use SoftDeletes;
+    use \OwenIt\Auditing\Auditable;
+    
+	protected $casts = [
+			'deleted_at' => 'datetime',
+	];
+    protected $fillable = [
+            'fecha', 'fechajornada', 'tipotransaccion_id',
+            'puntoventa_id', 'numerocomprobante', 'actividad_arca_id', 'cliente_id', 'condicionventa_id',
+            'vendedor_id', 'transporte_id', 'total', 'moneda_id', 'cotizacion', 'estado',
+            'usuario_id', 'leyenda', 'descuento', 'descuentointegrado', 'lugarentrega',
+            'cliente_entrega_id', 'codigo', 'nombre', 'domicilio', 'localidad_id', 'provincia_id',
+            'pais_id', 'codigopostal', 'email', 'telefono', 'nroinscripcion', 
+            'condicioniva_id', 'cae', 'fechavencimientocae', 'puntoventaremito_id',
+            'numeroremito', 'cantidadbulto', 'ordenventa_id'
+    ];
+
+    protected $table = 'venta';
+
+	public function venta_impuestos()
+	{
+    	return $this->hasMany(Venta_Impuesto::class, 'venta_id');
+	}
+
+	public function venta_emisiones()
+	{
+    	return $this->hasMany(Venta_Emision::class, 'venta_id')->with('articulos');
+	}
+
+	public function venta_exportaciones()
+	{
+    	return $this->hasMany(Venta_Exportacion::class, 'venta_id');
+	}
+
+    public function cliente_cuentacorrientes()
+	{
+    	return $this->hasMany(Cliente_Cuentacorriente::class, 'venta_id')->with('cliente_cuentacorriente_aplicaciones');
+	}
+
+    public function asientos()
+	{
+    	return $this->hasMany(Asiento::class, 'venta_id')->with('asiento_movimientos');
+	}
+
+    public function actividad_arcas()
+	{
+    	return $this->hasMany(Actividad_Arca::class, 'actividad_arca_id');
+	}
+
+    public function tipotransacciones()
+    {
+        return $this->hasOne(TipoTransaccion::class, 'id', 'tipotransaccion_id');
+    }
+
+    public function puntoventas()
+    {
+        return $this->hasOne(Puntoventa::class, 'id', 'puntoventa_id')->with('empresas');
+    }
+
+    public function clientes()
+    {
+        return $this->hasOne(Cliente::class, 'id', 'cliente_id')
+                    ->with("condicionivas");
+    }
+
+    public function ordenventas()
+    {
+        return $this->hasOne(Ordenventa::class, 'id', 'ordenventa_id');
+    }
+
+    public function transportes()
+    {
+        return $this->hasOne(Transporte::class, 'id', 'transporte_id');
+    }
+
+    public function monedas()
+    {
+        return $this->hasOne(Moneda::class, 'id', 'moneda_id');
+    }
+
+    // Borra en cadena por soft deletes
+    protected static function boot()
+	{
+		parent::boot();
+
+		static::deleting(function ($venta) {
+			$venta->venta_impuestos()->delete();
+			$venta->venta_emisiones()->delete();
+			$venta->venta_exportaciones()->delete();
+            $venta->cliente_cuentacorrientes()->delete();
+			$venta->asientos()->delete();
+		});
+	}    
+}
+

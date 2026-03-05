@@ -1,0 +1,40 @@
+label.requerido:after{
+    content: " *";
+    color: #e73d4a
+}
+.btn-accion-tabla {
+    cursor: pointer;
+    border: none;
+    background: 0;
+    padding: 0 0 0 5px;
+    font-size: 14px !important;
+    line-height: 1.5;
+}
+.d-inline{
+    display: inline;
+}
+.width20{
+    width: 20px !important;
+}
+.width70{
+    width: 70px !important;
+}
+.width80{
+    width: 80px !important;
+}
+.width100{
+    width: 100px !important;
+}
+.pl-40{
+    padding-left:40px !important;
+}
+.pl-50{
+    padding-left:50px !important;
+}
+.pl-60{
+    padding-left:60px !important;
+}
+.form-horizontal.form--label-right .form-group label:not(.kt-checkbox):not(.kt-radio):not(.kt-option) {
+    text-align: right;
+}
+

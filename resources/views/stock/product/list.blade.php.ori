@@ -1,0 +1,307 @@
+@extends("theme.$theme.layout")
+@section('titulo')
+Art&iacute;culos
+@endsection
+
+@section('contenido')
+<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.10.24/css/jquery.dataTables.css">
+<div class="container-fluid">
+    <div class="row justify-content-center">
+        <div class="col-md-10">
+            <div class="card">
+                <div class="card-header">Productos</div>
+                <div class="card-body">
+                    @if (session('status'))
+                        <div class="alert alert-success" role="alert">
+                            {{ session('status') }}
+                        </div>
+                    @endif                    
+                      <div class="col-md-6 float-right text-right mb-3 p-0">
+                        <span id="container-button-state">
+                          @if( $inactive )
+                            <button class="btn btn-primary" onclick="checkState(1)">Activar  combinaciones</button>
+                          @else
+                            <button class="btn btn-primary" onclick="checkState(0)">Desactivar combinaciones</button>
+                          @endif
+                        </span>
+                        @can('crear')
+                          <a href="/stock/products/create" class="btn btn-success">Crear Producto</a>
+                        @endcan
+                      </div>
+                      <div class="table-responsive">  
+                        <table id="listado" class="table table-hover table-striped w-100">
+                          <thead class="table-dark">
+                            <tr>
+                              <th scope="col">C&oacute;digo de articulo</th>
+                              <th scope="col">Descripción</th>
+                              <th scope="col">Unidad de medida</th>
+                              <th scope="col">Categor&iacute;a</th>
+                              <th scope="col">Marca</th>
+                              <th scope="col">Linea</th>
+                              <th scope="col"></th>
+                            </tr>
+                          </thead>
+                          <tbody> 
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal -->
+<div class="modal fade" id="exampleModal" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="exampleModalLabel">
+          Combinaciones
+        </h5>
+        <input type="hidden" class="form-control" id="producto_id" name="producto_id" value=""  />
+        <button type="button" class="btn-close m-0" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+
+        <div class="table-responsive">
+          <div id="container-create-combinacion" class="float-right text-right pb-2">
+          
+          </div>
+          <table id="modalTable" class="table table-hover table-striped w-100">
+            <thead class="table-dark">
+              <tr>
+                <th scope="col">Id</th>
+                <th scope="col">Descripción</th>
+                <th scope="col">Estado</th>
+                <th scope="col"></th>
+              </tr>
+            </thead>
+            <tbody> 
+            </tbody>
+          </table>
+        </div>             
+
+      </div>
+    </div>
+  </div>
+</div>
+<script type="text/javascript">
+$(document).ready( function () {
+  $.noConflict();
+  $('#listado').DataTable({
+    "ajax":{
+      url:"/products/list",
+      error: function(jqXHR, ajaxOptions, thrownError) {
+             alert(thrownError + "\r\n" + jqXHR.statusText + "\r\n" + jqXHR.responseText + "\r\n" + ajaxOptions.responseText);
+      }
+    },
+    "order": [[ 0, "desc" ]], 
+    "processing": true,
+    "paginate":true,
+    "deferRender": true,
+    "columns": [
+        {data:"stkm_articulo"},
+        {data:"stkm_desc"},
+        {data:"stkm_unidad_medida"},
+        {data:"stkm_agrupacion"},
+        {data:"stkm_marca"},
+        {data:"stkm_linea"},
+        {data:"botones"},
+    ],
+    "columnDefs": [
+      {
+        targets:6,
+        data:"botones",
+        render:function(data, type, row, meta){
+          const token = $('input[name="__token"]').val();
+          var articulo = "'" + row.stkm_articulo + "'" ; 
+          var html = '<div class="d-flex float-right">' + 
+          '<button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#exampleModal" onclick="listarCombinaciones(' + articulo + ')">Combinaciones</button>'+
+          '<a class="btn btn-danger ml-2" href="/stock/product/' + row.stkm_articulo + '">Descargar</a>'+
+          '<a class="btn btn-primary ml-2" href="/stock/product/edit/' + row.stkm_articulo + '">Diseño</a>'+
+          '<a class="btn btn-primary ml-2" href="/stock/product/edit/' + row.stkm_articulo + '/tecnica">Tecnica</a>'+
+          '<a class="btn btn-primary ml-2" href="/stock/product/edit/' + row.stkm_articulo + '/contaduria">Contaduría</a>'+
+          '<button type="button" class="btn btn-danger ml-2" onclick="eliminar('+ articulo + ')">Borrar</button>' + 
+          '</div>';
+          return html;
+        }
+      }
+    ],
+    "language": {
+      "lengthMenu": "Mostrar _MENU_ registros",
+      "zeroRecords": "No se encontraron resultados",
+      "info": "Mostrando pagina _PAGE_ de _PAGES_",
+      "infoEmpty": "Sin informacion disponible",
+      "search": "Buscar:",
+      "infoFiltered": "(filtrado de un total de _MAX_ registros)",
+      "paginate": {
+        "first":    "Primero",
+        "last":     "Ultimo",
+        "next":     "&nbsp;&nbsp; Siguiente",
+        "previous": "Anterior &nbsp;&nbsp;"
+      }
+    }
+  });
+});
+
+function listarCombinaciones(id){
+  $("#producto_id").val(id);
+  var btnCreate = '<a href="/stock/combinacion/product/'+ id +'" class="btn btn-success">Crear Combinación</a>';
+  $("#container-create-combinacion").html(btnCreate);
+  
+  $('#modalTable').DataTable({
+    "ajax":{
+      url:"/combinacion/list_json_response/" + id
+    },
+    "destroy":true,
+    "order": [[ 0, "desc" ]], 
+    "processing": true,
+    "paginate":true,
+    "deferRender": true,
+    "columns": [
+        {data:"comb_combinacion"},
+        {data:"comb_desc"},
+        {data:"comb_estado", render: function(data, type, row){
+            if(row.comb_estado == 'A'){
+              return "Activo"  
+            }else{
+              return "Inactivo";
+            }
+            
+          }
+        },
+        {data:"botones"},
+    ],
+    "columnDefs": [
+      {
+        targets:3,
+        data:"botones",
+        render:function(data, type, row, meta){
+          var combinacion = "'" + row.comb_combinacion + "'" ; 
+          if( row.comb_estado == 'A' ){
+            var btn = '<button type="button" class="btn btn-warning ml-2" onclick="cambiarEstado(' + combinacion + ', 0)">Descativar</button>';
+          }else{
+            var btn = '<button type="button" class="btn btn-warning ml-2" onclick="cambiarEstado(' + combinacion + ', 1)">Activar</button>';            
+          }
+          const token = $('input[name="__token"]').val();
+          var html = '<div class="d-flex float-right">' + btn +
+          '<a href="/stock/combinacion/edit/'+ row.comb_combinacion + '" type="button" class="btn btn-primary ml-2">Diseño</a>' + 
+          '<a href="/stock/combinacion/edit/'+ row.comb_combinacion + '/tecnica" type="button" class="btn btn-primary ml-2">Tecnica</a>' + 
+          '<button type="button" class="btn btn-danger ml-2" onclick="eliminarCombinacion('+ combinacion + ')">Borrar</button>' + 
+          '</div>';
+          return html;
+        }
+      }
+    ],
+    "language": {
+      "lengthMenu": "Mostrar _MENU_ registros",
+      "zeroRecords": "No se encontraron resultados",
+      "info": "Mostrando pagina _PAGE_ de _PAGES_",
+      "infoEmpty": "Sin informacion disponible",
+      "search": "Buscar:",
+      "infoFiltered": "(filtrado de un total de _MAX_ registros)",
+      "paginate": {
+        "first":    "Primero",
+        "last":     "Ultimo",
+        "next":     "&nbsp;&nbsp; Siguiente",
+        "previous": "Anterior &nbsp;&nbsp;"
+      }
+    }
+  });
+}
+
+function cambiarEstado(id, index){
+  var textoEstado = (index == 0 )?'desactivar':'activar';
+  var confirmar = confirm("¿Desea " + textoEstado + " combinación?");
+  if(confirmar){
+    var token = $("meta[name='csrf-token']").attr("content");
+    var estado = (index == 1)?'A':'I';
+    var data = "id=" + id + "&estado=" + estado + "&_token=" + token;
+    $.ajax({
+        type: "POST",
+        url: '/combinacion/updateState',
+        data: data,
+        success: function(response){
+          $("#container-button-state").html("");
+          var btn = '';
+          if(index == 0){
+            btn = '<button class="btn btn-primary" onclick="checkState(1)">Activar</button>';
+          }else{
+            btn = '<button class="btn btn-primary" onclick="checkState(0)">Desactivar</button>';
+          }
+          $("#container-button-state").html(btn);
+          $('#modalTable').DataTable().ajax.reload();
+        }
+    });
+  }
+}
+
+function checkState(index){
+  var textoEstado = (index == 0 )?'desactivar':'activar';
+  var confirmar = confirm("¿Desea " + textoEstado + " combinaciones de forma masiva?");
+  if(confirmar){
+
+    var id = $("#producto_id").val();
+    var token = $("meta[name='csrf-token']").attr("content");
+    var estado = (index == 0)?'I':'A';
+    var data = "id="+id+"&estado="+estado+"&_token="+token;
+    
+    $.ajax({
+        type: "POST",
+        url: '/combinacion/updateStateAll',
+        data: data,
+        success: function(response){
+          $("#container-button-state").html("");
+          var btn = '';
+          if(index == 0){
+            btn = '<button class="btn btn-primary" onclick="checkState(1)">Activar combinaciones</button>';
+          }else{
+            btn = '<button class="btn btn-primary" onclick="checkState(0)">Desactivar combinaciones</button>';
+          }
+
+          $("#container-button-state").html(btn);
+          $('#listado').DataTable().ajax.reload();
+
+        }
+    });
+  }
+}
+
+function eliminar(id){
+  var confirmar = confirm("¿Desea eliminar producto?");
+  if(confirmar){
+    var token = $("meta[name='csrf-token']").attr("content");
+    var data = "id=" + id + "&_token=" + token;
+    $.ajax({
+        type: "POST",
+        url: '/product/delete',
+        data: data,
+        success: function(response){
+          $('#listado').DataTable().ajax.reload();
+          console.log(response);
+        }
+    });
+  }
+}
+
+function eliminarCombinacion(id){
+  var confirmar = confirm("¿Desea eliminar combinación?");
+  if(confirmar){
+    var token = $("meta[name='csrf-token']").attr("content");
+    var data = "id=" + id + "&_token=" + token;
+    $.ajax({
+        type: "POST",
+        url: '/combinacion/delete',
+        data: data,
+        success: function(response){
+          $('#modalTable').DataTable().ajax.reload();
+          console.log(response);
+        }
+    });
+  }
+}
+
+</script>
+@endsection
