@@ -1,7 +1,7 @@
 <div class="card form4" style="display: none">
     <h3>Ordenes de Compra</h3>
     <div class="card-body">
-        <table class="table" id="capex-ordencompra-table">
+        <table class="table" id="partidagasto-ordencompra-table">
             <thead>
                 <tr>
                     <th style="width: 10%;">Fecha OC</th>
@@ -14,7 +14,7 @@
                     <th>Detalle</th>
                 </tr>
             </thead>
-            <tbody id="tbody-capex-ordencompra-table" class="container-ordencompra">
+            <tbody id="tbody-partidagasto-ordencompra-table" class="container-ordencompra">
             </tbody>
         </table>
     </div>

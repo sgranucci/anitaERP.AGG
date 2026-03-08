@@ -9,8 +9,8 @@
     			</tr>
     		</thead>
     		<tbody id="tbody-tabla-archivo">
-		 		@if ($data->ordenventa_archivos ?? '') 
-					@foreach (old('archivos', $data->ordenventa_archivos->count() ? $data->ordenventa_archivos : ['']) as $archivo)
+		 		@if ($data->capex_archivos ?? '') 
+					@foreach (old('archivos', $data->capex_archivos->count() ? $data->capex_archivos : ['']) as $archivo)
             			<tr class="item-archivo">
                 			<td>
 								<input type="file" name="nombrearchivos[]" class="form-control nombrearchivos" 

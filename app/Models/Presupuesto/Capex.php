@@ -38,6 +38,11 @@ class Capex extends Model implements Auditable
     	return $this->belongsTo(Empresa::class, 'empresa_id');
 	}
 
+	public function presupuestos()
+	{
+    	return $this->belongsTo(Presupuesto::class, 'presupuesto_id');
+	}
+
     public function centrocostos()
 	{
     	return $this->belongsTo(Centrocosto::class, 'centrocosto_id');

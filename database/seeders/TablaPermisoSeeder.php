@@ -17,11 +17,11 @@ class TablaPermisoSeeder extends Seeder
     {
         $now = Carbon::now()->toDateTimeString();
         $permiso = [
-            array('id' => '960', 'nombre' => 'Ingresar precarga proveedores', 'slug' => 'crear-precarga-proveedores', 'created_at' => $now, 'updated_at' => $now),
-            array('id' => '961', 'nombre' => 'Listar precarga proveedores', 'slug' => 'listar-precarga-proveedores', 'created_at' => $now, 'updated_at' => $now),
-            array('id' => '962', 'nombre' => 'Editar precarga proveedores', 'slug' => 'editar-precarga-proveedores', 'created_at' => $now, 'updated_at' => $now),
-            array('id' => '963', 'nombre' => 'Actualizar precarga proveedores', 'slug' => 'actualizar-precarga-proveedores', 'created_at' => $now, 'updated_at' => $now),
-            array('id' => '964', 'nombre' => 'Borrar precarga proveedores', 'slug' => 'borrar-precarga-proveedores', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '970', 'nombre' => 'Ingresar partidas de gastos', 'slug' => 'crear-partidagasto', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '971', 'nombre' => 'Listar partidas de gastos', 'slug' => 'listar-partidagasto', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '972', 'nombre' => 'Editar partidas de gastos', 'slug' => 'editar-partidagasto', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '973', 'nombre' => 'Actualizar partidas de gastos', 'slug' => 'actualizar-partidagasto', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '974', 'nombre' => 'Borrar partidas de gastos', 'slug' => 'borrar-partidagasto', 'created_at' => $now, 'updated_at' => $now),
         ];
         DB::table('permiso')->insert($permiso);
     }

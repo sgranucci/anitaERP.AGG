@@ -1,0 +1,303 @@
+<?php
+
+namespace App\Http\Controllers\Presupuesto;
+
+use App\Http\Controllers\Controller;
+use App\Http\Requests\ValidacionPartidagasto;
+use App\Repositories\Presupuesto\PartidagastoRepositoryInterface;
+use App\Repositories\Presupuesto\Partidagasto_MontoRepositoryInterface;
+use App\Repositories\Presupuesto\PresupuestoRepositoryInterface;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Repositories\Configuracion\MonedaRepositoryInterface;
+use App\Repositories\Contable\CentrocostoRepositoryInterface;
+use App\Services\Presupuesto\PartidagastoService;
+use App\Services\Compras\OrdencompraService;
+use App\Models\Presupuesto\Partidagasto_Estado;
+use App\Models\Presupuesto\Partidagasto;
+use App\Queries\Presupuesto\PartidagastoQueryInterface;
+use App\Exports\Presupuesto\PartidagastoExport;
+use App\Exports\Presupuesto\PartidagastoOrdenCompraExport;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Carbon\Carbon;
+use DB;
+use Exception;
+
+class PartidagastoController extends Controller
+{
+    private $empresaRepository;
+    private $centrocostoRepository;
+    private $partidagastoRepository;
+    private $partidagasto_partida_montoRepository;
+    private $presupuestoRepository;
+    private $monedaRepository;
+    private $partidagastoQuery;
+    private $partidagastoService;
+    private $ordencompraService;
+
+	public function __construct(PresupuestoRepositoryInterface $presupuestorepository,
+                                PartidagastoRepositoryInterface $partidagastorepository,
+                                Partidagasto_MontoRepositoryInterface $partidagasto_partida_montorepository,
+                                EmpresaRepositoryInterface $empresarepository,
+                                CentrocostoRepositoryInterface $centrocostorepository,
+                                MonedaRepositoryInterface $monedarepository,
+                                PartidagastoService $partidagastoservice,
+                                OrdencompraService $ordencompraservice,
+                                PartidagastoQueryInterface $partidagastoquery,
+                                )
+    {
+        $this->partidagastoRepository = $partidagastorepository;
+        $this->partidagasto_partida_montoRepository = $partidagasto_partida_montorepository;
+        $this->presupuestoRepository = $presupuestorepository;
+        $this->empresaRepository = $empresarepository;
+        $this->centrocostoRepository = $centrocostorepository;
+        $this->monedaRepository = $monedarepository;
+        $this->partidagastoService = $partidagastoservice;
+        $this->ordencompraService = $ordencompraservice;
+        $this->partidagastoQuery = $partidagastoquery;
+    }
+
+    /**
+     * Display a listing of the resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function index(Request $request)
+    {
+        can('listar-partidagasto');
+		
+        $hay_partidagasto = $this->partidagastoQuery->first();
+
+        if (!$hay_partidagasto)
+			$this->partidagastoService->sincronizarConAnita();
+
+        $busqueda = $request->busqueda;
+
+        $partidagasto = $this->partidagastoQuery->leePartidagasto($busqueda, true);
+        $estado_enum = Partidagasto_Estado::$enumEstado;
+        $datas = ['partidagasto' => $partidagasto, 'busqueda' => $busqueda, 
+                    'estado_enum' => $estado_enum];
+
+        return view('presupuesto.partidagasto.index', $datas);
+    }
+
+    public function listar(Request $request, $formato = null, $busqueda = null)
+    {
+        can('listar-partidagasto'); 
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        switch($formato)
+        {
+        case 'PDF':
+            $partidagasto = $this->partidagastoQuery->leePartidagasto($busqueda, false);
+
+            $view =  \View::make('presupuesto.partidagasto.listado', compact('partidagasto'))
+                        ->render();
+            $path = storage_path('pdf/listados');
+            $nombre_pdf = 'listado_partidagasto';
+
+            $pdf = \App::make('dompdf.wrapper');
+            $pdf->setPaper('legal','landscape');
+            $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
+
+            return response()->download($path.'/'.$nombre_pdf.'.pdf');
+            break;
+
+        case 'EXCEL':
+            return (new PartidagastoExport($this->partidagastoQuery))
+                        ->parametros($busqueda)
+                        ->download('partidagasto.xlsx');
+            break;
+
+        case 'CSV':
+            return (new PartidagastoExport($this->partidagastoQuery))
+                        ->parametros($busqueda)
+                        ->download('partidagasto.csv', \Maatwebsite\Excel\Excel::CSV);
+            break;            
+        }   
+
+        $datas = ['partidagasto' => $partidagasto, 'busqueda' => $busqueda];
+
+		return view('presupuesto.partidagasto.index', $datas);       
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function crear()
+    {
+        can('crear-partidagasto');
+
+        $empresa_query = $this->empresaRepository->allFiltrado();
+        $centrocosto_query = $this->centrocostoRepository->all();
+        $moneda_query = $this->monedaRepository->all();
+        $presupuesto_query = $this->presupuestoRepository->all();
+        $estado_enum = Partidagasto_Estado::$enumEstado;
+
+        return view('presupuesto.partidagasto.crear', compact('empresa_query', 'centrocosto_query', 'presupuesto_query',
+                                                            'moneda_query', 'estado_enum'));
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function guardar(ValidacionPartidagasto $request)
+    {
+        $partidagasto = $this->partidagastoService->guardaPartidagasto($request);
+
+        if ($partidagasto['mensaje'] == 'ok')
+            $mensaje = 'Partida de gasto creada con éxito';
+        else
+            $mensaje = $partidagasto['errores'];
+
+        return redirect('presupuesto/partidagasto')->with('mensaje', $mensaje);
+	}
+
+    /**
+     * Show the form for editing the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function editar($id)
+    {
+        can('editar-partidagasto');
+
+		$data = $this->partidagastoRepository->find($id);
+        $empresa_query = $this->empresaRepository->allFiltrado();
+        $centrocosto_query = $this->centrocostoRepository->all();
+        $presupuesto_query = $this->presupuestoRepository->all();
+        $moneda_query = $this->monedaRepository->all();
+        $estado_enum = Partidagasto_Estado::$enumEstado;
+
+        return view('presupuesto.partidagasto.editar', compact('data', 'empresa_query', 'centrocosto_query', 'presupuesto_query',
+                                                            'moneda_query','estado_enum'));
+    }
+
+    /**
+     * Updote the specified resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function actualizar(ValidacionPartidagasto $request, $id)
+    {
+        can('actualizar-partidagasto');
+//dd($request);
+        $partidagasto = $this->partidagastoService->actualizaPartidagasto($request, $id);
+
+        if ($partidagasto['mensaje'] == 'ok')
+            $mensaje = 'Partida de gasto actualizada con éxito';
+        else
+            $mensaje = $partidagasto['errores'];
+
+        return redirect('presupuesto/partidagasto')->with('mensaje', $mensaje);
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function eliminar(Request $request, $id)
+    {
+        can('borrar-partidagasto');
+
+        if ($request->ajax()) 
+		{
+			$fl_borro = false;
+            
+			if ($this->partidagastoRepository->delete($id))
+				$fl_borro = true;
+
+            if ($fl_borro) {
+                return response()->json(['mensaje' => 'ok']);
+            } else {
+                return response()->json(['mensaje' => 'ng']);
+            }
+        } else {
+            abort(404);
+        }
+    }
+
+    public function leerHistoriaPartidagasto($partidagasto_id)
+    {
+        return $this->partidagastoService->leeHistoriaPartidagasto($partidagasto_id);
+    }
+
+    public function leerOrdenCompra($partidagasto_id)
+    {
+        $partidagasto = $this->partidagastoRepository->find($partidagasto_id);
+
+        if ($partidagasto)
+            return $this->ordencompraService->leeOrdenCompraPorCodigo($partidagasto->codigo);
+
+        return false;
+    }
+
+    public function actualizaEstadoPartidagasto($estado, $partidagasto_id)
+    {
+        return $this->partidagastoService->actualizaEstadoPartidagasto(['estado' => $estado], $partidagasto_id);
+    }
+
+    public function leerPartidagastoPartidaMonto($partidagasto_partida_id)
+    {
+        return $this->partidagasto_partida_montoRepository->findPorPartidagasto_Partida($partidagasto_partida_id);
+    }
+
+    public function listarOrdenCompra($formato, $partidagasto_id)
+    {
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $partidagasto = $this->partidagastoRepository->find($partidagasto_id);
+
+        $codigoproyecto = $partidagasto->codigoproyecto;
+
+        if ($partidagasto)
+        {
+            switch($formato)
+            {
+            case 'PDF':
+                $ordencompra = $this->ordencompraService->leeOrdenCompraPorCodigo($partidagasto->codigo);
+
+                $view =  \View::make('presupuesto.partidagasto.listado_ordencompra', compact('ordencompra', 'codigoproyecto'))
+                            ->render();
+                $path = storage_path('pdf/listados');
+                $nombre_pdf = 'listado_partidagasto_ordencompra';
+
+                $pdf = \App::make('dompdf.wrapper');
+                $pdf->setPaper('legal','landscape');
+                $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
+
+                return response()->download($path.'/'.$nombre_pdf.'.pdf');
+                break;
+
+            case 'EXCEL':
+                $ordencompra = $this->ordencompraService->leeOrdenCompraPorCodigo($partidagasto->codigo);
+
+                return (new PartidagastoOrdenCompraExport($ordencompra))
+                            ->parametros($codigoproyecto)
+                            ->download('partidagasto_ordencompra.xlsx');
+                break;
+
+            case 'CSV':
+                $ordencompra = $this->ordencompraService->leeOrdenCompraPorCodigo($partidagasto->codigo);
+                return (new PartidagastoOrdenCompraExport($ordencompra))
+                            ->parametros($codigoproyecto)
+                            ->download('partidagasto_ordencompra.csv', \Maatwebsite\Excel\Excel::CSV);
+                break;            
+            }   
+        }
+        return redirect()->back();
+    }
+}

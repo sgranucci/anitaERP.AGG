@@ -77,4 +77,9 @@ class Presupuesto_EscenarioRepository implements Presupuesto_EscenarioRepository
         return $presupuesto_escenario;
     }
 
+    public function findPorCodigo($codigo)
+    {
+        return $this->model->with('creousuarios')->where('codigo',$codigo)->first();
+    }
+
 }

@@ -9,8 +9,8 @@
     			</tr>
     		</thead>
     		<tbody id="tbody-tabla-archivo">
-		 		@if ($data->ordenventa_archivos ?? '') 
-					@foreach (old('archivos', $data->ordenventa_archivos->count() ? $data->ordenventa_archivos : ['']) as $archivo)
+		 		@if ($data->partidagasto_archivos ?? '') 
+					@foreach (old('archivos', $data->partidagasto_archivos->count() ? $data->partidagasto_archivos : ['']) as $archivo)
             			<tr class="item-archivo">
                 			<td>
 								<input type="file" name="nombrearchivos[]" class="form-control nombrearchivos" 
@@ -42,7 +42,7 @@
 				@endif
        		</tbody>
        	</table>
-		@include('presupuesto.capex.template3')
+		@include('presupuesto.partidagasto.template3')
         <div class="row">
         	<div class="col-md-12">
         		<button id="agrega_renglon_archivo" class="pull-right btn btn-danger">+ Agrega rengl&oacute;n</button>

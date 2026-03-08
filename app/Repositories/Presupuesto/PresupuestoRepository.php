@@ -174,12 +174,8 @@ class PresupuestoRepository implements PresupuestoRepositoryInterface
 
     public function findPorCodigo($codigo)
     {
-        if (null == $presupuesto = $this->model->with('creousuarios')->with('presupuesto_escenarios')
-                                        ->where('codigo',$codigo)->first()) {
-            throw new ModelNotFoundException("Registro no encontrado");
-        }
-
-        return $presupuesto;
+        return $this->model->with('creousuarios')->with('presupuesto_escenarios')
+                                        ->where('codigo',$codigo)->first();
     }
 
     public function findOrFail($id)

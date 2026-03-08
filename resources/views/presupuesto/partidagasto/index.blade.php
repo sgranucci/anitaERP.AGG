@@ -27,14 +27,14 @@
             <div class="card-header">
                 <h3 class="card-title">Capex</h3>
                 <div class="card-tools">
-                    <a href="{{route('crear_capex')}}" class="btn btn-outline-secondary btn-sm">
-                       	@if (can('crear-capex', false))
+                    <a href="{{route('crear_partidagasto')}}" class="btn btn-outline-secondary btn-sm">
+                       	@if (can('crear-partida-gasto', false))
                         	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
 						@endif
                     </a>
                 </div>
                 <div class="d-md-flex justify-content-md-end">
-					<form action="{{ route('consultar_capex') }}" method="GET">
+					<form action="{{ route('consultar_partidagasto') }}" method="GET">
 						<div class="btn-group">
 							<input type="text" name="busqueda" class="form-control" placeholder="Busqueda ..."> 
 							<button type="submit" class="btn btn-default">
@@ -45,56 +45,68 @@
                 </div>
             </div>
             <div class="card-body table-responsive p-0">
-                @include('includes.exportar-tabla', ['ruta' => 'lista_capex', 'busqueda' => $busqueda])
+                @include('includes.exportar-tabla', ['ruta' => 'lista_partidagasto', 'busqueda' => $busqueda])
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead>
                         <tr>
                             <th class="width20">ID</th>
                             <th>Empresa</th>
                             <th>Presupuesto</th>
+                            <th>Escenario</th>
                             <th>Centro de Costo</th>
-                            <th>Nombre</th>
+                            <th>Partida</th>
                             <th>Detalle</th>
-                            <th>Codigo de Proyecto</th>
-                            <th>Nro. de Proyecto</th>
+                            <th>Articulo</th>
+                            <th>Proveedor</th>
+                            <th>Cuenta Contable</th>
+                            <th>Moneda</th>
+                            <th>Monto Total</th>
                             <th>Estado</th>
-                            <th style="width: 15%;">Partidas</th>
+                            <th style="width: 15%;">Apertura</th>
                             <th class="width40" data-orderable="false"></th>
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach ($capex as $data)
+                        @foreach ($partidagasto as $data)
                         <tr>
                             <td>{{$data->id}}</td>
                             <td>{{$data->nombreempresa ?? ''}}</td>
                             <td>{{$data->nombrepresupuesto ?? ''}}</td>
+                            <td>{{$data->nombreescenario ?? ''}}</td>
                             <td>{{$data->nombrecentrocosto ?? '' }}</td>
-                            <td>{{$data->nombre ?? ''}}</td>
+                            <td>{{$data->codigo ?? ''}}</td>
                             <td>{{$data->detalle ?? ''}}</td>
-                            <td>{{$data->codigoproyecto}}</td>
-                            <td>{{$data->codigo}}</td>
+                            <td>{{$data->descripcionarticulo ?? ''}}</td>
+                            <td>{{$data->nombreproveedor ?? ''}}</td>
+                            <td>{{$data->codigocuentacontable}}-{{$data->nombrecuentacontable ?? ''}}</td>
+                            <td>{{$data->abreviaturamoneda}}</td>
+                            <td>
+                                @php $montoTotal = 0; @endphp
+                                @foreach($data->partidagasto_montos as $partida)
+                                    @php $montoTotal += $partida->monto; @endphp
+                                @endforeach                                
+                                {{$montoTotal}}
+                            </td>
                             <td>{{$data->estado}}</td>
                             <td>
                                 <ul>
-                                    @foreach($data->capex_partidas as $partida)
+                                    @php $montoTotal = 0; @endphp
+                                    @foreach($data->partidagasto_montos as $partida)
 
-                                        @php $montoTotal = 0; @endphp
-                                        @foreach($partida->capex_partida_montos as $monto)
-                                            @php $montoTotal += $monto->monto; @endphp
-                                        @endforeach
+                                        @php $montoTotal += $partida->monto; @endphp
 
-                                        <li>Nro.{{$partida->codigo}} {{$partida->nombre}} {{ $partida->monedas->abreviatura ?? ''}} {{number_format($montoTotal,2)}}</li>
+                                        <li>Nro.{{$partida->periodo}} {{number_format($montoTotal,2)}}</li>
                                     @endforeach
                                 </ul>
                             </td>
                             <td>
-                       			@if (can('editar-capex', false))
-                                	<a href="{{route('editar_capex', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
+                       			@if (can('editar-partida-gasto', false))
+                                	<a href="{{route('editar_partidagasto', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                     <i class="fa fa-edit"></i>
                                 	</a>
 								@endif
-                       			@if (can('borrar-capex', false))
-                                <form action="{{route('eliminar_capex', ['id' => $data->id])}}" class="d-inline form-eliminar" method="POST">
+                       			@if (can('borrar-partida-gasto', false))
+                                <form action="{{route('eliminar_partidagasto', ['id' => $data->id])}}" class="d-inline form-eliminar" method="POST">
                                     @csrf @method("delete")
                                     <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">
                                         <i class="fa fa-times-circle text-danger"></i>
@@ -110,5 +122,6 @@
         </div>
     </div>
 </div>
-{{ $capex->appends(['busqueda' => $busqueda])->links() }}
+{{ $partidagasto->appends(['busqueda' => $busqueda])->links() }}
 @endsection
+

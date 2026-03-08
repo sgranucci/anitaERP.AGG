@@ -2209,3 +2209,21 @@ Route::get('uif/leercodigopostaluif/{id}', 'Uif\Localidad_UifController@leerCodi
  Route::get('presupuesto/listarordencompra/{formato}/{capex_id}', 'Presupuesto\CapexController@listarOrdenCompra')->name('lista_ordencompra_capex');
  Route::get('presupuesto/listacapex/{formato?}/{busqueda?}', 'Presupuesto\CapexController@listar')->name('lista_capex');
  Route::get('presupuesto/leercapexpartidamonto/{capex_partida_id}', 'Presupuesto\CapexController@leerCapexPartidaMonto')->name('lee_capex_partida_monto');
+
+/* 
+ * Partidas de gastos
+ */
+
+ Route::get('presupuesto/partidagasto', 'Presupuesto\PartidagastoController@index')->name('consultar_partidagasto');
+ Route::get('presupuesto/partidagasto/crear', 'Presupuesto\PartidagastoController@crear')->name('crear_partidagasto');
+ Route::post('presupuesto/partidagasto', 'Presupuesto\PartidagastoController@guardar')->name('guardar_partidagasto');
+ Route::get('presupuesto/partidagasto/{id}/editar', 'Presupuesto\PartidagastoController@editar')->name('editar_partidagasto');
+ Route::put('presupuesto/partidagasto/{id}', 'Presupuesto\PartidagastoController@actualizar')->name('actualizar_partidagasto');
+ Route::delete('presupuesto/partidagasto/{id}', 'Presupuesto\PartidagastoController@eliminar')->name('eliminar_partidagasto');
+
+ Route::get('presupuesto/actualizaestadopartidagasto/{estadopartidagasto}/{partidagasto_id}', 'Presupuesto\PartidagastoController@actualizaEstadoPartidagasto')->name('actualiza_solo_partidagasto');
+ Route::get('presupuesto/leerhistoriapartidagasto/{partidagasto_id}', 'Presupuesto\PartidagastoController@leerHistoriaPartidagasto')->name('lee_historia_partidagasto');
+ Route::get('presupuesto/leerordencomprapartidagasto/{partidagasto_id}', 'Presupuesto\PartidagastoController@leerOrdenCompra')->name('lee_ordencompra_partidagasto');
+ Route::get('presupuesto/listarordencomprapartidagasto/{formato}/{partidagasto_id}', 'Presupuesto\PartidagastoController@listarOrdenCompra')->name('lista_ordencompra_partidagasto');
+ Route::get('presupuesto/listapartidagasto/{formato?}/{busqueda?}', 'Presupuesto\PartidagastoController@listar')->name('lista_partidagasto');
+ Route::get('presupuesto/leerpartidagastopartidamonto/{partidagasto_partida_id}', 'Presupuesto\PartidagastoController@leerPartidagastoPartidaMonto')->name('lee_partidagasto_partida_monto');

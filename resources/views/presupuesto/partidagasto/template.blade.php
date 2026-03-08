@@ -1,43 +1,17 @@
-<template id="template-renglon-capex-partida">
-    <tr class="item-capex-partida">
+<template id="template-renglon-partidagasto-monto">
+    <tr>
         <td>
-            <input type="hidden" name="items[]" class="form-control item" readonly value="1" />
-            <input type="hidden" name="capex_partida_ids[]" class="form-control capex_partida_id" readonly value="" />
-            <input type="hidden" name="creousuario_ids[]" class="creousuario_id" value="{{ auth()->id() }}" />
-            <input type="hidden" name="estados[]" class="estadopartida" value="" />
-            <input type="text" name="codigos[]" class="form-control codigopartida" value="" readonly>                                    
+            <input type="hidden" name="items_monto[]" class="item_monto" value="" />
+            <input type="hidden" name="creousuario_ids_monto[]" class="creousuario_id_monto" value="{{ auth()->id() }}" />
+            <input type="month" name="periodos[]" min="2010/01" placeholder="Formato: AAAA-MM" class="form-control periodo" value="">
         </td>
         <td>
-            <input type="text" name="nombres[]" class="form-control nombre" value="">                                    
+            <input type="text" name="montos[]" class="form-control monto" value="">
         </td>
         <td>
-            <div class="form-group row">
-                <input type="text" class="col-lg-2 proveedor_id form-control" name="proveedor_ids[]" value="" >
-                <input type="text" class="col-lg-8 proveedor form-control" name="proveedores[]" value="" readonly>
-                <button type="button" title="Consulta proveedores" style="padding:1;" class="btn-accion-tabla consultaproveedor tooltipsC">
-                    <i class="fa fa-search text-primary"></i>
-                </button>
-                <input type="hidden" class="codigoproveedor" name="codigoproveedores[]" value="" >
-                <input type="hidden" name="nombreproveedores[]" class="form-control nombreproveedor" value="">
-            </div>            
-        </td>
-        <td>
-            <select name="moneda_ids[]" data-placeholder="Moneda" class="form-control required moneda_id" data-fouc readonly required>
-                @foreach($moneda_query as $key => $value)
-                    <option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-                @endforeach
-            </select>                                    
-        </td>
-        <td>
-            <input type="number" class="form-control montopartida" id="montopartida" name="montopartida" value="" readonly>
-        </td>            
-        <td>
-            <a href="#" class="btn-accion-tabla tooltipsC carga_partida_monto" title="Carga montos mensuales">
-                <i class="fa fa-calendar text-success"></i>
-            </a>   
-            <button style="width: 7%;" type="button" class="btn-accion-tabla eliminar_capex_partida tooltipsC">
+            <button style="width: 7%;" type="button" class="btn-accion-tabla eliminar_renglon_partida_monto tooltipsC">
                 <i class="fa fa-times-circle text-danger"></i>
-            </button>            
+            </button>
         </td>
     </tr>
 </template>
