@@ -25,9 +25,9 @@ class CrearTablaPartidagasto extends Migration
             $table->foreign('centrocosto_id', 'fk_partidagasto_centrocosto')->references('id')->on('centrocosto')->onDelete('restrict')->onUpdate('restrict');
             $table->unsignedBigInteger('moneda_id');
             $table->foreign('moneda_id', 'fk_partidagasto_moneda')->references('id')->on('moneda')->onDelete('restrict')->onUpdate('restrict');
-			$table->unsignedBigInteger('cuentacontable_id');
+			$table->unsignedBigInteger('cuentacontable_id')->nullable();
             $table->foreign('cuentacontable_id', 'fk_partidagasto_cuentacontable')->references('id')->on('cuentacontable')->onDelete('restrict')->onUpdate('restrict');
-			$table->unsignedBigInteger('articulo_id');
+			$table->unsignedBigInteger('articulo_id')->nullable();
             $table->foreign('articulo_id', 'fk_partidagasto_articulo')->references('id')->on('articulo')->onDelete('cascade')->onUpdate('cascade');
 			$table->unsignedBigInteger('proveedor_id')->nullable();
             $table->foreign('proveedor_id', 'fk_partidagasto_proveedor')->references('id')->on('proveedor')->onDelete('restrict')->onUpdate('restrict');

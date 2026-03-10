@@ -2,7 +2,7 @@
 
 namespace App\Repositories\Presupuesto;
 
-interface Partida_EstadoRepositoryInterface 
+interface Partidagasto_EstadoRepositoryInterface 
 {
 
     public function create(array $data, $id);

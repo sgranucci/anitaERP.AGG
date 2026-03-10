@@ -8,6 +8,7 @@ use App\Repositories\Presupuesto\Partidagasto_EstadoRepositoryInterface;
 use App\Repositories\Presupuesto\Partidagasto_ArchivoRepositoryInterface;
 use App\Repositories\Presupuesto\Partidagasto_MontoRepositoryInterface;
 use App\Repositories\Presupuesto\PresupuestoRepositoryInterface;
+use App\Repositories\Presupuesto\Presupuesto_EscenarioRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Compras\ProveedorRepositoryInterface;
@@ -35,12 +36,14 @@ class PartidagastoService
 	private $monedaRepository;
 	private $cuentacontableRepository;
 	private $presupuestoRepository;
+	private $presupuesto_escenarioRepository;
 
     public function __construct(PartidagastoRepositoryInterface $partidagastorepository,
                                 Partidagasto_EstadoRepositoryInterface $partidagasto_estadorepository,
                                 Partidagasto_ArchivoRepositoryInterface $partidagasto_archivorepository,
 								Partidagasto_MontoRepositoryInterface $partidagasto_montorepository,
 								PresupuestoRepositoryInterface $presupuestorepository,
+								Presupuesto_EscenarioRepositoryInterface $presupuesto_escenariorepository,
 								CentrocostoRepositoryInterface $centrocostorepository,
 								ProveedorRepositoryInterface $proveedorrepository,
 								CuentacontableRepositoryInterface $cuentacontableRepository,
@@ -53,6 +56,7 @@ class PartidagastoService
         $this->partidagasto_archivoRepository = $partidagasto_archivorepository;
 		$this->partidagasto_montoRepository = $partidagasto_montorepository;
 		$this->presupuestoRepository = $presupuestorepository;
+		$this->presupuesto_escenarioRepository = $presupuesto_escenariorepository;
 		$this->centrocostoRepository = $centrocostorepository;
 		$this->proveedorRepository = $proveedorrepository;
 		$this->cuentacontableRepository = $cuentacontableRepository;
@@ -459,7 +463,7 @@ class PartidagastoService
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
 		foreach ($dataAnita as $value) 
-			$this->traerRegistroDeAnita($value->inroproyecto);
+			$this->traerRegistroDeAnita($value->ipartidaid);
     }
 
     public function traerRegistroDeAnita($key){
@@ -539,14 +543,14 @@ class PartidagastoService
 			else
 				$proveedor_id = null;
 
-			$articulo = $this->articuloRepository->findPorCodigo(ltrim($dataPartidagasto->carticulo,'0'));
+			$articulo = $this->articuloRepository->findPorSku(ltrim($dataPartidagasto->carticulo,'0'));
 			
 			if ($articulo)
 				$articulo_id = $articulo->id;	
 			else
 				$articulo_id = null;
 
-			$cuentacontable = $this->cuentacontableRepository->findPorCodigo($dataPartidagasto->icuentacontableid);
+			$cuentacontable = $this->cuentacontableRepository->findPorCodigo($dataPartidagasto->iempresaid, $dataPartidagasto->icuentacontableid);
 			
 			if ($cuentacontable)
 				$cuentacontable_id = $cuentacontable->id;	
@@ -558,13 +562,13 @@ class PartidagastoService
 				'presupuesto_id' => $presupuesto_id, 
 				'presupuesto_escenario_id' => $presupuesto_escenario_id,
 				'centrocosto_id' => $centrocosto_id, 
-				'moneda_id' => $moneda_id,
+				'moneda_id' => $dataPartidagasto->ccodigomoneda,
 				'cuentacontable_id' => $cuentacontable_id,
 				'articulo_id' => $articulo_id,
 				'proveedor_id' => $proveedor_id,
-				'detalle' => $dataPartidagasto->cdescripcion, 
+				'detalle' => $dataPartidagasto->ccomentario, 
 				'estado' => 'ACTIVA', 
-				'codigo' => $dataPartidagasto->inroproyecto, 
+				'codigo' => $dataPartidagasto->ipartidaid, 
 				'creousuario_id' => $usuario_id
 			];
 
@@ -576,51 +580,51 @@ class PartidagastoService
 				switch($i)
 				{
 					case 1:
-						$monto = $data->fmontoenero;
+						$monto = $dataPartidagasto->fmontoenero;
 						$periodo = $presupuesto->anio.'-01';
 						break;
 					case 2:
-						$monto = $data->fmontofebrero;
+						$monto = $dataPartidagasto->fmontofebrero;
 						$periodo = $presupuesto->anio.'-02';
 						break;
 					case 3:
-						$monto = $data->fmontomarzo;
+						$monto = $dataPartidagasto->fmontomarzo;
 						$periodo = $presupuesto->anio.'-03';							
 						break;
 					case 4:
-						$monto = $data->fmontoabril;
+						$monto = $dataPartidagasto->fmontoabril;
 						$periodo = $presupuesto->anio.'-04';							
 						break;
 					case 5:
-						$monto = $data->fmontomayo;
+						$monto = $dataPartidagasto->fmontomayo;
 						$periodo = $presupuesto->anio.'-05';							
 						break;
 					case 6:
-						$monto = $data->fmontojunio;
+						$monto = $dataPartidagasto->fmontojunio;
 						$periodo = $presupuesto->anio.'-06';
 						break;
 					case 7:
-						$monto = $data->fmontojulio;
+						$monto = $dataPartidagasto->fmontojulio;
 						$periodo = $presupuesto->anio.'-07';							
 						break;
 					case 8:
-						$monto = $data->fmontoagosto;
+						$monto = $dataPartidagasto->fmontoagosto;
 						$periodo = $presupuesto->anio.'-08';							
 						break;
 					case 9:
-						$monto = $data->fmontoseptiembre;
+						$monto = $dataPartidagasto->fmontoseptiembre;
 						$periodo = $presupuesto->anio.'-09';							
 						break;
 					case 10:
-						$monto = $data->fmontooctubre;
+						$monto = $dataPartidagasto->fmontooctubre;
 						$periodo = $presupuesto->anio.'-10';							
 						break;
 					case 11:
-						$monto = $data->fmontonoviembre;
+						$monto = $dataPartidagasto->fmontonoviembre;
 						$periodo = $presupuesto->anio.'-11';							
 						break;
 					case 12:
-						$monto = $data->fmontodiciembre;
+						$monto = $dataPartidagasto->fmontodiciembre;
 						$periodo = $presupuesto->anio.'-12';							
 						break;
 				}

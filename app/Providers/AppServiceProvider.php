@@ -1244,5 +1244,30 @@ class AppServiceProvider extends ServiceProvider
         	'App\Queries\Presupuesto\CapexQuery',
     	);
 
+		$this->app->bind(
+        	'App\Repositories\Presupuesto\PartidagastoRepositoryInterface',
+        	'App\Repositories\Presupuesto\PartidagastoRepository',
+    	);				
+
+		$this->app->bind(
+        	'App\Repositories\Presupuesto\Partidagasto_MontoRepositoryInterface',
+        	'App\Repositories\Presupuesto\Partidagasto_MontoRepository',
+    	);		
+				
+		$this->app->bind(
+        	'App\Repositories\Presupuesto\Partidagasto_EstadoRepositoryInterface',
+        	'App\Repositories\Presupuesto\Partidagasto_EstadoRepository',
+    	);			
+		
+		$this->app->bind(
+        	'App\Repositories\Presupuesto\Partidagasto_ArchivoRepositoryInterface',
+        	'App\Repositories\Presupuesto\Partidagasto_ArchivoRepository',
+    	);				
+
+		$this->app->bind(
+        	'App\Queries\Presupuesto\PartidagastoQueryInterface',
+        	'App\Queries\Presupuesto\PartidagastoQuery',
+    	);
+
     }
 }

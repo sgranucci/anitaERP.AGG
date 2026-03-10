@@ -108,7 +108,7 @@
     <div class="col-md-12">
         <!-- textarea -->
         <div class="form-group">
-            <table class="table" id="partida-gasto-table">
+            <table class="table" id="partidagasto-monto-table">
                 <thead>
                     <tr>
                         <th style="width: 25%;">Período</th>

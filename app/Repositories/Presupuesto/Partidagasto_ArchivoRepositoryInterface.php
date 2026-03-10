@@ -9,7 +9,7 @@ interface Partidagasto_ArchivoRepositoryInterface
     public function update(Request $request, $id);
     public function find($id);
     public function findOrFail($id);
-    public function delete($ordenventa_id, $codigo);
+    public function delete($ordenventa_id);
 
 }
 

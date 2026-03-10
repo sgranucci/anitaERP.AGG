@@ -70,14 +70,14 @@
 			<table class="table table-sm table-bordered table-striped" style="font-size: 8px; margin: 5px 0; position:relative; left:9px;">
 				<thead>
 					<tr>
-						<th>Comprobante</th>
-						<th>Fecha</th>
-						<th>Fecha de Vto.</th>
-						<th>Mon</th>
-						<th align="right">Cotización</th>
-						<th align="right">Monto</th>
-						<th align="right">Aplicado</th>
-						<th align="right">Saldo</th>
+						<th style="text-align: center;">Comprobante</th>
+						<th style="text-align: center;">Fecha</th>
+						<th style="text-align: center;">Fecha de Vto.</th>
+						<th style="text-align: center;">Mon</th>
+						<th style="text-align: right;">Cotización</th>
+						<th style="text-align: right;">Monto</th>
+						<th style="text-align: right;">Aplicado</th>
+						<th style="text-align: right;">Saldo</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -115,10 +115,10 @@
 						<thead>
 							<th style="width: 15%;">Fecha pago</th>
 							<th style="width: 10%;">Nro. de Cheque</th>
-							<th align="left" style="width: 30%;">Banco</th>
+							<th style="text-align: keft; width: 30%;">Banco</th>
 							<th style="width: 5%;">Mon</th>
-							<th align="right" style="width: 15%;">Cotización</th>
-							<th align="right" style="width: 20%;">Monto</th>
+							<th style="text-align: right; width: 15%;">Cotización</th>
+							<th style="text-align: right; width: 20%;">Monto</th>
 						</thead>
 						<tbody>
 							@php 
@@ -164,10 +164,10 @@
 				<div class="col-sm-7">
 					<table style="font-size: 8px; position:relative; left:1px;" class="table table-sm table-bordered table-striped">
 						<thead>
-							<th align="left" style="width: 30%;">Cuenta</th>
+							<th style="text-align: left; width: 30%;">Cuenta</th>
 							<th style="width: 5%;">Mon</th>
-							<th align="right" style="width: 15%;">Cotización</th>
-							<th align="right" style="width: 20%;">Monto</th>
+							<th style="text-align: right; width: 15%;">Cotización</th>
+							<th style="text-align: right; width: 20%;">Monto</th>
 						</thead>
 						<tbody>
 							@php 
@@ -212,12 +212,12 @@
 				<div class="col-sm-7">
 					<table style="font-size: 8px; position:relative; left:1px;" class="table table-sm table-bordered table-striped">
 						<thead>
-							<th align="left" style="width: 30%;">Retención</th>
+							<th style="text-align:left; width: 30%;">Retención</th>
 							<th style="width: 10%;">Comprobante</th>
 							<th style="width: 8%;">Tasa</th>
 							<th style="width: 5%;">Mon</th>
-							<th style="width: 15%;">Cotización</th>
-							<th style="width: 20%;">Monto</th>
+							<th style="text-align:right; width: 15%;">Cotización</th>
+							<th style="text-align:right; width: 20%;">Monto</th>
 						</thead>
 						<tbody>
 							@php 

@@ -35,7 +35,7 @@ class RolController extends Controller
      */
     public function crear()
     {
-        $centrocosto_query = $this->centrocostoRepository->all()->pluck('nombre', 'id', 'codigo')->toArray();
+        $centrocosto_query = $this->centrocostoRepository->all();
 
         return view('admin.rol.crear', compact('centrocosto_query'));
     }
