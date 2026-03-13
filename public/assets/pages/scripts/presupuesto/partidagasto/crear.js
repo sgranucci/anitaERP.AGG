@@ -4,11 +4,10 @@
 	var id_activo_partida;
 	var item_activo_partida;
 	var ptr_partida;
-	var array_capex_partida_monto = [];
 	
 	$(function () {
-		$('#agrega_renglon_capex_partida').on('click', agregaRenglonCapex_Partida);
-        $(document).on('click', '.eliminar_capex_partida', borraRenglonCapex_Partida);
+		$('#agrega_renglon_partidagasto_monto').on('click', agregaRenglonPartidagasto_Monto);
+        $(document).on('click', '.eliminar_partidagasto_monto', borraRenglonPartidagasto_Monto);
 		$('#agrega_renglon_archivo').on('click', agregaRenglonArchivo);
         $(document).on('click', '.eliminararchivo', borraRenglonArchivo);
 
@@ -67,7 +66,8 @@
 		let estadoPartidaGasto = $('#estado').val();
 
 		muestraBotonAnulacion(estadoPartidaGasto);
-
+		
+		completarEscenario();
     });
 
 	function activa_eventos(flInicio)
@@ -75,37 +75,18 @@
 		// Si esta agregando items desactiva los eventos
 		if (!flInicio)
 		{
-			$('.carga_partida_monto').off('click');
-			$('#monedatotal_id').off('change');
 			$('.periodo').off('change');
+			$('.monto').off('change');
 		}
 
 		// Activa eventos de consulta
 		activa_eventos_consultaproveedor();
+		activa_eventos_consultaarticulo();
+		activa_eventos_consulta_cuentacontable();
 
-		$('.carga_partida_monto').on('click', function (event) {
-			event.preventDefault();
-			
-			// Carga el id y el item al cual pertecenen los montos que se van a cargar
-			id_activo_partida = $(this).parents("tr").find('.capex_partida_id').val();
-			item_activo_partida = $(this).parents("tr").find('.item').val();
-			ptr_partida = this;
-
-			if (item_activo_partida > 0)
-			{
-				$("#partidaMontoModal").modal('show');
-			}
-		});
-
-		$('#monedatotal_id').on('change', function (event) {
-			event.preventDefault();
-
-			let monedatotal_id = $('#monedatotal_id').val();
-
-			$('.moneda_id').each(function(){
-				$(this).val(monedatotal_id);
-			});
-		});
+		$('#presupuesto_id').on('change', function(event) {
+			completarEscenario();
+		});		
 
 		$('.periodo').on('change', function(event) {
 			var periodo = $(this).val();
@@ -122,41 +103,44 @@
 				$(this).focus();
 			}
 		});
+
+		$('.monto').on('change', function(event) {
+			sumaPartida();
+		});
 	}
 
-	function agregaRenglonCapex_Partida(event){
+	function agregaRenglonPartidagasto_Monto(event){
 		event.preventDefault();
 		
-		agregaUnRenglonCapex_Partida();
+		agregaUnRenglonPartidagasto_Monto();
 	}
 
-	function agregaUnRenglonCapex_Partida()
+	function agregaUnRenglonPartidagasto_Monto()
 	{
-    	let renglon = $('#template-renglon-capex-partida').html();
+    	let renglon = $('#template-renglon-partidagasto-monto').html();
 
-    	$("#tbody-capex-partida-table").append(renglon);
-    	actualizaRenglonesCapex_Partida();
+    	$("#tbody-partidagasto-monto-table").append(renglon);
+    	actualizaRenglonesPartidagasto_Monto();
 
 		// Hace focus sobre el primer elemento de la tabla
-		let ptrUltimoRenglon = $("#tbody-capex-partida-table tr:last");
-		let monedatotal_id = $('#monedatotal_id').val();
+		let ptrUltimoRenglon = $("#tbody-partidagasto-monto-table tr:last");
 
-		$(ptrUltimoRenglon).find('.moneda_id').val(monedatotal_id);
-		$(ptrUltimoRenglon).find('.nombre').focus();
+		$(ptrUltimoRenglon).find('.periodo').focus();
 
 		activa_eventos(false);
     }
 
-	function borraRenglonCapex_Partida(event) {
+	function borraRenglonPartidagasto_Monto(event) {
     	event.preventDefault();
     	$(this).parents('tr').remove();
-    	actualizaRenglonesCapex_Partida();
+    	actualizaRenglonesPartidagasto_Monto();
+		sumaPartida();
     }
 
-    function actualizaRenglonesCapex_Partida() {
+    function actualizaRenglonesPartidagasto_Monto() {
     	var item = 1;
 
-    	$("#tbody-capex-partida-table .item").each(function() {
+    	$("#tbody-partidagasto-monto-table .item").each(function() {
     		$(this).val(item++);
     	});
     }
@@ -202,7 +186,7 @@
 		var wrapper = $(".container-historia");
 		let partidagasto_id = $("#partidagasto_id").val();
 
-		let url = '/anitaERP/public/presupuesto/leerhistoriacapex/'+partidagasto_id;
+		let url = '/anitaERP/public/presupuesto/leerhistoriapartidagasto/'+partidagasto_id;
 
 		$.get(url, function(historia){
 
@@ -214,7 +198,7 @@
 			$.each(hist, function(index,value){
 				fecha = value.fecha;
 
-				$(wrapper).append('<tr class="item-capex-historia">'+
+				$(wrapper).append('<tr class="item-partidagasto-historia">'+
                             '<td>'+
                                 '<input type="hidden" name="estadofechas[]" class="form-control estadofecha" value="'+value.fecha+'" readonly>'+
                                 '<input type="date" name="estadocreated[]" class="form-control estadofecha" value="'+fecha.substring(0,10)+'" readonly>'+
@@ -314,22 +298,6 @@
 		});
 	}
 
-	function sumaMontoPartida(item)
-	{
-		// Calcula monto total de la partida
-		let totalPartida = 0;
-
-		for (var i = 0; i < array_capex_partida_monto.length; i++)
-		{
-			if (array_capex_partida_monto[i].item_monto == item)
-				totalPartida += parseFloat(array_capex_partida_monto[i].monto);
-		}
-
-		$(ptr_partida).parents('tr').find('.montopartida').val(totalPartida.toFixed(2));
-
-		sumaPartida();
-	}
-
 	function anulaPartidaMonto()
 	{
 		if (confirm("¿Desea cambiar el estado de la Partida?"))
@@ -351,7 +319,7 @@
 			let estadoPartidaGasto = $('#estado').val();
 			let partidagasto_id = $('#partidagasto_id').val();
 
-			let listarUri = "/anitaERP/public/presupuesto/actualizaestadocapex/"+estadoPartidaGasto+"/"+partidagasto_id;
+			let listarUri = "/anitaERP/public/presupuesto/actualizaestadopartidagasto/"+estadoPartidaGasto+"/"+partidagasto_id;
 
 			$.get(listarUri)
 				.done(function(data){
@@ -391,7 +359,7 @@
 			let estadoPartidaGasto = $('#estado').val();
 			let partidagasto_id = $('#partidagasto_id').val();
 
-			let listarUri = "/anitaERP/public/presupuesto/actualizaestadocapex/"+estadoPartidaGasto+"/"+partidagasto_id;
+			let listarUri = "/anitaERP/public/presupuesto/actualizaestadopartidagasto/"+estadoPartidaGasto+"/"+partidagasto_id;
 
 			$.get(listarUri)
 				.done(function(data){
@@ -411,22 +379,22 @@
 		switch(estadoPartidaGasto)
 		{
 			case 'ANULADA':
-				$('#anulacapex').hide();
-				$('#activacapex').show();
-				$('#abrecapex').hide();
-				$('#cierracapex').hide();
+				$('#anulapartidagasto').hide();
+				$('#activapartidagasto').show();
+				$('#abrepartidagasto').hide();
+				$('#cierrapartidagasto').hide();
 				break;
 			case 'CERRADA':
-				$('#anulacapex').hide();
-				$('#activacapex').hide();
-				$('#abrecapex').show();
-				$('#cierracapex').hide();				
+				$('#anulapartidagasto').hide();
+				$('#activapartidagasto').hide();
+				$('#abrepartidagasto').show();
+				$('#cierrapartidagasto').hide();				
 				break;
 			case 'ACTIVA':
-				$('#anulacapex').show();
-				$('#activacapex').hide();
-				$('#abrecapex').hide();
-				$('#cierracapex').show();				
+				$('#anulapartidagasto').show();
+				$('#activapartidagasto').hide();
+				$('#abrepartidagasto').hide();
+				$('#cierrapartidagasto').show();				
 				break;
 		}
 	}
@@ -435,14 +403,32 @@
 	{
 		let totalConcepto = 0;
 
-		$("#tbody-capex-partida-table .montopartida").each(function() {
+		$("#tbody-partidagasto-monto-table .monto").each(function() {
             let valor = parseFloat($(this).val());
 
-			if (valor > 0)
+			if (valor != 0)
 				totalConcepto += (valor);
         });
 
 		$('#totalpartida').val(totalConcepto.toFixed(2));
 		$('#montototal').val(totalConcepto.toFixed(2));
 	}
+
+	function completarEscenario(){
+		let presupuesto_id = $("#presupuesto_id").val();
+
+		// Si marca boton de todas las combinaciones trae sin filtrar las activas o esta leyendo todos los articulos sin filtrar
+		let url = '/anitaERP/public/presupuesto/leerescenario/'+presupuesto_id;
+
+        $.get(url, function(data){
+            let comb = $.map(data, function(value, index){
+                return [value];
+            });
+			$("#presupuesto_escenario_id").empty();
+            $.each(comb, function(index,value){
+               	$("#presupuesto_escenario_id").append('<option value="'+value.id+'" selected>'+value.codigo+'-'+value.nombre+'</option>');
+            });
+        });
+    }
+
 

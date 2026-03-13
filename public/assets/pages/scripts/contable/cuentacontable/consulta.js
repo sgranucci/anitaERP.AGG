@@ -1,7 +1,7 @@
 function buscar_datos(consulta) {
     let empresa_id = $("#consultaempresa_id").val();
 
-    if (empresa_id == 0)
+    if (empresa_id == 0 || empresa_id == null)
         empresa_id = $("#empresa_id").val();
 
     $.ajax({
@@ -18,8 +18,8 @@ function buscar_datos(consulta) {
     })
     .done (function(respuesta) {
 		const resp = respuesta.replace(/\\/g, '');
-        $("#datos").html("");
-        $("#datos").html(resp);
+        $("#datoscuentas").html("");
+        $("#datoscuentas").html(resp);
     })
     .fail (function() {
         console.log("error");
@@ -65,6 +65,9 @@ function activa_eventos_consulta_cuentacontable()
                 $(codigo).parents("tr").find('.cuentacontable_id').val(data.id);
                 $(codigo).parents("tr").find(".cuentacontable_id_previa").val(data.id);
                 $(codigo).parents("tr").find(".nombrecuentacontable").val(data.nombre);
+
+                $("#cuentacontable_id").val(data.id);
+                $("#nombrecuentacontable").val(data.nombre);
             }
             else
             {
@@ -72,6 +75,10 @@ function activa_eventos_consulta_cuentacontable()
 
                 // Borra el renglon
                 $(codigo).parents('tr').remove();
+
+                $("#cuentacontable_id").val('');
+                $("#nombrecuentacontable").val('');                
+                $("#codigocuentacontable").val('');                
                 return;
             }
         });
@@ -85,6 +92,9 @@ function activa_eventos_consulta_cuentacontable()
         nombrexcodigo = $(this).parents("tr").find(".nombrecuentacontable");
         codigoxcodigo = $(this).parents("tr").find(".codigocuentacontable");
         let empresa_id = $(this).parents("tr").find(".empresa").val();
+
+        if (empresa_id == null)
+            empresa_id = $('#empresa_id').val();
 
         // Abre modal de consulta
         if (empresa_id > 0)
@@ -114,6 +124,10 @@ function activa_eventos_consulta_cuentacontable()
         $(nombrexcodigo).val(nombre);
         $(codigoxcodigo).val(codigo);
 
+        $("#cuentacontable_id").val(seleccion);
+        $("#nombrecuentacontable").val(nombre);
+        $("#codigocuentacontable").val(codigo);
+
         //* Asigna nueva cuentacontable
         $(cuentacontablexcodigo).parents("tr").find(".cuentacontable_id_previa").val($(cuentacontablexcodigo).val());
     
@@ -121,7 +135,3 @@ function activa_eventos_consulta_cuentacontable()
     });
 
 }
-
-
-
-

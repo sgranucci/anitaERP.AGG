@@ -69,7 +69,7 @@ class Partidagasto_MontoRepository implements Partidagasto_MontoRepositoryInterf
 		if ($funcion == 'update')
 		{
 			// Trae todos los id
-        	$partidagasto_monto = $this->model->where('partidagasto_id', $data['partidagasto_ids'][0])->get()->pluck('id')->toArray();
+        	$partidagasto_monto = $this->model->where('partidagasto_id', $data['partidagasto_id'])->get()->pluck('id')->toArray();
 			$q_partidagasto_monto = count($partidagasto_monto);
 		}
 		// Graba estados

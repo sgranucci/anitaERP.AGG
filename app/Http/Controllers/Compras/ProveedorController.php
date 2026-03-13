@@ -446,4 +446,8 @@ class ProveedorController extends Controller
         return $this->proveedorRepository->find($proveedor_id);
     }
 
+    public function leeProveedorPorCodigo($codigo)
+    {
+        return $this->proveedorRepository->findPorCodigo($codigo);
+    }    
 }

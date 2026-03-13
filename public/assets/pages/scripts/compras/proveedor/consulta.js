@@ -69,6 +69,7 @@ function activa_eventos_consultaproveedor()
     $(document).on('click', '.eligeconsultaproveedor', function () {
         let seleccion = $(this).parents("tr").children().html();
         let nombre = $(this).parents("tr").find(".nombreproveedor").html();
+        let codigo = $(this).parents("tr").find(".codigoproveedor").html();
 
         // Asigna a grilla los valores devueltos por consulta
         $(proveedorxcodigo).val(seleccion);
@@ -79,6 +80,7 @@ function activa_eventos_consultaproveedor()
         $("#proveedor_id").val(seleccion);
         $("#nombreproveedor").val(nombre);
         $("#proveedor").val(nombre);
+        $("#codigoproveedor").val(codigo);
 
         $('#consultaproveedorModal').modal('hide');
     });
@@ -92,6 +94,25 @@ function activa_eventos_consultaproveedor()
             url = url.replace(':id', id);
             document.location.href=url;
         }
+    });
+
+    $('#codigoproveedor').on('change', function (event) {
+        event.preventDefault();
+
+        // Lee servicio terrestre por codigo
+        let codigoproveedor = $("#codigoproveedor").val();
+        let url_res = '/anitaERP/public/compras/leerproveedorporcodigo/'+codigoproveedor;
+
+        $("#proveedor_id").val('');
+        $("#nombreproveedor").val('');
+
+        $.get(url_res, function(data){
+            if (data)
+            {
+                $("#proveedor_id").val(data.id);
+                $("#nombreproveedor").val(data.nombre);
+            }
+        });
     });
 
     $('#proveedor_id').on('change', function (event) {

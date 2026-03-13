@@ -17,6 +17,7 @@ use App\Models\Presupuesto\Partidagasto;
 use App\Queries\Presupuesto\PartidagastoQueryInterface;
 use App\Exports\Presupuesto\PartidagastoExport;
 use App\Exports\Presupuesto\PartidagastoOrdenCompraExport;
+use App\Exports\Presupuesto\GeneraAsientoPartidagastoExport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
@@ -299,5 +300,46 @@ class PartidagastoController extends Controller
             }   
         }
         return redirect()->back();
+    }
+
+    // Reporte de pedidos por vendedor
+    public function indexGeneraAsiento()
+    {
+        $empresa_query = $this->empresaRepository->allFiltrado();
+        $presupuesto_query = $this->presupuestoRepository->all();        
+
+        return view('presupuesto.generaasiento.crear', compact('empresa_query', 'presupuesto_query'));
+    }
+
+    public function crearGeneraAsiento(Request $request)
+    {
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+		switch($request->extension)
+		{
+		case "Genera Reporte en Excel":
+			$extension = "xlsx";
+			break;
+		case "Genera Reporte en PDF":
+            $asientos = $this->partidagastoService->generaAsiento($request->empresa_id, $request->presupuesto_id, $request->presupuesto_escenario_id);
+
+            $view =  \View::make('presupuesto.partidagasto.listadogeneraasiento', compact('asientos'))
+                        ->render();
+            $path = storage_path('pdf/listados');
+            $nombre_pdf = 'listado_generaasientopartidagasto';
+
+            $pdf = \App::make('dompdf.wrapper');
+            $pdf->setPaper('legal','landscape');
+            $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
+
+            return response()->download($path.'/'.$nombre_pdf.'.pdf');
+            break;
+		case "Genera Reporte en CSV":
+			$extension = "csv";
+			break;
+		}
+		return (new GeneraAsientoPartidagastoExport($this->partidagastoService))->parametros($request->empresa_id, $request->presupuesto_id, $request->presupuesto_escenario_id)
+								->download('generasientopartidagasto.'.$extension);
     }
 }

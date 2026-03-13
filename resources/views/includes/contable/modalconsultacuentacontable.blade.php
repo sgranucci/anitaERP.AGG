@@ -26,7 +26,7 @@
               <th>Código</th>
               <th>Nombre</th>
           </thead>
-          <tbody id="datos"></tbody>
+          <tbody id="datoscuentas"></tbody>
         </table>
       </div>
       <div class="modal-footer">

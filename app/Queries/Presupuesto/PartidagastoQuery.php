@@ -54,6 +54,7 @@ class PartidagastoQuery implements PartidagastoQueryInterface
         $select = [ 'partidagasto.id as id',
                     'partidagasto.presupuesto_id as presupuesto_id',
                     'partidagasto.presupuesto_escenario_id as escenario_id',
+                    'partidagasto.codigo as codigopartida',
                     'empresa.nombre as nombreempresa',
                     'presupuesto.nombre as nombrepresupuesto',
                     'presupuesto_escenario.nombre as nombreescenario',
@@ -61,6 +62,7 @@ class PartidagastoQuery implements PartidagastoQueryInterface
                     'articulo.descripcion as descripcionarticulo',
                     'proveedor.nombre as nombreproveedor',
                     'moneda.abreviatura as abreviaturamoneda',
+                    'cuentacontable.codigo as codigocuentacontable',
                     'cuentacontable.nombre as nombrecuentacontable',
                     'partidagasto.detalle as detalle',
                     'partidagasto.estado as estado',
@@ -71,12 +73,12 @@ class PartidagastoQuery implements PartidagastoQueryInterface
                                 ->join('empresa', 'empresa.id', '=', 'partidagasto.empresa_id')
                                 ->join('centrocosto', 'centrocosto.id', '=', 'partidagasto.centrocosto_id')
                                 ->join('presupuesto', 'presupuesto.id', '=', 'partidagasto.presupuesto_id')
-                                ->join('presupuesto_escenario', 'presupuesto_escenario_id', '=', 'partidagasto.presupuesto_escenario_id')
+                                ->join('presupuesto_escenario', 'presupuesto_escenario.id', '=', 'partidagasto.presupuesto_escenario_id')
                                 ->join('moneda', 'moneda.id', '=', 'partidagasto.moneda_id')
-                                ->join('proveedor', 'proveedor.id', '=', 'partidagasto.proveedor_id')
-                                ->join('articulo', 'articulo.id', '=', 'partidagasto.articulo_id')
-                                ->join('cuentacontable', 'cuentacontable.id', '=', 'partidagasto.cuentacontable_id')
-                                ->join('usuario', 'usuario.id', '=', 'partidagasto.creousuario_id')->with('partidagasto_partidas');
+                                ->leftjoin('proveedor', 'proveedor.id', '=', 'partidagasto.proveedor_id')
+                                ->leftjoin('articulo', 'articulo.id', '=', 'partidagasto.articulo_id')
+                                ->leftjoin('cuentacontable', 'cuentacontable.id', '=', 'partidagasto.cuentacontable_id')
+                                ->join('usuario', 'usuario.id', '=', 'partidagasto.creousuario_id')->with('partidagasto_montos');
 
         $columns[] = ['columna' => 'partidagasto.id', 
                     'clausula' => 'LIKE'];                                
@@ -84,6 +86,8 @@ class PartidagastoQuery implements PartidagastoQueryInterface
                     'clausula' => 'LIKE'];
         $columns[] = ['columna' => 'centrocosto.nombre',
                     'clausula' => 'LIKE']; 
+        $columns[] = ['columna' => 'partidagasto.codigo',
+                    'clausula' => 'LIKE'];                        
         $columns[] = ['columna' => 'partidagasto.detalle',
                     'clausula' => 'LIKE'];                     
         $columns[] = ['columna' => 'usuario.nombre',
@@ -102,7 +106,7 @@ class PartidagastoQuery implements PartidagastoQueryInterface
                     'clausula' => 'LIKE'];                                       
         $count = count($columns);
 
-        $partidagastos->whereIn('empresa_id', $empresas);
+        $partidagastos->whereIn('partidagasto.empresa_id', $empresas);
 
         $partidagastos->where(function ($query) use ($count, $busqueda, $columns, $usuario_id) {
 
@@ -116,7 +120,7 @@ class PartidagastoQuery implements PartidagastoQueryInterface
                             });
 
         // Ordena desc. por ID
-        $partidagastos->orderBy('id', 'desc');
+        $partidagastos->orderBy('partidagasto.id', 'desc');
 
         if (isset($flPaginando))
         {

@@ -1526,6 +1526,7 @@ Route::delete('compras/proveedor/{id}', 'Compras\ProveedorController@eliminar')-
 
 Route::post('compras/proveedor/consultaproveedor', 'Compras\ProveedorController@consultaProveedor')->name('consulta_proveedor');
 Route::get('compras/leerproveedor/{proveedor_id}', 'Compras\ProveedorController@leeProveedor')->name('leer_proveedor');
+Route::get('compras/leerproveedorporcodigo/{codigo}', 'Compras\ProveedorController@leeProveedorPorCodigo')->name('leer_proveedor_por_codigo');
 
 
 /* 
@@ -2192,6 +2193,7 @@ Route::get('uif/leercodigopostaluif/{id}', 'Uif\Localidad_UifController@leerCodi
  Route::put('presupuesto/presupuesto/{id}', 'Presupuesto\PresupuestoController@actualizar')->name('actualizar_presupuesto');
  Route::delete('presupuesto/presupuesto/{id}', 'Presupuesto\PresupuestoController@eliminar')->name('eliminar_presupuesto');
 
+ Route::get('presupuesto/leerescenario/{escenario_id}', 'Presupuesto\PresupuestoController@leerEscenario')->name('lee_presupuesto_escenario');
 /* 
  * Capex
  */
@@ -2227,3 +2229,11 @@ Route::get('uif/leercodigopostaluif/{id}', 'Uif\Localidad_UifController@leerCodi
  Route::get('presupuesto/listarordencomprapartidagasto/{formato}/{partidagasto_id}', 'Presupuesto\PartidagastoController@listarOrdenCompra')->name('lista_ordencompra_partidagasto');
  Route::get('presupuesto/listapartidagasto/{formato?}/{busqueda?}', 'Presupuesto\PartidagastoController@listar')->name('lista_partidagasto');
  Route::get('presupuesto/leerpartidagastopartidamonto/{partidagasto_partida_id}', 'Presupuesto\PartidagastoController@leerPartidagastoPartidaMonto')->name('lee_partidagasto_partida_monto');
+
+/* 
+ * Genera asientos contables del presupuesto de gastos
+ */
+
+Route::get('presupuesto/generaasiento', 'Presupuesto\PartidagastoController@indexGeneraAsiento')->name('generar_asientos_partidagasto');
+Route::post('presupuesto/crear_generaasiento', 'Presupuesto\PartidagastoController@crearGeneraAsiento')->name('crear_genera_asiento_partidagasto');
+

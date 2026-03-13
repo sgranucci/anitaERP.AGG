@@ -125,4 +125,10 @@ class PresupuestoController extends Controller
         return redirect('presupuesto/presupuesto')->with('mensaje', 'Presupuesto eliminado con éxito');
     }
     
+    public function leerEscenario($presupuesto_id)
+    {
+        $data = $this->presupuestoRepository->findOrFail($presupuesto_id);
+
+        return $data->presupuesto_escenarios;
+    }
 }

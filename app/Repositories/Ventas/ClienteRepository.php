@@ -132,7 +132,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 										->where('id', $id);
 
 		if (count($vendedores) > 0)
-			$cliente = $cliente->whereIn('vendedor_id', [$vendedores]);
+			$cliente = $cliente->whereIn('vendedor_id', $vendedores);
 
 		$cliente = $cliente->first();
 
@@ -156,7 +156,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 										->where('codigo', $codigo);
 
 		if (count($vendedores) > 0)
-			$cliente = $cliente->whereIn('vendedor_id', [$vendedores]);
+			$cliente = $cliente->whereIn('vendedor_id', $vendedores);
 
 		$cliente = $cliente->first();
 
@@ -1321,7 +1321,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 		$vendedores = $this->vendedorRepository->leeVendedoresAsociados();
 
 		if (count($vendedores) > 0)
-			$data = $data->where('vendedor_id', [$vendedores]);
+			$data = $data->where('vendedor_id', $vendedores);
 
 		$data = $data->Where(function ($query) use ($count, $consulta, $columns) {
                         			for ($i = 0; $i < $count; $i++)

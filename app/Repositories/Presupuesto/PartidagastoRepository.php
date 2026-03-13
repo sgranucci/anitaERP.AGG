@@ -114,4 +114,42 @@ class PartidagastoRepository implements PartidagastoRepositoryInterface
 		return $numeropartidagasto;
 	}	
 
+	public function leePartidaGasto($empresa_id, $presupuesto_id, $presupuesto_escenario_id)
+	{
+		$partidagasto = $this->model->select('partidagasto.id as id', 
+											'partidagasto.presupuesto_id as presupuesto_id',
+											'partidagasto.presupuesto_escenario_id as escenario_id',
+											'partidagasto.empresa_id as empresa_id',
+											'empresa.nombre as nombreempresa',
+											'partidagasto.codigo as codigopartida',
+											'presupuesto.nombre as nombrepresupuesto',
+											'centrocosto.codigo as codigocentrocosto',
+											'centrocosto.nombre as nombrecentrocosto',
+											'articulo.descripcion as descripcionarticulo',
+											'proveedor.nombre as nombreproveedor',
+											'partidagasto.moneda_id as moneda_id',
+											'moneda.codigo as codigomoneda',
+											'moneda.abreviatura as abreviaturamoneda',
+											'partidagasto.cuentacontable_id as cuentacontable_id',
+											'cuentacontable.codigo as codigocuentacontable',
+											'cuentacontable.nombre as nombrecuentacontable',
+											'partidagasto.detalle as detalle',
+											'partidagasto.estado as estado',
+											'partidagasto_monto.periodo as periodo',
+											'partidagasto_monto.monto as monto')
+											->join('empresa', 'empresa.id', '=', 'partidagasto.empresa_id')
+											->join('centrocosto', 'centrocosto.id', '=', 'partidagasto.centrocosto_id')
+											->join('moneda', 'moneda.id', '=', 'partidagasto.moneda_id')
+											->join('presupuesto', 'presupuesto.id', '=', 'partidagasto.presupuesto_id')
+											->leftjoin('proveedor', 'proveedor.id', '=', 'partidagasto.proveedor_id')
+											->leftjoin('articulo', 'articulo.id', '=', 'partidagasto.articulo_id')
+											->leftjoin('cuentacontable', 'cuentacontable.id', '=', 'partidagasto.cuentacontable_id')	
+											->join('partidagasto_monto', 'partidagasto_monto.partidagasto_id', '=', 'partidagasto.id')
+											->where('partidagasto.empresa_id', $empresa_id)
+											->where('partidagasto.presupuesto_id', $presupuesto_id)
+											->where('partidagasto.presupuesto_escenario_id', $presupuesto_escenario_id)
+											->where('partidagasto_monto.monto', '!=', 0)
+											->get();
+		return $partidagasto;
+	}
 }

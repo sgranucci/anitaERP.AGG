@@ -188,7 +188,7 @@ class PedidoService
 	{
 	  	ini_set('memory_limit', '512M');
 
-		$pdfMerger = PDFMerger::init();
+		//$pdfMerger = PDFMerger::init();
 
 		$data = $this->pedidoQuery->leePedidoporId($id);
 		$pedido = $data[0];
@@ -214,7 +214,6 @@ class PedidoService
 
 		// reemplaza %s por nombre del archivo
 		$comandos[array_search('%s', $comandos)] = $nombreReporte;
-
 		$process = new Process($comandos);
 		$process->run();
 		if (!$process->isSuccessful()) {
@@ -231,7 +230,7 @@ class PedidoService
 	{
 	  	ini_set('memory_limit', '512M');
 
-		$pdfMerger = PDFMerger::init();
+		//$pdfMerger = PDFMerger::init();
 
 		$data = $this->pedidoQuery->leePedidoporId($id);
 		$pedido = $data[0];

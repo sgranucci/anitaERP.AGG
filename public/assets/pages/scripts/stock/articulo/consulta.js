@@ -91,20 +91,25 @@ function activa_eventos_consultaarticulo()
 
         $("#articulo_id").val(seleccion);
         $("#nombrearticulo").val(nombre);
+        $("#codigoarticulo").val(codigo);
 
-        if (unidadmedida.toUpperCase() == 'CAJ')
-            $(ptrarticulo_id).parents("tr").find(".caja").focus();
+        if (unidadmedida != null)
+        {
+            if (unidadmedida.toUpperCase() == 'CAJ')
+                $(ptrarticulo_id).parents("tr").find(".caja").focus();
 
-        if (unidadmedida.toUpperCase() == 'UN')
-            $(ptrarticulo_id).parents("tr").find(".pieza").focus();        
-        
-        if (unidadmedida.toUpperCase() == 'KG' || unidadmedida.toUpperCase() == 'KIL')
-            $(ptrarticulo_id).parents("tr").find(".pieza").focus();           
-
+            if (unidadmedida.toUpperCase() == 'UN')
+                $(ptrarticulo_id).parents("tr").find(".pieza").focus();        
+            
+            if (unidadmedida.toUpperCase() == 'KG' || unidadmedida.toUpperCase() == 'KIL')
+                $(ptrarticulo_id).parents("tr").find(".pieza").focus();           
+        }
         $('#consultaarticuloModal').modal('hide');
 
         // Si es salamin tira saca opciones que no van del descuento
-        armaSelectDescuentoVenta(ptrarticulo_id);
+        if (typeof $.fn.armaSelectDescuentoVenta === 'function') {
+            armaSelectDescuentoVenta(ptrarticulo_id);
+        }        
     });
 
     $('#articulo_id').on('change', function (event) {
@@ -188,30 +193,41 @@ function activa_eventos_consultaarticulo()
                 });
 
                 $("#articulo_id").val(data.id);
-                $("#descripcionarticulo").val(data.nombre);
+                $("#descripcionarticulo").val(data.descripcion);
+                $("#nombrearticulo").val(data.descripcion);
                 $("#unidadmedida").val(data.unidadmedida);
+                $("#codigoarticulo").val(data.sku);
 
                 let unidadmedida = $(ptrrenglon).parents("tr").find(".unidadmedida").val();
 
-                if (unidadmedida.toUpperCase() == 'CAJ')
-                    $(ptrrenglon).parents("tr").find(".caja").focus();
-
-                if (unidadmedida.toUpperCase() == 'UN')
-                    $(ptrrenglon).parents("tr").find(".pieza").focus();
-
-                if (unidadmedida.toUpperCase() == 'KG' || unidadmedida.toUpperCase() == 'KIL')                    
-                    $(ptrrenglon).parents("tr").find(".pieza").focus();  
-                
-                asignaPrecio(ptrrenglon, data.id, '');
-
-                if (!controlDescuento(ptrrenglon))
+                if (unidadmedida != null)                
                 {
-                    alert("No puede cargar el artículo");
-                    borraRenglon();
+                    if (unidadmedida.toUpperCase() == 'CAJ')
+                        $(ptrrenglon).parents("tr").find(".caja").focus();
+
+                    if (unidadmedida.toUpperCase() == 'UN')
+                        $(ptrrenglon).parents("tr").find(".pieza").focus();
+
+                    if (unidadmedida.toUpperCase() == 'KG' || unidadmedida.toUpperCase() == 'KIL')                    
+                        $(ptrrenglon).parents("tr").find(".pieza").focus();  
+                }
+                    
+                if (typeof $.fn.asignaPrecio === 'function') {
+                    asignaPrecio(ptrrenglon, data.id, '');
+                }
+
+                if (typeof $.fn.controlDescuento === 'function') {
+                    if (!controlDescuento(ptrrenglon))
+                    {
+                        alert("No puede cargar el artículo");
+                        borraRenglon();
+                    }
                 }
 
                 // Si es salamin tira saca opciones que no van del descuento
-                armaSelectDescuentoVenta(ptrrenglon);
+                if (typeof $.fn.armaSelectDescuentoVenta === 'function') {
+                    armaSelectDescuentoVenta(ptrrenglon);
+                }
             }
         });
 
@@ -219,6 +235,29 @@ function activa_eventos_consultaarticulo()
         }, 1000);
 
     });    
+
+    $('#codigoarticulo').on('change', function (event) {
+        event.preventDefault();
+
+
+        let sku = $(this).val();
+        let url_res = '/anitaERP/public/stock/leerunarticuloporsku/'+sku;
+
+        $.get(url_res, function(data){
+            if (data)
+            {
+                $("#articulo_id").val(data.id);
+                $("#descripcionarticulo").val(data.descripcion);
+                $("#nombrearticulo").val(data.descripcion);
+                $("#unidadmedida").val(data.unidadmedida);
+                $("#codigoarticulo").val(data.sku);
+            }
+        });
+
+        setTimeout(() => {
+        }, 1000);
+
+    });        
 
 }
 

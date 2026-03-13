@@ -19,7 +19,7 @@
         <div class="card card-danger">
             <div class="card-header">
                 @if (!isset($visualizar))
-                    <h3 class="card-title">Editar Partida de Gasto - Número {{$data->codigo ?? ''}} - Id {{$data->id}} - Proyecto {{$data->codigoproyecto}}</h3>
+                    <h3 class="card-title">Editar Partida de Gasto - Número {{$data->codigo ?? ''}} - Id {{$data->id}}</h3>
                     <div class="card-tools">
                         <a href="{{route('consultar_partidagasto')}}" class="btn btn-outline-info btn-sm">
                             <i class="fa fa-fw fa-reply-all"></i> Volver al listado

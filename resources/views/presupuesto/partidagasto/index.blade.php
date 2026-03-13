@@ -1,6 +1,6 @@
 @extends("theme.$theme.layout")
 @section('titulo')
-    Capex
+    Partidas de Gastos
 @endsection
 
 @section("scripts")
@@ -25,7 +25,7 @@
         @include('includes.mensaje')
         <div class="card card-info">
             <div class="card-header">
-                <h3 class="card-title">Capex</h3>
+                <h3 class="card-title">Partidas de Gastos</h3>
                 <div class="card-tools">
                     <a href="{{route('crear_partidagasto')}}" class="btn btn-outline-secondary btn-sm">
                        	@if (can('crear-partida-gasto', false))
@@ -74,28 +74,24 @@
                             <td>{{$data->nombrepresupuesto ?? ''}}</td>
                             <td>{{$data->nombreescenario ?? ''}}</td>
                             <td>{{$data->nombrecentrocosto ?? '' }}</td>
-                            <td>{{$data->codigo ?? ''}}</td>
+                            <td>{{$data->codigopartida ?? ''}}</td>
                             <td>{{$data->detalle ?? ''}}</td>
                             <td>{{$data->descripcionarticulo ?? ''}}</td>
                             <td>{{$data->nombreproveedor ?? ''}}</td>
                             <td>{{$data->codigocuentacontable}}-{{$data->nombrecuentacontable ?? ''}}</td>
                             <td>{{$data->abreviaturamoneda}}</td>
-                            <td>
+                            <td style="text-align: left;">
                                 @php $montoTotal = 0; @endphp
                                 @foreach($data->partidagasto_montos as $partida)
                                     @php $montoTotal += $partida->monto; @endphp
                                 @endforeach                                
-                                {{$montoTotal}}
+                                {{number_format($montoTotal,2)}}
                             </td>
                             <td>{{$data->estado}}</td>
                             <td>
                                 <ul>
-                                    @php $montoTotal = 0; @endphp
                                     @foreach($data->partidagasto_montos as $partida)
-
-                                        @php $montoTotal += $partida->monto; @endphp
-
-                                        <li>Nro.{{$partida->periodo}} {{number_format($montoTotal,2)}}</li>
+                                        <li>{{$partida->periodo}} {{number_format($partida->monto,2)}}</li>
                                     @endforeach
                                 </ul>
                             </td>

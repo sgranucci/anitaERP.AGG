@@ -62,9 +62,20 @@ class AsientoRepository implements AsientoRepositoryInterface
 		if (array_key_exists('path_sistema', $data))
 			$this->path_sistema = $data['path_sistema'];
 		
-		$data['numeroasiento'] = self::ultimoAsientoAnita($data['empresa_id']);
-		$data['usuario_id'] = Auth::user()->id;
+		// Si es tipo PRE el numero de asiento es periodo y mes
+		$tipoasiento = $this->tipoasientoRepository->find($data['tipoasiento_id']);
 
+		$codigoTipoAsiento = '';
+		if ($tipoasiento)
+			$codigoTipoAsiento = $tipoasiento->abreviatura;
+
+		if ($codigoTipoAsiento == 'PRE')
+			$data['numeroasiento'] = substr($data['fecha'],0,4).substr($data['fecha'],5,2).$data['numerolinea'];
+		else
+			$data['numeroasiento'] = self::ultimoAsientoAnita($data['empresa_id']);
+
+		$data['usuario_id'] = Auth()->id();
+		
 		$asiento = $this->model->create($data);
 
 		// Graba anita
@@ -704,6 +715,13 @@ class AsientoRepository implements AsientoRepositoryInterface
 		}
 		else
 		{
+			$empresa = $this->empresaRepository->find($empresa_id);
+
+			if ($empresa)
+				$codigoEmpresa = $empresa->codigo;
+			else
+				$codigoEmpresa = $empresa_id;
+
 			// Lee numero de operacion
 			$apiAnita = new ApiAnita();
 			$data = array( 
@@ -713,25 +731,28 @@ class AsientoRepository implements AsientoRepositoryInterface
 				'campos' => '
 					numa_ult_numero
 				' , 
-				'whereArmado' => " WHERE numa_sistema='contab' and numa_programa='a-ctamov.c' and numa_referencia='".$empresa_id."'"
+				'whereArmado' => " WHERE numa_sistema='contab' and numa_programa='a-ctamov.c' and numa_referencia='".$codigoEmpresa."'"
 			);
 			if (isset($this->path_sistema))
 				$data['path_sistema'] = $this->path_sistema;			
 			$dataAnita = json_decode($apiAnita->apiCall($data));
 
-			$numeroOperacion = $dataAnita[0]->numa_ult_numero + 1;
+			if ($dataAnita)
+			{
+				$numeroOperacion = $dataAnita[0]->numa_ult_numero + 1;
 
-			// Actualiza numero
-			$apiAnita = new ApiAnita();
-			$data = array( 'acc' => 'update', 
-						'tabla' => 'numabm', 
-						'sistema' => 'shared',
-						'valores' => 
-							" numa_ult_numero = '".$numeroOperacion."' ", 
-						'whereArmado' => " WHERE numa_sistema='contab' and numa_programa='a-ctamov.c' and numa_referencia='".$empresa_id."'" );
-			if (isset($this->path_sistema))
-				$data['path_sistema'] = $this->path_sistema;						
-			$numerador = $apiAnita->apiCall($data);
+				// Actualiza numero
+				$apiAnita = new ApiAnita();
+				$data = array( 'acc' => 'update', 
+							'tabla' => 'numabm', 
+							'sistema' => 'shared',
+							'valores' => 
+								" numa_ult_numero = '".$numeroOperacion."' ", 
+							'whereArmado' => " WHERE numa_sistema='contab' and numa_programa='a-ctamov.c' and numa_referencia='".$codigoEmpresa."'" );
+				if (isset($this->path_sistema))
+					$data['path_sistema'] = $this->path_sistema;						
+				$numerador = $apiAnita->apiCall($data);
+			}
 		}
 
 		return $numeroOperacion;		

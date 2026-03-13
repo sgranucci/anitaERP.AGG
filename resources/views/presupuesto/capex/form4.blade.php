@@ -1,12 +1,12 @@
 <div class="card form4" style="display: none">
         <div class="col-12 d-flex justify-content-end"> 
-            <a href="{{route('lista_ordencompra_capex', ['formato' => 'PDF', 'capex_id' => $data->id])}}" class="btn btn-sm bg-danger">
+            <a href="{{route('lista_ordencompra_capex', ['formato' => 'PDF', 'capex_id' => $data->id ?? 0])}}" class="btn btn-sm bg-danger">
                 <i class="fas fa-file-pdf"></i> Pdf
             </a>
-            <a href="{{route('lista_ordencompra_capex', ['formato' => 'EXCEL', 'capex_id' => $data->id])}}" class="btn btn-sm bg-success">
+            <a href="{{route('lista_ordencompra_capex', ['formato' => 'EXCEL', 'capex_id' => $data->id ?? 0])}}" class="btn btn-sm bg-success">
                 <i class="fas fa-file-excel"></i> Excel
             </a>
-            <a href="{{route('lista_ordencompra_capex', ['formato' => 'CSV', 'capex_id' => $data->id])}}" class="btn btn-sm bg-warning">
+            <a href="{{route('lista_ordencompra_capex', ['formato' => 'CSV', 'capex_id' => $data->id ?? 0])}}" class="btn btn-sm bg-warning">
                 <i class="fas fa-file-csv"></i> Csv
             </a>
         </div>
