@@ -4,7 +4,7 @@
             <input type="hidden" name="items[]" class="form-control item" readonly value="1" />
             <input type="hidden" name="capex_partida_ids[]" class="form-control capex_partida_id" readonly value="" />
             <input type="hidden" name="creousuario_ids[]" class="creousuario_id" value="{{ auth()->id() }}" />
-            <input type="hidden" name="estados[]" class="estadopartida" value="" />
+            <input type="hidden" name="estadopartidas[]" class="estadopartida" value="" />
             <input type="text" name="codigos[]" class="form-control codigopartida" value="" readonly>                                    
         </td>
         <td>

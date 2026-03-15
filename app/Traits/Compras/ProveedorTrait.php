@@ -9,6 +9,8 @@ trait ProveedorTrait {
 	public static $enumEstado = [
 		'0' => 'Activo',
 		'1' => 'Suspendido',
+		'2' => 'Alta Pendiente',
+		'3' => 'Regularizado'
 		];
 
 	public static $enumTipoAlta = [

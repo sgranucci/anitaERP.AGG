@@ -61,7 +61,6 @@ class CapexService
 	   	$data['estados'][] = Capex_Estado::$enumEstado[array_search('A', array_column(Capex_Estado::$enumEstado, 'valor'))]['nombre'];
 		$data['usuario_ids'][] = Auth::user()->id;
 	   	$data['observacionestados'][] = "Alta de Capex";
-
 		$data['creousuario_id'] = Auth::user()->id;
 
 		DB::beginTransaction();
@@ -75,6 +74,8 @@ class CapexService
 			// Guarda tablas asociadas
 			if ($capex)
 			{
+				$data['codigo'] = $capex->codigo;
+
 				Self::agrega($data, $capex, $request);
 
 				$anita = Self::grabaAnita($data);
@@ -155,7 +156,16 @@ class CapexService
 	private function actualiza(&$data, $id, $request)
 	{
 		// Graba capex
-		$capex = $this->capexRepository->update($data, $id);
+		$capex = $this->capexRepository->find($id);
+
+		if ($capex)
+			$capex = $this->capexRepository->update($data, $id);
+		else
+		{
+			$capex = $this->capexRepository->create($data);
+
+			$id = $capex->id;
+		}
 
 		if ($capex === 'Error')
 			throw new Exception('Error en grabacion capex.');
@@ -290,7 +300,6 @@ class CapexService
 							'".date_format(Carbon::now(), 'Ymd')."',
 							'".date_format(Carbon::now(), 'H:i')."'"
 					);
-
         $proyectocapex = $apiAnita->apiCall($grabaAnita);
 		if (strpos($proyectocapex, 'Error') !== false)
 			return ['error' => 'Error proyectocapex', 'mensaje' => $proyectocapex];
@@ -304,7 +313,7 @@ class CapexService
 			$estados = $data['estados'];
 			$codigos = $data['codigos'];
 			$usuario_ids = $data['creousuario_ids'];	
-			
+
 			for ($i = 0; $i < count($moneda_ids); $i++)
 			{
 				// Lee el proveedor
@@ -316,17 +325,19 @@ class CapexService
 
 				// Busca en todo el array los items que corresponden a cada partida
 				$montoMes = [];
+				for ($j = 0; $j <= 12; $j++)
+					$montoMes[$j] = 0;				
 				$montoTotal = 0;
-				if (isset($data['periodos']))
+				if (isset($data['periodo_monto_armados']))
 				{
-					for ($j = 0; $j < count($data['periodos']); $j++)
+					for ($j = 0; $j < count($data['periodo_monto_armados']); $j++)
 					{
-						if ($data['itempartidas'][$j] == $data['items'][$i])
+						if ($data['item_monto_armados'][$j] == $data['items'][$i])
 						{
-							$mes = substr($data['periodos'][$j], 4, 2);
+							$mes = substr($data['periodo_monto_armados'][$j], 4, 2);
 
-							$montoMes[(int) $mes] += $data['montos'][$j];
-							$montoTotal += $data['montos'][$j];
+							$montoMes[(int) $mes] += $data['monto_armados'][$j];
+							$montoTotal += $data['monto_armados'][$j];
 						}
 					}
 				}
@@ -371,18 +382,18 @@ class CapexService
 									'".date_format(Carbon::now(), 'Ymd')."',
 									'".date_format(Carbon::now(), 'H:i')."',
 									'".'0'."',
-									'".$montoMes[1] ?? '0'."',
-									'".$montoMes[2] ?? '0'."',
-									'".$montoMes[3] ?? '0'."',
-									'".$montoMes[4] ?? '0'."',
-									'".$montoMes[5] ?? '0'."',
-									'".$montoMes[6] ?? '0'."',
-									'".$montoMes[7] ?? '0'."',
-									'".$montoMes[8] ?? '0'."',
-									'".$montoMes[9] ?? '0'."',
-									'".$montoMes[10] ?? '0'."',
-									'".$montoMes[11] ?? '0'."',
-									'".$montoMes[12] ?? '0'."',
+									'".$montoMes[1]."',
+									'".$montoMes[2]."',
+									'".$montoMes[3]."',
+									'".$montoMes[4]."',
+									'".$montoMes[5]."',
+									'".$montoMes[6]."',
+									'".$montoMes[7]."',
+									'".$montoMes[8]."',
+									'".$montoMes[9]."',
+									'".$montoMes[10]."',
+									'".$montoMes[11]."',
+									'".$montoMes[12]."',
 									'".$montoTotal."',
 									'".$codigoPresupuesto."'"
 							);  
@@ -441,7 +452,7 @@ class CapexService
 			$nombres = $data['nombres'];
 			$proveedor_ids = $data['proveedor_ids'];
 			$moneda_ids = $data['moneda_ids'];
-			$estados = $data['estados'];
+			$estados = $data['estado'];
 			$codigos = $data['codigos'];
 			$usuario_ids = $data['creousuario_ids'];	
 			
@@ -529,18 +540,18 @@ class CapexService
 										'".date_format(Carbon::now(), 'Ymd')."',
 										'".date_format(Carbon::now(), 'H:i')."',
 										'".'0'."',
-										'".$montoMes[1] ?? '0' ."',
-										'".$montoMes[2] ?? '0' ."',
-										'".$montoMes[3] ?? '0' ."',
-										'".$montoMes[4] ?? '0' ."',
-										'".$montoMes[5] ?? '0' ."',
-										'".$montoMes[6] ?? '0' ."',
-										'".$montoMes[7] ?? '0' ."',
-										'".$montoMes[8] ?? '0' ."',
-										'".$montoMes[9] ?? '0' ."',
-										'".$montoMes[10] ?? '0' ."',
-										'".$montoMes[11] ?? '0' ."',
-										'".$montoMes[12] ?? '0' ."',
+										'".$montoMes[1]."',
+										'".$montoMes[2]."',
+										'".$montoMes[3]."',
+										'".$montoMes[4]."',
+										'".$montoMes[5]."',
+										'".$montoMes[7]."',
+										'".$montoMes[6]."',
+										'".$montoMes[8]."',
+										'".$montoMes[9]."',
+										'".$montoMes[10]."',
+										'".$montoMes[11]."',
+										'".$montoMes[12]."',
 										'".$montoTotal."',
 										'".$codigoPresupuesto."'"
 								);  

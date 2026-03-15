@@ -6,8 +6,14 @@ Art&iacute;culos
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/articulo/filtro.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/configuracion/salida.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/configuracion/configurar_salida.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/configuracion/configurar_modeloetiqueta.js")}}" type="text/javascript"></script>
 
 <script>
+
+var url = "{{ route('configurar_salida', ['programa' => ':programa']) }}";
+
 function checkState(index){
 }
 
@@ -42,12 +48,20 @@ function limpiaFiltros(){
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Art&iacute;culos</h3>
+                @include('includes.configurar-salida')
+                @include('includes.configurar-modeloetiqueta')
                 <div class="card-tools">
                     <a href="{{route('crear_articulo')}}" class="btn btn-outline-secondary btn-sm">
                        	@if (can('crear-articulos', false))
                         	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
 						@endif
                     </a>
+    				<a href="#" onclick="configurarSalida()" class="btn btn-outline-secondary btn-sm">
+						<i class="fa fa-fw fa-cog"></i> Configura salida
+					</a>
+    				<a href="#" onclick="configurarModeloEtiqueta()" class="btn btn-success btn-sm">
+						<i class="fa fa-fw fa-print"></i> Configura etiqueta
+					</a>                    
                 </div>
                 <div class="d-md-flex justify-content-md-end">
 					<form action="{{ route('articulo') }}" method="GET">
@@ -104,11 +118,11 @@ function limpiaFiltros(){
                             <td>
                        			@if (can('editar-articulos', false))
                                 	<a href="{{route('editar_articulo', ['id' => $articulo->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
-                                    <i class="fa fa-edit"></i>
+                                        <i class="fa fa-edit"></i>
                                 	</a>                                    
 								@endif
                        			@if (can('imprimir-articulos-qr', false))
-          							<a href="articulo/{{$articulo->id}}" class="btn-accion-tabla tooltipsC" title="Imprimir QR">
+          							<a href="{{route('listar_etiqueta_articulo', ['id' => $articulo->id])}}" class="btn-accion-tabla tooltipsC" title="Imprimir QR">
                                    		<i class="fa fa-qrcode"></i>
 									</a>
 								@endif

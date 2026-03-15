@@ -64,7 +64,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 								CondicionIIBBRepositoryInterface $condicionIIBBrepository,
 								CentrocostoRepositoryInterface $centrocostorepository,
 								ConceptogastoRepositoryInterface $conceptogastorepository,
-								Proveedor_FormaPagoRepositoryInterface $proveedor_formpagorepository,
+								Proveedor_FormaPagoRepositoryInterface $proveedor_formapagorepository,
 								Proveedor_ExclusionRepositoryInterface $proveedor_exclusionrepository,
 								FormapagoRepositoryInterface $formapagorepository,
 								TipocuentacajaRepositoryInterface $tipocuentacajarepository,
@@ -84,7 +84,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
         $this->condicionIIBBRepository = $condicionIIBBrepository;
 		$this->centrocostoRepository = $centrocostorepository;
 		$this->conceptogastoRepository = $conceptogastorepository;
-		$this->proveedor_formpagoRepository = $proveedor_formpagorepository;
+		$this->proveedor_formapagoRepository = $proveedor_formapagorepository;
 		$this->proveedor_exclusionRepository= $proveedor_exclusionrepository;
 		$this->formapagoRepository = $formapagorepository;
 		$this->bancoRepository = $bancorepository;
@@ -567,10 +567,10 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 					"tiporetencion" => $tipoRetencion,
 					"desdefecha" => $exclusion->proex_desde_fecha,
 					"hastafecha" => $exclusion->proex_hasta_fecha,
-					"porcentajeexclusion" => $exclusion->porc_excl
+					"porcentajeexclusion" => $exclusion->proex_porc_excl
 				];
 				if ($fl_crea_registro)
-					$proveedor = $this->proveedor_exclusionRepository->create($arr_proexcl);
+					$this->proveedor_exclusionRepository->create($arr_proexcl, $proveedor->id);
 			}
 	
 			// Graba tabla de formas de pago
@@ -598,9 +598,10 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 			foreach ($dataAnita as $formapago)
 			{
 				// Busca forma de pago
-				$formapago = $this->formapagoRepository->findPorAbreviatura($formapago->prop_forma_pago);
-				if ($formapago)
-					$formapago_id = $formapago->id;
+				$forma = $this->formapagoRepository->findPorAbreviatura($formapago->prop_forma_pago);
+
+				if ($forma)
+					$formapago_id = $forma->id;
 				else
 					$formapago_id = null;
 
@@ -610,7 +611,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 					$tipocuentacaja_id = $tipocuentacaja->id;
 				else
 					$tipocuentacaja_id = null;
-	
+
 				// Busca banco
 				$banco = $this->bancoRepository->findPorCodigo($formapago->prop_cod_banco);
 				if ($banco)
@@ -627,19 +628,19 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 
 				$arr_formapago = [
 					"proveedor_id" => $proveedor->id,
-					"nombre" => $formpago->prop_nombre,
+					"nombre" => $formapago->prop_nombre,
 					"formapago_id" => $formapago_id,
-					"cbu" => $formpago->prop_cbu,
+					"cbu" => $formapago->prop_cbu,
 					"tipocuentacaja_id" => $tipocuentacaja_id,
 					"moneda_id" => $formapago->prop_cod_mon,
 					"numerocuenta" => $formapago->prop_nro_cuenta,
 					"nroinscripcion" => $formapago->prop_cuit,
 					"banco_id" => $banco_id,
 					"mediopago_id" => $mediopago_id,
-					"email" => $formpago->e_mail_conf,
+					"email" => $formapago->prop_e_mail_conf,
 				];
 				if ($fl_crea_registro)
-					$proveedor = $this->proveedor_formapagoRepository->create($arr_formapago);
+					$this->proveedor_formapagoRepository->create($arr_formapago, $proveedor->id);
 			}			
         }
     }
@@ -1307,4 +1308,48 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 		else
 			$condicioncompra  = 0;
 	}
+
+	public function leeProveedor($busqueda, $flPaginando = null)
+    {
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $proveedor = $this->model->select('proveedor.id as id',
+                                        'proveedor.nombre as nombre',
+										'proveedor.fantasia as fantasia',
+										'proveedor.nroinscripcion as numerodocumento',
+                                        'proveedor.domicilio as domicilio',
+										'proveedor.codigo as codigo',
+                                        'localidad.nombre as nombrelocalidad',
+										'provincia.nombre as nombreprovincia')
+                                ->leftjoin('localidad', 'localidad.id', 'proveedor.localidad_id')
+								->leftjoin('provincia', 'provincia.id', 'proveedor.provincia_id');
+		
+		$proveedor = $proveedor->where(function ($query) use ($busqueda) {
+                	$query->orWhere('proveedor.id', $busqueda)
+							->orWhere('proveedor.nombre', 'like', '%'.$busqueda.'%')
+							->orWhere('proveedor.fantasia', 'like', '%'.$busqueda.'%')
+							->orWhere('proveedor.nroinscripcion', 'like', '%'.$busqueda.'%')
+							->orWhere('proveedor.domicilio', 'like', '%'.$busqueda.'%')
+							->orWhere('proveedor.codigo', 'like', '%'.$busqueda.'%')
+							->orWhere('localidad.nombre', 'like', '%'.$busqueda.'%')
+							->orWhere('provincia.nombre', 'like', '%'.$busqueda.'%');
+					});
+
+		$proveedor = $proveedor->orderby('id', 'DESC');
+                                
+		//dd($permisos['permisos']);
+        if (isset($flPaginando))
+        {
+            if ($flPaginando)
+                $proveedor = $proveedor->paginate(10);
+            else
+                $proveedor = $proveedor->get();
+        }
+        else
+            $proveedor = $proveedor->get();
+
+        return $proveedor;
+    }
+
 }

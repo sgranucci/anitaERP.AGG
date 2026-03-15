@@ -73,13 +73,9 @@ class BancoRepository implements BancoRepositoryInterface
 
     public function find($id)
     {
-        if (null == $banco = $this->model->with('provincias')
+        return $this->model->with('provincias')
 											->with('localidades')
-											->with('condicionivas')->find($id)) {
-            throw new ModelNotFoundException("Registro no encontrado");
-        }
-
-        return $banco;
+											->with('condicionivas')->find($id);
     }
 
     public function findOrFail($id)

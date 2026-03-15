@@ -81,7 +81,7 @@ class Capex_PartidaRepository implements Capex_PartidaRepositoryInterface
 				$nombres = $data['nombres'];
 				$proveedor_ids = $data['proveedor_ids'];
 				$moneda_ids = $data['moneda_ids'];
-				$estados = $data['estados'];
+				$estados = [$data['estado']];
 				$codigos = $data['codigos'];
 				$creousuario_ids = $data['creousuario_ids'];
 			}

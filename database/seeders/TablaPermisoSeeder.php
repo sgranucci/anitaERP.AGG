@@ -17,11 +17,11 @@ class TablaPermisoSeeder extends Seeder
     {
         $now = Carbon::now()->toDateTimeString();
         $permiso = [
-            array('id' => '970', 'nombre' => 'Ingresar partidas de gastos', 'slug' => 'crear-partidagasto', 'created_at' => $now, 'updated_at' => $now),
-            array('id' => '971', 'nombre' => 'Listar partidas de gastos', 'slug' => 'listar-partidagasto', 'created_at' => $now, 'updated_at' => $now),
-            array('id' => '972', 'nombre' => 'Editar partidas de gastos', 'slug' => 'editar-partidagasto', 'created_at' => $now, 'updated_at' => $now),
-            array('id' => '973', 'nombre' => 'Actualizar partidas de gastos', 'slug' => 'actualizar-partidagasto', 'created_at' => $now, 'updated_at' => $now),
-            array('id' => '974', 'nombre' => 'Borrar partidas de gastos', 'slug' => 'borrar-partidagasto', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '980', 'nombre' => 'Ingresar modelos de etiquetas', 'slug' => 'crear-modeloetiqueta', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '981', 'nombre' => 'Listar modelos de etiquetas', 'slug' => 'listar-modeloetiqueta', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '982', 'nombre' => 'Editar modelos de etiquetas', 'slug' => 'editar-modeloetiqueta', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '983', 'nombre' => 'Actualizar modelos de etiquetas', 'slug' => 'actualizar-modeloetiqueta', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '984', 'nombre' => 'Borrar modelos de etiquetas', 'slug' => 'borrar-modeloetiqueta', 'created_at' => $now, 'updated_at' => $now),
         ];
         DB::table('permiso')->insert($permiso);
     }

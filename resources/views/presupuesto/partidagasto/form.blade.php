@@ -76,7 +76,7 @@
                 <label for="codigo" class="col-lg-3 col-form-label">Código de Partida</label>
                 <input type="text" name="codigo" id="codigo" class="col-lg-2 form-control requerido" placeholder="Codigo de Partida" aria-label="Codigo de Partida" value="{{$data->codigo ?? ''}}" required>
                 <label for="estado" class="col-lg-3 col-form-label">Estado</label>
-                <input type="text" name="estado" id="estado" class="col-lg-3 form-control" value="{{old('estado', $data->estado ?? 'SOLICITADA')}}" readonly>
+                <input type="text" name="estado" id="estado" class="col-lg-3 form-control" value="{{old('estado', $data->estado ?? 'ACTIVA')}}" readonly>
             </div>             
             <div class="form-group row">
                 <label for="estado" class="col-lg-3 col-form-label">Monto Total</label>

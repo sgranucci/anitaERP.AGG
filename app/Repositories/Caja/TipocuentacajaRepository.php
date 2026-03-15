@@ -49,11 +49,7 @@ class TipocuentacajaRepository implements TipocuentacajaRepositoryInterface
 
     public function find($id)
     {
-        if (null == $tipocuentacaja = $this->model->find($id)) {
-            throw new ModelNotFoundException("Registro no encontrado");
-        }
-
-        return $tipocuentacaja;
+        return $this->model->find($id);
     }
 
     public function findOrFail($id)

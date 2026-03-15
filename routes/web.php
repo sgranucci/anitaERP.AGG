@@ -746,6 +746,7 @@ Route::get('stock/articulo/{id}/editar', 'Stock\ArticuloController@editar')->nam
 Route::put('stock/articulo/{id}', 'Stock\ArticuloController@actualizar')->name('actualizar_articulo');
 Route::delete('stock/articulo/{id}', 'Stock\ArticuloController@eliminar')->name('eliminar_articulo');
 Route::get('stock/download_articulo/{sku}', 'Stock\ArticuloController@download')->name('download_articulo');
+Route::get('stock/listar_etiqueta_articulo/{id}', 'Stock\ArticuloController@download')->name('listar_etiqueta_articulo');
 
 Route::get('stock/leer_historia_articulo/{articulo_id}', 'Stock\ArticuloController@leerHistoriaArticulo')->name('leer_historia_articulo');
 Route::get('stock/leerunarticulo/{articulo_id}', 'Stock\ArticuloController@leeUnArticulo')->name('leer_un_articulo');
@@ -1527,6 +1528,7 @@ Route::delete('compras/proveedor/{id}', 'Compras\ProveedorController@eliminar')-
 Route::post('compras/proveedor/consultaproveedor', 'Compras\ProveedorController@consultaProveedor')->name('consulta_proveedor');
 Route::get('compras/leerproveedor/{proveedor_id}', 'Compras\ProveedorController@leeProveedor')->name('leer_proveedor');
 Route::get('compras/leerproveedorporcodigo/{codigo}', 'Compras\ProveedorController@leeProveedorPorCodigo')->name('leer_proveedor_por_codigo');
+Route::get('compras/listaproveedor/{formato?}/{busqueda?}', 'Compras\ProveedorController@listar')->name('lista_proveedor');
 
 
 /* 
@@ -2063,6 +2065,23 @@ Route::get('uif/leercodigopostaluif/{id}', 'Uif\Localidad_UifController@leerCodi
  Route::get('configuracion/actividad_arca/{id}/editar', 'Configuracion\Actividad_ArcaController@editar')->name('editar_actividad_arca');
  Route::put('configuracion/actividad_arca/{id}', 'Configuracion\Actividad_ArcaController@actualizar')->name('actualizar_actividad_arca');
  Route::delete('configuracion/actividad_arca/{id}', 'Configuracion\Actividad_ArcaController@eliminar')->name('eliminar_actividad_arca');
+
+/* 
+ * Modelos de etiquetas
+ */
+
+ Route::get('configuracion/modeloetiqueta', 'Configuracion\ModeloetiquetaController@index')->name('consultar_modeloetiqueta');
+ Route::get('configuracion/modeloetiqueta/crear', 'Configuracion\ModeloetiquetaController@crear')->name('crear_modeloetiqueta');
+ Route::post('configuracion/modeloetiqueta', 'Configuracion\ModeloetiquetaController@guardar')->name('guardar_modeloetiqueta');
+ Route::get('configuracion/modeloetiqueta/{id}/editar', 'Configuracion\ModeloetiquetaController@editar')->name('editar_modeloetiqueta');
+ Route::put('configuracion/modeloetiqueta/{id}', 'Configuracion\ModeloetiquetaController@actualizar')->name('actualizar_modeloetiqueta');
+ Route::delete('configuracion/modeloetiqueta/{id}', 'Configuracion\ModeloetiquetaController@eliminar')->name('eliminar_modeloetiqueta');
+
+ Route::get('configuracion/actualizarestadomodeloetiqueta/{estadomodeloetiqueta}/{modeloetiqueta_id}', 'Configuracion\ModeloetiquetaController@actualizaEstado')->name('actualizar_estado_modeloetiqueta'); 
+ Route::get('configuracion/configurarmodeloetiqueta/{programa?}', 'Configuracion\ModeloetiquetaController@configurarModeloetiqueta')->name('configurar_modeloetiqueta');
+ Route::get('configuracion/setearmodeloetiqueta/{programa}/{modeloetiqueta}', 'Configuracion\ModeloetiquetaController@setearModeloetiqueta')->name('setear_modeloetiqueta');
+ Route::get('configuracion/buscarmodeloetiqueta/{programa?}', 'Configuracion\ModeloetiquetaController@buscarModeloetiqueta')->name('buscar_modeloetiqueta');
+ 
 
 /* 
  * Oficina de compras

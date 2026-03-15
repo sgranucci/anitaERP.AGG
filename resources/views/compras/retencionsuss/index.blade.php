@@ -70,7 +70,7 @@
 									@endforeach
 								</td>
 								<td>{{ number_format($retencionsuss->valorretencion,2) }}</td>
-								<td>{{ number_format($retencionsuss->minimoretencion,2) }}</td>
+								<td>{{ number_format($retencionsuss->minimoimponible,2) }}</td>
 								<td>{{ $retencionsuss->regimen }}</td>
         						<td>
                        			@if (can('editar-retenciones-de-suss', false))

@@ -181,6 +181,14 @@ class CondicionpagoRepository implements CondicionpagoRepositoryInterface
 				{
 					$nrocuota = $cuota->conpv_nro_cuota;
 					$tipoplazo = $colTipoPlazo->where('id', $cuota->conpv_tipo_plazo);
+
+					if (!isset($tipoplazo[0]['valor']))
+					{
+						$tipoplazo = [];
+
+						$tipoplazo[0]['valor'] = '1';
+					}
+
         			$condicionpagocuota = $this->modelCuota->create([
             											'condicionpago_id' => $condicionpago->id,
             											'cuota' => $nrocuota,

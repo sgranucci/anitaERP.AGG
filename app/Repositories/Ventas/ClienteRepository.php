@@ -1279,7 +1279,8 @@ class ClienteRepository implements ClienteRepositoryInterface
 							->orWhere('cliente.numerodocumento', 'like', '%'.$busqueda.'%')
 							->orWhere('cliente.domicilio', 'like', '%'.$busqueda.'%')
 							->orWhere('cliente.codigo', 'like', '%'.$busqueda.'%')
-							->orWhere('localidad.nombre', 'like', '%'.$busqueda.'%');
+							->orWhere('localidad.nombre', 'like', '%'.$busqueda.'%')
+							->orWhere('provincia.nombre', 'like', '%'.$busqueda.'%');
 					});
 
 		$cliente = $cliente->orderby('id', 'DESC');

@@ -121,7 +121,7 @@ class ProveedorController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function index()
+    public function index(Request $request)
     {
         can('listar-proveedor');
 
@@ -133,9 +133,55 @@ class ProveedorController extends Controller
 			$this->proveedor_archivoRepository->sincronizarConAnita();
 		}
 
-		$datas = $this->proveedorQuery->all();
+        $busqueda = $request->busqueda;
 
-        return view('compras.proveedor.index', compact('datas'));
+        $proveedores = $this->proveedorRepository->leeProveedor($busqueda, true);
+
+        $datas = ['proveedores' => $proveedores, 'busqueda' => $busqueda];
+
+        return view('compras.proveedor.index', $datas);
+    }
+
+    public function listar(Request $request, $formato = null, $busqueda = null)
+    {
+        can('listar-proveedor'); 
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        switch($formato)
+        {
+        case 'PDF':
+            $proveedores = $this->proveedorRepository->leeProveedor($busqueda, false);
+
+            $view =  \View::make('compras.proveedor.listado', compact('proveedores'))
+                        ->render();
+            $path = storage_path('pdf/listados');
+            $nombre_pdf = 'listado_proveedor';
+
+            $pdf = \App::make('dompdf.wrapper');
+            $pdf->setPaper('legal','landscape');
+            $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
+
+            return response()->download($path.'/'.$nombre_pdf.'.pdf');
+            break;
+
+        case 'EXCEL':
+            return (new ProveedorExport($this->proveedorRepository))
+                        ->parametros($busqueda)
+                        ->download('proveedor.xlsx');
+            break;
+
+        case 'CSV':
+            return (new ProveedorExport($this->proveedorRepository))
+                        ->parametros($busqueda)
+                        ->download('proveedor.csv', \Maatwebsite\Excel\Excel::CSV);
+            break;            
+        }   
+
+        $datas = ['proveedores' => $proveedor, 'busqueda' => $busqueda];
+
+		return view('compras.proveedor.index', $datas);       
     }
 
     /**
@@ -376,14 +422,14 @@ class ProveedorController extends Controller
 			$tasaarba = $this->iibbService->leeTasaPercepcion($nroinscripcion, '902');
             $tasacaba = $this->iibbService->leeTasaPercepcion($nroinscripcion, '901');
 
-            if ($tasaarba == '')
+            if (!$tasaarba)
 				$tasaarba = 'No esta en padron';
             else    
-                $tasaarba = round($tasaarba, 2).'%';
-			if ($tasacaba == '' || $tasacaba < 0.00001)
+                $tasaarba = round($tasaarba->tasaretencion, 2).'%';
+			if (!$tasacaba)
 				$tasacaba = 'No esta en padron';
             else
-                $tasacaba = round($tasacaba, 2).'%';
+                $tasacaba = round($tasacaba->tasaretencion, 2).'%';
 		}
 		else
 			$tasaarba = $tasacaba = '';

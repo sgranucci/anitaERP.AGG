@@ -70,7 +70,7 @@
 									@endforeach
 								</td>
 								<td>{{ number_format($retencioniva->porcentajeretencion,2) }}</td>
-								<td>{{ number_format($retencioniva->minimoretencion,2) }}</td>
+								<td>{{ number_format($retencioniva->minimoimponible,2) }}</td>
 								<td>{{ $retencioniva->regimen }}</td>
         						<td>
                        			@if (can('editar-retenciones-de-iva', false))

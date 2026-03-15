@@ -555,6 +555,16 @@ class AppServiceProvider extends ServiceProvider
     	);
 
 		$this->app->bind(
+        	'App\Repositories\Configuracion\ModeloetiquetaRepositoryInterface',
+        	'App\Repositories\Configuracion\ModeloetiquetaRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Configuracion\SeteoModeloetiquetaRepositoryInterface',
+        	'App\Repositories\Configuracion\SeteoModeloetiquetaRepository',
+    	);
+
+		$this->app->bind(
         	'App\Repositories\Configuracion\Retencion_CobranzaRepositoryInterface',
         	'App\Repositories\Configuracion\Retencion_CobranzaRepository',
     	);

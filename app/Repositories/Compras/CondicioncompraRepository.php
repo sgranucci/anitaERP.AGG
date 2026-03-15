@@ -71,11 +71,7 @@ class CondicioncompraRepository implements CondicioncompraRepositoryInterface
 
     public function find($id)
     {
-        if (null == $condicioncompra = $this->model->find($id)) {
-            throw new ModelNotFoundException("Registro no encontrado");
-        }
-
-        return $condicioncompra;
+        return $this->model->find($id);
     }
 
     public function findPorId($id)
@@ -106,7 +102,8 @@ class CondicioncompraRepository implements CondicioncompraRepositoryInterface
         $data = array( 'acc' => 'list', 
                         'sistema' => 'compras',
 						'campos' => "$this->keyFieldAnita as $this->keyField, $this->keyFieldAnita", 
-						'tabla' => $this->tableAnita );
+						'tabla' => $this->tableAnita,
+                        'orderBy' => 'codigo');
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
         $datosLocal = Condicioncompra::all();

@@ -17,15 +17,26 @@ Proveedores
             <div class="card-header">
                 <h3 class="card-title">Proveedores</h3>
                 <div class="card-tools">
-                    <a href="{{route('crear_cliente')}}" class="btn btn-outline-secondary btn-sm">
+                    <a href="{{route('crear_proveedor')}}" class="btn btn-outline-secondary btn-sm">
                        	@if (can('crear-proveedor', false))
                         	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
 						@endif
                     </a>
                 </div>
+                <div class="d-md-flex justify-content-md-end">
+					<form action="{{ route('proveedor') }}" method="GET">
+						<div class="btn-group">
+							<input type="text" name="busqueda" class="form-control" placeholder="Busqueda ..."> 
+							<button type="submit" class="btn btn-default">
+								<span class="fa fa-search"></span>
+							</button>
+						</div>
+					</form>
+                </div>                
             </div>
             <div class="card-body table-responsive p-0">
-                <table class="table table-striped table-bordered table-hover" id="tabla-data">
+                @include('includes.exportar-tabla', ['ruta' => 'lista_proveedor', 'busqueda' => $busqueda])
+                <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead>
                         <tr>
                             <th class="width10">ID</th>
@@ -40,7 +51,7 @@ Proveedores
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach ($datas as $data)
+                        @foreach ($proveedores as $data)
 							@if ($data->estado == '1')
                         		<tr class="table-danger">
 							@else
@@ -49,10 +60,10 @@ Proveedores
                             <td>{{$data->id}}</td>
                             <td>{{$data->nombre}}</td>
                             <td>{{$data->fantasia}}</td>
-                            <td><small>{{$data->nroinscripcion}}</small></td>
+                            <td><small>{{$data->numerodocumento}}</small></td>
                             <td><small>{{$data->domicilio}}</small></td>
-                            <td><small>{{($data->localidades ?? '' ? $data->localidades->nombre : '')}}</small></td>
-                            <td><small>{{($data->provincias ?? '' ? $data->provincias->nombre : '')}}</small></td>
+                            <td><small>{{$data->nombrelocalidad ?? ''}}</small></td>
+                            <td><small>{{$data->nombreprovincia ?? ''}}</small></td>
                             <td><small>{{$data->codigo}}</small></td>
                             <td>
                        			@if (can('editar-proveedor', false))
@@ -77,4 +88,5 @@ Proveedores
         </div>
     </div>
 </div>
+{{ $proveedores->appends(['busqueda' => $busqueda])->links() }}
 @endsection

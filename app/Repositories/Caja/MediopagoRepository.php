@@ -72,12 +72,8 @@ class MediopagoRepository implements MediopagoRepositoryInterface
 
     public function find($id)
     {
-        if (null == $mediopago = $this->model->with('empresas')
-											->with('cuentacajas')->find($id)) {
-            throw new ModelNotFoundException("Registro no encontrado");
-        }
-
-        return $mediopago;
+        return $this->model->with('empresas')
+											->with('cuentacajas')->find($id);
     }
 
     public function findOrFail($id)
@@ -92,12 +88,8 @@ class MediopagoRepository implements MediopagoRepositoryInterface
 
 	public function findPorCodigo($codigo)
     {
-        if (null == $mediopago = $this->model->with('empresas')
-										->with('cuentacajas')->where('codigo', $codigo)->first()) {
-            throw new ModelNotFoundException("Registro no encontrado");
-        }
-
-        return $mediopago;
+        return $this->model->with('empresas')
+										->with('cuentacajas')->where('codigo', $codigo)->first();
     }
 
     public function sincronizarConAnita(){

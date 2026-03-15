@@ -60,15 +60,12 @@ class CapexRepository implements CapexRepositoryInterface
 
     public function find($id)
     {
-        if (null == $capex = $this->model->with("capex_estados")
+        return $this->model->with("capex_estados")
 									->with("capex_partidas")
 									->with("capex_archivos")
 									->with("empresas")
 									->with("centrocostos")
-									->find($id)) {
-            throw new ModelNotFoundException("Registro no encontrado");
-        }
-		return($capex);
+									->find($id);
 	}
 
     public function findOrFail($id)

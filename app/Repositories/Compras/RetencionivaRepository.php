@@ -72,11 +72,7 @@ class RetencionivaRepository implements RetencionivaRepositoryInterface
 
     public function find($id)
     {
-        if (null == $retencioniva = $this->model->find($id)) {
-            throw new ModelNotFoundException("Registro no encontrado");
-        }
-
-        return $retencioniva;
+        return $this->model->find($id);
     }
 
 	public function findPorId($id)

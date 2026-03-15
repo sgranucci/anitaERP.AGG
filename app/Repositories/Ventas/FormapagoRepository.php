@@ -65,11 +65,7 @@ class FormapagoRepository implements FormapagoRepositoryInterface
 
     public function findPorAbreviatura($abreviatura)
     {
-        if (null == $formapago = $this->model->where('abreviatura', $abreviatura)->first()) {
-            throw new ModelNotFoundException("Registro no encontrado");
-        }
-
-        return $formapago;
+        return $this->model->where('abreviatura', $abreviatura)->first();
     }
 
 }

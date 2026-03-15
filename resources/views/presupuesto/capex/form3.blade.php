@@ -15,7 +15,7 @@
                 			<td>
 								<input type="file" name="nombrearchivos[]" class="form-control nombrearchivos" 
 									onchange='actualizaArchivo(this)'
-									data-initial-preview="{{isset($archivo->nombrearchivo) ? asset("storage/archivos/ordenventas/$data->id/$archivo->nombrearchivo") : ''}}" \>
+									data-initial-preview="{{isset($archivo->nombrearchivo) ? asset("storage/archivos/capex/$data->id/$archivo->nombrearchivo") : ''}}" \>
 								<input type="hidden" name="nombresanteriores[]" class="form-control nombresanteriores" 
 									value="{{isset($archivo->nombrearchivo) ? $archivo->nombrearchivo : ''}}" />
                 			</td>
@@ -24,14 +24,14 @@
 									@if (substr($archivo->nombrearchivo??'', -3) == "pdf")
                                 		<img heigh=40px width=100px class="img-fluid rounded" src="{{asset('storage/imagenes/pdf.png')}}" alt="Archivo del cliente" />
                                 	@else
-										<img heigh=100px width=100px src="{{ asset("storage/archivos/ordenventas/$data->id/$archivo->nombrearchivo") }}" alt="image">
+										<img heigh=100px width=100px src="{{ asset("storage/archivos/capex/$data->id/$archivo->nombrearchivo") }}" alt="image">
 									@endif
 									{{ "$archivo->nombrearchivo??''" }}
 								@endif
                 			</td>
                 			<td>
 								@if ($archivo->nombrearchivo ?? '')
-									<a download="{{$archivo->nombrearchivo}}" href="{{ asset("storage/archivos/ordenventas/$data->id/$archivo->nombrearchivo") }}" title='Descargar' /><i class="fa fa-download"></i>
+									<a download="{{$archivo->nombrearchivo}}" href="{{ asset("storage/archivos/capex/$data->id/$archivo->nombrearchivo") }}" title='Descargar' /><i class="fa fa-download"></i>
 									<button style="width: 7%;" type="button" title="Elimina esta linea" class="btn-accion-tabla eliminararchivo tooltipsC">
                             			<i class="fa fa-times-circle text-danger"></i>
 									</button>

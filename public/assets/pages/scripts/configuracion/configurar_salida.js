@@ -1,6 +1,8 @@
 
     $(function () {
+
         imprimirSalida();
+
     });
 
     function imprimirSalida()
@@ -9,7 +11,7 @@
 
         setTimeout(() => {
             $("#nombresalida").text(" - Imprime en: "+nombreSalida);
-        }, 1000);
+        }, 300);
     }
     
     function configurarSalida()

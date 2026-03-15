@@ -45,6 +45,8 @@ use App\Repositories\Ventas\DescuentoventaRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\OficinacompraRepositoryInterface;
 use App\Repositories\Configuracion\PeriodicidadcompraRepositoryInterface;
+use App\Repositories\Configuracion\SeteoModeloetiquetaRepositoryInterface;
+use App\Repositories\Configuracion\SeteosalidaRepositoryInterface;
 use App\Repositories\Compras\CondicionentregaRepositoryInterface;
 use App\Http\Controllers\Controller;
 use QrCode;
@@ -75,6 +77,8 @@ class ArticuloController extends Controller
 	private $oficinacompraRepository;
 	private $condicionentregaRepository;
 	private $peridicidadcompraRepository;
+	private $seteoModeloetiquetaRepository;
+	private $seteosalidaRepository;
 	protected $precioService;
 
     public function __construct(Articulo_CajaRepositoryInterface $articulo_cajaRepository,
@@ -88,6 +92,8 @@ class ArticuloController extends Controller
 								CondicionentregaRepositoryInterface $condicionentregaRepository,
 								DescuentoventaRepositoryInterface $descuentoventarepository,
 								EmpresaRepositoryInterface $empresaRepository,
+								SeteoModeloetiquetaRepositoryInterface $seteoModeloetiquetaRepository,
+								SeteosalidaRepositoryInterface $seteosalidarepository,
 								PrecioService $precioservice)
     {
         $this->articulo_cajaRepository = $articulo_cajaRepository;
@@ -101,6 +107,8 @@ class ArticuloController extends Controller
 		$this->periodicidadcompraRepository = $periodicidadcompraRepository;
 		$this->descuentoventaRepository = $descuentoventarepository;
 		$this->empresaRepository = $empresaRepository;
+		$this->seteoModeloetiquetaRepository = $seteoModeloetiquetaRepository;
+		$this->seteoSalidaRepository = $seteosalidarepository;
 		$this->precioService = $precioservice;
     }
     
@@ -307,32 +315,32 @@ class ArticuloController extends Controller
 		// Arma nombre de archivo
 		$nombreEtiqueta = "tmp/eti-" . Str::random(10) . '.txt';
 
+        // Agrega programa enviado a la url completa
+		$programa = request()->header('referer');
+		$usuario_id = Auth()->id();
+		$modeloetiqueta = $this->seteoModeloetiquetaRepository->buscaSeteoModeloetiqueta($usuario_id, $programa);
+
 		$etiqueta = "";
-		$qr = $articulo->sku . '-' . $articulo->descripcion;
+		if ($modeloetiqueta)
+		{
+			$etiqueta = $modeloetiqueta->modeloetiquetas->codigoetiqueta;
 
-		$nombre1 = substr($articulo->nombre,0,15);
-		$nombre2 = substr($articulo->nombre,15,15);
+			// Busca tags para reemplazar
+			$etiqueta = Str::replace('@sku@', $articulo->sku, $etiqueta, caseSensitive: false);
+			$etiqueta = Str::replace('@npu@', $articulo->numeroparte, $etiqueta, caseSensitive: false);
+			$etiqueta = Str::replace('@codigoproveedor@', ' ', $etiqueta, caseSensitive: false);
+			$etiqueta = Str::replace('@numerorecepcion@', ' ', $etiqueta, caseSensitive: false);
 
-		$etiqueta .= "\nN\n";
-		$etiqueta .= "q800\n";
-		$etiqueta .= "A750,5,1,2,2,1,N,\"".$articulo->descripcion."\"\n";
-		$etiqueta .= "A680,5,1,1,2,2,N,\"".$articulo->sku."\"\n";
-		$etiqueta .= "A630,5,1,2,1,1,N,\"".$nombre1."\"\n";
-		$etiqueta .= "A600,5,1,2,1,1,N,\"".$nombre2."\"\n";
-		$etiqueta .= "b450,50,Q,s3eL,\"".$qr."\"\n";
-		$etiqueta .= "A330,5,1,2,2,1,N,\"".$articulo->descripcion."\"\n";
-		$etiqueta .= "A260,5,1,1,2,2,N,\"".$articulo->sku."\"\n";
-		$etiqueta .= "A210,5,1,2,1,1,N,\"".$nombre1."\"\n";
-		$etiqueta .= "A180,5,1,2,1,1,N,\"".$nombre2."\"\n";
-		$etiqueta .= "b30,50,Q,s3eL,\"".$qr."\"\n";
-		$etiqueta .= "P1\n";
+			Storage::disk('local')->put($nombreEtiqueta, $etiqueta);
+			$path = Storage::path($nombreEtiqueta);
 
-		Storage::disk('local')->put($nombreEtiqueta, $etiqueta);
-		$path = Storage::path($nombreEtiqueta);
+			// Trae la impresora
+			$seteosalida = $this->seteoSalidaRepository->buscaSeteo($usuario_id, "");
+			$comando = sprintf($seteosalida->salidas->comando, $path);
+			system($comando);
 
-		system("lp -dzebraarriba ".$path);
-
-		Storage::disk('local')->delete($nombreEtiqueta);
+			Storage::disk('local')->delete($nombreEtiqueta);
+		}
 
         return redirect()->back()->with('status','El producto seleccionado se imprimió con exito.');
     }

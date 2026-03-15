@@ -46,14 +46,14 @@
         <div class="col-sm-6">
             <div class="form-group row">
                 <label for="codigo" class="col-lg-3 col-form-label">Número de Proyecto</label>
-                <input type="text" name="codigo" id="codigo" class="col-lg-3 form-control requerido" placeholder="Número de Proyecto" aria-label="Número de Proyecto" value="{{$data->codigo ?? ''}}" required>
+                <input type="text" name="codigo" id="codigo" class="col-lg-3 form-control requerido" placeholder="Número de Proyecto" aria-label="Número de Proyecto" value="{{$data->codigo ?? ''}}" readonly>
             </div>                  
             <div class="form-group row">
                 <label for="codigoproyecto" class="col-lg-3 col-form-label">Código de Proyecto</label>
                 <input type="text" name="codigoproyecto" id="codigoproyecto" class="col-lg-3 form-control requerido" placeholder="Codigo de Proyecto" aria-label="Codigo de Proyecto" value="{{$data->codigoproyecto ?? ''}}" required>
             </div>             
             <div class="form-group row">
-                <label for="estado" class="col-lg-3 col-form-label">Monto Total</label>
+                <label for="montototal" class="col-lg-3 col-form-label">Monto Total</label>
                 <select name="monedatotal_id" id="monedatotal_id" data-placeholder="Moneda" class="col-lg-2 form-control required" data-fouc>
                     @foreach($moneda_query as $key => $value)
                         <option value="{{ $value->id }}">{{ $value->nombre }}</option>    
@@ -64,7 +64,7 @@
             </div>                
             <div class="form-group row">
                 <label for="estado" class="col-lg-3 col-form-label">Estado</label>
-                <input type="text" name="estado" id="estado" class="col-lg-4 form-control" value="{{old('estado', $data->estado ?? 'SOLICITADA')}}" readonly>
+                <input type="text" name="estado" id="estado" class="col-lg-4 form-control" value="{{old('estado', $data->estado ?? 'ACTIVO')}}" readonly>
             </div>            
         </div>        
     </div>
@@ -99,7 +99,7 @@
                                     <input type="hidden" name="items[]" class="form-control item" readonly value="{{ $loop->index+1 }}" />
                                     <input type="hidden" name="capex_partida_ids[]" class="form-control capex_partida_id" readonly value="{{ $partida->id }}" />
                                     <input type="hidden" name="creousuario_ids[]" class="creousuario_id" value="{{ $partida->creousuario_id }}" />
-                                    <input type="hidden" name="estados[]" class="estadopartida" value="" />
+                                    <input type="hidden" name="estadopartidas[]" class="estadopartida" value="" />
                                     <input type="text" name="codigos[]" class="form-control codigopartida" value="{{$partida->codigo}}" readonly>                                    
                                 </td>
                                 <td>
