@@ -927,6 +927,7 @@ class FacturacionService
 										guardaArticuloMovimiento('create',
 										$dataArticuloMovimiento, null);
 					}
+					
 					// Graba contabilidad
 					Self::grabaAsientoContable($asientoContable, $empresa_id, $fechaFactura, $vta->id, $detalleContable, $centrocosto_id,
 											$moneda_id, $cotizacion, $signo, $cliente->cuentacontable_id,
@@ -1221,7 +1222,6 @@ class FacturacionService
 			{
 				// Arma asiento
 				$asientoContable = Self::armaContabilidad($dataFactura, $conceptosTotales, $empresa->id, $totalComprobante);
-
 				$numero++;
 
 				// Arma detalle
@@ -1290,7 +1290,6 @@ class FacturacionService
 						$tipoAnita = substr($tipotransaccion->abreviatura,0,1)+"CE";
 					else
 						$tipoAnita = $tipotransaccion->abreviatura;
-
 					$venta = ['fecha' => $fechaFactura,
 						'fechajornada' => $fechaFactura,
 						'empresa_id' => $puntoventa->empresa_id,
@@ -1331,7 +1330,6 @@ class FacturacionService
 						'ordenventa_id' => $ordenventa_id,
 						'empresa_id' => 1
 					];	
-
 					// Verifica si ya existe en anita
 					$ventaAnita = Self::buscaVentaAnita(substr($venta['codigo'], 0, 3), $letra, $puntoventa->codigo, $venta['numerocomprobante']);
 					// Si existe retorna con error
@@ -4030,7 +4028,7 @@ class FacturacionService
 
 		foreach ($dataFactura as $item)
 		{
-			$monto = $item['totalcondescuento'];
+			$monto = $item['cantidad'] * $item['precio'];
 
 			if ($item['cuentacontable_id'] > 0)
 			{
@@ -4183,7 +4181,6 @@ class FacturacionService
 			$moneda_ids[] = $moneda_id;
 			$cotizaciones[] = $cotizacion;
 		}
-
 		// Agrega contrapartida
 		if (abs($totalMonto) > 0.009)
 		{
@@ -4220,7 +4217,6 @@ class FacturacionService
 			$moneda_ids[] = $moneda_id;
 			$cotizaciones[] = $cotizacion;
 		}
-
 		// Carga en arrays de funcion de grabacion de Anita
 		$data['cuentacontable_ids'] = $cuentacontable_ids;
 		$data['debes'] = $debes;

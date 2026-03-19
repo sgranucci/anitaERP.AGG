@@ -33,6 +33,7 @@ use App\Models\Stock\Listaprecio;
 use App\Models\Ventas\Vendedor;
 use App\Models\Ventas\Condicionventa;
 use App\Exports\Ventas\PedidoExport;
+use App\Exports\Ventas\KiloPedidoExport;
 use App\Exports\Ventas\TotalPedidoExport;
 use App\Exports\Ventas\GeneralPedidoExport;
 use App\Exports\Ventas\ConsumoMaterialExport;
@@ -273,6 +274,46 @@ class PedidoController extends Controller
 								->asignaRangoVendedor($request->desdevendedor_id, $request->hastavendedor_id)
 								->asignaTipoListado($request->tipolistado, $request->origen)
 								->download('pedido.'.$extension);
+    }
+
+	// Reporte de pedidos por vendedor
+    public function indexReporteKiloPedido()
+    {
+		$transporte_query = $this->transporteRepository->all();
+		$transporte_query->prepend((object) ['id'=>'0','nombre'=>'Primero']);
+		$transporte_query->push((object) ['id'=>'999999','nombre'=>'Ultimo']);
+
+		$tipolistado_enum = [
+			'ABRE' => 'Abre items de pedidos',
+			'TOTAL' => 'Totales de pedidos'
+		];
+
+		$estado_enum = [
+			'PENDIENTE' => 'Lista pedidos pendientes de facturar',
+			'TODO' => 'Lista todos los pedidos'
+		];
+
+        return view('ventas.repkilopedido.crear', compact('transporte_query', 'tipolistado_enum', 'estado_enum'));
+    }
+
+    public function crearReporteKiloPedido(Request $request)
+    {
+		switch($request->extension)
+		{
+		case "Genera Reporte en Excel":
+			$extension = "xlsx";
+			break;
+		case "Genera Reporte en PDF":
+			$extension = "pdf";
+			break;
+		case "Genera Reporte en CSV":
+			$extension = "csv";
+			break;
+		}
+		return (new KiloPedidoExport($this->pedidoService))->rangoFecha($request->desdefecha, $request->hastafecha)
+								->asignaRangoTransporte($request->desdetransporte_id, $request->hastatransporte_id)
+								->asignaTipoListado($request->tipolistado, $request->estado)
+								->download('kilopedido.'.$extension);
     }
 
 	// Reporte total de pedidos por vendedor

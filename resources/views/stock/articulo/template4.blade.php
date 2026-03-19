@@ -30,6 +30,9 @@
 			</div>
 		</td>	
 		<td>
+			<button type="button" title="Replica la cuenta al resto de las empresas" class="btn-accion-tabla replicar_cuentacontable tooltipsC">
+				<i class="fa fa-clone text-success"></i>
+			</button>			
 			<button type="button" title="Elimina esta linea" class="btn-accion-tabla eliminar_cuentacontable tooltipsC">
 				<i class="fa fa-times-circle text-danger"></i>
 			</button>

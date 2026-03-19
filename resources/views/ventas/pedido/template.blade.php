@@ -66,7 +66,7 @@
 			<button type="button" title="Elimina esta linea" style="padding:0;" class="btn-accion-tabla eliminar tooltipsC">
         		<i class="fa fa-trash text-danger"></i>
 			</button>
-			@if (can('entregar-articulo-sin-cargo-venta', false))
+			@if (can('entregar-articulo-sin-cargo-pedido-venta', false))
 				<button type="button" title="Artículo sin cargo" style="padding:0;" class="btn-accion-tabla botonsincargo tooltipsC">
 					<i class="fa fa-gift text-primary"></i>
 				</button>

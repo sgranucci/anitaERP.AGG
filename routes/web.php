@@ -753,6 +753,7 @@ Route::get('stock/leerunarticulo/{articulo_id}', 'Stock\ArticuloController@leeUn
 Route::get('stock/leerunarticuloporsku/{sku}', 'Stock\ArticuloController@leeUnArticuloPorSku')->name('leer_un_articulo_por_sku');
 
 Route::get('stock/listaarticulo/{formato?}/{busqueda?}', 'Stock\ArticuloController@listar')->name('lista_articulo');
+Route::get('stock/replicar_cuentacontable_articulo/{empresa_id}/{tipoimputacion}/{cuentacontable_id}', 'Stock\ArticuloController@replicarCuentaContableArticulo')->name('replicar_cuentacontable_articulo');
 
 // Actualiza estado articulo desde programas externos
  Route::get('stock/actualizaestadoarticulo/{estadoarticulo}/{articulo_id}', 'Stock\ArticuloController@actualizaEstadoArticulo')->name('actualiza_estado_articulo');
@@ -799,6 +800,10 @@ Route::post('ventas/crearreppercepcioniibb', 'Ventas\ReppercepcioniibbController
 // Pedidos
 Route::get('ventas/reppedido', 'Ventas\PedidoController@indexReportePedido')->name('rep_pedido');
 Route::post('ventas/crearreppedido', 'Ventas\PedidoController@crearReportePedido')->name('crear_reppedido');
+
+// Kilos Pedidos
+Route::get('ventas/repkilopedido', 'Ventas\PedidoController@indexReporteKiloPedido')->name('rep_kilopedido');
+Route::post('ventas/crearrepkilopedido', 'Ventas\PedidoController@crearReporteKiloPedido')->name('crear_rep_kilopedido');
 
 // Totales de Pedidos
 Route::get('ventas/reptotalpedido', 'Ventas\PedidoController@indexReporteTotalPedido')->name('rep_totalpedido');

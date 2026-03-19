@@ -211,10 +211,9 @@ function activa_eventos_consultaarticulo()
                     if (unidadmedida.toUpperCase() == 'KG' || unidadmedida.toUpperCase() == 'KIL')                    
                         $(ptrrenglon).parents("tr").find(".pieza").focus();  
                 }
-                    
-                if (typeof $.fn.asignaPrecio === 'function') {
+                //if (typeof $.fn.asignaPrecio === 'function') {
                     asignaPrecio(ptrrenglon, data.id, '');
-                }
+                //}
 
                 if (typeof $.fn.controlDescuento === 'function') {
                     if (!controlDescuento(ptrrenglon))

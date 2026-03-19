@@ -253,7 +253,7 @@
 		let articulo_id = $(ptr).parents("tr").find(".articulo_id").val();
 		var precio, listaprecio_id, incluyeimpuesto, moneda_id;
 
-        $.get('/anitaERP/public/stock/asignapreciocliente/'+articulo_id+'/'+codigocliente, function(data){
+		$.get('/anitaERP/public/stock/asignapreciocliente/'+articulo_id+'/'+codigocliente, function(data){
            	var prec = $.map(data, function(value, index){
                	return [value];
            	});
@@ -718,7 +718,7 @@
 		});
 		$("#totalkilospedido").val(totKilo.toFixed(2));
 		$(".pesada").each(function() {
-			if (parseFloat($(this).val()) >= 1 && parseFloat($(this).val()) <= 999999)
+			if (parseFloat($(this).val()) >= 0.01 && parseFloat($(this).val()) <= 999999)
 				totPesada += parseFloat($(this).val());
 		});
 		$("#totalkilospesados").val(totPesada.toFixed(2));

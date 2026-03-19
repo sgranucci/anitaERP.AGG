@@ -12,6 +12,7 @@ use App\Imports\Configuracion\Padron_IibbImport;
 use App\Http\Requests\ValidacionPadron_Iibb;
 use App\Repositories\Configuracion\Padron_IibbRepositoryInterface;
 use App\Repositories\Configuracion\Padron_Iibb_TasaRepositoryInterface;
+use App\Repositories\Configuracion\Padron_Coeficiente_TucumanRepositoryInterface;
 use App\Repositories\Configuracion\ProvinciaRepositoryInterface;
 use App\Repositories\Ventas\ClienteRepositoryInterface;
 use Illuminate\Support\Facades\App;
@@ -26,16 +27,22 @@ class Padron_IibbController extends Controller
 	private $repository;
     private $clienteRepository;
     private $padron_iibb_tasaRepository;
+    private $padron_iibbRepository;
+    private $padron_coeficiente_tucumanRepository;
     private $provinciaRepository;
 
     public function __construct(Padron_IibbRepositoryInterface $repository,
                                 Padron_Iibb_TasaRepositoryInterface $padron_iibb_tasaRepository,
+                                Padron_IibbRepositoryInterface $padron_iibbRepository,
+                                Padron_Coeficiente_TucumanRepositoryInterface $padron_coeficiente_tucumanRepository,
                                 ClienteRepositoryInterface $clienteRepository,
                                 ProvinciaRepositoryInterface $provinciaRepository)
     {
         $this->repository = $repository;
         $this->clienteRepository = $clienteRepository;
         $this->padron_iibb_tasaRepository = $padron_iibb_tasaRepository;
+        $this->padron_coeficiente_tucumanRepository = $padron_coeficiente_tucumanRepository;
+        $this->padron_iibbRepository = $padron_iibbRepository;
         $this->provinciaRepository = $provinciaRepository;
     }
 
@@ -235,10 +242,7 @@ class Padron_IibbController extends Controller
                     ->with('mensaje', 'Padrón IIBB ARBA importado correctamente');
                 break;
 
-            case 904: // Cordoba
-            case 908: // Entre Rios
             case 914: // Misiones
-            case 924: // Tucuman tasas y coeficientes
                 // Borra tasas actuales
                 //$this->padron_iibb_tasaRepository->deletePorProvinciaId($provincia->id);
                 
@@ -255,6 +259,160 @@ class Padron_IibbController extends Controller
                 return back()
                     ->with('mensaje', 'Padrón IIBB importado correctamente');
                 break;
+
+            case 908: // Entre Rios
+                $carpetaArchivo = Self::abreArchivo($request);
+
+                if (($handle = fopen($carpetaArchivo, "r")) !== FALSE) {
+                    while (($linea = fgets($handle)) !== FALSE) {
+
+                        $columnas = explode(";", $linea);
+
+                        if (is_numeric(substr($columnas[0], 0, 1)))
+                        {
+                            $desdeFecha = DateTime::createFromFormat('dmY', $columnas[1]);
+                            $hastaFecha = DateTime::createFromFormat('dmY', $columnas[2]);
+
+                            $arrayPadron_Iibb = [
+                                'cuit' => $columnas[3]
+                            ];
+
+                            $padron_iibb = $this->padron_iibbRepository->findPorCuit($columnas[3]);
+
+                            if ($padron_iibb)
+                                $this->padron_iibbRepository->update($arrayPadron_Iibb, $padron_iibb->id);
+                            else
+                                $padron_iibb = $this->padron_iibbRepository->create($arrayPadron_Iibb);
+
+                            $tasaPercepcion = str_replace(',', '.', $columnas[7]);
+                            $tasaRetencion = str_replace(',', '.', $columnas[8]);
+
+                            $arrayPadron_Iibb_Tasa = [
+                                'padron_iibb_id' => $padron_iibb->id,
+                                'provincia_id' => $provincia->id,
+                                'desdefecha' => $desdeFecha->format('Y-m-d'),
+                                'hastafecha' => $hastaFecha->format('Y-m-d'),
+                                'tasapercepcion' => $tasaPercepcion,
+                                'tasaretencion' => $tasaRetencion,
+                                'tasapercepciondiferencial' => null,
+                                'tasaretenciondiferencial' => null,
+                                'coeficiente' => null,
+                                'riesgofiscal' => null,
+                                'tipocontribuyente' => $columnas[4],
+                                'excluido' => null
+                            ];
+                            $padron_iibb_tasa = $this->padron_iibb_tasaRepository->create($arrayPadron_Iibb_Tasa);
+                        }     
+                    }
+                    fclose($handle);
+                }        
+                break;
+                
+            case 924: // Tucuman
+                $carpetaArchivo = Self::abreArchivo($request);
+
+                if (($handle = fopen($carpetaArchivo, "r")) !== FALSE) {
+                    while (($linea = fgets($handle)) !== FALSE) 
+                    {
+                        $columnas = explode(";", $linea);
+
+                        if (is_numeric(substr($columnas[0], 0, 1)))
+                        {
+                            if ($tipoPadron == 'T') // Tasas
+                            {
+                                $cuit = substr($columnas[0],0,11);
+                                $excluido = substr($columnas[0],13,1);
+                                $coeficiente = (float) substr($columnas[0],191,6);
+
+                                if (substr($columnas[0],16,2) == 'CL')
+                                    $tipoContribuyente = 'L';
+                                else
+                                    $tipoContribuyente = 'C';
+
+                                $nombre = substr($columnas[0],40,60);
+
+                                $fecha = DateTime::createFromFormat('Ymd', substr($columnas[0],20,8));
+                                $desdeFecha = $fecha;
+
+                                $fecha = DateTime::createFromFormat('Ymd', substr($columnas[0],30,8));
+                                $hastaFecha = $fecha;
+
+                                $arrayPadron_Iibb = [
+                                    'cuit' => $cuit,
+                                    'nombre' => $nombre
+                                ];
+
+                                $padron_iibb = $this->padron_iibbRepository->findPorCuit($cuit);
+
+                                if ($padron_iibb)
+                                    $this->padron_iibbRepository->update($arrayPadron_Iibb, $padron_iibb->id);
+                                else
+                                    $padron_iibb = $this->padron_iibbRepository->create($arrayPadron_Iibb);
+
+                                // Busca registro de tasas
+                                $padron_iibb_tasa = $this->padron_iibb_tasaRepository->findPorIdProvincia($padron_iibb->id, $provincia->id);
+
+                                $arrayPadron_Iibb_Tasa = [
+                                        'padron_iibb_id' => $padron_iibb->id,
+                                        'provincia_id' => $provincia->id,
+                                        'nombre' => $nombre,
+                                        'desdefecha' => $desdeFecha->format('Y-m-d'),
+                                        'hastafecha' => $hastaFecha->format('Y-m-d'),
+                                        'tasapercepcion' => null,
+                                        'tasaretencion' => null,
+                                        'tasapercepciondiferencial' => null,
+                                        'tasaretenciondiferencial' => null,
+                                        'coeficiente' => $coeficiente,
+                                        'riesgofiscal' => null,
+                                        'tipocontribuyente' => $tipoContribuyente,
+                                        'excluido' => $excluido
+                                    ];
+
+                                if ($padron_iibb_tasa)
+                                    $padron_iibb_tasa = $this->padron_iibb_tasaRepository->update($arrayPadron_Iibb_Tasa, $padron_iibb_tasa->id);
+                                else
+                                    $padron_iibb_tasa = $this->padron_iibb_tasaRepository->create($arrayPadron_Iibb_Tasa);                                
+                            }
+                            else
+                            {
+                                $cuit = substr($columnas[0],0,11);
+                                $excluido = substr($columnas[0],13,1);
+                                $coeficiente = (float) substr($columnas[0],16,6);
+                                $coeficienteFinal = (float) substr($columnas[0],184,6);
+
+                                $tipoContribuyente = 'C';
+
+                                $nombre = substr($columnas[0],32,60);
+
+                                $fecha = DateTime::createFromFormat('Ymd', substr($columnas[0],24,6)."01");
+                                $desdeFecha = $fecha;
+
+                                $fecha = DateTime::createFromFormat('Ymd', substr($columnas[0],24,6)."01");
+                                $hastaFecha = $fecha->modify('last day of this month');
+
+                                // Busca registro de tasas
+                                $padron_iibb_tasa = $this->padron_coeficiente_tucumanRepository->findPorCuit($cuit);
+
+                                $arrayPadron_Coeficiente_Tucuman = [
+                                        'cuit' => $cuit,
+                                        'nombre' => $nombre,
+                                        'desdefecha' => $desdeFecha->format('Y-m-d'),
+                                        'hastafecha' => $hastaFecha->format('Y-m-d'),
+                                        'coeficiente' => $coeficiente,
+                                        'coeficientefinal' => $coeficienteFinal,
+                                        'tipocontribuyente' => $tipoContribuyente,
+                                        'excluido' => $excluido
+                                    ];
+
+                                if ($padron_iibb_tasa)
+                                    $this->padron_coeficiente_tucumanRepository->update($arrayPadron_Coeficiente_Tucuman, $padron_iibb_tasa->id);
+                                else
+                                    $this->padron_coeficiente_tucumanRepository->create($arrayPadron_Coeficiente_Tucuman);
+                            }
+                        }
+                    }
+                }
+                break;                
             }
         }
     }

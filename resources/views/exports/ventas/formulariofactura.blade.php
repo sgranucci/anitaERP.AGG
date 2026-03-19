@@ -10,20 +10,20 @@
 	</style>
 </head>
 <body>
-<div class="row" style="height: 250px; padding: 1px; margin: 0px; border: none;">
-	<table style="width=5500px;" class="table borderless">
+<div class="row" style="height: 260px; padding: 1px; margin: 0px; border: none;">
+	<table style="width=4500px;" class="table borderless">
 		<thead>
 		<tr style="height: 100px;">
 			<th style="width=150px; word-wrap: break-word;">
 				<img style="margin: 1px;" width="180" height="80" src="data:image/png;base64,{{ base64_encode(file_get_contents("/var/www/html/anitaERP/public/storage/imagenes/logos/".$venta->puntoventas->empresas->nombre.".png")) }}">
 				<div>
-					<strong style="font-size: 10px;">{{$venta->puntoventas->empresas->nombre}}</strong>
-					<p style="font-size: 8px;">
+					<strong style="font-size: 12px;">{{$venta->puntoventas->empresas->nombre}}</strong>
+					<p style="font-size: 12px;">
 						{{$venta->puntoventas->domicilio}}<br>
 						{{$venta->puntoventas->localidades->nombre}} ({{$venta->puntoventas->codigopostal}})<br>
 						{{$venta->puntoventas->provincias->nombre}}<br><br>
 					</p>
-					<p style="font-size: 8px; text-align: left;">IVA REPONSABLE INSCRIPTO</p>
+					<p style="font-size: 10px; text-align: left;">IVA REPONSABLE INSCRIPTO</p>
 				</div>
 			</th>
 			<th style="width=100px;">
@@ -31,35 +31,35 @@
 					<strong style="font-size: 22px; position:absolute; top: 50%; transform: translateY(-50%); left: 50%; transform: translate(-50%, -50%);">{{$letra}}</strong><br>
 				</div>
 				<div style="height: 40px; position:relative; width: 100px; left:20px;">
-					<strong style="font-size: 10px; position:absolute; top: 50%; transform: translateY(-50%); left: 50%; transform: translate(-50%, -50%);">Código {{$codigoTipoTransaccion}}</strong><br>
+					<strong style="font-size: 12px; position:absolute; top: 50%; transform: translateY(-50%); left: 50%; transform: translate(-50%, -50%);">Código {{$codigoTipoTransaccion}}</strong><br>
 				</div>				
 			</th>
 			<th style="width=300px; text-align: right;">
 				<strong>{{$venta->tipotransacciones->nombre ?? ''}}</strong><br>
 				<strong>Nro. {{$venta->codigo}}</strong><br>
-				<p style="font-size: 10px">
+				<p style="font-size: 12px">
 					Fecha emisi&oacute;n: {{date("d/m/Y", strtotime($venta->fecha ?? ''))}} <br>
 					C.U.I.T.: {{$venta->puntoventas->empresas->nroinscripcion}}<br>
 					Ingresos Brutos: {{$venta->puntoventas->empresas->numeroiibb}}<br>
 					Inicio de Actividades: {{date("d/m/Y", strtotime($venta->puntoventas->empresas->fechainicioactividad))}}
 				</p>
-				<p style="font-size: 8px">ORIGINAL</p>
+				<p style="font-size: 12px">ORIGINAL</p>
 			</th>
 		</tr>
 		<tr>
-			<th style="font-size: 10px; text-align: left;">
+			<th style="font-size: 12px; text-align: left;">
 				Fecha de Vencimiento: {{date("d/m/Y", strtotime($venta->cliente_cuentacorrientes[0]->fechavencimiento)) }}
 			</th>
 			<th></th>
-			<th style="font-size: 10px; text-align: right;">
+			<th style="font-size: 12px; text-align: right;">
 				Condicion de Venta: {{ $venta->clientes->condicionesventa->nombre ?? 'CONTADO' }}
 			</th>
 		</tr>		
 		</thead>
 	</table>
 </div>
-<div class="row" style="height: 500px; margin: 1px; padding: 0px;">
-	<table class="table borderless" style="margin: 5px 0;">
+<div style="height: 500px; margin: 0px; padding: 0px;">
+	<table class="table borderless" style="margin: 28px 0;">
 		<thead>
 			<tr>
 				<th style="width=150px; word-wrap: break-word; text-align: left;">
@@ -88,19 +88,13 @@
 			</tr=>
 		</thead>
 	</table>
-	<table class="table table-sm table-bordered table-striped" style="font-size: 8px; margin: 5px 0;">
+	<table class="table table-sm table-bordered table-striped" style="font-size: 12px; margin: 5px 0;">
 		<thead>
 			<tr>
 				<th>Artículo</th>
 				<th>Descripción</th>
-				@if (strtoupper(config('app.empresa')) == "EL BIERZO")
-					<th>Cajas</th>
-					<th>Piezas</th>
-					<th>Kilos</th>
-				@else
-					<th>Cantidad</th>
-				@endif
-				<th>Precio</th>
+				<th style="text-align: center;">Cantidad</th>
+				<th style="text-align: right;">Precio</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -114,13 +108,7 @@
 						<td></td>
 						<td>{{ $item['detalle'] }}</td>
 					@endif
-					@if (strtoupper(config('app.empresa')) == "EL BIERZO")
-						<td align="center">{{ number_format($item['caja'], config('facturacion.DECIMAL_CAJA')) }}</td>
-						<td align="center">{{ number_format($item['pieza'], config('facturacion.DECIMAL_PIEZA')) }}</td>
-						<td align="center">{{ number_format($item['cantidad'], config('facturacion.DECIMAL_KILO')) }}</td>
-					@else
-						<td align="center">{{ number_format($item['cantidad'], config('facturacion.DECIMAL_CANTIDAD')) }}</td>
-					@endif
+					<td align="center">{{ number_format($item['cantidad'], config('facturacion.DECIMAL_CANTIDAD')) }}</td>
 					<td align="right">{{ number_format($item['precio'], 2) }}</td>
 				</tr>
 
@@ -134,19 +122,13 @@
 			<tr>
 				<td> </td>
 				<td>TOTALES</td>
-				@if (strtoupper(config('app.empresa')) == "EL BIERZO")
-					<td align="center"><strong>{{number_format($totalCaja, config('facturacion.DECIMAL_KILO'))}}</td>
-					<td align="center"><strong>{{number_format($totalPieza, config('facturacion.DECIMAL_PIEZA'))}}</td>
-					<td align="center"><strong>{{number_format($totalCantidad, config('facturacion.DECIMAL_KILO'))}}</td>
-				@else
-					<td align="center"><strong>{{number_format($totalCantidad, config('facturacion.DECIMAL_CANTIDAD'))}}</td>
-				@endif
+				<td align="center"><strong>{{number_format($totalCantidad, config('facturacion.DECIMAL_CANTIDAD'))}}</td>
 				<td> </td>
 			</tr>
 		</tbody>
 	</table>
 	<div class="col-sm-6">
-		<table style="font-size: 8px; position:relative; left:508px;" class="table table-sm table-bordered table-striped">
+		<table style="font-size: 12px; position:relative; left:508px;" class="table table-sm table-bordered table-striped">
 			<thead>
 				<th style="width: 25%;"></th>
 				<th style="width: 10%;"></th>

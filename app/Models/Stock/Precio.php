@@ -55,7 +55,8 @@ class Precio extends Model
 				stkp_fe_ult_act,
 				stkp_usuario,
 				stkp_terminal
-            ' , 
+            ', 
+            'orderBy' => 'stkp_fe_ult_act desc'
         );
         $dataAnita = json_decode($apiAnita->apiCall($data));
 

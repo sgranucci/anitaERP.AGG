@@ -455,4 +455,48 @@ class PedidoQuery implements PedidoQueryInterface
                         ->get();
         return $pedido;
     }
+
+    // Lee para reporte de kilos pedidos
+    
+    public function findPorKiloPedido($tipolistado, $estado, $desdefecha, $hastafecha,
+                                    $desdetransporte_id, $hastatransporte_id)
+    {
+        $pedido = $this->model
+                        ->select('pedido.fecha as fecha',
+                                'pedido.codigo as codigo',
+                                'cliente.nombre as nombre',
+                                'cliente.codigo as cliente',
+                                'articulo.sku as sku',
+                                'pedido_articulo.caja as caja',
+                                'pedido_articulo.pieza as pieza',
+                                'pedido_articulo.kilo as kilo',
+                                'pedido_articulo.pesada as pesada',
+                                'pedido.estado as estado',
+                                'transporte.codigo as codigotransporte',
+                                'transporte.nombre as nombretransporte')
+                        ->join('pedido_articulo', 'pedido_articulo.pedido_id', '=', 'pedido.id')
+                        ->join('articulo', 'articulo.id', '=', 'pedido_articulo.articulo_id')
+                        ->join('cliente', 'cliente.id', '=', 'pedido.cliente_id')
+                        ->leftjoin('transporte', 'transporte.id', '=', 'pedido.transporte_id')
+                        ->whereBetween('pedido.fecha', [$desdefecha, $hastafecha]);
+
+        // Verifica si ingreso repartos en particular
+        if (strpos($desdetransporte_id, ',') !== false)
+        {
+            $transportes = explode(",", $desdetransporte_id);
+
+            $pedido->whereIn('pedido.transporte_id', $transportes);
+        }
+        else
+        {
+            if ($desdetransporte_id > 0)
+                $pedido->whereBetween('pedido.transporte_id', [$desdetransporte_id, $hastatransporte_id]);
+        }
+
+        $pedido->orderBy('pedido.transporte_id')
+                ->orderBy('articulo.sku')
+                ->get();
+dd($pedido);
+        return $pedido;    
+    }
 }

@@ -219,6 +219,7 @@
         $(document).on('click', '.eliminararchivo', borraRenglonArchivo);
         $('#agrega_renglon_cuentacontable').on('click', agregaRenglonCuentaContable);
         $(document).on('click', '.eliminar_cuentacontable', borraRenglonCuentaContable);    
+        $(document).on('click', '.replicar_cuentacontable', replicaCuentaContable); 
         
         $('#sku').focus();
     });
@@ -318,6 +319,48 @@
     	event.preventDefault();
     	$(this).parents('tr').remove();
     	actualizaRenglonesCuentaContable();
+    }
+
+    function replicaCuentaContable(event) {
+        event.preventDefault();
+        let empresa_id = $(this).parents('tr').find('.empresa').val();
+        let tipoimputacion = $(this).parents('tr').find('.tipoimputacion').val();
+        let cuentacontable_id = $(this).parents('tr').find('.cuentacontable_id').val();
+        let flError = false;
+		let url = '/anitaERP/public/stock/replicar_cuentacontable_articulo/'+empresa_id+'/'+tipoimputacion+'/'+cuentacontable_id;
+
+		$.get(url, function(cuentas){
+			var cta = $.map(cuentas, function(value, index){
+				return [value];
+			});
+			$.each(cta, function(index,value){
+                if (value.empresa_id)
+                {
+                    // Busca si la cuenta que envia ya existe
+                    $("#tbody-cuentacontable-table .empresa").each(function(index) {
+                        let act_empresa_id = $(this).val();
+                        let act_tipoimputacion = $(this).parents('tr').find('.tipoimputacion').val();
+
+                        if (value.empresa_id == act_empresa_id && value.tipoimputacion == act_tipoimputacion)
+                        {
+                            alert("El registro ya fue replicado");
+                            flError = true;
+                        }
+                    });        
+                    
+                    if (!flError)
+                    {
+                        agregaRenglonCuentaContable(event);
+
+                        $('#cuentacontable-table').find('tr').last().find('.empresa').val(value.empresa_id);
+                        $('#cuentacontable-table').find('tr').last().find('.tipoimputacion').val(value.tipoimputacion);
+                        $('#cuentacontable-table').find('tr').last().find('.cuentacontable_id').val(value.cuentacontable_id);
+                        $('#cuentacontable-table').find('tr').last().find('.codigocuentacontable').val(value.codigocuentacontable);
+                        $('#cuentacontable-table').find('tr').last().find('.nombrecuentacontable').val(value.nombrecuentacontable);
+                    }
+                }
+            });
+        });
     }
 
     function actualizaRenglonesCuentaContable() {

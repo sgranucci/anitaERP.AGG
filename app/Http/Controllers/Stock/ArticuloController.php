@@ -48,6 +48,7 @@ use App\Repositories\Configuracion\PeriodicidadcompraRepositoryInterface;
 use App\Repositories\Configuracion\SeteoModeloetiquetaRepositoryInterface;
 use App\Repositories\Configuracion\SeteosalidaRepositoryInterface;
 use App\Repositories\Compras\CondicionentregaRepositoryInterface;
+use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Http\Controllers\Controller;
 use QrCode;
 use Illuminate\Support\Facades\Validator;
@@ -72,6 +73,7 @@ class ArticuloController extends Controller
 	private $articulo_estadoRepository;
 	private $articulo_archivoRepository;
 	private $articulo_cuentacontableRepository;
+	private $cuentacontableRepository;
 	private $empresaRepository;
 	private $descuentoventaRepository;
 	private $oficinacompraRepository;
@@ -86,6 +88,7 @@ class ArticuloController extends Controller
 								Articulo_EstadoRepositoryInterface $articulo_estadoRepository,
 								Articulo_ArchivoRepositoryInterface $articulo_archivoRepository,
 								Articulo_CuentacontableRepositoryInterface $articulo_cuentacontableRepository,
+								CuentacontableRepositoryInterface $cuentacontableRepository,
 								ArticuloRepositoryInterface $articuloRepository,
 								OficinacompraRepositoryInterface $oficinacompraRepository,
 								PeriodicidadcompraRepositoryInterface $periodicidadcompraRepository,
@@ -101,6 +104,7 @@ class ArticuloController extends Controller
 		$this->articulo_estadoRepository = $articulo_estadoRepository;
 		$this->articulo_archivoRepository = $articulo_archivoRepository;
 		$this->articulo_cuentacontableRepository = $articulo_cuentacontableRepository;
+		$this->cuentacontableRepository = $cuentacontableRepository;
 		$this->articuloRepository = $articuloRepository;
 		$this->oficinacompraRepository = $oficinacompraRepository;
 		$this->condicionentregaRepository = $condicionentregaRepository;
@@ -799,5 +803,39 @@ class ArticuloController extends Controller
 			return ['mensaje' => 'error', 'errores' => $e->getMessage()];
 		}			
     }	
+
+	// En base a una cuenta ingresada, verificar el resto de las empresas asignadas y las genera
+	
+	public function replicarCuentaContableArticulo($empresa_id, $tipoimputacion, $cuentacontable_id)
+	{
+		$empresa_query = $this->empresaRepository->allFiltrado();
+
+		$cuentacontable = $this->cuentacontableRepository->find($cuentacontable_id);
+
+		if ($cuentacontable)
+			$codigoCuentaContable = $cuentacontable->codigo;
+
+		$arrayCuenta = [];
+		foreach ($empresa_query as $empresa)
+		{
+			// Solo crea las empresas distintas a la empresa del parametro
+			if ($empresa->id != $empresa_id)
+			{
+				// busca la cuenta en la otra empresa
+				$cuentacontable = $this->cuentacontableRepository->findPorCodigo($empresa->id, $codigoCuentaContable);
+
+				if ($cuentacontable)
+					$arrayCuenta[] = [
+						'empresa_id' => $empresa->id,
+						'tipoimputacion' => $tipoimputacion,
+						'cuentacontable_id' => $cuentacontable->id,
+						'codigocuentacontable' => $cuentacontable->codigo,
+						'nombrecuentacontable' => $cuentacontable->nombre
+				];
+			}
+		}
+
+		return $arrayCuenta;
+	}
 }
 

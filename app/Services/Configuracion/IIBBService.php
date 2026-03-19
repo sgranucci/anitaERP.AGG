@@ -53,6 +53,7 @@ class IIBBService
 			case 904: // Cordoba
             case 908: // Entre Rios
             case 914: // Misiones
+			case 921: // Santa Fe
             case 924: // Tucuman tasas y coeficientes
 				$tasa_iibb = $this->padron_iibbRepository->leePadronIibb($cuit, 'percepcion', $jurisdiccion);
 				break;

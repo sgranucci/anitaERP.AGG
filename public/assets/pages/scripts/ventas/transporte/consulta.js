@@ -44,7 +44,7 @@ $(document).on('keyup', '#consultatransporte', function () {
 
 function activa_eventos_consultatransporte()
 {
-    // Consulta de servicios
+    // Consulta de transportes
     $('.consultatransporte').on('click', function (event) {
         // Abre modal de consulta
         $("#consultatransporteModal").modal('show');
@@ -91,6 +91,51 @@ function activa_eventos_consultatransporte()
         });
     });
 
+    // Consulta de transportes
+    $('.consultadesdetransporte').on('click', function (event) {
+        // Abre modal de consulta
+        $("#consultatransporteModal").modal('show');
+    });
+
+    $('#codigodesdetransporte').on('change', function (event) {
+        event.preventDefault();
+
+        // Lee servicio terrestre por codigo
+        let codigotransporte = $("#codigodesdetransporte").val();
+        let url_res = '/anitaERP/public/ventas/leertransporte/'+codigotransporte;
+
+        $.get(url_res, function(data){
+            if (data)
+            {
+                $("#desdetransporte_id").val(data.id);
+                $("#nombredesdetransporte").val(data.nombre);
+                $("#codigodesdetransporte").val(data.codigo);
+            }
+        });
+    });    
+
+    // Consulta de transportes
+    $('.consultahastatransporte').on('click', function (event) {
+        // Abre modal de consulta
+        $("#consultatransporteModal").modal('show');
+    });
+
+    $('#codigohastatransporte').on('change', function (event) {
+        event.preventDefault();
+
+        // Lee servicio terrestre por codigo
+        let codigotransporte = $("#codigohastatransporte").val();
+        let url_res = '/anitaERP/public/ventas/leertransporte/'+codigotransporte;
+
+        $.get(url_res, function(data){
+            if (data)
+            {
+                $("#hastatransporte_id").val(data.id);
+                $("#nombrehastatransporte").val(data.nombre);
+                $("#codigohastatransporte").val(data.codigo);
+            }
+        });
+    });        
 }
 
 

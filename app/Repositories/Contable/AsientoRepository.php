@@ -526,10 +526,9 @@ class AsientoRepository implements AsientoRepositoryInterface
 			}
 
 			if ($cuentacontables[0] != null)
-				$qMovimiento = count($cuentacontables);
+				$qMovimiento = count($debes);
 			else
 				$qMovimiento = 0;
-			
 			for ($i_movimiento=0; $i_movimiento < $qMovimiento; $i_movimiento++) 
 			{
 				$observacion = preg_replace('([^A-Za-z0-9 ])', '', $observaciones[$i_movimiento]);

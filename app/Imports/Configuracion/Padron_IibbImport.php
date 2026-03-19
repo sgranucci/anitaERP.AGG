@@ -6,6 +6,7 @@ use Maatwebsite\Excel\Concerns\ToModel;
 use Maatwebsite\Excel\Concerns\WithChunkReading;
 use Maatwebsite\Excel\Row;
 use Illuminate\Support\Facades\App;
+use Illuminate\Support\Facades\Log;
 use Auth;
 use Carbon\Carbon;
 use DB;
@@ -40,6 +41,7 @@ class Padron_IibbImport implements ToModel, WithChunkReading
         $this->padron_iibbRepository = App::make(\App\Repositories\Configuracion\Padron_IibbRepositoryInterface::class);
         $this->padron_iibb_tasaRepository = App::make(\App\Repositories\Configuracion\Padron_Iibb_TasaRepositoryInterface::class);
 
+        Log::info('Mensaje', ['jurisdiccion' => $this->jurisdiccion]);
         try {
             set_time_limit(0);
 
@@ -160,6 +162,50 @@ class Padron_IibbImport implements ToModel, WithChunkReading
                 $padron_iibb_tasa = $this->padron_iibb_tasaRepository->create($arrayPadron_Iibb_Tasa);
 
                 break;
+
+            case 908: // Entre Rios
+                if (is_numeric(substr($columnas[0], 0, 1)))
+                {
+                    $desdeFecha = DateTime::createFromFormat('dmY', $columnas[1]);
+                    $hastaFecha = DateTime::createFromFormat('dmY', $columnas[2]);
+
+                    $arrayPadron_Iibb = [
+                        'cuit' => $columnas[3]
+                    ];
+
+                    $padron_iibb = $this->padron_iibbRepository->findPorCuit($columnas[3]);
+
+                    if ($padron_iibb)
+                        $this->padron_iibbRepository->update($arrayPadron_Iibb, $padron_iibb->id);
+                    else
+                        $padron_iibb = $this->padron_iibbRepository->create($arrayPadron_Iibb);
+
+                    $tasaPercepcion = str_replace(',', '.', $columnas[7]);
+                    $tasaRetencion = str_replace(',', '.', $columnas[8]);
+
+                    // Busca registro de tasas
+                    $padron_iibb_tasa = $this->padron_iibb_tasaRepository->findPorIdProvincia($padron_iibb->id, $this->provincia_id);
+
+                    $arrayPadron_Iibb_Tasa = [
+                        'padron_iibb_id' => $padron_iibb->id,
+                        'provincia_id' => $this->provincia_id,
+                        'desdefecha' => $desdeFecha->format('Y-m-d'),
+                        'hastafecha' => $hastaFecha->format('Y-m-d'),
+                        'tasapercepcion' => $tasaPercepcion,
+                        'tasaretencion' => $tasaRetencion,
+                        'tasapercepciondiferencial' => null,
+                        'tasaretenciondiferencial' => null,
+                        'coeficiente' => null,
+                        'riesgofiscal' => null,
+                        'tipocontribuyente' => $columnas[4],
+                        'excluido' => null
+                    ];
+                    if ($padron_iibb_tasa)
+                        $padron_iibb_tasa = $this->padron_iibb_tasaRepository->update($arrayPadron_Iibb_Tasa, $padron_iibb_tasa->id);
+                    else
+                        $padron_iibb_tasa = $this->padron_iibb_tasaRepository->create($arrayPadron_Iibb_Tasa);
+                }
+                break;                              
             }
             DB::commit();
             
