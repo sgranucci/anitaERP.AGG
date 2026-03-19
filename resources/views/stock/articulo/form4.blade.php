@@ -78,7 +78,7 @@
 								<select name="empresa_ids[]" data-placeholder="Empresa" class="empresa form-control" data-fouc>
 									<option value="">-- Seleccionar --</option>
 									@foreach($empresa_query as $value)
-										@if( (int) $value->id == (int) old('empresa_ids[]', $cuentacontable->cuentacontables->empresa_id ?? ''))
+										@if( (int) $value->id == (int) old('empresa_ids[]', $cuentacontable->empresa_id ?? ''))
 											<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
 										@else
 											<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
