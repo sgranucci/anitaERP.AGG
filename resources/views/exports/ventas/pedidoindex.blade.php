@@ -1,4 +1,4 @@
-<h2> Pedidos de Ventas </h2>
+<h4> Pedidos de Ventas </h4>
 <table> 
 	<thead>
 	<tr>

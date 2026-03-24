@@ -107,7 +107,7 @@ function activa_eventos_consultaarticulo()
         $('#consultaarticuloModal').modal('hide');
 
         // Si es salamin tira saca opciones que no van del descuento
-        if (typeof $.fn.armaSelectDescuentoVenta === 'function') {
+        if (window.armaSelectDescuentoVenta) {
             armaSelectDescuentoVenta(ptrarticulo_id);
         }        
     });
@@ -211,11 +211,10 @@ function activa_eventos_consultaarticulo()
                     if (unidadmedida.toUpperCase() == 'KG' || unidadmedida.toUpperCase() == 'KIL')                    
                         $(ptrrenglon).parents("tr").find(".pieza").focus();  
                 }
-                //if (typeof $.fn.asignaPrecio === 'function') {
+                if (window.asignaPrecio)
                     asignaPrecio(ptrrenglon, data.id, '');
-                //}
 
-                if (typeof $.fn.controlDescuento === 'function') {
+                if (window.controlDescuento) {
                     if (!controlDescuento(ptrrenglon))
                     {
                         alert("No puede cargar el artículo");
@@ -224,7 +223,7 @@ function activa_eventos_consultaarticulo()
                 }
 
                 // Si es salamin tira saca opciones que no van del descuento
-                if (typeof $.fn.armaSelectDescuentoVenta === 'function') {
+                if (window.armaSelectDescuentoVenta) {
                     armaSelectDescuentoVenta(ptrrenglon);
                 }
             }

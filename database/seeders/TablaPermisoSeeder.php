@@ -17,11 +17,11 @@ class TablaPermisoSeeder extends Seeder
     {
         $now = Carbon::now()->toDateTimeString();
         $permiso = [
-            array('id' => '980', 'nombre' => 'Ingresar modelos de etiquetas', 'slug' => 'crear-modeloetiqueta', 'created_at' => $now, 'updated_at' => $now),
-            array('id' => '981', 'nombre' => 'Listar modelos de etiquetas', 'slug' => 'listar-modeloetiqueta', 'created_at' => $now, 'updated_at' => $now),
-            array('id' => '982', 'nombre' => 'Editar modelos de etiquetas', 'slug' => 'editar-modeloetiqueta', 'created_at' => $now, 'updated_at' => $now),
-            array('id' => '983', 'nombre' => 'Actualizar modelos de etiquetas', 'slug' => 'actualizar-modeloetiqueta', 'created_at' => $now, 'updated_at' => $now),
-            array('id' => '984', 'nombre' => 'Borrar modelos de etiquetas', 'slug' => 'borrar-modeloetiqueta', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '1001', 'nombre' => 'Ingresar feriados', 'slug' => 'crear-feriado', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '1002', 'nombre' => 'Listar feriados', 'slug' => 'listar-feriado', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '1003', 'nombre' => 'Editar feriados', 'slug' => 'editar-feriado', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '1004', 'nombre' => 'Actualizar feriados', 'slug' => 'actualizar-feriado', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '1005', 'nombre' => 'Borrar feriados', 'slug' => 'borrar-feriado', 'created_at' => $now, 'updated_at' => $now),
         ];
         DB::table('permiso')->insert($permiso);
     }

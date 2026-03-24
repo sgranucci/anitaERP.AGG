@@ -198,7 +198,7 @@ class ImpuestoService extends FacturacionService
 
 					// Acumula netos por tasa de impuesto
 					self::agregaItemTotales(($valorTasaImpuesto == 0. ? "Exento" : "Gravado al ".$valorTasaImpuesto."%"), $valorTasaImpuesto, 
-						$totalItem, $impuesto_id, $impuesto_codigo, $impuesto_codigoarca, $netos);
+						$totalNeto, $impuesto_id, $impuesto_codigo, $impuesto_codigoarca, $netos);
 				}
 			}
 		}
@@ -229,7 +229,11 @@ class ImpuestoService extends FacturacionService
 
 		if (($descuentoFinal+$porcentajeDescuentoImportePie) != 0.)
 		{
-			$detalle = "Descuento ".$porcDescuento.'%';
+			if ($porcDescuento != 0.)
+				$detalle = "Descuento ".$porcDescuento.'%';
+			else
+				$detalle = "Descuento";
+			
 			$totalNeto -= $descuentoFinal;
 
 			self::agregaItemTotales($detalle, $porcDescuento, -$descuentoFinal, 0, 0, 0, $subtotales);
@@ -261,13 +265,21 @@ class ImpuestoService extends FacturacionService
 		// Agrega percepcion de iva si es agente de percepcion y el cliente no lo es
         if (env('ANITA_AGENTE_PERCEPCION_IVA') == 'si' && $retieneIva != 'S' && !$flGrabaComprobanteDividido)
 		{
-			$percepcionIva = $totalNeto * env('ANITA_TASA_PERCEPCION_IVA') / 100.;
-
-			$impuestos[] = ["concepto"=>"Percepcion IVA",
-							"baseimponible" => $totalNeto,
-							"tasa"=>env('ANITA_TASA_PERCEPCION_IVA'),
-							"importe"=>$percepcionIva,
-							];
+			$importeNeto = $importePercepcion = 0.;
+			for ($i = 0; $i < count($netos); $i++)
+			{
+				if(env('ANITA_TASA_PERCEPCION_IVA') != 0.)
+				{
+					$importeNeto += $netos[$i]['importe'];
+					$importePercepcion += ($netos[$i]['importe'] * env('ANITA_TASA_PERCEPCION_IVA') / 100.);
+				}
+			}			
+			$detalle = "Percepcion IVA ".env('ANITA_TASA_PERCEPCION_IVA')."%";
+			$impuestos[] = ["concepto"=>$detalle,
+						"baseimponible" => $importeNeto,
+						"tasa"=>env('ANITA_TASA_PERCEPCION_IVA'),
+						"importe"=>$importePercepcion
+					];			
 		}
 
 		// Agrega impuestos provinciales
@@ -396,12 +408,33 @@ class ImpuestoService extends FacturacionService
 			if ($impuesto)
 			{
 				// Calcula importe del item
-				$importeSinDto = $item['cantidad'] * 
+				if (config('facturacion.NETEA_DESCUENTO_LINEA'))
+				{
+					$importeSinDto = $item['cantidad'] * 
 							($item['incluyeimpuesto'] == 'N' || $item['incluyeimpuesto'] == '2' ? 
 							$item['precio'] : ($item['precio'] / (1.+(($valorTasaImpuesto+$tasaDetraccion)/100))));
 
-				// Asigna total sin descuento porque el item ya viene neteado con el descuento de linea
-				$totalNeto = $importeSinDto;
+					$totalNeto = $importeSinDto;	
+					
+					$totalDescuentoItem = 0;
+				}
+				else
+				{
+					$importeSinDto = $item['cantidad'] * 
+							($item['incluyeimpuesto'] == 'N' || $item['incluyeimpuesto'] == '2' ? 
+							$item['preciosindescuento'] : ($item['preciosindescuento'] / (1.+(($valorTasaImpuesto+$tasaDetraccion)/100))));	
+							
+					$totalBruto = $importeSinDto;
+
+					$importeConDto = $item['cantidad'] * 
+							($item['incluyeimpuesto'] == 'N' || $item['incluyeimpuesto'] == '2' ? 
+							$item['precio'] : ($item['precio'] / (1.+(($valorTasaImpuesto+$tasaDetraccion)/100))));					
+
+					// Asigna total sin descuento porque el item ya viene neteado con el descuento de linea
+					$totalNeto = $importeConDto;
+
+					$totalDescuentoItem = $totalBruto - $totalNeto;
+				}
 
 				// Agrega descuento final
 				if (($item['descuentofinal']+$porcentajeDescuentoImportePie) != 0.)
@@ -412,6 +445,10 @@ class ImpuestoService extends FacturacionService
 					$totalNeto *= (1. - (($item['descuentofinal']+$porcentajeDescuentoImportePie) / 100.));
 					$porcentajeDescuento = ($item['descuentofinal']+$porcentajeDescuentoImportePie);
 				}
+
+				// Agrega el descuento de linea al descuento de pie
+				if ($totalDescuentoItem != 0.)
+					$totalDescuento += $totalDescuentoItem;
 			}
 		}
 		return ['totalSinDescuento' => $importeSinDto, 'totalConDescuento' => $totalNeto, 'totalDescuento' => $totalDescuento, 'porcentajeDescuento' => $porcentajeDescuento];

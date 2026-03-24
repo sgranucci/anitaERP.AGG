@@ -322,91 +322,94 @@ class FacturacionService
 		
 			$pedido_articulo = $this->pedido_articuloRepository->find($pedido_articulo_id);
 
-			// Trae el articulo
-			$articulo = $this->articuloQuery->traeArticuloPorId($pedido_articulo->articulo_id);
-
-			if (!$articulo)
-				return ['error' => 'Artículo inexistente'];
-
-			if ($pedido_articulo->pesada == 0)
-				return ['error' => 'Artículo '.$articulo->sku.' sin pesar'];
-			
-			$moneda_id = $pedido_articulo->moneda_id;
-			
-			// Trae la categoria
-			$categoria = Categoria::find($articulo->categoria_id);
-			$codigoCategoria = '';
-			if ($categoria)
-				$codigoCategoria = $categoria->codigo;
-
-			// Lee el descuento 
-			$this->descuentoLinea = 0.;
-			if ($pedido_articulo->descuentoventa_id > 0)
+			if ($pedido_articulo->estado == 'P')
 			{
-				$descuentoventa = $this->descuentoventaRepository->find($pedido_articulo->descuentoventa_id);
+				// Trae el articulo
+				$articulo = $this->articuloQuery->traeArticuloPorId($pedido_articulo->articulo_id);
 
-				if ($descuentoventa)
-					$this->descuentoLinea = $descuentoventa->porcentajedescuento;
-			}
+				if (!$articulo)
+					return ['error' => 'Artículo inexistente'];
 
-			$precioUnitario = $pedido_articulo->precio;
-			if ($this->flDivide)
-			{
-				// Graba en Villafranca
-				if ($this->flGrabaComprobanteDividido)
+				if ($pedido_articulo->pesada == 0)
+					return ['error' => 'Artículo '.$articulo->sku.' sin pesar'];
+				
+				$moneda_id = $pedido_articulo->moneda_id;
+				
+				// Trae la categoria
+				$categoria = Categoria::find($articulo->categoria_id);
+				$codigoCategoria = '';
+				if ($categoria)
+					$codigoCategoria = $categoria->codigo;
+
+				// Lee el descuento 
+				$this->descuentoLinea = 0.;
+				if ($pedido_articulo->descuentoventa_id > 0)
 				{
-					if ($this->coeficienteExtraCliente != 0)
-						$precioUnitario = $pedido_articulo->precio * $this->coeficienteExtraCliente;
+					$descuentoventa = $this->descuentoventaRepository->find($pedido_articulo->descuentoventa_id);
 
-					$kilo = $pedido_articulo->pesada * $this->coeficienteCliente / 100.;
-					$pieza = $pedido_articulo->pieza * $this->coeficienteCliente / 100.;
-					$caja = $pedido_articulo->caja * $this->coeficienteCliente / 100.;
+					if ($descuentoventa)
+						$this->descuentoLinea = $descuentoventa->porcentajedescuento;
 				}
-				else // Deja el resto para grabar en Bierzo
+
+				$precioUnitario = $pedido_articulo->precio;
+				if ($this->flDivide)
 				{
-					$coeficiente = ((100. - $this->coeficienteCliente)/100.);
+					// Graba en Villafranca
+					if ($this->flGrabaComprobanteDividido)
+					{
+						if ($this->coeficienteExtraCliente != 0)
+							$precioUnitario = $pedido_articulo->precio * $this->coeficienteExtraCliente;
 
-					$kilo = $pedido_articulo->pesada * $coeficiente;
-					$pieza = $pedido_articulo->pieza * $coeficiente;
-					$caja = $pedido_articulo->caja * $coeficiente;
+						$kilo = $pedido_articulo->pesada * $this->coeficienteCliente / 100.;
+						$pieza = $pedido_articulo->pieza * $this->coeficienteCliente / 100.;
+						$caja = $pedido_articulo->caja * $this->coeficienteCliente / 100.;
+					}
+					else // Deja el resto para grabar en Bierzo
+					{
+						$coeficiente = ((100. - $this->coeficienteCliente)/100.);
+
+						$kilo = $pedido_articulo->pesada * $coeficiente;
+						$pieza = $pedido_articulo->pieza * $coeficiente;
+						$caja = $pedido_articulo->caja * $coeficiente;
+					}
 				}
-			}
-			else
-			{
-				$kilo = $pedido_articulo->pesada;
-				$pieza = $pedido_articulo->pieza;
-				$caja = $pedido_articulo->caja;
-			}
+				else
+				{
+					$kilo = $pedido_articulo->pesada;
+					$pieza = $pedido_articulo->pieza;
+					$caja = $pedido_articulo->caja;
+				}
 
-			if ($this->descuentoLinea != 0)
-				$precioConDescuento = $precioUnitario * (1. - ($this->descuentoLinea / 100.));
-			else
-				$precioConDescuento = $precioUnitario;
+				if ($this->descuentoLinea != 0)
+					$precioConDescuento = $precioUnitario * (1. - ($this->descuentoLinea / 100.));
+				else
+					$precioConDescuento = $precioUnitario;
 
-			$dataFactura[] = ["cantidad" => $kilo,
-				"pieza" => $pieza,
-				"caja" => $caja,
-				"preciosindescuento" => $precioUnitario,
-				"precio" => $precioConDescuento,
-				"descuento" => $this->descuentoLinea,
-				"descuentointegrado" => '',
-				"descuentofinal" => $this->descuentoPie,
-				"descuentointegradofinal" => '',
-				"incluyeimpuesto" => $pedido_articulo->incluyeimpuesto,
-				"impuesto_id" => $articulo->impuesto_id,
-				"articulo_id" => $articulo->id,
-				"sku" => $articulo->sku,
-				"descripcion" => $articulo->descripcion,
-				"codigounidadmedida" => $articulo->unidadesdemedidas->codigo ?? 1,
-				'categoria' => $codigoCategoria,
-				'moneda_id' => $moneda_id,
-				'listaprecio_id' => $pedido_articulo->listaprecio_id,
-				'despacho' => $this->numeroDespacho,
-				'loteimportacion_id' => null,
-				'pedido_articulo_id' => $pedido_articulo_id,
-				'cuentacontable_id' => $articulo->cuentacontableventa_id,
-			];
-			$totKilo += $pedido_articulo->pesada;
+				$dataFactura[] = ["cantidad" => $kilo,
+					"pieza" => $pieza,
+					"caja" => $caja,
+					"preciosindescuento" => $precioUnitario,
+					"precio" => $precioConDescuento,
+					"descuento" => $this->descuentoLinea,
+					"descuentointegrado" => '',
+					"descuentofinal" => $this->descuentoPie,
+					"descuentointegradofinal" => '',
+					"incluyeimpuesto" => $pedido_articulo->incluyeimpuesto,
+					"impuesto_id" => $articulo->impuesto_id,
+					"articulo_id" => $articulo->id,
+					"sku" => $articulo->sku,
+					"descripcion" => $articulo->descripcion,
+					"codigounidadmedida" => $articulo->unidadesdemedidas->codigo ?? 1,
+					'categoria' => $codigoCategoria,
+					'moneda_id' => $moneda_id,
+					'listaprecio_id' => $pedido_articulo->listaprecio_id,
+					'despacho' => $this->numeroDespacho,
+					'loteimportacion_id' => null,
+					'pedido_articulo_id' => $pedido_articulo_id,
+					'cuentacontable_id' => $articulo->cuentacontableventa_id,
+				];
+				$totKilo += $pedido_articulo->pesada;
+			}
 		}
 		// Arma datos del cliente
 		if (strtoupper(config('app.empresa') == "EL BIERZO"))
@@ -516,7 +519,7 @@ class FacturacionService
 				// Graba comprobante dividido
 				$retorno2 = Self::generaUnaFacturaPorPedido($data, $cliente, $pedido);
 
-				$retorno = array_merge($retorno1, $retorno2);
+				$retorno = [$retorno1, $retorno2];
 			}
 		}
 		else
@@ -524,7 +527,7 @@ class FacturacionService
 			$this->flGrabaComprobanteDividido = false;
 			$this->flDivide = false;
 
-			$retorno = Self::generaUnaFacturaPorPedido($data, $cliente, $pedido);
+			$retorno = [Self::generaUnaFacturaPorPedido($data, $cliente, $pedido)];
 		}
 
 		return $retorno;
@@ -959,7 +962,7 @@ class FacturacionService
 					}
 					DB::commit();
 
-					return ['factura' => substr($venta['codigo'],0,3).' '.$letra.' '.$puntoventa->codigo.'-'.$venta['numerocomprobante'], 'error' => ''];
+					return ['factura' => substr($venta['codigo'],0,3).' '.$letra.' '.$puntoventa->codigo.'-'.$venta['numerocomprobante']];
 				} catch (\Exception $e) {
 					DB::rollback();
 
@@ -4030,33 +4033,58 @@ class FacturacionService
 		{
 			$monto = $item['cantidad'] * $item['precio'];
 
-			if ($item['cuentacontable_id'] > 0)
+			if ($monto != 0)
 			{
-				$asientoContable[] = [	
-										'empresa_id' => $empresa_id,
-										'cuentacontable_id' => $item['cuentacontable_id'],
-										'monto' => $monto
-									];			
-			}
-			else
-			{
-				if (strtoupper(config('app.empresa')) == "EL BIERZO")
-					$cuentaVenta = config('facturacion.CUENTACONTABLE_VENTA');
-
-				if (strtoupper(config('app.empresa')) == 'AGG')
-					$cuentaVenta = config('ordenventa.CUENTAVENTA');
-
-				$cuentacontable = $this->cuentacontableRepository->findPorCodigo($empresa_id, $cuentaVenta);
-
-				$cuentacontable_id = 0;
-				
-				if ($cuentacontable)
+				if ($item['cuentacontable_id'] > 0)
 				{
-					$asientoContable[] = [	
+					for ($i = 0, $flEncontro = false; $i < count($asientoContable); $i++)
+					{
+						if ($asientoContable[$i]['cuentacontable_id'] == $item['cuentacontable_id'])
+						{
+							$flEncontro = true;
+							break;
+						}
+					}
+					if (!$flEncontro)
+						$asientoContable[] = [	
 											'empresa_id' => $empresa_id,
-											'cuentacontable_id' => $cuentacontable->id,
+											'cuentacontable_id' => $item['cuentacontable_id'],
 											'monto' => $monto
-										];
+										];			
+					else
+						$asientoContable[$i]['monto'] += $monto;
+				}
+				else
+				{
+					if (strtoupper(config('app.empresa')) == "EL BIERZO")
+						$cuentaVenta = config('facturacion.CUENTACONTABLE_VENTA');
+
+					if (strtoupper(config('app.empresa')) == 'AGG')
+						$cuentaVenta = config('ordenventa.CUENTAVENTA');
+
+					$cuentacontable = $this->cuentacontableRepository->findPorCodigo($empresa_id, $cuentaVenta);
+
+					$cuentacontable_id = 0;
+					
+					if ($cuentacontable)
+					{
+						for ($i = 0, $flEncontro = false; $i < count($asientoContable); $i++)
+						{
+							if ($asientoContable[$i]['cuentacontable_id'] == $item['cuentacontable_id'])
+							{
+								$flEncontro = true;
+								break;
+							}
+						}
+						if (!$flEncontro)						
+							$asientoContable[] = [	
+												'empresa_id' => $empresa_id,
+												'cuentacontable_id' => $cuentacontable->id,
+												'monto' => $monto
+											];
+						else
+							$asientoContable[$i]['monto'] += $monto;
+					}
 				}
 			}
 		}
@@ -4217,6 +4245,7 @@ class FacturacionService
 			$moneda_ids[] = $moneda_id;
 			$cotizaciones[] = $cotizacion;
 		}
+
 		// Carga en arrays de funcion de grabacion de Anita
 		$data['cuentacontable_ids'] = $cuentacontable_ids;
 		$data['debes'] = $debes;

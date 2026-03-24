@@ -22,6 +22,7 @@ switch(config('app.empresa'))
             'SUBCATEGORIA_TIRA_ID' => 2,
             'DEUDORES_POR_VENTAS' => 113100000,
             'ANTICIPO_DE_CLIENTES' => 113100000,
+            'EMPRESA_DEFAULT_ID' => 1,
             'ENVIA_MAIL_ALTA_CLIENTE_DEFINITIVO' => 'SI',
             'DESTINATARIO_ALTA_CLIENTE_DEFINITIVO' => ['luisav@elbierzo.com.ar', 'claudiam@elbierzo.com.ar', 'carolinal@elbierzo.com.ar']
             ];

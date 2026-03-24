@@ -83,11 +83,7 @@ class Pedido_ArticuloRepository implements Pedido_ArticuloRepositoryInterface
 
     public function updatePorId(array $data, $id)
     {
-        $pedido_articulo = $this->model->findOrFail($id);
-		
-		$pedido_articulo->update($data);
-		//
-		return $pedido;
+        return $this->model->findOrFail($id)->update($data);
     }
 
     public function delete($id)

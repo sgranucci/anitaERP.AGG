@@ -79,4 +79,10 @@ class Pedido_Articulo_EstadoRepository implements Pedido_Articulo_EstadoReposito
 		return $pedido_articulo_estado;
     }
 
+    public function leerHistoriaItemPedido($pedido_articulo_id)
+    {
+    	return $this->model->where('pedido_articulo_id', $pedido_articulo_id)->with('clientes')->with('motivoscierrepedido')
+                                    ->orderBy('id','asc')->get();
+    }
+
 }

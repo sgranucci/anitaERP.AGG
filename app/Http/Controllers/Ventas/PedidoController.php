@@ -125,8 +125,9 @@ class PedidoController extends Controller
 		}
 		else
 			$datas = $this->pedidoService->leePedidosPorEstado($cliente_id, 'P');
+		$transporte_query = $this->transporteRepository->all();
 
-		return view('ventas.pedido.index', compact('datas'));
+		return view('ventas.pedido.index', compact('datas', 'transporte_query'));
     }
 
 	// Index paginando 
@@ -199,17 +200,9 @@ class PedidoController extends Controller
         switch($formato)
         {
         case 'PDF':
-			$pedidos = $this->pedidoService->leePedidosPorEstadoSinPaginar($busqueda);
-            $view =  \View::make('ventas.pedido.listado', compact('pedidos'))
-                        ->render();
-            $path = storage_path('pdf/listados');
-            $nombre_pdf = 'listado_pedido';
-
-            $pdf = \App::make('dompdf.wrapper');
-            $pdf->setPaper('legal','portrait');
-            $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
-
-            return response()->download($path.'/'.$nombre_pdf.'.pdf');
+			return (new PedidoExport($this->pedidoService))
+						->parametros($busqueda)
+						->download('pedido.pdf');
             break;
 
         case 'EXCEL':
@@ -561,6 +554,11 @@ class PedidoController extends Controller
 		return $this->pedidoService->anularItemPedido($id, $codigoot, $motivocierrepedido_id, $cliente_id);
 	}
 
+	public function leerHistoriaItemPedido($id)
+	{
+		return $this->pedidoService->leerHistoriaItemPedido($id);
+	}
+
     /**
      * Show the form for creating a new resource.
      *
@@ -582,7 +580,7 @@ class PedidoController extends Controller
 		$formapago_query = $this->formapagoRepository->all();
 		$incoterm_query = $this->incotermRepository->all();
 		$descuentoventa_query = $this->descuentoventaRepository->all();
-		$actividad_arca_query = $this->actividad_arcaRepository->all();			
+		$actividad_arca_query = $this->actividad_arcaRepository->all();		
 		
         return view('ventas.pedido.crear', compact('cliente_query', 'condicionventa_query', 'vendedor_query',
 			'listaprecio_query', 'moneda_query', 

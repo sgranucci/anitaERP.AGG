@@ -18,12 +18,15 @@ switch(strtoupper(config('app.empresa')))
             "PUNTOVENTA_DIVISION_ID" => 5,
             "PUNTOVENTA_DIVISION_LOCAL_ID" => 6,
             "DECIMAL_KILO" => 2,
+            "DECIMAL_CANTIDAD" => 2,
             "DECIMAL_PIEZA" => 2,
             "DECIMAL_CAJA" => 2,
             "TIPO_REMITO" => 'REM',
             "LETRA_REMITO" => 'R',
             "TIPO_REMITO_ID" => 9,
-            "DEPOSITO_VENTA_ID" => 1
+            "DEPOSITO_VENTA_ID" => 1,
+            "NETEA_DESCUENTO_LINEA" => false, // false deja precio de lista en el renglon siempre y manda el descuento resultante al pie
+                                              // true netea el descuento en el precio de cada linea de la factura sin mandar descuento resultante al pie
         ];
         break;
     case "AGG":
@@ -36,7 +39,8 @@ switch(strtoupper(config('app.empresa')))
             "CUENTACONTABLE_PERCEPCION_IVA" => '',
             "CUENTACONTABLE_VENTA" => '',
             'USA_DETRACCION' => 'S',
-            "DECIMAL_CANTIDAD" => 0
+            "DECIMAL_CANTIDAD" => 0,
+            "NETEA_DESCUENTO_LINEA" => false,
         ];
         break;
 }

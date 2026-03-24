@@ -188,6 +188,17 @@ Route::delete('configuracion/condicioniva/{id}', 'Configuracion\CondicionivaCont
  Route::delete('configuracion/tipodocumento/{id}', 'Configuracion\TipodocumentoController@eliminar')->name('eliminar_tipodocumento');
  
 /* 
+ * Feriados
+ */
+
+ Route::get('configuracion/feriado', 'Configuracion\FeriadoController@index')->name('feriado');
+ Route::get('configuracion/feriado/crear', 'Configuracion\FeriadoController@crear')->name('crear_feriado');
+ Route::post('configuracion/feriado', 'Configuracion\FeriadoController@guardar')->name('guardar_feriado');
+ Route::get('configuracion/feriado/{id}/editar', 'Configuracion\FeriadoController@editar')->name('editar_feriado');
+ Route::put('configuracion/feriado/{id}', 'Configuracion\FeriadoController@actualizar')->name('actualizar_feriado');
+ Route::delete('configuracion/feriado/{id}', 'Configuracion\FeriadoController@eliminar')->name('eliminar_feriado');
+  
+/* 
  * Retenciones de cobranza
  */
 
@@ -198,6 +209,24 @@ Route::delete('configuracion/condicioniva/{id}', 'Configuracion\CondicionivaCont
  Route::put('configuracion/retencion_cobranza/{id}', 'Configuracion\Retencion_CobranzaController@actualizar')->name('actualizar_retencion_cobranza');
  Route::delete('configuracion/retencion_cobranza/{id}', 'Configuracion\Retencion_CobranzaController@eliminar')->name('eliminar_retencion_cobranza');
   
+/* 
+ * Control de Retenciones impositivas ARCA
+ */
+
+ Route::get('configuracion/retencion_impositiva_arca', 'Configuracion\Retencionimpositiva_ArcaController@index')->name('retencion_impositiva_arca');
+ Route::get('configuracion/retencion_impositiva_arca/crear', 'Configuracion\Retencionimpositiva_ArcaController@crear')->name('crear_retencion_impositiva_arca');
+ Route::post('configuracion/retencion_impositiva_arca', 'Configuracion\Retencionimpositiva_ArcaController@guardar')->name('guardar_retencion_impositiva_arca');
+ Route::get('configuracion/retencion_impositiva_arca/{id}/editar', 'Configuracion\Retencionimpositiva_ArcaController@editar')->name('editar_retencion_impositiva_arca');
+ Route::put('configuracion/retencion_impositiva_arca/{id}', 'Configuracion\Retencionimpositiva_ArcaController@actualizar')->name('actualizar_retencion_impositiva_arca');
+ Route::delete('configuracion/retencion_impositiva_arca/{id}', 'Configuracion\Retencionimpositiva_ArcaController@eliminar')->name('eliminar_retencion_impositiva_arca');
+ 
+ Route::get('configuracion/listaretencion_impositiva_arca/{formato?}/{busqueda?}', 'Configuracion\Retencionimpositiva_ArcaController@listar')->name('lista_retencion_impositiva_arca'); 
+
+ Route::get('configuracion/crea_importacion_retencion_impositiva_arca', 'Configuracion\Retencionimpositiva_ArcaController@crearImportacionRetencionimpositiva_Arca')->name('crear_importacion_retencion_impositiva_arca');
+ Route::post('configuracion/importa_retencion_impositiva_arca', 'Configuracion\Retencionimpositiva_ArcaController@importarRetencionimpositiva_Arca')->name('importar_retencion_impositiva_arca');
+ Route::get('configuracion/conciliar_retencion_impositiva_arca', 'Configuracion\Retencionimpositiva_ArcaController@conciliarRetencionimpositiva_Arca')->name('conciliar_retencion_impositiva_arca');
+ Route::post('configuracion/procesar_conciliacion_retencion_impositiva_arca', 'Configuracion\Retencionimpositiva_ArcaController@procesarConciliacionRetencionimpositiva_Arca')->name('procesar_conciliacion_retencion_impositiva_arca');
+
 /* 
  * Padron Mipyme
  */
@@ -1021,7 +1050,7 @@ Route::post('ventas/facturarporpedido', 'Ventas\FacturacionController@facturarPo
 
 // Actualiza pedido desde otras aplicaciones fuera del ABM
 Route::get('ventas/actualizasolopedido/{estadopedido}/{pedido_id}', 'Ventas\PedidoController@actualizaSoloPedido')->name('actualiza_solo_pedido');
-
+Route::get('ventas/leerhistoriaitempedido/{pedido_articulo_id}', 'Ventas\PedidoController@leerHistoriaItemPedido')->name('leer_historia_item_pedido');
 /* 
  * Ordenes de trabajo
  */

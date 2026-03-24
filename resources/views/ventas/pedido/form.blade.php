@@ -27,7 +27,7 @@
 		</div>
 		<div class="form-group row">
    			<label for="vendedor" class="col-lg-3 col-form-label requerido">Vendedor</label>
-        	<select name="vendedor_id" id="vendedor_id" data-placeholder="Vendedor" class="col-lg-8 form-control required" data-fouc>
+        	<select name="vendedor_id" id="vendedor_id" data-placeholder="Vendedor" class="col-lg-8 form-control" data-fouc required>
         		<option value="">-- Seleccionar vendedor --</option>
         		@foreach($vendedor_query as $key => $value)
         			@if( (int) $value->id == (int) old('vendedor_id', $pedido->vendedor_id ?? ''))
@@ -39,9 +39,9 @@
         	</select>
 		</div>
 		<div class="form-group row">
-			<label for="transporte" class="col-lg-3 col-form-label">Reparto</label>
+			<label for="transporte" class="col-lg-3 col-form-label requerido">Reparto</label>
 			<input type="hidden" class="col-form-label transporte_id" id="transporte_id" name="transporte_id" value="{{$pedido->transporte_id ?? ''}}" >
-			<input type="text" class="col-lg-2 codigotransporte" id="codigotransporte" name="codigotransporte" value="{{$pedido->transportes->codigo ?? ''}}" >
+			<input type="text" class="col-lg-2 codigotransporte" id="codigotransporte" name="codigotransporte" value="{{$pedido->transportes->codigo ?? ''}}" required>
 			<input type="text" class="col-lg-5 form-control nombretransporte" id="nombretransporte" name="nombretransporte" value="{{$pedido->transportes->nombre ?? ''}}" readonly>
 			<button type="button" title="Consulta repartos" style="padding:1;" class="btn-accion-tabla consultatransporte tooltipsC">
 				<i class="fa fa-search text-primary"></i>
@@ -136,7 +136,7 @@
 					@foreach (old('items', $pedido->pedido_articulos->count() ? $pedido->pedido_articulos : ['']) as $pedidoitem)
             			<tr class="item-pedido">
                 			<td>
-								@if ($pedidoitem->estado ?? '' == 'A')
+								@if ($pedidoitem->estado == 'A')
                 					<input type="text" style="background-color:red;font-weight:900;" name="items[]" class="form-control item" value="{{ $loop->index+1 }}" readonly>
 								@else
                 					<input type="text" name="items[]" class="form-control item" value="{{ $loop->index+1 }}" readonly>
@@ -146,6 +146,7 @@
                 				<input type="hidden" name="incluyeimpuestos[]" class="form-control incluyeimpuesto" readonly value="{{old('incluyeimpuestos', $pedidoitem->incluyeimpuesto??'')}}" />
                 				<input type="hidden" name="descuentos[]" class="form-control descuento" readonly value="{{old('descuentos', $pedidoitem->descuento??'')}}" />
                 				<input type="hidden" name="ids[]" class="form-control ids" value="{{$pedidoitem->id??''}}" />
+								<input type="hidden" name="estados[]" class="form-control estados" value="{{$pedidoitem->estado??'P'}}" />
 								<input type="hidden" name="loteids[]" class="form-control loteids" value="{{$pedidoitem->lotes->id ?? ''}}" />
 								@foreach ($pedidoitem->pedido_articulo_estados as $estado)
 									@php 
@@ -187,16 +188,16 @@
 								<input type="hidden" name="unidadmedidas[]" class="form-control unidadmedida" value="" />								
 							</td>										
                 			<td>
-								<input type="text" name="cajas[]" class="form-control caja" value="{{number_format(old('cajas.'.$loop->index, optional($pedidoitem)->caja),2)}}" />
+								<input type="text" name="cajas[]" class="form-control caja" value="{{number_format(old('cajas.'.$loop->index, optional($pedidoitem)->caja),2,'.','')}}" />
                 			</td>
                 			<td>
-								<input type="text" name="piezas[]" class="form-control pieza" value="{{number_format(old('piezas.'.$loop->index, optional($pedidoitem)->pieza),2)}}" />
+								<input type="text" name="piezas[]" class="form-control pieza" value="{{number_format(old('piezas.'.$loop->index, optional($pedidoitem)->pieza),2,'.','')}}" />
                 			</td>
                 			<td>
-								<input type="text" name="kilos[]" class="form-control kilo" value="{{number_format(old('kilos.'.$loop->index, optional($pedidoitem)->kilo),2)}}" />
+								<input type="text" name="kilos[]" class="form-control kilo" value="{{number_format(old('kilos.'.$loop->index, optional($pedidoitem)->kilo),2,'.','')}}" />
                 			</td>	
 							<td>
-								<input type="text" name="pesadas[]" class="form-control pesada" value="{{number_format(old('pesadas.'.$loop->index, optional($pedidoitem)->pesada),2)}}" />
+								<input type="text" name="pesadas[]" class="form-control pesada" value="{{number_format(old('pesadas.'.$loop->index, optional($pedidoitem)->pesada),2,'.','')}}" />
                 			</td>		
 							<td>
 								<select name="descuentoventa_ids[]" data-placeholder="Descuento" class="descuentoventa_id form-control" data-fouc>
@@ -212,7 +213,7 @@
 								<input type="hidden" name="descuentoventaanterior_ids[]" class="form-control descuentoventaanterior_id" value="{{$pedidoitem->descuentoventa_id}}" />
 							</td>				
                 			<td>
-                				<input type="text" style="text-align: right;" name="precios[]" class="form-control precio" readonly value="{{$pedidoitem->precio}}" />
+                				<input type="text" style="text-align: right;" name="precios[]" class="form-control precio" readonly value="{{number_format($pedidoitem->precio,2,'.','')}}" />
                 			</td>
                 			<td>
 								@if ($pedidoitem->estado == 'A')
@@ -232,7 +233,7 @@
 									<button type="button" title="Historia de anulaci&oacute;nes" style="padding:0;" class="btn-accion-tabla historiaitem tooltipsC">
                             			<i class="fa fa-book text-danger"></i>
 									</button>
-									<input type="hidden" class="historiaanulacion" value="{{$pedidoitem->pedido_combinacion_estados}}" >
+									<input type="hidden" class="historiaanulacion" value="{{$pedidoitem->pedido_articulo_estados}}" >
 								@endif
 								@if (can('entregar-articulo-sin-cargo-pedido-venta', false))
 									<button type="button" title="Artículo sin cargo" style="padding:0;" class="btn-accion-tabla botonsincargo tooltipsC">

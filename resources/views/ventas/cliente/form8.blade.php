@@ -15,9 +15,9 @@
     			</tr>
     		</thead>
     		<tbody id="tbody-tabla-cm05">
-				@if (isset($data->clientecm05s))
+				@if (isset($data->cliente_cm05s))
 		 		@if ($data->cliente_cm05s ?? '') 
-					@foreach (old('cliente_cm05', $data->cliente_cm05s->count() ? $data->cliente_cm05s : ['']) as $cm05)
+					@foreach (old('cliente_cm05s', $data->cliente_cm05s->count() ? $data->cliente_cm05s : ['']) as $cm05)
             			<tr class="item-cm05">
                 			<td>
                 				<input type="hidden" name="cliente_cm05[]" class="form-control iicm05" readonly value="{{ $loop->index+1 }}" />

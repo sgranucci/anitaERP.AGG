@@ -48,6 +48,8 @@
 	var offFactura;
 	var modalActivo;
 	var descuentoCliente;
+	var kiloanulacion;
+	var itemPedido_id;
 	
 	function completarCliente_Entrega(cliente_id){
         var loc_id;
@@ -303,9 +305,6 @@
         	completarModulos(articulo, modulo_id);
 		});
 
-		// Marca items como facturados, completa combinaciones y modulos al abrir pedido
-		marcaItemFacturado();
-
 		marcaDescuento();
 
 		muestraBotonSuspension(estadoPedido);
@@ -315,44 +314,6 @@
 
 		$("#codigocliente").focus();
 	});
-
-	function marcaItemFacturado()
-	{
-		// Completa combinaciones y modulos al abrir pedido
-		$("#tbody-tabla .otcodigo").each(function(index) {
-			let ordentrabajo = $(this).val();
-			let ot = this;
-			let tilde = $(this).parents("tr").find(".checkImpresion");
-			let pedido_combinacion_id = $(this).parents("tr").find(".ids").val();
-			let articulo = $(this).parents("tr").find(".articulo");
-			let combinacion = $(this).parents("tr").find(".combinacion");
-
-			if (ordentrabajo > 0)
-			{
-				articulo.prop('disabled', 'disabled');
-				combinacion.prop('disabled', 'disabled');
-			}
-			else
-			{
-				articulo.prop('disabled', false);
-				combinacion.prop('disabled', false);
-			}
-			
-			// Busca si tiene factura asociada
-			var listarUri = "/anitaERP/public/ventas/estadoot/"+ordentrabajo+"/"+pedido_combinacion_id;
-		
-			$.get(listarUri, function(data){
-				
-				if (data.numerofactura != -1 && data.numerofactura != -2 && data.numerofactura != -3)
-				{
-					$(ot).css("background-color","red");
-						$(ot).css("font-weight","900");
-
-					$(tilde).prop("checked",false);
-				}
-			});
-		});
-	}
 
 	function activa_eventos(flInicio)
 	{
@@ -382,12 +343,19 @@
 			$(document).off('change', '.desc_combinacion');
 			$(document).off('change', '.desc_modulo');
 			$(document).off('change', '.cantidadesportalles');
+			$('#itemspedido-table input').off('keydown');
 		}
 
 		activa_eventos_consultacliente();
 		activa_eventos_consultaarticulo();
 		activa_eventos_consultatransporte();
 		activa_eventos_consultazonavta();
+
+		$('#itemspedido-table input').keydown(function(event){
+			if(event.which == 13) {
+				event.preventDefault();
+			}
+		});
 
 		$('.codigocliente').on('change', function (event) {
 			event.preventDefault();
@@ -744,35 +712,6 @@
 		$("#tothistoriaPares").val(totPares.toFixed(0));
 	}
 
-	// Arma medidas y cantidades para modal
-	function armaMedidas(item)
-	{
-		articulo_id = $(item).parents("tr").find(".articulo").val();
-		descripcion_articulo = $(item).parents("tr").find(".articulo option:selected").text();
-		modulo_id = $(item).parents("tr").find(".modulo").val();
-		combinacion_id = $(item).parents("tr").find(".combinacion").val();
-		nombre_combinacion = $(item).parents("tr").find(".combinacion option:selected").text();
-
-		// Lee tabla de medidas
-		var val_medida = $(item).parents("tr").find(".medidas").val();
-
-		medidas=[];
-		cantidades=[];
-		precios=[];
-
-		if (val_medida != '')
-		{
-			var tbl_medidas = JSON.parse(val_medida);
-
-       		$.each(tbl_medidas, function(index,value){
-				medidas.push(value.talle_id);
-				cantidades.push(value.cantidad);
-				precios.push(value.precio);
-			});
-		}
-		completarTalles(modulo_id, 0, medidas, cantidades, precios);
-	}
-
 	// Manejo de grilla 
 
     $(function () {
@@ -783,7 +722,7 @@
 
 		// Si no tiene items agrega el primero
 		if(!$('.item-pedido').length)
-			agregaRenglon();
+			agregaRenglon(event);
 
 		let cliente_id = $("#cliente_id").val();
 		if (cliente_id == CLIENTE_STOCK_ID)
@@ -794,7 +733,7 @@
 		$("#codigocliente").focus();
     });
 
-    function agregaRenglon(){
+    function agregaRenglon(event){
 		if (event != undefined)
         	event.preventDefault();
         var renglon = $('#template-renglon').html();
@@ -805,41 +744,31 @@
 		activa_eventos(false);
 
 		$('#itemspedido-table').find('tr').last().find('.codigoarticulo').focus();
-    }
+	}
 
 	// Anula item 
     function anulaItem() {
-       	codigoAnulacionOt = $(this).parents('tr').find('.otcodigo').val();
-		idAnulacionOt = $(this).parents('tr').find('.ot').val();
-		motivoAnulacionOt = $(this).parents('tr').find('.motivosanulacion').val();
-		nombreClienteAnulacionOt = $(this).parents('tr').find('.clientesanulacion').val();
-	  	itemAnulacionOt = $(this);
-	  	let pedido_combinacion_id = $(this).parents("tr").find(".ids").val();
+		let estadoPedido = $('#estadopedido').val();
 
-	  	itemAnulacion = $(this).parents('tr').find('.item');
-	  	itemAnulacionId = $(this).parents('tr').find('.ids').val();
-	  	botonAnulacion = $(this).parents('tr').find('.ianulaItem');
+		if (estadoPedido != 'Pendiente')
+		{
+			alert("No puede anular un item que no está en estado pendiente");
+		}
+		else
+		{
+			motivoAnulacionOt = $(this).parents('tr').find('.motivosanulacion').val();
+			itemAnulacionOt = $(this);
 
-	  	flAnulacionItem = true;
+			itemAnulacion = $(this).parents('tr').find('.item');
+			itemAnulacionId = $(this).parents('tr').find('.ids').val();
+			botonAnulacion = $(this).parents('tr').find('.ianulaItem');
+			descripcion_articulo = $(this).parents('tr').find('.descripcionarticulo').val();
+			kiloanulacion = $(this).parents('tr').find('.kilo').val();
 
-		// Busca si tiene factura asociada
-		var listarUri = "/anitaERP/public/ventas/estadoot/"+codigoAnulacionOt+"/"+pedido_combinacion_id;
+			flAnulacionItem = true;
 
-		$.get(listarUri, function(data){
-			
-			if (data.numerofactura != -1 && data.numerofactura != -2 && data.numerofactura != -3)
-			{
-				alert("OT ya facturada "+data.numerofactura);
-			}
-			else
-			{
-				armaMedidas(itemAnulacionOt);
-
-				setTimeout(() => {
-					$("#anulacionModal").modal('show');
-				}, 300);	
-			}
-		});
+			$("#anulacionModal").modal('show');
+		}
 	}
 
 	// Controla apertura modal de anulacion
@@ -850,28 +779,21 @@
 		if (botonAnulacion.hasClass('text-danger'))
 	  	{
 			var tituloModal = "Anulación item ";
-  			modal.find('#aceptaanulacionModal').text("Anula item");
-			$("#clientereasignado").hide();
+  			modal.find('#aceptaanulacionModal').attr("title", "Anula item");
 			$("#motivocierrepedido").hide();
 	  	}
 		else
 	  	{
 			var tituloModal = "Recupera item ";
-  			modal.find('#aceptaanulacionModal').text("Recupera item");
-			$("#clientereasignado").show();
+  			modal.find('#aceptaanulacionModal').attr("title", "Recupera item");
 			$("#motivocierrepedido").show();
-			$("#nombreclientereasignado").empty();
-			$("#nombreclientereasignado").append(nombreClienteAnulacionOt);
 			$("#nombremotivoanulacion").empty();
 			$("#nombremotivoanulacion").append(motivoAnulacionOt);
 		}
-
-		$("#ordentrabajoanulacion").val(codigoAnulacionOt);
-  		modal.find('.modal-title').text(tituloModal+descripcion_articulo+' Combinacion '+nombre_combinacion+' Modulo '+nombre_modulo);
+  		modal.find('.modal-title').text(tituloModal+descripcion_articulo);
   		modal.find('#anulacionModal').empty();
-  		modal.find('#anulacionModal').append(talles_txt+medidas_txt+precios_txt+tallesid_txt);
-		sumaanulacionPares();
-		muestraanulacionTotalPares();
+  		modal.find('#anulacionModal').append('');
+		$('#totanulacionPares').val(kiloanulacion);
 	});
 
 	$('#cierraanulacionModal').on('click', function () {
@@ -880,7 +802,7 @@
 
 	// Acepta modal de anulacion de item
 	$('#aceptaanulacionModal').on('click', function () {
-	  	let nuevoClienteId = $('#nuevocliente_id').val();
+	  	let nuevoClienteId = 0;
 	  	let motivoAnulacionId = $('#motivoanulacion_id').val();
 
 		if (motivoAnulacionId == '')
@@ -889,7 +811,7 @@
 			return;
 		}
 	  	flAnulacionItem = false;
-
+		codigoAnulacionOt = 'xxx';
 		$('#anulacionModal').modal('hide');
 
 	  	// Anula el item 
@@ -898,24 +820,25 @@
                 return [value];
             });
             $.each(ret, function(index,value){
-			  	if (value == 'anulado')
-			  	{
-				  	$(itemAnulacion).css("background-color","red");
-				  	$(itemAnulacion).css("font-weight","900");
-				  	alert("Item anulado con exito");
+				if (value == 'anulado')
+				{
+					$(itemAnulacion).css("background-color","red");
+					$(itemAnulacion).css("font-weight","900");
+					$(itemAnulacion).parents('tr').find('.anulaitem').attr("title", "Recupera item");
+					alert("Item anulado con exito");
 					$(itemAnulacionOt).parents('tr').find('.motivosanulacion').val($("select[id=motivoanulacion_id] option:selected").text());
-					$(itemAnulacionOt).parents('tr').find('.clientesanulacion').val($("select[id=nuevocliente_id] option:selected").text());
-			  	}
-			  	else
-			  	{
-				  	$(itemAnulacion).css("background-color","");
-				  	$(itemAnulacion).css("font-weight","normal");
-				  	alert("Item recuperado con exito");
-			  	}
+				}
+				else
+				{
+					$(itemAnulacion).css("background-color","");
+					$(itemAnulacion).css("font-weight","normal");
+					$(itemAnulacion).parents('tr').find('.anulaitem').attr("title", "Anula item");
+					alert("Item recuperado con exito");
+				}
 				// Cambia atributo del boton
 				botonAnulacion.attr('class', botonAnulacion.hasClass('fa fa-window-close text-success ianulaItem') ? 
-			  							'fa fa-window-close text-danger ianulaItem' : 
-			  							'fa fa-window-close text-success ianulaItem' );
+										'fa fa-window-close text-danger ianulaItem' : 
+										'fa fa-window-close text-success ianulaItem' );
 			});
         });
         setTimeout(() => {
@@ -933,12 +856,13 @@
 	// Muestra historia del item
     function historiaItem() {
 		itemAnulacionOt = $(this);
-		codigoAnulacionOt = $(this).parents('tr').find('.otcodigo').val();
 		flAnulacionItem = true;
 
-		armaMedidas(itemAnulacionOt);
-
 		setTimeout(() => {
+			descripcion_articulo = $(this).parents('tr').find('.descripcionarticulo').val();
+			kiloanulacion = $(this).parents('tr').find('.kilo').val();
+			itemPedido_id = $(this).parents('tr').find('.ids').val();
+
 			$("#historiaModal").modal('show');
 		}, 300);
 	}
@@ -948,39 +872,60 @@
 		var modal = $(this);
 		let tituloModal = "Historia Anulación Item ";
 
-		$("#ordentrabajohistoria").val(codigoAnulacionOt);
-		modal.find('.modal-title').text(tituloModal+descripcion_articulo+' Combinacion '+nombre_combinacion+' Modulo '+nombre_modulo);
+		modal.find('.modal-title').text(tituloModal+descripcion_articulo);
 		modal.find('#historiaModal').empty();
-		modal.find('#historiaModal').append(talles_txt+medidas_txt+precios_txt+tallesid_txt);
-		modal.find('#tbody-historia').empty();
-		
-		let historia = $(itemAnulacionOt).parents("tr").find('.historiaanulacion').val();
-		historia = JSON.parse(historia);
+		modal.find('#historiaModal').append('');
 
-		historia_txt = "";
-		for (var i=0; i < historia.length; i++)
-		{
-			var motivo = historia[i];
+		var wrapper = $("#tbody-historia");
 
-			historia_txt += "<tr>";
-			
-			let fechaCierre = Date.parse(motivo.created_at);
+		let url = '/anitaERP/public/ventas/leerhistoriaitempedido/'+itemPedido_id;
 
-			historia_txt += "<td>"+new Date(fechaCierre).toLocaleString("es-AR")+"</td>";
-			historia_txt += "<td>"+motivo.motivoscierrepedido.nombre+"</td>";
-			if (motivo.clientes != null)
-				historia_txt += "<td>"+motivo.clientes.nombre+"</td>";
-			else
-				historia_txt += "<td></td>";
-			historia_txt += "<td>"+motivo.observacion+"</td>";
-			historia_txt += "<td>"+motivo.estado+"</td>";
-			historia_txt += "</tr>"
-		}
+		$.get(url, function(historia){
 
-		modal.find('#tbody-historia').append(historia_txt);
+			$(wrapper).empty();
 
-		sumaanulacionPares();
-		muestrahistoriaTotalPares();
+			var hist = $.map(historia, function(value, index){
+				return [value];
+			});
+			$.each(hist, function(index,value){
+				let fechaCierre = Date.parse(value.created_at);
+
+				if (value.cliente_id != null)
+					var cliente = value.clientes.nombre;
+				else
+					var cliente = '';
+
+				switch(value.estado)
+				{
+					case 'A':
+						var estado = 'Anulado';
+						break;
+					case 'P':
+						var estado = 'Pendiente';
+						break;
+				}
+
+				$(wrapper).append('<tr>'+
+                            '<td>'+
+                                '<input type="text" name="historiafechas[]" class="form-control historiafecha" value="'+new Date(fechaCierre).toLocaleString("es-AR")+'" readonly>'+
+                            '</td>'+
+                            '<td>'+
+                                '<input type="text" name="historiamotivos[]" class="form-control historiamotivo" value="'+value.motivoscierrepedido.nombre+'" readonly>'+
+                            '</td>'+
+                            '<td>'+
+                                '<input type="text" name="historiaclientes[]" class="form-control historiacliente" value="'+cliente+'" readonly>'+
+                            '</td>'+
+                            '<td>'+
+                                '<input type="text" name="historiaobservaciones[]" class="form-control historiaobservacione" value="'+value.observacion+'" readonly>'+
+                            '</td>'+
+							'<td>'+
+                                '<input type="text" name="historiaestados[]" class="form-control historiaestado" value="'+estado+'" readonly>'+
+                            '</td>'+
+                        '</tr>');
+			});
+		});
+
+		$('#tothistoriaPares').val(kiloanulacion);
 	});
 
 	$('#aceptahistoriaModal').on('click', function () {
@@ -1171,32 +1116,37 @@
     	leePuntoVenta(puntoVentaDefault);
 
 		$("#tbody-tabla .articulo_id").each(function(){
-			agregaRenglonFactura();
+			let estadoItem = $(this).parents('tr').find('.estados').val();
 
-			// Asigna variables
-			let articulo_id = $(this).val();
-			let codigoarticulo = $(this).parents("tr").find(".codigoarticulo").val();
-			let descripcionarticulo = $(this).parents("tr").find(".descripcionarticulo").val();
-			let pedido_articulo_id = $(this).parents("tr").find(".ids").val();
-			let unidadmedida = $(this).parents("tr").find(".unidadmedida_id").find(':selected').text();
-			let unidadmedida_id = $(this).parents("tr").find(".unidadmedida_id").val();
-			let caja = $(this).parents("tr").find(".caja").val();
-			let pieza = $(this).parents("tr").find(".pieza").val();
-			let pesada = $(this).parents("tr").find(".pesada").val();
-			let descuentoventa_id = $(this).parents("tr").find(".descuentoventa_id").val();
-			let precio = $(this).parents("tr").find(".precio").val();
+			if (estadoItem == 'P')
+			{
+				agregaRenglonFactura();
 
-			$('#factura-pedido-table').find('tr').last().find('.id_fac').val(pedido_articulo_id);
-			$('#factura-pedido-table').find('tr').last().find('.articulo_id_fac').val(articulo_id);
-			$('#factura-pedido-table').find('tr').last().find('.codigoarticulo_fac').val(codigoarticulo);
-			$('#factura-pedido-table').find('tr').last().find('.descripcionarticulo_fac').val(descripcionarticulo);
-			$('#factura-pedido-table').find('tr').last().find('.unidadmedida_fac').val(unidadmedida);
-			$('#factura-pedido-table').find('tr').last().find('.unidadmedida_id_fac').val(unidadmedida_id);
-			$('#factura-pedido-table').find('tr').last().find('.caja_fac').val(caja);
-			$('#factura-pedido-table').find('tr').last().find('.pieza_fac').val(pieza);
-			$('#factura-pedido-table').find('tr').last().find('.pesada_fac').val(pesada);
-			$('#factura-pedido-table').find('tr').last().find('.descuentoventa_id_fac').val(descuentoventa_id);
-			$('#factura-pedido-table').find('tr').last().find('.precio_fac').val(precio);
+				// Asigna variables
+				let articulo_id = $(this).val();
+				let codigoarticulo = $(this).parents("tr").find(".codigoarticulo").val();
+				let descripcionarticulo = $(this).parents("tr").find(".descripcionarticulo").val();
+				let pedido_articulo_id = $(this).parents("tr").find(".ids").val();
+				let unidadmedida = $(this).parents("tr").find(".unidadmedida_id").find(':selected').text();
+				let unidadmedida_id = $(this).parents("tr").find(".unidadmedida_id").val();
+				let caja = $(this).parents("tr").find(".caja").val();
+				let pieza = $(this).parents("tr").find(".pieza").val();
+				let pesada = $(this).parents("tr").find(".pesada").val();
+				let descuentoventa_id = $(this).parents("tr").find(".descuentoventa_id").val();
+				let precio = $(this).parents("tr").find(".precio").val();
+
+				$('#factura-pedido-table').find('tr').last().find('.id_fac').val(pedido_articulo_id);
+				$('#factura-pedido-table').find('tr').last().find('.articulo_id_fac').val(articulo_id);
+				$('#factura-pedido-table').find('tr').last().find('.codigoarticulo_fac').val(codigoarticulo);
+				$('#factura-pedido-table').find('tr').last().find('.descripcionarticulo_fac').val(descripcionarticulo);
+				$('#factura-pedido-table').find('tr').last().find('.unidadmedida_fac').val(unidadmedida);
+				$('#factura-pedido-table').find('tr').last().find('.unidadmedida_id_fac').val(unidadmedida_id);
+				$('#factura-pedido-table').find('tr').last().find('.caja_fac').val(caja);
+				$('#factura-pedido-table').find('tr').last().find('.pieza_fac').val(pieza);
+				$('#factura-pedido-table').find('tr').last().find('.pesada_fac').val(pesada);
+				$('#factura-pedido-table').find('tr').last().find('.descuentoventa_id_fac').val(descuentoventa_id);
+				$('#factura-pedido-table').find('tr').last().find('.precio_fac').val(precio);
+			}
 		});
 
 		$("#tbody-tabla-factura .descuentoventa_id_fac").each(function(){
@@ -1534,21 +1484,18 @@
 					_token: token
 				},
 				function(data, status){
-					if (data.error != '')
-                 	   alert(data.error);
-                	else
-                	{
-						alert("Factura Número: " + data.factura + "\nEstado: " + status);
-
-						$("#facturarPedidoModal").modal('hide');
-						$("#estadopedido").val('Facturado');
-
-						window.history.go(0);
-
-						// Marca como facturados los items
-						marcaItemFacturado();
+					if (data.length > 1)
+					{
+						alert("Factura Número: " + data[0].factura + "\nFactura Número: "+ data[1].factura + "\nEstado: " + status);
 					}
-				});
+					else
+						alert("Factura Número: " + data[0].factura + "\nEstado: " + status);
+
+					$("#facturarPedidoModal").modal('hide');
+					$("#estadopedido").val('Facturado');
+
+					window.history.go(0);
+				}).fail(function(error) {alert(error)});
 	});
 
 	$('#facturarPedidoModal').on('hidden.bs.modal', function () {
@@ -1613,11 +1560,15 @@
 			const tiposuspension_id = datoscli[5];
 			const lugarentrega = datoscli[6];
 			const zonavta_id = datoscli[7];
+			const codigotransporte = datoscli[9].codigo;
+			const nombretransporte = datoscli[9].nombre;
 
 			if (flCambioCliente)
 			{
 				$('#vendedor_id').val(vendedor_id);
 				$('#transporte_id').val(transporte_id);
+				$('#codigotransporte').val(codigotransporte);
+				$('#nombretransporte').val(nombretransporte);
 				$('#condicionventa_id').val(condicionventa_id);
 				$('#descuento').val(descuento);
 				$('#lugarentrega').val(lugarentrega);
@@ -1787,7 +1738,9 @@
 							{
 								if (codigoarticulo == camposQR[1] && parseFloat(kilo) > parseFloat(pesada)) // Si encuentra el articulo
 								{
-									let fechas = camposQR[5].split("/");
+									let fecha = camposQR[5];
+									let texto = fecha.replaceAll("-", "/");
+									let fechas = texto.split("/");
 
 									if (fechas[2].length == 1)
 										fechas[2] = "0"+fechas[2];
@@ -1798,7 +1751,10 @@
 									if (fechas[0].length == 1)
 										fechas[0] = "0"+fechas[0];
 									
-									let fechaFormateada = "20"+fechas[2]+"-"+fechas[1]+"-"+fechas[0];
+									if (fechas[2].length >= 4)
+										var fechaFormateada = fechas[2]+"-"+fechas[1]+"-"+fechas[0];
+									else
+										var fechaFormateada = "20"+fechas[2]+"-"+fechas[1]+"-"+fechas[0];
 
 									agregaRenglonPesada(event);
 

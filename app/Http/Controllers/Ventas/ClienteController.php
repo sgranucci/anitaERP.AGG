@@ -130,14 +130,14 @@ class ClienteController extends Controller
 
 		$clientes = $this->clienteRepository->leeCliente($busqueda, true);
 
-        //if ($clientes->isEmpty())
-		//{
-        	//$this->clienteRepository->sincronizarConAnita();
-			//$this->cliente_entregaRepository->sincronizarConAnita();
-			//$this->cliente_archivoRepository->sincronizarConAnita();
+        if ($clientes->isEmpty())
+		{
+        	$this->clienteRepository->sincronizarConAnita();
+			$this->cliente_entregaRepository->sincronizarConAnita();
+			$this->cliente_archivoRepository->sincronizarConAnita();
 	
-            //$clientes = $this->clienteRepository->leeCliente($busqueda, true);
-		//}
+            $clientes = $this->clienteRepository->leeCliente($busqueda, true);
+		}
 
         $datas = ['clientes' => $clientes, 'busqueda' => $busqueda];
 

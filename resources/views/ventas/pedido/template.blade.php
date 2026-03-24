@@ -7,6 +7,7 @@
             <input type="hidden" name="monedas_id[]" class="form-control moneda_id" readonly value="" />
             <input type="hidden" name="incluyeimpuestos[]" class="form-control incluyeimpuesto" readonly value="" />
             <input type="hidden" name="descuentos[]" class="form-control descuento" readonly value="0" />
+			<input type="hidden" name="estados[]" class="form-control estados" value="P" />
 			<input type="hidden" name="ids[]" class="form-control ids" value="0" />
 			<input type="hidden" name="loteids[]" class="form-control lote_id" value="" />
         </td>

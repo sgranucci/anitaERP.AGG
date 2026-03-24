@@ -166,6 +166,21 @@ class ClienteRepository implements ClienteRepositoryInterface
         return $cliente;
     }
 
+	public function findPorNumeroDocumento($numerodocumento)
+    {
+		$cliente = $this->model->with("cliente_entregas")->with("cliente_seguimientos")
+										->with("cliente_cm05s")
+										->with("cliente_articulo_suspendidos")->with("cliente_archivos")
+										->with("provincias")->with("localidades")->with("paises")
+										->with("tipossuspensioncliente")->with('zonavtas')
+										->with("abastos")->with("coeficientes")
+										->where('numerodocumento', $numerodocumento);
+
+		$cliente = $cliente->first();
+
+        return $cliente;
+    }
+
     public function findOrFail($id)
     {
         if (null == $cliente = $this->model->with("cliente_entregas")->with("cliente_seguimientos")
@@ -267,9 +282,9 @@ class ClienteRepository implements ClienteRepositoryInterface
 					clim_dias_atencion,
 					clim_hs_atencion,
 					clim_pais,
-					clim_perc_ing_br,
-					clim_nro_ing_br,
-					clim_dir_postal,
+					clim_perc_ing_br,'.
+					(config('app.empresa') == 'EL BIERZO' ? 'clim_nro_ing_bruto,' : 'clim_nro_ing_br,').
+					'clim_dir_postal,
 					clim_loc_postal,
 					clim_cp_postal,
 					clim_fantasia,

@@ -113,10 +113,15 @@ class PedidoQuery implements PedidoQueryInterface
 
         $pedidos = $this->model->select('pedido.id as id',
                                 'pedido.fecha as fecha',
+                                'pedido.fechaentrega as fechaentrega',
                                 'cliente.nombre as nombrecliente',
                                 'pedido.codigo as codigo',
-                                'pedido.estadopedido as estado')
+                                'pedido.estadopedido as estado',
+                                'pedido.transporte_id as transporte_id',
+                                'transporte.nombre as nombretransporte',
+                                'transporte.codigo as codigotransporte')
                                 ->join('cliente', 'cliente.id', '=', 'pedido.cliente_id')
+                                ->join('transporte', 'transporte.id', 'pedido.transporte_id')
                                 ->with('pedido_combinaciones')
                                 ->where('cliente.nombre', 'like', '%'.$busqueda.'%')
                                 ->orwhere('pedido.fecha', $busqueda)

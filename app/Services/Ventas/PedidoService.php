@@ -358,42 +358,50 @@ class PedidoService
 		  	$data = [];
 		  	if ($pedido_articulo->estado == 'A')
 			{
-			  	$nuevoestado = ' ';
-			  	$estado = 'recuperado';
+			  	$nuevoestado = 'P';
+			  	$observacion = 'recuperado';
 			}
 			else
 			{
 			  	$nuevoestado = 'A';
-			  	$estado = 'anulado';
+			  	$observacion = 'anulado';
 			}
 			$data = ['estado' => $nuevoestado];
 
 			DB::beginTransaction();
 			try {
 				$pedido = $this->pedido_articuloRepository->updatePorId($data, $id);
-			
+
 				if ($pedido)
 				{
+					if ($cliente_id == 0)
+						$cliente_id = null;
+					
 					// Graba estado
 					$pedido_articulo_estado = $this->pedido_articulo_estadoRepository->create([
 						'pedido_articulo_id' => $pedido_articulo->id,
 						'motivocierrepedido_id' => $motivocierrepedido_id,
 						'cliente_id' => $cliente_id,
 						'estado' => $nuevoestado,
-						'observacion' => $estado
+						'observacion' => $observacion
 					]);
 				}
 				DB::commit();
 			} catch (\Exception $e) {
 				DB::rollback();
 				return $e->getMessage();
-				$estado = 'error';
+				$observacion = 'error';
 			}
 			
-			return(['retorno'=>$estado]);
+			return(['retorno'=>$observacion]);
 		}
 		else
 			return(['retorno'=>'error']);
+	}
+
+	public function leerHistoriaItemPedido($id)
+	{
+		return $this->pedido_articulo_estadoRepository->leerHistoriaItemPedido($id);
 	}
 
 	// Actualiza datos solo en tabla pedido

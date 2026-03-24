@@ -15,6 +15,7 @@ use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithColumnWidths;
 use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Events\AfterSheet;
+use Maatwebsite\Excel\Events\BeforeSheet;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use App\Services\Ventas\PedidoService;
@@ -189,8 +190,8 @@ class PedidoExport implements FromView, WithColumnFormatting, WithMapping, Shoul
 		if ($this->flDesdeIndex)
 			return [
 				'A' => 8,
-				'C' => 40,
-				'D' => 10,
+				'C' => 15,
+				'D' => 20,
 				'E' => 10,
 			];
 		else
@@ -205,6 +206,11 @@ class PedidoExport implements FromView, WithColumnFormatting, WithMapping, Shoul
 	public function registerEvents(): array
     {
         return [
+			BeforeSheet::class => function(BeforeSheet $event) {
+				$event->sheet->getPageSetup()->setOrientation(\PhpOffice\PhpSpreadsheet\Worksheet\PageSetup::ORIENTATION_LANDSCAPE);
+				$event->sheet->getPageSetup()->setFitToWidth(1);
+				$event->sheet->getPageSetup()->setFitToHeight(0); // 0 indica páginas ilimitadas de alto
+			},			
             AfterSheet::class    => function(AfterSheet $event) {
 
                 $event->sheet->getDelegate()->freezePane('A3');

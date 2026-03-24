@@ -35,7 +35,7 @@ class TransporteRepository implements TransporteRepositoryInterface
 		if (!$hay_transportes)
 			self::sincronizarConAnita();
 
-        return $this->model->with('provincias:id,nombre')->with('localidades:id,nombre')->with('condicionivas:id,nombre')->orderBy('nombre','ASC')->get();
+        return $this->model->with('provincias:id,nombre')->with('localidades:id,nombre')->with('condicionivas:id,nombre')->orderBy('codigo','ASC')->get();
     }
 
     public function create(array $data)

@@ -718,6 +718,11 @@ class AppServiceProvider extends ServiceProvider
     	);
 
 		$this->app->bind(
+        	'App\Repositories\Configuracion\FeriadoRepositoryInterface',
+        	'App\Repositories\Configuracion\FeriadoRepository',
+    	);
+
+		$this->app->bind(
         	'App\Repositories\Configuracion\ImpuestoRepositoryInterface',
         	'App\Repositories\Configuracion\ImpuestoRepository',
     	);
@@ -730,6 +735,11 @@ class AppServiceProvider extends ServiceProvider
 		$this->app->bind(
         	'App\Repositories\Configuracion\Padron_ExclusionpercepcionivaRepositoryInterface',
         	'App\Repositories\Configuracion\Padron_ExclusionpercepcionivaRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Configuracion\Retencionimpositiva_ArcaRepositoryInterface',
+        	'App\Repositories\Configuracion\Retencionimpositiva_ArcaRepository',
     	);
 
 		$this->app->bind(

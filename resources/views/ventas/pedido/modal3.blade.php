@@ -9,21 +9,9 @@
       </div>
       <div class="modal-body">
         <form>
-			<div class="form-group">
-            	<label for="recipient-name" class="col-form-label">Orden de trabajo</label>
-            	<input type="text" style="font-weight: bold; text-align: center;" id="ordentrabajohistoria"></input>
-          	</div>
           	<div class="form-group">
-            	<label for="recipient-name" class="col-form-label">Cantidad m&oacute;dulos</label>
-            	<input type="text" size="5" style="font-weight: bold; text-align: center;" id="canthistoriamodulo" name="cantanulacionmodulo" value="1"></input>
-          	</div>
-          	<div class="form-group">
-            	<label for="recipient-name" class="col-form-label">Medidas</label>
-            	<div id="historiaModal"></div>
-          	</div>
-          	<div class="form-group">
-            	<label for="recipient-name" class="col-form-label">Total pares</label>
-            	<input type="text" size="5" style="font-weight: bold; text-align: center;" id="tothistoriaPares" name="totanulacionPares" readonly></input>
+            	<label for="recipient-name" class="col-form-label">Total kilos</label>
+            	<input type="text" size="6" style="font-weight: bold; text-align: center;" id="tothistoriaPares" name="tothistoriaPares" readonly></input>
           	</div>
 			<div class="card">
 				<div class="card-body">
@@ -34,7 +22,7 @@
 								<th>Motivo</th>
 								<th>Cliente</th>
 								<th>Observaci&oacute;n</th>
-								<th>Estado</th>
+								<th>Estado Actual</th>
 							</tr>
 						</thead>
 						<tbody id="tbody-historia">
