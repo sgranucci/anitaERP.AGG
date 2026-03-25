@@ -15,13 +15,13 @@
     <tbody>
 		@foreach ($ordencompra as $data)
 			@switch($data->moneda_id)
-			@case(1)
+			@case('1')
 				@php $nombremoneda = 'PESOS'; @endphp
 				break;
-			@case(2)
+			@case('2')
 				@php $nombremoneda = 'DOLARES'; @endphp
 				break;						
-			@case(3)
+			@case('3')
 				@php $nombremoneda = 'EUROS'; @endphp
 				break;
 			@default

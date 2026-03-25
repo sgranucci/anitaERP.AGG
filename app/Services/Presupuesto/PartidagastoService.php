@@ -476,16 +476,13 @@ class PartidagastoService
         $data = array( 'acc' => 'list', 
 						'campos' => 'ipartidaid',
 						'tabla' => 'partidas',
-						'sistema' => 'base_admin' );
+						'sistema' => 'base_admin',
+						'whereArmado' => " WHERE ipresupuestoid = 53670" );
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
-		$q = 0;
 		foreach ($dataAnita as $value) 
 		{
-			$q++;
-
-			if ($q > 26788)
-				$this->traerRegistroDeAnita($value->ipartidaid);
+			$this->traerRegistroDeAnita($value->ipartidaid);
 		}
     }
 
@@ -732,7 +729,7 @@ class PartidagastoService
 					else
 						$arrayAsiento['haberes'][0] = abs($partida->monto);
 
-					$arrayAsiento['cotizaciones'][0] = 0;
+					$arrayAsiento['cotizaciones'][0] = 1;
 					$arrayAsiento['observaciones'][0] = $partida->nombrepresupuesto." Part.: ".$partida->codigopartida;
 
 					$arrayAsiento['tipo'] = "PAR";

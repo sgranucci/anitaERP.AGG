@@ -125,6 +125,7 @@ class PartidagastoRepository implements PartidagastoRepositoryInterface
 											'presupuesto.nombre as nombrepresupuesto',
 											'centrocosto.codigo as codigocentrocosto',
 											'centrocosto.nombre as nombrecentrocosto',
+											'centrocosto.id as centrocosto_id',
 											'articulo.descripcion as descripcionarticulo',
 											'proveedor.nombre as nombreproveedor',
 											'partidagasto.moneda_id as moneda_id',

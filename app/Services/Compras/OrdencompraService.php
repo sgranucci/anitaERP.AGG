@@ -70,7 +70,7 @@ class OrdencompraService
 				movp_tipo,
 				movp_nro,
 				prom_nombre as nombreproveedor,
-				movp_cod_mon as moneda_id,
+				penmp_cod_mon as moneda_id,
 				movp_cotizacion as cotizacion,
 				movp_importe as total,
 				movp_mes as mes,

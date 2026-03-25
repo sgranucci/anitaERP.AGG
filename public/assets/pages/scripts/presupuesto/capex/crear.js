@@ -287,13 +287,13 @@
 
 				switch(value.moneda_id)
 				{
-					case 1:
+					case '1':
 						nombremoneda = 'PESOS';
 						break;
-					case 2:
+					case '2':
 						nombremoneda = 'DOLARES';
 						break;						
-					case 3:
+					case '3':
 						nombremoneda = 'EUROS';
 						break;
 					default:
