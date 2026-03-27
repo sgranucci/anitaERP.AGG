@@ -124,37 +124,57 @@ class TransporteRepository implements TransporteRepositoryInterface
     public function traerRegistroDeAnita($key){
         $apiAnita = new ApiAnita();
 		// Formato El Bierzo
-        $data = array( 
-            'acc' => 'list', 'tabla' => $this->tableAnita, 
-			'sistema' => 'ventas',
-            'campos' => '
-			expr_codigo,
-    		expr_nombre,
-    		expr_direccion,
-    		expr_localidad,
-    		expr_provincia,
-    		expr_cod_postal,
-    		expr_telefono,
-    		expr_cuit,
-    		expr_cond_iva,
-    		expr_nro_interno,
-			expr_hab_senasa,
-			expr_patente,
-			expr_tipo_expr,
-			expr_copias_remito,
-			expr_nro_ing_bruto,
-			expr_jurisdiccion,
-			expr_cod_loc,
-			expr_cod_depto,
-			expr_copia_pedido,
-			expr_dom_camion,
-			expr_dom_acoplado,
-			expr_cuit_chofer,
-			expr_estab_nro
-			',
-            'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
-        );
-        $dataAnita = json_decode($apiAnita->apiCall($data));
+		if (config('app.empresa') == 'EL BIERZO')
+			$data = array( 
+				'acc' => 'list', 'tabla' => $this->tableAnita, 
+				'sistema' => 'ventas',
+				'campos' => '
+				expr_codigo,
+				expr_nombre,
+				expr_direccion,
+				expr_localidad,
+				expr_provincia,
+				expr_cod_postal,
+				expr_telefono,
+				expr_cuit,
+				expr_cond_iva,
+				expr_nro_interno,
+				expr_hab_senasa,
+				expr_patente,
+				expr_tipo_expr,
+				expr_copias_remito,
+				expr_nro_ing_bruto,
+				expr_jurisdiccion,
+				expr_cod_loc,
+				expr_cod_depto,
+				expr_copia_pedido,
+				expr_dom_camion,
+				expr_dom_acoplado,
+				expr_cuit_chofer,
+				expr_estab_nro
+				',
+				'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
+			);
+		else
+			$data = array( 
+				'acc' => 'list', 'tabla' => $this->tableAnita, 
+				'sistema' => 'ventas',
+				'campos' => '
+				expr_codigo,
+				expr_nombre,
+				expr_direccion,
+				expr_localidad,
+				expr_provincia,
+				expr_cod_postal,
+				expr_telefono,
+				expr_cuit,
+				expr_cond_iva,
+				expr_nro_interno
+				',
+				'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
+			);			
+			
+		$dataAnita = json_decode($apiAnita->apiCall($data));
 
 		$usuario_id = Auth::user()->id;
 
@@ -190,25 +210,38 @@ class TransporteRepository implements TransporteRepositoryInterface
 				break;
 			}
 
-			$arr_campos = [
-				"nombre" => $data->expr_nombre,
-				"codigo" => $data->expr_codigo,
-				"domicilio" => $data->expr_direccion,
-				"provincia_id" => $provincia_id,
-				"localidad_id" => $localidad_id,
-				"codigopostal" => $data->expr_cod_postal,
-				"telefono" => $data->expr_telefono,
-				"email" => '',
-				"nroinscripcion" => $data->expr_cuit,
-				"condicioniva_id" => $condicioniva_id,
-				"patentevehiculo" => $data->expr_dom_camion,
-				"patenteacoplado" => $data->expr_dom_acoplado,
-				"horarioentrega" => ' ',
-				"tipoexpreso" => $data->expr_tipo_expr,
-				"copiaremito" => $data->expr_copias_remito,
-				"copiapedido" => $data->expr_copia_pedido
-            	];
-	
+			if (config('app.empresa') == "EL BIERZO")
+				$arr_campos = [
+					"nombre" => $data->expr_nombre,
+					"codigo" => $data->expr_codigo,
+					"domicilio" => $data->expr_direccion,
+					"provincia_id" => $provincia_id,
+					"localidad_id" => $localidad_id,
+					"codigopostal" => $data->expr_cod_postal,
+					"telefono" => $data->expr_telefono,
+					"email" => '',
+					"nroinscripcion" => $data->expr_cuit,
+					"condicioniva_id" => $condicioniva_id,
+					"patentevehiculo" => $data->expr_dom_camion,
+					"patenteacoplado" => $data->expr_dom_acoplado,
+					"horarioentrega" => ' ',
+					"tipoexpreso" => $data->expr_tipo_expr,
+					"copiaremito" => $data->expr_copias_remito,
+					"copiapedido" => $data->expr_copia_pedido
+					];
+				else
+					$arr_campos = [
+					"nombre" => $data->expr_nombre,
+					"codigo" => $data->expr_codigo,
+					"domicilio" => $data->expr_direccion,
+					"provincia_id" => $provincia_id,
+					"localidad_id" => $localidad_id,
+					"codigopostal" => $data->expr_cod_postal,
+					"telefono" => $data->expr_telefono,
+					"email" => '',
+					"nroinscripcion" => $data->expr_cuit,
+					"condicioniva_id" => $condicioniva_id
+					];
         	$transporte = $this->model->create($arr_campos);
         }
     }
@@ -218,6 +251,59 @@ class TransporteRepository implements TransporteRepositoryInterface
 
 		$this->setCondicionIvaAnita($request, $condicioniva_id);
 
+		if (config('app.empresa') == "EL BIERZO")
+			$data = array( 'tabla' => $this->tableAnita, 'acc' => 'insert',
+				'campos' => ' 
+					expr_codigo,
+					expr_nombre,
+					expr_direccion,
+					expr_localidad,
+					expr_provincia,
+					expr_cod_postal,
+					expr_telefono,
+					expr_cuit,
+					expr_cond_iva,
+					expr_nro_interno,
+					expr_hab_senasa,
+					expr_patente,
+					expr_tipo_expr,
+					expr_copias_remito,
+					expr_nro_ing_bruto,
+					expr_jurisdiccion,
+					expr_cod_loc,
+					expr_cod_depto,
+					expr_copia_pedido,
+					expr_dom_camion,
+					expr_dom_acoplado,
+					expr_cuit_chofer,
+					expr_estab_nro				
+					',
+				'valores' => " 
+					'".$request['codigo']."', 
+					'".$request['nombre']."',
+					'".$request['domicilio']."',
+					'".$request['desc_localidad']."',
+					'".$request['desc_provincia']."',
+					'".$request['codigopostal']."',
+					'".$request['telefono']."',
+					'".$request['nroinscripcion']."',
+					'".$condicioniva_id."',
+					'0',
+					' ',
+					' ',
+					'".$request['tipoexpreso']."',
+					'".$request['copiaremito']."',
+					' ',
+					' ',
+					' ',
+					' ',
+					'".$request['copiapedido']."',
+					'".$request['patentevehiculo']."',
+					'".$request['patenteacoplado']."',
+					' ',
+					' '"
+			);
+		else
         $data = array( 'tabla' => $this->tableAnita, 'acc' => 'insert',
             'campos' => ' 
 				expr_codigo,
@@ -229,20 +315,7 @@ class TransporteRepository implements TransporteRepositoryInterface
     			expr_telefono,
     			expr_cuit,
 				expr_cond_iva,
-				expr_nro_interno,
-				expr_hab_senasa,
-				expr_patente,
-				expr_tipo_expr,
-				expr_copias_remito,
-				expr_nro_ing_bruto,
-				expr_jurisdiccion,
-				expr_cod_loc,
-				expr_cod_depto,
-				expr_copia_pedido,
-				expr_dom_camion,
-				expr_dom_acoplado,
-				expr_cuit_chofer,
-				expr_estab_nro				
+				expr_nro_interno
 				',
             'valores' => " 
 				'".$request['codigo']."', 
@@ -254,20 +327,7 @@ class TransporteRepository implements TransporteRepositoryInterface
 				'".$request['telefono']."',
 				'".$request['nroinscripcion']."',
 				'".$condicioniva_id."',
-				'0',
-				' ',
-				' ',
-				'".$request['tipoexpreso']."',
-				'".$request['copiaremito']."',
-				' ',
-				' ',
-				' ',
-				' ',
-				'".$request['copiapedido']."',
-				'".$request['patentevehiculo']."',
-				'".$request['patenteacoplado']."',
-				' ',
-				' '"
+				'0'"
         );
         $apiAnita->apiCall($data);
 	}
@@ -277,7 +337,8 @@ class TransporteRepository implements TransporteRepositoryInterface
 
 		$this->setCondicionIvaAnita($request, $condicioniva);
 
-		$data = array( 'acc' => 'update', 'sistema' => 'ventas', 'tabla' => $this->tableAnita, 
+		if (config('app.empresa') == "EL BIERZO")
+			$data = array( 'acc' => 'update', 'sistema' => 'ventas', 'tabla' => $this->tableAnita, 
 				'valores' => " 
                 expr_codigo 	                = '".$request['codigo']."',
                 expr_nombre 	                = '".$request['nombre']."',
@@ -295,6 +356,20 @@ class TransporteRepository implements TransporteRepositoryInterface
                 expr_tipo_expr	                = '".$request['tipoexpreso']."' "
 					,
 				'whereArmado' => " WHERE expr_codigo = '".$id."' " );
+		else
+			$data = array( 'acc' => 'update', 'sistema' => 'ventas', 'tabla' => $this->tableAnita, 
+				'valores' => " 
+                expr_codigo 	                = '".$request['codigo']."',
+                expr_nombre 	                = '".$request['nombre']."',
+                expr_direccion 	                = '".$request['domicilio']."',
+                expr_localidad 	                = '".$request['desc_localidad']."',
+                expr_provincia 	                = '".$request['desc_provincia']."',
+                expr_cod_postal 	            = '".$request['codigopostal']."',
+                expr_telefono 	                = '".$request['telefono']."',
+                expr_cuit 	                    = '".$request['nroinscripcion']."',
+                expr_cond_iva 	                = '".$condicioniva."' "
+					,
+				'whereArmado' => " WHERE expr_codigo = '".$id."' " );			
         $apiAnita->apiCall($data);
 	}
 

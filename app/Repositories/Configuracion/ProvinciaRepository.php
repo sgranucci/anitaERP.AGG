@@ -139,32 +139,51 @@ class ProvinciaRepository implements ProvinciaRepositoryInterface
 
     public function traerRegistroDeAnita($key){
         $apiAnita = new ApiAnita();
-        if (config('app.empresa') == 'EL BIERZO')
-            $data = array( 
-                'acc' => 'list', 'tabla' => $this->tableAnita, 
-                'sistema' => 'shared',
-                'campos' => '
-                    provi_provincia,
-                    provi_desc,
-                    provi_abrev,
-                    provi_jurisdiccion,
-                    provi_cod_externo
-                ' , 
-                'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
-            );
-        else
-            $data = array( 
-                'acc' => 'list', 'tabla' => $this->tableAnita, 
-                'sistema' => 'shared',
-                'campos' => '
-                    provi_provincia,
-                    provi_desc,
-                    provi_abrev,
-                    provi_jurisdiccion,
-                    provi_letra
-                ' , 
-                'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
-            );            
+        switch(config('app.empresa'))
+        {
+            case 'EL BIERZO':
+                $data = array( 
+                    'acc' => 'list', 'tabla' => $this->tableAnita, 
+                    'sistema' => 'shared',
+                    'campos' => '
+                        provi_provincia,
+                        provi_desc,
+                        provi_abrev,
+                        provi_jurisdiccion,
+                        provi_cod_externo
+                    ' , 
+                    'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
+                );
+                break;
+
+            case 'AGG':
+                $data = array( 
+                    'acc' => 'list', 'tabla' => $this->tableAnita, 
+                    'sistema' => 'shared',
+                    'campos' => '
+                        provi_provincia,
+                        provi_desc,
+                        provi_abrev,
+                        provi_jurisdiccion,
+                        provi_letra
+                    ' , 
+                    'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
+                );
+                break;
+
+            case 'INTERFORMING':
+                $data = array( 
+                    'acc' => 'list', 'tabla' => $this->tableAnita, 
+                    'sistema' => 'shared',
+                    'campos' => '
+                        provi_provincia,
+                        provi_desc,
+                        provi_abrev,
+                        provi_jurisdiccion
+                    ' , 
+                    'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
+                );
+        }            
         $dataAnita = json_decode($apiAnita->apiCall($data));
         
         if (count($dataAnita) > 0) {

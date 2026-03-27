@@ -314,7 +314,11 @@ class ClienteRepository implements ClienteRepositoryInterface
 					clim_agrega_bonif,
 					clim_e_mail2,
 					clim_dfexcl_piva,
-					clim_hfexcl_piva' : '')
+					clim_hfexcl_piva' : '').
+					(config('app.empresa') == 'INTERFORMING' ?
+					',
+					clim_url,
+					clim_hs_atencion2' : '')
 			,
             'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
         );
@@ -546,7 +550,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 					"fantasia" => $data->clim_fantasia,
 					"email" => $email,
 					"telefono" => $data->clim_telefono.' '.$data->clim_fax,
-					"urlweb" => ' ',
+					"urlweb" => (config('app.empresa') == 'INTERFORMING' ? $data->clim_url : ' '),
 					"domicilio" => $data->clim_direccion,
 					"localidad_id" => $localidad_id,
 					"provincia_id" => $provincia_id,

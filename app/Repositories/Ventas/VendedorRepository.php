@@ -221,22 +221,40 @@ class VendedorRepository implements VendedorRepositoryInterface
 
     public function traerRegistroDeAnita($key){
         $apiAnita = new ApiAnita();
-        $data = array( 
-            'acc' => 'list', 'tabla' => $this->table, 
-            'sistema' => 'ventas',
-            'campos' => '
-                vend_codigo,
-				vend_nombre,
-				vend_comision_vta,
-				vend_comision_cob,
-                vend_aplicacion,
-                vend_empresa,
-                vend_legajo,
-                vend_email,
-                vend_estado
-            ' , 
-            'whereArmado' => " WHERE ".$this->keyField." = '".$key."' " 
-        );
+
+        if (config('app.empresa') == 'EL BIERZO')
+            $data = array( 
+                'acc' => 'list', 'tabla' => $this->table, 
+                'sistema' => 'ventas',
+                'campos' => '
+                    vend_codigo,
+                    vend_nombre,
+                    vend_comision_vta,
+                    vend_comision_cob,
+                    vend_aplicacion,
+                    vend_empresa,
+                    vend_legajo,
+                    vend_email,
+                    vend_estado
+                ' , 
+                'whereArmado' => " WHERE ".$this->keyField." = '".$key."' " 
+            );
+        else
+            $data = array( 
+                'acc' => 'list', 'tabla' => $this->table, 
+                'sistema' => 'ventas',
+                'campos' => '
+                    vend_codigo,
+                    vend_nombre,
+                    vend_comision_vta,
+                    vend_comision_cob,
+                    vend_aplicacion,
+                    vend_empresa,
+                    vend_legajo,
+                    vend_mercaderia
+                ' , 
+                'whereArmado' => " WHERE ".$this->keyField." = '".$key."' " 
+            );           
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
         if (count($dataAnita) > 0) {
@@ -248,12 +266,16 @@ class VendedorRepository implements VendedorRepositoryInterface
                 $aplicaSobre = "Sobre Neto";
 
             if ($data->vend_empresa == 0)
-                $data->vend_empresa = null;
+                $data->vend_empresa = '1';
 
-            if ($data->vend_estado == 'N')
-                $estado = "No Carga Clientes";
-            else
-                $estado = "Activo";
+            $estado = "Activo";
+            if (isset($data->vend_estado))
+                if ($data->vend_estado == 'N')
+                    $estado = "No Carga Clientes";
+
+            $email = null;
+            if (isset($data->vend_email))
+                $email = $data->vend_email;
 
             Vendedor::create([
                 "id" => $key,
@@ -263,7 +285,7 @@ class VendedorRepository implements VendedorRepositoryInterface
                 "aplicasobre" => $aplicaSobre,
                 "empresa_id" => $data->vend_empresa,
                 "legajo_id" => $data->vend_legajo,
-                "email" => $data->vend_email,
+                "email" => $email,
                 "codigo" => $data->vend_codigo,
                 "estado" => $estado
             ]);
@@ -277,20 +299,40 @@ class VendedorRepository implements VendedorRepositoryInterface
             $aplicaSobre = 'N';
         else
             $aplicaSobre = 'B';
-        $data = array( 'tabla' => 'vendedor', 'acc' => 'insert',
-            'sistema' => 'ventas',
-            'campos' => ' vend_codigo, vend_nombre, vend_comision_vta, vend_aplicacion, vend_empresa, vend_legajo, vend_comision_cob, vend_mercaderia, vend_email, vend_estado ',
-            'valores' => " '".$id."', 
-						   '".$data['nombre']."',
-						   '".$data['comisionventa']."',
-						   '".$aplicaSobre."',
-						   '".$data['empresa_id']."',
-						   '".$data['legajo_id']."',
-            			   '".$data['comisioncobranza']."',
-						   ' ',
-                           '".$data['email']."',
-                           '".' '."' "
-        );
+
+        if ($data['estado'] == "No Carga Clientes")
+            $estado = 'N';
+        else
+            $estado = ' ';
+
+        if (config('app.empresa') == 'EL BIERZO')
+            $data = array( 'tabla' => 'vendedor', 'acc' => 'insert',
+                'sistema' => 'ventas',
+                'campos' => ' vend_codigo, vend_nombre, vend_comision_vta, vend_aplicacion, vend_empresa, vend_legajo, vend_comision_cob, vend_mercaderia, vend_email, vend_estado ',
+                'valores' => " '".$id."', 
+                            '".$data['nombre']."',
+                            '".$data['comisionventa']."',
+                            '".$aplicaSobre."',
+                            '".$data['empresa_id']."',
+                            '".$data['legajo_id']."',
+                            '".$data['comisioncobranza']."',
+                            '".$estado."',
+                            '".$data['email']."',
+                            '".' '."' "
+            );
+        else
+            $data = array( 'tabla' => 'vendedor', 'acc' => 'insert',
+                'sistema' => 'ventas',
+                'campos' => ' vend_codigo, vend_nombre, vend_comision_vta, vend_aplicacion, vend_empresa, vend_legajo, vend_comision_cob, vend_mercaderia ',
+                'valores' => " '".$id."', 
+                            '".$data['nombre']."',
+                            '".$data['comisionventa']."',
+                            '".$aplicaSobre."',
+                            '".$data['empresa_id']."',
+                            '".$data['legajo_id']."',
+                            '".$data['comisioncobranza']."',
+                            '".' '."' "
+            );
         return $apiAnita->apiCall($data);
 	}
 
@@ -304,7 +346,8 @@ class VendedorRepository implements VendedorRepositoryInterface
             $estado = ' ';
         else
             $estado = 'N';
-		$data = array( 'acc' => 'update', 'tabla' => 'vendedor', 
+        if (config('app.empresa') == 'EL BIERZO')
+		    $data = array( 'acc' => 'update', 'tabla' => 'vendedor', 
                     'sistema' => 'ventas',
 					'valores' => " 
 								vend_nombre = '".  $data['nombre']."',
@@ -316,6 +359,18 @@ class VendedorRepository implements VendedorRepositoryInterface
                                 vend_codigo = '".$data['codigo']."',
                                 vend_estado = '".$estado."',
                                 vend_email = '".$data['email']."' ", 
+					'whereArmado' => " WHERE vend_codigo = '".$id."' " );
+        else
+		    $data = array( 'acc' => 'update', 'tabla' => 'vendedor', 
+                    'sistema' => 'ventas',
+					'valores' => " 
+								vend_nombre = '".  $data['nombre']."',
+								vend_comision_vta = '".  $data['comisionventa']."', 
+								vend_comision_cob = '".  $data['comisioncobranza']."',
+                                vend_aplicacion = '". $aplicaSobre."',
+                                vend_empresa = '".$data['empresa_id']."',
+                                vend_legajo = '".$data['legajo_id']."',
+                                vend_codigo = '".$data['codigo']."' ",
 					'whereArmado' => " WHERE vend_codigo = '".$id."' " );
         return $apiAnita->apiCall($data);
 	}

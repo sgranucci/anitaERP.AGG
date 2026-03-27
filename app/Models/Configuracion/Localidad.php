@@ -46,59 +46,120 @@ class Localidad extends Model
 
     public function traerRegistroDeAnita($key){
         $apiAnita = new ApiAnita();
-        $data = array( 
-            'acc' => 'list', 'tabla' => $this->table, 
-            'sistema' => 'shared',
-            'campos' => '
-                loc_localidad,
-				loc_provincia,
-				loc_desc,
-				loc_cod_postal,
-                loc_cod_senasa
-            ' , 
-            'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
-        );
+        if (config('app.empresa') == 'INTERFORMING')
+            $data = array( 
+                'acc' => 'list', 'tabla' => $this->table, 
+                'sistema' => 'shared',
+                'campos' => '
+                    loc_localidad,
+                    loc_provincia,
+                    loc_desc
+                ' , 
+                'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
+            );
+        else
+            $data = array( 
+                'acc' => 'list', 'tabla' => $this->table, 
+                'sistema' => 'shared',
+                'campos' => '
+                    loc_localidad,
+                    loc_provincia,
+                    loc_desc,
+                    loc_cod_postal,
+                    loc_cod_senasa
+                ' , 
+                'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
+            );
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
         if (count($dataAnita) > 0) {
             $data = $dataAnita[0];
-            Localidad::create([
-                "id" => $key,
-                "nombre" => $data->loc_desc,
-                "codigopostal" => $data->loc_cod_postal,
-                "codigo" => $data->loc_localidad,
-                "provincia_id" => ($data->loc_provincia > 0 ? $data->loc_provincia : NULL),
-                "codigosenasa" => $data->loc_cod_senasa
-            ]);
+
+            // Busca el codigo de provincia
+            $provincia = Provincia::select('id')->where('codigo', $data->loc_provincia)->first();
+
+            $provincia_id = null;
+            if ($provincia)
+                $provincia_id = $provincia->id;
+            if (config('app.empresa') == 'INTERFORMING')
+                Localidad::create([
+                    "id" => $key,
+                    "nombre" => $data->loc_desc,
+                    "codigopostal" => null, 
+                    "codigo" => $data->loc_localidad,
+                    "provincia_id" => $provincia_id,
+                    "codigosenasa" => null
+                ]);
+            else
+                Localidad::create([
+                    "id" => $key,
+                    "nombre" => $data->loc_desc,
+                    "codigopostal" => $data->loc_cod_postal,
+                    "codigo" => $data->loc_localidad,
+                    "provincia_id" => $provincia_id,
+                    "codigosenasa" => $data->loc_cod_senasa
+                ]);
         }
     }
 
 	public function guardarAnita($request, $id) {
         $apiAnita = new ApiAnita();
 
-        $data = array( 'tabla' => $this->table, 
+        $provincia = Provincia::select('codigo')->where('id', $request->provincia_id)->first();
+
+        $codigoprovincia = '0';
+        if ($provincia)
+            $codigoprovincia = $provincia->codigo;
+
+        if (config('app.empresa') == 'EL BIERZO')
+            $data = array( 'tabla' => $this->table, 
                         'sistema' => 'shared',
 						'acc' => 'insert',
             			'campos' => ' loc_localidad, loc_provincia, loc_desc, loc_cod_postal, loc_cod_senasa',
             			'valores' => " '".$request->codigo."', 
-										'".($request->provincia_id == NULL ? 0 : $request->provincia_id)."',
+										'".$codigoprovincia."',
 										'".$request->nombre."',  
 										'".$request->codigopostal."',
                                         '".$request->codigosenasa."' "
-        );
+            );
+        else
+            $data = array( 'tabla' => $this->table, 
+                        'sistema' => 'shared',
+						'acc' => 'insert',
+            			'campos' => ' loc_localidad, loc_provincia, loc_desc',
+            			'valores' => " '".$request->codigo."', 
+										'".$codigoprovincia."',
+										'".$request->nombre."' "
+            );
         $apiAnita->apiCall($data);
 	}
 
 	public function actualizarAnita($request, $id) {
         $apiAnita = new ApiAnita();
-		$data = array( 'acc' => 'update', 
+
+        $provincia = Provincia::select('codigo')->where('id', $request->provincia_id)->first();
+
+        $codigoprovincia = '0';
+        if ($provincia)
+            $codigoprovincia = $provincia->codigo;
+
+        if (config('app.empresa') == 'EL BIERZO')
+		    $data = array( 'acc' => 'update', 
                         'sistema' => 'shared',
 						'tabla' => $this->table, 
 						'valores' => " 
-						    loc_provincia = '".($request->provincia_id == NULL ? 0 : $request->provincia_id)."',
+						    loc_provincia = '".$codigoprovincia."',
 							loc_desc = '".$request->nombre."',
                 			loc_cod_postal =	'".$request->codigopostal."',
                             loc_cod_senasa = '".$request->codigosenasa."' ",
+						'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$request->codigo."' " );
+        else
+		    $data = array( 'acc' => 'update', 
+                        'sistema' => 'shared',
+						'tabla' => $this->table, 
+						'valores' => " 
+						    loc_provincia = '".$codigoprovincia."',
+							loc_desc = '".$request->nombre."' ",
 						'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$request->codigo."' " );
         $apiAnita->apiCall($data);
 	}
