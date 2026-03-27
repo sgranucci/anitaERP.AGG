@@ -76,6 +76,7 @@ class CapexOrdenCompraExport implements FromView, WithColumnFormatting, WithMapp
 	public function columnWidths(): array
     {
 		return [
+			'A' => 15
 		];
     }
 

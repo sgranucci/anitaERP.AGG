@@ -36,27 +36,28 @@
 			</thead>
 			<tbody>
 				@foreach ($ordencompra as $data)
-					@switch($data->moneda_id)
-					@case(1)
-						@php $nombremoneda = 'PESOS'; @endphp
-						break;
-					@case(2)
-						@php $nombremoneda = 'DOLARES'; @endphp
-						break;						
-					@case(3)
-						@php $nombremoneda = 'EUROS'; @endphp
-						break;
-					@default
-						@php $nombremoneda = 'PESOS'; @endphp
-						break;
-					@endswitch
-
 					<tr>
-						<td>{{$data->fechaordencompra ?? ''}}</td>
+						<td>{{\Carbon\Carbon::parse($data->fechaordencompra)->format('d-m-Y')}}</td>
 						<td>{{$data->movp_tipo}}-{{$data->movp_nro}}</td>
 						<td>{{$data->nombreproveedor ?? '' }}</td>
 						<td>{{$data->mes ?? ''}}</td>
-						<td>{{$nombremoneda}}</td>
+						<td>
+							@switch($data->moneda_id)
+								@case(1)
+									@php $nombremoneda = 'PESOS'; @endphp
+									@break;
+								@case(2)
+									@php $nombremoneda = 'DOLARES'; @endphp
+									@break;						
+								@case(3)
+									@php $nombremoneda = 'EUROS'; @endphp
+									@break;
+								@default
+									@php $nombremoneda = 'PESOS'; @endphp
+									@break;
+							@endswitch
+							{{$nombremoneda}}
+						</td>
 						<td style="text-align: right;">{{number_format($data->cotizacion, 4)}}</td>
 						<td style="text-align: right;">{{number_format($data->total,2)}}</td>
 						<td>{{$data->stkm_desc}}</td>
