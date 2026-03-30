@@ -162,11 +162,14 @@ class ArbolaprobacionService
 					$cotizacion = $this->cotizacionService->leeCotizacionDiaria($fecha, $moneda_id);
 
 					$coeficienteConversion = calculaCoeficienteMoneda($nivel->moneda_id, $moneda_id, $cotizacion);
+
+					if ($coeficienteConversion == 0)
+						$coeficienteConversion = 1.;
 				}
 				else
 					$coeficienteConversion = 1.;
 
-				$monto *= $coeficienteConversion;
+				$monto = $monto * $coeficienteConversion;
 
 				if ($nivelactual < $nivel->nivel &&
 					($nivel->desdemonto != 0 || $nivel->hastamonto != 0 ?

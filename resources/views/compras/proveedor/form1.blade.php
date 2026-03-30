@@ -2,38 +2,44 @@
 		<div class="row">
 			<div class="col-sm-6">
 				<div class="form-group row">
-    				<label for="nombre" class="col-lg-3 col-form-label requerido">Nombre</label>
+    				<label for="nombre" class="col-lg-2 col-form-label requerido">Nombre</label>
     				<div class="col-lg-8">
     					<input type="text" name="nombre" id="nombre" class="form-control" value="{{old('nombre', $data->nombre ?? '')}}" required/>
     				</div>
 				</div>
 				<div class="form-group row">
-    				<label for="codigo" class="col-lg-3 col-form-label">C&oacute;digo Anita</label>
-    				<div class="col-lg-2">
-    					<input type="text" name="codigo" id="codigo" class="form-control" value="{{old('codigo', $data->codigo ?? '')}}" readonly>
-    				</div>
-				</div>
-				<div class="form-group row">
-    				<label for="fantasia" class="col-lg-3 col-form-label">Fantas&iacute;a</label>
+    				<label for="fantasia" class="col-lg-2 col-form-label">Fantas&iacute;a</label>
     				<div class="col-lg-8">
     					<input type="text" name="fantasia" id="fantasia" class="form-control" value="{{old('fantasia', $data->fantasia ?? '')}}">
     				</div>
 				</div>
 				<div class="form-group row">
-    				<label for="contacto" class="col-lg-3 col-form-label">Contacto</label>
+    				<label for="contacto" class="col-lg-2 col-form-label">Contacto</label>
     				<div class="col-lg-8">
     					<input type="text" name="contacto" id="contacto" class="form-control" value="{{old('contacto', $data->contacto ?? '')}}">
     				</div>
 				</div>
+				<div class="form-group row">
+    				<label for="telefono" class="col-lg-2 col-form-label requerido">Telefono</label>
+                    <span class="input-group-text"><i class="fas fa-phone"></i></span>
+    				<div class="col-lg-5">
+    					<input type="text" name="telefono" id="telefono" class="form-control" value="{{old('telefono', $data->telefono ?? '')}}" required/>
+    				</div>
+					<label for="tiposervicio_proveedor" class="col-lg-2 col-form-label">Tipo de Servicio</label>
+					<select name="tiposervicio_proveedor_id" id="tiposervicio_proveedor_id" data-placeholder="Tipo de servicio" class="col-lg-2 form-control required" data-fouc>
+						<option value="">-- Seleccionar --</option>
+						@foreach($tiposervicio_proveedor_query as $key => $value)
+							@if( (int) $value->id == (int) old('tiposervicio_proveedor_id', $data->tiposervicio_proveedor_id ?? ''))
+								<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
+							@else
+								<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
+							@endif
+						@endforeach
+					</select>
+
+				</div>
 			</div>
 			<div class="col-sm-6">
-				<div class="form-group row">
-    				<label for="telefono" class="col-lg-3 col-form-label requerido">Telefono</label>
-                    <span class="input-group-text"><i class="fas fa-phone"></i></span>
-    				<div class="col-lg-8">
-    				<input type="text" name="telefono" id="telefono" class="form-control" value="{{old('telefono', $data->telefono ?? '')}}" required/>
-    				</div>
-				</div>
 				<div class="form-group row">
    					<label for="email" class="col-lg-3 col-form-label">Email</label>
    					<span class="input-group-text"><i class="fas fa-envelope"></i></span>
@@ -41,6 +47,13 @@
    						<input type="email" name="email" id="email" class="form-control" value="{{old('email', $data->email ?? '')}}" placeholder="Ingrese email">
    					</div>
 				</div>
+				<div class="form-group row">
+   					<label for="emailoc" class="col-lg-3 col-form-label">Email OC</label>
+   					<span class="input-group-text"><i class="fas fa-envelope"></i></span>
+   					<div class="col-lg-8">
+   						<input type="emailoc" name="emailoc" id="emailoc" class="form-control" value="{{old('emailoc', $data->emailoc ?? '')}}" placeholder="Ingrese email">
+   					</div>
+				</div>				
 				<div class="form-group row">
     				<label for="urlweb" class="col-lg-3 col-form-label">URL Web</label>
                     <span class="input-group-text"><i class="fas fa-laptop"></i></span>
@@ -50,7 +63,7 @@
     			</div>
 				<div class="form-group row">
 					<label for="tipoe" class="col-lg-3 col-form-label">Tipo de Empresa</label>
-					<select name="tipoempresa_id" id="tipoempresa_id" data-placeholder="Tipo de empresa" class="col-lg-5 form-control required" data-fouc>
+					<select name="tipoempresa_id" id="tipoempresa_id" data-placeholder="Tipo de empresa" class="col-lg-3 form-control required" data-fouc>
 						<option value="">-- Seleccionar --</option>
 						@foreach($tipoempresa_query as $key => $value)
 							@if( (int) $value->id == (int) old('tipoempresa_id', $data->tipoempresa_id ?? ''))
@@ -58,6 +71,15 @@
 							@else
 								<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
 							@endif
+						@endforeach
+					</select>
+					<label for="estado" class="col-lg-2 col-form-label requerido">Estado</label>
+					<select name="estado" class="col-lg-3 form-control" required>
+						<option value="">-- Elija estado --</option>
+						@foreach ($estado_enum as $value => $estado)
+							<option value="{{ $estado }}"
+								@if (old('estado', $data->estado ?? '') == $estado) selected @endif
+								>{{ $estado }}</option>
 						@endforeach
 					</select>
 				</div>
@@ -109,6 +131,11 @@
 							@endforeach
 						</select>
 					</div>
+				</div>
+				<div class="semaforo-horizontal">
+					<div class="luz red" id="rojo"></div>
+					<div class="luz yellow" id="amarillo"></div>
+					<div class="luz green" id="verde"></div>
 				</div>
 			</div>
 		</div>
@@ -279,6 +306,7 @@
 		<input type="hidden" id="tipoconsulta" name="tipoconsulta" value="{{$tipoconsulta ?? ''}}" >
 		<input type="hidden" id="tiposuspension_id" name="tiposuspension_id" value="{{$data->tiposuspension_id ?? ''}}" >
 		<input type="hidden" id="tiposuspensionproveedor_query" value="{{$tiposuspensionproveedor_query ?? ''}}" >
+		<input type="hidden" id="semaforo" value="{{$data->semaforo ?? 'Verde'}}" >
 </div>
 
 

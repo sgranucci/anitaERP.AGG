@@ -47,6 +47,7 @@ Proveedores
                             <th>Localidad</th>
                             <th>Provincia</th>
                             <th class="width10">C&oacute;d.</th>
+                            <th>Estado</th>
                             <th class="width40" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -65,6 +66,7 @@ Proveedores
                             <td><small>{{$data->nombrelocalidad ?? ''}}</small></td>
                             <td><small>{{$data->nombreprovincia ?? ''}}</small></td>
                             <td><small>{{$data->codigo}}</small></td>
+                            <td><small>{{$data->estado}}</small></td>
                             <td>
                        			@if (can('editar-proveedor', false))
                                 	<a href="{{route('editar_proveedor', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">

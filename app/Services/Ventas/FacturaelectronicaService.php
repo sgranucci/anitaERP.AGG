@@ -95,9 +95,9 @@ class FacturaElectronicaService
 			$nombreXml = $base.'.xml';
 			$nombreXmlRespuesta = $base.'_RESP.xml';
 			Storage::disk('public')->put($puntoventa->pathafip."/ent/$nombreXml", $this->GenerarXML ($req, null));
-	
+
 			$ret = $this->ejecutaAfip($puntoventa->pathafip, $nombreXml);
-	
+
 			//Storage::disk('public')->delete($puntoventa->pathafip."/ent/$nombreXml");
 			
 			$resp = new \SimpleXMLElement("storage/".$puntoventa->pathafip."/ent/$nombreXmlRespuesta", null, true);
@@ -368,7 +368,11 @@ class FacturaElectronicaService
 		if ($resultado == 'A')
 			return ['cae' => $cae, 'fechavencimientocae' => $fechaVto];
 		else	
-			return 'Error';
+		{
+			$retorno = $resp->detalle->observaciones->obs->msg;
+
+			return ['Error' => $retorno];
+		}
 	}
 
 	public function buscaCAEA($nroinscripcion, $fechafactura)

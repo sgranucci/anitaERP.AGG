@@ -32,7 +32,7 @@
         @include('includes.mensaje')
         <div class="card card-danger">
             <div class="card-header">
-                <h3 class="card-title">Editar Proveedor </h3>&nbsp;ID:&nbsp;{{$data->id }}&nbsp;{{$data->nombre}}
+                <h3 class="card-title">Editar Proveedor </h3>&nbsp;ID:&nbsp;{{$data->id }}&nbsp;{{$data->nombre}}&nbsp; &nbsp; &nbsp;Código Anita: {{$data->codigo}}
                 
                 @if ($tipoalta == 'P')
                     &nbsp; PROVEEDOR PROVISORIO
@@ -44,9 +44,26 @@
                             <i class="fa fa-bell"></i> Cambia a DEFINITIVO
                         </button>
                     @endif
-					<button type="button" id="botonestado" class="btn btn-info btn-sm">
-                        <i class="fa fa-bell"></i> Estado {{ $data->descripcionestado }}
-                    </button>
+                    @if (can('listar-cuentacorriente-proveedor', false))
+                        <a href="{{route('listar_cuentacorriente_proveedor', ['id' => $data->id])}}" target="_blank" class="btn btn-secondary btn-sm" title="Cuenta Corriente">
+                            <i class="fa fa-folder-open">Cuenta Corriente</i>
+                        </a>
+                    @endif       
+                    @if (can('listar-encuesta-proveedor', false))
+                        <a href="{{route('listar_encuesta_proveedor', ['id' => $data->id])}}" target="_blank" class="btn btn-secondary btn-sm" title="Encuentas del Proveedor">
+                            <i class="fa fa-question">Encuestas</i>
+                        </a>
+                    @endif  
+                    @if (can('listar-requisicion-proveedor', false))
+                        <a href="{{route('listar_requisicion_proveedor', ['id' => $data->id])}}" target="_blank" class="btn btn-secondary btn-sm" title="Requisiciones del Proveedor">
+                            <i class="fa fa-edit">Requisiciones</i>
+                        </a>   
+                    @endif                             
+                    @if (can('listar-ordencompra-proveedor', false))
+                        <a href="{{route('listar_ordencompra_proveedor', ['id' => $data->id])}}" target="_blank" class="btn btn-secondary btn-sm" title="Ordenes de Compra del Proveedor">
+                            <i class="fa fa-shopping-cart">Ordenes de compra</i>
+                        </a>        
+                    @endif           
                     @if ($tipoconsulta == "REMOTA")
                         <a href="javascript:history.back()" class="btn btn-outline-info btn-sm">
                             <i class="fa fa-fw fa-reply-all"></i> Volver a consulta
@@ -62,7 +79,7 @@
                 @csrf @method("put")
                 <div class="col-lg-8" align="right" style="margin: 5px;">
                     <button type="button" id="botonform1" class="btn btn-primary btn-sm">
-                    <i class="fa fa-user"></i> Datos principales
+                        <i class="fa fa-user"></i> Datos principales
                     </button>
                     <button type="button" id="botonform2" class="btn btn-info btn-sm">
                         <span class="fa fa-cash-register"></span> Datos impuestos

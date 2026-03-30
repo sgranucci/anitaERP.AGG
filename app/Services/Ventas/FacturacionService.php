@@ -1067,6 +1067,7 @@ class FacturacionService
 
 			$dataFactura[] = [
 				"precio" => $concepto->monto * $coeficienteCuota,
+				"preciosindescuento" => $concepto->monto * $coeficienteCuota,
 				"cantidad" => $concepto->cantidad,
 				"descuento" => $this->descuentoLinea,
 				"descuentointegrado" => '',
@@ -4515,8 +4516,8 @@ class FacturacionService
 
 				//$cae = ['cae' => '74040779002259', 'fechavencimientocae' => '20240201'];
 				
-				if ($cae == 'Error')
-					throw new Exception('No pudo asignar CAE');
+				if (isset($cae['Error']))
+					throw new Exception('No pudo asignar CAE.'.$cae['Error']);
 
 				if ($cae['fechavencimientocae'] == 0)
 					throw new Exception('No pudo asignar CAE');

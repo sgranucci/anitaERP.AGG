@@ -40,7 +40,8 @@ class Proveedor extends Model
                             'retencionsuss_id','condicionIIBB_id', 'agentepercepcionIIBB', 'nroIIBB', 
                             'condicionpago_id', 'condicionentrega_id', 'condicioncompra_id', 'cuentacontable_id', 
                             'cuentacontableme_id', 'cuentacontablecompra_id', 'centrocostocompra_id', 'conceptogasto_id',
-                            'estado', 'leyenda', 'tiposuspension_id', 'tipoalta', 'usuario_id'
+                            'estado', 'leyenda', 'tiposuspension_id', 'tipoalta', 'semaforo', 'emailoc', 'usuario_id',
+                            'regimenfacturacion', 'tiposervicio_proveedor_id'
                         ];
                                
     protected $table = 'proveedor';

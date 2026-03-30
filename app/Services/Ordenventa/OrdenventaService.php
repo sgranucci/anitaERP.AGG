@@ -130,7 +130,8 @@ class OrdenventaService
 		$this->ordenventa_conceptoRepository->update($data, $id);
 
 		// Llama al arbol de aprobacion
-		$this->arbolaprobacionService->procesaArbolaprobacion('OV', $id, 'insert');
+		if ($data['estado'] == 'SOLICITADA')
+			$this->arbolaprobacionService->procesaArbolaprobacion('OV', $id, 'insert');
 	}
 
 	public function actualizaSoloOrdenventa($estado, $id)

@@ -51,5 +51,15 @@ trait ProveedorTrait {
 		'N' => 'No percibe IIBB'
 		];
 
+	public static $enumSemaforo = [
+		'V' => 'Verde',
+		'A' => 'Amarillo',
+		'R' => 'Rojo'
+		];
+	
+	public static $enumRegimenfacturacion = [
+		'1' => 'RG 3419',
+		'2' => 'FCE'
+		];
 }
 

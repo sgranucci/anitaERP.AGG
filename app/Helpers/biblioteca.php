@@ -171,15 +171,20 @@ function calculaCoeficienteMoneda($aMoneda, $deMoneda, $cotizacion)
     if ($aMoneda == $deMoneda)
         return 1.;
 
+    if (isset($cotizacion['cotizacionventa']))
+        $cotizacionVenta = $cotizacion['cotizacionventa'];
+    else
+        $cotizacionVenta = $cotizacion;
+
     if ($aMoneda == 1)
-        return $cotizacion;
+        return $cotizacionVenta;
 
     if ($aMoneda > 1 && $deMoneda == 1)
-        return 1/$cotizacion;
+        return 1/$cotizacionVenta;
 
     // Faltaria definir bien conversiones entre monedas sin pasar por el peso
     if ($aMoneda > 1 && $deMoneda > 1)
-        return $cotizacion;
+        return $cotizacionVenta;
 
     return 1.;
 }

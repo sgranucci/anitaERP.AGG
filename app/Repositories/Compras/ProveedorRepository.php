@@ -336,6 +336,18 @@ class ProveedorRepository implements ProveedorRepositoryInterface
         );
         $dataleyAnita = json_decode($apiAnita->apiCall($data));
 
+		$data = array( 
+            'acc' => 'list', 'tabla' => 'promadic', 
+			'sistema' => 'compras',
+            'campos' => '
+			proad_proveedor,
+    		proad_e_mail_oc,
+			proad_semaforo
+			',
+            'whereArmado' => " WHERE proad_proveedor = '".$key."' " 
+        );
+        $dataAdicionalAnita = json_decode($apiAnita->apiCall($data));
+
 		$usuario_id = Auth::user()->id;
 
         if (isset($dataAnita)) {
@@ -474,11 +486,71 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 			else
 				$condicioncompra_id = null;
 
-			$concepto = $this->conceptogastoRepository->findPorId($data->prom_concepto);
+			if ($data->prom_concepto == 0)
+				$concepto_id = 66;
+			else
+				$concepto_id = $data->prom_concepto;
+
+			$concepto = $this->conceptogastoRepository->findPorId($concepto_id);
+
 			if ($concepto)
 				$conceptogasto_id = $concepto->id;
 			else
 				$conceptogasto_id = null;
+			
+			$estado = 'Activo';
+			switch($data->prom_estado_pro)
+			{
+				case '0':
+					$estado = 'Activo';
+					break;
+				case '1':
+					$estado = 'Suspendido';
+					break;
+				case '2':
+					$estado = 'Alta Pendiente';
+					break;
+				case '3':
+					$estado = 'Regularizado';
+					break;
+			}
+
+			$semaforo = null;
+			if (isset($dataAdicionalAnita[0]->proad_semaforo))
+			switch($dataAdicionalAnita[0]->proad_semaforo)
+			{
+				case 'V':
+					$semaforo = 'Verde';
+					break;
+				case 'A':
+					$semaforo = 'Amarillo';
+					break;
+				case 'R':
+					$semaforo = 'Rojo';
+					break;
+			}
+
+			$emailOc = null;
+			if (isset($dataAdicionalAnita[0]->proad_e_mail_oc))
+				$emailOc = $dataAdicionalAnita[0]->proad_e_mail_oc;
+
+			$regimenFacturacion = 'RG 3419';
+			switch($data->prom_regimen)
+			{
+			case '1':
+				$regimenFacturacion = 'FCE';
+				break;
+			}
+
+			$tipoServicio_id = 1;
+			switch($data->prom_prov_vario)
+			{
+				case 'S':
+					$tipoServicio_id = 2; // Servicios
+					break;
+				case 'V':
+					$tipoServicio_id = 3; // Eventual
+			}
 
 			// Lee las leyendas
 			$leyenda = "";
@@ -520,8 +592,12 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 				"cuentacontablecompra_id" => $cuentacontablecompra_id,
 				"centrocostocompra_id" => $centrocostocompra_id,
 				"conceptogasto_id" => $conceptogasto_id,
-				"estado" => $data->prom_estado_pro,
+				"estado" => $estado,
 				"leyenda" => $leyenda,
+				"semaforo" => $semaforo,
+				"emailoc" => $emailOc,
+				"regimenfacturacion" => $regimenFacturacion,
+				"tiposervicio_proveedor_id" => $tipoServicio_id,
 				"usuario_id" => $usuario_id,
             	];
 	
@@ -658,6 +734,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 		$fechainicioexclusionretib  = '';
 		$retencioniva = $retencionganancia = $retencionsuss = 0;
 		$condicionpago = $condicioncompra = $condicionentrega = 0;
+		$tiposervicio = $regimenfacturacion = '';
 		$this->setCamposAnita($request, $cuentacontable, $condicioniva, $retieneganancia, $condicionganancia,
 							$retieneiva, $retienesuss, $retieneiibb, 
 							$exclusionretiva, $fechaexclusionretiva, 
@@ -668,7 +745,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 							$fechainicioexclusionretiva, $fechainicioexclusionretgan,
 							$fechainicioexclusionretib,
 							$retencioniva, $retencionganancia, $retencionsuss,
-							$condicionpago, $condicioncompra, $condicionentrega);
+							$condicionpago, $condicioncompra, $condicionentrega, $tiposervicio, $regimenfacturacion);
 
         $fecha = Carbon::now();
 		$fecha = $fecha->format('Ymd');
@@ -762,7 +839,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 				'".$condicioncompra."',
 				'".$condicionentrega."',
 				'".$tipoempresa."',
-				'P',
+				'".$tiposervicio."',
 				'".$retieneiva."',
 				'".$retencionganancia."',
 				'".$retencioniva."',
@@ -776,7 +853,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 				'".$fecha."',
 				'".$request['estado']."',
 				'".$request['fantasia']."',
-				'0',
+				'".$regimenfacturacion."',
 				'".$fechaexclusionretiva."',
 				'".$exclusionretgan."',
 				'".$fechaexclusionretgan."',
@@ -822,6 +899,23 @@ class ProveedorRepository implements ProveedorRepositoryInterface
         	$apiAnita->apiCall($data);
 		}
 
+		// Graba datos adicionales promadic
+		$data = array( 'tabla' => 'promadic', 
+				'acc' => 'insert',
+				'sistema' => 'compras',
+				'campos' => '
+					proad_proveedor,
+					proad_e_mail_oc,
+					proad_semaforo
+							',
+				'valores' => " 
+					'".str_pad($request['codigo'], 6, "0", STR_PAD_LEFT)."', 
+					'".$request['emailoc']."', 
+					'".substr($request['semaforo'],0,1)."' "
+			);
+
+		$apiAnita->apiCall($data);
+
 		// Graba exclusiones
 		Self::grabaExclusion($request);
 
@@ -844,6 +938,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 		$fechainicioexclusionretib  = '';		
 		$retencioniva = $retencionganancia = $retencionsuss = 0;
 		$condicionpago = $condicioncompra = $condicionentrega = 0;
+		$tiposervicio = $regimenfacturacion = '';
 		$this->setCamposAnita($request, $cuentacontable, $condicioniva, $retieneganancia, $condicionganancia,
 							$retieneiva, $retienesuss, $retieneiibb, 
 							$exclusionretiva, $fechaexclusionretiva, 
@@ -854,7 +949,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 							$fechainicioexclusionretiva, $fechainicioexclusionretgan,
 							$fechainicioexclusionretib,
 							$retencioniva, $retencionganancia, $retencionsuss,
-							$condicionpago, $condicioncompra, $condicionentrega);
+							$condicionpago, $condicioncompra, $condicionentrega, $tiposervicio, $regimenfacturacion);
 		
 		if (array_key_exists('localidad_id', $request))
 			$localidad_id = $request['localidad_id'];
@@ -913,7 +1008,9 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 					prom_fe_ini_exclrg= '".$fechainicioexclusionretgan."',
 					prom_fe_ini_exclib= '".$fechainicioexclusionretib."',
 					prom_ag_perc_ib   = '".$request['agentepercepcionIIBB']."',
-					prom_ag_perc_iva  = '".$request['agentepercepcioniva']."' "
+					prom_ag_perc_iva  = '".$request['agentepercepcioniva']."',
+					prom_prov_vario   = '".$tiposervicio."',
+					prom_regimen  = '".$regimenfacturacion."' "
 					,
 				'whereArmado' => " WHERE prom_proveedor = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
         $apiAnita->apiCall($data);
@@ -944,6 +1041,19 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 
         	$apiAnita->apiCall($data);
 		}
+
+		// Graba promadic
+		$data = array( 'tabla' => 'promadic', 
+				'acc' => 'update',
+				'sistema' => 'compras',
+				'valores' => " 
+					proad_e_mail_oc = '".$request['emailoc']."',
+					proad_semaforo  = '".substr($request['semaforo'],0,1)."' "
+					,
+				'whereArmado' => " WHERE proad_proveedor = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
+
+		$apiAnita->apiCall($data);
+
 		// Borra exclusiones
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[2], 
 				'sistema' => 'compras',
@@ -1150,7 +1260,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 									&$conceptogasto, &$fechainicioexclusionretiva, &$fechainicioexclusionretgan,
 									&$fechainicioexclusionretib,
 									&$retencioniva, &$retencionganancia, &$retencionsuss,
-									&$condicionpago, &$condicioncompra, &$condicionentrega) 
+									&$condicionpago, &$condicioncompra, &$condicionentrega, &$tiposervicio, &$regimenfacturacion) 
 	{
 		$cuenta = $this->cuentacontableRepository->find($data['cuentacontable_id']);
 		if ($cuenta)
@@ -1193,7 +1303,6 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 		$retieneiva = $data['retieneiva'];
 		$retienesuss = $data['retienesuss'];
 
-		
 		$exclusionretiva = $exclusionretgan = $exclusionretib = 0;
 		$fechaexclusionretiva = $fechaexclusionretgan = $fechaexclusionretib = 0;
 		$fechainicioexclusionretiva = $fechainicioexclusionretgan = $fechainicioexclusionretib = 0;
@@ -1270,7 +1379,10 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 		else
 			$centrocostocompra = 0;
 
-		$conceptogasto = $data['conceptogasto_id'];
+		if ($data['conceptogasto_id'] == 66) // Sin clasificar
+			$conceptogasto = 0;
+		else
+			$conceptogasto = $data['conceptogasto_id'];
 			
 		$retiva = $this->retencionivaRepository->findPorId($data['retencioniva_id']);
 		if ($retencioniva)
@@ -1307,6 +1419,31 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 			$condicioncompra  = $condcompra->codigo;
 		else
 			$condicioncompra  = 0;
+
+		$regimenfacturacion = '0';
+		switch($data['regimenfacturacion'])
+		{
+			case 'RG 3419':
+				$regimenfacturacion = '0';
+				break;
+			case 'FCE':
+				$regimenfacturacion = '1';
+				break;
+		}
+
+		$tiposervicio = 'P';
+		switch($data['tiposervicio_proveedor_id'])
+		{
+			case 1:
+				$tiposervicio = 'P';
+				break;
+			case 2:
+				$tiposervicio = 'S';
+				break;
+			case 3:
+				$tiposervicio = 'V';
+				break;
+		}		
 	}
 
 	public function leeProveedor($busqueda, $flPaginando = null)
@@ -1321,7 +1458,8 @@ class ProveedorRepository implements ProveedorRepositoryInterface
                                         'proveedor.domicilio as domicilio',
 										'proveedor.codigo as codigo',
                                         'localidad.nombre as nombrelocalidad',
-										'provincia.nombre as nombreprovincia')
+										'provincia.nombre as nombreprovincia',
+										'proveedor.estado as estado')
                                 ->leftjoin('localidad', 'localidad.id', 'proveedor.localidad_id')
 								->leftjoin('provincia', 'provincia.id', 'proveedor.provincia_id');
 		
@@ -1332,6 +1470,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 							->orWhere('proveedor.nroinscripcion', 'like', '%'.$busqueda.'%')
 							->orWhere('proveedor.domicilio', 'like', '%'.$busqueda.'%')
 							->orWhere('proveedor.codigo', 'like', '%'.$busqueda.'%')
+							->orWhere('proveedor.estado', 'like', '%'.$busqueda.'%')
 							->orWhere('localidad.nombre', 'like', '%'.$busqueda.'%')
 							->orWhere('provincia.nombre', 'like', '%'.$busqueda.'%');
 					});

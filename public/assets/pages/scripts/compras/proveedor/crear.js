@@ -17,14 +17,43 @@
             completarLetra(condicioniva_id);
         });
 
+        colorSemaforo();
+
+        $("#rojo").click(function(){
+            if (confirm("Esta seguro de cambiar el color del semáforo a rojo?"))
+            {
+                $("#semaforo").val('Rojo');
+
+                colorSemaforo();
+            }
+        });
+
+        $("#amarillo").click(function(){
+            if (confirm("Esta seguro de cambiar el color del semáforo a amarillo?"))
+            {            
+                $("#semaforo").val('Amarillo');
+
+                colorSemaforo();
+            }
+        });
+
+        $("#verde").click(function(){
+            if (confirm("Esta seguro de cambiar el color del semáforo a verde?"))
+            {
+                $("#semaforo").val('Verde');
+
+                colorSemaforo();
+            }
+        });
+
         $("#botonestado").click(function(){
 
             var estado = $("#estado").val();
 			var descripcion = $("#botonestado").text();
 
-			if (estado == '0')
+			if (estado == 'Activo')
 			{
-				estado = '1';
+				estado = 'Suspendido';
 				descripcion = 'Suspendido';
 
                 // Muestra modal si tiene orden de trabajo generada
@@ -32,7 +61,7 @@
             }
             else
 			{
-				estado = '0';
+				estado = 'Activo';
 				descripcion = 'Activo';
                 
                 // Pasa tipo de suspension al form
@@ -151,6 +180,26 @@
         $('#agrega_renglon_archivo').on('click', agregaRenglonArchivo);
         $(document).on('click', '.eliminararchivo', borraRenglonArchivo);
     });
+
+    function colorSemaforo()
+    {
+        let semaforo = $("#semaforo").val();
+
+        $('.luz').removeClass('active');
+
+        switch(semaforo)
+        {
+            case 'Verde':
+                $('#verde').addClass('active');
+                break;
+            case 'Amarillo':
+                $('#amarillo').addClass('active');
+                break;
+            case 'Rojo':
+                $('#rojo').addClass('active');
+                break;
+        }
+    }
 
     function muestraTipoSuspension()
     {

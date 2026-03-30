@@ -38,3 +38,28 @@ label.requerido:after{
     text-align: right;
 }
 
+/* CSS de semaforo */
+.semaforo-horizontal {
+    display: flex; /* Activa Flexbox */
+    justify-content: center; /* Centra los círculos en la página */
+    gap: 15px; /* Espacio entre luces */
+    background-color: #fff; /* Color del semáforo */
+    padding: 20px;
+    border-radius: 50px;
+    border: 1px solid black;
+    width: 220px; /* Ancho ajustado */
+    height: 100px;
+    margin: 0 auto; /* Centra el contenedor completo */
+}
+.luz {
+width: 60px;
+height: 55px;
+background-color: #555; /* Luz apagada */
+border-radius: 50%;
+transition: background-color 0.5s;
+}
+
+/* Colores encendidos */
+.red.active { background-color: red; }
+.yellow.active { background-color: yellow; }
+.green.active { background-color: green; }

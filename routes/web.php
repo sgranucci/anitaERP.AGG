@@ -1459,6 +1459,17 @@ Route::get('caja/movimientocaja', 'Caja\MovimientoCajaController@index')->name('
  Route::put('compras/tipoempresa/{id}', 'Compras\TipoempresaController@actualizar')->name('actualizar_tipoempresa');
  Route::delete('compras/tipoempresa/{id}', 'Compras\TipoempresaController@eliminar')->name('eliminar_tipoempresa'); 
 
+/* 
+ * Tipos de servicio de proveedor
+ */
+
+ Route::get('compras/tiposervicio_proveedor', 'Compras\Tiposervicio_ProveedorController@index')->name('tiposervicio_proveedor');
+ Route::get('compras/tiposervicio_proveedor/crear', 'Compras\Tiposervicio_ProveedorController@crear')->name('crear_tiposervicio_proveedor');
+ Route::post('compras/tiposervicio_proveedor', 'Compras\Tiposervicio_ProveedorController@guardar')->name('guardar_tiposervicio_proveedor');
+ Route::get('compras/tiposervicio_proveedor/{id}/editar', 'Compras\Tiposervicio_ProveedorController@editar')->name('editar_tiposervicio_proveedor');
+ Route::put('compras/tiposervicio_proveedor/{id}', 'Compras\Tiposervicio_ProveedorController@actualizar')->name('actualizar_tiposervicio_proveedor');
+ Route::delete('compras/tiposervicio_proveedor/{id}', 'Compras\Tiposervicio_ProveedorController@eliminar')->name('eliminar_tiposervicio_proveedor'); 
+
  /* 
  * Retenciones de ganancia
  */
@@ -1564,6 +1575,10 @@ Route::get('compras/leerproveedor/{proveedor_id}', 'Compras\ProveedorController@
 Route::get('compras/leerproveedorporcodigo/{codigo}', 'Compras\ProveedorController@leeProveedorPorCodigo')->name('leer_proveedor_por_codigo');
 Route::get('compras/listaproveedor/{formato?}/{busqueda?}', 'Compras\ProveedorController@listar')->name('lista_proveedor');
 
+Route::get('compras/listarcuentacorrienteproveedor/{id}', 'Compras\ProveedorController@listarCuentaCorriente')->name('listar_cuentacorriente_proveedor');
+Route::get('compras/listarencuestaproveedor/{id}', 'Compras\ProveedorController@listarEncuenta')->name('listar_encuesta_proveedor');
+Route::get('compras/listarrequisicionproveedor/{id}', 'Compras\ProveedorController@listarRequisicion')->name('listar_requisicion_proveedor');
+Route::get('compras/listar_ordencompra_proveedor/{id}', 'Compras\ProveedorController@listarOrdencompra')->name('listar_ordencompra_proveedor');
 
 /* 
  * Precarga de comprobantes de proveedores

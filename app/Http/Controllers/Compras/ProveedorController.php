@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Storage;
 use App\Http\Requests\ValidacionProveedor;
 use App\Repositories\Compras\TiposuspensionproveedorRepositoryInterface;
 use App\Repositories\Compras\TipoempresaRepositoryInterface;
+use App\Repositories\Compras\Tiposervicio_ProveedorRepositoryInterface;
 use App\Repositories\Compras\RetenciongananciaRepositoryInterface;
 use App\Repositories\Compras\RetencionsussRepositoryInterface;
 use App\Repositories\Compras\RetencionivaRepositoryInterface;
@@ -49,6 +50,7 @@ class ProveedorController extends Controller
     private $proveedor_formapagoRepository;
     private $tiposuspensionproveedorRepository;
     private $tipoempresaRepository;
+    private $tiposervicio_proveedorRepository;
     private $retenciongananciaRepository;
     private $retencionsussRepository;
     private $retencionivaRepository;
@@ -70,6 +72,7 @@ class ProveedorController extends Controller
 		IIBBService $iibbService,
         TiposuspensionproveedorRepositoryInterface $tiposuspensionproveedorrepository,
         TipoempresaRepositoryInterface $tipoempresarepository,
+        Tiposervicio_ProveedorRepositoryInterface $tiposervicio_proveedorrepository,
         RetenciongananciaRepositoryInterface $retenciongananciarepository,
         RetencionivaRepositoryInterface $retencionivarepository,
         RetencionsussRepositoryInterface $retencionsussrepository,
@@ -96,6 +99,7 @@ class ProveedorController extends Controller
         $this->proveedor_formapagoRepository = $proveedor_formapagorepository;
         $this->tiposuspensionproveedorRepository = $tiposuspensionproveedorrepository;
         $this->tipoempresaRepository = $tipoempresarepository;
+        $this->tiposervicio_proveedorRepository = $tiposervicio_proveedorrepository;
         $this->retenciongananciaRepository = $retenciongananciarepository;
         $this->retencionivaRepository = $retencionivarepository;
         $this->retencionsussRepository = $retencionsussrepository;
@@ -204,7 +208,7 @@ class ProveedorController extends Controller
             $centrocosto_query, $conceptogasto_query,
             $estado_enum, '', $tasaarba, $tasacaba, 
             $formapago_query, $tipocuentacaja_query, $moneda_query, $banco_query, $mediopago_query,
-            $tiporetencion_enum,
+            $tiporetencion_enum, $semaforo_enum, $tiposervicio_proveedor_query, $regimenfacturacion_enum,
             'crear'); 
 
         $tipoAlta_enum = Proveedor::$enumTipoAlta;
@@ -218,9 +222,9 @@ class ProveedorController extends Controller
             'cuentacontable_query', 'retieneiva_enum', 
             'retieneganancia_enum', 'retienesuss_enum', 'condicionganancia_enum',
             'centrocosto_query', 'conceptogasto_query', 'agentepercepcioniva_enum', 'agentepercepcionIIBB_enum',
-            'estado_enum', 'tasaarba', 'tasacaba', 'tipoalta',
+            'estado_enum', 'tasaarba', 'tasacaba', 'tipoalta', 'semaforo_enum',
             'formapago_query', 'tipocuentacaja_query', 'moneda_query', 'banco_query', 'mediopago_query',
-            'tiporetencion_enum'));
+            'tiporetencion_enum', 'tiposervicio_proveedor_query', 'regimenfacturacion_enum'));
     }
 
     /**
@@ -288,7 +292,7 @@ class ProveedorController extends Controller
             $centrocosto_query, $conceptogasto_query,
             $estado_enum, $data->nroinscripcion, $tasaarba, $tasacaba, 
             $formapago_query, $tipocuentacaja_query, $moneda_query, $banco_query, $mediopago_query,
-            $tiporetencion_enum,
+            $tiporetencion_enum, $semaforo_enum, $tiposervicio_proveedor_query, $regimenfacturacion_enum,
             'editar'); 
 
         $tiposuspensionproveedor_query = $this->tiposuspensionproveedorRepository->all();
@@ -302,10 +306,10 @@ class ProveedorController extends Controller
 			'cuentacontable_query', 'retieneiva_enum', 
             'retieneganancia_enum', 'retienesuss_enum', 'condicionganancia_enum',
             'centrocosto_query', 'conceptogasto_query',
-            'estado_enum', 'tasaarba', 'tasacaba', 'tipoalta', 
+            'estado_enum', 'tasaarba', 'tasacaba', 'tipoalta', 'semaforo_enum',
 		    'tiposuspensionproveedor_query', 'agentepercepcioniva_enum', 'agentepercepcionIIBB_enum',
             'formapago_query', 'tipocuentacaja_query', 'moneda_query', 'banco_query', 'mediopago_query',
-            'tiporetencion_enum', 'tipoconsulta'));
+            'tiporetencion_enum', 'tipoconsulta', 'tiposervicio_proveedor_query', 'regimenfacturacion_enum'));
     }
 
     /**
@@ -385,12 +389,13 @@ class ProveedorController extends Controller
         &$centrocosto_query, &$conceptogasto_query,
         &$estado_enum, $nroinscripcion, &$tasaarba, &$tasacaba, 
         &$formapago_query, &$tipocuentacaja_query, &$moneda_query, &$banco_query, &$mediopago_query,
-        &$tiporetencion_enum,
+        &$tiporetencion_enum, &$semaforo_enum, &$tiposervicio_proveedor_query, &$regimenfacturacion_enum,
         $funcion)
 	{
         $pais_query = Pais::orderBy('nombre')->get();
         $provincia_query = Provincia::orderBy('nombre')->get();
         $tipoempresa_query = $this->tipoempresaRepository->all();
+        $tiposervicio_proveedor_query = $this->tiposervicio_proveedorRepository->all();
         $condicioniva_query = Condicioniva::orderBy('nombre')->get();
         $condicionIIBB_query = $this->condicionIIBBRepository->all();
         $retencionganancia_query = $this->retenciongananciaRepository->all();
@@ -408,6 +413,8 @@ class ProveedorController extends Controller
         $retienesuss_enum = Proveedor::$enumRetienesuss;
         $agentepercepcioniva_enum = Proveedor::$enumAgentePercepcioniva;
         $agentepercepcionIIBB_enum = Proveedor::$enumAgentePercepcionIIBB;
+        $semaforo_enum = Proveedor::$enumSemaforo;
+        $regimenfacturacion_enum = Proveedor::$enumRegimenfacturacion;
         $formapago_query = $this->formapagoRepository->all();
         $tipocuentacaja_query = $this->tipocuentacajaRepository->all();
         $banco_query = $this->bancoRepository->all();

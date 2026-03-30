@@ -6,7 +6,7 @@ use Carbon\Carbon;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
-class TablaPermisoSeeder extends Seeder
+class UltimosAgregadosTablaPermisoSeeder extends Seeder
 {
     /**
      * Run the database seeds.
@@ -30,6 +30,15 @@ class TablaPermisoSeeder extends Seeder
             array('id' => '1003', 'nombre' => 'Editar feriados', 'slug' => 'editar-feriado', 'created_at' => $now, 'updated_at' => $now),
             array('id' => '1004', 'nombre' => 'Actualizar feriados', 'slug' => 'actualizar-feriado', 'created_at' => $now, 'updated_at' => $now),
             array('id' => '1005', 'nombre' => 'Borrar feriados', 'slug' => 'borrar-feriado', 'created_at' => $now, 'updated_at' => $now),            
+            array('id' => '1006', 'nombre' => 'Listar cuenta corriente del proveedor', 'slug' => 'listar-cuentacorriente-proveedor', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '1007', 'nombre' => 'Listar encuestas del proveedor', 'slug' => 'listar-encuestra-proveedor', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '1008', 'nombre' => 'Listar requisiciones del proveedor', 'slug' => 'listar-requisicion-proveedor', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '1009', 'nombre' => 'Listar ordenes de compra del proveedor', 'slug' => 'listar-ordencompra-proveedor', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '1010', 'nombre' => 'Ingresar tipo de servicio de proveedores', 'slug' => 'crear-tipo-servicio-proveedor', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '1011', 'nombre' => 'Listar tipo de servicio de proveedores', 'slug' => 'listar-tipo-servicio-proveedor', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '1012', 'nombre' => 'Editar tipo de servicio de proveedores', 'slug' => 'editar-tipo-servicio-proveedor', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '1013', 'nombre' => 'Actualizar tipo de servicio de proveedores', 'slug' => 'actualizar-tipo-servicio-proveedor', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '1014', 'nombre' => 'Borrar tipo de servicio de proveedores', 'slug' => 'borrar-tipo-servicio-proveedor', 'created_at' => $now, 'updated_at' => $now),
         ];
         DB::table('permiso')->insert($permiso);
     }

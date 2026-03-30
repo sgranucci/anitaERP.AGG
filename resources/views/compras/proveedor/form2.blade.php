@@ -34,9 +34,18 @@
 			</div>
 			<div class="form-group row">
 				<label for="letra" class="col-lg-4 col-form-label">Letra </label>
-				<div class="col-lg-2">
+				<div class="col-lg-1">
 					<input type="text" name="letra" id="letra" class="form-control" value="" readonly>
 				</div>
+					<label for="regimenfacturacion" class="col-lg-2 col-form-label requerido">Régimen</label>
+					<select name="regimenfacturacion" class="col-lg-3 form-control" required>
+						<option value="">-- Elija régimen --</option>
+						@foreach ($regimenfacturacion_enum as $value => $regimenfacturacion)
+							<option value="{{ $regimenfacturacion }}"
+								@if (old('regimenfacturacion', $data->regimenfacturacion ?? '') == $regimenfacturacion) selected @endif
+								>{{ $regimenfacturacion }}</option>
+						@endforeach
+					</select>
 			</div>
 			<div class="form-group row">
 				@if ($tipoalta != 'P')
@@ -133,7 +142,7 @@
 					<label for="retienesuss" class="col-lg-4 col-form-label">Retiene SUSS</label>
 				@endif
 				<select name="retienesuss" class="col-lg-3 form-control" @if ($tipoalta != 'P') required @endif>
-					<option value="">-- Elija retiene iva --</option>
+					<option value="">-- Elija retiene suss --</option>
 					@foreach ($retienesuss_enum as $value => $retienesuss)
 						<option value="{{ $value }}"
 							@if (old('retienesuss', $data->retienesuss ?? '') == $value) selected @endif
