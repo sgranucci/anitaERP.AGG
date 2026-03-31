@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Exports\Compras;
+namespace App\Exports\Presupuesto;
 
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\FromView;
@@ -17,38 +17,35 @@ use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Events\AfterSheet;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
-use App\Repositories\Compras\ProveedorRepositoryInterface;
+use App\Queries\Presupuesto\PartidagastoQueryInterface;
 use Carbon\Carbon;
 use App\ApiAnita;
 
-class ProveedorExport implements FromView, WithColumnFormatting, WithMapping, ShouldAutoSize, WithStyles, WithColumnWidths, WithEvents, WithTitle
+class PartidagastoExport implements FromView, WithColumnFormatting, WithMapping, ShouldAutoSize, WithStyles, WithColumnWidths, WithEvents, WithTitle
 {
 	use Exportable;
-	private $proveedorRepository;
-	private $busqueda;
+	private $origen;
+	protected $dates = ['fecha'];
+	private $partidagastoQuery;
 
 	public function __construct(
-								ProveedorRepositoryInterface $proveedorRepository
+								PartidagastoQueryInterface $partidagastoquery,
 								)
 	{
-		$this->proveedorRepository = $proveedorRepository;
+		$this->partidagastoQuery = $partidagastoquery;
 	}
 
 	public function view(): View
 	{
-		$datas = $this->proveedorRepository->leeProveedor($this->busqueda, false);
+		$partidagastos = $this->partidagastoQuery->leePartidagasto($this->busqueda, false);
 
-		return view('exports.compras.listadoproveedor', ['proveedores' => $datas]);
+		return view('exports.presupuesto.partidagastoindex', ['partidagasto' => $partidagastos]);
 	}
 
 	public function columnFormats(): array
     {
 		return [
-				'A' => NumberFormat::FORMAT_TEXT,
-				'H' => NumberFormat::FORMAT_TEXT,
-				'I' => NumberFormat::FORMAT_TEXT,
-				'J' => NumberFormat::FORMAT_TEXT,
-			];		
+		];
     }
 
 	public function map($row): array
@@ -60,25 +57,30 @@ class ProveedorExport implements FromView, WithColumnFormatting, WithMapping, Sh
     public function styles(Worksheet $sheet)
     {
 		return [
-				2   => ['font' => ['bold' => true,
-									'color' => array('rgb' => '17202A'),
-									'size'  => 12,
-									'name'  => 'Arial'
-									],
-						'fill' => [
-									'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
-									'color' => array('rgb' => '85C1E9'),
-						]
-						],
-				'G' => ['font' => ['bold' => true]],
-			];		
+			2   => ['font' => ['bold' => true,
+								'color' => array('rgb' => '17202A'),
+								'size'  => 12,
+								'name'  => 'Arial'
+								],
+					'fill' => [
+								'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+								'color' => array('rgb' => '85C1E9'),
+					]
+					],
+			'B' => ['font' => ['bold' => true]],
+			'C' => ['font' => ['bold' => true]],
+			'E' => ['font' => ['bold' => true]],
+			'F' => ['font' => ['bold' => true]],
+			'K' => ['font' => ['bold' => true]],
+			'L' => ['font' => ['bold' => true]],
+		];
     }
 
 	public function columnWidths(): array
     {
 		return [
-				'A' => 15,
-			];
+			'A' => 10
+		];
     }
 
 	public function registerEvents(): array
@@ -94,7 +96,7 @@ class ProveedorExport implements FromView, WithColumnFormatting, WithMapping, Sh
 
 	public function title(): string
     {
-        return 'Reporte de Proveedores';
+        return 'Reporte de Ordenes de Venta';
     }
 
 	public function parametros($busqueda)

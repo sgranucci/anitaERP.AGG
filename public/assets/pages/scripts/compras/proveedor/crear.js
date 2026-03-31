@@ -17,6 +17,13 @@
             completarLetra(condicioniva_id);
         });
 
+        // Pone en readonly estado para el alta
+        let tipoempresa_id = $("#tipoempresa_id").val();
+
+        // Uso tipo de empresa como flag para saber si es alta
+        if (tipoempresa_id == '')
+            $("#estado").attr('disabled', true);
+
         colorSemaforo();
 
         $("#rojo").click(function(){

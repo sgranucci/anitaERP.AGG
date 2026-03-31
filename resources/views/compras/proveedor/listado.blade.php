@@ -31,6 +31,7 @@
 					<th>Localidad</th>
 					<th>Provincia</th>
 					<th class="width10">C&oacute;d.</th>
+					<th>Estado</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -44,6 +45,7 @@
 					<td><small>{{$data->nombrelocalidad ?? ''}}</small></td>
 					<td><small>{{$data->nombreprovincia ?? ''}}</small></td>
 					<td><small>{{$data->codigo}}</small></td>
+					<td><small>{{$data->estado}}</small></td>
 				</tr>
 				@endforeach
 			</tbody>

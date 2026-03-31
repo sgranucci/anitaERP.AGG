@@ -1,5 +1,5 @@
 <h2>Proveedores</h2>
-<table> 
+<table class="table table-striped table-bordered table-hover"> 
 	<thead>
 	<tr>
 		<th class="width10">ID</th>
@@ -10,9 +10,10 @@
 		<th>Localidad</th>
 		<th>Provincia</th>
 		<th class="width10">C&oacute;d.</th>
+		<th>Estado</th>
 	</tr>
-  	</thead>
-    <tbody>
+	</thead>
+	<tbody>
 		@foreach ($proveedores as $data)
 		<tr>
 			<td>{{$data->id}}</td>
@@ -23,6 +24,7 @@
 			<td><small>{{$data->nombrelocalidad ?? ''}}</small></td>
 			<td><small>{{$data->nombreprovincia ?? ''}}</small></td>
 			<td><small>{{$data->codigo}}</small></td>
+			<td><small>{{$data->estado}}</small></td>
 		</tr>
 		@endforeach
 	</tbody>

@@ -16,6 +16,7 @@ use App\Repositories\Caja\TipocuentacajaRepositoryInterface;
 use App\Repositories\Caja\BancoRepositoryInterface;
 use App\Repositories\Caja\MediopagoRepositoryInterface;
 use App\Repositories\Configuracion\CondicionIIBBRepositoryInterface;
+use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -47,6 +48,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 	private $bancoRepository;
 	private $mediopagoRepository;
 	private $cuentacontableRepository;
+	private $monedaRepository;
 
     /**
      * PostRepository constructor.
@@ -70,7 +72,8 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 								TipocuentacajaRepositoryInterface $tipocuentacajarepository,
 								BancoRepositoryInterface $bancorepository,
 								MediopagoRepositoryInterface $mediopagorepository,
-								CuentacontableRepositoryInterface $cuentacontablerepository
+								CuentacontableRepositoryInterface $cuentacontablerepository,
+								MonedaRepositoryInterface $monedarepository
 								)
     {
         $this->model = $proveedor;
@@ -91,6 +94,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 		$this->mediopagoRepository = $mediopagorepository;
 		$this->tipocuentacajaRepository = $tipocuentacajarepository;
 		$this->cuentacontableRepository = $cuentacontablerepository;
+		$this->monedaRepository = $monedarepository;
     }
 
     public function create(array $data)
@@ -646,7 +650,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 					"porcentajeexclusion" => $exclusion->proex_porc_excl
 				];
 				if ($fl_crea_registro)
-					$this->proveedor_exclusionRepository->create($arr_proexcl, $proveedor->id);
+					$this->proveedor_exclusionRepository->createUnique($arr_proexcl);
 			}
 	
 			// Graba tabla de formas de pago
@@ -679,14 +683,14 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 				if ($forma)
 					$formapago_id = $forma->id;
 				else
-					$formapago_id = null;
+					$formapago_id = 1;
 
 				// Busca tipo de cuenta de caja
 				$tipocuentacaja = $this->tipocuentacajaRepository->find($formapago->prop_tipo_cta);
 				if ($tipocuentacaja)
 					$tipocuentacaja_id = $tipocuentacaja->id;
 				else
-					$tipocuentacaja_id = null;
+					$tipocuentacaja_id = 1;
 
 				// Busca banco
 				$banco = $this->bancoRepository->findPorCodigo($formapago->prop_cod_banco);
@@ -702,13 +706,20 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 				else
 					$mediopago_id = null;
 
+				// Busca moneda
+				$moneda = $this->monedaRepository->findPorCodigo($formapago->prop_cod_mon);
+				if ($moneda)
+					$moneda_id = $moneda->id;
+				else
+					$moneda_id = 1;
+
 				$arr_formapago = [
 					"proveedor_id" => $proveedor->id,
 					"nombre" => $formapago->prop_nombre,
 					"formapago_id" => $formapago_id,
 					"cbu" => $formapago->prop_cbu,
 					"tipocuentacaja_id" => $tipocuentacaja_id,
-					"moneda_id" => $formapago->prop_cod_mon,
+					"moneda_id" => $moneda_id,
 					"numerocuenta" => $formapago->prop_nro_cuenta,
 					"nroinscripcion" => $formapago->prop_cuit,
 					"banco_id" => $banco_id,
@@ -716,7 +727,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 					"email" => $formapago->prop_e_mail_conf,
 				];
 				if ($fl_crea_registro)
-					$this->proveedor_formapagoRepository->create($arr_formapago, $proveedor->id);
+					$this->proveedor_formapagoRepository->createUnique($arr_formapago);
 			}			
         }
     }

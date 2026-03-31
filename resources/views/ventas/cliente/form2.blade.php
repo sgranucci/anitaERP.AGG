@@ -303,6 +303,12 @@
 					</select>
 				</div>
 			@endif
+			<div class="form-group row">
+				<label for="horarioatencion" class="col-lg-4 col-form-label">Horario de Atención</label>
+				<div class="col-lg-8">
+					<input type="text" name="horarioatencion" id="horarioatencion" class="form-control" value="{{old('horarioatencion', $data->horarioatencion ?? '')}}"/>
+				</div>
+			</div>
 		</div>
 	</div>
 </div>

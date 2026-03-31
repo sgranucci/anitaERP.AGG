@@ -26,6 +26,11 @@ class Proveedor_ExclusionRepository implements Proveedor_ExclusionRepositoryInte
 		return self::guardarProveedor_Exclusion($data, 'create', $id);
     }
 
+	public function createUnique(array $data)
+    {
+		return $this->model->create($data);
+    }
+
     public function update(array $data, $id)
     {
 		return self::guardarProveedor_Exclusion($data, 'update', $id);

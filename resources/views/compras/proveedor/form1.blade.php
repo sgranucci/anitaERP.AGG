@@ -74,11 +74,11 @@
 						@endforeach
 					</select>
 					<label for="estado" class="col-lg-2 col-form-label requerido">Estado</label>
-					<select name="estado" class="col-lg-3 form-control" required>
+					<select id="estado" name="estado" class="col-lg-3 form-control" required>
 						<option value="">-- Elija estado --</option>
 						@foreach ($estado_enum as $value => $estado)
 							<option value="{{ $estado }}"
-								@if (old('estado', $data->estado ?? '') == $estado) selected @endif
+								@if (old('estado', $data->estado ?? 'Alta Pendiente') == $estado) selected @endif
 								>{{ $estado }}</option>
 						@endforeach
 					</select>

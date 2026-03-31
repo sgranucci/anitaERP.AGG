@@ -40,7 +40,7 @@ class Cliente extends Model implements Auditable
                             'abasto_id', 'coeficiente_id', 'porcentajelogistica', 'emitecertificado', 'emitenotadecredito',
                             'coeficienteextra', 'agregabonificacion', 'desdefecha_exclusionpercepcioniva',
                             'hastafecha_exclusionpercepcioniva', 'distribuidor_id', 'descuentoventa_id', 'tipodocumento_id',
-                            'lugarentrega'
+                            'lugarentrega', 'horarioatencion'
                         ];
 
     protected $table = 'cliente';

@@ -26,6 +26,11 @@ class Proveedor_FormapagoRepository implements Proveedor_FormapagoRepositoryInte
 		return self::guardarProveedor_Formapago($data, 'create', $id);
     }
 
+    public function createUnique(array $data)
+    {
+		return $this->model->create($data);
+    }
+
     public function update(array $data, $id)
     {
 		return self::guardarProveedor_Formapago($data, 'update', $id);

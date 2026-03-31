@@ -541,6 +541,11 @@ class ClienteRepository implements ClienteRepositoryInterface
 			else
 				$email = rtrim($data->clim_e_mail, ' ');
 
+			if (config('app.empresa') == 'INTERFORMING')
+				$horarioAtencion = $data->clim_hs_atencion.' '.$data->clim_hs_atencion2;
+			else
+				$horarioAtencion = $data->clim_hs_atencion;
+
 			if (config("app.empresa") == 'EL BIERZO')
 			{
 				$arr_campos = [
@@ -586,7 +591,8 @@ class ClienteRepository implements ClienteRepositoryInterface
 					'distribuidor_id' => $distribuidor_id,
 					'descuentoventa_id' => null,
 					'tipodocumento_id' => 1,
-					'lugarentrega' => $data->clim_lugar_entrega
+					'lugarentrega' => $data->clim_lugar_entrega,
+					'horarioantencion' => $horarioAtencion
 					];
 			}
 			else
@@ -598,7 +604,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 					"fantasia" => $data->clim_fantasia,
 					"email" => $email,
 					"telefono" => $data->clim_telefono.' '.$data->clim_fax,
-					"urlweb" => ' ',
+					"urlweb" => (config('app.empresa') == 'INTERFORMING' ? $data->clim_url : ' '),
 					"domicilio" => $data->clim_direccion,
 					"localidad_id" => $localidad_id,
 					"provincia_id" => $provincia_id,
@@ -621,7 +627,8 @@ class ClienteRepository implements ClienteRepositoryInterface
 					"estado" => $data->clim_estado_cli,
 					"leyenda" => $leyenda,
 					"modofacturacion" => $modoFacturacion,
-					"usuario_id" => $usuario_id
+					"usuario_id" => $usuario_id,
+					'horarioantencion' => $horarioAtencion
 					];
 			}
 		
@@ -708,6 +715,8 @@ class ClienteRepository implements ClienteRepositoryInterface
 		else
 			$campo_ing_bruto = 'clim_nro_ing_bruto';
 
+		$horarioAtencion = $request['horarioatencion'];
+
         $data = array( 'tabla' => $this->tableAnita[0], 'acc' => 'insert',
 			'sistema' => 'ventas',
             'campos' => ' 
@@ -720,7 +729,8 @@ class ClienteRepository implements ClienteRepositoryInterface
 					clim_ley_liberado, clim_regimen, clim_leyenda_fact, clim_prov_postal, clim_lugar_de_pago, clim_excl_perc_iva, clim_fe_excl_piva,
 					clim_dto_integrado, clim_fecha_boletin, clim_e_mail, clim_fax'.(config("app.empresa") == 'EL BIERZO' ?
 					',clim_abasto, clim_distribuidor, clim_coef, clim_logistica, clim_emite_cert, clim_emite_nc, clim_coef_extra,clim_referencia,
-					clim_cod_localidad, clim_cod_provincia, clim_agrega_bonif, clim_e_mail2, clim_dfexcl_piva, clim_hfexcl_piva' : ''),
+					clim_cod_localidad, clim_cod_provincia, clim_agrega_bonif, clim_e_mail2, clim_dfexcl_piva, clim_hfexcl_piva' : '').
+					(config('app.empresa') == 'INTERFORMING' ? ', clim_url, clim_hs_atencion2' : ''),
             'valores' => " 
 				'".str_pad($request['codigo'], 6, "0", STR_PAD_LEFT)."', 
 				'".$nombre."',
@@ -778,21 +788,24 @@ class ClienteRepository implements ClienteRepositoryInterface
 				'0',
                 '".substr($request['email'],0,40)."',
 				'".'FAX'."'".
-					(config('app.empresa') == "EL BIERZO" ? ",
-					'".$codigoabasto."',
-					'".'0'."',
-					'".$codigocoeficiente."',
-					'".$request['porcentajelogistica']."',
-					'".$emitecertificado."',
-					'".$emitenotadecredito."',
-					'".$request['coeficienteextra']."',
-					'".'0'."',
-					'".$codigolocalidad."',
-					'".$codigoprovincia."',
-					'".$agregabonificacion."',
-					'".substr($request['email'],40,40)."',
-					'".$dfexcl_piva."',
-					'".$hfexcl_piva."' " : "")
+				(config('app.empresa') == "EL BIERZO" ? ",
+				'".$codigoabasto."',
+				'".'0'."',
+				'".$codigocoeficiente."',
+				'".$request['porcentajelogistica']."',
+				'".$emitecertificado."',
+				'".$emitenotadecredito."',
+				'".$request['coeficienteextra']."',
+				'".'0'."',
+				'".$codigolocalidad."',
+				'".$codigoprovincia."',
+				'".$agregabonificacion."',
+				'".substr($request['email'],40,40)."',
+				'".$dfexcl_piva."',
+				'".$hfexcl_piva."' " : "").
+				(config('app.empresa') == "INTERFORMING" ? ",
+				'".$horarioAtencion."',
+				'".$request['urlweb']." " : "")
         );
         $climae = $apiAnita->apiCall($data);
 
@@ -959,7 +972,11 @@ class ClienteRepository implements ClienteRepositoryInterface
 				clim_agrega_bonif               = '".$agregabonificacion."',
 				clim_e_mail2                    = '".substr($request['email'],40,40)."',
 				clim_dfexcl_piva                = '".$dfexcl_piva."',
-				clim_hfexcl_piva                = '".$hfexcl_piva."' " : ""),
+				clim_hfexcl_piva                = '".$hfexcl_piva."' " : "").
+				(config('app.empresa') == "INTERFORMING" ? ",
+				clim_url                        = '".$request['urlweb']."',
+				clim_hs_atencion2               = '".$horarioAtencion."' " : "")
+				,
 				'whereArmado' => " WHERE clim_cliente = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
         $climae = $apiAnita->apiCall($data);
 
