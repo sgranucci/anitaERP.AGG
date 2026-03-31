@@ -387,7 +387,7 @@ class ArticuloController extends Controller
         can('crear-articulos');
 
 		$nombre_foto = $request->sku;
-        if ($foto = Articulo::setFoto($request->foto_up, $nombre_foto))
+        if ($foto = Articulo::setFoto($request, $nombre_foto))
             $request->request->add(['foto' => $foto]);
 
 		$estado_enum = Articulo_Estado::$enumEstado;
@@ -496,7 +496,7 @@ class ArticuloController extends Controller
         can('actualizar-articulos');
 
 		$nombre_foto = $request->sku;
-        if ($foto = Articulo::setFoto($request->foto_up, $nombre_foto))
+        if ($foto = Articulo::setFoto($request, $nombre_foto))
             $request->request->add(['foto' => $foto]);
 
 		$data = $request->all();

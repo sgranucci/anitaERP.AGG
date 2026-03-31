@@ -50,7 +50,11 @@
 			<th style="font-size: 16px; text-align: left;">
 				Remito: {{$venta->numeroremito}}
 			</th>
-			<th>Reparto: {{$venta->transportes->codigo}}</th>
+			@if (isset($venta->transportes->codigo))
+				<th>Reparto: {{$venta->transportes->codigo??''}}</th>
+			@else
+				<th></th>
+			@endif
 			<th style="font-size: 16px; text-align: right;">
 				Condicion de Venta: {{ $venta->clientes->condicionesventa->nombre ?? 'CONTADO' }}
 			</th>
@@ -190,18 +194,31 @@
 						Otros Impuestos Nacionales Indirectos {{0}} <br>
 					</th>
 				@endif
-				<th style="font-size: 10px; text-align: right">
-					EMITIR LOS CHEQUES A LA ORDEN DE FRIGORIFICO EL BIERZO <br>
-					CONTROLE EL PESO DE LA MERCADERIA <br>
-					NO SE ACEPTAN RECLAMOS <br>
-					<p style="font-size: 14px; text-align: right">
-						CAE: {{ $venta->cae }}<br>
-						Fecha Vencimiento CAE: {{date("d/m/Y", strtotime($venta->fechavencimientocae ?? ''))}} 
-					</p>		
-				</th>
+				@if (config('app.empresa') == 'EL BIERZO')
+					<th style="font-size: 10px; text-align: right">
+						EMITIR LOS CHEQUES A LA ORDEN DE FRIGORIFICO EL BIERZO <br>
+						CONTROLE EL PESO DE LA MERCADERIA <br>
+						NO SE ACEPTAN RECLAMOS <br>
+						<p style="font-size: 14px; text-align: right">
+							CAE: {{ $venta->cae }}<br>
+							Fecha Vencimiento CAE: {{date("d/m/Y", strtotime($venta->fechavencimientocae ?? ''))}} 
+						</p>		
+					</th>
+				@else
+					<th style="font-size: 10px; text-align: right">
+						<p style="font-size: 14px; text-align: right">
+							CAE: {{ $venta->cae }}<br>
+							Fecha Vencimiento CAE: {{date("d/m/Y", strtotime($venta->fechavencimientocae ?? ''))}} 
+						</p>		
+					</th>				
+				@endif
 			</tr>
 		</thead>
 	</table>
+	<div class="qr-container">
+	<!-- Asegúrate de que la imagen exista o se genere correctamente -->
+	<img src="data:image/png;base64,{{ base64_encode(file_get_contents("/var/www/html/anitaERP/public/storage/".$output_file)) }}" width="100" height="100" alt="Codigo QR">	
+</div>
 </div>
 @if ($venta->leyenda != '')
 	<div class="form-group">
@@ -209,9 +226,5 @@
 		<p>{{$venta->leyenda}}</p>
 	</div>
 @endif
-<div class="qr-container">
-	<!-- Asegúrate de que la imagen exista o se genere correctamente -->
-	<img src="data:image/png;base64,{{ base64_encode(file_get_contents("/var/www/html/anitaERP/public/storage/".$output_file)) }}" width="100" height="100" alt="Codigo QR">	
-</div>
 </body>
 </html>

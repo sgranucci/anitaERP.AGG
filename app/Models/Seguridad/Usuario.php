@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use Intervention\Image\Facades\Image;
+use Intervention\Image\Laravel\Facades\Image;
 use OwenIt\Auditing\Contracts\Auditable;
 
 class Usuario extends Authenticatable implements Auditable
@@ -74,18 +74,30 @@ class Usuario extends Authenticatable implements Auditable
         Session::put('usuario_empresas', $empresas);
     }
 
-    public static function setFoto($foto, $actual = false)
+    public static function setFoto($request, $actual = false)
     {
-        if ($foto) {
+        if ($request->foto_up) {
             if ($actual) {
                 Storage::disk('public')->delete("imagenes/fotos_usuarios/$actual");
             }
+
             $imageName = Str::random(20) . '.jpg';
-            $imagen = Image::make($foto)->encode('jpg', 75);
-            $imagen->resize(300, 300, function ($constraint) {
-                $constraint->upsize();
-            });
-            Storage::disk('public')->put("imagenes/fotos_usuarios/$imageName", $imagen->stream());
+
+            $upload = $request->foto_up;
+            $image = Image::decode($upload)
+                ->resize(300, 300);
+
+            Storage::disk('public')->put("imagenes/fotos_usuarios/$imageName",
+                $image->encodeUsingFileExtension($upload->getClientOriginalExtension(), quality: 70)
+            );            
+
+            //$imagen = Image::read($foto);
+            //$imagen->encode('jpg', 75);
+            //$imagen->resize(300, 300, function ($constraint) {
+            //    $constraint->upsize();
+            //});
+
+            //Storage::disk('public')->put("imagenes/fotos_usuarios/$imageName", $imagen->stream());
             return $imageName;
         } else {
             return false;

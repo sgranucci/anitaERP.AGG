@@ -157,7 +157,7 @@
             <div class="col-lg-5">
                 <input type="file" name="foto_up" id="foto" data-initial-preview="{{isset($producto->foto) ? asset("storage/imagenes/fotos_articulos/$producto->foto") : ''}}" accept="image/*"/>
                 @if ($producto->foto ?? '')
-                    <img src="{{ asset("storage/imagenes/fotos_articulos/$producto->foto") }}" alt="Foto del artículol" style="max-width: 200px;">
+                    <img src="{{ asset("storage/imagenes/fotos_articulos/$producto->foto") }}" alt="Foto del artículo" style="max-width: 200px;">
                 @endif
             </div>
         </div>      

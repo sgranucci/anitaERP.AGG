@@ -4,7 +4,7 @@ namespace App\Models\Stock;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
-use Intervention\Image\Facades\Image;
+use Intervention\Image\Laravel\Facades\Image;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\App;
 use App\ApiAnita;
@@ -206,23 +206,28 @@ class Articulo extends Model
 		return $this->belongsTo(Tipoarticulo::class, 'tipoarticulo_id');
 	}
 
-	public static function setFoto($foto, $nombre_foto, $actual = false)
+  	public static function setFoto($request, $nombre_foto, $actual = false)
     {
-        if ($foto) {
+        if ($request->foto_up) {
             if ($actual) {
                 Storage::disk('public')->delete("imagenes/fotos_articulos/$actual");
             }
-            $imageName = $nombre_foto . '.jpg';
-            $imagen = Image::make($foto)->encode('jpg', 75);
-            $imagen->resize(300, 300, function ($constraint) {
-                $constraint->upsize();
-            });
-            Storage::disk('public')->put("imagenes/fotos_articulos/$imageName", $imagen->stream());
+
+			$imageName = $nombre_foto . '.jpg';
+
+            $upload = $request->foto_up;
+            $image = Image::decode($upload)
+                ->resize(300, 300);
+
+            Storage::disk('public')->put("imagenes/fotos_articulos/$imageName",
+                $image->encodeUsingFileExtension($upload->getClientOriginalExtension(), quality: 70)
+            );            
+
             return $imageName;
         } else {
             return false;
         }
-    }
+    }	
 
 	public function sincronizarConAnita(){
 		ini_set('max_execution_time', '300');

@@ -130,7 +130,7 @@ class CentrocostoRepository implements CentrocostoRepositoryInterface
     public function traerRegistroDeAnita($key){
         $apiAnita = new ApiAnita();
 
-        if (config('app.empresa') == "EL BIERZO")
+        if (config('app.empresa') == "EL BIERZO" || config('app.empresa') == "INTERFORMING")
             $data = array( 
                 'acc' => 'list', 'tabla' => $this->tableAnita, 
                 'sistema' => 'contab',
@@ -160,7 +160,7 @@ class CentrocostoRepository implements CentrocostoRepositoryInterface
         if (count($dataAnita) > 0) {
             $data = $dataAnita[0];
 
-            if (config('app.empresa') == "EL BIERZO")
+            if (config('app.empresa') == "EL BIERZO" || config('app.empresa') == "INTERFORMING")
                 $abreviatura = substr($data->ccos_desc,0,5);
             else
                 $abreviatura = $data->ccos_abreviatura;
@@ -178,7 +178,7 @@ class CentrocostoRepository implements CentrocostoRepositoryInterface
 	public function guardarAnita($request) {
         $apiAnita = new ApiAnita();
 
-        if (config('app.empresa') == "EL BIERZO")
+        if (config('app.empresa') == "EL BIERZO"  || config('app.empresa') == "INTERFORMING")
             $data = array( 'tabla' => $this->tableAnita, 'acc' => 'insert',
                 'sistema' => 'contab',
                 'campos' => ' 
@@ -212,7 +212,7 @@ class CentrocostoRepository implements CentrocostoRepositoryInterface
 	public function actualizarAnita($request, $id) {
         $apiAnita = new ApiAnita();
 
-        if (config('app.empresa') == "EL BIERZO")
+        if (config('app.empresa') == "EL BIERZO" || config('app.empresa') == "INTERFORMING")
             $data = array( 'acc' => 'update', 'tabla' => $this->tableAnita, 
                     'sistema' => 'contab',
                     'valores' => " 

@@ -48,7 +48,7 @@ class UsuarioController extends Controller
 
     public function guardar(ValidacionUsuario $request)
     {
-        if ($foto = Usuario::setFoto($request->foto_up))
+        if ($foto = Usuario::setFoto($request))
             $request->request->add(['foto' => $foto]);
 
         $usuario = Usuario::create($request->all());
@@ -74,7 +74,7 @@ class UsuarioController extends Controller
     public function actualizar(ValidacionUsuario $request, $id)
     {
         $usuario = Usuario::findOrFail($id);
-        if ($foto = Usuario::setFoto($request->foto_up, $usuario->foto))
+        if ($foto = Usuario::setFoto($request, $usuario->foto))
             $request->request->add(['foto' => $foto]);
 
         $data = array_filter($request->all());

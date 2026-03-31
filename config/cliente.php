@@ -2,6 +2,32 @@
 // Constantes de reporte total de pares
 switch(config('app.empresa'))
 {
+    case "INTERFORMING":
+        return [
+            "tipoalta" => [
+                        'DEFINITIVO' => ['D'], 
+                        'PROVISORIO' => ['P']
+                ],
+            "tiposuspension" => [
+                        'MOROSO' => '1',
+                        'PROFORMA' => '2',
+                        'MOROSOS' => '3',
+                        'NO_FACTURAR' => '4'
+                ],
+            'CLIENTE_STOCK_ID' => '620',
+            'MAIL_CLIENTE_PROVISORIO' => 'fherber@interforming.com.ar',
+            'TOPE_DESCUENTO' => 20,
+            'CATEGORIA_SECOS_ID' => 10,
+            'SUBCATEGORIA_MAQUINA_ID' => 1,
+            'SUBCATEGORIA_TIRA_ID' => 2,
+            'DEUDORES_POR_VENTAS' => 113100000,
+            'ANTICIPO_DE_CLIENTES' => 113100000,
+            'EMPRESA_DEFAULT_ID' => 1,
+            'ENVIA_MAIL_ALTA_CLIENTE_DEFINITIVO' => 'SI',
+            'DESTINATARIO_ALTA_CLIENTE_DEFINITIVO' => ['fherber@interforming.com.ar']
+            ];
+        break;
+
     case "EL BIERZO":
         return [
             "tipoalta" => [
