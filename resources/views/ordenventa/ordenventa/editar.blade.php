@@ -29,7 +29,7 @@
                     <h3 class="card-title">Editar Orden de Venta - Número {{$data->numeroordenventa ?? ''}} - Id {{$data->id}}</h3>
                     <div class="card-tools">
                         @if ($data->estado == 'PENDIENTE' || $data->estado == 'FACTPARCIAL')
-                            <button type="submit" onclick="generaFactura()" class="btn btn-primary">
+                            <button type="submit" id="generafactura" onclick="generaFactura()" class="btn btn-primary">
                                 <i class="fa fa-fw fa-print"></i>
                                 Facturar
                             </button>

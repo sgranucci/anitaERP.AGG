@@ -14,6 +14,7 @@ return new class extends Migration
         Schema::create('encuesta', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->string('nombre',255);
+            $table->string('estado',50);
             $table->timestamps();
             $table->charset = 'utf8mb4';
             $table->collation = 'utf8mb4_spanish_ci';

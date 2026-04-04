@@ -55,7 +55,7 @@ class ProveedorQuery implements ProveedorQueryInterface
 
     public function traeProveedorporCodigo($codigo)
     {
-        return $this->model->select('id','codigo')->where('codigo',$codigo)->first();
+        return $this->model->select('id','codigo','nombre')->where('codigo',$codigo)->first();
     }
 
     public function traeProveedorporId($id, $campos = null)
@@ -63,7 +63,7 @@ class ProveedorQuery implements ProveedorQueryInterface
 	  	if ($campos)
         	return $this->model->with('condicionivas')->select($campos)->where('id',$id)->first();
 		else
-        	return $this->model->with('condicionivas')->where('id',$id)->with('paises')->with('condicionventas')->first();
+        	return $this->model->with('condicionivas')->where('id',$id)->with('paises')->first();
     }
 
     // Datos para informe maestro de proveedores

@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Compras;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Pagination\Paginator;
 use App\Models\Compras\Proveedor;
 use App\Models\Compras\Proveedor_Exclusion;
 use App\Models\Configuracion\Pais;
@@ -22,6 +24,7 @@ use App\Repositories\Compras\RetencionivaRepositoryInterface;
 use App\Repositories\Compras\CondicionpagoRepositoryInterface;
 use App\Repositories\Compras\CondicioncompraRepositoryInterface;
 use App\Repositories\Compras\CondicionentregaRepositoryInterface;
+use App\Repositories\Compras\EncuestaRepositoryInterface;
 use App\Repositories\Caja\ConceptogastoRepositoryInterface;
 use App\Repositories\Ventas\FormapagoRepositoryInterface;
 use App\Repositories\Caja\TipocuentacajaRepositoryInterface;
@@ -29,15 +32,22 @@ use App\Repositories\Caja\BancoRepositoryInterface;
 use App\Repositories\Caja\MediopagoRepositoryInterface;
 use App\Queries\Compras\ProveedorQueryInterface;
 use App\Services\Configuracion\IIBBService;
+use App\Services\Compras\RequisicionService;
+use App\Services\Compras\OrdencompraService;
 use App\Repositories\Configuracion\CondicionIIBBRepositoryInterface;
+use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Compras\ProveedorRepositoryInterface;
 use App\Repositories\Compras\Proveedor_ExclusionRepositoryInterface;
 use App\Repositories\Compras\Proveedor_ArchivoRepositoryInterface;
 use App\Repositories\Compras\Proveedor_FormapagoRepositoryInterface;
+use App\Repositories\Compras\Proveedor_EncuestaRepositoryInterface;
+use App\Repositories\Compras\Proveedor_Encuesta_PreguntaRepositoryInterface;
+use App\Repositories\Compras\Proveedor_CuentacorrienteRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Mail\Compras\ProveedorProvisorio;
 use App\Exports\Compras\ProveedorExport;
+use App\Exports\Compras\Proveedor_CuentacorrienteExport;
 use Carbon\Carbon;
 use Mail;
 use DB;
@@ -48,6 +58,9 @@ class ProveedorController extends Controller
 	private $proveedor_exclusionRepository;
 	private $proveedor_archivoRepository;
     private $proveedor_formapagoRepository;
+    private $proveedor_encuestaRepository;
+    private $proveedor_encuesta_preguntaRepository;
+    private $proveedor_cuentacorrienteRepository;
     private $tiposuspensionproveedorRepository;
     private $tipoempresaRepository;
     private $tiposervicio_proveedorRepository;
@@ -60,16 +73,22 @@ class ProveedorController extends Controller
     private $condicionIIBBRepository;
     private $conceptogastoRepository;
 	private $iibbService;
+    private $requisicionService;
+    private $ordencompraService;
 	private $proveedorQuery;
     private $formapagoRepository;
+    private $monedaRepository;
     private $tipocuentacajaRepository;
     private $bancoRepository;
     private $mediopagoRepository;
     private $centrocostoRepository;
     private $cuentacontableRepository;
+    private $encuestaRepository;
 
     public function __construct(
 		IIBBService $iibbService,
+        RequisicionService $requisicionService,
+        OrdencompraService $ordencompraService,
         TiposuspensionproveedorRepositoryInterface $tiposuspensionproveedorrepository,
         TipoempresaRepositoryInterface $tipoempresarepository,
         Tiposervicio_ProveedorRepositoryInterface $tiposervicio_proveedorrepository,
@@ -89,14 +108,22 @@ class ProveedorController extends Controller
 		Proveedor_ExclusionRepositoryInterface $proveedor_exclusionrepository, 
         Proveedor_FormapagoRepositoryInterface $proveedor_formapagorepository, 
 		Proveedor_ArchivoRepositoryInterface $proveedor_archivorepository,
+        Proveedor_EncuestaRepositoryInterface $proveedor_encuestarepository, 
+        Proveedor_Encuesta_PreguntaRepositoryInterface $proveedor_encuesta_preguntarepository, 
+        Proveedor_CuentacorrienteRepositoryInterface $proveedor_cuentacorrienterepository, 
         ProveedorQueryInterface $proveedorquery,
         CentrocostoRepositoryInterface $centrocostorepository,
-        CuentacontableRepositoryInterface $cuentacontablerepository)
+        CuentacontableRepositoryInterface $cuentacontablerepository,
+        EncuestaRepositoryInterface $encuestaRepository,
+        MonedaRepositoryInterface $monedaRepository)
     {
         $this->proveedorRepository = $proveedorrepository;
         $this->proveedor_exclusionRepository = $proveedor_exclusionrepository;
         $this->proveedor_archivoRepository = $proveedor_archivorepository;
+        $this->proveedor_encuestaRepository = $proveedor_encuestarepository;
+        $this->proveedor_encuesta_preguntaRepository = $proveedor_encuesta_preguntarepository;
         $this->proveedor_formapagoRepository = $proveedor_formapagorepository;
+        $this->proveedor_cuentacorrienteRepository = $proveedor_cuentacorrienterepository;
         $this->tiposuspensionproveedorRepository = $tiposuspensionproveedorrepository;
         $this->tipoempresaRepository = $tipoempresarepository;
         $this->tiposervicio_proveedorRepository = $tiposervicio_proveedorrepository;
@@ -108,6 +135,8 @@ class ProveedorController extends Controller
         $this->condicionentregaRepository = $condicionentregarepository;
         $this->condicionIIBBRepository = $condicionIIBBrepository;
         $this->iibbService = $iibbService;
+        $this->requisicionService = $requisicionService;
+        $this->ordencompraService = $ordencompraService;
         $this->conceptogastoRepository = $conceptogastorepository;
         $this->formapagoRepository = $formapagorepository;
         $this->tipocuentacajaRepository = $tipocuentacajarepository;
@@ -115,6 +144,8 @@ class ProveedorController extends Controller
         $this->mediopagoRepository = $mediopagorepository;
         $this->centrocostoRepository = $centrocostorepository;
         $this->cuentacontableRepository = $cuentacontablerepository;
+        $this->encuestaRepository = $encuestaRepository;
+        $this->monedaRepository = $monedaRepository;
 
         $this->proveedorQuery = $proveedorquery;
         $this->flRemoto = false;
@@ -503,4 +534,213 @@ class ProveedorController extends Controller
     {
         return $this->proveedorRepository->findPorCodigo($codigo);
     }    
+
+    public function generarEncuesta($codigoProveedor, $encuesta_id, $origen, $hash)
+    {
+        $proveedor = $this->proveedorRepository->findPorCodigo($codigoProveedor);
+
+        $encuesta = $this->encuestaRepository->find($encuesta_id);
+
+        if (!$encuesta)
+            return redirect()->route('inicio')->with('mensaje', 'Encuesta inexistente')->send();
+
+        return view('compras.proveedor.formencuesta', compact('proveedor', 'encuesta', 'origen'));
+    }
+
+    public function guardarEncuesta(Request $request)
+    {
+		DB::beginTransaction();
+		try
+		{
+            $data = $request->all();
+
+            $data['fecha'] = Carbon::now();
+            $proveedor_encuesta = $this->proveedor_encuestaRepository->create($data);
+
+            // Guarda tablas asociadas
+            if ($proveedor_encuesta)
+                $proveedor_encuesta_pregunta = $this->proveedor_encuesta_preguntaRepository->create($request->all(), $proveedor_encuesta->id);     
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollback();
+
+            dd($e->getMessage());
+            return ['errores' => $e->getMessage()];
+        }
+        return redirect()->route('inicio')->with('mensaje', 'Encuesta guardada con éxito')->send();
+    }
+
+    public function listarEncuesta(Request $request, $proveedor_id)
+    {
+        $busqueda = '';
+        if (isset($request->busqueda))
+            $busqueda = $request->busqueda;
+
+        $encuesta_proveedor = $this->proveedor_encuestaRepository->leePorProveedor($proveedor_id, $busqueda);
+
+        $datas = ['encuesta_proveedor' => $encuesta_proveedor, 'busqueda' => $busqueda, 'id' => $proveedor_id];
+
+        return view('compras.proveedor.indexencuesta', $datas);
+    }
+
+    public function listarRequisicion(Request $request, $proveedor_id)
+    {
+        can('listar-requisicion-proveedor');
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $formato = $request->formato;
+        $busqueda = $request->busqueda;
+        $proveedor = $this->proveedorRepository->find($proveedor_id);
+
+        $urlOrigen = request()->headers->get('referer');
+
+        $nombreproveedor = '';
+        $codigoproveedor = '';
+        if ($proveedor)
+        {
+            $nombreproveedor = $proveedor->nombre;
+            $codigoproveedor = $proveedor->codigo;
+        }
+
+        $requisicion = $this->requisicionService->leeRequisicionPorProveedor($busqueda, $proveedor_id);
+        $moneda_query = $this->monedaRepository->all();
+
+        if (!isset($requisicion['requisicion']))
+            $requisicion['requisicion'] = [];
+
+        if (!isset($requisicion['item']))
+            $requisicion['item'] = [];
+        
+        $datas = ['requisicion' => $requisicion['requisicion'], 'items' => $requisicion['item'], 'busqueda' => $busqueda, 
+                    'id' => $proveedor_id, 'codigoproveedor' => $codigoproveedor, 
+                    'nombreproveedor' => $nombreproveedor, 'urlOrigen' => $urlOrigen,
+                    'moneda_query' => $moneda_query];
+
+        return view('compras.requisicion.index', $datas);
+    }
+
+    public function listarOrdenCompra(Request $request, $proveedor_id)
+    {
+        can('listar-ordencompra-proveedor');
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $formato = $request->formato;
+        $busqueda = $request->busqueda;
+        $proveedor = $this->proveedorRepository->find($proveedor_id);
+
+        $urlOrigen = request()->headers->get('referer');
+
+        $nombreproveedor = '';
+        $codigoproveedor = '';
+        if ($proveedor)
+        {
+            $nombreproveedor = $proveedor->nombre;
+            $codigoproveedor = $proveedor->codigo;
+        }
+
+        $ordencompra = $this->ordencompraService->leeOrdencompraPorProveedor($busqueda, $proveedor_id);
+        $moneda_query = $this->monedaRepository->all();
+
+        if (!isset($ordencompra['ordencompra']))
+            $ordencompra['ordencompra'] = [];
+
+        if (!isset($ordencompra['item']))
+            $ordencompra['item'] = [];
+        
+        $datas = ['ordencompra' => $ordencompra['ordencompra'], 'items' => $ordencompra['item'], 'busqueda' => $busqueda, 
+                    'id' => $proveedor_id, 'codigoproveedor' => $codigoproveedor, 
+                    'nombreproveedor' => $nombreproveedor, 'urlOrigen' => $urlOrigen,
+                    'moneda_query' => $moneda_query];
+
+        return view('compras.ordencompra.index', $datas);
+    }    
+
+    public function listarCuentaCorriente(Request $request, $proveedor_id)
+        {
+        can('listar-cuentacorriente-proveedor');
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $formato = $request->formato;
+        $busqueda = $request->busqueda;
+        $proveedor = $this->proveedorRepository->find($proveedor_id);
+
+        $urlOrigen = request()->headers->get('referer');
+
+        $nombreproveedor = '';
+        $codigoproveedor = '';
+        if ($proveedor)
+        {
+            $nombreproveedor = $proveedor->nombre;
+            $codigoproveedor = $proveedor->codigo;
+        }
+
+        $moneda_query = $this->monedaRepository->all();
+
+        switch($formato)
+        {
+        case 'PDF':
+            $cuentacorriente = $this->proveedor_cuentacorrienteRepository->listarCuentaCorriente($busqueda, $proveedor_id);
+
+            $view =  \View::make('compras.cuentacorriente.listado', compact('cuentacorriente', 'nombreproveedor', 'moneda_query', 'codigoproveedor'))
+                        ->render();
+            $path = storage_path('pdf/listados');
+            $nombre_pdf = 'listado_cuentacorriente_proveedor';
+
+            $pdf = \App::make('dompdf.wrapper');
+            $pdf->setPaper('legal','landscape');
+            $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
+
+            return response()->download($path.'/'.$nombre_pdf.'.pdf');
+            break;
+
+        case 'EXCEL':
+            return (new Proveedor_CuentacorrienteExport($this->proveedor_cuentacorrienteRepository))
+                        ->parametros($busqueda, $moneda_query, $proveedor_id, $nombreproveedor, $codigoproveedor)
+                        ->download('cuentacorriente_proveedor.xlsx');
+            break;
+
+        case 'CSV':
+            return (new Proveedor_CuentacorrienteExport($this->proveedor_cuentacorrienteRepository))
+                        ->parametros($busqueda, $moneda_query, $proveedor_id, $nombreproveedor, $codigoproveedor)
+                        ->download('cuentacorriente_proveedor.csv', \Maatwebsite\Excel\Excel::CSV);
+            break;
+
+        default:
+            $cuentacorriente = $this->proveedor_cuentacorrienteRepository->listarCuentaCorriente($busqueda, $proveedor_id);
+
+            $coleccion = collect($cuentacorriente);
+            $data = $coleccion->sortBy('fecha'); 
+            $perPage = 10;
+            $currentPage = Paginator::resolveCurrentPage();
+            
+            $currentPageItems = $data->slice(($currentPage - 1) * $perPage, $perPage)->values();
+            
+            $paginatedItems = new LengthAwarePaginator(
+                $currentPageItems, 
+                $data->count(), 
+                $perPage, 
+                $currentPage, 
+                ['path' => Paginator::resolveCurrentPath()]
+            );
+
+            $datas = ['cuentacorriente' => $paginatedItems, 'busqueda' => $busqueda, 
+                        'id' => $proveedor_id, 'nombreproveedor' => $nombreproveedor, 'codigoproveedor' => $codigoproveedor,
+                        'urlOrigen' => $urlOrigen, 'moneda_query' => $moneda_query];
+
+            return view('compras.cuentacorriente.index', $datas);
+        }
+    }
+
+    public function leerCuentaCorrienteAplicacion($proveedor_cuentacorriente_id, $comprobante, $proveedor)
+    {
+        return $this->proveedor_cuentacorrienteRepository->consultarAplicacion($proveedor_cuentacorriente_id, $comprobante, $proveedor);
+    }
 }
+

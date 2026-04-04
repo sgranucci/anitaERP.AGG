@@ -3,9 +3,11 @@
 namespace App\Models\Compras;
 
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Proveedor_Formapago extends Model
+class Proveedor_Formapago extends Model implements Auditable
 {
+	use \OwenIt\Auditing\Auditable;
     protected $fillable = ['proveedor_id', 'nombre', 'formapago_id', 'cbu', 'tipocuentacaja_id', 'moneda_id',
 							'numerocuenta', 'nroinscripcion', 'banco_id', 'mediopago_id', 'email'];
     protected $table = 'proveedor_formapago';

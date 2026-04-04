@@ -18,6 +18,8 @@ return new class extends Migration
 			$table->unsignedBigInteger('encuesta_id');
             $table->foreign('encuesta_id', 'fk_proveedor_encuesta_encuesta')->references('id')->on('encuesta')->onDelete('restrict')->onUpdate('restrict');
             $table->datetime('fecha');
+            $table->text('comentario');
+            $table->string('origen', 255);
             $table->timestamps();
             $table->charset = 'utf8mb4';
             $table->collation = 'utf8mb4_spanish_ci';

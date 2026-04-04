@@ -903,6 +903,7 @@
                 	{
 						$('#estado').val('FACTURADA');
 						$('#venta_id').val(data.venta_id);
+						$('#generafactura').hide();
 
 						// Agrega renglon de historia
 						leeHistoria();

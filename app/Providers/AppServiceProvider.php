@@ -360,6 +360,16 @@ class AppServiceProvider extends ServiceProvider
     	);
 
 		$this->app->bind(
+        	'App\Repositories\Compras\EncuestaRepositoryInterface',
+        	'App\Repositories\Compras\EncuestaRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Compras\Encuesta_PreguntaRepositoryInterface',
+        	'App\Repositories\Compras\Encuesta_PreguntaRepository',
+    	);
+
+		$this->app->bind(
         	'App\Repositories\Compras\RetenciongananciaRepositoryInterface',
         	'App\Repositories\Compras\RetenciongananciaRepository',
     	);
@@ -412,6 +422,21 @@ class AppServiceProvider extends ServiceProvider
 		$this->app->bind(
         	'App\Repositories\Compras\Proveedor_ArchivoRepositoryInterface',
         	'App\Repositories\Compras\Proveedor_ArchivoRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Compras\Proveedor_EncuestaRepositoryInterface',
+        	'App\Repositories\Compras\Proveedor_EncuestaRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Compras\Proveedor_Encuesta_PreguntaRepositoryInterface',
+			'App\Repositories\Compras\Proveedor_Encuesta_PreguntaRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Compras\Proveedor_CuentacorrienteRepositoryInterface',
+			'App\Repositories\Compras\Proveedor_CuentacorrienteRepository',
     	);
 
 		$this->app->bind(

@@ -1,6 +1,6 @@
 @extends("theme.$theme.layout")
 @section('titulo')
-    Cuenta Corriente
+    Cuenta Corriente de Clientes
 @endsection
 
 @section("scripts")
@@ -16,7 +16,7 @@
         @include('includes.mensaje')
         <div class="card card-info">
             <div class="card-header">
-                <h3 class="card-title">Cuenta Corriente {{$nombrecliente}}</h3>
+                <h3 class="card-title">Cuenta Corriente Cliente: {{$nombrecliente}}</h3>
                 <div class="card-tools">
                     @if (!str_contains($urlOrigen, 'editar'))
                         @if (isset($urlOrigen))

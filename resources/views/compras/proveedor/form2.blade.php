@@ -20,16 +20,18 @@
 			</div>
 			<div class="form-group row">
 				<label for="condicioniva_id" class="col-lg-4 col-form-label requerido">Condicion de iva.</label>
-				<select name="condicioniva_id" id="condicioniva_id" data-placeholder="Condicion de iva" class="col-lg-5 form-control" required data-fouc>
-					<option value="">-- Seleccionar --</option>
-					@foreach($condicioniva_query as $key => $value)
-						@if( (int) $value->id == (int) old('condicioniva_id', $data->condicioniva_id ?? ''))
-							<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-						@else
-							<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-						@endif
-					@endforeach
-				</select>
+				<div class="col-lg-8">
+					<select name="condicioniva_id" id="condicioniva_id" data-placeholder="Condicion de iva" class="col-lg-5 form-control" required data-fouc>
+						<option value="">-- Seleccionar --</option>
+						@foreach($condicioniva_query as $key => $value)
+							@if( (int) $value->id == (int) old('condicioniva_id', $data->condicioniva_id ?? ''))
+								<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
+							@else
+								<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
+							@endif
+						@endforeach
+					</select>
+				</div>
 				<input type="hidden" id="condicioniva_query" value="{{$condicioniva_query}}">
 			</div>
 			<div class="form-group row">
@@ -53,27 +55,31 @@
 				@else
 					<label for="retieneiva" class="col-lg-4 col-form-label">Retiene iva</label>
 				@endif
-				<select name="retieneiva" class="col-lg-3 form-control" @if ($tipoalta != 'P') required @endif>
-					<option value="">-- Elija retiene iva --</option>
-					@foreach ($retieneiva_enum as $value => $retieneiva)
-						<option value="{{ $value }}"
-							@if (old('retieneiva', $data->retieneiva ?? '') == $value) selected @endif
-							>{{ $retieneiva }}</option>
-					@endforeach
-				</select>
+				<div class="col-lg-8">
+					<select name="retieneiva" class="col-lg-3 form-control" @if ($tipoalta != 'P') required @endif>
+						<option value="">-- Elija retiene iva --</option>
+						@foreach ($retieneiva_enum as $value => $retieneiva)
+							<option value="{{ $value }}"
+								@if (old('retieneiva', $data->retieneiva ?? '') == $value) selected @endif
+								>{{ $retieneiva }}</option>
+						@endforeach
+					</select>
+				</div>
 			</div>
 			<div class="form-group row">
 				<label for="retencioniva" class="col-lg-4 col-form-label">Codigo de retención de iva</label>
-				<select name="retencioniva_id" id="retencioniva_id" data-placeholder="Codigo de retención de iva" class="col-lg-5 form-control" data-fouc>
-					<option value="">-- Seleccionar Código --</option>
-					@foreach($retencioniva_query as $key => $value)
-						@if( (int) $value->id == (int) old('retencioniva_id', $data->retencioniva_id ?? ''))
-							<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-						@else
-							<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-						@endif
-					@endforeach
-				</select>
+				<div class="col-lg-8">
+					<select name="retencioniva_id" id="retencioniva_id" data-placeholder="Codigo de retención de iva" class="col-lg-7 form-control" data-fouc>
+						<option value="">-- Seleccionar Código --</option>
+						@foreach($retencioniva_query as $key => $value)
+							@if( (int) $value->id == (int) old('retencioniva_id', $data->retencioniva_id ?? ''))
+								<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
+							@else
+								<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
+							@endif
+						@endforeach
+					</select>
+				</div>
 			</div>
 			<div class="form-group row">
 				@if ($tipoalta != 'P')
@@ -81,14 +87,16 @@
 				@else
 					<label for="agentepercepcioniva" class="col-lg-4 col-form-label">Agente de perc. iva</label>
 				@endif
-				<select name="agentepercepcioniva" class="col-lg-3 form-control" @if ($tipoalta != 'P') required @endif>
-					<option value="">-- Elija Agente de perc. iva --</option>
-					@foreach ($agentepercepcioniva_enum as $value => $agentepercepcioniva)
-						<option value="{{ $value }}"
-							@if (old('agentepercepcioniva', $data->agentepercepcioniva ?? '') == $value) selected @endif
-							>{{ $agentepercepcioniva }}</option>
-					@endforeach
-				</select>
+				<div class="col-lg-8">
+					<select name="agentepercepcioniva" class="col-lg-7 form-control">
+						<option value="">-- Elija Agente de perc. iva --</option>
+						@foreach ($agentepercepcioniva_enum as $value => $agentepercepcioniva)
+							<option value="{{ $value }}"
+								@if (old('agentepercepcioniva', $data->agentepercepcioniva ?? '') == $value) selected @endif
+								>{{ $agentepercepcioniva }}</option>
+						@endforeach
+					</select>
+				</div>
 			</div>
 		</div>
 		<div class="col-sm-6">
@@ -182,7 +190,7 @@
 				@else
 					<label for="agentepercepcionIIBB" class="col-lg-4 col-form-label">Agente de perc. IIBB</label>
 				@endif
-				<select name="agentepercepcionIIBB" class="col-lg-3 form-control" @if ($tipoalta != 'P') required @endif>
+				<select name="agentepercepcionIIBB" class="col-lg-3 form-control">
 					<option value="">-- Elija Agente de perc. IIBB --</option>
 					@foreach ($agentepercepcionIIBB_enum as $value => $agentepercepcionIIBB)
 						<option value="{{ $value }}"

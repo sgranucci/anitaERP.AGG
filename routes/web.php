@@ -1576,9 +1576,18 @@ Route::get('compras/leerproveedorporcodigo/{codigo}', 'Compras\ProveedorControll
 Route::get('compras/listaproveedor/{formato?}/{busqueda?}', 'Compras\ProveedorController@listar')->name('lista_proveedor');
 
 Route::get('compras/listarcuentacorrienteproveedor/{id}', 'Compras\ProveedorController@listarCuentaCorriente')->name('listar_cuentacorriente_proveedor');
-Route::get('compras/listarencuestaproveedor/{id}', 'Compras\ProveedorController@listarEncuenta')->name('listar_encuesta_proveedor');
+Route::get('compras/listarencuestaproveedor/{id}', 'Compras\ProveedorController@listarEncuesta')->name('listar_encuesta_proveedor');
 Route::get('compras/listarrequisicionproveedor/{id}', 'Compras\ProveedorController@listarRequisicion')->name('listar_requisicion_proveedor');
 Route::get('compras/listar_ordencompra_proveedor/{id}', 'Compras\ProveedorController@listarOrdencompra')->name('listar_ordencompra_proveedor');
+
+Route::get('compras/genera_proveedor_encuesta/{proveedor_id}/{encuesta_id}/{origen}/{hash}', 'Compras\ProveedorController@generarEncuesta')->name('generar_proveedor_encuesta');
+Route::post('compras/guardar_proveedor_encuesta', 'Compras\ProveedorController@guardarEncuesta')->name('guardar_proveedor_encuesta');
+
+/*
+ * Cuenta corriente de proveedores
+ */
+
+Route::get('compras/proveedor/leercuentacorrienteaplicacion/{id}/{comprobante}/{proveedor}', 'Compras\ProveedorController@leerCuentaCorrienteAplicacion')->name('leer_cuentacorriente_aplicacion_proveedor');
 
 /* 
  * Precarga de comprobantes de proveedores
@@ -1593,6 +1602,41 @@ Route::delete('compras/precarga_comprobante_proveedor/{id}', 'Compras\Precarga_C
 
 Route::get('compras/lista_precarga_comprobante_proveedor/{formato?}/{busqueda?}', 'Compras\Precarga_Comprobante_ProveedorController@listar')->name('lista_precarga_comprobante_proveedor');
 
+/* 
+ * Tabla de encuestas
+ */
+
+ Route::get('compras/encuesta', 'Compras\EncuestaController@index')->name('consultar_encuesta');
+ Route::get('compras/encuesta/crear', 'Compras\EncuestaController@crear')->name('crear_encuesta');
+ Route::post('compras/encuesta', 'Compras\EncuestaController@guardar')->name('guardar_encuesta');
+ Route::get('compras/encuesta/{id}/editar', 'Compras\EncuestaController@editar')->name('editar_encuesta');
+ Route::put('compras/encuesta/{id}', 'Compras\EncuestaController@actualizar')->name('actualizar_encuesta');
+ Route::delete('compras/encuesta/{id}', 'Compras\EncuestaController@eliminar')->name('eliminar_encuesta');
+
+/* 
+ * Requisiciones
+ */
+
+ Route::get('compras/requisicion', 'Compras\RequisicionController@index')->name('consultar_requisicion');
+ Route::get('compras/requisicion/crear', 'Compras\RequisicionController@crear')->name('crear_requisicion');
+ Route::post('compras/requisicion', 'Compras\RequisicionController@guardar')->name('guardar_requisicion');
+ Route::get('compras/requisicion/{id}/editar', 'Compras\RequisicionController@editar')->name('editar_requisicion');
+ Route::put('compras/requisicion/{id}', 'Compras\RequisicionController@actualizar')->name('actualizar_requisicion');
+ Route::delete('compras/requisicion/{id}', 'Compras\RequisicionController@eliminar')->name('eliminar_requisicion');
+ Route::get('compras/listarequisicion/{formato?}/{busqueda?}', 'Compras\RequisicionController@listar')->name('listar_requisicion');
+  
+/* 
+ * Ordenes de Compra
+ */
+
+ Route::get('compras/ordencompra', 'Compras\OrdencompraController@index')->name('consultar_ordencompra');
+ Route::get('compras/ordencompra/crear', 'Compras\OrdencompraController@crear')->name('crear_ordencompra');
+ Route::post('compras/ordencompra', 'Compras\OrdencompraController@guardar')->name('guardar_ordencompra');
+ Route::get('compras/ordencompra/{id}/editar', 'Compras\OrdencompraController@editar')->name('editar_ordencompra');
+ Route::put('compras/ordencompra/{id}', 'Compras\OrdencompraController@actualizar')->name('actualizar_ordencompra');
+ Route::delete('compras/ordencompra/{id}', 'Compras\OrdencompraController@eliminar')->name('eliminar_ordencompra');
+ Route::get('compras/listaordencompra/{formato?}/{busqueda?}', 'Compras\OrdencompraController@listar')->name('listar_ordencompra');
+   
 /* Modulo receptivo */
 
 /* 

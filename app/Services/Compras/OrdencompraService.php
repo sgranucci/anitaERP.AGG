@@ -2,10 +2,18 @@
 
 namespace App\Services\Compras;
 
+use App\Queries\Compras\ProveedorQueryInterface;
 use App\ApiAnita;
 
 class OrdencompraService 
 {
+	private $proveedorQuery;
+
+	public function __construct(ProveedorQueryInterface $proveedorQuery)
+	{
+		$this->proveedorQuery = $proveedorQuery;
+	}
+
 	public function leeOrdenCompra($numeroOrdenCompra)
 	{
 		$apiAnita = new ApiAnita();
@@ -88,5 +96,73 @@ class OrdencompraService
 
 		return $dataAnita;
 	}
+
+	public function leeOrdencompraPorProveedor($busqueda, $proveedor_id)
+	{
+		$proveedor = $this->proveedorQuery->traeProveedorporId($proveedor_id);
+
+		if ($proveedor)
+		{
+			$apiAnita = new ApiAnita();
+			$leeAnita = array( 
+				'acc' => 'list', 
+				'sistema' => 'compras',
+				'tabla' => 'pendmaep, promae, emprmae', 
+				'campos' => '
+					penmp_nro as id,
+					penmp_fecha as fecha,
+					penmp_fecha_ent as fechaentrega,
+					penmp_ccosto as ccorigen,
+					penmp_ccosto_dest as ccdestino,
+					prom_nombre as nombreproveedor,
+					prom_cuit as cuit,
+					penmp_empresa as empresa_id,
+					empm_nombre as nombreempresa,
+					penmp_cond_pago as condicionpago,
+					penmp_cod_mon as codigomoneda,
+					penmp_cotizacion as cotizacion,
+					penmp_requisicion as requisicion,
+					penmp_es_anticipo as esanticipo,
+					penmp_estado as estado
+				',
+				'whereArmado' => " WHERE
+					penmp_proveedor='".str_pad($proveedor->codigo, 6, "0", STR_PAD_LEFT)."' and
+					penmp_proveedor=prom_proveedor and
+					penmp_empresa=empm_empresa"
+			);
+			$dataAnita = json_decode($apiAnita->apiCall($leeAnita));
+
+			if ($dataAnita)
+			{
+				$ordencompra = $dataAnita;
+
+				$apiAnita = new ApiAnita();
+				$leeAnita = array( 
+					'acc' => 'list', 
+					'sistema' => 'compras',
+					'tabla' => 'pendmovp,stkmae', 
+					'campos' => '
+						penvp_nro as id,
+						penvp_articulo as sku,
+						penvp_cantidad as cantidad,
+						penvp_precio as precio,
+						stkm_tipo_articulo as tipo_articulo,
+						stkm_agrupacion as codigoagrupacion,
+						stkm_desc as descarticulo
+					',
+					'whereArmado' => " WHERE
+						penvp_proveedor='".str_pad($proveedor->codigo, 6, "0", STR_PAD_LEFT)."' and
+						penvp_articulo=stkm_articulo"
+				);
+				$dataAnita = json_decode($apiAnita->apiCall($leeAnita));
+
+				$itemOrdencompra = $dataAnita;
+
+				return ['ordencompra' => $ordencompra, 'item' => $itemOrdencompra];
+			}
+		}
+
+		return ['Error' => 'Sin informacion'];
+	}	
 }
 

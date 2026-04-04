@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use OwenIt\Auditing\Contracts\Auditable;
 use App\ApiAnita;
 use App\Models\Seguridad\Usuario;
 use App\Models\Contable\Cuentacontable;
@@ -27,10 +28,11 @@ use App\Models\Configuracion\CondicionIIBB;
 use App\Models\Compras\Tiposuspensionproveedor;
 use App\Traits\Compras\ProveedorTrait;
 
-class Proveedor extends Model
+class Proveedor extends Model implements Auditable
 {
 	use SoftDeletes;
 	use ProveedorTrait;
+    use \OwenIt\Auditing\Auditable;
 
     protected $fillable = [
                             'nombre', 'codigo', 'contacto', 'fantasia', 'email', 'telefono', 'urlweb', 'domicilio',

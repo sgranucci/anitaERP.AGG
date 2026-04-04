@@ -39,6 +39,11 @@ class UltimosAgregadosTablaPermisoSeeder extends Seeder
             array('id' => '1012', 'nombre' => 'Editar tipo de servicio de proveedores', 'slug' => 'editar-tipo-servicio-proveedor', 'created_at' => $now, 'updated_at' => $now),
             array('id' => '1013', 'nombre' => 'Actualizar tipo de servicio de proveedores', 'slug' => 'actualizar-tipo-servicio-proveedor', 'created_at' => $now, 'updated_at' => $now),
             array('id' => '1014', 'nombre' => 'Borrar tipo de servicio de proveedores', 'slug' => 'borrar-tipo-servicio-proveedor', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '1015', 'nombre' => 'Ingresar encuestas', 'slug' => 'crear-encuesta', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '1016', 'nombre' => 'Listar encuestas', 'slug' => 'listar-encuesta', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '1017', 'nombre' => 'Editar encuestas', 'slug' => 'editar-encuesta', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '1018', 'nombre' => 'Actualizar encuestas', 'slug' => 'actualizar-encuesta', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '1019', 'nombre' => 'Borrar encuestas', 'slug' => 'borrar-encuesta', 'created_at' => $now, 'updated_at' => $now),            
         ];
         DB::table('permiso')->insert($permiso);
     }

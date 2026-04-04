@@ -73,7 +73,7 @@
                     @endif
                     @if (can('listar-cuentacorriente-cliente', false))
                         <a href="{{route('listar_cuentacorriente_cliente', ['id' => $data->id])}}" target="_blank" class="btn btn-secondary btn-sm" title="Cuenta Corriente">
-                        <i class="fa fa-folder-open">Cuenta Corriente</i>
+                            <i class="fa fa-folder-open">Cuenta Corriente</i>
                         </a>
                     @endif
                 </div>

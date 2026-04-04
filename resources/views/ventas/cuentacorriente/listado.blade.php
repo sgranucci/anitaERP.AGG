@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html>
-	<title>Comprobantes de Ventas</title>
+	<title>Cuenta Corriente de Clientes</title>
 	<head>
 		<style>
 			table {
@@ -19,7 +19,7 @@
 		</style>
 	</head>
 	<body>
-		<h2>Cuenta Corriente {{$nombrecliente}}</h2>
+		<h2>Cuenta Corriente Cliente {{$nombrecliente}}</h2>
 		<table class="table table-striped table-bordered table-hover">
 			<thead>
 				<tr>

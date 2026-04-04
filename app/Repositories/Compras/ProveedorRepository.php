@@ -17,6 +17,7 @@ use App\Repositories\Caja\BancoRepositoryInterface;
 use App\Repositories\Caja\MediopagoRepositoryInterface;
 use App\Repositories\Configuracion\CondicionIIBBRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
+use App\Repositories\Configuracion\LocalidadRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -49,6 +50,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 	private $mediopagoRepository;
 	private $cuentacontableRepository;
 	private $monedaRepository;
+	private $localidadRepository;
 
     /**
      * PostRepository constructor.
@@ -73,7 +75,8 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 								BancoRepositoryInterface $bancorepository,
 								MediopagoRepositoryInterface $mediopagorepository,
 								CuentacontableRepositoryInterface $cuentacontablerepository,
-								MonedaRepositoryInterface $monedarepository
+								MonedaRepositoryInterface $monedarepository,
+								LocalidadRepositoryInterface $localidadrepository
 								)
     {
         $this->model = $proveedor;
@@ -95,6 +98,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 		$this->tipocuentacajaRepository = $tipocuentacajarepository;
 		$this->cuentacontableRepository = $cuentacontablerepository;
 		$this->monedaRepository = $monedarepository;
+		$this->localidadRepository = $localidadrepository;
     }
 
     public function create(array $data)
@@ -765,6 +769,13 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 		$contacto = preg_replace('([^A-Za-z0-9 ])', '', $request['contacto']);
 		$domicilio = preg_replace('([^A-Za-z0-9 ])', '', $request['domicilio']);
 
+		$localidad = $this->localidadRepository->find($request['localidad_id']);
+
+		if ($localidad)
+			$codigolocalidad = $localidad->codigo;
+		else
+			$codigolocalidad = 0;
+
         $data = array( 'tabla' => $this->tableAnita[0], 'acc' => 'insert',
 			'sistema' => 'compras',
             'campos' => ' 
@@ -868,7 +879,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 				'".$fechaexclusionretiva."',
 				'".$exclusionretgan."',
 				'".$fechaexclusionretgan."',
-				'".$request['localidad_id']."',
+				'".$codigolocalidad."',
 				'".$tipoempresaalfa."',
 				'".$request['email']."',
 				'0',
@@ -967,6 +978,13 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 		else
 			$localidad_id = 0;
 
+		$localidad = $this->localidadRepository->find($localidad_id);
+
+		if ($localidad)
+			$codigolocalidad = $localidad->codigo;
+		else
+			$codigolocalidad = 0;
+
 		$nombre = preg_replace('([^A-Za-z0-9 ])', '', $request['nombre']);
 		$contacto = preg_replace('([^A-Za-z0-9 ])', '', $request['contacto']);
 		$domicilio = preg_replace('([^A-Za-z0-9 ])', '', $request['domicilio']);
@@ -1005,10 +1023,10 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 					prom_fecha_excl   = '".$fechaexclusionretiva."',
 					prom_excl_retgan  = '".$exclusionretgan."',
 					prom_fecha_exclrg = '".$fechaexclusionretgan."',
-					prom_cod_localidad= '".$request['localidad_id']."',
+					prom_cod_localidad= '".$codigolocalidad."',
 					prom_tipo_emp_alfa= '".$tipoempresaalfa."',
 					prom_e_mail       = '".$request['email']."',
-					prom_cod_ret_suss = '".$request['retencionsuss_id']."',
+					prom_cod_ret_suss = '".$retencionsuss."',
 					prom_cta_cont_me  = '".$cuentacontableme."',
 					prom_cta_default  = '".$cuentacontablecompra."',
 					prom_cc_default   = '".$centrocostocompra."',
@@ -1024,7 +1042,8 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 					prom_regimen  = '".$regimenfacturacion."' "
 					,
 				'whereArmado' => " WHERE prom_proveedor = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
-        $apiAnita->apiCall($data);
+
+        $promae = $apiAnita->apiCall($data);
 
 		// Borra leyenda
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[1], 
@@ -1277,7 +1296,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 		if ($cuenta)
 			$cuentacontable = $cuenta->codigo;
 		else
-			$cuentacontable = NULL;
+			$cuentacontable = 0;
 		
 		$condicioniva = 1;
 		switch($data['condicioniva_id'])
@@ -1376,13 +1395,13 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 		if ($cuenta)
 			$cuentacontableme = $cuenta->codigo;
 		else
-			$cuentacontableme = NULL;
+			$cuentacontableme = 0;
 			
 		$cuenta = $this->cuentacontableRepository->findPorId($data['cuentacontablecompra_id']);
 		if ($cuenta)
 			$cuentacontablecompra = $cuenta->codigo;
 		else
-			$cuentacontablecompra = NULL;
+			$cuentacontablecompra = 0;
 		
 		$centrocosto = $this->centrocostoRepository->findPorId($data['centrocostocompra_id']);
 		if ($centrocosto)

@@ -16,11 +16,12 @@ return new class extends Migration
 			$table->unsignedBigInteger('proveedor_id');
             $table->foreign('proveedor_id', 'fk_proveedor_encuesta_pregunta_proveedor')->references('id')->on('proveedor')->onDelete('cascade')->onUpdate('cascade');
 			$table->unsignedBigInteger('proveedor_encuesta_id');
-            $table->foreign('proveedor_encuesta_id', 'fk_proveedor_encuesta_pregunta_proveedor_encuesta')->references('id')->on('encuesta')->onDelete('cascade')->onUpdate('cascade');
+            $table->foreign('proveedor_encuesta_id', 'fk_proveedor_encuesta_pregunta_proveedor_encuesta')->references('id')->on('proveedor_encuesta')->onDelete('cascade')->onUpdate('cascade');
 			$table->unsignedBigInteger('encuesta_id');
             $table->foreign('encuesta_id', 'fk_proveedor_encuesta_pregunta_encuesta')->references('id')->on('encuesta')->onDelete('restrict')->onUpdate('restrict');
+			$table->unsignedBigInteger('encuesta_pregunta_id');
+            $table->foreign('encuesta_pregunta_id', 'fk_proveedor_encuesta_pregunta_encuesta_pregunta')->references('id')->on('encuesta_pregunta')->onDelete('restrict')->onUpdate('restrict');
             $table->unsignedInteger('puntaje');
-            $table->text('comentario');
             $table->timestamps();
             $table->charset = 'utf8mb4';
             $table->collation = 'utf8mb4_spanish_ci';

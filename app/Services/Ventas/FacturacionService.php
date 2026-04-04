@@ -1416,17 +1416,16 @@ class FacturacionService
 							'descuentointegrado' => $itemEmision['descuentointegrado']
 						];
 						$venta_emision = $this->venta_emisionRepository->create($dataEmision);
-
-						// Agrega referencia a la OV
-						$dataEmision = [
-							'venta_id' => $vta->id,
-							'numeroitem' => ++$numeroItem, 
-							'detalle' => 'CC '.$codigoCentrocosto.' OV '.$numeroOrdenventa,
-							'cantidad' => 0, 
-							'precio' => 0
-						];
-						$venta_emision = $this->venta_emisionRepository->create($dataEmision);			
 					}
+					// Agrega referencia a la OV
+					$dataEmision = [
+						'venta_id' => $vta->id,
+						'numeroitem' => ++$numeroItem, 
+						'detalle' => 'CC '.$codigoCentrocosto.' OV '.$numeroOrdenventa,
+						'cantidad' => 0, 
+						'precio' => 0
+					];
+					$venta_emision = $this->venta_emisionRepository->create($dataEmision);			
 					// Graba contabilidad
 					Self::grabaAsientoContable($asientoContable, $puntoventa->empresa_id, $fechaFactura, $vta->id, 
 											$detalleContable, $centrocosto_id,

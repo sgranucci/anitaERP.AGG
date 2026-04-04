@@ -73,6 +73,11 @@ Proveedores
                                     <i class="fa fa-edit"></i>
                                 	</a>
 								@endif
+                                @if (can('listar-cuentacorriente-proveedor', false))
+                                	<a href="{{route('listar_cuentacorriente_proveedor', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Cuenta Corriente">
+                                    <i class="fa fa-folder-open"></i>
+                                	</a>
+								@endif                                
                        			@if (can('borrar-proveedor', false))
                                 <form action="{{route('eliminar_proveedor', ['id' => $data->id])}}" class="d-inline form-eliminar" method="POST">
                                     @csrf @method("delete")
