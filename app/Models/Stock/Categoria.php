@@ -7,10 +7,14 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use App\ApiAnita;
 use App\Models\Stock\Tipoarticulo;
+use App\Models\Stock\Linea;
+use App\Models\Ventas\Puntoventa;
 
 class Categoria extends Model
 {
-    protected $fillable = ['nombre', 'codigo', 'copiaot', 'tipoarticulo_id'];
+    protected $fillable = ['nombre', 'codigo', 'copiaot', 'tipoarticulo_id',
+                            'division', 'estado', 'grupocompra', 'linea_id', 'deposito_id', 
+                            'puntoventa_id', 'excel'];
     protected $table = 'categoria';
     protected $tableAnita = 'stkagr';
     protected $keyField = 'codigo';
@@ -41,14 +45,38 @@ class Categoria extends Model
 
     public function traerRegistroDeAnita($key){
         $apiAnita = new ApiAnita();
-        $data = array( 
-            'acc' => 'list', 'tabla' => $this->tableAnita, 
-            'campos' => '
-                stka_agrupacion,
-				stka_desc
-            ' , 
-            'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
-        );
+
+        switch(config('app.empresa'))
+        {
+            case 'FRASLE':
+                $data = array( 
+                    'acc' => 'list', 'tabla' => $this->tableAnita, 
+                    'campos' => '
+                        stka_agrupacion,
+                        stka_desc,
+                        stka_division,
+                        stka_estado,
+                        stka_grupocom,
+                        stka_linea,
+                        stka_deposito,
+                        stka_sucursal,
+                        stka_excel
+                    ' , 
+                    'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
+                );
+                break;
+
+            default:
+                $data = array( 
+                    'acc' => 'list', 'tabla' => $this->tableAnita, 
+                    'campos' => '
+                        stka_agrupacion,
+                        stka_desc
+                    ' , 
+                    'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
+                );
+                break;
+        }
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
         if (count($dataAnita) > 0) {
@@ -56,12 +84,47 @@ class Categoria extends Model
 
 			$codigo = ltrim($data->stka_agrupacion, '0');
 
-            Categoria::create([
-                "nombre" => $data->stka_desc,
-                "codigo" => $codigo,
-				"copiaot" => '',
-				"tipoarticulo_id" => 1
-            ]);
+            if (config('app.empresa') != 'FRASLE')
+                Categoria::create([
+                    "nombre" => $data->stka_desc,
+                    "codigo" => $codigo,
+                    "copiaot" => '',
+                    "tipoarticulo_id" => 1
+                ]);
+            else
+            {
+                $linea = Linea::select('id')->where('codigo', ltrim($data->stka_linea, '0'))->first();
+
+                $linea_id = null;
+                if ($linea)
+                    $linea_id = $linea->id;
+
+                $deposito = Depmae::select('id')->where('codigo', $data->stka_deposito)->first();
+
+                $deposito_id = null;
+                if ($deposito)
+                    $deposito_id = $deposito->id;
+
+                $puntoventa = Puntoventa::select('id')->where('codigo', $data->stka_sucursal)->first();
+
+                $puntoventa_id = null;
+                if ($puntoventa)
+                    $puntoventa_id = $puntoventa->id;
+
+                Categoria::create([
+                    "nombre" => $data->stka_desc,
+                    "codigo" => $codigo,
+                    "copiaot" => '',
+                    "tipoarticulo_id" => 1,
+                    "division" => $data->stka_division,
+                    "estado" => $data->stka_estado,
+                    "grupocompra" => $data->stka_grupocom,
+                    "linea_id" => $linea_id,
+                    "deposito_id" => $deposito_id,
+                    "puntoventa_id" => $puntoventa_id,
+                    "excel" => $data->stka_excel
+                ]);
+            }
         }
     }
 

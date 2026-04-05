@@ -8,7 +8,11 @@ trait PuntoventaTrait {
 		'M' => 'Manual',
 		'C' => 'Factura electronica CAE',
 		'A' => 'Factura electronica CAEA',
-		'E' => 'Factura electronica de exportacion'
+		'E' => 'Factura electronica de exportacion',
+		'R' => 'Remito Factura',
+		'L' => 'Remito Manual',
+		'O' => 'Otros',
+		'I' => 'Inactiva'
 		];
 
 	public static $enumEstado = [

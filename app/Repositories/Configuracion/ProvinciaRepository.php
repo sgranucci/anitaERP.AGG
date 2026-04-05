@@ -126,7 +126,7 @@ class ProvinciaRepository implements ProvinciaRepositoryInterface
         foreach ($datosLocal as $value) {
             $datosLocalArray[] = $value->{$this->keyField};
         }
-        
+
 		if ($dataAnita)
 		{
         	foreach ($dataAnita as $value) {
@@ -157,6 +157,7 @@ class ProvinciaRepository implements ProvinciaRepositoryInterface
                 break;
 
             case 'AGG':
+            case 'FRASLE':
                 $data = array( 
                     'acc' => 'list', 'tabla' => $this->tableAnita, 
                     'sistema' => 'shared',

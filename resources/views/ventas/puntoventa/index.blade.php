@@ -47,7 +47,7 @@
                             <td>{{$data->id}}</td>
                             <td>{{$data->nombre}}</td>
                             <td>{{$data->codigo}}</td>
-                            <td>{{$data->empresas->nombre}}</td>
+                            <td>{{$data->empresas->nombre??''}}</td>
                             <td>{{$data->domicilio}}</td>
                             <td>{{$data->localidades->nombre}}</td>
                             <td>{{$data->provincias->nombre}}</td>

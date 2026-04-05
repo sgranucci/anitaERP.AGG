@@ -46,7 +46,8 @@ class Localidad extends Model
 
     public function traerRegistroDeAnita($key){
         $apiAnita = new ApiAnita();
-        if (config('app.empresa') == 'INTERFORMING')
+        if (config('app.empresa') == 'INTERFORMING' ||
+            config('app.empresa') == 'FRASLE')
             $data = array( 
                 'acc' => 'list', 'tabla' => $this->table, 
                 'sistema' => 'shared',
@@ -81,7 +82,8 @@ class Localidad extends Model
             $provincia_id = null;
             if ($provincia)
                 $provincia_id = $provincia->id;
-            if (config('app.empresa') == 'INTERFORMING')
+            if (config('app.empresa') == 'INTERFORMING' ||
+                config('app.empresa') == 'FRASLE')
                 Localidad::create([
                     "id" => $key,
                     "nombre" => $data->loc_desc,

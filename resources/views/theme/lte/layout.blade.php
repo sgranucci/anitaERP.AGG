@@ -91,6 +91,11 @@
             </div>
         @endif
     </div>
+    <script>
+        window.Laravel = {
+            baseUrl: '{{ url('/') }}',
+        };
+    </script>
     <script src="{{asset("assets/$theme/plugins/jquery/jquery.min.js")}}"></script>
     <!-- Bootstrap 4 -->
     <script src="{{asset("assets/$theme/plugins/bootstrap/js/bootstrap.bundle.min.js")}}"></script>

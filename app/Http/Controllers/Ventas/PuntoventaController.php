@@ -33,7 +33,14 @@ class PuntoventaController extends Controller
     public function index()
     {
         can('listar-puntos-de-venta');
-		$datas = $this->repository->all();
+
+        $datas = Puntoventa::orderBy('id')->get();
+
+        if ($datas->isEmpty())
+            $this->repository->sincronizarConAnita();
+
+        $datas = $this->repository->all();
+
         $estadoEnum = Puntoventa::$enumEstado;
         $modofacturacionEnum = Puntoventa::$enumModoFacturacion;
 

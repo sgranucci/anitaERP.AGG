@@ -19,7 +19,8 @@ class Puntoventa extends Model
 
     protected $fillable = ['nombre', 'codigo', 'empresa_id', 'domicilio', 'localidad_id', 
                             'provincia_id', 'pais_id', 'codigopostal', 'email', 'telefono', 
-                            'leyenda', 'modofacturacion', 'estado', 'webservice', 'pathafip', 'actividad_arca_id'];
+                            'leyenda', 'modofacturacion', 'estado', 'webservice', 'pathafip', 'actividad_arca_id',
+                            'division', 'numeropoliza', 'puntoventa_remito'];
     protected $table = 'puntoventa';
 
     public function localidades()
