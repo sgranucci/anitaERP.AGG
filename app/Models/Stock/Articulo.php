@@ -1402,7 +1402,7 @@ class Articulo extends Model
 						stkm_sector_sell = '".$sectorSellado."',
 						stkm_sala = '".$sala."',
 						stkm_dias_enfriado = '".$request['diaenfriado']."',
-						stkm_art_cbarra = '".$request['codigobarra']."'
+						stkm_art_cbarra = '".$request['codigobarra']."',
 						stkm_uref_cbarra = '".$request['unidadreferenciacodigobarra']."',
 						stkm_envia_alarma = '".$enviaAlarma."',
 						stkm_peso_caja = '".$request['pesocaja']."',

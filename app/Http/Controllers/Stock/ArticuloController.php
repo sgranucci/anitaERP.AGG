@@ -60,6 +60,7 @@ use App\Http\Requests\ValidacionArticuloTecnica;
 use App\Http\Requests\ValidacionArticuloContaduria;
 use App\Mail\Stock\AltaArticulo;
 use App\Exports\Stock\ArticuloExport;
+use Exception;
 use App\ApiAnita;
 use Carbon\Carbon;
 use Mail;

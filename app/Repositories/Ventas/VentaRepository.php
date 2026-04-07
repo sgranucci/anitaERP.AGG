@@ -136,6 +136,7 @@ class VentaRepository implements VentaRepositoryInterface
         $data = array( 
             'acc' => 'list', 
 			'tabla' => 'compemis', 
+            'sistema' => 'ventas',
             'campos' => '
                 compe_numero
 			' , 

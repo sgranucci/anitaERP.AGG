@@ -61,6 +61,11 @@
     				<div class="col-lg-2">
     					<input type="number" name="unidadesxenvase" id="unidadesxenvase" class="form-control" value="{{old('unidadesxenvase', $producto->unidadesxenvase ?? '')}}"/>
                 	</div>
+
+					<label for="peso" class="col-lg-2 col-form-label">Peso</label>
+    				<div class="col-lg-2">
+    					<input type="number" name="peso" id="peso" class="form-control" value="{{old('peso', $producto->peso ?? '')}}"/>
+                	</div>
                 </div>
                 <div class="form-group row">
     				<label for="coeficienteconversion" class="col-lg-4 col-form-label">Coeficiente de Conversión</label>

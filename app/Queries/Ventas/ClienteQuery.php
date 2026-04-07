@@ -58,9 +58,9 @@ class ClienteQuery implements ClienteQueryInterface
     public function traeClienteporId($id, $campos = null)
     {
 	  	if ($campos)
-        	return $this->model->with('condicionivas')->with('transportes')->with('condicionventas')->with('abastos')->with('coeficientes')->select($campos)->where('id',$id)->first();
+        	return $this->model->with('condicionivas')->with('vendedores')->with('zonavtas')->with('transportes')->with('condicionventas')->with('abastos')->with('coeficientes')->select($campos)->where('id',$id)->first();
 		else
-        	return $this->model->with('condicionivas')->with('transportes')->where('id',$id)->with('paises')->with('abastos')->with('coeficientes')->with('condicionventas')->first();
+        	return $this->model->with('condicionivas')->with('vendedores')->with('zonavtas')->with('transportes')->where('id',$id)->with('paises')->with('abastos')->with('coeficientes')->with('condicionventas')->first();
     }
 
     // Datos para informe maestro de clientes

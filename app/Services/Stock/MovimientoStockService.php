@@ -130,6 +130,8 @@ class MovimientoStockService
 				$modulos = $data['modulos_id'];
 				$numeroitems = $data['items'];
 				$cantidades = $data['cantidades'];
+				$cajas = $data['cajas'];
+				$piezas = $data['piezas'];
 				$precios = $data['precios'];
 				$listaprecios = $data['listasprecios_id'];
 				$incluyeimpuestos = $data['incluyeimpuestos'];
@@ -137,7 +139,7 @@ class MovimientoStockService
 				$descuentos = $data['descuentos'];
 				$loteids = $data['loteids'];
 				$medidas = $data['medidas'];
-				
+
 				// Graba items
 				$dataArticuloMovimiento = [];
 				for ($i = 0; $i < count($articulos); $i++)
@@ -150,7 +152,12 @@ class MovimientoStockService
 						$sku = $articulo->sku;
 						$codigoCategoria = $articulo->categorias->codigo;
 					}
-
+					$combinacion = null;
+					if (isset($combinaciones[$i]))
+						$combinacion = $combinaciones[$i];
+					$modulo = null;
+					if (isset($modulos[$i]))
+						$modulo = $modulos[$i];
 					$dataArticuloMovimiento = [
 						'fecha' => $data['fecha'],
 						'fechajornada' => $data['fecha'],
@@ -163,8 +170,8 @@ class MovimientoStockService
 						'lote' => $data['lote'],
 						'articulo_id' => $articulos[$i],
 						'sku' => $sku,
-						'combinacion_id' => $combinaciones[$i],
-						'modulo_id' => $modulos[$i],
+						'combinacion_id' => $combinacion,
+						'modulo_id' => $modulo,
 						'concepto' => $tipotransaccion->nombre,
 						'cantidad' => $cantidades[$i],
 						'caja' => $cajas[$i],
@@ -195,16 +202,23 @@ class MovimientoStockService
 						'partida' => 0,
 						'empresa' => $data['empresa']
 					];
+
 					$dataTalle = [];
-					$jtalles = json_decode($medidas[$i]);
-					foreach($jtalles as $medida)
+					if (isset($medidas))
 					{
-						$dataTalle[] = [
-							'id' => null,
-							'talle_id' => $medida->talle_id,
-							'cantidad' => $medida->cantidad*($tipotransaccion->signo == 'S' ? 1 : -1),
-							'precio' => $precios[$i],
-						];
+						if (count($medidas) > 0)
+						{
+							$jtalles = json_decode($medidas[$i]);
+							foreach($jtalles as $medida)
+							{
+								$dataTalle[] = [
+									'id' => null,
+									'talle_id' => $medida->talle_id,
+									'cantidad' => $medida->cantidad*($tipotransaccion->signo == 'S' ? 1 : -1),
+									'precio' => $precios[$i],
+								];
+							}
+						}
 					}
 					
 					$articulo_movimiento = $this->articulo_movimientoService->
@@ -212,13 +226,13 @@ class MovimientoStockService
 									$dataArticuloMovimiento, $dataTalle);
 
 					// Guarda remito en pendmae Anita
-					if (strtoupper(config('app.empresa') == 'EL BIERZO') && substr($data['codigo'],0,3) == 'REM')
-					{
-						$this->pedido_articuloRepository->guardarPedidoEnAnita($dataArticuloMovimiento,
-									$articulos[$i], 0, $i,
-	  								0, $cantidades[$i], $precios[$i], $listaprecios[$i], $incluyeimpuestos[$i], 
-	  								$monedas[$i], $descuentos[$i], '', $data['leyendafactura'], 'create');
-					}									
+					//if (strtoupper(config('app.empresa') == 'EL BIERZO') && substr($data['codigo'],0,3) == 'REM')
+					//{
+				//		$this->pedido_articuloRepository->guardarPedidoEnAnita($dataArticuloMovimiento,
+				//					$articulos[$i], 0, $i,
+	  			//					0, $cantidades[$i], $precios[$i], $listaprecios[$i], $incluyeimpuestos[$i], 
+	  			//					$monedas[$i], $descuentos[$i], '', $data['leyendafactura'], 'create');
+				//	}									
 				}
 			}
 			DB::commit();

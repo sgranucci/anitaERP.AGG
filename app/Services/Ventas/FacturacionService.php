@@ -77,6 +77,7 @@ use App\Services\Stock\Articulo_MovimientoService;
 use App\Services\Configuracion\ImpuestoService;
 use App\Services\Configuracion\CotizacionService;
 use App\Services\Ventas\FacturaelectronicaService;
+use App\Services\Stock\MovimientoStockService;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
@@ -152,6 +153,7 @@ class FacturacionService
 	protected $puntoVentaDivision_id;
 	protected $numeroComprobanteDivision;
 	protected $numeroRemito;
+	protected $movimientoStockService;
 
     public function __construct(
 								OrdentrabajoQueryInterface $ordentrabajoquery,
@@ -197,6 +199,7 @@ class FacturacionService
 								ImpuestoRepositoryInterface $impuestorepository,
 								MonedaRepositoryInterface $monedarepository,
 								ProvinciaRepositoryInterface $provinciaRepository,
+								MovimientoStockService $movimientoStockservice,
 								Actividad_ArcaRepositoryInterface $actividad_arcaRepository
 								)
     {
@@ -244,6 +247,7 @@ class FacturacionService
 		$this->impuestoRepository = $impuestorepository;
 		$this->provinciaRepository = $provinciaRepository;
 		$this->actividad_arcaRepository = $actividad_arcaRepository;
+		$this->movimientoStockService = $movimientoStockservice;
 
 		$this->coeficienteCliente = 0;
 		$this->coeficienteExtraCliente = 0;
@@ -481,7 +485,11 @@ class FacturacionService
 			{
 				$this->flDivide = true;
 				$this->flGrabaComprobanteDividido = false;
-				$this->coeficienteCliente = $cliente->coeficientes->porcentajedivision;
+
+				if ($pedido->transportes->codigo == '101')
+					$this->coeficienteCliente = 100.;
+				else
+					$this->coeficienteCliente = $cliente->coeficientes->porcentajedivision;
 				$this->tasaImpuesto = $cliente->coeficientes->tasa;
 
 				// Si no es toda divida genera factura por el resto en el Bierzo
@@ -512,6 +520,10 @@ class FacturacionService
 					// Genera remito
 					$retorno1 = Self::generaUnRemito($data, $cliente, $pedido, config('facturacion.TIPO_REMITO'), 
 						config('facturacion.LETRA_REMITO'), $puntoventaremito->codigo, $numeroremito, $puntoventaremito->empresas->codigo);
+
+					// Cambia punto de venta de Villa
+					$this->puntoVentaDivision_id = config('facturacion.PUNTOVENTA_DIVISION_ID');
+					$data['puntoventa_id'] = $this->puntoVentaDivision_id;						
 				}
 
 				$this->flGrabaComprobanteDividido = true;
@@ -764,7 +776,7 @@ class FacturacionService
 							'pais' => $cliente->paises->codigo,
 							'nombrecliente' => $cliente->nombre,
 							'domicilio' => $cliente->domicilio,
-							'formapago' => $cliente->condicionventas->nombre,
+							'formapago' => $cliente->condicionventas->nombre ?? '',
 							'formapagoexportacion' => $this->formaPagoExportacion,
 							'incoterms' => $this->abreviaturaIncoterm,
 							'items' => $dataFactura
@@ -2828,7 +2840,11 @@ class FacturacionService
 			if ($transporte)
 				$codigoTransporte = $transporte->codigo;
 		}
-				
+			
+		$codigoAbasto = 0;
+		if (isset($cliente->abastos->codigo))
+			$codigoAbasto = $cliente->abastos->codigo;
+
 		if (strtoupper(config('app.empresa') == 'EL BIERZO'))
 			$data = array( 	'tabla' => 'venta', 
 						'acc' => 'insert',
@@ -2867,7 +2883,7 @@ class FacturacionService
 							'".$porcentajeDescuento."',
 							'".'0'."',
 							'".$venta['moneda_id']."',
-							'".'1'."',
+							'".$venta['cotizacion']."',
 							'".'0'."',
 							'".'0'."',
 							'".'0'."',
@@ -2895,7 +2911,7 @@ class FacturacionService
 							'".'0'."',
 							'".$totalIngBruto1."',
 							'".'0'."',
-							'".$cliente->abastos->codigo."',
+							'".$codigoAbasto."',
 							'".$totalAbasto."',
 							'".'0'."',
 							'".$codigoTransporte."',
@@ -2944,7 +2960,7 @@ class FacturacionService
 							'".$porcentajeDescuento."',
 							'".'0'."',
 							'".$venta['moneda_id']."',
-							'".'1'."',
+							'".$venta['cotizacion']."',
 							'".'0'."',
 							'".'0'."',
 							'".'0'."',
@@ -3111,7 +3127,7 @@ class FacturacionService
 								'".date('Ymd', strtotime($cuota['fechavencimiento']))."',
 								'".$cuota['total']."',
 								'".$venta['moneda_id']."',
-								'".'1'."',
+								'".$venta['cotizacion']."',
 								'".$nroCuota."',
 								'".'0'."',
 								'".'0'."',
@@ -4559,12 +4575,15 @@ class FacturacionService
 	}
 
 	// Genera un Remito
-	private function generaUnRemito($data, $cliente, $pedido, $tipoRemito, $letraRemito, $puntoVentaRemito, $numeroRemito, $codigoEmpresa,
-									$totalNeto)
+	private function generaUnRemito($data, $cliente, $pedido, $tipoRemito, $letraRemito, $puntoVentaRemito, $numeroRemito, $codigoEmpresa)
 	{
+		$anteriorFlDivide = $this->flDivide;
+		$this->flDivide = false;
+
 		// Recalcula la factura
 		$calculoFactura = Self::calculaFacturaPorPedido($data);
 
+		$this->flDivide = $anteriorFlDivide;
 		$dataFactura = $calculoFactura['datosfactura'];
 
 		$data['tipotransaccion_id'] = config('facturacion.TIPO_REMITO_ID');
@@ -4584,13 +4603,17 @@ class FacturacionService
 
 		// Graba items
 		$dataArticuloMovimiento = [];
-		$totalCaja = $totalKilo = $totalPieza;
+		$totalCaja = $totalKilo = $totalPieza = 0;
+		$totalNeto = 0.;
+		$numeroItem = 0;
 
 		foreach ($dataFactura as $item)
 		{
+			$numeroItem++;
+
 			$articulos_id[] = $item['articulo_id'];
-			$skus[] = $item['codigoarticulos'];
-			$numeroitems[] = $item['items'];
+			$skus[] = $item['sku'];
+			$numeroitems[] = $numeroItem;
 			$cantidades[] = $item['cantidad'];
 			$piezas[] = $item['pieza'];
 			$cajas[] = $item['caja'];
@@ -4610,6 +4633,8 @@ class FacturacionService
 			$totalCaja += $item['caja'];
 			$totalPieza += $item['pieza'];
 			$totalKilo += $item['cantidad'];
+
+			$totalNeto += ($item['cantidad'] * $item['precio']);
 		}
 
 		// Carga variables para grabacion de movimiento de stock
@@ -4619,6 +4644,8 @@ class FacturacionService
 		$data['modulos_id'] = null;
 		$data['items'] = $numeroitems;
 		$data['cantidades'] = $cantidades;
+		$data['piezas'] = $piezas;
+		$data['cajas'] = $cajas;
 		$data['precios'] = $precios;
 		$data['listasprecios_id'] = $listaprecios_id;
 		$data['incluyeimpuestos'] = $incluyeimpuestos;
@@ -4627,24 +4654,33 @@ class FacturacionService
 		$data['loteids'] = null;
 		$data['medidas'] = [];
 		$data['fecha'] = $data['fechafactura'];
+		$data['fechaentrega'] = $data['fechafactura'];
 		$data['deposito_id'] = config('facturacion.DEPOSITO_VENTA_ID');
 		$data['loteimportacion_id'] = null;
 		$data['codigo'] = $tipoRemito.' '.$letraRemito.' '.$puntoVentaRemito.'-'.$numeroRemito;
 		$data['letra'] = $letraRemito;
 		$data['puntoventa'] = $puntoVentaRemito;
 		$data['numerocomprobante'] = $numeroRemito;
-		$data['item'] = $i;
+		$data['item'] = 0;
+		$data['tipofactura'] = 'PED';
+		$data['letrafactura'] = 'X';
+		$data['sucursalfactura'] = '1';
+		$data['numerofactura'] = $pedido->codigo;
 		$data['codigocliente'] = $cliente->codigo;
 		$data['codigotransporte'] = $pedido->transportes->codigo;
 		$data['codigovendedor'] = $pedido->vendedores->codigo;
-		$data['codigozonavta'] = $pedido->zonavtas->codigo;
+		$data['codigozona'] = $pedido->zonavtas->codigo;
 		$data['codigoprovincia'] = $cliente->provincias->codigo;
-		$data['codigosubzona'] = $cliente->subzonavtas->id;
+		$data['codigosubzona'] = $cliente->subzonavtas->id ?? '0';
+		$data['condicionventa_id'] = $cliente->condicionventa_id ?? 0;
+		$data['vendedor_id'] = $pedido->vendedor_id;
+		$data['lugarentrega'] = $pedido->lugarentrega;
+		$data['transporte_id'] = $pedido->transporte_id;
 		$data['codigocombinacion'] = '';
 		$data['pedido'] = $pedido->codigo;
 		$data['partida'] = 0;
 		$data['empresa'] = $codigoEmpresa;
-		$data['codigoabasto'] = $cliente->abastos->codigo;
+		$data['codigoabasto'] = $cliente->abastos->codigo ?? 0;
 		$data['totalseguro'] = $totalNeto;
 		$data['totalneto'] = $totalNeto;
 		$data['totalcaja'] = $totalCaja;
@@ -4655,7 +4691,9 @@ class FacturacionService
 		$data['cantidadmodificada'] = $totalKilo;
 		$data['usuarioalta'] = Auth::user()->nombre;
 
-		$this->movimientostockService->guardaMovimientoStock($data, 'create');
+		$this->movimientoStockService->guardaMovimientoStock($data, 'create');
+
+		return ['comprobante' => $data['codigo']];
 	}
 }
 

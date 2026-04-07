@@ -10,6 +10,7 @@ use App\Models\Ventas\Vendedor;
 use App\Models\Ventas\Condicionventa;
 use App\Models\Ventas\Transporte;
 use App\Queries\Ventas\ClienteQueryInterface;
+use App\Repositories\Stock\ArticuloRepositoryInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
 use Carbon\Carbon;
@@ -23,6 +24,7 @@ class PedidoRepository implements PedidoRepositoryInterface
     protected $keyFieldAnita = ['penm_sucursal', 'penm_nro'];
 
 	private $clienteQuery;
+	private $articuloRepository;
 
     /**
      * PostRepository constructor.
@@ -30,10 +32,12 @@ class PedidoRepository implements PedidoRepositoryInterface
      * @param Post $post
      */
     public function __construct(Pedido $pedido,
-    							ClienteQueryInterface $clientequery)
+    							ClienteQueryInterface $clientequery,
+								ArticuloRepository $articuloRepository)
     {
         $this->model = $pedido;
 		$this->clienteQuery = $clientequery;
+		$this->articuloRepository = $articuloRepository;
     }
 
     public function create(array $data)
@@ -237,9 +241,10 @@ class PedidoRepository implements PedidoRepositoryInterface
 
         $apiAnita = new ApiAnita();
 
-		$this->setCamposAnita($request, $cliente, $tipo, $letra, $sucursal, $nro, $fechapedido, $fechaentrega, $zonavta, $descuento, $fechahoy, $horahoy);
+		$this->setCamposAnita($request, $cliente, $tipo, $letra, $sucursal, $nro, $fechapedido, $fechaentrega, $transporte,
+								$vendedor, $zonavta, $descuento, $fechahoy, $horahoy);
 
-        $data = array( 'tabla' => $this->tableAnita, 'acc' => 'insert',
+		$data = array( 'tabla' => $this->tableAnita, 'acc' => 'insert',
             'campos' => ' 
     			penm_cliente,
     			penm_tipo,
@@ -273,7 +278,7 @@ class PedidoRepository implements PedidoRepositoryInterface
     			penm_nro_fact,
     			penm_dto_integrado,
     			penm_cod_entrega'.(strtoupper(config('app.empresa')) == "EL BIERZO" ?
-				'penm_caja, penm_abasto, penm_tot_seguro, penm_neto, penm_caja_reales, penm_kg_reales, penm_unid_reales, penm_subzona, 
+				', penm_caja, penm_abasto, penm_tot_seguro, penm_neto, penm_caja_reales, penm_kg_reales, penm_unid_reales, penm_subzona, 
 				penm_oblea, penm_cant_modif, penm_usuario_alta' : ''),
             'valores' => " 
 				'".str_pad($cliente, 6, "0", STR_PAD_LEFT)."', 
@@ -289,15 +294,15 @@ class PedidoRepository implements PedidoRepositoryInterface
 				'".$fechaentrega."', 
 				'".$request['condicionventa_id']."', 
 				'".'1'."', 
-				'".$request['vendedor_id']."', 
+				'".$vendedor."', 
 				'".$zonavta."', 
 				'".$request['lugarentrega']."', 
 				'".$descuento."', 
-				'".$request['transporte_id']."', 
-				'".' '."', 
-				'".' '."', 
-				'".'1'."', 
-				'".'0'."', 
+				'".$transporte."', 
+				'".$request['tipofactura']."', 
+				'".$request['letrafactura']."', 
+				'".$request['sucursalfactura']."', 
+				'".$request['numerofactura']."', 
 				'".$fechahoy."', 
 				'".$horahoy."', 
     			'".$request['estado']."',
@@ -309,26 +314,103 @@ class PedidoRepository implements PedidoRepositoryInterface
     			'".($request['descuentointegrado']??' ')."',
 				'".'0'."',".
 				(strtoupper(config('app.empresa')) == "EL BIERZO" ?
-				"'".$request['caja']."',
+				"'".$request['totalcaja']."',
 				'".$request['codigoabasto']."',
 				'".$request['totalseguro']."', 
-				.".$request['totalneto']."',
-				.".$request['totalcaja']."',
-				.".$request['totalkilo']."',
-				.".$request['totalpieza']."',
-				.".$request['subzona']."',
-				.".$request['oblea']."',
-				.".$request['cantidadmodificada']."',
-				.".$request['usuarioalta']."' " : " ")
+				'".$request['totalneto']."',
+				'".$request['totalcaja']."',
+				'".$request['totalkilo']."',
+				'".$request['totalpieza']."',
+				'".$request['subzona']."',
+				'".$request['oblea']."',
+				'".$request['cantidadmodificada']."',
+				'".$request['usuarioalta']."' " : " ")
         );
         $apiAnita->apiCall($data);
+
+		// Guarda pendmov
+		for ($i = 0; $i < count($request['skus']); $i++)
+		{
+			// Lee el articulo por sku
+			$articulo = $this->articuloRepository->findPorSku($request['skus'][$i]);
+
+			$data = array( 'tabla' => 'pendmov', 
+				'sistema' => 'ventas', 
+				'acc' => 'insert',
+				'campos' => ' 
+					penv_cliente,       
+					penv_tipo,          
+					penv_letra,         
+					penv_sucursal,      
+					penv_nro ,          
+					penv_orden,         
+					penv_articulo,      
+					penv_desc,          
+					penv_agrupacion,    
+					penv_unidad_medida, 
+					penv_cantidad ,     
+					penv_cantaentr,     
+					penv_cantentr,      
+					penv_cantfact,      
+					penv_precio,        
+					penv_dto_art,       
+					penv_deposito,     
+					penv_tipo_iva,      
+					penv_fecha,         
+					penv_incl_impuesto, 
+					penv_cod_mon,       
+					penv_vendedor,      
+					penv_zonavta,       
+					penv_zonamult,      
+					penv_partida,      
+					penv_fecha_ent,     
+					penv_pieza,         
+					penv_fl_bonif,      
+					penv_reparto,       
+					penv_kilos_reales,  
+					penv_piezas_reales',
+				'valores' => " 
+					'".str_pad($cliente, 6, "0", STR_PAD_LEFT)."', 
+					'".$tipo."', 
+					'".$letra."', 
+					'".$sucursal."', 
+					'".$nro."', 
+					'".$request['items'][$i]."',
+					'".str_pad($request['skus'][$i], 13, "0", STR_PAD_LEFT)."',
+					'".$articulo->desc."',
+					'".$articulo->categorias->codigo."',
+					'".$articulo->unidadesdemedidas->abreviatura."',
+					'".$data['cantidades'][$i]."',
+					'0',
+					'".$data['cantidades'][$i]."',
+					'0',
+					'".$data['precios'][$i]."',
+					'".$data['descuentos'][$i]."',
+					'1',
+					'".$articulo->impuestos->codigo."',
+					'".$fechapedido."', 
+					'".$data['incluyeimpuestos'][$i]."',
+					'".$data['monedas_id'][$i]."',
+					'".$vendedor."', 
+					'".$zonavta."',	
+					'0',
+					'0',
+					'".$fechaentrega."',
+					'".$data['piezas'][$i]."',
+					' ',
+					'".$transporte."',
+					'".$data['cantidades'][$i]."',
+					'".$data['piezas'][$i]."' "
+			);
+		}
 	}
 
 	private function actualizarAnita($request, $id) {
 		return 0;
         $apiAnita = new ApiAnita();
 
-		$this->setCamposAnita($request, $cliente, $tipo, $letra, $sucursal, $nro, $fechapedido, $fechaentrega, $zonavta, $descuento, $fechahoy, $horahoy);
+		$this->setCamposAnita($request, $cliente, $tipo, $letra, $sucursal, $nro, $fechapedido, $fechaentrega, $transporte,
+								$vendedor, $zonavta, $descuento, $fechahoy, $horahoy);
 
 		$data = array( 'acc' => 'update', 'tabla' => $this->tableAnita, 
 				'valores' => " 
@@ -336,11 +418,11 @@ class PedidoRepository implements PedidoRepositoryInterface
     			penm_fecha            = '".$fechapedido."', 
     			penm_fecha_ent        = '".$fechaentrega."',
     			penm_cond_vta         = '".$request['condicionventa_id']."',
-    			penm_vendedor         = '".$request['vendedor_id']."',
+    			penm_vendedor         = '".$vendedor."',
     			penm_zonvta           = '".$zonavta."',
     			penm_entrega          = '".$request['lugarentrega']."',
     			penm_dto              = '".$descuento."',
-    			penm_expreso          = '".$request['transporte_id']."', 
+    			penm_expreso          = '".$transporte."', 
     			penm_fecha_ing        = '".$fechahoy."',
     			penm_hora_ing         = '".$horahoy."',
     			penm_estado           = '".$request['estado']."',
@@ -381,7 +463,8 @@ class PedidoRepository implements PedidoRepositoryInterface
 		}
 	}
 
-	private function setCamposAnita($request, &$cliente, &$tipo, &$letra, &$sucursal, &$nro, &$fechapedido, &$fechaentrega, &$zonavta, &$descuento, &$fechahoy, &$horahoy)
+	private function setCamposAnita($request, &$cliente, &$tipo, &$letra, &$sucursal, &$nro, &$fechapedido, &$fechaentrega,
+									&$transporte, &$vendedor, &$zonavta, &$descuento, &$fechahoy, &$horahoy)
 	{
         $fecha = Carbon::now();
 		$fechahoy = $fecha->format('Ymd');
@@ -392,18 +475,26 @@ class PedidoRepository implements PedidoRepositoryInterface
 		if ($clientes)
 		{
 			$cliente = $clientes->codigo;
-			$zonavta = $clientes->zonavta_id;
+			$zonavta = $clientes->zonavtas->codigo;
+			$vendedor = $clientes->vendedores->codigo;
+			$transportes = $clientes->transportes->codigo;
 		}
 		else
 		{
-			$cliente = NULL;
-			$zonavta = NULL;
+			$cliente = '';
+			$zonavta = 0;
+			$vendedor = 0;
+			$transporte = 0;
 		}
 
 		$tipo = substr($request['codigo'], 0, 3);
 		$letra = substr($request['codigo'], 4, 1);
-		$sucursal = substr($request['codigo'], 6, 5);
-		$nro = substr($request['codigo'], 12, 8);
+
+		$resto = substr($request['codigo'], 6);
+		$partes = explode('-', $resto);
+
+		$sucursal = $partes[0];
+		$nro = $partes[1];
 
 		$fechapedido = date('Ymd', strtotime($request['fecha']));
 		$fechaentrega = date('Ymd', strtotime($request['fechaentrega']));

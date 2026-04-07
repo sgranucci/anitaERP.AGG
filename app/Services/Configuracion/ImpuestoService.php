@@ -270,8 +270,11 @@ class ImpuestoService extends FacturacionService
 			{
 				if(env('ANITA_TASA_PERCEPCION_IVA') != 0.)
 				{
-					$importeNeto += $netos[$i]['importe'];
-					$importePercepcion += ($netos[$i]['importe'] * env('ANITA_TASA_PERCEPCION_IVA') / 100.);
+					if($netos[$i]['tasa'] != 0.) // Solo trae los importes gravados
+					{
+						$importeNeto += $netos[$i]['importe'];
+						$importePercepcion += ($netos[$i]['importe'] * env('ANITA_TASA_PERCEPCION_IVA') / 100.);
+					}
 				}
 			}			
 			$detalle = "Percepcion IVA ".env('ANITA_TASA_PERCEPCION_IVA')."%";
@@ -285,8 +288,16 @@ class ImpuestoService extends FacturacionService
 		// Agrega impuestos provinciales
 		$percepcionesIIBB = [];
 		if (!$flGrabaComprobanteDividido)
-			$percepcionesIIBB = $this->IIBBService->calculaPercepcionIIBB($totalNeto, $nroInscripcion, 
+		{
+			$importeNeto = 0.;
+			for ($i = 0; $i < count($netos); $i++)
+			{
+				if($netos[$i]['tasa'] != 0.) // Solo trae los importes gravados
+					$importeNeto += $netos[$i]['importe'];
+			}	
+			$percepcionesIIBB = $this->IIBBService->calculaPercepcionIIBB($importeNeto, $nroInscripcion, 
 																		$condicioniibb_id, $provincia, $cm05, $fechaFactura);
+		}
 
 		// Para El Bierzo agrega total de abasto
 		if (strtoupper(config('app.empresa')) == 'EL BIERZO' && !$flGrabaComprobanteDividido)

@@ -100,7 +100,7 @@ class Cliente extends Model implements Auditable
 
     public function subzonavtas()
     {
-        return $this->belongsTo(Subsonavta::class, 'subzonavta_id');
+        return $this->belongsTo(Subzonavta::class, 'subzonavta_id');
     }
 
     public function vendedores()

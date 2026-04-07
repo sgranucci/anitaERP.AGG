@@ -52,7 +52,7 @@ class ArticuloRepository implements ArticuloRepositoryInterface
 
    	public function findPorSku($codigo)
     {
-        return $this->model->where('sku', $codigo)->with('categorias')->with('unidadesdemedidas')->first();
+        return $this->model->where('sku', $codigo)->with('categorias')->with('unidadesdemedidas')->with('impuestos')->first();
     }
 
 	public function leeArticulo($busqueda, $flPaginando = null)
