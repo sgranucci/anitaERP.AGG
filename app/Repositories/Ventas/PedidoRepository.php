@@ -33,7 +33,7 @@ class PedidoRepository implements PedidoRepositoryInterface
      */
     public function __construct(Pedido $pedido,
     							ClienteQueryInterface $clientequery,
-								ArticuloRepository $articuloRepository)
+								ArticuloRepositoryInterface $articuloRepository)
     {
         $this->model = $pedido;
 		$this->clienteQuery = $clientequery;

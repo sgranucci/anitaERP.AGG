@@ -4041,48 +4041,50 @@ class FacturacionService
 		foreach ($conceptostotales as $conc)
 		{
 			// Graba solo los importes distintos a 0
-			if ($conc['concepto'] == 'Subtotal')
+			if (str_contains($conc['concepto'], 'Exento') ||
+				str_contains($conc['concepto'], 'Gravado'))
 				$subTotal = $conc['importe'];
 		}
 
-		foreach ($dataFactura as $item)
+		if (strtoupper(config('app.empresa')) == "EL BIERZO")
+			$cuentaVenta = config('facturacion.CUENTACONTABLE_VENTA');
+
+		if (strtoupper(config('app.empresa')) == 'AGG')
+			$cuentaVenta = config('ordenventa.CUENTAVENTA');
+
+		if (config('facturacion.USA_DETRACCION') == 'S')
 		{
-			$monto = $item['cantidad'] * $item['precio'];
+			$cuentacontable = $this->cuentacontableRepository->findPorCodigo($empresa_id, $cuentaVenta);
 
-			if ($monto != 0)
+			if ($cuentacontable)
 			{
-				if ($item['cuentacontable_id'] > 0)
+				for ($i = 0, $flEncontro = false; $i < count($asientoContable); $i++)
 				{
-					for ($i = 0, $flEncontro = false; $i < count($asientoContable); $i++)
+					if ($asientoContable[$i]['cuentacontable_id'] == $item['cuentacontable_id'])
 					{
-						if ($asientoContable[$i]['cuentacontable_id'] == $item['cuentacontable_id'])
-						{
-							$flEncontro = true;
-							break;
-						}
+						$flEncontro = true;
+						break;
 					}
-					if (!$flEncontro)
-						$asientoContable[] = [	
-											'empresa_id' => $empresa_id,
-											'cuentacontable_id' => $item['cuentacontable_id'],
-											'monto' => $monto
-										];			
-					else
-						$asientoContable[$i]['monto'] += $monto;
 				}
+				if (!$flEncontro)						
+					$asientoContable[] = [	
+										'empresa_id' => $empresa_id,
+										'cuentacontable_id' => $cuentacontable->id,
+										'monto' => $subTotal
+									];
 				else
+					$asientoContable[$i]['monto'] += $subTotal;
+			}
+		}
+		else
+		{
+			foreach ($dataFactura as $item)
+			{
+				$monto = $item['cantidad'] * $item['precio'];
+
+				if ($monto != 0)
 				{
-					if (strtoupper(config('app.empresa')) == "EL BIERZO")
-						$cuentaVenta = config('facturacion.CUENTACONTABLE_VENTA');
-
-					if (strtoupper(config('app.empresa')) == 'AGG')
-						$cuentaVenta = config('ordenventa.CUENTAVENTA');
-
-					$cuentacontable = $this->cuentacontableRepository->findPorCodigo($empresa_id, $cuentaVenta);
-
-					$cuentacontable_id = 0;
-					
-					if ($cuentacontable)
+					if ($item['cuentacontable_id'] > 0)
 					{
 						for ($i = 0, $flEncontro = false; $i < count($asientoContable); $i++)
 						{
@@ -4092,14 +4094,40 @@ class FacturacionService
 								break;
 							}
 						}
-						if (!$flEncontro)						
+						if (!$flEncontro)
 							$asientoContable[] = [	
 												'empresa_id' => $empresa_id,
-												'cuentacontable_id' => $cuentacontable->id,
+												'cuentacontable_id' => $item['cuentacontable_id'],
 												'monto' => $monto
-											];
+											];			
 						else
 							$asientoContable[$i]['monto'] += $monto;
+					}
+					else
+					{
+						$cuentacontable = $this->cuentacontableRepository->findPorCodigo($empresa_id, $cuentaVenta);
+
+						$cuentacontable_id = 0;
+						
+						if ($cuentacontable)
+						{
+							for ($i = 0, $flEncontro = false; $i < count($asientoContable); $i++)
+							{
+								if ($asientoContable[$i]['cuentacontable_id'] == $item['cuentacontable_id'])
+								{
+									$flEncontro = true;
+									break;
+								}
+							}
+							if (!$flEncontro)						
+								$asientoContable[] = [	
+													'empresa_id' => $empresa_id,
+													'cuentacontable_id' => $cuentacontable->id,
+													'monto' => $monto
+												];
+							else
+								$asientoContable[$i]['monto'] += $monto;
+						}
 					}
 				}
 			}
