@@ -11,6 +11,7 @@ use App\Models\Ventas\Condicionventa;
 use App\Models\Ventas\Transporte;
 use App\Queries\Ventas\ClienteQueryInterface;
 use App\Repositories\Stock\ArticuloRepositoryInterface;
+use App\Repositories\Ventas\TransporteRepositoryInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
 use Carbon\Carbon;
@@ -25,6 +26,7 @@ class PedidoRepository implements PedidoRepositoryInterface
 
 	private $clienteQuery;
 	private $articuloRepository;
+	private $transporteRepository;
 
     /**
      * PostRepository constructor.
@@ -33,11 +35,13 @@ class PedidoRepository implements PedidoRepositoryInterface
      */
     public function __construct(Pedido $pedido,
     							ClienteQueryInterface $clientequery,
-								ArticuloRepositoryInterface $articuloRepository)
+								ArticuloRepositoryInterface $articuloRepository,
+								TransporteRepositoryInterface $transporteRepository)
     {
         $this->model = $pedido;
 		$this->clienteQuery = $clientequery;
 		$this->articuloRepository = $articuloRepository;
+		$this->transporteRepository = $transporteRepository;
     }
 
     public function create(array $data)
@@ -299,18 +303,18 @@ class PedidoRepository implements PedidoRepositoryInterface
 				'".$request['lugarentrega']."', 
 				'".$descuento."', 
 				'".$transporte."', 
+				' ',
+				' ',
+				'1',
+				'1',
+				'".$fechahoy."',
+				'".$horahoy."',
+				' ',
+				'".($request['leyenda']??' ')."',
 				'".$request['tipofactura']."', 
 				'".$request['letrafactura']."', 
 				'".$request['sucursalfactura']."', 
 				'".$request['numerofactura']."', 
-				'".$fechahoy."', 
-				'".$horahoy."', 
-    			'".$request['estado']."',
-    			'".($request['leyenda']??' ')."',
-				'".' '."', 
-				'".' '."', 
-				'".'0'."', 
-				'".'0'."', 
     			'".($request['descuentointegrado']??' ')."',
 				'".'0'."',".
 				(strtoupper(config('app.empresa')) == "EL BIERZO" ?
@@ -333,6 +337,10 @@ class PedidoRepository implements PedidoRepositoryInterface
 		{
 			// Lee el articulo por sku
 			$articulo = $this->articuloRepository->findPorSku($request['skus'][$i]);
+
+			$incluyeImpuesto = 'S';
+			if ($request['incluyeimpuestos'][$i] == '2')
+				$incluyeImpuesto = 'N';
 
 			$data = array( 'tabla' => 'pendmov', 
 				'sistema' => 'ventas', 
@@ -377,31 +385,32 @@ class PedidoRepository implements PedidoRepositoryInterface
 					'".$nro."', 
 					'".$request['items'][$i]."',
 					'".str_pad($request['skus'][$i], 13, "0", STR_PAD_LEFT)."',
-					'".$articulo->desc."',
-					'".$articulo->categorias->codigo."',
+					'".$articulo->descripcion."',
+					'".str_pad($articulo->categorias->codigo, 4, "0", STR_PAD_LEFT)."',
 					'".$articulo->unidadesdemedidas->abreviatura."',
-					'".$data['cantidades'][$i]."',
+					'".$request['cantidades'][$i]."',
 					'0',
-					'".$data['cantidades'][$i]."',
+					'".$request['cantidades'][$i]."',
 					'0',
-					'".$data['precios'][$i]."',
-					'".$data['descuentos'][$i]."',
+					'".$request['precios'][$i]."',
+					'".$request['descuentos'][$i]."',
 					'1',
 					'".$articulo->impuestos->codigo."',
 					'".$fechapedido."', 
-					'".$data['incluyeimpuestos'][$i]."',
-					'".$data['monedas_id'][$i]."',
+					'".$incluyeImpuesto."',
+					'".$request['monedas_id'][$i]."',
 					'".$vendedor."', 
 					'".$zonavta."',	
 					'0',
 					'0',
 					'".$fechaentrega."',
-					'".$data['piezas'][$i]."',
+					'".$request['piezas'][$i]."',
 					' ',
 					'".$transporte."',
-					'".$data['cantidades'][$i]."',
-					'".$data['piezas'][$i]."' "
+					'".$request['cantidades'][$i]."',
+					'".$request['piezas'][$i]."' "
 			);
+			$apiAnita->apiCall($data);
 		}
 	}
 
@@ -477,15 +486,19 @@ class PedidoRepository implements PedidoRepositoryInterface
 			$cliente = $clientes->codigo;
 			$zonavta = $clientes->zonavtas->codigo;
 			$vendedor = $clientes->vendedores->codigo;
-			$transportes = $clientes->transportes->codigo;
 		}
 		else
 		{
 			$cliente = '';
 			$zonavta = 0;
 			$vendedor = 0;
-			$transporte = 0;
 		}
+
+		$tra = $this->transporteRepository->find($request['transporte_id']);
+
+		$transporte = 0;
+		if ($tra)
+			$transporte = $tra->codigo;
 
 		$tipo = substr($request['codigo'], 0, 3);
 		$letra = substr($request['codigo'], 4, 1);

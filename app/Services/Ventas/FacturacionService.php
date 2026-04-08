@@ -2782,7 +2782,7 @@ class FacturacionService
 				else
 					$totalIngBruto2 += $concepto['importe'];
 			}
-			if ($concepto['concepto'] == 'Percepcion IVA')
+			if (strpos($concepto['concepto'], 'Percepcion IVA') !== false)
 				$totalPercepcionIva += $concepto['importe'];
 
 			if (strpos($concepto['concepto'], 'Descuento') !== false)
@@ -4721,7 +4721,7 @@ class FacturacionService
 
 		$this->movimientoStockService->guardaMovimientoStock($data, 'create');
 
-		return ['comprobante' => $data['codigo']];
+		return ['factura' => $data['codigo']];
 	}
 }
 
