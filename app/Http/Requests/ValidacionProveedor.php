@@ -37,7 +37,7 @@ class ValidacionProveedor extends FormRequest
             'cuentacontableme_id' => 'required',
             'nroinscripcion' => ['required', new RuleProveedor('nroinscripcion')],
             'retieneiva' => ['required', new RuleProveedor('retieneiva')],
-            'nroIIBB' => 'required|max:100|',
+            'nroIIBB' => 'sometimes|max:100|',
         ];
     }
 }

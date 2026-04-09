@@ -9,7 +9,7 @@ use App\Models\Compras\Proveedor;
 
 class RuleProveedor implements Rule
 {
-  	private $campo;
+  	private $campo, $tipoalta;
 	use ValidacionCuit;
 
     /**
@@ -17,9 +17,11 @@ class RuleProveedor implements Rule
      *
      * @return void
      */
-    public function __construct($campo)
+    public function __construct($campo, $tipoalta = null)
     {
-	  	$this->campo = $campo;	  
+	  	$this->campo = $campo;
+      
+      $this->tipoalta = $tipoalta;
     }
 
     /**
@@ -31,17 +33,30 @@ class RuleProveedor implements Rule
      */
     public function passes($attribute, $value)
     {
-		$cc = true;
-		switch($this->campo)
-		{
-		case 'nroinscripcion':
-			$cc = $this->ValidacionCuit($value);
-			break;
-		case 'retieneiva':
-			$cc = Arr::has(Proveedor::$enumRetieneiva, $value);
-			break;
-    }
-		return($cc);
+      $cc = true;
+      switch($this->campo)
+      {
+      case 'nroinscripcion':
+        $cc = $this->ValidacionCuit($value);
+        break;
+      case 'retieneiva':
+        $cc = Arr::has(Proveedor::$enumRetieneiva, $value);
+        break;
+      case 'nroIIBB':
+        if ($this->tipoalta)
+        {
+          if ($this->tipoalta == substr(config("proveedor.tipoalta"),0,1))
+            $cc = true;
+          else
+          {
+            $cc = request()->has($attribute);
+          }
+        }
+        else
+          $cc = true;
+        break;
+      }
+      return($cc);
     }
 
     /**

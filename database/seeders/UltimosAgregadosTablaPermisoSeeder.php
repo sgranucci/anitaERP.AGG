@@ -31,7 +31,7 @@ class UltimosAgregadosTablaPermisoSeeder extends Seeder
             array('id' => '1004', 'nombre' => 'Actualizar feriados', 'slug' => 'actualizar-feriado', 'created_at' => $now, 'updated_at' => $now),
             array('id' => '1005', 'nombre' => 'Borrar feriados', 'slug' => 'borrar-feriado', 'created_at' => $now, 'updated_at' => $now),            
             array('id' => '1006', 'nombre' => 'Listar cuenta corriente del proveedor', 'slug' => 'listar-cuentacorriente-proveedor', 'created_at' => $now, 'updated_at' => $now),
-            array('id' => '1007', 'nombre' => 'Listar encuestas del proveedor', 'slug' => 'listar-encuestra-proveedor', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '1007', 'nombre' => 'Listar encuestas del proveedor', 'slug' => 'listar-encuesta-proveedor', 'created_at' => $now, 'updated_at' => $now),
             array('id' => '1008', 'nombre' => 'Listar requisiciones del proveedor', 'slug' => 'listar-requisicion-proveedor', 'created_at' => $now, 'updated_at' => $now),
             array('id' => '1009', 'nombre' => 'Listar ordenes de compra del proveedor', 'slug' => 'listar-ordencompra-proveedor', 'created_at' => $now, 'updated_at' => $now),
             array('id' => '1010', 'nombre' => 'Ingresar tipo de servicio de proveedores', 'slug' => 'crear-tipo-servicio-proveedor', 'created_at' => $now, 'updated_at' => $now),

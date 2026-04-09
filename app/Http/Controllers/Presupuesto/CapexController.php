@@ -215,10 +215,16 @@ class CapexController extends Controller
         if ($request->ajax()) 
 		{
 			$fl_borro = false;
-            
-			if ($this->capexRepository->delete($id))
-				$fl_borro = true;
 
+            $capex = $this->capexRepository->find($id);
+
+            if ($capex)
+            {
+                $anita = $this->capexService->borraAnita($capex);
+       
+            	if ($this->capexRepository->delete($id))
+			    	$fl_borro = true;
+            }
             if ($fl_borro) {
                 return response()->json(['mensaje' => 'ok']);
             } else {

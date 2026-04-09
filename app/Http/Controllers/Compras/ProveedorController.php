@@ -269,7 +269,14 @@ class ProveedorController extends Controller
         DB::beginTransaction();
         try
         {
-            $proveedor = $this->proveedorRepository->create($request->all());
+            $data = $request->all();
+
+            if (substr(config("proveedor.tipoalta"),0,1) == 'P')
+                $data['estado'] = 'Alta Pendiente';
+            else
+                $data['estado'] = 'Activo';
+
+            $proveedor = $this->proveedorRepository->create($data);
 
             // Guarda tablas asociadas
             if ($proveedor)

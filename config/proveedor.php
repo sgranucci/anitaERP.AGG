@@ -1,5 +1,4 @@
 <?php
-// Constantes de reporte total de pares
 switch(config('app.empresa'))
 {
     case "AGG":
@@ -7,6 +6,14 @@ switch(config('app.empresa'))
             'tipoalta' => 'PROVISORIA',
             'enviamailaprobacion' => 'S',
             'emailapruebaalta' => ['impuestosBSA@grupoagg.com']
+            ];
+        break;
+
+    default:
+        return [
+            'tipoalta' => 'DEFINITIVA',
+            'enviamailaprobacion' => 'N',
+            'emailapruebaalta' => ['']
             ];
         break;
 }

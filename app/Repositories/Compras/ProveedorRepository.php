@@ -119,7 +119,16 @@ class ProveedorRepository implements ProveedorRepositoryInterface
         $proveedor = $this->model->create($data);
 
 		// Graba anita
-		self::guardarAnita($data);
+		$anita = self::guardarAnita($data);
+
+		if (isset($anita['error']))
+		{
+			if ($anita['error'] == 'Error')
+				throw new Exception('Error en grabacion anita. '.$anita['mensaje']);
+
+			if ($anita['error'] == 'Errvend')
+				throw new Exception('No tiene vendedor asignado.');
+		}
 
 		return $proveedor;
     }
@@ -870,7 +879,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 				'".$retieneiibb."',
 				'".$request['nroIIBB']."',
 				' ',
-				'".$exclusionretiva."'
+				'".$exclusionretiva."',
 				'".($request['pais_id']>0?$request['pais_id']:0)."',
 				'".$fecha."',
 				'".$request['estado']."',
@@ -898,7 +907,10 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 				'".$request['agentepercepcionIIBB']."',
 				'".$request['agentepercepcioniva']."' "
         );
-        $apiAnita->apiCall($data);
+        $promae = $apiAnita->apiCall($data);
+
+		if (strpos($promae, 'Error') !== false)
+			return ['error' => 'Error promae', 'mensaje' => $promae];
 
 		// Graba leyenda
 		$leyenda = explode("\n", $request['leyenda']);
@@ -918,7 +930,10 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 								'".preg_replace("/\r/", "", $ley)."' "
 						);
 
-        	$apiAnita->apiCall($data);
+        	$proley = $apiAnita->apiCall($data);
+
+			if (strpos($proley, 'Error') !== false)
+				return ['error' => 'Error proley', 'mensaje' => $proley];
 		}
 
 		// Graba datos adicionales promadic
@@ -936,13 +951,22 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 					'".substr($request['semaforo'],0,1)."' "
 			);
 
-		$apiAnita->apiCall($data);
+		$promadic = $apiAnita->apiCall($data);
 
+		if (strpos($promadic, 'Error') !== false)
+			return ['error' => 'Error promadic', 'mensaje' => $promadic];	
+		
 		// Graba exclusiones
-		Self::grabaExclusion($request);
+		$proexcl = Self::grabaExclusion($request);
 
+		if (strpos($proexcl, 'Error') !== false)
+			return ['error' => 'Error proexcl', 'mensaje' => $proexcl];	
+				
 		// Graba formas de pago
-		Self::grabaFormaDePago($request);
+		$propago = Self::grabaFormaDePago($request);
+
+		if (strpos($propago, 'Error') !== false)
+			return ['error' => 'Error propago', 'mensaje' => $propago];	
 	}
 
 	private function actualizarAnita($request, $id) {
@@ -1045,12 +1069,18 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 
         $promae = $apiAnita->apiCall($data);
 
+		if (strpos($promae, 'Error') !== false)
+			return ['error' => 'Error promae', 'mensaje' => $promae];		
+
 		// Borra leyenda
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[1], 
 				'sistema' => 'compras',
 				'whereArmado' => " WHERE prol_proveedor = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
-        $apiAnita->apiCall($data);
+        $proley = $apiAnita->apiCall($data);
 
+		if (strpos($proley, 'Error') !== false)
+			return ['error' => 'Error proley', 'mensaje' => $proley];		
+		
 		// Graba leyenda
 		$leyenda = explode("\n", $request['leyenda']);
 		$linea = 0;
@@ -1069,7 +1099,10 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 								'".preg_replace("/\r/", "", $ley)."' "
 						);
 
-        	$apiAnita->apiCall($data);
+        	$proley = $apiAnita->apiCall($data);
+
+			if (strpos($proley, 'Error') !== false)
+				return ['error' => 'Error proley', 'mensaje' => $proley];		
 		}
 
 		// Graba promadic
@@ -1082,25 +1115,40 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 					,
 				'whereArmado' => " WHERE proad_proveedor = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
 
-		$apiAnita->apiCall($data);
+		$promadic = $apiAnita->apiCall($data);
+
+		if (strpos($promadic, 'Error') !== false)
+			return ['error' => 'Error promadic', 'mensaje' => $promadic];		
 
 		// Borra exclusiones
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[2], 
 				'sistema' => 'compras',
 				'whereArmado' => " WHERE proex_proveedor = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
-        $apiAnita->apiCall($data);
+        $proexcl = $apiAnita->apiCall($data);
+
+		if (strpos($proexcl, 'Error') !== false)
+			return ['error' => 'Error proexcl', 'mensaje' => $proexcl];		
 
 		// Graba exclusiones
-		Self::grabaExclusion($request);
+		$proexcl = Self::grabaExclusion($request);
+
+		if (strpos($proexcl, 'Error') !== false)
+			return ['error' => 'Error proexcl', 'mensaje' => $proexcl];		
 
 		// Borra formas de pago
 		$data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[3], 
 				'sistema' => 'compras',
 				'whereArmado' => " WHERE prop_proveedor = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
-        $apiAnita->apiCall($data);
+        $propago = $apiAnita->apiCall($data);
+
+		if (strpos($propago, 'Error') !== false)
+			return ['error' => 'Error propago', 'mensaje' => $propago];		
 
 		// Graba formas de pago
-		Self::grabaFormaDePago($request);
+		$propago = Self::grabaFormaDePago($request);
+
+		if (strpos($propago, 'Error') !== false)
+			return ['error' => 'Error propago', 'mensaje' => $propago];		
 	}
 
 	private function grabaExclusion($request)
@@ -1144,7 +1192,10 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 								'".$porcentajeexclusiones[$i_exclusion]."',
 								'".$comentarios[$i_exclusion]."' "
 						);
-				$apiAnita->apiCall($data);
+				$proexcl = $apiAnita->apiCall($data);
+
+				if (strpos($proexcl, 'Error') !== false)
+					return ['error' => 'Error proexcl', 'mensaje' => $proexcl];					
 			}
 		}
 	}
@@ -1230,7 +1281,10 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 						'".$emails[$i_formapago]."',
 						'".$i_formapago."' "
 				);
-				$apiAnita->apiCall($data);
+				$propago = $apiAnita->apiCall($data);
+
+				if (strpos($propago, 'Error') !== false)
+					return ['error' => 'Error propago', 'mensaje' => $propago];				
 			}
 		}
 	}

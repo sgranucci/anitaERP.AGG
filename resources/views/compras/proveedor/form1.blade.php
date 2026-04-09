@@ -307,5 +307,5 @@
 		<input type="hidden" id="tiposuspension_id" name="tiposuspension_id" value="{{$data->tiposuspension_id ?? ''}}" >
 		<input type="hidden" id="tiposuspensionproveedor_query" value="{{$tiposuspensionproveedor_query ?? ''}}" >
 		<input type="hidden" id="semaforo" name="semaforo" value="{{$data->semaforo ?? 'Verde'}}" >
-		<input type="hidden" id="codigo" name="codigo" value="{{$data->codigo}}" >
+		<input type="hidden" id="codigo" name="codigo" value="{{$data->codigo ?? ''}}" >
 </div>

@@ -102,7 +102,7 @@ class CapexService
 		if (isset($data['moneda_ids']))
 			$capex_partida = $this->capex_partidaRepository->create($data, $capex->id);
 
-		if (isset($data['periodos']))
+		if (isset($data['periodo_monto_armados']))
 		{
 			for ($i = 0; $i < count($data['moneda_ids']); $i++)
 			{

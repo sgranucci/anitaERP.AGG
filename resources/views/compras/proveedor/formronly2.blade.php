@@ -15,13 +15,12 @@
 					<label for="nroIIBB" class="col-lg-4 col-form-label">Nro.IIBB</label>
 				@endif
 				<div class="col-lg-3">
-					<input type="text" name="nroIIBB" id="nroIIBB" class="form-control" value="{{old('nroIIBB', $data->nroIIBB ?? '')}}" @if ($tipoalta != 'P') required @endif/>
+					<input type="text" name="nroIIBB" id="nroIIBB" class="form-control" value="{{old('nroIIBB', $data->nroIIBB ?? '')}}" @if ($tipoalta != 'P') required @endif readonly/>
 				</div>
 			</div>
 			<div class="form-group row">
 				<label for="condicioniva_id" class="col-lg-4 col-form-label requerido">Condicion de iva.</label>
-				<select name="condicioniva_id" id="condicioniva_id" data-placeholder="Condicion de iva" class="col-lg-5 form-control" required data-fouc>
-					<option value="">-- Seleccionar --</option>
+				<select name="condicioniva_id" id="condicioniva_id" data-placeholder="Condicion de iva" class="col-lg-5 form-control" required data-fouc readonly>
 					@foreach($condicioniva_query as $key => $value)
 						@if( (int) $value->id == (int) old('condicioniva_id', $data->condicioniva_id ?? ''))
 							<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
@@ -38,8 +37,7 @@
 					<input type="text" name="letra" id="letra" class="form-control" value="" readonly>
 				</div>
 					<label for="regimenfacturacion" class="col-lg-2 col-form-label requerido">Régimen</label>
-					<select name="regimenfacturacion" class="col-lg-3 form-control" required>
-						<option value="">-- Elija régimen --</option>
+					<select name="regimenfacturacion" class="col-lg-3 form-control" required readonly>
 						@foreach ($regimenfacturacion_enum as $value => $regimenfacturacion)
 							<option value="{{ $regimenfacturacion }}"
 								@if (old('regimenfacturacion', $data->regimenfacturacion ?? '') == $regimenfacturacion) selected @endif
@@ -53,8 +51,7 @@
 				@else
 					<label for="retieneiva" class="col-lg-4 col-form-label">Retiene iva</label>
 				@endif
-				<select name="retieneiva" class="col-lg-3 form-control" @if ($tipoalta != 'P') required @endif>
-					<option value="">-- Elija retiene iva --</option>
+				<select name="retieneiva" class="col-lg-3 form-control" @if ($tipoalta != 'P') required @endif readonly>
 					@foreach ($retieneiva_enum as $value => $retieneiva)
 						<option value="{{ $value }}"
 							@if (old('retieneiva', $data->retieneiva ?? '') == $value) selected @endif
@@ -64,8 +61,7 @@
 			</div>
 			<div class="form-group row">
 				<label for="retencioniva" class="col-lg-4 col-form-label">Codigo de retención de iva</label>
-				<select name="retencioniva_id" id="retencioniva_id" data-placeholder="Codigo de retención de iva" class="col-lg-5 form-control" data-fouc>
-					<option value="">-- Seleccionar Código --</option>
+				<select name="retencioniva_id" id="retencioniva_id" data-placeholder="Codigo de retención de iva" class="col-lg-5 form-control" data-fouc readonly>
 					@foreach($retencioniva_query as $key => $value)
 						@if( (int) $value->id == (int) old('retencioniva_id', $data->retencioniva_id ?? ''))
 							<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
@@ -81,8 +77,7 @@
 				@else
 					<label for="agentepercepcioniva" class="col-lg-4 col-form-label">Agente de perc. iva</label>
 				@endif
-				<select name="agentepercepcioniva" class="col-lg-3 form-control" @if ($tipoalta != 'P') required @endif>
-					<option value="">-- Elija Agente de perc. iva --</option>
+				<select name="agentepercepcioniva" class="col-lg-3 form-control" @if ($tipoalta != 'P') required @endif readonly>
 					@foreach ($agentepercepcioniva_enum as $value => $agentepercepcioniva)
 						<option value="{{ $value }}"
 							@if (old('agentepercepcioniva', $data->agentepercepcioniva ?? '') == $value) selected @endif
@@ -98,8 +93,7 @@
 				@else
 					<label for="retieneganancia" class="col-lg-4 col-form-label">Retiene Ganancias</label>
 				@endif
-				<select name="retieneganancia" class="col-lg-3 form-control" @if ($tipoalta != 'P') required @endif>
-					<option value="">-- Elija retiene iva --</option>
+				<select name="retieneganancia" class="col-lg-3 form-control" @if ($tipoalta != 'P') required @endif readonly>
 					@foreach ($retieneganancia_enum as $value => $retieneganancia)
 						<option value="{{ $value }}"
 							@if (old('retieneganancia', $data->retieneganancia ?? '') == $value) selected @endif
@@ -113,8 +107,7 @@
 				@else
 					<label for="condicionganancia" class="col-lg-4 col-form-label">Condición de Ganancias</label>
 				@endif
-				<select name="condicionganancia" class="col-lg-3 form-control" @if ($tipoalta != 'P') required @endif>
-					<option value="">-- Elija condicion de ganancias --</option>
+				<select name="condicionganancia" class="col-lg-3 form-control" @if ($tipoalta != 'P') required @endif readonly>
 					@foreach ($condicionganancia_enum as $value => $condicionganancia)
 						<option value="{{ $value }}"
 							@if (old('condicionganancia', $data->condicionganancia ?? '') == $value) selected @endif
@@ -124,8 +117,7 @@
 			</div>
 			<div class="form-group row">
 				<label for="retencionganancia" class="col-lg-4 col-form-label">Codigo de retención de ganancias</label>
-				<select name="retencionganancia_id" id="retencionganancia_id" data-placeholder="Codigo de retención de ganancias" class="col-lg-5 form-control" data-fouc>
-					<option value="">-- Seleccionar Código --</option>
+				<select name="retencionganancia_id" id="retencionganancia_id" data-placeholder="Codigo de retención de ganancias" class="col-lg-5 form-control" data-fouc readonly>
 					@foreach($retencionganancia_query as $key => $value)
 						@if( (int) $value->id == (int) old('retencionganancia_id', $data->retencionganancia_id ?? ''))
 							<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
@@ -141,8 +133,7 @@
 				@else
 					<label for="retienesuss" class="col-lg-4 col-form-label">Retiene SUSS</label>
 				@endif
-				<select name="retienesuss" class="col-lg-3 form-control" @if ($tipoalta != 'P') required @endif>
-					<option value="">-- Elija retiene suss --</option>
+				<select name="retienesuss" class="col-lg-3 form-control" @if ($tipoalta != 'P') required @endif readonly>
 					@foreach ($retienesuss_enum as $value => $retienesuss)
 						<option value="{{ $value }}"
 							@if (old('retienesuss', $data->retienesuss ?? '') == $value) selected @endif
@@ -152,8 +143,7 @@
 			</div>
 			<div class="form-group row">
 				<label for="retencionsuss" class="col-lg-4 col-form-label">Codigo de retención de suss</label>
-				<select name="retencionsuss_id" id="retencionsuss_id" data-placeholder="Codigo de retención de suss" class="col-lg-5 form-control" data-fouc>
-					<option value="">-- Seleccionar Código --</option>
+				<select name="retencionsuss_id" id="retencionsuss_id" data-placeholder="Codigo de retención de suss" class="col-lg-5 form-control" data-fouc readonly>
 					@foreach($retencionsuss_query as $key => $value)
 						@if( (int) $value->id == (int) old('retencionsuss_id', $data->retencionsuss_id ?? ''))
 							<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
@@ -165,8 +155,7 @@
 			</div>
 			<div class="form-group row">
 				<label for="condicionIIBB" class="col-lg-4 col-form-label">Condición de IIBB</label>
-				<select name="condicionIIBB_id" id="condicionIIBB_id" data-placeholder="Condicion de retencion de ingresos brutos" class="col-lg-5 form-control" data-fouc>
-					<option value="">-- Seleccionar Código --</option>
+				<select name="condicionIIBB_id" id="condicionIIBB_id" data-placeholder="Condicion de retencion de ingresos brutos" class="col-lg-5 form-control" data-fouc readonly>
 					@foreach($condicionIIBB_query as $key => $value)
 						@if( (int) $value->id == (int) old('condicionIIBB_id', $data->condicionIIBB_id ?? ''))
 							<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
@@ -182,8 +171,7 @@
 				@else
 					<label for="agentepercepcionIIBB" class="col-lg-4 col-form-label">Agente de perc. IIBB</label>
 				@endif
-				<select name="agentepercepcionIIBB" class="col-lg-3 form-control" @if ($tipoalta != 'P') required @endif>
-					<option value="">-- Elija Agente de perc. IIBB --</option>
+				<select name="agentepercepcionIIBB" class="col-lg-3 form-control" @if ($tipoalta != 'P') required @endif readonly>
 					@foreach ($agentepercepcionIIBB_enum as $value => $agentepercepcionIIBB)
 						<option value="{{ $value }}"
 							@if (old('agentepercepcionIIBB', $data->agentepercepcionIIBB ?? '') == $value) selected @endif

@@ -64,7 +64,7 @@
         <div>
             <!-- textarea -->
             <div class="form-group">
-                <textarea name="comentario" style="width: 30%;" id="comentario" class="form-control" rows="5" placeholder="Comentarios ..."></textarea>
+                <textarea name="comentario" style="width: 30%;" id="comentario" class="form-control requerido" rows="5" placeholder="Comentarios ..." required></textarea>
             </div>
         </div>
         <input type="hidden" name="proveedor_id" value="{{$proveedor->id}}">

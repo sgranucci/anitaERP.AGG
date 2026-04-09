@@ -67,7 +67,7 @@ class CrearTablaProveedor extends Migration
             $table->unsignedBigInteger('conceptogasto_id')->nullable();
             $table->foreign('conceptogasto_id', 'fk_proveedor_conceptogasto')->references('id')->on('conceptogasto')->onDelete('set null')->onUpdate('set null');
             $table->string('estado',1);
-            $table->string('leyenda',2048);
+            $table->string('leyenda',2048)->nullable();
             $table->unsignedBigInteger('tiposuspension_id')->nullable();
             $table->foreign('tiposuspension_id', 'fk_proveedor_tiposuspensionproveedor')->references('id')->on('tiposuspensionproveedor')->onDelete('set null')->onUpdate('set null');
             $table->string('tipoalta',1);
