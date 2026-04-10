@@ -544,21 +544,29 @@ class AsientoRepository implements AsientoRepositoryInterface
 					$d_h = 'H';
 					$monto = abs(floatval($haberes[$i_movimiento])+floatval($debes[$i_movimiento]));
 				}
+
 				$cuenta = $this->cuentacontableRepository->findPorId($cuentacontables[$i_movimiento]);
 				if ($cuenta)
 					$cuentacontable = $cuenta->codigo;
 				else
 					$cuentacontable = NULL;
-				$centrocosto = $this->centrocostoRepository->findPorId($centrocostos[$i_movimiento]);
-				if ($centrocosto)
-					$codigoCentroCosto = $centrocosto->codigo;
-				else
-					$codigoCentroCosto = 0;
+
+				$codigoCentroCosto = 0;
+				if ($centrocostos[$i_movimiento])
+				{
+					$centrocosto = $this->centrocostoRepository->findPorId($centrocostos[$i_movimiento]);
+					if ($centrocosto)
+						$codigoCentroCosto = $centrocosto->codigo;
+					else
+						$codigoCentroCosto = 0;
+				}
+
 				$moneda = $this->monedaRepository->findPorCodigo($moneda_ids[$i_movimiento]);
 				if ($moneda)
 					$codigoMoneda = $moneda->codigo;
 				else
 					$codigoMoneda = '1';
+				
 				$data = array( 'tabla' => $this->tableAnita[0], 
 						'acc' => 'insert',
 						'sistema' => 'contab',

@@ -1490,6 +1490,160 @@ class FacturacionService
 			return 'Error con punto de venta asignado';
 	}
 
+	// Calcula factura general
+
+	public function calculaFacturaGeneral($data)
+	{
+		// Guarda tipo de transaccion y punto de venta en cache
+		Cache::forever(generaKey('tipotransaccion'), $data['tipotransaccion_id']);
+		Cache::forever(generaKey('puntoventa'), $data['puntoventa_id']);
+
+		// Recibe datos para facturar
+		$cliente_id = $data['cliente_id'];
+		$puntoventa_id = $data['puntoventa_id'];
+		$moneda_id = $data['moneda_id'];
+		$this->descuentoPie = $data['descuentopie'];
+		$this->descuentoLinea = 0;
+		$this->descuentoImportePie = $data['descuentoimportepie'];
+		$fechaFactura = $data['fechafactura'];
+
+		// Trae el cliente
+		$cliente = $this->clienteQuery->traeClienteporId($cliente_id);
+
+		if (!$cliente)
+			return ['error' => 'Cliente inexistente'];
+		
+		if ($cliente->numerodocumento == null)
+			return ['error' => 'No tiene Documento'];
+			
+		// Saca letra del comprobante
+		$condicioniva = $this->condicionivaRepository->find($cliente->condicioniva_id);
+		$letra = 'Z';
+		if ($condicioniva)
+			$letra = $condicioniva->letra;
+
+		// Lee punto de venta
+		$puntoventa = $this->puntoventaRepository->find($puntoventa_id);
+
+		$empresa_id = $puntoventa->empresa_id;
+
+		// Lee los items a facturar
+		$dataFactura = [];
+		$totCantidad = 0;
+
+		$articulos = $data['articulo_ids'];
+		$descripciones = $data['descripcionarticulos'];
+		$cantidades = $data['cantidades'];
+		$precios = $data['precios'];
+
+		for ($offItem = 0; $offItem < count($cantidades); $offItem++)
+		{
+			// Trae el articulo
+			if ($articulos[$offItem] > 0)
+			{
+				$articulo = $this->articuloQuery->traeArticuloPorId($articulos[$offItem]);
+
+				if (!$articulo)
+					return ['error' => 'Artículo inexistente'];
+
+				// Trae la categoria
+				$categoria = Categoria::find($articulo->categoria_id);
+				$codigoCategoria = '';
+				if ($categoria)
+					$codigoCategoria = $categoria->codigo;
+
+				$sku = $articulo->sku;
+				$articulo_id = $articulo->id;
+				$descripcion = $articulo->descripcion;
+				$codigoUnidadMedida = $articulo->unidadesdemedidas->codigo;
+				$impuesto_id = $articulo->impuesto_id;
+				$incluyeImpuesto = 1;
+				$cuentaContable_id = $articulo->cuentacontableventa_id;
+				$listaprecio_id = 1;
+			}
+			else
+			{
+				$articulo_id = null;
+				$codigoCategoria = '';
+				$descripcion = $descripciones[$offItem];
+				$codigoUnidadMedida = 1;
+				$sku = '';
+				$impuesto_id = 3;
+				$incluyeImpuesto = 1;
+				$listaprecio_id = 1;
+
+				$cuentaVenta = config('facturacion.CUENTACONTABLE_VENTA');
+
+				$cuentacontable = $this->cuentacontableRepository->findPorCodigo($empresa_id, $cuentaVenta);
+
+				$cuentaContable_id = null;
+				if ($cuentacontable)
+					$cuentaContable_id = $cuentacontable->id;
+			}
+
+			// Lee el descuento 
+			$this->descuentoLinea = $data['descuentolinea'];
+
+			$precioUnitario = $precios[$offItem];
+			$cantidad = $cantidades[$offItem];
+
+			if ($this->descuentoLinea != 0)
+				$precioConDescuento = $precioUnitario * (1. - ($this->descuentoLinea / 100.));
+			else
+				$precioConDescuento = $precioUnitario;
+
+			$dataFactura[] = ["cantidad" => $cantidad,
+				"preciosindescuento" => $precioUnitario,
+				"precio" => $precioConDescuento,
+				"descuento" => $this->descuentoLinea,
+				"descuentointegrado" => '',
+				"descuentofinal" => $this->descuentoPie,
+				"descuentointegradofinal" => '',
+				"incluyeimpuesto" => $incluyeImpuesto,
+				"impuesto_id" => $impuesto_id,
+				"articulo_id" => $articulo_id,
+				"sku" => $sku,
+				"descripcion" => $descripcion,
+				"codigounidadmedida" => $codigoUnidadMedida,
+				'categoria' => $codigoCategoria,
+				'moneda_id' => $moneda_id,
+				'listaprecio_id' => $listaprecio_id,
+				'cuentacontable_id' => $cuentaContable_id,
+			];
+			$totCantidad += $cantidad;
+		}
+		// Arma datos del cliente
+		if (strtoupper(config('app.empresa') == "EL BIERZO"))
+			$datosCliente = [ "condicioniva_id" => $cliente->condicioniva_id,
+							"numerodocumento" => $cliente->numerodocumento,
+							"retieneiva" => $cliente->retieneiva,
+							"condicioniibb_id" => $cliente->condicioniibb_id,
+							"provincia" => $cliente->provincia_id,
+							"descuentoimportepie" => $this->descuentoImportePie,
+							"id" => $cliente->id,
+							"abasto_id" => $cliente->abasto_id,
+							"porcentajelogistica" => $cliente->porcentajelogistica
+							];
+		else
+			$datosCliente = [ "condicioniva_id" => $cliente->condicioniva_id,
+							"numerodocumento" => $cliente->numerodocumento,
+							"retieneiva" => $cliente->retieneiva,
+							"condicioniibb_id" => $cliente->condicioniibb_id,
+							"provincia" => $cliente->provincia_id,
+							"descuentoimportepie" => $this->descuentoImportePie,
+							"id" => $cliente->id
+							];
+		// Calcula impuestos
+		$conceptosTotales = $this->impuestoService->calculaImpuestoVenta($dataFactura, $datosCliente, $fechaFactura, 
+																			$this->flGrabaComprobanteDividido);
+
+		// Arma total de comprobante
+		$totalComprobante = $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Total', 'importe');
+
+		return ['datosfactura' => $dataFactura, 'datoscliente' => $datosCliente, 'totalcomprobante' => $totalComprobante,
+				'conceptostotales' => $conceptosTotales];
+	}
+
 	// Genera factura general
 
 	public function generaComprobanteGeneral(array $data)
@@ -1498,14 +1652,34 @@ class FacturacionService
 		Cache::forever(generaKey('tipotransaccion'), $data['tipotransaccion_id']);
 		Cache::forever(generaKey('puntoventa'), $data['puntoventa_id']);
 
+		// Recalcula factura
+		$calculoFactura = Self::calculaFacturaGeneral($data);
+
+		$puntoventa_id = $data['puntoventa_id'];
 		$tipoTransaccion_id = $data['tipotransaccion_id'];
-		$venta_id = $data['venta_id'];
+		$fechaFactura = $data['fechafactura'];
+		$leyenda = $data['leyendafactura'];
+		$actividad_arca_id = $data['actividad_arca_id'];
+
+		$dataFactura = $calculoFactura['datosfactura'];
+		$conceptosTotales = $calculoFactura['conceptostotales'];
+		$datosCliente = $calculoFactura['datoscliente'];
+		$totalComprobante = $calculoFactura['totalcomprobante'];
+
+		if (isset($data['venta_id']))
+			$venta_id = $data['venta_id'];
+		else	
+			$venta_id = 0;
+
 		$cliente_id = $data['cliente_id'];
 		$this->descuentoPie = $data['descuentopie'];
 		$this->descuentoLinea = $data['descuentolinea'];
 		$this->descuentoImportePie = $data['descuentoimportepie'];
-		$fechaFactura = $data['fecha'];
-		$actividad_arca_id = $data['actividad_arca_id'];
+
+		if (isset($data['fecha']))
+			$fechaFactura = $data['fecha'];
+		else
+			$fechaFactura = $data['fechafactura'];
 
 		$tipotransaccion = $this->tipotransaccionRepository->find($tipoTransaccion_id);
 
@@ -1536,114 +1710,6 @@ class FacturacionService
 			}
 		}
 
-		// Arma array de conceptos totales segun lo calculado en el front
-		$conceptosTotales = [];
-		if (isset($data['conceptototales']))
-		{
-			for ($i = 0; $i < count($data['conceptototales']); $i++)
-			{
-				$concepto = $data['conceptototales'][$i];
-				$baseimponible = $data['baseimponibles'][$i];
-				$tasa = $data['tasatotales'][$i];
-				$importe = str_replace(',', '', $data['montototales'][$i]);
-				$impuesto_id = $data['impuestototal_ids'][$i];
-				$provincia_id = $data['provincia_ids'][$i];
-
-				if ($baseimponible == null)
-					$baseimponible = 0;
-
-				if ($tasa == null)
-					$tasa = 0;
-
-				// Lee el impuesto
-				$impuesto = $this->impuestoRepository->findPorId($impuesto_id);
-				$codigoarca = $codigo = null;
-				if ($impuesto)
-				{
-					$codigoarca = $impuesto->codigoarca;
-					$codigo = $impuesto->codigo;
-				}
-
-				// Lee la provincia para sacar la jurisdiccion
-				$provincia = $this->provinciaRepository->findPorId($provincia_id);
-
-				$jurisdiccion = null;
-				if ($provincia)
-					$jurisdiccion = $provincia->jurisdiccion;
-
-				$conceptosTotales[] = [
-					'concepto' => $concepto,
-					'baseimponible' => $baseimponible,
-					'tasa' => $tasa,
-					'importe' => $importe,
-					'impuesto_id' => $impuesto_id,
-					'codigo' => $codigo,
-					'codigoarca' => $codigoarca,
-					'provincia_id' => $provincia_id,
-					'jurisdiccion' => $jurisdiccion
-				];
-			}
-		}
-
-		// Trae el cliente 
-		$cliente = $this->clienteQuery->traeClienteporId($cliente_id);
-		if (!$cliente)
-			return ['error' => 'Cliente inexistente'];
-		
-		$this->cuentacontable_id = $cliente->cuentacontable_id;
-		$this->codigoCuentaContable = $cliente->cuentascontables->codigo;
-
-		if (isset($data['condicionventa_id']))
-			$condicionventa_id = $data['condicionventa_id'];
-		else
-		{
-			if (isset($cliente->condicionventa_id))
-				$condicionventa_id = $cliente->condicionventa_id;
-			else
-				$condicionventa_id = null;
-		}
-
-		// Arma datos del cliente
-		$datosCliente = [ "condicioniva_id" => $cliente->condicioniva_id,
-						  "numerodocumento" => $cliente->numerodocumento,
-						  "retieneiva" => $cliente->retieneiva,
-						  "condicioniibb_id" => $cliente->condicioniibb_id,
-						  "provincia" => $cliente->provincia_id,
-						  "descuentoimportepie" => $this->descuentoImportePie,
-						  "id" => $cliente->id
-						];
-
-		// Arma factura
-		$cantItem = count($data['items']);
-
-		$dataFactura = [];
-		for ($i = 0; $i < $cantItem; $i++)
-		{
-			// Trae el articulo
-			if ($data['articulo_ids'][$i] > 0)
-			{
-				$articulo = $this->articuloQuery->traeArticuloPorId($data['articulo_ids'][$i]);
-
-				if (!$articulo)
-					return ['error' => 'Artículo inexistente'];
-			}
-
-			$dataFactura[] = [
-				"precio" => str_replace(',', '', $data['precios'][$i]),
-				"cantidad" => str_replace(',', '', $data['cantidades'][$i]),
-				"descuento" => $this->descuentoLinea,
-				"descuentointegrado" => '',
-				"descuentofinal" => $this->descuentoPie,
-				"descuentointegradofinal" => '',
-				"incluyeimpuesto" => $data['incluyeimpuestos'][$i],
-				"impuesto_id" => $data['impuesto_ids'][$i],
-				'moneda_id' => $data['monedas_id'][$i],
-				'ordenventa_id' => $ordenventa_id,
-				'detalle' => $data['descripcionarticulos'][$i],
-				'cuentacontable_id' => $articulo->cuentacontableventa_id ?? 0
-			];
-		}
-
 		// Arma total de comprobante
 		$totalComprobante = $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Total', 'importe');
 
@@ -1666,6 +1732,19 @@ class FacturacionService
 
 		if ($cotizacion == 0)
 			$cotizacion = 1.;
+
+		// Trae el cliente 
+		$cliente = $this->clienteQuery->traeClienteporId($cliente_id);
+		if (!$cliente)
+			return ['error' => 'Cliente inexistente'];
+		
+		$this->cuentacontable_id = $cliente->cuentacontable_id;
+		$this->codigoCuentaContable = $cliente->cuentascontables->codigo;
+
+		if (isset($cliente->condicionventa_id))
+			$condicionventa_id = $cliente->condicionventa_id;
+		else
+			$condicionventa_id = null;
 
 		// Saca letra del comprobante
 		$condicioniva = $this->condicionivaRepository->find($cliente->condicioniva_id);
@@ -1723,11 +1802,11 @@ class FacturacionService
 						$numero = 0;
 					break;
 			}			
-			$centrocosto_id = 0;
+			$centrocosto_id = null;
 			if ($numero != -1)
 			{
 				// Arma asiento
-				if ($signo == -1)
+				if ($signo == -1 && isset($factura))
 				{
 					$asientoContable = [];
 					foreach ($factura->asientos[0]->asiento_movimientos as $movimiento)
@@ -2659,7 +2738,7 @@ class FacturacionService
 					'venta_id' => $vta->id,
 					'numeroitem' => ++$numeroItem, 
 					'lotestock' => 0,
-					'detalle' => $itemEmision['detalle'],
+					'detalle' => $itemEmision['detalle'] ?? $itemEmision['descripcion'],
 					'cantidad' => abs($itemEmision['cantidad']), 
 					'precio' => $itemEmision['precio'], 
 					'impuesto_id' => $itemEmision['impuesto_id'],
@@ -3094,8 +3173,8 @@ class FacturacionService
 			{
 				$tipoReferencia = '';
 				$letraReferencia = '';
-				$puntoVentaReferencia = '';
-				$numeroReferencia = '';
+				$puntoVentaReferencia = 0;
+				$numeroReferencia = 0;
 				if ($numeroOrdenventa > 0)
 				{
 					$tipoReferencia = 'OV';
@@ -3175,7 +3254,7 @@ class FacturacionService
 							'".$numeroremito."',
 							'".date('Ymd', strtotime($venta['fecha']))."',
 							'".(config('app.empresa') == 'EL BIERZO' ? $codigoTransporte : '0')."',
-							'".(config('app.empresa') == 'EL BIERZO' ? $this->cantidadBulto : $venta['condicionventa_id'])."',
+							'".(config('app.empresa') == 'EL BIERZO' ? $this->cantidadBulto : $condicionventa)."',
 							'".$lugarEntrega."',
 							'".$porcentajeDescuento."',
 							'".$codigoTransporte."',
@@ -3271,7 +3350,7 @@ class FacturacionService
 				}
 				else
 				{
-					if (isset($item['sku']))
+					if (isset($item['articulo_id']))
 					{
 						$flGrabaStock = true;
 						$dataItem[] = [
@@ -3300,7 +3379,7 @@ class FacturacionService
 							'incluyeimpuesto' => $item['incluyeimpuesto'],
 							'pedido' => 0,
 							'sku' => 'texto',
-							'descripcion' => $item['detalle']
+							'descripcion' => $item['detalle'] ?? $item['descripcion']
 						];
 				}
 			}
@@ -4050,8 +4129,12 @@ class FacturacionService
 			$cuentaVenta = config('facturacion.CUENTACONTABLE_VENTA');
 
 		if (strtoupper(config('app.empresa')) == 'AGG')
-			$cuentaVenta = config('ordenventa.CUENTAVENTA');
-
+		{
+			if (isset($dataFactura[0]['cuentacontable_id']))
+				$cuentaVenta = config('facturacion.CUENTACONTABLE_VENTA');
+			else
+				$cuentaVenta = config('ordenventa.CUENTAVENTA');
+		}
 		if (config('facturacion.USA_DETRACCION') == 'S')
 		{
 			$cuentacontable = $this->cuentacontableRepository->findPorCodigo($empresa_id, $cuentaVenta);
@@ -4060,7 +4143,7 @@ class FacturacionService
 			{
 				for ($i = 0, $flEncontro = false; $i < count($asientoContable); $i++)
 				{
-					if ($asientoContable[$i]['cuentacontable_id'] == $item['cuentacontable_id'])
+					if ($asientoContable[$i]['cuentacontable_id'] == $cuentacontable->id)
 					{
 						$flEncontro = true;
 						break;

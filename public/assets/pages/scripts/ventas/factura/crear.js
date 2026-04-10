@@ -559,15 +559,33 @@
         	$('#aceptaOrdenTrabajoModal').off('click');
 			$('#lote_id').off('change');
 			$('#puntoventa_id').off('change');
+			$('.precio').off('change');
+			$('.cantidad').off('change');
+			$('.descuento').off('change');
 			$(document).off('change', '.desc_combinacion');
 			$(document).off('change', '.desc_modulo');
 			$(document).off('change', '.cantidadesportalles');
 		}
 
+		// Activa eventos de consulta
+		activa_eventos_consultacliente();
+
 		$('.articulo').on('click', function (event) {
 
 			armaSelectArticulo(this, this, 1);
 
+		});
+
+		$('.precio').on('change', function (event) {
+			calculaFactura();
+		});
+
+		$('.cantidad').on('change', function (event) {
+			calculaFactura();
+		});
+
+		$('.descuento').on('change', function (event) {
+			calculaFactura();
 		});
 
 		$('#puntoventa_id').on('change', function (event) {
@@ -1302,6 +1320,7 @@
 					actualizaRenglones();
 				}
 				TotalCantidadFactura();
+				calculaFactura();
 			}
 		}, 300);
 	}
@@ -1527,5 +1546,79 @@
 			}).prop('selected', true);
 		}
 	}
+
+	function calculaFactura()
+	{
+		$('#tbody-tabla-total-factura').empty();
+
+		const tiempoTranscurrido = Date.now();
+		const hoy = new Date(tiempoTranscurrido);
+
+		var token = $('#csrf_token').val();
+		var puntoventa_id = $('#puntoventa_id').val();
+		var descuentopie = $('#descuentopie').val();
+		var descuentoimportepie = $('#descuentoimportepie').val();
+		var fechafactura = $('#fechafactura').val();
+		var formapago_id = $('#formapago_id').val();
+		var cliente_id = $('#cliente_id').val();
+
+		// Arma los items
+		var parametros=new FormData($('#formgeneral')[0])
+
+		$.ajaxSetup({
+			headers: {
+				'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+			},
+			processData: false,  
+    		contentType: false, 
+		});
+		
+		let url = "/anitaERP/public/ventas/calcula_factura_general";
+
+		$.ajax({
+			type: "POST",
+			url: url,
+			data: parametros,
+			contentType: false, //importante enviar este parametro en false
+			processData: false, //importante enviar este parametro en false
+			success: function (data) {
+				$.each(data.conceptostotales, function(index, item) {
+					// index es la posición del elemento en el array
+					// item es el elemento en sí
+					if (item.importe != 0)
+					{
+						agregaRenglonTotalFactura();
+
+						$('#total-factura-table').find('tr').last().find('.conceptototal').val(item.concepto);
+						if (item.tasa > 0)
+							$('#total-factura-table').find('tr').last().find('.tasatotal').val(parseFloat(item.tasa).toFixed(2));
+
+						$('#total-factura-table').find('tr').last().find('.importetotal').val(item.importe.toFixed(2));
+
+						if (item.concepto == "Total")
+						{
+							$('#montototalfactura').val(item.importe.toFixed(2));
+							$('#total-factura-table').find('tr').last().find('.conceptototal').css('fontWeight', 'bold');
+							$('#total-factura-table').find('tr').last().find('.importetotal').css('fontWeight', 'bold');
+						}
+					}
+				});
+				$('.tasatotal').css('text-align', 'right');
+				$('.importetotal').css('text-align', 'right');
+			},
+			error :function( data ) {
+				if (data.error)
+					alert(data.error);
+			}
+		});
+	}
+
+	// Agrega renglon totales de factura
+    function agregaRenglonTotalFactura(){
+        var renglon = $('#template-renglon-total-factura').html();
+
+		$("#tbody-tabla-total-factura").append(renglon);
+    }
+
 
 	

@@ -37,7 +37,7 @@ switch(strtoupper(config('app.empresa')))
             "PUNTOVENTA_FACTURACION" => [19,2,3], // Por empresa BSA/KSA/RSA
             "PUNTOVENTA_REMITO" => 1,
             "CUENTACONTABLE_PERCEPCION_IVA" => '',
-            "CUENTACONTABLE_VENTA" => '',
+            "CUENTACONTABLE_VENTA" => '415010002',
             'USA_DETRACCION' => 'S',
             "DECIMAL_CANTIDAD" => 0,
             "NETEA_DESCUENTO_LINEA" => false,

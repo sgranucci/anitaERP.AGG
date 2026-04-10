@@ -41,22 +41,17 @@
 		</div>
 		<div class="form-group row">
    			<label for="cliente" class="col-lg-3 col-form-label requerido">Cliente</label>
-        	<select name="cliente_id" id="cliente_id" data-placeholder="Cliente" class="col-lg-8 form-control required" data-fouc>
-        		<option value="">-- Seleccionar cliente --</option>
-        		@foreach($cliente_query as $key => $value)
-        			@if( (int) $value->id == (int) old('cliente_id', $data->cliente_id ?? ''))
-        				<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-        			@else
-        				<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-        			@endif
-        		@endforeach
-        	</select>
+			<input type="text" class="col-lg-2" id="cliente_id" name="cliente_id" value="{{$data->cliente_id??''}}" >
+			<button type="button" title="Consulta clientes" style="padding:1;" class="btn-accion-tabla consultacliente tooltipsC">
+					<i class="fa fa-search text-primary"></i>
+			</button>
+			<input type="text" class="col-lg-5 form-control" id="nombrecliente" name="nombrecliente" value="{{$data->clientes->nombre??$data->nombrecliente??''}}" >
 			@if ($datos['funcion'] == 'crear')
 				<a href="{{route('crear_cliente', ['tipoalta' => 'P'])}}" id="clienteprovisorio" class="btn-accion-tabla tooltipsC" title="Crear cliente provisorio">
                 	<i class="fa fa-user"></i>
             	</a>
 			@endif
-			<a href="{{route('editar_cliente', ['id' => $data->cliente_id])}}" style="display: flex; align-items: center;" class="btn-accion-tabla tooltipsC" title="Editar este registro">
+			<a href="{{route('editar_cliente', ['id' => $data->cliente_id ?? 0])}}" style="display: flex; align-items: center;" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                 <i class="fa fa-edit"></i>
             </a>                
 			<label for="Tiposuspension" id="nombretiposuspension" style="padding: 0px;" class="col-form-label text-danger"></label>
@@ -110,9 +105,9 @@
 	</div>
 	<div class="col-sm-6">
 		<div class="form-group row">
-			<label for="fecha" class="col-lg-4 col-form-label requerido">Fecha</label>
+			<label for="fechafactura" class="col-lg-4 col-form-label requerido">Fecha</label>
 			<div class="col-lg-3">
-				<input type="date" name="fecha" id="fecha" class="form-control" value="{{substr(old('fecha', $data->fecha ?? date('Y-m-d')),0,10)}}" required>
+				<input type="date" name="fechafactura" id="fechafactura" class="form-control" value="{{substr(old('fechafactura', $data->fecha ?? date('Y-m-d')),0,10)}}" required>
 			</div>
 		</div>
 		<div class="form-group row">
@@ -201,7 +196,7 @@
                                 </div>
                             </td>		
                             <td>
-                                <input type="text" style="WIDTH: 700px; HEIGHT: 38px" class="descripcionarticulo form-control" name="descripcionarticulos[]" value="{{$item->detalle ?? ''}}" readonly>
+                                <input type="text" style="WIDTH: 700px; HEIGHT: 38px" class="descripcionarticulo form-control" name="descripcionarticulos[]" value="{{$item->detalle ?? ''}}">
                             </td>										
 							<td>
 								<input type="text" name="cantidades[]" class="form-control cantidad" value="{{number_format(old('cantidades.'.$loop->index, optional($item)->cantidad),2)}}" />
@@ -233,7 +228,7 @@
                	<!-- textarea -->
 			   <div class="form-group" id="div_leyendafacturacion">
 	                <label>Leyendas</label>
-    	            <textarea id="leyendafactura" class="form-control" cols="80" rows="6" placeholder="Leyendas de factura ...">{{$data->leyenda ?? ''}}</textarea>
+    	            <textarea id="leyendafactura" name="leyendafactura" class="form-control" cols="80" rows="6" placeholder="Leyendas de factura ...">{{$data->leyenda ?? ''}}</textarea>
             	</div>
 			</div>
 			<div class="col-sm-6">
@@ -307,4 +302,6 @@
 <input type="hidden" id="ordenventa_id" name="ordenventa_id" class="form-control" value="{{$data->ordenventa_id ?? ''}}" />
 
 @include('ventas.factura.modal')
+@include('ventas.factura.templatetotalfactura')
 @include('includes.stock.modalconsultaarticulo')
+@include('includes.ventas.modalconsultacliente')

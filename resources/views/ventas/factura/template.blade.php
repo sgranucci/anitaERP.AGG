@@ -24,7 +24,7 @@
 			</div>
 		</td>		
 		<td>
-			<input type="text" style="WIDTH: 700px; HEIGHT: 38px" class="descripcionarticulo form-control" name="descripcionarticulos[]" value="" readonly>
+			<input type="text" style="WIDTH: 700px; HEIGHT: 38px" class="descripcionarticulo form-control" name="descripcionarticulos[]" value="">
 		</td>										
 		<td>
 			<input type="text" name="cantidades[]" class="form-control cantidad" value="" />
@@ -33,7 +33,7 @@
 			<input type="text" name="descuentos[]" class="form-control descuento" value="" />
 		</td>			
 		<td>
-			<input type="text" style="text-align: right;" name="precios[]" class="form-control precio" readonly value="" />
+			<input type="text" style="text-align: right;" name="precios[]" class="form-control precio" value="" />
 		</td>	
         <td>
 			<button type="button" title="Elimina esta linea" style="padding:0;" class="btn-accion-tabla eliminar tooltipsC">

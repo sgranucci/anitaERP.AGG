@@ -1087,6 +1087,7 @@ Route::delete('ventas/factura/{id}', 'Ventas\FacturacionController@eliminar')->n
 Route::get('ventas/listafactura/{formato?}/{busqueda?}', 'Ventas\FacturacionController@listar')->name('listar_factura');
 Route::get('ventas/listaunafactura/{id}', 'Ventas\FacturacionController@listaUnaFactura')->name('lista_una_factura');
 Route::get('ventas/factura/generanotadecredito/{id}', 'Ventas\FacturacionController@generaNotaDeCredito')->name('generar_notadecredito');
+Route::post('ventas/calcula_factura_general', 'Ventas\FacturacionController@calculaFacturaGeneral')->name('calcula_factura_general');
 
 /* PRODUCCION */
 

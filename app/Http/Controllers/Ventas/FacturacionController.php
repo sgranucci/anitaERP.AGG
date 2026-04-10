@@ -161,7 +161,11 @@ class FacturacionController extends Controller
 		$mensaje = '';
 		try
 		{
-            $data = $this->facturacionService->generaFacturaPorItemOt($request->all());
+            if (config('app.empresa') == 'CALZADOS FERLI')
+                $data = $this->facturacionService->generaFacturaPorItemOt($request->all());
+            else
+                $data = $this->facturacionService->generaComprobanteGeneral($request->all());
+
 			if (is_array($data))
 				$mensaje = "Comprobante creado con exito";
 			else
@@ -170,6 +174,8 @@ class FacturacionController extends Controller
 		} catch (\Exception $e)
 		{
 			$mensaje = $e->getMessage();
+
+            dd($mensaje);
 		}
 
         return redirect('ventas/factura')->with('mensaje', 'Comprobante actualizado con exito');		
@@ -282,6 +288,11 @@ class FacturacionController extends Controller
 
         return $this->facturacionService->editaUnaFactura($id, true);
     }
+
+    public function calculaFacturaGeneral(Request $request)
+    {
+        return $this->facturacionService->calculaFacturaGeneral($request->all());
+    }    
 
     // Graba el comprobante
     public function grabaComprobante(Request $request)
