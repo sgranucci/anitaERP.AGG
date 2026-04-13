@@ -1,6 +1,6 @@
 function buscar_datos_movil(consulta) {
     $.ajax({
-        url: '/anitaERP/public/receptivo/movil/consultamovil',
+        url: carpetaBase+'/receptivo/movil/consultamovil',
         type: 'POST',
         dataType: 'HTML',
 	    headers: {
@@ -75,7 +75,7 @@ function activa_eventos_consultamovil()
 
         // Lee servicio terrestre por codigo
         let codigomovil = $("#codigomovil").val();
-        let url_res = '/anitaERP/public/receptivo/leermovil/'+codigomovil;
+        let url_res = carpetaBase+'/receptivo/leermovil/'+codigomovil;
 
         $.get(url_res, function(data){
             if (data)

@@ -26,7 +26,7 @@ var codigoxcodigo;
 			var codigo_nuevo = codigo.val();
 			let empresa_id = $(this).parents("tr").find(".empresa").val();
 
-			let url_cta = '/anitaERP/public/contable/cuentacontable/leercuentacontableporcodigo/'+empresa_id+'/'+codigo_nuevo;
+			let url_cta = carpetaBase+'/contable/cuentacontable/leercuentacontableporcodigo/'+empresa_id+'/'+codigo_nuevo;
 
 			$.get(url_cta, function(data){
 				if (data.id > 0)
@@ -156,7 +156,7 @@ var codigoxcodigo;
 		parametros.append('_token', token);
 
 
-		url = "/anitaERP/public/contable/actualizar_usuario_cuentacontable";
+		url = carpetaBase+"/contable/actualizar_usuario_cuentacontable";
 
 		//realizamos la petición ajax con la función de jquery
 		$.ajax({
@@ -170,7 +170,7 @@ var codigoxcodigo;
 					alert("Se grabó el usuario con éxito");
 				else
 					alert("Error de grabacion");
-				window.location.href = '/anitaERP/public/contable/usuario_cuentacontable';
+				window.location.href = carpetaBase+'/contable/usuario_cuentacontable';
 			},
 			error: function (r) {
 				alert("Error del servidor");

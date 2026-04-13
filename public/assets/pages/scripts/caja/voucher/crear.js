@@ -17,7 +17,7 @@
 		activa_eventos(true);
 
 		// Lee monedas
-		$.get('/anitaERP/public/configuracion/leermoneda', function(data){
+		$.get(carpetaBase+'/configuracion/leermoneda', function(data){
 			var monedas = $.map(data, function(value, index){
 				return [value];
 			});
@@ -140,7 +140,7 @@
 
 				// Lee reserva
 				let codigoservicioterrestre = $("#codigoservicioterrestre").val();
-				let url_res = '/anitaERP/public/receptivo/leereservaporidservicioterrestre/'+seleccion+"/"+codigoservicioterrestre;
+				let url_res = carpetaBase+'/receptivo/leereservaporidservicioterrestre/'+seleccion+"/"+codigoservicioterrestre;
 				
 				$.get(url_res, function(data){
 					{
@@ -179,7 +179,7 @@
 
 			// Lee reserva
 			let codigoservicioterrestre = $("#codigoservicioterrestre").val();
-			let url_res = '/anitaERP/public/receptivo/leereservaporidservicioterrestre/'+reserva_id+"/"+codigoservicioterrestre;
+			let url_res = carpetaBase+'/receptivo/leereservaporidservicioterrestre/'+reserva_id+"/"+codigoservicioterrestre;
 
 			$.get(url_res, function(data){
 				{
@@ -247,7 +247,7 @@
 			$("#codigoservicioterrestre").val(codigo);
 
 			// Lee el proveedor si existe y lo trae
-			let url = '/anitaERP/public/receptivo/leerproveedor_servicioterrestre/'+seleccion;
+			let url = carpetaBase+'/receptivo/leerproveedor_servicioterrestre/'+seleccion;
 			$.get(url, function(data){
 				if (data[0])
 				{
@@ -354,7 +354,7 @@
 			codigoxcodigo = $(this).parents("tr").find(".codigo");
 
 			// Lee cuenta de caja
-			let url = '/anitaERP/public/caja/cuentacaja/leercuentacajaporcodigo/'+codigo;
+			let url = carpetaBase+'/caja/cuentacaja/leercuentacajaporcodigo/'+codigo;
 			$.get(url, function(data){
 				// Asigna a grilla los valores devueltos por consulta
 				$(cuentacajaxcodigo).val(data.id);
@@ -438,7 +438,7 @@
 
 			// Lee servicio terrestre por codigo
 			let codigoservicioterrestre = $("#codigoservicioterrestre").val();
-			let url_res = '/anitaERP/public/receptivo/leerservicioterrestre/'+codigoservicioterrestre;
+			let url_res = carpetaBase+'/receptivo/leerservicioterrestre/'+codigoservicioterrestre;
 
 			$.get(url_res, function(data){
 				{
@@ -458,7 +458,7 @@
 			
 			// Lee servicio terrestre por codigo
 			let proveedor_id = $("#proveedor_id").val();
-			let url_res = '/anitaERP/public/compras/leerproveedor/'+proveedor_id;
+			let url_res = carpetaBase+'/compras/leerproveedor/'+proveedor_id;
 
 			$.get(url_res, function(data){
 				if (data)
@@ -636,7 +636,7 @@
 
 		if (moneda_id > 0)
 		{
-			let url_cot = '/anitaERP/public/configuracion/leercotizacion/'+fecha+'/'+moneda_id;
+			let url_cot = carpetaBase+'/configuracion/leercotizacion/'+fecha+'/'+moneda_id;
 		
 			$.get(url_cot, function(data){
 				$(ptr).parents("tr").find('.cotizacion').val(data.cotizacionventa);
@@ -696,7 +696,7 @@
 		// Busca costo del servicio
 		if (servicioterrestre_id > 0 && proveedor_id > 0)
 		{
-			let url = '/anitaERP/public/receptivo/leercostoproveedor_servicioterrestre/'+servicioterrestre_id+'/'+proveedor_id;
+			let url = carpetaBase+'/receptivo/leercostoproveedor_servicioterrestre/'+servicioterrestre_id+'/'+proveedor_id;
 			
 			$.get(url, function(data){
 				let montoProveedor = parseFloat(data.costo);
@@ -712,7 +712,7 @@
 				{
 					let fecha = $('#fecha').val();
 
-					let url_cot = '/anitaERP/public/configuracion/leercotizacion/'+fecha+'/'+moneda_id;
+					let url_cot = carpetaBase+'/configuracion/leercotizacion/'+fecha+'/'+moneda_id;
 				
 					$.get(url_cot, function(data){
 						montoProveedor = montoProveedor * data.cotizacionventa;
@@ -756,7 +756,7 @@
 		let servicioterrestre_id = $('#servicioterrestre_id').val();
 		let tipocomision = $(ptr).parents("tr").find(".tipocomision").val();
 
-		let url = '/anitaERP/public/caja/leercomision_servicioterrestre/'+servicioterrestre_id+'/'+tipocomision;
+		let url = carpetaBase+'/caja/leercomision_servicioterrestre/'+servicioterrestre_id+'/'+tipocomision;
 		$.get(url, function(data){
 			if (data.porcentajecomision)
 			{

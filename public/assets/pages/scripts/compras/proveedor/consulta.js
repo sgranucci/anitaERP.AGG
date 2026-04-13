@@ -3,7 +3,7 @@ var ptrnombreproveedor;
 
 function buscar_datos_proveedor(consulta) {
     $.ajax({
-        url: '/anitaERP/public/compras/proveedor/consultaproveedor',
+        url: carpetaBase+'/compras/proveedor/consultaproveedor',
         type: 'POST',
         dataType: 'HTML',
 	    headers: {
@@ -101,7 +101,7 @@ function activa_eventos_consultaproveedor()
 
         // Lee servicio terrestre por codigo
         let codigoproveedor = $("#codigoproveedor").val();
-        let url_res = '/anitaERP/public/compras/leerproveedorporcodigo/'+codigoproveedor;
+        let url_res = carpetaBase+'/compras/leerproveedorporcodigo/'+codigoproveedor;
 
         $("#proveedor_id").val('');
         $("#nombreproveedor").val('');
@@ -120,7 +120,7 @@ function activa_eventos_consultaproveedor()
 
         // Lee servicio terrestre por codigo
         let proveedor_id = $("#proveedor_id").val();
-        let url_res = '/anitaERP/public/compras/leerproveedor/'+proveedor_id;
+        let url_res = carpetaBase+'/compras/leerproveedor/'+proveedor_id;
 
         $.get(url_res, function(data){
             if (data)
@@ -137,7 +137,7 @@ function activa_eventos_consultaproveedor()
         var ptrrenglon = this;
 
         let proveedor_id = $(this).val();
-        let url_res = '/anitaERP/public/compras/leerproveedor/'+proveedor_id;
+        let url_res = carpetaBase+'/compras/leerproveedor/'+proveedor_id;
 
         $(ptrrenglon).parents("tr").find(".proveedor_id").val("");
         $(ptrrenglon).parents("tr").find(".codigoproveedor").val("");

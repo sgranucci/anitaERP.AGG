@@ -5,7 +5,7 @@ function buscar_datos_tecnico_ticket(consulta) {
     let areadestino_id = $("#areadestino_id").val();
 
     $.ajax({
-        url: '/anitaERP/public/ticket/consultatecnico_ticket',
+        url: carpetaBase+'/ticket/consultatecnico_ticket',
         type: 'POST',
         dataType: 'HTML',
 	    headers: {
@@ -107,7 +107,7 @@ function activa_eventos_consultatecnico_ticket()
 
         if ($.isNumeric(tecnico_ticket_id))
         {
-            let url_res = '/anitaERP/public/ticket/leertecnico_ticket/'+tecnico_ticket_id;
+            let url_res = carpetaBase+'/ticket/leertecnico_ticket/'+tecnico_ticket_id;
 
             $.get(url_res, function(data){
                 if (data)
@@ -134,7 +134,7 @@ function activa_eventos_consultatecnico_ticket()
         // Procesa cambio de tecnico
         cambioTecnico(ticket_tarea_id, tecnico_ticket_id);
 
-        let url_res = '/anitaERP/public/ticket/leertecnico_ticket/'+tecnico_ticket_id;
+        let url_res = carpetaBase+'/ticket/leertecnico_ticket/'+tecnico_ticket_id;
 
         $(ptrrenglon).parents("tr").find(".tecnico_ticket_id").val("");
 		$(ptrrenglon).parents("tr").find(".nombretecnico_ticket").val("");

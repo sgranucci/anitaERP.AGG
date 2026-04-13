@@ -17,11 +17,11 @@ class TablaPermisoSeeder extends Seeder
     {
         $now = Carbon::now()->toDateTimeString();
         $permiso = [
-            array('id' => '1015', 'nombre' => 'Ingresar encuestas', 'slug' => 'crear-encuesta', 'created_at' => $now, 'updated_at' => $now),
-            array('id' => '1016', 'nombre' => 'Listar encuestas', 'slug' => 'listar-encuesta', 'created_at' => $now, 'updated_at' => $now),
-            array('id' => '1017', 'nombre' => 'Editar encuestas', 'slug' => 'editar-encuesta', 'created_at' => $now, 'updated_at' => $now),
-            array('id' => '1018', 'nombre' => 'Actualizar encuestas', 'slug' => 'actualizar-encuesta', 'created_at' => $now, 'updated_at' => $now),
-            array('id' => '1019', 'nombre' => 'Borrar encuestas', 'slug' => 'borrar-encuesta', 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '2011', 'nombre' => 'Ingresar orden de produccion', 'slug' => 'crear-orden-produccion', 'menu_id' => 200, 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '2012', 'nombre' => 'Listar orden de produccion', 'slug' => 'listar-orden-produccion', 'menu_id' => 200, 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '2013', 'nombre' => 'Editar orden de produccion', 'slug' => 'editar-orden-produccion', 'menu_id' => 200, 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '2014', 'nombre' => 'Actualizar orden de produccion', 'slug' => 'actualizar-orden-produccion', 'menu_id' => 200, 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '2015', 'nombre' => 'Borrar orden de produccion', 'slug' => 'borrar-orden-produccion', 'menu_id' => 200, 'created_at' => $now, 'updated_at' => $now),
         ];
         DB::table('permiso')->insert($permiso);
     }

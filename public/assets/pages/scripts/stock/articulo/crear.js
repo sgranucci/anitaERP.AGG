@@ -327,7 +327,7 @@
         let tipoimputacion = $(this).parents('tr').find('.tipoimputacion').val();
         let cuentacontable_id = $(this).parents('tr').find('.cuentacontable_id').val();
         let flError = false;
-		let url = '/anitaERP/public/stock/replicar_cuentacontable_articulo/'+empresa_id+'/'+tipoimputacion+'/'+cuentacontable_id;
+		let url = carpetaBase+'/stock/replicar_cuentacontable_articulo/'+empresa_id+'/'+tipoimputacion+'/'+cuentacontable_id;
 
 		$.get(url, function(cuentas){
 			var cta = $.map(cuentas, function(value, index){
@@ -394,7 +394,7 @@
 		let estadoArticulo = $('#estado').val();
 		let articulo_id = $('#articulo_id').val();
 
-		let listarUri = "/anitaERP/public/stock/actualizaestadoarticulo/"+estadoArticulo+"/"+articulo_id;
+		let listarUri = carpetaBase+"/stock/actualizaestadoarticulo/"+estadoArticulo+"/"+articulo_id;
 
 		$.get(listarUri)
 			.done(function(data){
@@ -430,7 +430,7 @@
 		var wrapper = $(".container-historia");
 		let articulo_id = $("#articulo_id").val();
 
-		let url = '/anitaERP/public/stock/leer_historia_articulo/'+articulo_id;
+		let url = carpetaBase+'/stock/leer_historia_articulo/'+articulo_id;
 
 		$.get(url, function(historia){
 

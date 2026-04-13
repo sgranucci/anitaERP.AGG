@@ -1,6 +1,6 @@
 function buscar_datos_servicioterrestre(consulta) {
     $.ajax({
-        url: '/anitaERP/public/receptivo/servicioterrestre/consultaservicioterrestre',
+        url: carpetaBase+'/receptivo/servicioterrestre/consultaservicioterrestre',
         type: 'POST',
         dataType: 'HTML',
 	    headers: {
@@ -74,7 +74,7 @@ function activa_eventos_consultaservicioterrestre()
 
         // Lee servicio terrestre por codigo
         let codigoservicioterrestre = $("#codigoservicioterrestre").val();
-        let url_res = '/anitaERP/public/receptivo/leerservicioterrestre/'+codigoservicioterrestre;
+        let url_res = carpetaBase+'/receptivo/leerservicioterrestre/'+codigoservicioterrestre;
 
         $.get(url_res, function(data){
             if (data)

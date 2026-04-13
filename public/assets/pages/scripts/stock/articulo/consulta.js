@@ -7,7 +7,7 @@ var ptrsubcategoria_id;
 
 function buscar_datos_articulo(consulta) {
     $.ajax({
-        url: '/anitaERP/public/stock/product/consultaarticulo',
+        url: carpetaBase+'/stock/product/consultaarticulo',
         type: 'POST',
         dataType: 'HTML',
 	    headers: {
@@ -52,13 +52,15 @@ function activa_eventos_consultaarticulo()
 {
     // Consulta de articulo
     $('.consultaarticulo').on('click', function (event) {
-        ptrarticulo_id = $(this).parents("tr").find(".articulo_id");
-        ptrcodigoarticulo = $(this).parents("tr").find(".codigoarticulo");
-		ptrnombrearticulo = $(this).parents("tr").find(".descripcionarticulo");
-        ptrunidadmedida = $(this).parents("tr").find(".unidadmedida");
-        ptrcategoria_id = $(this).parents("tr").find(".categoria_id");
-        ptrsubcategoria_id = $(this).parents("tr").find(".subcategoria_id");
 
+        //if ($(this).parents("tr").find(".articulo_id").length > 0) {
+            ptrarticulo_id = $(this).parents("tr").find(".articulo_id");
+            ptrcodigoarticulo = $(this).parents("tr").find(".codigoarticulo");
+            ptrnombrearticulo = $(this).parents("tr").find(".descripcionarticulo");
+            ptrunidadmedida = $(this).parents("tr").find(".unidadmedida");
+            ptrcategoria_id = $(this).parents("tr").find(".categoria_id");
+            ptrsubcategoria_id = $(this).parents("tr").find(".subcategoria_id");
+        //}
         // Abre modal de consulta
         $("#consultaarticuloModal").modal('show');
     });
@@ -90,7 +92,7 @@ function activa_eventos_consultaarticulo()
         $(ptrsubcategoria_id).val(subcategoria_id);
 
         $("#articulo_id").val(seleccion);
-        $("#nombrearticulo").val(nombre);
+        $("#descripcionarticulo").val(nombre);
         $("#codigoarticulo").val(codigo);
 
         if (unidadmedida != null)
@@ -117,7 +119,7 @@ function activa_eventos_consultaarticulo()
 
         // Lee servicio terrestre por codigo
         let articulo_id = $("#articulo_id").val();
-        let url_res = '/anitaERP/public/stock/leerunarticulo/'+articulo_id;
+        let url_res = carpetaBase+'/stock/leerunarticulo/'+articulo_id;
 
         $.get(url_res, function(data){
             if (data)
@@ -144,7 +146,7 @@ function activa_eventos_consultaarticulo()
 
         // Lee concepto gasto
         let articulo_id = $(this).val();
-        let url_res = '/anitaERP/public/stock/leerunarticulo/'+articulo_id;
+        let url_res = carpetaBase+'/stock/leerunarticulo/'+articulo_id;
 
         $.get(url_res, function(data){
             if (data)
@@ -173,7 +175,7 @@ function activa_eventos_consultaarticulo()
         var ptrrenglon = this;
 
         let sku = $(this).val();
-        let url_res = '/anitaERP/public/stock/leerunarticuloporsku/'+sku;
+        let url_res = carpetaBase+'/stock/leerunarticuloporsku/'+sku;
 
         $.get(url_res, function(data){
             if (data)
@@ -239,7 +241,7 @@ function activa_eventos_consultaarticulo()
 
 
         let sku = $(this).val();
-        let url_res = '/anitaERP/public/stock/leerunarticuloporsku/'+sku;
+        let url_res = carpetaBase+'/stock/leerunarticuloporsku/'+sku;
 
         $.get(url_res, function(data){
             if (data)

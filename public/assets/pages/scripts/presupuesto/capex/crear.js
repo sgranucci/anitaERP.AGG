@@ -230,7 +230,7 @@
 		var wrapper = $(".container-historia");
 		let capex_id = $("#capex_id").val();
 
-		let url = '/anitaERP/public/presupuesto/leerhistoriacapex/'+capex_id;
+		let url = carpetaBase+'/presupuesto/leerhistoriacapex/'+capex_id;
 
 		$.get(url, function(historia){
 
@@ -266,7 +266,7 @@
 		var wrapper = $(".container-ordencompra");
 		let capex_id = $("#capex_id").val();
 
-		let url = '/anitaERP/public/presupuesto/leerordencompra/'+capex_id;
+		let url = carpetaBase+'/presupuesto/leerordencompra/'+capex_id;
 
 		$.get(url, function(historia){
 
@@ -379,7 +379,7 @@
 	{
 		var wrapper = $(".container-partida-monto");
 
-		let url = '/anitaERP/public/presupuesto/leercapexpartidamonto/'+id_activo_partida;
+		let url = carpetaBase+'/presupuesto/leercapexpartidamonto/'+id_activo_partida;
 
 		$.get(url, function(historia){
 
@@ -537,7 +537,7 @@
 			let estadoCapex = $('#estado').val();
 			let capex_id = $('#capex_id').val();
 
-			let listarUri = "/anitaERP/public/presupuesto/actualizaestadocapex/"+estadoCapex+"/"+capex_id;
+			let listarUri = carpetaBase+"/presupuesto/actualizaestadocapex/"+estadoCapex+"/"+capex_id;
 
 			$.get(listarUri)
 				.done(function(data){
@@ -577,7 +577,7 @@
 			let estadoCapex = $('#estado').val();
 			let capex_id = $('#capex_id').val();
 
-			let listarUri = "/anitaERP/public/presupuesto/actualizaestadocapex/"+estadoCapex+"/"+capex_id;
+			let listarUri = carpetaBase+"/presupuesto/actualizaestadocapex/"+estadoCapex+"/"+capex_id;
 
 			$.get(listarUri)
 				.done(function(data){

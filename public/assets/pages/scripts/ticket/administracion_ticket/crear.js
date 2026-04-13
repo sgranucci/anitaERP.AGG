@@ -73,7 +73,7 @@ var ptrAbreNovedad;
 				}
 			});
 		
-			let url = "/anitaERP/public/ticket/guardar_ticket_tarea_novedad";
+			let url = carpetaBase+"/ticket/guardar_ticket_tarea_novedad";
 
 			// Arma tabla de novedades para grabar
 			$("#table-tarea-novedad .item-tarea-novedad").each(function() {
@@ -201,7 +201,7 @@ var ptrAbreNovedad;
 			{
 				$(this).parents("tr").find(".estadotarea").val("Finalizada");
 
-				let url = '/anitaERP/public/ticket/finalizar_tarea/'+ticket_tarea_id+'/'+fechafinalizacion+'/'+tiempoinsumido;
+				let url = carpetaBase+'/ticket/finalizar_tarea/'+ticket_tarea_id+'/'+fechafinalizacion+'/'+tiempoinsumido;
 
 				$.get(url, function(data, textStatus){
 					if (textStatus == 'success')
@@ -342,7 +342,7 @@ var ptrAbreNovedad;
 		var wrapper = $(".container-novedad");
 
 		ticket_tarea_id = ticketTarea_id;
-		let url = '/anitaERP/public/ticket/leer_ticket_tarea_novedad/'+ticket_tarea_id;
+		let url = carpetaBase+'/ticket/leer_ticket_tarea_novedad/'+ticket_tarea_id;
 	
 		$.get(url, function(novedades){
 
@@ -421,7 +421,7 @@ var ptrAbreNovedad;
 		var wrapper = $(".container-historia");
 		let ticket_id = $("#id").val();
 
-		let url = '/anitaERP/public/ticket/leer_historia_ticket/'+ticket_id;
+		let url = carpetaBase+'/ticket/leer_historia_ticket/'+ticket_id;
 
 		$.get(url, function(historia){
 
@@ -462,7 +462,7 @@ var ptrAbreNovedad;
 			let ultimoEstado = '';
 
 			// Busca estado de la tarea con la ultima novedad
-			url = '/anitaERP/public/ticket/leer_ticket_tarea_novedad/'+ticket_tarea_id;
+			url = carpetaBase+'/ticket/leer_ticket_tarea_novedad/'+ticket_tarea_id;
 
 			$.get(url, function(novedades){
 
@@ -481,7 +481,7 @@ var ptrAbreNovedad;
 
 	function cambioTecnico(ticket_tarea_id, tecnico_ticket_id)
 	{
-		let url = '/anitaERP/public/ticket/cambiar_tecnico/'+ticket_tarea_id+'/'+tecnico_ticket_id;
+		let url = carpetaBase+'/ticket/cambiar_tecnico/'+ticket_tarea_id+'/'+tecnico_ticket_id;
 
 		$.get(url, function(data, textStatus){
 			if (textStatus == 'success')

@@ -5,7 +5,7 @@ function buscar_datos_tarea_ticket(consulta) {
     let areadestino_id = $("#areadestino_id").val();
 
     $.ajax({
-        url: '/anitaERP/public/ticket/consultatarea_ticket',
+        url: carpetaBase+'/ticket/consultatarea_ticket',
         type: 'POST',
         dataType: 'HTML',
 	    headers: {
@@ -99,7 +99,7 @@ function activa_eventos_consultatarea_ticket()
 
         if ($.isNumeric(tarea_ticket_id))
         {
-            let url_res = '/anitaERP/public/ticket/leertarea_ticket/'+tarea_ticket_id;
+            let url_res = carpetaBase+'/ticket/leertarea_ticket/'+tarea_ticket_id;
 
             $.get(url_res, function(data){
                 if (data)
@@ -122,7 +122,7 @@ function activa_eventos_consultatarea_ticket()
         let areadestino_id = $("#areadestino_id").val();
 
         let tarea_ticket_id = $(this).val();
-        let url_res = '/anitaERP/public/ticket/leertarea_ticket/'+tarea_ticket_id;
+        let url_res = carpetaBase+'/ticket/leertarea_ticket/'+tarea_ticket_id;
 
         $(ptrrenglon).parents("tr").find(".tarea_ticket_id").val("");
 		$(ptrrenglon).parents("tr").find(".nombretarea_ticket").val("");        

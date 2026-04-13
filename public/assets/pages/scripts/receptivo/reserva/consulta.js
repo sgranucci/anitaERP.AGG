@@ -2,7 +2,7 @@ function buscar_datos_reserva(consulta) {
     let empresa_id = $("#empresa_id").val();
 
     $.ajax({
-        url: '/anitaERP/public/receptivo/reserva/consultareserva',
+        url: carpetaBase+'/receptivo/reserva/consultareserva',
         type: 'POST',
         dataType: 'HTML',
 	    headers: {

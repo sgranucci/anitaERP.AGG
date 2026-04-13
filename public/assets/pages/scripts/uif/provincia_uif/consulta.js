@@ -3,7 +3,7 @@ var ptrnombreprovincia_uif;
 
 function buscar_datos_provincia_uif(consulta) {
     $.ajax({
-        url: '/anitaERP/public/uif/consultaprovincia_uif',
+        url: carpetaBase+'/uif/consultaprovincia_uif',
         type: 'POST',
         dataType: 'HTML',
 	    headers: {
@@ -89,7 +89,7 @@ function activa_eventos_consultaprovincia_uif()
 
         if ($.isNumeric(provincia_uif_id))
         {
-            let url_res = '/anitaERP/public/uif/leerprovincia_uif/'+provincia_uif_id;
+            let url_res = carpetaBase+'/uif/leerprovincia_uif/'+provincia_uif_id;
 
             $("#provincia_uif_id").val("");
             $("#nombreprovincia_uif").val("");
@@ -115,7 +115,7 @@ function activa_eventos_consultaprovincia_uif()
 
         // Lee concepto gasto
         let provincia_uif_id = $(this).val();
-        let url_res = '/anitaERP/public/uif/leerprovincia_uif/'+provincia_uif_id;
+        let url_res = carpetaBase+'/uif/leerprovincia_uif/'+provincia_uif_id;
 
         $.get(url_res, function(data){
             if (data)

@@ -105,7 +105,7 @@
 			event.preventDefault();
 			var puntoventa_id = $(this).val();
 
-			var listarUri = "/anitaERP/public/ventas/leeunpuntoventa/"+puntoventa_id;
+			var listarUri = carpetaBase+"/ventas/leeunpuntoventa/"+puntoventa_id;
 
 			$.get(listarUri, function(data){
 				$("#actividad_arca_id").val(data.actividad_arca_id);
@@ -432,7 +432,7 @@
 		var wrapper = $(".container-historia");
 		let ordenventa_id = $("#ordenventa_id").val();
 
-		let url = '/anitaERP/public/ordenventa/leer_historia_ordenventa/'+ordenventa_id;
+		let url = carpetaBase+'/ordenventa/leer_historia_ordenventa/'+ordenventa_id;
 
 		$.get(url, function(historia){
 
@@ -468,7 +468,7 @@
 		var wrapper = $(".container-arbol");
 		let ordenventa_id = $("#ordenventa_id").val();
 
-		let url = '/anitaERP/public/arbolaprobacion/leer_movimiento_aprobacion/OV/'+ordenventa_id;
+		let url = carpetaBase+'/arbolaprobacion/leer_movimiento_aprobacion/OV/'+ordenventa_id;
 
 		$.get(url, function(historia){
 
@@ -521,7 +521,7 @@
 		var wrapper = $(".container-comprobante");
 		let ordenventa_id = $("#ordenventa_id").val();
 
-		let url = '/anitaERP/public/ordenventa/leer_comprobantes_ordenventa/'+ordenventa_id;
+		let url = carpetaBase+'//ordenventa/leer_comprobantes_ordenventa/'+ordenventa_id;
 
 		$.get(url, function(historia){
 
@@ -766,7 +766,7 @@
 		// Completa actividad
 		var puntoventa_id = $("#puntoventa_id").val();
 
-		var listarUri = "/anitaERP/public/ventas/leeunpuntoventa/"+puntoventa_id;
+		var listarUri = carpetaBase+"/ventas/leeunpuntoventa/"+puntoventa_id;
 
 		$.get(listarUri, function(data){
 			$("#actividad_arca_id").val(data.actividad_arca_id);
@@ -778,7 +778,7 @@
 		});
 
 		// Calcula factura
-		$.post("/anitaERP/public/ventas/calculafacturaporordenventa",
+		$.post(carpetaBase+"/ventas/calculafacturaporordenventa",
 		{
 			ordenventa_id: ordenventa_id,
 			cliente_id: cliente_id,
@@ -878,7 +878,7 @@
 
 		$('#facturarOrdenventaModal').modal('hide');
 
-		$.post("/anitaERP/public/ventas/facturarordenventa",
+		$.post(carpetaBase+"/ventas/facturarordenventa",
 				{
 					ordenventa_id: ordenventa_id,
 					codigocentrocosto: codigocentrocosto[0],
@@ -931,7 +931,7 @@
 	{
 	  	let venta_id = $("#venta_id").val();
 
-		let listarUri = "/anitaERP/public/ventas/listaunafactura"+"/"+venta_id;
+		let listarUri = carpetaBase+"/ventas/listaunafactura"+"/"+venta_id;
 		document.location.href= listarUri;				
 	}
 
@@ -963,7 +963,7 @@
 		let estadoOrdenVenta = $('#estado').val();
 		let ordenventa_id = $('#ordenventa_id').val();
 
-		let listarUri = "/anitaERP/public/ordenventa/actualizasoloordenventa/"+estadoOrdenVenta+"/"+ordenventa_id;
+		let listarUri = carpetaBase+"/ordenventa/actualizasoloordenventa/"+estadoOrdenVenta+"/"+ordenventa_id;
 
 		$.get(listarUri)
 			.done(function(data){

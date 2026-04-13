@@ -5,7 +5,7 @@ function buscar_datos(consulta) {
         empresa_id = $("#empresa_id").val();
 
     $.ajax({
-        url: '/anitaERP/public/contable/cuentacontable/consultacuentacontable',
+        url: carpetaBase+'/contable/cuentacontable/consultacuentacontable',
         type: 'POST',
         dataType: 'HTML',
 	    headers: {
@@ -57,7 +57,7 @@ function activa_eventos_consulta_cuentacontable()
         var codigo_nuevo = codigo.val();
         let empresa_id = $(this).parents("tr").find(".empresa").val();
 
-        let url_cta = '/anitaERP/public/contable/cuentacontable/leercuentacontableporcodigo/'+empresa_id+'/'+codigo_nuevo;
+        let url_cta = carpetaBase+'/contable/cuentacontable/leercuentacontableporcodigo/'+empresa_id+'/'+codigo_nuevo;
 
         $.get(url_cta, function(data){
             if (data.id > 0)

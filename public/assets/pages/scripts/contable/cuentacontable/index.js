@@ -4,7 +4,7 @@ $(document).ready(function () {
             menu: window.JSON.stringify($('#nestable').nestable('serialize')),
             _token: $('input[name=_token]').val()
         };
-        let gord = '/anitaERP/public/admin/menu/guardar-orden';
+        let gord = carpetaBase+'/admin/menu/guardar-orden';
         $.ajax({
             url: gord,
             type: 'POST',

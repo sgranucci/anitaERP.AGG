@@ -11,7 +11,7 @@ $(function () {
 				'X-CSRF-TOKEN': $('#csrf_token').val()
 			}
 		});
-		let url = "/anitaERP/public/admin/usuario/crearusuarioremoto";
+		let url = carpetaBase+"/admin/usuario/crearusuarioremoto";
 
 		$.ajax({
 			type: "POST",
@@ -45,7 +45,7 @@ function armaSelectUsuario()
 	select.append('<option value="">-- Seleccionar --</option>');
 
 	// Lee usuarios
-	$.get('/anitaERP/public/admin/usuario/leerusuario', function(data){
+	$.get(carpetaBase+'/admin/usuario/leerusuario', function(data){
 		var usuarios = $.map(data, function(value, index){
 			return [value];
 		});

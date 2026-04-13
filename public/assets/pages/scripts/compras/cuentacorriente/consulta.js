@@ -21,7 +21,7 @@ $(function () {
         if (cuentacorriente_id == '')
             cuentacorriente_id = 0;
         
-		let url = '/anitaERP/public/compras/proveedor/leercuentacorrienteaplicacion/'+cuentacorriente_id+'/'+comprobante+'/'+codigoproveedor;
+		let url = carpetaBase+'/compras/proveedor/leercuentacorrienteaplicacion/'+cuentacorriente_id+'/'+comprobante+'/'+codigoproveedor;
 
         $(wrapper).empty();
 

@@ -3,7 +3,7 @@ var ptrnombrecliente_congelado_uif;
 
 function buscar_datos_cliente_congelado_uif(consulta) {
     $.ajax({
-        url: '/anitaERP/public/uif/consultacliente_congelado_uif',
+        url: carpetaBase+'/uif/consultacliente_congelado_uif',
         type: 'POST',
         dataType: 'HTML',
 	    headers: {
@@ -89,7 +89,7 @@ function activa_eventos_consultacliente_congelado_uif()
 
         if ($.isNumeric(cliente_congelado_uif_id))
         {
-            let url_res = '/anitaERP/public/uif/leeruncliente_congelado_uif/'+cliente_congelado_uif_id;
+            let url_res = carpetaBase+'/uif/leeruncliente_congelado_uif/'+cliente_congelado_uif_id;
 
             $("#cliente_congelado_uif_id").val("");
             $("#nombrecliente_congelado_uif").val("");
@@ -115,7 +115,7 @@ function activa_eventos_consultacliente_congelado_uif()
 
         // Lee concepto gasto
         let cliente_congelado_uif_id = $(this).val();
-        let url_res = '/anitaERP/public/uif/leerunacliente_congelado_uif/'+cliente_congelado_uif_id;
+        let url_res = carpetaBase+'/uif/leerunacliente_congelado_uif/'+cliente_congelado_uif_id;
 
         $.get(url_res, function(data){
             if (data)

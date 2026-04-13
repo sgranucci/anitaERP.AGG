@@ -2350,3 +2350,39 @@ Route::get('uif/leercodigopostaluif/{id}', 'Uif\Localidad_UifController@leerCodi
 Route::get('presupuesto/generaasiento', 'Presupuesto\PartidagastoController@indexGeneraAsiento')->name('generar_asientos_partidagasto');
 Route::post('presupuesto/crear_generaasiento', 'Presupuesto\PartidagastoController@crearGeneraAsiento')->name('crear_genera_asiento_partidagasto');
 
+/* FRASLE */
+
+/* Produccion */
+
+/* 
+ * Linea de llenado
+ */
+
+ Route::get('produccion/lineallenado', 'Produccion\LineallenadoController@index')->name('consultar_lineallenado');
+ Route::get('produccion/lineallenado/crear', 'Produccion\LineallenadoController@crear')->name('crear_lineallenado');
+ Route::post('produccion/lineallenado', 'Produccion\LineallenadoController@guardar')->name('guardar_lineallenado');
+ Route::get('produccion/lineallenado/{id}/editar', 'Produccion\LineallenadoController@editar')->name('editar_lineallenado');
+ Route::put('produccion/lineallenado/{id}', 'Produccion\LineallenadoController@actualizar')->name('actualizar_lineallenado');
+ Route::delete('produccion/lineallenado/{id}', 'Produccion\LineallenadoController@eliminar')->name('eliminar_lineallenado');
+
+/* 
+ * Proviene de bines
+ */
+
+ Route::get('produccion/provienebin', 'Produccion\ProvienebinController@index')->name('consultar_provienebin');
+ Route::get('produccion/provienebin/crear', 'Produccion\ProvienebinController@crear')->name('crear_provienebin');
+ Route::post('produccion/provienebin', 'Produccion\ProvienebinController@guardar')->name('guardar_provienebin');
+ Route::get('produccion/provienebin/{id}/editar', 'Produccion\ProvienebinController@editar')->name('editar_provienebin');
+ Route::put('produccion/provienebin/{id}', 'Produccion\ProvienebinController@actualizar')->name('actualizar_provienebin');
+ Route::delete('produccion/provienebin/{id}', 'Produccion\ProvienebinController@eliminar')->name('eliminar_provienebin');
+
+/* 
+ * Ordenes de produccion
+ */
+
+ Route::get('produccion/ordenproduccion', 'Produccion\OrdenproduccionController@index')->name('consultar_ordenproduccion');
+ Route::get('produccion/ordenproduccion/crear', 'Produccion\OrdenproduccionController@crear')->name('crear_ordenproduccion');
+ Route::post('produccion/ordenproduccion', 'Produccion\OrdenproduccionController@guardar')->name('guardar_ordenproduccion');
+ Route::get('produccion/ordenproduccion/{id}/editar', 'Produccion\OrdenproduccionController@editar')->name('editar_ordenproduccion');
+ Route::put('produccion/ordenproduccion/{id}', 'Produccion\OrdenproduccionController@actualizar')->name('actualizar_ordenproduccion');
+ Route::delete('produccion/ordenproduccion/{id}', 'Produccion\OrdenproduccionController@eliminar')->name('eliminar_ordenproduccion');

@@ -40,7 +40,7 @@ var codigoxcodigo;
 
 			$('#copiarasientoModal').modal('hide');
 
-			let url = '/anitaERP/public/contable/copiar_asiento';
+			let url = carpetaBase+'/contable/copiar_asiento';
 
 			$.post(url, {_token: $('input[name=_token]').val(), 
 						id: $('#id').val(),
@@ -63,7 +63,7 @@ var codigoxcodigo;
 
 			$('#revertirasientoModal').modal('hide');
 
-			let url = '/anitaERP/public/contable/copiar_asiento';
+			let url = carpetaBase+'/contable/copiar_asiento';
 
 			$.post(url, {_token: $('input[name=_token]').val(), 
 						id: $('#id').val(),
@@ -101,7 +101,7 @@ var codigoxcodigo;
 			var codigo_nuevo = codigo.val();
 			let empresa_id = $('#empresa_id').val();
 
-			let url_cta = '/anitaERP/public/contable/cuentacontable/leercuentacontableporcodigo/'+empresa_id+'/'+codigo_nuevo;
+			let url_cta = carpetaBase+'/contable/cuentacontable/leercuentacontableporcodigo/'+empresa_id+'/'+codigo_nuevo;
 
 			$.get(url_cta, function(data){
 				if (data.id > 0)
@@ -281,7 +281,7 @@ var codigoxcodigo;
 	}
 
 	function completarCentroCosto(ptrcodigo, cuentacontable_id, centrocosto_id){
-		let url_cta = '/anitaERP/public/contable/cuentacontable/leercuentacontablecentrocosto/'+cuentacontable_id;
+		let url_cta = carpetaBase+'/contable/cuentacontable/leercuentacontablecentrocosto/'+cuentacontable_id;
 
 		$.get(url_cta, function(data){
 			if (data === "No maneja centro de costo")
@@ -323,7 +323,7 @@ var codigoxcodigo;
 				alert("Debe ingresar empresa");
 			else
 			{
-				let url_cta = '/anitaERP/public/contable/cuentacontable/leercuentacontableporcodigo/'+empresa_id+'/'+codigo_nuevo;
+				let url_cta = carpetaBase+'/contable/cuentacontable/leercuentacontableporcodigo/'+empresa_id+'/'+codigo_nuevo;
 
 				$.get(url_cta, function(data){
 					$(codigo).parents("tr").find('.cuentacontable_id').val(data.id);
@@ -353,7 +353,7 @@ var codigoxcodigo;
 	{
 		let fecha = $('#fecha').val();
 		let moneda_id = $(ptr).parents("tr").find('.moneda').val();
-		let url_cot = '/anitaERP/public/configuracion/leercotizacion/'+fecha+'/'+moneda_id;
+		let url_cot = carpetaBase+'/configuracion/leercotizacion/'+fecha+'/'+moneda_id;
 	
 		$.get(url_cot, function(data){
 			$(ptr).parents("tr").find('.cotizacion').val(data.cotizacionventa);
@@ -456,7 +456,7 @@ var codigoxcodigo;
 		//	},           
 		//	function(data, status){
 		//		alert(data);
-		//		window.location.href = '/anitaERP/public/contable/asiento';
+		//		window.location.href = '/contable/asiento';
 		//	});
 
 		//FormData es necesario para el envio de archivo,
@@ -470,9 +470,9 @@ var codigoxcodigo;
 		//parametros.append('datos',datosCuentas);
 
 		if (id != '')
-			url = "/anitaERP/public/contable/actualizarasiento/"+id;
+			url = carpetaBase+"/contable/actualizarasiento/"+id;
 		else
-			url = "/anitaERP/public/contable/asiento";
+			url = carpetaBase+"/contable/asiento";
 
 		//realizamos la petición ajax con la función de jquery
 		$.ajax({
@@ -486,7 +486,7 @@ var codigoxcodigo;
 					alert("Se grabó el asiento con éxito");
 				else
 					alert("Error de grabacion");
-				window.location.href = '/anitaERP/public/contable/asiento';
+				window.location.href = carpetaBase+'/contable/asiento';
 			},
 			error: function (r) {
 				alert("Error del servidor");

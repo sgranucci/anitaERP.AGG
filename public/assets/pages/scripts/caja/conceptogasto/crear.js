@@ -26,7 +26,7 @@ var codigoxcodigo;
 			var codigo_nuevo = codigo.val();
 			let empresa_id = $(this).parents("tr").find(".empresa").val();
 
-			let url_cta = '/anitaERP/public/contable/cuentacontable/leercuentacontableporcodigo/'+empresa_id+'/'+codigo_nuevo;
+			let url_cta = carpetaBase+'/contable/cuentacontable/leercuentacontableporcodigo/'+empresa_id+'/'+codigo_nuevo;
 
 			$.get(url_cta, function(data){
 				if (data.id > 0)
@@ -132,9 +132,9 @@ var codigoxcodigo;
 		parametros.append('_token', token);
 
 		if (id != '')
-			url = "/anitaERP/public/caja/actualizar_conceptogasto/"+id;
+			url = carpetaBase+"/caja/actualizar_conceptogasto/"+id;
 		else
-			url = "/anitaERP/public/caja/conceptogasto";
+			url = carpetaBase+"/caja/conceptogasto";
 
 		//realizamos la petición ajax con la función de jquery
 		$.ajax({
@@ -148,7 +148,7 @@ var codigoxcodigo;
 					alert("Se grabó el concepto de gasto con éxito");
 				else
 					alert("Error de grabacion");
-				window.location.href = '/anitaERP/public/caja/conceptogasto';
+				window.location.href = carpetaBase+'/caja/conceptogasto';
 			},
 			error: function (r) {
 				alert("Error del servidor");

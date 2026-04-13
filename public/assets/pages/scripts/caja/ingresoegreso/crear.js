@@ -100,7 +100,7 @@ var flModificaAsiento;
 
 			$('#copiaringresoegresoModal').modal('hide');
 
-			let url = '/anitaERP/public/caja/copiar_ingresoegreso';
+			let url = carpetaBase+'/caja/copiar_ingresoegreso';
 
 			$.post(url, {_token: $('input[name=_token]').val(), 
 						id: $('#id').val(),
@@ -123,7 +123,7 @@ var flModificaAsiento;
 
 			$('#revertiringresoegresoModal').modal('hide');
 
-			let url = '/anitaERP/public/contable/copiar_ingresoegreso';
+			let url = carpetaBase+'/contable/copiar_ingresoegreso';
 
 			$.post(url, {_token: $('input[name=_token]').val(), 
 						id: $('#id').val(),
@@ -143,7 +143,7 @@ var flModificaAsiento;
 			agregaUnRenglon();
 
 		// Lee monedas
-		$.get('/anitaERP/public/configuracion/leermoneda', function(data){
+		$.get(carpetaBase+'/configuracion/leermoneda', function(data){
 			var monedas = $.map(data, function(value, index){
 				return [value];
 			});
@@ -259,7 +259,7 @@ var flModificaAsiento;
 			var codigo_nuevo = codigo.val();
 			let empresa_id = $('#empresa_id').val();
 
-			let url_cta = '/anitaERP/public/caja/cuentacaja/leercuentacajaporcodigo/'+codigo_nuevo;
+			let url_cta = carpetaBase+'/caja/cuentacaja/leercuentacajaporcodigo/'+codigo_nuevo;
 
 			$.get(url_cta, function(data){
 				if (data.id > 0)
@@ -433,7 +433,7 @@ var flModificaAsiento;
 
 		if (moneda_id > 0)
 		{
-			let url_cot = '/anitaERP/public/configuracion/leercotizacion/'+fecha+'/'+moneda_id;
+			let url_cot = carpetaBase+'/configuracion/leercotizacion/'+fecha+'/'+moneda_id;
 		
 			$.get(url_cot, function(data){
 				$(ptr).parents("tr").find('.cotizacion').val(data.cotizacionventa);
@@ -583,7 +583,7 @@ var flModificaAsiento;
 			}
 		});
 		
-		let url = "/anitaERP/public/caja/generaasientocontable_ingresoegreso";
+		let url = carpetaBase+"/caja/generaasientocontable_ingresoegreso";
 
 		$.ajax({
 			type: "POST",
@@ -693,7 +693,7 @@ var flModificaAsiento;
 		select.append('<option value="">-- Seleccionar --</option>');
 
 		// Lee monedas
-		//$.get('/anitaERP/public/configuracion/leermoneda', function(data){
+		//$.get('/configuracion/leermoneda', function(data){
         //    var monedas = $.map(data, function(value, index){
         //        return [value];
         //    });
@@ -738,9 +738,9 @@ var flModificaAsiento;
 		parametros.append('_token', token);
 
 		if (id != '')
-			url = "/anitaERP/public/caja/actualizaringresoegreso/"+id;
+			url = carpetaBase+"/caja/actualizaringresoegreso/"+id;
 		else
-			url = "/anitaERP/public/caja/ingresoegreso";
+			url = carpetaBase+"/caja/ingresoegreso";
 
 		//realizamos la petición ajax con la función de jquery
 		$.ajax({
@@ -758,9 +758,9 @@ var flModificaAsiento;
 				let origen = $('#origen').val();
 
 				if (origen == 'movimientocaja')
-					var listarUri = "/anitaERP/public/caja/movimientocaja";
+					var listarUri = carpetaBase+"/caja/movimientocaja";
 				else
-					var listarUri = "/anitaERP/public/caja/ingresoegreso";
+					var listarUri = carpetaBase+"/caja/ingresoegreso";
 
 				window.location.href = listarUri;
 			},
@@ -789,7 +789,7 @@ var flModificaAsiento;
 	function buscaTipoTransaccionCaja()
 	{
 		let tipotransaccion_caja_id = $('#tipotransaccion_caja_id').val();
-		let url = '/anitaERP/public/caja/leertipotransaccion_caja/'+tipotransaccion_caja_id;
+		let url = carpetaBase+'/caja/leertipotransaccion_caja/'+tipotransaccion_caja_id;
 
 		$.get(url, function(data){
 			if (data.id > 0)

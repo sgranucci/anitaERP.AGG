@@ -8,7 +8,7 @@ function buscar_datos_subcategoria_ticket(consulta) {
     let areadestino_id = $("#areadestino_id").val();
 
     $.ajax({
-        url: '/anitaERP/public/ticket/consultasubcategoria_ticket',
+        url: carpetaBase+'/ticket/consultasubcategoria_ticket',
         type: 'POST',
         dataType: 'HTML',
 	    headers: {
@@ -117,7 +117,7 @@ function activa_eventos_consultasubcategoria_ticket()
         // Si cargo una subcategoria lee
         if (subcategoria_ticket_id > 0)
         {
-            let url_res = '/anitaERP/public/ticket/leersubcategoria_ticket/'+subcategoria_ticket_id;
+            let url_res = carpetaBase+'/ticket/leersubcategoria_ticket/'+subcategoria_ticket_id;
 
             $.get(url_res, function(data){
                 if (data)
@@ -145,7 +145,7 @@ function activa_eventos_consultasubcategoria_ticket()
 
         // Lee subcategoria
         let subcategoria_id = $(this).val();
-        let url_res = '/anitaERP/public/ticket/leersubcategoria_ticket/'+subcategoria_ticket_id;
+        let url_res = carpetaBase+'/ticket/leersubcategoria_ticket/'+subcategoria_ticket_id;
 
         $.get(url_res, function(data){
             if (data)

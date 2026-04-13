@@ -236,7 +236,7 @@
             }
         });
     
-        let url = "/anitaERP/public/uif/elimina_premio_uif";
+        let url = carpetaBase+"/uif/elimina_premio_uif";
 
         $.ajax({
             type: "POST",
@@ -411,7 +411,7 @@
 
         if (tamano == 6 || tamano == 7)
         {
-			let url_cta = '/anitaERP/public/uif/calculariesgo_uif/'+cliente_uif_id+'/'+numeroPeriodo+'/'+inusualidad_uif_id;
+			let url_cta = carpetaBase+'/uif/calculariesgo_uif/'+cliente_uif_id+'/'+numeroPeriodo+'/'+inusualidad_uif_id;
 
 			$.get(url_cta, function(data){
                 ptrriesgo.val(data.riesgo);

@@ -199,7 +199,7 @@ class Proveedor_ArchivoRepository implements Proveedor_ArchivoRepositoryInterfac
 
 				$cmd = "scp sergio@".env('ANITA_SERVER').":".env('ANITA_BDD_PATH')."/var/prom_files/PROM-".
 						$data->proma_proveedor.".".$data->proma_archivo.
-						" /var/www/html/anitaERP/public/storage/archivos/proveedors/".
+						" /var/www/html/anitaERP/public/storage/archivos/proveedores/".
 						$proveedor->id."/".$proveedor->id."-".$data->proma_archivo;
 				system($cmd);
 			}

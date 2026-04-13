@@ -2,7 +2,7 @@ function buscar_datos_localidad(consulta) {
     let provincia_id = $("#provincia_id").val();
 
     $.ajax({
-        url: '/anitaERP/public/configuracion/localidad/consultalocalidad',
+        url: carpetaBase+'/configuracion/localidad/consultalocalidad',
         type: 'POST',
         dataType: 'HTML',
 	    headers: {
@@ -92,7 +92,7 @@ function activa_eventos_consultalocalidad()
 
         // Lee servicio terrestre por codigo
         let codigolocalidad = $("#codigolocalidad").val();
-        let url_res = '/anitaERP/public/configuracion/leerlocalidad/'+codigolocalidad;
+        let url_res = carpetaBase+'/configuracion/leerlocalidad/'+codigolocalidad;
 
         $.get(url_res, function(data){
             if (data)

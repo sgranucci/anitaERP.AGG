@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\App;
 use App\ApiAnita;
 use App\Models\Seguridad\Usuario;
 use App\Models\Contable\Cuentacontable;
+use App\Models\Contable\Centrocosto;
 use App\Models\Configuracion\Impuesto;
 use App\Models\Ventas\Pedido_Combinacion;
 use App\Models\Stock\Articulo_Caja;
@@ -26,25 +27,49 @@ use Auth;
 
 class Articulo extends Model
 {
-    protected $fillable = ['sku', 'descripcion',
-            'detalle', 'empresa_id', 'unidadesxenvase', 'skualternativo', 'categoria_id', 'subcategoria_id', 'linea_id', 'mventa_id', 'peso',
-            'nofactura', 'impuesto_id', 'formula', 'nomenclador', 'foto', 'unidadmedida_id', 'unidadmedidaalternativa_id', 'cuentacontableventa_id',
-			'cuentacontablecompra_id', 'cuentacontableimpinterno_id', 'ppp', 'usoarticulo_id', 'material_id', 'tipocorte_id', 'puntera_id',
-			'contrafuerte_id', 'tipocorteforro_id', 'forro_id', 'compfondo_id', 'fondo_id', 'leyenda',
-			'horma_id', 'serigrafia_id', 'claveorden', 'usuario_id', 'fechaultimacompra',
-     		'unidadmedidanomenclador', 'codigobarra', 'unidadreferenciacodigobarra', 'enviaalarma', 'grupocarne',
-            'tipocarne', 'pesocaja', 'alertastock', 'origenproducto', 'inicialproduccion',  
-            'diasproceso', 'vencimientoendia', 'diaenfriado', 'codigosenasa_id', 'salaproduccion_id', 'tipoproduccion_id',
-            'sectorsellado_id', 'tipoarticulo_id', 'coeficienteconversion', 'depositoentrega_id', 'numeroparte', 'ubicacionparte',
-			'oficinacompra_id', 'periodicidadcompra_id', 'condicionentrega_id', 'estado'
-			];
-
+	protected $fillable = [];
     protected $table = 'articulo';
     protected $tableAnita = 'stkmae';
     protected $keyField = 'sku';
     protected $keyFieldAnita = 'stkm_articulo';
     protected $condicionentregaRepository;
 	protected $articulo_estadoRepository;
+
+    public function __construct(array $attributes = []) {
+        parent::__construct($attributes);
+
+		if (config('app.empresa') == 'FRASLE')
+			$this->fillable = ['sku', 'descripcion',
+				'detalle', 'empresa_id', 'unidadesxenvase', 'skualternativo', 'categoria_id', 'subcategoria_id', 'linea_id', 'mventa_id', 'peso',
+				'nofactura', 'impuesto_id', 'formula', 'nomenclador', 'foto', 'unidadmedida_id', 'unidadmedidaalternativa_id', 'cuentacontableventa_id',
+				'cuentacontablecompra_id', 'cuentacontableimpinterno_id', 'ppp', 'usoarticulo_id', 'material_id', 'tipocorte_id', 'puntera_id',
+				'contrafuerte_id', 'tipocorteforro_id', 'forro_id', 'compfondo_id', 'fondo_id', 'leyenda',
+				'horma_id', 'serigrafia_id', 'claveorden', 'usuario_id', 'fechaultimacompra',
+				'unidadmedidanomenclador', 'codigobarra', 'unidadreferenciacodigobarra', 'enviaalarma', 'grupocarne',
+				'tipocarne', 'pesocaja', 'alertastock', 'origenproducto', 'inicialproduccion',  
+				'diasproceso', 'vencimientoendia', 'diaenfriado', 'codigosenasa_id', 'salaproduccion_id', 'tipoproduccion_id',
+				'sectorsellado_id', 'tipoarticulo_id', 'coeficienteconversion', 'depositoentrega_id', 'numeroparte', 'ubicacionparte',
+				'oficinacompra_id', 'periodicidadcompra_id', 'condicionentrega_id', 'estado',
+				'nivelstock', 'fechaalta', 'etiqueta_id', 'unidadenvasado', 'leyendanofacturar', 'skuproveedor',
+				'skuproveedor2', 'posicionaracelaria', 'vigenteenlista', 'cuentacontablevariacionprecio_id',
+				'centrocostovariacionprecio_id', 'centrocostocompra_id', 'abc', 'punto', 'lote', 
+				'coeficientelitro', 'estadobloqueo_id', 'estuche', 'skuetiqueta', 'skulistaprecio', 
+				'clase', 'fechaprimeraventa', 'fechaprimeringreso', 'estadofacturacion' 
+				];
+		else
+			$this->fillable = ['sku', 'descripcion',
+				'detalle', 'empresa_id', 'unidadesxenvase', 'skualternativo', 'categoria_id', 'subcategoria_id', 'linea_id', 'mventa_id', 'peso',
+				'nofactura', 'impuesto_id', 'formula', 'nomenclador', 'foto', 'unidadmedida_id', 'unidadmedidaalternativa_id', 'cuentacontableventa_id',
+				'cuentacontablecompra_id', 'cuentacontableimpinterno_id', 'ppp', 'usoarticulo_id', 'material_id', 'tipocorte_id', 'puntera_id',
+				'contrafuerte_id', 'tipocorteforro_id', 'forro_id', 'compfondo_id', 'fondo_id', 'leyenda',
+				'horma_id', 'serigrafia_id', 'claveorden', 'usuario_id', 'fechaultimacompra',
+				'unidadmedidanomenclador', 'codigobarra', 'unidadreferenciacodigobarra', 'enviaalarma', 'grupocarne',
+				'tipocarne', 'pesocaja', 'alertastock', 'origenproducto', 'inicialproduccion',  
+				'diasproceso', 'vencimientoendia', 'diaenfriado', 'codigosenasa_id', 'salaproduccion_id', 'tipoproduccion_id',
+				'sectorsellado_id', 'tipoarticulo_id', 'coeficienteconversion', 'depositoentrega_id', 'numeroparte', 'ubicacionparte',
+				'oficinacompra_id', 'periodicidadcompra_id', 'condicionentrega_id', 'estado'
+				];
+	}
 
 	public function articulos_caja()
     {
@@ -230,7 +255,8 @@ class Articulo extends Model
     }	
 
 	public function sincronizarConAnita(){
-		ini_set('max_execution_time', '300');
+		ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
 
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'list', 
@@ -255,81 +281,163 @@ class Articulo extends Model
 		$this->articulo_estadoRepository = App::make(\App\Repositories\Stock\Articulo_EstadoRepositoryInterface::class);
 
         $apiAnita = new ApiAnita();
-        $data = array( 
-            'acc' => 'list', 'tabla' => $this->tableAnita, 
-            'campos' => '
-			stkm_articulo,
-    		stkm_desc,
-    		stkm_unidad_medida,
-    		stkm_unidad_xenv,
-    		stkm_proveedor,
-    		stkm_agrupacion,
-    		stkm_cta_contable,
-    		stkm_cod_impuesto,
-    		stkm_descuento,
-    		stkm_p_rep,
-    		stkm_cod_mon_p_rep,
-    		stkm_imp_interno,
-    		stkm_cta_cont_ii,
-    		stkm_cant_compra1,
-    		stkm_cant_compra2,
-    		stkm_cant_compra3,
-    		stkm_pre_compra1,
-    		stkm_pre_compra2,
-    		stkm_pre_compra3,
-    		stkm_usuario,
-    		stkm_terminal,
-    		stkm_fe_ult_act,
-    		stkm_articulo_prod,
-    		stkm_peso_aprox,
-	    	stkm_marca,
-    		stkm_linea,
-    		stkm_cta_contablec,
-    		stkm_fe_ult_compra,
-    		stkm_o_compra,
-    		stkm_fl_no_factura,
-    		stkm_formula,
-    		stkm_ppp,
-    		stkm_nombre_foto,
-    		stkm_cod_umd,
-    		stkm_cod_umd_alter,'.
-			(config('app.empresa') == 'AGG' ? 
-			'
-			stkm_tipo_articulo,
-			stkm_codigo_menu,
-			stkm_area,
-			stkm_fecha_alta,
-			stkm_tiempo_entr,
-			stkm_period_compra,
-			stkm_cond_entrega,
-			stkm_cod_mon_co1,
-			stkm_cod_mon_co2,
-			stkm_cod_mon_co3
-			' 
-			: 
-			'
-    		stkm_fecha_alta,
-			stkm_cod_nomencl,
-			stkm_cta_var_pre,
-			stkm_cc_var_pre,
-			stkm_cc_compra,
-			stkm_tipo_articulo,
-			stkm_umd_nomenc,
-			stkm_iniciales,
-			stkm_tipo_producto,
-			stkm_dias_proceso,
-			stkm_vto_en_dias,
-			stkm_sector_sell,
-			stkm_sala,
-			stkm_dias_enfriado,
-			stkm_art_cbarra,
-			stkm_uref_cbarra,
-			stkm_envia_alarma,
-			stkm_peso_caja,
-			stkm_alerta_stock
-			'),
-            'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
-        );
+		if (config('app.empresa') == 'FRASLE')
+			$data = array( 
+				'acc' => 'list', 'tabla' => $this->tableAnita, 
+				'campos' => '
+				stkm_articulo,
+				stkm_desc,
+				stkm_unidad_medida,
+				stkm_unidad_xenv,
+				stkm_proveedor,
+				stkm_agrupacion,
+				stkm_cta_contable,
+				stkm_cod_impuesto,
+				stkm_descuento,
+				stkm_p_rep,
+				stkm_cod_mon_p_rep,
+				stkm_imp_interno,
+				stkm_cta_cont_ii,
+				stkm_cant_compra1,
+				stkm_cant_compra2,
+				stkm_cant_compra3,
+				stkm_pre_compra1,
+				stkm_pre_compra2,
+				stkm_pre_compra3,
+				stkm_usuario,
+				stkm_terminal,
+				stkm_fe_ult_act,
+				stkm_articulo_prod,
+				stkm_peso_aprox,
+				stkm_marca,
+				stkm_linea,
+				stkm_cta_contablec,
+				stkm_fe_ult_compra,
+				stkm_o_compra,
+				stkm_fl_no_factura,
+				stkm_formula,
+				stkm_ppp,
+				stkm_codimpuesto  , 
+				stkm_nivel_stk    ,
+				stkm_fecha_alta   ,
+				stkm_art_princ    ,
+				stkm_art_barra    ,
+				stkm_cod_etiqueta ,
+				stkm_unidad_env   ,
+				stkm_ley_no_fact  ,
+				stkm_nombre_foto  ,
+				stkm_articulo_prov , 
+				stkm_detalle2 ,
+				stkm_pos_aranc ,
+				stkm_lista_vigente,
+				stkm_cod_nomenc   ,
+				stkm_cod_umd      ,
+				stkm_tipo_articulo,
+				stkm_precio_oc1   ,
+				stkm_precio_oc2   ,
+				stkm_precio_oc3   ,
+				stkm_cod_mon_oc1  ,
+				stkm_cod_mon_oc2  ,
+				stkm_cod_mon_oc3  ,
+				stkm_fecha_ult_oc ,
+				stkm_cta_var_pre  ,
+				stkm_cc_var_pre   ,
+				stkm_cc_compra    ,
+				stkm_abc          ,
+				stkm_punto        ,
+				stkm_lote         ,
+				stkm_detalle1     ,
+				stkm_estado       ,
+				stkm_coef_litro   ,
+				stkm_estado_bloq  ,
+				stkm_usuario_umod ,
+				stkm_fecha_umod   ,
+				stkm_hora_umod    ,
+				stkm_estuche      ,
+				stkm_art_etiqueta ,
+				stkm_art_l_precio ,
+				stkm_posarancel   ,
+				stkm_clase        ,
+				stkm_prom_venta   ,
+				stkm_fecha_pvta   ',
+				'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
+			);
+		else
+			$data = array( 
+				'acc' => 'list', 'tabla' => $this->tableAnita, 
+				'campos' => '
+				stkm_articulo,
+				stkm_desc,
+				stkm_unidad_medida,
+				stkm_unidad_xenv,
+				stkm_proveedor,
+				stkm_agrupacion,
+				stkm_cta_contable,
+				stkm_cod_impuesto,
+				stkm_descuento,
+				stkm_p_rep,
+				stkm_cod_mon_p_rep,
+				stkm_imp_interno,
+				stkm_cta_cont_ii,
+				stkm_cant_compra1,
+				stkm_cant_compra2,
+				stkm_cant_compra3,
+				stkm_pre_compra1,
+				stkm_pre_compra2,
+				stkm_pre_compra3,
+				stkm_usuario,
+				stkm_terminal,
+				stkm_fe_ult_act,
+				stkm_articulo_prod,
+				stkm_peso_aprox,
+				stkm_marca,
+				stkm_linea,
+				stkm_cta_contablec,
+				stkm_fe_ult_compra,
+				stkm_o_compra,
+				stkm_fl_no_factura,
+				stkm_formula,
+				stkm_ppp,
+				stkm_nombre_foto,
+				stkm_cod_umd,
+				stkm_cod_umd_alter,'.
+				(config('app.empresa') == 'AGG' ? 
+				'
+				stkm_tipo_articulo,
+				stkm_codigo_menu,
+				stkm_area,
+				stkm_fecha_alta,
+				stkm_tiempo_entr,
+				stkm_period_compra,
+				stkm_cond_entrega,
+				stkm_cod_mon_co1,
+				stkm_cod_mon_co2,
+				stkm_cod_mon_co3
+				' 
+				: 
+				'
+				stkm_fecha_alta,
+				stkm_cod_nomencl,
+				stkm_cta_var_pre,
+				stkm_cc_var_pre,
+				stkm_cc_compra,
+				stkm_tipo_articulo,
+				stkm_umd_nomenc,
+				stkm_iniciales,
+				stkm_tipo_producto,
+				stkm_dias_proceso,
+				stkm_vto_en_dias,
+				stkm_sector_sell,
+				stkm_sala,
+				stkm_dias_enfriado,
+				stkm_art_cbarra,
+				stkm_uref_cbarra,
+				stkm_envia_alarma,
+				stkm_peso_caja,
+				stkm_alerta_stock
+				'),
+				'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
+			);
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
 		$usuario_id = Auth::user()->id;
@@ -380,12 +488,14 @@ class Articulo extends Model
 			else
 				$unidadmedida_id = NULL;
 	
-        	$unidadmedida = Unidadmedida::select('id')->where('id' , $data->stkm_cod_umd_alter)->first();
-			if ($unidadmedida)
-				$unidadmedidaalternativa_id = $unidadmedida->id;
-			else
-				$unidadmedidaalternativa_id = NULL;
-	
+			$unidadmedidaalternativa_id = NULL;
+			if (isset($data->stkm_cod_umd_alter))
+			{
+				$unidadmedida = Unidadmedida::select('id')->where('id' , $data->stkm_cod_umd_alter)->first();
+				if ($unidadmedida)
+					$unidadmedidaalternativa_id = $unidadmedida->id;
+			}
+
 			if (config('app.empresa') == 'Calzados Ferli')
 			{
 				$material = Material::select('id', 'codigo')->where('codigo' , ltrim($data->stkm_marca, '0'))->first();
@@ -561,8 +671,9 @@ class Articulo extends Model
 				$data->stkm_fe_ult_compra = 20100101;
 			$fechaultimacompra = date('Y-m-d', strtotime($data->stkm_fe_ult_compra));
 	
-			if (config('app.empresa') == 'AGG')
+			switch(config('app.empresa'))
 			{
+			case 'AGG':
 				// Leer stcustom
 				Self::leeStCustom($data->stkm_articulo, $oficinacompra_id, $cuentaContableGasto_id,
 		 							$ubicacionparte, $depositoentrega, $numeroparte, $detalle);
@@ -655,10 +766,132 @@ class Articulo extends Model
 					'oficinacompra_id' => $oficinacompra_id,
 					'periodicidadcompra_id' => $data->stkm_period_compra > '0' ? $data->stkm_period_compra : null,
 					'estado' => $estado
-				];			
-			}
-			else
-			{
+				];		
+				break;
+				
+			case 'FRASLE':
+				$estado = 'ACTIVO';
+				switch($data->stkm_fl_no_factura)
+				{
+				case '0':
+					$noFactura = '0';
+					$estado = 'ACTIVO';
+					break;
+				case '1':
+				case 'N':
+					$noFactura = '1';
+					$estado = 'ACTIVO';
+					break;					
+				case 'I':
+					$noFactura = '1';
+					$estado = 'INACTIVO';
+					break;
+				}
+
+				$tipoarticulo_id = 1;
+				switch($data->stkm_tipo_articulo)
+				{
+				case 'V':
+				case 'R':
+					$tipoarticulo_id = 1;
+					break;
+				case 'I':
+					$tipoarticulo_id = 2;
+					break;
+				case 'P':
+					$tipoarticulo_id = 3;
+					break;
+				case 'T':
+					$tipoarticulo_id = 4;
+					break;
+				case 'B':
+					$tipoarticulo_id = 5;
+					break;
+				}
+				$etiqueta_id = null;
+				if ($data->stkm_cod_etiqueta == 0)
+					$etiqueta_id = $data->stkm_cod_etiqueta;
+
+				$cuenta = Cuentacontable::select('id', 'codigo')->where('codigo' , $data->stkm_cta_var_pre)->first();
+				if ($cuenta)
+					$cuentacontablevariacionprecio_id = $cuenta->id;
+				else
+					$cuentacontablevariacionprecio_id = NULL;
+
+				$centrocosto = Centrocosto::select('id', 'codigo')->where('codigo' , $data->stkm_cc_var_pre)->first();
+				if ($cuenta)
+					$centrocostovariacionprecio_id = $centrocosto->id;
+				else
+					$centrocostovariacionprecio_id = NULL;
+		
+				$centrocosto = Centrocosto::select('id', 'codigo')->where('codigo' , $data->stkm_cc_compra)->first();
+				if ($cuenta)
+					$centrocostocompra_id = $centrocosto->id;
+				else
+					$centrocostocompra_id = NULL;
+
+				$cuentaContableGasto_id = null;
+
+				$detalle = $data->stkm_detalle1.' '.$data->stkm_detalle2;
+
+				$arrayCampos = [
+					"descripcion" => $data->stkm_desc,
+					"sku" => ltrim($data->stkm_articulo, '0'),
+					"detalle" => $detalle,
+					"empresa_id" => 1,
+					"unidadesxenvase" => $data->stkm_unidad_xenv,
+					"skualternativo" => $data->stkm_articulo_prod,
+					"categoria_id" => $categoria_id > 0 ? $categoria_id : NULL,
+					"subcategoria_id" => $subcategoria_id > 0 ? $subcategoria_id : NULL,
+					"linea_id" => $linea_id,
+					"mventa_id" => $mventa_id,
+					"peso" => $data->stkm_peso_aprox,
+					"nofactura" => $noFactura,
+					"impuesto_id" => $impuesto_id,
+					"formula" => $data->stkm_formula,
+					"nomenclador" => $codigoNomenclador,
+					"foto" => $data->stkm_nombre_foto,
+					"unidadmedida_id" => $unidadmedida_id > 0 ? $unidadmedida_id : NULL,
+					"unidadmedidaalternativa_id" => $unidadmedidaalternativa_id > 0 ? $unidadmedidaalternativa_id : NULL,
+					"cuentacontableventa_id" => $cuentacontableventa_id > 0 ? $cuentacontableventa_id : NULL,
+					"cuentacontablecompra_id" => $cuentacontablecompra_id > 0 ? $cuentacontablecompra_id : NULL,
+					"cuentacontableimpinterno_id" => $cuentacontableimpinterno_id > 0 ? $cuentacontableimpinterno_id : NULL,
+					"ppp" => $data->stkm_ppp,
+					"usuario_id" => $usuario_id,
+					"fechaultimacompra" => $fechaultimacompra,
+					"usoarticulo_id" => $usoarticulo_id > 0 ? $usoarticulo_id : NULL,
+					'tipoarticulo_id' => $tipoarticulo_id,
+					'leyenda' => '',
+					'coeficienteconversion' => $data->stkm_peso_aprox,
+					'estado' => $estado,
+					'nivelstock' => $data->stkm_nivel_stk,
+					'fechaalta' => date('Y-m-d', strtotime($data->stkm_fecha_alta)),
+            		'etiqueta_id' => $etiqueta_id,
+            		'unidadenvasado' => $data->stkm_unidad_env,
+            		'leyendanofacturar' => $data->stkm_ley_no_fact,
+            		'skuproveedor' => $data->stkm_articulo_prov,
+            		'skuproveedor2' => $data->stkm_articulo_prod,
+            		'posicionaracelaria' => $data->stkm_pos_aranc,
+            		'vigenteenlista' => $data->stkm_lista_vigente,
+					'cuentacontablevariacionprecio_id' => $cuentacontablevariacionprecio_id,
+					'centrocostovariacionprecio_id'  => $centrocostovariacionprecio_id,
+					'centrocostocompra_id' => $centrocostocompra_id,
+            		'abc' => $data->stkm_abc,
+            		'punto' => $data->stkm_punto,
+            		'lote' => $data->stkm_lote,
+            		'coeficientelitro' => $data->stkm_coef_litro,
+					'estadobloqueo_id' => $data->stkm_estado_bloq,
+					'estuche' => $data->stkm_estuche,
+					'skuetiqueta' => $data->stkm_art_etiqueta,
+					'skulistaprecio' => $data->stkm_art_l_precio,
+					'clase' => $data->stkm_clase,
+					'fechaprimeraventa' => $data->stkm_fecha_pvta, 
+					'fechaprimeringreso' => null,
+					'estadofacturacion' => $data->stkm_estado
+				];
+				break;
+
+			default:
 				$arrayCampos = [
 					"descripcion" => $data->stkm_desc,
 					"sku" => ltrim($data->stkm_articulo, '0'),
@@ -705,6 +938,7 @@ class Articulo extends Model
 					'tipoarticulo_id' => $tipoarticulo_id,
 					'estado' => 'ACTIVO'
 				];			
+				break;
 			}
 			if ($fl_crea_registro)
             	$articulo = Articulo::create($arrayCampos);

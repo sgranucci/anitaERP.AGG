@@ -4,7 +4,7 @@ var ptrcodigoguia;
 
 function buscar_datos_guia(consulta) {
     $.ajax({
-        url: '/anitaERP/public/receptivo/guia/consultaguia',
+        url: carpetaBase+'/receptivo/guia/consultaguia',
         type: 'POST',
         dataType: 'HTML',
 	    headers: {
@@ -87,7 +87,7 @@ function activa_eventos_consultaguia()
 
         // Lee guia por codigo
         let codigoguia = $("#codigoguia").val();
-        let url_res = '/anitaERP/public/receptivo/leerguia/'+codigoguia;
+        let url_res = carpetaBase+'/receptivo/leerguia/'+codigoguia;
 
         $.get(url_res, function(data){
             if (data)
@@ -110,7 +110,7 @@ function activa_eventos_consultaguia()
 
         // Lee guia por codigo
         let codigoguia = $(this).val();
-        let url_res = '/anitaERP/public/receptivo/leerguia/'+codigoguia;
+        let url_res = carpetaBase+'/receptivo/leerguia/'+codigoguia;
 
         $.get(url_res, function(data){
             if (data)

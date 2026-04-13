@@ -3,7 +3,7 @@
 
     function completarLocalidadesNacimientos(provincia_id){
         var loc_id;
-        $.get('/anitaERP/public/uif/leerlocalidadesuif/'+provincia_id, function(data){
+        $.get(carpetaBase+'/uif/leerlocalidadesuif/'+provincia_id, function(data){
             var loc = $.map(data, function(value, index){
                 return [value];
             });

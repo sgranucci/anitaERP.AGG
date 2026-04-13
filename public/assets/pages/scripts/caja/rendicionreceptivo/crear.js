@@ -88,7 +88,7 @@ var montoComision=[];
         });
 
 		// Lee monedas
-		$.get('/anitaERP/public/configuracion/leermoneda', function(data){
+		$.get(carpetaBase+'/configuracion/leermoneda', function(data){
 			var monedas = $.map(data, function(value, index){
 				return [value];
 			});
@@ -151,7 +151,7 @@ var montoComision=[];
 			var codigo_nuevo = codigo.val();
 			let empresa_id = $('#empresa_id').val();
 
-			let url_cta = '/anitaERP/public/caja/cuentacaja/leercuentacajaporcodigo/'+codigo_nuevo;
+			let url_cta = carpetaBase+'/caja/cuentacaja/leercuentacajaporcodigo/'+codigo_nuevo;
 
 			$.get(url_cta, function(data){
 				if (data.id > 0)
@@ -249,7 +249,7 @@ var montoComision=[];
 				}
 			});
 			
-			let url = "/anitaERP/public/caja/rendicionreceptivo/leegastoanterior";
+			let url = carpetaBase+"/caja/rendicionreceptivo/leegastoanterior";
 
 			$.ajax({
 				type: "POST",
@@ -429,7 +429,7 @@ var montoComision=[];
 
 		if (moneda_id > 0)
 		{
-			let url_cot = '/anitaERP/public/configuracion/leercotizacion/'+fecha+'/'+moneda_id;
+			let url_cot = carpetaBase+'/configuracion/leercotizacion/'+fecha+'/'+moneda_id;
 		
 			$.get(url_cot, function(data){
 				$(ptr).parents("tr").find('.cotizacion').val(data.cotizacionventa);
@@ -458,7 +458,7 @@ var montoComision=[];
 				}
 			});
 			
-			let url = "/anitaERP/public/caja/rendicionreceptivo/leevoucher";
+			let url = carpetaBase+"/caja/rendicionreceptivo/leevoucher";
 
 			$.ajax({
 				type: "POST",
@@ -838,9 +838,9 @@ var montoComision=[];
 		parametros.append('_token', token);
 
 		if (id != '' && id != undefined)
-			url = "/anitaERP/public/caja/actualizarrendicionreceptivo/"+id;
+			url = carpetaBase+"/caja/actualizarrendicionreceptivo/"+id;
 		else
-			url = "/anitaERP/public/caja/rendicionreceptivo";
+			url = carpetaBase+"/caja/rendicionreceptivo";
 
 		//realizamos la petición ajax con la función de jquery
 		$.ajax({
@@ -856,7 +856,7 @@ var montoComision=[];
 					alert("Error de grabacion");
 
 				let origen = $('#origen').val();
-				var listarUri = "/anitaERP/public/caja/rendicionreceptivo";
+				var listarUri = carpetaBase+"/caja/rendicionreceptivo";
 
 				window.location.href = listarUri;
 			},

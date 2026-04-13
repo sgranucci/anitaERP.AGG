@@ -1319,5 +1319,25 @@ class AppServiceProvider extends ServiceProvider
         	'App\Queries\Presupuesto\PartidagastoQuery',
     	);
 
+		// Frasle
+
+		// Produccion
+
+		$this->app->bind(
+        	'App\Repositories\Produccion\LineallenadoRepositoryInterface',
+        	'App\Repositories\Produccion\LineallenadoRepository',
+    	);				
+
+		$this->app->bind(
+        	'App\Repositories\Produccion\ProvienebinRepositoryInterface',
+        	'App\Repositories\Produccion\ProvienebinRepository',
+    	);				
+
+		$this->app->bind(
+        	'App\Repositories\Produccion\OrdenproduccionRepositoryInterface',
+        	'App\Repositories\Produccion\OrdenproduccionRepository',
+    	);				
+
+
     }
 }

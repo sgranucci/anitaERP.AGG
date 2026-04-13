@@ -29,7 +29,7 @@
 		let estadoModeloetiqueta = $('#estado').val();
 		let modeloetiqueta_id = $('#modeloetiqueta_id').val();
 
-		let listarUri = "/anitaERP/public/configuracion/actualizarestadomodeloetiqueta/"+estadoModeloetiqueta+"/"+modeloetiqueta_id;
+		let listarUri = carpetaBase+"/configuracion/actualizarestadomodeloetiqueta/"+estadoModeloetiqueta+"/"+modeloetiqueta_id;
 
 		$.get(listarUri)
 			.done(function(data){

@@ -31,7 +31,7 @@
     function buscarModeloEtiqueta(programa)
     {
         // Actualiza configuracion de salida
-        var listarUri = "/anitaERP/public/configuracion/buscarmodeloetiqueta/"+programa;
+        var listarUri = carpetaBase+"/configuracion/buscarmodeloetiqueta/"+programa;
 
         $.get(listarUri, function(data){
             if (data.id > 0)

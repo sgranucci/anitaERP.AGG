@@ -4,7 +4,7 @@ var ptrcodigobanco;
 
 function buscar_datos_banco(consulta) {
     $.ajax({
-        url: '/anitaERP/public/caja/banco/consultabanco',
+        url: carpetaBase+'/caja/banco/consultabanco',
         type: 'POST',
         dataType: 'HTML',
 	    headers: {
@@ -98,7 +98,7 @@ function activa_eventos_consultabanco()
 
         // Lee servicio terrestre por codigo
         let banco_id = $("#banco_id").val();
-        let url_res = '/anitaERP/public/caja/leerbanco/'+banco_id;
+        let url_res = carpetaBase+'/caja/leerbanco/'+banco_id;
 
         $.get(url_res, function(data){
             if (data)
@@ -122,7 +122,7 @@ function activa_eventos_consultabanco()
 
         // Lee concepto gasto
         let banco_id = $(this).val();
-        let url_res = '/anitaERP/public/caja/leerbanco/'+banco_id;
+        let url_res = carpetaBase+'/caja/leerbanco/'+banco_id;
 
         $.get(url_res, function(data){
             if (data)
@@ -149,7 +149,7 @@ function activa_eventos_consultabanco()
 
         // Lee concepto gasto
         let codigobanco = $(this).val();
-        let url_res = '/anitaERP/public/caja/leerbancoporcodigo/'+codigobanco;
+        let url_res = carpetaBase+'/caja/leerbancoporcodigo/'+codigobanco;
 
         $.get(url_res, function(data){
             if (data)

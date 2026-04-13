@@ -9,7 +9,7 @@ $(function () {
 function buscarSalida(programa)
 {
     // Actualiza configuracion de salida
-    var listarUri = "/anitaERP/public/configuracion/buscarsalida/"+programa;
+    var listarUri = carpetaBase+"/configuracion/buscarsalida/"+programa;
 
     $.get(listarUri, function(data){
         if (data.id > 0)

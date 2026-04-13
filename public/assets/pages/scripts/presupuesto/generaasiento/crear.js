@@ -11,7 +11,7 @@
 		let presupuesto_id = $("#presupuesto_id").val();
 
 		// Si marca boton de todas las combinaciones trae sin filtrar las activas o esta leyendo todos los articulos sin filtrar
-		let url = '/anitaERP/public/presupuesto/leerescenario/'+presupuesto_id;
+		let url = carpetaBase+'/presupuesto/leerescenario/'+presupuesto_id;
 
         $.get(url, function(data){
             let comb = $.map(data, function(value, index){

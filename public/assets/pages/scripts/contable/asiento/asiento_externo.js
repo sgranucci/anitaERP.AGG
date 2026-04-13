@@ -42,7 +42,7 @@ var totalHaberAsiento = 0;
 			var codigo_nuevo = codigo.val();
 			let empresa_id = $('#empresa_id').val();
 
-			let url_cta = '/anitaERP/public/contable/cuentacontable/leercuentacontableporcodigo/'+empresa_id+'/'+codigo_nuevo;
+			let url_cta = carpetaBase+'/contable/cuentacontable/leercuentacontableporcodigo/'+empresa_id+'/'+codigo_nuevo;
 
 			$.get(url_cta, function(data){
 				if (data.id > 0)
@@ -158,7 +158,7 @@ var totalHaberAsiento = 0;
     }
 
 	function completarCentroCostoAsiento(ptrcodigo, cuentacontable_id, centrocosto_id){
-		let url_cta = '/anitaERP/public/contable/cuentacontable/leercuentacontablecentrocosto/'+cuentacontable_id;
+		let url_cta = carpetaBase+'/contable/cuentacontable/leercuentacontablecentrocosto/'+cuentacontable_id;
 
 		$.get(url_cta, function(data){
 			if (data === "No maneja centro de costo")
@@ -200,7 +200,7 @@ var totalHaberAsiento = 0;
 				alert("Debe ingresar empresa");
 			else
 			{
-				let url_cta = '/anitaERP/public/contable/cuentacontable/leercuentacontableporcodigo/'+empresa_id+'/'+codigo_nuevo;
+				let url_cta = carpetaBase+'/contable/cuentacontable/leercuentacontableporcodigo/'+empresa_id+'/'+codigo_nuevo;
 
 				$.get(url_cta, function(data){
 					$(codigo).parents("tr").find('.cuentacontable_id').val(data.id);
@@ -227,7 +227,7 @@ var totalHaberAsiento = 0;
 	}
 
 	function completarCentroCosto(ptrcodigo, cuentacontable_id, centrocosto_id){
-		let url_cta = '/anitaERP/public/contable/cuentacontable/leercuentacontablecentrocosto/'+cuentacontable_id;
+		let url_cta = carpetaBase+'/contable/cuentacontable/leercuentacontablecentrocosto/'+cuentacontable_id;
 
 		$.get(url_cta, function(data){
 			if (data === "No maneja centro de costo")
@@ -263,7 +263,7 @@ var totalHaberAsiento = 0;
 			var centrocosto_id = $(this);
 			var codigo = $(this).parents("tr").find(".codigocuentacontable").val();
 
-			let url_cta = '/anitaERP/public/caja/cuentacaja/leercuentacajaporcodigo/'+codigo;
+			let url_cta = carpetaBase+'/caja/cuentacaja/leercuentacajaporcodigo/'+codigo;
 
 			$.get(url_cta, function(data){
 				if (data.manejaccosto != 'N' && !$.isNumeric(centrocosto_id))
@@ -278,7 +278,7 @@ var totalHaberAsiento = 0;
 	{
 		let fecha = $('#fecha').val();
 		let moneda_id = $(ptr).parents("tr").find('.monedaasiento').val();
-		let url_cot = '/anitaERP/public/configuracion/leercotizacion/'+fecha+'/'+moneda_id;
+		let url_cot = carpetaBase+'/configuracion/leercotizacion/'+fecha+'/'+moneda_id;
 	
 		$.get(url_cot, function(data){
 			$(ptr).parents("tr").find('.cotizacionasiento').val(data.cotizacionventa);

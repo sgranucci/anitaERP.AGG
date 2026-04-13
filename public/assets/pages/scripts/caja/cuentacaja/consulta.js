@@ -2,7 +2,7 @@ function buscar_datos_cuentacaja(consulta) {
     let empresa_id = $("#empresa_id").val();
 
     $.ajax({
-        url: '/anitaERP/public/caja/cuentacaja/consultacuentacaja',
+        url: carpetaBase+'/caja/cuentacaja/consultacuentacaja',
         type: 'POST',
         dataType: 'HTML',
 	    headers: {

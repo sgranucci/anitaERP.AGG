@@ -3,7 +3,7 @@ var ptrprovincia_id;
 function buscar_datos_provincia(consulta) {
 
     $.ajax({
-        url: '/anitaERP/public/configuracion/provincia/consultaprovincia',
+        url: carpetaBase+'/configuracion/provincia/consultaprovincia',
         type: 'POST',
         dataType: 'HTML',
 	    headers: {
@@ -85,7 +85,7 @@ function activa_eventos_consultaprovincia()
 
         // Lee servicio terrestre por codigo
         let codigoprovincia = $("#codigoprovincia").val();
-        let url_res = '/anitaERP/public/configuracion/leerunaprovincia/'+codigoprovincia;
+        let url_res = carpetaBase+'/configuracion/leerunaprovincia/'+codigoprovincia;
 
         $.get(url_res, function(data){
             if (data)
@@ -103,7 +103,7 @@ function activa_eventos_consultaprovincia()
         var ptrrenglon = this;
 
         let codigoprovincia = $(this).parents("tr").find(".codigoprovincia").val();
-        let url_res = '/anitaERP/public/configuracion/leerunaprovincia/'+codigoprovincia;
+        let url_res = carpetaBase+'/configuracion/leerunaprovincia/'+codigoprovincia;
 
         $(ptrrenglon).parents("tr").find(".provincia_id").val("");
         $(ptrrenglon).parents("tr").find(".codigoprovincia").val("");

@@ -3,7 +3,7 @@ var ptrnombreactividad_uif;
 
 function buscar_datos_actividad_uif(consulta) {
     $.ajax({
-        url: '/anitaERP/public/uif/consultaactividad_uif',
+        url: carpetaBase+'/uif/consultaactividad_uif',
         type: 'POST',
         dataType: 'HTML',
 	    headers: {
@@ -89,7 +89,7 @@ function activa_eventos_consultaactividad_uif()
 
         if ($.isNumeric(actividad_uif_id))
         {
-            let url_res = '/anitaERP/public/uif/leerunaactividad_uif/'+actividad_uif_id;
+            let url_res = carpetaBase+'/uif/leerunaactividad_uif/'+actividad_uif_id;
 
             $("#actividad_uif_id").val("");
             $("#nombreactividad_uif").val("");
@@ -115,7 +115,7 @@ function activa_eventos_consultaactividad_uif()
 
         // Lee concepto gasto
         let actividad_uif_id = $(this).val();
-        let url_res = '/anitaERP/public/uif/leerunaactividad_uif/'+actividad_uif_id;
+        let url_res = carpetaBase+'/uif/leerunaactividad_uif/'+actividad_uif_id;
 
         $.get(url_res, function(data){
             if (data)

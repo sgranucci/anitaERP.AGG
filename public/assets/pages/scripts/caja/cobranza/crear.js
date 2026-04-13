@@ -144,7 +144,7 @@ var saldoFinalCobranza = 0;
 
 			$('#revertircobranzaModal').modal('hide');
 
-			let url = '/anitaERP/public/caja/copiar_cobranza';
+			let url = carpetaBase+'/caja/copiar_cobranza';
 
 			$.post(url, {_token: $('input[name=_token]').val(), 
 						id: $('#id').val(),
@@ -160,7 +160,7 @@ var saldoFinalCobranza = 0;
 		});
 
 		// Lee monedas
-		$.get('/anitaERP/public/configuracion/leermoneda', function(data){
+		$.get(carpetaBase+'/configuracion/leermoneda', function(data){
 			var monedas = $.map(data, function(value, index){
 				return [value];
 			});
@@ -355,7 +355,7 @@ var saldoFinalCobranza = 0;
 			var codigo_nuevo = codigo.val();
 			let empresa_id = $('#empresa_id').val();
 
-			let url_cta = '/anitaERP/public/caja/cuentacaja/leercuentacajaporcodigo/'+codigo_nuevo;
+			let url_cta = carpetaBase+'/caja/cuentacaja/leercuentacajaporcodigo/'+codigo_nuevo;
 
 			$.get(url_cta, function(data){
 				if (data.id > 0)
@@ -672,7 +672,7 @@ var saldoFinalCobranza = 0;
 
 		if (moneda_id > 0)
 		{
-			let url_cot = '/anitaERP/public/configuracion/leercotizacion/'+fecha+'/'+moneda_id;
+			let url_cot = carpetaBase+'/configuracion/leercotizacion/'+fecha+'/'+moneda_id;
 		
 			$.get(url_cot, function(data){
 				$(ptr).parents("tr").find('.cotizacion').val(data.cotizacionventa);
@@ -688,7 +688,7 @@ var saldoFinalCobranza = 0;
 
 		if (moneda_id > 0)
 		{
-			let url_cot = '/anitaERP/public/configuracion/leercotizacion/'+fecha+'/'+moneda_id;
+			let url_cot = carpetaBase+'/configuracion/leercotizacion/'+fecha+'/'+moneda_id;
 		
 			$.get(url_cot, function(data){
 				$(ptr).parents("tr").find('.cotizacioncheque').val(data.cotizacionventa);
@@ -704,7 +704,7 @@ var saldoFinalCobranza = 0;
 
 		if (moneda_id > 0)
 		{
-			let url_cot = '/anitaERP/public/configuracion/leercotizacion/'+fecha+'/'+moneda_id;
+			let url_cot = carpetaBase+'/configuracion/leercotizacion/'+fecha+'/'+moneda_id;
 		
 			$.get(url_cot, function(data){
 				$(ptr).parents("tr").find('.cotizacionretencion').val(data.cotizacionventa);
@@ -720,9 +720,9 @@ var saldoFinalCobranza = 0;
 		let venta_id = $('#venta_id').val();
 
 		if (venta_id > 0)
-			var url = '/anitaERP/public/ventas/cliente/consultadeuda/0/0/'+venta_id;
+			var url = carpetaBase+'/ventas/cliente/consultadeuda/0/0/'+venta_id;
 		else
-			var url = '/anitaERP/public/ventas/cliente/consultadeuda/'+cliente_id+'/'+empresa_id;
+			var url = carpetaBase+'/ventas/cliente/consultadeuda/'+cliente_id+'/'+empresa_id;
 	
 		$('#tbody-comprobante-table').empty();
 
@@ -1150,7 +1150,7 @@ var saldoFinalCobranza = 0;
 			}
 		});
 		
-		let url = "/anitaERP/public/caja/generaasientocontable_cobranza";
+		let url = carpetaBase+"/caja/generaasientocontable_cobranza";
 
 		$.ajax({
 			type: "POST",
@@ -1259,7 +1259,7 @@ var saldoFinalCobranza = 0;
 		var wrapper = $(".container-historia");
 		let cobranza_id = $("#cobranza_id").val();
 
-		let url = '/anitaERP/public/caja/leer_historia_cobranza/'+cobranza_id;
+		let url = carpetaBase+'/caja/leer_historia_cobranza/'+cobranza_id;
 
 		$.get(url, function(historia){
 
@@ -1348,9 +1348,9 @@ var saldoFinalCobranza = 0;
 		$( "#botonform0" ).hide();
 
 		if (id != '')
-			url = "/anitaERP/public/caja/actualizarcobranza/"+id;
+			url = carpetaBase+"/caja/actualizarcobranza/"+id;
 		else
-			url = "/anitaERP/public/caja/cobranza";
+			url = carpetaBase+"/caja/cobranza";
 
 		//realizamos la petición ajax con la función de jquery
 		$.ajax({
@@ -1370,10 +1370,10 @@ var saldoFinalCobranza = 0;
 				switch(origen)
 				{
 					case 'movimientocaja':
-						var listarUri = "/anitaERP/public/caja/movimientocaja";
+						var listarUri = carpetaBase+"/caja/movimientocaja";
 						break;
 					case 'cobranza':
-						var listarUri = "/anitaERP/public/caja/cobranza";
+						var listarUri = carpetaBase+"/caja/cobranza";
 						break;
 					case 'ordenventa':
 						var listarUri = $('#referer').val();
@@ -1407,7 +1407,7 @@ var saldoFinalCobranza = 0;
 	function buscaTipoTransaccionCaja()
 	{
 		let tipotransaccion_caja_id = $('#tipotransaccion_caja_id').val();
-		let url = '/anitaERP/public/caja/leertipotransaccion_caja/'+tipotransaccion_caja_id;
+		let url = carpetaBase+'/caja/leertipotransaccion_caja/'+tipotransaccion_caja_id;
 
 		$.get(url, function(data){
 			if (data.id > 0)

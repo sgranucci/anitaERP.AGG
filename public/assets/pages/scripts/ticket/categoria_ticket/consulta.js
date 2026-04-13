@@ -5,7 +5,7 @@ function buscar_datos_categoria_ticket(consulta) {
     let areadestino_id = $("#areadestino_id").val();
 
     $.ajax({
-        url: '/anitaERP/public/ticket/consultacategoria_ticket',
+        url: carpetaBase+'/ticket/consultacategoria_ticket',
         type: 'POST',
         dataType: 'HTML',
 	    headers: {
@@ -109,7 +109,7 @@ function activa_eventos_consultacategoria_ticket()
 
         if ($.isNumeric(categoria_ticket_id))
         {
-            let url_res = '/anitaERP/public/ticket/leercategoria_ticket/'+categoria_ticket_id;
+            let url_res = carpetaBase+'/ticket/leercategoria_ticket/'+categoria_ticket_id;
 
             $("#categoria_ticket_id").val("");
             $("#nombrecategoria_ticket").val("");
@@ -145,7 +145,7 @@ function activa_eventos_consultacategoria_ticket()
 
         // Lee concepto gasto
         let categoria_ticket_id = $(this).val();
-        let url_res = '/anitaERP/public/ticket/leercategoria_ticket/'+categoria_ticket_id;
+        let url_res = carpetaBase+'/ticket/leercategoria_ticket/'+categoria_ticket_id;
 
         $.get(url_res, function(data){
             if (data)
