@@ -7,7 +7,8 @@ trait TransporteTrait {
 	public static $enumTipoExpreso = [
 		'1' => 'Completo',
 		'2' => 'Normal',
-		'3' => 'Divide'
+		'3' => 'Divide',
+		'4' => 'Solo Remito'
 		];
 
 }

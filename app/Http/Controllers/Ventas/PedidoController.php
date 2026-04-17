@@ -304,7 +304,7 @@ class PedidoController extends Controller
 			break;
 		}
 		return (new KiloPedidoExport($this->pedidoService))->rangoFecha($request->desdefecha, $request->hastafecha)
-								->asignaRangoTransporte($request->desdetransporte_id, $request->hastatransporte_id)
+								->asignaRangoTransporte($request->codigodesdetransporte, $request->codigohastatransporte)
 								->asignaTipoListado($request->tipolistado, $request->estado)
 								->download('kilopedido.'.$extension);
     }

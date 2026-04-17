@@ -98,11 +98,15 @@
 				<th>Artículo</th>
 				<th>Descripción</th>
 				<th style="text-align: center;">Cantidad</th>
+				@if (config('app.empresa') == 'EL BIERZO')
+					<th style="text-align: center;">Bonificación</th>
+				@endif
 				<th style="text-align: right;">Precio</th>
+				<th style="text-align: right;">Total Item</th>
 			</tr>
 		</thead>
 		<tbody>
-			@php $totalCantidad = 0; $totalCaja = 0; $totalPieza = 0; @endphp
+			@php $totalCantidad = 0; $totalCaja = 0; $totalPieza = 0; $totalKiloDescuento = 0; @endphp
 			@foreach ($tblItem as $item)
 				<tr>
 					@if (isset($item['sku']))
@@ -113,11 +117,21 @@
 						<td>{{ $item['detalle'] }}</td>
 					@endif
 					<td align="center">{{ number_format($item['cantidad'], config('facturacion.DECIMAL_CANTIDAD')) }}</td>
-					<td align="right">{{ number_format($item['precio'], 2) }}</td>
+					@if (config('app.empresa') == 'EL BIERZO')
+						<td align="center">{{ number_format($item['kilodescuento'], config('facturacion.DECIMAL_CANTIDAD')) }}</td>
+					@endif
+					@if (config('app.empresa') == 'EL BIERZO')
+						<td align="right">{{ number_format($item['preciosindescuento'], 2) }}</td>
+						<td align="right">{{ number_format($item['preciosindescuento']*$item['cantidad'], 2) }}</td>
+					@else
+						<td align="right">{{ number_format($item['precio'], 2) }}</td>
+						<td align="right">{{ number_format(round($item['preciosindescuento'],2)*round($item['cantidad'],2), 2) }}</td>
+					@endif
 				</tr>
 
 				@php 
 					$totalCantidad += $item['cantidad']; 
+					$totalKiloDescuento += $item['kilodescuento']; 
 					$totalCaja += $item['caja']; 
 					$totalPieza += $item['pieza']; 
 				@endphp
@@ -127,7 +141,13 @@
 				<td> </td>
 				<td>TOTALES</td>
 				<td align="center"><strong>{{number_format($totalCantidad, config('facturacion.DECIMAL_CANTIDAD'))}}</td>
+				@if (config('app.empresa') == 'EL BIERZO')
+					<td align="center"><strong>{{number_format($totalKiloDescuento, config('facturacion.DECIMAL_CANTIDAD'))}}</td>
+				@endif
 				<td> </td>
+				@if (config('app.empresa') == 'EL BIERZO')
+					<td> </td>
+				@endif
 			</tr>
 		</tbody>
 	</table>

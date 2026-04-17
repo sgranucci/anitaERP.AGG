@@ -30,7 +30,7 @@ class Venta extends Model implements Auditable
             'cliente_entrega_id', 'codigo', 'nombre', 'domicilio', 'localidad_id', 'provincia_id',
             'pais_id', 'codigopostal', 'email', 'telefono', 'nroinscripcion', 
             'condicioniva_id', 'cae', 'fechavencimientocae', 'puntoventaremito_id',
-            'numeroremito', 'cantidadbulto', 'ordenventa_id'
+            'numeroremito', 'cantidadbulto', 'ordenventa_id', 'pedido_id'
     ];
 
     protected $table = 'venta';
@@ -84,6 +84,11 @@ class Venta extends Model implements Auditable
     public function ordenventas()
     {
         return $this->hasOne(Ordenventa::class, 'id', 'ordenventa_id');
+    }
+
+    public function pedidos()
+    {
+        return $this->hasOne(Pedido::class, 'id', 'pedido_id');
     }
 
     public function transportes()

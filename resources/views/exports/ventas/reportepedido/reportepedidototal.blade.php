@@ -1,122 +1,133 @@
-<h2> Totales de Pedidos de Ventas </h2>
-<h1><strong>Vendedor: {{$vendedor ?? ''}}-{{$nombre_vendedor}}</strong>&nbsp;&nbsp;
+<h1> Kilos Pedidos Totalizado por Pedido </h1>
+<h2><strong>Reparto: {{$transporte ?? ''}}</strong>&nbsp;&nbsp;
 	<strong>Desde: {{date("d/m/Y", strtotime($desdefecha ?? ''))}} </strong>&nbsp;
 	<strong>Hasta: {{date("d/m/Y", strtotime($hastafecha ?? ''))}} </strong>
-</h1>
+</h2>
 <table>
 	<thead>
     <tr>
+		<th>Reparto</th>
+		<th>Nombre Reparto</th>
        	<th>Cliente</th>
        	<th>Nombre</th>
        	<th>Pedido</th>
        	<th>Fecha</th>
-       	<th>Pedidos</th>
-       	<th>Produccion</th>
-       	<th>Facturados</th>
-       	<th>Pendientes</th>
-       	<th>Efectividad</th>
+		<th>Localidad</th>
+		<th>Provincia</th>
+       	<th>Piezas</th>
+		<th>Kilos Teóricos</th>
+       	<th>Kilos Pesados</th>
+       	<th>Cajas</th>
     </tr>
   	</thead>
     <tbody>
 	@php
-		$cliente_actual = '';
-		$nombre_actual = '';
-		$vendedor_actual = '';
-		$nombrevendedor_actual = '';
-		$totv_pedido = $totc_pedido = $totp_pedido = 0;
-		$totv_produccion = $totc_produccion = $totp_produccion = 0;
-		$totv_facturado = $totc_facturado = $totp_facturado = 0;
-		$totv_pendiente = $totc_pendiente = $totp_pendiente = 0;
-		$id_actual = 0;
-		$fecha_actual = 0;
-		$tipo_actual = $letra_actual = '';
-		$sucursal_actual = $numero_actual = 0;
-		$fl_primer_mov = true;
+		$repartoActual = '';
+		$nombreRepartoActual = '';
+		$totalPieza = $totalCaja = $totalKiloPesado = $totalKiloTeorico = 0;
+		$totalFinalPieza = $totalFinalCaja = $totalFinalKiloPesado = $totalFinalKiloTeorico = 0;
+		$fl_primer_item = false;
 	@endphp
-
     @foreach ($comprobantes as $data)
-		@if ($id_actual != $data->numero)
-			@if ($id_actual != 0)
-				@include('exports.ventas.reportepedido.imprimeunrenglon')
-				@php 
-					$totc_pedido += $totp_pedido;
-					$totc_produccion += $totp_produccion;
-					$totc_facturado += $totp_facturado;
-					$totc_pendiente += $totp_pendiente;
-					$totv_pedido += $totp_pedido;
-					$totv_produccion += $totp_produccion;
-					$totv_facturado += $totp_facturado;
-					$totv_pendiente += $totp_pendiente;
-				@endphp
+		@if ($data->codigotransporte != $repartoActual)
+			@if ($repartoActual != '')
+        	<tr>
+           		<td>
+					@if ($fl_primer_item)
+						{{$repartoActual}}
+					@endif
+				</td>
+           		<td>
+					@if ($fl_primer_item)
+						{{$nombreRepartoActual}}
+					@endif
+					@php $fl_primer_item = false; @endphp
+				</td>
+           		<td></td>
+				<td></td>
+				<td></td>
+				<td></td>
+				<td></td>
+           		<td></td>
+           		<td align="right">{{number_format(floatval($totalPieza), 2)}}</td>
+           		<td align="right">{{number_format(floatval($totalKiloTeorico), 2)}}</td>
+				<td align="right">{{number_format(floatval($totalKiloPesado), 2)}}</td>
+           		<td align="right">{{number_format(floatval($totalCaja), 2)}}</td>
+        	</tr>
 			@endif
 			@php 
-				$id_actual = $data->numero;
-				$totp_pedido = $totp_produccion = $totp_facturado = $totp_pendiente = 0;
-			@endphp
+				$fl_primer_item = true;
+				$totalPieza = $totalCaja = $totalKiloPesado = $totalKiloTeorico = 0;
+				$repartoActual = $data->codigotransporte;
+				$nombreRepartoActual = $data->nombretransporte;
+			@endphp 
 		@endif
-
-		@if ($data->cliente != $cliente_actual)
-			@if ($cliente_actual != '')
-				@include('exports.ventas.reportepedido.imprimetotalcliente')
-			@endif
-			@php 
-				$cliente_actual = $data->cliente; 
-				$nombre_actual = $data->nombre; 
-	
-				$totc_pedido = $totc_produccion = $totc_facturado = $totc_pendiente = 0;
-			@endphp
-		@endif
-
-		@if ($data->vendedor != $vendedor_actual)
-			@if ($vendedor_actual != '')
-				@include('exports.ventas.reportepedido.imprimetotalvendedor')
-			@endif
-			@php 
-				$vendedor_actual = $data->vendedor; 
-				$nombrevendedor_actual = $data->nombre_vendedor; 
-	
-				$totv_pedido = $totv_produccion = $totv_facturado = $totv_pendiente = 0;
-			@endphp
-		@endif
-		@php
-			$fecha_actual = $data->fecha;
-			$tipo_actual = $data->tipo;
-			$letra_actual = $data->letra;
-			$sucursal_actual = $data->sucursal;
-			$numero_actual = $data->numero;
-
-			$totp_pedido += $data->cantidad; 
-		@endphp
-
-		@if ($data->nro_orden != 0 && $data->nro_orden != -1 && ($data->cantfact == 0 || $data->cantfact == null))
-			@php $totp_produccion += $data->cantidad; @endphp
-		@endif
-		@if ($data->cantfact > 0)
-			@php $totp_facturado += $data->cantidad; @endphp
-		@endif
-		@if (($data->cantfact == 0 || $data->cantfact == null) && ($data->nro_orden == 0 || $data->nro_orden == -1))
-			@php $totp_pendiente += $data->cantidad; @endphp
-		@endif
-
-    @endforeach
-
-	@if ($id_actual != 0)
-		@include('exports.ventas.reportepedido.imprimeunrenglon')
 
 		@php 
-			$totc_pedido += $totp_pedido;
-			$totc_produccion += $totp_produccion;
-			$totc_facturado += $totp_facturado;
-			$totc_pendiente += $totp_pendiente;
-			$totv_pedido += $totp_pedido;
-			$totv_produccion += $totp_produccion;
-			$totv_facturado += $totp_facturado;
-			$totv_pendiente += $totp_pendiente;
+			$totalPieza += $data->total_pieza;
+			$totalKiloTeorico += $data->total_kilo; 
+			$totalKiloPesado += $data->total_pesada; 
+			$totalCaja += $data->total_caja; 
+
+			$totalFinalPieza += $data->total_pieza;
+			$totalFinalKiloTeorico += $data->total_kilo; 
+			$totalFinalKiloPesado += $data->total_pesada; 
+			$totalFinalCaja += $data->total_caja; 
 		@endphp
 
-		@include('exports.ventas.reportepedido.imprimetotalcliente')
-	@endif
-	@include('exports.ventas.reportepedido.imprimetotalvendedor')
-
+		<tr>
+			<td></td>
+			<td></td>
+			<td>{{$data->codigocliente}}</td>
+			<td>{{$data->nombrecliente}}</td>
+			<td>{{$data->codigopedido}}</td>
+			<td>{{$data->fechaentrega->format('d-m-Y H:i')}}</td>
+			<td>{{$data->nombrelocalidad}}</td>
+			<td>{{$data->nombreprovincia}}</td>
+			<td align="right">{{number_format(floatval($data->total_pieza), 2)}}</td>
+			<td align="right">{{number_format(floatval($data->total_kilo), 2)}}</td>
+			<td align="right">{{number_format(floatval($data->total_pesada), 2)}}</td>
+			<td align="right">{{number_format(floatval($data->total_caja), 2)}}</td>
+			<td> </td>
+		</tr>		
+    @endforeach
+	<tr>
+		<td>
+			@if ($fl_primer_item)
+				{{$repartoActual}}
+			@endif
+		</td>
+		<td>
+			@if ($fl_primer_item)
+				{{$nombreRepartoActual}}
+			@endif
+			@php $fl_primer_item = false; @endphp
+		</td>
+		<td></td>
+		<td></td>
+		<td></td>
+		<td></td>
+		<td></td>
+		<td></td>
+		<td align="right">{{number_format(floatval($totalPieza), 2)}}</td>
+		<td align="right">{{number_format(floatval($totalKiloTeorico), 2)}}</td>
+		<td align="right">{{number_format(floatval($totalKiloPesado), 2)}}</td>
+		<td align="right">{{number_format(floatval($totalCaja), 2)}}</td>
+		<td> </td>
+	</tr>	
+	<tr>
+		<td>TOTAL FINAL</td>
+		<td></td>
+		<td></td>
+		<td></td>
+		<td></td>
+		<td></td>
+		<td></td>
+		<td></td>
+		<td align="right">{{number_format(floatval($totalFinalPieza), 2)}}</td>
+		<td align="right">{{number_format(floatval($totalFinalKiloTeorico), 2)}}</td>
+		<td align="right">{{number_format(floatval($totalFinalKiloPesado), 2)}}</td>
+		<td align="right">{{number_format(floatval($totalFinalCaja), 2)}}</td>
+	</tr>
 	</tbody>
 </table>

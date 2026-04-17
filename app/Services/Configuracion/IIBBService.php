@@ -153,7 +153,7 @@ class IIBBService
 								$tasa = $tasasDescarte[$i];
 						}
 
-						$importePercepcion = $totalNeto * $tasa / 100. * $coeficienteCm05;
+						$importePercepcion = round($totalNeto * $tasa / 100. * $coeficienteCm05, 2);
 						//if ($i == 1)
 						//	dd($totalNeto.' '.$minimoNeto[$i].' '.$importePercepcion.' '.$minimaPercepcion[$i].' '.$i.' '.$tasa);
 

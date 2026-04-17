@@ -191,7 +191,7 @@ class ImpuestoService extends FacturacionService
 						$impuesto_codigoarca = $impuesto->codigoarca;
 					}
 
-					$totalNeto = $neto['totalConDescuento'];
+					$totalNeto = round($neto['totalConDescuento'], 2);
 
 					// Asigna total neto para calculos posteriores
 					$dataItem[$off-1]['totalcondescuento'] = $totalNeto;
@@ -206,7 +206,7 @@ class ImpuestoService extends FacturacionService
 		// Agraga item de logistica
 		if (strtoupper(config('app.empresa')) == 'EL BIERZO' && $porcentajeLogistica && !$flGrabaComprobanteDividido)
 		{
-			$totalLogistica = $totalNeto * $porcentajeLogistica / 100.;
+			$totalLogistica = round($totalNeto * $porcentajeLogistica / 100., 2);
 			
 			$impuesto = Impuesto::findOrFail(config('facturacion.IMPUESTO_LOGISTICA_ID'));
 
@@ -230,7 +230,7 @@ class ImpuestoService extends FacturacionService
 		if (($descuentoFinal+$porcentajeDescuentoImportePie) != 0.)
 		{
 			if ($porcDescuento != 0.)
-				$detalle = "Descuento ".$porcDescuento.'%';
+				$detalle = "Descuento Gral. ".$porcDescuento.'%';
 			else
 				$detalle = "Descuento";
 			
@@ -248,7 +248,7 @@ class ImpuestoService extends FacturacionService
 				if($netos[$i]['tasa'] != 0.)
 				{
 					$detalle = "Iva ".$netos[$i]['tasa']."%";
-					$importe = $netos[$i]['importe'] * $netos[$i]['tasa'] / 100.;
+					$importe = round($netos[$i]['importe'] * $netos[$i]['tasa'] / 100., 2);
 	
 					$impuestos[] = ["concepto"=>$detalle,
 								"baseimponible" => $netos[$i]['importe'],
@@ -273,7 +273,7 @@ class ImpuestoService extends FacturacionService
 					if($netos[$i]['tasa'] != 0.) // Solo trae los importes gravados
 					{
 						$importeNeto += $netos[$i]['importe'];
-						$importePercepcion += ($netos[$i]['importe'] * env('ANITA_TASA_PERCEPCION_IVA') / 100.);
+						$importePercepcion += round($netos[$i]['importe'] * env('ANITA_TASA_PERCEPCION_IVA') / 100., 2);
 					}
 				}
 			}			

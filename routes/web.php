@@ -1051,6 +1051,7 @@ Route::post('ventas/facturarporpedido', 'Ventas\FacturacionController@facturarPo
 // Actualiza pedido desde otras aplicaciones fuera del ABM
 Route::get('ventas/actualizasolopedido/{estadopedido}/{pedido_id}', 'Ventas\PedidoController@actualizaSoloPedido')->name('actualiza_solo_pedido');
 Route::get('ventas/leerhistoriaitempedido/{pedido_articulo_id}', 'Ventas\PedidoController@leerHistoriaItemPedido')->name('leer_historia_item_pedido');
+
 /* 
  * Ordenes de trabajo
  */

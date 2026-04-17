@@ -87,7 +87,7 @@ class PedidoRepository implements PedidoRepositoryInterface
 	
     public function find($id)
     {
-        if (null == $pedido = $this->model->with("pedido_articulos")->with("pedido_articulo_cajas")->with("clientes")->find($id)) {
+        if (null == $pedido = $this->model->with("pedido_articulos")->with("pedido_articulo_cajas")->with("clientes")->with('ventas')->find($id)) {
             throw new ModelNotFoundException("Registro no encontrado");
         }
 		return $pedido;

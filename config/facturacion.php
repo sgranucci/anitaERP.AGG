@@ -7,7 +7,7 @@ switch(strtoupper(config('app.empresa')))
         return [
             "DIGITOS_SUCURSAL" => "5",
             "DIGITOS_COMPROBANTE" => "8",
-            "LIMITE_FCE" => 3958316,
+            "LIMITE_FCE" => 5549862,
             "PUNTOVENTA_FACTURACION" => 5,
             "PUNTOVENTA_REMITO" => 1,
             "CUENTACONTABLE_PERCEPCION_IVA" => '211290000',
@@ -17,6 +17,7 @@ switch(strtoupper(config('app.empresa')))
             "USA_DETRACCION" => 'N',
             "PUNTOVENTA_DIVISION_ID" => 5,
             "PUNTOVENTA_DIVISION_LOCAL_ID" => 6,
+            "COEFICIENTE_EXTRA_REPARTO_101" => 1.10,
             "DECIMAL_KILO" => 2,
             "DECIMAL_CANTIDAD" => 2,
             "DECIMAL_PIEZA" => 2,

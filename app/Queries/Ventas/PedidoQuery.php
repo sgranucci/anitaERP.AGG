@@ -464,44 +464,81 @@ class PedidoQuery implements PedidoQueryInterface
     // Lee para reporte de kilos pedidos
     
     public function findPorKiloPedido($tipolistado, $estado, $desdefecha, $hastafecha,
-                                    $desdetransporte_id, $hastatransporte_id)
+                                    $codigodesdetransporte, $codigohastatransporte)
     {
-        $pedido = $this->model
-                        ->select('pedido.fecha as fecha',
-                                'pedido.codigo as codigo',
-                                'cliente.nombre as nombre',
-                                'cliente.codigo as cliente',
-                                'articulo.sku as sku',
-                                'pedido_articulo.caja as caja',
-                                'pedido_articulo.pieza as pieza',
-                                'pedido_articulo.kilo as kilo',
-                                'pedido_articulo.pesada as pesada',
+        if ($tipolistado == 'TOTAL')
+        {
+            $pedido = $this->model
+                        ->select('pedido.fechaentrega as fechaentrega',
+                                'pedido.codigo as codigopedido',
+                                'cliente.nombre as nombrecliente',
+                                'cliente.codigo as codigocliente',
+                                'localidad.nombre as nombrelocalidad',
+                                'provincia.nombre as nombreprovincia',
+                                DB::raw('SUM(pedido_articulo.caja) as total_caja'),
+                                DB::raw('SUM(pedido_articulo.pieza) as total_pieza'),
+                                DB::raw('SUM(pedido_articulo.kilo) as total_kilo'),
+                                DB::raw('SUM(pedido_articulo.pesada) as total_pesada'),
                                 'pedido.estado as estado',
                                 'transporte.codigo as codigotransporte',
-                                'transporte.nombre as nombretransporte')
-                        ->join('pedido_articulo', 'pedido_articulo.pedido_id', '=', 'pedido.id')
-                        ->join('articulo', 'articulo.id', '=', 'pedido_articulo.articulo_id')
-                        ->join('cliente', 'cliente.id', '=', 'pedido.cliente_id')
-                        ->leftjoin('transporte', 'transporte.id', '=', 'pedido.transporte_id')
-                        ->whereBetween('pedido.fecha', [$desdefecha, $hastafecha]);
-
-        // Verifica si ingreso repartos en particular
-        if (strpos($desdetransporte_id, ',') !== false)
-        {
-            $transportes = explode(",", $desdetransporte_id);
-
-            $pedido->whereIn('pedido.transporte_id', $transportes);
+                                'transporte.nombre as nombretransporte');
         }
         else
         {
-            if ($desdetransporte_id > 0)
-                $pedido->whereBetween('pedido.transporte_id', [$desdetransporte_id, $hastatransporte_id]);
+            $pedido = $this->model
+                        ->select('pedido.fechaentrega as fechaentrega',
+                                'pedido.codigo as codigopedido',
+                                'articulo.sku as sku',
+                                'articulo.descripcion as descripcion',
+                                'categoria.codigo as codigocategoria',
+                                DB::raw('SUM(pedido_articulo.caja) as total_caja'),
+                                DB::raw('SUM(pedido_articulo.pieza) as total_pieza'),
+                                DB::raw('SUM(pedido_articulo.kilo) as total_kilo'),
+                                DB::raw('SUM(pedido_articulo.pesada) as total_pesada'),
+                                'transporte.codigo as codigotransporte',
+                                'transporte.nombre as nombretransporte');
         }
 
-        $pedido->orderBy('pedido.transporte_id')
-                ->orderBy('articulo.sku')
-                ->get();
-dd($pedido);
+        $pedido = $pedido->join('pedido_articulo', 'pedido_articulo.pedido_id', '=', 'pedido.id')
+                        ->join('articulo', 'articulo.id', '=', 'pedido_articulo.articulo_id')
+                        ->leftjoin('categoria', 'categoria.id', '=', 'articulo.categoria_id')
+                        ->join('cliente', 'cliente.id', '=', 'pedido.cliente_id')
+                        ->leftjoin('localidad', 'localidad.id', '=', 'cliente.localidad_id')
+                        ->leftjoin('provincia', 'provincia.id', '=', 'cliente.provincia_id')
+                        ->leftjoin('transporte', 'transporte.id', '=', 'pedido.transporte_id')
+                        ->whereBetween('pedido.fechaentrega', [$desdefecha, $hastafecha]);
+
+        switch($estado)
+        {
+            case 'PENDIENTE':
+                $pedido = $pedido->where('pedido.estadopedido', 'Pendiente');
+                break;
+        }
+
+        // Verifica si ingreso repartos en particular
+        if (strpos($codigodesdetransporte, ',') !== false)
+        {
+            $transportes = explode(",", $codigodesdetransporte);
+
+            $pedido = $pedido->whereIn('transporte.codigo', $transportes);
+        }
+        else
+        {
+            if ($codigodesdetransporte > 0)
+                $pedido = $pedido->whereBetween('transporte.codigo', [$codigodesdetransporte, $codigohastatransporte]);
+        }
+
+        if ($tipolistado == 'TOTAL')
+            $pedido = $pedido->orderBy('transporte.codigo')
+                    ->orderBy('pedido.codigo')
+                    ->groupBy('pedido.codigo')
+                    ->get();
+        else
+            $pedido = $pedido->orderBy('transporte.codigo')
+                    ->orderBy('articulo.sku')
+                    ->groupBy('transporte.codigo', 'articulo.sku')
+                    ->get();
+
         return $pedido;    
     }
 }

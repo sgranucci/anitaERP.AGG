@@ -15,7 +15,7 @@
     			</tr>
     		</thead>
     		<tbody id="tbody-tabla-cm05">
-				@if (isset($dat->cliente_cm05s))
+				@if (isset($data->cliente_cm05s))
 				@if (count($data->cliente_cm05s) > 0)
 		 		@if ($data->cliente_cm05s ?? '') 
 					@foreach (old('cliente_cm05s', $data->cliente_cm05s->count() ? $data->cliente_cm05s : ['']) as $cm05)

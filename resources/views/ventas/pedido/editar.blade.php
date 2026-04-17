@@ -67,7 +67,7 @@
                     <a href="{{route('pedido')}}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
-					<button type="submit" onclick="pesada()" class="btn btn-primary">
+					<button type="submit" onclick="pesada()" class="btn btn-success">
                     	<i class="fa fa-fw fa-check"></i>
 						Pesada
 					</button>
@@ -85,6 +85,21 @@
                     @else
                         <input type="hidden" id="suspendepedido" value="">
                     @endif
+                    @if ($pedido->estadopedido == "Facturado" && isset($pedido->ventas[0]->id))
+                        @if (can('listar-factura', false))
+                            <a href="{{route('lista_una_factura', ['id' => $pedido->ventas[0]->id])}}" class="btn btn-primary" title="Listar la factura">
+                                <i class="fas fa-file-pdf"> Listar Factura</i>
+                            </a>                    
+                        @endif  
+                    @endif
+                    <a href="{{route('listar_pedido_pdf', ['id' => $pedido['id']])}}" class="btn btn-primary" title="Listar el pedido en PDF">
+                        <i class="fas fa-file-pdf"> Listar Pedido</i>
+                    </a>      
+                    @if (can('listar-cuentacorriente-cliente', false))
+                        <a href="{{route('listar_cuentacorriente_cliente', ['id' => $pedido->cliente_id])}}" target="_blank" class="btn btn-primary" title="Cuenta Corriente">
+                        <i class="fa fa-folder-open"> Listar Cuenta Corriente</i>
+                        </a>
+                    @endif                                  
                 </div>
             </div>
             <form action="{{route('actualizar_pedido', ['id' => $pedido->id])}}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off">

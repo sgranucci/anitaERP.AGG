@@ -358,23 +358,25 @@ class FacturacionService
 				$precioUnitario = $pedido_articulo->precio;
 				if ($this->flDivide)
 				{
+					$decimal = config('facturacion.DECIMAL_CANTIDAD');
+
 					// Graba en Villafranca
 					if ($this->flGrabaComprobanteDividido)
 					{
 						if ($this->coeficienteExtraCliente != 0)
 							$precioUnitario = $pedido_articulo->precio * $this->coeficienteExtraCliente;
 
-						$kilo = $pedido_articulo->pesada * $this->coeficienteCliente / 100.;
-						$pieza = $pedido_articulo->pieza * $this->coeficienteCliente / 100.;
-						$caja = $pedido_articulo->caja * $this->coeficienteCliente / 100.;
+						$kilo = round($pedido_articulo->pesada * $this->coeficienteCliente / 100., $decimal);
+						$pieza = round($pedido_articulo->pieza * $this->coeficienteCliente / 100., $decimal);
+						$caja = round($pedido_articulo->caja * $this->coeficienteCliente / 100., $decimal);
 					}
 					else // Deja el resto para grabar en Bierzo
 					{
 						$coeficiente = ((100. - $this->coeficienteCliente)/100.);
 
-						$kilo = $pedido_articulo->pesada * $coeficiente;
-						$pieza = $pedido_articulo->pieza * $coeficiente;
-						$caja = $pedido_articulo->caja * $coeficiente;
+						$kilo = round($pedido_articulo->pesada * $coeficiente, $decimal);
+						$pieza = round($pedido_articulo->pieza * $coeficiente, $decimal);
+						$caja = round($pedido_articulo->caja * $coeficiente, $decimal);
 					}
 				}
 				else
@@ -385,7 +387,7 @@ class FacturacionService
 				}
 
 				if ($this->descuentoLinea != 0)
-					$precioConDescuento = $precioUnitario * (1. - ($this->descuentoLinea / 100.));
+					$precioConDescuento = round($precioUnitario * (1. - ($this->descuentoLinea / 100.)), 2);
 				else
 					$precioConDescuento = $precioUnitario;
 
@@ -479,7 +481,10 @@ class FacturacionService
 		if ($pedido->transportes->tipoexpreso == '3' && 
 			($tipotransaccion->codigo == '001' || $tipotransaccion->codigo == '201'))
 		{
-			$this->coeficienteExtraCliente = $cliente->coeficienteextra;
+			if ($pedido->transportes->tipoexpreso == '4') // Genera solo remito
+				$this->coeficienteExtraCliente = config('facturacion.COEFICIENTE_EXTRA_REPARTO_101');
+			else
+				$this->coeficienteExtraCliente = $cliente->coeficienteextra;
 
 			if (isset($cliente->coeficientes))
 			{
@@ -922,7 +927,7 @@ class FacturacionService
 							'cantidad' => $item['cantidad'],
 							'pieza' => $item['pieza'] ?? 0,
 							'caja' => $item['caja'] ?? 0,
-							'precio' => $item['precio'],
+							'precio' => $item['preciosindescuento'],
 							'impuesto_id' => $item['impuesto_id'],
 							'costo' => 0,
 							'despacho' => $item['despacho'],
@@ -2864,7 +2869,7 @@ class FacturacionService
 			if (strpos($concepto['concepto'], 'Percepcion IVA') !== false)
 				$totalPercepcionIva += $concepto['importe'];
 
-			if (strpos($concepto['concepto'], 'Descuento') !== false)
+			if (strpos($concepto['concepto'], 'Descuento Gral') !== false)
 			{
 				$totalDescuento += $concepto['importe'];
 				$porcentajeDescuento = $concepto['tasa'];
@@ -3296,6 +3301,11 @@ class FacturacionService
 			$dataItem = [];
 			foreach($datatalle as $item)
 			{
+				if (isset($item['preciosindescuento']))
+					$precio = $item['preciosindescuento'];
+				else
+					$precio = $item['precio'];
+
 				if (isset($item['sku']) && isset($item['medidas']))
 				{
 					$flGrabaStock = true;
@@ -3335,6 +3345,7 @@ class FacturacionService
 								'partida' => $partida,
 								'cantidad' => $medida['cantidad'],
 								'precio' => $medida['precio'],
+								'descuento' => $medida['descuento'],
 								'impuesto_id' => $item['impuesto_id'],
 								'incluyeimpuesto' => $item['incluyeimpuesto'],
 								'pedido' => $medida['pedido'],
@@ -3358,7 +3369,8 @@ class FacturacionService
 							'cantidad' => $item['cantidad'],
 							'pieza' => $item['pieza'],
 							'caja' => $item['caja'],
-							'precio' => $item['precio'],
+							'precio' => $precio,
+							'descuento' => $item['descuento'],
 							'impuesto_id' => $item['impuesto_id'],
 							'incluyeimpuesto' => $item['incluyeimpuesto'],
 							'pedido' => $pedido_id,
@@ -3374,7 +3386,8 @@ class FacturacionService
 							'cantidad' => $item['cantidad'],
 							'pieza' => 0,
 							'caja' => 0,
-							'precio' => $item['precio'],
+							'precio' => $precio,
+							'descuento' => $item['descuento'],
 							'impuesto_id' => $item['impuesto_id'],
 							'incluyeimpuesto' => $item['incluyeimpuesto'],
 							'pedido' => 0,
@@ -3403,6 +3416,7 @@ class FacturacionService
 						'partida' => 0,
 						'cantidad' => 1,
 						'precio' => $precio,
+						'descuento' => 0,
 						'impuesto_id' => $datatalle[0]['impuesto_id'],
 						'incluyeimpuesto' => $datatalle[0]['incluyeimpuesto'],
 						'pedido' => 0,
@@ -3416,6 +3430,7 @@ class FacturacionService
 						'partida' => 0,
 						'cantidad' => 0,
 						'precio' => 0,
+						'descuento' => 0,
 						'impuesto_id' => 0,
 						'incluyeimpuesto' => ' ',
 						'pedido' => 0,
@@ -3427,6 +3442,7 @@ class FacturacionService
 				'partida' => 0,
 				'cantidad' => 0,
 				'precio' => 0,
+				'descuento' => 0,
 				'impuesto_id' => 0,
 				'incluyeimpuesto' => ' ',
 				'pedido' => 0,
@@ -3465,7 +3481,7 @@ class FacturacionService
 								'".$medida['cantidad']."', 
 								'".$medida['precio']."', 
 								'".$medida['descripcion']."', 
-								'".($this->descuentoLinea == null || $letra == 'E'? '0' : $this->descuentoLinea)."',
+								'".$medida['descuento']."',
 								'".'1'."',
 								'".$medida['impuesto_id']."', 
 								'".'0'."',
@@ -3546,7 +3562,7 @@ class FacturacionService
 								'".$precio."',
 								'".$venta['moneda_id']."',
 								'".$medida['impuesto_id']."', 
-								'".($this->descuentoLinea == null || $letra == 'E'? 0 : $this->descuentoLinea)."',
+								'".$medida['descuento']."',
 								'".($this->descuentoPie == null ? 0 : $this->descuentoPie)."',
 								'".'0'."',
 								'".$orden."',
@@ -4475,9 +4491,22 @@ class FacturacionService
 				$detalle = $ventaItem->detalle;
 			}
 
+			// Calcula los kilos sin descuento y el descuento
+			$KiloDescuento = 0;
+			$cantidad = $ventaItem->cantidad;
+			if (config('app.empresa') == 'EL BIERZO')
+			{
+				if ($ventaItem->descuento != 0)
+				{
+					$cantidad = $ventaItem->cantidad * (1. - ($ventaItem->descuento / 100.));	
+					$kiloDescuento = $ventaItem->cantidad * $ventaItem->descuento / 100.;
+				}
+			}
+
 			$tblItem[] = ["sku" => $sku,
 					"detalle" => $detalle,
-					"cantidad" => $ventaItem->cantidad,
+					"cantidad" => $cantidad,
+					"kilodescuento" => $kiloDescuento,
 					"caja" => $ventaItem->caja,
 					"pieza" => $ventaItem->pieza,
 					"precio" => $precioArticulo,
@@ -4535,6 +4564,11 @@ class FacturacionService
             "tipoCodAut" => $tipoCodAut,
             "codAut" => intval($venta->cae),
 		];
+		if (config('app.empresa') == "EL BIERZO")
+		{
+			unset($conceptosTotales[0]);
+			unset($conceptosTotales[1]);
+		}
 
 		$datosJson_cmp = json_encode($datos_cmp);
 		$url = 'https://www.arca.gob.ar/fe/qr/?p='.base64_encode($datosJson_cmp);

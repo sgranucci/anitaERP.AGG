@@ -39,9 +39,9 @@ class KiloPedidoExport implements FromView, WithColumnFormatting, WithMapping, S
 	public function view(): View
 	{
 		$fecha = strtotime($this->desdefecha);
-		$desde_fecha = date('Ymd', $fecha);
+		$desde_fecha = date('Y-m-d', $fecha);
 		$fecha = strtotime($this->hastafecha);
-		$hasta_fecha = date('Ymd', $fecha);
+		$hasta_fecha = date('Y-m-d', $fecha);
 
 		$datas = $this->pedidoService->generaDatosKiloPedido($this->tipolistado, $this->estado, $desde_fecha, $hasta_fecha, 
 														$this->desdetransporte, $this->hastatransporte);
@@ -54,19 +54,11 @@ class KiloPedidoExport implements FromView, WithColumnFormatting, WithMapping, S
 
 	public function columnFormats(): array
     {
-		if ($this->flDesdeIndex)
-			return [
-				'A' => NumberFormat::FORMAT_TEXT,
-				'C' => NumberFormat::FORMAT_TEXT,
-				'E' => NumberFormat::FORMAT_GENERAL,
-			];
-		else
-			return [
-				'A' => NumberFormat::FORMAT_TEXT,
-				'H' => NumberFormat::FORMAT_TEXT,
-				'I' => NumberFormat::FORMAT_TEXT,
-				'J' => NumberFormat::FORMAT_TEXT,
-			];		
+		return [
+			'A' => NumberFormat::FORMAT_TEXT,
+			'C' => NumberFormat::FORMAT_TEXT,
+			'E' => NumberFormat::FORMAT_GENERAL,
+		];
     }
 
 	public function map($row): array
@@ -77,65 +69,29 @@ class KiloPedidoExport implements FromView, WithColumnFormatting, WithMapping, S
 
     public function styles(Worksheet $sheet)
     {
-		if ($this->flDesdeIndex)
-			return [
-				2   => ['font' => ['bold' => true,
-									'color' => array('rgb' => '17202A'),
-									'size'  => 12,
-									'name'  => 'Arial'
-									],
-						'fill' => [
-									'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
-									'color' => array('rgb' => '85C1E9'),
-						]
-						],
-				'B' => ['font' => ['bold' => true]],
-				'C' => ['font' => ['bold' => true]],
-				'E' => ['font' => ['bold' => true]],
-				'F' => ['font' => ['bold' => true]],
-			];
-		else
-			return [
-				2   => ['font' => ['bold' => true,
-									'color' => array('rgb' => '17202A'),
-									'size'  => 12,
-									'name'  => 'Arial'
-									],
-						],
-				3   => ['font' => ['bold' => true,
-									'color' => array('rgb' => '17202A'),
-									'size'  => 12,
-									'name'  => 'Arial'
-									],
-						'fill' => [
-									'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
-									'color' => array('rgb' => '85C1E9'),
-						]
-						],
-				'B' => ['font' => ['bold' => true]],
-				'G' => ['font' => ['bold' => true]],
-				'H' => ['font' => ['bold' => true]],
-				'J' => ['font' => ['bold' => true]],
-				'M' => ['font' => ['bold' => true]],
-			];		
+		return [
+			3   => ['font' => ['bold' => true,
+								'color' => array('rgb' => '17202A'),
+								'size'  => 12,
+								'name'  => 'Arial'
+								],
+					'fill' => [
+								'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+								'color' => array('rgb' => '85C1E9'),
+					]
+					],					
+			'B' => ['font' => ['bold' => true]],
+			'C' => ['font' => ['bold' => true]],
+			'E' => ['font' => ['bold' => true]],
+			'F' => ['font' => ['bold' => true]],
+		];
     }
 
 	public function columnWidths(): array
     {
-		if ($this->flDesdeIndex)
-			return [
-				'A' => 8,
-				'C' => 40,
-				'D' => 10,
-				'E' => 10,
-			];
-		else
-			return [
-				'A' => 10,
-				'C' => 15,
-				'D' => 10,
-				'E' => 15,
-			];
+		return [
+			'A' => 10,
+		];
     }
 
 	public function registerEvents(): array
@@ -143,7 +99,7 @@ class KiloPedidoExport implements FromView, WithColumnFormatting, WithMapping, S
         return [
             AfterSheet::class    => function(AfterSheet $event) {
 
-                $event->sheet->getDelegate()->freezePane('A3');
+                $event->sheet->getDelegate()->freezePane('A4');
 
             },
         ];
@@ -151,7 +107,7 @@ class KiloPedidoExport implements FromView, WithColumnFormatting, WithMapping, S
 
 	public function title(): string
     {
-        return 'Reporte de Pedidos';
+        return 'Kilos Pedidos';
     }
 
 	public function rangoFecha($desdefecha, $hastafecha)
@@ -174,14 +130,6 @@ class KiloPedidoExport implements FromView, WithColumnFormatting, WithMapping, S
 	{
 		$this->tipolistado = $tipolistado;
 		$this->estado = $estado;
-
-		return $this;
-	}
-
-	public function parametros($busqueda)
-	{
-		$this->busqueda = $busqueda;
-		$this->flDesdeIndex = true;
 
 		return $this;
 	}

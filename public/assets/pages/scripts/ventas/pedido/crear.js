@@ -1553,18 +1553,21 @@
             var datoscli = $.map(data, function(value, index){
                 return [value];
             });
-            const vendedor_id = datoscli[1];
-            const transporte_id = datoscli[2];
+            const vendedor_id = datoscli[1] == null ? 1 : datoscli[1];
+            const transporte_id = datoscli[2] == null ? 0 : datoscli[2];
             const condicionventa_id = datoscli[3];
             const descuento = datoscli[4];
 			const tiposuspension_id = datoscli[5];
 			const lugarentrega = datoscli[6];
 			const zonavta_id = datoscli[7];
-			const codigotransporte = datoscli[9].codigo;
-			const nombretransporte = datoscli[9].nombre;
+			const codigotransporte = datoscli[11].codigo;
+			const nombretransporte = datoscli[11].nombre;
 
 			if (flCambioCliente)
 			{
+				if (vendedor_id == null)
+					vendedor_id = 1;
+
 				$('#vendedor_id').val(vendedor_id);
 				$('#transporte_id').val(transporte_id);
 				$('#codigotransporte').val(codigotransporte);

@@ -252,6 +252,12 @@ class TransporteRepository implements TransporteRepositoryInterface
 		$this->setCondicionIvaAnita($request, $condicioniva_id);
 
 		if (config('app.empresa') == "EL BIERZO")
+		{
+			if ($request['tipoexpreso'] == '4')
+				$tipoExpreso = '3';
+			else
+				$tipoExpreso = $request['tipoexpreso'];
+
 			$data = array( 'tabla' => $this->tableAnita, 'acc' => 'insert',
 				'campos' => ' 
 					expr_codigo,
@@ -291,7 +297,7 @@ class TransporteRepository implements TransporteRepositoryInterface
 					'0',
 					' ',
 					' ',
-					'".$request['tipoexpreso']."',
+					'".$tipoExpreso."',
 					'".$request['copiaremito']."',
 					' ',
 					' ',
@@ -303,6 +309,7 @@ class TransporteRepository implements TransporteRepositoryInterface
 					' ',
 					' '"
 			);
+		}
 		else
         $data = array( 'tabla' => $this->tableAnita, 'acc' => 'insert',
             'campos' => ' 
@@ -338,6 +345,12 @@ class TransporteRepository implements TransporteRepositoryInterface
 		$this->setCondicionIvaAnita($request, $condicioniva);
 
 		if (config('app.empresa') == "EL BIERZO")
+		{
+			if ($request['tipoexpreso'] == '4')
+				$tipoExpreso = '3';
+			else
+				$tipoExpreso = $request['tipoexpreso'];
+
 			$data = array( 'acc' => 'update', 'sistema' => 'ventas', 'tabla' => $this->tableAnita, 
 				'valores' => " 
                 expr_codigo 	                = '".$request['codigo']."',
@@ -353,9 +366,10 @@ class TransporteRepository implements TransporteRepositoryInterface
                 expr_dom_acoplado 	            = '".$request['patenteacoplado']."',
 				expr_copias_remito              = '".$request['copiaremito']."',
 				expr_copias_pedido              = '".$request['copiapedido']."',
-                expr_tipo_expr	                = '".$request['tipoexpreso']."' "
+                expr_tipo_expr	                = '".$tipoExpreso."' "
 					,
 				'whereArmado' => " WHERE expr_codigo = '".$id."' " );
+		}
 		else
 			$data = array( 'acc' => 'update', 'sistema' => 'ventas', 'tabla' => $this->tableAnita, 
 				'valores' => " 
