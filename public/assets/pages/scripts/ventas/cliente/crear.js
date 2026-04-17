@@ -167,7 +167,7 @@
 
         $("#botonemitenc").click(function(){
             let cliente_id = $('#cliente_id').val();
-            let url = '/anitaERP/public/ventas/cliente/emitenc/'+cliente_id;
+            let url = carpetaBase+'/ventas/cliente/emitenc/'+cliente_id;
 
             $.get(url, function(data, textStatus){
 				if (textStatus == 'success')

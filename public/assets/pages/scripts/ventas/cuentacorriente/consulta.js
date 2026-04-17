@@ -17,7 +17,7 @@ $(function () {
         // Lee aplicaciones del comprobante
         $("#comprobanteaplicado").val(comprobante);
 
-		let url = '/anitaERP/public/ventas/cliente/leercuentacorrienteaplicacion/'+cuentacorriente_id;
+		let url = carpetaBase+'/ventas/cliente/leercuentacorrienteaplicacion/'+cuentacorriente_id;
 
         $(wrapper).empty();
 

@@ -54,7 +54,7 @@
 	function completarCliente_Entrega(cliente_id){
         var loc_id;
 		var lugarentrega = $("#lugarentrega").val();
-        $.get('/anitaERP/public/ventas/leercliente_entrega/'+cliente_id, function(data){
+        $.get(carpetaBase+'/ventas/leercliente_entrega/'+cliente_id, function(data){
             var entr = $.map(data, function(value, index){
                 return [value];
             });
@@ -95,9 +95,9 @@
 
 		// Si marca boton de todas las combinaciones trae sin filtrar las activas o esta leyendo todos los articulos sin filtrar
 		if (fl_todas_las_combinaciones == 'on' || fl_todos_los_articulos == 'on' || flsinfiltro)
-			var url_comb = '/anitaERP/public/stock/leercombinaciones/';
+			var url_comb = carpetaBase+'/stock/leercombinaciones/';
 		else
-			var url_comb = '/anitaERP/public/stock/leercombinacionesactivas/';
+			var url_comb = carpetaBase+'/stock/leercombinacionesactivas/';
 
         $.get(url_comb+articulo_id, function(data){
             var comb = $.map(data, function(value, index){
@@ -125,7 +125,7 @@
 		var eligioModulo = false;
 		var articulo_id = $(articulo).val();
 		var flTieneModuloAbierto = false;
-        $.get('/anitaERP/public/stock/leermodulos/'+articulo_id+'/'+modulo_id, function(data){
+        $.get(carpetaBase+'/stock/leermodulos/'+articulo_id+'/'+modulo_id, function(data){
             var mod = $.map(data, function(value, index){
                 return [value];
             });
@@ -160,7 +160,7 @@
 		nombre_modulo = "";
 
 		// Lee talles del modulo
-        $.get('/anitaERP/public/stock/leertalles/'+modulo_id, function(data){
+        $.get(carpetaBase+'/stock/leertalles/'+modulo_id, function(data){
 			var flEncontro, flHayMedidas;
 
            	var tall = $.map(data, function(value, index){
@@ -255,7 +255,7 @@
 		let articulo_id = $(ptr).parents("tr").find(".articulo_id").val();
 		var precio, listaprecio_id, incluyeimpuesto, moneda_id;
 
-		$.get('/anitaERP/public/stock/asignapreciocliente/'+articulo_id+'/'+codigocliente, function(data){
+		$.get(carpetaBase+'/stock/asignapreciocliente/'+articulo_id+'/'+codigocliente, function(data){
            	var prec = $.map(data, function(value, index){
                	return [value];
            	});
@@ -427,7 +427,7 @@
 				}
 
 				// Busca si tiene factura asociada
-				var listarUri = "/anitaERP/public/ventas/estadoot/"+ordentrabajo+"/"+pedido_combinacion_id;
+				var listarUri = carpetaBase+"/ventas/estadoot/"+ordentrabajo+"/"+pedido_combinacion_id;
             
 				$.get(listarUri, function(data){
 					
@@ -562,7 +562,7 @@
 
 			if (ordentrabajo_stock_codigo > 0)
 			{
-				var listarUri = "/anitaERP/public/ventas/controlaordentrabajostock/"+ordentrabajo_stock_codigo+"/"+articulo_id+"/"+combinacion_id;
+				var listarUri = carpetaBase+"/ventas/controlaordentrabajostock/"+ordentrabajo_stock_codigo+"/"+articulo_id+"/"+combinacion_id;
 
 				$.get(listarUri, function(data){
 					if (data.estado != -1)
@@ -582,10 +582,10 @@
 						$('#crearOrdenTrabajoModal').modal('hide');
 
 						if (checkotstock == 'on')
-							var listarUri = "/anitaERP/public/ventas/guardaordenestrabajo/pedido/"+
+							var listarUri = carpetaBase+"/ventas/guardaordenestrabajo/pedido/"+
 											$(pedido_combinacion).val()+"/on/"+ordentrabajo_stock_codigo+'/'+data.deposito_id+'/'+leyenda;
 						else
-							var listarUri = "/anitaERP/public/ventas/guardaordenestrabajo/pedido/"+
+							var listarUri = carpetaBase+"/ventas/guardaordenestrabajo/pedido/"+
 											$(pedido_combinacion).val()+"/off/"+ordentrabajo_stock_codigo+'/'+data.deposito_id+'/'+leyenda;
 						$.get(listarUri, function(data){
 							// Asigna ot id y nro. de orden 
@@ -612,10 +612,10 @@
 				$('#crearOrdenTrabajoModal').modal('hide');
 
 				if (checkotstock == 'on')
-					var listarUri = "/anitaERP/public/ventas/guardaordenestrabajo/pedido/"
+					var listarUri = carpetaBase+"/ventas/guardaordenestrabajo/pedido/"
 									+$(pedido_combinacion).val()+"/on/"+ordentrabajo_stock_codigo+'/1/'+leyenda;
 				else
-					var listarUri = "/anitaERP/public/ventas/guardaordenestrabajo/pedido/"
+					var listarUri = carpetaBase+"/ventas/guardaordenestrabajo/pedido/"
 									+$(pedido_combinacion).val()+"/off/"+ordentrabajo_stock_codigo+'/1/'+leyenda;
 	
 				$.get(listarUri, function(data){
@@ -815,7 +815,7 @@
 		$('#anulacionModal').modal('hide');
 
 	  	// Anula el item 
-        $.get('/anitaERP/public/ventas/anularitempedido/'+itemAnulacionId+'/'+codigoAnulacionOt+'/'+motivoAnulacionId+'/'+nuevoClienteId, function(data){
+        $.get(carpetaBase+'/ventas/anularitempedido/'+itemAnulacionId+'/'+codigoAnulacionOt+'/'+motivoAnulacionId+'/'+nuevoClienteId, function(data){
             var ret = $.map(data, function(value, index){
                 return [value];
             });
@@ -878,7 +878,7 @@
 
 		var wrapper = $("#tbody-historia");
 
-		let url = '/anitaERP/public/ventas/leerhistoriaitempedido/'+itemPedido_id;
+		let url = carpetaBase+'/ventas/leerhistoriaitempedido/'+itemPedido_id;
 
 		$.get(url, function(historia){
 
@@ -947,7 +947,7 @@
 		let pedido_combinacion_id = $(this).parents("tr").find(".ids").val();
 		
 		// Busca si tiene factura asociada
-		var listarUri = "/anitaERP/public/ventas/estadoot/"+ordentrabajo+"/"+pedido_combinacion_id;
+		var listarUri = carpetaBase+"/ventas/estadoot/"+ordentrabajo+"/"+pedido_combinacion_id;
 		var flError = false;
 
 		$.get(listarUri, function(data){
@@ -1013,7 +1013,7 @@
 		});
 		descuentoLinea = prompt("Ingrese descuento de linea: ");
 
-		let listarUri = "/anitaERP/public/ventas/listarprefactura"+"/"+pedidoId+'/'+checksId+"/"+descuentoLinea;
+		let listarUri = carpetaBase+"/ventas/listarprefactura"+"/"+pedidoId+'/'+checksId+"/"+descuentoLinea;
 		document.location.href= listarUri;
 	}
 
@@ -1056,7 +1056,7 @@
 				event.preventDefault();
 				var puntoventa_id = $(this).val();
 
-				var listarUri = "/anitaERP/public/ventas/leeunpuntoventa/"+puntoventa_id;
+				var listarUri = carpetaBase+"/ventas/leeunpuntoventa/"+puntoventa_id;
 
 				$.get(listarUri, function(data){
 					$("#actividad_arca_id").val(data.actividad_arca_id);
@@ -1156,7 +1156,7 @@
 			// Lee descuento
 			if (descuentoventa_id > 0)
 			{
-				var uri = "/anitaERP/public/ventas/leeundescuentoventa/"+descuentoventa_id;
+				var uri = carpetaBase+"/ventas/leeundescuentoventa/"+descuentoventa_id;
 
 				$.get(uri, function(data){
 					
@@ -1268,7 +1268,7 @@
 		// Completa actividad
 		var puntoventa_id = $("#puntoventa_id").val();
 
-		var listarUri = "/anitaERP/public/ventas/leeunpuntoventa/"+puntoventa_id;
+		var listarUri = carpetaBase+"/ventas/leeunpuntoventa/"+puntoventa_id;
 
 		$.get(listarUri, function(data){
 			$("#actividad_arca_id").val(data.actividad_arca_id);
@@ -1280,7 +1280,7 @@
 		});
 
 		// Calcula factura
-		$.post("/anitaERP/public/ventas/calculafacturaporpedido",
+		$.post(carpetaBase+"/ventas/calculafacturaporpedido",
 		{
 			pedido_id: pedido_id,
 			pedido_articulo_ids: pedido_articulo_ids,
@@ -1369,7 +1369,7 @@
 		let estadoPedido = $('#estadopedido').val();
 		let pedido_id = $('#pedido_id').val();
 
-		let listarUri = "/anitaERP/public/ventas/actualizasolopedido/"+estadoPedido+"/"+pedido_id;
+		let listarUri = carpetaBase+"/ventas/actualizasolopedido/"+estadoPedido+"/"+pedido_id;
 
 		$.get(listarUri)
 			.done(function(data){
@@ -1461,7 +1461,7 @@
 		
 		$('#facturarPedidoModal').modal('hide');
 
-		$.post("/anitaERP/public/ventas/facturarporpedido",
+		$.post(carpetaBase+"/ventas/facturarporpedido",
 				{
 					pedido_articulo_ids: pedido_articulo_ids,
 					cliente_id: cliente_id,
@@ -1516,7 +1516,7 @@
 
 	function leePuntoVenta(puntoventa_id)
 	{
-		var listarUri = "/anitaERP/public/ventas/chequeapuntoventa/"+puntoventa_id;
+		var listarUri = carpetaBase+"/ventas/chequeapuntoventa/"+puntoventa_id;
 
 		$.get(listarUri, function(data){
 			
@@ -1549,7 +1549,7 @@
 	}
 
    	function asignaDatosCliente(cliente_id, flCambioCliente){
-        $.get('/anitaERP/public/ventas/leercliente/'+cliente_id, function(data){
+        $.get(carpetaBase+'/ventas/leercliente/'+cliente_id, function(data){
             var datoscli = $.map(data, function(value, index){
                 return [value];
             });
@@ -1613,7 +1613,7 @@
 	function itemFacturado(pedido_articulo_id)
 	{
 		// Busca si tiene factura asociada
-		var listarUri = "/anitaERP/public/ventas/estadoitempedido/"+pedido_articulo_id;
+		var listarUri = carpetaBase+"/ventas/estadoitempedido/"+pedido_articulo_id;
             
 		$.get(listarUri, function(data){
 							
@@ -1654,7 +1654,7 @@
 
 		if (opcion > 0)
 		{
-			let url = '/anitaERP/public/stock/redondeacaja/'+articulo_id+'/'+unidadmedida+'/'+caja+'/'+pieza+'/'+kilo+'/'+descuentoventa_id+'/'+opcion;
+			let url = carpetaBase+'/stock/redondeacaja/'+articulo_id+'/'+unidadmedida+'/'+caja+'/'+pieza+'/'+kilo+'/'+descuentoventa_id+'/'+opcion;
 
 			$.get(url, function(data){
 				if (typeof data.caja != 'string')

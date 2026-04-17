@@ -3,7 +3,7 @@ var ptrnombreconceptogasto;
 
 function buscar_datos_conceptogasto(consulta) {
     $.ajax({
-        url: '/anitaERP/public/caja/conceptogasto/consultaconceptogasto',
+        url: carpetaBase+'/caja/conceptogasto/consultaconceptogasto',
         type: 'POST',
         dataType: 'HTML',
 	    headers: {
@@ -82,7 +82,7 @@ function activa_eventos_consultaconceptogasto()
 
         // Lee servicio terrestre por codigo
         let conceptogasto_id = $("#conceptogasto_id").val();
-        let url_res = '/anitaERP/public/caja/leerconceptogasto/'+conceptogasto_id;
+        let url_res = carpetaBase+'/caja/leerconceptogasto/'+conceptogasto_id;
 
         $.get(url_res, function(data){
             if (data)
@@ -106,7 +106,7 @@ function activa_eventos_consultaconceptogasto()
 
         // Lee concepto gasto
         let conceptogasto_id = $(this).val();
-        let url_res = '/anitaERP/public/caja/leerconceptogasto/'+conceptogasto_id;
+        let url_res = carpetaBase+'/caja/leerconceptogasto/'+conceptogasto_id;
 
         $.get(url_res, function(data){
             if (data)

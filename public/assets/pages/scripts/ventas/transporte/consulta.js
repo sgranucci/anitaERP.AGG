@@ -1,6 +1,6 @@
 function buscar_datos_transporte(consulta) {
     $.ajax({
-        url: '/anitaERP/public/ventas/transporte/consultatransporte',
+        url: carpetaBase+'/ventas/transporte/consultatransporte',
         type: 'POST',
         dataType: 'HTML',
 	    headers: {
@@ -76,7 +76,7 @@ function activa_eventos_consultatransporte()
 
         // Lee servicio terrestre por codigo
         let codigotransporte = $("#codigotransporte").val();
-        let url_res = '/anitaERP/public/ventas/leertransporte/'+codigotransporte;
+        let url_res = carpetaBase+'/ventas/leertransporte/'+codigotransporte;
 
         $.get(url_res, function(data){
             if (data)
@@ -102,7 +102,7 @@ function activa_eventos_consultatransporte()
 
         // Lee servicio terrestre por codigo
         let codigotransporte = $("#codigodesdetransporte").val();
-        let url_res = '/anitaERP/public/ventas/leertransporte/'+codigotransporte;
+        let url_res = carpetaBase+'/ventas/leertransporte/'+codigotransporte;
 
         $.get(url_res, function(data){
             if (data)
@@ -125,7 +125,7 @@ function activa_eventos_consultatransporte()
 
         // Lee servicio terrestre por codigo
         let codigotransporte = $("#codigohastatransporte").val();
-        let url_res = '/anitaERP/public/ventas/leertransporte/'+codigotransporte;
+        let url_res = carpetaBase+'/ventas/leertransporte/'+codigotransporte;
 
         $.get(url_res, function(data){
             if (data)

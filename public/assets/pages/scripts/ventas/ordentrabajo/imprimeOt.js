@@ -1,6 +1,6 @@
 
     function imprimeOt(id) {
-        var listarUri = "/anitaERP/public/ventas/crearemisionot";
+        var listarUri = carpetaBase+"/ventas/crearemisionot";
 
         if (id == 0)
             alert("No puede listar OT");

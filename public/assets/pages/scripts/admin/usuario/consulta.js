@@ -6,7 +6,7 @@ function buscar_datos_usuario(consulta) {
     let empresa_id = $("#empresa_id").val();
 
     $.ajax({
-        url: '/anitaERP/public/configuracion/consultausuario',
+        url: carpetaBase+'/configuracion/consultausuario',
         type: 'POST',
         dataType: 'HTML',
 	    headers: {
@@ -104,7 +104,7 @@ function activa_eventos_consultausuario()
 
         if ($.isNumeric(usuario_id))
         {
-            let url_res = '/anitaERP/public/configuracion/leerunusuario/'+usuario_id;
+            let url_res = carpetaBase+'/configuracion/leerunusuario/'+usuario_id;
 
             $.get(url_res, function(data){
                 if (data)
@@ -127,7 +127,7 @@ function activa_eventos_consultausuario()
         let empresa_id = $("#empresa_id").val();
         let usuario_id = $(ptrrenglon).parents("tr").find(".usuario_id").val();
 
-        let url_res = '/anitaERP/public/configuracion/leerusuario/'+usuario_id;
+        let url_res = carpetaBase+'/configuracion/leerusuario/'+usuario_id;
 
         $(ptrrenglon).parents("tr").find(".usuario_id").val("");
 		$(ptrrenglon).parents("tr").find(".nombreusuario").val("");

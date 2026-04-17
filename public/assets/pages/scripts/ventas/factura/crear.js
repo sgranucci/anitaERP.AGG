@@ -101,7 +101,7 @@
         var loc_id;
 		var lugarentrega = $("#lugarentrega").val();
 
-        $.get('/anitaERP/public/ventas/leercliente_entrega/'+cliente_id, function(data){
+        $.get(carpetaBase+'/ventas/leercliente_entrega/'+cliente_id, function(data){
             var entr = $.map(data, function(value, index){
                 return [value];
             });
@@ -135,7 +135,7 @@
     }
 
    	function asignaDatosCliente(cliente_id, flCambioCliente){
-        $.get('/anitaERP/public/ventas/leercliente/'+cliente_id, function(data){
+        $.get(carpetaBase+'/ventas/leercliente/'+cliente_id, function(data){
             var datoscli = $.map(data, function(value, index){
                 return [value];
             });
@@ -192,9 +192,9 @@
 
 		// Si marca boton de todas las combinaciones trae sin filtrar las activas o esta leyendo todos los articulos sin filtrar
 		if (fl_todas_las_combinaciones == 'on' || fl_todos_los_articulos == 'on' || flsinfiltro)
-			var url_comb = '/anitaERP/public/stock/leercombinaciones/';
+			var url_comb = carpetaBase+'/stock/leercombinaciones/';
 		else
-			var url_comb = '/anitaERP/public/stock/leercombinacionesactivas/';
+			var url_comb = carpetaBase+'/stock/leercombinacionesactivas/';
 
         $.get(url_comb+articulo_id, function(data){
             var comb = $.map(data, function(value, index){
@@ -222,7 +222,7 @@
 		var eligioModulo = false;
 		var articulo_id = $(articulo).val();
 		var flTieneModuloAbierto = false;
-        $.get('/anitaERP/public/stock/leermodulos/'+articulo_id+'/'+modulo_id, function(data){
+        $.get(carpetaBase+'/stock/leermodulos/'+articulo_id+'/'+modulo_id, function(data){
             var mod = $.map(data, function(value, index){
                 return [value];
             });
@@ -257,7 +257,7 @@
 		nombre_modulo = "";
 
 		// Lee talles del modulo
-        $.get('/anitaERP/public/stock/leertalles/'+modulo_id, function(data){
+        $.get(carpetaBase+'/stock/leertalles/'+modulo_id, function(data){
 			var flEncontro, flHayMedidas;
 
            	var tall = $.map(data, function(value, index){
@@ -349,7 +349,7 @@
 	function asignaPrecio(Particulo_id, Ptalle_id)
 	{
 		// Lee talles del modulo
-        $.get('/anitaERP/public/stock/asignaprecio/'+Particulo_id+'/'+Ptalle_id, function(data){
+        $.get(carpetaBase+'/stock/asignaprecio/'+Particulo_id+'/'+Ptalle_id, function(data){
            	var prec = $.map(data, function(value, index){
                	return [value];
            	});
@@ -495,7 +495,7 @@
 
 	function leePuntoVenta(puntoventa_id)
 	{
-		var listarUri = "/anitaERP/public/ventas/chequeapuntoventa/"+puntoventa_id;
+		var listarUri = carpetaBase+"/ventas/chequeapuntoventa/"+puntoventa_id;
 
 		$.get(listarUri, function(data){
 			
@@ -525,7 +525,7 @@
 			let tilde = $(this).parents("tr").find(".checkImpresion");
 			
 			// Busca si tiene factura asociada
-			var listarUri = "/anitaERP/public/ventas/estadoot/"+ordentrabajo;
+			var listarUri = carpetaBase+"/ventas/estadoot/"+ordentrabajo;
 		
 			$.get(listarUri, function(data){
 				
@@ -592,7 +592,7 @@
 			event.preventDefault();
 			var puntoventa_id = $(this).val();
 
-			var listarUri = "/anitaERP/public/ventas/leeunpuntoventa/"+puntoventa_id;
+			var listarUri = carpetaBase+"/ventas/leeunpuntoventa/"+puntoventa_id;
 
 			$.get(listarUri, function(data){
 				$("#actividad_arca_id").val(data.actividad_arca_id);
@@ -876,7 +876,7 @@
 
 			if (ordentrabajo_stock_codigo > 0)
 			{
-				var listarUri = "/anitaERP/public/ventas/controlaordentrabajostock/"+ordentrabajo_stock_codigo+"/"+articulo_id+"/"+combinacion_id;
+				var listarUri = carpetaBase+"/ventas/controlaordentrabajostock/"+ordentrabajo_stock_codigo+"/"+articulo_id+"/"+combinacion_id;
 
 				$.get(listarUri, function(data){
 					if (data.estado != -1)
@@ -886,9 +886,9 @@
 						$('#crearOrdenTrabajoModal').modal('hide');
 
 						if (checkotstock == 'on')
-							var listarUri = "/anitaERP/public/ventas/guardaordenestrabajo/pedido/"+$(pedido_combinacion).val()+"/on/"+ordentrabajo_stock_codigo+'/'+leyenda;
+							var listarUri = carpetaBase+"/ventas/guardaordenestrabajo/pedido/"+$(pedido_combinacion).val()+"/on/"+ordentrabajo_stock_codigo+'/'+leyenda;
 						else
-							var listarUri = "/anitaERP/public/ventas/guardaordenestrabajo/pedido/"+$(pedido_combinacion).val()+"/off/"+ordentrabajo_stock_codigo+'/'+leyenda;
+							var listarUri = carpetaBase+"/ventas/guardaordenestrabajo/pedido/"+$(pedido_combinacion).val()+"/off/"+ordentrabajo_stock_codigo+'/'+leyenda;
 			
 						$.get(listarUri, function(data){
 							// Asigna ot id y nro. de orden 
@@ -915,9 +915,9 @@
 				$('#crearOrdenTrabajoModal').modal('hide');
 
 				if (checkotstock == 'on')
-					var listarUri = "/anitaERP/public/ventas/guardaordenestrabajo/pedido/"+$(pedido_combinacion).val()+"/on/"+ordentrabajo_stock_codigo+'/'+leyenda;
+					var listarUri = carpetaBase+"/ventas/guardaordenestrabajo/pedido/"+$(pedido_combinacion).val()+"/on/"+ordentrabajo_stock_codigo+'/'+leyenda;
 				else
-					var listarUri = "/anitaERP/public/ventas/guardaordenestrabajo/pedido/"+$(pedido_combinacion).val()+"/off/"+ordentrabajo_stock_codigo+'/'+leyenda;
+					var listarUri = carpetaBase+"/ventas/guardaordenestrabajo/pedido/"+$(pedido_combinacion).val()+"/off/"+ordentrabajo_stock_codigo+'/'+leyenda;
 	
 				$.get(listarUri, function(data){
 					// Asigna ot id y nro. de orden 
@@ -1170,7 +1170,7 @@
 		$('#anulacionModal').modal('hide');
 
 	  	// Anula el item 
-        $.get('/anitaERP/public/ventas/anularitempedido/'+itemAnulacionId+'/'+codigoAnulacionOt+'/'+motivoAnulacionId+'/'+nuevoClienteId, function(data){
+        $.get(carpetaBase+'/ventas/anularitempedido/'+itemAnulacionId+'/'+codigoAnulacionOt+'/'+motivoAnulacionId+'/'+nuevoClienteId, function(data){
             var ret = $.map(data, function(value, index){
                 return [value];
             });
@@ -1285,7 +1285,7 @@
 		var flError = false;
 		if (ordentrabajo > 0 && ordentrabajo < 999999)
 		{
-			var listarUri = "/anitaERP/public/ventas/estadoot/"+ordentrabajo;
+			var listarUri = carpetaBase+"/ventas/estadoot/"+ordentrabajo;
 
 			$.get(listarUri, function(data){
 								
@@ -1300,7 +1300,7 @@
 		// Busca si tiene una OT asociada al lote
 		if (!flError && loteStock >= 1)
 		{
-			var listarUri = "/anitaERP/public/ventas/controlaordentrabajostock/"+loteStock+"/"+articulo_id+"/"+combinacion_id;
+			var listarUri = carpetaBase+"/ventas/controlaordentrabajostock/"+loteStock+"/"+articulo_id+"/"+combinacion_id;
 
 			$.get(listarUri, function(data){
 				if (data.estado != -1 && data.estado != 1)
@@ -1355,7 +1355,7 @@
 
 		});
 
-		let listarUri = "/anitaERP/public/ventas/listarprefactura"+"/"+pedidoId+'/'+checksId;
+		let listarUri = carpetaBase+"/ventas/listarprefactura"+"/"+pedidoId+'/'+checksId;
 		document.location.href= listarUri;
 	}
 	
@@ -1408,7 +1408,7 @@
 			}
 		});
 		
-		let url = "/anitaERP/public/caja/generaasientocontable_ingresoegreso";
+		let url = carpetaBase+"/caja/generaasientocontable_ingresoegreso";
 
 		$.ajax({
 			type: "POST",
@@ -1518,7 +1518,7 @@
 		select.append('<option value="">-- Seleccionar --</option>');
 
 		// Lee monedas
-		//$.get('/anitaERP/public/configuracion/leermoneda', function(data){
+		//$.get('/configuracion/leermoneda', function(data){
         //    var monedas = $.map(data, function(value, index){
         //        return [value];
         //    });
@@ -1573,7 +1573,7 @@
     		contentType: false, 
 		});
 		
-		let url = "/anitaERP/public/ventas/calcula_factura_general";
+		let url = carpetaBase+"/ventas/calcula_factura_general";
 
 		$.ajax({
 			type: "POST",

@@ -4,7 +4,7 @@
     function completarLocalidadesEntrega(provincia){
         var loc_id;
 		var provincia_id = $(provincia).val();
-        $.get('/anitaERP/public/configuracion/leerlocalidades/'+provincia_id, function(data){
+        $.get(carpetaBase+'/configuracion/leerlocalidades/'+provincia_id, function(data){
             var loc = $.map(data, function(value, index){
                 return [value];
             });
@@ -24,7 +24,7 @@
     }
 
     function completarCPEntrega(localidad_id, codigopostal){
-        $.get('/anitaERP/public/configuracion/leercodigopostal/'+localidad_id, function(data){
+        $.get(carpetaBase+'/configuracion/leercodigopostal/'+localidad_id, function(data){
             if(data!=0){
                 $(codigopostal).val(data);
             }

@@ -4,7 +4,7 @@ var ptrNombreVendedor;
 
 function buscar_datos_vendedor(consulta) {
     $.ajax({
-        url: '/anitaERP/public/ventas/vendedor/consultavendedor',
+        url: carpetaBase+'/ventas/vendedor/consultavendedor',
         type: 'POST',
         dataType: 'HTML',
 	    headers: {
@@ -100,7 +100,7 @@ function activa_eventos_consultavendedor()
 
         // Lee servicio terrestre por codigo
         let codigovendedor = $("#codigovendedor").val();
-        let url_res = '/anitaERP/public/ventas/leervendedor/'+codigovendedor;
+        let url_res = carpetaBase+'/ventas/leervendedor/'+codigovendedor;
 
         $.get(url_res, function(data){
             if (data)
@@ -118,7 +118,7 @@ function activa_eventos_consultavendedor()
         var ptrrenglon = this;
 
         let codigovendedor = $(this).val();
-        let url_res = '/anitaERP/public/ventas/leervendedor/'+codigovendedor;
+        let url_res = carpetaBase+'/ventas/leervendedor/'+codigovendedor;
 
         $(ptrrenglon).parents("tr").find(".vendedor_id").val("");
         $(ptrrenglon).parents("tr").find(".codigovendedor").val("");

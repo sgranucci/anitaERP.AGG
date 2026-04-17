@@ -3,7 +3,7 @@
 
     function completarLocalidades(provincia_id){
         var loc_id;
-        $.get('/anitaERP/public/configuracion/leerlocalidades/'+provincia_id, function(data){
+        $.get(carpetaBase+'/configuracion/leerlocalidades/'+provincia_id, function(data){
             var loc = $.map(data, function(value, index){
                 return [value];
             });
@@ -22,7 +22,7 @@
     }
 
     function completarCP(localidad_id){
-        $.get('/anitaERP/public/configuracion/leercodigopostal/'+localidad_id, function(data){
+        $.get(carpetaBase+'/configuracion/leercodigopostal/'+localidad_id, function(data){
             if(data!=0){
                 $("#codigopostal").val(data);
             }

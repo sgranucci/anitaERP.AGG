@@ -9,7 +9,7 @@ $('.permiso_rol').on('change', function () {
     } else {
         data.estado = 0
     }
-    ajaxRequest('/anitaERP/public/admin/permiso-rol', data);
+    ajaxRequest(carpetaBase+'/admin/permiso-rol', data);
 });
 
 function ajaxRequest (url, data) {

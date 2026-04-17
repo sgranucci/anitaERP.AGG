@@ -1,6 +1,6 @@
 function buscar_datos_zonavta(consulta) {
     $.ajax({
-        url: '/anitaERP/public/ventas/zonavta/consultazonavta',
+        url: carpetaBase+'/ventas/zonavta/consultazonavta',
         type: 'POST',
         dataType: 'HTML',
 	    headers: {
@@ -87,7 +87,7 @@ function activa_eventos_consultazonavta()
 
         // Lee servicio terrestre por codigo
         let codigozonavta = $("#codigozonavta").val();
-        let url_res = '/anitaERP/public/ventas/leerzonavta/'+codigozonavta;
+        let url_res = carpetaBase+'/ventas/leerzonavta/'+codigozonavta;
 
         $.get(url_res, function(data){
             if (data)
@@ -104,7 +104,7 @@ function activa_eventos_consultazonavta()
 function leeZonaVta()
 {
     let zonavta_id = $("#zonavta_id").val();
-    let url_res = '/anitaERP/public/ventas/leerzonavtaporid/'+zonavta_id;
+    let url_res = carpetaBase+'/ventas/leerzonavtaporid/'+zonavta_id;
 
     $.get(url_res, function(data){
         if (data)

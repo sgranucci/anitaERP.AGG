@@ -4,7 +4,7 @@ var ptrnombrecliente;
 function buscar_datos_cliente(consulta) {
 
     $.ajax({
-        url: '/anitaERP/public/ventas/consultacliente',
+        url: carpetaBase+'/ventas/consultacliente',
         type: 'POST',
         dataType: 'HTML',
 	    headers: {
@@ -135,7 +135,7 @@ function activa_eventos_consultacliente()
         let areadestino_id = $("#areadestino_id").val();
 
         let cliente_id = $(this).val();
-        let url_res = '/anitaERP/public/ventas/leeruncliente/'+cliente_id;
+        let url_res = carpetaBase+'/ventas/leeruncliente/'+cliente_id;
 
         $(ptrrenglon).parents("tr").find(".cliente_id").val("");
         $(ptrrenglon).parents("tr").find(".codigocliente").val("");
@@ -173,9 +173,9 @@ function leeUnCliente(cliente_id, codigocliente)
     if ($.isNumeric(cliente_id))
     {
         if (cliente_id > 0)
-            var url_res = '/anitaERP/public/ventas/leeruncliente/'+cliente_id;
+            var url_res = carpetaBase+'/ventas/leeruncliente/'+cliente_id;
         else
-            var url_res = '/anitaERP/public/ventas/leerunclienteporcodigo/'+codigocliente;
+            var url_res = carpetaBase+'/ventas/leerunclienteporcodigo/'+codigocliente;
 
         $.get(url_res).done(function(data){
             if (data)
