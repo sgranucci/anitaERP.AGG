@@ -23,9 +23,20 @@
 						@endif
                     </a>
                 </div>
+                <div class="d-md-flex justify-content-md-end">
+					<form action="{{ route('consultar_ordenproduccion') }}" method="GET">
+						<div class="btn-group">
+							<input type="text" name="busqueda" class="form-control" placeholder="Busqueda ..."> 
+							<button type="submit" class="btn btn-default">
+								<span class="fa fa-search"></span>
+							</button>
+						</div>
+					</form>
+                </div>
             </div>
             <div class="card-body table-responsive p-0">
-                <table class="table table-striped table-bordered table-hover" id="tabla-data">
+                @include('includes.exportar-tabla', ['ruta' => 'lista_ordenproduccion', 'busqueda' => $busqueda])
+                <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead>
                         <tr>
                             <th class="width20">ID</th>
@@ -47,23 +58,24 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach ($datas as $data)
+                        @foreach ($ordenesproduccion as $data)
                         <tr>
                             <td>{{$data->id}}</td>
-                            <td>{{$data->fechainicio}}</td>
-                            <td>{{$data->fechafinalizacion}}</td>
-                            <td>{{$data->usuarios->nombre}}</td>
-                            <td>{{$data->lineallenados->nombre??''}}</td>
-                            <td>{{$data->numeroordenproduccion}}</td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td>{{$data->articulos->marcas->nombre??''}}</td>
-                            <td></td>
-                            <td>{{$data->cantidad}}</td>
-                            <td>{{$data->provienebines->nombre??''}}</td>
-                            <td>{{$data->lote}}</td>
-                            <td>{{$data->observacion}}</td>
+                            <td><small>{{\Carbon\Carbon::parse($data->fechainicio)->format('d-m-Y H:i')}}</small></td>
+                            <td><small>{{\Carbon\Carbon::parse($data->fechafinalizacion)->format('d-m-Y H:i')}}</small></td>
+                            <td><small>{{$data->nombreusuario}}</small></td>
+                            <td><small>{{$data->nombrelineallenado??''}}</small></td>
+                            <td><small>{{$data->numeroordenproduccion}}</small></td>
+                            <td><small>{{$data->nombretipoproducto??''}}</small></td>
+                            <td><small>{{$data->nombretipoliquidofreno??''}}</small></td>
+                            <td><small>{{$data->nombrecapacidad??''}}</small></td>
+                            <td><small>{{$data->nombremarca??''}}</small></td>
+                            <td><small>{{$data->nombrecolor??''}}</small></td>
+                            <td><small>{{$data->cantidad}}</small></td>
+                            <td><small>{{$data->nombreprovienebin??''}}</small></td>
+                            <td><small>{{$data->lote}}</small></td>
+                            <td><small>{{$data->observacion}}</small></td>
+                            <td>
                        			@if (can('editar-orden-produccion', false))
                                 	<a href="{{route('editar_ordenproduccion', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                     <i class="fa fa-edit"></i>
@@ -86,4 +98,5 @@
         </div>
     </div>
 </div>
+{{ $ordenesproduccion->appends(['busqueda' => $busqueda])->links() }}
 @endsection

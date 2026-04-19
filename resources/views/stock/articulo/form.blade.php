@@ -1,4 +1,4 @@
-<div class="card form1">
+<div class="card form1 .tab-content">
     <div class="card-body">
         <div class="row">
             <div class="col-sm-6">
@@ -162,4 +162,27 @@
             </div>
         </div>      
     </div>
+    <input type="hidden" name="fechaalta" value="{{$producto->fechaalta}}">
+    <input type="hidden" name="etiqueta_id" value="{{$producto->etiqueta_id}}">
+    <input type="hidden" name="unidadenvasado" value="{{$producto->unidadenvasado}}">
+    <input type="hidden" name="leyendanofacturar" value="{{$producto->leyendanofacturar}}">
+    <input type="hidden" name="skuproveedor" value="{{$producto->skuproveedor}}">
+    <input type="hidden" name="skuproveedor2" value="{{$producto->skuproveedor2}}">
+    <input type="hidden" name="posicionaracelaria" value="{{$producto->posicionaracelaria}}">
+    <input type="hidden" name="vigenteenlista" value="{{$producto->vigenteenlista}}">
+    <input type="hidden" name="cuentacontablevariacionprecio_id" value="{{$producto->cuentacontablevariacionprecio_id}}">
+    <input type="hidden" name="centrocostovariacionprecio_id" value="{{$producto->centrocostovariacionprecio_id}}">
+    <input type="hidden" name="centrocostocompra_id" value="{{$producto->centrocostocompra_id}}">
+    <input type="hidden" name="abc" value="{{$producto->abc}}">
+    <input type="hidden" name="punto" value="{{$producto->punto}}">
+    <input type="hidden" name="lote" value="{{$producto->lote}}">
+    <input type="hidden" name="coeficientelitro" value="{{$producto->coeficientelitro}}">
+    <input type="hidden" name="estadobloqueo_id" value="{{$producto->estadobloqueo_id}}">
+    <input type="hidden" name="estuche" value="{{$producto->estuche}}">
+    <input type="hidden" name="skuetiqueta" value="{{$producto->skuetiqueta}}">
+    <input type="hidden" name="skulistaprecio" value="{{$producto->skulistaprecio}}">
+    <input type="hidden" name="clase" value="{{$producto->clase}}">
+    <input type="hidden" name="fechaprimeraventa" value="{{$producto->fechaprimeraventa}}">
+    <input type="hidden" name="fechaprimeringreso" value="{{$producto->fechaprimeringreso}}">
+    <input type="hidden" name="estadofacturacion" value="{{$producto->estadofacturacion}}">
 </div>

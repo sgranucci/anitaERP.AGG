@@ -1326,7 +1326,22 @@ class AppServiceProvider extends ServiceProvider
 		$this->app->bind(
         	'App\Repositories\Produccion\LineallenadoRepositoryInterface',
         	'App\Repositories\Produccion\LineallenadoRepository',
-    	);				
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Stock\TipoproductoRepositoryInterface',
+        	'App\Repositories\Stock\TipoproductoRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Stock\CapacidadRepositoryInterface',
+        	'App\Repositories\Stock\CapacidadRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Stock\TipoliquidofrenoRepositoryInterface',
+        	'App\Repositories\Stock\TipoliquidofrenoRepository',
+    	);
 
 		$this->app->bind(
         	'App\Repositories\Produccion\ProvienebinRepositoryInterface',

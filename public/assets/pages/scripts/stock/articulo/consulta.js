@@ -95,6 +95,14 @@ function activa_eventos_consultaarticulo()
         $("#descripcionarticulo").val(nombre);
         $("#codigoarticulo").val(codigo);
 
+        if (window.rellenaAtributosArticuloOrdenProduccion) {
+            $.get(carpetaBase + '/stock/leerunarticulo/' + seleccion, function (dataArticulo) {
+                if (dataArticulo) {
+                    window.rellenaAtributosArticuloOrdenProduccion(dataArticulo);
+                }
+            });
+        }
+
         if (unidadmedida != null)
         {
             if (unidadmedida.toUpperCase() == 'CAJ')
@@ -228,6 +236,10 @@ function activa_eventos_consultaarticulo()
                 if (window.armaSelectDescuentoVenta) {
                     armaSelectDescuentoVenta(ptrrenglon);
                 }
+
+                if (window.rellenaAtributosArticuloOrdenProduccion) {
+                    window.rellenaAtributosArticuloOrdenProduccion(data);
+                }
             }
         });
 
@@ -251,6 +263,10 @@ function activa_eventos_consultaarticulo()
                 $("#nombrearticulo").val(data.descripcion);
                 $("#unidadmedida").val(data.unidadmedida);
                 $("#codigoarticulo").val(data.sku);
+
+                if (window.rellenaAtributosArticuloOrdenProduccion) {
+                    window.rellenaAtributosArticuloOrdenProduccion(data);
+                }
             }
         });
 

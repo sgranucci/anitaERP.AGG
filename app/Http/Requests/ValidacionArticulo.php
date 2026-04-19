@@ -29,6 +29,10 @@ class ValidacionArticulo extends FormRequest
             'categoria_id' => 'required|numeric',
             'unidadmedida_id' => 'required|numeric',
             'usoarticulo_id' => 'required|numeric',
+            'tipoproducto_id' => 'nullable|numeric|exists:tipoproducto,id',
+            'capacidad_id' => 'nullable|numeric|exists:capacidad,id',
+            'color_id' => 'nullable|numeric|exists:color,id',
+            'tipoliquidofreno_id' => 'nullable|numeric|exists:tipoliquidofreno,id',
         ];
     }
 }

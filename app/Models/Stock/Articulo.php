@@ -55,6 +55,7 @@ class Articulo extends Model
 				'centrocostovariacionprecio_id', 'centrocostocompra_id', 'abc', 'punto', 'lote', 
 				'coeficientelitro', 'estadobloqueo_id', 'estuche', 'skuetiqueta', 'skulistaprecio', 
 				'clase', 'fechaprimeraventa', 'fechaprimeringreso', 'estadofacturacion' 
+				, 'tipoproducto_id', 'capacidad_id', 'color_id', 'tipoliquidofreno_id'
 				];
 		else
 			$this->fillable = ['sku', 'descripcion',
@@ -67,7 +68,6 @@ class Articulo extends Model
 				'tipocarne', 'pesocaja', 'alertastock', 'origenproducto', 'inicialproduccion',  
 				'diasproceso', 'vencimientoendia', 'diaenfriado', 'codigosenasa_id', 'salaproduccion_id', 'tipoproduccion_id',
 				'sectorsellado_id', 'tipoarticulo_id', 'coeficienteconversion', 'depositoentrega_id', 'numeroparte', 'ubicacionparte',
-				'oficinacompra_id', 'periodicidadcompra_id', 'condicionentrega_id', 'estado'
 				];
 	}
 
@@ -229,6 +229,38 @@ class Articulo extends Model
 	public function tipoarticulos()
 	{
 		return $this->belongsTo(Tipoarticulo::class, 'tipoarticulo_id');
+	}
+
+	public function tipoproductos()
+	{
+		if (config('app.empresa') == 'FRASLE')
+			return $this->belongsTo(Tipoproducto::class, 'tipoproducto_id');
+		else
+			return NULL;
+	}
+
+	public function capacidades()
+	{
+		if (config('app.empresa') == 'FRASLE')
+			return $this->belongsTo(Capacidad::class, 'capacidad_id');
+		else
+			return NULL;
+	}
+
+	public function colores()
+	{
+		if (config('app.empresa') == 'FRASLE')
+			return $this->belongsTo(Color::class, 'color_id');
+		else
+			return NULL;
+	}
+
+	public function tipoliquidofrenos()
+	{
+		if (config('app.empresa') == 'FRASLE')
+			return $this->belongsTo(Tipoliquidofreno::class, 'tipoliquidofreno_id');
+		else
+			return NULL;
 	}
 
   	public static function setFoto($request, $nombre_foto, $actual = false)
@@ -819,13 +851,13 @@ class Articulo extends Model
 					$cuentacontablevariacionprecio_id = NULL;
 
 				$centrocosto = Centrocosto::select('id', 'codigo')->where('codigo' , $data->stkm_cc_var_pre)->first();
-				if ($cuenta)
+				if ($centrocosto)
 					$centrocostovariacionprecio_id = $centrocosto->id;
 				else
 					$centrocostovariacionprecio_id = NULL;
 		
 				$centrocosto = Centrocosto::select('id', 'codigo')->where('codigo' , $data->stkm_cc_compra)->first();
-				if ($cuenta)
+				if ($centrocosto)
 					$centrocostocompra_id = $centrocosto->id;
 				else
 					$centrocostocompra_id = NULL;
@@ -1066,12 +1098,13 @@ class Articulo extends Model
 
         $apiAnita = new ApiAnita();
 
-        $fecha = Carbon::now();
-		$fecha = $fecha->format('Ymd');
+        $fechaDate = Carbon::now();
+		$fecha = $fechaDate->format('Ymd');
+		$hora = $fechaDate->format('H:i');
 
-		switch(config('app.empresa'))
+		switch(strtoupper(config('app.empresa')))
 		{
-		case "Calzados Ferli":
+		case "CALZADOS FERLI":
 			$data = array( 'tabla' => $this->tableAnita, 'acc' => 'insert',
 				'campos' => ' 
 					stkm_articulo,
@@ -1438,6 +1471,198 @@ class Articulo extends Model
 					".'0'." "
 			);
 			break;
+
+		case "FRASLE":
+			$tipoarticulo = TipoArticulo::find($request->tipoarticulo_id);
+
+			if ($tipoarticulo)
+				$abreviaturaTipoArticulo = $tipoarticulo->abreviatura;
+
+			$cuenta = Cuentacontable::select('id', 'codigo')->where('id' , $request->cuentacontableventa_id)->first();
+			if ($cuenta)
+				$codigoCuentaContableVenta = $cuenta->codigo;
+			else
+				$codigoCuentaContableVenta = NULL;
+									
+			$cuenta = Cuentacontable::select('id', 'codigo')->where('id' , $request->cuentacontablevariacionprecio_id)->first();
+			if ($cuenta)
+				$codigoCuentacontableVariacionPrecio = $cuenta->codigo;
+			else
+				$codigoCuentacontableVariacionPrecio = NULL;
+					
+			$centrocosto = Centrocosto::select('id', 'codigo')->where('id' , $request->centrocostovariacionprecio_id)->first();
+			if ($centrocosto)
+				$codigoCentroCostoVariacionPrecio = $centrocosto->codigo;
+			else
+				$codigoCentroCostoVariacionPrecio = ' ';
+
+			$centrocosto = Centrocosto::select('id', 'codigo')->where('id' , $request->centrocostocompra_id)->first();
+			if ($centrocosto)
+				$codigoCentroCostoCompra = $centrocosto->codigo;
+			else
+				$codigoCentroCostoCompra = ' ';
+	
+			// Verifica estado
+			if ($request->estado == 'INACTIVO')
+				$noFactura = 'I';
+			else
+				$noFactura = $request->nofactura;
+
+			$data = array( 'tabla' => $this->tableAnita, 'acc' => 'insert',
+				'campos' => ' 
+					stkm_articulo,
+					stkm_desc,
+					stkm_unidad_medida,
+					stkm_unidad_xenv,
+					stkm_proveedor,
+					stkm_agrupacion,
+					stkm_cta_contable,
+					stkm_cod_impuesto,
+					stkm_descuento,
+					stkm_p_rep,
+					stkm_cod_mon_p_rep,
+					stkm_imp_interno,
+					stkm_cta_cont_ii,
+					stkm_cant_compra1,
+					stkm_cant_compra2,
+					stkm_cant_compra3,
+					stkm_pre_compra1,
+					stkm_pre_compra2,
+					stkm_pre_compra3,
+					stkm_usuario,
+					stkm_terminal,
+					stkm_fe_ult_act,
+					stkm_articulo_prod,
+					stkm_peso_aprox,
+					stkm_marca,
+					stkm_linea,
+					stkm_cta_contablec,
+					stkm_fe_ult_compra,
+					stkm_o_compra,
+					stkm_fl_no_factura,
+					stkm_formula,
+					stkm_ppp,
+					stkm_codimpuesto  , 
+					stkm_nivel_stk    ,
+					stkm_fecha_alta   ,
+					stkm_art_princ    ,
+					stkm_art_barra ,
+					stkm_cod_etiqueta ,
+					stkm_unidad_env   ,
+					stkm_ley_no_fact  ,
+					stkm_nombre_foto  ,
+					stkm_articulo_prov , 
+					stkm_detalle2 ,
+					stkm_pos_aranc ,
+					stkm_lista_vigente,
+					stkm_cod_nomenc   ,
+					stkm_cod_umd      ,
+					stkm_tipo_articulo,
+					stkm_precio_oc1   ,
+					stkm_precio_oc2   ,
+					stkm_precio_oc3   ,
+					stkm_cod_mon_oc1  ,
+					stkm_cod_mon_oc2  ,
+					stkm_cod_mon_oc3  ,
+					stkm_fecha_ult_oc ,
+					stkm_cta_var_pre  ,
+					stkm_cc_var_pre   ,
+					stkm_cc_compra    ,
+					stkm_abc          ,
+					stkm_punto        ,
+					stkm_lote         ,
+					stkm_detalle1     ,
+					stkm_estado       ,
+					stkm_coef_litro   ,
+					stkm_estado_bloq  ,
+					stkm_usuario_umod ,
+					stkm_fecha_umod   ,
+					stkm_hora_umod    ,
+					stkm_estuche      ,
+					stkm_art_etiqueta ,
+					stkm_art_l_precio ,
+					stkm_posarancel   ,
+					stkm_clase        ,
+					stkm_prom_venta   ,
+					stkm_fecha_pvta   ',					
+					'valores' => " 
+					'".str_pad($request->sku, 13, "0", STR_PAD_LEFT)."', 
+					'".$request->descripcion."',
+					'".$request->unidadesdemedidas->abreviatura."',
+					'".($request->unidadesxenvase == NULL ? 0 : $request->unidadesxenvase)."',
+					'".'000000'."',
+					'".str_pad($request->categorias->codigo, 4, "0", STR_PAD_LEFT)."',
+					'".$codigoCuentaContableVenta."',
+					'".($request->impuesto_id == NULL || $request->impuesto_id == ' ' ? 0 : $request->impuesto_id)."',
+					'".'0'."',
+					'".'0'."',
+					'".$productoTercero."',  
+					'".'0'."',
+					'".$request->tipocarne."',
+					'".'0'."',
+					'".'0'."',
+					'".'0'."',
+					'".'0'."',
+					'".'0'."',
+					'".'0'."',
+					'".Auth::user()->nombre."',
+					'".'0'."',
+					'".$fecha."',
+					'".$request->skualternativo."',
+					'".($request->peso == NULL ? 0 : $request->peso)."',
+					'".($request->materiales ? str_pad($request->materiales->codigo, 8, "0", STR_PAD_LEFT) : '')."',
+					'".str_pad($request->lineas->codigo, 6, "0", STR_PAD_LEFT)."',
+					'".($request->cuentascontablescompras ? $request->cuentascontablescompras->codigo : 0)."',
+					'".Carbon::parse($request->fechaultimacompra)->format('Ymd')."',
+					'".$request->mventa_id."',
+					'".$request->nofactura."',
+					'".($request->formula == NULL ? 0 : $request->formula)."',
+					'".($request->ppp == NULL ? 0 : $request->ppp)."',
+					'".' '."'
+					'".$request->nivelstock."',
+					'".$fecha."',
+					'".' '."'
+					'".' '."'
+					'".$request->etiqueta_id."',
+					'".$request->unidadenvasado."',
+					'".$request->leyendanofacturar."',
+					'".$request->foto."',
+					'".$request->skuproveedor."',
+					'".substr($request->detalle, -40)."',
+					'".$request->posicionaracelaria."',
+					'".$request->vigenteenlista."'
+					'".$request->nomenclador."',
+					'".$request->unidadmedida_id."',
+					'".$abreviaturaTipoArticulo."',
+					'".'0'."',
+					'".'0'."',
+					'".'0'."',
+					'".' '."',		
+					'".' '."',		
+					'".' '."',		
+					'".'0'."',
+					'".$codigoCuentacontableVariacionPrecio."',
+					'".$codigoCentroCostoVariacionPrecio."',
+					'".$codigoCentroCostoCompra."',
+					'".$request->abc."',
+					'".$request->punto."',
+					'".$request->lote."',
+					'".substr($request->detalle, 0, 40)."',
+					'".$request->estadofacturacion."',
+					'".$request->coeficientelitro."',
+					'".$request->estadobloqueo_id."',
+					'".Auth::user()->nombre."',
+					'".$fecha."',
+					'".$hora."',
+					'".$request->estuche."',
+					'".$request->skuetiqueta."',
+					'".$request->skulistaprecio."',
+					'".$request->posicionarancelaria."',
+					'".$request->clase."',
+					'".'0'."',
+					'".'0'."'"
+			);
+			break;
 		}
         $articulo = $apiAnita->apiCall($data);
 
@@ -1565,8 +1790,9 @@ class Articulo extends Model
 		$this->condicionentregaRepository = App::make(\App\Repositories\Compras\CondicionentregaRepositoryInterface::class);
 
         $apiAnita = new ApiAnita();
-        $fecha = Carbon::now();
-		$fecha = $fecha->format('Ymd');
+        $fechaDate = Carbon::now();
+		$fecha = $fechaDate->format('Ymd');
+		$hora = $fechaDate->format('H:i');
 
 		if (is_object($request->categorias))
 			$codigo = str_pad($request->categorias->codigo, 4, "0", STR_PAD_LEFT);
@@ -1728,6 +1954,97 @@ class Articulo extends Model
 						stkm_period_compra = '".$periodicidadCompra."',
 						stkm_cond_entrega = '".$codigoCondicionEntrega."'",
 					'whereArmado' => " WHERE stkm_articulo = '".str_pad($id, 13, "0", STR_PAD_LEFT)."' " );
+				break;
+
+			case 'FRASLE':
+				$tipoarticulo = TipoArticulo::find($request->tipoarticulo_id);
+
+				if ($tipoarticulo)
+					$abreviaturaTipoArticulo = $tipoarticulo->abreviatura;
+	
+				$cuenta = Cuentacontable::select('id', 'codigo')->where('id' , $request->cuentacontableventa_id)->first();
+				if ($cuenta)
+					$codigoCuentaContableVenta = $cuenta->codigo;
+				else
+					$codigoCuentaContableVenta = NULL;
+										
+				$cuenta = Cuentacontable::select('id', 'codigo')->where('id' , $request->cuentacontablevariacionprecio_id)->first();
+				if ($cuenta)
+					$codigoCuentacontableVariacionPrecio = $cuenta->codigo;
+				else
+					$codigoCuentacontableVariacionPrecio = NULL;
+						
+				$centrocosto = Centrocosto::select('id', 'codigo')->where('id' , $request->centrocostovariacionprecio_id)->first();
+				if ($centrocosto)
+					$codigoCentroCostoVariacionPrecio = $centrocosto->codigo;
+				else
+					$codigoCentroCostoVariacionPrecio = ' ';
+	
+				$centrocosto = Centrocosto::select('id', 'codigo')->where('id' , $request->centrocostocompra_id)->first();
+				if ($centrocosto)
+					$codigoCentroCostoCompra = $centrocosto->codigo;
+				else
+					$codigoCentroCostoCompra = ' ';
+						
+				// Verifica estado
+				if ($request->estado == 'INACTIVO')
+					$noFactura = 'I';
+				else
+					$noFactura = $request->nofactura;
+
+				$data = array( 'acc' => 'update', 'tabla' => $this->tableAnita, 
+				'sistema' => 'ventas',
+				'valores' => " stkm_desc = '".$request->descripcion."',
+					stkm_unidad_medida = '".($request->unidadesdemedidas ? $request->unidadesdemedidas->abreviatura : ' ')."',
+					stkm_unidad_xenv = '".$request->unidadesxenvase."',
+					stkm_proveedor = '".'000000'."',
+					stkm_agrupacion = '".$codigo."',
+					stkm_cta_contable = '".$codigoCuentaContableVenta."',
+					stkm_cod_impuesto =	'".($request->impuesto_id == NULL || $request->impuesto_id == ' ' ? 0 : $request->impuesto_id)."',
+					stkm_usuario = '".Auth::user()->name."',
+					stkm_terminal =	'".'0'."',
+					stkm_fe_ult_act = '".$fecha."',
+					stkm_articulo_prod = '".$request->skualternativo."',
+					stkm_peso_aprox = '".$request->coeficienteconversion."',
+					stkm_marca = '".($request->mventas ? str_pad($request->mventas->codigo, 8, "0", STR_PAD_LEFT) : ' ')."',
+					stkm_linea = '".($request->lineas ? str_pad($request->lineas->codigo, 6, "0", STR_PAD_LEFT) : ' ')."',
+					stkm_fe_ult_compra = '".Carbon::parse($request->fechaultimacompra)->format('Ymd')."',
+					stkm_o_compra =	'".'0'."',
+					stkm_fl_no_factura = '".$noFactura."',
+					stkm_formula = '".$request->formula."',
+					stkm_ppp = '".$request->ppp."',		
+					stkm_codimpuesto   = '".' '."',
+					stkm_nivel_stk     = '".$request->nivelstock."',
+					stkm_cod_etiqueta  = '".$request->etiqueta_id."',
+					stkm_unidad_env    = '".$request->unidadenvasado."',
+					stkm_ley_no_fact   = '".$request->leyendanofacturar."',
+					stkm_nombre_foto   = '".$request->foto."',
+					stkm_articulo_prov  = '".$request->skuproveedor."', 
+					stkm_detalle2  = '".substr($request->detalle, -40)."',
+					stkm_pos_aranc  = '".$request->posicionaracelaria."',
+					stkm_lista_vigente = '".$request->vigenteenlista."',
+					stkm_cod_nomenc    = '".$request->nomenclador."',
+					stkm_cod_umd       = '".$request->unidadmedida_id."',
+					stkm_tipo_articulo = '".$abreviaturaTipoArticulo."',
+					stkm_cta_var_pre   = '".$codigoCuentacontableVariacionPrecio."',
+					stkm_cc_var_pre    = '".$codigoCentroCostoVariacionPrecio."',
+					stkm_cc_compra     = '".$codigoCentroCostoCompra."',
+					stkm_abc           = '".$request->abc."',
+					stkm_punto         = '".$request->punto."',
+					stkm_lote          = '".$request->lote."',
+					stkm_detalle1      = '".substr($request->detalle, 0, 40)."',
+					stkm_estado        = '".$request->estadofacturacion."',
+					stkm_coef_litro    = '".$request->coeficientelitro."',
+					stkm_estado_bloq   = '".$request->estadobloqueo_id."',
+					stkm_usuario_umod  = '".Auth::user()->nombre."',
+					stkm_fecha_umod    = '".$fecha."',
+					stkm_hora_umod     = '".$hora."',
+					stkm_estuche       = '".$request->estuche."',
+					stkm_art_etiqueta  = '".$request->skuetiqueta."',
+					stkm_art_l_precio  = '".$request->skulistaprecio."',
+					stkm_posarancel    = '".$request->posicionarancelaria."',
+					stkm_clase         = '".$request->clase."' ",
+				'whereArmado' => " WHERE stkm_articulo = '".str_pad($id, 13, "0", STR_PAD_LEFT)."' " );	
 				break;
 
 			default:

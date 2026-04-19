@@ -32,7 +32,7 @@
                     <div class="row">
                         <div class="col-lg-3"></div>
                         <div class="col-lg-6">
-                            @include('includes.boton-form-editar')
+                            <button type="submit" onclick="sub()" class="btn btn-success">Guardar</button>
                         </div>
                     </div>
                 </div>

@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use OwenIt\Auditing\Contracts\Auditable;
 use App\Models\Stock\Articulo;
+use App\Models\Seguridad\Usuario;
 use Illuminate\Support\Str;
 
 class Ordenproduccion extends Model implements Auditable

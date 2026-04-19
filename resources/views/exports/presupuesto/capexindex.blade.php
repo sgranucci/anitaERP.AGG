@@ -1,4 +1,4 @@
-<h2> Ordenes de Venta </h2>
+<h2> Capex </h2>
 <table> 
 	<thead>
 	<tr>

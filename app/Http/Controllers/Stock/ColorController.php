@@ -24,9 +24,12 @@ class ColorController extends Controller
 
 		if ($datas->isEmpty())
 		{
-			$Color = new Color();
-        	$Color->sincronizarConAnita();
-	
+            if (config('app.empresa') == 'CALZADOS FERLI')
+            {
+                $Color = new Color();
+                $Color->sincronizarConAnita();
+            }
+        
         	$datas = Color::orderBy('id')->paginate(50);
 		}  
 
@@ -55,8 +58,11 @@ class ColorController extends Controller
         $color = Color::create($request->all());
 
 		// Graba anita
-		$Color = new Color();
-        $Color->guardarAnita($request);
+        if (config('app.empresa') == 'CALZADOS FERLI')
+        {        
+            $Color = new Color();
+            $Color->guardarAnita($request);
+        }
 
         return redirect('stock/color')->with('mensaje', 'Color creado con exito');
     }
@@ -88,8 +94,11 @@ class ColorController extends Controller
         Color::findOrFail($id)->update($request->all());
 
 		// Actualiza anita
-		$Color = new Color();
-        $Color->actualizarAnita($request);
+        if (config('app.empresa') == 'CALZADOS FERLI')
+        {        
+            $Color = new Color();
+            $Color->actualizarAnita($request);
+        }
 
         return redirect('stock/color')->with('mensaje', 'Color actualizado con exito');
     }
@@ -105,8 +114,11 @@ class ColorController extends Controller
         can('borrar-colores');
 
 		// Elimina anita
-		$Color = new Color();
-        $Color->eliminarAnita($request->codigo);
+        if (config('app.empresa') == 'CALZADOS FERLI')
+        {
+            $Color = new Color();
+            $Color->eliminarAnita($request->codigo);
+        }
 
         if ($request->ajax()) {
             if (Color::destroy($id)) {

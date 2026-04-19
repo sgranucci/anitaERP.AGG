@@ -9,6 +9,7 @@ interface ArticuloRepositoryInterface
     public function create(array $data);
     public function leeArticulo($busqueda, $flPaginando = null);
     public function findPorSku($sku);
+    public function leeColores();
 
 }
 

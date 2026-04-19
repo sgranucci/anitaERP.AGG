@@ -44,6 +44,24 @@ class UltimosAgregadosTablaPermisoSeeder extends Seeder
             array('id' => '1017', 'nombre' => 'Editar encuestas', 'slug' => 'editar-encuesta', 'created_at' => $now, 'updated_at' => $now),
             array('id' => '1018', 'nombre' => 'Actualizar encuestas', 'slug' => 'actualizar-encuesta', 'created_at' => $now, 'updated_at' => $now),
             array('id' => '1019', 'nombre' => 'Borrar encuestas', 'slug' => 'borrar-encuesta', 'created_at' => $now, 'updated_at' => $now),            
+            array('id' => '2016', 'nombre' => 'Ingresar tipo de producto', 'slug' => 'crear-tipo-de-producto', 'menu_id' => 201, 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '2017', 'nombre' => 'Listar tipo de producto', 'slug' => 'listar-tipo-de-producto', 'menu_id' => 201,'created_at' => $now, 'updated_at' => $now),
+            array('id' => '2018', 'nombre' => 'Editar tipo de producto', 'slug' => 'editar-tipo-de-producto', 'menu_id' => 201,'created_at' => $now, 'updated_at' => $now),
+            array('id' => '2019', 'nombre' => 'Actualizar tipo de producto', 'slug' => 'actualizar-tipo-de-producto', 'menu_id' => 201,'created_at' => $now, 'updated_at' => $now),
+            array('id' => '2020', 'nombre' => 'Borrar tipo de producto', 'slug' => 'borrar-tipo-de-producto', 'menu_id' => 201, 'created_at' => $now, 'updated_at' => $now),            
+            array('id' => '2021', 'nombre' => 'Ingresar capacidad', 'slug' => 'crear-capacidad', 'menu_id' => 202, 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '2022', 'nombre' => 'Listar capacidad', 'slug' => 'listar-capacidad', 'menu_id' => 202,'created_at' => $now, 'updated_at' => $now),
+            array('id' => '2023', 'nombre' => 'Editar capacidad', 'slug' => 'editar-capacidad', 'menu_id' => 202,'created_at' => $now, 'updated_at' => $now),
+            array('id' => '2024', 'nombre' => 'Actualizar capacidad', 'slug' => 'actualizar-capacidad', 'menu_id' => 202,'created_at' => $now, 'updated_at' => $now),
+            array('id' => '2025', 'nombre' => 'Borrar capacidad', 'slug' => 'borrar-capacidad', 'menu_id' => 202, 'created_at' => $now, 'updated_at' => $now),            
+            array('id' => '2026', 'nombre' => 'Ingresar tipo de liquido de freno', 'slug' => 'crear-tipo-de-liquido-de-freno', 'menu_id' => 203, 'created_at' => $now, 'updated_at' => $now),
+            array('id' => '2027', 'nombre' => 'Listar tipo de liquido de freno', 'slug' => 'listar-tipo-de-liquido-de-freno', 'menu_id' => 203,'created_at' => $now, 'updated_at' => $now),
+            array('id' => '2028', 'nombre' => 'Editar tipo de liquido de freno', 'slug' => 'editar-tipo-de-liquido-de-freno', 'menu_id' => 203,'created_at' => $now, 'updated_at' => $now),
+            array('id' => '2029', 'nombre' => 'Actualizar tipo de liquido de freno', 'slug' => 'actualizar-tipo-de-liquido-de-freno', 'menu_id' => 203,'created_at' => $now, 'updated_at' => $now),
+            array('id' => '2030', 'nombre' => 'Borrar tipo de liquido de freno', 'slug' => 'borrar-tipo-de-liquido-de-freno', 'menu_id' => 203, 'created_at' => $now, 'updated_at' => $now),            
+            array('id' => '1006', 'nombre' => 'Editar articulos', 'slug' => 'editar-articulos', 'menu_id' => 10,'created_at' => $now, 'updated_at' => $now),
+            array('id' => '1007', 'nombre' => 'Actualizar articulos', 'slug' => 'actualizar-articulos', 'menu_id' => 10,'created_at' => $now, 'updated_at' => $now),
+
         ];
         DB::table('permiso')->insert($permiso);
     }

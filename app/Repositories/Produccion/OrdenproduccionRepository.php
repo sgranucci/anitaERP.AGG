@@ -62,4 +62,66 @@ class OrdenproduccionRepository implements OrdenproduccionRepositoryInterface
         return $ordenproduccion;
     }
 
+	public function leeOrdenProduccion($busqueda, $flPaginando = null)
+    {
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $ordenproduccion = $this->model->select('ordenproduccion.id as id',
+                                                'ordenproduccion.fechainicio as fechainicio',
+                                                'ordenproduccion.fechafinalizacion as fechafinalizacion',
+                                                'lineallenado.nombre as nombrelineallenado',
+                                                'ordenproduccion.numeroordenproduccion as numeroordenproduccion',
+                                                'tipoproducto.nombre as nombretipoproducto',
+                                                'tipoliquidofreno.nombre as nombretipoliquidofreno',
+                                                'capacidad.nombre as nombrecapacidad',
+                                                'mventa.nombre as nombremarca',
+                                                'color.nombre as nombrecolor',
+                                                'ordenproduccion.cantidad as cantidad',
+                                                'provienebin.nombre as nombreprovienebin',
+                                                'ordenproduccion.lote as lote',
+                                                'ordenproduccion.observacion as observacion',
+                                                'usuario.nombre as nombreusuario')
+                                ->leftjoin('articulo', 'articulo.id', 'ordenproduccion.articulo_id')
+                                ->leftjoin('lineallenado', 'lineallenado.id', 'ordenproduccion.lineallenado_id')
+								->leftjoin('tipoproducto', 'tipoproducto.id', 'articulo.tipoproducto_id')
+								->leftjoin('tipoliquidofreno', 'tipoliquidofreno.id', 'articulo.tipoliquidofreno_id')
+                                ->leftjoin('capacidad', 'capacidad.id', 'articulo.capacidad_id')
+                                ->leftjoin('mventa', 'mventa.id', 'articulo.mventa_id')
+                                ->leftjoin('color', 'color.id', 'articulo.color_id')
+                                ->leftjoin('provienebin', 'provienebin.id', 'ordenproduccion.provienebin_id')
+                                ->leftjoin('usuario', 'usuario.id', 'ordenproduccion.usuario_id');
+		
+		$ordenproduccion = $ordenproduccion->where(function ($query) use ($busqueda) {
+                	$query->orWhere('ordenproduccion.id', $busqueda)
+                            ->orWhere('ordenproduccion.fechainicio', 'like', '%'.$busqueda.'%')
+                            ->orWhere('ordenproduccion.fechafinalizacion', 'like', '%'.$busqueda.'%')
+							->orWhere('lineallenado.nombre', 'like', '%'.$busqueda.'%')
+							->orWhere('ordenproduccion.numeroordenproduccion', 'like', '%'.$busqueda.'%')
+							->orWhere('tipoproducto.nombre', 'like', '%'.$busqueda.'%')
+							->orWhere('tipoliquidofreno.nombre', 'like', '%'.$busqueda.'%')
+							->orWhere('capacidad.nombre', 'like', '%'.$busqueda.'%')
+							->orWhere('mventa.nombre', 'like', '%'.$busqueda.'%')
+							->orWhere('ordenproduccion.cantidad', '=', $busqueda)
+							->orWhere('provienebin.nombre', 'like', '%'.$busqueda.'%')
+                            ->orWhere('ordenproduccion.observacion', 'like', '%'.$busqueda.'%')
+                            ->orWhere('usuario.nombre', 'like', '%'.$busqueda.'%');
+					});
+
+		$ordenproduccion = $ordenproduccion->orderby('id', 'DESC');
+                                
+		//dd($permisos['permisos']);
+        if (isset($flPaginando))
+        {
+            if ($flPaginando)
+                $ordenproduccion = $ordenproduccion->paginate(10);
+            else
+                $ordenproduccion = $ordenproduccion->get();
+        }
+        else
+            $ordenproduccion = $ordenproduccion->get();
+
+        return $ordenproduccion;
+    }
+    
 }

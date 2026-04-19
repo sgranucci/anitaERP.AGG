@@ -397,6 +397,39 @@ Route::put('stock/tipocorte/{id}', 'Stock\TipocorteController@actualizar')->name
 Route::delete('stock/tipocorte/{id}', 'Stock\TipocorteController@eliminar')->name('eliminar_tipocorte');
 
 /* 
+ * Tipo de producto
+ */
+
+Route::get('stock/tipoproducto', 'Stock\TipoproductoController@index')->name('consultar_tipoproducto');
+Route::get('stock/tipoproducto/crear', 'Stock\TipoproductoController@crear')->name('crear_tipoproducto');
+Route::post('stock/tipoproducto', 'Stock\TipoproductoController@guardar')->name('guardar_tipoproducto');
+Route::get('stock/tipoproducto/{id}/editar', 'Stock\TipoproductoController@editar')->name('editar_tipoproducto');
+Route::put('stock/tipoproducto/{id}', 'Stock\TipoproductoController@actualizar')->name('actualizar_tipoproducto');
+Route::delete('stock/tipoproducto/{id}', 'Stock\TipoproductoController@eliminar')->name('eliminar_tipoproducto');
+
+/* 
+ * Capacidad
+ */
+
+Route::get('stock/capacidad', 'Stock\CapacidadController@index')->name('consultar_capacidad');
+Route::get('stock/capacidad/crear', 'Stock\CapacidadController@crear')->name('crear_capacidad');
+Route::post('stock/capacidad', 'Stock\CapacidadController@guardar')->name('guardar_capacidad');
+Route::get('stock/capacidad/{id}/editar', 'Stock\CapacidadController@editar')->name('editar_capacidad');
+Route::put('stock/capacidad/{id}', 'Stock\CapacidadController@actualizar')->name('actualizar_capacidad');
+Route::delete('stock/capacidad/{id}', 'Stock\CapacidadController@eliminar')->name('eliminar_capacidad');
+
+/* 
+ * Tipo líquido de freno
+ */
+
+Route::get('stock/tipoliquidofreno', 'Stock\TipoliquidofrenoController@index')->name('consultar_tipoliquidofreno');
+Route::get('stock/tipoliquidofreno/crear', 'Stock\TipoliquidofrenoController@crear')->name('crear_tipoliquidofreno');
+Route::post('stock/tipoliquidofreno', 'Stock\TipoliquidofrenoController@guardar')->name('guardar_tipoliquidofreno');
+Route::get('stock/tipoliquidofreno/{id}/editar', 'Stock\TipoliquidofrenoController@editar')->name('editar_tipoliquidofreno');
+Route::put('stock/tipoliquidofreno/{id}', 'Stock\TipoliquidofrenoController@actualizar')->name('actualizar_tipoliquidofreno');
+Route::delete('stock/tipoliquidofreno/{id}', 'Stock\TipoliquidofrenoController@eliminar')->name('eliminar_tipoliquidofreno');
+
+/* 
  * Materiales
  */
 
@@ -2387,3 +2420,5 @@ Route::post('presupuesto/crear_generaasiento', 'Presupuesto\PartidagastoControll
  Route::get('produccion/ordenproduccion/{id}/editar', 'Produccion\OrdenproduccionController@editar')->name('editar_ordenproduccion');
  Route::put('produccion/ordenproduccion/{id}', 'Produccion\OrdenproduccionController@actualizar')->name('actualizar_ordenproduccion');
  Route::delete('produccion/ordenproduccion/{id}', 'Produccion\OrdenproduccionController@eliminar')->name('eliminar_ordenproduccion');
+
+ Route::get('produccion/listaordenproduccion/{formato?}/{busqueda?}', 'Produccion\OrdenproduccionController@listar')->name('lista_ordenproduccion');

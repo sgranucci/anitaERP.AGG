@@ -100,3 +100,48 @@ function redondearDecimales(numero, decimales) {
         return Number(numero.toFixed(decimales)) === 0 ? 0 : numero;  // En valores muy bajos, se comprueba si el numero es 0 (con el redondeo deseado), si no lo es se devuelve el numero otra vez.
     }
 }
+
+document.getElementById('form-general').addEventListener('submit', function(event) {
+    let primerCampoInvalido = null;
+    
+    // 1. Obtener todos los campos requeridos
+    const camposRequeridos = this.querySelectorAll('[required]');
+
+    camposRequeridos.forEach(campo => {
+        // 2. Verificar si el campo está vacío
+        if (!campo.value.trim()) {
+            // Marcar campo inválido (opcional, ej: borde rojo)
+            campo.style.borderColor = 'red';
+            
+            if (!primerCampoInvalido) {
+                primerCampoInvalido = campo;
+            }
+        } else {
+            // Limpiar si ya se rellenó
+            campo.style.borderColor = '';
+        }
+    });
+
+    // 3. Si hay campos inválidos, detener envío y mostrar la pestaña
+    if (primerCampoInvalido) {
+        event.preventDefault(); // Detiene el formulario
+        
+        // Encontrar la solapa padre
+        const solapaContenedora = primerCampoInvalido.closest('.tab-content');
+        
+        if (solapaContenedora) {
+            // Activar la solapa (aquí llamas a tu función para cambiar de pestaña)
+            activarSolapa(solapaContenedora.id);
+            alert('Por favor, rellene todos los campos obligatorios.');
+        }
+        primerCampoInvalido.focus();
+    }
+});
+
+// Función para cambiar la visualización de las solapas
+function activarSolapa(tabId) {
+    // Ocultar todo
+    document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = 'none');
+    // Mostrar la solapa con el error
+    document.getElementById(tabId).style.display = 'block';
+}

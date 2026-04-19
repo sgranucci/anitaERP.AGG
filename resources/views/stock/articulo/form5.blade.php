@@ -1,4 +1,4 @@
-<div class="card form5" style="display: none">
+<div class="card form5 .tab-content" style="display: none">
 	<div class="row">
 		<div class="col-sm-6">
 			<!-- textarea -->

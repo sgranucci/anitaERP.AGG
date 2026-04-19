@@ -4,6 +4,8 @@ namespace App\Repositories\Stock;
 
 use App\Models\Stock\Articulo_Caja;
 use App\Models\Stock\Articulo;
+use App\Models\Stock\Color;
+use App\Models\Stock\Tipoliquidofreno;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Carbon\Carbon;
 use App\ApiAnita;
@@ -39,11 +41,17 @@ class ArticuloRepository implements ArticuloRepositoryInterface
 
     public function find($id)
     {
-        if (null == $articulo = $this->model->where('id', $id)->with('categorias')->with('unidadesdemedidas')
+        $query = $this->model->where('id', $id)
+                                ->with('categorias')->with('unidadesdemedidas')
                                 ->with('categorias')->with('subcategorias')->with('lineas')->with('mventas')->with('impuestos')
 								->with('unidadesdemedidas')->with('unidadesdemedidasalternativas')->with('usoarticulos')
-                                ->with('articulo_estados')->with('articulo_archivos')->with('articulo_cuentacontables')
-								->first()) {
+                                ->with('articulo_estados')->with('articulo_archivos')->with('articulo_cuentacontables');
+
+        if (config('app.empresa') === 'FRASLE') {
+            $query = $query->with('tipoproductos')->with('capacidades')->with('colores')->with('tipoliquidofrenos');
+        }
+
+        if (null == $articulo = $query->first()) {
             throw new ModelNotFoundException("Registro no encontrado");
         }
 
@@ -52,7 +60,19 @@ class ArticuloRepository implements ArticuloRepositoryInterface
 
    	public function findPorSku($codigo)
     {
-        return $this->model->where('sku', $codigo)->with('categorias')->with('unidadesdemedidas')->with('impuestos')->first();
+        $query = $this->model->where('sku', $codigo)
+            ->with('categorias')
+            ->with('unidadesdemedidas')
+            ->with('impuestos')
+            ->with('subcategorias')
+            ->with('lineas')
+            ->with('mventas');
+
+        if (config('app.empresa') === 'FRASLE') {
+            $query = $query->with('tipoproductos')->with('capacidades')->with('colores')->with('tipoliquidofrenos');
+        }
+
+        return $query->first();
     }
 
 	public function leeArticulo($busqueda, $flPaginando = null)
@@ -94,8 +114,16 @@ class ArticuloRepository implements ArticuloRepositoryInterface
         else
             $articulo = $articulo->get();
 
-        return $articulo;
+        return $articulo;       
     }
 
-    
+    public function leeColores()
+    {
+        return Color::orderBy('nombre')->get();
+    }
+
+    public function leeTipoliquidofrenos()
+    {
+        return Tipoliquidofreno::orderBy('nombre')->get();
+    }
 }

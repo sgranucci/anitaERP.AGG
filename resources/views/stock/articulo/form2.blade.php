@@ -1,4 +1,4 @@
-<div class="form2" style="display: none">    
+<div class="form2 .tab-content" style="display: none">    
     <div class="card-body">
         <div class="row">
             <div class="col-sm-6">
@@ -47,7 +47,41 @@
                             @endif
                         @endforeach
                     </select>
-                </div>                
+                </div>   
+                @if (config('app.empresa') == 'FRASLE')                       
+                    <div class="form-group row">
+                        <label for="tipoproducto_id" class="col-lg-4 col-form-label">Tipo de producto</label>
+                        <div class="col-lg-8">
+                            <select id="tipoproducto_id" name="tipoproducto_id" class="col-lg-6 form-control">
+                                <option value="">-- Seleccionar --</option>
+                                @foreach($tipoproducto_query as $key => $value)
+                                    @if( isset($producto) && (int) $value->id == (int) old('tipoproducto_id', $producto->tipoproducto_id ?? ''))
+                                        <option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
+                                    @else
+                                        <option value="{{ $value->id }}">{{ $value->nombre }}</option>    
+                                    @endif
+                                @endforeach
+                            </select>
+                        </div>
+                    </div>
+                @endif
+				@if (config('app.empresa') == 'FRASLE')
+					<div class="form-group row">
+						<label for="capacidad_id" class="col-lg-4 col-form-label">Capacidad</label>
+						<div class="col-lg-8">
+							<select id="capacidad_id" name="capacidad_id" class="col-lg-6 form-control">
+								<option value="">-- Seleccionar --</option>
+								@foreach($capacidad_query as $key => $value)
+									@if( isset($producto) && (int) $value->id == (int) old('capacidad_id', $producto->capacidad_id ?? ''))
+										<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
+									@else
+										<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
+									@endif
+								@endforeach
+							</select>
+						</div>
+					</div>
+				@endif                             
             </div>
             <div class="col-sm-6">
                 <div class="form-group row">
@@ -78,7 +112,42 @@
     				<div class="col-lg-2">
     					<input type="number" name="formula" id="formula" class="form-control" value="{{old('formula', $producto->formula ?? '')}}"/>
                 	</div>
-                </div>                                        
+                </div>                 
+
+				@if (config('app.empresa') == 'FRASLE')
+					<div class="form-group row">
+						<label for="color_id" class="col-lg-4 col-form-label">Color</label>
+						<div class="col-lg-8">
+							<select id="color_id" name="color_id" class="col-lg-6 form-control">
+								<option value="">-- Seleccionar --</option>
+								@foreach($color_query as $key => $value)
+									@if( isset($producto) && (int) $value->id == (int) old('color_id', $producto->color_id ?? ''))
+										<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>
+									@else
+										<option value="{{ $value->id }}">{{ $value->nombre }}</option>
+									@endif
+								@endforeach
+							</select>
+						</div>
+					</div>
+				@endif
+				@if (config('app.empresa') == 'FRASLE')
+					<div class="form-group row">
+						<label for="tipoliquidofreno_id" class="col-lg-4 col-form-label">Tipo l&iacute;quido de freno</label>
+						<div class="col-lg-8">
+							<select id="tipoliquidofreno_id" name="tipoliquidofreno_id" class="col-lg-6 form-control">
+								<option value="">-- Seleccionar --</option>
+								@foreach($tipoliquidofreno_query as $key => $value)
+									@if( isset($producto) && (int) $value->id == (int) old('tipoliquidofreno_id', $producto->tipoliquidofreno_id ?? ''))
+										<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>
+									@else
+										<option value="{{ $value->id }}">{{ $value->nombre }}</option>
+									@endif
+								@endforeach
+							</select>
+						</div>
+					</div>
+				@endif
             </div>
         </div>
     </div>

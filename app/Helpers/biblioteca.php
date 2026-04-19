@@ -277,4 +277,17 @@ function specialChars($str, $chars = null) {
     return strpbrk($str, $specialChars) !== false;
 }
 
+function convertirFecha($fechaString, $formatoEntrada) {
+    // 1. Validar el formato
+    $d = DateTime::createFromFormat($formatoEntrada, $fechaString);
+    
+    // 2. Verificar si es una fecha válida y si el formato coincide
+    if ($d && $d->format($formatoEntrada) === $fechaString) {
+        // 3. Convertir al formato AAAA-MM-DD
+        return $d->format('Y-m-d');
+    }
+    
+    return false; // Formato incorrecto
+}
+
 

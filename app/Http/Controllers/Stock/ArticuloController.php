@@ -32,6 +32,9 @@ use App\Models\Stock\Caja;
 use App\Models\Stock\Serigrafia;
 use App\Models\Stock\Horma;
 use App\Models\Stock\Depmae;
+use App\Models\Stock\Tipoproducto;
+use App\Models\Stock\Capacidad;
+use App\Models\Stock\Tipoliquidofreno;
 use App\Models\Produccion\Tarea;
 use App\Models\Configuracion\Impuesto;
 use App\Services\Stock\PrecioService;
@@ -371,6 +374,16 @@ class ArticuloController extends Controller
 		$nofactura_enum = Articulo_Estado::$enumNoFactura;
 		$codimp = Impuesto::all();
 		$estado_enum = Articulo_Estado::$enumEstado;
+		$tipoproducto_query = Tipoproducto::orderBy('nombre')->get();
+		$capacidad_query = (config('app.empresa') === 'FRASLE')
+							? Capacidad::orderBy('nombre')->get()
+							: collect();
+		$color_query = (config('app.empresa') === 'FRASLE')
+							? $this->articuloRepository->leeColores()
+							: collect();
+		$tipoliquidofreno_query = (config('app.empresa') === 'FRASLE')
+							? Tipoliquidofreno::orderBy('nombre')->get()
+							: collect();
 
 		$numeroparte_enum = [
 			['id' => '0', 'nombre'  => 'No tiene (a granel)'],
@@ -380,7 +393,8 @@ class ArticuloController extends Controller
         return view("stock.articulo.crear",compact('categoria','subcategoria','linea','marca','tipoimputacion_enum',
 											'unidadmedida', 'usosArticulos', 'oficinacompra_query', 'referer', 'codimp',
 											'periodicidadcompra_query', 'condicionentrega_query', 'empresa_query', 'estado_enum',
-											'tiposArticulos', 'deposito_query', 'numeroparte_enum', 'nofactura_enum'));
+											'tiposArticulos', 'deposito_query', 'numeroparte_enum', 'nofactura_enum',
+											'tipoproducto_query', 'capacidad_query', 'color_query', 'tipoliquidofreno_query'));
     }
 
     public function guardar(ValidacionArticulo $request)
@@ -479,6 +493,16 @@ class ArticuloController extends Controller
 
 		$nofactura_enum = Articulo_Estado::$enumNoFactura;
 		$estado_enum = Articulo_Estado::$enumEstado;
+		$tipoproducto_query = Tipoproducto::orderBy('nombre')->get();
+		$capacidad_query = (config('app.empresa') === 'FRASLE')
+							? Capacidad::orderBy('nombre')->get()
+							: collect();
+		$color_query = (config('app.empresa') === 'FRASLE')
+							? $this->articuloRepository->leeColores()
+							: collect();
+		$tipoliquidofreno_query = (config('app.empresa') === 'FRASLE')
+							? Tipoliquidofreno::orderBy('nombre')->get()
+							: collect();
 
 		$numeroparte_enum = [
 			['id' => '0', 'nombre'  => 'No tiene (a granel)'],
@@ -489,7 +513,8 @@ class ArticuloController extends Controller
 													'usosArticulos','codimp', 'empresa_query', 'referer', 'estado_enum',
 													'unidadmedida','filtros','nofactura_enum','tiposArticulos',
 													'periodicidadcompra_query', 'condicionentrega_query', 'tipoimputacion_enum',
-													'deposito_query', 'numeroparte_enum', 'oficinacompra_query'));
+													'deposito_query', 'numeroparte_enum', 'oficinacompra_query',
+													'tipoproducto_query', 'capacidad_query', 'color_query', 'tipoliquidofreno_query'));
     }
 
     public function actualizar(ValidacionArticulo $request, $id)
