@@ -73,45 +73,9 @@ class Profesion_UifRepository implements Profesion_UifRepositoryInterface
     }
 
     public function sincronizarConAnita(){
-        $apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'list', 
-                    'sistema' => 'base_admin',
-					'campos' => $this->keyFieldAnita, 
-					'orderBy' => $this->keyFieldAnita, 
-					'tabla' => $this->table );
-        $dataAnita = json_decode($apiAnita->apiCall($data));
-
-		if ($dataAnita)
-		{
-		    for ($_ii = 0; $_ii < count($dataAnita); $_ii++)
-		    {
-            	$this->traerRegistroDeAnita($_ii);
-	    	}
-		}
     }
 
     public function traerRegistroDeAnita($key){
-        $apiAnita = new ApiAnita();
-        $data = array( 
-            'acc' => 'list', 'tabla' => $this->table, 
-            'sistema' => 'base_admin',
-            'campos' => '
-                iprofesionid,
-                cdesc
-            ' , 
-            'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
-        );
-        $dataAnita = json_decode($apiAnita->apiCall($data));
-
-        if (count($dataAnita) > 0)
-        {
-            $data = $dataAnita[0];
-
-            $this->model->create([
-                "nombre" => $data->cdesc,
-                "codigo" => $data->iprofesionid
-            ]);
-        }
     }
 
     public function leeProfesion_Uif($consulta, $profesion_uif_id = null)

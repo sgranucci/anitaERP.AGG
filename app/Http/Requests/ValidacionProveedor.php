@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use Illuminate\Foundation\Http\FormRequest;
 use App\Rules\Compras\RuleProveedor;
 use App\Models\Compras\Proveedor;
+use Illuminate\Validation\Rule;
 
 class ValidacionProveedor extends FormRequest
 {
@@ -35,7 +36,7 @@ class ValidacionProveedor extends FormRequest
             'condicionpago_id' => ['integer', 'nullable'],
             'cuentacontable_id' => 'required',
             'cuentacontableme_id' => 'required',
-            'nroinscripcion' => ['required', new RuleProveedor('nroinscripcion')],
+            'nroinscripcion' => ['required', new RuleProveedor('nroinscripcion'), Rule::unique('proveedor', 'nroinscripcion')->ignore($this->route('id'))->whereNull('deleted_at')],
             'retieneiva' => ['required', new RuleProveedor('retieneiva')],
             'nroIIBB' => 'sometimes|max:100|',
         ];

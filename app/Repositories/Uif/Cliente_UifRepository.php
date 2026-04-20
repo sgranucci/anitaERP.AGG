@@ -588,4 +588,602 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
         }
     }
 
+	private function convierteProfesion($profesion)
+	{
+		switch($profesion)
+		{
+		case 176:
+			$profesion_id = 11;
+			break;
+		case 11:
+			$profesion_id = 11;
+			break;
+		case 157:
+			$profesion_id = 3;
+			break;
+		case 73:
+			$profesion_id = 25;
+			break;
+		case 174:
+			$profesion_id = 25;
+			break;
+		case 108:
+			$profesion_id = 33;
+			break;
+		case 61:
+			$profesion_id = 1;
+			break;
+		case 103:
+			$profesion_id = 2;
+			break;
+		case 2:
+			$profesion_id = 35;
+			break;
+		case 199:
+			$profesion_id = 35;
+			break;
+		case 161:
+			$profesion_id = 22;
+			break;
+		case 3:
+			$profesion_id = 30;
+			break;
+		case 154:
+			$profesion_id = 30;
+			break;
+		case 165:
+			$profesion_id = 34;
+			break;
+		case 166:
+			$profesion_id = 32;
+			break;
+		case 70	:
+			$profesion_id = 11;
+			break;
+		case 207:
+			$profesion_id = 25;
+			break;
+		case 56:
+			$profesion_id = 11;
+			break;
+		case 210:
+			$profesion_id = 22;
+			break;
+		case 71:
+			$profesion_id = 25;
+			break;
+		case 121:
+			$profesion_id = 36;
+			break;
+		case 220:
+			$profesion_id = 27;
+			break;
+		case 91:
+			$profesion_id = 12;
+			break;
+		case 115:
+			$profesion_id = 22;
+			break;
+		case 195:
+			$profesion_id = 28;
+			break;
+		case 123:
+			$profesion_id = 38;
+			break;
+		case 150:
+			$profesion_id = 11;
+			break;
+		case 216:
+			$profesion_id = 11;
+			break;
+		case 81:
+			$profesion_id = 38;
+			break;
+		case 181	:
+			$profesion_id = 1;
+			break;
+		case 36:
+			$profesion_id = 1;
+			break;
+		case 69:
+			$profesion_id = 28;
+			break;
+		case 118:
+			$profesion_id = 27;
+			break;
+		case 192:
+			$profesion_id = 26;
+			break;
+		case 74:
+			$profesion_id = 25;
+			break;
+		case 25:
+			$profesion_id = 7;
+			break;
+		case 58:
+			$profesion_id = 22;
+			break;
+		case 62:
+			$profesion_id = 22;
+			break;
+		case 202:
+			$profesion_id = 39;
+			break;
+		case 229:
+			$profesion_id = 22;
+			break;
+		case 63:
+			$profesion_id = 28;
+			break;
+		case 26:
+			$profesion_id = 26;
+			break;
+		case 55:
+			$profesion_id = 24;
+			break;
+		case 37:
+			$profesion_id = 7;
+			break;
+		case 1:
+			$profesion_id = 15;
+			break;
+		case 19	:
+			$profesion_id = 3;
+			break;
+		case 23:
+			$profesion_id = 11;
+			break;
+		case 68:
+			$profesion_id = 11;
+			break;
+		case 76:
+			$profesion_id = 27;
+			break;
+		case 22:
+			$profesion_id = 37;
+			break;
+		case 186:
+			$profesion_id = 11;
+			break;
+		case 111:
+			$profesion_id = 27;
+			break;
+		case 173:
+			$profesion_id = 13;
+			break;
+		case 96:
+			$profesion_id = 13;
+			break;
+		case 140:
+			$profesion_id = 14;
+			break;
+		case 131:
+			$profesion_id = 11;
+			break;
+		case 134:
+			$profesion_id = 3;
+			break;
+		case 183:
+			$profesion_id = 25;
+			break;
+		case 29:
+			$profesion_id = 37;
+			break;
+		case 189:
+			$profesion_id = 41;
+			break;
+		case 163:
+			$profesion_id = 11;
+			break;
+		case 177:
+			$profesion_id = 11;
+			break;
+		case 179:
+			$profesion_id = 11;
+			break;
+		case 178:
+			$profesion_id = 11;
+			break;
+		case 193:
+			$profesion_id = 27;
+			break;
+		case 171:
+			$profesion_id = 16;
+			break;
+		case 66:
+			$profesion_id = 24;
+			break;
+		case 133:
+			$profesion_id = 11;
+			break;
+		case 214:
+			$profesion_id = 11;
+			break;
+		case 142:
+			$profesion_id = 22;
+			break;
+		case 190:
+			$profesion_id = 42;
+			break;
+		case 53:
+			$profesion_id = 2;
+			break;
+		case 90:
+			$profesion_id = 42;
+			break;
+		case 226:
+			$profesion_id = 1;
+			break;
+		case 167:
+			$profesion_id = 1;
+			break;
+		case 48:
+			$profesion_id = 2;
+			break;
+		case 4:
+			$profesion_id = 1;
+			break;
+		case 109:
+			$profesion_id = 43;
+			break;
+		case 107:
+			$profesion_id = 31;
+			break;
+		case 34:
+			$profesion_id = 44;
+			break;
+		case 33:
+			$profesion_id = 10;
+			break;
+		case 162:
+			$profesion_id = 19;
+			break;
+		case 225:
+			$profesion_id = 1;
+			break;
+		case 182:
+			$profesion_id = 1;
+			break;
+		case 15:
+			$profesion_id = 24;
+			break;
+		case 59:
+			$profesion_id = 12;
+			break;
+		case 201:
+			$profesion_id = 25;
+			break;
+		case 137:
+			$profesion_id = 27;
+			break;
+		case 135:
+			$profesion_id = 27;
+			break;
+		case 106:
+			$profesion_id = 17;
+			break;
+		case 116:
+			$profesion_id = 24;
+			break;
+		case 151:
+			$profesion_id = 11;
+			break;
+		case 105:
+			$profesion_id = 27;
+			break;
+		case 89:
+			$profesion_id = 37;
+			break;
+		case 80:
+			$profesion_id = 22;
+			break;
+		case 155:
+			$profesion_id = 28;
+			break;
+		case 102:
+			$profesion_id = 38;
+			break;
+		case 60:
+			$profesion_id = 45;
+			break;
+		case 114:
+			$profesion_id = 24;
+			break;
+		case 149:
+			$profesion_id = 38;
+			break;
+		case 198:
+			$profesion_id = 1;
+			break;
+		case 124:
+			$profesion_id = 38;
+			break;
+		case 153:
+			$profesion_id = 29;
+			break;
+		case 184:
+			$profesion_id = 25;
+			break;
+		case 221:
+			$profesion_id = 22;
+			break;
+		case 158:
+			$profesion_id = 19;
+			break;
+		case 127:
+			$profesion_id = 11;
+			break;
+		case 30:
+			$profesion_id = 4;
+			break;
+		case 156:
+			$profesion_id = 24;
+			break;
+		case 120:
+			$profesion_id = 3;
+			break;
+		case 13:
+			$profesion_id = 21;
+			break;
+		case 230:
+			$profesion_id = 21;
+			break;
+		case 141:
+			$profesion_id = 24;
+			break;
+		case 99:
+			$profesion_id = 7;
+			break;
+		case 228:
+			$profesion_id = 22;
+			break;
+		case 10:
+			$profesion_id = 11;
+			break;
+		case 92:
+			$profesion_id = 11;
+			break;
+		case 122:
+			$profesion_id = 36;
+			break;
+		case 21:
+			$profesion_id = 11;
+			break;
+		case 75:
+			$profesion_id = 11;
+			break;
+		case 8:
+			$profesion_id = 40;
+			break;
+		case 206:
+			$profesion_id = 27;
+			break;
+		case 129:
+			$profesion_id = 27;
+			break;
+		case 39:
+			$profesion_id = 46;
+			break;
+		case 139:
+			$profesion_id = 4;
+			break;
+		case 126:
+			$profesion_id = 27;
+			break;
+		case 227:
+			$profesion_id = 24;
+			break;
+		case 18:
+			$profesion_id = 22;
+			break;
+		case 20:
+			$profesion_id = 24;
+			break;
+		case 170:
+			$profesion_id = 24;
+			break;
+		case 132:
+			$profesion_id = 19;
+			break;
+		case 130:
+			$profesion_id = 27;
+			break;
+		case 24:
+			$profesion_id = 33;
+			break;
+		case 83:
+			$profesion_id = 34;
+			break;
+		case 110:
+			$profesion_id = 47;
+			break;
+		case 203:
+			$profesion_id = 28;
+			break;
+		case 212:
+			$profesion_id = 27;
+			break;
+		case 204:
+			$profesion_id = 25;
+			break;
+		case 197:
+			$profesion_id = 24;
+			break;
+		case 233:
+			$profesion_id = 13;
+			break;
+		case 5:
+			$profesion_id = 13;
+			break;
+		case 6:
+			$profesion_id = 22;
+			break;
+		case 12:
+			$profesion_id = 24;
+			break;
+		case 169:
+			$profesion_id = 24;
+			break;
+		case 145:
+			$profesion_id = 22;
+			break;
+		case 200:
+			$profesion_id = 24;
+			break;
+		case 7	:
+			$profesion_id = 13;
+			break;
+		case 231:
+			$profesion_id = 1;
+			break;
+		case 232:
+			$profesion_id = 1;
+			break;
+		case 215:
+			$profesion_id = 11;
+			break;
+		case 97:
+			$profesion_id = 22;
+			break;
+		case 100:
+			$profesion_id = 27;
+			break;
+		case 82:
+			$profesion_id = 33;
+			break;
+		case 211:
+			$profesion_id = 38;
+			break;
+		case 52:
+			$profesion_id = 48;
+			break;
+		case 219:
+			$profesion_id = 27;
+			break;
+		case 16:
+			$profesion_id = 20;
+			break;
+		case 32:
+			$profesion_id = 38;
+			break;
+		case 85:
+			$profesion_id = 22;
+			break;
+		case 218:
+			$profesion_id = 13;
+			break;
+		case 196:
+			$profesion_id = 22;
+			break;
+		case 148:
+			$profesion_id = 22;
+			break;
+		case 125:
+			$profesion_id = 27;
+			break;
+		case 17:
+			$profesion_id = 38;
+			break;
+		case 77:
+			$profesion_id = 37;
+			break;
+		case 9:
+			$profesion_id = 11;
+			break;
+		case 138:
+			$profesion_id = 16;
+			break;
+		case 146:
+			$profesion_id = 27;
+			break;
+		case 93:
+			$profesion_id = 24;
+			break;
+		case 64:
+			$profesion_id = 24;
+			break;
+		case 65:
+			$profesion_id = 24;
+			break;
+		case 208:
+			$profesion_id = 11;
+			break;
+		case 217:
+			$profesion_id = 11;
+			break;
+		case 117:
+			$profesion_id = 24;
+			break;
+		case 72:
+			$profesion_id = 1;
+			break;
+		case 185:
+			$profesion_id = 1;
+			break;
+		case 180:
+			$profesion_id = 1;
+			break;
+		case 88:
+			$profesion_id = 11;
+			break;
+		case 222:
+			$profesion_id = 27;
+			break;
+		case 119:
+			$profesion_id = 1;
+			break;
+		case 104:
+			$profesion_id = 38;
+			break;
+		case 57:
+			$profesion_id = 5;
+			break;
+		case 147:
+			$profesion_id = 22;
+			break;
+		case 187:
+			$profesion_id = 38;
+			break;
+		case 38:
+			$profesion_id = 28;
+			break;
+		case 209:
+			$profesion_id = 22;
+			break;
+		case 143:
+			$profesion_id = 22;
+			break;
+		case 86:
+			$profesion_id = 22;
+			break;
+		case 224:
+			$profesion_id = 24;
+			break;
+		case 223:
+			$profesion_id = 24;
+			break;
+		case 213:
+			$profesion_id = 11;
+			break;
+		case 136:
+			$profesion_id = 1;
+			break;
+		case 172:
+			$profesion_id = 22;
+			break;
+		case 188:
+			$profesion_id = 27;
+			break;
+		case 101:
+			$profesion_id = 49;
+			break;
+		case 27:
+			$profesion_id = 50;
+			break;
+		case 128:
+			$profesion_id = 27;
+			break;
+		}
+		return $profesion_id;
+	}
 }

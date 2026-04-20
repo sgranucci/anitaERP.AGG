@@ -70,7 +70,6 @@ class Actividad_UifController extends Controller
     {
         can('editar-actividad-uif');
         $data = $this->repository->findOrFail($id);
-
         $riesgo_enum = Actividad_Uif::$enumRiesgo;
 
         return view('uif.actividad_uif.editar', compact('data', 'riesgo_enum'));

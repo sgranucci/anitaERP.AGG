@@ -1,4 +1,4 @@
-<div class="form1">
+<div id="tab1" class="form1 tab-content">
 		<div class="row">
 			<div class="col-sm-6">
 				<div class="form-group row">
@@ -79,7 +79,7 @@
         		<div class="col-md-3">
         			<div class="form-group">
         				<label class="requerido">País</label>
-        				<select name="pais_id" id="pais_id" data-placeholder="País" class="form-control required" data-fouc>
+        				<select name="pais_id" id="pais_id" data-placeholder="País" class="form-control" required data-fouc>
         					<option value="">-- Seleccionar --</option>
         					@foreach($pais_query as $key => $value)
         						@if( (int) $value->id == (int) old('pais_id', $data->pais_id ?? ''))
@@ -94,7 +94,7 @@
         		<div class="col-md-3" id='prov'>
         			<div class="form-group">
         				<label class="requerido">Provincia</label>
-        				<select name="provincia_id" id="provincia_id" data-placeholder="Provincia" class="form-control required" data-fouc>
+        				<select name="provincia_id" id="provincia_id" data-placeholder="Provincia" class="form-control" required data-fouc>
         					<option value="">-- Seleccionar --</option>
         					@foreach($provincia_query as $key => $value)
         						@if( (int) $value->id == (int) old('provincia_id', $data->provincia_id ?? ''))

@@ -6,16 +6,18 @@
 </div>
 <div class="form-group row">
 	<label for="riesgo" class="col-lg-3 col-form-label requerido">Riesgo</label>
-	<select id="riesgo" name="riesgo" class="col-lg-4 form-control" required>
-    	<option value="">-- Elija riesgo --</option>
-       	@foreach($riesgo_enum as $riesgo)
-			@if ($riesgo['nombre'] == old('riesgo',$data->riesgo??''))
-       			<option value="{{ $riesgo['nombre'] }}" selected>{{ $riesgo['nombre'] }}</option>    
-			@else
-			    <option value="{{ $riesgo['nombre'] }}">{{ $riesgo['nombre'] }}</option>
-			@endif
-    	@endforeach
-	</select>
+    <div class="col-lg-6">
+        <select id="riesgo" name="riesgo" class="col-lg-4 form-control" required>
+            <option value="">-- Elija riesgo --</option>
+            @foreach($riesgo_enum as $riesgo)
+                @if ($riesgo['nombre'] == old('riesgo',$data->riesgo??''))
+                    <option value="{{ $riesgo['nombre'] }}" selected>{{ $riesgo['nombre'] }}</option>    
+                @else
+                    <option value="{{ $riesgo['nombre'] }}">{{ $riesgo['nombre'] }}</option>
+                @endif
+            @endforeach
+        </select>
+    </div>
 </div>
 <div class="form-group row">
     <label for="puntaje" class="col-lg-3 col-form-label requerido">Puntaje</label>

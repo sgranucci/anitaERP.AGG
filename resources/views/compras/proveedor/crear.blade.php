@@ -3,23 +3,10 @@
     Proveedores
 @endsection
 
-@section("styles")
-
-input:invalid {
-  background-color: pink;
-}
-
-@endsection
-
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/domicilio.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/proveedor/crear.js")}}" type="text/javascript"></script>
-<script>
-$( "#botonform0" ).click(function() {
-  $( "#form-general" ).submit();
-});
-</script>
 @endsection
 
 @section('contenido')

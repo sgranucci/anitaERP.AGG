@@ -17,6 +17,33 @@
             completarLetra(condicioniva_id);
         });
 
+        $("#tipodocumento_id").change(function(){
+            var tipodocumento_id = $(this).val();
+            var texto = $("#tipodocumento_id option:selected").text();
+
+            if (texto == "CUIT")
+            {
+                $('#numerodocumento').attr('placeholder', 'XX-XXXXXXXX-X');
+
+                // Siempre borra el dato si pasa a CUIT
+                $('#numerodocumento').val('');
+
+                $('#numerodocumento').on('input', function() {
+                    var valor = $(this).val();
+
+                    formatarCUIT(this);
+                });            
+            }
+            else
+            {
+                $('#numerodocumento').removeAttr('placeholder');
+
+                $('#numerodocumento').off('input');
+            }
+
+            $('#numerodocumento').focus();
+        });
+
         $("#botonestado").click(function(){
 
             var estado = $("#estado").val();

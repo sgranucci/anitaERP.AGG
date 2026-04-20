@@ -1,11 +1,11 @@
-<div class="form2" style="display: none">
+<div id="tab2" class="form2 tab-content" style="display: none">
 	<h3>Datos de impuestos</h3>
 	<div class="row">
 		<div class="col-sm-6">
 			<div class="form-group row">
 				<label for="nroinscripcion" class="col-lg-4 col-form-label requerido">C.U.I.T.</label>
 				<div class="col-lg-3">
-					<input type="text" name="nroinscripcion" id="nroinscripcion" class="form-control" value="{{old('nroinscripcion', $data->nroinscripcion ?? '')}}" required/>
+					<input type="text" id="nroinscripcion" name="nroinscripcion" class="form-control" placeholder="XX-XXXXXXXX-X" maxlength="13" oninput="formatarCUIT(this)" value="{{old('nroinscripcion', $data->nroinscripcion ?? '')}}" required>
 				</div>
 			</div>
 			<div class="form-group row">
@@ -56,7 +56,7 @@
 					<label for="retieneiva" class="col-lg-4 col-form-label">Retiene iva</label>
 				@endif
 				<div class="col-lg-8">
-					<select name="retieneiva" class="col-lg-3 form-control" @if ($tipoalta != 'P') required @endif>
+					<select name="retieneiva" class="col-lg-3 form-control" required>
 						<option value="">-- Elija retiene iva --</option>
 						@foreach ($retieneiva_enum as $value => $retieneiva)
 							<option value="{{ $value }}"

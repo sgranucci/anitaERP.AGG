@@ -1,4 +1,4 @@
-<div class="card form7 .tab-content" style="display: none">
+<div id="tab7" class="card form7 tab-content" style="display: none">
     <h3>Historia</h3>
     <div class="card-body">
         <table class="table" id="ordenventa-historia-table">

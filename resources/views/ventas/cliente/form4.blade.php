@@ -1,4 +1,4 @@
-<div class="form4" style="display: none">
+<div id="tab4" class="form4 tab-content" style="display: none">
 	<div class="row">
 		<div class="col-sm-6">
                	<!-- textarea -->

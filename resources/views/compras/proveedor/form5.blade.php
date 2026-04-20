@@ -1,4 +1,4 @@
-<div class="card form5" style="display: none">
+<div id="tab5" class="card form5 tab-content" style="display: none">
     <div class="card-body">
     	<table class="table" id="archivo-table">
     		<thead>

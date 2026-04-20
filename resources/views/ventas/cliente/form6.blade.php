@@ -1,4 +1,4 @@
-<div class="card form6" style="display: none">
+<div id="tab6" class="card form6 tab-content" style="display: none">
     <div class="card-body">
     	<table class="table" id="seguimiento-table">
     		<thead>

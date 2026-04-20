@@ -1,4 +1,4 @@
-<div class="form2 .tab-content" style="display: none">    
+<div id="tab2" class="form2 tab-content" style="display: none">    
     <div class="card-body">
         <div class="row">
             <div class="col-sm-6">

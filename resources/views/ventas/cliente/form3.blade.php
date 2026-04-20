@@ -1,4 +1,4 @@
-<div class="card form3" style="display: none">
+<div id="tab3" class="card form3 tab-content" style="display: none">
     <div class="card-body">
 		<div class="form-group row">
 			<label for="lugarentrega" class="col-lg-3 col-form-label">Lugar de Entrega</label>

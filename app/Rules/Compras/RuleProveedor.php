@@ -10,7 +10,7 @@ use App\Models\Compras\Proveedor;
 class RuleProveedor implements Rule
 {
   	private $campo, $tipoalta;
-	use ValidacionCuit;
+	  use ValidacionCuit;
 
     /**
      * Create a new rule instance.
@@ -38,6 +38,12 @@ class RuleProveedor implements Rule
       {
       case 'nroinscripcion':
         $cc = $this->ValidacionCuit($value);
+
+        // Valida la existencia en otro proveedor
+        if ($cc)
+        {
+
+        }
         break;
       case 'retieneiva':
         $cc = Arr::has(Proveedor::$enumRetieneiva, $value);

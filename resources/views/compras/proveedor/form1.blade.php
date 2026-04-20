@@ -1,4 +1,4 @@
-<div class="form1">
+<div id="tab1" class="form1 tab-content">
 		<div class="row">
 			<div class="col-sm-6">
 				<div class="form-group row">
@@ -26,7 +26,7 @@
     					<input type="text" name="telefono" id="telefono" class="form-control" value="{{old('telefono', $data->telefono ?? '')}}" required/>
     				</div>
 					<label for="tiposervicio_proveedor" class="col-lg-2 col-form-label">Tipo de Servicio</label>
-					<select name="tiposervicio_proveedor_id" id="tiposervicio_proveedor_id" data-placeholder="Tipo de servicio" class="col-lg-2 form-control required" data-fouc>
+					<select name="tiposervicio_proveedor_id" id="tiposervicio_proveedor_id" data-placeholder="Tipo de servicio" class="col-lg-2 form-control" data-fouc>
 						<option value="">-- Seleccionar --</option>
 						@foreach($tiposervicio_proveedor_query as $key => $value)
 							@if( (int) $value->id == (int) old('tiposervicio_proveedor_id', $data->tiposervicio_proveedor_id ?? ''))
@@ -62,8 +62,8 @@
     				</div>
     			</div>
 				<div class="form-group row">
-					<label for="tipoe" class="col-lg-3 col-form-label">Tipo de Empresa</label>
-					<select name="tipoempresa_id" id="tipoempresa_id" data-placeholder="Tipo de empresa" class="col-lg-3 form-control required" data-fouc>
+					<label for="tipoe" class="col-lg-3 col-form-label requerido">Tipo de Empresa</label>
+					<select name="tipoempresa_id" id="tipoempresa_id" data-placeholder="Tipo de empresa" class="col-lg-3 form-control" required data-fouc>
 						<option value="">-- Seleccionar --</option>
 						@foreach($tipoempresa_query as $key => $value)
 							@if( (int) $value->id == (int) old('tipoempresa_id', $data->tipoempresa_id ?? ''))
@@ -90,7 +90,7 @@
 				<div class="col-md-3">
 					<div class="form-group">
 						<label class="requerido" >Condici&oacute;n de pago</label>
-						<select name="condicionpago_id" id="condicionpago_id" data-placeholder="Condición de pago" class="form-control required" data-fouc>
+						<select name="condicionpago_id" id="condicionpago_id" data-placeholder="Condición de pago" class="form-control" required data-fouc>
 							<option value="">-- Seleccionar Cond. Pago --</option>
 							@foreach($condicionpago_query as $key => $value)
 								@if( (int) $value->id == (int) old('condicionpago_id', $data->condicionpago_id ?? ''))
@@ -193,7 +193,7 @@
 				<div class="form-group row">
 				<div class="col-md-3">
 				<div class="form-group">
-					<label for="centrocostocompra" class="col-form-label requerido">Centro de costo compras</label>
+					<label for="centrocostocompra" class="col-form-label">Centro de costo compras</label>
 					<select name="centrocostocompra_id" id="centrocostocompra_id" data-placeholder="Centro de costo para compras" class="form-control" data-fouc>
 						<option value="">-- Seleccionar Centro de Costo --</option>
 						@foreach($centrocosto_query as $key => $value)
@@ -207,7 +207,7 @@
 				</div></div>
 				<div class="col-md-3">
 				<div class="form-group">
-					<label for="conceptogasto" class="col-form-label requerido">Concepto de gasto</label>
+					<label for="conceptogasto" class="col-form-label">Concepto de gasto</label>
 					<select name="conceptogasto_id" id="conceptogasto_id" data-placeholder="Condición de entrega" class="form-control" data-fouc>
 						<option value="">-- Seleccionar Concepto de Gasto --</option>
 						@foreach($conceptogasto_query as $key => $value)
@@ -228,7 +228,7 @@
         		<div class="col-md-3">
         			<div class="form-group">
         				<label class="requerido">País</label>
-        				<select name="pais_id" id="pais_id" data-placeholder="País" class="form-control required" data-fouc>
+        				<select name="pais_id" id="pais_id" data-placeholder="País" class="form-control" required data-fouc>
         					<option value="">-- Seleccionar --</option>
         					@foreach($pais_query as $key => $value)
         						@if( (int) $value->id == (int) old('pais_id', $data->pais_id ?? ''))
@@ -243,7 +243,7 @@
         		<div class="col-md-3" id='prov'>
         			<div class="form-group">
         				<label class="requerido">Provincia</label>
-        				<select name="provincia_id" id="provincia_id" data-placeholder="Provincia" class="form-control required" data-fouc>
+        				<select name="provincia_id" id="provincia_id" data-placeholder="Provincia" class="form-control" required data-fouc>
         					<option value="">-- Seleccionar --</option>
         					@foreach($provincia_query as $key => $value)
         						@if( (int) $value->id == (int) old('provincia_id', $data->provincia_id ?? ''))
@@ -301,7 +301,6 @@
 				</div>
 			</div>
 		</div>
-        <input type="hidden" id="estado" name="estado" value="{{old('estado', $data->estado ?? '')}}" >
 		<input type="hidden" id="tipoalta" name="tipoalta" value="{{$tipoalta ?? ''}}" >
 		<input type="hidden" id="tipoconsulta" name="tipoconsulta" value="{{$tipoconsulta ?? ''}}" >
 		<input type="hidden" id="tiposuspension_id" name="tiposuspension_id" value="{{$data->tiposuspension_id ?? ''}}" >

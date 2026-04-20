@@ -46,8 +46,10 @@ class Profesion_UifController extends Controller
     public function crear()
     {
         can('crear-profesion-uif');
+        
+        $riesgo_enum = Profesion_Uif::$enumRiesgo;
 
-        return view('uif.profesion_uif.crear');
+        return view('uif.profesion_uif.crear', compact('riesgo_enum'));
     }
 
     /**
@@ -74,8 +76,9 @@ class Profesion_UifController extends Controller
     {
         can('editar-profesion-uif');
         $data = $this->repository->findOrFail($id);
+        $riesgo_enum = Profesion_Uif::$enumRiesgo;
 
-        return view('uif.profesion_uif.editar', compact('data'));
+        return view('uif.profesion_uif.editar', compact('data', 'riesgo_enum'));
     }
 
     /**

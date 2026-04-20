@@ -101,7 +101,7 @@ function redondearDecimales(numero, decimales) {
     }
 }
 
-document.getElementById('form-general').addEventListener('submit', function(event) {
+$('#form-general').on('submit', function() {
     let primerCampoInvalido = null;
     
     // 1. Obtener todos los campos requeridos
@@ -125,10 +125,8 @@ document.getElementById('form-general').addEventListener('submit', function(even
     // 3. Si hay campos inválidos, detener envío y mostrar la pestaña
     if (primerCampoInvalido) {
         event.preventDefault(); // Detiene el formulario
-        
         // Encontrar la solapa padre
         const solapaContenedora = primerCampoInvalido.closest('.tab-content');
-        
         if (solapaContenedora) {
             // Activar la solapa (aquí llamas a tu función para cambiar de pestaña)
             activarSolapa(solapaContenedora.id);
@@ -144,4 +142,22 @@ function activarSolapa(tabId) {
     document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = 'none');
     // Mostrar la solapa con el error
     document.getElementById(tabId).style.display = 'block';
+}
+
+function formatarCUIT(input) {
+    // 1. Eliminar todo lo que no sea número
+    let value = input.value.replace(/\D/g, '');
+    
+    // 2. Limitar a 11 dígitos
+    value = value.substring(0, 11);
+    
+    // 3. Aplicar guiones (XX-XXXXXXXX-X)
+    if (value.length > 2 && value.length <= 10) {
+        value = value.substring(0, 2) + '-' + value.substring(2);
+    } else if (value.length > 10) {
+        value = value.substring(0, 2) + '-' + value.substring(2, 10) + '-' + value.substring(10);
+    }
+    
+    // 4. Actualizar el valor del input
+    input.value = value;
 }

@@ -1,4 +1,4 @@
-<div class="card form3" style="display: none">
+<div id="tab3" class="card form3 tab-content" style="display: none">
     <div class="card-body">
 		<h3>Formas de pago</h3>
     	<table class="table" id="formapago-table">

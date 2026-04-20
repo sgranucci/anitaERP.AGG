@@ -389,8 +389,11 @@ class ArticuloController extends Controller
 			['id' => '0', 'nombre'  => 'No tiene (a granel)'],
 			['id' => '1', 'nombre'  => 'Lleva número de parte'],
 					];					
+		
+		// Inicializa todos los campos del form para que no den error
+		$producto = new Articulo();
 
-        return view("stock.articulo.crear",compact('categoria','subcategoria','linea','marca','tipoimputacion_enum',
+        return view("stock.articulo.crear",compact('producto', 'categoria','subcategoria','linea','marca','tipoimputacion_enum',
 											'unidadmedida', 'usosArticulos', 'oficinacompra_query', 'referer', 'codimp',
 											'periodicidadcompra_query', 'condicionentrega_query', 'empresa_query', 'estado_enum',
 											'tiposArticulos', 'deposito_query', 'numeroparte_enum', 'nofactura_enum',

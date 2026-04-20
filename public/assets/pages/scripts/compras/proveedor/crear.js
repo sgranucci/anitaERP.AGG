@@ -142,6 +142,13 @@
             $(".form5").show();
         });
 	
+        $( "#botonform0" ).click(function() {
+
+            // Dispara submit para que lo atienda el control de campos required en funciones.js
+            $( "#form-general" ).trigger('submit'); 
+            
+        });
+
         // Controla apertura modal de anulacion
         $('#suspensionModal').on('show.bs.modal', function (event) {
             var modal = $(this);
@@ -179,13 +186,14 @@
 
         // Muestra tipo de suspension
         muestraTipoSuspension();
-        
+
         $('#agrega_renglon_exclusion').on('click', agregaRenglonExclusion);
         $(document).on('click', '.eliminar_exclusion', borraRenglonExclusion);
         $('#agrega_renglon_formapago').on('click', agregaRenglonFormapago);
         $(document).on('click', '.eliminar_formapago', borraRenglonFormapago);
         $('#agrega_renglon_archivo').on('click', agregaRenglonArchivo);
         $(document).on('click', '.eliminararchivo', borraRenglonArchivo);
+
     });
 
     function colorSemaforo()

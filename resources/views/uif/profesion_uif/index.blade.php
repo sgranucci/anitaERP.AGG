@@ -30,6 +30,8 @@
                         <tr>
                             <th class="width20">ID</th>
                             <th>Nombre</th>
+                            <th>Riesgo</th>
+                            <th>Puntaje</th>
                             <th>Código Anita</th>
                             <th class="width80" data-orderable="false"></th>
                         </tr>
@@ -39,6 +41,8 @@
                         <tr>
                             <td>{{$data->id}}</td>
                             <td>{{$data->nombre}}</td>
+                            <td>{{$data->riesgo}}</td>
+                            <td>{{$data->puntaje}}</td>
                             <td>{{$data->codigo}}</td>
                             <td>
                        			@if (can('editar-profesion-uif', false))

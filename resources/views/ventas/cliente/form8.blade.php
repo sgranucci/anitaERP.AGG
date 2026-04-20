@@ -1,4 +1,4 @@
-<div class="card form8" style="display: none">
+<div id="tab8" class="card form8 tab-content" style="display: none">
     <div class="card-body">
     	<table class="table" id="cm05-table">
     		<thead>
