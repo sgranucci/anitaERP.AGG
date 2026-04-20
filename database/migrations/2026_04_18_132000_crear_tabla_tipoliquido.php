@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('tipoliquidofreno', function (Blueprint $table) {
+        Schema::create('tipoliquido', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->string('nombre', 255);
             $table->timestamps();
@@ -25,6 +25,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('tipoliquidofreno');
+        Schema::dropIfExists('tipoliquido');
     }
 };

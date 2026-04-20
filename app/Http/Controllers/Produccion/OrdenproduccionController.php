@@ -139,7 +139,7 @@ class OrdenproduccionController extends Controller
                 'articulos.capacidades',
                 'articulos.mventas',
                 'articulos.colores',
-                'articulos.tipoliquidofrenos',
+                'articulos.tipoliquidos',
             ]);
         } else {
             $data->load('articulos.mventas');

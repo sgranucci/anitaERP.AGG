@@ -1,4 +1,4 @@
-<div class="row">
+<div id="tab1" class="row tab-content">
     <div class="col-sm-6">  
         <div class="form-group row">
             <label for="fechainicio" class="col-lg-3 col-form-label">Inicio</label>
@@ -49,7 +49,7 @@
     <div class="col-sm-6">
     	<div class="form-group row">
 			<label for="recipient-name" class="col-lg-4 col-form-label">Número de Orden de Producción</label>
-			<input type="text" id="numeroordenproduccion" name="numeroordenproduccion" value="{{$data->numeroordenproduccion ?? ''}}"></input>
+			<input type="text" id="numeroordenproduccion" name="numeroordenproduccion" class="col-lg-3 form-control" readonly  value="{{$data->numeroordenproduccion ?? ''}}"></input>
 		</div>
     	<div class="form-group row">
 			<label for="tipoproducto" class="col-lg-4 col-form-label">Tipo de producto</label>
@@ -72,19 +72,19 @@
 				value="{{ old('color', isset($data) && $data->articulo_id ? optional(optional($data->articulos)->colores)->nombre : '') }}">
 		</div>
     	<div class="form-group row">
-			<label for="tipoliquidofreno" class="col-lg-4 col-form-label">Líquido de freno (tipo)</label>
-			<input type="text" id="tipoliquidofreno" name="tipoliquidofreno" class="col-lg-6 form-control" readonly
-				value="{{ old('tipoliquidofreno', isset($data) && $data->articulo_id ? optional(optional($data->articulos)->tipoliquidofrenos)->nombre : '') }}">
+			<label for="tipoliquido" class="col-lg-4 col-form-label">Tipo de Líquido</label>
+			<input type="text" id="tipoliquido" name="tipoliquido" class="col-lg-6 form-control" readonly
+				value="{{ old('tipoliquido', isset($data) && $data->articulo_id ? optional(optional($data->articulos)->tipoliquidos)->nombre : '') }}">
 		</div>
     </div>
 </div>  
 <div class="form-group row">
-    <label for="recipient-name" class="col-lg-4 col-form-label">Cantidad de envases</label>
-    <input type="text" id="cantidad" name="cantidad" value="{{$data->cantidad ?? ''}}"></input>
+    <label for="recipient-name" class="col-lg-4 col-form-label requerido">Cantidad de envases</label>
+    <input type="text" id="cantidad" name="cantidad" class="col-lg-2 form-control" value="{{$data->cantidad ?? ''}}" required></input>
 </div> 
 <div class="form-group row">
-    <label for="recipient-name" class="col-lg-4 col-form-label">Lote</label>
-    <input type="text" id="lote" name="lote" value="{{$data->lote ?? ''}}"></input>
+    <label for="recipient-name" class="col-lg-4 col-form-label requerido">Lote</label>
+    <input type="text" id="lote" name="lote" class="col-lg-2 form-control" value="{{$data->lote ?? ''}}" required></input>
 </div> 
 <div class="col-sm-6">
     <!-- textarea -->

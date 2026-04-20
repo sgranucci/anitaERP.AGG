@@ -4,15 +4,15 @@ namespace App\Http\Controllers\Stock;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\ValidacionTipoliquidofreno;
-use App\Models\Stock\Tipoliquidofreno;
-use App\Repositories\Stock\TipoliquidofrenoRepositoryInterface;
+use App\Http\Requests\ValidacionTipoliquido;
+use App\Models\Stock\Tipoliquido;
+use App\Repositories\Stock\TipoliquidoRepositoryInterface;
 
-class TipoliquidofrenoController extends Controller
+class TipoliquidoController extends Controller
 {
     private $repository;
 
-    public function __construct(TipoliquidofrenoRepositoryInterface $repository)
+    public function __construct(TipoliquidoRepositoryInterface $repository)
     {
         $this->repository = $repository;
     }
@@ -24,10 +24,10 @@ class TipoliquidofrenoController extends Controller
      */
     public function index()
     {
-        can('listar-tipo-de-liquido-de-freno');
+        can('listar-tipo-de-liquido');
         $datas = $this->repository->all();
 
-        return view('stock.tipoliquidofreno.index', compact('datas'));
+        return view('stock.tipoliquido.index', compact('datas'));
     }
 
     /**
@@ -37,10 +37,10 @@ class TipoliquidofrenoController extends Controller
      */
     public function crear()
     {
-        can('crear-tipo-de-liquido-de-freno');
-        $data = new Tipoliquidofreno();
+        can('crear-tipo-de-liquido');
+        $data = new Tipoliquido();
 
-        return view('stock.tipoliquidofreno.crear', compact('data'));
+        return view('stock.tipoliquido.crear', compact('data'));
     }
 
     /**
@@ -49,11 +49,11 @@ class TipoliquidofrenoController extends Controller
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
      */
-    public function guardar(ValidacionTipoliquidofreno $request)
+    public function guardar(ValidacionTipoliquido $request)
     {
         $this->repository->create($request->all());
 
-        return redirect('stock/tipoliquidofreno')->with('mensaje', 'Tipo de líquido de freno creado con éxito');
+        return redirect('stock/tipoliquido')->with('mensaje', 'Tipo de líquido creado con éxito');
     }
 
     /**
@@ -64,10 +64,10 @@ class TipoliquidofrenoController extends Controller
      */
     public function editar($id)
     {
-        can('editar-tipo-de-liquido-de-freno');
+        can('editar-tipo-de-liquido');
         $data = $this->repository->findOrFail($id);
 
-        return view('stock.tipoliquidofreno.editar', compact('data'));
+        return view('stock.tipoliquido.editar', compact('data'));
     }
 
     /**
@@ -77,13 +77,13 @@ class TipoliquidofrenoController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function actualizar(ValidacionTipoliquidofreno $request, $id)
+    public function actualizar(ValidacionTipoliquido $request, $id)
     {
-        can('actualizar-tipo-de-liquido-de-freno');
+        can('actualizar-tipo-de-liquido');
 
         $this->repository->update($request->all(), $id);
 
-        return redirect('stock/tipoliquidofreno')->with('mensaje', 'Tipo de líquido de freno actualizado con éxito');
+        return redirect('stock/tipoliquido')->with('mensaje', 'Tipo de líquido actualizado con éxito');
     }
 
     /**
@@ -94,7 +94,7 @@ class TipoliquidofrenoController extends Controller
      */
     public function eliminar(Request $request, $id)
     {
-        can('borrar-tipo-de-liquido-de-freno');
+        can('borrar-tipo-de-liquido');
 
         if ($request->ajax()) {
             if ($this->repository->delete($id)) {

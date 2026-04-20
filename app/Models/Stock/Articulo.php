@@ -55,7 +55,7 @@ class Articulo extends Model
 				'centrocostovariacionprecio_id', 'centrocostocompra_id', 'abc', 'punto', 'lote', 
 				'coeficientelitro', 'estadobloqueo_id', 'estuche', 'skuetiqueta', 'skulistaprecio', 
 				'clase', 'fechaprimeraventa', 'fechaprimeringreso', 'estadofacturacion' 
-				, 'tipoproducto_id', 'capacidad_id', 'color_id', 'tipoliquidofreno_id'
+				, 'tipoproducto_id', 'capacidad_id', 'color_id', 'tipoliquido_id'
 				];
 		else
 			$this->fillable = ['sku', 'descripcion',
@@ -255,10 +255,10 @@ class Articulo extends Model
 			return NULL;
 	}
 
-	public function tipoliquidofrenos()
+	public function tipoliquidos()
 	{
 		if (config('app.empresa') == 'FRASLE')
-			return $this->belongsTo(Tipoliquidofreno::class, 'tipoliquidofreno_id');
+			return $this->belongsTo(Tipoliquido::class, 'tipoliquido_id');
 		else
 			return NULL;
 	}

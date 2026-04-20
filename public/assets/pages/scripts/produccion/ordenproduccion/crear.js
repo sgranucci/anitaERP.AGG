@@ -7,12 +7,12 @@ window.rellenaAtributosArticuloOrdenProduccion = function (data) {
 	var cap = (data.capacidades && data.capacidades.nombre) ? data.capacidades.nombre : '';
 	var marca = (data.mventas && data.mventas.nombre) ? data.mventas.nombre : '';
 	var color = (data.colores && data.colores.nombre) ? data.colores.nombre : '';
-	var tlf = (data.tipoliquidofrenos && data.tipoliquidofrenos.nombre) ? data.tipoliquidofrenos.nombre : '';
+	var tlf = (data.tipoliquidos && data.tipoliquidos.nombre) ? data.tipoliquidos.nombre : '';
 	$('#tipoproducto').val(tp);
 	$('#capacidad').val(cap);
 	$('#marca').val(marca);
 	$('#color').val(color);
-	$('#tipoliquidofreno').val(tlf);
+	$('#tipoliquido').val(tlf);
 };
 
 $(function () {
@@ -23,7 +23,7 @@ $(function () {
 
 function sub()
 {
-	$('#form-general').submit();
+	$( "#form-general" ).submit();
 }
 
 function activa_eventos(flInicio)

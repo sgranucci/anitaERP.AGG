@@ -1,6 +1,6 @@
 @extends("theme.$theme.layout")
 @section('titulo')
-    Tipos de líquido de freno
+    Tipos de líquido
 @endsection
 
 @section("scripts")
@@ -14,17 +14,17 @@
         @include('includes.mensaje')
         <div class="card card-danger">
             <div class="card-header">
-                <h3 class="card-title">Editar tipo de líquido de freno</h3>
+                <h3 class="card-title">Editar tipo de líquido</h3>
                 <div class="card-tools">
-                    <a href="{{route('consultar_tipoliquidofreno')}}" class="btn btn-outline-info btn-sm">
+                    <a href="{{route('consultar_tipoliquido')}}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
                 </div>
             </div>
-            <form action="{{route('actualizar_tipoliquidofreno', ['id' => $data->id])}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
+            <form action="{{route('actualizar_tipoliquido', ['id' => $data->id])}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
                 @csrf @method("put")
                 <div class="card-body">
-                    @include('stock.tipoliquidofreno.form')
+                    @include('stock.tipoliquido.form')
                 </div>
                 <div class="card-footer">
                     <div class="row">

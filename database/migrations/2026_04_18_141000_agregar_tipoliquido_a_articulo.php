@@ -13,11 +13,11 @@ return new class extends Migration
         }
 
         Schema::table('articulo', function (Blueprint $table) {
-            if (!Schema::hasColumn('articulo', 'tipoliquidofreno_id')) {
-                $table->unsignedBigInteger('tipoliquidofreno_id')->nullable()->after('color_id');
-                $table->foreign('tipoliquidofreno_id', 'fk_articulo_tipoliquidofreno')
+            if (!Schema::hasColumn('articulo', 'tipoliquido_id')) {
+                $table->unsignedBigInteger('tipoliquido_id')->nullable()->after('color_id');
+                $table->foreign('tipoliquido_id', 'fk_articulo_tipoliquido')
                     ->references('id')
-                    ->on('tipoliquidofreno')
+                    ->on('tipoliquido')
                     ->onDelete('set null')
                     ->onUpdate('cascade');
             }
@@ -27,9 +27,9 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('articulo', function (Blueprint $table) {
-            if (Schema::hasColumn('articulo', 'tipoliquidofreno_id')) {
-                $table->dropForeign('fk_articulo_tipoliquidofreno');
-                $table->dropColumn('tipoliquidofreno_id');
+            if (Schema::hasColumn('articulo', 'tipoliquido_id')) {
+                $table->dropForeign('fk_articulo_tipoliquido');
+                $table->dropColumn('tipoliquido_id');
             }
         });
     }

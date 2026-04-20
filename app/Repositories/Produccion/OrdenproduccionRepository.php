@@ -28,6 +28,8 @@ class OrdenproduccionRepository implements OrdenproduccionRepositoryInterface
 
     public function create(array $data)
     {
+        $data['numeroordenproduccion'] = self::ultimaOrdenproduccion();
+
         return $this->model->create($data);
     }
 
@@ -73,7 +75,7 @@ class OrdenproduccionRepository implements OrdenproduccionRepositoryInterface
                                                 'lineallenado.nombre as nombrelineallenado',
                                                 'ordenproduccion.numeroordenproduccion as numeroordenproduccion',
                                                 'tipoproducto.nombre as nombretipoproducto',
-                                                'tipoliquidofreno.nombre as nombretipoliquidofreno',
+                                                'tipoliquido.nombre as nombretipoliquido',
                                                 'capacidad.nombre as nombrecapacidad',
                                                 'mventa.nombre as nombremarca',
                                                 'color.nombre as nombrecolor',
@@ -85,7 +87,7 @@ class OrdenproduccionRepository implements OrdenproduccionRepositoryInterface
                                 ->leftjoin('articulo', 'articulo.id', 'ordenproduccion.articulo_id')
                                 ->leftjoin('lineallenado', 'lineallenado.id', 'ordenproduccion.lineallenado_id')
 								->leftjoin('tipoproducto', 'tipoproducto.id', 'articulo.tipoproducto_id')
-								->leftjoin('tipoliquidofreno', 'tipoliquidofreno.id', 'articulo.tipoliquidofreno_id')
+								->leftjoin('tipoliquido', 'tipoliquido.id', 'articulo.tipoliquido_id')
                                 ->leftjoin('capacidad', 'capacidad.id', 'articulo.capacidad_id')
                                 ->leftjoin('mventa', 'mventa.id', 'articulo.mventa_id')
                                 ->leftjoin('color', 'color.id', 'articulo.color_id')
@@ -99,7 +101,7 @@ class OrdenproduccionRepository implements OrdenproduccionRepositoryInterface
 							->orWhere('lineallenado.nombre', 'like', '%'.$busqueda.'%')
 							->orWhere('ordenproduccion.numeroordenproduccion', 'like', '%'.$busqueda.'%')
 							->orWhere('tipoproducto.nombre', 'like', '%'.$busqueda.'%')
-							->orWhere('tipoliquidofreno.nombre', 'like', '%'.$busqueda.'%')
+							->orWhere('tipoliquido.nombre', 'like', '%'.$busqueda.'%')
 							->orWhere('capacidad.nombre', 'like', '%'.$busqueda.'%')
 							->orWhere('mventa.nombre', 'like', '%'.$busqueda.'%')
 							->orWhere('ordenproduccion.cantidad', '=', $busqueda)
@@ -123,5 +125,22 @@ class OrdenproduccionRepository implements OrdenproduccionRepositoryInterface
 
         return $ordenproduccion;
     }
+ 
+	// Devuelve ultimo numero de ordenproduccion + 1
+	private function ultimaOrdenproduccion()
+	{
+		$ordenproduccion = $this->model->select('numeroordenproduccion')->orderBy('numeroordenproduccion', 'desc')->first();
+		
+		$numeroordenproduccion = 0;
+        if ($ordenproduccion) 
+		{
+			$numeroordenproduccion = $ordenproduccion->numeroordenproduccion;
+			$numeroordenproduccion = $numeroordenproduccion + 1;
+		}
+		else	
+			$numeroordenproduccion = 1;
+
+		return $numeroordenproduccion;
+	}	
     
 }

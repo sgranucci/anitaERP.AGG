@@ -2,15 +2,15 @@
 
 namespace App\Repositories\Stock;
 
-use App\Models\Stock\Tipoliquidofreno;
+use App\Models\Stock\Tipoliquido;
 
-class TipoliquidofrenoRepository implements TipoliquidofrenoRepositoryInterface
+class TipoliquidoRepository implements TipoliquidoRepositoryInterface
 {
     protected $model;
 
-    public function __construct(Tipoliquidofreno $tipoliquidofreno)
+    public function __construct(Tipoliquido $tipoliquido)
     {
-        $this->model = $tipoliquidofreno;
+        $this->model = $tipoliquido;
     }
 
     public function all()

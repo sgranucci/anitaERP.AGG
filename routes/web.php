@@ -422,12 +422,12 @@ Route::delete('stock/capacidad/{id}', 'Stock\CapacidadController@eliminar')->nam
  * Tipo líquido de freno
  */
 
-Route::get('stock/tipoliquidofreno', 'Stock\TipoliquidofrenoController@index')->name('consultar_tipoliquidofreno');
-Route::get('stock/tipoliquidofreno/crear', 'Stock\TipoliquidofrenoController@crear')->name('crear_tipoliquidofreno');
-Route::post('stock/tipoliquidofreno', 'Stock\TipoliquidofrenoController@guardar')->name('guardar_tipoliquidofreno');
-Route::get('stock/tipoliquidofreno/{id}/editar', 'Stock\TipoliquidofrenoController@editar')->name('editar_tipoliquidofreno');
-Route::put('stock/tipoliquidofreno/{id}', 'Stock\TipoliquidofrenoController@actualizar')->name('actualizar_tipoliquidofreno');
-Route::delete('stock/tipoliquidofreno/{id}', 'Stock\TipoliquidofrenoController@eliminar')->name('eliminar_tipoliquidofreno');
+Route::get('stock/tipoliquido', 'Stock\TipoliquidoController@index')->name('consultar_tipoliquido');
+Route::get('stock/tipoliquido/crear', 'Stock\TipoliquidoController@crear')->name('crear_tipoliquido');
+Route::post('stock/tipoliquido', 'Stock\TipoliquidoController@guardar')->name('guardar_tipoliquido');
+Route::get('stock/tipoliquido/{id}/editar', 'Stock\TipoliquidoController@editar')->name('editar_tipoliquido');
+Route::put('stock/tipoliquido/{id}', 'Stock\TipoliquidoController@actualizar')->name('actualizar_tipoliquido');
+Route::delete('stock/tipoliquido/{id}', 'Stock\TipoliquidoController@eliminar')->name('eliminar_tipoliquido');
 
 /* 
  * Materiales

@@ -1,6 +1,6 @@
 @extends("theme.$theme.layout")
 @section('titulo')
-    Tipos de líquido de freno
+    Tipos de líquido
 @endsection
 
 @section("scripts")
@@ -15,10 +15,10 @@
         @include('includes.mensaje')
         <div class="card card-info">
             <div class="card-header">
-                <h3 class="card-title">Tipos de líquido de freno</h3>
+                <h3 class="card-title">Tipos de líquido</h3>
                 <div class="card-tools">
-                    <a href="{{route('crear_tipoliquidofreno')}}" class="btn btn-outline-secondary btn-sm">
-                       	@if (can('crear-tipo-de-liquido-de-freno', false))
+                    <a href="{{route('crear_tipoliquido')}}" class="btn btn-outline-secondary btn-sm">
+                       	@if (can('crear-tipo-de-liquido', false))
                         	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
 						@endif
                     </a>
@@ -39,13 +39,13 @@
                             <td>{{$data->id}}</td>
                             <td>{{$data->nombre}}</td>
                             <td>
-                       			@if (can('editar-tipo-de-liquido-de-freno', false))
-                                	<a href="{{route('editar_tipoliquidofreno', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
+                       			@if (can('editar-tipo-de-liquido', false))
+                                	<a href="{{route('editar_tipoliquido', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                     <i class="fa fa-edit"></i>
                                 	</a>
 								@endif
-                       			@if (can('borrar-tipo-de-liquido-de-freno', false))
-                                <form action="{{route('eliminar_tipoliquidofreno', ['id' => $data->id])}}" class="d-inline form-eliminar" method="POST">
+                       			@if (can('borrar-tipo-de-liquido', false))
+                                <form action="{{route('eliminar_tipoliquido', ['id' => $data->id])}}" class="d-inline form-eliminar" method="POST">
                                     @csrf @method("delete")
                                     <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">
                                         <i class="fa fa-times-circle text-danger"></i>

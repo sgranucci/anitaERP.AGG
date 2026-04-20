@@ -1339,8 +1339,8 @@ class AppServiceProvider extends ServiceProvider
     	);
 
 		$this->app->bind(
-        	'App\Repositories\Stock\TipoliquidofrenoRepositoryInterface',
-        	'App\Repositories\Stock\TipoliquidofrenoRepository',
+        	'App\Repositories\Stock\TipoliquidoRepositoryInterface',
+        	'App\Repositories\Stock\TipoliquidoRepository',
     	);
 
 		$this->app->bind(

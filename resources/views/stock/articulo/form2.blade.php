@@ -133,12 +133,12 @@
 				@endif
 				@if (config('app.empresa') == 'FRASLE')
 					<div class="form-group row">
-						<label for="tipoliquidofreno_id" class="col-lg-4 col-form-label">Tipo l&iacute;quido de freno</label>
+						<label for="tipoliquido_id" class="col-lg-4 col-form-label">Tipo l&iacute;quido</label>
 						<div class="col-lg-8">
-							<select id="tipoliquidofreno_id" name="tipoliquidofreno_id" class="col-lg-6 form-control">
+							<select id="tipoliquido_id" name="tipoliquido_id" class="col-lg-6 form-control">
 								<option value="">-- Seleccionar --</option>
-								@foreach($tipoliquidofreno_query as $key => $value)
-									@if( isset($producto) && (int) $value->id == (int) old('tipoliquidofreno_id', $producto->tipoliquidofreno_id ?? ''))
+								@foreach($tipoliquido_query as $key => $value)
+									@if( isset($producto) && (int) $value->id == (int) old('tipoliquido_id', $producto->tipoliquido_id ?? ''))
 										<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>
 									@else
 										<option value="{{ $value->id }}">{{ $value->nombre }}</option>

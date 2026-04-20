@@ -5,7 +5,7 @@ namespace App\Repositories\Stock;
 use App\Models\Stock\Articulo_Caja;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Color;
-use App\Models\Stock\Tipoliquidofreno;
+use App\Models\Stock\Tipoliquido;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Carbon\Carbon;
 use App\ApiAnita;
@@ -48,7 +48,7 @@ class ArticuloRepository implements ArticuloRepositoryInterface
                                 ->with('articulo_estados')->with('articulo_archivos')->with('articulo_cuentacontables');
 
         if (config('app.empresa') === 'FRASLE') {
-            $query = $query->with('tipoproductos')->with('capacidades')->with('colores')->with('tipoliquidofrenos');
+            $query = $query->with('tipoproductos')->with('capacidades')->with('colores')->with('tipoliquidos');
         }
 
         if (null == $articulo = $query->first()) {
@@ -69,7 +69,7 @@ class ArticuloRepository implements ArticuloRepositoryInterface
             ->with('mventas');
 
         if (config('app.empresa') === 'FRASLE') {
-            $query = $query->with('tipoproductos')->with('capacidades')->with('colores')->with('tipoliquidofrenos');
+            $query = $query->with('tipoproductos')->with('capacidades')->with('colores')->with('tipoliquidos');
         }
 
         return $query->first();
@@ -122,8 +122,8 @@ class ArticuloRepository implements ArticuloRepositoryInterface
         return Color::orderBy('nombre')->get();
     }
 
-    public function leeTipoliquidofrenos()
+    public function leeTipoliquidos()
     {
-        return Tipoliquidofreno::orderBy('nombre')->get();
+        return Tipoliquido::orderBy('nombre')->get();
     }
 }

@@ -46,7 +46,7 @@
                             <th>Linea de Llenado</th>
                             <th>Nro.Orden Prod.</th>
                             <th>Tipo de Producto</th>
-                            <th>Líquido de Freno Tipo</th>
+                            <th>Tipo de Líquido</th>
                             <th>Capacidad</th>
                             <th>Marca</th>
                             <th>Tipo de Color</th>
@@ -67,7 +67,7 @@
                             <td><small>{{$data->nombrelineallenado??''}}</small></td>
                             <td><small>{{$data->numeroordenproduccion}}</small></td>
                             <td><small>{{$data->nombretipoproducto??''}}</small></td>
-                            <td><small>{{$data->nombretipoliquidofreno??''}}</small></td>
+                            <td><small>{{$data->nombretipoliquido??''}}</small></td>
                             <td><small>{{$data->nombrecapacidad??''}}</small></td>
                             <td><small>{{$data->nombremarca??''}}</small></td>
                             <td><small>{{$data->nombrecolor??''}}</small></td>

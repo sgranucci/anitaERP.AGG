@@ -4,7 +4,7 @@ namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-class ValidacionTipoliquidofreno extends FormRequest
+class ValidacionTipoliquido extends FormRequest
 {
     /**
      * Determine if the user is authorized to make this request.
@@ -24,7 +24,7 @@ class ValidacionTipoliquidofreno extends FormRequest
     public function rules()
     {
         return [
-            'nombre' => 'required|max:255|unique:tipoliquidofreno,nombre,' . $this->route('id'),
+            'nombre' => 'required|max:255|unique:tipoliquido,nombre,' . $this->route('id'),
         ];
     }
 }
