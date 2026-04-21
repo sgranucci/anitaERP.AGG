@@ -679,7 +679,7 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
 		case 81:
 			$profesion_id = 38;
 			break;
-		case 181	:
+		case 181:
 			$profesion_id = 1;
 			break;
 		case 36:
