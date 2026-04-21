@@ -17,7 +17,8 @@ class Articulo_Movimiento extends Model
                         'concepto', 'modulo_id', 'cantidad', 
                         'pieza', 'caja',
                         'precio', 'costo', 'listaprecio_id', 'incluyeimpuesto', 
-                        'moneda_id', 'descuento', 'descuentointegrado', 'deposito_id', 'loteimportacion_id'];
+                        'moneda_id', 'descuento', 'descuentointegrado', 'deposito_id', 'loteimportacion_id',
+                        'pedido_articulo_id'];
 
     protected $table = 'articulo_movimiento';
 
@@ -39,6 +40,11 @@ class Articulo_Movimiento extends Model
     public function pedidos_combinacion()
 	{
     	return $this->belongsTo(Pedido_Combinacion::class, 'pedido_combinacion_id', 'id')->with('articulos');
+	}
+
+    public function pedido_articulos()
+	{
+    	return $this->belongsTo(Pedido_Articulo::class, 'pedido_articulo_id', 'id')->with('articulos');
 	}
 
     public function articulos()

@@ -1494,6 +1494,8 @@
 					$("#facturarPedidoModal").modal('hide');
 					$("#estadopedido").val('Facturado');
 
+					TotalPedido();
+
 					window.history.go(0);
 				}).fail(function(error) {alert(error)});
 	});

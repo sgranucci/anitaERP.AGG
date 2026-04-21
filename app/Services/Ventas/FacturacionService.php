@@ -837,7 +837,8 @@ class FacturacionService
 						'condicioniva_id' => $cliente->condicioniva_id,
 						'puntoventaremito_id' => $this->puntoventaremito_id,
             			'numeroremito' => $numeroremito,
-						'cantidadbulto' => $this->cantidadBulto
+						'cantidadbulto' => $this->cantidadBulto,
+						'pedido_id' => $pedido->id
 					];	
 					// Verifica si ya existe en anita
 					$ventaAnita = Self::buscaVentaAnita(substr($venta['codigo'], 0, 3), $letra, $puntoventa->codigo, $venta['numerocomprobante']);
@@ -4459,6 +4460,7 @@ class FacturacionService
 		$cliente = $this->clienteQuery->traeClienteporId($venta->cliente_id);
 
 		$tblItem = [];
+		$flConDescuento = false;
 		foreach($venta->venta_emisiones as $ventaItem)
 		{
 			$descuentoLinea = $ventaItem->descuento;
@@ -4492,7 +4494,7 @@ class FacturacionService
 			}
 
 			// Calcula los kilos sin descuento y el descuento
-			$KiloDescuento = 0;
+			$kiloDescuento = 0;
 			$cantidad = $ventaItem->cantidad;
 			if (config('app.empresa') == 'EL BIERZO')
 			{
@@ -4500,6 +4502,8 @@ class FacturacionService
 				{
 					$cantidad = $ventaItem->cantidad * (1. - ($ventaItem->descuento / 100.));	
 					$kiloDescuento = $ventaItem->cantidad * $ventaItem->descuento / 100.;
+
+					$flConDescuento = true;
 				}
 			}
 
@@ -4567,7 +4571,9 @@ class FacturacionService
 		if (config('app.empresa') == "EL BIERZO")
 		{
 			unset($conceptosTotales[0]);
-			unset($conceptosTotales[1]);
+
+			if ($flConDescuento)
+				unset($conceptosTotales[1]);
 		}
 
 		$datosJson_cmp = json_encode($datos_cmp);
