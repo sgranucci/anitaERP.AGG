@@ -154,6 +154,7 @@ class FacturacionService
 	protected $numeroComprobanteDivision;
 	protected $numeroRemito;
 	protected $movimientoStockService;
+	protected $flCalculaDesdeGeneracionFactura;
 
     public function __construct(
 								OrdentrabajoQueryInterface $ordentrabajoquery,
@@ -257,6 +258,7 @@ class FacturacionService
 		$this->puntoVentaDivision_id = 0;
 		$this->numeroComprobanteDivision = 0;
 		$this->numeroRemito = 0;
+		$this->flCalculaDesdeGeneracionFactura = false;
     }
 
 	public function leePaginando($busqueda)
@@ -356,9 +358,31 @@ class FacturacionService
 				}
 
 				$precioUnitario = $pedido_articulo->precio;
+
+				// Si esta calculando factura para la pre-factura y es reparto 101 calcula dividiendo
+				if (config('app.empresa') == "EL BIERZO" &&
+					!$this->flCalculaDesdeGeneracionFactura &&
+					$pedido->transportes->tipoexpreso == '4')
+				{
+					$this->flDivide = true;
+					$this->flGrabaComprobanteDividido = true;
+					$this->coeficienteCliente = 100.;
+
+					if ($pedido->transportes->tipoexpreso == '4') // Genera solo remito
+						$this->coeficienteExtraCliente = config('facturacion.COEFICIENTE_EXTRA_REPARTO_101');
+					else
+						$this->coeficienteExtraCliente = $cliente->coeficienteextra;
+				}
+
 				if ($this->flDivide)
 				{
 					$decimal = config('facturacion.DECIMAL_CANTIDAD');
+
+					$coeficienteDivision = $this->coeficienteCliente;
+
+					// Si el articulo no se divide cambia el coeficiente
+					if ($articulo->divide == 'NO DIVIDE')
+						$coeficienteDivision = 0;
 
 					// Graba en Villafranca
 					if ($this->flGrabaComprobanteDividido)
@@ -366,13 +390,13 @@ class FacturacionService
 						if ($this->coeficienteExtraCliente != 0)
 							$precioUnitario = $pedido_articulo->precio * $this->coeficienteExtraCliente;
 
-						$kilo = round($pedido_articulo->pesada * $this->coeficienteCliente / 100., $decimal);
-						$pieza = round($pedido_articulo->pieza * $this->coeficienteCliente / 100., $decimal);
-						$caja = round($pedido_articulo->caja * $this->coeficienteCliente / 100., $decimal);
+						$kilo = round($pedido_articulo->pesada * $coeficienteDivision / 100., $decimal);
+						$pieza = round($pedido_articulo->pieza * $coeficienteDivision / 100., $decimal);
+						$caja = round($pedido_articulo->caja * $coeficienteDivision / 100., $decimal);
 					}
 					else // Deja el resto para grabar en Bierzo
 					{
-						$coeficiente = ((100. - $this->coeficienteCliente)/100.);
+						$coeficiente = ((100. - $coeficienteDivision)/100.);
 
 						$kilo = round($pedido_articulo->pesada * $coeficiente, $decimal);
 						$pieza = round($pedido_articulo->pieza * $coeficiente, $decimal);
@@ -391,30 +415,33 @@ class FacturacionService
 				else
 					$precioConDescuento = $precioUnitario;
 
-				$dataFactura[] = ["cantidad" => $kilo,
-					"pieza" => $pieza,
-					"caja" => $caja,
-					"preciosindescuento" => $precioUnitario,
-					"precio" => $precioConDescuento,
-					"descuento" => $this->descuentoLinea,
-					"descuentointegrado" => '',
-					"descuentofinal" => $this->descuentoPie,
-					"descuentointegradofinal" => '',
-					"incluyeimpuesto" => $pedido_articulo->incluyeimpuesto,
-					"impuesto_id" => $articulo->impuesto_id,
-					"articulo_id" => $articulo->id,
-					"sku" => $articulo->sku,
-					"descripcion" => $articulo->descripcion,
-					"codigounidadmedida" => $articulo->unidadesdemedidas->codigo ?? 1,
-					'categoria' => $codigoCategoria,
-					'moneda_id' => $moneda_id,
-					'listaprecio_id' => $pedido_articulo->listaprecio_id,
-					'despacho' => $this->numeroDespacho,
-					'loteimportacion_id' => null,
-					'pedido_articulo_id' => $pedido_articulo_id,
-					'cuentacontable_id' => $articulo->cuentacontableventa_id,
-				];
-				$totKilo += $pedido_articulo->pesada;
+				if ($kilo != 0)
+				{
+					$dataFactura[] = ["cantidad" => $kilo,
+						"pieza" => $pieza,
+						"caja" => $caja,
+						"preciosindescuento" => $precioUnitario,
+						"precio" => $precioConDescuento,
+						"descuento" => $this->descuentoLinea,
+						"descuentointegrado" => '',
+						"descuentofinal" => $this->descuentoPie,
+						"descuentointegradofinal" => '',
+						"incluyeimpuesto" => $pedido_articulo->incluyeimpuesto,
+						"impuesto_id" => $articulo->impuesto_id,
+						"articulo_id" => $articulo->id,
+						"sku" => $articulo->sku,
+						"descripcion" => $articulo->descripcion,
+						"codigounidadmedida" => $articulo->unidadesdemedidas->codigo ?? 1,
+						'categoria' => $codigoCategoria,
+						'moneda_id' => $moneda_id,
+						'listaprecio_id' => $pedido_articulo->listaprecio_id,
+						'despacho' => $this->numeroDespacho,
+						'loteimportacion_id' => null,
+						'pedido_articulo_id' => $pedido_articulo_id,
+						'cuentacontable_id' => $articulo->cuentacontableventa_id,
+					];
+					$totKilo += $kilo;
+				}
 			}
 		}
 		// Arma datos del cliente
@@ -461,6 +488,7 @@ class FacturacionService
 		$puntoventa_id = $data['puntoventa_id'];
 		$this->coeficienteCliente = 0;
 		$this->coeficienteExtraCliente = 0;
+		$this->flCalculaDesdeGeneracionFactura = true;
 
 		// Trae el cliente 
 		$cliente = $this->clienteQuery->traeClienteporId($cliente_id);
@@ -477,8 +505,9 @@ class FacturacionService
 			return ['error' => 'Pedido inexistente'];
 		else	
 			$pedido = $pedido_query[0];
+
 		// Controla si divide factura
-		if ($pedido->transportes->tipoexpreso == '3' && 
+		if (($pedido->transportes->tipoexpreso == '4' || $pedido->transportes->tipoexpreso == '3') && 
 			($tipotransaccion->codigo == '001' || $tipotransaccion->codigo == '201'))
 		{
 			if ($pedido->transportes->tipoexpreso == '4') // Genera solo remito
@@ -491,13 +520,13 @@ class FacturacionService
 				$this->flDivide = true;
 				$this->flGrabaComprobanteDividido = false;
 
-				if ($pedido->transportes->codigo == '101')
+				if ($pedido->transportes->tipoexpreso == '4') // Reparto 101 con remito en bierzo
 					$this->coeficienteCliente = 100.;
 				else
 					$this->coeficienteCliente = $cliente->coeficientes->porcentajedivision;
 				$this->tasaImpuesto = $cliente->coeficientes->tasa;
 
-				// Si no es toda divida genera factura por el resto en el Bierzo
+				// Si no es toda dividida genera factura por el resto en el Bierzo
 				if ($this->coeficienteCliente < 100)
 				{
 					$this->puntoVentaDivision_id = 0;
@@ -519,12 +548,9 @@ class FacturacionService
 					if ($this->puntoventaremito_id >= 1)
 						$puntoventaremito = $this->puntoventaRepository->find($this->puntoventaremito_id);
 
-					$numeroremito = $this->ventaRepository->traeUltimoNumeroRemito(config('facturacion.TIPO_REMITO'),
-						config('facturacion.LETRA_REMITO'), $puntoventaremito->codigo);
-
 					// Genera remito
 					$retorno1 = Self::generaUnRemito($data, $cliente, $pedido, config('facturacion.TIPO_REMITO'), 
-						config('facturacion.LETRA_REMITO'), $puntoventaremito->codigo, $numeroremito, $puntoventaremito->empresas->codigo);
+						config('facturacion.LETRA_REMITO'), $puntoventaremito->codigo, $puntoventaremito->empresas->codigo);
 
 					// Cambia punto de venta de Villa
 					$this->puntoVentaDivision_id = config('facturacion.PUNTOVENTA_DIVISION_ID');
@@ -603,6 +629,9 @@ class FacturacionService
 		$totalComprobante = $calculoFactura['totalcomprobante'];
 		$moneda_id = $calculoFactura['datosfactura'][0]['moneda_id'];
 		$centrocosto_id = null;
+
+		if ($totalComprobante == 0.)
+			return ['error' => 'Factura en 0'];
 
 		$cotizacion = $this->cotizacionService->calculaCotizacionVenta($fechaFactura, $moneda_id);
 
@@ -4726,7 +4755,7 @@ class FacturacionService
 	}
 
 	// Genera un Remito
-	private function generaUnRemito($data, $cliente, $pedido, $tipoRemito, $letraRemito, $puntoVentaRemito, $numeroRemito, $codigoEmpresa)
+	private function generaUnRemito($data, $cliente, $pedido, $tipoRemito, $letraRemito, $puntoVentaRemito, $codigoEmpresa)
 	{
 		$anteriorFlDivide = $this->flDivide;
 		$this->flDivide = false;
@@ -4737,8 +4766,16 @@ class FacturacionService
 		$this->flDivide = $anteriorFlDivide;
 		$dataFactura = $calculoFactura['datosfactura'];
 
+		$totalComprobante = $calculoFactura['totalcomprobante'];
+
+		if ($totalComprobante == 0.)
+			return ['error' => 'Factura en 0'];
+
 		$data['tipotransaccion_id'] = config('facturacion.TIPO_REMITO_ID');
 		$data['lote'] = '';
+
+		$numeroRemito = $this->ventaRepository->traeUltimoNumeroRemito(config('facturacion.TIPO_REMITO'),
+						config('facturacion.LETRA_REMITO'), $puntoVentaRemito);
 
 		$articulos_id = [];
 		$skus = [];
@@ -4771,9 +4808,9 @@ class FacturacionService
 
 	        // Si el precio tiene iva incluido lo netea
 			if ($item['incluyeimpuesto'] == '1')
-				$precio = $item['precio'] / (1 + ($tasa/100));
+				$precio = $item['preciosindescuento'] / (1 + ($tasa/100));
 			else	
-				$precio = $item['precio'];
+				$precio = $item['preciosindescuento'];
 
 			$precios[] = $precio;
 			$listaprecios_id[] = $item['listaprecio_id'];
@@ -4785,9 +4822,8 @@ class FacturacionService
 			$totalPieza += $item['pieza'];
 			$totalKilo += $item['cantidad'];
 
-			$totalNeto += ($item['cantidad'] * $item['precio']);
+			$totalNeto += ($item['cantidad'] * $item['preciosindescuento']);
 		}
-
 		// Carga variables para grabacion de movimiento de stock
 		$data['articulos_id'] = $articulos_id;
 		$data['skus'] = $skus;

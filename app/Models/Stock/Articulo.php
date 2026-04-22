@@ -4,6 +4,7 @@ namespace App\Models\Stock;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
+use OwenIt\Auditing\Contracts\Auditable;
 use Intervention\Image\Laravel\Facades\Image;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\App;
@@ -22,11 +23,15 @@ use App\Models\Stock\Depmae;
 use App\Models\Produccion\Tipoproduccion;
 use App\Models\Produccion\Sectorsellado;
 use App\Models\Produccion\Salaproduccion;
+use App\Traits\Stock\ArticuloTrait;
 use Carbon\Carbon;
 use Auth;
 
-class Articulo extends Model
+class Articulo extends Model implements Auditable
 {
+	use \OwenIt\Auditing\Auditable;
+	use ArticuloTrait;
+
 	protected $fillable = [];
     protected $table = 'articulo';
     protected $tableAnita = 'stkmae';
@@ -65,9 +70,10 @@ class Articulo extends Model
 				'contrafuerte_id', 'tipocorteforro_id', 'forro_id', 'compfondo_id', 'fondo_id', 'leyenda',
 				'horma_id', 'serigrafia_id', 'claveorden', 'usuario_id', 'fechaultimacompra',
 				'unidadmedidanomenclador', 'codigobarra', 'unidadreferenciacodigobarra', 'enviaalarma', 'grupocarne',
-				'tipocarne', 'pesocaja', 'alertastock', 'origenproducto', 'inicialproduccion',  
+				'tipocarne', 'pesocaja', 'alertastock', 'origenproducto', 'inicialproduccion', 'divide',
 				'diasproceso', 'vencimientoendia', 'diaenfriado', 'codigosenasa_id', 'salaproduccion_id', 'tipoproduccion_id',
 				'sectorsellado_id', 'tipoarticulo_id', 'coeficienteconversion', 'depositoentrega_id', 'numeroparte', 'ubicacionparte',
+				'oficinacompra_id', 'periodicidadcompra_id', 'condicionentrega_id', 'estado',
 				];
 	}
 

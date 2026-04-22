@@ -384,6 +384,9 @@ class ArticuloController extends Controller
 		$tipoliquido_query = (config('app.empresa') === 'FRASLE')
 							? Tipoliquido::orderBy('nombre')->get()
 							: collect();
+		$divide_enum = (config('app.empresa') === 'EL BIERZO')
+							? Articulo::$enumDivide
+							: array();
 
 		$numeroparte_enum = [
 			['id' => '0', 'nombre'  => 'No tiene (a granel)'],
@@ -397,7 +400,8 @@ class ArticuloController extends Controller
 											'unidadmedida', 'usosArticulos', 'oficinacompra_query', 'referer', 'codimp',
 											'periodicidadcompra_query', 'condicionentrega_query', 'empresa_query', 'estado_enum',
 											'tiposArticulos', 'deposito_query', 'numeroparte_enum', 'nofactura_enum',
-											'tipoproducto_query', 'capacidad_query', 'color_query', 'tipoliquido_query'));
+											'tipoproducto_query', 'capacidad_query', 'color_query', 'tipoliquido_query',
+											'divide_enum'));
     }
 
     public function guardar(ValidacionArticulo $request)
@@ -506,7 +510,9 @@ class ArticuloController extends Controller
 		$tipoliquido_query = (config('app.empresa') === 'FRASLE')
 							? Tipoliquido::orderBy('nombre')->get()
 							: collect();
-
+		$divide_enum = (config('app.empresa') === 'EL BIERZO')
+							? Articulo::$enumDivide
+							: array();
 		$numeroparte_enum = [
 			['id' => '0', 'nombre'  => 'No tiene (a granel)'],
 			['id' => '1', 'nombre'  => 'Lleva número de parte'],
@@ -517,6 +523,7 @@ class ArticuloController extends Controller
 													'unidadmedida','filtros','nofactura_enum','tiposArticulos',
 													'periodicidadcompra_query', 'condicionentrega_query', 'tipoimputacion_enum',
 													'deposito_query', 'numeroparte_enum', 'oficinacompra_query',
+													'divide_enum',
 													'tipoproducto_query', 'capacidad_query', 'color_query', 'tipoliquido_query'));
     }
 

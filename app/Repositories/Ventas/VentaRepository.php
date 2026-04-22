@@ -135,39 +135,21 @@ class VentaRepository implements VentaRepositoryInterface
 		$apiAnita = new ApiAnita();
         $data = array( 
             'acc' => 'list', 
-			'tabla' => 'compemis', 
+			'tabla' => 'pendmae', 
             'sistema' => 'ventas',
             'campos' => '
-                compe_numero
+                max(penm_nro) as ultnro
 			' , 
-            'whereArmado' => " WHERE compe_tipo='".$tipo."' and compe_letra='".$letra."' 
-                                    and compe_sucursal='".$sucursal."' " 
+            'whereArmado' => " WHERE penm_tipo='".$tipo."' and penm_letra='".$letra."' 
+                                    and penm_sucursal='".$sucursal."' " 
         );
         $dataAnita = json_decode($apiAnita->apiCall($data));
         
         if (count($dataAnita) > 0)
         {
-            $claveNumero = $dataAnita[0]->compe_numero;
-
-            $apiAnita = new ApiAnita();
-            $data = array( 
-                'acc' => 'list', 
-                'tabla' => 'numerador', 
-                'campos' => '
-                    num_ult_numero
-                ' , 
-                'whereArmado' => " WHERE num_clave='".$claveNumero."' " 
-            );
-            $dataAnita = json_decode($apiAnita->apiCall($data));
-
-            $nro = $dataAnita[0]->num_ult_numero + 1;
+            $nro = $dataAnita[0]->ultnro + 1;
         }
         
-        //$venta = $this->model->where('puntoventaremito_id', $puntoventaremito_id)->max('numeroremito');
-		//$nro = 0;
-		//if ($venta)
-		//	$nro = $venta;
-		//$nro = $nro + 1;
         if (!isset($nro))
             return 'error';
         

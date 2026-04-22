@@ -53,6 +53,20 @@
                         @endforeach
                     </select>
                 </div>
+                @if (config('app.empresa') == 'EL BIERZO')
+                    <div class="form-group row">
+                        <label for="divide" class="col-lg-4 col-form-label">Divide</label>
+                        <select id="divide" name="divide" class="col-lg-3 form-control">
+                            @foreach($divide_enum as $key => $value)
+                                @if( isset($producto) && $value['nombre'] == old('divide', $producto->divide ?? ''))
+                                    <option value="{{ $value['nombre'] }}" selected="select">{{ $value['nombre'] }}</option>    
+                                @else
+                                    <option value="{{ $value['nombre'] }}">{{ $value['nombre'] }}</option>    
+                                @endif
+                            @endforeach
+                        </select>
+                    </div>  
+                @endif
             </div>
             <div class="col-sm-6">
 				<div class="form-group row">
@@ -103,22 +117,24 @@
                             @endif
                         @endforeach
                     </select>
-                </div>                
-				<div class="form-group row">
-    				<label for="numeroparte" class="col-lg-4 col-form-label">Número de parte</label>
-					<select id="numeroparte" name="numeroparte" class="col-lg-3 form-control">
-                        @foreach($numeroparte_enum as $key => $value)
-                            @if( isset($producto) && (int) $value['id'] == (int) old('numeroparte', $producto->numeroparte ?? ''))
-                                <option value="{{ $value['id'] }}" selected="select">{{ $value['nombre'] }}</option>    
-                            @else
-                                <option value="{{ $value['id'] }}">{{ $value['nombre'] }}</option>    
-                            @endif
-                        @endforeach
-                    </select>
-                    <label for="ubicacionparte" class="col-lg-2 col-form-label">Ubic. de parte</label>
-                    <input type="text" name="ubicacionparte" id="ubicacionparte" class="col-lg-2 form-control" value="{{old('ubicacionparte', $producto->ubicacionparte ?? '')}}"/>
-              	</div>  
-				<div class="form-group row">
+                </div>  
+                @if (config('app.empresa') == 'AGG')
+                    <div class="form-group row">
+                        <label for="numeroparte" class="col-lg-4 col-form-label">Número de parte</label>
+                        <select id="numeroparte" name="numeroparte" class="col-lg-3 form-control">
+                            @foreach($numeroparte_enum as $key => $value)
+                                @if( isset($producto) && (int) $value['id'] == (int) old('numeroparte', $producto->numeroparte ?? ''))
+                                    <option value="{{ $value['id'] }}" selected="select">{{ $value['nombre'] }}</option>    
+                                @else
+                                    <option value="{{ $value['id'] }}">{{ $value['nombre'] }}</option>    
+                                @endif
+                            @endforeach
+                        </select>
+                        <label for="ubicacionparte" class="col-lg-2 col-form-label">Ubic. de parte</label>
+                        <input type="text" name="ubicacionparte" id="ubicacionparte" class="col-lg-2 form-control" value="{{old('ubicacionparte', $producto->ubicacionparte ?? '')}}"/>
+                    </div>  
+                @endif
+                <div class="form-group row">
     				<label for="mventa_id" class="col-lg-4 col-form-label">Marca</label>
 					<select id="mventa_id" name="mventa_id" class="col-lg-8 form-control">
                         <option value="">-- Seleccionar --</option>

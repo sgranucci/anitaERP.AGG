@@ -1164,10 +1164,10 @@
 
 					let bonificado = parseFloat(pesada) * parseFloat(data.porcentajedescuento) / 100;
 
-					let pesadaSinDescuento = parseFloat(pesada) - parseFloat(bonificado);
+					let pesadaSinDescuento = parseFloat(pesada) - parseFloat(bonificado.toFixed(1));
 
 					$(ptr).parents('tr').find('.pesada_fac').val(pesadaSinDescuento.toFixed(2));
-					$(ptr).parents('tr').find('.porcentajedescuento_fac').val(bonificado.toFixed(2));
+					$(ptr).parents('tr').find('.porcentajedescuento_fac').val(bonificado.toFixed(1));
 
 				});
 

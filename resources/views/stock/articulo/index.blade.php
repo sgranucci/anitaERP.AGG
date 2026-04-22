@@ -79,7 +79,7 @@ function limpiaFiltros(){
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead>
                         <tr>
-                            <th>C&oacute;digo</th>
+                            <th>SKU</th>
                             <th>Descripci&oacute;n</th>
                             <th>Unidad de Medida</th>
                             <th>Categoría</th>
