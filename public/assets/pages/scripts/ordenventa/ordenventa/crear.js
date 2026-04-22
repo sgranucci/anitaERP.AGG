@@ -521,7 +521,7 @@
 		var wrapper = $(".container-comprobante");
 		let ordenventa_id = $("#ordenventa_id").val();
 
-		let url = carpetaBase+'//ordenventa/leer_comprobantes_ordenventa/'+ordenventa_id;
+		let url = carpetaBase+'/ordenventa/leer_comprobantes_ordenventa/'+ordenventa_id;
 
 		$.get(url, function(historia){
 

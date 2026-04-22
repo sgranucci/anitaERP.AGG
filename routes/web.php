@@ -1664,13 +1664,13 @@ Route::get('compras/lista_precarga_comprobante_proveedor/{formato?}/{busqueda?}'
  * Ordenes de Compra
  */
 
- Route::get('compras/ordencompra', 'Compras\OrdencompraController@index')->name('consultar_ordencompra');
- Route::get('compras/ordencompra/crear', 'Compras\OrdencompraController@crear')->name('crear_ordencompra');
- Route::post('compras/ordencompra', 'Compras\OrdencompraController@guardar')->name('guardar_ordencompra');
- Route::get('compras/ordencompra/{id}/editar', 'Compras\OrdencompraController@editar')->name('editar_ordencompra');
- Route::put('compras/ordencompra/{id}', 'Compras\OrdencompraController@actualizar')->name('actualizar_ordencompra');
- Route::delete('compras/ordencompra/{id}', 'Compras\OrdencompraController@eliminar')->name('eliminar_ordencompra');
- Route::get('compras/listaordencompra/{formato?}/{busqueda?}', 'Compras\OrdencompraController@listar')->name('listar_ordencompra');
+ //Route::get('compras/ordencompra', 'Compras\OrdencompraController@index')->name('consultar_ordencompra');
+ //Route::get('compras/ordencompra/crear', 'Compras\OrdencompraController@crear')->name('crear_ordencompra');
+ //Route::post('compras/ordencompra', 'Compras\OrdencompraController@guardar')->name('guardar_ordencompra');
+ //Route::get('compras/ordencompra/{id}/editar', 'Compras\OrdencompraController@editar')->name('editar_ordencompra');
+ //Route::put('compras/ordencompra/{id}', 'Compras\OrdencompraController@actualizar')->name('actualizar_ordencompra');
+ //Route::delete('compras/ordencompra/{id}', 'Compras\OrdencompraController@eliminar')->name('eliminar_ordencompra');
+ //Route::get('compras/listaordencompra/{formato?}/{busqueda?}', 'Compras\OrdencompraController@listar')->name('listar_ordencompra');
    
 /* Modulo receptivo */
 

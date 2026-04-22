@@ -1627,9 +1627,9 @@ class FacturacionService
 			else
 				$precioConDescuento = $precioUnitario;
 
-			$dataFactura[] = ["cantidad" => $cantidad,
-				"preciosindescuento" => $precioUnitario,
-				"precio" => $precioConDescuento,
+			$dataFactura[] = ["cantidad" => (float) str_replace(",","",$cantidad),
+				"preciosindescuento" => (float) str_replace(",","",$precioUnitario),
+				"precio" => (float) str_replace(",","",$precioConDescuento),
 				"descuento" => $this->descuentoLinea,
 				"descuentointegrado" => '',
 				"descuentofinal" => $this->descuentoPie,

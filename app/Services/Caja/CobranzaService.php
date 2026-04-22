@@ -448,6 +448,9 @@ class CobranzaService
 				$data['sucursal'] = 0;
 				$data['nro'] = $data['numerotransaccion'];
 
+				// El asiento es con fecha de hoy
+				$data['fecha'] = Carbon::now()->format("Y-m-d");
+
 				$asiento = $this->asientoRepository->create($data);
 
 				if ($asiento == 'Error')

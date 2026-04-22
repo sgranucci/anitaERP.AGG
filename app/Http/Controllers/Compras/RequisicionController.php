@@ -4,8 +4,7 @@ namespace App\Http\Controllers\Compras;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionRequisicion;
-use App\Repositories\Requisicion\RequisicionRepositoryInterface;
-use App\Repositories\Requisicion\Concepto_RequisicionRepositoryInterface;
+use App\Repositories\Compras\RequisicionRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\PaisRepositoryInterface;
 use App\Repositories\Configuracion\LocalidadRepositoryInterface;
@@ -18,11 +17,10 @@ use App\Repositories\Ventas\FormapagoRepositoryInterface;
 use App\Repositories\Ventas\PuntoventaRepositoryInterface;
 use App\Repositories\Ventas\TipotransaccionRepositoryInterface;
 use App\Repositories\Ventas\IncotermRepositoryInterface;
-use App\Services\Requisicion\RequisicionService;
-use App\Models\Requisicion\Requisicion_Estado;
-use App\Models\Requisicion\Requisicion;
-use App\Queries\Requisicion\RequisicionQueryInterface;
-use App\Exports\Requisicion\RequisicionExport;
+use App\Services\Compras\RequisicionService;
+use App\Models\Compras\Requisicion_Estado;
+use App\Models\Compras\Requisicion;
+use App\Exports\Compras\RequisicionExport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Hash;
@@ -50,7 +48,6 @@ class RequisicionController extends Controller
     private $actividad_arcaRepository;
 
 	public function __construct(RequisicionRepositoryInterface $ordenventarepository,
-                                Concepto_RequisicionRepositoryInterface $concepto_ordenventarepository,
                                 EmpresaRepositoryInterface $empresarepository,
                                 CentrocostoRepositoryInterface $centrocostorepository,
                                 LocalidadRepositoryInterface $localidadrepository,
@@ -59,7 +56,6 @@ class RequisicionController extends Controller
                                 FormapagoRepositoryInterface $formapagorepository,
                                 MonedaRepositoryInterface $monedarepository,
                                 RequisicionService $ordenventaservice,
-                                RequisicionQueryInterface $ordenventaquery,
                                 PuntoventaRepositoryInterface $puntoventarepository,
 							    TipotransaccionRepositoryInterface $tipotransaccionrepository,
 								IncotermRepositoryInterface $incotermrepository,
@@ -68,7 +64,6 @@ class RequisicionController extends Controller
                                 )
     {
         $this->ordenventaRepository = $ordenventarepository;
-        $this->concepto_ordenventaRepository = $concepto_ordenventarepository;
         $this->empresaRepository = $empresarepository;
         $this->centrocostoRepository = $centrocostorepository;
         $this->localidadRepository = $localidadrepository;
@@ -77,7 +72,6 @@ class RequisicionController extends Controller
         $this->formapagoRepository = $formapagorepository;
         $this->monedaRepository = $monedarepository;
         $this->ordenventaService = $ordenventaservice;
-        $this->ordenventaQuery = $ordenventaquery;
 		$this->puntoventaRepository = $puntoventarepository;
 		$this->tipotransaccionRepository = $tipotransaccionrepository;
 		$this->incotermRepository = $incotermrepository;        

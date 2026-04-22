@@ -78,6 +78,7 @@ class CobranzaQuery implements CobranzaQueryInterface
         $clausulaOrWhere = [
             ['empresa.nombre', 'like', '%'.$busqueda.'%'],
             ['tipotransaccion_caja.nombre', 'like', '%'.$busqueda.'%'],
+            ['cobranza.estado', 'like', '%'.$busqueda.'%'],
             ['cobranza.detalle', 'like', '%'.$busqueda.'%'],
             ['cliente.nombre', 'like', '%'.$busqueda.'%']
         ];

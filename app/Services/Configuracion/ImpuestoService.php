@@ -98,6 +98,7 @@ class ImpuestoService extends FacturacionService
 		// Debe calcular el total de los items y sacar el descuento en porcentaje
 		$totalBrutoAuxiliar = 0;
 		$tasaDetraccion = 0.;
+		
 		foreach($dataItem as $item)
 			$totalBrutoAuxiliar += ($item['cantidad'] * $item['precio']);
 
