@@ -573,8 +573,6 @@ class Articulo extends Model implements Auditable
 
 				$forro_id = $data->stkm_forro;
 				$compfondo_id = $data->stkm_compfondo;
-
-				$codigoNomenclador = $data->stkm_cod_nomenc;
 			}
 			else
 			{
@@ -588,9 +586,9 @@ class Articulo extends Model implements Auditable
 				else
 					$mventa_id = NULL;
 
-				$codigoNomenclador = NULL;
 				$usoarticulo_id = 1;
 			}
+			$codigoNomenclador = $data->stkm_cod_nomenc;
 
 			if (config('app.empresa') == 'EL BIERZO')
 			{
@@ -1214,6 +1212,11 @@ class Articulo extends Model implements Auditable
 			Self::armaVariableBierzo($request, $codigoSenasa, $tipoArticulo, $tipoProducto, $sectorSellado, $sala,
 									$enviaAlarma, $productoTercero);
 
+			if ($request->divide == 'DIVIDE')
+				$divide = 'SI';
+			else
+				$divide = 'NO';
+
 			$data = array( 'tabla' => $this->tableAnita, 'acc' => 'insert',
 				'campos' => ' 
 					stkm_articulo,
@@ -1292,7 +1295,7 @@ class Articulo extends Model implements Auditable
 					'".'0'."',
 					'".'0'."',
 					'".Auth::user()->nombre."',
-					'".'0'."',
+					'".$divide."',
 					'".$fecha."',
 					'".$request->skualternativo."',
 					'".($request->peso == NULL ? 0 : $request->peso)."',
@@ -1825,6 +1828,10 @@ class Articulo extends Model implements Auditable
 			case 'EL BIERZO':
 				Self::armaVariableBierzo($request, $codigoSenasa, $tipoArticulo, $tipoProducto, $sectorSellado, $sala,
 									$enviaAlarma, $productoTercero);
+				if ($request->divide == 'DIVIDE')
+					$divide = 'SI';
+				else
+					$divide = 'NO';
 
 				$data = array( 'acc' => 'update', 'tabla' => $this->tableAnita, 
 					'valores' => " stkm_desc = '".$request->descripcion."',
@@ -1859,6 +1866,7 @@ class Articulo extends Model implements Auditable
 						stkm_cta_var_pre = '".$request['grupocarne']."',
 						stkm_cc_var_pre = '".$codigoSenasa."',
 						stkm_cc_compra = '".'0'."',
+						stkm_terminal = '".$divide."',
 						stkm_tipo_articulo = '".$tipoArticulo."',
 						stkm_umd_nomenc = '".$request['unidadmedidanomenclador']."',
 						stkm_iniciales = '".$request['inicialproduccion']."',
