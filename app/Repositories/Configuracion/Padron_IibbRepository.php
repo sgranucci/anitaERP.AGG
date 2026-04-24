@@ -68,10 +68,13 @@ class Padron_IibbRepository implements Padron_IibbRepositoryInterface
     }
 
     // Busca tasas ya cargadas por jurisdiccion
-    public function leePadronIibb($cuit, $tipo, $jurisdiccion)
+    public function leePadronIibb($cuit, $tipo, $jurisdiccion, $fecha = null)
 	{
 		// Elimino los posibles guiones
 		$cuitFinal = str_replace("-", "", $cuit);
+
+        if (!$fecha)
+            $fecha = date('Y-m-d');
 
         $padron_iibb = $this->model->select('id', 'cuit')->where('cuit', $cuitFinal)
                                                          ->with('padron_iibb_tasas')->first();
@@ -82,7 +85,8 @@ class Padron_IibbRepository implements Padron_IibbRepositoryInterface
         {
             foreach ($padron_iibb->padron_iibb_tasas as $tasas)
             {
-                if ($tasas->provincias->jurisdiccion == $jurisdiccion)
+                if ($tasas->provincias->jurisdiccion == $jurisdiccion && $tasas->desdefecha <= $fecha &&
+                    $tasas->hastafecha >= $fecha)
                 {
                     $tasa = ($tipo == "percepcion" ? $tasas->tasapercepcion : $tasas->tasaretencion);
                     $tasaDiferencial = ($tipo == "percepcion" ? $tasas->tasapercepciondiferencial : $tasas->tasapercepciondiferencial);

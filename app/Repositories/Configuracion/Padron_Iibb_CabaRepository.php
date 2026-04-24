@@ -64,9 +64,13 @@ class Padron_Iibb_CabaRepository implements Padron_Iibb_CabaRepositoryInterface
         return $padron_iibb_caba;
     }
 
-    public function findPorCuit($cuit)
+    public function findPorCuit($cuit, $fecha = null)
     {
-        return $this->model->where('cuit', $cuit)->first();
+        if (!$fecha)
+            $fecha = date('Y-m-d');
+
+        return $this->model->where('cuit', $cuit)->where('desdefecha', '<=', $fecha)
+                ->where('hastafecha', '>=', $fecha)->first();        
     }
 
 }

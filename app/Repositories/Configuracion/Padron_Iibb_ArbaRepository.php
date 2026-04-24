@@ -4,7 +4,7 @@ namespace App\Repositories\Configuracion;
 
 use App\Models\Configuracion\Padron_Iibb_Arba;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use App\ApiAnita;
+use Carbon\Carbon;
 
 class Padron_Iibb_ArbaRepository implements Padron_Iibb_ArbaRepositoryInterface
 {
@@ -64,9 +64,13 @@ class Padron_Iibb_ArbaRepository implements Padron_Iibb_ArbaRepositoryInterface
         return $padron_iibb_arba;
     }
 
-    public function findPorCuit($cuit)
+    public function findPorCuit($cuit, $fecha = null)
     {
-        return $this->model->where('cuit', $cuit)->first();
+        if (!$fecha)
+            $fecha = date('Y-m-d');
+
+        return $this->model->where('cuit', $cuit)->where('desdefecha', '<=', $fecha)
+                ->where('hastafecha', '>=', $fecha)->first();
     }
 
 }

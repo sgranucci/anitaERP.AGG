@@ -37,7 +37,7 @@ class IIBBService
 		$this->provinciaRepository = $provinciaRepository;
 	}
 
-	public function leeTasaPercepcion($nroinscripcion, $jurisdiccion)
+	public function leeTasaPercepcion($nroinscripcion, $jurisdiccion, $fechaFactura)
 	{
 		$this->flLeyoPadron = false;
 		
@@ -141,7 +141,7 @@ class IIBBService
 					}
 					if ($flPercibe)
 					{
-						$tasaPercepcion = self::leeTasaPercepcion($numeroDocumento, $jurisdiccionesPercepcion[$i]);
+						$tasaPercepcion = self::leeTasaPercepcion($numeroDocumento, $jurisdiccionesPercepcion[$i], $fechaFactura);
 
 						$tasa = 0.;
 						if (isset($tasaPercepcion['tasapercepcion']))
