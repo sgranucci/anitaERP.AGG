@@ -41,9 +41,13 @@ class AppServiceProvider extends ServiceProvider
 		Ordentrabajo_Tarea::observe(Ordentrabajo_TareaObserver::class);
 		Pedido_Combinacion_Estado::observe(Pedido_Combinacion_EstadoObserver::class);
 
-    	//if (App::environment('production')) {
-        	//URL::forceScheme('https');
-    	//}
+        $url = env('APP_URL');
+        if (str_contains($url, 'https'))
+        {
+            if (App::environment('production')) {
+                URL::forceScheme('https');
+            }
+        }
 	}
 
     /**
