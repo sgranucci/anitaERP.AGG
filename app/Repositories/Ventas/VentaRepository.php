@@ -147,7 +147,7 @@ class VentaRepository implements VentaRepositoryInterface
         
         if (count($dataAnita) > 0)
         {
-            $nro = $dataAnita[0]->ultnro + 1;
+            $nro = (int) $dataAnita[0]->ultnro + 1;
         }
         
         if (!isset($nro))

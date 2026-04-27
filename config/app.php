@@ -18,6 +18,7 @@ return [
     'name' => env('APP_NAME', 'Anita ERP'),
     'empresa' => env('EMPRESA', 'AGG'),
     'empresa_link' => env('EMPRESA_LINK', '/anitaERP/public'),
+    'app_carpeta' => env('APP_CARPETA', '/anitaERP/public'),
 
     /*
     |--------------------------------------------------------------------------

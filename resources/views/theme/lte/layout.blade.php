@@ -95,7 +95,7 @@
         window.Laravel = {
             baseUrl: '{{ url('/') }}',
         };
-        var carpetaBase = '{{ env('APP_CARPETA') }}';
+        var carpetaBase = '{{ config('app.app_carpeta') }}';
     </script>
     <script src="{{asset("assets/$theme/plugins/jquery/jquery.min.js")}}"></script>
     <!-- Bootstrap 4 -->
