@@ -417,7 +417,18 @@ class FacturacionService
 
 				if ($kilo != 0)
 				{
+					// Calcula los kilos sin descuento y el descuento
+					$kiloDescuento = $kilo;
+					if (config('app.empresa') == 'EL BIERZO')
+					{
+						if ($this->descuentoLinea != 0)
+						{
+							$kiloDescuento = round($kilo * (1. - ($this->descuentoLinea / 100.)), 1);	
+						}
+					}
+
 					$dataFactura[] = ["cantidad" => $kilo,
+						"kilodescuento" => $kiloDescuento,
 						"pieza" => $pieza,
 						"caja" => $caja,
 						"preciosindescuento" => $precioUnitario,
@@ -4529,8 +4540,8 @@ class FacturacionService
 			{
 				if ($ventaItem->descuento != 0)
 				{
-					$cantidad = $ventaItem->cantidad * (1. - ($ventaItem->descuento / 100.));	
-					$kiloDescuento = $ventaItem->cantidad * $ventaItem->descuento / 100.;
+					$cantidad = round($ventaItem->cantidad * (1. - ($ventaItem->descuento / 100.)), 1);	
+					$kiloDescuento = $ventaItem->cantidad - $cantidad;
 
 					$flConDescuento = true;
 				}

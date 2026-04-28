@@ -438,9 +438,15 @@ class ImpuestoService extends FacturacionService
 							
 					$totalBruto = $importeSinDto;
 
-					$importeConDto = $item['cantidad'] * 
-							($item['incluyeimpuesto'] == 'N' || $item['incluyeimpuesto'] == '2' ? 
-							$item['precio'] : ($item['precio'] / (1.+(($valorTasaImpuesto+$tasaDetraccion)/100))));					
+					// Si es bierzo toma los kilos descontados directamente para el neto gravado
+					if (config('app.empresa') == 'EL BIERZO')
+						$importeConDto = $item['kilodescuento'] * 
+								($item['incluyeimpuesto'] == 'N' || $item['incluyeimpuesto'] == '2' ? 
+								$item['preciosindescuento'] : ($item['preciosindescuento'] / (1.+(($valorTasaImpuesto+$tasaDetraccion)/100))));					
+					else
+						$importeConDto = $item['cantidad'] * 
+								($item['incluyeimpuesto'] == 'N' || $item['incluyeimpuesto'] == '2' ? 
+								$item['precio'] : ($item['precio'] / (1.+(($valorTasaImpuesto+$tasaDetraccion)/100))));					
 
 					// Asigna total sin descuento porque el item ya viene neteado con el descuento de linea
 					$totalNeto = $importeConDto;

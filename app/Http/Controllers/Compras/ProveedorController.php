@@ -464,8 +464,10 @@ class ProveedorController extends Controller
 
 		if ($funcion == 'editar')
 		{
-			$tasaarba = $this->iibbService->leeTasaPercepcion($nroinscripcion, '902');
-            $tasacaba = $this->iibbService->leeTasaPercepcion($nroinscripcion, '901');
+            $fechaHoy = Carbon::now();
+            
+			$tasaarba = $this->iibbService->leeTasaPercepcion($nroinscripcion, '902', $fechaHoy);
+            $tasacaba = $this->iibbService->leeTasaPercepcion($nroinscripcion, '901', $fechaHoy);
 
             if (!$tasaarba)
 				$tasaarba = 'No esta en padron';
