@@ -88,6 +88,8 @@ class ArticuloRepository implements ArticuloRepositoryInterface
                                 'categoria.nombre as nombrecategoria', 
                                 'tipoarticulo.nombre as nombretipoarticulo', 
                                 'usoarticulo.nombre as nombreusoarticulo',
+                                'articulo.numeroparte as numeroparte',
+                                'articulo.ubicacionparte as ubicacionparte',
                                 'articulo.nofactura',
                                 'articulo.estado as estado')
                                 ->leftJoin('categoria','articulo.categoria_id','=','categoria.id')
@@ -98,6 +100,8 @@ class ArticuloRepository implements ArticuloRepositoryInterface
                                 ->orWhere('articulo.sku', 'like', '%'.$busqueda.'%')
                                 ->orWhere('articulo.descripcion', 'like', '%'.$busqueda.'%')
 								->orWhere('unidadmedida.nombre', 'like', '%'.$busqueda.'%')
+                                ->orWhere('articulo.ubicacionparte', 'like', '%'.$busqueda.'%')
+                                ->orWhere('articulo.numeroparte', 'like', '%'.$busqueda.'%')
 								->orWhere('categoria.nombre', 'like', '%'.$busqueda.'%')
 								->orWhere('tipoarticulo.nombre', 'like', '%'.$busqueda.'%')
                                 ->orWhere('usoarticulo.nombre', 'like', '%'.$busqueda.'%')
@@ -127,3 +131,4 @@ class ArticuloRepository implements ArticuloRepositoryInterface
         return Tipoliquido::orderBy('nombre')->get();
     }
 }
+

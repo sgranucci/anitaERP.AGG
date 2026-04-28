@@ -5,13 +5,13 @@ namespace App\Http\Controllers\Caja;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Storage;
-use App\Services\Caja\InterbakingService;
+use App\Services\Caja\InterbankingService;
 
 class InterbankingController extends Controller
 {
 	private $interbankingService;
 
-    public function __construct(InterbakingService $interbankingService)
+    public function __construct(InterbankingService $interbankingService)
     {
         $this->interbankingService = $interbankingService;
     }
@@ -25,9 +25,14 @@ class InterbankingController extends Controller
     {
         can('listar-saldo-cuentas');
         
-		$datas = $this->interbankingService->leeSaldos();
+		$datas = $this->interbankingService->leeSaldos(3);
 
-        return view('caja.interbanking.index', compact('datas'));
+        if (isset($datas['accounts']))
+            $cuentas = $datas['accounts'];
+        else
+            $cuentas = collect();
+
+        return view('caja.interbanking.index', compact('cuentas'));
     }
 
 }

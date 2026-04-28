@@ -452,6 +452,111 @@ var table3 = $("#tabla-data-3").DataTable({
         }
     });
 
+var table3 = $("#tabla-data-sin-ordenar").DataTable({
+    
+	"processing": true,
+    "paging": true,
+    "lengthChange": true,
+    "searching": true,
+    "ordering": false,
+    "info": true,
+    "autoWidth": true,
+	"language": idioma,
+    "lengthMenu": [[-1,10,5,50],["Mostrar todo",10,5,50]],
+    dom: 'Bfrt<"col-md-6 inline"i> <"col-md-6 inline"p>',
+    
+    buttons: {
+          dom: {
+            container:{
+              tag:'div',
+              className:'dataTables_filter'
+            },
+            buttonLiner: {
+              tag: null
+            }
+          },
+          buttons: [
+                    {
+                        extend:    'copyHtml5',
+                        text:      '<i class="fa fa-clipboard" style="color: white"></i><p style="color:white";>Copiar</p>',
+                        title: 'Titulo de tabla copiada',
+                        titleAttr: 'Copiar',
+                        className: 'btn btn-app export barras',
+                        exportOptions: {
+                            columns: ':visible'
+                        }
+                    },
+
+                    {
+                        extend:    'pdfHtml5',
+                        text:      '<i class="fa fa-file-pdf" style="color: white;"></i><p style="color:white";>PDF</p>',
+                        title:'Titulo de tabla en pdf',
+                        titleAttr: 'PDF',
+                        className: 'btn btn-app export pdf',
+                        exportOptions: {
+                            columns: ':visible'
+                        },
+                        customize:function(doc) {
+
+                            doc.styles.title = {
+                                color: '#4c8aa0',
+                                fontSize: '30',
+                                alignment: 'center'
+                            }
+                            doc.styles['td:nth-child(2)'] = { 
+                                width: '100px',
+                                'max-width': '100px'
+                            },
+                            doc.styles.tableHeader = {
+                                fillColor:'#4c8aa0',
+                                color:'white',
+                                alignment:'center'
+                            },
+                            doc.content[1].margin = [ 100, 0, 100, 0 ]
+
+                        }
+
+                    },
+                    {
+                        extend:    'excelHtml5',
+                        text:      '<i class="fa fa-file-excel" style="color: white;"></i><p style="color:white";>Excel</p>',
+                        title:'Titulo de tabla en excel',
+                        titleAttr: 'Excel',
+                        className: 'btn btn-app export excel',
+                        exportOptions: {
+                            columns: ':visible'
+                        },
+                    },
+                    {
+                        extend:    'csvHtml5',
+                        text:      '<i class="fa fa-file" style="color: white;"></i><p style="color:white";>CSV</p>',
+                        title:'Titulo de tabla en CSV',
+                        titleAttr: 'CSV',
+                        className: 'btn btn-app export csv',
+                        exportOptions: {
+                            columns: ':visible'
+                        }
+                    },
+                    {
+                        extend:    'print',
+                        text:      '<i class="fa fa-print" style="color: white;"></i><p style="color:white";>Imprimir</p>',
+                        title:'Titulo de tabla en impresion',
+                        titleAttr: 'Imprimir',
+                        className: 'btn btn-app export imprimir',
+                        exportOptions: {
+                            columns: ':visible'
+                        }
+                    },
+                    {
+                        extend:    'pageLength',
+                        titleAttr: 'Registros a mostrar',
+                        className: 'selectTable'
+                    }
+                ]
+          
+          
+        }
+    });
 
 
 function downloadPDFWithBrowserPrint() {

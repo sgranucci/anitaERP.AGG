@@ -85,6 +85,8 @@ function limpiaFiltros(){
                             <th>Categoría</th>
                             <th>Tipo de Artículo</th>
                             <th>Uso</th>
+                            <th>Nro.Parte</th>
+                            <th>Ubic.Parte</th>
                             <th>Facturable</th>
                             <th>Estado</th>
                             <th data-orderable="false"></th>
@@ -111,6 +113,8 @@ function limpiaFiltros(){
                                 <td>
                                     {{ $articulo->nombreusoarticulo ?? '' }}
                                 </td>
+                                <td>{{$articulo->numeroparte ?? ''}}</td>
+                                <td>{{$articulo->ubicacionparte ?? ''}}</td>
                                 <td>
                                     {{ ($articulo->nofactura == '0' ? 'Facturable' : ($articulo->nofactura == '1' ? 'No facturable' : '' )) }}
                                 </td>

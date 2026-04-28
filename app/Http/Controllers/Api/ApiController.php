@@ -272,6 +272,7 @@ class ApiController extends Controller
         // Busca tipo de transaccion por tipo de comprobante
         $comprobante = $this->comprobanteService->leeTipoTransaccionCompraPorAbreviatura($request->tipo);
 
+        $tipotransaccion_compra_id = null;
         if ($comprobante)
             $tipotransaccion_compra_id = $comprobante->id;
 

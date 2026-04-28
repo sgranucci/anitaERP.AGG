@@ -118,7 +118,21 @@
             let sku = $(this).val();
 
             $(".sku").val(sku);
-        });  
+
+            // busca el sku si existe
+            let url = carpetaBase+'/stock/leerunarticuloporsku/'+sku;
+
+            $.get(url, function(articulo){
+
+                if (articulo.id > 0)
+                {
+                    alert('Articulo ya existente '+articulo.id+' Descripcion '+articulo.descripcion);
+
+                    $("#sku").val('');
+                    $("#sku").focus();
+                }
+            });  
+        });
                 
         $('#unidadmedida_id').on('change', function () {                             
             let unidadmedida_id = $(this).val();

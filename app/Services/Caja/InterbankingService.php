@@ -19,8 +19,12 @@ class InterbankingService
     {
     }
 
-	public function leeSaldos() 
+	public function leeSaldos($empresa_id) 
 	{
+        // Pide token
+        Self::pideTokenInterbanking();
+
+        $customerId = config('interbanking.customer_id');
 
         // 1. Configurar los par┬ámetros de la consulta
         $params = [
@@ -28,7 +32,7 @@ class InterbankingService
             //'account-type'   => 'REPLACE_THIS_VALUE',
             //'bank-number'    => 'REPLACE_THIS_VALUE',
             //'currency'       => 'REPLACE_THIS_VALUE',
-            'customer-id'    => 'C25656A',
+            'customer-id'    => $customerId[$empresa_id-1],
             //'date-since'     => 'REPLACE_THIS_VALUE',
             //'date-until'     => 'REPLACE_THIS_VALUE',
             //'limit'          => 'REPLACE_THIS_VALUE',
@@ -38,12 +42,13 @@ class InterbankingService
         $baseUrl = 'https://api-gw.interbanking.com.ar/api/prod/v1/accounts/balances';
         $url = $baseUrl . '?' . http_build_query($params);
 
-        $token = file_get_contents("token.json");
-        $clientId = 'ohLciTIWzAgaNui7XbRH1wznR50PqepBYfhp';
+        $token = json_decode(Storage::get('tokeninterbanking.json'));
+
+        $clientId = config('interbanking.client_id');
 
         // 2. Definir los headers
         $headers = [
-            "Authorization: Bearer $token",
+            "Authorization: Bearer ".$token->access_token,
             "accept: application/json",
             "client_id: $clientId"
             ];
@@ -56,35 +61,34 @@ class InterbankingService
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'GET');
 
-        // 4. Ejecutar la solicitud
-        $response = curl_exec($ch);
+        try {
+            // 4. Ejecutar la solicitud
+            $response = curl_exec($ch);
 
-        // 5. Manejar errores y cerrar
-        if (curl_errno($ch)) {
-            echo 'Error:' . curl_error($ch);
-        } else {
-            // Procesar la respuesta JSON
-            $data = json_decode($response, true);
-            print_r($data);
+            // 5. Manejar errores y cerrar
+            if (curl_errno($ch)) {
+                $error = 'Error:' . curl_error($ch);
+                throw new ModelNotFoundException($error);
+            } else {
+                // Procesar la respuesta JSON
+                $data = json_decode($response, true);
+            }
+
+            curl_close($ch);
+
+            return ($data);
         }
-
-        curl_close($ch);
-
-		try {
-		  $result = $this->client->ListadoComprobantesFull($request);
-		  return($result->ListadoComprobantesFullResult->ListadoComprobantes->Comprobante);
-		}
 		catch (\Exception $e) {
 		 	Log::info('Caught Exception :'. $e->getMessage());
 			return $e;       // just re-throw it
 		}
 	}
 
-    private function pideTokenInterbanking()
+    public function pideTokenInterbanking()
     {
         $url = 'https://auth.interbanking.com.ar/cas/oidc/accessToken';
-        $clienteId = 'ohLciTIWzAgaNui7XbRH1wznR50PqepBYfhp';
-        $clientSecret = 'QCOOkdzAzwUgLB1esv5XmDCrlG7DSrjJVoMF';
+        $clienteId = config('interbanking.client_id');
+        $clientSecret = config('interbanking.client_secret');
 
         $curl = curl_init();
 
@@ -109,16 +113,17 @@ class InterbankingService
 
         // 5. Manejar errores
         if (curl_errno($curl)) {
-            echo 'Error en cURL: ' . curl_error($curl);
+            Log::info('Error en cURL: ' . curl_error($curl));
         } else {
             // 6. Decodificar la respuesta
             $result = json_decode($response, true);
+
             if (isset($result['access_token'])) {
 
-                file_put_contents("token.json", $result['access_token']);
+                Storage::put('tokeninterbanking.json', json_encode($result));
 
             } else {
-                echo "Error al obtener token: " . $response;
+                Log::info("Error al obtener token: " . $response);
             }
         }
 
