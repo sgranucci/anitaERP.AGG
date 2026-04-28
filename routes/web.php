@@ -1448,6 +1448,12 @@ Route::get('caja/movimientocaja', 'Caja\MovimientoCajaController@index')->name('
  Route::get('caja/leer_historia_cobranza/{cobranza_id}', 'Caja\CobranzaController@leerHistoriaCobranza')->name('leer_historia_cobranza');
  Route::get('caja/listar_una_cobranza/{id}', 'Caja\CobranzaController@listarUnaCobranza')->name('listar_una_cobranza');  
 
+/* 
+ * Interface con Interbanking
+ */
+
+ Route::get('caja/interbanking', 'Caja\InterbankingController@index')->name('interbanking');
+
 // Modulo de compras
  
 /* 
