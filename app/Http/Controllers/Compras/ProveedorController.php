@@ -271,11 +271,6 @@ class ProveedorController extends Controller
         {
             $data = $request->all();
 
-            if (substr(config("proveedor.tipoalta"),0,1) == 'P')
-                $data['estado'] = 'Alta Pendiente';
-            else
-                $data['estado'] = 'Activo';
-
             $proveedor = $this->proveedorRepository->create($data);
 
             // Guarda tablas asociadas

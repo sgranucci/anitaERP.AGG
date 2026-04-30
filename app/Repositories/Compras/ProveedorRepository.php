@@ -106,7 +106,11 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 		$codigo = '';
 		self::ultimoCodigo($codigo);
 		$data['codigo'] = $codigo;
-		$data['estado'] = '0';
+
+		if (substr(config("proveedor.tipoalta"),0,1) == 'P')
+			$data['estado'] = 'Alta Pendiente';
+		else
+			$data['estado'] = 'Activo';
 
 		if ($data['retieneiva'] == null)
 			$data['retieneiva'] = 'N';
@@ -1523,9 +1527,6 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 				break;
 			case 2:
 				$tiposervicio = 'S';
-				break;
-			case 3:
-				$tiposervicio = 'V';
 				break;
 		}		
 	}

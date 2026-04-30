@@ -37,7 +37,7 @@ class IIBBService
 		$this->provinciaRepository = $provinciaRepository;
 	}
 
-	public function leeTasaPercepcion($nroinscripcion, $jurisdiccion, $fechaFactura)
+	public function leeTasaPercepcion($nroinscripcion, $jurisdiccion, $fechaFactura = null)
 	{
 		$this->flLeyoPadron = false;
 		
@@ -45,17 +45,17 @@ class IIBBService
 		switch($jurisdiccion)
 		{
 			case 901: // Caba
-				$tasa_iibb = $this->padron_iibb_cabaRepository->findPorCuit($cuit);
+				$tasa_iibb = $this->padron_iibb_cabaRepository->findPorCuit($cuit, $fechaFactura);
 				break;
 			case 902: // Arba
-				$tasa_iibb = $this->padron_iibb_arbaRepository->findPorCuit($cuit);
+				$tasa_iibb = $this->padron_iibb_arbaRepository->findPorCuit($cuit, $fechaFactura);
 				break;
 			case 904: // Cordoba
             case 908: // Entre Rios
             case 914: // Misiones
 			case 921: // Santa Fe
             case 924: // Tucuman tasas y coeficientes
-				$tasa_iibb = $this->padron_iibbRepository->leePadronIibb($cuit, 'percepcion', $jurisdiccion);
+				$tasa_iibb = $this->padron_iibbRepository->leePadronIibb($cuit, 'percepcion', $jurisdiccion, $fechaFactura);
 				break;
 		}
 
