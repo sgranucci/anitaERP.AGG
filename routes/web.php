@@ -798,7 +798,7 @@ Route::get('stock/product/datos-tecnicos/edit/{id}', 'Stock\ArticuloFerliControl
 Route::put('stock/product/update/{id}/{filtros?}', 'Stock\ArticuloFerliController@actualizar')->name('product.update');
 Route::delete('stock/product/delete/{id}', 'Stock\ArticuloFerliController@delete')->name('product.delete');
 Route::post('stock/product/limpiafiltro', 'Stock\ArticuloFerliController@limpiafiltro')->name('product.limpiafiltro');
-Route::post('stock/product/consultaarticulo', 'Stock\ArticuloFerliController@consultaArticulo')->name('consulta_articulo');
+Route::post('stock/product/consultaarticulo', 'Stock\ArticuloFerliController@consultaArticulo')->name('consulta_articulo_ferli');
 
 // Articulos
 Route::get('stock/articulo', 'Stock\ArticuloController@index')->name('articulo');
@@ -814,6 +814,7 @@ Route::get('stock/leer_historia_articulo/{articulo_id}', 'Stock\ArticuloControll
 Route::get('stock/leerunarticulo/{articulo_id}', 'Stock\ArticuloController@leeUnArticulo')->name('leer_un_articulo');
 Route::get('stock/leerunarticuloporsku/{sku}', 'Stock\ArticuloController@leeUnArticuloPorSku')->name('leer_un_articulo_por_sku');
 
+Route::post('stock/articulo/consultaarticulo', 'Stock\ArticuloController@consultaArticulo')->name('consulta_articulo');
 Route::get('stock/listaarticulo/{formato?}/{busqueda?}', 'Stock\ArticuloController@listar')->name('lista_articulo');
 Route::get('stock/replicar_cuentacontable_articulo/{empresa_id}/{tipoimputacion}/{cuentacontable_id}', 'Stock\ArticuloController@replicarCuentaContableArticulo')->name('replicar_cuentacontable_articulo');
 
@@ -1662,9 +1663,17 @@ Route::get('compras/lista_precarga_comprobante_proveedor/{formato?}/{busqueda?}'
  Route::get('compras/requisicion/crear', 'Compras\RequisicionController@crear')->name('crear_requisicion');
  Route::post('compras/requisicion', 'Compras\RequisicionController@guardar')->name('guardar_requisicion');
  Route::get('compras/requisicion/{id}/editar', 'Compras\RequisicionController@editar')->name('editar_requisicion');
+ Route::get('compras/requisicion/{id}/imprimir-pdf', 'Compras\RequisicionController@imprimirPdf')->name('imprimir_pdf_requisicion');
+ Route::post('compras/requisicion/{id}/enviar-arbol-aprobacion', 'Compras\RequisicionController@enviarArbolAprobacion')->name('enviar_arbol_requisicion');
  Route::put('compras/requisicion/{id}', 'Compras\RequisicionController@actualizar')->name('actualizar_requisicion');
  Route::delete('compras/requisicion/{id}', 'Compras\RequisicionController@eliminar')->name('eliminar_requisicion');
  Route::get('compras/listarequisicion/{formato?}/{busqueda?}', 'Compras\RequisicionController@listar')->name('listar_requisicion');
+ Route::get('compras/leer_historia_requisicion/{requisicion_id}', 'Compras\RequisicionController@leerHistoriaRequisicion')->name('lee_historia_requisicion');
+ Route::get('compras/requisicion/aviso-arbol-grabacion', 'Compras\RequisicionController@avisoArbolGrabacion')->name('requisicion_aviso_arbol_grabacion');
+ Route::post('compras/requisicion/consulta_partidagasto', 'Compras\RequisicionController@consultaPartidagastoRequisicion')->name('consulta_partidagasto_requisicion');
+ Route::get('compras/requisicion/leer_partidagasto/{partidagasto_id}', 'Compras\RequisicionController@leerPartidagastoRequisicionPorId')->name('leer_partidagasto_requisicion');
+ Route::get('compras/requisicion/visualizar/{id}/{hash}', 'Compras\RequisicionController@visualizar')->name('visualizar_requisicion');
+ Route::get('compras/requisicion/soloconsulta/{id}', 'Compras\RequisicionController@soloConsulta')->name('solo_consulta_requisicion');
   
 /* 
  * Ordenes de Compra
@@ -2365,6 +2374,9 @@ Route::get('uif/leercodigopostaluif/{id}', 'Uif\Localidad_UifController@leerCodi
  Route::get('presupuesto/listacapex/{formato?}/{busqueda?}', 'Presupuesto\CapexController@listar')->name('lista_capex');
  Route::get('presupuesto/leercapexpartidamonto/{capex_partida_id}', 'Presupuesto\CapexController@leerCapexPartidaMonto')->name('lee_capex_partida_monto');
 
+ Route::post('presupuesto/consulta_capex', 'Presupuesto\CapexController@consultaCapex')->name('consulta_capex');
+ Route::get('presupuesto/leer_capex/{capex_id}', 'Presupuesto\CapexController@leerCapexPorId')->name('leer_capex');
+
 /* 
  * Partidas de gastos
  */
@@ -2382,6 +2394,9 @@ Route::get('uif/leercodigopostaluif/{id}', 'Uif\Localidad_UifController@leerCodi
  Route::get('presupuesto/listarordencomprapartidagasto/{formato}/{partidagasto_id}', 'Presupuesto\PartidagastoController@listarOrdenCompra')->name('lista_ordencompra_partidagasto');
  Route::get('presupuesto/listapartidagasto/{formato?}/{busqueda?}', 'Presupuesto\PartidagastoController@listar')->name('lista_partidagasto');
  Route::get('presupuesto/leerpartidagastopartidamonto/{partidagasto_partida_id}', 'Presupuesto\PartidagastoController@leerPartidagastoPartidaMonto')->name('lee_partidagasto_partida_monto');
+
+ Route::post('presupuesto/consulta_partidagasto', 'Presupuesto\PartidagastoController@consultaPartidagasto')->name('consulta_partidagasto');
+ Route::get('presupuesto/leer_partidagasto/{partidagasto_id}', 'Presupuesto\PartidagastoController@leerPartidagastoPorId')->name('leer_partidagasto');
 
 /* 
  * Genera asientos contables del presupuesto de gastos

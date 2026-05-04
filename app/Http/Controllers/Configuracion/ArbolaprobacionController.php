@@ -12,6 +12,7 @@ use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Models\Configuracion\Arbolaprobacion;
 use App\Models\Configuracion\Arbolaprobacion_Movimiento;
+use App\Models\Compras\Requisicion_Estado;
 use App\Services\Configuracion\ArbolaprobacionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -76,8 +77,10 @@ class ArbolaprobacionController extends Controller
         $recordatorio_enum = Arbolaprobacion::$enumRecordatorio;
         $estado_enum = Arbolaprobacion::$enumEstado;
 
+        $requisicion_estados_arbol_enum = Requisicion_Estado::estadosArbolRequisicionConfigurables();
+
         return view('configuracion.arbolaprobacion.crear', compact('empresa_query', 'centrocosto_query', 'moneda_query',
-                                                         			'tipoarbol_enum', 'recordatorio_enum', 'estado_enum'));
+                                                         			'tipoarbol_enum', 'recordatorio_enum', 'estado_enum', 'requisicion_estados_arbol_enum'));
     }
 
     /**
@@ -129,8 +132,10 @@ class ArbolaprobacionController extends Controller
         $recordatorio_enum = Arbolaprobacion::$enumRecordatorio;
         $estado_enum = Arbolaprobacion::$enumEstado;
 
+        $requisicion_estados_arbol_enum = Requisicion_Estado::estadosArbolRequisicionConfigurables();
+
         return view('configuracion.arbolaprobacion.editar', compact('data', 'empresa_query', 'centrocosto_query', 'moneda_query',
-																	'tipoarbol_enum', 'recordatorio_enum', 'estado_enum'));
+																	'tipoarbol_enum', 'recordatorio_enum', 'estado_enum', 'requisicion_estados_arbol_enum'));
     }
 
     /**
@@ -198,10 +203,14 @@ class ArbolaprobacionController extends Controller
         $flEncontro = false;
 
         // Busca hash de aprobacion en movimientos del arbol
+        $arbolaprobacion_movimiento = collect();
         switch($tipocomprobante)
         {
             case 'OV':
                 $arbolaprobacion_movimiento = $this->arbolaprobacion_movimientoRepository->findPorOrdenVenta($comprobante_id);
+                break;
+            case 'RE':
+                $arbolaprobacion_movimiento = $this->arbolaprobacion_movimientoRepository->findPorRequisicion($comprobante_id);
                 break;
         }
 
@@ -236,10 +245,14 @@ class ArbolaprobacionController extends Controller
         $flEncontro = false;
 
         // Busca hash de aprobacion en movimientos del arbol
+        $arbolaprobacion_movimiento = collect();
         switch($tipocomprobante)
         {
             case 'OV':
                 $arbolaprobacion_movimiento = $this->arbolaprobacion_movimientoRepository->findPorOrdenVenta($comprobante_id);
+                break;
+            case 'RE':
+                $arbolaprobacion_movimiento = $this->arbolaprobacion_movimientoRepository->findPorRequisicion($comprobante_id);
                 break;
         }
 
@@ -282,11 +295,16 @@ class ArbolaprobacionController extends Controller
     public function leerMovimientoAprobacion($tipocomprobante, $comprobante_id)
     {
         // Busca hash de aprobacion en movimientos del arbol
+        $arbolaprobacion_movimiento = collect();
         switch($tipocomprobante)
         {
             case 'OV':
                 $arbolaprobacion_movimiento = $this->arbolaprobacion_movimientoRepository->findPorOrdenVenta($comprobante_id);
                 break;
+            case 'RE':
+                return response()->json(
+                    $this->arbolaprobacionService->movimientosRequisicionConAvisoGrabacion((int) $comprobante_id)
+                );
         }
         return $arbolaprobacion_movimiento;
     }

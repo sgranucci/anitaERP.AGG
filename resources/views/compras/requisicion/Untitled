@@ -1,0 +1,4 @@
+@include('includes.stock.modalconsultaarticulo')
+@include('includes.presupuesto.modalconsultapartidagasto')
+@include('includes.presupuesto.modalconsultacapex')
+@include('includes.compras.modalconsultaproveedor')

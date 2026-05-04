@@ -479,7 +479,10 @@ class ArticuloController extends Controller
 
     public function editar($id, $type = null, $filtros = null)
 	{
+		can('editar-articulos');
+
 		$producto = $this->articuloRepository->find($id);
+		$puedeActualizarArticulo = can('actualizar-articulos', false);
 
 		$categoria = Categoria::orderBy('nombre')->get();
         $subcategoria = Subcategoria::orderBy('nombre')->get();
@@ -524,7 +527,8 @@ class ArticuloController extends Controller
 													'periodicidadcompra_query', 'condicionentrega_query', 'tipoimputacion_enum',
 													'deposito_query', 'numeroparte_enum', 'oficinacompra_query',
 													'divide_enum',
-													'tipoproducto_query', 'capacidad_query', 'color_query', 'tipoliquido_query'));
+													'tipoproducto_query', 'capacidad_query', 'color_query', 'tipoliquido_query',
+													'puedeActualizarArticulo'));
     }
 
     public function actualizar(ValidacionArticulo $request, $id)
@@ -626,7 +630,8 @@ class ArticuloController extends Controller
 		$query = $query->get();
 
 		$output = [];
-		$output['data'] = '';	
+		$output['data'] = '';
+		$puedeConsultarArticulo = can('editar-articulos', false);
 		if (count($query) > 0)
 		{
 			foreach ($query as $row)
@@ -639,14 +644,19 @@ class ArticuloController extends Controller
 					else
 						$output['data'] .= '<input type="hidden" class="'.$columnsOut[$i].'" value="'.$row[$columnsOut[$i]].'">';
 				}
-				$output['data'] .= '<td><a class="btn btn-warning btn-sm eligeconsultaarticulo">Elegir</a></td>';
+				$output['data'] .= '<td>'
+					.'<a class="btn btn-warning btn-sm eligeconsultaarticulo">Elegir</a>';
+				if ($puedeConsultarArticulo) {
+					$output['data'] .= ' <a class="btn btn-info btn-sm" href="'.e(url('stock/articulo/'.$row['articulo_id'].'/editar')).'" target="_blank" rel="noopener">Consultar</a>';
+				}
+				$output['data'] .= '</td>';
 				$output['data'] .= '</tr>';
 			}
 		}
 		else
 		{
 			$output['data'] .= '<tr>';
-			$output['data'] .= '<td>Sin resultados</td>';
+			$output['data'] .= '<td colspan="6">Sin resultados</td>';
 			$output['data'] .= '</tr>';
 		}
 		return(json_encode($output, JSON_UNESCAPED_UNICODE));

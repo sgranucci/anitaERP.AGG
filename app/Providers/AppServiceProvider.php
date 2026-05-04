@@ -339,6 +339,26 @@ class AppServiceProvider extends ServiceProvider
     	);
 
 		$this->app->bind(
+        	'App\Repositories\Compras\Requisicion_EstadoRepositoryInterface',
+        	'App\Repositories\Compras\Requisicion_EstadoRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Compras\Requisicion_ArticuloRepositoryInterface',
+        	'App\Repositories\Compras\Requisicion_ArticuloRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Repositories\Compras\Requisicion_ArchivoRepositoryInterface',
+        	'App\Repositories\Compras\Requisicion_ArchivoRepository',
+    	);
+
+		$this->app->bind(
+        	'App\Queries\Compras\RequisicionQueryInterface',
+        	'App\Queries\Compras\RequisicionQuery',
+    	);
+
+		$this->app->bind(
         	'App\Repositories\Compras\CondicionpagoRepositoryInterface',
         	'App\Repositories\Compras\CondicionpagoRepository',
     	);

@@ -3,125 +3,96 @@
 namespace App\Repositories\Compras;
 
 use App\Models\Compras\Requisicion;
-use App\Repositories\Compras\RequisicionRepositoryInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Exception;
-use Carbon\Carbon;
-use Auth;
-use DB;
 
 class RequisicionRepository implements RequisicionRepositoryInterface
 {
     protected $model;
 
-    /**
-     * PostRepository constructor.
-     *
-     * @param Post $post
-     */
-	public function __construct(Requisicion $ordenventa)
+    public function __construct(Requisicion $requisicion)
     {
-        $this->model = $ordenventa;
+        $this->model = $requisicion;
     }
 
     public function create(array $data)
     {
-		$data['numeroordenventa'] = self::ultimaRequisicion($data['empresa_id']);
+        $data = self::limpiaPayloadCabecera($data);
+        $data['numerorequisicion'] = self::ultimaRequisicion($data['empresa_id']);
 
-		return $this->model->create($data);
+        return $this->model->create($data);
+    }
+
+    public function createDesdeAnita(array $data)
+    {
+        return $this->model->create($data);
     }
 
     public function update(array $data, $id)
     {
-		$ordenventa = $this->model->findOrFail($id)->update($data);
+        $data = self::limpiaPayloadCabecera($data);
 
-		return $ordenventa;
+        return $this->model->findOrFail($id)->update($data);
+    }
+
+    private static function limpiaPayloadCabecera(array $data)
+    {
+        unset(
+            $data['articulo_ids'],
+            $data['cantidades'],
+            $data['precios'],
+            $data['moneda_linea_ids'],
+            $data['fechaentrega_articulos'],
+            $data['cantidadalternativas'],
+            $data['detalle_articulos'],
+            $data['centrocostodestino_ids'],
+            $data['preciooriginales'],
+            $data['motivoahorros'],
+            $data['partidagasto_ids'],
+            $data['capex_ids'],
+            $data['fechas'],
+            $data['estados'],
+            $data['usuario_ids'],
+            $data['observacionestados'],
+            $data['_token'],
+            $data['_method']
+        );
+
+        return $data;
     }
 
     public function delete($id)
     {
-		$ordenventa = $this->model->findOrFail($id);
+        $req = $this->model->findOrFail($id);
+        if ($req) {
+            return $this->model->destroy($id);
+        }
 
-		if ($ordenventa)
-        	$ordenventa = $this->model->destroy($id);
-
-		return $ordenventa;
+        return false;
     }
 
     public function find($id)
     {
-        if (null == $ordenventa = $this->model->with("ordenventa_estados")
-									->with("ordenventa_cuotas")
-									->with("ordenventa_conceptos")
-									->with("ordenventa_archivos")
-									->with("empresas")
-									->with("centrocostos")
-									->with("monedas")
-									->with("clientes")
-									->with("localidades")
-									->with("provincias")
-									->with("paises")
-									->with("formapagos")
-									->with("ventas")
-									->find($id)) {
-            throw new ModelNotFoundException("Registro no encontrado");
+        if (null == $req = $this->model->with(['requisicion_estados', 'requisicion_archivos',
+            'empresas', 'centrocostos', 'oficinacompras', 'proveedores.condicionpagos', 'formapagos', 'usuarios',
+        ])->with(['requisicion_articulos.articulos', 'requisicion_articulos.monedas',
+            'requisicion_articulos.partidagastos', 'requisicion_articulos.capexs',
+        ])->find($id)) {
+            throw new ModelNotFoundException('Registro no encontrado');
         }
-		return($ordenventa);
-	}
+
+        return $req;
+    }
 
     public function findOrFail($id)
     {
-        if (null == $ordenventa = $this->model->with("ordenventa_estados")
-									->with("ordenventa_cuotas")
-									->with("ordenventa_conceptos")
-									->with("ordenventa_archivos")
-									->with("empresas")
-									->with("centrocostos")
-									->with("monedas")
-									->with("clientes")
-									->with("localidades")
-									->with("provincias")
-									->with("paises")
-									->with("formapagos")
-									->with("ventas")
-									->findOrFail($id))
-		{
-            throw new ModelNotFoundException("Registro no encontrado");
-        }
-        return $ordenventa;
+        return $this->find($id);
     }
 
-	// Devuelve ultimo numero de ordenventa + 1
-	private function ultimaRequisicion($empresa_id)
-	{
-		$ordenventa = $this->model->select('numeroordenventa')->where('empresa_id', $empresa_id)->where('deleted_at', null)
-							->orderBy('numeroordenventa', 'desc')->first();
-		
-		$numeroordenventa = 0;
-        if ($ordenventa) 
-		{
-			$numeroordenventa = $ordenventa->numeroordenventa;
-			$numeroordenventa = $numeroordenventa + 1;
-		}
-		else	
-			$numeroordenventa = 1;
+    private function ultimaRequisicion($empresa_id)
+    {
+        $ultimo = $this->model->select('numerorequisicion')->where('empresa_id', $empresa_id)
+            ->orderBy('numerorequisicion', 'desc')->first();
 
-		return $numeroordenventa;
-	}	
-
-	public function apruebaRequisicion($ordenventa_id)
-	{
-		$estado = Requisicion_Estado::$enumEstado[array_search('P', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
-
-		// Graba estado de aprobacion
-		$data = [];
-	   	$data['fechas'][] = Carbon::now();
-	   	$data['estados'][] = $estado;
-		$data['usuario_ids'][] = Auth::user()->id;
-	   	$data['observacionestados'][] = "Orden de Venta Aprobada";
-
-		$ordenventa_estado = $this->ordenventa_estadoRepository->create($data, $ordenventa_id);
-
-		return Self::update(['estado' => $estado], $id);
-	}
+        return $ultimo ? ((int) $ultimo->numerorequisicion + 1) : 1;
+    }
 }

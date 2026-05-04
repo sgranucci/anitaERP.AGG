@@ -712,7 +712,8 @@ class ArticuloFerliController extends Controller
 		$query = $query->get();
 
 		$output = [];
-		$output['data'] = '';	
+		$output['data'] = '';
+		$puedeAbrirFichaArticulo = can('editar-articulos', false);
 		if (count($query) > 0)
 		{
 			foreach ($query as $row)
@@ -722,14 +723,21 @@ class ArticuloFerliController extends Controller
 				{
 					$output['data'] .= '<td class="'.$columnsOut[$i].'">' . $row[$columnsOut[$i]] . '</td>';	
 				}
-				$output['data'] .= '<td><a class="btn btn-warning btn-sm eligeconsultaarticulo">Elegir</a></td>';
+				$output['data'] .= '<td>'
+					.'<a class="btn btn-warning btn-sm eligeconsultaarticulo">Elegir</a>';
+				if ($puedeAbrirFichaArticulo) {
+					$urlFicha = url('stock/articulo/'.$row['articulo_id'].'/editar');
+					$output['data'] .= ' <a class="btn btn-info btn-sm" href="'.e($urlFicha).'" target="_blank" rel="noopener">Consultar</a>';
+				}
+				$output['data'] .= '</td>';
 				$output['data'] .= '</tr>';
 			}
 		}
 		else
 		{
+			$colspan = 6;
 			$output['data'] .= '<tr>';
-			$output['data'] .= '<td>Sin resultados</td>';
+			$output['data'] .= '<td colspan="'.$colspan.'">Sin resultados</td>';
 			$output['data'] .= '</tr>';
 		}
 		return(json_encode($output, JSON_UNESCAPED_UNICODE));

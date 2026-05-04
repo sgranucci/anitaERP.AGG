@@ -1,6 +1,9 @@
 $(document).ready(function () {
     Biblioteca.validacionGeneral('form-general');
 
-	document.getElementById("nombre").focus();
+	var nombreEl = document.getElementById("nombre");
+	if (nombreEl) {
+		nombreEl.focus();
+	}
 });
 

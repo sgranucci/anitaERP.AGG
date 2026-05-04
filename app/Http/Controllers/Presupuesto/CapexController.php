@@ -18,6 +18,7 @@ use App\Queries\Presupuesto\CapexQueryInterface;
 use App\Exports\Presupuesto\CapexExport;
 use App\Exports\Presupuesto\CapexOrdenCompraExport;
 use Illuminate\Http\Request;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
 use DB;
@@ -305,5 +306,31 @@ class CapexController extends Controller
             }   
         }
         return redirect()->back();
+    }
+
+    public function consultaCapex(Request $request)
+    {
+        $empresa_id = (int) $request->input('empresa_id', 0);
+        $consulta = $request->input('consulta', '');
+        $centrocostodestino_id = $request->input('centrocostodestino_id');
+        $payload = $this->capexRepository->consultaCapex($consulta, $empresa_id, $centrocostodestino_id);
+
+        return response()->json($payload);
+    }
+
+    public function leerCapexPorId($capex_id)
+    {
+        try {
+            $row = $this->capexRepository->findOrFail((int) $capex_id);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['mensaje' => 'no encontrado'], 404);
+        }
+
+        return response()->json([
+            'id' => $row->id,
+            'codigo' => $row->codigo,
+            'detalle' => $row->detalle,
+            'nombre' => $row->nombre,
+        ]);
     }
 }

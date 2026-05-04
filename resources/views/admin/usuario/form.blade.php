@@ -34,6 +34,7 @@
         <input type="file" name="foto_up" id="foto" data-initial-preview="{{isset($data->foto) ? asset("storage/imagenes/fotos_usuarios/$data->foto") : asset("assets/$theme/dist/img/user2-160x160.jpg")}}" accept="image/*"/>
     </div>
 </div>
+
 <div class="form-group row">
     <label for="empresa_id" class="col-lg-3 col-form-label requerido">Empresas</label>
     <div class="col-lg-8">
@@ -45,41 +46,58 @@
         </select>  
     </div>
 </div>        
-<div class="form-group row">
-    <label for="centrocosto_id" class="col-lg-3 col-form-label requerido">Centro Costo</label>
-    <div class="col-lg-8">
-        <select class="form-control" id="centrocosto_id" name="centrocosto_id" required>
-            <option value="">Seleccione el centro de costo</option>
-            @foreach($centrocosto_query as $centrocosto)
-                <option value="{{$centrocosto['id']}}" {{is_array(old('centrocosto_id')) ? (in_array($id, old('centrocosto_id')) ? 'selected' : '')  : (isset($data) ? ($data->centrocosto_id == $centrocosto['id'] ? 'selected' : '') : '')}}>{{$centrocosto['nombre']}} ({{$centrocosto['codigo']}})</option>            
-            @endforeach            
-        </select>  
+<div class="row">
+    <div class="col-lg-6">
+        <div class="form-group row">
+            <label for="centrocosto_id" class="col-lg-3 col-form-label requerido">Centro Costo</label>
+            <div class="col-lg-8">
+                <select class="form-control" id="centrocosto_id" name="centrocosto_id" required>
+                    <option value="">Seleccione el centro de costo</option>
+                    @foreach($centrocosto_query as $centrocosto)
+                        <option value="{{$centrocosto['id']}}" {{is_array(old('centrocosto_id')) ? (in_array($id, old('centrocosto_id')) ? 'selected' : '')  : (isset($data) ? ($data->centrocosto_id == $centrocosto['id'] ? 'selected' : '') : '')}}>{{$centrocosto['nombre']}} ({{$centrocosto['codigo']}})</option>            
+                    @endforeach            
+                </select>  
+            </div>
+        </div>      
+        <div class="form-group row">
+            <label for="vendedor_id" class="col-lg-3 col-form-label">Vendedor</label>
+            <div class="col-lg-8">
+                <select class="form-control" id="vendedor_id" name="vendedor_id">
+                    <option value="">Seleccione vendedor</option>
+                    @foreach($vendedor_query as $id => $nombre)
+                        <option value="{{$id}}" {{is_array(old('vendedor_id')) ? (in_array($id, old('vendedor_id')) ? 'selected' : '')  : (isset($data) ? ($data->vendedor_id == $id ? 'selected' : '') : '')}}>{{$nombre}}-{{$id}}</option>
+                    @endforeach
+                </select>  
+            </div>
+        </div>              
     </div>
-</div>      
-<div class="form-group row">
-    <label for="vendedor_id" class="col-lg-3 col-form-label">Vendedor</label>
-    <div class="col-lg-8">
-        <select class="form-control" id="vendedor_id" name="vendedor_id">
-            <option value="">Seleccione vendedor</option>
-            @foreach($vendedor_query as $id => $nombre)
-                <option value="{{$id}}" {{is_array(old('vendedor_id')) ? (in_array($id, old('vendedor_id')) ? 'selected' : '')  : (isset($data) ? ($data->vendedor_id == $id ? 'selected' : '') : '')}}>{{$nombre}}-{{$id}}</option>
-            @endforeach
-        </select>  
-    </div>
-</div>      
-<div class="form-group row">
-    <label for="rol_id" class="col-lg-3 col-form-label requerido">Rol</label>
-    <div class="col-lg-8">
-        <select name="rol_id[]" id="rol_id" class="form-control" multiple required>
-            <option value="">Seleccione el rol</option>
-            @foreach($rols as $id => $nombre)
-                <option
-                value="{{$id}}"
-                {{is_array(old('rol_id')) ? (in_array($id, old('rol_id')) ? 'selected' : '')  : (isset($data) ? ($data->roles->firstWhere('id', $id) ? 'selected' : '') : '')}}
-                >
-                {{$nombre}}
-                </option>
-            @endforeach
-        </select>
-    </div>
+    <div class="col-lg-6">
+        <div class="form-group row">
+            <label for="oficinacompra_id" class="col-lg-3 col-form-label">Oficina de Compra</label>
+            <div class="col-lg-8">
+                <select class="form-control select2" id="oficinacompra_id" name="oficinacompra_id">
+                    <option value="">Seleccione la oficina de compra</option>
+                    @foreach($oficinacompra_query as $id => $nombre)
+                        <option value="{{$id}}" {{is_array(old('oficinacompra_id')) ? (in_array($id, old('oficinacompra_id')) ? 'selected' : '')  : (isset($data) ? ($data->oficinacompra_id == $id ? 'selected' : '') : '')}}>{{$nombre}}</option>
+                    @endforeach
+                </select>  
+            </div>
+        </div>
+        <div class="form-group row">
+            <label for="rol_id" class="col-lg-3 col-form-label requerido">Rol</label>
+            <div class="col-lg-8">
+                <select name="rol_id[]" id="rol_id" class="form-control" multiple required>
+                    <option value="">Seleccione el rol</option>
+                    @foreach($rols as $id => $nombre)
+                        <option
+                        value="{{$id}}"
+                        {{is_array(old('rol_id')) ? (in_array($id, old('rol_id')) ? 'selected' : '')  : (isset($data) ? ($data->roles->firstWhere('id', $id) ? 'selected' : '') : '')}}
+                        >
+                        {{$nombre}}
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+        </div>
+    </div>  
 </div>

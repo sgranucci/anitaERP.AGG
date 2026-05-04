@@ -127,4 +127,16 @@ class ArbolaprobacionRepository implements ArbolaprobacionRepositoryInterface
         return $arbolaprobacion;
     }
 
+    public function findPorTipoArbolYEmpresa(string $tipoarbol, int $empresa_id)
+    {
+        return $this->model->where('tipoarbol', $tipoarbol)
+            ->where('estado', 'ACTIVO')
+            ->where('empresa_id', $empresa_id)
+            ->with(['arbolaprobacion_niveles' => function ($query) {
+                $query->orderBy('nivel', 'asc');
+            }])
+            ->orderBy('id')
+            ->get();
+    }
+
 }    

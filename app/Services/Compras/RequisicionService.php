@@ -2,30 +2,366 @@
 
 namespace App\Services\Compras;
 
-use App\Queries\Compras\ProveedorQueryInterface;
 use App\ApiAnita;
+use App\Models\Compras\Requisicion_Estado;
+use App\Models\Stock\Articulo;
+use App\Queries\Compras\ProveedorQueryInterface;
+use App\Repositories\Compras\RequisicionRepositoryInterface;
+use App\Repositories\Compras\Requisicion_EstadoRepositoryInterface;
+use App\Repositories\Compras\Requisicion_ArticuloRepositoryInterface;
+use App\Repositories\Compras\Requisicion_ArchivoRepositoryInterface;
+use App\Repositories\Presupuesto\PartidagastoRepositoryInterface;
+use App\Repositories\Presupuesto\CapexRepositoryInterface;
+use App\Services\Configuracion\ArbolaprobacionService;
+use App\Repositories\Contable\CentrocostoRepositoryInterface;
+use App\Repositories\Configuracion\MonedaRepositoryInterface;
+use App\Queries\Stock\ArticuloQueryInterface;
+use Carbon\Carbon;
+use Auth;
+use DB;
 
-class RequisicionService 
+class RequisicionService
 {
-	private $proveedorQuery;
+    private $proveedorQuery;
+    private $requisicionRepository;
+    private $requisicion_estadoRepository;
+    private $requisicion_articuloRepository;
+    private $requisicion_archivoRepository;
+    private $arbolaprobacionService;
+    private $partidagastoRepository;
+    private $capexRepository;
+    private $centrocostoRepository;
+    private $articuloQuery;
+    private $monedaRepository;
+    public function __construct(
+        ProveedorQueryInterface $proveedorQuery,
+        RequisicionRepositoryInterface $requisicionRepository,
+        Requisicion_EstadoRepositoryInterface $requisicion_estadoRepository,
+        Requisicion_ArticuloRepositoryInterface $requisicion_articuloRepository,
+        Requisicion_ArchivoRepositoryInterface $requisicion_archivoRepository,
+        ArbolaprobacionService $arbolaprobacionService,
+        PartidagastoRepositoryInterface $partidagastoRepository,
+        CapexRepositoryInterface $capexRepository,
+        CentrocostoRepositoryInterface $centrocostoRepository,
+        ArticuloQueryInterface $articuloQuery,
+        MonedaRepositoryInterface $monedaRepository
+    ) {
+        $this->proveedorQuery = $proveedorQuery;
+        $this->requisicionRepository = $requisicionRepository;
+        $this->requisicion_estadoRepository = $requisicion_estadoRepository;
+        $this->requisicion_articuloRepository = $requisicion_articuloRepository;
+        $this->requisicion_archivoRepository = $requisicion_archivoRepository;
+        $this->arbolaprobacionService = $arbolaprobacionService;
+        $this->partidagastoRepository = $partidagastoRepository;
+        $this->capexRepository = $capexRepository;
+        $this->centrocostoRepository = $centrocostoRepository;
+        $this->articuloQuery = $articuloQuery;
+        $this->monedaRepository = $monedaRepository;
+    }
 
-	public function __construct(ProveedorQueryInterface $proveedorQuery)
-	{
-		$this->proveedorQuery = $proveedorQuery;
-	}
+    public function guardaRequisicion($request)
+    {
+        $data = $request->all();
+        $pendiente = Requisicion_Estado::$enumEstado[array_search('P', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
 
-	public function leeRequisicionPorProveedor($busqueda, $proveedor_id)
-	{
-		$proveedor = $this->proveedorQuery->traeProveedorporId($proveedor_id);
+        $data['fechas'][] = Carbon::now()->format('Y-m-d');
+        $data['estados'][] = $pendiente;
+        $data['usuario_ids'][] = Auth::user()->id;
+        $data['observacionestados'][] = 'Alta de requisición';
 
-		if ($proveedor)
-		{
-			$apiAnita = new ApiAnita();
-			$leeAnita = array( 
-				'acc' => 'list', 
-				'sistema' => 'compras',
-				'tabla' => 'reqmae, promae, emprmae', 
-				'campos' => '
+        $data['creousuario_id'] = Auth::user()->id;
+        $data['estado'] = $pendiente;
+
+        try {
+            $data['oficinacompra_id'] = $this->validaYCalculaOficinaCompraIdDesdeArticulos($data);
+            $this->arbolaprobacionService->validaRequisicionRequestContraArbol($data);
+        } catch (\RuntimeException $e) {
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        } catch (\Exception $e) {
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        }
+
+        $cabecera = self::armaCabecera($data);
+
+        DB::beginTransaction();
+        try {
+            $requisicion = $this->requisicionRepository->create($cabecera);
+
+            $this->requisicion_estadoRepository->create($data, $requisicion->id);
+
+            $payloadArticulos = array_merge($data, ['fecha' => $cabecera['fecha']]);
+            $this->requisicion_articuloRepository->syncFromRequest($payloadArticulos, $requisicion->id);
+
+            $this->sincronizaMontoCabeceraDesdeArticulos($requisicion->id);
+
+            $this->requisicion_archivoRepository->create($request, $requisicion->id);
+
+            $this->arbolaprobacionService->procesaArbolaprobacion('RE', $requisicion->id, 'insert');
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollback();
+
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        }
+
+        return ['mensaje' => 'ok'];
+    }
+
+    /**
+     * En EN_COMPRAS solo puede intervenir un usuario cuya oficina de compra coincida con la de la requisición.
+     * Si la requisición no tiene oficinacompra_id, se asume la oficina 1 para la comparación.
+     */
+    public function usuarioPuedeEditarRequisicionEnCompras($requisicion): bool
+    {
+        if (! $requisicion) {
+            return false;
+        }
+        $nombreEnCompras = Requisicion_Estado::$enumEstado[array_search('K', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
+        if ($requisicion->estado !== $nombreEnCompras) {
+            return true;
+        }
+        $oficinaRequisicion = (int) ($requisicion->oficinacompra_id ?? 1);
+        $oficinaUsuario = Auth::user()->oficinacompra_id;
+        if ($oficinaUsuario === null) {
+            return false;
+        }
+
+        return (int) $oficinaUsuario === $oficinaRequisicion;
+    }
+
+    /**
+     * Reanuda el envío al siguiente nivel del árbol cuando la requisición quedó en EN_COMPRAS
+     * (el circuito se detuvo hasta esta acción explícita).
+     */
+    public function enviarArbolAprobacionDesdeEnCompras(int $id): array
+    {
+        $req = $this->requisicionRepository->find($id);
+        if (! $req) {
+            return ['mensaje' => 'error', 'errores' => 'Requisición no encontrada.'];
+        }
+        $nombreEnCompras = Requisicion_Estado::$enumEstado[array_search('K', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
+        if ($req->estado !== $nombreEnCompras) {
+            return ['mensaje' => 'error', 'errores' => 'Solo se puede enviar al árbol cuando la requisición está en estado EN_COMPRAS.'];
+        }
+        if (! $this->usuarioPuedeEditarRequisicionEnCompras($req)) {
+            return ['mensaje' => 'error', 'errores' => 'No puede actuar sobre esta requisición en compras: su oficina de compra no coincide con la de la requisición.'];
+        }
+
+        try {
+            $this->arbolaprobacionService->validaRequisicionModeloContraArbol($req);
+        } catch (\RuntimeException $e) {
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        }
+
+        DB::beginTransaction();
+        try {
+            $nombreEnArbol = Requisicion_Estado::$enumEstado[array_search('R', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
+            $this->requisicion_estadoRepository->creaEstado(
+                $id,
+                Carbon::now()->format('Y-m-d'),
+                $nombreEnArbol,
+                Auth::user()->id,
+                'Enviada al árbol de aprobación (desde EN_COMPRAS)'
+            );
+            $this->requisicionRepository->update(['estado' => $nombreEnArbol], $id);
+
+            $this->arbolaprobacionService->procesaArbolaprobacion('RE', $id, 'resume');
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollback();
+
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        }
+
+        return ['mensaje' => 'ok'];
+    }
+
+    public function actualizaRequisicion($request, $id)
+    {
+        $existente = $this->requisicionRepository->find($id);
+        if (! $existente) {
+            return ['mensaje' => 'error', 'errores' => 'Requisición no encontrada.'];
+        }
+        if (! $this->usuarioPuedeEditarRequisicionEnCompras($existente)) {
+            return ['mensaje' => 'error', 'errores' => 'No puede modificar esta requisición en compras: su oficina de compra no coincide con la de la requisición.'];
+        }
+
+        $data = $request->all();
+        $data['oficinacompra_id'] = $this->validaYCalculaOficinaCompraIdDesdeArticulos($data);
+
+        $pendiente = Requisicion_Estado::$enumEstado[array_search('P', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
+        if (($data['estado'] ?? '') == $pendiente) {
+            $data['requisicion_id'] = $id;
+            try {
+                $this->arbolaprobacionService->validaRequisicionRequestContraArbol($data);
+            } catch (\RuntimeException $e) {
+                return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+            }
+        }
+
+        DB::beginTransaction();
+        try {
+            $cabecera = self::armaCabecera($data);
+            $cabecera['estado'] = $data['estado'] ?? null;
+            unset($cabecera['creousuario_id']);
+
+            $this->requisicionRepository->update($cabecera, $id);
+
+            $payloadArticulos = array_merge($data, ['fecha' => $cabecera['fecha']]);
+            $this->requisicion_articuloRepository->syncFromRequest($payloadArticulos, $id);
+
+            $this->sincronizaMontoCabeceraDesdeArticulos($id);
+
+            $this->requisicion_archivoRepository->update($request, $id);
+
+            if (($data['estado'] ?? '') == $pendiente) {
+                $this->arbolaprobacionService->procesaArbolaprobacion('RE', $id, 'insert');
+            }
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollback();
+
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        }
+
+        return ['mensaje' => 'ok'];
+    }
+
+    public function actualizaSoloRequisicion($estado, $id)
+    {
+        DB::beginTransaction();
+        try {
+            if (isset($estado['estadorequisicion'])) {
+                $nombreEstado = $estado['estadorequisicion'];
+                $this->requisicionRepository->update(['estado' => $nombreEstado], $id);
+
+                $this->requisicion_estadoRepository->creaEstado(
+                    $id,
+                    Carbon::now()->format('Y-m-d'),
+                    $nombreEstado,
+                    Auth::user()->id,
+                    $estado['observacion'] ?? 'Cambio de estado'
+                );
+            }
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollback();
+
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        }
+
+        return ['mensaje' => 'ok'];
+    }
+
+    public function leeHistoriaRequisicion($requisicion_id)
+    {
+        return $this->requisicion_estadoRepository->leeHistoriaRequisicion($requisicion_id);
+    }
+
+    /**
+     * El árbol de aprobación usa cabecera.monto / moneda_id; el formulario no envía monto explícito.
+     */
+    private function sincronizaMontoCabeceraDesdeArticulos(int $requisicion_id): void
+    {
+        $req = $this->requisicionRepository->find($requisicion_id);
+        $monto = 0.0;
+        $moneda_id = $req->moneda_id;
+        foreach ($req->requisicion_articulos as $linea) {
+            $monto += (float) $linea->cantidad * (float) $linea->precio;
+            if (empty($moneda_id) && ! empty($linea->moneda_id)) {
+                $moneda_id = $linea->moneda_id;
+            }
+        }
+        $update = ['monto' => $monto];
+        if (! empty($moneda_id)) {
+            $update['moneda_id'] = $moneda_id;
+        }
+        $this->requisicionRepository->update($update, $requisicion_id);
+    }
+
+    private static function armaCabecera(array $data)
+    {
+        return [
+            'fecha' => $data['fecha'] ?? null,
+            'fechaentrega' => $data['fechaentrega'] ?? null,
+            'empresa_id' => $data['empresa_id'] ?? null,
+            'centrocosto_id' => $data['centrocosto_id'] ?? null,
+            'oficinacompra_id' => $data['oficinacompra_id'] ?? null,
+            'comentario' => $data['comentario'] ?? '',
+            'detalle' => $data['detalle'] ?? '',
+            'tratamiento' => $data['tratamiento'] ?? '',
+            'motivotratamiento' => $data['motivotratamiento'] ?? '',
+            'contrataciondirecta' => $data['contrataciondirecta'] ?? '',
+            'proveedor_id' => !empty($data['proveedor_id']) ? $data['proveedor_id'] : null,
+            'nroinscripcion' => $data['nroinscripcion'] ?? null,
+            'formapago_id' => !empty($data['formapago_id']) ? $data['formapago_id'] : null,
+            'estado' => $data['estado'] ?? null,
+            'monto' => $data['monto'] ?? 0,
+            'moneda_id' => $data['moneda_id'] ?? null,
+            'ordencompra_id' => !empty($data['ordencompra_id']) ? $data['ordencompra_id'] : null,
+            'creousuario_id' => $data['creousuario_id'] ?? Auth::user()->id,
+        ];
+    }
+
+    /**
+     * Setea la oficina de compra según el primer artículo y valida que todos los artículos
+     * pertenezcan a la misma oficina de compra.
+     */
+    private function validaYCalculaOficinaCompraIdDesdeArticulos(array $data): ?int
+    {
+        $ids = $data['articulo_ids'] ?? null;
+        if (!is_array($ids)) {
+            return null;
+        }
+
+        $ids = array_values(array_filter($ids, fn ($v) => $v !== null && $v !== ''));
+        if (count($ids) === 0) {
+            return null;
+        }
+
+        $oficinas = Articulo::query()
+            ->whereIn('id', $ids)
+            ->pluck('oficinacompra_id', 'id')
+            ->toArray();
+
+        $primeroId = (int) $ids[0];
+        $oficinaBase = $oficinas[$primeroId] ?? null;
+        if (empty($oficinaBase)) {
+            throw new \Exception('El primer artículo no tiene oficina de compra definida.');
+        }
+
+        foreach ($ids as $articuloId) {
+            $articuloId = (int) $articuloId;
+            $oficina = $oficinas[$articuloId] ?? null;
+            if (empty($oficina)) {
+                throw new \Exception('Hay artículos sin oficina de compra definida.');
+            }
+            if ((int) $oficina !== (int) $oficinaBase) {
+                throw new \Exception('No se permiten artículos de diferentes oficinas de compra en una requisición.');
+            }
+        }
+
+        return (int) $oficinaBase;
+    }
+
+    /**
+     * Listado histórico desde sistema Anita (proveedor).
+     */
+    public function leeRequisicionPorProveedor($busqueda, $proveedor_id)
+    {
+        $proveedor = $this->proveedorQuery->traeProveedorporId($proveedor_id);
+
+        if ($proveedor) {
+            $apiAnita = new ApiAnita();
+            $leeAnita = [
+                'acc' => 'list',
+                'sistema' => 'compras',
+                'tabla' => 'reqmae, promae, emprmae',
+                'campos' => '
 					reqm_nro as id,
 					reqm_fecha as fecha,
 					reqm_ccosto as ccorigen,
@@ -39,23 +375,22 @@ class RequisicionService
 					reqm_cod_mon as codigomoneda,
 					reqm_estado as estado
 				',
-				'whereArmado' => " WHERE
-					reqm_proveedor='".str_pad($proveedor->codigo, 6, "0", STR_PAD_LEFT)."' and
+                'whereArmado' => " WHERE
+					reqm_proveedor='".str_pad($proveedor->codigo, 6, '0', STR_PAD_LEFT)."' and
 					reqm_proveedor=prom_proveedor and
-					reqm_empresa=empm_empresa"
-			);
-			$dataAnita = json_decode($apiAnita->apiCall($leeAnita));
+					reqm_empresa=empm_empresa",
+            ];
+            $dataAnita = json_decode($apiAnita->apiCall($leeAnita));
 
-			if ($dataAnita)
-			{
-				$requisicion = $dataAnita;
+            if ($dataAnita) {
+                $requisicion = $dataAnita;
 
-				$apiAnita = new ApiAnita();
-				$leeAnita = array( 
-					'acc' => 'list', 
-					'sistema' => 'compras',
-					'tabla' => 'reqmov,stkmae', 
-					'campos' => '
+                $apiAnita = new ApiAnita();
+                $leeAnita = [
+                    'acc' => 'list',
+                    'sistema' => 'compras',
+                    'tabla' => 'reqmov,stkmae',
+                    'campos' => '
 						reqv_nro as id,
 						reqv_articulo as sku,
 						reqv_cantidad as cantidad,
@@ -64,20 +399,324 @@ class RequisicionService
 						stkm_agrupacion as codigoagrupacion,
 						stkm_desc as descarticulo
 					',
-					'whereArmado' => " WHERE
-						reqv_proveedor='".str_pad($proveedor->codigo, 6, "0", STR_PAD_LEFT)."' and
-						reqv_articulo=stkm_articulo"
-				);
-				$dataAnita = json_decode($apiAnita->apiCall($leeAnita));
+                    'whereArmado' => " WHERE
+						reqv_proveedor='".str_pad($proveedor->codigo, 6, '0', STR_PAD_LEFT)."' and
+						reqv_articulo=stkm_articulo",
+                ];
+                $dataAnita = json_decode($apiAnita->apiCall($leeAnita));
 
-				$itemRequisicion = $dataAnita;
+                $itemRequisicion = $dataAnita;
 
-				return ['requisicion' => $requisicion, 'item' => $itemRequisicion];
+                return ['requisicion' => $requisicion, 'item' => $itemRequisicion];
+            }
+        }
+
+        return ['Error' => 'Sin informacion'];
+    }
+
+    public function sincronizarConAnita(){
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $apiAnita = new ApiAnita();
+        $data = array( 'acc' => 'list', 
+						'campos' => 'reqm_nro',
+						'tabla' => 'reqmae',
+						'sistema' => 'compras',
+                    'whereArmado' => " WHERE reqm_fecha >= 20250100" );
+        $dataAnita = json_decode($apiAnita->apiCall($data));
+
+        $off = 0;
+		foreach ($dataAnita as $value) 
+        {   $off++;
+            if ($off > 14700)
+                $this->traerRegistroDeAnita($value->reqm_nro);
+        }
+    }
+
+    public function traerRegistroDeAnita($key){
+
+        $apiAnita = new ApiAnita();
+        $data = array( 
+            'acc' => 'list', 
+			'tabla' => 'reqmae, outer usuario', 
+			'sistema' => 'compras',
+            'campos' => '
+                    reqm_nro,
+                    reqm_fecha,
+                    reqm_fecha_ent,
+                    reqm_deposito,
+                    reqm_emp_sueldos,
+                    reqm_legajo,
+                    reqm_ccosto,
+                    reqm_fecha_ing,
+                    reqm_hora_ing,
+                    reqm_usuario,
+                    reqm_estado,
+                    reqm_leyenda ,
+                    reqm_deposito_alfa ,
+                    reqm_empresa,
+                    reqm_proveedor,
+                    reqm_cod_mon,
+                    reqm_ccosto_dest,
+                    reqm_fecha_alfa,
+                    reqm_cond_pago,
+                    reqm_es_urgente,
+                    reqm_mot_urgencia,
+                    reqm_cont_directa,
+                    usu_nombre as nombreusuario',
+            'whereArmado' => " WHERE reqm_nro='".$key."' AND reqm_usuario=usu_usuario"
+        );
+        $dataAnita = json_decode($apiAnita->apiCall($data));
+
+		$usuario_id = Auth::user()->id;
+
+        if (count($dataAnita) > 0) {
+            $dataRequisicion = $dataAnita[0];
+
+            // Lee el proveedor
+            $proveedor = $this->proveedorQuery->traeProveedorporCodigo(ltrim($dataRequisicion->reqm_proveedor,'0'));
+
+            $proveedor_id = null;
+            if ($proveedor)
+                $proveedor_id = $proveedor->id;
+
+            // Lee el centro de costo
+			$centrocosto = $this->centrocostoRepository->findPorCodigo($dataRequisicion->reqm_ccosto);
+			
+			if ($centrocosto)
+				$centrocosto_id = $centrocosto->id;	
+			else
+				$centrocosto_id = null;
+
+            $moneda = $this->monedaRepository->findPorCodigo($dataRequisicion->reqm_cod_mon);
+            if ($moneda)
+                $moneda_id = $moneda->id;
+            else
+                $moneda_id = null;
+
+            // Asume forma de pago TRANSFERENCIA
+            $formapago_id = 2;
+
+            switch($dataRequisicion->reqm_estado)
+            {
+                case '0':
+                    $estado = 'PENDIENTE';
+                    break;
+                case '1':
+                    $estado = 'GENERO_ORDEN_COMPRA';
+                    break;
+                case '2':
+                    $estado = 'PARCIAL';
+                    break;
+                case '3':
+                    $estado = 'CUMPLIDA';
+                    break;
+                case '4':
+                    $estado = 'SUSPENDIDA';
+                    break;
+                case '5':
+                    $estado = 'EN_COMPRAS';
+                    break;
+                case '6':
+                    $estado = 'A_AUTORIZAR';
+                    break;
+                case 'T':
+                    $estado = 'TRANSFERIDA';
+                    break;
+                case 'E':
+                    $estado = 'AUT_ESPECIAL';
+                    break;
+                case 'A':
+                    $estado = 'EN_ARBOL_APROBACION';
+                    break;
+                default:
+                    $estado = 'PENDIENTE';
+                    break;
+            }
+            // Suponiendo que $request->fecha_string es "20260501"
+            $fechaObjeto = Carbon::createFromFormat('Ymd', $dataRequisicion->reqm_fecha);
+            $fecha = $fechaObjeto->toDateString(); // "2026-05-01"
+            $fechaEntrega = Carbon::createFromFormat('Ymd', $dataRequisicion->reqm_fecha_ent);
+            $fechaEntrega = $fechaEntrega->toDateString(); // "2026-05-01"
+
+            $arrayCampos = [
+				'empresa_id' => $dataRequisicion->reqm_empresa, 
+				'centrocosto_id' => $centrocosto_id, 
+                'fecha' => $fecha, 
+                'fechaentrega' => $fechaEntrega, 
+                'numerorequisicion' => $dataRequisicion->reqm_nro, 
+                'detalle' => $dataRequisicion->reqm_leyenda, 
+                'comentario' => 'Creo Usuario: '.$dataRequisicion->nombreusuario,
+                'tratamiento' => $dataRequisicion->reqm_es_urgente == 'S' ? 'Urgente' : 'Normal', 
+                'motivotratamiento' => $dataRequisicion->reqm_mot_urgencia, 
+                'contrataciondirecta' => $dataRequisicion->reqm_cont_directa == 'S' ? 'Si' : 'No', 
+                'proveedor_id' => $proveedor_id, 
+                'formapago_id' => $formapago_id, 
+                'estado' => $estado, 
+                'creousuario_id' => $usuario_id,
+                'oficinacompra_id' => null,
+			];
+
+			$requisicion = $this->requisicionRepository->createDesdeAnita($arrayCampos);
+
+			// Arma movimientos
+			$apiAnita = new ApiAnita();
+			$data = array( 
+				'acc' => 'list', 
+				'tabla' => 'reqmov', 
+				'sistema' => 'compras',
+				'campos' => '
+                        reqv_nro,             
+                        reqv_nro_orden,       
+                        reqv_articulo,        
+                        reqv_desc,           
+                        reqv_marca,           
+                        reqv_linea,           
+                        reqv_agrupacion,      
+                        reqv_unidad_medida,   
+                        reqv_cantidad,        
+                        reqv_cantentr,        
+                        reqv_precio,          
+                        reqv_deposito,        
+                        reqv_tipo_iva,        
+                        reqv_fecha,          
+                        reqv_fecha_ent,       
+                        reqv_emp_sueldos,    
+                        reqv_legajo,          
+                        reqv_usuario,         
+                        reqv_ccosto,          
+                        reqv_cod_umd_comp,      
+                        reqv_cant_unid,            
+                        reqv_cod_umd_stock,       
+                        reqv_unidad_xenv,     
+                        reqv_genero_oc,       
+                        reqv_empresa,         
+                        reqv_proveedor,       
+                        reqv_cantidad_oc,     
+                        reqv_nro_interno,    
+                        reqv_precio_ori,     
+                        reqv_motivo_ahorro', 
+				'whereArmado' => " WHERE reqv_nro='".$key."' "
+			);
+			$dataAnita = json_decode($apiAnita->apiCall($data));
+
+            // Lee reqmref
+            $apiAnita = new ApiAnita();
+            $data = array( 
+                'acc' => 'list', 
+                'tabla' => 'reqmref', 
+                'sistema' => 'compras',
+                'campos' => ' 
+                    reqr_nro_requi,
+                    reqr_fecha,
+                    reqr_partida,
+                    reqr_presupuesto,
+                    reqr_escenario,
+                    reqr_proyecto,
+                    reqr_mes,
+                    reqr_cod_proyecto,
+                    reqr_empresa,
+                    reqr_usuario_autor,
+                    reqr_fecha_ing,
+                    reqr_hora_ing,
+                    reqr_usuario_carga,
+                    reqr_leyenda,
+                    reqr_concepto,
+                    reqr_cta_contable,
+                    reqr_ccosto,
+                    reqr_importe',
+                'whereArmado' => " WHERE reqr_nro_requi='".$key."' "
+            );
+            $dataAnitaReqmref = json_decode($apiAnita->apiCall($data));
+
+            if (isset($dataAnitaReqmref[0]))
+                $dataReqmref = $dataAnitaReqmref[0];
+            else
+                $dataReqmref = null;
+
+			if ($dataAnita && count($dataAnita) > 0)    
+            {
+                foreach ($dataAnita as $data)
+                {
+                    $fechaObjeto = Carbon::createFromFormat('Ymd', $data->reqv_fecha_ent);
+                    $fecha = $fechaObjeto->toDateString(); // "2026-05-01"
+
+                    $articulo = $this->articuloQuery->traeArticuloPorSku(ltrim($data->reqv_articulo,'0'));
+                    if ($articulo)
+                        $articulo_id = $articulo->id;
+                    else
+                        $articulo_id = null;
+
+                    $centrocostodestino = $this->centrocostoRepository->findPorCodigo($data->reqv_ccosto);
+                    if ($centrocostodestino)
+                        $centrocostodestino_id = $centrocostodestino->id;
+                    else
+                        $centrocostodestino_id = null;
+
+                    $partidagasto_id = null;
+                    $capex_id = null;
+                    if ($dataReqmref)
+                    {
+                        $partidagasto = $this->partidagastoRepository->findPorCodigo($dataReqmref->reqr_partida);
+                        if ($partidagasto)
+                            $partidagasto_id = $partidagasto->id;
+
+                        $capex = $this->capexRepository->findPorCodigo($dataReqmref->reqr_proyecto);
+                        if ($capex)
+                            $capex_id = $capex->id;
+                    }
+
+                    $arrayCampos = [
+                        'requisicion_id' => $requisicion->id,
+                        'fechaentrega' => $fecha,
+                        'articulo_id' => $articulo_id,
+                        'cantidad' => $data->reqv_cantidad,
+                        'precio' => $data->reqv_precio,
+                        'moneda_id' => $moneda_id,
+                        'cantidadalternativa' => $data->reqv_cant_unid,
+                        'detalle' => $data->reqv_desc,
+                        'centrocostodestino_id' => $centrocostodestino_id,
+                        'preciooriginal' => $data->reqv_precio_ori ?? 0,
+                        'motivoahorro' => $data->reqv_motivo_ahorro ?? '',
+                        'partidagasto_id' => $partidagasto_id,
+                        'capex_id' => $capex_id,
+                        ];
+
+                    $requisicion_articulo = $this->requisicion_articuloRepository->createUnique($arrayCampos);
+                }
 			}
+            // Lee los archivos asociados
+            $apiAnita = new ApiAnita();
+            $data = array( 
+                'acc' => 'list', 
+                'tabla' => 'reqarch', 
+                'sistema' => 'compras',
+                'campos' => 'reqa_nro_req, reqa_nro_linea, reqa_archivo, reqa_usuario, reqa_fecha_act, reqa_hora_act',  
+                'whereArmado' => " WHERE reqa_nro_req='".$key."' "
+            );
+            $dataAnita = json_decode($apiAnita->apiCall($data));
+
+            foreach ($dataAnita as $dataArchivo)
+            {
+                $data = [
+                        'requisicion_id' => $requisicion->id,
+                        'nombrearchivo' => $dataArchivo->reqa_archivo,
+                    ];
+
+                $requisicion_archivo = $this->requisicion_archivoRepository->createDesdeAnita($data);
+            }
+
+			// Crea estado
+			$data = [];
+			$data['fechas'][] = Carbon::now();
+			$data['estados'][] = $estado;
+			$data['usuario_ids'][] = Auth::user()->id;
+			$data['observacionestados'][] = 'Alta de requisición desde Anita';
+
+			$data['creousuario_id'] = Auth::user()->id;
+
+			$requisicion_estado = $this->requisicion_estadoRepository->create($data, $requisicion->id);
 		}
-
-		return ['Error' => 'Sin informacion'];
 	}
-
 }
-

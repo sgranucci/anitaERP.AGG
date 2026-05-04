@@ -26,7 +26,7 @@
               <th>Descripción</th>
               <th>UMD</th>
               <th>Categoría</th>
-              <th>Acci&oacute;n</th>
+              <th></th>
           </thead>
           <tbody id="datos"></tbody>
         </table>
