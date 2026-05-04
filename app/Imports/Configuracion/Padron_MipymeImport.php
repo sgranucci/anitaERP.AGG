@@ -31,7 +31,10 @@ class Padron_MipymeImport implements ToModel
         $this->clienteRepository = App::make(\App\Repositories\Ventas\ClienteRepositoryInterface::class);
 
         $columnas = explode(';', $row[0]);
-        
+  
+        if (count($columnas) <= 1)
+            $columnas = $row;
+
         // Si el documento es un numero importa
         if (substr($columnas[0],1,1) >= '0' and substr($columnas[0],1,1) <= '9')
         {
