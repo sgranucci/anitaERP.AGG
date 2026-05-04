@@ -4,324 +4,362 @@ namespace App\Http\Controllers\Compras;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionRequisicion;
-use App\Repositories\Compras\RequisicionRepositoryInterface;
-use App\Repositories\Configuracion\EmpresaRepositoryInterface;
-use App\Repositories\Configuracion\PaisRepositoryInterface;
-use App\Repositories\Configuracion\LocalidadRepositoryInterface;
-use App\Repositories\Configuracion\ProvinciaRepositoryInterface;
-use App\Repositories\Configuracion\MonedaRepositoryInterface;
-use App\Repositories\Configuracion\Arbolaprobacion_MovimientoRepositoryInterface;
-use App\Repositories\Configuracion\Actividad_ArcaRepositoryInterface;
-use App\Repositories\Contable\CentrocostoRepositoryInterface;
-use App\Repositories\Ventas\FormapagoRepositoryInterface;
-use App\Repositories\Ventas\PuntoventaRepositoryInterface;
-use App\Repositories\Ventas\TipotransaccionRepositoryInterface;
-use App\Repositories\Ventas\IncotermRepositoryInterface;
-use App\Services\Compras\RequisicionService;
 use App\Models\Compras\Requisicion_Estado;
 use App\Models\Compras\Requisicion;
+use App\Models\Configuracion\Oficinacompra;
+use App\Repositories\Compras\RequisicionRepositoryInterface;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Repositories\Configuracion\MonedaRepositoryInterface;
+use App\Repositories\Configuracion\Arbolaprobacion_MovimientoRepositoryInterface;
+use App\Repositories\Contable\CentrocostoRepositoryInterface;
+use App\Repositories\Ventas\FormapagoRepositoryInterface;
+use App\Models\Compras\Proveedor;
+use App\Services\Compras\RequisicionService;
+use App\Services\Configuracion\ArbolaprobacionService;
+use App\Queries\Compras\RequisicionQueryInterface;
 use App\Exports\Compras\RequisicionExport;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Hash;
-use Carbon\Carbon;
-use DB;
-use Exception;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class RequisicionController extends Controller
 {
     private $empresaRepository;
     private $centrocostoRepository;
-    private $ordenventaRepository;
-    private $concepto_ordenventaRepository;
-    private $localidadRepository;
-    private $provinciaRepository;
-    private $paisRepository;
     private $monedaRepository;
     private $formapagoRepository;
-    private $ordenventaQuery;
-    private $ordenventaService;
+    private $requisicionRepository;
+    private $requisicionQuery;
+    private $requisicionService;
     private $arbolaprobacion_movimientoRepository;
-    private $puntoventaRepository;
-	private $tipotransaccionRepository;
-	private $incotermRepository;
-    private $actividad_arcaRepository;
+    private $arbolaprobacionService;
 
-	public function __construct(RequisicionRepositoryInterface $ordenventarepository,
-                                EmpresaRepositoryInterface $empresarepository,
-                                CentrocostoRepositoryInterface $centrocostorepository,
-                                LocalidadRepositoryInterface $localidadrepository,
-                                ProvinciaRepositoryInterface $provinciarepository,
-                                PaisRepositoryInterface $paisrepository,
-                                FormapagoRepositoryInterface $formapagorepository,
-                                MonedaRepositoryInterface $monedarepository,
-                                RequisicionService $ordenventaservice,
-                                PuntoventaRepositoryInterface $puntoventarepository,
-							    TipotransaccionRepositoryInterface $tipotransaccionrepository,
-								IncotermRepositoryInterface $incotermrepository,
-                                Arbolaprobacion_MovimientoRepositoryInterface $arbolaprobacion_movimientorepository,
-                                Actividad_ArcaRepositoryInterface $actividad_arcarepository
-                                )
-    {
-        $this->ordenventaRepository = $ordenventarepository;
+    public function __construct(
+        RequisicionRepositoryInterface $requisicionrepository,
+        EmpresaRepositoryInterface $empresarepository,
+        CentrocostoRepositoryInterface $centrocostorepository,
+        MonedaRepositoryInterface $monedarepository,
+        FormapagoRepositoryInterface $formapagorepository,
+        RequisicionService $requisicionservice,
+        RequisicionQueryInterface $requisicionquery,
+        Arbolaprobacion_MovimientoRepositoryInterface $arbolaprobacion_movimientorepository,
+        ArbolaprobacionService $arbolaprobacionservice,
+    ) {
+        $this->requisicionRepository = $requisicionrepository;
         $this->empresaRepository = $empresarepository;
         $this->centrocostoRepository = $centrocostorepository;
-        $this->localidadRepository = $localidadrepository;
-        $this->provinciaRepository = $provinciarepository;
-        $this->paisRepository = $paisrepository;
-        $this->formapagoRepository = $formapagorepository;
         $this->monedaRepository = $monedarepository;
-        $this->ordenventaService = $ordenventaservice;
-		$this->puntoventaRepository = $puntoventarepository;
-		$this->tipotransaccionRepository = $tipotransaccionrepository;
-		$this->incotermRepository = $incotermrepository;        
+        $this->formapagoRepository = $formapagorepository;
+        $this->requisicionService = $requisicionservice;
+        $this->requisicionQuery = $requisicionquery;
         $this->arbolaprobacion_movimientoRepository = $arbolaprobacion_movimientorepository;
-        $this->actividad_arcaRepository = $actividad_arcarepository;
+        $this->arbolaprobacionService = $arbolaprobacionservice;
     }
 
-    /**
-     * Display a listing of the resource.
-     *
-     * @return \Illuminate\Http\Response
-     */
     public function index(Request $request)
     {
-        can('listar-orden-de-venta');
-		
+        can('listar-requisicion');
+        //$this->requisicionService->sincronizarConAnita();
+        $hay_requisiciones = $this->requisicionQuery->first();
+
+        if (!$hay_requisiciones)
+			$this->requisicionService->sincronizarConAnita();
+
         $busqueda = $request->busqueda;
 
-        $ordenventa = $this->ordenventaQuery->leeRequisicion($busqueda, true);
-        $estado_enum = Requisicion_Estado::$enumEstado;
-        $tratamiento_enum = Requisicion::$enumTratamiento;
-        $datas = ['ordenventa' => $ordenventa, 'busqueda' => $busqueda, 
-                    'estado_enum' => $estado_enum, 'tratamiento_enum' => $tratamiento_enum];
+        $requisicion = $this->requisicionQuery->leeRequisicion($busqueda, true);
 
-        return view('ordenventa.ordenventa.index', $datas);
+        $datas = [
+            'requisicion' => $requisicion,
+            'busqueda' => $busqueda,
+            'estado_enum' => Requisicion_Estado::$enumEstado,
+            'estado_en_compras' => Requisicion_Estado::$enumEstado[array_search('K', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'],
+            'tratamiento_enum' => Requisicion::$enumTratamiento,
+            'contratacionDirecta_enum' => Requisicion::$enumContratacionDirecta
+        ];
+
+        return view('compras.requisicion.index', $datas);
     }
 
     public function listar(Request $request, $formato = null, $busqueda = null)
     {
-        can('listar-orden-de-venta'); 
+        can('listar-requisicion');
 
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        switch($formato)
-        {
-        case 'PDF':
-            $ordenventa = $this->ordenventaQuery->leeRequisicion($busqueda, false);
+        switch ($formato) {
+            case 'PDF':
+                $requisicion = $this->requisicionQuery->leeRequisicion($busqueda, false);
 
-            $view =  \View::make('ordenventa.ordenventa.listado', compact('ordenventa'))
-                        ->render();
-            $path = storage_path('pdf/listados');
-            $nombre_pdf = 'listado_ordenventa';
+                $view = \View::make('compras.requisicion.listado', compact('requisicion'))
+                    ->render();
+                $path = storage_path('pdf/listados');
+                $nombre_pdf = 'listado_requisicion';
 
-            $pdf = \App::make('dompdf.wrapper');
-            $pdf->setPaper('legal','landscape');
-            $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
+                $pdf = \App::make('dompdf.wrapper');
+                $pdf->setPaper('legal', 'landscape');
+                $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
 
-            return response()->download($path.'/'.$nombre_pdf.'.pdf');
-            break;
+                return response()->download($path.'/'.$nombre_pdf.'.pdf');
 
-        case 'EXCEL':
-            return (new RequisicionExport($this->ordenventaQuery))
-                        ->parametros($busqueda)
-                        ->download('ordenventa.xlsx');
-            break;
+            case 'EXCEL':
+                return (new RequisicionExport($this->requisicionQuery))
+                    ->parametros($busqueda)
+                    ->download('requisicion.xlsx');
 
-        case 'CSV':
-            return (new RequisicionExport($this->ordenventaQuery))
-                        ->parametros($busqueda)
-                        ->download('ordenventa.csv', \Maatwebsite\Excel\Excel::CSV);
-            break;            
-        }   
+            case 'CSV':
+                return (new RequisicionExport($this->requisicionQuery))
+                    ->parametros($busqueda)
+                    ->download('requisicion.csv', \Maatwebsite\Excel\Excel::CSV);
+        }
 
-        $datas = ['ordenventa' => $ordenventa, 'busqueda' => $busqueda];
+        $requisicion = $this->requisicionQuery->leeRequisicion($busqueda, true);
+        $datas = [
+            'requisicion' => $requisicion,
+            'busqueda' => $busqueda,
+            'estado_enum' => Requisicion_Estado::$enumEstado,
+            'estado_en_compras' => Requisicion_Estado::$enumEstado[array_search('K', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'],
+            'tratamiento_enum' => Requisicion::$enumTratamiento,
+            'contratacionDirecta_enum' => Requisicion::$enumContratacionDirecta
+        ];
 
-		return view('ordenventa.ordenventa.index', $datas);       
+        return view('compras.requisicion.index', $datas);
     }
 
-    /**
-     * Show the form for creating a new resource.
-     *
-     * @return \Illuminate\Http\Response
-     */
     public function crear()
     {
-        can('ingresar-orden-de-venta');
+        can('crear-requisicion');
 
         $empresa_query = $this->empresaRepository->allFiltrado();
         $centrocosto_query = $this->centrocostoRepository->all();
-        $pais_query = $this->paisRepository->all();
-        $localidad_query = $this->localidadRepository->all();
-        $provincia_query = $this->provinciaRepository->all();
         $formapago_query = $this->formapagoRepository->all();
         $moneda_query = $this->monedaRepository->all();
+        $oficinacompra_query = Oficinacompra::orderBy('nombre')->get();
+        $proveedor_query = Proveedor::orderBy('nombre')->get();
         $estado_enum = Requisicion_Estado::$enumEstado;
         $tratamiento_enum = Requisicion::$enumTratamiento;
-        $incoterm_query = $this->incotermRepository->all();
-        $tipotransaccion_query = $this->tipotransaccionRepository->all(['V','C'], ['A']);
-        $puntoventa_query = $this->puntoventaRepository->all('A');
-        $puntoventa_facturacion = config('ordenventa.PUNTOSDEVENTA_FACTURACION');
-        $actividad_arca_query = $this->actividad_arcaRepository->all();
-        $concepto_ordenventa_query = $this->concepto_ordenventaRepository->all();
+        $contratacionDirecta_enum = Requisicion::$enumContratacionDirecta;
+        $data = null;
 
-        return view('ordenventa.ordenventa.crear', compact('empresa_query', 'centrocosto_query', 'concepto_ordenventa_query',
-                                                            'pais_query', 'provincia_query', 'localidad_query', 'formapago_query',
-                                                            'moneda_query', 'estado_enum', 'tratamiento_enum', 
-                                                            'tipotransaccion_query', 'puntoventa_query', 'incoterm_query',
-                                                            'puntoventa_facturacion', 'actividad_arca_query'));
+        return view('compras.requisicion.crear', compact(
+            'data',
+            'empresa_query',
+            'centrocosto_query',
+            'formapago_query',
+            'moneda_query',
+            'oficinacompra_query',
+            'proveedor_query',
+            'estado_enum',
+            'tratamiento_enum',
+            'contratacionDirecta_enum'
+        ));
     }
 
-    /**
-     * Store a newly created resource in storage.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
-     */
     public function guardar(ValidacionRequisicion $request)
     {
-        $ordenventa = $this->ordenventaService->guardaRequisicion($request);
+        $ret = $this->requisicionService->guardaRequisicion($request);
 
-        if ($ordenventa['mensaje'] == 'ok')
-            $mensaje = 'Orden de venta creada con éxito';
-        else
-            $mensaje = $ordenventa['errores'];
+        if ($ret['mensaje'] == 'ok') {
+            $mensaje = 'Requisición creada con éxito';
+        } else {
+            $mensaje = $ret['errores'];
+        }
 
-        return redirect('ordenventa/ordenventa')->with('mensaje', $mensaje);
-	}
+        return redirect('compras/requisicion')->with('mensaje', $mensaje);
+    }
 
-    /**
-     * Show the form for editing the specified resource.
-     *
-     * @param  int  $id
-     * @return \Illuminate\Http\Response
-     */
+    public function imprimirPdf($id)
+    {
+        if (! can('listar-requisicion', false) && ! can('editar-requisicion', false)) {
+            return redirect()->route('inicio')->with('mensaje', 'No tienes permisos para imprimir la requisición');
+        }
+
+        $data = $this->requisicionRepository->find($id);
+        $data->loadMissing([
+            'requisicion_estados.usuarios',
+            'requisicion_articulos.centrocostos_destino',
+        ]);
+
+        $arbolMovimientos = $this->arbolaprobacion_movimientoRepository->findPorRequisicion((int) $id);
+
+        $html = view('compras.requisicion.pdf', compact('data', 'arbolMovimientos'))->render();
+
+        $pdf = \App::make('dompdf.wrapper');
+        $pdf->setPaper('legal', 'landscape');
+        $pdf->loadHTML($html);
+
+        $nombreArchivo = 'Requisicion_'.preg_replace('/[^\w\-]+/', '_', (string) $data->numerorequisicion).'.pdf';
+
+        return $pdf->download($nombreArchivo);
+    }
+
     public function editar($id)
     {
-        can('editar-orden-de-venta');
+        can('editar-requisicion');
 
-		$data = $this->ordenventaRepository->find($id);
+        $data = $this->requisicionRepository->find($id);
+        if (! $this->requisicionService->usuarioPuedeEditarRequisicionEnCompras($data)) {
+            return redirect()->route('solo_consulta_requisicion', $id)
+                ->with('mensaje', 'No puede modificar esta requisición en compras: su oficina de compra no coincide con la de la requisición.');
+        }
+
+        // No puede modificar una requisicion que no este como pendiente
+        if ($data->estado !== 'PENDIENTE' && $data->estado !== 'EN_COMPRAS') {
+            return redirect()->route('solo_consulta_requisicion', $id)
+                ->with('mensaje', 'No puede modificar esta requisición por no estar pendiente o en compras.');
+        }
+
         $empresa_query = $this->empresaRepository->allFiltrado();
         $centrocosto_query = $this->centrocostoRepository->all();
-        $pais_query = $this->paisRepository->all();
-        $moneda_query = $this->monedaRepository->all();
-        $localidad_query = $this->localidadRepository->all();
-        $provincia_query = $this->provinciaRepository->all();
         $formapago_query = $this->formapagoRepository->all();
+        $moneda_query = $this->monedaRepository->all();
+        $oficinacompra_query = Oficinacompra::orderBy('nombre')->get();
+        $proveedor_query = Proveedor::orderBy('nombre')->get();
         $estado_enum = Requisicion_Estado::$enumEstado;
+        $estado_en_compras = Requisicion_Estado::$enumEstado[array_search('K', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
         $tratamiento_enum = Requisicion::$enumTratamiento;
-		$incoterm_query = $this->incotermRepository->all();
-        $tipotransaccion_query = $this->tipotransaccionRepository->all(['V','C'], ['A']);
-        $puntoventa_query = $this->puntoventaRepository->all('A');
-        $puntoventa_facturacion = config('ordenventa.PUNTOSDEVENTA_FACTURACION');
-        $actividad_arca_query = $this->actividad_arcaRepository->all();
-        $concepto_ordenventa_query = $this->concepto_ordenventaRepository->all();
-//dd($data);
-        return view('ordenventa.ordenventa.editar', compact('data', 'empresa_query', 'centrocosto_query', 'concepto_ordenventa_query',
-                                                            'pais_query', 'provincia_query', 'localidad_query', 'formapago_query',
-                                                            'moneda_query','estado_enum', 'tratamiento_enum',
-                                                            'incoterm_query', 'tipotransaccion_query', 'puntoventa_query',
-                                                            'puntoventa_facturacion', 'actividad_arca_query'));
+        $contratacionDirecta_enum = Requisicion::$enumContratacionDirecta;
+
+        $acceso_visualizacion_por_hash = false;
+
+        return view('compras.requisicion.editar', compact(
+            'data',
+            'empresa_query',
+            'centrocosto_query',
+            'formapago_query',
+            'moneda_query',
+            'oficinacompra_query',
+            'proveedor_query',
+            'estado_enum',
+            'estado_en_compras',
+            'tratamiento_enum',
+            'contratacionDirecta_enum',
+            'acceso_visualizacion_por_hash'
+        ));
     }
 
-    /**
-     * Updote the specified resource in storage.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @param  int  $id
-     * @return \Illuminate\Http\Response
-     */
     public function actualizar(ValidacionRequisicion $request, $id)
     {
-        can('actualizar-orden-de-venta');
+        can('actualizar-requisicion');
 
-        $ordenventa = $this->ordenventaService->actualizaRequisicion($request, $id);
+        $ret = $this->requisicionService->actualizaRequisicion($request, $id);
 
-        if ($ordenventa['mensaje'] == 'ok')
-            $mensaje = 'Orden de venta actualizada con éxito';
-        else
-            $mensaje = $ordenventa['errores'];
+        if ($ret['mensaje'] == 'ok') {
+            $mensaje = 'Requisición actualizada con éxito';
+        } else {
+            $mensaje = $ret['errores'];
+        }
 
-        return redirect('ordenventa/ordenventa')->with('mensaje', $mensaje);
+        return redirect('compras/requisicion')->with('mensaje', $mensaje);
+    }
+
+    public function enviarArbolAprobacion(Request $request, $id)
+    {
+        can('editar-requisicion');
+
+        $ret = $this->requisicionService->enviarArbolAprobacionDesdeEnCompras((int) $id);
+
+        if ($ret['mensaje'] === 'ok') {
+            $mensaje = 'Requisición enviada al árbol de aprobación; el circuito continúa con el siguiente nivel.';
+        } else {
+            $mensaje = $ret['errores'] ?? 'No se pudo enviar al árbol de aprobación.';
+        }
+
+        return redirect()->route('consultar_requisicion')->with('mensaje', $mensaje);
+    }
+
+    public function eliminar(Request $request, $id)
+    {
+        can('borrar-requisicion');
+
+        if ($request->ajax()) {
+            if ($this->requisicionRepository->delete($id)) {
+                return response()->json(['mensaje' => 'ok']);
+            }
+
+            return response()->json(['mensaje' => 'ng']);
+        }
+
+        abort(404);
+    }
+
+    public function leerHistoriaRequisicion($requisicion_id)
+    {
+        return $this->requisicionService->leeHistoriaRequisicion($requisicion_id);
     }
 
     /**
-     * Remove the specified resource from storage.
-     *
-     * @param  int  $id
-     * @return \Illuminate\Http\Response
+     * Comprueba árbol de aprobación para alta (empresa) o edición en pendiente (requisición completa).
      */
-    public function eliminar(Request $request, $id)
+    public function avisoArbolGrabacion(Request $request)
     {
-        can('borrar-orden-de-venta');
+        $requisicionId = (int) $request->query('requisicion_id', 0);
+        $empresaId = (int) $request->query('empresa_id', 0);
 
-        if ($request->ajax()) 
-		{
-			$fl_borro = false;
-            
-			if ($this->ordenventaRepository->delete($id))
-				$fl_borro = true;
-
-            if ($fl_borro) {
-                return response()->json(['mensaje' => 'ok']);
-            } else {
-                return response()->json(['mensaje' => 'ng']);
-            }
+        if ($requisicionId > 0) {
+            can('editar-requisicion');
         } else {
-            abort(404);
+            can('crear-requisicion');
         }
+
+        $aviso = $this->arbolaprobacionService->avisoGrabacionRequisicionAjax($empresaId, $requisicionId);
+
+        return response()->json(['aviso' => $aviso]);
     }
 
-    public function leerHistoriaRequisicion($ordenventa_id)
+    public function soloConsulta($id)
     {
-        return $this->ordenventaService->leeHistoriaRequisicion($ordenventa_id);
+        return $this->visualizar($id, null);
     }
 
-    public function visualizar($id, $hash)
+    public function visualizar($id, $hash = null)
     {
-        // Verifica hash de visualizacion leyendo aprobaciones
-        $aprobacion_movimiento = $this->arbolaprobacion_movimientoRepository->findPorOrdenVenta($id);
+        $aprobacion_movimiento = $this->arbolaprobacion_movimientoRepository->findPorRequisicion($id);
 
-        $flEncontro = false;
-        $idAprobacion = 0;
-        foreach($aprobacion_movimiento as $movimiento)
-        {
-            if ($movimiento->hashvisualizar == $hash)
-            {
-                $flEncontro = true;
-                $idAprobacion = $movimiento->id;
+        if ($hash) {
+            $flEncontro = false;
+            foreach ($aprobacion_movimiento as $movimiento) {
+                if ($movimiento->hashvisualizar == $hash) {
+                    $flEncontro = true;
+                    break;
+                }
             }
-        }
-        if ($flEncontro)
-        {
-            $data = $this->ordenventaRepository->find($id);
-            $empresa_query = $this->empresaRepository->allFiltrado();
-            $centrocosto_query = $this->centrocostoRepository->all();
-            $pais_query = $this->paisRepository->all();
-            $moneda_query = $this->monedaRepository->all();
-            $localidad_query = $this->localidadRepository->all();
-            $provincia_query = $this->provinciaRepository->all();
-            $formapago_query = $this->formapagoRepository->all();
-            $estado_enum = Requisicion_Estado::$enumEstado;
-            $tratamiento_enum = Requisicion::$enumTratamiento;
-            $visualizar = true;
-
-            return view('ordenventa.ordenventa.editar', compact('data', 'empresa_query', 'centrocosto_query',
-                                                                'pais_query', 'provincia_query', 'localidad_query', 'formapago_query',
-                                                                'moneda_query','estado_enum', 'tratamiento_enum', 'visualizar')); 
         }
         else
-            return redirect()->route('inicio')->with('mensaje', 'No tienes permisos para visualizar la orden de venta')->send();
-    }
+            $flEncontro = true;
 
-    public function leerComprobantesRequisicion($ordenventa_id)
-    {
-        return $this->ordenventaService->leeComprobantesRequisicion($ordenventa_id);
-    }
+        if ($flEncontro) {
+            $data = $this->requisicionRepository->find($id);
+            $empresa_query = $this->empresaRepository->allFiltrado();
+            $centrocosto_query = $this->centrocostoRepository->all();
+            $formapago_query = $this->formapagoRepository->all();
+            $moneda_query = $this->monedaRepository->all();
+            $oficinacompra_query = Oficinacompra::orderBy('nombre')->get();
+            $proveedor_query = Proveedor::orderBy('nombre')->get();
+            $estado_enum = Requisicion_Estado::$enumEstado;
+            $estado_en_compras = Requisicion_Estado::$enumEstado[array_search('K', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
+            $tratamiento_enum = Requisicion::$enumTratamiento;
+            $contratacionDirecta_enum = Requisicion::$enumContratacionDirecta;
+            $visualizar = true;
+            $acceso_visualizacion_por_hash = filled($hash);
 
-    public function actualizaSoloRequisicion($estadoordenventa, $ordenventa_id)
-    {
-        return $this->ordenventaService->actualizaSoloRequisicion(['estadoordenventa' => $estadoordenventa], $ordenventa_id);
+            return view('compras.requisicion.editar', compact(
+                'data',
+                'empresa_query',
+                'centrocosto_query',
+                'formapago_query',
+                'moneda_query',
+                'oficinacompra_query',
+                'proveedor_query',
+                'estado_enum',
+                'estado_en_compras',
+                'tratamiento_enum',
+                'contratacionDirecta_enum',
+                'visualizar',
+                'acceso_visualizacion_por_hash'
+            ));
+        }
+
+        return redirect()->route('inicio')->with('mensaje', 'No tienes permisos para visualizar la requisición')->send();
     }
 }

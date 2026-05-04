@@ -789,6 +789,23 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 		else
 			$codigolocalidad = 0;
 
+		$estado = '0';
+		switch($request['estado'])
+		{
+			case 'Activo':
+				$estado = '0';
+				break;
+			case 'Suspendido':
+				$estado = '1';
+				break;
+			case 'Alta Pendiente':
+				$estado = '2';
+				break;
+			case 'Regularizado':
+				$estado = '3';
+				break;
+		}			
+
         $data = array( 'tabla' => $this->tableAnita[0], 'acc' => 'insert',
 			'sistema' => 'compras',
             'campos' => ' 
@@ -886,7 +903,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 				'".$exclusionretiva."',
 				'".($request['pais_id']>0?$request['pais_id']:0)."',
 				'".$fecha."',
-				'".$request['estado']."',
+				'".$estado."',
 				'".$request['fantasia']."',
 				'".$regimenfacturacion."',
 				'".$fechaexclusionretiva."',
@@ -1017,6 +1034,23 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 		$contacto = preg_replace('([^A-Za-z0-9 ])', '', $request['contacto']);
 		$domicilio = preg_replace('([^A-Za-z0-9 ])', '', $request['domicilio']);
 
+		$estado = '0';
+		switch($request['estado'])
+		{
+			case 'Activo':
+				$estado = '0';
+				break;
+			case 'Suspendido':
+				$estado = '1';
+				break;
+			case 'Alta Pendiente':
+				$estado = '2';
+				break;
+			case 'Regularizado':
+				$estado = '3';
+				break;
+		}			
+
 		$data = array( 'acc' => 'update', 'tabla' => $this->tableAnita[0], 
 				'sistema' => 'compras',
 				'valores' => " 
@@ -1046,7 +1080,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 					prom_nro_ret_ibr  = '".$request['nroIIBB']."',
 					prom_excl_retiva  = '".$exclusionretiva."',
 					prom_pais         = '".($request['pais_id']>0?$request['pais_id']:0)."',
-					prom_estado_pro   = '".$request['estado']."',
+					prom_estado_pro   = '".$estado."',
 					prom_fantasia     = '".$request['fantasia']."',
 					prom_fecha_excl   = '".$fechaexclusionretiva."',
 					prom_excl_retgan  = '".$exclusionretgan."',

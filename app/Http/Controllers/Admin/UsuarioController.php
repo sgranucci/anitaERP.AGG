@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Seguridad\Usuario;
 use App\Repositories\Admin\UsuarioRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Repositories\Configuracion\OficinacompraRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Ventas\VendedorRepositoryInterface;
 use App\Models\Admin\Rol;
@@ -18,16 +19,18 @@ class UsuarioController extends Controller
     private $centrocostoRepository;
     private $vendedorRepository;
     private $usuarioRepository;
-
+    private $oficinacompraRepository;
     public function __construct(EmpresaRepositoryInterface $empresarepository,
                                 CentrocostoRepositoryInterface $centrocostorepository,
                                 VendedorRepositoryInterface $vendedorrepository,
-                                UsuarioRepositoryInterface $usuariorepository)
+                                UsuarioRepositoryInterface $usuariorepository,
+                                OficinacompraRepositoryInterface $oficinacomprarepository)
     {
         $this->empresaRepository = $empresarepository;
         $this->centrocostoRepository = $centrocostorepository;
         $this->vendedorRepository = $vendedorrepository;
         $this->usuarioRepository = $usuariorepository;
+        $this->oficinacompraRepository = $oficinacomprarepository;
     }
     
     public function index()
@@ -42,8 +45,8 @@ class UsuarioController extends Controller
         $empresa_query = $this->empresaRepository->all()->pluck('nombre', 'id')->toArray();
         $centrocosto_query = $this->centrocostoRepository->all()->toArray();
         $vendedor_query = $this->vendedorRepository->all()->pluck('nombre', 'id')->toArray();
-
-        return view('admin.usuario.crear', compact('rols', 'empresa_query', 'centrocosto_query', 'vendedor_query'));
+        $oficinacompra_query = $this->oficinacompraRepository->all()->pluck('nombre', 'id')->toArray();
+        return view('admin.usuario.crear', compact('rols', 'empresa_query', 'centrocosto_query', 'vendedor_query', 'oficinacompra_query'));
     }
 
     public function guardar(ValidacionUsuario $request)
@@ -67,8 +70,8 @@ class UsuarioController extends Controller
         $empresa_query = $this->empresaRepository->all()->pluck('nombre', 'id')->toArray();
         $centrocosto_query = $this->centrocostoRepository->all()->toArray();
         $vendedor_query = $this->vendedorRepository->all()->pluck('nombre', 'id')->toArray();
-
-        return view('admin.usuario.editar', compact('data', 'rols', 'empresa_query', 'centrocosto_query', 'vendedor_query'));
+        $oficinacompra_query = $this->oficinacompraRepository->all()->pluck('nombre', 'id')->toArray(); 
+        return view('admin.usuario.editar', compact('data', 'rols', 'empresa_query', 'centrocosto_query', 'vendedor_query', 'oficinacompra_query'));
     }
 
     public function actualizar(ValidacionUsuario $request, $id)
@@ -81,6 +84,9 @@ class UsuarioController extends Controller
 
         if (!isset($data['vendedor_id']))
             $data['vendedor_id'] = null;
+
+        if (!isset($data['oficinacompra_id']))
+            $data['oficinacompra_id'] = null;
 
         $usuario->update($data);
         $usuario->roles()->sync($request->rol_id);

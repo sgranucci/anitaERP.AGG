@@ -9,6 +9,7 @@ use Illuminate\Support\Arr;
 use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Moneda;
 use App\Models\Contable\Centrocosto;
+use App\Models\Seguridad\Usuario;
 use DB;
 
 class Capex extends Model implements Auditable

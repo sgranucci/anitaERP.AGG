@@ -7,7 +7,7 @@ var ptrsubcategoria_id;
 
 function buscar_datos_articulo(consulta) {
     $.ajax({
-        url: carpetaBase+'/stock/product/consultaarticulo',
+        url: carpetaBase+'/stock/articulo/consultaarticulo',
         type: 'POST',
         dataType: 'HTML',
 	    headers: {
@@ -50,16 +50,16 @@ $(document).on('keyup', '#consulta', function () {
 
 function activa_eventos_consultaarticulo()
 {
-    // Consulta de articulo
-    $('.consultaarticulo').on('click', function (event) {
+    // Consulta de artículo (delegado para filas agregadas dinámicamente)
+    $(document).off('click.consultaArtBtn', '.consultaarticulo').on('click.consultaArtBtn', '.consultaarticulo', function (event) {
 
         //if ($(this).parents("tr").find(".articulo_id").length > 0) {
-            ptrarticulo_id = $(this).parents("tr").find(".articulo_id");
-            ptrcodigoarticulo = $(this).parents("tr").find(".codigoarticulo");
-            ptrnombrearticulo = $(this).parents("tr").find(".descripcionarticulo");
-            ptrunidadmedida = $(this).parents("tr").find(".unidadmedida");
-            ptrcategoria_id = $(this).parents("tr").find(".categoria_id");
-            ptrsubcategoria_id = $(this).parents("tr").find(".subcategoria_id");
+            ptrarticulo_id = $(this).closest("tr").find(".articulo_id");
+            ptrcodigoarticulo = $(this).closest("tr").find(".codigoarticulo");
+            ptrnombrearticulo = $(this).closest("tr").find(".descripcionarticulo");
+            ptrunidadmedida = $(this).closest("tr").find(".unidadmedida");
+            ptrcategoria_id = $(this).closest("tr").find(".categoria_id");
+            ptrsubcategoria_id = $(this).closest("tr").find(".subcategoria_id");
         //}
         // Abre modal de consulta
         $("#consultaarticuloModal").modal('show');
@@ -99,6 +99,14 @@ function activa_eventos_consultaarticulo()
             $.get(carpetaBase + '/stock/leerunarticulo/' + seleccion, function (dataArticulo) {
                 if (dataArticulo) {
                     window.rellenaAtributosArticuloOrdenProduccion(dataArticulo);
+                }
+            });
+        }
+
+        if (window.onArticuloSeleccionado) {
+            $.get(carpetaBase + '/stock/leerunarticulo/' + seleccion, function (dataArticulo) {
+                if (dataArticulo) {
+                    window.onArticuloSeleccionado(dataArticulo, { row: $(ptrarticulo_id).closest('tr') });
                 }
             });
         }
@@ -239,6 +247,10 @@ function activa_eventos_consultaarticulo()
 
                 if (window.rellenaAtributosArticuloOrdenProduccion) {
                     window.rellenaAtributosArticuloOrdenProduccion(data);
+                }
+
+                if (window.onArticuloSeleccionado) {
+                    window.onArticuloSeleccionado(data, { row: $(ptrrenglon).closest('tr') });
                 }
             }
         });

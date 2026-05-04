@@ -463,55 +463,71 @@
 		});
 	}
 
+	function fechaMovimientoArbolTexto(raw) {
+		if (raw == null || raw === '') {
+			return '';
+		}
+		// MySQL devuelve "YYYY-MM-DD HH:mm:ss"; ISO usa "T". datetime-local en Chromium/Edge
+		// exige "YYYY-MM-DDTHH:mm" y deja el control vacío si el valor no es válido; usamos texto sólo lectura.
+		return String(raw).substring(0, 19).replace('T', ' ');
+	}
+
 	function leeArbol()
 	{
 		var wrapper = $(".container-arbol");
-		let ordenventa_id = $("#ordenventa_id").val();
+		var ordenventa_id = $("#ordenventa_id").val();
+		if (!ordenventa_id) {
+			return;
+		}
+		var url = carpetaBase + '/arbolaprobacion/leer_movimiento_aprobacion/OV/' + ordenventa_id;
 
-		let url = carpetaBase+'/arbolaprobacion/leer_movimiento_aprobacion/OV/'+ordenventa_id;
-
-		$.get(url, function(historia){
-
-			$(wrapper).empty();
-
-			var hist = $.map(historia, function(value, index){
-				return [value];
-			});
-			$.each(hist, function(index,value){
-				fecha = value.fechaenvio;
-				if (value.fechaproceso != null)
-					fechaproceso = value.fechaproceso;
-				else	
-					fechaproceso = '';
-
-				$(wrapper).append('<tr class="item-ordenventa-arbol">'+
-                            '<td>'+
-                                '<input type="datetime-local" class="form-control arbolfecha" value="'+fecha.substring(0,19)+'" readonly>'+
-                            '</td>'+
-                            '<td>'+
-                                '<input type="text" class="form-control estadousuario" value="'+value.enviousuarios.nombre+'" readonly>'+
-                            '</td>'+	
-                            '<td>'+
-                                '<input type="text" class="form-control nivel" value="'+value.nivel+'" readonly>'+
-                            '</td>'+													
-                            '<td>'+
-                                '<input type="text" class="form-control estado" value="'+value.estado+'" readonly>'+
-                            '</td>'+
-							(fechaproceso == '' ? 
-                            '<td>'+
-                                '<input type="text" class="form-control arbolfecha" value="" readonly>'+
-                            '</td>' :
-							'<td>'+
-                                '<input type="datetime-local" class="form-control arbolfecha" value="'+fechaproceso.substring(0,19)+'" readonly>'+
-                            '</td>'
-							)+			
-                            '<td>'+
-                                '<input type="text" class="form-control destinatariousuario" value="'+value.destinatariousuarios.nombre+'" readonly>'+
-                            '</td>'+
-                            '<td>'+
-                                '<input type="text" class="form-control estadoobservacion" value="'+value.observacion+'" readonly>'+
-                            '</td>'+
-                        '</tr>');
+		$.ajax({
+			url: url,
+			method: 'GET',
+			dataType: 'json',
+			cache: false
+		}).done(function (historia) {
+			wrapper.empty();
+			$.each(historia, function (index, value) {
+				var fecha = value.fechaenvio;
+				var fechaproceso = value.fechaproceso != null ? value.fechaproceso : '';
+				var $tr = $('<tr class="item-ordenventa-arbol"></tr>');
+				$tr.append(
+					$('<td></td>').append(
+						$('<input type="text" class="form-control arbolfecha" readonly>').val(fechaMovimientoArbolTexto(fecha))
+					)
+				);
+				$tr.append(
+					$('<td></td>').append(
+						$('<input type="text" class="form-control estadousuario" readonly>').val((value.enviousuarios && value.enviousuarios.nombre) || '')
+					)
+				);
+				$tr.append(
+					$('<td></td>').append(
+						$('<input type="text" class="form-control nivel" readonly>').val(value.nivel !== undefined && value.nivel !== null ? value.nivel : '')
+					)
+				);
+				$tr.append(
+					$('<td></td>').append(
+						$('<input type="text" class="form-control estado" readonly>').val(value.estado || '')
+					)
+				);
+				$tr.append(
+					$('<td></td>').append(
+						$('<input type="text" class="form-control arbolfecha" readonly>').val(fechaproceso === '' ? '' : fechaMovimientoArbolTexto(fechaproceso))
+					)
+				);
+				$tr.append(
+					$('<td></td>').append(
+						$('<input type="text" class="form-control destinatariousuario" readonly>').val((value.destinatariousuarios && value.destinatariousuarios.nombre) || '')
+					)
+				);
+				$tr.append(
+					$('<td></td>').append(
+						$('<input type="text" class="form-control estadoobservacion" readonly>').val(value.observacion || '')
+					)
+				);
+				wrapper.append($tr);
 			});
 		});
 	}

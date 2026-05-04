@@ -33,7 +33,7 @@
                         @endif                    
                 </div>
             </div>
-            <form action="{{route('actualizar_articulo', ['id' => $producto->id])}}" enctype="multipart/form-data" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
+            <form action="{{route('actualizar_articulo', ['id' => $producto->id])}}" enctype="multipart/form-data" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off" @if(empty($puedeActualizarArticulo)) onsubmit="return false;" @endif>
                 @csrf @method("put")
                 <input type="hidden" id="articulo_id" name="articulo_id" class="form-control" value="{{ $producto->id }}" />
                 <div align="center" style="margin: 5px;">
@@ -74,7 +74,13 @@
                 @include('stock.articulo.form7')                
                 <div class="card-footer">
                     <div class="row">
-                        @include('includes.boton-form-editar')
+                        @if(!empty($puedeActualizarArticulo))
+                            @include('includes.boton-form-editar')
+                        @else
+                            <div class="col-lg-12 text-center">
+                                <a href="{{ route('articulo') }}" class="btn btn-secondary">Salir</a>
+                            </div>
+                        @endif
                     </div>
                 </div>
             </form>

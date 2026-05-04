@@ -7,8 +7,6 @@ Requisiciones
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
 @endsection
 
-<?php use App\Helpers\biblioteca ?>
-
 @section('contenido')
 <div class="row">
     <div class="col-lg-12">
@@ -17,25 +15,33 @@ Requisiciones
             <div class="card-header">
                 <h3 class="card-title">Requisiciones</h3>
                 <div class="card-tools">
-                    <a href="#" {{--"{{route('crear_requisicion')}}"--}} class="btn btn-outline-secondary btn-sm">
-                       	@if (can('crear-requisicion', false))
-                        	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
-						@endif
+                    @if (can('crear-requisicion', false))
+                    <a href="{{ route('crear_requisicion') }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
                     </a>
+                    @endif
                 </div>
+                <div class="d-md-flex justify-content-md-end">
+					<form action="{{ route('consultar_requisicion') }}" method="GET">
+						<div class="btn-group">
+							<input type="text" name="busqueda" class="form-control" placeholder="Busqueda ..."> 
+							<button type="submit" class="btn btn-default">
+								<span class="fa fa-search"></span>
+							</button>
+						</div>
+					</form>
+                </div>                
             </div>
             <div class="card-body table-responsive p-0">
-                <table class="table table-striped table-bordered table-hover" id="tabla-data-2">
+                @include('includes.exportar-tabla', ['ruta' => 'listar_requisicion', 'busqueda' => $busqueda])
+                <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead>
                         <tr>
-                            <th class="width10">ID</th>
+                            <th class="width10">Número</th>
                             <th>Fecha</th>
                             <th>Empresa</th>
+                            <th>Centro costo</th>
                             <th>Proveedor</th>
-                            <th>CC Origen</th>
-                            <th>CC Destino</th>
-                            <th>Moneda</th>
-                            <th>Urgente</th>
                             <th>Estado</th>
                             <th>Items</th>
                             <th class="width40" data-orderable="false"></th>
@@ -43,85 +49,56 @@ Requisiciones
                     </thead>
                     <tbody>
                         @foreach ($requisicion as $data)
-							@if ($data->estado == '4')
-                        		<tr class="table-danger">
-							@else
-                        		<tr>
-							@endif
-                            <td>{{$data->id}}</td>
-                            <td>{{date('d/m/Y', strtotime($data->fecha))}}</td>
-                            <td>{{$data->nombreempresa}}</td>
-                            <td><small>{{$data->nombreproveedor}}</small></td>
-                            <td><small>{{$data->ccorigen}}</small></td>
-                            <td><small>{{$data->ccdestino}}</small></td>
+                        <tr>
+                            <td>{{ $data->numerorequisicion }}</td>
+                            <td>{{ date('d/m/Y', strtotime($data->fecha)) }}</td>
+                            <td>{{ $data->nombreempresa }}</td>
+                            <td><small>{{ $data->nombrecentrocosto }}</small></td>
+                            <td><small>{{ $data->nombreproveedor }}</small></td>
+                            <td><small>{{ $data->estado }}</small></td>
                             <td>
-                                @foreach ($moneda_query as $moneda)
-                                    @if ($moneda->codigo == $data->codigomoneda)
-                                        <small>{{$moneda->nombre ?? ''}}</small>
-                                    @endif
+                                @foreach ($data->requisicion_articulos as $item)
+                                    <small>{{ $item->articulos->sku ?? '' }}-{{ $item->articulos->descripcion ?? '' }}-Cant.:{{ $item->cantidad }}-Precio:{{ $item->precio }}</small><br>
                                 @endforeach
                             </td>
-                            <td><small>{{$data->esurgente}}</small></td>
                             <td>
-                                @switch($data->estado)
-                                    @case('1')    
-                                        <small>PENDIENTE</small>
-                                    @break
-                                    @case('2')    
-                                        <small>PARCIAL</small>
-                                    @break
-                                    @case('3')    
-                                        <small>CUMPLIDO</small>
-                                    @break
-                                    @case('4')    
-                                        <small>SUSPENDIDO</small>
-                                    @break
-                                    @case('5')    
-                                        <small>A COMPRAS</small>
-                                    @break
-                                    @case('6')    
-                                        <small>A AUTORIZAR</small>
-                                    @break
-                                    @case('T')    
-                                        <small>TRANSFERIDA</small>
-                                    @break
-                                    @case('E')    
-                                        <small>AUT.ESPECIAL</small>
-                                    @break                                    
-                                    @case('A')    
-                                        <small>ARBOL AUTORIZACION</small>
-                                    @break 
-                                @endswitch
-                            </td>
-                            <td>
-                                @if ($items)
-                                    @foreach ($items as $item)
-                                        @if ($item->id == $data->id)
-                                            <small>{{$item->sku}}-{{$item->descarticulo}}-Cant.:{{$item->cantidad}}-Precio:{{$item->precio}}</small><br>
-                                        @endif
-                                    @endforeach
-                                @endif
-                            </td>
-                            <td>
-                       			@if (can('editar-requisicion', false))
-                                	<a href="#" {{--"{{route('editar_requisicion', ['id' => $data->id])}}"--}} class="btn-accion-tabla tooltipsC" title="Editar este registro">
+                                @if (can('editar-requisicion', false))
+                                <a href="{{ route('editar_requisicion', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Editar">
                                     <i class="fa fa-edit"></i>
-                                	</a>
-								@endif
-                       			@if (can('borrar-requisicion', false))
-                                <form action="#" {{--"{{route('eliminar_requisicion', ['id' => $data->id])}}"--}} class="d-inline form-eliminar" method="POST">
+                                </a>
+                                @if (($data->estado ?? '') === ($estado_en_compras ?? 'EN_COMPRAS'))
+                                <form action="{{ route('enviar_arbol_requisicion', ['id' => $data->id]) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Enviar esta requisición al árbol de aprobación para continuar el circuito?');">
+                                    @csrf
+                                    <button type="submit" class="btn-accion-tabla tooltipsC text-success" title="Envía al árbol de aprobación">
+                                        <i class="fa fa-sitemap"></i>
+                                    </button>
+                                </form>
+                                @endif
+                                @endif
+                                @if (can('listar-requisicion', false) || can('editar-requisicion', false))
+                                <a href="{{ route('imprimir_pdf_requisicion', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Listar la requisición (PDF)" target="_blank" rel="noopener noreferrer">
+                                    <i class="fa fa-print"></i>
+                                </a>
+                                @endif                                
+                                @if (can('borrar-requisicion', false))
+                                <form action="{{ route('eliminar_requisicion', ['id' => $data->id]) }}" class="d-inline form-eliminar" method="POST">
                                     @csrf @method("delete")
-                                    <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">
+                                    <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar">
                                         <i class="fa fa-times-circle text-danger"></i>
                                     </button>
                                 </form>
-								@endif
+                                @endif
                             </td>
                         </tr>
                         @endforeach
                     </tbody>
                 </table>
             </div>
+            @if(method_exists($requisicion, 'links'))
+            <div class="card-footer">
+                {{ $requisicion->appends(request()->query())->links() }}
+            </div>
+            @endif
         </div>
     </div>
 </div>

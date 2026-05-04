@@ -342,4 +342,30 @@ class PartidagastoController extends Controller
 		return (new GeneraAsientoPartidagastoExport($this->partidagastoService))->parametros($request->empresa_id, $request->presupuesto_id, $request->presupuesto_escenario_id)
 								->download('generasientopartidagasto.'.$extension);
     }
+
+    public function consultaPartidagasto(Request $request)
+    {
+        $empresa_id = (int) $request->input('empresa_id', 0);
+        $consulta = $request->input('consulta', '');
+        $centrocostodestino_id = $request->input('centrocostodestino_id');
+        $payload = $this->partidagastoRepository->consultaPartidagasto($consulta, $empresa_id, $centrocostodestino_id);
+
+        return response()->json($payload);
+    }
+
+    public function leerPartidagastoPorId($partidagasto_id)
+    {
+        try {
+            $row = $this->partidagastoRepository->find((int) $partidagasto_id);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['mensaje' => 'no encontrado'], 404);
+        }
+
+        return response()->json([
+            'id' => $row->id,
+            'codigo' => $row->codigo,
+            'detalle' => $row->detalle,
+        ]);
+    }
+
 }

@@ -8,6 +8,7 @@ use App\Models\Seguridad\Usuario_Empresa;
 use App\Models\Contable\Usuario_Cuentacontable;
 use App\Models\Contable\Cuentacontable;
 use App\Models\Contable\Centrocosto;
+use App\Models\Configuracion\Oficinacompra;
 use App\Models\Ventas\Vendedor;
 use App\Models\Configuracion\Empresa;
 use Illuminate\Notifications\Notifiable;
@@ -24,7 +25,7 @@ class Usuario extends Authenticatable implements Auditable
     use Notifiable;
     protected $remember_token = false;
     protected $table = 'usuario';
-    protected $fillable = ['usuario', 'nombre', 'email', 'password', 'foto', 'centrocosto_id', 'vendedor_id'];
+    protected $fillable = ['usuario', 'nombre', 'email', 'password', 'foto', 'centrocosto_id', 'vendedor_id', 'oficinacompra_id'];
 
     public function roles()
     {
@@ -39,6 +40,11 @@ class Usuario extends Authenticatable implements Auditable
     public function vendedores()
     {
         return $this->belongsTo(Vendedor::class, 'vendedor_id');
+    }
+
+    public function oficinacompras()
+    {
+        return $this->belongsTo(Oficinacompra::class, 'oficinacompra_id');
     }
 
     public function usuario_empresas()
@@ -59,6 +65,7 @@ class Usuario extends Authenticatable implements Auditable
             'nombre_usuario' => $this->nombre,
             'centrocosto' => $this->centrocosto,
             'vendedor_id' => $this->vendedor_id,
+            'oficinacompra_id' => $this->oficinacompra_id,
             'foto_usuario' => $this->foto
         ]);
         if (count($roles) == 1) {

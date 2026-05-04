@@ -88,12 +88,13 @@
         <thead>
             <tr>
                 <th style="width: 6%;"></th>
-                <th style="width: 10%;">Nivel</th>
-                <th style="width: 25%;">Centro Costo</th>
-                <th style="width: 30%;">Usuario</th>
-                <th style="width: 15%;">Desde Monto</th>
-                <th style="width: 15%;">Hasta Monto</th>
-                <th style="width: 10%;">Moneda</th>
+                <th style="width: 8%;">Nivel</th>
+                <th style="width: 18%;">Centro Costo</th>
+                <th style="width: 22%;">Usuario</th>
+                <th style="width: 11%;">Desde Monto</th>
+                <th style="width: 11%;">Hasta Monto</th>
+                <th style="width: 8%;">Moneda</th>
+                <th style="width: 14%;" title="Estado de la requisición al aprobar este nivel (solo tipo Requisiciones; opcional)">Estado req.</th>
                 <th></th>
             </tr>
         </thead>
@@ -146,7 +147,19 @@
                                 @endif
                             @endforeach
                         </select>
-                    </td>                    
+                    </td>
+                    <td>
+                        @php
+                            $idxNivel = $loop->index;
+                            $selEstReq = old('requisicion_estado_al_aprobar.'.$idxNivel, $arbolaprobacion_niveles->requisicion_estado_al_aprobar ?? '');
+                        @endphp
+                        <select name="requisicion_estado_al_aprobar[]" class="form-control form-control-sm" title="Opcional; aplica al aprobar este nivel">
+                            <option value="">—</option>
+                            @foreach(($requisicion_estados_arbol_enum ?? []) as $estReq)
+                                <option value="{{ $estReq['nombre'] }}" {{ $selEstReq == $estReq['nombre'] ? 'selected' : '' }}>{{ str_replace('_', ' ', $estReq['nombre']) }}</option>
+                            @endforeach
+                        </select>
+                    </td>
                     <td>
                         <button style="width: 7%;" type="button" title="Elimina esta linea" class="btn-accion-tabla eliminar_arbolaprobacion_nivel tooltipsC">
                             <i class="fa fa-times-circle text-danger"></i>

@@ -134,7 +134,7 @@ class ProveedorQuery implements ProveedorQueryInterface
 		{
 			foreach ($query as $row)
 			{
-                if ($row['estado'] == '0')
+                if ($row['estado'] == 'Activo')
                 {
                     $flSinDatos = false;
                     $output['data'] .= '<tr>';

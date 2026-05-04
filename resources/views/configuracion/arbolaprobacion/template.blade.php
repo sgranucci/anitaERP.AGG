@@ -37,7 +37,15 @@
                     <option value="{{ $value->id }}">{{ $value->abreviatura }}</option>    
                 @endforeach
             </select>
-        </td>                
+        </td>
+        <td>
+            <select name="requisicion_estado_al_aprobar[]" class="form-control form-control-sm">
+                <option value="">—</option>
+                @foreach(($requisicion_estados_arbol_enum ?? []) as $estReq)
+                    <option value="{{ $estReq['nombre'] }}">{{ str_replace('_', ' ', $estReq['nombre']) }}</option>
+                @endforeach
+            </select>
+        </td>
         <td>
             <button type="button" style="width: 7%;" title="Elimina esta linea" class="btn-accion-tabla eliminar_arbolaprobacion_nivel tooltipsC">
                 <i class="fa fa-times-circle text-danger"></i>

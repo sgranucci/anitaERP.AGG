@@ -439,7 +439,7 @@ class ProveedorController extends Controller
         $condicionentrega_query = $this->condicionentregaRepository->all();
         $centrocosto_query = $this->centrocostoRepository->all();
         $conceptogasto_query = $this->conceptogastoRepository->all();
-        $cuentacontable_query = $this->cuentacontableRepository->all();
+        $cuentacontable_query = $this->cuentacontableRepository->allPrimeraEmpresa();
         $retieneiva_enum = Proveedor::$enumRetieneiva;
         $retieneganancia_enum = Proveedor::$enumRetieneganancia;
         $condicionganancia_enum = Proveedor::$enumCondicionganancia;
@@ -623,7 +623,7 @@ class ProveedorController extends Controller
                     'nombreproveedor' => $nombreproveedor, 'urlOrigen' => $urlOrigen,
                     'moneda_query' => $moneda_query];
 
-        return view('compras.requisicion.index', $datas);
+        return view('compras.requisicion.proveedor_index', $datas);
     }
 
     public function listarOrdenCompra(Request $request, $proveedor_id)

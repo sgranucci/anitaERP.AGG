@@ -16,18 +16,23 @@ class MailArbolAprobacion extends Mailable
     public $linkAprobacion, $linkRechazo;
     public $linkVisualizar;
 
+    /** @var array<string, mixed>|null Datos extra solo para requisiciones (estado al aprobar, monto ítems). */
+    public $mailExtras;
+
     /**
      * Create a new message instance.
      *
+     * @param  array<string, mixed>|null  $mailExtras
      * @return void
      */
-    public function __construct($ptrcomprobante, $tipoarbol, $linkaprobacion, $linkrechazo, $linkvisualizar)
+    public function __construct($ptrcomprobante, $tipoarbol, $linkaprobacion, $linkrechazo, $linkvisualizar, $mailExtras = null)
     {
         $this->datosComprobante = $ptrcomprobante;
         $this->tipoArbol = $tipoarbol;
         $this->linkAprobacion = $linkaprobacion;
         $this->linkRechazo = $linkrechazo;
         $this->linkVisualizar = $linkvisualizar;
+        $this->mailExtras = $mailExtras;
     }
 
     /**

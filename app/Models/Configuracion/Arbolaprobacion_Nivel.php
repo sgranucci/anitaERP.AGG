@@ -14,7 +14,8 @@ class Arbolaprobacion_Nivel extends Model implements Auditable
     use \OwenIt\Auditing\Auditable;
     
     protected $fillable = [
-                            'arbolaprobacion_id', 'nivel', 'centrocosto_id', 'usuario_id', 'desdemonto', 'hastamonto', 'moneda_id'
+                            'arbolaprobacion_id', 'nivel', 'centrocosto_id', 'usuario_id', 'desdemonto', 'hastamonto', 'moneda_id',
+                            'requisicion_estado_al_aprobar',
                         ];
     protected $table = 'arbolaprobacion_nivel';
 

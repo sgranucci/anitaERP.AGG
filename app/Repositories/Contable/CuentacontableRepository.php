@@ -46,10 +46,26 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
     {
         $hay_cuentacontable = Cuentacontable::first();
 
-		if (!$hay_cuentacontable)
-			self::sincronizarConAnita();
+        if (!$hay_cuentacontable)
+            self::sincronizarConAnita();
 
-        return $this->model->with('empresas')->with('rubrocontables')->orderBy('nombre','ASC')->get();
+        $empresa_query = $this->empresaRepository->allFiltrado();
+
+        if (count($empresa_query) > 1)
+            $cuentacontable = $this->model->with('empresas')->whereIn('empresa_id', $empresa_query->pluck('id')->toArray())->with('rubrocontables')->orderBy('nombre','ASC')->get();
+        else
+            $cuentacontable = $this->model->with('empresas')->with('rubrocontables')->orderBy('nombre','ASC')->get();
+
+        return $cuentacontable;
+    }
+
+    public function allPrimeraEmpresa()
+    {
+        $empresa_query = $this->empresaRepository->allFiltrado();
+
+        $empresa_id = $empresa_query[0]->id;
+
+        return $this->model->with('empresas')->where('empresa_id', $empresa_id)->with('rubrocontables')->orderBy('nombre','ASC')->get();
     }
 
     public function create(array $data)

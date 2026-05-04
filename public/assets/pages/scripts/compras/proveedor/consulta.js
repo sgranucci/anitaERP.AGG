@@ -1,6 +1,17 @@
 var ptrproveedor_id;
 var ptrnombreproveedor;
 
+function actualizarCondicionPagoProveedorDesdeJson(data) {
+    if (!$('#condicionpago_proveedor_show').length) {
+        return;
+    }
+    if (data && data.condicionpagos && data.condicionpagos.nombre) {
+        $('#condicionpago_proveedor_show').val(data.condicionpagos.nombre);
+    } else {
+        $('#condicionpago_proveedor_show').val('');
+    }
+}
+
 function buscar_datos_proveedor(consulta) {
     $.ajax({
         url: carpetaBase+'/compras/proveedor/consultaproveedor',
@@ -82,6 +93,8 @@ function activa_eventos_consultaproveedor()
         $("#proveedor").val(nombre);
         $("#codigoproveedor").val(codigo);
 
+        $('#proveedor_id').trigger('change');
+
         $('#consultaproveedorModal').modal('hide');
     });
 
@@ -90,9 +103,10 @@ function activa_eventos_consultaproveedor()
 
         if (id > 0)
         {
+            let urlConsultaProveedor = route('editar_proveedor', ':id');
             let url = urlConsultaProveedor;
             url = url.replace(':id', id);
-            document.location.href=url;
+            document.location.href=url;            
         }
     });
 
@@ -105,12 +119,14 @@ function activa_eventos_consultaproveedor()
 
         $("#proveedor_id").val('');
         $("#nombreproveedor").val('');
+        actualizarCondicionPagoProveedorDesdeJson(null);
 
         $.get(url_res, function(data){
             if (data)
             {
                 $("#proveedor_id").val(data.id);
                 $("#nombreproveedor").val(data.nombre);
+                actualizarCondicionPagoProveedorDesdeJson(data);
             }
         });
     });
@@ -118,8 +134,14 @@ function activa_eventos_consultaproveedor()
     $('#proveedor_id').on('change', function (event) {
         event.preventDefault();
 
-        // Lee servicio terrestre por codigo
         let proveedor_id = $("#proveedor_id").val();
+        if (!proveedor_id) {
+            $("#nombreproveedor").val('');
+            $("#proveedor").val('');
+            actualizarCondicionPagoProveedorDesdeJson(null);
+            return;
+        }
+
         let url_res = carpetaBase+'/compras/leerproveedor/'+proveedor_id;
 
         $.get(url_res, function(data){
@@ -128,6 +150,7 @@ function activa_eventos_consultaproveedor()
                 $("#proveedor_id").val(data.id);
                 $("#nombreproveedor").val(data.nombre);
                 $("#proveedor").val(data.nombre);
+                actualizarCondicionPagoProveedorDesdeJson(data);
             }
         });
     });
@@ -144,7 +167,8 @@ function activa_eventos_consultaproveedor()
 		$(ptrrenglon).parents("tr").find(".nombreproveedor").val("");        
 
         $("#proveedor_id").val("");
-        $("#nombreproveedor").val("");        
+        $("#nombreproveedor").val("");
+        actualizarCondicionPagoProveedorDesdeJson(null);
 
         $.get(url_res, function(data){
             if (data)
@@ -155,6 +179,7 @@ function activa_eventos_consultaproveedor()
 
                 $("#proveedor_id").val(data.id);
                 $("#nombreproveedor").val(data.nombre);
+                actualizarCondicionPagoProveedorDesdeJson(data);
             }
         });
 

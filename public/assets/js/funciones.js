@@ -101,10 +101,10 @@ function redondearDecimales(numero, decimales) {
     }
 }
 
-$('#form-general').on('submit', function() {
+$('#form-general').on('submit', function (event) {
     let primerCampoInvalido = null;
-    
-    // 1. Obtener todos los campos requeridos
+
+    // Validar solo campos requeridos "reales" (no deshabilitados/ocultos)
     const camposRequeridos = this.querySelectorAll('[required]');
 
     camposRequeridos.forEach(campo => {
@@ -112,7 +112,7 @@ $('#form-general').on('submit', function() {
         if (!campo.value.trim()) {
             // Marcar campo inválido (opcional, ej: borde rojo)
             campo.style.borderColor = 'red';
-            
+
             if (!primerCampoInvalido) {
                 primerCampoInvalido = campo;
             }
@@ -122,13 +122,15 @@ $('#form-general').on('submit', function() {
         }
     });
 
-    // 3. Si hay campos inválidos, detener envío y mostrar la pestaña
-    if (primerCampoInvalido) {
-        event.preventDefault(); // Detiene el formulario
-        // Encontrar la solapa padre
+    if (primerCampoInvalido) 
+    {
+        event.preventDefault();
+    
+        // Si el formulario usa secciones tipo .form1/.form3/... (como Requisición),
+        // mostrar la sección donde está el primer inválido antes de enfocar.
+        // Compatibilidad con pantallas que usan solapas .tab-content
         const solapaContenedora = primerCampoInvalido.closest('.tab-content');
         if (solapaContenedora) {
-            // Activar la solapa (aquí llamas a tu función para cambiar de pestaña)
             activarSolapa(solapaContenedora.id);
             alert('Por favor, rellene todos los campos obligatorios.');
         }
