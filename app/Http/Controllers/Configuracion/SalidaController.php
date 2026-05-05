@@ -9,6 +9,7 @@ use App\Http\Requests\ValidacionSalida;
 use App\Repositories\Configuracion\SalidaRepositoryInterface;
 use App\Repositories\Configuracion\SeteosalidaRepositoryInterface;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Auth;
 
 class SalidaController extends Controller
 {
@@ -155,6 +156,13 @@ class SalidaController extends Controller
 
         // Busca configuracion
         $seteosalida = $this->seteosalidaRepository->buscaSeteo($usuario_id, $opcion);
+
+        $vendedor = Auth::user()->vendedor_id;
+        if ($vendedor)
+        {
+            $impresoraDefault = config('pedido.impresora_default');
+            $seteosalida = ['id' => 999999, 'salidas' => ['nombre' => $impresoraDefault]];
+        }
 
         if ($seteosalida)        
             return $seteosalida;

@@ -2,6 +2,9 @@
     $(function () {
 
         imprimirSalida();
+        setTimeout(() => {
+            imprimirSalida();
+        }, 300);        
 
     });
 

@@ -43,7 +43,7 @@ class SeteosalidaRepository implements SeteosalidaRepositoryInterface
 
     public function delete($id)
     {
-    	$salida = salida::find($id);
+    	$salida = $this->model->find($id);
 		
         $salida = $this->model->destroy($id);
 
