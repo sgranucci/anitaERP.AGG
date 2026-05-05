@@ -18,7 +18,7 @@
                 <h3 class="card-title">Empleados</h3>
                 <div class="card-tools">
                     <a href="{{route('crear_empleado')}}" class="btn btn-outline-secondary btn-sm">
-                       	@if (can('crear-empleado', false))
+                       	@if (can('crear-empleados', false))
                         	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
 						@endif
                     </a>

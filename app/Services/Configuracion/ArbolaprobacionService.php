@@ -117,42 +117,60 @@ class ArbolaprobacionService
 				continue;
 			}
 
-			$hashAprobacion = Hash::make('OV'.'A'.$comprobante_id.$ordenventa->fecha.$ordenventa->numeroordenventa.'N'.
-				$estadoAprobacionActual['nivelactual'].'U'.$proximoNivel['proximousuario']);
-			$hashRechazo = Hash::make('OV'.'R'.$comprobante_id.$ordenventa->fecha.$ordenventa->numeroordenventa.'N'.
-				$estadoAprobacionActual['nivelactual'].'U'.$proximoNivel['proximousuario']);
-
-			$hashAprobacion = str_replace($arrayReplace, '+', $hashAprobacion);
 			$ip = config('arbolaprobacion.ip_link');
-			$linkAprobacion = $ip.'/anitaERP/public/arbolaprobacion/aprobar/OV/'.$comprobante_id.'/'.$hashAprobacion;
-			$hashRechazo = str_replace($arrayReplace, '+', $hashRechazo);
-			$linkRechazo = $ip.'/anitaERP/public/arbolaprobacion/buscarechazo/OV/'.$comprobante_id.'/'.$hashRechazo;
-
 			$hashVisualizar = Hash::make('VIS'.$comprobante_id.$ordenventa->fecha.$ordenventa->numeroordenventa);
 			$hashVisualizar = str_replace($arrayReplace, '+', $hashVisualizar);
 			$linkVisualizar = $ip.'/anitaERP/public/ordenventa/visualizar/'.$comprobante_id.'/'.$hashVisualizar;
 
-			$this->enviaCorreo($proximoNivel['proximousuario'], $tipoarbol, $ordenventa, $linkAprobacion, $linkRechazo,
-				$linkVisualizar, null);
+			$nombrePendiente = Arbolaprobacion_Movimiento::$enumEstado[array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
+			$uids = $proximoNivel['proximousuarios'] ?? [];
+			if (! is_array($uids) || count($uids) === 0) {
+				$uids = [$proximoNivel['proximousuario']];
+			}
+			$uids = array_values(array_unique(array_filter($uids)));
 
-			$aprobacion = [
-				'arbolaprobacion_id' => $arbol->id,
-				'fechaenvio' => Carbon::now(),
-				'enviousuario_id' => Auth::user()->id,
-				'requisicion_id' => null,
-				'ordencompra_id' => null,
-				'solicitudpago_id' => null,
-				'ordenventa_id' => $comprobante_id,
-				'hashaprobacion' => $hashAprobacion,
-				'hashrechazo' => $hashRechazo,
-				'hashvisualizar' => $hashVisualizar,
-				'nivel' => $proximoNivel['proximonivel'],
-				'destinatariousuario_id' => $proximoNivel['proximousuario'],
-				'fechaproceso' => null,
-				'estado' => Arbolaprobacion_Movimiento::$enumEstado[array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'],
-				'observacion' => '',
-			];
-			$this->arbolaprobacion_movimientoRepository->create($aprobacion);
+			$ya = Arbolaprobacion_Movimiento::where('ordenventa_id', $comprobante_id)
+				->where('nivel', $proximoNivel['proximonivel'])
+				->where('estado', $nombrePendiente)
+				->pluck('destinatariousuario_id')
+				->map(fn ($x) => (int) $x)
+				->all();
+
+			foreach ($uids as $uid) {
+				$uid = (int) $uid;
+				if ($uid <= 0 || in_array($uid, $ya, true)) {
+					continue;
+				}
+
+				$hashAprobacion = Hash::make('OV'.'A'.$comprobante_id.$ordenventa->fecha.$ordenventa->numeroordenventa.'N'.
+					$estadoAprobacionActual['nivelactual'].'U'.$uid);
+				$hashRechazo = Hash::make('OV'.'R'.$comprobante_id.$ordenventa->fecha.$ordenventa->numeroordenventa.'N'.
+					$estadoAprobacionActual['nivelactual'].'U'.$uid);
+				$hashAprobacion = str_replace($arrayReplace, '+', $hashAprobacion);
+				$hashRechazo = str_replace($arrayReplace, '+', $hashRechazo);
+				$linkAprobacion = $ip.'/anitaERP/public/arbolaprobacion/aprobar/OV/'.$comprobante_id.'/'.$hashAprobacion;
+				$linkRechazo = $ip.'/anitaERP/public/arbolaprobacion/buscarechazo/OV/'.$comprobante_id.'/'.$hashRechazo;
+
+				$this->enviaCorreo($uid, $tipoarbol, $ordenventa, $linkAprobacion, $linkRechazo, $linkVisualizar, null);
+
+				$this->arbolaprobacion_movimientoRepository->create([
+					'arbolaprobacion_id' => $arbol->id,
+					'fechaenvio' => Carbon::now(),
+					'enviousuario_id' => Auth::user()->id,
+					'requisicion_id' => null,
+					'ordencompra_id' => null,
+					'solicitudpago_id' => null,
+					'ordenventa_id' => $comprobante_id,
+					'hashaprobacion' => $hashAprobacion,
+					'hashrechazo' => $hashRechazo,
+					'hashvisualizar' => $hashVisualizar,
+					'nivel' => $proximoNivel['proximonivel'],
+					'destinatariousuario_id' => $uid,
+					'fechaproceso' => null,
+					'estado' => $nombrePendiente,
+					'observacion' => '',
+				]);
+			}
 
 			return $proximoNivel['proximonivel'];
 		}
@@ -210,45 +228,63 @@ class ArbolaprobacionService
 				continue;
 			}
 
-			$hashAprobacion = Hash::make('RE'.'A'.$comprobante_id.$requisicion->fecha.$requisicion->numerorequisicion.'N'.
-				$estadoAprobacionActual['nivelactual'].'U'.$proximoNivel['proximousuario']);
-			$hashRechazo = Hash::make('RE'.'R'.$comprobante_id.$requisicion->fecha.$requisicion->numerorequisicion.'N'.
-				$estadoAprobacionActual['nivelactual'].'U'.$proximoNivel['proximousuario']);
-
-			$hashAprobacion = str_replace($arrayReplace, '+', $hashAprobacion);
 			$ip = config('arbolaprobacion.ip_link');
-			$linkAprobacion = $ip.'/anitaERP/public/arbolaprobacion/aprobar/RE/'.$comprobante_id.'/'.$hashAprobacion;
-			$hashRechazo = str_replace($arrayReplace, '+', $hashRechazo);
-			$linkRechazo = $ip.'/anitaERP/public/arbolaprobacion/buscarechazo/RE/'.$comprobante_id.'/'.$hashRechazo;
-
 			$hashVisualizar = Hash::make('VIS'.$comprobante_id.$requisicion->fecha.$requisicion->numerorequisicion);
 			$hashVisualizar = str_replace($arrayReplace, '+', $hashVisualizar);
 			$linkVisualizar = $ip.'/anitaERP/public/compras/requisicion/visualizar/'.$comprobante_id.'/'.$hashVisualizar;
 
 			$mailExtras = $this->armaExtrasMailRequisicion($requisicion, $proximoNivel['requisicion_estado_al_aprobar']);
-			$this->enviaCorreo($proximoNivel['proximousuario'], $tipoarbol, $requisicion, $linkAprobacion, $linkRechazo,
-				$linkVisualizar, $mailExtras);
-
 			$envioUid = Auth::check() ? Auth::user()->id : $requisicion->creousuario_id;
+			$nombrePendiente = Arbolaprobacion_Movimiento::$enumEstado[array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
 
-			$aprobacion = [
-				'arbolaprobacion_id' => $arbol->id,
-				'fechaenvio' => Carbon::now(),
-				'enviousuario_id' => $envioUid,
-				'requisicion_id' => $comprobante_id,
-				'ordencompra_id' => null,
-				'solicitudpago_id' => null,
-				'ordenventa_id' => null,
-				'hashaprobacion' => $hashAprobacion,
-				'hashrechazo' => $hashRechazo,
-				'hashvisualizar' => $hashVisualizar,
-				'nivel' => $proximoNivel['proximonivel'],
-				'destinatariousuario_id' => $proximoNivel['proximousuario'],
-				'fechaproceso' => null,
-				'estado' => Arbolaprobacion_Movimiento::$enumEstado[array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'],
-				'observacion' => '',
-			];
-			$this->arbolaprobacion_movimientoRepository->create($aprobacion);
+			$uids = $proximoNivel['proximousuarios'] ?? [];
+			if (! is_array($uids) || count($uids) === 0) {
+				$uids = [$proximoNivel['proximousuario']];
+			}
+			$uids = array_values(array_unique(array_filter($uids)));
+
+			$ya = Arbolaprobacion_Movimiento::where('requisicion_id', $comprobante_id)
+				->where('nivel', $proximoNivel['proximonivel'])
+				->where('estado', $nombrePendiente)
+				->pluck('destinatariousuario_id')
+				->map(fn ($x) => (int) $x)
+				->all();
+
+			foreach ($uids as $uid) {
+				$uid = (int) $uid;
+				if ($uid <= 0 || in_array($uid, $ya, true)) {
+					continue;
+				}
+
+				$hashAprobacion = Hash::make('RE'.'A'.$comprobante_id.$requisicion->fecha.$requisicion->numerorequisicion.'N'.
+					$estadoAprobacionActual['nivelactual'].'U'.$uid);
+				$hashRechazo = Hash::make('RE'.'R'.$comprobante_id.$requisicion->fecha.$requisicion->numerorequisicion.'N'.
+					$estadoAprobacionActual['nivelactual'].'U'.$uid);
+				$hashAprobacion = str_replace($arrayReplace, '+', $hashAprobacion);
+				$hashRechazo = str_replace($arrayReplace, '+', $hashRechazo);
+				$linkAprobacion = $ip.'/anitaERP/public/arbolaprobacion/aprobar/RE/'.$comprobante_id.'/'.$hashAprobacion;
+				$linkRechazo = $ip.'/anitaERP/public/arbolaprobacion/buscarechazo/RE/'.$comprobante_id.'/'.$hashRechazo;
+
+				$this->enviaCorreo($uid, $tipoarbol, $requisicion, $linkAprobacion, $linkRechazo, $linkVisualizar, $mailExtras);
+
+				$this->arbolaprobacion_movimientoRepository->create([
+					'arbolaprobacion_id' => $arbol->id,
+					'fechaenvio' => Carbon::now(),
+					'enviousuario_id' => $envioUid,
+					'requisicion_id' => $comprobante_id,
+					'ordencompra_id' => null,
+					'solicitudpago_id' => null,
+					'ordenventa_id' => null,
+					'hashaprobacion' => $hashAprobacion,
+					'hashrechazo' => $hashRechazo,
+					'hashvisualizar' => $hashVisualizar,
+					'nivel' => $proximoNivel['proximonivel'],
+					'destinatariousuario_id' => $uid,
+					'fechaproceso' => null,
+					'estado' => $nombrePendiente,
+					'observacion' => '',
+				]);
+			}
 
 			return $proximoNivel['proximonivel'];
 		}
@@ -320,13 +356,26 @@ class ArbolaprobacionService
 		if (count($candidatos) === 0) {
 			$proximoNivel = 0;
 			$proximoUsuario = null;
+			$proximoUsuarios = [];
 			$estadoReq = null;
 		} else {
 			usort($candidatos, fn ($a, $b) => $a['nivel'] <=> $b['nivel']);
-			$elegido = $candidatos[0];
-			$proximoNivel = $elegido['nivel'];
-			$proximoUsuario = $elegido['usuario_id'];
-			$estadoReq = $elegido['requisicion_estado_al_aprobar'];
+			$proximoNivel = (int) $candidatos[0]['nivel'];
+			$enNivel = array_values(array_filter($candidatos, fn ($c) => (int) $c['nivel'] === $proximoNivel));
+
+			$uids = [];
+			$estadoReq = null;
+			foreach ($enNivel as $c) {
+				if (! empty($c['usuario_id'])) {
+					$uids[] = (int) $c['usuario_id'];
+				}
+				if ($estadoReq === null && filled($c['requisicion_estado_al_aprobar'])) {
+					$estadoReq = $c['requisicion_estado_al_aprobar'];
+				}
+			}
+			$uids = array_values(array_unique($uids));
+			$proximoUsuarios = $uids;
+			$proximoUsuario = $uids[0] ?? null; // compat
 		}
 
 		if ($nivelactual > 0 && $proximoNivel === 0) {
@@ -336,6 +385,7 @@ class ArbolaprobacionService
 		return [
 			'proximonivel' => $proximoNivel,
 			'proximousuario' => $proximoUsuario,
+			'proximousuarios' => $proximoUsuarios,
 			'requisicion_estado_al_aprobar' => $estadoReq,
 		];
 	}
@@ -421,10 +471,37 @@ class ArbolaprobacionService
 		try {
 			$movimientoPre = Arbolaprobacion_Movimiento::findOrFail($aprobacion_id);
 
-			$this->arbolaprobacion_movimientoRepository->update([
+			$nombrePendiente = Arbolaprobacion_Movimiento::$enumEstado[array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
+			$nombreAprobado = Arbolaprobacion_Movimiento::$enumEstado[array_search('A', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
+			$nombreSinEfecto = Arbolaprobacion_Movimiento::$enumEstado[array_search('X', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
+
+			// First-wins: si otro ya aprobó/gestionó, no avanzamos.
+			$rows = Arbolaprobacion_Movimiento::where('id', $aprobacion_id)
+				->where('estado', $nombrePendiente)
+				->update([
+					'fechaproceso' => Carbon::now(),
+					'estado' => $nombreAprobado,
+				]);
+			if ($rows === 0) {
+				DB::commit();
+				return;
+			}
+
+			// Invalida el resto de los usuarios del mismo nivel/comprobante.
+			$q = Arbolaprobacion_Movimiento::where('arbolaprobacion_id', $movimientoPre->arbolaprobacion_id)
+				->where('nivel', $movimientoPre->nivel)
+				->where('estado', $nombrePendiente)
+				->where('id', '!=', $aprobacion_id);
+			if ($movimientoPre->requisicion_id) {
+				$q->where('requisicion_id', $movimientoPre->requisicion_id);
+			} elseif ($movimientoPre->ordenventa_id) {
+				$q->where('ordenventa_id', $movimientoPre->ordenventa_id);
+			}
+			$q->update([
 				'fechaproceso' => Carbon::now(),
-				'estado' => Arbolaprobacion_Movimiento::$enumEstado[array_search('A', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'],
-			], $aprobacion_id);
+				'estado' => $nombreSinEfecto,
+				'observacion' => 'Sin efecto (otro usuario aprobó el nivel)',
+			]);
 
 			if ($tipocomprobante === 'RE') {
 				$arbol = $this->arbolaprobacionRepository->find($movimientoPre->arbolaprobacion_id);
@@ -628,11 +705,40 @@ class ArbolaprobacionService
 		DB::beginTransaction();
 		try
 		{
-			// Graba nivel rechazado
-			$arbolaprobacion_movimiento = $this->arbolaprobacion_movimientoRepository->update([
-															"fechaproceso" => Carbon::now(),
-															"estado" => Arbolaprobacion_Movimiento::$enumEstado[array_search('R', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre']
-															], $aprobacion_id);
+			$movimientoPre = Arbolaprobacion_Movimiento::findOrFail($aprobacion_id);
+
+			$nombrePendiente = Arbolaprobacion_Movimiento::$enumEstado[array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
+			$nombreRechazado = Arbolaprobacion_Movimiento::$enumEstado[array_search('R', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
+			$nombreSinEfecto = Arbolaprobacion_Movimiento::$enumEstado[array_search('X', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
+
+			// First-wins: si otro ya gestionó, no avanzamos.
+			$rows = Arbolaprobacion_Movimiento::where('id', $aprobacion_id)
+				->where('estado', $nombrePendiente)
+				->update([
+					'fechaproceso' => Carbon::now(),
+					'estado' => $nombreRechazado,
+					'observacion' => (string) ($observacion ?? ''),
+				]);
+			if ($rows === 0) {
+				DB::commit();
+				return;
+			}
+
+			// Invalida el resto de los usuarios del mismo nivel/comprobante.
+			$q = Arbolaprobacion_Movimiento::where('arbolaprobacion_id', $movimientoPre->arbolaprobacion_id)
+				->where('nivel', $movimientoPre->nivel)
+				->where('estado', $nombrePendiente)
+				->where('id', '!=', $aprobacion_id);
+			if ($movimientoPre->requisicion_id) {
+				$q->where('requisicion_id', $movimientoPre->requisicion_id);
+			} elseif ($movimientoPre->ordenventa_id) {
+				$q->where('ordenventa_id', $movimientoPre->ordenventa_id);
+			}
+			$q->update([
+				'fechaproceso' => Carbon::now(),
+				'estado' => $nombreSinEfecto,
+				'observacion' => 'Sin efecto (otro usuario rechazó el nivel)',
+			]);
 
 			// Actualiza comprobantes
 			switch($tipocomprobante)

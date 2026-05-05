@@ -17,12 +17,12 @@
         </td>                    
         <td>
             <div class="form-group row" id="usuario">
-                <input type="text" style="WIDTH: 40px;HEIGHT: 38px" class="usuario_id" name="usuario_ids[]" value="" >
+                <input type="text" style="WIDTH: 40px;HEIGHT: 38px" class="usuario_id" name="usuario_ids[]" value="" placeholder="(opcional)" >
                 <input type="hidden" class="usuario_id_previa" name="usuario_id_previa[]" value="" >
                 <button type="button" title="Consulta usuarios" style="padding:1;" class="btn-accion-tabla consultausuario tooltipsC">
                         <i class="fa fa-search text-primary"></i>
                 </button>
-                <input type="text" style="font-size: 16px; WIDTH: 300px;HEIGHT: 38px" class="nombreusuario form-control" name="nombreusuarios[]" value="" >
+                <input type="text" style="font-size: 16px; WIDTH: 300px;HEIGHT: 38px" class="nombreusuario form-control" name="nombreusuarios[]" value="" placeholder="(opcional)" >
             </div>
         </td>
         <td>

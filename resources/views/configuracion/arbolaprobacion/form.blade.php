@@ -83,6 +83,18 @@
     </div>
 </div>
 <h4>Niveles</h4>
+@php
+    $esRequisiciones = (old('tipoarbol', $data->tipoarbol ?? '') === 'Requisiciones');
+@endphp
+<div class="alert alert-info" role="alert" style="margin-top: 10px;">
+    <strong>Usuario opcional por nivel.</strong>
+    Si en un nivel no se asigna usuario, el nivel se considera <strong>aprobado automáticamente</strong>.
+    @if($esRequisiciones)
+        En requisiciones, además se aplicará el <strong>Estado req.</strong> configurado para ese nivel (si está definido).
+    @else
+        (Este comportamiento aplica al circuito del árbol; en requisiciones también puede impactar el estado.)
+    @endif
+</div>
 <div class="card-body">
     <table class="table" id="arbolaprobacion-nivel-table">
         <thead>
@@ -90,7 +102,7 @@
                 <th style="width: 6%;"></th>
                 <th style="width: 8%;">Nivel</th>
                 <th style="width: 18%;">Centro Costo</th>
-                <th style="width: 22%;">Usuario</th>
+                <th style="width: 22%;" title="Opcional. Si no se asigna usuario, el nivel se aprueba automáticamente.">Usuario (opcional)</th>
                 <th style="width: 11%;">Desde Monto</th>
                 <th style="width: 11%;">Hasta Monto</th>
                 <th style="width: 8%;">Moneda</th>
