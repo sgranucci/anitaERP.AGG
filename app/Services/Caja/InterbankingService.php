@@ -19,7 +19,7 @@ class InterbankingService
     {
     }
 
-	public function leeSaldos($empresa_id) 
+	public function leeSaldos($empresa_id, $currency) 
 	{
         // Pide token
         Self::pideTokenInterbanking();
@@ -31,7 +31,7 @@ class InterbankingService
             //'account-number' => 'REPLACE_THIS_VALUE',
             //'account-type'   => 'REPLACE_THIS_VALUE',
             //'bank-number'    => 'REPLACE_THIS_VALUE',
-            //'currency'       => 'REPLACE_THIS_VALUE',
+            'currency'       => $currency,
             'customer-id'    => $customerId[$empresa_id-1],
             //'date-since'     => 'REPLACE_THIS_VALUE',
             //'date-until'     => 'REPLACE_THIS_VALUE',

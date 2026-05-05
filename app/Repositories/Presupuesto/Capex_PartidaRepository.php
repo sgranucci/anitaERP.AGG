@@ -81,7 +81,7 @@ class Capex_PartidaRepository implements Capex_PartidaRepositoryInterface
 				$nombres = $data['nombres'];
 				$proveedor_ids = $data['proveedor_ids'];
 				$moneda_ids = $data['moneda_ids'];
-				$estados = [$data['estado']];
+				$estado = $data['estado'];
 				$codigos = $data['codigos'];
 				$creousuario_ids = $data['creousuario_ids'];
 			}
@@ -90,7 +90,7 @@ class Capex_PartidaRepository implements Capex_PartidaRepositoryInterface
 				$nombres = [];
 				$proveedor_ids = [];
 				$moneda_ids = [];
-				$estados = [];
+				$estado = null;
 				$codigos = [];
 				$creousuario_ids = [];
 			}
@@ -120,7 +120,7 @@ class Capex_PartidaRepository implements Capex_PartidaRepositoryInterface
 									"nombre" => $nombres[$i],
 									"proveedor_id" => $proveedor_ids[$i],
 									"moneda_id" => $moneda_ids[$i],
-									"estado" => $estados[$i],
+									"estado" => $estado,
 									"codigo" => $codigos[$i],
 									"creousuario_id" => $creousuario_ids[$i]
 									]);
@@ -148,7 +148,7 @@ class Capex_PartidaRepository implements Capex_PartidaRepositoryInterface
 						"nombre" => $nombres[$i_movimiento],
 						"proveedor_id" => $proveedor_ids[$i_movimiento],
 						"moneda_id" => $moneda_ids[$i_movimiento],
-						"estado" => $estados[$i_movimiento],
+						"estado" => $estado,
 						"codigo" => $codigos[$i_movimiento],
 						"creousuario_id" => $creousuario_ids[$i_movimiento]
 						]);

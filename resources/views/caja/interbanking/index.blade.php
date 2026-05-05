@@ -113,7 +113,10 @@
                     <tbody>
                         @foreach ($cuentas as $data)
                         <tr>
-                            <td class="bank_number">{{$data['bank_number'] ?? ''}}</td>
+                            <td>
+                                {{ $data['nombrebanco'] ?? '' }}
+                                <span class="bank_number" style="display:none">{{ $data['bank_number'] ?? $data['bankNumber'] ?? '' }}</span>
+                            </td>
                             <td class="currency">{{$data['currency'] ?? ''}}</td>
                             <td class="account_number">{{$data['account_number'] ?? ''}}</td>
                             <td class="account_type">{{$data['account_type'] ?? ''}}</td>

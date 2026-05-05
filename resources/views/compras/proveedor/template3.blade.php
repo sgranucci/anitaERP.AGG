@@ -16,7 +16,7 @@
 		</td>
 		<td>
 			<div class="form-group">
-				<input type="text" name="cbus[]" value="" class="form-control cbus requerido" placeholder="CBU" required>
+				<input type="text" name="cbus[]" value="" class="form-control cbus" placeholder="CBU">
 			</div>
 		</td>							
 		<td>
