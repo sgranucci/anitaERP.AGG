@@ -25,6 +25,7 @@ class OrdencompraService
 				penmp_proveedor,
 				penmp_ccosto_dest,
 				prom_cuit,
+				prom_letra,
 				penmp_tipo
 			',
 			'whereArmado' => " WHERE

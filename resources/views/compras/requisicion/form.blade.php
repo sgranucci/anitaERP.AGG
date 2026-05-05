@@ -82,21 +82,21 @@
             <div class="form-group row align-items-center" id="div-proveedor">
                 <label for="codigoproveedor" class="col-lg-3 control-label">Proveedor sugerido</label>
                 <div class="col-lg-9">
+                    <input type="hidden" id="proveedor_id" name="proveedor_id" value="{{ old('proveedor_id', (isset($data) && $data) ? ($data->proveedor_id ?? '') : '') }}">
                     <div class="d-flex flex-wrap align-items-center">
-                        <input type="hidden" id="proveedor_id" name="proveedor_id" value="{{ old('proveedor_id', (isset($data) && $data) ? ($data->proveedor_id ?? '') : '') }}">
-                        <input type="text" class="form-control codigoproveedor col-lg-2" id="codigoproveedor" name="codigoproveedor" value="{{ old('codigoproveedor', optional($reqProveedor)->codigo ?? '') }}" style="width: 6.5rem; max-width: 30%; flex-shrink: 0;" {{ isset($visualizar) ? 'readonly' : '' }}>
-                        <input type="text" class="form-control col-lg-5" id="nombreproveedor" name="nombreproveedor" value="{{ old('nombreproveedor', optional($reqProveedor)->nombre ?? '') }}" readonly style="min-width: 8rem;">
+                        <input type="text" class="form-control codigoproveedor mr-2" id="codigoproveedor" name="codigoproveedor" value="{{ old('codigoproveedor', optional($reqProveedor)->codigo ?? '') }}" style="width: 6.5rem; max-width: 30%; flex-shrink: 0;" {{ isset($visualizar) ? 'readonly' : '' }}>
+                        <input type="text" class="form-control mr-2" id="nombreproveedor" name="nombreproveedor" value="{{ old('nombreproveedor', optional($reqProveedor)->nombre ?? '') }}" readonly style="min-width: 8rem; flex: 1 1 8rem;">
                         @if(empty($visualizar))
-                        <button type="button" title="Consulta proveedores" class="btn-accion-tabla consultaproveedor tooltipsC mb-1 mr-2">
+                        <button type="button" title="Consulta proveedores" class="btn-accion-tabla consultaproveedor tooltipsC mr-2 mr-md-3">
                             <i class="fa fa-search text-primary"></i>
                         </button>
                         @endif
-                        <div class="d-flex align-items-center flex-grow-1 mb-1" style="min-width: 12rem;">
-                            <label class="col-lg-3 control-label">C.pago</label>
-                            <input type="text" class="form-control col-lg-6" id="condicionpago_proveedor_show" readonly tabindex="-1" value="{{ $condicionPagoProveedorNombre }}" placeholder="—">
+                        <div class="d-flex align-items-center flex-grow-1" style="min-width: 12rem;">
+                            <label for="condicionpago_proveedor_show" class="control-label mb-0 mr-2 text-nowrap">C.pago</label>
+                            <input type="text" class="form-control" id="condicionpago_proveedor_show" readonly tabindex="-1" value="{{ $condicionPagoProveedorNombre }}" placeholder="—">
                         </div>
-                        <span id="nombretiposuspension" class="col-form-label text-danger small mb-0"></span>
                     </div>
+                    <span id="nombretiposuspension" class="col-form-label text-danger small mb-0 d-block"></span>
                 </div>
             </div>
         </div>

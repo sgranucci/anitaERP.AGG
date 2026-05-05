@@ -23,7 +23,7 @@ class InterbankingController extends Controller
      */
     public function index()
     {
-        can('listar-saldo-cuentas');
+        can('listar-saldo-cuenta-interbaking');
         
 		$datas = $this->interbankingService->leeSaldos(3);
 

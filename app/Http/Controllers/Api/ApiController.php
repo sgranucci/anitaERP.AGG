@@ -70,6 +70,7 @@ class ApiController extends Controller
 
             $cuitOrdenCompra = str_replace("-", "", $datosOrdenCompra->prom_cuit);
             $cuitProveedor = str_replace("-", "", $cuitProveedor);
+            $letraProveedor = $datosOrdenCompra->prom_letra;
 
             if ($cuitOrdenCompra != $cuitProveedor)
             {
@@ -164,6 +165,7 @@ class ApiController extends Controller
 
                         $respuesta[] = [
                             'tipocomprobante' => $abreviatura,
+                            'letra' => $letraProveedor,
                             'concepto' => $conceptos
                         ];
 
