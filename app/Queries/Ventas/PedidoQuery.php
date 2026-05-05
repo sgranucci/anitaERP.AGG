@@ -6,20 +6,22 @@ use App\Models\Ventas\Pedido;
 use App\Models\Stock\Capeart;
 use App\Models\Stock\Avioart;
 use Illuminate\Support\Collection;
+use App\Repositories\Ventas\VendedorRepositoryInterface;
 use DB;
 
 class PedidoQuery implements PedidoQueryInterface
 {
     protected $model;
-
+    protected $vendedorRepository;  // Repositorio de vendedores
     /**
      * PostRepository constructor.
      *
      * @param Post $post
      */
-    public function __construct(Pedido $pedido)
+    public function __construct(Pedido $pedido, VendedorRepositoryInterface $vendedorRepository)
     {
         $this->model = $pedido;
+        $this->vendedorRepository = $vendedorRepository;
     }
 
     public function allPedidoIndex($cliente_id, $opcion)
@@ -40,6 +42,9 @@ class PedidoQuery implements PedidoQueryInterface
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
+        // Filtra vendedores
+		$vendedores = $this->vendedorRepository->leeVendedoresAsociados();
+
         $pedidos = $this->model->select('pedido.id as id',
                                 'pedido.fecha as fecha',
                                 'pedido.fechaentrega as fechaentrega',
@@ -57,6 +62,9 @@ class PedidoQuery implements PedidoQueryInterface
         {
             $pedidos = $pedidos->where('pedido.estadopedido', $estado);
         }
+
+        if (count($vendedores) > 0)
+			$pedidos = $pedidos->whereIn('cliente.vendedor_id', $vendedores);
 
         if (isset($reparto[0]) && $reparto[0] != '')
         {

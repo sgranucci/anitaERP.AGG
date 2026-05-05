@@ -23,11 +23,12 @@ use App\Models\Stock\Mventa;
 use App\Models\Stock\Combinacion;
 use App\Models\Stock\Categoria;
 use App\Models\Stock\Talle;
+use Illuminate\Support\Facades\View;
 use Illuminate\Support\Facades\Storage;
 use LynX39\LaraPdfMerger\Facades\PdfMerger;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
-use App;
+use Illuminate\Support\Facades\App;
 use PDF;
 use Auth;
 use Exception;
@@ -82,7 +83,7 @@ class PedidoService
 		$this->articulo_movimientoService = $articulo_movimientoservice;
 		$this->ordentrabajoService = $ordentrabajoservice;
 		$this->precioService = $precioservice;
-		$this->seteoSalidaRepository = $seteosalidarepository;
+		$this->seteosalidaRepository = $seteosalidarepository;
     }
 
 	public function leePedido($id)
@@ -194,7 +195,7 @@ class PedidoService
 		$pedido = $data[0];
 		$nombre_pdf = 'pedido-'.$id.'-'.$pedido->clientes->nombre;
 
-		$view =  \View::make('exports.ventas.pedido', compact('pedido'))
+		$view =  View::make('exports.ventas.pedido', compact('pedido'))
 			    ->render();
 		$path = storage_path('pdf/pedido');
 
@@ -208,7 +209,7 @@ class PedidoService
 		//$path = Storage::path($nombreReporte);
 
 		$usuario_id = Auth::user()->id;
-        $seteosalida = $this->seteoSalidaRepository->buscaSeteo($usuario_id, "");
+        $seteosalida = $this->seteosalidaRepository->buscaSeteo($usuario_id, "");
 
 		$comandos = explode(' ', $seteosalida->salidas->comando);
 
@@ -236,7 +237,7 @@ class PedidoService
 		$pedido = $data[0];
 		$nombre_pdf = 'pedido-'.$id.'-'.$pedido->clientes->nombre;
 
-		$view =  \View::make('exports.ventas.pedido', compact('pedido'))
+		$view =  View::make('exports.ventas.pedido', compact('pedido'))
 			    ->render();
 		$path = storage_path('pdf/pedido');
 
@@ -328,7 +329,7 @@ class PedidoService
 		// Calcula impuestos
 		$conceptosTotales = $this->impuestoService->calculaImpuestoVenta($tblImpuesto, $datosCliente);
 
-		$view =  \View::make('exports.ventas.prefactura', compact('pedido', 'itemsId', 'conceptosTotales', 'tblImpuesto'))
+		$view =  View::make('exports.ventas.prefactura', compact('pedido', 'itemsId', 'conceptosTotales', 'tblImpuesto'))
 			    ->render();
 		$path = storage_path('pdf/pedido');
 

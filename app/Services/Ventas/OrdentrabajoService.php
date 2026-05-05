@@ -67,7 +67,7 @@ class OrdentrabajoService
 	protected $cliente_comisionQuery;
 	protected $articuloQuery;
 	protected $articulo_movimientoService;
-	protected $seteosalidaRepository;
+	protected $seteoSalidaRepository;
 	protected $tot_pares1, $tot_pares2, $tot_pares3, $tot_pares4;
 
     public function __construct(
