@@ -114,7 +114,7 @@
                     @if ($pedido->estadopedido != "Facturado")
                         <div class="row">
                             <div class="col-lg-6">
-                                <button type="submit" onclick="sub()" class="btn btn-success">Actualizar</button>
+                                <button type="submit" onclick="sub()" class="btn btn-success">Guardar</button>
                             </div>
                         </div>
                     @endif

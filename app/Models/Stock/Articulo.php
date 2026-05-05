@@ -701,6 +701,11 @@ class Articulo extends Model implements Auditable
 					$origenProducto = "Producto de Terceros";
 
 				$usoarticulo_id = 1;
+
+				if ($data->stkm_terminal == 'SI')
+					$divide = 'DIVIDE';
+				else
+					$divide = 'NO DIVIDE';
 			}
 	
 			if ($data->stkm_fe_ult_compra < 19000000)
@@ -972,7 +977,8 @@ class Articulo extends Model implements Auditable
 					'tipoproduccion_id' => $tipoproduccion_id,
 					'sectorsellado_id' => $sectorsellado_id,
 					'tipoarticulo_id' => $tipoarticulo_id,
-					'estado' => 'ACTIVO'
+					'estado' => 'ACTIVO',
+					'divide' => $divide
 				];			
 				break;
 			}
