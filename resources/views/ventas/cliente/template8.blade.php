@@ -8,7 +8,7 @@
                 <button type="button" title="Consulta provincias" style="padding:1;" class="btn-accion-tabla consultaprovincia tooltipsC">
                         <i class="fa fa-search text-primary"></i>
                 </button>
-                <input type="text" style="WIDTH: 80px;HEIGHT: 38px" class="codigoprovincia form-control" name="codigoprovincias[]" value="" >
+                <input type="text" style="WIDTH: 60px;HEIGHT: 38px" class="codigoprovincia form-control" name="codigoprovincias[]" value="" >
                 <input type="hidden" class="codigo_previo_provincia" name="codigo_previo_provincias[]" value="" >
             </div>
         </td>							

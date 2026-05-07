@@ -3,10 +3,10 @@
     	<table class="table" id="cm05-table">
     		<thead>
     			<tr>
-    				<th style="width: 12%;">Provincia</th>
-					<th style="width: 15%;">Nombre Provincia</th>
+    				<th style="width: 8%;">Provincia</th>
+					<th style="width: 13%;">Nombre Provincia</th>
     				<th style="width: 35%;">Tipo Percepción</th>
-					<th style="width: 10%;">Coeficiente</th>
+					<th style="width: 12%;">Coeficiente</th>
 					<th style="width: 15%;">Fecha vigencia</th>
 					<th style="width: 10%;">No Ret.</th>
 					<th>Desde Fecha</th>
@@ -28,7 +28,7 @@
                                     <button type="button" title="Consulta provincias" style="padding:1;" class="btn-accion-tabla consultaprovincia tooltipsC">
                                             <i class="fa fa-search text-primary"></i>
                                     </button>
-                                    <input type="text" style="WIDTH: 80px;HEIGHT: 38px" class="codigoprovincia form-control" name="codigoprovincias[]" value="{{$cm05->provincias->codigo ?? ''}}" >
+                                    <input type="text" style="WIDTH: 60px;HEIGHT: 38px" class="codigoprovincia form-control" name="codigoprovincias[]" value="{{$cm05->provincias->codigo ?? ''}}" >
                                     <input type="hidden" class="codigo_previo_provincia" name="codigo_previo_provincias[]" value="{{$cm05->provincias->codigo ?? ''}}" >
                                 </div>
                             </td>							

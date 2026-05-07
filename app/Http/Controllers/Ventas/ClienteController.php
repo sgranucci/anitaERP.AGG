@@ -128,7 +128,7 @@ class ClienteController extends Controller
 
         $busqueda = $request->busqueda;
 
-		$clientes = $this->clienteRepository->leeCliente($busqueda, true);
+        $clientes = $this->clienteRepository->leeCliente($busqueda, true);
 
         if ($clientes->isEmpty())
 		{
