@@ -20,10 +20,10 @@ switch(config('app.empresa'))
             'CATEGORIA_SECOS_ID' => 10,
             'SUBCATEGORIA_MAQUINA_ID' => 1,
             'SUBCATEGORIA_TIRA_ID' => 2,
-            'DEUDORES_POR_VENTAS' => 113100000,
-            'ANTICIPO_DE_CLIENTES' => 113100000,
+            'DEUDORES_POR_VENTAS' => 112101000,
+            'ANTICIPO_DE_CLIENTES' => 112101000,
             'EMPRESA_DEFAULT_ID' => 1,
-            'ENVIA_MAIL_ALTA_CLIENTE_DEFINITIVO' => 'SI',
+            'ENVIA_MAIL_ALTA_CLIENTE_DEFINITIVO' => 'NO',
             'DESTINATARIO_ALTA_CLIENTE_DEFINITIVO' => ['fherber@interforming.com.ar']
             ];
         break;

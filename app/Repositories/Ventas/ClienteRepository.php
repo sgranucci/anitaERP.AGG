@@ -714,7 +714,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 				$documento = $tipodocumento->abreviatura.' '.$request['numerodocumento'];
 		}
 
-		if (config('app.empresa') == 'AGG')
+		if (config('app.empresa') == 'AGG' || config('app.empresa') == 'INTERFORMING')
 			$campo_ing_bruto = 'clim_nro_ing_br';
 		else
 			$campo_ing_bruto = 'clim_nro_ing_bruto';
@@ -809,7 +809,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 				'".$hfexcl_piva."' " : "").
 				(config('app.empresa') == "INTERFORMING" ? ",
 				'".$horarioAtencion."',
-				'".$request['urlweb']." " : "")
+				'".$request['urlweb']."' " : "")
         );
         $climae = $apiAnita->apiCall($data);
 
@@ -925,10 +925,11 @@ class ClienteRepository implements ClienteRepositoryInterface
 			if ($tipodocumento->codigoexterno != "80")
 				$documento = $tipodocumento->abreviatura.' '.$request['numerodocumento'];
 		}		
-		if (config('app.empresa') == 'AGG')
+		if (config('app.empresa') == 'AGG' || config('app.empresa') == 'INTERFORMING')
 			$campo_ing_bruto = 'clim_nro_ing_br';
 		else
 			$campo_ing_bruto = 'clim_nro_ing_bruto';
+		$horarioAtencion = $request['horarioatencion'];
 
 		$data = array( 'acc' => 'update', 'tabla' => $this->tableAnita[0], 
 				'sistema' => 'ventas',
@@ -1325,7 +1326,6 @@ class ClienteRepository implements ClienteRepositoryInterface
 
 		$cliente = $cliente->orderby('id', 'DESC');
                                 
-		//dd($permisos['permisos']);
         if (isset($flPaginando))
         {
             if ($flPaginando)
