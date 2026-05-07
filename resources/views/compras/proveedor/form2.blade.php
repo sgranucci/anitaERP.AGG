@@ -1,4 +1,4 @@
-<div id="tab2" class="form2 tab-content" style="display: none">
+<div id="tab2" class="form2 tab-content" style="display: none" data-arca-constancia-url="{{ route('arca_constancia_inscripcion') }}">
 	<h3>Datos de impuestos</h3>
 	<div class="row">
 		<div class="col-sm-6">
@@ -7,6 +7,12 @@
 				<div class="col-lg-3">
 					<input type="text" id="nroinscripcion" name="nroinscripcion" class="form-control" placeholder="XX-XXXXXXXX-X" maxlength="13" oninput="formatarCUIT(this)" value="{{old('nroinscripcion', $data->nroinscripcion ?? '')}}" required>
 				</div>
+				<button type="button" id="btn-consulta-arca-proveedor" title="Consultar padrón ARCA" class="btn-accion-tabla tooltipsC" style="padding:1px;" onclick="return window.consultaArcaProveedor?.(event)">
+					<i class="fa fa-search text-primary"></i>
+				</button>
+				<span id="arca-loading-proveedor" style="display:none; margin-left:8px; color:#6c757d; font-size: 0.95em;">
+					<i class="fa fa-spinner fa-spin" aria-hidden="true"></i> Consultando a ARCA...
+				</span>
 			</div>
 			<div class="form-group row">
 				@if ($tipoalta != 'P')
@@ -266,3 +272,5 @@
         </div>
 	</div>
 </div>
+
+@include('compras.proveedor.arca-padron-modals')

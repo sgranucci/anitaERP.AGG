@@ -1,0 +1,87 @@
+@extends("theme.$theme.layout")
+@section('titulo')
+Editar lista de precios proveedor
+@endsection
+
+@section("scripts")
+<script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/stock/articulo/consulta.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/compras/listaprecio-proveedor/crear.js")}}" type="text/javascript"></script>
+@endsection
+
+@section('contenido')
+<div class="row" id="editar">
+    <div class="col-lg-12">
+        @include('includes.form-error')
+        @include('includes.mensaje')
+        <div class="card card-danger">
+            <div class="card-header">
+                <h3 class="card-title">Lista: {{ $data->nombre }}</h3>
+                <div class="card-tools">
+                    <a href="{{ route('consultar_listaprecio_proveedor') }}" class="btn btn-outline-info btn-sm">
+                        <i class="fa fa-fw fa-reply-all"></i> Volver al listado
+                    </a>
+                </div>
+            </div>
+            <form action="{{ route('actualizar_listaprecio_proveedor', ['id' => $data->id]) }}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off">
+                @csrf @method('put')
+                <div align="center" style="margin: 5px;">
+                    <button type="button" id="botonform1" class="btn btn-primary btn-sm">Datos principales</button>
+                    <button type="button" id="botonform3" class="btn btn-info btn-sm">Historia estados</button>
+                    <button type="button" id="botonform4" class="btn btn-info btn-sm">Archivos</button>
+                    @if (can('actualizar-listaprecio-proveedor', false))
+                    <button type="button" id="botonform-importexcel" class="btn btn-success btn-sm">
+                        <i class="fa fa-file-excel-o"></i> Importar Excel
+                    </button>
+                    @endif
+                </div>
+                <div class="card-body">
+                    @include('compras.listaprecio_proveedor.form')
+                    <div class="form3" style="display:none;">
+                        <h5>Historia de estados</h5>
+                        <table class="table table-bordered">
+                            <thead><tr><th>Fecha / hora</th><th>Estado</th><th>Usuario</th><th>Observación</th></tr></thead>
+                            <tbody class="container-historia"></tbody>
+                        </table>
+                    </div>
+                    <div class="form4" style="display:none;">
+                        <h5>Archivos nuevos</h5>
+                        <input type="file" name="nombrearchivos[]" class="form-control" multiple>
+                        <h6 class="mt-3">Archivos actuales</h6>
+                        <ul>
+                            @foreach ($data->listaprecio_proveedor_archivos as $arch)
+                                <li>{{ $arch->nombrearchivo }}</li>
+                                <input type="hidden" name="nombresanteriores[]" value="{{ $arch->nombrearchivo }}">
+                            @endforeach
+                        </ul>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <div class="col-lg-4">
+                        @include('includes.boton-form-editar')
+                    </div>
+                </div>
+            </form>
+
+            @if (can('actualizar-listaprecio-proveedor', false))
+            <div class="card-body border-top" id="importar-excel">
+                <h5 class="mb-2"><i class="fa fa-file-excel-o text-success"></i> Importar precios desde Excel</h5>
+                <p class="small text-muted mb-2">Columnas: <strong>A</strong> = SKU artículo, <strong>B</strong> = precio, <strong>C</strong> = % descuento (opcional), <strong>D</strong> = código artículo proveedor (opcional). La primera fila puede ser encabezado (SKU, …).</p>
+                <form action="{{ route('importar_excel_listaprecio_proveedor', ['id' => $data->id]) }}" method="POST" enctype="multipart/form-data" class="form-inline flex-wrap align-items-end">
+                    @csrf
+                    <div class="form-group mr-2 mb-2">
+                        <label for="fechavigencia_import" class="d-block">Fecha de vigencia de los precios importados</label>
+                        <input type="date" name="fechavigencia" id="fechavigencia_import" class="form-control" required value="{{ date('Y-m-d') }}">
+                    </div>
+                    <div class="form-group mr-2 mb-2">
+                        <label for="archivoexcel" class="d-block">Archivo (.xlsx, .xls, .csv)</label>
+                        <input type="file" name="archivoexcel" id="archivoexcel" class="form-control-file" accept=".xlsx,.xls,.csv" required>
+                    </div>
+                    <button type="submit" class="btn btn-success mb-2">Importar</button>
+                </form>
+            </div>
+            @endif
+        </div>
+    </div>
+</div>
+@endsection

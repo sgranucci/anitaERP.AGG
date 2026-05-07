@@ -197,7 +197,8 @@ class ClienteRepository implements ClienteRepositoryInterface
 
 	public function actualizaPadronMipymePorCuit($cuit, $modo)
 	{
-		$this->model->where('numerodocumento', $cuit)->update(['modofacturacion' => $modo]);
+		$this->model->whereRaw("REPLACE(REPLACE(numerodocumento, '-', ''), '.', '') = ?", [$cuit])
+					->update(['modofacturacion' => $modo]);
 	}
 
 	public function actualizaPadronMipyme($modo)

@@ -183,7 +183,7 @@ class Padron_MipymeController extends Controller
             DB::beginTransaction();
 
             // Actualiza todos los clientes normalizando modo de facturacion
-            $this->clienteRepository->actualizaPadronMipyme('C');
+            $this->clienteRepository->actualizaPadronMipyme('N');
 
             // Borra todo el padron
             DB::table('padron_mipyme')->delete();

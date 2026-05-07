@@ -1,4 +1,4 @@
-<div id="tab2" class="form2 tab-content" style="display: none">
+<div id="tab2" class="form2 tab-content" style="display: none" data-arca-constancia-url="{{ route('arca_constancia_inscripcion') }}">
 	<div class="row">
 		<div class="col-sm-6">
 			<div class="form-group row">
@@ -16,6 +16,12 @@
 				<input type="hidden" id="condicioniva_query" value="{{$condicioniva_query}}">
 				<span class="input-group-text">#</span>
 				<input type="text" name="numerodocumento" id="numerodocumento" class="col-lg-3 form-control" value="{{$data->numerodocumento??''}}">
+				<button type="button" id="btn-consulta-arca-cliente" title="Consultar padrón ARCA" class="btn-accion-tabla tooltipsC" style="padding:1;" onclick="return window.consultaArcaCliente?.(event)">
+					<i class="fa fa-search text-primary"></i>
+				</button>
+				<span id="arca-loading-cliente" style="display:none; margin-left:8px; color:#6c757d; font-size: 0.95em;">
+					<i class="fa fa-spinner fa-spin" aria-hidden="true"></i> Consultando a ARCA...
+				</span>
 			</div>			
 			<div class="form-group row">
 				@if ($tipoalta != 'P')
@@ -313,3 +319,4 @@
 	</div>
 </div>
 @include('includes.ventas.modalconsultazonavta')
+@include('compras.proveedor.arca-padron-modals')

@@ -2,19 +2,18 @@
 
 namespace App\Http\Controllers\Caja;
 
-use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
-use Illuminate\Support\Facades\Storage;
-use App\Services\Caja\InterbankingService;
 use App\Repositories\Caja\BancoRepositoryInterface;
+use App\Services\Caja\InterbankingService;
 
 class InterbankingController extends Controller
 {
-	private $interbankingService;
-	private $bancoRepository;
+    private $interbankingService;
 
-    public function __construct(InterbankingService $interbankingService, 
-                                BancoRepositoryInterface $bancoRepository)
+    private $bancoRepository;
+
+    public function __construct(InterbankingService $interbankingService,
+        BancoRepositoryInterface $bancoRepository)
     {
         $this->interbankingService = $interbankingService;
         $this->bancoRepository = $bancoRepository;
@@ -28,12 +27,9 @@ class InterbankingController extends Controller
     public function index()
     {
         can('listar-saldo-cuenta-interbanking');
-        
-        $dataARS = $this->interbankingService->leeSaldos(1, 'ARS');
-        dd($dataARS);
-        
+
         $dataARS = $this->interbankingService->leeSaldos(3, 'ARS');
-        
+
         $dataUSD = $this->interbankingService->leeSaldos(3, 'USD');
 
         $datas = array_merge($dataARS['accounts'], $dataUSD['accounts']);
@@ -81,5 +77,4 @@ class InterbankingController extends Controller
 
         return 'Banco no encontrado';
     }
-
 }

@@ -6,7 +6,7 @@
     				<th style="width: 12%;">Provincia</th>
 					<th style="width: 15%;">Nombre Provincia</th>
     				<th style="width: 35%;">Tipo Percepción</th>
-					<th>Coeficiente</th>
+					<th style="width: 10%;">Coeficiente</th>
 					<th style="width: 15%;">Fecha vigencia</th>
 					<th style="width: 10%;">No Ret.</th>
 					<th>Desde Fecha</th>

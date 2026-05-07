@@ -17,8 +17,11 @@ class TablaPermisoSeeder extends Seeder
     {
         $now = Carbon::now()->toDateTimeString();
         $permiso = [
-            array('id' => '1040', 'nombre' => 'Listar saldo de cuentas interbanking', 'slug' => 'listar-saldo-cuenta-interbanking', 'menu_id' => 225, 'created_at' => $now, 'updated_at' => $now),
-            array('id' => '1041', 'nombre' => 'Ver movimientos de cuenta interbanking', 'slug' => 'ver-movimientos-cuenta-interbanking', 'menu_id' => 225, 'created_at' => $now, 'updated_at' => $now),
+            ['id' => '1050', 'nombre' => 'Listar listas de precio de proveedores', 'slug' => 'listar-listaprecio-proveedor', 'menu_id' => 225, 'created_at' => $now, 'updated_at' => $now],
+            ['id' => '1051', 'nombre' => 'Ingresar listas de precio de proveedores', 'slug' => 'crear-listaprecio-proveedor', 'menu_id' => 225, 'created_at' => $now, 'updated_at' => $now],
+            ['id' => '1052', 'nombre' => 'Editar listas de precio de proveedores', 'slug' => 'editar-listaprecio-proveedor', 'menu_id' => 225, 'created_at' => $now, 'updated_at' => $now],
+            ['id' => '1053', 'nombre' => 'Actualizar listas de precio de proveedores', 'slug' => 'actualizar-listaprecio-proveedor', 'menu_id' => 225, 'created_at' => $now, 'updated_at' => $now],
+            ['id' => '1054', 'nombre' => 'Borrar listas de precio de proveedores', 'slug' => 'borrar-listaprecio-proveedor', 'menu_id' => 225, 'created_at' => $now, 'updated_at' => $now],
         ];
         DB::table('permiso')->insert($permiso);
     }

@@ -12,6 +12,7 @@ input:invalid {
 @endsection
 
 @section("scripts")
+<meta name="csrf-token" content="{{ csrf_token() }}">
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/domicilio.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/cliente/domicilioentrega.js")}}" type="text/javascript"></script>
@@ -19,6 +20,7 @@ input:invalid {
 <script src="{{asset("assets/pages/scripts/configuracion/localidad/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/configuracion/provincia/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/zonavta/consulta.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/ventas/cliente/arca-padron.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/cliente/crear.js")}}" type="text/javascript"></script>
 <script>
 $( "#botonform0" ).click(function() {
@@ -78,7 +80,10 @@ $( "#botonform0" ).click(function() {
                     </button>
                     <button type="button" id="botonform8" class="btn btn-info btn-sm">
                         <span class="fa fa-copy"></span> CM05
-                    </button>                       
+                    </button>
+                    <button type="button" id="btn-consulta-arca-padron-crear" class="btn btn-outline-secondary btn-sm" title="Ingresá el CUIT y consultá el padrón ARCA">
+                        <i class="fa fa-search"></i> Consulta padrón ARCA
+                    </button>
                 </div>                
                 <div class="card-body" style="padding-bottom: 0; padding-top: 5px;">
                     @include('ventas.cliente.form1')
@@ -100,6 +105,7 @@ $( "#botonform0" ).click(function() {
             		</div>
             	</div>
             </form>
+            @include('compras.proveedor.arca-cuit-entry-modal')
         </div>
     </div>
 </div>
