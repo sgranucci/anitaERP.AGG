@@ -51,9 +51,12 @@ class ClienteRepository implements ClienteRepositoryInterface
 
     public function create(array $data)
     {
-		$codigo = '';
-		self::ultimoCodigo($codigo);
-		$data['codigo'] = $codigo;
+		if (config('app.empresa') !== 'INTERFORMING')
+		{
+			$codigo = '';
+			self::ultimoCodigo($codigo);
+			$data['codigo'] = $codigo;
+		}
 		$data['estado'] = '0';
 
 		if (config('app.empresa') == 'EL BIERZO')
