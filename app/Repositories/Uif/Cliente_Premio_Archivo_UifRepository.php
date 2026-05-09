@@ -124,4 +124,80 @@ class Cliente_Premio_Archivo_UifRepository implements Cliente_Premio_Archivo_Uif
 		return $retorno;
 	}
 
+	public function traerArchivosDeAnita(int $premioLocalId, $inroclienteid, $inropremioid): void
+	{
+		$cid = filter_var($inroclienteid, FILTER_VALIDATE_INT);
+		$pid = filter_var($inropremioid, FILTER_VALIDATE_INT);
+		if ($premioLocalId <= 0 || $cid === false || $cid <= 0 || $pid === false || $pid <= 0) {
+			return;
+		}
+
+		$cfg = config('uif.anita_uif_archivos', []);
+		$mount = (string) ($cfg['mount'] ?? '');
+		$tabla = (string) ($cfg['tabla_premio'] ?? '');
+		$campos = (string) ($cfg['campos_premio'] ?? 'inropremioid, inroclienteid, inrolinea, carchivo');
+		$sistema = (string) ($cfg['sistema'] ?? 'base_admin');
+
+		$filasApi = $tabla !== ''
+			? AnitaUifArchivosSync::listarDesdeAnita(
+				$tabla,
+				$campos,
+				$sistema,
+				" WHERE inropremioid = '".$pid."' "
+			)
+			: [];
+
+		$dirs = AnitaUifArchivosSync::directoriosCandidatosPremio($mount, (int) $cid, (int) $pid);
+		$desdeFs = AnitaUifArchivosSync::listarBasenamesEnDirectorios($dirs);
+		$desdeFsPlano = AnitaUifArchivosSync::listarBasenamesPremioPorPrefijo($mount, (int) $cid, (int) $pid);
+
+		$nombres = AnitaUifArchivosSync::mergeNombresArchivo($filasApi, array_merge($desdeFs, $desdeFsPlano));
+		foreach ($nombres as $nombre) {
+			$this->importarArchivoPremioSiExiste($premioLocalId, (int) $cid, (int) $pid, $nombre, $mount);
+		}
+	}
+
+	private function importarArchivoPremioSiExiste(
+		int $premioLocalId,
+		int $inroclienteid,
+		int $inropremioid,
+		string $nombreArchivo,
+		string $mount
+	): void {
+		$nombreArchivo = basename($nombreArchivo);
+		if ($nombreArchivo === '') {
+			return;
+		}
+
+		$destNombre = $premioLocalId.'-'.$nombreArchivo;
+		if ($this->model->newQuery()
+			->where('cliente_premio_uif_id', $premioLocalId)
+			->where('nombrearchivo', $destNombre)
+			->exists()) {
+			return;
+		}
+
+		$origen = AnitaUifArchivosSync::primeraRutaExistente(
+			AnitaUifArchivosSync::rutasOrigenCandidatasPremio($mount, $inroclienteid, $inropremioid, $nombreArchivo)
+		);
+		if ($origen === null) {
+			return;
+		}
+
+		$destDir = public_path('storage/archivos/clientes_premios_uif/'.$premioLocalId);
+		if (! is_dir($destDir) && ! @mkdir($destDir, 0775, true) && ! is_dir($destDir)) {
+			return;
+		}
+
+		$destFile = $destDir.'/'.$destNombre;
+		if (! @copy($origen, $destFile)) {
+			return;
+		}
+
+		$this->model->create([
+			'cliente_premio_uif_id' => $premioLocalId,
+			'nombrearchivo' => $destNombre,
+		]);
+	}
+
 }

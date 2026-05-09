@@ -12,5 +12,7 @@ interface Cliente_Archivo_UifRepositoryInterface
     public function findOrFail($id);
     public function delete($cliente_uif_id);
 
+    public function traerArchivosDeAnita(int $clienteUifId, $inroclienteid): void;
+
 }
 

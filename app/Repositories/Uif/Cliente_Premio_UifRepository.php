@@ -68,7 +68,7 @@ class Cliente_Premio_UifRepository implements Cliente_Premio_UifRepositoryInterf
 
 	public function createUnique(array $data)
 	{
-		$cliente_premio_uif = $this->model->create($data);
+		return $this->model->create($data);
 	}
 
     public function update(array $data, $id)

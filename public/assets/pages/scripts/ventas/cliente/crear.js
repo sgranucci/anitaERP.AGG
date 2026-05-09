@@ -267,6 +267,7 @@
         $(document).on('click', '.eliminar', borraRenglon);
         $('#agrega_renglon_archivo').on('click', agregaRenglonArchivo);
         $(document).on('click', '.eliminararchivo', borraRenglonArchivo);
+        $(document).on('click', '.eliminar-archivo-cliente', borraTarjetaArchivoCliente);
         $('#agrega_renglon_seguimiento').on('click', agregaRenglonSeguimiento);
         $(document).on('click', '.eliminar_seguimiento', borraRenglonSeguimiento);
         $('#agrega_renglon_articulo_suspendido').on('click', agregaRenglonArticuloSuspendido);
@@ -359,7 +360,7 @@
     	});
     }
 
-    function agregaRenglonArchivo(){
+    function agregaRenglonArchivo(event){
     	event.preventDefault();
     	var renglon = $('#template-renglon-archivo').html();
 
@@ -370,6 +371,16 @@
     function borraRenglonArchivo(event) {
     	event.preventDefault();
     	$(this).parents('tr').remove();
+    }
+
+    function borraTarjetaArchivoCliente(event) {
+        event.preventDefault();
+        var $wrap = $(this).closest('.cliente-archivo-item');
+        if ($wrap.length) {
+            $wrap.remove();
+            return;
+        }
+        $(this).closest('.col-md-6').remove();
     }
 
     function actualizaArchivo(elem) {

@@ -36,7 +36,7 @@ $( "#botonform0" ).click(function() {
                     </a>
                 </div>
             </div>
-            <form action="{{route('guarda_cliente_uif')}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
+            <form action="{{route('guarda_cliente_uif')}}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off">
                 @csrf
                 <div align="center" style="margin: 5px;">
                     <button type="button" id="botonform1" class="btn btn-primary btn-sm">

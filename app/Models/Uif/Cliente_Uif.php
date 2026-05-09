@@ -2,45 +2,43 @@
 
 namespace App\Models\Uif;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
-use OwenIt\Auditing\Contracts\Auditable;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Traits\Uif\Cliente_UifTrait;
-use Illuminate\Support\Arr;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use OwenIt\Auditing\Contracts\Auditable;
 
 class Cliente_Uif extends Model implements Auditable
 {
-    use SoftDeletes;
-    use \OwenIt\Auditing\Auditable;
     use Cliente_UifTrait;
+    use \OwenIt\Auditing\Auditable;
+    use SoftDeletes;
 
-    protected $fillable = ['nombre', 'tipodocumento_id', 'numerodocumento', 'cuit',
-            'fechanacimiento', 'provincianacimiento_id', 'localidadnacimiento_id', 'paisnacimiento_id', 
-            'sexo', 'estadocivil_uif_id', 
-            'domicilio', 'piso', 'departamento', 'localidad_uif_id', 'codigopostal', 'provincia_uif_id', 
-            'pais_uif_id', 'telefono', 'email', 'actividad_uif_id', 'estado', 'pep_uif_id' ,'resideparaisofiscal', 
-            'resideexterior', 'fechafirmapep', 'fechaconfirmapep', 'fechainformepep', 'fechainformenosis', 
-            'fechavencimientodni', 'fechavencimientoactividad', 'so_uif_id', 'cumplenormativaso', 
-            'actividadso', 'firmodeclaracionjurada', 'riesgopep', 'nivelsocioeconomico_uif_id', 'fotodocumento', 
-            'usuario_id'];
+    protected $fillable = ['inroclienteid', 'nombre', 'tipodocumento_id', 'numerodocumento', 'cuit',
+        'fechanacimiento', 'provincianacimiento_id', 'localidadnacimiento_id', 'paisnacimiento_id',
+        'sexo', 'estadocivil_uif_id',
+        'domicilio', 'piso', 'departamento', 'localidad_uif_id', 'codigopostal', 'provincia_uif_id',
+        'pais_uif_id', 'telefono', 'email', 'actividad_uif_id', 'estado', 'pep_uif_id', 'resideparaisofiscal',
+        'resideexterior', 'fechafirmapep', 'fechaconfirmapep', 'fechainformepep', 'fechainformenosis',
+        'fechavencimientodni', 'fechavencimientoactividad', 'so_uif_id', 'cumplenormativaso',
+        'actividadso', 'firmodeclaracionjurada', 'riesgopep', 'nivelsocioeconomico_uif_id', 'fotodocumento',
+        'usuario_id'];
 
     protected $table = 'cliente_uif';
 
     public function cliente_premios_uif()
-	{
-    	return $this->hasMany(Cliente_Premio_Uif::class, 'cliente_uif_id');
-	}
+    {
+        return $this->hasMany(Cliente_Premio_Uif::class, 'cliente_uif_id');
+    }
 
     public function cliente_riesgos_uif()
-	{
-    	return $this->hasMany(Cliente_Riesgo_Uif::class, 'cliente_uif_id');
-	}
+    {
+        return $this->hasMany(Cliente_Riesgo_Uif::class, 'cliente_uif_id');
+    }
 
     public function cliente_archivos_uif()
-	{
-    	return $this->hasMany(Cliente_Archivo_Uif::class, 'cliente_uif_id');
-	}
+    {
+        return $this->hasMany(Cliente_Archivo_Uif::class, 'cliente_uif_id');
+    }
 
     public function provincia_nacimientos()
     {
@@ -96,10 +94,9 @@ class Cliente_Uif extends Model implements Auditable
     {
         return $this->belongsTo(Nivelsocioeconomico_Uif::class, 'nivelsocioeconomico_uif_id');
     }
- 
+
     public function usuarios()
     {
         return $this->belongsTo(Usuario::class, 'usuario_id');
     }
-
 }

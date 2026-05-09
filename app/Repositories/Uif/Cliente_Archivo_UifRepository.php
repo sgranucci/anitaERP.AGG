@@ -70,7 +70,7 @@ class Cliente_Archivo_UifRepository implements Cliente_Archivo_UifRepositoryInte
 		if ($funcion == 'update')
 		{
 			// Borra los registros antes de grabar nuevamente
-       		$this->delete($id, $request->codigo);
+       		$this->delete($id);
 		}
 		$nombrearchivos = $request->file('nombrearchivos');
 
@@ -81,17 +81,19 @@ class Cliente_Archivo_UifRepository implements Cliente_Archivo_UifRepositoryInte
 			{
 		  		if ($archivo)
 				{
-					// Guarda fisicamente el archivo
-					$path = public_path()."/storage/archivos/clientes_uif/";
+					$destDir = public_path().'/storage/archivos/clientes_uif/'.$id;
+					if (! is_dir($destDir)) {
+						@mkdir($destDir, 0775, true);
+					}
     				$file = $archivo->getClientOriginalName();
-    				$fileName = $path . $id . '-' . $archivo->getClientOriginalName();
-	
-    				$archivo->move($path, $fileName);
+    				$destName = $id.'-'.$file;
+
+    				$archivo->move($destDir, $destName);
 
 					// Guarda en ERP
 					$cliente_archivo_uif = $this->model->create([
 									'cliente_uif_id' => $id,
-									'nombrearchivo' => $id.'-'.$file,
+									'nombrearchivo' => $destName,
 									]);
 				}
 			}
@@ -130,6 +132,76 @@ class Cliente_Archivo_UifRepository implements Cliente_Archivo_UifRepositoryInte
 		}
 		$retorno = $cliente_archivo_uif ?? '1';
 		return $retorno;
+	}
+
+	public function traerArchivosDeAnita(int $clienteUifId, $inroclienteid): void
+	{
+		$cid = filter_var($inroclienteid, FILTER_VALIDATE_INT);
+		if ($clienteUifId <= 0 || $cid === false || $cid <= 0) {
+			return;
+		}
+
+		$cfg = config('uif.anita_uif_archivos', []);
+		$mount = (string) ($cfg['mount'] ?? '');
+		$tabla = (string) ($cfg['tabla_cliente'] ?? '');
+		$campos = (string) ($cfg['campos_cliente'] ?? 'inroclienteid, inrolinea, carchivo');
+		$sistema = (string) ($cfg['sistema'] ?? 'base_admin');
+
+		$filasApi = $tabla !== ''
+			? AnitaUifArchivosSync::listarDesdeAnita(
+				$tabla,
+				$campos,
+				$sistema,
+				" WHERE inroclienteid = '".$cid."' "
+			)
+			: [];
+
+		$dirs = AnitaUifArchivosSync::directoriosCandidatosCliente($mount, (int) $cid);
+		$desdeFs = AnitaUifArchivosSync::listarBasenamesEnDirectorios($dirs);
+		$desdeFsPlano = AnitaUifArchivosSync::listarBasenamesClientePorPrefijo($mount, (int) $cid);
+
+		$nombres = AnitaUifArchivosSync::mergeNombresArchivo($filasApi, array_merge($desdeFs, $desdeFsPlano));
+		foreach ($nombres as $nombre) {
+			$this->importarArchivoClienteSiExiste($clienteUifId, (int) $cid, $nombre, $mount);
+		}
+	}
+
+	private function importarArchivoClienteSiExiste(int $clienteUifId, int $inroclienteid, string $nombreArchivo, string $mount): void
+	{
+		$nombreArchivo = basename($nombreArchivo);
+		if ($nombreArchivo === '') {
+			return;
+		}
+
+		$destNombre = $clienteUifId.'-'.$nombreArchivo;
+		if ($this->model->newQuery()
+			->where('cliente_uif_id', $clienteUifId)
+			->where('nombrearchivo', $destNombre)
+			->exists()) {
+			return;
+		}
+
+		$origen = AnitaUifArchivosSync::primeraRutaExistente(
+			AnitaUifArchivosSync::rutasOrigenCandidatas($mount, $inroclienteid, $nombreArchivo)
+		);
+		if ($origen === null) {
+			return;
+		}
+
+		$destDir = public_path('storage/archivos/clientes_uif/'.$clienteUifId);
+		if (! is_dir($destDir) && ! @mkdir($destDir, 0775, true) && ! is_dir($destDir)) {
+			return;
+		}
+
+		$destFile = $destDir.'/'.$destNombre;
+		if (! @copy($origen, $destFile)) {
+			return;
+		}
+
+		$this->model->create([
+			'cliente_uif_id' => $clienteUifId,
+			'nombrearchivo' => $destNombre,
+		]);
 	}
 
 }

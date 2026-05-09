@@ -21,7 +21,7 @@
         					@endforeach
         				</select>
 						<span class="input-group-text">#</span>
-						<input type="text" name="numerodocumento" id="numerodocumento" class="col-lg-3 form-control" placeholder="Nro. de documento" aria-label="Número" value="{{$data->numerodocumento??''}}">
+						<input type="text" name="numerodocumento" id="numerodocumento" class="col-lg-3 form-control" placeholder="Nro. de documento" aria-label="Número" value="{{ old('numerodocumento', $data->numerodocumento ?? '') }}">
 						<span class="input-group-text">CUIT</span>
 						<input type="text" name="cuit" id="cuit" class="col-lg-3 form-control" placeholder="CUIT" aria-label="CUIT" value="{{$data->cuit??''}}">
 					</div>
@@ -221,10 +221,55 @@
 				<label for="fotodocumento">Foto DNI:</label>
 				<input type="file" id="fotodocumento" name="fotodocumento" style="color: transparent" value="{{$data->fotodocumento ?? ''}}">
 				<div id="archivoseleccionado" style="align: left;"></div>
-				@if (isset($data['fotodocumento']))
-					<a download="{{$data->fotodocumento}}" href="{{ asset("storage/imagenes/fotos_documentos_uif/$data->fotodocumento") }}" title='Descargar' />
-						<i class="fa fa-download"></i>
-					</a>
+				@if (!empty($data['fotodocumento']))
+					@php
+						$fotoNombre = $data['fotodocumento'];
+						$fotoBasename = basename($fotoNombre);
+						$fid = $data->id ?? null;
+						$rutaVerDocumento = $fid ? route('cliente_uif_fotodocumento', ['id' => $fid]) : '#';
+						$legacyRel = 'storage/imagenes/fotos_documentos_uif/'.$fotoBasename;
+						$legacyAbs = public_path($legacyRel);
+						$esImagen = preg_match('/\.(jpe?g|png|gif|webp)$/i', $fotoNombre);
+						$esPdf = preg_match('/\.pdf$/i', $fotoNombre);
+						// Archivos en public/storage: el navegador los sirve directo (evita redirecciones de permiso en la etiqueta img).
+						$urlMiniatura = null;
+						if ($fid && $esImagen) {
+							$urlMiniatura = is_file($legacyAbs) ? asset($legacyRel) : $rutaVerDocumento;
+						} elseif ($fid && $esPdf) {
+							$urlMiniatura = asset('storage/imagenes/pdf.png');
+						}
+					@endphp
+					@if ($fid)
+					<div class="mt-2 p-2 border rounded bg-light d-flex align-items-start flex-wrap" style="gap: 12px;">
+						<div class="text-center flex-shrink-0" style="width: 104px;">
+							@if ($urlMiniatura)
+								<a href="{{ $rutaVerDocumento }}" target="_blank" rel="noopener" title="Abrir documento">
+									<img src="{{ $urlMiniatura }}" alt="Vista previa documento" class="img-thumbnail" style="max-height: 96px; max-width: 96px; width: 96px; height: 96px; object-fit: {{ $esPdf ? 'contain' : 'cover' }};">
+								</a>
+								@if ($esPdf)
+									<small class="text-muted d-block text-break mt-1" style="max-width: 104px;">PDF</small>
+								@endif
+							@else
+								<a href="{{ $rutaVerDocumento }}" target="_blank" rel="noopener" class="text-secondary" title="Abrir archivo">
+									<i class="fa fa-file-o fa-3x d-block my-2"></i>
+								</a>
+								<small class="text-muted d-block text-break" style="max-width: 96px;">{{ $fotoBasename }}</small>
+							@endif
+						</div>
+						<div class="d-flex flex-column justify-content-center" style="gap: 6px;">
+							<a class="btn btn-sm btn-outline-primary" href="{{ route('cliente_uif_fotodocumento', ['id' => $fid]) }}?disposition=attachment">
+								<i class="fa fa-download"></i> Descargar
+							</a>
+							@if (can('actualizar-cliente-uif', false))
+							<button type="button" class="btn btn-sm btn-outline-danger" data-url="{{ route('elimina_fotodocumento_cliente_uif', ['id' => $fid]) }}" onclick="eliminarFotoDocumentoClienteUif(this.dataset.url)">
+								<i class="fa fa-trash"></i> Borrar foto
+							</button>
+							@endif
+						</div>
+					</div>
+					@else
+						<p class="small text-muted mt-2 mb-0">Guarde el cliente para gestionar la foto del documento.</p>
+					@endif
 				@endif
 			</div>
 		</div>

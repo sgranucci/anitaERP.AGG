@@ -10,6 +10,7 @@
         $(document).on('click', '.eliminar_partidagasto_monto', borraRenglonPartidagasto_Monto);
 		$('#agrega_renglon_archivo').on('click', agregaRenglonArchivo);
         $(document).on('click', '.eliminararchivo', borraRenglonArchivo);
+        $(document).on('click', '.eliminar-archivo-partidagasto', borraTarjetaArchivoPartidagasto);
 
 		activa_eventos(true);
 		
@@ -145,16 +146,26 @@
     	});
     }
 
-	function agregaRenglonArchivo(){
+	function agregaRenglonArchivo(event){
     	event.preventDefault();
     	var renglon = $('#template-renglon-archivo').html();
 
     	$("#tbody-tabla-archivo").append(renglon);
     }
 
-    function borraRenglonArchivo() {
+    function borraRenglonArchivo(event) {
     	event.preventDefault();
     	$(this).parents('tr').remove();
+    }
+
+    function borraTarjetaArchivoPartidagasto(event) {
+        event.preventDefault();
+        var $wrap = $(this).closest('.partidagasto-archivo-item');
+        if ($wrap.length) {
+            $wrap.remove();
+            return;
+        }
+        $(this).closest('.col-md-6').remove();
     }
 
     function actualizaArchivo(elem) {

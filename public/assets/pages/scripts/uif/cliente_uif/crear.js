@@ -130,6 +130,7 @@
         $(document).on('click', '.eliminar_premio', borraRenglonPremio);
         $('#agrega_renglon_archivo').on('click', agregaRenglonArchivo);
         $(document).on('click', '.eliminararchivo', borraRenglonArchivo);
+        $(document).on('click', '.eliminar-archivo-cliente-uif', borraTarjetaArchivoClienteUif);
 
         activa_eventos(true);
         activa_eventos_consultaactividad_uif();
@@ -292,16 +293,26 @@
     	});
     }
 
-    function agregaRenglonArchivo(){
+    function agregaRenglonArchivo(event){
     	event.preventDefault();
     	var renglon = $('#template-renglon-archivo').html();
 
     	$("#tbody-tabla-archivo").append(renglon);
     }
 
-    function borraRenglonArchivo() {
+    function borraRenglonArchivo(event) {
     	event.preventDefault();
     	$(this).parents('tr').remove();
+    }
+
+    function borraTarjetaArchivoClienteUif(event) {
+        event.preventDefault();
+        var $wrap = $(this).closest('.cliente-uif-archivo-item');
+        if ($wrap.length) {
+            $wrap.remove();
+            return;
+        }
+        $(this).closest('.col-md-6').remove();
     }
 
     function actualizaArchivo(elem) {
@@ -401,6 +412,31 @@
             }
         }
     }
+
+    /**
+     * Borra la foto del DNI vía POST+DELETE en un form aparte (evita form anidado y _method duplicado en edición).
+     */
+    window.eliminarFotoDocumentoClienteUif = function (url) {
+        if (!url || !confirm('¿Eliminar la foto del documento del cliente?')) {
+            return;
+        }
+        var token = $('meta[name="csrf-token"]').attr('content');
+        var f = document.createElement('form');
+        f.method = 'POST';
+        f.action = url;
+        var iToken = document.createElement('input');
+        iToken.type = 'hidden';
+        iToken.name = '_token';
+        iToken.value = token;
+        var iMethod = document.createElement('input');
+        iMethod.type = 'hidden';
+        iMethod.name = '_method';
+        iMethod.value = 'DELETE';
+        f.appendChild(iToken);
+        f.appendChild(iMethod);
+        document.body.appendChild(f);
+        f.submit();
+    };
 
     function calculaRiesgo(periodo, inusualidad_uif_id)
     {

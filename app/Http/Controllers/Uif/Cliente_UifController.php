@@ -22,6 +22,7 @@ use App\Repositories\Uif\Nivelsocioeconomico_UifRepositoryInterface;
 use App\Repositories\Uif\Pais_UifRepositoryInterface;
 use App\Repositories\Uif\Pep_UifRepositoryInterface;
 use App\Repositories\Uif\So_UifRepositoryInterface;
+use App\Services\Uif\ClienteUifFotoDocumento;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Arr;
@@ -279,6 +280,50 @@ class Cliente_UifController extends Controller
         $this->cliente_uifService->actualizaCliente_Uif($request, $id);
 
         return redirect('uif/cliente_uif')->with('mensaje', 'Cliente actualizado con éxito');
+    }
+
+    /**
+     * Sirve la foto DNI (storage público o rutas legacy / montaje) para vista previa o descarga.
+     */
+    public function mostrarFotodocumento($id)
+    {
+        can('editar-cliente-uif');
+
+        $cliente_uif = $this->cliente_uifRepository->find($id);
+        if ($cliente_uif === null || ($cliente_uif->fotodocumento ?? '') === '') {
+            abort(404);
+        }
+
+        $path = ClienteUifFotoDocumento::absolutePathForBasename($cliente_uif->fotodocumento);
+        if ($path === null || ! is_file($path)) {
+            abort(404);
+        }
+
+        if (request()->query('disposition') === 'attachment') {
+            return response()->download($path, basename($path));
+        }
+
+        return response()->file($path);
+    }
+
+    /**
+     * Quita la foto DNI del cliente y del disco.
+     */
+    public function eliminarFotodocumento(Request $request, $id)
+    {
+        can('actualizar-cliente-uif');
+
+        $cliente_uif = $this->cliente_uifRepository->find($id);
+        if ($cliente_uif === null || ($cliente_uif->fotodocumento ?? '') === '') {
+            return redirect()->back()->with('mensaje', 'No hay foto del documento para eliminar');
+        }
+
+        ClienteUifFotoDocumento::deleteStoredFile($cliente_uif->fotodocumento);
+        Storage::disk('public')->delete('imagenes/fotos_documentos_uif/'.$cliente_uif->fotodocumento);
+
+        $cliente_uif->update(['fotodocumento' => null]);
+
+        return redirect()->back()->with('mensaje', 'Foto del documento eliminada');
     }
 
     /**

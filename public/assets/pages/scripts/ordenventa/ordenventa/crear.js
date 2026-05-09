@@ -16,6 +16,7 @@
         $(document).on('click', '.eliminar_ordenventa_cuota', borraRenglonOrdenventa_Cuota);
 		$('#agrega_renglon_archivo').on('click', agregaRenglonArchivo);
         $(document).on('click', '.eliminararchivo', borraRenglonArchivo);
+        $(document).on('click', '.eliminar-archivo-ordenventa', borraTarjetaArchivoOrdenventa);
 		$('#agrega_renglon_ordenventa_concepto').on('click', agregaRenglonOrdenventa_Concepto);
         $(document).on('click', '.eliminar_ordenventa_concepto', borraRenglonOrdenventa_Concepto);
 
@@ -391,16 +392,26 @@
     	});
     }
 
-	function agregaRenglonArchivo(){
+	function agregaRenglonArchivo(event){
     	event.preventDefault();
     	var renglon = $('#template-renglon-archivo').html();
 
     	$("#tbody-tabla-archivo").append(renglon);
     }
 
-    function borraRenglonArchivo() {
+    function borraRenglonArchivo(event) {
     	event.preventDefault();
     	$(this).parents('tr').remove();
+    }
+
+    function borraTarjetaArchivoOrdenventa(event) {
+        event.preventDefault();
+        var $wrap = $(this).closest('.ordenventa-archivo-item');
+        if ($wrap.length) {
+            $wrap.remove();
+            return;
+        }
+        $(this).closest('.col-md-6').remove();
     }
 
     function actualizaArchivo(elem) {
