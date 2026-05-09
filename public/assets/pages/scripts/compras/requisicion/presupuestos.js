@@ -78,8 +78,22 @@
 		});
 	}
 
+	function enlacesPdfModalParaId(id) {
+		var base = cfg('url-presupuesto-base') || '';
+		if (!base || !id) {
+			return;
+		}
+		$('#presupuesto_abrir_pdf').removeClass('d-none').attr('href', base + '/' + id + '/pdf');
+		$('#presupuesto_abrir_impresion').removeClass('d-none').attr('href', base + '/' + id + '/imprimir');
+	}
+
+	function ocultarEnlacesPdfModal() {
+		$('#presupuesto_abrir_pdf, #presupuesto_abrir_impresion').addClass('d-none').attr('href', '#');
+	}
+
 	function abrirModalNuevo() {
 		$('#presupuesto_edit_id').val('');
+		ocultarEnlacesPdfModal();
 		$('#presupuesto_fecha').val(new Date().toISOString().slice(0, 10));
 		$('#presupuesto_proveedor_id').val('');
 		$('#presupuesto_condiciones_entrega').val('');
@@ -168,6 +182,7 @@
 			}
 			limpiarPreviewNuevos();
 			$('#modalPresupuestoRequisicionTitulo').text('Editar presupuesto #' + det.id);
+			enlacesPdfModalParaId(det.id);
 			$('#modalPresupuestoRequisicion').modal('show');
 		}).fail(function () {
 			alert('No se pudo cargar el presupuesto.');

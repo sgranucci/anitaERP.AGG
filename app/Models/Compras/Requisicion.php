@@ -40,6 +40,11 @@ class Requisicion extends Model implements Auditable
         return $this->hasMany(Requisicion_Archivo::class, 'requisicion_id');
     }
 
+    public function requisicion_presupuestos()
+    {
+        return $this->hasMany(Requisicion_Presupuesto::class, 'requisicion_id');
+    }
+
     public function empresas()
     {
         return $this->belongsTo(Empresa::class, 'empresa_id');

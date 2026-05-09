@@ -119,6 +119,8 @@
                     <div id="presupuesto-archivos-existentes" class="mt-2"></div>
                 </div>
                 <div class="modal-footer">
+                    <a href="#" id="presupuesto_abrir_pdf" class="btn btn-sm btn-outline-danger d-none" target="_blank" rel="noopener noreferrer">Descargar PDF</a>
+                    <a href="#" id="presupuesto_abrir_impresion" class="btn btn-sm btn-outline-secondary d-none" target="_blank" rel="noopener noreferrer">Formulario para imprimir</a>
                     <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
                     @if(empty($visualizar))
                     <button type="button" class="btn btn-primary" id="presupuesto_btn_guardar">Guardar</button>

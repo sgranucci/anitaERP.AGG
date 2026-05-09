@@ -165,6 +165,8 @@
         </tbody>
     </table>
 
+    @include('compras.requisicion.partials.pdf_presupuestos_resumen', ['data' => $data])
+
     <h2>Historia de estados</h2>
     <table>
         <thead>

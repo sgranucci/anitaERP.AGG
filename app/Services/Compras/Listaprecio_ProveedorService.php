@@ -39,6 +39,7 @@ class Listaprecio_ProveedorService
             );
             $this->listaprecioProveedorArticuloRepository->syncFromRequest($data, $lista->id, Auth::user()->id);
             $this->listaprecioProveedorArchivoRepository->create($request, $lista->id);
+            $this->listaprecioProveedorRepository->persistirEnAnita((int) $lista->id);
             DB::commit();
         } catch (\Exception $e) {
             DB::rollBack();
@@ -66,6 +67,7 @@ class Listaprecio_ProveedorService
             $this->listaprecioProveedorRepository->update($cabecera, $id);
             $this->listaprecioProveedorArticuloRepository->syncFromRequest($data, $id, Auth::user()->id);
             $this->listaprecioProveedorArchivoRepository->update($request, $id);
+            $this->listaprecioProveedorRepository->persistirEnAnita($id);
             DB::commit();
         } catch (\Exception $e) {
             DB::rollBack();
@@ -94,6 +96,7 @@ class Listaprecio_ProveedorService
                 Auth::user()->id,
                 $observacion !== '' ? $observacion : 'Cambio de estado de '.$actual.' a '.$nuevo
             );
+            $this->listaprecioProveedorRepository->persistirEnAnita($id);
             DB::commit();
         } catch (\Exception $e) {
             DB::rollBack();

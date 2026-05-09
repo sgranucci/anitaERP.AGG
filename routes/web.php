@@ -1668,12 +1668,21 @@ Route::get('compras/requisicion/crear', 'Compras\RequisicionController@crear')->
 Route::post('compras/requisicion', 'Compras\RequisicionController@guardar')->name('guardar_requisicion');
 Route::get('compras/requisicion/{id}/editar', 'Compras\RequisicionController@editar')->name('editar_requisicion');
 Route::get('compras/requisicion/{id}/imprimir-pdf', 'Compras\RequisicionController@imprimirPdf')->name('imprimir_pdf_requisicion');
+Route::get('compras/requisicion/{requisicion}/presupuestos/{presupuesto}/pdf', 'Compras\RequisicionPresupuestoController@pdfPresupuesto')->name('requisicion_presupuesto_pdf');
+Route::get('compras/requisicion/{requisicion}/presupuestos/{presupuesto}/imprimir', 'Compras\RequisicionPresupuestoController@formularioImpresionPresupuesto')->name('requisicion_presupuesto_impresion');
+Route::get('compras/requisicion/{requisicion}/presupuestos/{presupuesto}/archivo/{archivo}/ver', 'Compras\RequisicionPresupuestoController@verArchivo')->name('requisicion_presupuesto_archivo_ver');
+Route::get('compras/requisicion/{requisicion}/presupuestos/{presupuesto}', 'Compras\RequisicionPresupuestoController@show')->name('requisicion_presupuesto_show');
+Route::post('compras/requisicion/{requisicion}/presupuestos', 'Compras\RequisicionPresupuestoController@store')->name('requisicion_presupuesto_store');
+Route::put('compras/requisicion/{requisicion}/presupuestos/{presupuesto}', 'Compras\RequisicionPresupuestoController@update')->name('requisicion_presupuesto_update');
+Route::delete('compras/requisicion/{requisicion}/presupuestos/{presupuesto}', 'Compras\RequisicionPresupuestoController@destroy')->name('requisicion_presupuesto_destroy');
+Route::get('compras/requisicion/{requisicion}/presupuestos', 'Compras\RequisicionPresupuestoController@index')->name('requisicion_presupuestos_index');
 Route::post('compras/requisicion/{id}/enviar-arbol-aprobacion', 'Compras\RequisicionController@enviarArbolAprobacion')->name('enviar_arbol_requisicion');
 Route::put('compras/requisicion/{id}', 'Compras\RequisicionController@actualizar')->name('actualizar_requisicion');
 Route::delete('compras/requisicion/{id}', 'Compras\RequisicionController@eliminar')->name('eliminar_requisicion');
 Route::get('compras/listarequisicion/{formato?}/{busqueda?}', 'Compras\RequisicionController@listar')->name('listar_requisicion');
 Route::get('compras/leer_historia_requisicion/{requisicion_id}', 'Compras\RequisicionController@leerHistoriaRequisicion')->name('lee_historia_requisicion');
 Route::get('compras/requisicion/aviso-arbol-grabacion', 'Compras\RequisicionController@avisoArbolGrabacion')->name('requisicion_aviso_arbol_grabacion');
+Route::get('compras/requisicion/consulta-listas-precio-articulo', 'Compras\RequisicionController@consultaListasPrecioArticulo')->name('requisicion_consulta_listas_precio_articulo');
 Route::post('compras/requisicion/consulta_partidagasto', 'Compras\RequisicionController@consultaPartidagastoRequisicion')->name('consulta_partidagasto_requisicion');
 Route::get('compras/requisicion/leer_partidagasto/{partidagasto_id}', 'Compras\RequisicionController@leerPartidagastoRequisicionPorId')->name('leer_partidagasto_requisicion');
 Route::get('compras/requisicion/visualizar/{id}/{hash}', 'Compras\RequisicionController@visualizar')->name('visualizar_requisicion');
@@ -1683,7 +1692,7 @@ Route::get('compras/requisicion/soloconsulta/{id}', 'Compras\RequisicionControll
  * Listas de precio proveedor
  */
  Route::get('compras/listaprecio_proveedor', 'Compras\Listaprecio_ProveedorController@index')->name('consultar_listaprecio_proveedor');
- Route::get('compras/listarlistaprecioproveedor/{formato?}/{busqueda?}', 'Compras\Listaprecio_ProveedorController@listar')->name('listar_listaprecio_proveedor');
+ Route::get('compras/listar_listaprecio_proveedor/{formato?}/{busqueda?}', 'Compras\Listaprecio_ProveedorController@listar')->name('listar_listaprecio_proveedor');
 Route::get('compras/listaprecio_proveedor/crear', 'Compras\Listaprecio_ProveedorController@crear')->name('crear_listaprecio_proveedor');
 Route::post('compras/listaprecio_proveedor', 'Compras\Listaprecio_ProveedorController@guardar')->name('guardar_listaprecio_proveedor');
 Route::get('compras/listaprecio_proveedor/{id}/editar', 'Compras\Listaprecio_ProveedorController@editar')->name('editar_listaprecio_proveedor');

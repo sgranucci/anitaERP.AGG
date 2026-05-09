@@ -195,8 +195,8 @@
     <table class="table" id="tabla-articulos-requisicion" data-requisicion-cc-destino-default="{{ $centrocostoDefaultDestino }}">
         <thead>
             <tr>
-                <th style="width: 12%;">Artículo</th>
-                <th style="width: 18%;">Descripción</th>
+                <th style="width: 13%;">Artículo</th>
+                <th style="width: 16%;">Descripción</th>
                 <th style="width: 8%;">Cantidad</th>
                 <th style="width: 9%;">Precio unit.</th>
                 <th style="width: 5%;">Moneda</th>
@@ -217,12 +217,15 @@
             @foreach ($lineas as $idx => $linea)
             <tr class="item-requisicion-articulo">
                 <td>
-                    <div class="form-group row celda-articulo-requisicion">
+                    <div class="form-group row celda-articulo-requisicion mb-0 d-flex align-items-center flex-nowrap">
                         <input type="hidden" class="articulo_id" name="articulo_ids[]" value="{{ old('articulo_ids.'.$idx, $linea->articulo_id ?? '') }}" >
-                        <button type="button" title="Consulta articulos" style="padding:1;" class="btn-accion-tabla consultaarticulo tooltipsC">
+                        <button type="button" title="Consulta articulos" style="padding:1;" class="btn-accion-tabla consultaarticulo tooltipsC flex-shrink-0">
                                 <i class="fa fa-search text-primary"></i>
                         </button>
-                        <input type="text" class="codigoarticulo codigoarticulolocal col-lg-10 form-control" name="codigoarticulos[]" value="{{ optional($linea->articulos)->sku ?? '' }}" {{ isset($visualizar) ? 'readonly' : '' }} >
+                        <button type="button" title="Consultar listas de precios de compra" style="padding:1;" class="btn-accion-tabla consultalistasprecio tooltipsC flex-shrink-0">
+                                <i class="fa fa-tags text-info"></i>
+                        </button>
+                        <input type="text" class="codigoarticulo codigoarticulolocal form-control flex-shrink-0" style="width: 140px; max-width: 15vw; height: 38px;" name="codigoarticulos[]" value="{{ optional($linea->articulos)->sku ?? '' }}" {{ isset($visualizar) ? 'readonly' : '' }} >
                     </div>
                 </td>
                 <td>
@@ -291,3 +294,4 @@
 @include('includes.presupuesto.modalconsultapartidagasto')
 @include('includes.presupuesto.modalconsultacapex')
 @include('includes.compras.modalconsultaproveedor')
+@include('includes.compras.modalconsultalistasprecio')

@@ -18,8 +18,10 @@ use App\Services\Compras\RequisicionService;
 use App\Services\Configuracion\ArbolaprobacionService;
 use App\Queries\Compras\RequisicionQueryInterface;
 use App\Exports\Compras\RequisicionExport;
+use App\Models\Stock\Articulo;
 use Illuminate\Http\Request;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\DB;
 
 class RequisicionController extends Controller
 {
@@ -178,6 +180,13 @@ class RequisicionController extends Controller
         $data->loadMissing([
             'requisicion_estados.usuarios',
             'requisicion_articulos.centrocostos_destino',
+            'requisicion_presupuestos' => function ($q) {
+                $q->orderByDesc('fecha')->orderByDesc('id');
+            },
+            'requisicion_presupuestos.proveedores',
+            'requisicion_presupuestos.requisicion_presupuesto_articulos.requisicion_articulo.articulos',
+            'requisicion_presupuestos.requisicion_presupuesto_articulos.requisicion_articulo.monedas',
+            'requisicion_presupuestos.requisicion_presupuesto_archivos',
         ]);
 
         $arbolMovimientos = $this->arbolaprobacion_movimientoRepository->findPorRequisicion((int) $id);
@@ -305,6 +314,162 @@ class RequisicionController extends Controller
         $aviso = $this->arbolaprobacionService->avisoGrabacionRequisicionAjax($empresaId, $requisicionId);
 
         return response()->json(['aviso' => $aviso]);
+    }
+
+    /**
+     * Listas de precio de compra (proveedor) para un artículo: precio vigente a fecha de referencia,
+     * solo listas ACTIVAS; opcionalmente filtradas al proveedor cargado en la requisición.
+     */
+    public function consultaListasPrecioArticulo(Request $request)
+    {
+        if (! can('listar-requisicion', false) && ! can('editar-requisicion', false) && ! can('crear-requisicion', false)) {
+            return response()->json(['message' => 'No tiene permisos para esta consulta.'], 403);
+        }
+
+        $articuloId = (int) $request->query('articulo_id', 0);
+        if ($articuloId <= 0) {
+            return response()->json(['message' => 'articulo_id es obligatorio.'], 422);
+        }
+
+        $articulo = Articulo::query()->select('id', 'sku', 'descripcion')->find($articuloId);
+        if (! $articulo) {
+            return response()->json(['message' => 'Artículo no encontrado.'], 404);
+        }
+
+        $fechaRef = $request->query('fecha_referencia');
+        if (! is_string($fechaRef) || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaRef)) {
+            $fechaRef = date('Y-m-d');
+        }
+
+        $proveedorId = $request->query('proveedor_id');
+        $proveedorId = ($proveedorId !== null && $proveedorId !== '' && (int) $proveedorId > 0)
+            ? (int) $proveedorId
+            : null;
+        $filtradoPorProveedor = $proveedorId !== null;
+
+        $subMaxFv = DB::table('listaprecio_proveedor_articulo')
+            ->select('listaprecio_proveedor_id', DB::raw('MAX(fechavigencia) as max_fv'))
+            ->where('articulo_id', $articuloId)
+            ->whereDate('fechavigencia', '<=', $fechaRef)
+            ->groupBy('listaprecio_proveedor_id');
+
+        $lineIds = DB::table('listaprecio_proveedor_articulo as lpa')
+            ->joinSub($subMaxFv, 'mx', function ($join) {
+                $join->on('lpa.listaprecio_proveedor_id', '=', 'mx.listaprecio_proveedor_id')
+                    ->on('lpa.fechavigencia', '=', 'mx.max_fv');
+            })
+            ->where('lpa.articulo_id', $articuloId)
+            ->groupBy('lpa.listaprecio_proveedor_id')
+            ->select(DB::raw('MAX(lpa.id) as id'))
+            ->pluck('id')
+            ->filter()
+            ->values()
+            ->all();
+
+        if ($lineIds === []) {
+            return response()->json([
+                'articulo' => [
+                    'sku' => $articulo->sku,
+                    'descripcion' => $articulo->descripcion,
+                ],
+                'fecha_referencia' => $fechaRef,
+                'filtrado_por_proveedor' => $filtradoPorProveedor,
+                'filas' => [],
+            ]);
+        }
+
+        $q = DB::table('listaprecio_proveedor_articulo as lpa')
+            ->join('listaprecio_proveedor as lp', 'lp.id', '=', 'lpa.listaprecio_proveedor_id')
+            ->leftJoin('proveedor as prov', 'prov.id', '=', 'lp.proveedor_id')
+            ->leftJoin('moneda as mon', 'mon.id', '=', 'lp.moneda_id')
+            ->leftJoin('condicionpago as cp', 'cp.id', '=', 'lp.condicionpago_id')
+            ->leftJoin('condicionentrega as ce', 'ce.id', '=', 'lp.condicionentrega_id')
+            ->leftJoin('condicioncompra as ccom', 'ccom.id', '=', 'lp.condicioncompra_id')
+            ->leftJoin('usuario as ulista', 'ulista.id', '=', 'lp.creousuario_id')
+            ->leftJoin('usuario as ulinea', 'ulinea.id', '=', 'lpa.usuarioultcambio_id')
+            ->whereIn('lpa.id', $lineIds)
+            ->where('lp.estado', 'ACTIVA');
+
+        if ($filtradoPorProveedor) {
+            $q->where('lp.proveedor_id', $proveedorId);
+        }
+
+        $q->select([
+            'lp.id as lista_id',
+            'lp.nombre as lista_nombre',
+            'lp.fecha as lista_fecha',
+            'lp.estado as lista_estado',
+            'lp.observaciones as lista_observaciones',
+            'lp.created_at as lista_created_at',
+            'lp.updated_at as lista_updated_at',
+            'prov.codigo as proveedor_codigo',
+            'prov.nombre as proveedor_nombre',
+            'prov.fantasia as proveedor_fantasia',
+            'mon.abreviatura as moneda_abreviatura',
+            'mon.nombre as moneda_nombre',
+            'mon.codigo as moneda_codigo',
+            'lpa.precio',
+            'lpa.descuento',
+            'lpa.articulo_proveedor',
+            'lpa.fechavigencia as linea_fechavigencia',
+            'cp.nombre as condicion_pago',
+            'ce.nombre as condicion_entrega',
+            'ccom.nombre as condicion_compra',
+            'ulista.nombre as lista_creador',
+            'ulinea.nombre as linea_ultimo_usuario',
+        ]);
+
+        if ($filtradoPorProveedor) {
+            $q->orderByDesc('lp.fecha')->orderByDesc('lp.id');
+        } else {
+            $q->orderBy('lpa.precio')->orderBy('prov.nombre')->orderBy('lp.nombre');
+        }
+
+        $rows = $q->get();
+
+        $filas = [];
+        foreach ($rows as $r) {
+            $precio = (float) $r->precio;
+            $dto = (float) $r->descuento;
+            $factor = max(0.0, 1 - ($dto / 100.0));
+            $precioNeto = round($precio * $factor, 6);
+
+            $filas[] = [
+                'proveedor_codigo' => $r->proveedor_codigo,
+                'proveedor_nombre' => $r->proveedor_nombre,
+                'proveedor_fantasia' => $r->proveedor_fantasia,
+                'lista_id' => $r->lista_id,
+                'lista_nombre' => $r->lista_nombre,
+                'lista_fecha' => $r->lista_fecha ? substr((string) $r->lista_fecha, 0, 10) : '',
+                'lista_estado' => $r->lista_estado,
+                'lista_observaciones' => $r->lista_observaciones,
+                'lista_created_at' => $r->lista_created_at ? substr((string) $r->lista_created_at, 0, 19) : '',
+                'lista_updated_at' => $r->lista_updated_at ? substr((string) $r->lista_updated_at, 0, 19) : '',
+                'moneda_abreviatura' => $r->moneda_abreviatura,
+                'moneda_nombre' => $r->moneda_nombre,
+                'moneda_codigo' => $r->moneda_codigo,
+                'precio' => $r->precio,
+                'precio_neto_descuento' => $precioNeto,
+                'descuento' => $r->descuento,
+                'articulo_proveedor' => $r->articulo_proveedor,
+                'linea_fechavigencia' => $r->linea_fechavigencia ? substr((string) $r->linea_fechavigencia, 0, 10) : '',
+                'condicion_pago' => $r->condicion_pago,
+                'condicion_entrega' => $r->condicion_entrega,
+                'condicion_compra' => $r->condicion_compra,
+                'lista_creador' => $r->lista_creador,
+                'linea_ultimo_usuario' => $r->linea_ultimo_usuario,
+            ];
+        }
+
+        return response()->json([
+            'articulo' => [
+                'sku' => $articulo->sku,
+                'descripcion' => $articulo->descripcion,
+            ],
+            'fecha_referencia' => $fechaRef,
+            'filtrado_por_proveedor' => $filtradoPorProveedor,
+            'filas' => $filas,
+        ]);
     }
 
     public function soloConsulta($id)

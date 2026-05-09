@@ -31,28 +31,26 @@ class Listaprecio_ProveedorRepository implements Listaprecio_ProveedorRepository
 
     public function create(array $data)
     {
-        $lista = $this->model->create($data);
-
-        // Graba anita (cabecera + movimientos) con lógica de negocio
-        $anita = $this->guardarAnitaDesdeErp((int) $lista->id);
-        if (isset($anita['error'])) {
-            throw new Exception('Error en grabacion anita. '.$anita['mensaje']);
-        }
-
-        return $lista;
+        return $this->model->create($data);
     }
 
     public function update(array $data, $id)
     {
-        $ok = $this->model->findOrFail($id)->update($data);
+        return $this->model->findOrFail($id)->update($data);
+    }
 
-        // Actualiza anita (cabecera + movimientos) con lógica de negocio
-        $anita = $this->actualizarAnitaDesdeErp((int) $id);
+    public function persistirEnAnita(int $listaprecio_proveedor_id): void
+    {
+        $anita = $this->actualizarAnitaDesdeErp($listaprecio_proveedor_id);
         if (isset($anita['error'])) {
-            throw new Exception('Error en actualización anita. '.$anita['mensaje']);
+            throw new Exception('Error en grabación anita. '.$anita['mensaje']);
         }
+    }
 
-        return $ok;
+    public function importarDesdeAnita(int $lispm_nro): void
+    {
+        $existe = $this->model->whereKey($lispm_nro)->exists();
+        $this->traerRegistroDeAnita($lispm_nro, ! $existe);
     }
 
     public function find($id)
@@ -107,6 +105,9 @@ class Listaprecio_ProveedorRepository implements Listaprecio_ProveedorRepository
             'orderBy' => $this->keyFieldAnita,
         ];
         $dataAnita = json_decode($apiAnita->apiCall($data));
+        if (! is_iterable($dataAnita)) {
+            return;
+        }
 
         $datosLocal = $this->model->select('id')->get();
         $idsLocal = $datosLocal->pluck('id')->all();
@@ -169,6 +170,8 @@ class Listaprecio_ProveedorRepository implements Listaprecio_ProveedorRepository
 
         $fecha = $this->anitaIntToDate((int) $cab->lispm_fecha);
 
+        $usuarioId = $this->usuarioOperativoId();
+
         $arrCab = [
             'proveedor_id' => $proveedor?->id,
             'fecha' => $fecha,
@@ -179,17 +182,21 @@ class Listaprecio_ProveedorRepository implements Listaprecio_ProveedorRepository
             'condicioncompra_id' => $condCompra?->id,
             'moneda_id' => $moneda?->id,
             'estado' => $this->mapEstadoAnitaToErp((string) ($cab->lispm_estado ?? '')),
-            'creousuario_id' => Auth::user()->id,
+            'creousuario_id' => $usuarioId,
         ];
 
-        DB::transaction(function () use ($arrCab, $nroLista, $fl_crea_registro, $apiAnita) {
+        DB::transaction(function () use ($arrCab, $nroLista, $fl_crea_registro, $apiAnita, $usuarioId) {
             if ($fl_crea_registro) {
-                $listaprecio_proveedor = $this->model->create($arrCab);
+                $lista = $this->model->newInstance();
+                $lista->forceFill($arrCab);
+                $lista->id = $nroLista;
+                $lista->save();
             } else {
-                unset($arrCab['id']);
-                $listaprecio_proveedor = $this->model->findOrFail((int) $nroLista)->update($arrCab);
+                $this->model->whereKey($nroLista)->update($arrCab);
                 DB::table('listaprecio_proveedor_articulo')->where('listaprecio_proveedor_id', (int) $nroLista)->delete();
             }
+
+            $listaId = (int) $nroLista;
 
             $dataMov = [
                 'acc' => 'list',
@@ -210,6 +217,9 @@ class Listaprecio_ProveedorRepository implements Listaprecio_ProveedorRepository
                 'orderBy' => 'listpv_nro_orden',
             ];
             $movs = json_decode($apiAnita->apiCall($dataMov));
+            if (! is_iterable($movs)) {
+                return;
+            }
 
             foreach ($movs as $m) {
                 $sku = ltrim((string) $m->listpv_articulo, '0');
@@ -219,13 +229,13 @@ class Listaprecio_ProveedorRepository implements Listaprecio_ProveedorRepository
                 }
 
                 $row = [
-                    'listaprecio_proveedor_id' => $listaprecio_proveedor->id,
+                    'listaprecio_proveedor_id' => $listaId,
                     'articulo_id' => $art->id,
                     'precio' => (float) ($m->listpv_precio ?? 0),
-                    'descuento' => (float) ((string) ($m->lispv_descuento ?? 0)),
-                    'articulo_proveedor' => substr(rtrim((string) ($m->lispv_art_prov ?? '')), 0, 100),
+                    'descuento' => $this->parseDescuentoAnita($m->lispv_descuento ?? null),
+                    'articulo_proveedor' => substr(rtrim((string) ($m->lispv_art_prov ?? '')), 0, 100) ?: '',
                     'fechavigencia' => $this->anitaIntToDate((int) ($m->listpv_fecha ?? 0)),
-                    'usuarioultcambio_id' => Auth::user()->id,
+                    'usuarioultcambio_id' => $usuarioId,
                 ];
                 Listaprecio_Proveedor_Articulo::create($row);
             }
@@ -251,8 +261,8 @@ class Listaprecio_ProveedorRepository implements Listaprecio_ProveedorRepository
         $monedaCodigo = $lista->monedas?->codigo ?? ($lista->monedas?->abreviatura ?? '0');
         $monedaCodigo = (string) (is_string($monedaCodigo) && $monedaCodigo !== '' ? substr($monedaCodigo, 0, 1) : '0');
 
-        $estado = substr((string) ($lista->estado ?? 'A'), 0, 1);
-        $usuario = substr((string) (Auth::user()->nombre ?? Auth::user()->name ?? ''), 0, 15);
+        $estado = $this->mapEstadoErpPrimeraLetra((string) ($lista->estado ?? 'Activa'));
+        $usuario = substr((string) (Auth::user()?->nombre ?? Auth::user()?->name ?? 'system'), 0, 15);
 
         $dataCab = [
             'tabla' => $this->tableAnita[0],
@@ -325,8 +335,8 @@ class Listaprecio_ProveedorRepository implements Listaprecio_ProveedorRepository
         $monedaCodigo = $lista->monedas?->codigo ?? ($lista->monedas?->abreviatura ?? '0');
         $monedaCodigo = (string) (is_string($monedaCodigo) && $monedaCodigo !== '' ? substr($monedaCodigo, 0, 1) : '0');
 
-        $estado = substr((string) ($lista->estado ?? 'A'), 0, 1);
-        $usuario = substr((string) (Auth::user()->nombre ?? Auth::user()->name ?? ''), 0, 15);
+        $estado = $this->mapEstadoErpPrimeraLetra((string) ($lista->estado ?? 'Activa'));
+        $usuario = substr((string) (Auth::user()?->nombre ?? Auth::user()?->name ?? 'system'), 0, 15);
 
         $dataCab = [
             'acc' => 'update',
@@ -450,5 +460,40 @@ class Listaprecio_ProveedorRepository implements Listaprecio_ProveedorRepository
         }
 
         return 'Activa';
+    }
+
+    /**
+     * Anita listapmae.lispm_estado es char(1): A/I. El ERP usa nombres completos.
+     */
+    private function mapEstadoErpPrimeraLetra(string $estadoErp): string
+    {
+        $s = strtoupper(trim($estadoErp));
+        if ($s === 'ACTIVA' || str_starts_with($s, 'A')) {
+            return 'A';
+        }
+        if ($s === 'INACTIVA' || str_starts_with($s, 'I')) {
+            return 'I';
+        }
+
+        return 'A';
+    }
+
+    private function usuarioOperativoId(): int
+    {
+        if (Auth::check()) {
+            return (int) Auth::id();
+        }
+
+        return (int) (DB::table('usuario')->orderBy('id')->value('id') ?: 1);
+    }
+
+    private function parseDescuentoAnita($raw): float
+    {
+        if ($raw === null || $raw === '') {
+            return 0.0;
+        }
+        $t = str_replace(',', '.', trim((string) $raw));
+
+        return round((float) $t, 2);
     }
 }

@@ -18,19 +18,22 @@
             <thead class="thead-light text-nowrap">
               <tr>
                 <th>Proveedor</th>
+                <th>Fantasía</th>
                 <th>Lista</th>
                 <th>F. lista</th>
-                <th>Estado</th>
+                <th>Estado lista</th>
                 <th>Moneda lista</th>
                 <th>Precio vigente</th>
                 <th>% Desc.</th>
+                <th title="Precio unitario neto estimado (precio − descuento %)">Precio c/dto.</th>
                 <th>Cód. art. prov.</th>
                 <th>Vigencia ítem</th>
-                <th title="Condiciones de la lista">Cond. pago</th>
+                <th title="Condición de pago de la lista">Cond. pago</th>
                 <th>Cond. entrega</th>
                 <th>Cond. compra</th>
                 <th>Obs. lista</th>
                 <th>Alta lista</th>
+                <th>Últ. mod. lista</th>
                 <th>Creador lista</th>
                 <th>Últ. cambio ítem</th>
               </tr>

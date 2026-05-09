@@ -223,6 +223,7 @@ class Listaprecio_ProveedorController extends Controller
         try {
             set_time_limit(0);
             Excel::import($import, $request->file('archivoexcel'));
+            $this->repository->persistirEnAnita((int) $id);
         } catch (\Exception $e) {
             return redirect()->back()->with('mensaje', 'Error al leer el archivo: '.$e->getMessage());
         }

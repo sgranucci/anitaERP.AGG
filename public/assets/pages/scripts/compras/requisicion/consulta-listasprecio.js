@@ -42,6 +42,17 @@ $(function () {
 		return s.length >= 10 ? s.substring(0, 10) : s;
 	}
 
+	function cmpPrecio(r) {
+		if (r.precio_neto_descuento !== undefined && r.precio_neto_descuento !== null && r.precio_neto_descuento !== '') {
+			var x = parseFloat(r.precio_neto_descuento);
+			if (!isNaN(x)) {
+				return x;
+			}
+		}
+		var p = parseFloat(r.precio);
+		return isNaN(p) ? null : p;
+	}
+
 	$(document).on('click', '.consultalistasprecio', function (event) {
 		event.preventDefault();
 		var $row = $(this).closest('tr.item-requisicion-articulo');
@@ -92,14 +103,14 @@ $(function () {
 					ref +
 					'. ' +
 					(data.filtrado_por_proveedor
-						? 'Solo listas ACTIVAS del proveedor cargado en la requisición y precio vigente a esa fecha.'
-						: 'Sin proveedor en la requisición: todas las listas ACTIVAS que incluyen el ítem; orden por precio para comparar.');
+						? 'Proveedor cargado en la requisición: solo listas ACTIVAS de ese proveedor y precio vigente del ítem a esa fecha.'
+						: 'Sin proveedor en la requisición: todas las listas ACTIVAS que incluyen el ítem; orden por precio neto (tras % descuento) para comparar. La fila con menor precio neto se resalta.');
 				$sub.text(subt);
 
 				var filas = data.filas || [];
 				if (!filas.length) {
 					$body.append(
-						'<tr><td colspan="16" class="text-center text-muted">No hay precios en listas activas para este artículo a la fecha indicada.</td></tr>'
+						'<tr><td colspan="19" class="text-center text-muted">No hay precios en listas activas para este artículo a la fecha indicada.</td></tr>'
 					);
 					return;
 				}
@@ -107,8 +118,8 @@ $(function () {
 				var minPrecio = null;
 				if (!data.filtrado_por_proveedor) {
 					filas.forEach(function (r) {
-						var p = parseFloat(r.precio);
-						if (!isNaN(p) && (minPrecio === null || p < minPrecio)) {
+						var p = cmpPrecio(r);
+						if (p !== null && (minPrecio === null || p < minPrecio)) {
 							minPrecio = p;
 						}
 					});
@@ -117,12 +128,12 @@ $(function () {
 				filas.forEach(function (r) {
 					var provLabel = esc(r.proveedor_codigo || '') + ' — ' + esc(r.proveedor_nombre || '');
 					var listaLabel = '#' + esc(String(r.lista_id || '')) + ' — ' + esc(r.lista_nombre || '');
-					var p = parseFloat(r.precio);
+					var pcmp = cmpPrecio(r);
 					var esMin =
 						!data.filtrado_por_proveedor &&
 						minPrecio !== null &&
-						!isNaN(p) &&
-						p === minPrecio;
+						pcmp !== null &&
+						pcmp === minPrecio;
 
 					var $tr = $('<tr></tr>');
 					if (esMin) {
@@ -133,13 +144,23 @@ $(function () {
 						return $('<td></td>').html(html);
 					}
 
+					var monHtml = '<strong>' + esc(r.moneda_abreviatura || '') + '</strong>';
+					if (r.moneda_codigo) {
+						monHtml += ' <small class="text-muted">(' + esc(r.moneda_codigo) + ')</small>';
+					}
+					if (r.moneda_nombre) {
+						monHtml += '<br><small class="text-muted">' + esc(r.moneda_nombre) + '</small>';
+					}
+
 					$tr.append(td(provLabel));
+					$tr.append(td(esc(r.proveedor_fantasia || '—')));
 					$tr.append(td(listaLabel));
 					$tr.append(td(esc(r.lista_fecha || '')));
 					$tr.append(td(esc(r.lista_estado || '')));
-					$tr.append(td(esc(r.moneda_abreviatura || r.moneda_nombre || '')));
+					$tr.append(td(monHtml));
 					$tr.append(td('<strong>' + fmtNum(r.precio) + '</strong>'));
 					$tr.append(td(fmtNum(r.descuento)));
+					$tr.append(td('<strong>' + fmtNum(r.precio_neto_descuento) + '</strong>'));
 					$tr.append(td(esc(r.articulo_proveedor || '')));
 					$tr.append(td(esc(r.linea_fechavigencia || '')));
 					$tr.append(td(esc(r.condicion_pago || '—')));
@@ -152,6 +173,7 @@ $(function () {
 							.text(trunc(obs, 80))
 					);
 					$tr.append(td(fmtFechaAlta(r.lista_created_at)));
+					$tr.append(td(esc(r.lista_updated_at || '')));
 					$tr.append(td(esc(r.lista_creador || '')));
 					$tr.append(td(esc(r.linea_ultimo_usuario || '')));
 

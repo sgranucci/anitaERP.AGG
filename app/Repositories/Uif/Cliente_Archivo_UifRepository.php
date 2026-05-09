@@ -166,6 +166,21 @@ class Cliente_Archivo_UifRepository implements Cliente_Archivo_UifRepositoryInte
 		}
 	}
 
+	/**
+	 * Nombre físico en storage: "{cliente_uif_id}-{basename}" salvo que Anita ya traiga
+	 * "{id}-..." con el mismo id numérico que el cliente en el ERP (evita "123-123-doc.pdf").
+	 */
+	private function nombreDestinoImportClienteUif(int $clienteUifId, string $nombreArchivo): string
+	{
+		if (preg_match('/^(\d+)-/', $nombreArchivo, $m)) {
+			if ((int) $m[1] === $clienteUifId) {
+				return $nombreArchivo;
+			}
+		}
+
+		return $clienteUifId.'-'.$nombreArchivo;
+	}
+
 	private function importarArchivoClienteSiExiste(int $clienteUifId, int $inroclienteid, string $nombreArchivo, string $mount): void
 	{
 		$nombreArchivo = basename($nombreArchivo);
@@ -173,7 +188,7 @@ class Cliente_Archivo_UifRepository implements Cliente_Archivo_UifRepositoryInte
 			return;
 		}
 
-		$destNombre = $clienteUifId.'-'.$nombreArchivo;
+		$destNombre = $this->nombreDestinoImportClienteUif($clienteUifId, $nombreArchivo);
 		if ($this->model->newQuery()
 			->where('cliente_uif_id', $clienteUifId)
 			->where('nombrearchivo', $destNombre)
