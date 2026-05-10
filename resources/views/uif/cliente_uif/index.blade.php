@@ -74,6 +74,10 @@ Clientes UIF
                                 	<a href="{{route('edita_cliente_uif', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                     <i class="fa fa-edit"></i>
                                 	</a>
+								@elseif (can('listar-cliente-uif', false))
+                                	<a href="{{route('edita_cliente_uif', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Ver registro">
+                                    <i class="fa fa-eye"></i>
+                                	</a>
 								@endif
                        			@if (can('borrar-cliente-uif', false))
                                 <form action="{{route('elimina_cliente_uif', ['id' => $data->id])}}" class="d-inline form-eliminar" method="POST">

@@ -228,6 +228,19 @@
         // Muestra tipo de suspension
         muestraTipoSuspension();
         
+        var tabParam = new URLSearchParams(window.location.search).get('uif_tab');
+        if (tabParam === '1') {
+            $('#botonform1').trigger('click');
+        } else if (tabParam === '2') {
+            $('#botonform2').trigger('click');
+        } else if (tabParam === '3') {
+            $('#botonform3').trigger('click');
+        } else if (tabParam === '4') {
+            $('#botonform4').trigger('click');
+        } else if (tabParam === '5') {
+            $('#botonform5').trigger('click');
+        }
+
         $('#agrega_renglon_riesgo').on('click', agregaRenglonRiesgo);
         $(document).on('click', '.eliminar_riesgo', borraRenglonRiesgo);
         $('#agrega_renglon_premio').on('click', agregaRenglonPremio);
@@ -294,7 +307,48 @@
                 }
             });
         }
+
+        aplicarRestriccionPerfilClienteUif();
     });
+
+    /**
+     * Supervisor: sin bloqueos.
+     * Cajero: solapa Datos UIF (form2) solo SO, PEP y fecha última firma PEP; solapa Riesgo (form4) solo lectura.
+     *        Solapas 1, 3 y 5 sin restricción en esta función.
+     * Operador (solo visualización en edición): todo bloqueado salvo botones de solapa.
+     */
+    function aplicarRestriccionPerfilClienteUif() {
+        var perfil = $('#uif_perfil_cliente').val();
+        var cid = ($('#cliente_uif_id').val() || '').trim();
+        var esEdicion = cid !== '' && cid !== '0';
+        var $tabs = $('#botonform1, #botonform2, #botonform3, #botonform4, #botonform5');
+
+        if (perfil === 'supervisor') {
+            return;
+        }
+
+        if (perfil === 'cajero') {
+            var $f2 = $('.form2').find('input:not([type=hidden]), select, textarea, button');
+            $f2.prop('disabled', true).addClass('bg-light');
+            $('#so_uif_id, #pep_uif_id, #fechafirmapep').prop('disabled', false).removeClass('bg-light');
+
+            $('.form4').find('input:not([type=hidden]), select, textarea, button')
+                .prop('disabled', true)
+                .addClass('bg-light');
+        }
+
+        if (!esEdicion) {
+            return;
+        }
+
+        if (perfil === 'operador') {
+            $('.form1, .form2, .form3, .form4, .form5').find('input:not([type=hidden]), select, textarea, button')
+                .prop('disabled', true)
+                .addClass('bg-light');
+            $tabs.prop('disabled', false).removeClass('bg-light');
+            $('#botonestado').prop('disabled', true).addClass('bg-light');
+        }
+    }
 
     function muestraTipoSuspension()
     {
@@ -329,7 +383,21 @@
 
     function borraRenglonPremio(event) {
     	event.preventDefault();
-        let id = $(this).parents('tr').find('.premio_id').val();
+        var $tr = $(this).parents('tr');
+        var id = ($tr.find('.premio_id').val() || '').trim();
+
+        if (!id) {
+            if (!window.confirm('¿Quitar esta línea de la grilla?')) {
+                return;
+            }
+            $tr.remove();
+            actualizaRenglonesPremio();
+            return;
+        }
+
+        if (!window.confirm('¿Eliminar este premio de forma permanente?')) {
+            return;
+        }
 
         $.ajaxSetup({
             headers: {
@@ -337,7 +405,7 @@
             }
         });
     
-        let url = carpetaBase+"/uif/elimina_premio_uif";
+        var url = carpetaBase+"/uif/elimina_premio_uif";
 
         $.ajax({
             type: "POST",
@@ -346,19 +414,23 @@
                 id: id
             },
             success: function (data) {
-                if (data.mensaje == 'ok')
-                {
-                    alert("Premio borrado con éxito");
+                if (!data || data.mensaje !== 'ok') {
+                    alert("No se pudo borrar el premio");
+                    return;
                 }
-                location.reload();
+                alert("Premio borrado con éxito");
+                try {
+                    var u = new URL(window.location.href);
+                    u.searchParams.set('uif_tab', '3');
+                    window.location.href = u.toString();
+                } catch (e) {
+                    location.reload();
+                }
             },
             error: function (r) {
                 alert("No se pudo borrar el premio");
             }
         });
-
-    	//$(this).parents('tr').remove();
-    	//actualizaRenglonesPremio();
     }
 
     function actualizaRenglonesPremio() {

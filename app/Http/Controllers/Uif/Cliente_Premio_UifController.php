@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionCliente_Premio_Uif;
 use App\Services\Uif\Cliente_UifService;
 use App\Services\Uif\ClienteUifFotoDocumento;
-use App\Exports\Uif\Cliente_UifExport;
+use App\Exports\Uif\Cliente_Premio_UifExport;
 use App\Models\Uif\Cliente_Uif;
 use App\Models\Uif\Cliente_Congelado_Uif;
 use App\Models\Uif\Cliente_Premio_Uif;
@@ -91,19 +91,19 @@ class Cliente_Premio_UifController extends Controller
 
             $pdf = \App::make('dompdf.wrapper');
             $pdf->setPaper('legal','landscape');
-            $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
+            $pdf->loadHTML($view, 'UTF-8')->save($path.'/'.$nombre_pdf.'.pdf');
 
             return response()->download($path.'/'.$nombre_pdf.'.pdf');
             break;
 
         case 'EXCEL':
-            return (new Cliente_UifExport($this->cliente_uifRepository))
+            return (new Cliente_Premio_UifExport($this->cliente_premio_uifRepository))
                         ->parametros($busqueda)
                         ->download('cliente_premio_uif.xlsx');
             break;
 
         case 'CSV':
-            return (new Cliente_UifExport($this->cliente_uifRepository))
+            return (new Cliente_Premio_UifExport($this->cliente_premio_uifRepository))
                         ->parametros($busqueda)
                         ->download('cliente_premio_uif.csv', \Maatwebsite\Excel\Excel::CSV);
             break;            
@@ -125,7 +125,7 @@ class Cliente_Premio_UifController extends Controller
 
         $cliente_uif = $this->cliente_uifRepository->find($cliente_uif_id);
 
-        $referer = $request->header('referer');
+        $referer = $this->refererPremioDesdeClienteUif($request, $cliente_uif_id ? (int) $cliente_uif_id : null);
         $nombrecliente = '';
         $numerodocumento = '';
         if ($cliente_uif)
@@ -187,8 +187,8 @@ class Cliente_Premio_UifController extends Controller
 
 		$data = $this->cliente_premio_uifRepository->find($id);
 
-        $referer = $request->header('referer');
-        
+        $referer = $this->refererPremioDesdeClienteUif($request, $data ? (int) $data->cliente_uif_id : null);
+
         $empresa_query = $this->empresaRepository->allFiltrado();
         $sala_query = $this->salaRepository->allFiltrado();
         $moneda_query = $this->monedaRepository->all();
@@ -395,5 +395,22 @@ class Cliente_Premio_UifController extends Controller
         }
 
         return response()->download($rutaPdfPremio);
+    }
+
+    /**
+     * URL de retorno al formulario oculto "referer": edición del cliente UIF en solapa concreta si viene return_cliente_tab.
+     */
+    private function refererPremioDesdeClienteUif(Request $request, ?int $cliente_uif_id): ?string
+    {
+        $referer = $request->header('referer');
+        $tabCliente = $request->query('return_cliente_tab');
+        if ($tabCliente !== null && $cliente_uif_id && is_numeric($tabCliente)) {
+            $t = (int) $tabCliente;
+            if ($t >= 1 && $t <= 5) {
+                return route('edita_cliente_uif', ['id' => $cliente_uif_id]).'?uif_tab='.$t;
+            }
+        }
+
+        return $referer;
     }
 }

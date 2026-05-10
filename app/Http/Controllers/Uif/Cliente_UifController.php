@@ -125,7 +125,7 @@ class Cliente_UifController extends Controller
 
             $pdf = \App::make('dompdf.wrapper');
             $pdf->setPaper('legal','landscape');
-            $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
+            $pdf->loadHTML($view, 'UTF-8')->save($path.'/'.$nombre_pdf.'.pdf');
 
             return response()->download($path.'/'.$nombre_pdf.'.pdf');
             break;
@@ -178,11 +178,8 @@ class Cliente_UifController extends Controller
 	    $firmodeclaracionjurada_enum = Cliente_Uif::$enumFirmoDeclaracionJurada;
         $riesgopep_enum = Cliente_Uif::$enumRiesgoPep;
 
-        $essupervisor = 'N';
-        $permisos = traePermisosUsuario();
-
-        if (in_array('supervisor-uif', $permisos['permisos']))  
-            $essupervisor = 'S';
+        $essupervisor = esSupervisorUif() ? 'S' : 'N';
+        $uifPerfil = perfilClienteUif();
 
         return view('uif.cliente_uif.crear', compact('localidad_uif_query', 'provincia_uif_query', 'actividad_uif_query',
                                                             'empresa_query', 'estadocivil_uif_query', 'sala_query',
@@ -191,7 +188,7 @@ class Cliente_UifController extends Controller
                                                             'pais_uif_query', 'pep_uif_query', 'so_uif_query', 'tipodocumento_query',
                                                             'sexo_enum', 'resideparaisofiscal_enum', 'resideexterior_enum',
                                                             'cumplenormativaso_enum', 'firmodeclaracionjurada_enum',
-                                                            'riesgopep_enum', 'essupervisor'));
+                                                            'riesgopep_enum', 'essupervisor', 'uifPerfil'));
     }
 
     /**
@@ -217,7 +214,9 @@ class Cliente_UifController extends Controller
      */
     public function editar($id, $origen = null)
     {
-        can('editar-cliente-uif');
+        if (! can('editar-cliente-uif', false) && ! can('listar-cliente-uif', false)) {
+            abort(403);
+        }
 
         if (!isset($origen))
             $origen = 'cliente_uif';
@@ -245,11 +244,8 @@ class Cliente_UifController extends Controller
 	    $firmodeclaracionjurada_enum = Cliente_Uif::$enumFirmoDeclaracionJurada;
         $riesgopep_enum = Cliente_Uif::$enumRiesgoPep;
 
-        $essupervisor = 'N';
-        $permisos = traePermisosUsuario();
-
-        if (in_array('supervisor-uif', $permisos['permisos']))  
-            $essupervisor = 'S';
+        $essupervisor = esSupervisorUif() ? 'S' : 'N';
+        $uifPerfil = perfilClienteUif();
 //dd($data);
         return view('uif.cliente_uif.editar', compact('data', 
                                                     'localidad_uif_query', 'provincia_uif_query', 'actividad_uif_query',
@@ -259,7 +255,7 @@ class Cliente_UifController extends Controller
                                                     'pais_uif_query', 'pep_uif_query', 'so_uif_query', 'tipodocumento_query',
                                                     'sexo_enum', 'resideparaisofiscal_enum', 'resideexterior_enum',
                                                     'cumplenormativaso_enum', 'firmodeclaracionjurada_enum', 'riesgopep_enum',
-                                                    'essupervisor'));
+                                                    'essupervisor', 'uifPerfil'));
     }
 
     /**
@@ -285,7 +281,9 @@ class Cliente_UifController extends Controller
      */
     public function mostrarFotodocumento($id)
     {
-        can('editar-cliente-uif');
+        if (! can('editar-cliente-uif', false) && ! can('listar-cliente-uif', false)) {
+            abort(403);
+        }
 
         $cliente_uif = $this->cliente_uifRepository->find($id);
         if ($cliente_uif === null || ($cliente_uif->fotodocumento ?? '') === '') {

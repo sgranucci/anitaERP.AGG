@@ -30,7 +30,7 @@
         @include('includes.mensaje')
         <div class="card card-danger">
             <div class="card-header">
-                <h3 class="card-title">Editar Cliente UIF </h3>&nbsp;ID:&nbsp;{{$data->id }}&nbsp;{{$data->nombre}}
+                <h3 class="card-title">{{ esSoloVisualizacionClienteUif() ? 'Ver' : 'Editar' }} Cliente UIF </h3>&nbsp;ID:&nbsp;{{$data->id }}&nbsp;{{$data->nombre}}
                 <div class="card-tools">
 					<button type="button" id="botonestado" class="btn btn-info btn-sm">
                         <i class="fa fa-bell"></i> Estado {{ $data->descripcionestado }}
@@ -49,7 +49,7 @@
                     <button type="button" id="botonform2" class="btn btn-primary btn-sm">
                         <i class="fa fa-user"></i> Datos UIF
                     </button>                    
-                    <button type="button" id="botonform3" class="btn btn-info btn-sm">
+                    <button type="button" id="botonform3" class="btn btn-primary btn-sm">
                         <span class="fa fa-copy"></span> Premios
                     </button>
                     <button type="button" id="botonform4" class="btn btn-info btn-sm">
@@ -69,7 +69,11 @@
                 <div class="card-footer" style="padding-top: 0">
                 	<div class="row">
                    		<div class="col-lg-4">
+                        	@if (can('actualizar-cliente-uif', false))
                         	<button type="button" onclick="sub()" class="btn btn-success">Actualizar</button>
+                        	@else
+                        	<span class="text-muted"><i class="fa fa-lock"></i> Solo visualización</span>
+                        	@endif
                     	</div>
             		</div>
             	</div>

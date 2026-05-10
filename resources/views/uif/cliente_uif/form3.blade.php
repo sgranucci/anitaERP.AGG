@@ -1,5 +1,30 @@
+@php
+    $tieneClienteForm3 = isset($data) && ($data->id ?? null);
+    $detalleClienteUifRestringido = esSoloVisualizacionClienteUif();
+@endphp
 <div class="form3" style="display: none">
+    <style>
+        .premio-foto-thumb-link { display: inline-block; line-height: 0; }
+        .premio-foto-thumb {
+            max-height: 48px;
+            max-width: 48px;
+            width: auto;
+            height: auto;
+            object-fit: cover;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            vertical-align: middle;
+        }
+        .premio-foto-thumb-link:hover .premio-foto-thumb { border-color: #3c8dbc; opacity: 0.92; }
+    </style>
     <div class="card-body">
+			@if ($tieneClienteForm3 && ! esSoloVisualizacionClienteUif() && can('crear-cliente-premio-uif', false))
+				<div class="mb-3">
+					<a href="{{ route('crea_cliente_premio_uif', ['id' => $data->id]) }}?return_cliente_tab=3" class="btn btn-info">
+						<i class="fa fa-plus-circle"></i> Dar de alta premio
+					</a>
+				</div>
+			@endif
     	<table class="table" id="premio-table">
     		<thead>
     			<tr>
@@ -8,6 +33,7 @@
 					<th>Juego</th>
 					<th>Nro. de Tito</th>
 					<th style="text-align: right;">Monto Premio</th>
+                    <th style="text-align: center; width: 72px;">Foto</th>
     				<th></th>
     			</tr>
     		</thead>
@@ -32,23 +58,31 @@
 							<td>
                 				<input type="text" name="montopremios[]" class="form-control montopremio" style="text-align: right;" value="{{ number_format((float) ($premio->monto ?? 0), 2, ',', '.') }}" />
                 			</td>
-                			<td>
-								@if (can('editar-cliente-premio-uif', false))
-                                	<a href="{{route('edita_cliente_premio_uif', ['id' => $premio->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
+                            <td class="text-center align-middle premio-foto-preview">
+                                @if (! empty($premio->foto ?? null))
+                                    @if (can('editar-cliente-premio-uif', false))
+                                        <a href="{{ route('muestra_foto_cliente_premio_uif', ['id' => $premio->id]) }}" class="premio-foto-thumb-link tooltipsC" title="Ver foto del jugador">
+                                            <img src="{{ asset('storage/imagenes/fotos_uif/'.$premio->foto) }}" alt="" class="premio-foto-thumb">
+                                        </a>
+                                    @else
+                                        <img src="{{ asset('storage/imagenes/fotos_uif/'.$premio->foto) }}" alt="" class="premio-foto-thumb">
+                                    @endif
+                                @else
+                                    <span class="text-muted">—</span>
+                                @endif
+                            </td>
+							<td>
+								@if (can('editar-cliente-premio-uif', false) && ! $detalleClienteUifRestringido)
+                                	<a href="{{ route('edita_cliente_premio_uif', ['id' => $premio->id]) }}?return_cliente_tab=3" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                     <i class="fa fa-edit"></i>
                                 	</a>
 								@endif
-								@if (can('editar-cliente-premio-uif', false))
-                                	<a href="{{route('muestra_foto_cliente_premio_uif', ['id' => $premio->id])}}" class="btn-accion-tabla tooltipsC" title="Muestra foto jugador">
-                                    <i class="fa fa-address-card"></i>
-                                	</a>
-								@endif
-								@if (can('editar-cliente-premio-uif', false))
+								@if (can('editar-cliente-premio-uif', false) && ! $detalleClienteUifRestringido)
                                 	<a href="{{route('lista_un_cliente_premio_uif', ['id' => $premio->id])}}" class="btn-accion-tabla tooltipsC" title="Listar el premio">
                                     <i class="fa fa-print"></i>
                                 	</a>
 								@endif
-								@if (can('borrar-cliente-premio-uif', false))
+								@if (can('borrar-cliente-premio-uif', false) && ! $detalleClienteUifRestringido)
 									<button style="width: 7%;" type="button" title="Elimina el premio" class="btn-accion-tabla eliminar_premio tooltipsC">
 										<i class="fa fa-times-circle text-danger"></i>
 									</button>								
@@ -61,12 +95,5 @@
        		</tbody>
        	</table>
 		@include('uif.cliente_uif.template2')
-        <div class="row">
-			@if (isset($data))
-				<div class="col-md-12">
-					<a href="{{route('crea_cliente_premio_uif', ['id' => $data->id])}}" class="btn btn-info pull-right">+ Nuevo Premio</a>
-				</div>
-			@endif
-        </div>
     </div>	
 </div>

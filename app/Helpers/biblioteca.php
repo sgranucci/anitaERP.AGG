@@ -60,6 +60,50 @@ function traePermisosUsuario()
 }
 
 /**
+ * Perfil UIF para vistas cliente_uif: supervisor (completo), cajero (restringido) u operador.
+ */
+if (!function_exists('perfilClienteUif')) {
+    function perfilClienteUif(): string
+    {
+        if (session()->get('rol_nombre') == 'administrador') {
+            return 'supervisor';
+        }
+        $p = traePermisosUsuario()['permisos'];
+        if (in_array('supervisor-uif', $p, true)) {
+            return 'supervisor';
+        }
+        if (in_array('cajero-uif', $p, true)) {
+            return 'cajero';
+        }
+
+        return 'operador';
+    }
+}
+
+if (!function_exists('esSupervisorUif')) {
+    function esSupervisorUif(): bool
+    {
+        return perfilClienteUif() === 'supervisor';
+    }
+}
+
+/** Cajero UIF sin permiso de supervisor (ni administrador). */
+if (!function_exists('esCajeroUifSinSupervisor')) {
+    function esCajeroUifSinSupervisor(): bool
+    {
+        return perfilClienteUif() === 'cajero';
+    }
+}
+
+/** Solo listado/visualización: sin slug cajero-uif ni supervisor-uif (perfil operador). */
+if (!function_exists('esSoloVisualizacionClienteUif')) {
+    function esSoloVisualizacionClienteUif(): bool
+    {
+        return perfilClienteUif() === 'operador';
+    }
+}
+
+/**
  * Funcion para devolver la fecha inicial y final de una
  * semana dada.
  *

@@ -279,6 +279,7 @@
         <input type="hidden" id="estado" name="estado" value="{{old('estado', $data->estado ?? '')}}" >
 		<input type="hidden" id="cliente_uif_id" name="cliente_uif_id" value="{{old('cliente_uif_id', $data->id ?? '0')}}" >
 		<input type="hidden" id="essupervisor" name="essupervisor" value="{{old('essupervisor', $essupervisor ?? '')}}" >
+		<input type="hidden" id="uif_perfil_cliente" value="{{ $uifPerfil ?? 'operador' }}" >
 </div>
 @include('includes.uif.modalconsultaactividad_uif')
 

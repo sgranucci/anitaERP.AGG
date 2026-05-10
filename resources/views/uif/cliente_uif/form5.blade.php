@@ -1,11 +1,12 @@
 @php
     $tieneCliente = isset($data) && $data && ($data->id ?? null);
+    $archivoClienteUifRestringido = esSoloVisualizacionClienteUif();
 @endphp
 <div class="card form5" style="display: none">
     <div class="card-body">
         @if ($tieneCliente)
             <p class="text-muted small mb-2">Archivos actuales</p>
-            @include('uif.cliente_uif.partials.archivos_adjuntos', ['data' => $data])
+            @include('uif.cliente_uif.partials.archivos_adjuntos', ['data' => $data, 'ocultarInputsConservar' => $archivoClienteUifRestringido])
             <p class="text-muted small mb-2 mt-3">Agregar archivos nuevos</p>
         @else
             <p class="text-muted small mb-2">Archivos</p>
@@ -34,10 +35,12 @@
             </tbody>
         </table>
         @include('uif.cliente_uif.template5')
+        @unless($archivoClienteUifRestringido)
         <div class="row">
             <div class="col-md-12">
                 <button id="agrega_renglon_archivo" type="button" class="pull-right btn btn-danger">+ Agrega renglón</button>
             </div>
         </div>
+        @endunless
     </div>
 </div>

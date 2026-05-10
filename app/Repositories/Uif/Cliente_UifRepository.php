@@ -244,7 +244,7 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
 
         $apiAnita = new ApiAnita;
         $data = [
-            'acc' => 'list', 'tabla' => $this->tableAnita,
+            'acc' => 'list', 'tabla' => $this->tableAnita.', outer profesion',
             'sistema' => 'base_admin',
             'campos' => '
 			    inroclienteid,
@@ -267,6 +267,7 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
 				iprovincia,
 				ipais,
 				iprofesion,
+                profesion.nuevocodigo as codigoprofesion,
 				fpremio,
 				cmoneda,
 				cdescpremio,
@@ -298,7 +299,7 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
 				cdecljur,
 				ifevtoactividad
             ',
-            'whereArmado' => ' WHERE '.$this->keyFieldAnita." = '".$key."' ",
+            'whereArmado' => ' WHERE '.$this->keyFieldAnita." = '".$key."' AND clientes_uif.iprofesion=profesion.iprofesionid",
         ];
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
@@ -375,7 +376,7 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
 
             // Lee actividad
             try {
-                $actividad = $this->actividad_uifRepository->find($data->iprofesion);
+                $actividad = $this->actividad_uifRepository->find($data->codigoprofesion);
 
                 $actividad_id = null;
                 if ($actividad) {
@@ -603,21 +604,15 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
             if (is_array($dataAnita) && count($dataAnita) > 0) {
                 foreach ($dataAnita as $premioAnita) {
                     $juego_id = 1;
-                    $mediopago_id = 1;
 
-                    if ($premioAnita->ifechaentrega < 20000000) {
-                        $fechaEntrega = '01-01-2001';
-                    } else {
-                        $fechaEntrega = substr($premioAnita->ifechaentrega, 6, 2).'-'.substr($premioAnita->ifechaentrega, 4, 2).'-'.substr($premioAnita->ifechaentrega, 0, 4);
-                    }
-
-                    $horaEntrega = $premioAnita->choraentrega.':00';
-
-                    if (! validarHora($horaEntrega)) {
-                        $horaEntrega = '01:00';
+                    $fechaEntrega = $this->fechaSqlDesdeAnitaYyyymmdd($premioAnita->ifechaentrega ?? 0);
+                    $horaEntrega = $this->horaSqlDesdeAnita(isset($premioAnita->choraentrega) ? (string) $premioAnita->choraentrega : null);
+                    if (! validarFormatoHora($horaEntrega)) {
+                        $horaEntrega = '01:00:00';
                     }
 
                     $premioLocal = $this->cliente_premio_uifRepository->createUnique([
+                        'anita_inropremioid' => (int) $premioAnita->inropremioid,
                         'cliente_uif_id' => $cliente_uif->id,
                         'sala_id' => 1,
                         'juego_uif_id' => $juego_id,
@@ -627,8 +622,7 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
                         'moneda_id' => 1,
                         'posicion' => $premioAnita->cposicion,
                         'numerotito' => $premioAnita->cnroticket,
-                        'fechatito' => $premioAnita->ifechatito,
-                        'mediopago_id' => $mediopago_id,
+                        'fechatito' => $this->fechaSqlOpcionalDesdeAnitaYyyymmdd($premioAnita->ifechatito ?? null),
                         'piderecibopago' => $premioAnita->crecibo_pago,
                         'creousuario_id' => Auth::user()->id,
                     ]);
@@ -644,6 +638,10 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
                         isset($premioAnita->cextfoto) ? (string) $premioAnita->cextfoto : null
                     );
                     if ($fotoPremio !== null) {
+                        $anterior = $premioLocal->foto ?? '';
+                        if ($anterior !== '' && $anterior !== $fotoPremio) {
+                            ClientePremioUifFotoTesoreria::deletePublicFotoIfUnused($anterior);
+                        }
                         $premioLocal->update(['foto' => $fotoPremio]);
                     }
                 }
@@ -673,6 +671,69 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
                 }
             }
         }
+    }
+
+    /**
+     * Anita usa fecha como entero YYYYMMDD (ifechaentrega).
+     */
+    private function fechaSqlDesdeAnitaYyyymmdd($valor, string $fallback = '2001-01-01'): string
+    {
+        $n = (int) $valor;
+        if ($n < 20000000) {
+            return $fallback;
+        }
+        $s = str_pad((string) $n, 8, '0', STR_PAD_LEFT);
+        if (strlen($s) !== 8 || ! ctype_digit($s)) {
+            return $fallback;
+        }
+
+        return substr($s, 0, 4).'-'.substr($s, 4, 2).'-'.substr($s, 6, 2);
+    }
+
+    /**
+     * Anita: ifechatito como YYYYMMDD o null.
+     */
+    private function fechaSqlOpcionalDesdeAnitaYyyymmdd($valor): ?string
+    {
+        if ($valor === null || $valor === '') {
+            return null;
+        }
+        $n = (int) $valor;
+        if ($n < 18500101 || $n > 29991231) {
+            return null;
+        }
+        $s = str_pad((string) $n, 8, '0', STR_PAD_LEFT);
+        if (strlen($s) !== 8 || ! ctype_digit($s)) {
+            return null;
+        }
+
+        return substr($s, 0, 4).'-'.substr($s, 4, 2).'-'.substr($s, 6, 2);
+    }
+
+    /**
+     * Normaliza choraentrega a H:i:s (evita "01:00:00:00" si Anita ya manda segundos).
+     */
+    private function horaSqlDesdeAnita(?string $chora): string
+    {
+        $t = trim((string) ($chora ?? ''));
+        if ($t === '') {
+            return '01:00:00';
+        }
+        if (preg_match('/^(\d{1,2}):(\d{2})$/', $t, $m)) {
+            $h = min(23, max(0, (int) $m[1]));
+            $i = min(59, max(0, (int) $m[2]));
+
+            return sprintf('%02d:%02d:00', $h, $i);
+        }
+        if (preg_match('/^(\d{1,2}):(\d{2}):(\d{2})$/', $t, $m)) {
+            $h = min(23, max(0, (int) $m[1]));
+            $i = min(59, max(0, (int) $m[2]));
+            $s = min(59, max(0, (int) $m[3]));
+
+            return sprintf('%02d:%02d:%02d', $h, $i, $s);
+        }
+
+        return '01:00:00';
     }
 
     private function convierteProfesion($profesion)

@@ -45,7 +45,7 @@ $( "#botonform0" ).click(function() {
                     <button type="button" id="botonform2" class="btn btn-info btn-sm">
                         <span class="fa fa-copy"></span> Datos UIF
                     </button>
-                    <button type="button" id="botonform3" class="btn btn-info btn-sm">
+                    <button type="button" id="botonform3" class="btn btn-primary btn-sm">
                         <span class="fa fa-copy"></span> Premios
                     </button>
                     <button type="button" id="botonform4" class="btn btn-info btn-sm">

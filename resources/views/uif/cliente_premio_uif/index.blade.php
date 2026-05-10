@@ -9,6 +9,23 @@ Premios UIF
 
 <?php use App\Helpers\biblioteca ?>
 
+@section('styles')
+<style>
+    .premio-foto-thumb-link { display: inline-block; line-height: 0; }
+    .premio-foto-thumb {
+        max-height: 48px;
+        max-width: 48px;
+        width: auto;
+        height: auto;
+        object-fit: cover;
+        border-radius: 4px;
+        border: 1px solid #ddd;
+        vertical-align: middle;
+    }
+    .premio-foto-thumb-link:hover .premio-foto-thumb { border-color: #3c8dbc; opacity: 0.92; }
+</style>
+@endsection
+
 @section('contenido')
 <div class="row">
     <div class="col-lg-12">
@@ -21,7 +38,7 @@ Premios UIF
                 <div class="d-md-flex justify-content-md-end">
 					<form action="{{ route('consulta_cliente_premio_uif') }}" method="GET">
 						<div class="btn-group">
-							<input type="text" name="busqueda" class="form-control" placeholder="Busqueda ..."> 
+							<input type="text" name="busqueda" class="form-control" placeholder="Busqueda ..." value="{{ $busqueda ?? '' }}"> 
 							<button type="submit" class="btn btn-default">
 								<span class="fa fa-search"></span>
 							</button>
@@ -43,6 +60,7 @@ Premios UIF
                             <th>Posición</th>
                             <th>Número TITO</th>
                             <th>Forma de Pago</th>
+                            <th style="text-align: center; width: 72px;">Foto</th>
                             <th class="width40" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -58,6 +76,19 @@ Premios UIF
                             <td><small>{{$data->posicion ?? ''}}</small></td>
                             <td><small>{{$data->numerotito ?? ''}}</small></td>
                             <td><small>{{$data->nombreformapago}}</small></td>
+                            <td class="text-center align-middle premio-foto-preview">
+                                @if (! empty($data->foto ?? null))
+                                    @if (can('editar-cliente-premio-uif', false))
+                                        <a href="{{ route('muestra_foto_cliente_premio_uif', ['id' => $data->id]) }}" class="premio-foto-thumb-link tooltipsC" title="Ver foto del jugador">
+                                            <img src="{{ asset('storage/imagenes/fotos_uif/'.$data->foto) }}" alt="" class="premio-foto-thumb">
+                                        </a>
+                                    @else
+                                        <img src="{{ asset('storage/imagenes/fotos_uif/'.$data->foto) }}" alt="" class="premio-foto-thumb">
+                                    @endif
+                                @else
+                                    <span class="text-muted">—</span>
+                                @endif
+                            </td>
                             <td>
                        			@if (can('editar-cliente-premio-uif', false))
                                 	<a href="{{route('edita_cliente_premio_uif', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">

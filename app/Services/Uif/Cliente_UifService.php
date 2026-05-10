@@ -136,7 +136,9 @@ class Cliente_UifService
 				}
 			}
 
-			Self::actualiza($data, $id, $request);
+			$actualizarRiesgo = ! esCajeroUifSinSupervisor();
+
+			Self::actualiza($data, $id, $request, $actualizarRiesgo);
 
 			DB::commit();
 		} catch (\Exception $e) {
@@ -149,7 +151,10 @@ class Cliente_UifService
         return ['mensaje' => 'ok'];
     }
 
-	private function actualiza($data, $id, $request)
+	/**
+	 * @param  bool  $actualizarRiesgo  Falso para cajero UIF: la solapa de riesgo la gestiona solo el supervisor.
+	 */
+	private function actualiza($data, $id, $request, $actualizarRiesgo = true)
 	{
 		// Graba cliente_uif
 		$cliente_uif = $this->cliente_uifRepository->update($data, $id);
@@ -159,7 +164,9 @@ class Cliente_UifService
 
 		$this->cliente_archivo_uifRepository->update($request, $id);
 
-		$cliente_riesgo_uif = $this->cliente_riesgo_uifRepository->update($data, $id);
+		if ($actualizarRiesgo) {
+			$this->cliente_riesgo_uifRepository->update($data, $id);
+		}
 	}
 
 	public function guardaCliente_Premio_Uif($request)

@@ -3,15 +3,22 @@
 namespace App\Services\Uif;
 
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
-use Intervention\Image\Facades\Image;
+use Intervention\Image\Laravel\Facades\Image;
 
 /**
- * Fotos de premio guardadas por tesorería en {@see ClienteUifFotoDocumento::basePath()}
- * con nombre {@code pago_}{@code inropremioid}.{@code ext}.
+ * Fotos de pago guardadas por tesorería en {@see ClienteUifFotoDocumento::basePath()}
+ * típicamente con nombre {@code pago_}{@code inropremioid}.{@code ext}.
  */
 class ClientePremioUifFotoTesoreria
 {
+    private static function acceptedImageExtensions(): array
+    {
+        return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tif', 'tiff'];
+    }
+
+    /**
+     * @param  ?string  $hintExtension  extensión informada por Anita (cextfoto), sin punto
+     */
     public static function findSourcePath(int $inropremioid, ?string $hintExtension = null): ?string
     {
         if ($inropremioid <= 0) {
@@ -19,28 +26,48 @@ class ClientePremioUifFotoTesoreria
         }
 
         $dir = ClienteUifFotoDocumento::basePath();
-        if ($dir === '' || ! is_dir($dir)) {
+        if ($dir === '' || ! is_dir($dir) || ! is_readable($dir)) {
             return null;
         }
 
         $stem = 'pago_'.$inropremioid;
+        $ds = DIRECTORY_SEPARATOR;
 
-        foreach (glob($dir.DIRECTORY_SEPARATOR.$stem.'.*') ?: [] as $path) {
-            if (! is_file($path)) {
+        foreach (glob($dir.$ds.$stem.'.*') ?: [] as $path) {
+            if (self::isAcceptedImagePath($path)) {
+                return $path;
+            }
+        }
+
+        foreach (@scandir($dir, SCANDIR_SORT_NONE) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
                 continue;
             }
-            $e = strtolower((string) pathinfo($path, PATHINFO_EXTENSION));
-            if (in_array($e, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true)) {
+            $path = $dir.$ds.$entry;
+            if (! is_file($path) || ! is_readable($path)) {
+                continue;
+            }
+            $baseFile = pathinfo($entry, PATHINFO_FILENAME);
+            if (strcasecmp((string) $baseFile, $stem) !== 0) {
+                continue;
+            }
+            if (self::isAcceptedImagePath($path)) {
                 return $path;
             }
         }
 
         if ($hintExtension !== null && $hintExtension !== '') {
             $ext = ltrim(strtolower($hintExtension), '.');
-            if (in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true)) {
-                $candidate = $dir.DIRECTORY_SEPARATOR.$stem.'.'.$ext;
-                if (is_file($candidate)) {
-                    return $candidate;
+            if (in_array($ext, self::acceptedImageExtensions(), true)) {
+                foreach (self::acceptedImageExtensions() as $tryExt) {
+                    $candidate = $dir.$ds.$stem.'.'.$tryExt;
+                    if (is_file($candidate) && is_readable($candidate)) {
+                        return $candidate;
+                    }
+                    $candidateCi = self::findCaseInsensitiveStemExt($dir, $stem, $tryExt);
+                    if ($candidateCi !== null) {
+                        return $candidateCi;
+                    }
                 }
             }
         }
@@ -48,12 +75,43 @@ class ClientePremioUifFotoTesoreria
         return null;
     }
 
+    private static function findCaseInsensitiveStemExt(string $dir, string $stem, string $extLower): ?string
+    {
+        foreach (@scandir($dir, SCANDIR_SORT_NONE) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+            $path = $dir.DIRECTORY_SEPARATOR.$entry;
+            if (! is_file($path)) {
+                continue;
+            }
+            if (strcasecmp(pathinfo($entry, PATHINFO_FILENAME), $stem) !== 0) {
+                continue;
+            }
+            if (strcasecmp((string) pathinfo($entry, PATHINFO_EXTENSION), $extLower) === 0) {
+                return $path;
+            }
+        }
+
+        return null;
+    }
+
+    private static function isAcceptedImagePath(string $path): bool
+    {
+        if (! is_file($path) || ! is_readable($path)) {
+            return false;
+        }
+        $ext = strtolower((string) pathinfo($path, PATHINFO_EXTENSION));
+
+        return in_array($ext, self::acceptedImageExtensions(), true);
+    }
+
     /**
-     * Copia desde el escáner de tesorería a {@code storage/app/public/imagenes/fotos_uif},
-     * mismo criterio que {@see \App\Models\Uif\Cliente_Premio_Uif::setFoto}.
+     * Copia desde tesorería a {@code storage/app/public/imagenes/fotos_uif}.
+     * Si el procesamiento a JPG tiene éxito, el archivo destino será {@code pago_{inropremioid}.jpg}.
+     * Si falla Intervention, copia binaria conservando la extensión del origen.
      *
-     * @param  int  $inropremioid  ID del premio en Anita (nombre del archivo en /scan).
-     * @return string|null basename guardado en disco público, o null si no hay origen o falla el procesado
+     * @return string|null nombre de archivo dentro de imagenes/fotos_uif/ (basename), o null
      */
     public static function importToPublicStorage(int $inropremioid, ?string $hintExtension = null): ?string
     {
@@ -62,17 +120,45 @@ class ClientePremioUifFotoTesoreria
             return null;
         }
 
-        try {
-            $imageName = Str::random(20).'.jpg';
-            $imagen = Image::make($src)->encode('jpg', 75);
-            $imagen->resize(300, 300, function ($constraint) {
-                $constraint->upsize();
-            });
-            Storage::disk('public')->put('imagenes/fotos_uif/'.$imageName, $imagen->stream());
+        $relPrefix = 'imagenes/fotos_uif';
+        $stem = 'pago_'.$inropremioid;
 
-            return $imageName;
+        try {
+            $image = Image::decodePath($src)
+                ->resizeDown(300, 300);
+            $destName = $stem.'.jpg';
+            Storage::disk('public')->put(
+                $relPrefix.'/'.$destName,
+                $image->encodeUsingFileExtension('jpg', quality: 75)
+            );
+
+            return $destName;
         } catch (\Throwable $e) {
-            return null;
+            try {
+                $raw = @file_get_contents($src);
+                if ($raw === false || $raw === '') {
+                    return null;
+                }
+                $ext = strtolower((string) pathinfo($src, PATHINFO_EXTENSION));
+                if (! in_array($ext, self::acceptedImageExtensions(), true)) {
+                    $ext = 'jpg';
+                }
+                $destName = $stem.'.'.$ext;
+                Storage::disk('public')->put($relPrefix.'/'.$destName, $raw);
+
+                return $destName;
+            } catch (\Throwable $e2) {
+                return null;
+            }
         }
+    }
+
+    /** Elimina un archivo previo del disco público si era distinto al nuevo basename. */
+    public static function deletePublicFotoIfUnused(?string $basename): void
+    {
+        if ($basename === null || $basename === '' || strpos($basename, '/') !== false || strpos($basename, '\\') !== false) {
+            return;
+        }
+        Storage::disk('public')->delete('imagenes/fotos_uif/'.$basename);
     }
 }

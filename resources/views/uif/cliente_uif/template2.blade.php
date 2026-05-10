@@ -17,6 +17,9 @@
 		<td>
 			<input type="text" name="montopremios[]" class="form-control montopremio" style="text-align: right;" value="" />
 		</td>
+		<td class="text-center align-middle premio-foto-preview">
+			<span class="text-muted">—</span>
+		</td>
     	<td>
 			<button style="width: 7%;" type="button" title="Elimina esta linea" class="btn-accion-tabla eliminar_premio tooltipsC">
     			<i class="fa fa-times-circle text-danger"></i>

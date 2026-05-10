@@ -2,6 +2,7 @@
 
 namespace App\Exports\Uif;
 
+use App\Repositories\Uif\Cliente_UifRepositoryInterface;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
@@ -14,35 +15,37 @@ use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Events\AfterSheet;
 use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
-use App\Repositories\Uif\Cliente_Premio_UifRepositoryInterface;
 
-class Cliente_Premio_UifExport implements FromView, WithColumnFormatting, ShouldAutoSize, WithStyles, WithColumnWidths, WithEvents, WithTitle
+class Cliente_UifExport implements FromView, WithColumnFormatting, ShouldAutoSize, WithStyles, WithColumnWidths, WithEvents, WithTitle
 {
 	use Exportable;
 
-	private $cliente_premio_uifRepository;
+	private $cliente_uifRepository;
 
 	private $busqueda;
 
 	private $flDesdeIndex = false;
 
-	public function __construct(Cliente_Premio_UifRepositoryInterface $cliente_premio_uifrepository)
+	public function __construct(Cliente_UifRepositoryInterface $cliente_uifrepository)
 	{
-		$this->cliente_premio_uifRepository = $cliente_premio_uifrepository;
+		$this->cliente_uifRepository = $cliente_uifrepository;
 	}
 
 	public function view(): View
 	{
 		if ($this->flDesdeIndex) {
-			$busqueda = is_string($this->busqueda ?? null) ? trim($this->busqueda) : '';
-			$cliente_premio_uifs = $this->cliente_premio_uifRepository->leeCliente_Premio_Uif($busqueda, false);
+			$busqueda = $this->busqueda;
+			if (is_string($busqueda)) {
+				$busqueda = trim($busqueda);
+			}
+			$cliente_uifs = $this->cliente_uifRepository->leeCliente_Uif($busqueda, false);
 
-			return view('exports.uif.cliente_premio_uifindex', compact('cliente_premio_uifs'));
+			return view('exports.uif.cliente_uifindex', compact('cliente_uifs'));
 		}
 
-		$cliente_premio_uifs = collect();
+		$cliente_uifs = collect();
 
-		return view('exports.uif.cliente_premio_uifindex', compact('cliente_premio_uifs'));
+		return view('exports.uif.cliente_uifindex', compact('cliente_uifs'));
 	}
 
 	public function columnFormats(): array
@@ -58,6 +61,7 @@ class Cliente_Premio_UifExport implements FromView, WithColumnFormatting, Should
 				'G' => NumberFormat::FORMAT_TEXT,
 				'H' => NumberFormat::FORMAT_TEXT,
 				'I' => NumberFormat::FORMAT_TEXT,
+				'J' => NumberFormat::FORMAT_TEXT,
 			];
 		}
 
@@ -88,6 +92,7 @@ class Cliente_Premio_UifExport implements FromView, WithColumnFormatting, Should
 				'G' => ['font' => ['bold' => true]],
 				'H' => ['font' => ['bold' => true]],
 				'I' => ['font' => ['bold' => true]],
+				'J' => ['font' => ['bold' => true]],
 			];
 		}
 
@@ -99,14 +104,15 @@ class Cliente_Premio_UifExport implements FromView, WithColumnFormatting, Should
 		if ($this->flDesdeIndex) {
 			return [
 				'A' => 10,
-				'B' => 36,
-				'C' => 22,
-				'D' => 22,
-				'E' => 20,
-				'F' => 14,
-				'G' => 12,
-				'H' => 14,
-				'I' => 22,
+				'B' => 34,
+				'C' => 12,
+				'D' => 16,
+				'E' => 28,
+				'F' => 22,
+				'G' => 18,
+				'H' => 18,
+				'I' => 14,
+				'J' => 28,
 			];
 		}
 
@@ -124,7 +130,7 @@ class Cliente_Premio_UifExport implements FromView, WithColumnFormatting, Should
 
 	public function title(): string
 	{
-		return 'Premios UIF';
+		return 'Clientes UIF';
 	}
 
 	public function parametros($busqueda)

@@ -10,17 +10,20 @@
     $logoData = is_file($logoPath) ? base64_encode(file_get_contents($logoPath)) : null;
 @endphp
 <!DOCTYPE html>
-<html>
-	<title>Premios</title>
-	<head>
+<html lang="es">
+<head>
+	<meta charset="UTF-8">
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+	<title>Premios UIF</title>
 		<style>
+			body { font-family: DejaVu Sans, Helvetica, Arial, sans-serif; }
 			table {
-				font-family: arial, sans-serif;
+				font-family: DejaVu Sans, Helvetica, Arial, sans-serif;
 				border-collapse: collapse;
 				width: 100%;
 			}
 			td, th {
-				boder: 1px solid #dddddd;
+				border: 1px solid #dddddd;
 				text-align: left;
 				padding: 8px;
 			}
@@ -57,7 +60,6 @@
 					<th>Posición</th>
 					<th>Número TITO</th>
 					<th>Forma de Pago</th>
-					<th class="width40" data-orderable="false"></th>
 				</tr>
 			</thead>
 			<tbody>

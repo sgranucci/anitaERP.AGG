@@ -26,6 +26,8 @@ class Cliente_Premio_UifRepository implements Cliente_Premio_UifRepositoryInterf
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
+        $busqueda = is_string($busqueda) ? trim($busqueda) : '';
+
         $cliente_premio_uifs = $this->model->select('cliente_premio_uif.id as id',
                                         'cliente_uif.nombre as nombrecliente',
 										'sala.nombre as nombresala',
@@ -34,19 +36,35 @@ class Cliente_Premio_UifRepository implements Cliente_Premio_UifRepositoryInterf
 										'cliente_premio_uif.monto as monto',
                                         'cliente_premio_uif.posicion as posicion',
 										'cliente_premio_uif.numerotito as numerotito',
-										'formapago.nombre as nombreformapago')
+										'formapago.nombre as nombreformapago',
+                                        'cliente_premio_uif.foto as foto')
                                 ->join('cliente_uif', 'cliente_uif.id', '=', 'cliente_premio_uif.cliente_uif_id')
                                 ->leftjoin('sala', 'sala.id', '=', 'cliente_premio_uif.sala_id')
                                 ->leftjoin('juego_uif', 'juego_uif.id', '=', 'cliente_premio_uif.juego_uif_id')
 								->leftjoin('formapago', 'formapago.id', '=', 'cliente_premio_uif.formapago_id')
-								->where('cliente_uif.deleted_at', null)
-                                ->where('cliente_uif.id', $busqueda)
-                                ->orWhere('cliente_uif.nombre', 'like', '%'.$busqueda.'%')
-                                ->orWhere('cliente_premio_uif.fechaentrega', '=', $busqueda)  
-								->orWhere('cliente_premio_uif.monto', 'like', '%'.$busqueda.'%')
-								->orWhere('cliente_premio_uif.posicion', 'like', '%'.$busqueda.'%')
-								->orWhere('cliente_premio_uif.numerotito', 'like', '%'.$busqueda.'%')
-                                ->orderby('id', 'DESC');
+								->whereNull('cliente_uif.deleted_at');
+
+        if ($busqueda !== '') {
+            $cliente_premio_uifs->where(function ($q) use ($busqueda) {
+                $like = '%'.$busqueda.'%';
+                $q->where('cliente_uif.nombre', 'like', $like)
+                    ->orWhere('sala.nombre', 'like', $like)
+                    ->orWhere('juego_uif.nombre', 'like', $like)
+                    ->orWhere('formapago.nombre', 'like', $like)
+                    ->orWhere('cliente_premio_uif.monto', 'like', $like)
+                    ->orWhere('cliente_premio_uif.posicion', 'like', $like)
+                    ->orWhere('cliente_premio_uif.numerotito', 'like', $like)
+                    ->orWhereRaw('CAST(cliente_premio_uif.fechaentrega AS CHAR) LIKE ?', [$like]);
+
+                if (ctype_digit($busqueda)) {
+                    $id = (int) $busqueda;
+                    $q->orWhere('cliente_premio_uif.id', $id)
+                        ->orWhere('cliente_uif.id', $id);
+                }
+            });
+        }
+
+        $cliente_premio_uifs = $cliente_premio_uifs->orderBy('cliente_premio_uif.id', 'DESC');
                                 
         if (isset($flPaginando))
         {
@@ -68,7 +86,35 @@ class Cliente_Premio_UifRepository implements Cliente_Premio_UifRepositoryInterf
 
 	public function createUnique(array $data)
 	{
-		return $this->model->create($data);
+        $cid = isset($data['cliente_uif_id']) ? filter_var($data['cliente_uif_id'], FILTER_VALIDATE_INT) : false;
+        $anita = isset($data['anita_inropremioid']) ? filter_var($data['anita_inropremioid'], FILTER_VALIDATE_INT) : false;
+
+        if ($cid !== false && $cid > 0 && $anita !== false && $anita > 0) {
+            $exist = $this->model->newQuery()
+                ->where('cliente_uif_id', $cid)
+                ->where('anita_inropremioid', $anita)
+                ->first();
+            if ($exist !== null) {
+                $exist->update($data);
+
+                return $exist->fresh();
+            }
+
+            $legacy = $this->model->newQuery()
+                ->where('cliente_uif_id', $cid)
+                ->whereNull('anita_inropremioid')
+                ->where('fechaentrega', $data['fechaentrega'] ?? null)
+                ->where('monto', $data['monto'] ?? null)
+                ->orderBy('id')
+                ->first();
+            if ($legacy !== null) {
+                $legacy->update($data);
+
+                return $legacy->fresh();
+            }
+        }
+
+        return $this->model->create($data);
 	}
 
     public function update(array $data, $id)

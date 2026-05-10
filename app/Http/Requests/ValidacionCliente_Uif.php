@@ -160,6 +160,9 @@ class ValidacionCliente_Uif extends FormRequest
             'numerodocumento' => 'número de documento',
             'fotodocumento' => 'foto del documento',
             'periodos.*' => 'período (riesgo)',
+            'so_uif_id' => 'sujeto obligado',
+            'pep_uif_id' => 'expuesto políticamente',
+            'fechafirmapep' => 'fecha de última firma PEP',
         ];
     }
 }

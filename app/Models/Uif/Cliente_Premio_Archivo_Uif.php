@@ -4,6 +4,8 @@ namespace App\Models\Uif;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Intervention\Image\Laravel\Facades\Image;
 
 class Cliente_Premio_Archivo_Uif extends Model
 {
@@ -22,11 +24,13 @@ class Cliente_Premio_Archivo_Uif extends Model
                 Storage::disk('public')->delete("imagenes/fotos_uif/$actual");
             }
             $imageName = Str::random(20) . '.jpg';
-            $imagen = Image::make($foto)->encode('jpg', 75);
-            $imagen->resize(300, 300, function ($constraint) {
-                $constraint->upsize();
-            });
-            Storage::disk('public')->put("imagenes/fotos_uif/$imageName", $imagen->stream());
+            $image = Image::decode($foto)
+                ->resizeDown(300, 300);
+
+            Storage::disk('public')->put(
+                "imagenes/fotos_uif/$imageName",
+                $image->encodeUsingFileExtension('jpg', quality: 75)
+            );
             return $imageName;
         } else {
             return false;

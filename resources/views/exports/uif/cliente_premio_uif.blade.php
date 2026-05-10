@@ -41,10 +41,6 @@
     }
     $logoData = is_file($logoPath) ? base64_encode(file_get_contents($logoPath)) : null;
 
-    $fotoNombre = $cliente_premio_uif->foto ?? '';
-    $fotoPath   = $fotoNombre ? public_path('storage/imagenes/fotos_uif/'.$fotoNombre) : '';
-    $fotoData   = ($fotoPath && is_file($fotoPath)) ? base64_encode(file_get_contents($fotoPath)) : null;
-
     $pieLegalPath = resource_path('text/uif/premio_pie_legal.txt');
     $pieLegalParrafos = [];
     if (is_file($pieLegalPath)) {
@@ -114,7 +110,6 @@
             color: #777;
             text-align: center;
         }
-        .foto-jugador { max-width: 110px; max-height: 130px; border: 1px solid #aaa; padding: 2px; }
     </style>
 </head>
 <body>
@@ -243,13 +238,6 @@
         </tbody>
     </table>
 </div>
-
-@if ($fotoData)
-    <div class="seccion-titulo">Foto del jugador</div>
-    <div class="seccion-cuerpo" style="text-align: center;">
-        <img class="foto-jugador" src="data:image/jpeg;base64,{{ $fotoData }}">
-    </div>
-@endif
 
 <div class="seccion-titulo">Observaciones</div>
 <div class="observaciones">&nbsp;</div>

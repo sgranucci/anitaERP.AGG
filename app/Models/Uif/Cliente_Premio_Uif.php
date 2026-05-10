@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use OwenIt\Auditing\Contracts\Auditable;
 use Illuminate\Support\Str;
-use Intervention\Image\Facades\Image;
+use Intervention\Image\Laravel\Facades\Image;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\Configuracion\Moneda;
 use App\Models\Configuracion\Sala;
@@ -22,7 +22,7 @@ class Cliente_Premio_Uif extends Model implements Auditable
 	use Cliente_Premio_UifTrait;
 
     protected $fillable = [
-							'cliente_uif_id', 'sala_id', 'juego_uif_id',  
+							'anita_inropremioid', 'cliente_uif_id', 'sala_id', 'juego_uif_id',
 							'fechaentrega', 'detalle', 'monto', 'moneda_id',
 							'posicion', 'numerotito', 'fechatito', 'formapago_id',
 							'piderecibopago', 'foto', 'creousuario_id'
@@ -75,11 +75,13 @@ class Cliente_Premio_Uif extends Model implements Auditable
                 Storage::disk('public')->delete("imagenes/fotos_uif/$actual");
             }
             $imageName = Str::random(20) . '.jpg';
-            $imagen = Image::make($foto)->encode('jpg', 75);
-            $imagen->resize(300, 300, function ($constraint) {
-                $constraint->upsize();
-            });
-            Storage::disk('public')->put("imagenes/fotos_uif/$imageName", $imagen->stream());
+            $image = Image::decode($foto)
+                ->resizeDown(300, 300);
+
+            Storage::disk('public')->put(
+                "imagenes/fotos_uif/$imageName",
+                $image->encodeUsingFileExtension('jpg', quality: 75)
+            );
             return $imageName;
         } else {
             return false;

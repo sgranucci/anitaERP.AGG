@@ -24,33 +24,33 @@ use Carbon\Carbon;
     <ul class="navbar-nav ml-auto">
         <!-- Messages Dropdown Menu -->
         <!-- Notifications Dropdown Menu -->
-        @if (Auth::check())
+        @guest
+            <li class="nav-item">
+                <a href="{{ route('login') }}" class="nav-link font-weight-bold">
+                    <i class="fas fa-sign-in-alt"></i> Ingresar
+                </a>
+            </li>
+        @endguest
+        @auth
             <li class="nav-item dropdown">
                 <a href="{{route('cambia_password')}}" class="nav-link">
                     <i class="fa fa-lock"></i> Cambia password
                 </a>
             </li>
-        @endif
-        <li class="nav-item dropdown">
-            <a class="nav-link" data-toggle="dropdown" href="#">
-                <i class="far fa-user"></i> {{session()->get('nombre_usuario', 'Invitado')}} - {{session()->get('rol_nombre', 'Guest')}}
-            </a>
-            <div class="dropdown-menu dropdown-menu-lg dropdown-menu-right">
-                @guest
-                    <a href="{{route('login')}}" class="dropdown-item">
-                        <i class="fas fa-lock mr-2"></i> Login
-                    </a>
-                @endguest
-                @auth
+            <li class="nav-item dropdown">
+                <a class="nav-link" data-toggle="dropdown" href="#">
+                    <i class="far fa-user"></i> {{session()->get('nombre_usuario', 'Invitado')}} - {{session()->get('rol_nombre', 'Guest')}}
+                </a>
+                <div class="dropdown-menu dropdown-menu-lg dropdown-menu-right">
                     <a href="{{route('logout')}}" class="nav-link">
                         <i class="fas fa-users mr-2"></i> Salir
                     </a>
-                @endauth
-                <div class="dropdown-divider"></div>
-                @if(session()->get("roles") && count(session()->get("roles")) > 1)
-                    <a href="#" class="cambiar-rol dropdown-item dropdown-footer">Cambiar Rol</a>
-                @endif
-            </div>
-        </li>
+                    <div class="dropdown-divider"></div>
+                    @if(session()->get("roles") && count(session()->get("roles")) > 1)
+                        <a href="#" class="cambiar-rol dropdown-item dropdown-footer">Cambiar Rol</a>
+                    @endif
+                </div>
+            </li>
+        @endauth
     </ul>
 </nav>

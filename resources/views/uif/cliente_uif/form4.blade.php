@@ -1,4 +1,6 @@
 @php
+    $tieneClienteForm4 = isset($data) && ($data->id ?? null);
+    $riesgoClienteUifRestringido = esSoloVisualizacionClienteUif() || ! esSupervisorUif();
     $mesesPeriodoUif = [
         '01' => 'Enero',
         '02' => 'Febrero',
@@ -16,6 +18,7 @@
     $anioMinRiesgoUif = 2010;
     $anioMaxRiesgoUif = (int) date('Y') + 5;
 @endphp
+
 <div class="card form4" style="display: none">
     <div class="card-body">
     	<table class="table" id="riesgo-table">
@@ -85,10 +88,12 @@
        		</tbody>
        	</table>
 		@include('uif.cliente_uif.template4')
+        @unless($riesgoClienteUifRestringido)
         <div class="row">
         	<div class="col-md-12">
         		<button id="agrega_renglon_riesgo" class="pull-right btn btn-danger">+ Agrega rengl&oacute;n</button>
         	</div>
         </div>
+        @endunless
     </div>
 </div>
