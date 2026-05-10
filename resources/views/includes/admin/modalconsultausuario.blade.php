@@ -22,6 +22,7 @@
         <table class="table table-striped table-bordered table-hover" id="tabla-data">
           <thead>
               <th>ID</th>
+              <th>Usuario</th>
               <th>Nombre</th>
               <th>Email</th>
               <th>Centro de Costo</th>

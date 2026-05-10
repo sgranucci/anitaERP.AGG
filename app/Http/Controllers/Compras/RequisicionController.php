@@ -14,6 +14,7 @@ use App\Repositories\Configuracion\Arbolaprobacion_MovimientoRepositoryInterface
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Ventas\FormapagoRepositoryInterface;
 use App\Models\Compras\Proveedor;
+use App\Models\Compras\Requisicion_Archivo;
 use App\Services\Compras\RequisicionService;
 use App\Services\Configuracion\ArbolaprobacionService;
 use App\Queries\Compras\RequisicionQueryInterface;
@@ -230,6 +231,7 @@ class RequisicionController extends Controller
         $contratacionDirecta_enum = Requisicion::$enumContratacionDirecta;
 
         $acceso_visualizacion_por_hash = false;
+        $visualizar = false;
 
         return view('compras.requisicion.editar', compact(
             'data',
@@ -243,7 +245,8 @@ class RequisicionController extends Controller
             'estado_en_compras',
             'tratamiento_enum',
             'contratacionDirecta_enum',
-            'acceso_visualizacion_por_hash'
+            'acceso_visualizacion_por_hash',
+            'visualizar'
         ));
     }
 
@@ -470,6 +473,53 @@ class RequisicionController extends Controller
             'filtrado_por_proveedor' => $filtradoPorProveedor,
             'filas' => $filas,
         ]);
+    }
+
+    /**
+     * Descarga o sirve en línea (preview) un archivo adjunto de la requisición.
+     * Acceso: permisos de consulta/edición de requisiciones, o hash de visualización del árbol (como en visualizar).
+     */
+    public function descargarArchivo(Request $request, int $id, int $archivo)
+    {
+        $hash = $request->query('hash');
+        if (filled($hash)) {
+            $flEncontro = false;
+            foreach ($this->arbolaprobacion_movimientoRepository->findPorRequisicion($id) as $movimiento) {
+                if ($movimiento->hashvisualizar == $hash) {
+                    $flEncontro = true;
+                    break;
+                }
+            }
+            if (! $flEncontro) {
+                abort(403);
+            }
+        } elseif (! can('listar-requisicion', false) && ! can('editar-requisicion', false) && ! can('crear-requisicion', false)) {
+            abort(403);
+        }
+
+        $registro = Requisicion_Archivo::query()
+            ->where('id', $archivo)
+            ->where('requisicion_id', $id)
+            ->first();
+        if (! $registro) {
+            abort(404);
+        }
+
+        $basename = basename((string) $registro->nombrearchivo);
+        if ($basename === '' || str_contains($registro->nombrearchivo, '..')) {
+            abort(404);
+        }
+
+        $path = public_path('storage/archivos/requisiciones/'.$id.'/'.$basename);
+        if (! is_file($path)) {
+            abort(404);
+        }
+
+        if ($request->boolean('inline')) {
+            return response()->file($path);
+        }
+
+        return response()->download($path, $basename);
     }
 
     public function soloConsulta($id)

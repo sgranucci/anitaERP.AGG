@@ -66,7 +66,8 @@ class ClienteQuery implements ClienteQueryInterface
     // Datos para informe maestro de clientes
 
     public function generaDatosRepCliente($desdecliente_id, $hastacliente_id, $estado, $tiposuspensioncliente_id,
-                                        $desdevendedor_id, $hastavendedor_id)
+                                        $desdevendedor_id, $hastavendedor_id,
+                                        $desdeprovincia_id = 0, $hastaprovincia_id = 99999999)
     {
         $data = $this->model->select('cliente.*')
             ->with('localidades')
@@ -102,6 +103,11 @@ class ClienteQuery implements ClienteQueryInterface
         if ($hastavendedor_id != 99999999 || $desdevendedor_id != 0)
             $data = $data->where('cliente.vendedor_id', '>=', $desdevendedor_id)
                         ->where('cliente.vendedor_id', '<=', $hastavendedor_id);
+
+        // Filtra por provincia
+        if ($hastaprovincia_id != 99999999 || $desdeprovincia_id != 0)
+            $data = $data->where('cliente.provincia_id', '>=', $desdeprovincia_id)
+                        ->where('cliente.provincia_id', '<=', $hastaprovincia_id);
 
         $data = $data->get();
         return $data;

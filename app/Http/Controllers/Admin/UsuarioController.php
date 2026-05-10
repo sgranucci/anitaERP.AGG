@@ -162,4 +162,36 @@ class UsuarioController extends Controller
     {
         return ($this->usuarioRepository->find($usuario_id));
 	}
+
+    /**
+     * Resuelve id y nombre a partir del código de usuario o del id (árbol de aprobación y similares).
+     */
+    public function resolverUsuario(Request $request)
+    {
+        $valor = trim((string) $request->query('valor', ''));
+        $empresa_id = $request->query('empresa_id');
+
+        if ($valor === '') {
+            return response()->json(null);
+        }
+
+        $usuario = $this->usuarioRepository->findPorIdOCodigo($valor, $empresa_id ? (int) $empresa_id : null);
+
+        if (! $usuario) {
+            return response()->json(['ok' => false, 'mensaje' => 'Usuario no encontrado']);
+        }
+
+        $empresa_ok = true;
+        if ($empresa_id) {
+            $empresa_ok = $usuario->usuario_empresas->contains('id', (int) $empresa_id);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'id' => $usuario->id,
+            'nombre' => $usuario->nombre,
+            'usuario' => $usuario->usuario,
+            'empresa_ok' => $empresa_ok,
+        ]);
+    }
 }

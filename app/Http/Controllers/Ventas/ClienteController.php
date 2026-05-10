@@ -541,9 +541,12 @@ class ClienteController extends Controller
         $vendedor_query = Vendedor::all();
 		$vendedor_query->prepend((object) ['id'=>'0','nombre'=>'Primero']);
 		$vendedor_query->push((object) ['id'=>'99999999','nombre'=>'Ultimo']);
+        $provincia_query = Provincia::orderBy('nombre')->get();
+		$provincia_query->prepend((object) ['id'=>'0','nombre'=>'Primero']);
+		$provincia_query->push((object) ['id'=>'99999999','nombre'=>'Ultimo']);
         
         return view('ventas.repcliente.crear', compact('cliente_query', 'estado_enum', 
-                                                        'tiposuspensioncliente_query', 'vendedor_query'));
+                                                        'tiposuspensioncliente_query', 'vendedor_query', 'provincia_query'));
     }
 
     public function crearReporteCliente(Request $request)
@@ -567,7 +570,9 @@ class ClienteController extends Controller
                              $request->estado, 
                              $request->tiposuspensioncliente_id,
                              $request->desdevendedor_id,
-                             $request->hastavendedor_id)
+                             $request->hastavendedor_id,
+                             $request->desdeprovincia_id ?? 0,
+                             $request->hastaprovincia_id ?? 99999999)
                 ->download('cliente.'.$extension);
     }
     

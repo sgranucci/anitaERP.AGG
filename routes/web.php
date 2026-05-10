@@ -77,6 +77,7 @@ Route::post('configuracion/crearusuarioremoto', 'Admin\UsuarioController@crearUs
 Route::get('configuracion/leerusuario', 'Admin\UsuarioController@leerUsuario')->name('leer_usuario');
 Route::post('configuracion/consultausuario', 'Admin\UsuarioController@consultaUsuario')->name('consultar_usuario');
 Route::get('configuracion/leerunusuario/{usuario_id}', 'Admin\UsuarioController@leeUnUsuario')->name('leer_un_usuario');
+Route::get('configuracion/resolverusuario', 'Admin\UsuarioController@resolverUsuario')->name('resolver_usuario');
 
 /*
  * Salidas
@@ -1668,6 +1669,7 @@ Route::get('compras/requisicion/crear', 'Compras\RequisicionController@crear')->
 Route::post('compras/requisicion', 'Compras\RequisicionController@guardar')->name('guardar_requisicion');
 Route::get('compras/requisicion/{id}/editar', 'Compras\RequisicionController@editar')->name('editar_requisicion');
 Route::get('compras/requisicion/{id}/imprimir-pdf', 'Compras\RequisicionController@imprimirPdf')->name('imprimir_pdf_requisicion');
+Route::get('compras/requisicion/{id}/archivo/{archivo}', 'Compras\RequisicionController@descargarArchivo')->name('requisicion_archivo');
 Route::get('compras/requisicion/{requisicion}/presupuestos/{presupuesto}/pdf', 'Compras\RequisicionPresupuestoController@pdfPresupuesto')->name('requisicion_presupuesto_pdf');
 Route::get('compras/requisicion/{requisicion}/presupuestos/{presupuesto}/imprimir', 'Compras\RequisicionPresupuestoController@formularioImpresionPresupuesto')->name('requisicion_presupuesto_impresion');
 Route::get('compras/requisicion/{requisicion}/presupuestos/{presupuesto}/archivo/{archivo}/ver', 'Compras\RequisicionPresupuestoController@verArchivo')->name('requisicion_presupuesto_archivo_ver');

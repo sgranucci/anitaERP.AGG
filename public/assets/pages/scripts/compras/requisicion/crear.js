@@ -156,6 +156,10 @@ $(function () {
 		$(".form3").hide();
 		$(".form4").show();
 		$(".form5").hide();
+		var sol = document.getElementById('requisicion-solapa-archivos-adjuntos');
+		if (sol) {
+			sol.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		}
 	});
 	$("#botonform5").click(function(){
 		$(".form1").hide();
@@ -168,7 +172,39 @@ $(function () {
 	$( "#botonform0" ).click(function() {
 		$("#form-general").submit();
 	});
-		
+
+	$(document).on('click', '.eliminar-archivo-requisicion', function (event) {
+		event.preventDefault();
+		var $wrap = $(this).closest('.requisicion-archivo-item');
+		if ($wrap.length) {
+			$wrap.remove();
+		}
+	});
+
+	// Archivos nuevos: misma interacción que compras/proveedor (tabla + plantilla)
+	$('#agrega_renglon_archivo').on('click', function (event) {
+		event.preventDefault();
+		var tpl = $('#template-renglon-archivo').html();
+		if (!tpl) {
+			return;
+		}
+		$('#tbody-tabla-archivo').append(tpl);
+	});
+
+	$(document).on('click', '#tbody-tabla-archivo .eliminararchivo', function (event) {
+		event.preventDefault();
+		$(this).closest('tr.item-archivo').remove();
+	});
+
+	$(document).on('change', '#tbody-tabla-archivo .nombrearchivos', function () {
+		var fn = $(this).val();
+		if (!fn) {
+			return;
+		}
+		var filename = fn.match(/[^\\/]*$/)[0];
+		$(this).closest('tr').find('.nombresanteriores').val(filename);
+	});
+
 	function leeHistoria() {
 		var id = $("#requisicion_id").val();
 		if (!id) return;

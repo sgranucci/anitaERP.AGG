@@ -3,6 +3,7 @@
 namespace App\Queries\Compras;
 
 use App\Models\Compras\Listaprecio_Proveedor;
+use App\Models\Compras\Listaprecio_Proveedor_Estado;
 
 class Listaprecio_ProveedorQuery implements Listaprecio_ProveedorQueryInterface
 {
@@ -40,9 +41,28 @@ class Listaprecio_ProveedorQuery implements Listaprecio_ProveedorQueryInterface
         ];
 
         if ($busqueda) {
-            $q->where(function ($query) use ($busqueda, $columns) {
-                foreach ($columns as $col) {
-                    $query->orWhere($col['columna'], 'LIKE', '%'.$busqueda.'%');
+            $trim = trim($busqueda);
+            $columnsSinEstado = array_values(array_filter($columns, function ($col) {
+                return $col['columna'] !== 'listaprecio_proveedor.estado';
+            }));
+
+            $q->where(function ($query) use ($trim, $columnsSinEstado) {
+                foreach ($columnsSinEstado as $col) {
+                    $query->orWhere($col['columna'], 'LIKE', '%'.$trim.'%');
+                }
+
+                $estadoExacto = null;
+                foreach (Listaprecio_Proveedor_Estado::$enumEstado as $row) {
+                    if (strcasecmp($trim, $row['nombre']) === 0) {
+                        $estadoExacto = $row['nombre'];
+                        break;
+                    }
+                }
+
+                if ($estadoExacto !== null) {
+                    $query->orWhere('listaprecio_proveedor.estado', '=', $estadoExacto);
+                } else {
+                    $query->orWhere('listaprecio_proveedor.estado', 'LIKE', '%'.$trim.'%');
                 }
             });
         }

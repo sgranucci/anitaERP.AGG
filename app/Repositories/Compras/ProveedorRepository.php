@@ -782,7 +782,10 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 		$contacto = preg_replace('([^A-Za-z0-9 ])', '', $request['contacto']);
 		$domicilio = preg_replace('([^A-Za-z0-9 ])', '', $request['domicilio']);
 
-		$localidad = $this->localidadRepository->find($request['localidad_id']);
+		$localidad_id = $request['localidad_id'] ?? null;
+		$localidad = ($localidad_id !== null && $localidad_id !== '' && $localidad_id !== '0')
+			? $this->localidadRepository->findPorId($localidad_id)
+			: null;
 
 		if ($localidad)
 			$codigolocalidad = $localidad->codigo;
@@ -1023,7 +1026,9 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 		else
 			$localidad_id = 0;
 
-		$localidad = $this->localidadRepository->find($localidad_id);
+		$localidad = ($localidad_id !== null && $localidad_id !== '' && $localidad_id !== '0')
+			? $this->localidadRepository->findPorId($localidad_id)
+			: null;
 
 		if ($localidad)
 			$codigolocalidad = $localidad->codigo;

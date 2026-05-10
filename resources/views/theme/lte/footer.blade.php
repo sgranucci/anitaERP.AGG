@@ -2,5 +2,8 @@
     <div class="float-right d-none d-sm-block">
         <b>Version</b> 1.0.0
     </div>
-    <strong>Copyright Sysgran SRL 2021-2025 
+    @if (config('app.empresa') == 'AGG')
+        <img src="{{ asset('storage/imagenes/logos/AGG.png') }}" alt="AGG" class="mr-2 align-middle" style="max-height: 22px;">
+    @endif
+    <strong class="align-middle">Copyright Sysgran SRL 2021-2026</strong>
 </footer>

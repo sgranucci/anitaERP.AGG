@@ -16,13 +16,14 @@
             </select>
         </td>                    
         <td>
-            <div class="form-group row" id="usuario">
-                <input type="text" style="WIDTH: 40px;HEIGHT: 38px" class="usuario_id" name="usuario_ids[]" value="" placeholder="(opcional)" >
+            <div class="d-flex flex-nowrap align-items-center" style="gap: 4px;">
+                <input type="hidden" class="usuario_id_arbol" name="usuario_ids[]" value="" >
                 <input type="hidden" class="usuario_id_previa" name="usuario_id_previa[]" value="" >
-                <button type="button" title="Consulta usuarios" style="padding:1;" class="btn-accion-tabla consultausuario tooltipsC">
+                <input type="text" style="flex: 0 0 110px; width: 110px; height: 38px;" class="usuario_codigo_arbol form-control" value="" placeholder="Código usuario" title="Código de login o ID numérico; Tab fuera para cargar el nombre" autocomplete="off">
+                <button type="button" title="Consulta usuarios" style="padding:1; flex: 0 0 auto;" class="btn-accion-tabla consultausuario tooltipsC">
                         <i class="fa fa-search text-primary"></i>
                 </button>
-                <input type="text" style="font-size: 16px; WIDTH: 300px;HEIGHT: 38px" class="nombreusuario form-control" name="nombreusuarios[]" value="" placeholder="(opcional)" >
+                <input type="text" style="flex: 1 1 auto; min-width: 0; height: 38px; font-size: 14px;" class="nombreusuario form-control" name="nombreusuarios[]" value="" placeholder="(opcional)" >
             </div>
         </td>
         <td>

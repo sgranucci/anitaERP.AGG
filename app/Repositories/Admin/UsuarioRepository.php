@@ -4,6 +4,7 @@ namespace App\Repositories\Admin;
 
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Str;
 use Auth;
 
 class UsuarioRepository implements UsuarioRepositoryInterface
@@ -95,15 +96,40 @@ class UsuarioRepository implements UsuarioRepositoryInterface
         return $usuario;
     }
 
+    public function findPorIdOCodigo(string $valor, $empresa_id = null)
+    {
+        $valor = trim($valor);
+        if ($valor === '') {
+            return null;
+        }
+
+        $q = $this->model->with('usuario_empresas');
+
+        if (preg_match('/^\d+$/', $valor)) {
+            $q->where('usuario.id', (int) $valor);
+        } else {
+            $q->whereRaw('UPPER(TRIM(usuario.usuario)) = ?', [Str::upper($valor)]);
+        }
+
+        if ($empresa_id) {
+            $q->whereHas('usuario_empresas', function ($query) use ($empresa_id) {
+                $query->where('empresa_id', (int) $empresa_id);
+            });
+        }
+
+        return $q->first();
+    }
+
     public function consultaUsuario($consulta, $empresa_id = null, $centrocosto_id = null)
     {
-		$columns = ['usuario.id', 'usuario.nombre', 'usuario.email', 'centrocosto.nombre'];
-        $columnsOut = ['id', 'nombre', 'email', 'nombrecentrocosto'];
+		$columns = ['usuario.id', 'usuario.usuario', 'usuario.nombre', 'usuario.email', 'centrocosto.nombre'];
+        $columnsOut = ['id', 'usuariologin', 'nombre', 'email', 'nombrecentrocosto'];
 
 		$consulta = strtoupper($consulta);
 
 		$count = count($columns);
 		$data = $this->model->select('usuario.id as id',
+                                    'usuario.usuario as usuariologin',
 									'usuario.nombre as nombre',
                                     'usuario.email as email',
                                     'usuario.centrocosto_id as idcentrocosto',

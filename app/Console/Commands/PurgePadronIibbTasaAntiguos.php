@@ -10,7 +10,7 @@ class PurgePadronIibbTasaAntiguos extends Command
 {
     protected $signature = 'padron-iibb-tasa:purge';
 
-    protected $description = 'Elimina filas de padron_iibb_tasa cuya hastafecha es anterior a hace 2 meses (vigencia cerrada)';
+    protected $description = 'Elimina padron_iibb_tasa con vigencia vencida (hastafecha anterior a hoy menos 2 meses; rango desdefecha–hastafecha)';
 
     public function __construct(
         private Padron_Iibb_TasaRepositoryInterface $padron_iibb_tasaRepository
@@ -26,10 +26,11 @@ class PurgePadronIibbTasaAntiguos extends Command
 
         Log::info('padron_iibb_tasa:purge', [
             'eliminados' => $eliminados,
-            'fecha_corte_hastafecha' => $corte->toDateString(),
+            'corte_hastafecha_lt' => $corte->toDateString(),
+            'criterio' => 'hastafecha < corte (periodo desdefecha..hastafecha ya finalizado)',
         ]);
 
-        $this->info("Eliminados {$eliminados} registro(s) con hastafecha anterior a {$corte->format('Y-m-d')} (vigencia finalizada antes del corte).");
+        $this->info("Eliminados {$eliminados} registro(s): hastafecha anterior a {$corte->format('Y-m-d')} (retención 2 meses desde desdefecha/hastafecha).");
 
         return self::SUCCESS;
     }

@@ -20,6 +20,7 @@ use Maatwebsite\Excel\Events\AfterSheet;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use App\Models\Ventas\Vendedor;
+use App\Models\Configuracion\Provincia;
 use Carbon\Carbon;
 use App\ApiAnita;
 
@@ -28,6 +29,8 @@ class ClienteExport implements FromView, WithColumnFormatting, WithMapping, Shou
 	use Exportable;
 	private $desdeCliente_id, $hastaCliente_id, $estado, $tipoSuspensionCliente_id;
 	private $descripcionEstado, $desdeVendedor_id, $hastaVendedor_id;
+	private $desdeProvincia_id, $hastaProvincia_id;
+	private $descripcionProvinciaDesde, $descripcionProvinciaHasta;
 		
 	protected $dates = ['fecha'];
     private $clienteQuery, $tiposuspensionclienteRepository;
@@ -45,7 +48,8 @@ class ClienteExport implements FromView, WithColumnFormatting, WithMapping, Shou
 	{
 		// Lee informacion del listado
 		$data = $this->clienteQuery->generaDatosRepCliente($this->desdeCliente_id, $this->hastaCliente_id,
-			$this->estado, $this->tipoSuspensionCliente_id, $this->desdeVendedor_id, $this->hastaVendedor_id);
+			$this->estado, $this->tipoSuspensionCliente_id, $this->desdeVendedor_id, $this->hastaVendedor_id,
+			$this->desdeProvincia_id, $this->hastaProvincia_id);
 
 		return view('exports.ventas.reportecliente.reportecliente', 
 					['clientes' => $data, 
@@ -53,6 +57,8 @@ class ClienteExport implements FromView, WithColumnFormatting, WithMapping, Shou
 					'hastacliente' => $this->hastaCliente_id,
 					'desdevendedor' => $this->desdeVendedor_id,
 					'hastavendedor' => $this->hastaVendedor_id,
+					'descripcionprovinciadesde' => $this->descripcionProvinciaDesde,
+					'descripcionprovinciahasta' => $this->descripcionProvinciaHasta,
 					'estado' => $this->descripcionEstado,
 					]);
 	}
@@ -106,7 +112,7 @@ class ClienteExport implements FromView, WithColumnFormatting, WithMapping, Shou
         return [
             AfterSheet::class    => function(AfterSheet $event) {
 
-                $event->sheet->getDelegate()->freezePane('A4');
+                $event->sheet->getDelegate()->freezePane('A5');
 
             },
         ];
@@ -119,7 +125,7 @@ class ClienteExport implements FromView, WithColumnFormatting, WithMapping, Shou
 
 	public function parametros($desdecliente_id, $hastacliente_id,
 							$estado, $tiposuspensioncliente_id, $desdevendedor_id,
-							$hastavendedor_id)
+							$hastavendedor_id, $desdeprovincia_id = 0, $hastaprovincia_id = 99999999)
 	{
 		$this->desdeCliente_id = $desdecliente_id;
 		$this->hastaCliente_id = $hastacliente_id;
@@ -127,6 +133,15 @@ class ClienteExport implements FromView, WithColumnFormatting, WithMapping, Shou
 		$this->tipoSuspensionCliente_id = $tiposuspensioncliente_id;
 		$this->desdeVendedor_id = $desdevendedor_id;
 		$this->hastaVendedor_id = $hastavendedor_id;
+		$this->desdeProvincia_id = $desdeprovincia_id;
+		$this->hastaProvincia_id = $hastaprovincia_id;
+
+		$this->descripcionProvinciaDesde = $desdeprovincia_id == 0
+			? 'Primero'
+			: optional(Provincia::find($desdeprovincia_id))->nombre ?? (string) $desdeprovincia_id;
+		$this->descripcionProvinciaHasta = $hastaprovincia_id == 99999999
+			? 'Ultimo'
+			: optional(Provincia::find($hastaprovincia_id))->nombre ?? (string) $hastaprovincia_id;
 
 		$this->descripcionEstado = $estado;
 		if ($estado == 'SUSPENDIDOS')

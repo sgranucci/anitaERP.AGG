@@ -31,7 +31,9 @@ class Requisicion_ArchivoRepository implements Requisicion_ArchivoRepositoryInte
 
     private function guardaArchivo($request, $funcion, $id = null)
     {
+        $nombresAntes = [];
         if ($funcion == 'update') {
+            $nombresAntes = $this->model->where('requisicion_id', $id)->pluck('nombrearchivo')->all();
             $this->deletePorRequisicion($id);
         }
 
@@ -70,6 +72,20 @@ class Requisicion_ArchivoRepository implements Requisicion_ArchivoRepositoryInte
                         'requisicion_id' => $id,
                         'nombrearchivo' => $request->nombresanteriores[$i_archivo],
                     ]);
+                }
+            }
+        }
+
+        if ($funcion == 'update' && $nombresAntes !== []) {
+            $nombresDespues = $this->model->where('requisicion_id', $id)->pluck('nombrearchivo')->all();
+            $pathBase = public_path().'/storage/archivos/requisiciones/'.$id;
+            foreach (array_diff($nombresAntes, $nombresDespues) as $nombre) {
+                if ($nombre === '' || $nombre === null) {
+                    continue;
+                }
+                $full = $pathBase.'/'.basename((string) $nombre);
+                if (is_file($full)) {
+                    @unlink($full);
                 }
             }
         }

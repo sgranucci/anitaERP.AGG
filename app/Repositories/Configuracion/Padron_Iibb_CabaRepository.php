@@ -3,6 +3,7 @@
 namespace App\Repositories\Configuracion;
 
 use App\Models\Configuracion\Padron_Iibb_Caba;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
 
@@ -71,6 +72,14 @@ class Padron_Iibb_CabaRepository implements Padron_Iibb_CabaRepositoryInterface
 
         return $this->model->where('cuit', $cuit)->where('desdefecha', '<=', $fecha)
                 ->where('hastafecha', '>=', $fecha)->first();        
+    }
+
+    public function eliminarPorHastafechaAnteriorA(CarbonInterface $corte): int
+    {
+        return $this->model->newQuery()
+            ->whereNotNull('hastafecha')
+            ->where('hastafecha', '<', $corte->format('Y-m-d'))
+            ->delete();
     }
 
 }

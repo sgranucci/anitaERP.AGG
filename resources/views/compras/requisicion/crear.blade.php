@@ -37,7 +37,7 @@ Requisiciones
                         <span class="fa fa-copy"></span> Historia
                     </button>
                     <button type="button" id="botonform4" class="btn btn-info btn-sm">
-                        <span class="fa fa-copy"></span> Archivos
+                        <span class="fa fa-paperclip"></span> Archivos asociados
                     </button>
                 </div>
                 <div class="card-body">
@@ -53,9 +53,8 @@ Requisiciones
                             <tbody class="container-historia"></tbody>
                         </table>
                     </div>
-                    <div class="form4" style="display:none;">
-                        <h5>Archivos</h5>
-                        <input type="file" name="nombrearchivos[]" class="form-control" multiple>
+                    <div class="form4" id="requisicion-solapa-archivos-adjuntos" style="display:none;">
+                        @include('compras.requisicion.partials.solapa_agregar_archivos', ['data' => $data ?? null])
                     </div>
                 </div>
                 <div class="card-footer">

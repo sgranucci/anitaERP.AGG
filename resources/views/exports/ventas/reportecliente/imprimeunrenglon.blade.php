@@ -1,6 +1,7 @@
 <tr>
 	<td>{{$data->codigo}}</td>
 	<td>{{$data->nombre}}</td>
+	<td>{{$data->fantasia}}</td>
 	<td>{{$data->domicilio}}</td>
 	<td>{{$data->provincias->nombre??''}}</td>
 	<td>{{$data->localidades->nombre??''}}</td>

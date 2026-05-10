@@ -53,7 +53,7 @@ Requisiciones
                 <div align="center" style="margin: 5px;">
                     <button type="button" id="botonform1" class="btn btn-primary btn-sm">Datos principales</button>
                     <button type="button" id="botonform3" class="btn btn-info btn-sm">Historia</button>
-                    <button type="button" id="botonform4" class="btn btn-info btn-sm">Archivos</button>
+                    <button type="button" id="botonform4" class="btn btn-info btn-sm">Archivos asociados</button>
                     <button type="button" id="botonform5" class="btn btn-info btn-sm">Árbol aprobación</button>
                 </div>
                 <div class="card-body">
@@ -71,16 +71,16 @@ Requisiciones
                             <tbody class="container-historia"></tbody>
                         </table>
                     </div>
-                    <div class="form4" style="display:none;">
-                        <h5>Archivos nuevos</h5>
-                        <input type="file" name="nombrearchivos[]" class="form-control" multiple>
-                        <h6 class="mt-3">Archivos actuales</h6>
-                        <ul>
-                            @foreach ($data->requisicion_archivos as $arch)
-                                <li>{{ $arch->nombrearchivo }}</li>
-                                <input type="hidden" name="nombresanteriores[]" value="{{ $arch->nombrearchivo }}">
-                            @endforeach
-                        </ul>
+                    <div class="form4" id="requisicion-solapa-archivos-adjuntos" style="display:none;">
+                        <p class="text-muted small mb-2">Archivos actuales</p>
+                        @include('compras.requisicion.partials.archivos_adjuntos', [
+                            'data' => $data,
+                            'ocultarInputsConservar' => !empty($visualizar),
+                        ])
+                        @include('compras.requisicion.partials.solapa_agregar_archivos', [
+                            'visualizar' => $visualizar ?? null,
+                            'data' => $data,
+                        ])
                     </div>
                     <div class="form5" style="display:none;">
                         <h5>Movimientos árbol de aprobación</h5>

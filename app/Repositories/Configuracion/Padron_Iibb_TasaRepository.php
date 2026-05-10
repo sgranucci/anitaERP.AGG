@@ -4,6 +4,7 @@ namespace App\Repositories\Configuracion;
 
 use App\Models\Configuracion\Padron_Iibb;
 use App\Models\Configuracion\Padron_Iibb_Tasa;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
 
@@ -69,6 +70,14 @@ class Padron_Iibb_TasaRepository implements Padron_Iibb_TasaRepositoryInterface
     {
         return $this->model->select('id')->where('padron_iibb_id', $padron_iibb_id)
                                         ->where('provincia_id', $provincia_id)->first();
+    }
+
+    public function eliminarPorHastafechaAnteriorA(CarbonInterface $corte): int
+    {
+        return $this->model->newQuery()
+            ->whereNotNull('hastafecha')
+            ->where('hastafecha', '<', $corte->format('Y-m-d'))
+            ->delete();
     }
 
 }

@@ -5,7 +5,70 @@
 	var item_activo_partida;
 	var ptr_partida;
 	var array_capex_partida_monto = [];
-	
+
+	var PERIODO_ANIO_MIN = 2010;
+
+	function anioMaxPeriodoPicker(anioValor) {
+		var base = new Date().getFullYear() + 5;
+		var v = parseInt(anioValor, 10);
+		if (!isNaN(v)) {
+			return Math.max(base, v);
+		}
+		return base;
+	}
+
+	function poblarSelectAnio($select, anioSeleccionado) {
+		var sel = anioSeleccionado ? String(anioSeleccionado) : '';
+		var maxY = anioMaxPeriodoPicker(sel);
+		$select.empty();
+		$select.append($('<option>', { value: '', text: 'Año' }));
+		for (var y = PERIODO_ANIO_MIN; y <= maxY; y++) {
+			var ys = String(y);
+			$select.append($('<option>', { value: ys, text: ys }));
+		}
+		if (sel) {
+			$select.val(sel);
+		}
+	}
+
+	function sincronizarPeriodoOcultoDesdeSelects($row) {
+		var y = $row.find('.periodo-anio').val();
+		var m = $row.find('.periodo-mes').val();
+		var $h = $row.find('.periodo');
+		if (y && m) {
+			$h.val(y + '-' + m);
+			return;
+		}
+		$h.val('');
+	}
+
+	function setPeriodoEnFila($row, yyyymm) {
+		var $anio = $row.find('.periodo-anio');
+		var $mes = $row.find('.periodo-mes');
+		var $h = $row.find('.periodo');
+		if (!yyyymm || !/^\d{4}-(0[1-9]|1[0-2])$/.test(String(yyyymm))) {
+			poblarSelectAnio($anio, '');
+			$anio.val('');
+			$mes.val('');
+			$h.val('');
+			return;
+		}
+		var parts = String(yyyymm).split('-');
+		var y = parts[0];
+		var m = parts[1];
+		poblarSelectAnio($anio, y);
+		$anio.val(y);
+		$mes.val(m);
+		$h.val(y + '-' + m);
+	}
+
+	function inicializarNuevaFilaPeriodo($row) {
+		poblarSelectAnio($row.find('.periodo-anio'), '');
+		$row.find('.periodo-anio').val('');
+		$row.find('.periodo-mes').val('');
+		$row.find('.periodo').val('');
+	}
+
 	$(function () {
 		$('#agrega_renglon_capex_partida').on('click', agregaRenglonCapex_Partida);
         $(document).on('click', '.eliminar_capex_partida', borraRenglonCapex_Partida);
@@ -106,7 +169,6 @@
 		{
 			$('.carga_partida_monto').off('click');
 			$('#monedatotal_id').off('change');
-			$('.periodo').off('change');
 		}
 
 		// Activa eventos de consulta
@@ -135,23 +197,11 @@
 				$(this).val(monedatotal_id);
 			});
 		});
-
-		$('.periodo').on('change', function(event) {
-			var periodo = $(this).val();
-
-			// Regex: 01-09 o 10-12, seguido de / o - y 4 dígitos de año
-			//var regex = /^(0[1-9]|1[0-2])\/\d{4}$/; 
-			var regex = /^\d{4}\-(0[1-9]|1[0-2])$/; 
-
-			if (!regex.test(periodo) && periodo != '') {
-				alert("Formato inválido. Use AAAA-MM");
-
-				// Blanquea y retorna el foco
-				$(this).val('');
-				$(this).focus();
-			}
-		});
 	}
+
+	$(document).on('change', '.periodo-anio, .periodo-mes', function () {
+		sincronizarPeriodoOcultoDesdeSelects($(this).closest('tr.item-partida-monto'));
+	});
 
 	function agregaRenglonCapex_Partida(event){
 		event.preventDefault();
@@ -376,11 +426,12 @@
 
 					let monto = parseFloat(array_capex_partida_monto[i].monto);
 
-					$('#capex-partida-monto-table').find('tr').last().find('.item_monto').val(array_capex_partida_monto[i].item_monto);
-					$('#capex-partida-monto-table').find('tr').last().find('.capex_partida_id_monto').val(array_capex_partida_monto[i].capex_partida_id_monto);
-					$('#capex-partida-monto-table').find('tr').last().find('.periodo').val(array_capex_partida_monto[i].periodo);
-					$('#capex-partida-monto-table').find('tr').last().find('.monto').val(monto.toFixed(2));
-					$('#capex-partida-monto-table').find('tr').last().find('.creousuario_id_monto').val(array_capex_partida_monto[i].creousuario_id_monto);
+					var $filaMem = $('#tbody-capex-partida-monto-table tr.item-partida-monto').last();
+					$filaMem.find('.item_monto').val(array_capex_partida_monto[i].item_monto);
+					$filaMem.find('.capex_partida_id_monto').val(array_capex_partida_monto[i].capex_partida_id_monto);
+					setPeriodoEnFila($filaMem, array_capex_partida_monto[i].periodo);
+					$filaMem.find('.monto').val(monto.toFixed(2));
+					$filaMem.find('.creousuario_id_monto').val(array_capex_partida_monto[i].creousuario_id_monto);
 				}
 			}
 		}
@@ -404,11 +455,12 @@
 
 				let monto = parseFloat(value.monto);
 
-				$('#capex-partida-monto-table').find('tr').last().find('.item_monto').val(item_activo_partida);
-				$('#capex-partida-monto-table').find('tr').last().find('.capex_partida_id_monto').val(id_activo_partida);
-				$('#capex-partida-monto-table').find('tr').last().find('.periodo').val(value.periodo);
-				$('#capex-partida-monto-table').find('tr').last().find('.monto').val(monto.toFixed(2));
-				$('#capex-partida-monto-table').find('tr').last().find('.creousuario_id_monto').val(value.creousuario_id);
+				var $filaSrv = $('#tbody-capex-partida-monto-table tr.item-partida-monto').last();
+				$filaSrv.find('.item_monto').val(item_activo_partida);
+				$filaSrv.find('.capex_partida_id_monto').val(id_activo_partida);
+				setPeriodoEnFila($filaSrv, value.periodo);
+				$filaSrv.find('.monto').val(monto.toFixed(2));
+				$filaSrv.find('.creousuario_id_monto').val(value.creousuario_id);
 			});
 
 			// Agrega items a tabla en memoria
@@ -428,28 +480,21 @@
 
 		activa_eventos(false);
 
-		// Hace focus sobre el primer elemento de la tabla
-		let ptrUltimoRenglon = $("#tbody-capex-partida-monto-table tr:last");
-		$(ptrUltimoRenglon).find('.periodo').focus();
+		let ptrUltimoRenglon = $("#tbody-capex-partida-monto-table tr.item-partida-monto").last();
+		inicializarNuevaFilaPeriodo(ptrUltimoRenglon);
+		ptrUltimoRenglon.find('.periodo-anio').focus();
     }
 
     function borraRenglonPartidaMonto(event) {
 		if (event != undefined)
 			event.preventDefault();
 
-		let item_a_borrar = $(this).parents('tr').find('.item_monto').val();
-
-		// Busca el item en la tabla para reemplazar los valores
-		for (var i = 0; i < array_capex_partida_monto.length; i++)
-		{
-			if (array_capex_partida_monto[i].item_monto == item_a_borrar)
-				array_capex_partida_monto.splice(i, 1)
-		}
+		var $fila = $(this).parents('tr');
 
 		setTimeout(() => {
 			if (confirm("¿Desea borrar renglon?"))
 			{
-				$(this).parents('tr').remove();
+				$fila.remove();
 				actualizaRenglonesPartidaMonto();
 			}
 		}, 300);
@@ -466,7 +511,26 @@
 	// Acepta modal
 	$('#aceptaPartidaMontoModal').on('click', function () {
 
-		// Al aceptar el modal reemplaza los valores anteriores por los nuevos pertenecientes a la partida
+		$('#tbody-capex-partida-monto-table tr.item-partida-monto').each(function () {
+			sincronizarPeriodoOcultoDesdeSelects($(this));
+		});
+
+		var periodoMontosOk = true;
+		$('#tbody-capex-partida-monto-table tr.item-partida-monto').each(function () {
+			var $r = $(this);
+			var rawMonto = $r.find('.monto').val();
+			var monto = parseFloat(String(rawMonto).replace(',', '.')) || 0;
+			var p = $r.find('.periodo').val();
+			if (monto !== 0 && !/^\d{4}-(0[1-9]|1[0-2])$/.test(p)) {
+				alert('Seleccione año y mes para cada renglón que tenga monto.');
+				periodoMontosOk = false;
+				return false;
+			}
+		});
+		if (!periodoMontosOk) {
+			return;
+		}
+
 		agregaItemPartidaMonto();
 
 		$('#partidaMontoModal').modal('hide');
@@ -505,17 +569,22 @@
 	
 	function agregaItemPartidaMonto()
 	{
-		// Busca el item en la tabla para reemplazar los valores
-		for (var i = 0; i < array_capex_partida_monto.length; i++)
+		$('#tbody-capex-partida-monto-table tr.item-partida-monto').each(function () {
+			sincronizarPeriodoOcultoDesdeSelects($(this));
+		});
+
+		// Borra los items existentes de la partida activa antes de re-armarlos.
+		// Recorre el array hacia atras para evitar saltar elementos al hacer splice.
+		for (var i = array_capex_partida_monto.length - 1; i >= 0; i--)
 		{
 			if (array_capex_partida_monto[i].item_monto == item_activo_partida)
-				array_capex_partida_monto.splice(i, 1)
+				array_capex_partida_monto.splice(i, 1);
 		}
 		// Agrega valores de la tabla
-		$(".item_monto").each(function() {
-			let periodo = $(this).parents('tr').find('.periodo').val();
-			let monto = $(this).parents('tr').find('.monto').val();
-			let creousuario_id_monto = $(this).parents('tr').find('.creousuario_id_monto').val();
+		$('#tbody-capex-partida-monto-table tr.item-partida-monto').each(function() {
+			let periodo = $(this).find('.periodo').val();
+			let monto = $(this).find('.monto').val();
+			let creousuario_id_monto = $(this).find('.creousuario_id_monto').val();
 
 			array_capex_partida_monto.push({"item_monto":item_activo_partida,"capex_partida_id_monto":id_activo_partida,"periodo":periodo,
 											"monto":monto,"creousuario_id_monto":creousuario_id_monto});

@@ -99,12 +99,12 @@
     <table class="table" id="arbolaprobacion-nivel-table">
         <thead>
             <tr>
-                <th style="width: 6%;"></th>
-                <th style="width: 8%;">Nivel</th>
-                <th style="width: 18%;">Centro Costo</th>
-                <th style="width: 22%;" title="Opcional. Si no se asigna usuario, el nivel se aprueba automáticamente.">Usuario (opcional)</th>
-                <th style="width: 11%;">Desde Monto</th>
-                <th style="width: 11%;">Hasta Monto</th>
+                <th style="width: 5%;"></th>
+                <th style="width: 7%;">Nivel</th>
+                <th style="width: 15%;">Centro Costo</th>
+                <th style="width: 28%;" title="Opcional. Si no se asigna usuario, el nivel se aprueba automáticamente.">Usuario (opcional)</th>
+                <th style="width: 10%;">Desde Monto</th>
+                <th style="width: 10%;">Hasta Monto</th>
                 <th style="width: 8%;">Moneda</th>
                 <th style="width: 14%;" title="Estado de la requisición al aprobar este nivel (solo tipo Requisiciones; opcional)">Estado req.</th>
                 <th></th>
@@ -134,13 +134,14 @@
                         </select>
                     </td>                    
                     <td>
-                        <div class="form-group row" id="usuario">
-                            <input type="text" style="WIDTH: 40px;HEIGHT: 38px" class="usuario_id" name="usuario_ids[]" value="{{$arbolaprobacion_niveles->usuario_id ?? ''}}" >
+                        <div class="d-flex flex-nowrap align-items-center" style="gap: 4px;">
+                            <input type="hidden" class="usuario_id_arbol" name="usuario_ids[]" value="{{$arbolaprobacion_niveles->usuario_id ?? ''}}" >
                             <input type="hidden" class="usuario_id_previa" name="usuario_id_previa[]" value="{{$arbolaprobacion_niveles->usuario_id ?? ''}}" >
-                            <button type="button" title="Consulta usuarios" style="padding:1;" class="btn-accion-tabla consultausuario tooltipsC">
+                            <input type="text" style="flex: 0 0 110px; width: 110px; height: 38px;" class="usuario_codigo_arbol form-control" value="{{ $arbolaprobacion_niveles->usuarios->usuario ?? '' }}" placeholder="Código usuario" title="Código de login o ID numérico; Tab fuera para cargar el nombre" autocomplete="off">
+                            <button type="button" title="Consulta usuarios" style="padding:1; flex: 0 0 auto;" class="btn-accion-tabla consultausuario tooltipsC">
                                     <i class="fa fa-search text-primary"></i>
                             </button>
-                            <input type="text" style="font-size: 16px; WIDTH: 300px;HEIGHT: 38px" class="nombreusuario form-control" name="nombreusuarios[]" value="{{$arbolaprobacion_niveles->usuarios->nombre ?? ''}}" >
+                            <input type="text" style="flex: 1 1 auto; min-width: 0; height: 38px; font-size: 14px;" class="nombreusuario form-control" name="nombreusuarios[]" value="{{$arbolaprobacion_niveles->usuarios->nombre ?? ''}}" placeholder="(opcional)">
                         </div>
                     </td>
                     <td>

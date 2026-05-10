@@ -334,7 +334,7 @@ class CapexService
 					{
 						if ($data['item_monto_armados'][$j] == $data['items'][$i])
 						{
-							$mes = substr($data['periodo_monto_armados'][$j], 4, 2);
+							$mes = substr($data['periodo_monto_armados'][$j], 5, 2);
 
 							$montoMes[(int) $mes] += $data['monto_armados'][$j];
 							$montoTotal += $data['monto_armados'][$j];

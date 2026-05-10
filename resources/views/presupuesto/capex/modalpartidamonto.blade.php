@@ -13,8 +13,9 @@
                     <table class="table" id="capex-partida-monto-table">
                         <thead>
                             <tr>
-                                <th style="width: 25%;">Período</th>
-                                <th style="width: 30%;">Monto</th>
+                                <th style="width: 42%;">Período (año / mes)</th>
+                                <th style="width: 35%;">Monto</th>
+                                <th style="width: 8%;"></th>
                             </tr>
                         </thead>
                         <tbody id="tbody-capex-partida-monto-table" class="container-partida-monto">
