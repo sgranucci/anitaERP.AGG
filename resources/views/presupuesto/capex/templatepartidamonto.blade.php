@@ -24,11 +24,11 @@
 			<div class="form-row align-items-center mx-0 capex-periodo-picker">
 				<div class="col-6 col-md-5 pr-md-1 px-0 mb-1 mb-md-0">
 					<label class="d-md-none small text-muted mb-0">Año</label>
-					<select class="form-control form-control-sm periodo-anio" title="Año del período" aria-label="Año del período"></select>
+					<select class="form-control periodo-anio" title="Año del período" aria-label="Año del período"></select>
 				</div>
 				<div class="col-6 col-md-7 pl-md-1 px-0">
 					<label class="d-md-none small text-muted mb-0">Mes</label>
-					<select class="form-control form-control-sm periodo-mes" title="Mes del período" aria-label="Mes del período">
+					<select class="form-control periodo-mes" title="Mes del período" aria-label="Mes del período">
 						<option value="">Mes</option>
 						@foreach ($mesesPeriodoCapex as $num => $nombre)
 							<option value="{{ $num }}">{{ $nombre }}</option>

@@ -27,14 +27,11 @@ Nueva lista de precios proveedor
                 @csrf
                 <div align="center" style="margin: 5px;">
                     <button type="button" id="botonform1" class="btn btn-primary btn-sm">Datos principales</button>
-                    <button type="button" id="botonform4" class="btn btn-info btn-sm">Archivos</button>
+                    <button type="button" id="botonform4" class="btn btn-info btn-sm"><span class="fa fa-copy"></span> Archivos asociados</button>
                 </div>
                 <div class="card-body">
                     @include('compras.listaprecio_proveedor.form')
-                    <div class="form4" style="display:none;">
-                        <h5>Archivos adjuntos</h5>
-                        <input type="file" name="nombrearchivos[]" class="form-control" multiple>
-                    </div>
+                    @include('compras.listaprecio_proveedor.form_archivos')
                 </div>
                 <div class="card-footer">
                     <div class="col-lg-4">

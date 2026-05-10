@@ -632,19 +632,16 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
                 $inroclienteid
             );
 
-            // Foto DNI: después de copiar adjuntos desde Anita (nombres arbitrarios, no solo {dni}.ext).
+            // Foto DNI: referenciar archivo ya existente en el montaje (/scan u otros); sin copiar si ya está accesible.
             if (($cliente_uif->fotodocumento ?? '') === '') {
                 $cid = (int) $cliente_uif->id;
-                $fotoStaged = ClienteUifFotoDocumento::importAndStorePublic(
-                    $nroDocumento,
-                    $inroclienteidParaGuardar,
-                    $cid
-                );
-                if ($fotoStaged === null) {
-                    $fotoStaged = ClienteUifFotoDocumento::copyFirstClienteAdjuntoImageToFotodocumento($cid, $nroDocumento);
+                $path = ClienteUifFotoDocumento::findFirstMatchingPath($nroDocumento, $inroclienteidParaGuardar);
+                $fotoBasename = ($path !== null && is_file($path)) ? basename($path) : null;
+                if ($fotoBasename === null) {
+                    $fotoBasename = ClienteUifFotoDocumento::copyFirstClienteAdjuntoImageToFotodocumento($cid, $nroDocumento);
                 }
-                if ($fotoStaged !== null) {
-                    $cliente_uif->update(['fotodocumento' => $fotoStaged]);
+                if ($fotoBasename !== null) {
+                    $cliente_uif->update(['fotodocumento' => $fotoBasename]);
                     $cliente_uif = $cliente_uif->fresh();
                 }
             }

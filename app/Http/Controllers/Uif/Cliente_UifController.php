@@ -24,7 +24,6 @@ use App\Repositories\Uif\Pep_UifRepositoryInterface;
 use App\Repositories\Uif\So_UifRepositoryInterface;
 use App\Services\Uif\ClienteUifFotoDocumento;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Arr;
 use Carbon\Carbon;
 use DB;
@@ -319,7 +318,6 @@ class Cliente_UifController extends Controller
         }
 
         ClienteUifFotoDocumento::deleteStoredFile($cliente_uif->fotodocumento);
-        Storage::disk('public')->delete('imagenes/fotos_documentos_uif/'.$cliente_uif->fotodocumento);
 
         $cliente_uif->update(['fotodocumento' => null]);
 
@@ -343,7 +341,7 @@ class Cliente_UifController extends Controller
 
 			if ($this->cliente_uifRepository->delete($id))
             {
-                Storage::disk('public')->delete("imagenes/fotos_documentos_uif/$cliente_uif->fotodocumento");
+                ClienteUifFotoDocumento::deleteStoredFile($cliente_uif->fotodocumento);
 				$fl_borro = true;
             }
 
@@ -353,10 +351,13 @@ class Cliente_UifController extends Controller
                 return response()->json(['mensaje' => 'ng']);
             }
         } else {
-            if ($this->cliente_uifRepository->delete($id))
+            $cliente_uifRow = $this->cliente_uifRepository->find($id);
+            if ($this->cliente_uifRepository->delete($id)) {
+                ClienteUifFotoDocumento::deleteStoredFile($cliente_uifRow->fotodocumento);
                 $mensaje = 'Cliente UIF borrado con éxito';
-            else 	
+            } else {
                 $mensaje = 'error';
+            }
 
             return redirect('uif/cliente_uif')->with('mensaje', $mensaje);
         }

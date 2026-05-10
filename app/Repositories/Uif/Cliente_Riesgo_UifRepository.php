@@ -4,8 +4,6 @@ namespace App\Repositories\Uif;
 
 use App\Models\Uif\Cliente_Riesgo_Uif;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Carbon\Carbon;
-use Auth;
 
 class Cliente_Riesgo_UifRepository implements Cliente_Riesgo_UifRepositoryInterface
 {
@@ -64,6 +62,58 @@ class Cliente_Riesgo_UifRepository implements Cliente_Riesgo_UifRepositoryInterf
         return $cliente_riesgo_uif;
     }
 
+	/**
+	 * Intenta normalizar el período a YYYY-MM.
+	 *
+	 * @param  mixed  $valor
+	 * @return string|false string vacío o YYYY-MM; false si hay texto no reconocible
+	 */
+	public static function intentarNormalizarPeriodoRiesgoUif($valor)
+	{
+		if ($valor === null) {
+			return '';
+		}
+		if (is_array($valor)) {
+			return false;
+		}
+		$valor = trim((string) $valor);
+		if ($valor === '') {
+			return '';
+		}
+		if (preg_match('/^(\d{4})-(0[1-9]|1[0-2])$/', $valor)) {
+			return $valor;
+		}
+		if (preg_match('/^(\d{1,2})\/(\d{4})$/', $valor, $m)) {
+			$mes = (int) $m[1];
+			$anio = (int) $m[2];
+			if ($mes >= 1 && $mes <= 12 && $anio > 0) {
+				return sprintf('%04d-%02d', $anio, $mes);
+			}
+		}
+		if (preg_match('/^(\d{2})(\d{4})$/', $valor, $m)) {
+			$mes = (int) $m[1];
+			$anio = (int) $m[2];
+			if ($mes >= 1 && $mes <= 12 && $anio > 0) {
+				return sprintf('%04d-%02d', $anio, $mes);
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * @return string
+	 */
+	private function normalizarPeriodoRiesgoUif($valor)
+	{
+		$r = self::intentarNormalizarPeriodoRiesgoUif($valor);
+		if ($r === false) {
+			throw new \InvalidArgumentException('Período de riesgo inválido.');
+		}
+
+		return $r;
+	}
+
 	private function guardarCliente_Riesgo_Uif($data, $funcion, $id = null)
 	{
 		if ($funcion == 'update')
@@ -84,13 +134,14 @@ class Cliente_Riesgo_UifRepository implements Cliente_Riesgo_UifRepositoryInterf
 
 			for ($i = 0; $i < count($riesgo_ids); $i++)
 			{
+				$periodoGuardar = $this->normalizarPeriodoRiesgoUif($periodos[$i] ?? null);
 				$cliente_riesgo_uif = $this->model->find($riesgo_ids[$i]);
 
 				if ($cliente_riesgo_uif)
 				{
 					$cliente_riesgo_uif->update([
 								"cliente_uif_id" => $id,
-								"periodo" => $periodos[$i],
+								"periodo" => $periodoGuardar,
 								"inusualidad_uif_id" => $inusualidad_uif_ids[$i],
 								"riesgo" => $riesgos[$i],
 								"creousuario_id" => $creousuario_ids[$i]
@@ -102,7 +153,7 @@ class Cliente_Riesgo_UifRepository implements Cliente_Riesgo_UifRepositoryInterf
 					{
 						$cliente_riesgo_uif = $this->model->create([
 							"cliente_uif_id" => $id,
-							"periodo" => $periodos[$i],
+							"periodo" => $periodoGuardar,
 							"inusualidad_uif_id" => $inusualidad_uif_ids[$i],
 							"riesgo" => $riesgos[$i],
 							"creousuario_id" => $creousuario_ids[$i]						

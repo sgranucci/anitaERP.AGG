@@ -32,9 +32,7 @@ $("input").keydown(function (e){
     var keyCode= e.which;
     // Si la tecla es el Intro/Enter
     if (keyCode == 13){
-      // Evitamos que se ejecute eventos
-      event.preventDefault();
-      // Devolvemos falso
+      e.preventDefault();
       return false;
     }
   });

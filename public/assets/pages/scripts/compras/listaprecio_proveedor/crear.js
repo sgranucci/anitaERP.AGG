@@ -46,17 +46,53 @@ $(function () {
 		$(".form1").show();
 		$(".form3").hide();
 		$(".form4").hide();
+		$("#importar-excel").hide();
 	});
 	$("#botonform3").click(function () {
 		$(".form1").hide();
 		$(".form3").show();
 		$(".form4").hide();
+		$("#importar-excel").hide();
 		leeHistoria();
 	});
 	$("#botonform4").click(function () {
 		$(".form1").hide();
 		$(".form3").hide();
 		$(".form4").show();
+		$("#importar-excel").hide();
+	});
+
+	$('#agrega_renglon_archivo_listaprecio').on('click', function (event) {
+		event.preventDefault();
+		var tpl = document.getElementById('template-renglon-archivo-listaprecio');
+		var tbody = document.getElementById('tbody-tabla-archivo-listaprecio');
+		if (!tpl || !tbody) {
+			return;
+		}
+		// jQuery .html() sobre <template> suele devolver vacío; usar el fragmento del template.
+		if (tpl.content) {
+			tbody.appendChild(document.importNode(tpl.content, true));
+		} else {
+			var html = $(tpl).html();
+			if (html) {
+				$('#tbody-tabla-archivo-listaprecio').append(html);
+			}
+		}
+	});
+
+	$(document).on('click', '#tbody-tabla-archivo-listaprecio .eliminararchivo', function (event) {
+		event.preventDefault();
+		$(this).parents('tr').remove();
+	});
+
+	$(document).on('click', '.eliminar-archivo-listaprecio', function (event) {
+		event.preventDefault();
+		var $wrap = $(this).closest('.listaprecio-archivo-item');
+		if ($wrap.length) {
+			$wrap.remove();
+			return;
+		}
+		$(this).closest('.col-md-6').remove();
 	});
 
 	$("#botonform-importexcel").on("click", function () {
@@ -64,6 +100,10 @@ $(function () {
 		if (!$target.length) {
 			return;
 		}
+		$(".form1").show();
+		$(".form3").hide();
+		$(".form4").hide();
+		$target.show();
 		$("html, body").animate(
 			{ scrollTop: $target.offset().top - 72 },
 			350
@@ -90,4 +130,19 @@ $(function () {
 
 	$(".form3,.form4").hide();
 	$(".form1").show();
+	var $imp = $("#importar-excel");
+	if ($imp.length && window.location.hash === "#importar-excel") {
+		$imp.show();
+		setTimeout(function () {
+			$("html, body").animate({ scrollTop: $imp.offset().top - 72 }, 200);
+		}, 100);
+	} else {
+		$imp.hide();
+	}
 });
+
+function actualizaArchivo(elem) {
+	var fn = $(elem).val();
+	var filename = fn.match(/[^\\/]*$/)[0];
+	$(elem).parents('tr').find('.nombresanteriores').val(filename);
+}

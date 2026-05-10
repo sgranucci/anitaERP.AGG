@@ -1,23 +1,22 @@
 @php
-    $archivosList = isset($data) && $data && ($data->cliente_premio_archivos_uif ?? null)
-        ? $data->cliente_premio_archivos_uif
+    $archivosList = isset($data) && $data && ($data->listaprecio_proveedor_archivos ?? null)
+        ? $data->listaprecio_proveedor_archivos
         : collect();
-    $premioId = isset($data) && $data ? ($data->id ?? null) : null;
     $ocultarInputsConservar = $ocultarInputsConservar ?? false;
 @endphp
 
 @if ($archivosList->count())
-    <div class="cliente-premio-uif-archivos-preview row">
+    <div class="listaprecio-archivos-preview row">
         @foreach ($archivosList as $arch)
             @php
                 $safeName = $arch->nombrearchivo;
                 $ext = strtolower(pathinfo($safeName, PATHINFO_EXTENSION));
-                $urlInline = asset('storage/archivos/clientes_premios_uif/'.$premioId.'/'.$safeName);
+                $urlInline = asset('storage/archivos/listaprecio_proveedor/'.$data->id.'/'.$safeName);
                 $urlDescarga = $urlInline;
                 $esImagen = in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true);
                 $esPdf = $ext === 'pdf';
             @endphp
-            <div class="col-md-6 col-lg-4 mb-3 cliente-premio-uif-archivo-item">
+            <div class="col-md-6 col-lg-4 mb-3 listaprecio-archivo-item">
                 <div class="card card-outline card-secondary h-100 mb-0">
                     <div class="card-body p-2 d-flex flex-column">
                         <div class="small text-truncate mb-2" title="{{ $safeName }}">{{ $safeName }}</div>
@@ -47,7 +46,7 @@
                         </div>
                         @if (! $ocultarInputsConservar)
                             <input type="hidden" name="nombresanteriores[]" value="{{ $arch->nombrearchivo }}">
-                            <button type="button" class="btn btn-sm btn-outline-danger mt-2 eliminar-archivo-premio-uif" title="Quitar de la lista; se elimina del premio al guardar">
+                            <button type="button" class="btn btn-sm btn-outline-danger mt-2 eliminar-archivo-listaprecio" title="Quitar de la lista; se elimina al guardar">
                                 <i class="fa fa-times"></i> Quitar
                             </button>
                         @endif

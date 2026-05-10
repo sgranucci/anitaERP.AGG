@@ -252,6 +252,21 @@ class OrdenventaController extends Controller
         return redirect('ordenventa/ordenventa')->with('mensaje', $mensaje);
     }
 
+    public function reenviarArbolAprobacion($id)
+    {
+        can('actualizar-orden-de-venta');
+
+        $resultado = $this->ordenventaService->reenviarAlArbolAprobacion((int) $id);
+
+        if ($resultado['mensaje'] === 'ok') {
+            return redirect()->route('edita_ordenventa', ['id' => $id])
+                ->with('mensaje', 'La orden de venta se envió nuevamente al árbol de aprobación.');
+        }
+
+        return redirect()->route('edita_ordenventa', ['id' => $id])
+            ->with('mensaje', $resultado['errores'] ?? 'No se pudo reenviar la orden al árbol de aprobación.');
+    }
+
     /**
      * Remove the specified resource from storage.
      *

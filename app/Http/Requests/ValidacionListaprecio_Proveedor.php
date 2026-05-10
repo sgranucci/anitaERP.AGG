@@ -32,6 +32,10 @@ class ValidacionListaprecio_Proveedor extends FormRequest
             'fechavigencias.*' => 'nullable|date',
             'linea_ids' => 'nullable|array',
             'linea_ids.*' => 'nullable|integer',
+            'nombrearchivos' => 'nullable|array',
+            'nombrearchivos.*' => 'nullable|file|max:20480',
+            'nombresanteriores' => 'nullable|array',
+            'nombresanteriores.*' => 'nullable|string|max:255',
         ];
     }
 }

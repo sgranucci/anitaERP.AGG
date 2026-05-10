@@ -11,14 +11,13 @@
         </button>
       </div>
       <div class="modal-body">
-        <form action="" method="post">
-			      <div class="form-group row">
-   				    <label for="consulta" class="col-form-label">Buscar:</label>
-              <input type="text" name="consulta" id="consulta">
-              <input type="hidden" name="consultaarticulo" id="consultaarticulo_id">
-			      </div>
-        </form>
-        
+        {{-- Sin form anidado: el partial va dentro de otros forms; HTML cerraría el padre y el submit fallaría. --}}
+        <div class="form-group row">
+          <label for="consulta" class="col-form-label">Buscar:</label>
+          <input type="text" name="consulta" id="consulta">
+          <input type="hidden" name="consultaarticulo" id="consultaarticulo_id">
+        </div>
+
         <table class="table table-striped table-bordered table-hover" id="tabla-data">
           <thead>
               <th>ID</th>

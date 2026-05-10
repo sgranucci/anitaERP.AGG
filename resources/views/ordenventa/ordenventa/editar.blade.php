@@ -34,6 +34,19 @@
                                 Facturar
                             </button>
                         @endif        
+                        @php
+                            $estadosReenvioArbol = ['SOLICITADA', 'RECHAZADA'];
+                        @endphp
+                        @if (in_array($data->estado ?? '', $estadosReenvioArbol, true))
+                            <form action="{{ route('reenviar_arbol_aprobacion_ordenventa', ['id' => $data->id]) }}" method="POST" style="display:inline"
+                                onsubmit="return confirm('¿Realmente desea volver a enviar la orden de venta al árbol de aprobación?');">
+                                @csrf
+                                <button type="submit" class="btn btn-outline-secondary btn-sm" title="Elimina los movimientos previos del árbol y vuelve a disparar el flujo desde el primer nivel">
+                                    <i class="fa fa-fw fa-sitemap"></i>
+                                    Reenviar al árbol de aprobación
+                                </button>
+                            </form>
+                        @endif
                         <a href="{{route('consulta_ordenventa')}}" class="btn btn-outline-info btn-sm">
                             <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                         </a>

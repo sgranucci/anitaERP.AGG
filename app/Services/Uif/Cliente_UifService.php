@@ -14,12 +14,11 @@ use App\Repositories\Uif\Puntaje_UifRepositoryInterface;
 use App\Repositories\Uif\Factorriesgo_UifRepositoryInterface;
 use App\Repositories\Uif\Frecuencia_UifRepositoryInterface;
 use App\Services\Configuracion\CotizacionService;
+use App\Services\Uif\ClienteUifFotoDocumento;
 use App\Models\Uif\Cliente_Uif;
 use App\Models\Uif\Cliente_Premio_Uif;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
 use Carbon\Carbon;
 use App;
 use Auth;
@@ -71,21 +70,15 @@ class Cliente_UifService
 		DB::beginTransaction();
 		try
 		{
-			$data = $request->all();
+			$data = $request->except(['fotodocumento']);
 			$estado = Cliente_Uif::$enumEstado[array_search('A', array_column(Cliente_Uif::$enumEstado, 'valor'))]['nombre'];
 			$data['estado'] = $estado;
 			$fotodocumento = $request->file('fotodocumento');
-			
-			// Guarda fisicamente el archivo
-			if ($fotodocumento)
-			{
-				$path = public_path()."/storage/imagenes/fotos_documentos_uif/";
-				$file = $fotodocumento->getClientOriginalName();
-				$fileName = $path . $data['id'] . '-' . $fotodocumento->getClientOriginalName();
-
-				$fotodocumento->move($path, $fileName);
-
-				$data['fotodocumento'] = $id.'-'.$file;
+			if ($fotodocumento) {
+				$data['fotodocumento'] = ClienteUifFotoDocumento::storeUploadedFile(
+					$fotodocumento,
+					trim((string) $request->input('numerodocumento'))
+				);
 			}
 
 			$cliente_uif = $this->cliente_uifRepository->create($data);
@@ -101,8 +94,7 @@ class Cliente_UifService
 		} catch (\Exception $e) {
 			DB::rollback();
 
-			// Borra el asiento creado
-			dd($e->getMessage());
+			Log::error('guardaCliente_Uif: '.$e->getMessage());
 
 			return ['errores' => $e->getMessage()];
 		}
@@ -123,20 +115,25 @@ class Cliente_UifService
 		DB::beginTransaction();
 		try
 		{
-			$data = $request->all();
+			$data = $request->except(['fotodocumento']);
+			$existente = $this->cliente_uifRepository->find($id);
 
 			$fotodocumento = $request->file('fotodocumento');
-
-			// Guarda fisicamente el archivo
-			if ($fotodocumento)
-			{
-				$path = public_path()."/storage/imagenes/fotos_documentos_uif/";
-				$file = $fotodocumento->getClientOriginalName();
-				$fileName = $path . $id . '-' . $fotodocumento->getClientOriginalName();
-
-				$fotodocumento->move($path, $fileName);
-
-				$data['fotodocumento'] = $id.'-'.$file;
+			if ($fotodocumento) {
+				$data['fotodocumento'] = ClienteUifFotoDocumento::storeUploadedFile(
+					$fotodocumento,
+					trim((string) $request->input('numerodocumento')),
+					$existente->fotodocumento
+				);
+			} else {
+				$renombrado = ClienteUifFotoDocumento::renameIfDocNumberChanged(
+					(string) $existente->numerodocumento,
+					trim((string) $request->input('numerodocumento')),
+					$existente->fotodocumento
+				);
+				if ($renombrado !== null) {
+					$data['fotodocumento'] = $renombrado;
+				}
 			}
 
 			Self::actualiza($data, $id, $request);
@@ -145,8 +142,8 @@ class Cliente_UifService
 		} catch (\Exception $e) {
 			DB::rollback();
 
-			dd($e->getMessage());
-			
+			Log::error('actualizaCliente_Uif: '.$e->getMessage());
+
 			return ['errores' => $e->getMessage()];
 		}
         return ['mensaje' => 'ok'];

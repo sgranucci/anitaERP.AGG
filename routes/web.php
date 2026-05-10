@@ -2188,6 +2188,7 @@ Route::get('ordenventa/ordenventa/crear', 'Ordenventa\OrdenventaController@crear
 Route::post('ordenventa/ordenventa', 'Ordenventa\OrdenventaController@guardar')->name('guarda_ordenventa');
 Route::get('ordenventa/ordenventa/{id}/editar', 'Ordenventa\OrdenventaController@editar')->name('edita_ordenventa');
 Route::put('ordenventa/ordenventa/{id}', 'Ordenventa\OrdenventaController@actualizar')->name('actualiza_ordenventa');
+Route::post('ordenventa/ordenventa/{id}/reenviar-arbol-aprobacion', 'Ordenventa\OrdenventaController@reenviarArbolAprobacion')->name('reenviar_arbol_aprobacion_ordenventa');
 Route::delete('ordenventa/ordenventa/{id}', 'Ordenventa\OrdenventaController@eliminar')->name('elimina_ordenventa');
 Route::get('ordenventa/listaordenventa/{formato?}/{busqueda?}', 'Ordenventa\OrdenventaController@listar')->name('lista_ordenventa');
 

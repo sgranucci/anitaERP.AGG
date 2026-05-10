@@ -53,6 +53,22 @@ class ClienteUifFotoDocumento
         }
     }
 
+    /**
+     * Guarda un upload en {@see basePath()} con nombre `{numerodocumento_sanitizado}.{ext}`.
+     * Si ya había otra foto distinta en BD, intenta eliminarla del almacén propio (no montajes externos).
+     */
+    public static function storeUploadedFile(UploadedFile $file, string $numerodocumento, ?string $previousBasename = null): string
+    {
+        self::ensureDirectoryExists();
+        $basename = self::buildFilenameForUpload($file, $numerodocumento);
+        if ($previousBasename !== null && $previousBasename !== '' && basename($previousBasename) !== $basename) {
+            self::deleteStoredFile($previousBasename);
+        }
+        $file->move(self::basePath(), $basename);
+
+        return $basename;
+    }
+
     public static function absolutePathForBasename(?string $fotodocumento): ?string
     {
         if ($fotodocumento === null || $fotodocumento === '') {
@@ -102,18 +118,6 @@ class ClienteUifFotoDocumento
         ] as $p) {
             if (is_file($p)) {
                 @unlink($p);
-            }
-        }
-        $dniMount = self::anitaDniMount();
-        if ($dniMount !== '') {
-            $flat = $dniMount.DIRECTORY_SEPARATOR.$base;
-            if (is_file($flat)) {
-                @unlink($flat);
-            }
-            foreach (glob($dniMount.DIRECTORY_SEPARATOR.'*'.DIRECTORY_SEPARATOR.$base, GLOB_NOSORT) ?: [] as $p) {
-                if (is_file($p)) {
-                    @unlink($p);
-                }
             }
         }
     }
@@ -264,7 +268,8 @@ class ClienteUifFotoDocumento
      */
     public static function copyFirstClienteAdjuntoImageToFotodocumento(int $clienteUifId, string $numerodocumento): ?string
     {
-        $stem = strtolower(self::sanitizeNumeroDocumento($numerodocumento));
+        $stem = self::sanitizeNumeroDocumento($numerodocumento);
+        $stemLower = strtolower($stem);
         $rows = Cliente_Archivo_Uif::query()
             ->where('cliente_uif_id', $clienteUifId)
             ->orderBy('id')
@@ -282,7 +287,7 @@ class ClienteUifFotoDocumento
             }
             $bn = strtolower(basename($n));
             $score = 0;
-            if ($stem !== '' && str_contains($bn, $stem)) {
+            if ($stemLower !== '' && str_contains($bn, $stemLower)) {
                 $score += 100;
             }
             foreach (['dni', 'documento', 'frente', 'verso'] as $hint) {
@@ -306,14 +311,17 @@ class ClienteUifFotoDocumento
         });
 
         $pick = $ranked[0];
-        $destDir = public_path('storage'.DIRECTORY_SEPARATOR.self::LEGACY_PUBLIC_SUBDIR);
-        if (! is_dir($destDir)) {
-            File::makeDirectory($destDir, 0755, true);
+        if ($stem === '') {
+            return null;
+        }
+        $ext = strtolower((string) pathinfo($pick['src'], PATHINFO_EXTENSION));
+        if (! in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true)) {
+            return null;
         }
 
-        // nombrearchivo ya viene como "{id}-{original}" desde traerArchivosDeAnita.
-        $destName = basename($pick['nombre']);
-        $destPath = $destDir.DIRECTORY_SEPARATOR.$destName;
+        self::ensureDirectoryExists();
+        $destName = $stem.'.'.$ext;
+        $destPath = self::basePath().DIRECTORY_SEPARATOR.$destName;
         if (! @copy($pick['src'], $destPath)) {
             return null;
         }
@@ -322,7 +330,7 @@ class ClienteUifFotoDocumento
     }
 
     /**
-     * Copia la foto encontrada a storage público (misma convención que la carga manual: id-nombreorig.ext).
+     * @deprecated Las fotos viven en {@see basePath()} o montajes; no duplicar en public/storage salvo legacy.
      */
     public static function importAndStorePublic(string $numerodocumento, ?int $inroclienteid, int $clienteUifId): ?string
     {
@@ -331,18 +339,7 @@ class ClienteUifFotoDocumento
             return null;
         }
 
-        $destDir = public_path('storage'.DIRECTORY_SEPARATOR.self::LEGACY_PUBLIC_SUBDIR);
-        if (! is_dir($destDir)) {
-            File::makeDirectory($destDir, 0755, true);
-        }
-
-        $destName = $clienteUifId.'-'.basename($src);
-        $destPath = $destDir.DIRECTORY_SEPARATOR.$destName;
-        if (! @copy($src, $destPath)) {
-            return null;
-        }
-
-        return $destName;
+        return basename($src);
     }
 
     /**

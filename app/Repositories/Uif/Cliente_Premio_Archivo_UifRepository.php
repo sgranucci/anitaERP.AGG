@@ -2,13 +2,8 @@
 
 namespace App\Repositories\Uif;
 
-use App\Models\Uif\Cliente_Uif;
 use App\Models\Uif\Cliente_Premio_Archivo_Uif;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Illuminate\Support\Facades\Storage;
-use App\ApiAnita;
-use Carbon\Carbon;
-use Auth;
 
 class Cliente_Premio_Archivo_UifRepository implements Cliente_Premio_Archivo_UifRepositoryInterface
 {
@@ -62,7 +57,7 @@ class Cliente_Premio_Archivo_UifRepository implements Cliente_Premio_Archivo_Uif
 		if ($funcion == 'update')
 		{
 			// Borra los registros antes de grabar nuevamente
-       		$this->delete($id, $request->codigo);
+       		$this->delete($id);
 		}
 		$nombrearchivos = $request->file('nombrearchivos');
 
@@ -73,17 +68,19 @@ class Cliente_Premio_Archivo_UifRepository implements Cliente_Premio_Archivo_Uif
 			{
 		  		if ($archivo)
 				{
-					// Guarda fisicamente el archivo
-					$path = public_path()."/storage/archivos/clientes_premios_uif/";
+					$destDir = public_path().'/storage/archivos/clientes_premios_uif/'.$id;
+					if (! is_dir($destDir)) {
+						@mkdir($destDir, 0775, true);
+					}
     				$file = $archivo->getClientOriginalName();
-    				$fileName = $path . $id . '-' . $archivo->getClientOriginalName();
+    				$destName = $id.'-'.$file;
 
-    				$archivo->move($path, $fileName);
+    				$archivo->move($destDir, $destName);
 
 					// Guarda en ERP
 					$cliente_premio_archivo_uif = $this->model->create([
 									'cliente_premio_uif_id' => $id,
-									'nombrearchivo' => $id.'-'.$file,
+									'nombrearchivo' => $destName,
 									]);
 				}
 			}
@@ -157,6 +154,21 @@ class Cliente_Premio_Archivo_UifRepository implements Cliente_Premio_Archivo_Uif
 		}
 	}
 
+	/**
+	 * Nombre físico en storage: "{cliente_premio_uif_id}-{basename}" salvo que Anita ya traiga
+	 * "{id}-..." con el mismo id numérico que el premio en el ERP (evita "12-12-doc.pdf").
+	 */
+	private function nombreDestinoImportPremioUif(int $premioLocalId, string $nombreArchivo): string
+	{
+		if (preg_match('/^(\d+)-/', $nombreArchivo, $m)) {
+			if ((int) $m[1] === $premioLocalId) {
+				return $nombreArchivo;
+			}
+		}
+
+		return $premioLocalId.'-'.$nombreArchivo;
+	}
+
 	private function importarArchivoPremioSiExiste(
 		int $premioLocalId,
 		int $inroclienteid,
@@ -169,7 +181,7 @@ class Cliente_Premio_Archivo_UifRepository implements Cliente_Premio_Archivo_Uif
 			return;
 		}
 
-		$destNombre = $premioLocalId.'-'.$nombreArchivo;
+		$destNombre = $this->nombreDestinoImportPremioUif($premioLocalId, $nombreArchivo);
 		if ($this->model->newQuery()
 			->where('cliente_premio_uif_id', $premioLocalId)
 			->where('nombrearchivo', $destNombre)

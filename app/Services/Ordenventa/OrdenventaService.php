@@ -10,6 +10,7 @@ use App\Repositories\Ordenventa\Ordenventa_CuotaRepositoryInterface;
 use App\Repositories\Ordenventa\Ordenventa_ConceptoRepositoryInterface;
 use App\Repositories\Ventas\VentaRepositoryInterface;
 use App\Services\Configuracion\ArbolaprobacionService;
+use App\Models\Configuracion\Arbolaprobacion_Movimiento;
 use App\Models\Ordenventa\Ordenventa_Estado;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -267,5 +268,53 @@ class OrdenventaService
 
 		if (!$flPendiente)
 			$ordenventa = $this->ordenventaRepository->update(['estado' => 'COBRADA'], $ordenventa_id);
+	}
+
+	/**
+	 * Reinicia el envío al árbol de aprobación (órdenes SOLICITADA o RECHAZADA).
+	 */
+	public function reenviarAlArbolAprobacion(int $id): array
+	{
+		$ordenventa = $this->ordenventaRepository->find($id);
+		if (! $ordenventa) {
+			return ['mensaje' => 'error', 'errores' => 'Orden de venta no encontrada.'];
+		}
+
+		$permitidos = [
+			Ordenventa_Estado::$enumEstado[array_search('S', array_column(Ordenventa_Estado::$enumEstado, 'valor'))]['nombre'],
+			Ordenventa_Estado::$enumEstado[array_search('R', array_column(Ordenventa_Estado::$enumEstado, 'valor'))]['nombre'],
+		];
+		if (! in_array($ordenventa->estado, $permitidos, true)) {
+			return ['mensaje' => 'error', 'errores' => 'Solo se puede reenviar al árbol una orden en estado SOLICITADA o RECHAZADA.'];
+		}
+
+		$nombreSolicitada = Ordenventa_Estado::$enumEstado[array_search('S', array_column(Ordenventa_Estado::$enumEstado, 'valor'))]['nombre'];
+
+		DB::beginTransaction();
+		try {
+			Arbolaprobacion_Movimiento::where('ordenventa_id', $id)->delete();
+
+			$this->ordenventa_estadoRepository->creaEstado(
+				$id,
+				Carbon::now()->format('Y-m-d'),
+				$nombreSolicitada,
+				Auth::user()->id,
+				'Reenvío al árbol de aprobación'
+			);
+
+			if ($ordenventa->estado !== $nombreSolicitada) {
+				$this->ordenventaRepository->update(['estado' => $nombreSolicitada], $id);
+			}
+
+			$this->arbolaprobacionService->procesaArbolaprobacion('OV', $id, 'insert');
+
+			DB::commit();
+
+			return ['mensaje' => 'ok'];
+		} catch (\Exception $e) {
+			DB::rollback();
+
+			return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+		}
 	}
 }

@@ -39,11 +39,12 @@ class Listaprecio_Proveedor_ArchivoRepository implements Listaprecio_Proveedor_A
                         mkdir($path, 0777, true);
                     }
                     $file = $archivo->getClientOriginalName();
-                    $archivo->move($path, $file);
+                    $nombreStored = $id.'-'.$file;
+                    $archivo->move($path, $nombreStored);
 
                     $this->model->create([
                         'listaprecio_proveedor_id' => $id,
-                        'nombrearchivo' => $file,
+                        'nombrearchivo' => $nombreStored,
                     ]);
                 }
             }

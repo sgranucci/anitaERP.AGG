@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\Uif\Cliente_Uif;
+use App\Repositories\Uif\Cliente_Riesgo_UifRepository;
 use Illuminate\Foundation\Http\FormRequest;
 
 class ValidacionCliente_Uif extends FormRequest
@@ -49,6 +50,25 @@ class ValidacionCliente_Uif extends FormRequest
                 },
             ],
             'fotodocumento' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:10240',
+            'periodos' => 'sometimes|array',
+            'periodos.*' => [
+                function (string $attribute, mixed $value, \Closure $fail) {
+                    if ($value === null || (is_string($value) && trim($value) === '')) {
+                        $fail('Debe indicar año y mes del período de riesgo.');
+
+                        return;
+                    }
+                    $r = Cliente_Riesgo_UifRepository::intentarNormalizarPeriodoRiesgoUif($value);
+                    if ($r === false) {
+                        $fail('El período de riesgo no es válido. Use AAAA-MM o un formato equivalente reconocible.');
+
+                        return;
+                    }
+                    if ($r === '') {
+                        $fail('Debe indicar año y mes del período de riesgo.');
+                    }
+                },
+            ],
         ];
     }
 
@@ -106,11 +126,25 @@ class ValidacionCliente_Uif extends FormRequest
         }
     }
 
+    protected function passedValidation()
+    {
+        if (! $this->has('periodos') || ! is_array($this->input('periodos'))) {
+            return;
+        }
+        $normalizados = [];
+        foreach ($this->input('periodos') as $p) {
+            $n = Cliente_Riesgo_UifRepository::intentarNormalizarPeriodoRiesgoUif($p);
+            $normalizados[] = ($n === false) ? '' : $n;
+        }
+        $this->merge(['periodos' => $normalizados]);
+    }
+
     public function attributes()
     {
         return [
             'numerodocumento' => 'número de documento',
             'fotodocumento' => 'foto del documento',
+            'periodos.*' => 'período (riesgo)',
         ];
     }
 }

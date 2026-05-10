@@ -4,10 +4,17 @@
 return [
 	"LIMITE_INFORME_UIF" => 4700000,
 
+	/**
+	 * Fotos de DNI tomadas en caja / escáner. Debe coincidir con el montaje donde el sistema
+	 * legacy guarda archivos `{numerodocumento}.{ext}` (sin copiar al migrar si /scan ya está montado).
+	 */
+	'FOTOS_CLIENTES_PATH' => env('UIF_FOTOS_CLIENTES_PATH', '/scan/tesoreria/fotos_clientes'),
+
 	/*
 	 * Importación de adjuntos desde Anita al sincronizar clientes UIF.
-	 * - mount: ruta local donde está montado (o copiado) el árbol de archivos de Anita
-	 *   (por defecto la misma ruta servidor indicada en Cliente_UifRepository).
+	 * - mount: directorio **padre** del árbol de archivos UIF en Anita (debe contener las
+	 *   carpetas `clientes/` y `premios/`). No usar `.../archivos/clientes` como mount:
+	 *   el código concatena `mount/clientes/...` y `mount/premios/...` (ver AnitaUifArchivosSync).
 	 * - tabla_* / campos_*: si la tabla Informix existe y los nombres coinciden, se listan adjuntos
 	 *   por API; si no, solo se usan archivos hallados bajo `mount` con la convención de carpetas.
 	 */

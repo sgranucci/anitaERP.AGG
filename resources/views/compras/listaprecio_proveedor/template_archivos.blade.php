@@ -1,4 +1,4 @@
-<template id="template-renglon-archivo">
+<template id="template-renglon-archivo-listaprecio">
 	<tr class="item-archivo">
     	<td>
             <input type="file" name="nombrearchivos[]" class="form-control nombrearchivos" onchange="actualizaArchivo(this)">

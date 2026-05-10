@@ -1,6 +1,110 @@
 
     var ptrriesgo;
 
+    var PERIODO_ANIO_MIN_UIF = 2010;
+
+    function anioMaxPeriodoPickerUif(anioValor) {
+        var base = new Date().getFullYear() + 5;
+        var v = parseInt(anioValor, 10);
+        if (!isNaN(v)) {
+            return Math.max(base, v);
+        }
+        return base;
+    }
+
+    function poblarSelectAnioUif($select, anioSeleccionado) {
+        if (!$select || !$select.length) {
+            return;
+        }
+        var sel = anioSeleccionado ? String(anioSeleccionado) : '';
+        var maxY = anioMaxPeriodoPickerUif(sel);
+        var minY = PERIODO_ANIO_MIN_UIF;
+        if (maxY < minY) {
+            maxY = minY;
+        }
+        $select.empty();
+        $select.append($('<option>', { value: '', text: 'Año' }));
+        for (var y = minY; y <= maxY; y++) {
+            var ys = String(y);
+            $select.append($('<option>', { value: ys, text: ys }));
+        }
+        if (sel) {
+            $select.val(sel);
+        }
+    }
+
+    function sincronizarPeriodoOcultoDesdeSelectsUif($row) {
+        var y = $row.find('.periodo-anio').val();
+        var m = $row.find('.periodo-mes').val();
+        var $h = $row.find('.periodo');
+        if (y && m) {
+            $h.val(y + '-' + m);
+            return;
+        }
+        $h.val('');
+    }
+
+    function normalizaPeriodoValorServidorAUyyyMm(val) {
+        if (val === undefined || val === null) {
+            return '';
+        }
+        val = String(val).trim();
+        if (!val) {
+            return '';
+        }
+        var ym = val.match(/^(\d{4})-(0[1-9]|1[0-2])$/);
+        if (ym) {
+            return val;
+        }
+        var slash = val.match(/^(\d{1,2})\/(\d{4})$/);
+        if (slash) {
+            var mes = ('0' + slash[1]).slice(-2);
+            return slash[2] + '-' + mes;
+        }
+        var compact = val.match(/^(\d{2})(\d{4})$/);
+        if (compact) {
+            return compact[2] + '-' + compact[1];
+        }
+        return '';
+    }
+
+    function setPeriodoEnFilaUif($row, valorRaw) {
+        var $anio = $row.find('.periodo-anio');
+        var $mes = $row.find('.periodo-mes');
+        var $h = $row.find('.periodo');
+        var yyyymm = normalizaPeriodoValorServidorAUyyyMm(valorRaw);
+        if (!yyyymm || !/^\d{4}-(0[1-9]|1[0-2])$/.test(String(yyyymm))) {
+            var anioDefault = String(new Date().getFullYear());
+            poblarSelectAnioUif($anio, anioDefault);
+            $anio.val(anioDefault);
+            $mes.val('');
+            $h.val('');
+            return;
+        }
+        var parts = String(yyyymm).split('-');
+        var y = parts[0];
+        var m = parts[1];
+        poblarSelectAnioUif($anio, y);
+        $anio.val(y);
+        $mes.val(m);
+        $h.val(y + '-' + m);
+    }
+
+    function inicializarNuevaFilaPeriodoUif($row) {
+        var anioActual = String(new Date().getFullYear());
+        poblarSelectAnioUif($row.find('.periodo-anio'), anioActual);
+        $row.find('.periodo-anio').val(anioActual);
+        $row.find('.periodo-mes').val('');
+        $row.find('.periodo').val('');
+    }
+
+    function inicializarTablaRiesgoPeriodoFilas() {
+        $('#tbody-tabla-riesgo .item-riesgo').each(function () {
+            var $r = $(this);
+            setPeriodoEnFilaUif($r, $r.find('.periodo').val());
+        });
+    }
+
     $(function () {
         $("#botonestado").click(function(){
 
@@ -132,7 +236,25 @@
         $(document).on('click', '.eliminararchivo', borraRenglonArchivo);
         $(document).on('click', '.eliminar-archivo-cliente-uif', borraTarjetaArchivoClienteUif);
 
-        activa_eventos(true);
+        inicializarTablaRiesgoPeriodoFilas();
+
+        $('#tbody-tabla-riesgo').on('change', '.periodo-anio, .periodo-mes', function (event) {
+            event.preventDefault();
+            var $row = $(this).closest('tr.item-riesgo');
+            sincronizarPeriodoOcultoDesdeSelectsUif($row);
+            ptrriesgo = $row.find('.riesgo');
+            if ($row.find('.periodo-mes').val()) {
+                $row.find('.inusualidad_uif').focus();
+            }
+            calculaRiesgo($row.find('.periodo').val(), $row.find('.inusualidad_uif').val());
+        });
+        $('#tbody-tabla-riesgo').on('change', '.inusualidad_uif', function (event) {
+            event.preventDefault();
+            var $row = $(this).closest('tr.item-riesgo');
+            ptrriesgo = $row.find('.riesgo');
+            calculaRiesgo($row.find('.periodo').val(), $(this).val());
+        });
+
         activa_eventos_consultaactividad_uif();
         chequeaSujetoObligado();
 
@@ -142,59 +264,37 @@
         }, 3000);
 
         var inputArchivo = document.getElementById('fotodocumento');
-
-        inputArchivo.addEventListener("change", function() {
-        let nombreArchivo = this.files[0].name;
-        let archivoSeleccionado = document.getElementById('archivoseleccionado');
-        if (this.value != "") {
-            archivoSeleccionado.innerHTML = nombreArchivo
-        } else {
-            archivoSeleccionado.innerHTML = ''
+        if (inputArchivo) {
+            inputArchivo.addEventListener('change', function () {
+                var archivoSeleccionado = document.getElementById('archivoseleccionado');
+                var previewWrap = document.getElementById('fotodocumento-preview-nuevo');
+                var previewImg = document.getElementById('fotodocumento-preview-img');
+                if (this.files && this.files[0]) {
+                    var f = this.files[0];
+                    if (archivoSeleccionado) {
+                        archivoSeleccionado.innerHTML = f.name;
+                    }
+                    if (f.type && f.type.indexOf('image/') === 0 && previewImg && previewWrap) {
+                        var reader = new FileReader();
+                        reader.onload = function (e) {
+                            previewImg.src = e.target.result;
+                            previewWrap.style.display = 'block';
+                        };
+                        reader.readAsDataURL(f);
+                    } else if (previewWrap) {
+                        previewWrap.style.display = 'none';
+                    }
+                } else {
+                    if (archivoSeleccionado) {
+                        archivoSeleccionado.innerHTML = '';
+                    }
+                    if (previewWrap) {
+                        previewWrap.style.display = 'none';
+                    }
+                }
+            });
         }
-        });        
     });
-	
-    function activa_eventos(flInicio)
-	{
-		// Si esta agregando items desactiva los eventos
-		if (!flInicio)
-		{
-            $('.periodo').off('change');
-            $('.inusualidad_uif').off('change');
-		}
-
-        $('.periodo').datepicker( {
-            changeMonth: true,
-            changeYear: true,
-            minViewMode: "months",
-        });   
-
-        $('.periodo').on('change', function (event) {
-			event.preventDefault();
-            $(this).parents('tr').find('.inusualidad_uif').focus();
-            let periodo = $(this).parents('tr').find('.periodo').val();
-            let inusualidad_uif = $(this).parents('tr').find('.inusualidad_uif').val();
-            let fecha = new Date($(this).val());
-            let mes = fecha.getMonth() + 1;
-            let anio = fecha.getFullYear();
-
-            ptrriesgo = $(this).parents('tr').find('.riesgo');
-
-            if (mes >= 1)
-                $(this).val(mes+"/"+anio);
-
-            calculaRiesgo(periodo, inusualidad_uif);
-		});
-
-        $('.inusualidad_uif').on('change', function (event) {
-			event.preventDefault();
-            let periodo = $(this).parents('tr').find('.periodo').val();
-            let inusualidad_uif = $(this).parents('tr').find('.inusualidad_uif').val();
-            ptrriesgo = $(this).parents('tr').find('.riesgo');
-
-            calculaRiesgo(periodo, inusualidad_uif);
-		});        
-    }
 
     function muestraTipoSuspension()
     {
@@ -276,7 +376,7 @@
     	$("#tbody-tabla-riesgo").append(renglon);
     	actualizaRenglonesRiesgo();
 
-        activa_eventos(false);
+        inicializarNuevaFilaPeriodoUif($("#tbody-tabla-riesgo tr.item-riesgo:last"));
     }
 
     function borraRenglonRiesgo(event) {
@@ -440,17 +540,21 @@
 
     function calculaRiesgo(periodo, inusualidad_uif_id)
     {
-        let tamano = periodo.length;
-        let cliente_uif_id = $('#cliente_uif_id').val();
-        let periodoSinBarras = periodo.replace(/\//g, '');
-        var numeroPeriodo = parseInt(periodoSinBarras);
-
-        if (tamano == 6 || tamano == 7)
-        {
-			let url_cta = carpetaBase+'/uif/calculariesgo_uif/'+cliente_uif_id+'/'+numeroPeriodo+'/'+inusualidad_uif_id;
-
-			$.get(url_cta, function(data){
-                ptrriesgo.val(data.riesgo);
-            });
+        var yyyymm = normalizaPeriodoValorServidorAUyyyMm(periodo);
+        if (!yyyymm || !inusualidad_uif_id) {
+            return;
         }
+        var cliente_uif_id = $('#cliente_uif_id').val();
+        if (!cliente_uif_id || cliente_uif_id === '0') {
+            return;
+        }
+        var parts = yyyymm.split('-');
+        var periodoSinBarras = parts[1] + parts[0];
+        var numeroPeriodo = parseInt(periodoSinBarras, 10);
+
+        var url_cta = carpetaBase + '/uif/calculariesgo_uif/' + cliente_uif_id + '/' + numeroPeriodo + '/' + inusualidad_uif_id;
+
+        $.get(url_cta, function (data) {
+            ptrriesgo.val(data.riesgo);
+        });
     }

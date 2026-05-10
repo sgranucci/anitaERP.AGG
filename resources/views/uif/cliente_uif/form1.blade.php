@@ -219,22 +219,23 @@
         <div class='col-md-12'>
 			<div class="form-group row">
 				<label for="fotodocumento">Foto DNI:</label>
-				<input type="file" id="fotodocumento" name="fotodocumento" style="color: transparent" value="{{$data->fotodocumento ?? ''}}">
+				<input type="file" id="fotodocumento" name="fotodocumento" accept="image/jpeg,image/png,image/gif,image/webp" style="color: transparent" value="{{$data->fotodocumento ?? ''}}">
 				<div id="archivoseleccionado" style="align: left;"></div>
+				<div id="fotodocumento-preview-nuevo" class="mt-2" style="display: none;">
+					<small class="text-muted d-block mb-1">Vista previa (archivo seleccionado):</small>
+					<img id="fotodocumento-preview-img" src="" alt="Vista previa" class="img-thumbnail" style="max-height: 120px; max-width: 200px; object-fit: contain;">
+				</div>
 				@if (!empty($data['fotodocumento']))
 					@php
 						$fotoNombre = $data['fotodocumento'];
 						$fotoBasename = basename($fotoNombre);
 						$fid = $data->id ?? null;
 						$rutaVerDocumento = $fid ? route('cliente_uif_fotodocumento', ['id' => $fid]) : '#';
-						$legacyRel = 'storage/imagenes/fotos_documentos_uif/'.$fotoBasename;
-						$legacyAbs = public_path($legacyRel);
 						$esImagen = preg_match('/\.(jpe?g|png|gif|webp)$/i', $fotoNombre);
 						$esPdf = preg_match('/\.pdf$/i', $fotoNombre);
-						// Archivos en public/storage: el navegador los sirve directo (evita redirecciones de permiso en la etiqueta img).
 						$urlMiniatura = null;
 						if ($fid && $esImagen) {
-							$urlMiniatura = is_file($legacyAbs) ? asset($legacyRel) : $rutaVerDocumento;
+							$urlMiniatura = $rutaVerDocumento;
 						} elseif ($fid && $esPdf) {
 							$urlMiniatura = asset('storage/imagenes/pdf.png');
 						}
