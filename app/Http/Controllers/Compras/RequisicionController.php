@@ -7,6 +7,9 @@ use App\Http\Requests\ValidacionRequisicion;
 use App\Models\Compras\Requisicion_Estado;
 use App\Models\Compras\Requisicion;
 use App\Models\Configuracion\Oficinacompra;
+use App\Models\Compras\Condicionpago;
+use App\Models\Compras\Condicionentrega;
+use App\Models\Compras\Condicioncompra;
 use App\Repositories\Compras\RequisicionRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
@@ -185,6 +188,9 @@ class RequisicionController extends Controller
                 $q->orderByDesc('fecha')->orderByDesc('id');
             },
             'requisicion_presupuestos.proveedores',
+            'requisicion_presupuestos.condicionentregas',
+            'requisicion_presupuestos.condicioncompras',
+            'requisicion_presupuestos.condicionpagos',
             'requisicion_presupuestos.requisicion_presupuesto_articulos.requisicion_articulo.articulos',
             'requisicion_presupuestos.requisicion_presupuesto_articulos.requisicion_articulo.monedas',
             'requisicion_presupuestos.requisicion_presupuesto_archivos',
@@ -213,8 +219,15 @@ class RequisicionController extends Controller
                 ->with('mensaje', 'No puede modificar esta requisición en compras: su oficina de compra no coincide con la de la requisición.');
         }
 
-        // No puede modificar una requisicion que no este como pendiente
-        if ($data->estado !== 'PENDIENTE' && $data->estado !== 'EN_COMPRAS') {
+        // Solo editable en PENDIENTE o EN COMPRAS (nombre exacto según enum, p. ej. "EN COMPRAS" con espacio)
+        $nombrePendiente = Requisicion_Estado::$enumEstado[array_search('P', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
+        $nombreEnCompras = Requisicion_Estado::$enumEstado[array_search('K', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
+        $estadoPermitido = ($data->estado === $nombrePendiente || $data->estado === $nombreEnCompras);
+        // Compatibilidad registros viejos (p. ej. import) con guión bajo
+        if (! $estadoPermitido && $data->estado === 'EN_COMPRAS') {
+            $estadoPermitido = true;
+        }
+        if (! $estadoPermitido) {
             return redirect()->route('solo_consulta_requisicion', $id)
                 ->with('mensaje', 'No puede modificar esta requisición por no estar pendiente o en compras.');
         }
@@ -225,6 +238,9 @@ class RequisicionController extends Controller
         $moneda_query = $this->monedaRepository->all();
         $oficinacompra_query = Oficinacompra::orderBy('nombre')->get();
         $proveedor_query = Proveedor::orderBy('nombre')->get();
+        $condicionpago_query = Condicionpago::orderBy('nombre')->get();
+        $condicionentrega_query = Condicionentrega::orderBy('nombre')->get();
+        $condicioncompra_query = Condicioncompra::orderBy('nombre')->get();
         $estado_enum = Requisicion_Estado::$enumEstado;
         $estado_en_compras = Requisicion_Estado::$enumEstado[array_search('K', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
         $tratamiento_enum = Requisicion::$enumTratamiento;
@@ -241,6 +257,9 @@ class RequisicionController extends Controller
             'moneda_query',
             'oficinacompra_query',
             'proveedor_query',
+            'condicionpago_query',
+            'condicionentrega_query',
+            'condicioncompra_query',
             'estado_enum',
             'estado_en_compras',
             'tratamiento_enum',

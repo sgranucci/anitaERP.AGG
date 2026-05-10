@@ -4,6 +4,8 @@
     if (!empty($oficinaCompraId) && isset($oficinacompra_query)) {
         $oficinaCompraNombre = optional($oficinacompra_query->firstWhere('id', (int) $oficinaCompraId))->nombre ?? '';
     }
+    // Solo consulta cuando $visualizar es truthy (no bastaba isset(): en editar viene false y ocultaba edición).
+    $soloLectura = isset($visualizar) && $visualizar;
 @endphp
 <div id="tab1" class="form1 tab-content">
     <div class="row">
@@ -22,7 +24,7 @@
             <div class="form-group row">
                 <label for="empresa_id" class="col-lg-3 control-label requerido">Empresa</label>
                 <div class="col-lg-5">
-                    <select name="empresa_id" id="empresa_id" class="form-control" required {{ isset($visualizar) ? 'disabled' : '' }}>
+                    <select name="empresa_id" id="empresa_id" class="form-control" required {{ $soloLectura ? 'disabled' : '' }}>
                         <option value="">Seleccione...</option>
                         @foreach ($empresa_query as $empresa)
                             <option value="{{ $empresa->id }}" {{ (int) old('empresa_id', (isset($data) && $data) ? $data->empresa_id : '') === (int) $empresa->id ? 'selected' : '' }}>
@@ -43,21 +45,21 @@
             <div class="form-group row">
                 <label for="fecha" class="col-lg-3 control-label requerido">Fecha</label>
                 <div class="col-lg-3">
-                    <input type="date" name="fecha" id="fecha" class="form-control" value="{{ old('fecha', (isset($data) && $data && $data->fecha) ? substr($data->fecha, 0, 10) : date('Y-m-d')) }}" required {{ isset($visualizar) ? 'readonly' : '' }}>
+                    <input type="date" name="fecha" id="fecha" class="form-control" value="{{ old('fecha', (isset($data) && $data && $data->fecha) ? substr($data->fecha, 0, 10) : date('Y-m-d')) }}" required {{ $soloLectura ? 'readonly' : '' }}>
                 </div>
             </div>
 
             <div class="form-group row">
                 <label for="fechaentrega" class="col-lg-3 control-label requerido">Fecha entrega</label>
                 <div class="col-lg-3">
-                    <input type="date" name="fechaentrega" id="fechaentrega" class="form-control" value="{{ old('fechaentrega', (isset($data) && $data && $data->fechaentrega) ? substr($data->fechaentrega, 0, 10) : date('Y-m-d')) }}" required {{ isset($visualizar) ? 'readonly' : '' }}>
+                    <input type="date" name="fechaentrega" id="fechaentrega" class="form-control" value="{{ old('fechaentrega', (isset($data) && $data && $data->fechaentrega) ? substr($data->fechaentrega, 0, 10) : date('Y-m-d')) }}" required {{ $soloLectura ? 'readonly' : '' }}>
                 </div>
             </div>
 
             <div class="form-group row">
                 <label for="centrocosto_id" class="col-lg-3 control-label requerido">Centro costo</label>
                 <div class="col-lg-4">
-                    <select name="centrocosto_id" id="centrocosto_id" class="form-control" required {{ isset($visualizar) ? 'disabled' : '' }}>
+                    <select name="centrocosto_id" id="centrocosto_id" class="form-control" required {{ $soloLectura ? 'disabled' : '' }}>
                         @php $centrocostoUsuario_id = (isset($data) && $data) ? $data->centrocosto_id : (auth()->user()->centrocosto_id ?? 1); @endphp
                         @foreach ($centrocosto_query as $cc)
                             @if ($cc->id > 0)
@@ -84,9 +86,9 @@
                 <div class="col-lg-9">
                     <input type="hidden" id="proveedor_id" name="proveedor_id" value="{{ old('proveedor_id', (isset($data) && $data) ? ($data->proveedor_id ?? '') : '') }}">
                     <div class="d-flex flex-wrap align-items-center">
-                        <input type="text" class="form-control codigoproveedor mr-2" id="codigoproveedor" name="codigoproveedor" value="{{ old('codigoproveedor', optional($reqProveedor)->codigo ?? '') }}" style="width: 6.5rem; max-width: 30%; flex-shrink: 0;" {{ isset($visualizar) ? 'readonly' : '' }}>
+                        <input type="text" class="form-control codigoproveedor mr-2" id="codigoproveedor" name="codigoproveedor" value="{{ old('codigoproveedor', optional($reqProveedor)->codigo ?? '') }}" style="width: 6.5rem; max-width: 30%; flex-shrink: 0;" {{ $soloLectura ? 'readonly' : '' }}>
                         <input type="text" class="form-control mr-2" id="nombreproveedor" name="nombreproveedor" value="{{ old('nombreproveedor', optional($reqProveedor)->nombre ?? '') }}" readonly style="min-width: 8rem; flex: 1 1 8rem;">
-                        @if(empty($visualizar))
+                        @if(!$soloLectura)
                         <button type="button" title="Consulta proveedores" class="btn-accion-tabla consultaproveedor tooltipsC mr-2 mr-md-3">
                             <i class="fa fa-search text-primary"></i>
                         </button>
@@ -104,7 +106,7 @@
             <div class="form-group row">
                 <label for="formapago_id" class="col-lg-3 control-label">Forma de pago</label>
                 <div class="col-lg-4">
-                    <select name="formapago_id" id="formapago_id" class="form-control" {{ isset($visualizar) ? 'disabled' : '' }}>
+                    <select name="formapago_id" id="formapago_id" class="form-control" {{ $soloLectura ? 'disabled' : '' }}>
                         <option value="">—</option>
                         @foreach ($formapago_query as $fp)
                             <option value="{{ $fp->id }}" {{ (int) old('formapago_id', (isset($data) && $data) ? $data->formapago_id : '') === (int) $fp->id ? 'selected' : '' }}>
@@ -122,7 +124,7 @@
             <div class="form-group row">
                 <label for="tratamiento" class="col-lg-3 control-label requerido">Tratamiento</label>
                 <div class="col-lg-4">
-                    <select name="tratamiento" id="tratamiento" class="form-control" required {{ isset($visualizar) ? 'disabled' : '' }}>
+                    <select name="tratamiento" id="tratamiento" class="form-control" required {{ $soloLectura ? 'disabled' : '' }}>
                         @foreach ($tratamiento_enum as $t)
                             <option value="{{ $t['nombre'] }}" {{ old('tratamiento', (isset($data) && $data) ? $data->tratamiento : 'Normal') == $t['nombre'] ? 'selected' : '' }}>
                                 {{ $t['nombre'] }}
@@ -135,14 +137,14 @@
             <div class="form-group row">
                 <label for="motivotratamiento" class="col-lg-3 control-label">Motivo tratamiento</label>
                 <div class="col-lg-8">
-                    <input type="text" name="motivotratamiento" id="motivotratamiento" class="form-control" value="{{ old('motivotratamiento', (isset($data) && $data) ? $data->motivotratamiento : '') }}" {{ isset($visualizar) ? 'readonly' : '' }}>
+                    <input type="text" name="motivotratamiento" id="motivotratamiento" class="form-control" value="{{ old('motivotratamiento', (isset($data) && $data) ? $data->motivotratamiento : '') }}" {{ $soloLectura ? 'readonly' : '' }}>
                 </div>
             </div>
 
             <div class="form-group row">
                 <label for="contrataciondirecta" class="col-lg-3 control-label requerido">Contratación directa</label>
                 <div class="col-lg-4">
-                    <select name="contrataciondirecta" id="contrataciondirecta" class="form-control" required {{ isset($visualizar) ? 'disabled' : '' }}>
+                    <select name="contrataciondirecta" id="contrataciondirecta" class="form-control" required {{ $soloLectura ? 'disabled' : '' }}>
                         @foreach ($contratacionDirecta_enum as $t)
                             <option value="{{ $t['nombre'] }}" {{ old('contrataciondirecta', (isset($data) && $data) ? $data->contrataciondirecta : 'Normal') == $t['nombre'] ? 'selected' : '' }}>
                                 {{ $t['nombre'] }}
@@ -155,7 +157,7 @@
             <div class="form-group row">
                 <label for="comentario" class="col-lg-3 control-label">Comentario</label>
                 <div class="col-lg-8">
-                    <input type="text" name="comentario" id="comentario" class="form-control" value="{{ old('comentario', (isset($data) && $data) ? $data->comentario : '') }}" {{ isset($visualizar) ? 'readonly' : '' }}>
+                    <input type="text" name="comentario" id="comentario" class="form-control" value="{{ old('comentario', (isset($data) && $data) ? $data->comentario : '') }}" {{ $soloLectura ? 'readonly' : '' }}>
                 </div>
             </div>
 
@@ -163,7 +165,7 @@
             <div class="form-group row">
                 <label for="estado" class="col-lg-3 control-label">Estado</label>
                 <div class="col-lg-5">
-                    <select name="estado" id="estado" class="form-control" {{ isset($visualizar) ? 'disabled' : '' }}>
+                    <select name="estado" id="estado" class="form-control" {{ $soloLectura ? 'disabled' : '' }}>
                         @foreach ($estado_enum as $e)
                             <option value="{{ $e['nombre'] }}" {{ old('estado', $data->estado ?? '') == $e['nombre'] ? 'selected' : '' }}>
                                 {{ $e['nombre'] }}
@@ -203,7 +205,7 @@
                 <th style="width: 10%;">CC destino</th>
                 <th style="width: 22%;">Partida presupuesto</th>
                 <th style="width: 22%;">Capex</th>
-                @if(!isset($visualizar))
+                @if(!$soloLectura)
                 <th style="width: 4%;"></th>
                 @endif
             </tr>
@@ -225,20 +227,20 @@
                         <button type="button" title="Consultar listas de precios de compra" style="padding:1;" class="btn-accion-tabla consultalistasprecio tooltipsC flex-shrink-0">
                                 <i class="fa fa-tags text-info"></i>
                         </button>
-                        <input type="text" class="codigoarticulo codigoarticulolocal form-control flex-shrink-0" style="width: 140px; max-width: 15vw; height: 38px;" name="codigoarticulos[]" value="{{ optional($linea->articulos)->sku ?? '' }}" {{ isset($visualizar) ? 'readonly' : '' }} >
+                        <input type="text" class="codigoarticulo codigoarticulolocal form-control flex-shrink-0" style="width: 140px; max-width: 15vw; height: 38px;" name="codigoarticulos[]" value="{{ optional($linea->articulos)->sku ?? '' }}" {{ $soloLectura ? 'readonly' : '' }} >
                     </div>
                 </td>
                 <td>
                     <input type="text" class="descripcionarticulo form-control" name="descripcionarticulos[]" value="{{ old('descripcionarticulos.'.$idx, optional($linea->articulos)->descripcion ?? '') }}" readonly>
                 </td>
                 <td>
-                    <input type="number" step="0.0001" name="cantidades[]" class="form-control cantidad-linea" value="{{ old('cantidades.'.$idx, $linea->cantidad ?? '1') }}" {{ isset($visualizar) ? 'readonly' : '' }}>
+                    <input type="number" step="0.0001" name="cantidades[]" class="form-control cantidad-linea" value="{{ old('cantidades.'.$idx, $linea->cantidad ?? '1') }}" {{ $soloLectura ? 'readonly' : '' }}>
                 </td>
                 <td>
-                    <input type="number" step="0.0001" name="precios[]" class="form-control precio-linea" value="{{ old('precios.'.$idx, $linea->precio ?? '0') }}" {{ isset($visualizar) ? 'readonly' : '' }}>
+                    <input type="number" step="0.0001" name="precios[]" class="form-control precio-linea" value="{{ old('precios.'.$idx, $linea->precio ?? '0') }}" {{ $soloLectura ? 'readonly' : '' }}>
                 </td>
                 <td>
-                    <select name="moneda_linea_ids[]" class="form-control" {{ isset($visualizar) ? 'disabled' : '' }}>
+                    <select name="moneda_linea_ids[]" class="form-control" {{ $soloLectura ? 'disabled' : '' }}>
                         @foreach ($moneda_query as $moneda)
                             <option value="{{ $moneda->id }}" {{ (int) old('moneda_linea_ids.'.$idx, $linea->moneda_id ?? 1) === (int) $moneda->id ? 'selected' : '' }}>
                                 {{ $moneda->abreviatura }}
@@ -247,7 +249,7 @@
                     </select>
                 </td>
                 <td>
-                    <select name="centrocostodestino_ids[]" class="form-control" {{ isset($visualizar) ? 'disabled' : '' }}>
+                    <select name="centrocostodestino_ids[]" class="form-control" {{ $soloLectura ? 'disabled' : '' }}>
                         @foreach ($centrocosto_query as $cc)
                             <option value="{{ $cc->id }}" {{ (int) old('centrocostodestino_ids.'.$idx, $linea->centrocostodestino_id ?? $centrocostoDefaultDestino) === (int) $cc->id ? 'selected' : '' }}>
                                 {{ $cc->codigo }}-{{ $cc->nombre }}
@@ -261,7 +263,7 @@
                         <button type="button" title="Consulta partidas (último presupuesto)" style="padding:1;" class="btn-accion-tabla consultapartidagasto tooltipsC">
                                 <i class="fa fa-search text-primary"></i>
                         </button>
-                        <input type="text" class="codigopartidagasto col-lg-3 form-control" name="codigopartidagastos[]" value="{{ optional($linea->partidagastos)->codigo ?? '' }}" {{ isset($visualizar) ? 'readonly' : '' }} >
+                        <input type="text" class="codigopartidagasto col-lg-3 form-control" name="codigopartidagastos[]" value="{{ optional($linea->partidagastos)->codigo ?? '' }}" {{ $soloLectura ? 'readonly' : '' }} >
                         <input type="text" class="descripcionpartidagasto col-lg-8 form-control" name="descripcionpartidagastos[]" value="{{ old('descripcionpartidagastos.'.$idx, optional($linea->partidagastos?->articulos)->detalle ?? '') }}" readonly>
                     </div>
                 </td>
@@ -271,11 +273,11 @@
                         <button type="button" title="Consulta CAPEX (último presupuesto)" style="padding:1;" class="btn-accion-tabla consultacapex tooltipsC">
                                 <i class="fa fa-search text-primary"></i>
                         </button>
-                        <input type="text" class="codigocapex col-lg-3 form-control" name="codigocapexs[]" value="{{ optional($linea->capexs)->codigo ?? '' }}" {{ isset($visualizar) ? 'readonly' : '' }} >
+                        <input type="text" class="codigocapex col-lg-3 form-control" name="codigocapexs[]" value="{{ optional($linea->capexs)->codigo ?? '' }}" {{ $soloLectura ? 'readonly' : '' }} >
                         <input type="text" class="descripcioncapex col-lg-8 form-control" name="descripcioncapexs[]" value="{{ old('descripcioncapexs.'.$idx, optional($linea->capexs)->nombre ?? '') }}" readonly>
                     </div>
                 </td>
-                @if(!isset($visualizar))
+                @if(!$soloLectura)
                 <td class="text-center">
                     <button type="button" title="Eliminar línea" class="btn-accion-tabla eliminar_requisicion_articulo tooltipsC">
                         <i class="fa fa-times-circle text-danger"></i>
@@ -286,8 +288,10 @@
             @endforeach
         </tbody>
     </table>
-    @if(!isset($visualizar))
-    <button type="button" class="pull-right btn btn-danger" id="agrega_renglon_requisicion_articulo">+ Agrega rengl&oacute;n</button>
+    @if(!$soloLectura)
+    <div class="d-flex flex-wrap align-items-center justify-content-start mt-2">
+        <button type="button" class="btn btn-danger" id="agrega_renglon_requisicion_articulo">+ Agrega rengl&oacute;n</button>
+    </div>
     @endif
 </div>
 @include('includes.stock.modalconsultaarticulo')

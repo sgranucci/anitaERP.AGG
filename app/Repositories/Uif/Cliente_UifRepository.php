@@ -68,6 +68,8 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
+        $busqueda = is_string($busqueda) ? trim($busqueda) : $busqueda;
+
         $cliente_uifs = $this->model->select('cliente_uif.id as id',
             'cliente_uif.nombre as nombre',
             'tipodocumento.abreviatura as abreviaturatipodocumento',
@@ -82,15 +84,26 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
             ->join('localidad_uif', 'localidad_uif.id', '=', 'cliente_uif.localidad_uif_id')
             ->join('provincia_uif', 'provincia_uif.id', '=', 'cliente_uif.provincia_uif_id')
             ->join('pais_uif', 'pais_uif.id', '=', 'cliente_uif.pais_uif_id')
-            ->where('cliente_uif.deleted_at', null)
-            ->where('cliente_uif.id', $busqueda)
-            ->orWhere('tipodocumento.abreviatura', 'like', '%'.$busqueda.'%')
-            ->orWhere('cliente_uif.numerodocumento', 'like', '%'.$busqueda.'%')
-            ->orWhere('cliente_uif.domicilio', 'like', '%'.$busqueda.'%')
-            ->orWhere('localidad_uif.nombre', 'like', '%'.$busqueda.'%')
-            ->orWhere('provincia_uif.nombre', 'like', '%'.$busqueda.'%')
-            ->orWhere('pais_uif.nombre', 'like', '%'.$busqueda.'%')
+            ->whereNull('cliente_uif.deleted_at')
             ->orderby('id', 'DESC');
+
+        // Si no hay búsqueda, no aplicar ORs con LIKE '%%' (causa full scan + count() caro en paginación).
+        if ($busqueda !== null && $busqueda !== '') {
+            $like = '%'.$busqueda.'%';
+            $cliente_uifs->where(function ($q) use ($busqueda, $like) {
+                $id = filter_var($busqueda, FILTER_VALIDATE_INT);
+                if ($id !== false) {
+                    $q->orWhere('cliente_uif.id', (int) $id);
+                }
+                $q->orWhere('cliente_uif.nombre', 'like', $like)
+                    ->orWhere('tipodocumento.abreviatura', 'like', $like)
+                    ->orWhere('cliente_uif.numerodocumento', 'like', $like)
+                    ->orWhere('cliente_uif.domicilio', 'like', $like)
+                    ->orWhere('localidad_uif.nombre', 'like', $like)
+                    ->orWhere('provincia_uif.nombre', 'like', $like)
+                    ->orWhere('pais_uif.nombre', 'like', $like);
+            });
+        }
 
         if (isset($flPaginando)) {
             if ($flPaginando) {
@@ -103,6 +116,11 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
         }
 
         return $cliente_uifs;
+    }
+
+    public function hayRegistrosClienteUifLocales(): bool
+    {
+        return $this->model->newQuery()->exists();
     }
 
     public function create(array $data)

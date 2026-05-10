@@ -14,7 +14,12 @@
 	}
 
 	function cfg(name) {
-		return box().data(name);
+		var $b = box();
+		if (!$b.length) {
+			return undefined;
+		}
+		// Usar .attr: jQuery .data() transforma claves con guiones y suele fallar con data-url-index, etc.
+		return $b.attr('data-' + name);
 	}
 
 	function readonly() {
@@ -96,9 +101,9 @@
 		ocultarEnlacesPdfModal();
 		$('#presupuesto_fecha').val(new Date().toISOString().slice(0, 10));
 		$('#presupuesto_proveedor_id').val('');
-		$('#presupuesto_condiciones_entrega').val('');
-		$('#presupuesto_condiciones_compra').val('');
-		$('#presupuesto_condiciones_pago').val('');
+		$('#presupuesto_condicionentrega_id').val('');
+		$('#presupuesto_condicioncompra_id').val('');
+		$('#presupuesto_condicionpago_id').val('');
 		$('#presupuesto_estado').val('ACTIVO');
 		idsConservarArchivos = [];
 		$('#presupuesto-archivos-existentes').empty();
@@ -137,9 +142,9 @@
 			$('#presupuesto_edit_id').val(det.id);
 			$('#presupuesto_fecha').val(det.fecha || '');
 			$('#presupuesto_proveedor_id').val(det.proveedor_id || '');
-			$('#presupuesto_condiciones_entrega').val(det.condiciones_entrega || '');
-			$('#presupuesto_condiciones_compra').val(det.condiciones_compra || '');
-			$('#presupuesto_condiciones_pago').val(det.condiciones_pago || '');
+			$('#presupuesto_condicionentrega_id').val(det.condicionentrega_id || '');
+			$('#presupuesto_condicioncompra_id').val(det.condicioncompra_id || '');
+			$('#presupuesto_condicionpago_id').val(det.condicionpago_id || '');
 			$('#presupuesto_estado').val(det.estado || 'ACTIVO');
 			var precMap = {};
 			(det.articulos || []).forEach(function (a) {
@@ -205,13 +210,23 @@
 	}
 
 	function guardarPresupuesto() {
+		var fechaVal = $('#presupuesto_fecha').val();
+		if (!fechaVal || !String(fechaVal).trim()) {
+			alert('Indique la fecha del presupuesto.');
+			return;
+		}
+		var provVal = $('#presupuesto_proveedor_id').val();
+		if (!provVal) {
+			alert('Seleccione un proveedor cotizado.');
+			return;
+		}
 		var editId = $('#presupuesto_edit_id').val();
 		var fd = new FormData();
-		fd.append('fecha', $('#presupuesto_fecha').val());
+		fd.append('fecha', fechaVal);
 		fd.append('proveedor_id', $('#presupuesto_proveedor_id').val());
-		fd.append('condiciones_entrega', $('#presupuesto_condiciones_entrega').val() || '');
-		fd.append('condiciones_compra', $('#presupuesto_condiciones_compra').val() || '');
-		fd.append('condiciones_pago', $('#presupuesto_condiciones_pago').val() || '');
+		fd.append('condicionentrega_id', $('#presupuesto_condicionentrega_id').val() || '');
+		fd.append('condicioncompra_id', $('#presupuesto_condicioncompra_id').val() || '');
+		fd.append('condicionpago_id', $('#presupuesto_condicionpago_id').val() || '');
 		fd.append('estado', $('#presupuesto_estado').val());
 		var L = recolectarLineasParaEnvio();
 		L.ids.forEach(function (id) { fd.append('requisicion_articulo_ids[]', id); });
@@ -347,22 +362,29 @@
 		});
 	};
 
+	function clickNuevoPresupuestoDesdeFooter() {
+		if (!lineasReqCache.length) {
+			window.cargaSolapaPresupuestos();
+			setTimeout(function () {
+				if (!lineasReqCache.length) {
+					alert('La requisición no tiene líneas de artículo; no se puede pedir presupuesto.');
+					return;
+				}
+				abrirModalNuevo();
+			}, 400);
+			return;
+		}
+		abrirModalNuevo();
+	}
+
 	$(function () {
-		if (!box().length) return;
-		$('#btn-nuevo-presupuesto-requisicion').on('click', function () {
-			if (!lineasReqCache.length) {
-				window.cargaSolapaPresupuestos();
-				setTimeout(function () {
-					if (!lineasReqCache.length) {
-						alert('La requisición no tiene líneas de artículo; no se puede pedir presupuesto.');
-						return;
-					}
-					abrirModalNuevo();
-				}, 400);
-				return;
-			}
-			abrirModalNuevo();
+		$(document).on('click', '#btn-footer-nuevo-presupuesto-requisicion', function (e) {
+			e.preventDefault();
+			clickNuevoPresupuestoDesdeFooter();
 		});
+		if (!box().length) {
+			return;
+		}
 		$('#presupuesto_btn_guardar').on('click', guardarPresupuesto);
 		$(document).on('change', '#presupuesto_archivos_input', onArchivosInputChange);
 	});

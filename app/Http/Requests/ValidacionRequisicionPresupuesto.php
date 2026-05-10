@@ -18,9 +18,9 @@ class ValidacionRequisicionPresupuesto extends FormRequest
 
         return [
             'fecha' => 'required|date',
-            'condiciones_entrega' => 'nullable|string',
-            'condiciones_compra' => 'nullable|string',
-            'condiciones_pago' => 'nullable|string',
+            'condicionentrega_id' => 'nullable|integer|exists:condicionentrega,id',
+            'condicioncompra_id' => 'nullable|integer|exists:condicioncompra,id',
+            'condicionpago_id' => 'nullable|integer|exists:condicionpago,id',
             'proveedor_id' => 'required|integer|exists:proveedor,id',
             'estado' => 'required|string|in:'.$estados,
             'requisicion_articulo_ids' => 'required|array|min:1',

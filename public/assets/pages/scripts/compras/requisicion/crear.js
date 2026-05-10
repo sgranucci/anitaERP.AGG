@@ -138,17 +138,33 @@ $(function () {
 		}
 	});
 
+	function requisicionToggleFooterPresupuesto(mostrarSolapaPresupuesto) {
+		var $actions = $('#requisicion-footer-presupuesto-actions');
+		if (!$actions.length) {
+			return;
+		}
+		if (mostrarSolapaPresupuesto) {
+			$actions.removeClass('d-none');
+		} else {
+			$actions.addClass('d-none');
+		}
+	}
+
 	$("#botonform1").click(function(){
 		$(".form1").show();
 		$(".form3").hide();
 		$(".form4").hide();
 		$(".form5").hide();
+		$(".form6").hide();
+		requisicionToggleFooterPresupuesto(false);
 	});
 	$("#botonform3").click(function(){
 		$(".form1").hide();
 		$(".form3").show();
 		$(".form4").hide();
 		$(".form5").hide();
+		$(".form6").hide();
+		requisicionToggleFooterPresupuesto(false);
 		leeHistoria();
 	});
 	$("#botonform4").click(function(){
@@ -156,6 +172,8 @@ $(function () {
 		$(".form3").hide();
 		$(".form4").show();
 		$(".form5").hide();
+		$(".form6").hide();
+		requisicionToggleFooterPresupuesto(false);
 		var sol = document.getElementById('requisicion-solapa-archivos-adjuntos');
 		if (sol) {
 			sol.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -166,11 +184,34 @@ $(function () {
 		$(".form3").hide();
 		$(".form4").hide();
 		$(".form5").show();
+		$(".form6").hide();
+		requisicionToggleFooterPresupuesto(false);
 		leeArbol();
 	});
+	$(document).on('click', '#boton-solapa-presupuesto-requisicion', function (e) {
+		e.preventDefault();
+		$(".form1").hide();
+		$(".form3").hide();
+		$(".form4").hide();
+		$(".form5").hide();
+		$(".form6").show();
+		requisicionToggleFooterPresupuesto(true);
+		if (typeof window.cargaSolapaPresupuestos === 'function') {
+			window.cargaSolapaPresupuestos();
+		}
+	});
 
-	$( "#botonform0" ).click(function() {
-		$("#form-general").submit();
+	$(document).on('click', '#btn-footer-volver-datos-requisicion', function (e) {
+		e.preventDefault();
+		$('#botonform1').trigger('click');
+	});
+
+	$(document).on('click', '#botonform0', function (e) {
+		e.preventDefault();
+		var $f = $('#form-general');
+		if ($f.length) {
+			$f.trigger('submit');
+		}
 	});
 
 	$(document).on('click', '.eliminar-archivo-requisicion', function (event) {
@@ -276,8 +317,9 @@ $(function () {
 		});
 	}
 
-	$(".form3,.form4,.form5").hide();
+	$(".form3,.form4,.form5,.form6").hide();
 	$(".form1").show();
+	requisicionToggleFooterPresupuesto(false);
 
 	$('#empresa_id').on('change', function () {
 		actualizaAvisoArbolGrabacion();

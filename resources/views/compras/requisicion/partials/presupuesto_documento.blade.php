@@ -48,15 +48,15 @@
 <table>
     <tr>
         <td class="lbl" style="width:18%;">Entrega</td>
-        <td class="bloque-texto">{{ $detalle['condiciones_entrega'] ?: '—' }}</td>
+        <td class="bloque-texto">{{ $detalle['condicionentrega_nombre'] ?? '—' }}</td>
     </tr>
     <tr>
         <td class="lbl">Compra</td>
-        <td class="bloque-texto">{{ $detalle['condiciones_compra'] ?: '—' }}</td>
+        <td class="bloque-texto">{{ $detalle['condicioncompra_nombre'] ?? '—' }}</td>
     </tr>
     <tr>
         <td class="lbl">Pago</td>
-        <td class="bloque-texto">{{ $detalle['condiciones_pago'] ?: '—' }}</td>
+        <td class="bloque-texto">{{ $detalle['condicionpago_nombre'] ?? '—' }}</td>
     </tr>
 </table>
 

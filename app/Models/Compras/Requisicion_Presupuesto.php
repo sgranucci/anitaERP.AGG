@@ -20,9 +20,9 @@ class Requisicion_Presupuesto extends Model implements Auditable
     protected $fillable = [
         'requisicion_id',
         'fecha',
-        'condiciones_entrega',
-        'condiciones_compra',
-        'condiciones_pago',
+        'condicionentrega_id',
+        'condicioncompra_id',
+        'condicionpago_id',
         'proveedor_id',
         'estado',
     ];
@@ -35,6 +35,21 @@ class Requisicion_Presupuesto extends Model implements Auditable
     public function proveedores()
     {
         return $this->belongsTo(Proveedor::class, 'proveedor_id');
+    }
+
+    public function condicionentregas()
+    {
+        return $this->belongsTo(Condicionentrega::class, 'condicionentrega_id');
+    }
+
+    public function condicioncompras()
+    {
+        return $this->belongsTo(Condicioncompra::class, 'condicioncompra_id');
+    }
+
+    public function condicionpagos()
+    {
+        return $this->belongsTo(Condicionpago::class, 'condicionpago_id');
     }
 
     public function requisicion_presupuesto_articulos()

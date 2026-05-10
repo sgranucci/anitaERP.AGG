@@ -62,8 +62,8 @@ Requisiciones
                         <div class="col-lg-3"></div>
                         <div class="col-lg-6">
                             <button type="button" id="botonform0" class="btn btn-success">
-    						   	<i class="fa fa-save"></i> Guardar
-							</button>
+                                <i class="fa fa-save"></i> Guardar
+                            </button>
                         </div>
                     </div>
                 </div>

@@ -66,7 +66,7 @@ Requisiciones
                                 <a href="{{ route('editar_requisicion', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Editar">
                                     <i class="fa fa-edit"></i>
                                 </a>
-                                @if (($data->estado ?? '') === ($estado_en_compras ?? 'EN_COMPRAS'))
+                                @if (($data->estado ?? '') === ($estado_en_compras ?? 'EN COMPRAS'))
                                 <form action="{{ route('enviar_arbol_requisicion', ['id' => $data->id]) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Enviar esta requisición al árbol de aprobación para continuar el circuito?');">
                                     @csrf
                                     <button type="submit" class="btn-accion-tabla tooltipsC text-success" title="Envía al árbol de aprobación">

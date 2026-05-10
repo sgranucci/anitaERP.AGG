@@ -108,6 +108,10 @@ $('#form-general').on('submit', function (event) {
     const camposRequeridos = this.querySelectorAll('[required]');
 
     camposRequeridos.forEach(campo => {
+        // No validar campos dentro de modales (p. ej. presupuesto en requisición): su propio flujo los valida
+        if (campo.closest && campo.closest('.modal')) {
+            return;
+        }
         // 2. Verificar si el campo está vacío
         if (!campo.value.trim()) {
             // Marcar campo inválido (opcional, ej: borde rojo)

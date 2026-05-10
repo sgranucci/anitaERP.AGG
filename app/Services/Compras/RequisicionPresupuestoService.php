@@ -32,7 +32,13 @@ class RequisicionPresupuestoService
     {
         $items = Requisicion_Presupuesto::query()
             ->where('requisicion_id', $requisicionId)
-            ->with(['proveedores', 'requisicion_presupuesto_archivos'])
+            ->with([
+                'proveedores',
+                'condicionentregas',
+                'condicioncompras',
+                'condicionpagos',
+                'requisicion_presupuesto_archivos',
+            ])
             ->orderByDesc('fecha')
             ->orderByDesc('id')
             ->get();
@@ -76,6 +82,9 @@ class RequisicionPresupuestoService
             ->where('id', $presupuestoId)
             ->with([
                 'proveedores',
+                'condicionentregas',
+                'condicioncompras',
+                'condicionpagos',
                 'requisicion_presupuesto_articulos.requisicion_articulo.articulos',
                 'requisicion_presupuesto_articulos.requisicion_articulo.monedas',
                 'requisicion_presupuesto_archivos',
@@ -113,14 +122,20 @@ class RequisicionPresupuestoService
     private function serializaCabecera(Requisicion_Presupuesto $p, int $requisicionId): array
     {
         $prov = $p->proveedores;
+        $ce = $p->condicionentregas;
+        $cc = $p->condicioncompras;
+        $cp = $p->condicionpagos;
 
         return [
             'id' => $p->id,
             'requisicion_id' => $p->requisicion_id,
             'fecha' => $p->fecha ? substr((string) $p->fecha, 0, 10) : null,
-            'condiciones_entrega' => $p->condiciones_entrega,
-            'condiciones_compra' => $p->condiciones_compra,
-            'condiciones_pago' => $p->condiciones_pago,
+            'condicionentrega_id' => $p->condicionentrega_id,
+            'condicioncompra_id' => $p->condicioncompra_id,
+            'condicionpago_id' => $p->condicionpago_id,
+            'condicionentrega_nombre' => $ce?->nombre,
+            'condicioncompra_nombre' => $cc?->nombre,
+            'condicionpago_nombre' => $cp?->nombre,
             'proveedor_id' => $p->proveedor_id,
             'proveedor_codigo' => $prov ? $prov->codigo : '',
             'proveedor_nombre' => $prov ? $prov->nombre : '',
@@ -159,9 +174,9 @@ class RequisicionPresupuestoService
             $pres = Requisicion_Presupuesto::create([
                 'requisicion_id' => $requisicionId,
                 'fecha' => $request->input('fecha'),
-                'condiciones_entrega' => $request->input('condiciones_entrega'),
-                'condiciones_compra' => $request->input('condiciones_compra'),
-                'condiciones_pago' => $request->input('condiciones_pago'),
+                'condicionentrega_id' => $request->input('condicionentrega_id') ?: null,
+                'condicioncompra_id' => $request->input('condicioncompra_id') ?: null,
+                'condicionpago_id' => $request->input('condicionpago_id') ?: null,
                 'proveedor_id' => (int) $request->input('proveedor_id'),
                 'estado' => $estado,
             ]);
@@ -213,9 +228,9 @@ class RequisicionPresupuestoService
             $estado = $request->input('estado');
             $pres->update([
                 'fecha' => $request->input('fecha'),
-                'condiciones_entrega' => $request->input('condiciones_entrega'),
-                'condiciones_compra' => $request->input('condiciones_compra'),
-                'condiciones_pago' => $request->input('condiciones_pago'),
+                'condicionentrega_id' => $request->input('condicionentrega_id') ?: null,
+                'condicioncompra_id' => $request->input('condicioncompra_id') ?: null,
+                'condicionpago_id' => $request->input('condicionpago_id') ?: null,
                 'proveedor_id' => (int) $request->input('proveedor_id'),
                 'estado' => $estado,
             ]);

@@ -22,15 +22,15 @@
         <table>
             <tr>
                 <td class="lbl" style="width:14%;">Cond. entrega</td>
-                <td class="bloque-texto">{{ $pres->condiciones_entrega ?: '—' }}</td>
+                <td class="bloque-texto">{{ $pres->condicionentregas->nombre ?? '—' }}</td>
             </tr>
             <tr>
                 <td class="lbl">Cond. compra</td>
-                <td class="bloque-texto">{{ $pres->condiciones_compra ?: '—' }}</td>
+                <td class="bloque-texto">{{ $pres->condicioncompras->nombre ?? '—' }}</td>
             </tr>
             <tr>
                 <td class="lbl">Cond. pago</td>
-                <td class="bloque-texto">{{ $pres->condiciones_pago ?: '—' }}</td>
+                <td class="bloque-texto">{{ $pres->condicionpagos->nombre ?? '—' }}</td>
             </tr>
         </table>
         <table class="items">

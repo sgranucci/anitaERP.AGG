@@ -95,12 +95,11 @@ class Cliente_UifController extends Controller
 
 		$cliente_uifs = $this->cliente_uifRepository->leeCliente_Uif($busqueda, true);
 
-        if ($cliente_uifs->isEmpty())
-		{
-        	$this->cliente_uifRepository->sincronizarConAnita();
-	
+        if (! $this->cliente_uifRepository->hayRegistrosClienteUifLocales()) {
+            $this->cliente_uifRepository->sincronizarConAnita();
+
             $cliente_uifs = $this->cliente_uifRepository->leeCliente_Uif($busqueda, true);
-		}
+        }
 
         $datas = ['cliente_uifs' => $cliente_uifs, 'busqueda' => $busqueda];
 

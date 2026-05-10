@@ -12,16 +12,16 @@
     data-csrf="{{ csrf_token() }}"
     data-readonly="{{ !empty($visualizar) ? '1' : '0' }}"
 >
-    <h5 class="mb-3">Presupuestos solicitados a proveedores</h5>
-    <p class="text-muted small">Registro de cotizaciones por proveedor (condiciones comerciales, plazos y documentación), alineado al circuito de compras de la requisición.</p>
-
-    @if(empty($visualizar))
-    <div class="mb-3">
-        <button type="button" class="btn btn-sm btn-primary" id="btn-nuevo-presupuesto-requisicion">
-            <i class="fa fa-plus"></i> Nuevo presupuesto
-        </button>
+    <h5 class="mb-2">Presupuestos solicitados a proveedores</h5>
+    <div class="alert alert-light border small mb-3" role="note">
+        <p class="mb-2"><strong>¿Qué es esto?</strong> Aquí registrás las cotizaciones que pedís a cada proveedor sobre los ítems de esta requisición (precios unitarios, condiciones de entrega, compra y pago, y archivos del proveedor).</p>
+        <ul class="mb-2 pl-3">
+            <li><strong>Nuevo presupuesto:</strong> elegí proveedor, fecha y completá las líneas con el precio cotizado por ítem (podés adjuntar PDF u otros archivos). Podés repetir el proceso para comparar varios proveedores.</li>
+            <li><strong>Estados:</strong> <em>ACTIVO</em> y <em>SUSPENDIDO</em> para gestionar la negociación; <em>ELEGIDO</em> marca la cotización seleccionada (solo puede haber una elegida a la vez).</li>
+            <li><strong>PDF / imprimir:</strong> desde la grilla o el detalle podés descargar el PDF del presupuesto o abrir el formulario para imprimir. El PDF de la requisición incluirá un apartado con todas las cotizaciones cargadas, si las hay.</li>
+        </ul>
+        <p class="mb-0 text-muted">Los ítems cotizados corresponden a las líneas de artículos ya cargadas en la solapa «Datos principales».</p>
     </div>
-    @endif
 
     <div class="table-responsive">
         <table class="table table-bordered table-sm table-striped" id="tabla-lista-presupuestos">
@@ -57,7 +57,7 @@
                     <div class="form-row">
                         <div class="form-group col-md-4">
                             <label for="presupuesto_fecha">Fecha del presupuesto</label>
-                            <input type="date" class="form-control" id="presupuesto_fecha" required>
+                            <input type="date" class="form-control" id="presupuesto_fecha">
                         </div>
                         <div class="form-group col-md-8">
                             <label for="presupuesto_proveedor_id">Proveedor cotizado</label>
@@ -70,16 +70,31 @@
                         </div>
                     </div>
                     <div class="form-group">
-                        <label for="presupuesto_condiciones_entrega">Condiciones de entrega</label>
-                        <textarea class="form-control" id="presupuesto_condiciones_entrega" rows="2" placeholder="Plazo, lugar, incoterms, etc."></textarea>
+                        <label for="presupuesto_condicionentrega_id">Condición de entrega</label>
+                        <select class="form-control" id="presupuesto_condicionentrega_id" {{ !empty($visualizar) ? 'disabled' : '' }}>
+                            <option value="">—</option>
+                            @foreach (($condicionentrega_query ?? collect()) as $c)
+                                <option value="{{ $c->id }}">{{ $c->nombre }}</option>
+                            @endforeach
+                        </select>
                     </div>
                     <div class="form-group">
-                        <label for="presupuesto_condiciones_compra">Condiciones de compra</label>
-                        <textarea class="form-control" id="presupuesto_condiciones_compra" rows="2"></textarea>
+                        <label for="presupuesto_condicioncompra_id">Condición de compra</label>
+                        <select class="form-control" id="presupuesto_condicioncompra_id" {{ !empty($visualizar) ? 'disabled' : '' }}>
+                            <option value="">—</option>
+                            @foreach (($condicioncompra_query ?? collect()) as $c)
+                                <option value="{{ $c->id }}">{{ $c->nombre }}</option>
+                            @endforeach
+                        </select>
                     </div>
                     <div class="form-group">
-                        <label for="presupuesto_condiciones_pago">Condiciones de pago</label>
-                        <textarea class="form-control" id="presupuesto_condiciones_pago" rows="2"></textarea>
+                        <label for="presupuesto_condicionpago_id">Condición de pago</label>
+                        <select class="form-control" id="presupuesto_condicionpago_id" {{ !empty($visualizar) ? 'disabled' : '' }}>
+                            <option value="">—</option>
+                            @foreach (($condicionpago_query ?? collect()) as $c)
+                                <option value="{{ $c->id }}">{{ $c->nombre }}</option>
+                            @endforeach
+                        </select>
                     </div>
                     <div class="form-group">
                         <label for="presupuesto_estado">Estado del presupuesto</label>

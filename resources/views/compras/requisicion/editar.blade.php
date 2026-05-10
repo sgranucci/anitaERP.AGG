@@ -11,6 +11,7 @@ Requisiciones
 <script src="{{asset("assets/pages/scripts/compras/proveedor/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/requisicion/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/requisicion/consulta-listasprecio.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/compras/requisicion/presupuestos.js")}}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
@@ -37,7 +38,7 @@ Requisiciones
                         <a href="{{ route('consultar_requisicion') }}" class="btn btn-outline-info btn-sm">
                                 <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                         </a>
-                        @if (can('editar-requisicion', false) && ($data->estado ?? '') === ($estado_en_compras ?? 'EN_COMPRAS'))
+                        @if (can('editar-requisicion', false) && ($data->estado ?? '') === ($estado_en_compras ?? 'EN COMPRAS'))
                         <form action="{{ route('enviar_arbol_requisicion', ['id' => $data->id]) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Enviar esta requisición al árbol de aprobación para continuar el circuito?');">
                             @csrf
                             <button type="submit" class="btn btn-success btn-sm ml-1">
@@ -55,6 +56,7 @@ Requisiciones
                     <button type="button" id="botonform3" class="btn btn-info btn-sm">Historia</button>
                     <button type="button" id="botonform4" class="btn btn-info btn-sm">Archivos asociados</button>
                     <button type="button" id="botonform5" class="btn btn-info btn-sm">Árbol aprobación</button>
+                    <button type="button" id="boton-solapa-presupuesto-requisicion" class="btn btn-info btn-sm">Presupuestos</button>
                 </div>
                 <div class="card-body">
                     @if(empty($visualizar))
@@ -93,14 +95,24 @@ Requisiciones
                             <tbody class="container-arbol"></tbody>
                         </table>
                     </div>
+                    @include('compras.requisicion.presupuestos-tab')
                 </div>
                 <div class="card-footer">
                     @if(empty($visualizar))
-                    <div class="row">
-                        <div class="col-lg-3"></div>
-                        <div class="col-lg-6">
+                    <div id="requisicion-footer-bar" class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                        <div class="flex-shrink-0">
                             <button type="button" id="botonform0" class="btn btn-primary">Actualizar</button>
-                        </div>                    
+                        </div>
+                        <div id="requisicion-footer-presupuesto-actions" class="d-none">
+                            <div class="d-flex flex-wrap align-items-center" style="gap: 0.5rem;">
+                                <button type="button" class="btn btn-primary btn-sm" id="btn-footer-nuevo-presupuesto-requisicion">
+                                    <i class="fa fa-plus"></i> Nuevo presupuesto
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-footer-volver-datos-requisicion" title="Volver a datos principales">
+                                    <i class="fa fa-arrow-left"></i> Datos principales
+                                </button>
+                            </div>
+                        </div>
                     </div>
                     @endif
                 </div>
