@@ -2,6 +2,7 @@
 
 namespace App\Models\Uif;
 
+use App\Models\Configuracion\Tipodocumento;
 use App\Traits\Uif\Cliente_UifTrait;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -27,7 +28,9 @@ class Cliente_Uif extends Model implements Auditable
 
     public function cliente_premios_uif()
     {
-        return $this->hasMany(Cliente_Premio_Uif::class, 'cliente_uif_id');
+        return $this->hasMany(Cliente_Premio_Uif::class, 'cliente_uif_id')
+            ->orderByDesc('fechaentrega')
+            ->orderByDesc('id');
     }
 
     public function cliente_riesgos_uif()
@@ -38,6 +41,11 @@ class Cliente_Uif extends Model implements Auditable
     public function cliente_archivos_uif()
     {
         return $this->hasMany(Cliente_Archivo_Uif::class, 'cliente_uif_id');
+    }
+
+    public function tipodocumentos()
+    {
+        return $this->belongsTo(Tipodocumento::class, 'tipodocumento_id');
     }
 
     public function provincia_nacimientos()

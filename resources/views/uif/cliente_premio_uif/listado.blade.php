@@ -1,3 +1,14 @@
+@php
+    $logoAggPath = public_path('storage/imagenes/logos/AGG.png');
+    $logoAguasPath = public_path('storage/imagenes/logos/logoAguas.jpg');
+    $logoMime = 'jpeg';
+    $logoPath = $logoAguasPath;
+    if (config('app.empresa') == 'AGG' && is_file($logoAggPath)) {
+        $logoPath = $logoAggPath;
+        $logoMime = 'png';
+    }
+    $logoData = is_file($logoPath) ? base64_encode(file_get_contents($logoPath)) : null;
+@endphp
 <!DOCTYPE html>
 <html>
 	<title>Premios</title>
@@ -16,10 +27,24 @@
 			tr:nth-child(even) {
 				background-color: #dddddd;
 			}
+			.listado-header { width: 100%; margin-bottom: 12px; border-bottom: 2px solid #444; padding-bottom: 8px; }
+			.listado-header td { vertical-align: middle; }
 		</style>
 	</head>
 	<body>
-		<h2>Premios UIF</h2>
+		<table class="listado-header">
+			<tr>
+				<td style="width: 35%;">
+					@if ($logoData)
+						<img src="data:image/{{ $logoMime }};base64,{{ $logoData }}" alt="" style="max-width: 220px; max-height: 70px;">
+					@endif
+				</td>
+				<td style="width: 40%; text-align: center;">
+					<h2 style="margin: 0;">Premios UIF</h2>
+				</td>
+				<td style="width: 25%;"></td>
+			</tr>
+		</table>
 		<table class="table table-striped table-bordered table-hover">
 			<thead>
 				<tr>
@@ -28,7 +53,7 @@
 					<th>Sala</th>
 					<th>Juego</th>
 					<th>Fecha Entrega</th>
-					<th>Monto</th>
+					<th style="text-align: right;">Monto</th>
 					<th>Posición</th>
 					<th>Número TITO</th>
 					<th>Forma de Pago</th>
@@ -43,7 +68,7 @@
 					<td>{{$data->nombresala}}</td>
 					<td><small>{{$data->nombrejuego}}</small></td>
 					<td><small>{{$data->fechaentrega}}</small></td>
-					<td><small>{{$data->monto ?? ''}}</small></td>
+					<td style="text-align: right;"><small>{{ number_format((float) ($data->monto ?? 0), 2, ',', '.') }}</small></td>
 					<td><small>{{$data->posicion ?? ''}}</small></td>
 					<td><small>{{$data->numerotito ?? ''}}</small></td>
 					<td><small>{{$data->nombreformapago}}</small></td>

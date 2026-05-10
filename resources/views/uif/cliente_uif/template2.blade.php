@@ -15,7 +15,7 @@
 			<input type="text" name="numerotitos[]" class="form-control numerotito" value="" />
 		</td>
 		<td>
-			<input type="text" name="montopremios[]" class="form-control montopremio" value="" />
+			<input type="text" name="montopremios[]" class="form-control montopremio" style="text-align: right;" value="" />
 		</td>
     	<td>
 			<button style="width: 7%;" type="button" title="Elimina esta linea" class="btn-accion-tabla eliminar_premio tooltipsC">

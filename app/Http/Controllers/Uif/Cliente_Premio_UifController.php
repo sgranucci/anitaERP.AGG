@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Uif;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionCliente_Premio_Uif;
 use App\Services\Uif\Cliente_UifService;
+use App\Services\Uif\ClienteUifFotoDocumento;
 use App\Exports\Uif\Cliente_UifExport;
 use App\Models\Uif\Cliente_Uif;
+use App\Models\Uif\Cliente_Congelado_Uif;
 use App\Models\Uif\Cliente_Premio_Uif;
 use App\Repositories\Uif\Cliente_UifRepositoryInterface;
 use App\Repositories\Uif\Cliente_Premio_UifRepositoryInterface;
@@ -18,6 +20,7 @@ use App\Repositories\Uif\Juego_UifRepositoryInterface;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Arr;
+use Jurosh\PDFMerge\PDFMerger;
 use Carbon\Carbon;
 use DB;
 
@@ -323,18 +326,74 @@ class Cliente_Premio_UifController extends Controller
 
     public function listarUnPremio(Request $request, $id)
     {
-		$cliente_premio_uif = $this->cliente_premio_uifRepository->find($id);
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
 
-        $view =  \View::make('exports.uif.cliente_premio_uif', compact('cliente_premio_uif'))
-			    ->render();
-		$path = storage_path('pdf/cliente_premio_uif');
+        $cliente_premio_uif = Cliente_Premio_Uif::with([
+                                    'clientes_uif.tipodocumentos',
+                                    'clientes_uif.localidades_uif',
+                                    'clientes_uif.provincias_uif',
+                                    'clientes_uif.paises_uif',
+                                    'clientes_uif.localidad_nacimientos',
+                                    'clientes_uif.provincia_nacimientos',
+                                    'clientes_uif.pais_nacimientos',
+                                    'clientes_uif.actividades_uif',
+                                    'clientes_uif.estadociviles_uif',
+                                    'clientes_uif.peps_uif',
+                                    'clientes_uif.sos_uif',
+                                    'cliente_premio_archivos_uif',
+                                    'salas.empresas',
+                                    'juegos_uif',
+                                    'monedas',
+                                    'formapagos',
+                                    'usuarios',
+                                ])->findOrFail($id);
+
+        $cliente = $cliente_premio_uif->clientes_uif;
+
+        $congelado = false;
+        if ($cliente && ($cliente->numerodocumento ?? '') !== '') {
+            $congelado = Cliente_Congelado_Uif::where('numerodocumento', $cliente->numerodocumento)->exists();
+        }
+
+        $fotodocumentoPath = ($cliente && ($cliente->fotodocumento ?? '') !== '')
+            ? ClienteUifFotoDocumento::absolutePathForBasename($cliente->fotodocumento)
+            : null;
+
+        $path = storage_path('pdf/cliente_premio_uif');
+        if (! is_dir($path)) {
+            @mkdir($path, 0775, true);
+        }
+
+        $view = \View::make('exports.uif.cliente_premio_uif', compact(
+                            'cliente_premio_uif', 'congelado', 'fotodocumentoPath'
+                        ))->render();
 
         $pdf = \App::make('dompdf.wrapper');
-        
-        $nombre_pdf = 'cliente_premio_uif-'.$id.'.pdf';
-        $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf);
-        $pdf->download($nombre_pdf);
+        $pdf->setPaper('a4', 'portrait');
+        $pdf->setOptions([
+            'isHtml5ParserEnabled' => true,
+            'isRemoteEnabled'      => true,
+            'defaultFont'          => 'DejaVu Sans',
+        ]);
 
-		return response()->download($path.'/'.$nombre_pdf);
+        $nombre_pdf = 'cliente_premio_uif-'.$id.'.pdf';
+        $rutaPdfPremio = $path.'/'.$nombre_pdf;
+        $pdf->loadHTML($view)->save($rutaPdfPremio);
+
+        $rutaInformeUif = storage_path('app/public/imagenes/informe_uif.pdf');
+        if (is_file($rutaInformeUif)) {
+            try {
+                $merger = new PDFMerger;
+                $merger->addPDF($rutaPdfPremio, 'all', 'vertical')
+                    ->addPDF($rutaInformeUif, 'all', 'vertical');
+                $pdfFusionado = $merger->merge('string', $nombre_pdf);
+                file_put_contents($rutaPdfPremio, $pdfFusionado);
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
+
+        return response()->download($rutaPdfPremio);
     }
 }

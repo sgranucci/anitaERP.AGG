@@ -35,9 +35,12 @@
         @include('includes.form-error')
         @include('includes.mensaje')
         <div class="card card-danger">
-            <div class="card-header">
-                <h3 class="card-title">Editar Premio UIF &nbsp;ID:&nbsp;{{$data->id }}&nbsp;{{$data->clientes_uif->nombre}}&nbsp;Doc.: {{$data->clientes_uif->numerodocumento}}</h3>
-                <div class="card-tools">
+            <div class="card-header d-flex align-items-center flex-wrap">
+                @if (config('app.empresa') == 'AGG')
+                    <img src="{{ asset('storage/imagenes/logos/AGG.png') }}" alt="AGG" class="mr-3 mb-2 mb-md-0 align-middle" style="max-height: 44px;">
+                @endif
+                <h3 class="card-title mb-0 flex-grow-1">Editar Premio UIF &nbsp;ID:&nbsp;{{$data->id }}&nbsp;{{$data->clientes_uif->nombre}}&nbsp;Doc.: {{$data->clientes_uif->numerodocumento}}</h3>
+                <div class="card-tools ml-auto">
                     @if (isset($referer))
                         <a href="#" onclick="history.back()" class="btn btn-outline-info btn-sm">
                             <i class="fa fa-fw fa-reply-all"></i> Volver atrás

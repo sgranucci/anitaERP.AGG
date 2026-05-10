@@ -36,9 +36,12 @@ $( "#botonform0" ).click(function() {
         @include('includes.form-error')
         @include('includes.mensaje')
         <div class="card card-danger">
-            <div class="card-header">
-                <h3 class="card-title">Crear Premio UIF - {{$nombrecliente}} - {{$numerodocumento}}</h3>
-                <div class="card-tools">
+            <div class="card-header d-flex align-items-center flex-wrap">
+                @if (config('app.empresa') == 'AGG')
+                    <img src="{{ asset('storage/imagenes/logos/AGG.png') }}" alt="AGG" class="mr-3 mb-2 mb-md-0 align-middle" style="max-height: 44px;">
+                @endif
+                <h3 class="card-title mb-0 flex-grow-1">Crear Premio UIF - {{$nombrecliente}} - {{$numerodocumento}}</h3>
+                <div class="card-tools ml-auto">
                     <a href="{{route('consulta_cliente_premio_uif')}}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>

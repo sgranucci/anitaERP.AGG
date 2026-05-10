@@ -39,7 +39,7 @@ Premios UIF
                             <th>Sala</th>
                             <th>Juego</th>
                             <th>Fecha Entrega</th>
-                            <th>Monto</th>
+                            <th style="text-align: right;">Monto</th>
                             <th>Posición</th>
                             <th>Número TITO</th>
                             <th>Forma de Pago</th>
@@ -54,7 +54,7 @@ Premios UIF
                             <td>{{$data->nombresala}}</td>
                             <td><small>{{$data->nombrejuego}}</small></td>
                             <td><small>{{$data->fechaentrega}}</small></td>
-                            <td><small>{{number_format($data->monto,2) ?? ''}}</small></td>
+                            <td style="text-align: right;"><small>{{ number_format((float) ($data->monto ?? 0), 2, ',', '.') }}</small></td>
                             <td><small>{{$data->posicion ?? ''}}</small></td>
                             <td><small>{{$data->numerotito ?? ''}}</small></td>
                             <td><small>{{$data->nombreformapago}}</small></td>

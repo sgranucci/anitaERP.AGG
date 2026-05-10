@@ -5,6 +5,7 @@ namespace App\Repositories\Uif;
 use App\ApiAnita;
 use App\Models\Uif\Cliente_Uif;
 use App\Repositories\Configuracion\TipodocumentoRepositoryInterface;
+use App\Services\Uif\ClientePremioUifFotoTesoreria;
 use App\Services\Uif\ClienteUifFotoDocumento;
 use Auth;
 use Exception;
@@ -619,6 +620,14 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
                         $inroclienteid,
                         $premioAnita->inropremioid
                     );
+
+                    $fotoPremio = ClientePremioUifFotoTesoreria::importToPublicStorage(
+                        (int) $premioAnita->inropremioid,
+                        isset($premioAnita->cextfoto) ? (string) $premioAnita->cextfoto : null
+                    );
+                    if ($fotoPremio !== null) {
+                        $premioLocal->update(['foto' => $fotoPremio]);
+                    }
                 }
             }
 

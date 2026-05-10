@@ -223,7 +223,9 @@
 				<div id="archivoseleccionado" style="align: left;"></div>
 				<div id="fotodocumento-preview-nuevo" class="mt-2" style="display: none;">
 					<small class="text-muted d-block mb-1">Vista previa (archivo seleccionado):</small>
-					<img id="fotodocumento-preview-img" src="" alt="Vista previa" class="img-thumbnail" style="max-height: 120px; max-width: 200px; object-fit: contain;">
+					<div class="text-center bg-white border rounded p-2">
+						<img id="fotodocumento-preview-img" src="" alt="Vista previa" class="img-fluid rounded" style="max-height: min(18vh, 160px); max-width: 100%; object-fit: contain;">
+					</div>
 				</div>
 				@if (!empty($data['fotodocumento']))
 					@php
@@ -233,33 +235,33 @@
 						$rutaVerDocumento = $fid ? route('cliente_uif_fotodocumento', ['id' => $fid]) : '#';
 						$esImagen = preg_match('/\.(jpe?g|png|gif|webp)$/i', $fotoNombre);
 						$esPdf = preg_match('/\.pdf$/i', $fotoNombre);
-						$urlMiniatura = null;
-						if ($fid && $esImagen) {
-							$urlMiniatura = $rutaVerDocumento;
-						} elseif ($fid && $esPdf) {
-							$urlMiniatura = asset('storage/imagenes/pdf.png');
-						}
 					@endphp
 					@if ($fid)
-					<div class="mt-2 p-2 border rounded bg-light d-flex align-items-start flex-wrap" style="gap: 12px;">
-						<div class="text-center flex-shrink-0" style="width: 104px;">
-							@if ($urlMiniatura)
-								<a href="{{ $rutaVerDocumento }}" target="_blank" rel="noopener" title="Abrir documento">
-									<img src="{{ $urlMiniatura }}" alt="Vista previa documento" class="img-thumbnail" style="max-height: 96px; max-width: 96px; width: 96px; height: 96px; object-fit: {{ $esPdf ? 'contain' : 'cover' }};">
+					<div class="mt-3 cliente-uif-fotodocumento-vista border rounded bg-light p-2">
+						@if ($esPdf)
+							<div class="rounded overflow-hidden bg-white border shadow-sm">
+								<iframe src="{{ $rutaVerDocumento }}" class="w-100 border-0 d-block bg-secondary" style="height: min(24vh, 260px); min-height: 140px;" title="Vista previa PDF del documento"></iframe>
+							</div>
+						@elseif ($esImagen)
+							<div class="text-center p-2 bg-white rounded border shadow-sm">
+								<a href="{{ $rutaVerDocumento }}" target="_blank" rel="noopener noreferrer" title="Abrir imagen en tamaño completo">
+									<img src="{{ $rutaVerDocumento }}" alt="Foto documento" class="img-fluid rounded" style="max-height: min(20vh, 180px); max-width: 100%; width: auto; object-fit: contain;">
 								</a>
-								@if ($esPdf)
-									<small class="text-muted d-block text-break mt-1" style="max-width: 104px;">PDF</small>
-								@endif
-							@else
-								<a href="{{ $rutaVerDocumento }}" target="_blank" rel="noopener" class="text-secondary" title="Abrir archivo">
-									<i class="fa fa-file-o fa-3x d-block my-2"></i>
+							</div>
+						@else
+							<div class="text-center py-3">
+								<a href="{{ $rutaVerDocumento }}" target="_blank" rel="noopener noreferrer" class="text-secondary" title="Abrir archivo">
+									<i class="fa fa-file-o fa-3x d-block mb-2"></i>
+									<span class="small text-break d-inline-block" style="max-width: 100%;">{{ $fotoBasename }}</span>
 								</a>
-								<small class="text-muted d-block text-break" style="max-width: 96px;">{{ $fotoBasename }}</small>
-							@endif
-						</div>
-						<div class="d-flex flex-column justify-content-center" style="gap: 6px;">
+							</div>
+						@endif
+						<div class="d-flex flex-wrap align-items-center mt-3 pt-2 border-top" style="gap: 8px;">
 							<a class="btn btn-sm btn-outline-primary" href="{{ route('cliente_uif_fotodocumento', ['id' => $fid]) }}?disposition=attachment">
 								<i class="fa fa-download"></i> Descargar
+							</a>
+							<a class="btn btn-sm btn-outline-secondary" href="{{ $rutaVerDocumento }}" target="_blank" rel="noopener noreferrer" title="Abrir en nueva pestaña">
+								<i class="fa fa-external-link-alt"></i> Abrir en pestaña nueva
 							</a>
 							@if (can('actualizar-cliente-uif', false))
 							<button type="button" class="btn btn-sm btn-outline-danger" data-url="{{ route('elimina_fotodocumento_cliente_uif', ['id' => $fid]) }}" onclick="eliminarFotoDocumentoClienteUif(this.dataset.url)">

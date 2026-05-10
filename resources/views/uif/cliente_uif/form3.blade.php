@@ -7,7 +7,7 @@
 					<th>Sala</th>
 					<th>Juego</th>
 					<th>Nro. de Tito</th>
-					<th>Monto Premio</th>
+					<th style="text-align: right;">Monto Premio</th>
     				<th></th>
     			</tr>
     		</thead>
@@ -30,7 +30,7 @@
                 				<input type="text" name="numerotitos[]" class="form-control numerotito" value="{{ $premio->numerotito }}" />
                 			</td>
 							<td>
-                				<input type="text" name="montopremios[]" class="form-control montopremio" value="{{ $premio->monto }}" />
+                				<input type="text" name="montopremios[]" class="form-control montopremio" style="text-align: right;" value="{{ number_format((float) ($premio->monto ?? 0), 2, ',', '.') }}" />
                 			</td>
                 			<td>
 								@if (can('editar-cliente-premio-uif', false))
