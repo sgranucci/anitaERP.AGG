@@ -29,7 +29,7 @@
     		</thead>
     		<tbody id="tbody-tabla-riesgo">
 		 		@if ($data->cliente_riesgos_uif ?? '') 
-					@foreach (old('riesgo', $data->cliente_riesgos_uif->count() ? $data->cliente_riesgos_uif : ['']) as $riesgo)
+					@foreach (old('riesgo', $data->cliente_riesgos_uif->count() ? $data->cliente_riesgos_uif : []) as $riesgo)
             			<tr class="item-riesgo">
                 			<td>
                 				<input type="hidden" name="iiriesgos[]" class="form-control iiriesgo" readonly value="{{ $loop->index+1 }}" />

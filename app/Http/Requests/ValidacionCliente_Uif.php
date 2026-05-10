@@ -34,7 +34,8 @@ class ValidacionCliente_Uif extends FormRequest
                     $nro = trim((string) $value);
                     $ignoreId = $this->resolveClienteUifIdForValidation();
 
-                    $query = Cliente_Uif::query()->where('numerodocumento', $nro);
+                    // Comparar con TRIM para alinear con prepareForValidation() y valores guardados con espacios.
+                    $query = Cliente_Uif::query()->whereRaw('TRIM(numerodocumento) = ?', [$nro]);
 
                     if ($this->filled('tipodocumento_id')) {
                         $query->where('tipodocumento_id', (int) $this->input('tipodocumento_id'));
@@ -87,19 +88,33 @@ class ValidacionCliente_Uif extends FormRequest
             }
         }
 
-        if ($this->isMethod('put') || $this->isMethod('patch')) {
+        // Actualización: el formulario envía POST + _method=PUT y campo oculto cliente_uif_id.
+        if ($this->isClienteUifUpdateRequest()) {
             $id = $this->normalizeClienteUifRouteId($this->input('cliente_uif_id'));
             if ($id !== null) {
                 return $id;
             }
         }
 
+        // Sin anclaje al inicio del path (compatible con prefijo de subcarpeta / proxy).
         $path = ltrim((string) $this->path(), '/');
-        if (preg_match('#^uif/cliente_uif/(\d+)#', $path, $m)) {
+        if (preg_match('#cliente_uif/(\d+)#', $path, $m)) {
             return (int) $m[1];
         }
 
         return null;
+    }
+
+    /**
+     * Detecta guardado en edición (PUT/PATCH o POST con spoofing _method=PUT hacia uif/cliente_uif/{id}).
+     */
+    private function isClienteUifUpdateRequest(): bool
+    {
+        if ($this->isMethod('put') || $this->isMethod('patch')) {
+            return true;
+        }
+
+        return strtoupper((string) $this->input('_method')) === 'PUT';
     }
 
     private function normalizeClienteUifRouteId(mixed $value): ?int
