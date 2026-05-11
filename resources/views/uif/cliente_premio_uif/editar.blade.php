@@ -41,12 +41,12 @@
                 @endif
                 <h3 class="card-title mb-0 flex-grow-1">Editar Premio UIF &nbsp;ID:&nbsp;{{$data->id }}&nbsp;{{$data->clientes_uif->nombre}}&nbsp;Doc.: {{$data->clientes_uif->numerodocumento}}</h3>
                 <div class="card-tools ml-auto">
-                    @if (isset($referer))
-                        <a href="#" onclick="history.back()" class="btn btn-outline-info btn-sm">
-                            <i class="fa fa-fw fa-reply-all"></i> Volver atrás
+                    @if (!empty($volverAClienteUif) && !empty($referer))
+                        <a href="{{ $referer }}" class="btn btn-outline-info btn-sm">
+                            <i class="fa fa-fw fa-arrow-left"></i> Volver atrás
                         </a>
                     @else
-                        <a href="{{route('consulta_cliente_premio_uif')}}" class="btn btn-outline-info btn-sm">
+                        <a href="{{ route('consulta_cliente_premio_uif') }}" class="btn btn-outline-info btn-sm">
                             <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                         </a>
                     @endif

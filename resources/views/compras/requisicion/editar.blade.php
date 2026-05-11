@@ -23,21 +23,17 @@ Requisiciones
             <div class="card-header">
                 <h3 class="card-title">Requisición {{ $data->numerorequisicion }}</h3>
                 <div class="card-tools">
-                    @if(!empty($visualizar))
-                        @if(empty($acceso_visualizacion_por_hash))
+                    @if(empty($acceso_visualizacion_por_hash))
+                        @if (can('listar-requisicion', false) || can('editar-requisicion', false))
+                        <a href="{{ route('imprimir_pdf_requisicion', ['id' => $data->id]) }}" class="btn btn-primary" title="Listar la requisición en PDF" target="_blank" rel="noopener noreferrer">
+                            <i class="fas fa-file-pdf"> Listar Requisición</i>
+                        </a>
+                        @endif
                         <a href="{{ route('consultar_requisicion') }}" class="btn btn-outline-info btn-sm">
                             <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                         </a>
-                        @endif
-                    @else
-                        @if (can('listar-requisicion', false) || can('editar-requisicion', false))
-                        <a href="{{ route('imprimir_pdf_requisicion', ['id' => $data->id]) }}" class="btn btn-outline-danger btn-sm" target="_blank" rel="noopener noreferrer" title="Descargar PDF con todos los datos">
-                            <i class="fas fa-file-pdf"></i> PDF
-                        </a>
-                        @endif
-                        <a href="{{ route('consultar_requisicion') }}" class="btn btn-outline-info btn-sm">
-                                <i class="fa fa-fw fa-reply-all"></i> Volver al listado
-                        </a>
+                    @endif
+                    @if(empty($visualizar))
                         @if (can('editar-requisicion', false) && ($data->estado ?? '') === ($estado_en_compras ?? 'EN COMPRAS'))
                         <form action="{{ route('enviar_arbol_requisicion', ['id' => $data->id]) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Enviar esta requisición al árbol de aprobación para continuar el circuito?');">
                             @csrf

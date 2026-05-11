@@ -61,10 +61,12 @@
 	function armarTablaLineasDesdeCache(preciosPorLinea) {
 		var $tb = $('#tabla-lineas-presupuesto tbody').empty();
 		lineasReqCache.forEach(function (ln, idx) {
-			var rid = ln.requisicion_articulo_id;
+			var rid = Number(ln.requisicion_articulo_id);
 			var precioReq = ln.precio_requisicion != null ? ln.precio_requisicion : '';
-			var precioCot = preciosPorLinea && preciosPorLinea[rid] != null ? preciosPorLinea[rid] : precioReq;
-			var obs = preciosPorLinea && preciosPorLinea['_obs_' + rid] != null ? preciosPorLinea['_obs_' + rid] : '';
+			var precioCot = preciosPorLinea && preciosPorLinea[rid] !== undefined && preciosPorLinea[rid] !== null && preciosPorLinea[rid] !== ''
+				? preciosPorLinea[rid]
+				: precioReq;
+			var obs = preciosPorLinea && preciosPorLinea['_obs_' + rid] !== undefined ? preciosPorLinea['_obs_' + rid] : '';
 			var $tr = $('<tr></tr>');
 			$tr.attr('data-requisicion-articulo-id', rid);
 			$tr.append('<td>' + escapeHtml(ln.articulo_codigo || '') + '</td>');
@@ -127,7 +129,10 @@
 	function cargarDetalle(id) {
 		var url = cfg('url-show') + '/' + id;
 		$.get(url).done(function (det) {
-			if (!lineasReqCache.length && det.articulos && det.articulos.length) {
+			if ((!lineasReqCache || !lineasReqCache.length) && det.lineas_requisicion && det.lineas_requisicion.length) {
+				lineasReqCache = det.lineas_requisicion;
+			}
+			if ((!lineasReqCache || !lineasReqCache.length) && det.articulos && det.articulos.length) {
 				lineasReqCache = det.articulos.map(function (a) {
 					return {
 						requisicion_articulo_id: a.requisicion_articulo_id,
@@ -148,8 +153,12 @@
 			$('#presupuesto_estado').val(det.estado || 'ACTIVO');
 			var precMap = {};
 			(det.articulos || []).forEach(function (a) {
-				precMap[a.requisicion_articulo_id] = a.precio_unitario;
-				precMap['_obs_' + a.requisicion_articulo_id] = a.observacion || '';
+				var arid = Number(a.requisicion_articulo_id);
+				if (isNaN(arid)) {
+					return;
+				}
+				precMap[arid] = a.precio_unitario;
+				precMap['_obs_' + arid] = a.observacion || '';
 			});
 			idsConservarArchivos = (det.archivos || []).map(function (x) { return x.id; });
 			armarTablaLineasDesdeCache(precMap);
@@ -199,7 +208,7 @@
 		var precios = [];
 		var obs = [];
 		$('#tabla-lineas-presupuesto tbody tr').each(function () {
-			var rid = $(this).data('requisicion-articulo-id');
+			var rid = Number($(this).data('requisicion-articulo-id'));
 			var p = $(this).find('.presupuesto-in-precio').val();
 			var o = $(this).find('.presupuesto-in-obs').val();
 			ids.push(rid);
@@ -297,7 +306,7 @@
 		var $tb = $('#tabla-lista-presupuestos tbody').empty();
 		var ro = readonly();
 		if (!rows || !rows.length) {
-			$tb.append('<tr><td colspan="5" class="text-center text-muted">Sin presupuestos cargados.</td></tr>');
+			$tb.append('<tr><td colspan="6" class="text-center text-muted">Sin presupuestos cargados.</td></tr>');
 			return;
 		}
 		rows.forEach(function (p) {
@@ -306,6 +315,8 @@
 			$tr.append('<td>' + escapeHtml(p.fecha || '') + '</td>');
 			$tr.append('<td>' + escapeHtml(p.proveedor_codigo || '') + ' — ' + escapeHtml(p.proveedor_nombre || '') + '</td>');
 			$tr.append('<td>' + escapeHtml(p.estado || '') + '</td>');
+			var numLin = typeof p.num_lineas_cotizadas === 'number' ? p.num_lineas_cotizadas : parseInt(p.num_lineas_cotizadas, 10) || 0;
+			$tr.append('<td class="text-center">' + numLin + '</td>');
 			$tr.append('<td>' + escapeHtml(archTxt) + '</td>');
 			var basePres = box().attr('data-url-presupuesto-base') || '';
 			var urlPdf = basePres + '/' + p.id + '/pdf';
@@ -357,7 +368,7 @@
 			renderTablaLista(data.presupuestos || []);
 		}).fail(function () {
 			$('#tabla-lista-presupuestos tbody').html(
-				'<tr><td colspan="5" class="text-center text-danger">No se pudieron cargar los presupuestos.</td></tr>'
+				'<tr><td colspan="6" class="text-center text-danger">No se pudieron cargar los presupuestos.</td></tr>'
 			);
 		});
 	};

@@ -92,8 +92,6 @@ class RequisicionService
             $payloadArticulos = array_merge($data, ['fecha' => $cabecera['fecha']]);
             $this->requisicion_articuloRepository->syncFromRequest($payloadArticulos, $requisicion->id);
 
-            $this->sincronizaMontoCabeceraDesdeArticulos($requisicion->id);
-
             $this->requisicion_archivoRepository->create($request, $requisicion->id);
 
             $this->arbolaprobacionService->procesaArbolaprobacion('RE', $requisicion->id, 'insert');
@@ -212,8 +210,6 @@ class RequisicionService
             $payloadArticulos = array_merge($data, ['fecha' => $cabecera['fecha']]);
             $this->requisicion_articuloRepository->syncFromRequest($payloadArticulos, $id);
 
-            $this->sincronizaMontoCabeceraDesdeArticulos($id);
-
             $this->requisicion_archivoRepository->update($request, $id);
 
             if (($data['estado'] ?? '') == $pendiente) {
@@ -262,27 +258,6 @@ class RequisicionService
         return $this->requisicion_estadoRepository->leeHistoriaRequisicion($requisicion_id);
     }
 
-    /**
-     * El árbol de aprobación usa cabecera.monto / moneda_id; el formulario no envía monto explícito.
-     */
-    private function sincronizaMontoCabeceraDesdeArticulos(int $requisicion_id): void
-    {
-        $req = $this->requisicionRepository->find($requisicion_id);
-        $monto = 0.0;
-        $moneda_id = $req->moneda_id;
-        foreach ($req->requisicion_articulos as $linea) {
-            $monto += (float) $linea->cantidad * (float) $linea->precio;
-            if (empty($moneda_id) && ! empty($linea->moneda_id)) {
-                $moneda_id = $linea->moneda_id;
-            }
-        }
-        $update = ['monto' => $monto];
-        if (! empty($moneda_id)) {
-            $update['moneda_id'] = $moneda_id;
-        }
-        $this->requisicionRepository->update($update, $requisicion_id);
-    }
-
     private static function armaCabecera(array $data)
     {
         return [
@@ -300,8 +275,6 @@ class RequisicionService
             'nroinscripcion' => $data['nroinscripcion'] ?? null,
             'formapago_id' => !empty($data['formapago_id']) ? $data['formapago_id'] : null,
             'estado' => $data['estado'] ?? null,
-            'monto' => $data['monto'] ?? 0,
-            'moneda_id' => $data['moneda_id'] ?? null,
             'ordencompra_id' => !empty($data['ordencompra_id']) ? $data['ordencompra_id'] : null,
             'creousuario_id' => $data['creousuario_id'] ?? Auth::user()->id,
         ];

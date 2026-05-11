@@ -42,22 +42,34 @@
             </div>
             <form action="{{route('actualiza_cliente_uif', ['id' => $data->id])}}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off">
                 @csrf @method("put")
-                <div align="center" style="margin: 5px;">
-                    <button type="button" id="botonform1" class="btn btn-primary btn-sm">
-                        <i class="fa fa-user"></i> Datos principales
-                    </button>
-                    <button type="button" id="botonform2" class="btn btn-primary btn-sm">
-                        <i class="fa fa-user"></i> Datos UIF
-                    </button>                    
-                    <button type="button" id="botonform3" class="btn btn-primary btn-sm">
-                        <span class="fa fa-copy"></span> Premios
-                    </button>
-                    <button type="button" id="botonform4" class="btn btn-info btn-sm">
-                        <span class="fa fa-copy"></span> Riesgo
-                    </button>
-                    <button type="button" id="botonform5" class="btn btn-info btn-sm">
-                        <span class="fa fa-copy"></span> Archivos asociados
-                    </button>
+                <div class="d-flex align-items-center flex-wrap" style="margin: 5px;">
+                    <div class="flex-grow-1" style="min-width: 0;"></div>
+                    <div class="d-flex flex-wrap justify-content-center align-items-center py-1" style="gap: 0.45rem;">
+                        <button type="button" id="botonform1" class="btn btn-primary btn-sm">
+                            <i class="fa fa-user"></i> Datos principales
+                        </button>
+                        <button type="button" id="botonform2" class="btn btn-primary btn-sm">
+                            <i class="fa fa-user"></i> Datos UIF
+                        </button>
+                        <button type="button" id="botonform3" class="btn btn-primary btn-sm">
+                            <span class="fa fa-copy"></span> Premios
+                        </button>
+                        <button type="button" id="botonform4" class="btn btn-info btn-sm">
+                            <span class="fa fa-copy"></span> Riesgo
+                        </button>
+                        <button type="button" id="botonform5" class="btn btn-info btn-sm">
+                            <span class="fa fa-copy"></span> Archivos asociados
+                        </button>
+                    </div>
+                    <div class="flex-grow-1 d-flex justify-content-end align-items-center py-1" style="min-width: 0;">
+                        @if (can('crear-cliente-premio-uif', false) && ! esSoloVisualizacionClienteUif())
+                        <span id="barra-alta-premio-uif-cliente" style="display: none;">
+                            <a href="{{ route('crea_cliente_premio_uif', ['id' => $data->id]) }}?return_cliente_tab=3" class="btn btn-info btn-sm">
+                                <i class="fa fa-plus-circle"></i> Dar de alta premio
+                            </a>
+                        </span>
+                        @endif
+                    </div>
                 </div>
                 <div class="card-body" style="padding-bottom: 0; padding-top: 5px;">
                     @include('uif.cliente_uif.form1')

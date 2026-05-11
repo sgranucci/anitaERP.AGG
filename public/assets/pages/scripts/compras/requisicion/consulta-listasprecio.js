@@ -57,16 +57,21 @@ $(function () {
 		event.preventDefault();
 		var $row = $(this).closest('tr.item-requisicion-articulo');
 		var articuloId = parseInt($row.find('.articulo_id').val(), 10);
-		if (!articuloId || articuloId <= 0) {
-			alert('Seleccione un artículo antes de consultar listas de precios.');
-			return;
-		}
+		var hayArticulo = !!(articuloId && articuloId > 0);
 
 		var proveedorVal = $('#proveedor_id').val();
 		var proveedorId = proveedorVal ? parseInt(proveedorVal, 10) : null;
+		var hayProveedor = !!(proveedorId && proveedorId > 0);
+
+		if (!hayArticulo && !hayProveedor) {
+			alert('Seleccione un artículo, o cargue un proveedor en la requisición, para consultar listas de precios.');
+			return;
+		}
+
 		var fechaRef = $('#fecha').val() || '';
 
 		var $modal = $('#consultalistasprecioModal');
+		var $tabla = $('#consultalistasprecioTabla');
 		var $body = $('#consultalistasprecioBody');
 		var $sub = $('#consultalistasprecioSubtitulo');
 		var $err = $('#consultalistasprecioError');
@@ -75,48 +80,77 @@ $(function () {
 		$err.addClass('d-none').text('');
 		$body.empty();
 		$sub.text('');
+		$tabla.removeClass('mode-proveedor');
 		$load.removeClass('d-none');
 		$modal.modal('show');
 
-		var params = { articulo_id: articuloId };
+		var params = {};
+		if (hayArticulo) {
+			params.articulo_id = articuloId;
+		}
+		if (hayProveedor) {
+			params.proveedor_id = proveedorId;
+		}
 		if (fechaRef) {
 			params.fecha_referencia = fechaRef;
-		}
-		if (proveedorId && proveedorId > 0) {
-			params.proveedor_id = proveedorId;
 		}
 
 		$.getJSON(urlConsulta, params)
 			.done(function (data) {
 				$load.addClass('d-none');
 
-				var art = data.articulo || {};
-				var sku = art.sku || '';
-				var desc = art.descripcion || '';
-				$('#consultalistasprecioTitulo').text(
-					'Listas de precios — ' + sku + (desc ? ' — ' + desc : '')
-				);
+				var modoProveedor = !!data.modo_proveedor;
+				$tabla.toggleClass('mode-proveedor', modoProveedor);
+
+				if (modoProveedor) {
+					var prov = data.proveedor || {};
+					var provLabel = (prov.codigo ? prov.codigo + ' — ' : '') + (prov.nombre || '');
+					$('#consultalistasprecioTitulo').text(
+						'Listas de precios del proveedor — ' + provLabel
+					);
+				} else {
+					var art = data.articulo || {};
+					var sku = art.sku || '';
+					var desc = art.descripcion || '';
+					$('#consultalistasprecioTitulo').text(
+						'Listas de precios — ' + sku + (desc ? ' — ' + desc : '')
+					);
+				}
 
 				var ref = data.fecha_referencia || '';
-				var subt =
-					'Referencia de vigencia: ' +
-					ref +
-					'. ' +
-					(data.filtrado_por_proveedor
-						? 'Proveedor cargado en la requisición: solo listas ACTIVAS de ese proveedor y precio vigente del ítem a esa fecha.'
-						: 'Sin proveedor en la requisición: todas las listas ACTIVAS que incluyen el ítem; orden por precio neto (tras % descuento) para comparar. La fila con menor precio neto se resalta.');
+				var subt;
+				if (modoProveedor) {
+					subt =
+						'Referencia de vigencia: ' +
+						ref +
+						'. Sin artículo seleccionado: se muestran las últimas listas ACTIVAS del proveedor y, por cada lista, el último precio vigente de cada artículo a esa fecha.';
+				} else {
+					subt =
+						'Referencia de vigencia: ' +
+						ref +
+						'. ' +
+						(data.filtrado_por_proveedor
+							? 'Proveedor cargado en la requisición: solo listas ACTIVAS de ese proveedor y precio vigente del ítem a esa fecha.'
+							: 'Sin proveedor en la requisición: todas las listas ACTIVAS que incluyen el ítem; orden por precio neto (tras % descuento) para comparar. La fila con menor precio neto se resalta.');
+				}
 				$sub.text(subt);
 
 				var filas = data.filas || [];
 				if (!filas.length) {
+					var colspan = $tabla.find('thead tr th').filter(function () {
+						return $(this).css('display') !== 'none';
+					}).length || 19;
+					var msg = modoProveedor
+						? 'El proveedor no tiene listas de precios ACTIVAS con artículos vigentes a la fecha indicada.'
+						: 'No hay precios en listas activas para este artículo a la fecha indicada.';
 					$body.append(
-						'<tr><td colspan="19" class="text-center text-muted">No hay precios en listas activas para este artículo a la fecha indicada.</td></tr>'
+						'<tr><td colspan="' + colspan + '" class="text-center text-muted">' + msg + '</td></tr>'
 					);
 					return;
 				}
 
 				var minPrecio = null;
-				if (!data.filtrado_por_proveedor) {
+				if (!modoProveedor && !data.filtrado_por_proveedor) {
 					filas.forEach(function (r) {
 						var p = cmpPrecio(r);
 						if (p !== null && (minPrecio === null || p < minPrecio)) {
@@ -130,6 +164,7 @@ $(function () {
 					var listaLabel = '#' + esc(String(r.lista_id || '')) + ' — ' + esc(r.lista_nombre || '');
 					var pcmp = cmpPrecio(r);
 					var esMin =
+						!modoProveedor &&
 						!data.filtrado_por_proveedor &&
 						minPrecio !== null &&
 						pcmp !== null &&
@@ -140,8 +175,12 @@ $(function () {
 						$tr.addClass('table-success');
 					}
 
-					function td(html) {
-						return $('<td></td>').html(html);
+					function td(html, cls) {
+						var $c = $('<td></td>').html(html);
+						if (cls) {
+							$c.addClass(cls);
+						}
+						return $c;
 					}
 
 					var monHtml = '<strong>' + esc(r.moneda_abreviatura || '') + '</strong>';
@@ -151,6 +190,10 @@ $(function () {
 					if (r.moneda_nombre) {
 						monHtml += '<br><small class="text-muted">' + esc(r.moneda_nombre) + '</small>';
 					}
+
+					// Columnas de artículo (solo visibles en modo proveedor, CSS las oculta cuando no aplica)
+					$tr.append(td(esc(r.articulo_sku || ''), 'col-articulo-info'));
+					$tr.append(td(esc(r.articulo_descripcion || ''), 'col-articulo-info'));
 
 					$tr.append(td(provLabel));
 					$tr.append(td(esc(r.proveedor_fantasia || '—')));

@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Compras;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionRequisicionPresupuesto;
 use App\Models\Compras\Requisicion;
-use App\Models\Compras\Requisicion_Presupuesto_Archivo;
+use App\Repositories\Compras\Requisicion_Presupuesto_ArchivoRepositoryInterface;
 use App\Repositories\Compras\RequisicionRepositoryInterface;
 use App\Services\Compras\RequisicionPresupuestoService;
 use App\Services\Compras\RequisicionService;
@@ -19,14 +19,18 @@ class RequisicionPresupuestoController extends Controller
 
     private $requisicionRepository;
 
+    private $presupuestoArchivoRepository;
+
     public function __construct(
         RequisicionPresupuestoService $presupuestoService,
         RequisicionService $requisicionService,
-        RequisicionRepositoryInterface $requisicionRepository
+        RequisicionRepositoryInterface $requisicionRepository,
+        Requisicion_Presupuesto_ArchivoRepositoryInterface $presupuestoArchivoRepository
     ) {
         $this->presupuestoService = $presupuestoService;
         $this->requisicionService = $requisicionService;
         $this->requisicionRepository = $requisicionRepository;
+        $this->presupuestoArchivoRepository = $presupuestoArchivoRepository;
     }
 
     private function puedeConsultar(): void
@@ -116,10 +120,7 @@ class RequisicionPresupuestoController extends Controller
     {
         $this->puedeConsultar();
 
-        $arch = Requisicion_Presupuesto_Archivo::query()
-            ->where('id', $archivo)
-            ->where('requisicion_presupuesto_id', $presupuesto)
-            ->first();
+        $arch = $this->presupuestoArchivoRepository->findPorPresupuestoYId($presupuesto, $archivo);
         if (! $arch) {
             abort(Response::HTTP_NOT_FOUND);
         }

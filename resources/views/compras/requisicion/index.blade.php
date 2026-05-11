@@ -43,6 +43,7 @@ Requisiciones
                             <th>Centro costo</th>
                             <th>Proveedor</th>
                             <th>Estado</th>
+                            <th class="text-right">Total</th>
                             <th>Items</th>
                             <th class="width40" data-orderable="false"></th>
                         </tr>
@@ -56,6 +57,9 @@ Requisiciones
                             <td><small>{{ $data->nombrecentrocosto }}</small></td>
                             <td><small>{{ $data->nombreproveedor }}</small></td>
                             <td><small>{{ $data->estado }}</small></td>
+                            <td class="text-right text-nowrap">
+                                <small>{{ number_format((float) ($data->monto ?? 0), 2, ',', '.') }} {{ $data->monedacabecera_abreviatura ?? '' }}</small>
+                            </td>
                             <td>
                                 @foreach ($data->requisicion_articulos as $item)
                                     <small>{{ $item->articulos->sku ?? '' }}-{{ $item->articulos->descripcion ?? '' }}-Cant.:{{ $item->cantidad }}-Precio:{{ $item->precio }}</small><br>

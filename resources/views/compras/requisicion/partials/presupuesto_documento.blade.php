@@ -1,11 +1,8 @@
 @php
+    use App\Support\Configuracion\EmpresaLogoArchivo;
     $nombreEmpresaLogo = optional($req->empresas)->nombre;
-    $rutaLogoEmpresa = $nombreEmpresaLogo
-        ? public_path('storage/imagenes/logos/'.$nombreEmpresaLogo.'.png')
-        : null;
-    $logoEmpresaDataUri = ($rutaLogoEmpresa && is_file($rutaLogoEmpresa))
-        ? 'data:image/png;base64,'.base64_encode(file_get_contents($rutaLogoEmpresa))
-        : null;
+    $logoEmpresaDat = EmpresaLogoArchivo::dataUriDesdeNombre($nombreEmpresaLogo);
+    $logoEmpresaDataUri = $logoEmpresaDat['uri'] ?? null;
     $articulos = $detalle['articulos'] ?? [];
     $totalCotizado = 0.0;
     foreach ($articulos as $_ln) {
@@ -18,7 +15,7 @@
     <tr>
         <td style="width:55%;">
             @if ($logoEmpresaDataUri)
-                <img class="logo-empresa" src="{{ $logoEmpresaDataUri }}" width="180" height="80" alt="">
+                <img class="logo-empresa" src="{{ $logoEmpresaDataUri }}" alt="">
             @endif
             <div style="font-size: 12px; font-weight: bold; margin-top: 4px;">{{ $nombreEmpresaLogo ?? '—' }}</div>
         </td>

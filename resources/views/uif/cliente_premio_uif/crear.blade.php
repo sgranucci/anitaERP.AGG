@@ -42,9 +42,15 @@ $( "#botonform0" ).click(function() {
                 @endif
                 <h3 class="card-title mb-0 flex-grow-1">Crear Premio UIF - {{$nombrecliente}} - {{$numerodocumento}}</h3>
                 <div class="card-tools ml-auto">
-                    <a href="{{route('consulta_cliente_premio_uif')}}" class="btn btn-outline-info btn-sm">
-                        <i class="fa fa-fw fa-reply-all"></i> Volver al listado
-                    </a>
+                    @if (!empty($volverAClienteUif) && !empty($referer))
+                        <a href="{{ $referer }}" class="btn btn-outline-info btn-sm">
+                            <i class="fa fa-fw fa-arrow-left"></i> Volver atrás
+                        </a>
+                    @else
+                        <a href="{{ route('consulta_cliente_premio_uif') }}" class="btn btn-outline-info btn-sm">
+                            <i class="fa fa-fw fa-reply-all"></i> Volver al listado
+                        </a>
+                    @endif
                 </div>
             </div>
             <form action="{{route('guarda_cliente_premio_uif')}}" id="form-general" class="form-horizontal form--label-right" method="POST"  enctype="multipart/form-data"  autocomplete="off">

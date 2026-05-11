@@ -15,7 +15,14 @@
         .muted { color: #555; font-size: 8px; }
         .pdf-cabecera { margin-bottom: 10px; }
         .pdf-cabecera td { border: none !important; vertical-align: top; }
-        .pdf-cabecera .logo-empresa { max-width: 200px; max-height: 90px; }
+        .pdf-cabecera .logo-empresa {
+            max-width: 180px;
+            max-height: 56px;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            vertical-align: middle;
+        }
         .items th, .items td { font-size: 10px; padding: 4px 5px; word-wrap: break-word; }
         .items .num { text-align: right; white-space: nowrap; }
         .items .cen { text-align: center; }

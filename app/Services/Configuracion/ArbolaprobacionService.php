@@ -9,7 +9,9 @@ use App\Repositories\Ordenventa\Ordenventa_EstadoRepositoryInterface;
 use App\Repositories\Compras\RequisicionRepositoryInterface;
 use App\Repositories\Compras\Requisicion_EstadoRepositoryInterface;
 use App\Repositories\Admin\UsuarioRepositoryInterface;
+use App\Queries\Configuracion\CotizacionQueryInterface;
 use App\Services\Configuracion\CotizacionService;
+use App\Support\Compras\RequisicionTotalesCabecera;
 use App\Models\Configuracion\Arbolaprobacion_Movimiento;
 use App\Models\Configuracion\Arbolaprobacion;
 use App\Models\Configuracion\Arbolaprobacion_Nivel;
@@ -34,6 +36,7 @@ class ArbolaprobacionService
 	private $requisicion_estadoRepository;
 	private $usuarioRepository;
 	private $cotizacionService;
+	private CotizacionQueryInterface $cotizacionQuery;
 
 	public function __construct(ArbolaprobacionRepositoryInterface $arbolaprobacionrepository,
 								Arbolaprobacion_MovimientoRepositoryInterface $arbolaprobacion_movimientorepository,
@@ -42,7 +45,8 @@ class ArbolaprobacionService
 								RequisicionRepositoryInterface $requisicionrepository,
 								Requisicion_EstadoRepositoryInterface $requisicion_estadorepository,
 								UsuarioRepositoryInterface $usuariorepository,
-								CotizacionService $cotizacionservice)
+								CotizacionService $cotizacionservice,
+								CotizacionQueryInterface $cotizacionquery)
 	{
 		$this->arbolaprobacionRepository = $arbolaprobacionrepository;
 		$this->arbolaprobacion_movimientoRepository = $arbolaprobacion_movimientorepository;
@@ -52,6 +56,7 @@ class ArbolaprobacionService
 		$this->requisicion_estadoRepository = $requisicion_estadorepository;
 		$this->usuarioRepository = $usuariorepository;
 		$this->cotizacionService = $cotizacionservice;
+		$this->cotizacionQuery = $cotizacionquery;
 	}
 
 	public function procesaArbolaprobacion($tipocomprobante, $comprobante_id, $operacion)
@@ -195,10 +200,13 @@ class ArbolaprobacionService
 		$centrocostoArbol = $this->centroCostoParaArbolAprobacionDesdeModelo($requisicion);
 
 		while (true) {
+			$requisicion = $this->requisicionRepository->find($comprobante_id);
+			$totalesReq = RequisicionTotalesCabecera::desdeModelo($requisicion, $this->cotizacionQuery);
+
 			$estadoAprobacionActual = $this->leeAprobacionComprobante($tipoarbol, $comprobante_id);
 			$proximoNivel = $this->buscaProximoNivel($arbol, $centrocostoArbol,
 				$estadoAprobacionActual['nivelactual'],
-				$requisicion->fecha, $requisicion->monto, $requisicion->moneda_id);
+				$requisicion->fecha, $totalesReq['monto'], $totalesReq['moneda_id']);
 
 			if ($proximoNivel['proximonivel'] === -1) {
 				$uid = Auth::check() ? Auth::user()->id : $requisicion->creousuario_id;
@@ -412,57 +420,15 @@ class ArbolaprobacionService
 	 */
 	private function armaExtrasMailRequisicion(Requisicion $requisicion, ?string $estadoAlAprobarEsteNivel): array
 	{
-		$totales = $this->montoTotalItemsEnMonedaPrimeraLinea($requisicion);
+		$totales = RequisicionTotalesCabecera::desdeModelo($requisicion, $this->cotizacionQuery);
 
 		return [
 			'estado_tras_aprobar' => $estadoAlAprobarEsteNivel !== null && $estadoAlAprobarEsteNivel !== ''
 				? $estadoAlAprobarEsteNivel
 				: null,
 			'monto_items' => $totales['monto'],
-			'moneda_abrev_items' => $totales['moneda_abreviatura'],
+			'moneda_abrev_items' => $totales['monedacabecera_abreviatura'],
 		];
-	}
-
-	/**
-	 * Suma cantidad × precio de cada ítem, expresado en la moneda del primer ítem (por id),
-	 * usando cotización del día de la requisición (tabla cotizacion, última fecha ≤ fecha req.).
-	 *
-	 * @return array{monto: float, moneda_abreviatura: string}
-	 */
-	private function montoTotalItemsEnMonedaPrimeraLinea(Requisicion $requisicion): array
-	{
-		$articulos = $requisicion->requisicion_articulos->sortBy('id');
-		if ($articulos->isEmpty()) {
-			return ['monto' => 0.0, 'moneda_abreviatura' => ''];
-		}
-
-		$primero = $articulos->first();
-		$monedaDestinoId = $primero->moneda_id;
-		$fecha = $requisicion->fecha;
-		$total = 0.0;
-
-		foreach ($articulos as $linea) {
-			$lineMonedaId = $linea->moneda_id ?: $monedaDestinoId;
-			$sub = (float) $linea->cantidad * (float) $linea->precio;
-			if (! $monedaDestinoId || (int) $lineMonedaId === (int) $monedaDestinoId) {
-				$total += $sub;
-
-				continue;
-			}
-			$cot = $this->cotizacionService->leeCotizacionDiaria($fecha, $lineMonedaId);
-			$coef = calculaCoeficienteMoneda($monedaDestinoId, $lineMonedaId, $cot);
-			if ($coef == 0) {
-				$coef = 1.;
-			}
-			$total += $sub * $coef;
-		}
-
-		$abrev = '';
-		if ($primero->relationLoaded('monedas') && $primero->monedas) {
-			$abrev = (string) ($primero->monedas->abreviatura ?? '');
-		}
-
-		return ['monto' => $total, 'moneda_abreviatura' => $abrev];
 	}
 
 	public function aprobar($tipocomprobante, $comprobante_id, $aprobacion_id, $usuario_id)
@@ -507,13 +473,14 @@ class ArbolaprobacionService
 				$arbol = $this->arbolaprobacionRepository->find($movimientoPre->arbolaprobacion_id);
 				$requisicion = $this->requisicionRepository->find($comprobante_id);
 				$centrocostoArbol = $this->centroCostoParaArbolAprobacionDesdeModelo($requisicion);
+				$totalesReq = RequisicionTotalesCabecera::desdeModelo($requisicion, $this->cotizacionQuery);
 				$nivelCfg = $this->encuentraNivelCoincidente(
 					$arbol,
 					$centrocostoArbol,
 					$movimientoPre->nivel,
 					$requisicion->fecha,
-					$requisicion->monto,
-					$requisicion->moneda_id
+					$totalesReq['monto'],
+					$totalesReq['moneda_id']
 				);
 				if ($nivelCfg !== null && filled($nivelCfg->requisicion_estado_al_aprobar)) {
 					$this->aplicaEstadoRequisicionPorNombre(
@@ -861,7 +828,8 @@ class ArbolaprobacionService
 		$cc = $this->centroCostoParaArbolAprobacionDesdeModelo($req);
 		$nivelActual = $this->leeAprobacionComprobante($nombreTipo, $req->id)['nivelactual'];
 		$arbol = $trees->first();
-		$prox = $this->buscaProximoNivel($arbol, $cc, $nivelActual, $req->fecha, $req->monto, $req->moneda_id);
+		$totalesReq = RequisicionTotalesCabecera::desdeModelo($req, $this->cotizacionQuery);
+		$prox = $this->buscaProximoNivel($arbol, $cc, $nivelActual, $req->fecha, $totalesReq['monto'], $totalesReq['moneda_id']);
 		if ($prox['proximonivel'] === 0) {
 			throw new \RuntimeException('El árbol de aprobación no tiene un nivel aplicable para el centro de costo de destino, el monto total y la moneda de la requisición.');
 		}
@@ -959,7 +927,9 @@ class ArbolaprobacionService
 			$cc = (int) $req->centrocosto_id;
 		}
 
-		return $movimientos->map(function ($m) use ($arbol, $cc, $req, $ccIndicacionError) {
+		$totalesReq = RequisicionTotalesCabecera::desdeModelo($req, $this->cotizacionQuery);
+
+		return $movimientos->map(function ($m) use ($arbol, $cc, $req, $ccIndicacionError, $totalesReq) {
 			$row = $m->toArray();
 			if ($ccIndicacionError !== null) {
 				$row['indicacion_estado_requisicion'] = $ccIndicacionError;
@@ -972,8 +942,8 @@ class ArbolaprobacionService
 					$cc,
 					(int) $m->nivel,
 					$req->fecha,
-					$req->monto,
-					$req->moneda_id
+					$totalesReq['monto'],
+					$totalesReq['moneda_id']
 				);
 				$est = $nivelCfg && filled($nivelCfg->requisicion_estado_al_aprobar)
 					? trim((string) $nivelCfg->requisicion_estado_al_aprobar)
@@ -1028,29 +998,7 @@ class ArbolaprobacionService
 	 */
 	private function montoYMonedaDesdeLineasRequisicionRequest(array $data): array
 	{
-		$articulo_ids = $data['articulo_ids'] ?? [];
-		$monto = 0.0;
-		$monedaId = null;
-		if (! is_array($articulo_ids)) {
-			return [$monto, $monedaId];
-		}
-		$n = count($articulo_ids);
-		for ($i = 0; $i < $n; $i++) {
-			$aid = $articulo_ids[$i] ?? null;
-			if ($aid === null || $aid === '') {
-				continue;
-			}
-			$cant = (float) ($data['cantidades'][$i] ?? 0);
-			if ($cant <= 0) {
-				continue;
-			}
-			$monto += $cant * (float) ($data['precios'][$i] ?? 0);
-			if (! $monedaId && ! empty($data['moneda_linea_ids'][$i])) {
-				$monedaId = (int) $data['moneda_linea_ids'][$i];
-			}
-		}
-
-		return [$monto, $monedaId];
+		return RequisicionTotalesCabecera::montoYMonedaDesdeRequest($data, $this->cotizacionQuery);
 	}
 }
 

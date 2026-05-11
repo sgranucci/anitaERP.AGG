@@ -6,6 +6,9 @@ use App\Models\Compras\Requisicion;
 use App\Models\Compras\Requisicion_Presupuesto;
 use App\Models\Compras\Requisicion_Presupuesto_Archivo;
 use App\Models\Compras\Requisicion_Presupuesto_Articulo;
+use App\Repositories\Compras\Requisicion_Presupuesto_ArchivoRepositoryInterface;
+use App\Repositories\Compras\Requisicion_Presupuesto_ArticuloRepositoryInterface;
+use App\Repositories\Compras\Requisicion_PresupuestoRepositoryInterface;
 use App\Repositories\Compras\RequisicionRepositoryInterface;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -15,9 +18,22 @@ class RequisicionPresupuestoService
 {
     private $requisicionRepository;
 
-    public function __construct(RequisicionRepositoryInterface $requisicionRepository)
-    {
+    private $presupuestoRepository;
+
+    private $presupuestoArticuloRepository;
+
+    private $presupuestoArchivoRepository;
+
+    public function __construct(
+        RequisicionRepositoryInterface $requisicionRepository,
+        Requisicion_PresupuestoRepositoryInterface $presupuestoRepository,
+        Requisicion_Presupuesto_ArticuloRepositoryInterface $presupuestoArticuloRepository,
+        Requisicion_Presupuesto_ArchivoRepositoryInterface $presupuestoArchivoRepository
+    ) {
         $this->requisicionRepository = $requisicionRepository;
+        $this->presupuestoRepository = $presupuestoRepository;
+        $this->presupuestoArticuloRepository = $presupuestoArticuloRepository;
+        $this->presupuestoArchivoRepository = $presupuestoArchivoRepository;
     }
 
     public function directorioPresupuesto(int $requisicionId, int $presupuestoId): string
@@ -30,18 +46,7 @@ class RequisicionPresupuestoService
      */
     public function listarParaRequisicion(int $requisicionId): array
     {
-        $items = Requisicion_Presupuesto::query()
-            ->where('requisicion_id', $requisicionId)
-            ->with([
-                'proveedores',
-                'condicionentregas',
-                'condicioncompras',
-                'condicionpagos',
-                'requisicion_presupuesto_archivos',
-            ])
-            ->orderByDesc('fecha')
-            ->orderByDesc('id')
-            ->get();
+        $items = $this->presupuestoRepository->listarCabecerasPorRequisicion($requisicionId);
 
         return $items->map(function (Requisicion_Presupuesto $p) use ($requisicionId) {
             return $this->serializaCabecera($p, $requisicionId);
@@ -77,25 +82,14 @@ class RequisicionPresupuestoService
      */
     public function obtenerDetalle(int $requisicionId, int $presupuestoId): ?array
     {
-        $p = Requisicion_Presupuesto::query()
-            ->where('requisicion_id', $requisicionId)
-            ->where('id', $presupuestoId)
-            ->with([
-                'proveedores',
-                'condicionentregas',
-                'condicioncompras',
-                'condicionpagos',
-                'requisicion_presupuesto_articulos.requisicion_articulo.articulos',
-                'requisicion_presupuesto_articulos.requisicion_articulo.monedas',
-                'requisicion_presupuesto_archivos',
-            ])
-            ->first();
+        $p = $this->presupuestoRepository->findDetalle($requisicionId, $presupuestoId);
 
         if (! $p) {
             return null;
         }
 
         $cabecera = $this->serializaCabecera($p, $requisicionId);
+        $cabecera['lineas_requisicion'] = $this->lineasBaseRequisicion($requisicionId);
         $cabecera['articulos'] = $p->requisicion_presupuesto_articulos->map(function (Requisicion_Presupuesto_Articulo $linea) {
             $ra = $linea->requisicion_articulo;
             $art = $ra ? $ra->articulos : null;
@@ -128,6 +122,7 @@ class RequisicionPresupuestoService
 
         return [
             'id' => $p->id,
+            'num_lineas_cotizadas' => (int) ($p->requisicion_presupuesto_articulos_count ?? 0),
             'requisicion_id' => $p->requisicion_id,
             'fecha' => $p->fecha ? substr((string) $p->fecha, 0, 10) : null,
             'condicionentrega_id' => $p->condicionentrega_id,
@@ -171,7 +166,7 @@ class RequisicionPresupuestoService
         DB::beginTransaction();
         try {
             $estado = $request->input('estado');
-            $pres = Requisicion_Presupuesto::create([
+            $pres = $this->presupuestoRepository->create([
                 'requisicion_id' => $requisicionId,
                 'fecha' => $request->input('fecha'),
                 'condicionentrega_id' => $request->input('condicionentrega_id') ?: null,
@@ -182,7 +177,7 @@ class RequisicionPresupuestoService
             ]);
 
             foreach ($lineas as $linea) {
-                Requisicion_Presupuesto_Articulo::create([
+                $this->presupuestoArticuloRepository->create([
                     'requisicion_presupuesto_id' => $pres->id,
                     'requisicion_articulo_id' => $linea['requisicion_articulo_id'],
                     'precio_unitario' => $linea['precio_unitario'],
@@ -210,10 +205,7 @@ class RequisicionPresupuestoService
     {
         $req = $this->requisicionRepository->find($requisicionId);
 
-        $pres = Requisicion_Presupuesto::query()
-            ->where('requisicion_id', $requisicionId)
-            ->where('id', $presupuestoId)
-            ->first();
+        $pres = $this->presupuestoRepository->findCabecera($requisicionId, $presupuestoId);
         if (! $pres) {
             return ['ok' => false, 'error' => 'Presupuesto no encontrado.'];
         }
@@ -226,7 +218,7 @@ class RequisicionPresupuestoService
         DB::beginTransaction();
         try {
             $estado = $request->input('estado');
-            $pres->update([
+            $this->presupuestoRepository->updateCabecera($pres, [
                 'fecha' => $request->input('fecha'),
                 'condicionentrega_id' => $request->input('condicionentrega_id') ?: null,
                 'condicioncompra_id' => $request->input('condicioncompra_id') ?: null,
@@ -235,9 +227,9 @@ class RequisicionPresupuestoService
                 'estado' => $estado,
             ]);
 
-            Requisicion_Presupuesto_Articulo::query()->where('requisicion_presupuesto_id', $pres->id)->delete();
+            $this->presupuestoArticuloRepository->deletePorPresupuesto($pres->id);
             foreach ($lineas as $linea) {
-                Requisicion_Presupuesto_Articulo::create([
+                $this->presupuestoArticuloRepository->create([
                     'requisicion_presupuesto_id' => $pres->id,
                     'requisicion_articulo_id' => $linea['requisicion_articulo_id'],
                     'precio_unitario' => $linea['precio_unitario'],
@@ -263,10 +255,7 @@ class RequisicionPresupuestoService
      */
     public function eliminar(int $requisicionId, int $presupuestoId): array
     {
-        $pres = Requisicion_Presupuesto::query()
-            ->where('requisicion_id', $requisicionId)
-            ->where('id', $presupuestoId)
-            ->first();
+        $pres = $this->presupuestoRepository->findCabecera($requisicionId, $presupuestoId);
         if (! $pres) {
             return ['ok' => false, 'error' => 'Presupuesto no encontrado.'];
         }
@@ -274,9 +263,9 @@ class RequisicionPresupuestoService
         $dir = $this->directorioPresupuesto($requisicionId, $presupuestoId);
         DB::beginTransaction();
         try {
-            Requisicion_Presupuesto_Articulo::query()->where('requisicion_presupuesto_id', $pres->id)->delete();
-            Requisicion_Presupuesto_Archivo::query()->where('requisicion_presupuesto_id', $pres->id)->delete();
-            $pres->delete();
+            $this->presupuestoArticuloRepository->deletePorPresupuesto($pres->id);
+            $this->presupuestoArchivoRepository->deletePorPresupuesto($pres->id);
+            $this->presupuestoRepository->deleteCabecera($pres);
             DB::commit();
         } catch (\Throwable $e) {
             DB::rollBack();
@@ -333,11 +322,7 @@ class RequisicionPresupuestoService
         }
         $activo = Requisicion_Presupuesto::$enumEstado[array_search('A', array_column(Requisicion_Presupuesto::$enumEstado, 'valor'))]['nombre'];
 
-        Requisicion_Presupuesto::query()
-            ->where('requisicion_id', $requisicionId)
-            ->where('id', '<>', $presupuestoIdActual)
-            ->where('estado', $elegido)
-            ->update(['estado' => $activo]);
+        $this->presupuestoRepository->demoteOtrosElegidos($requisicionId, $presupuestoIdActual, $elegido, $activo);
     }
 
     private function guardaArchivosSubidos(Request $request, int $requisicionId, int $presupuestoId): void
@@ -354,7 +339,7 @@ class RequisicionPresupuestoService
             if ($archivo) {
                 $name = $archivo->getClientOriginalName();
                 $archivo->move($path, $name);
-                Requisicion_Presupuesto_Archivo::create([
+                $this->presupuestoArchivoRepository->create([
                     'requisicion_presupuesto_id' => $presupuestoId,
                     'nombrearchivo' => $name,
                 ]);
@@ -370,9 +355,7 @@ class RequisicionPresupuestoService
         }
         $idsConservar = array_map('intval', $idsConservar);
 
-        $existentes = Requisicion_Presupuesto_Archivo::query()
-            ->where('requisicion_presupuesto_id', $presupuestoId)
-            ->get();
+        $existentes = $this->presupuestoArchivoRepository->listarPorPresupuesto($presupuestoId);
 
         foreach ($existentes as $ex) {
             if (! in_array((int) $ex->id, $idsConservar, true)) {
@@ -380,7 +363,7 @@ class RequisicionPresupuestoService
                 if (is_file($full)) {
                     @unlink($full);
                 }
-                $ex->delete();
+                $this->presupuestoArchivoRepository->deleteArchivo($ex);
             }
         }
 

@@ -70,12 +70,12 @@ Premios UIF
                             <td>{{$data->id}}</td>
                             <td>{{$data->nombrecliente}}</td>
                             <td>{{$data->nombresala}}</td>
-                            <td><small>{{$data->nombrejuego}}</small></td>
-                            <td><small>{{$data->fechaentrega}}</small></td>
-                            <td style="text-align: right;"><small>{{ number_format((float) ($data->monto ?? 0), 2, ',', '.') }}</small></td>
-                            <td><small>{{$data->posicion ?? ''}}</small></td>
-                            <td><small>{{$data->numerotito ?? ''}}</small></td>
-                            <td><small>{{$data->nombreformapago}}</small></td>
+                            <td>{{$data->nombrejuego}}</td>
+                            <td>@if(!empty($data->fechaentrega)){{\Carbon\Carbon::parse($data->fechaentrega)->format('d/m/Y H:i')}}@else<span class="text-muted">—</span>@endif</td>
+                            <td style="text-align: right;">{{ number_format((float) ($data->monto ?? 0), 2, ',', '.') }}</td>
+                            <td>{{$data->posicion ?? ''}}</td>
+                            <td>{{$data->numerotito ?? ''}}</td>
+                            <td>{{$data->nombreformapago}}</td>
                             <td class="text-center align-middle premio-foto-preview">
                                 @if (! empty($data->foto ?? null))
                                     @if (can('editar-cliente-premio-uif', false))

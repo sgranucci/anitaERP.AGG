@@ -16,7 +16,15 @@
         .muted { color: #555; font-size: 8px; }
         .pdf-cabecera { margin-bottom: 10px; }
         .pdf-cabecera td { border: none !important; vertical-align: top; }
-        .pdf-cabecera .logo-empresa { max-width: 200px; max-height: 90px; }
+        /* Misma caja visual que logos del listado PDF (cabecera requisiciones) */
+        .pdf-cabecera .logo-empresa {
+            max-width: 180px;
+            max-height: 56px;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            vertical-align: middle;
+        }
         .items th, .items td { font-size: 10px; padding: 4px 5px; word-wrap: break-word; }
         .items .num { text-align: right; white-space: nowrap; }
         .items .cen { text-align: center; }
@@ -26,19 +34,16 @@
 </head>
 <body>
     @php
+        use App\Support\Configuracion\EmpresaLogoArchivo;
         $nombreEmpresaLogo = optional($data->empresas)->nombre;
-        $rutaLogoEmpresa = $nombreEmpresaLogo
-            ? public_path('storage/imagenes/logos/'.$nombreEmpresaLogo.'.png')
-            : null;
-        $logoEmpresaDataUri = ($rutaLogoEmpresa && is_file($rutaLogoEmpresa))
-            ? 'data:image/png;base64,'.base64_encode(file_get_contents($rutaLogoEmpresa))
-            : null;
+        $logoEmpresaDat = EmpresaLogoArchivo::dataUriDesdeNombre($nombreEmpresaLogo);
+        $logoEmpresaDataUri = $logoEmpresaDat['uri'] ?? null;
     @endphp
     <table class="pdf-cabecera">
         <tr>
             <td style="width:55%;">
                 @if ($logoEmpresaDataUri)
-                    <img class="logo-empresa" src="{{ $logoEmpresaDataUri }}" width="180" height="80" alt="">
+                    <img class="logo-empresa" src="{{ $logoEmpresaDataUri }}" alt="">
                 @endif
                 <div style="font-size: 12px; font-weight: bold; margin-top: 4px;">{{ $nombreEmpresaLogo ?? '—' }}</div>
             </td>
@@ -97,14 +102,12 @@
             <td class="lbl">Comentario</td>
             <td>{{ $data->comentario ?? '—' }}</td>
         </tr>
-        @if(isset($data->monto))
         <tr>
-            <td class="lbl">Monto cabecera</td>
-            <td class="num">{{ number_format((float) $data->monto, 2, ',', '.') }}</td>
-            <td class="lbl">Moneda cabecera</td>
-            <td>{{ $data->moneda_id ?? '—' }}</td>
+            <td class="lbl">Total (primer ítem, con conversión)</td>
+            <td class="num">{{ number_format((float) ($data->monto ?? 0), 2, ',', '.') }}</td>
+            <td class="lbl">Moneda referencia</td>
+            <td>{{ $data->monedacabecera_abreviatura ?? '—' }}</td>
         </tr>
-        @endif
     </table>
 
     <table>

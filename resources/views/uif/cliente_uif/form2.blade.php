@@ -128,7 +128,7 @@
 			</div>
 			<div class="form-group row" id='div-fechavencimientoactividad'>
 				<label class="col-lg-4 col-form-label requerido">Fecha Vto. Actividad Econ.</label>
-				<input type="date" name="fechavencimientoactividad" id="fechavencimientoactividad" class="col-lg-3 form-control" value="{{old('fechavencimientoactividad', $data['fechavencimientoactividad'] ?? '')}}" class="col-lg-6 form-control" placeholder="Fecha Confirmación Ultima Firma PEP">
+				<input type="date" name="fechavencimientoactividad" id="fechavencimientoactividad" class="col-lg-3 form-control" value="{{ old('fechavencimientoactividad', (isset($data) && !empty($data->fechavencimientoactividad)) ? \Carbon\Carbon::parse($data->fechavencimientoactividad)->format('Y-m-d') : '') }}" class="col-lg-6 form-control" placeholder="Fecha Confirmación Ultima Firma PEP">
 			</div>		
 			<div class="form-group row" id="div-firmodeclaracionjurada">
 				<label for="firmodeclaracionjurada" class="col-lg-4 col-form-label requerido">Firmo Decl.Jur. Actividad Econ.</label>

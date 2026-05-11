@@ -30,6 +30,7 @@
                     <th>Fecha</th>
                     <th>Proveedor</th>
                     <th>Estado</th>
+                    <th>Ítems cotizados</th>
                     <th>Archivos</th>
                     @if(empty($visualizar))
                     <th style="width:120px;"></th>
@@ -39,7 +40,7 @@
                 </tr>
             </thead>
             <tbody>
-                <tr id="fila-carga-presupuestos"><td colspan="{{ empty($visualizar) ? '5' : '5' }}" class="text-center text-muted">Cargue la solapa para ver los presupuestos…</td></tr>
+                <tr id="fila-carga-presupuestos"><td colspan="6" class="text-center text-muted">Cargue la solapa para ver los presupuestos…</td></tr>
             </tbody>
         </table>
     </div>

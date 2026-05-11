@@ -21,7 +21,9 @@ use App\Models\Compras\Requisicion_Archivo;
 use App\Services\Compras\RequisicionService;
 use App\Services\Configuracion\ArbolaprobacionService;
 use App\Queries\Compras\RequisicionQueryInterface;
+use App\Queries\Configuracion\CotizacionQueryInterface;
 use App\Exports\Compras\RequisicionExport;
+use App\Support\Compras\RequisicionTotalesCabecera;
 use App\Models\Stock\Articulo;
 use Illuminate\Http\Request;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -72,7 +74,7 @@ class RequisicionController extends Controller
 
         $busqueda = $request->busqueda;
 
-        $requisicion = $this->requisicionQuery->leeRequisicion($busqueda, true);
+        $requisicion = $this->requisicionQuery->leeRequisicion($busqueda, true, true);
 
         $datas = [
             'requisicion' => $requisicion,
@@ -95,7 +97,7 @@ class RequisicionController extends Controller
 
         switch ($formato) {
             case 'PDF':
-                $requisicion = $this->requisicionQuery->leeRequisicion($busqueda, false);
+                $requisicion = $this->requisicionQuery->leeRequisicion($busqueda, false, true);
 
                 $view = \View::make('compras.requisicion.listado', compact('requisicion'))
                     ->render();
@@ -104,7 +106,7 @@ class RequisicionController extends Controller
 
                 $pdf = \App::make('dompdf.wrapper');
                 $pdf->setPaper('legal', 'landscape');
-                $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
+                $pdf->loadHTML($view, 'UTF-8')->save($path.'/'.$nombre_pdf.'.pdf');
 
                 return response()->download($path.'/'.$nombre_pdf.'.pdf');
 
@@ -119,7 +121,7 @@ class RequisicionController extends Controller
                     ->download('requisicion.csv', \Maatwebsite\Excel\Excel::CSV);
         }
 
-        $requisicion = $this->requisicionQuery->leeRequisicion($busqueda, true);
+        $requisicion = $this->requisicionQuery->leeRequisicion($busqueda, true, true);
         $datas = [
             'requisicion' => $requisicion,
             'busqueda' => $busqueda,
@@ -183,6 +185,7 @@ class RequisicionController extends Controller
         $data = $this->requisicionRepository->find($id);
         $data->loadMissing([
             'requisicion_estados.usuarios',
+            'requisicion_articulos.monedas',
             'requisicion_articulos.centrocostos_destino',
             'requisicion_presupuestos' => function ($q) {
                 $q->orderByDesc('fecha')->orderByDesc('id');
@@ -195,6 +198,8 @@ class RequisicionController extends Controller
             'requisicion_presupuestos.requisicion_presupuesto_articulos.requisicion_articulo.monedas',
             'requisicion_presupuestos.requisicion_presupuesto_archivos',
         ]);
+
+        RequisicionTotalesCabecera::aplicarAtributosVirtuales($data, app(CotizacionQueryInterface::class));
 
         $arbolMovimientos = $this->arbolaprobacion_movimientoRepository->findPorRequisicion((int) $id);
 
@@ -339,8 +344,13 @@ class RequisicionController extends Controller
     }
 
     /**
-     * Listas de precio de compra (proveedor) para un artículo: precio vigente a fecha de referencia,
-     * solo listas ACTIVAS; opcionalmente filtradas al proveedor cargado en la requisición.
+     * Listas de precio de compra (proveedor) para consulta desde una requisición.
+     *
+     * Modos de operación:
+     *  - Modo artículo (articulo_id > 0): precio vigente a la fecha de referencia para ese artículo,
+     *    sobre listas ACTIVAS. Si además llega proveedor_id, se filtran al proveedor.
+     *  - Modo proveedor (sin articulo_id, con proveedor_id > 0): últimas listas vigentes del proveedor
+     *    (estado ACTIVA), incluyendo todos los artículos con su precio vigente a la fecha de referencia.
      */
     public function consultaListasPrecioArticulo(Request $request)
     {
@@ -349,13 +359,35 @@ class RequisicionController extends Controller
         }
 
         $articuloId = (int) $request->query('articulo_id', 0);
-        if ($articuloId <= 0) {
-            return response()->json(['message' => 'articulo_id es obligatorio.'], 422);
+
+        $proveedorId = $request->query('proveedor_id');
+        $proveedorId = ($proveedorId !== null && $proveedorId !== '' && (int) $proveedorId > 0)
+            ? (int) $proveedorId
+            : null;
+
+        if ($articuloId <= 0 && $proveedorId === null) {
+            return response()->json([
+                'message' => 'Indique un artículo o un proveedor para consultar listas de precios.',
+            ], 422);
         }
 
-        $articulo = Articulo::query()->select('id', 'sku', 'descripcion')->find($articuloId);
-        if (! $articulo) {
-            return response()->json(['message' => 'Artículo no encontrado.'], 404);
+        $articulo = null;
+        if ($articuloId > 0) {
+            $articulo = Articulo::query()->select('id', 'sku', 'descripcion')->find($articuloId);
+            if (! $articulo) {
+                return response()->json(['message' => 'Artículo no encontrado.'], 404);
+            }
+        }
+
+        $proveedor = null;
+        if ($proveedorId !== null) {
+            $proveedor = DB::table('proveedor')
+                ->select('id', 'codigo', 'nombre', 'fantasia')
+                ->where('id', $proveedorId)
+                ->first();
+            if (! $proveedor) {
+                return response()->json(['message' => 'Proveedor no encontrado.'], 404);
+            }
         }
 
         $fechaRef = $request->query('fecha_referencia');
@@ -363,41 +395,70 @@ class RequisicionController extends Controller
             $fechaRef = date('Y-m-d');
         }
 
-        $proveedorId = $request->query('proveedor_id');
-        $proveedorId = ($proveedorId !== null && $proveedorId !== '' && (int) $proveedorId > 0)
-            ? (int) $proveedorId
-            : null;
-        $filtradoPorProveedor = $proveedorId !== null;
+        $modoArticulo = $articuloId > 0;
+        $modoProveedor = ! $modoArticulo && $proveedorId !== null;
+        $filtradoPorProveedor = $modoArticulo && $proveedorId !== null;
 
-        $subMaxFv = DB::table('listaprecio_proveedor_articulo')
-            ->select('listaprecio_proveedor_id', DB::raw('MAX(fechavigencia) as max_fv'))
-            ->where('articulo_id', $articuloId)
-            ->whereDate('fechavigencia', '<=', $fechaRef)
-            ->groupBy('listaprecio_proveedor_id');
+        if ($modoArticulo) {
+            $subMaxFv = DB::table('listaprecio_proveedor_articulo')
+                ->select('listaprecio_proveedor_id', DB::raw('MAX(fechavigencia) as max_fv'))
+                ->where('articulo_id', $articuloId)
+                ->whereDate('fechavigencia', '<=', $fechaRef)
+                ->groupBy('listaprecio_proveedor_id');
 
-        $lineIds = DB::table('listaprecio_proveedor_articulo as lpa')
-            ->joinSub($subMaxFv, 'mx', function ($join) {
-                $join->on('lpa.listaprecio_proveedor_id', '=', 'mx.listaprecio_proveedor_id')
-                    ->on('lpa.fechavigencia', '=', 'mx.max_fv');
-            })
-            ->where('lpa.articulo_id', $articuloId)
-            ->groupBy('lpa.listaprecio_proveedor_id')
-            ->select(DB::raw('MAX(lpa.id) as id'))
-            ->pluck('id')
-            ->filter()
-            ->values()
-            ->all();
+            $lineIds = DB::table('listaprecio_proveedor_articulo as lpa')
+                ->joinSub($subMaxFv, 'mx', function ($join) {
+                    $join->on('lpa.listaprecio_proveedor_id', '=', 'mx.listaprecio_proveedor_id')
+                        ->on('lpa.fechavigencia', '=', 'mx.max_fv');
+                })
+                ->where('lpa.articulo_id', $articuloId)
+                ->groupBy('lpa.listaprecio_proveedor_id')
+                ->select(DB::raw('MAX(lpa.id) as id'))
+                ->pluck('id')
+                ->filter()
+                ->values()
+                ->all();
+        } else {
+            // Modo proveedor: para cada lista ACTIVA del proveedor, la última fechavigencia <= fechaRef por (lista, articulo)
+            $subMaxFv = DB::table('listaprecio_proveedor_articulo as lpa2')
+                ->join('listaprecio_proveedor as lp2', 'lp2.id', '=', 'lpa2.listaprecio_proveedor_id')
+                ->select('lpa2.listaprecio_proveedor_id', 'lpa2.articulo_id', DB::raw('MAX(lpa2.fechavigencia) as max_fv'))
+                ->where('lp2.estado', 'ACTIVA')
+                ->where('lp2.proveedor_id', $proveedorId)
+                ->whereDate('lpa2.fechavigencia', '<=', $fechaRef)
+                ->groupBy('lpa2.listaprecio_proveedor_id', 'lpa2.articulo_id');
+
+            $lineIds = DB::table('listaprecio_proveedor_articulo as lpa')
+                ->joinSub($subMaxFv, 'mx', function ($join) {
+                    $join->on('lpa.listaprecio_proveedor_id', '=', 'mx.listaprecio_proveedor_id')
+                        ->on('lpa.articulo_id', '=', 'mx.articulo_id')
+                        ->on('lpa.fechavigencia', '=', 'mx.max_fv');
+                })
+                ->groupBy('lpa.listaprecio_proveedor_id', 'lpa.articulo_id')
+                ->select(DB::raw('MAX(lpa.id) as id'))
+                ->pluck('id')
+                ->filter()
+                ->values()
+                ->all();
+        }
+
+        $respuestaBase = [
+            'articulo' => $articulo ? [
+                'sku' => $articulo->sku,
+                'descripcion' => $articulo->descripcion,
+            ] : null,
+            'proveedor' => $proveedor ? [
+                'codigo' => $proveedor->codigo,
+                'nombre' => $proveedor->nombre,
+                'fantasia' => $proveedor->fantasia,
+            ] : null,
+            'fecha_referencia' => $fechaRef,
+            'modo_proveedor' => $modoProveedor,
+            'filtrado_por_proveedor' => $filtradoPorProveedor,
+        ];
 
         if ($lineIds === []) {
-            return response()->json([
-                'articulo' => [
-                    'sku' => $articulo->sku,
-                    'descripcion' => $articulo->descripcion,
-                ],
-                'fecha_referencia' => $fechaRef,
-                'filtrado_por_proveedor' => $filtradoPorProveedor,
-                'filas' => [],
-            ]);
+            return response()->json(array_merge($respuestaBase, ['filas' => []]));
         }
 
         $q = DB::table('listaprecio_proveedor_articulo as lpa')
@@ -409,10 +470,14 @@ class RequisicionController extends Controller
             ->leftJoin('condicioncompra as ccom', 'ccom.id', '=', 'lp.condicioncompra_id')
             ->leftJoin('usuario as ulista', 'ulista.id', '=', 'lp.creousuario_id')
             ->leftJoin('usuario as ulinea', 'ulinea.id', '=', 'lpa.usuarioultcambio_id')
+            ->leftJoin('articulo as art', 'art.id', '=', 'lpa.articulo_id')
             ->whereIn('lpa.id', $lineIds)
             ->where('lp.estado', 'ACTIVA');
 
-        if ($filtradoPorProveedor) {
+        if ($modoArticulo && $filtradoPorProveedor) {
+            $q->where('lp.proveedor_id', $proveedorId);
+        }
+        if ($modoProveedor) {
             $q->where('lp.proveedor_id', $proveedorId);
         }
 
@@ -430,6 +495,9 @@ class RequisicionController extends Controller
             'mon.abreviatura as moneda_abreviatura',
             'mon.nombre as moneda_nombre',
             'mon.codigo as moneda_codigo',
+            'lpa.articulo_id',
+            'art.sku as articulo_sku',
+            'art.descripcion as articulo_descripcion',
             'lpa.precio',
             'lpa.descuento',
             'lpa.articulo_proveedor',
@@ -441,7 +509,10 @@ class RequisicionController extends Controller
             'ulinea.nombre as linea_ultimo_usuario',
         ]);
 
-        if ($filtradoPorProveedor) {
+        if ($modoProveedor) {
+            // En modo proveedor priorizamos las listas más recientes y luego artículo
+            $q->orderByDesc('lp.fecha')->orderByDesc('lp.id')->orderBy('art.sku');
+        } elseif ($filtradoPorProveedor) {
             $q->orderByDesc('lp.fecha')->orderByDesc('lp.id');
         } else {
             $q->orderBy('lpa.precio')->orderBy('prov.nombre')->orderBy('lp.nombre');
@@ -470,6 +541,9 @@ class RequisicionController extends Controller
                 'moneda_abreviatura' => $r->moneda_abreviatura,
                 'moneda_nombre' => $r->moneda_nombre,
                 'moneda_codigo' => $r->moneda_codigo,
+                'articulo_id' => $r->articulo_id,
+                'articulo_sku' => $r->articulo_sku,
+                'articulo_descripcion' => $r->articulo_descripcion,
                 'precio' => $r->precio,
                 'precio_neto_descuento' => $precioNeto,
                 'descuento' => $r->descuento,
@@ -483,15 +557,7 @@ class RequisicionController extends Controller
             ];
         }
 
-        return response()->json([
-            'articulo' => [
-                'sku' => $articulo->sku,
-                'descripcion' => $articulo->descripcion,
-            ],
-            'fecha_referencia' => $fechaRef,
-            'filtrado_por_proveedor' => $filtradoPorProveedor,
-            'filas' => $filas,
-        ]);
+        return response()->json(array_merge($respuestaBase, ['filas' => $filas]));
     }
 
     /**

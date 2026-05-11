@@ -224,7 +224,7 @@
                         <button type="button" title="Consulta articulos" style="padding:1;" class="btn-accion-tabla consultaarticulo tooltipsC flex-shrink-0">
                                 <i class="fa fa-search text-primary"></i>
                         </button>
-                        <button type="button" title="Consultar listas de precios de compra" style="padding:1;" class="btn-accion-tabla consultalistasprecio tooltipsC flex-shrink-0">
+                        <button type="button" title="Consultar listas de precios de compra (si no hay artículo, muestra las últimas listas vigentes del proveedor)" style="padding:1;" class="btn-accion-tabla consultalistasprecio tooltipsC flex-shrink-0">
                                 <i class="fa fa-tags text-info"></i>
                         </button>
                         <input type="text" class="codigoarticulo codigoarticulolocal form-control flex-shrink-0" style="width: 140px; max-width: 15vw; height: 38px;" name="codigoarticulos[]" value="{{ optional($linea->articulos)->sku ?? '' }}" {{ $soloLectura ? 'readonly' : '' }} >

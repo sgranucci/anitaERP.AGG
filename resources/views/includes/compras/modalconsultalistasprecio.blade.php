@@ -13,10 +13,16 @@
         <div id="consultalistasprecioCargando" class="text-center text-muted py-4 d-none">
           <span class="fa fa-spinner fa-spin mr-2"></span>Cargando…
         </div>
+        <style>
+          #consultalistasprecioTabla .col-articulo-info { display: none; }
+          #consultalistasprecioTabla.mode-proveedor .col-articulo-info { display: table-cell; }
+        </style>
         <div class="table-responsive" style="max-height: 65vh;">
           <table class="table table-sm table-striped table-bordered mb-0" id="consultalistasprecioTabla">
             <thead class="thead-light text-nowrap">
               <tr>
+                <th class="col-articulo-info">Cód. artículo</th>
+                <th class="col-articulo-info">Descripción artículo</th>
                 <th>Proveedor</th>
                 <th>Fantasía</th>
                 <th>Lista</th>

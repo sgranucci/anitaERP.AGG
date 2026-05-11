@@ -37,6 +37,8 @@ class RequisicionRepository implements RequisicionRepositoryInterface
     private static function limpiaPayloadCabecera(array $data)
     {
         unset(
+            $data['monto'],
+            $data['moneda_id'],
             $data['articulo_ids'],
             $data['cantidades'],
             $data['precios'],

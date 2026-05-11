@@ -132,12 +132,21 @@
             $("#botonestado").html("<i class='fa fa-bell'></i>&nbsp;Estado "+descripcion);
         });
 
+        function sincronizarBarraAltaPremioUifCliente() {
+            var $bar = $('#barra-alta-premio-uif-cliente');
+            if (!$bar.length) {
+                return;
+            }
+            $bar.toggle($('.form3').is(':visible'));
+        }
+
         $("#botonform1").click(function(){
             $(".form1").show();
             $(".form2").hide();
             $(".form3").hide();
             $(".form4").hide();
             $(".form5").hide();
+            sincronizarBarraAltaPremioUifCliente();
         });
 
         $("#botonform2").click(function(){
@@ -149,6 +158,7 @@
 
 			$("#titulo").html("");
 			$("#titulo").html("<span class='fa fa-cash-register'></span> Datos facturac&oacute;n");
+            sincronizarBarraAltaPremioUifCliente();
         });
 
         $("#botonform3").click(function(){
@@ -170,6 +180,7 @@
                 	}, 1000);
 				}
             });
+            sincronizarBarraAltaPremioUifCliente();
         });
 
         $("#botonform4").click(function(){
@@ -178,6 +189,7 @@
             $(".form3").hide();
             $(".form4").show();
             $(".form5").hide();
+            sincronizarBarraAltaPremioUifCliente();
         });
 
         $("#botonform5").click(function(){
@@ -186,6 +198,7 @@
             $(".form3").hide();
             $(".form4").hide();
             $(".form5").show();
+            sincronizarBarraAltaPremioUifCliente();
         });
 
         // Controla apertura modal de anulacion
@@ -240,6 +253,7 @@
         } else if (tabParam === '5') {
             $('#botonform5').trigger('click');
         }
+        sincronizarBarraAltaPremioUifCliente();
 
         $('#agrega_renglon_riesgo').on('click', agregaRenglonRiesgo);
         $(document).on('click', '.eliminar_riesgo', borraRenglonRiesgo);
@@ -494,6 +508,36 @@
 		$(elem).parents("tr").find(".nombresanteriores").val(filename);
 	}
 
+    /** Valor de input fecha → timestamp y YYYY-MM-DD para comparar y para formateaFecha. */
+    function parseFechaCampoUif(val) {
+        val = String(val || '').trim();
+        if (!val) {
+            return null;
+        }
+        var iso = null;
+        var m = val.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (m) {
+            iso = m[1] + '-' + m[2] + '-' + m[3];
+        } else {
+            m = val.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+            if (m) {
+                iso = m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
+            }
+        }
+        if (!iso) {
+            var t = Date.parse(val);
+            if (!isFinite(t)) {
+                return null;
+            }
+            return { ts: t, isoYmd: val };
+        }
+        var ts = Date.parse(iso);
+        if (!isFinite(ts)) {
+            return null;
+        }
+        return { ts: ts, isoYmd: iso };
+    }
+
     function chequeaSujetoObligado()
     {
         let so_uif_id = $("#so_uif_id").val();
@@ -514,6 +558,7 @@
     {
         let fechaActual = new Date();
         let fecha6Meses = new Date(fechaActual.setMonth(fechaActual.getMonth() - 6));
+        let umbral6MesesMs = fecha6Meses.getTime();
         let firmodeclaracionjurada = $('#firmodeclaracionjurada').val();
         let fechaConfirmaPep = $('#fechaconfirmapep').val();
         let fechaVencimientoDni = $('#fechavencimientodni').val();
@@ -523,29 +568,36 @@
         let riesgoPep = $('#riesgopep').val();
         let esSupervisor = $('#essupervisor').val();
 
-        if (Date.parse(fechaConfirmaPep) < Date.parse(fecha6Meses))
-        {
-            alert('DEBE FIRMAR PEP\nULTIMA VALIDACION: '+ formateaFecha(fechaConfirmaPep));
-
-            // Cambia estilo
+        var fechaConfTrim = String(fechaConfirmaPep || '').trim();
+        var parsedConfPep = parseFechaCampoUif(fechaConfirmaPep);
+        if (!parsedConfPep) {
+            alert('DEBE FIRMAR PEP\n' + (fechaConfTrim ? 'FECHA NO VÁLIDA.' : 'NO REGISTRA FECHA DE VALIDACIÓN DE ÚLTIMA FIRMA PEP.'));
+            $('#div-fechafirmapep').css("color", "red");
+            $('#div-fechaconfirmapep').css("color", "red");
+        } else if (parsedConfPep.ts < umbral6MesesMs) {
+            alert('DEBE FIRMAR PEP\nULTIMA VALIDACION: '+ formateaFecha(parsedConfPep.isoYmd));
             $('#div-fechafirmapep').css("color", "red");
             $('#div-fechaconfirmapep').css("color", "red");
         }
 
-        if (Date.parse(fechaVencimientoDni) < new Date())
-        {
-            alert('DEBE RENOVAR DNI\nVENCIMIENTO: '+ formateaFecha(fechaVencimientoDni));
-
-            // Cambia estilo
-            $('#div-fechavencimientodni').css("color", "red");            
+        var fechaDniTrim = String(fechaVencimientoDni || '').trim();
+        var parsedDni = parseFechaCampoUif(fechaVencimientoDni);
+        if (!parsedDni) {
+            alert('DEBE RENOVAR DNI\n' + (fechaDniTrim ? 'FECHA NO VÁLIDA.' : 'NO REGISTRA FECHA DE VENCIMIENTO DEL DNI.'));
+            $('#div-fechavencimientodni').css("color", "red");
+        } else if (parsedDni.ts < Date.now()) {
+            alert('DEBE RENOVAR DNI\nVENCIMIENTO: '+ formateaFecha(parsedDni.isoYmd));
+            $('#div-fechavencimientodni').css("color", "red");
         }
 
-        if (Date.parse(fechaVencimientoActividad) < Date.parse(fecha6Meses))
-        {
-            alert('DEBE RENOVAR ACTIVIDAD\nVENCIMIENTO: '+ formateaFecha(fechaVencimientoActividad));
-
-            // Cambia estilo
-            $('#div-fechavencimientoactividad').css("color", "red");            
+        var fechaVtoActTrim = String(fechaVencimientoActividad || '').trim();
+        var parsedVtoActividad = parseFechaCampoUif(fechaVencimientoActividad);
+        if (!parsedVtoActividad) {
+            alert('DEBE RENOVAR ACTIVIDAD\n' + (fechaVtoActTrim ? 'FECHA NO VÁLIDA.' : 'NO REGISTRA FECHA DE VENCIMIENTO DE ACTIVIDAD ECONÓMICA.'));
+            $('#div-fechavencimientoactividad').css('color', 'red');
+        } else if (parsedVtoActividad.ts < umbral6MesesMs) {
+            alert('DEBE RENOVAR ACTIVIDAD\nVENCIMIENTO: ' + formateaFecha(parsedVtoActividad.isoYmd));
+            $('#div-fechavencimientoactividad').css('color', 'red');
         }
 
         if (firmodeclaracionjurada != 'S')
@@ -567,20 +619,24 @@
         // Alertas solo para supervisores
         if (esSupervisor == 'S')
         {
-            if (Date.parse(fechaInformeNosis) < Date.parse(fecha6Meses))
-            {
-                alert('DEBE FIRMAR INFORME NOSIS\nVENCIMIENTO: '+ formateaFecha(fechaInformeNosis));
-
-                // Cambia estilo
-                $('#div-fechainformenosis').css("color", "red");            
+            var fechaNosisTrim = String(fechaInformeNosis || '').trim();
+            var parsedNosis = parseFechaCampoUif(fechaInformeNosis);
+            if (!parsedNosis) {
+                alert('DEBE FIRMAR INFORME NOSIS\n' + (fechaNosisTrim ? 'FECHA NO VÁLIDA.' : 'NO REGISTRA FECHA DEL INFORME NOSIS.'));
+                $('#div-fechainformenosis').css("color", "red");
+            } else if (parsedNosis.ts < umbral6MesesMs) {
+                alert('DEBE FIRMAR INFORME NOSIS\nVENCIMIENTO: '+ formateaFecha(parsedNosis.isoYmd));
+                $('#div-fechainformenosis').css("color", "red");
             }
 
-            if (Date.parse(fechaInformePep) < Date.parse(fecha6Meses))
-            {
-                alert('DEBE FIRMAR INFORME PEP\nVENCIMIENTO: '+ formateaFecha(fechaInformePep));
-
-                // Cambia estilo
-                $('#div-fechainformepep').css("color", "red");            
+            var fechaInfPepTrim = String(fechaInformePep || '').trim();
+            var parsedInfPep = parseFechaCampoUif(fechaInformePep);
+            if (!parsedInfPep) {
+                alert('DEBE FIRMAR INFORME PEP\n' + (fechaInfPepTrim ? 'FECHA NO VÁLIDA.' : 'NO REGISTRA FECHA DEL INFORME PEP.'));
+                $('#div-fechainformepep').css("color", "red");
+            } else if (parsedInfPep.ts < umbral6MesesMs) {
+                alert('DEBE FIRMAR INFORME PEP\nVENCIMIENTO: '+ formateaFecha(parsedInfPep.isoYmd));
+                $('#div-fechainformepep').css("color", "red");
             }
         }
     }

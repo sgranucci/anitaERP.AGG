@@ -1,5 +1,4 @@
 @php
-    $tieneClienteForm3 = isset($data) && ($data->id ?? null);
     $detalleClienteUifRestringido = esSoloVisualizacionClienteUif();
 @endphp
 <div class="form3" style="display: none">
@@ -18,13 +17,6 @@
         .premio-foto-thumb-link:hover .premio-foto-thumb { border-color: #3c8dbc; opacity: 0.92; }
     </style>
     <div class="card-body">
-			@if ($tieneClienteForm3 && ! esSoloVisualizacionClienteUif() && can('crear-cliente-premio-uif', false))
-				<div class="mb-3">
-					<a href="{{ route('crea_cliente_premio_uif', ['id' => $data->id]) }}?return_cliente_tab=3" class="btn btn-info">
-						<i class="fa fa-plus-circle"></i> Dar de alta premio
-					</a>
-				</div>
-			@endif
     	<table class="table" id="premio-table">
     		<thead>
     			<tr>

@@ -126,6 +126,7 @@ class Cliente_Premio_UifController extends Controller
         $cliente_uif = $this->cliente_uifRepository->find($cliente_uif_id);
 
         $referer = $this->refererPremioDesdeClienteUif($request, $cliente_uif_id ? (int) $cliente_uif_id : null);
+        $volverAClienteUif = $this->premioInvocadoDesdeClienteUif($request, $cliente_uif_id ? (int) $cliente_uif_id : null);
         $nombrecliente = '';
         $numerodocumento = '';
         if ($cliente_uif)
@@ -148,7 +149,7 @@ class Cliente_Premio_UifController extends Controller
 
         return view('uif.cliente_premio_uif.crear', compact('nombrecliente', 'numerodocumento', 'moneda_query', 'juego_uif_query', 'sala_query',
                                                             'empresa_query', 'formapago_query', 'essupervisor',
-                                                            'piderecibopago_enum', 'cliente_uif_id', 'referer'));
+                                                            'piderecibopago_enum', 'cliente_uif_id', 'referer', 'volverAClienteUif'));
     }
 
     /**
@@ -188,6 +189,7 @@ class Cliente_Premio_UifController extends Controller
 		$data = $this->cliente_premio_uifRepository->find($id);
 
         $referer = $this->refererPremioDesdeClienteUif($request, $data ? (int) $data->cliente_uif_id : null);
+        $volverAClienteUif = $this->premioInvocadoDesdeClienteUif($request, $data ? (int) $data->cliente_uif_id : null);
 
         $empresa_query = $this->empresaRepository->allFiltrado();
         $sala_query = $this->salaRepository->allFiltrado();
@@ -205,7 +207,7 @@ class Cliente_Premio_UifController extends Controller
         return view('uif.cliente_premio_uif.editar', compact('data', 
                                                     'moneda_query', 'juego_uif_query', 'sala_query',
                                                     'empresa_query', 'formapago_query',
-                                                    'essupervisor', 'piderecibopago_enum', 'referer'));
+                                                    'essupervisor', 'piderecibopago_enum', 'referer', 'volverAClienteUif'));
     }
 
     /**
@@ -395,6 +397,20 @@ class Cliente_Premio_UifController extends Controller
         }
 
         return response()->download($rutaPdfPremio);
+    }
+
+    /**
+     * Alta/edición de premio abierta desde el CRUD cliente con ?return_cliente_tab= (botón form3 u otros).
+     */
+    private function premioInvocadoDesdeClienteUif(Request $request, ?int $cliente_uif_id): bool
+    {
+        $tabCliente = $request->query('return_cliente_tab');
+        if ($tabCliente === null || ! $cliente_uif_id || ! is_numeric($tabCliente)) {
+            return false;
+        }
+        $t = (int) $tabCliente;
+
+        return $t >= 1 && $t <= 5;
     }
 
     /**
