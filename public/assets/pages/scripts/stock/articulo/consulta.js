@@ -5,11 +5,38 @@ var ptrunidadmedida;
 var ptrcategoria_id;
 var ptrsubcategoria_id;
 
+/** Evita un POST por tecla y cancela respuestas obsoletas al seguir escribiendo */
+var consultaArticuloAjax = null;
+var consultaArticuloTimer = null;
+var CONSULTA_ARTICULO_DEBOUNCE_MS = 280;
+var CONSULTA_ARTICULO_MIN_LEN = 2;
+
+function htmlTablaConsultaArticuloMensaje(texto) {
+    return '<tr><td colspan="6" class="text-muted">' + texto + '</td></tr>';
+}
+
+function aplicarRespuestaConsultaArticulo(respuesta) {
+    var html = '';
+    if (respuesta && typeof respuesta.data === 'string') {
+        html = respuesta.data;
+    } else if (typeof respuesta === 'string') {
+        try {
+            html = JSON.parse(respuesta).data || '';
+        } catch (e) {
+            html = respuesta.replace(/\\/g, '');
+        }
+    }
+    $("#datos").html(html);
+}
+
 function buscar_datos_articulo(consulta) {
-    $.ajax({
+    if (consultaArticuloAjax && consultaArticuloAjax.readyState !== 4) {
+        consultaArticuloAjax.abort();
+    }
+    consultaArticuloAjax = $.ajax({
         url: carpetaBase+'/stock/articulo/consultaarticulo',
         type: 'POST',
-        dataType: 'HTML',
+        dataType: 'json',
 	    headers: {
         	'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
     	},
@@ -18,11 +45,12 @@ function buscar_datos_articulo(consulta) {
         },
     })
     .done (function(respuesta) {
-		const resp = respuesta.replace(/\\/g, '');
-        $("#datos").html(resp);
+        aplicarRespuestaConsultaArticulo(respuesta);
     })
-    .fail (function() {
-        console.log("error");
+    .fail (function(xhr, status) {
+        if (status !== 'abort') {
+            console.log("error");
+        }
     });
 }
 
@@ -36,15 +64,6 @@ $("input").keydown(function (e){
       return false;
     }
   });
-
-$(document).on('keyup', '#consulta', function () {
-    var valor = $(this).val();
-    if (valor != "") {
-        buscar_datos_articulo(valor);
-    } else {
-        buscar_datos_articulo();
-    }
-});
 
 function activa_eventos_consultaarticulo()
 {
@@ -63,9 +82,37 @@ function activa_eventos_consultaarticulo()
         $("#consultaarticuloModal").modal('show');
     });
 
-    $('#consultaarticuloModal').on('shown.bs.modal', function () {
+    $('#consultaarticuloModal').off('show.bs.modal.consultaArt').on('show.bs.modal.consultaArt', function () {
+        $('#consulta').val('');
+        clearTimeout(consultaArticuloTimer);
+        if (consultaArticuloAjax && consultaArticuloAjax.readyState !== 4) {
+            consultaArticuloAjax.abort();
+        }
+        $("#datos").html(htmlTablaConsultaArticuloMensaje('Escriba al menos ' + CONSULTA_ARTICULO_MIN_LEN + ' caracteres para buscar.'));
+    });
+
+    $('#consultaarticuloModal').off('shown.bs.modal.consultaArt').on('shown.bs.modal.consultaArt', function () {
         $(this).find('#consulta').focus();
-    })
+    });
+
+    $(document).off('input.consultaArtCampo', '#consulta').on('input.consultaArtCampo', '#consulta', function () {
+        var valor = ($(this).val() || '').trim();
+        clearTimeout(consultaArticuloTimer);
+        if (valor.length < CONSULTA_ARTICULO_MIN_LEN) {
+            if (consultaArticuloAjax && consultaArticuloAjax.readyState !== 4) {
+                consultaArticuloAjax.abort();
+            }
+            if (valor.length === 0) {
+                $("#datos").html(htmlTablaConsultaArticuloMensaje('Escriba al menos ' + CONSULTA_ARTICULO_MIN_LEN + ' caracteres para buscar.'));
+            } else {
+                $("#datos").html(htmlTablaConsultaArticuloMensaje('Ingrese al menos ' + CONSULTA_ARTICULO_MIN_LEN + ' caracteres para buscar.'));
+            }
+            return;
+        }
+        consultaArticuloTimer = setTimeout(function () {
+            buscar_datos_articulo(valor);
+        }, CONSULTA_ARTICULO_DEBOUNCE_MS);
+    });
 
     $('#aceptaconsultaarticuloModal').on('click', function () {
         $('#consultaarticuloModal').modal('hide');

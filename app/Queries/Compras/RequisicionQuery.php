@@ -44,11 +44,11 @@ class RequisicionQuery implements RequisicionQueryInterface
         $centrocosto_id = Auth::user()->centrocosto_id;
         $centrocostoFiltro = null;
 
-        if (can('usuario-requisicion-compras')) {
+        if (can('usuario-requisicion-compras', false)) {
             $centrocostoFiltro = null;
         }
 
-        if (can('usuario-requisicion-resto')) {
+        if (can('usuario-requisicion-resto', false)) {
             $centrocostoFiltro = $centrocosto_id;
         }
 
@@ -106,6 +106,7 @@ class RequisicionQuery implements RequisicionQueryInterface
             ['columna' => 'requisicion.detalle', 'clausula' => 'LIKE'],
             ['columna' => 'requisicion.estado', 'clausula' => 'LIKE'],
             ['columna' => 'usuario.nombre', 'clausula' => 'LIKE'],
+            ['columna' => 'usuario.usuario', 'clausula' => 'LIKE'],
             ['columna' => 'proveedor.nombre', 'clausula' => 'LIKE'],
             ['columna' => 'proveedor.codigo', 'clausula' => 'LIKE'],
             ['columna' => 'oficinacompra.nombre', 'clausula' => 'LIKE'],

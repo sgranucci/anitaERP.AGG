@@ -15,6 +15,7 @@ return new class extends Migration
             $table->id();
             $table->unsignedBigInteger('ordencompra_id');
             $table->foreign('ordencompra_id', 'fk_ordencompra_comprobante_ordencompra')->references('id')->on('ordencompra')->onDelete('cascade')->onUpdate('cascade');
+            $table->string('tipocomprobante', 50);
             $table->date('fechavencimiento');
             $table->decimal('monto',22,4);
             $table->unsignedBigInteger('moneda_id');

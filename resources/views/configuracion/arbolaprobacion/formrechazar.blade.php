@@ -2,7 +2,7 @@
     <div class="form-group row">
         <label for="observacion" class="col-lg-1 col-form-label">Observaciones</label>
         <div class="col-lg-6">
-            <textarea name="observacion" name="observacion" class="form-control required" rows="4" required placeholder="Observaciones ...">{{old('observacion', $observacion ?? '')}}</textarea>
+            <textarea name="observacion" class="form-control required" rows="4" required placeholder="Observaciones ...">{{old('observacion', $observacion ?? '')}}</textarea>
         </div>
     </div>
     <input type="hidden" name="tipocomprobante" class="form-control" value="{{$tipocomprobante}}">

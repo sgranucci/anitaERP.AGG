@@ -16,6 +16,14 @@ class ValidacionUsuario extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        $sector = $this->input('sector_legajocompra_id');
+        if ($sector === '' || $sector === null) {
+            $this->merge(['sector_legajocompra_id' => null]);
+        }
+    }
+
     /**
      * Get the validation rules that apply to the request.
      *
@@ -25,21 +33,23 @@ class ValidacionUsuario extends FormRequest
     {
         if ($this->route('id')) {
             return [
-                'usuario' => 'required|max:50|unique:usuario,usuario,' . $this->route('id'),
+                'usuario' => 'required|max:50|unique:usuario,usuario,'.$this->route('id'),
                 'nombre' => 'required|max:50',
-                'email' => 'required|email|max:100|unique:usuario,email,' . $this->route('id'),
+                'email' => 'required|email|max:100|unique:usuario,email,'.$this->route('id'),
                 'password' => 'nullable|min:5',
                 're_password' => 'nullable|required_with:password|min:5|same:password',
-                'rol_id' => 'required|array'
+                'rol_id' => 'required|array',
+                'sector_legajocompra_id' => 'nullable|integer|exists:sector_legajocompra,id',
             ];
         } else {
             return [
-                'usuario' => 'required|max:50|unique:usuario,usuario,' . $this->route('id'),
+                'usuario' => 'required|max:50|unique:usuario,usuario,'.$this->route('id'),
                 'nombre' => 'required|max:50',
-                'email' => 'required|email|max:100|unique:usuario,email,' . $this->route('id'),
+                'email' => 'required|email|max:100|unique:usuario,email,'.$this->route('id'),
                 'password' => 'required|min:5',
                 're_password' => 'required|min:5|same:password',
-                'rol_id' => 'required|array'
+                'rol_id' => 'required|array',
+                'sector_legajocompra_id' => 'nullable|integer|exists:sector_legajocompra,id',
             ];
         }
     }

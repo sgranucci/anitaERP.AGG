@@ -17,11 +17,11 @@ class TablaPermisoSeeder extends Seeder
     {
         $now = Carbon::now()->toDateTimeString();
         $permiso = [
-            ['id' => '1050', 'nombre' => 'Listar listas de precio de proveedores', 'slug' => 'listar-listaprecio-proveedor', 'menu_id' => 225, 'created_at' => $now, 'updated_at' => $now],
-            ['id' => '1051', 'nombre' => 'Ingresar listas de precio de proveedores', 'slug' => 'crear-listaprecio-proveedor', 'menu_id' => 225, 'created_at' => $now, 'updated_at' => $now],
-            ['id' => '1052', 'nombre' => 'Editar listas de precio de proveedores', 'slug' => 'editar-listaprecio-proveedor', 'menu_id' => 225, 'created_at' => $now, 'updated_at' => $now],
-            ['id' => '1053', 'nombre' => 'Actualizar listas de precio de proveedores', 'slug' => 'actualizar-listaprecio-proveedor', 'menu_id' => 225, 'created_at' => $now, 'updated_at' => $now],
-            ['id' => '1054', 'nombre' => 'Borrar listas de precio de proveedores', 'slug' => 'borrar-listaprecio-proveedor', 'menu_id' => 225, 'created_at' => $now, 'updated_at' => $now],
+            ['id' => '2031', 'nombre' => 'Ingresar sector legajo compra', 'slug' => 'crear-sector-legajocompra', 'menu_id' => 228, 'created_at' => $now, 'updated_at' => $now],
+            ['id' => '2032', 'nombre' => 'Listar sector legajo compra', 'slug' => 'listar-sector-legajocompra', 'menu_id' => 228, 'created_at' => $now, 'updated_at' => $now],
+            ['id' => '2033', 'nombre' => 'Editar sector legajo compra', 'slug' => 'editar-sector-legajocompra', 'menu_id' => 228, 'created_at' => $now, 'updated_at' => $now],
+            ['id' => '2034', 'nombre' => 'Actualizar sector legajo compra', 'slug' => 'actualizar-sector-legajocompra', 'menu_id' => 228, 'created_at' => $now, 'updated_at' => $now],
+            ['id' => '2035', 'nombre' => 'Borrar sector legajo compra', 'slug' => 'borrar-sector-legajocompra', 'menu_id' => 228, 'created_at' => $now, 'updated_at' => $now],
         ];
         DB::table('permiso')->insert($permiso);
     }

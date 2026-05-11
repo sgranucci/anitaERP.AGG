@@ -15,6 +15,7 @@
 		<tr>
 			<th>ID</th>
 			<th>Número</th>
+			<th>Solicitante</th>
 			<th>Fecha</th>
 			<th>Fecha entrega</th>
 			<th>Empresa</th>
@@ -29,7 +30,6 @@
 			<th>Motivo tratamiento</th>
 			<th>Contratación directa</th>
 			<th>Estado</th>
-			<th>Usuario alta</th>
 			<th>Comentario</th>
 			<th>Detalle cabecera</th>
 			<th>Nro inscripción</th>
@@ -41,6 +41,7 @@
 			<tr>
 				<td>{{ $data->id }}</td>
 				<td>{{ $data->numerorequisicion }}</td>
+				<td>{{ $data->nombreusuario ?? '' }}</td>
 				<td>{{ $data->fecha ? date('d/m/Y', strtotime($data->fecha)) : '' }}</td>
 				<td>{{ $data->fechaentrega ? date('d/m/Y', strtotime($data->fechaentrega)) : '' }}</td>
 				<td>{{ $data->nombreempresa }}</td>
@@ -55,7 +56,6 @@
 				<td>{{ $data->motivotratamiento ?? '' }}</td>
 				<td>{{ $data->contrataciondirecta ?? '' }}</td>
 				<td>{{ $data->estado }}</td>
-				<td>{{ $data->nombreusuario }}</td>
 				<td>{{ $data->comentario }}</td>
 				<td>{{ $data->detalle }}</td>
 				<td>{{ $data->nroinscripcion ?? '' }}</td>

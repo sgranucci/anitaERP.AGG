@@ -48,6 +48,7 @@
         </div>
     @elseif ($tipoArbol == 'Requisiciones')
         @php $mx = $mailExtras ?? []; @endphp
+        <p style="font-size:14px;color:#444;">Al abrir los enlaces de <strong>Autorizar</strong> o <strong>Rechazar</strong> verá el detalle en una pantalla adaptable a celular y podrá cargar observaciones antes de confirmar.</p>
         <ul>
             <li>Empresa: {{ $datosComprobante->empresas->nombre ?? '' }}</li>
             <li>Número: {{ $datosComprobante->numerorequisicion }}</li>

@@ -52,6 +52,7 @@
 		<colgroup>
 			<col style="width: 3%;">
 			<col style="width: 5%;">
+			<col style="width: 6%;">
 			<col style="width: 4%;">
 			<col style="width: 4%;">
 			<col style="width: 6%;">
@@ -76,6 +77,7 @@
 			<tr>
 				<th>ID</th>
 				<th>Número</th>
+				<th>Solicitante</th>
 				<th>Fecha</th>
 				<th>F. entrega</th>
 				<th>Empresa</th>
@@ -90,7 +92,6 @@
 				<th>Motivo trat.</th>
 				<th>Contratación dir.</th>
 				<th>Estado</th>
-				<th>Usuario alta</th>
 				<th>Comentario</th>
 				<th>Detalle cab.</th>
 				<th>Nro inscr.</th>
@@ -102,6 +103,7 @@
 				<tr>
 					<td>{{ $data->id }}</td>
 					<td>{{ $data->numerorequisicion }}</td>
+					<td><small>{{ $data->nombreusuario ?? '' }}</small></td>
 					<td>{{ $data->fecha ? date('d/m/Y', strtotime($data->fecha)) : '' }}</td>
 					<td>{{ $data->fechaentrega ? date('d/m/Y', strtotime($data->fechaentrega)) : '' }}</td>
 					<td>{{ $data->nombreempresa }}</td>
@@ -116,7 +118,6 @@
 					<td><small>{{ $data->motivotratamiento ?? '' }}</small></td>
 					<td><small>{{ $data->contrataciondirecta ?? '' }}</small></td>
 					<td><small>{{ $data->estado }}</small></td>
-					<td><small>{{ $data->nombreusuario }}</small></td>
 					<td><small>{{ $data->comentario }}</small></td>
 					<td><small>{{ $data->detalle }}</small></td>
 					<td><small>{{ $data->nroinscripcion ?? '' }}</small></td>

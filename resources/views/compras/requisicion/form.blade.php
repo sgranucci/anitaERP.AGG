@@ -6,6 +6,12 @@
     }
     // Solo consulta cuando $visualizar es truthy (no bastaba isset(): en editar viene false y ocultaba edición).
     $soloLectura = isset($visualizar) && $visualizar;
+
+    if (isset($data) && $data) {
+        $solicitanteTexto = trim((string) (optional($data->usuarios)->nombre ?? ''));
+    } else {
+        $solicitanteTexto = trim((string) (auth()->user()->nombre ?? ''));
+    }
 @endphp
 <div id="tab1" class="form1 tab-content">
     <div class="row">
@@ -39,6 +45,13 @@
                 <label for="oficinacompra_id_show" class="col-lg-3 control-label">Oficina compra</label>
                 <div class="col-lg-5">
                     <input type="text" id="oficinacompra_id_show" class="form-control" value="{{ $oficinaCompraNombre }}" readonly>
+                </div>
+            </div>
+
+            <div class="form-group row">
+                <label for="solicitante_show" class="col-lg-3 control-label">Solicitante</label>
+                <div class="col-lg-5">
+                    <input type="text" id="solicitante_show" class="form-control" value="{{ $solicitanteTexto }}" readonly tabindex="-1" aria-readonly="true">
                 </div>
             </div>
 
@@ -219,6 +232,7 @@
             @foreach ($lineas as $idx => $linea)
             <tr class="item-requisicion-articulo">
                 <td>
+                    <input type="hidden" class="requisicion_articulo_id" name="requisicion_articulo_ids[]" value="{{ old('requisicion_articulo_ids.'.$idx, $linea->id ?? '') }}">
                     <div class="form-group row celda-articulo-requisicion mb-0 d-flex align-items-center flex-nowrap">
                         <input type="hidden" class="articulo_id" name="articulo_ids[]" value="{{ old('articulo_ids.'.$idx, $linea->articulo_id ?? '') }}" >
                         <button type="button" title="Consulta articulos" style="padding:1;" class="btn-accion-tabla consultaarticulo tooltipsC flex-shrink-0">

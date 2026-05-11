@@ -87,7 +87,7 @@
         <tr>
             <td class="lbl">Forma de pago</td>
             <td>{{ optional($data->formapagos)->nombre ?? '—' }}</td>
-            <td class="lbl">Usuario alta</td>
+            <td class="lbl">Solicitante</td>
             <td>{{ optional($data->usuarios)->nombre ?? '—' }}</td>
         </tr>
         <tr>

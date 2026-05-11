@@ -711,6 +711,7 @@ Route::put('configuracion/arbolaprobacion/{id}', 'Configuracion\ArbolaprobacionC
 Route::delete('configuracion/arbolaprobacion/{id}', 'Configuracion\ArbolaprobacionController@eliminar')->name('elimina_arbolaprobacion');
 
 Route::get('arbolaprobacion/aprobar/{tipocomprobante}/{comprobante_id}/{hash}', 'Configuracion\ArbolaprobacionController@aprobar');
+Route::post('arbolaprobacion/aprobar-requisicion', 'Configuracion\ArbolaprobacionController@confirmarAprobacionRequisicion')->name('aprobar_requisicion_externo');
 Route::get('arbolaprobacion/buscarechazo/{tipocomprobante}/{comprobante_id}/{hash}', 'Configuracion\ArbolaprobacionController@buscaRechazo')->name('busca_rechazo');
 Route::put('arbolaprobacion/rechazar', 'Configuracion\ArbolaprobacionController@rechazar')->name('rechazar');
 
@@ -1573,6 +1574,17 @@ Route::put('compras/tiposuspensionproveedor/{id}', 'Compras\Tiposuspensionprovee
 Route::delete('compras/tiposuspensionproveedor/{id}', 'Compras\TiposuspensionproveedorController@eliminar')->name('eliminar_tiposuspensionproveedor');
 
 /*
+ * Sector legajo compra
+ */
+
+Route::get('compras/sector_legajocompra', 'Compras\SectorLegajocompraController@index')->name('consultar_sector_legajocompra');
+Route::get('compras/sector_legajocompra/crear', 'Compras\SectorLegajocompraController@crear')->name('crear_sector_legajocompra');
+Route::post('compras/sector_legajocompra', 'Compras\SectorLegajocompraController@guardar')->name('guardar_sector_legajocompra');
+Route::get('compras/sector_legajocompra/{id}/editar', 'Compras\SectorLegajocompraController@editar')->name('editar_sector_legajocompra');
+Route::put('compras/sector_legajocompra/{id}', 'Compras\SectorLegajocompraController@actualizar')->name('actualizar_sector_legajocompra');
+Route::delete('compras/sector_legajocompra/{id}', 'Compras\SectorLegajocompraController@eliminar')->name('eliminar_sector_legajocompra');
+
+/*
  * Columnas de iva compras
  */
 
@@ -1693,8 +1705,8 @@ Route::get('compras/requisicion/soloconsulta/{id}', 'Compras\RequisicionControll
 /*
  * Listas de precio proveedor
  */
- Route::get('compras/listaprecio_proveedor', 'Compras\Listaprecio_ProveedorController@index')->name('consultar_listaprecio_proveedor');
- Route::get('compras/listar_listaprecio_proveedor/{formato?}/{busqueda?}', 'Compras\Listaprecio_ProveedorController@listar')->name('listar_listaprecio_proveedor');
+Route::get('compras/listaprecio_proveedor', 'Compras\Listaprecio_ProveedorController@index')->name('consultar_listaprecio_proveedor');
+Route::get('compras/listar_listaprecio_proveedor/{formato?}/{busqueda?}', 'Compras\Listaprecio_ProveedorController@listar')->name('listar_listaprecio_proveedor');
 Route::get('compras/listaprecio_proveedor/crear', 'Compras\Listaprecio_ProveedorController@crear')->name('crear_listaprecio_proveedor');
 Route::post('compras/listaprecio_proveedor', 'Compras\Listaprecio_ProveedorController@guardar')->name('guardar_listaprecio_proveedor');
 Route::get('compras/listaprecio_proveedor/{id}/editar', 'Compras\Listaprecio_ProveedorController@editar')->name('editar_listaprecio_proveedor');

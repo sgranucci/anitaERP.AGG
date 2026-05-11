@@ -19,7 +19,7 @@ use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class RequisicionExport implements FromView, WithColumnFormatting, ShouldAutoSize, WithStyles, WithColumnWidths, WithEvents, WithTitle
+class RequisicionExport implements FromView, ShouldAutoSize, WithColumnFormatting, WithColumnWidths, WithEvents, WithStyles, WithTitle
 {
     use Exportable;
 
@@ -94,8 +94,8 @@ class RequisicionExport implements FromView, WithColumnFormatting, ShouldAutoSiz
                 'I' => NumberFormat::FORMAT_TEXT,
                 'J' => NumberFormat::FORMAT_TEXT,
                 'K' => NumberFormat::FORMAT_TEXT,
-                'L' => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED2,
-                'M' => NumberFormat::FORMAT_TEXT,
+                'L' => NumberFormat::FORMAT_TEXT,
+                'M' => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED2,
                 'N' => NumberFormat::FORMAT_TEXT,
                 'O' => NumberFormat::FORMAT_TEXT,
                 'P' => NumberFormat::FORMAT_TEXT,
@@ -138,21 +138,21 @@ class RequisicionExport implements FromView, WithColumnFormatting, ShouldAutoSiz
             return [
                 'A' => 8,
                 'B' => 14,
-                'C' => 11,
-                'D' => 13,
-                'E' => 22,
+                'C' => 22,
+                'D' => 11,
+                'E' => 13,
                 'F' => 22,
-                'G' => 18,
-                'H' => 12,
-                'I' => 26,
-                'J' => 18,
-                'K' => 9,
-                'L' => 14,
-                'M' => 12,
-                'N' => 24,
-                'O' => 22,
-                'P' => 14,
-                'Q' => 18,
+                'G' => 22,
+                'H' => 18,
+                'I' => 12,
+                'J' => 26,
+                'K' => 18,
+                'L' => 9,
+                'M' => 14,
+                'N' => 12,
+                'O' => 24,
+                'P' => 22,
+                'Q' => 14,
                 'R' => 28,
                 'S' => 36,
                 'T' => 14,

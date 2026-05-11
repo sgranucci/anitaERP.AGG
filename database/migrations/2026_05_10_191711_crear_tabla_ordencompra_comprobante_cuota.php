@@ -20,8 +20,6 @@ return new class extends Migration
             $table->unsignedBigInteger('moneda_id');
             $table->foreign('moneda_id', 'fk_ordencompra_comprobante_cuota_moneda')->references('id')->on('moneda')->onDelete('restrict')->onUpdate('restrict');
             $table->float('cotizacion')->nullable();
-            $table->unsignedBigInteger('condicionpago_id')->nullable();
-            $table->foreign('condicionpago_id', 'fk_ordencompra_comprobante_cuota_condicionpago')->references('id')->on('condicionpago')->onDelete('restrict')->onUpdate('restrict');
             $table->unsignedBigInteger('formapago_id');
             $table->foreign('formapago_id', 'fk_ordencompra_comprobante_cuota_formapago')->references('id')->on('formapago')->onDelete('restrict')->onUpdate('restrict');
             $table->text('detalle')->nullable();

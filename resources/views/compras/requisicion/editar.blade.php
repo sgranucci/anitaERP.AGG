@@ -1,4 +1,4 @@
-@extends("theme.$theme.layout")
+@extends(!empty($acceso_visualizacion_por_hash) ? 'layouts.requisicion-visualizar-hash' : "theme.$theme.layout")
 @section('titulo')
 Requisiciones
 @endsection

@@ -92,8 +92,31 @@
         @endif
     </div>
     <script>
+        @php
+            $laravelUsuario = null;
+            if (auth()->check()) {
+                $u = auth()->user()->loadMissing(['centrocostos', 'sectorLegajocompra', 'oficinacompras', 'vendedores']);
+                $cc = $u->centrocostos;
+                $laravelUsuario = [
+                    'id' => $u->id,
+                    'usuario' => $u->usuario,
+                    'nombre' => $u->nombre,
+                    'email' => $u->email,
+                    'centrocosto_id' => $u->centrocosto_id,
+                    'centrocosto_codigo' => $cc?->codigo,
+                    'centrocosto_nombre' => $cc?->nombre,
+                    'sector_legajocompra_id' => $u->sector_legajocompra_id,
+                    'sector_legajocompra_nombre' => $u->sectorLegajocompra?->nombre,
+                    'vendedor_id' => $u->vendedor_id,
+                    'vendedor_nombre' => $u->vendedores?->nombre,
+                    'oficinacompra_id' => $u->oficinacompra_id,
+                    'oficinacompra_nombre' => $u->oficinacompras?->nombre,
+                ];
+            }
+        @endphp
         window.Laravel = {
             baseUrl: '{{ url('/') }}',
+            usuario: @json($laravelUsuario),
         };
         var carpetaBase = '{{ config('app.app_carpeta') }}';
     </script>

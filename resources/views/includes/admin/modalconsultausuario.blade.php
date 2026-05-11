@@ -25,7 +25,8 @@
               <th>Usuario</th>
               <th>Nombre</th>
               <th>Email</th>
-              <th>Centro de Costo</th>
+              <th>Centro de costo</th>
+              <th>Sector legajo compras</th>
           </thead>
           <tbody id="datosusuario"></tbody>
         </table>

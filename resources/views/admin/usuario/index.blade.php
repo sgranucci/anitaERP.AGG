@@ -31,7 +31,8 @@ Usuarios
                             <th>Email</th>
                             <th>Roles</th>
                             <th>Empresas</th>
-                            <th>Centro de Costo</th>
+                            <th>Centro de costo</th>
+                            <th>Sector legajo compras</th>
                             <th class="width80"></th>
                         </tr>
                     </thead>
@@ -53,7 +54,8 @@ Usuarios
                                     {{$loop->last ? $empresa->nombre : $empresa->nombre . ', '}}
                                 @endforeach
                             </td>
-                            <td>{{$data->centrocostos->nombre??''}} ({{$data->centrocostos->codigo??''}})</td>
+                            <td><small>{{ trim(($data->centrocostos->nombre ?? '').' ('.($data->centrocostos->codigo ?? '').')') }}</small></td>
+                            <td><small>{{ $data->sectorLegajocompra?->nombre ?? '—' }}</small></td>
                             <td>
                                 <a href="{{route('editar_usuario', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                     <i class="fa fa-edit"></i>

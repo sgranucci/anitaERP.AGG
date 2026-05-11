@@ -24,7 +24,7 @@ Requisiciones
                 <div class="d-md-flex justify-content-md-end">
 					<form action="{{ route('consultar_requisicion') }}" method="GET">
 						<div class="btn-group">
-							<input type="text" name="busqueda" class="form-control" placeholder="Busqueda ..."> 
+							<input type="text" name="busqueda" class="form-control" placeholder="Busqueda ..." value="{{ $busqueda ?? '' }}"> 
 							<button type="submit" class="btn btn-default">
 								<span class="fa fa-search"></span>
 							</button>
@@ -38,6 +38,7 @@ Requisiciones
                     <thead>
                         <tr>
                             <th class="width10">Número</th>
+                            <th>Solicitante</th>
                             <th>Fecha</th>
                             <th>Empresa</th>
                             <th>Centro costo</th>
@@ -52,6 +53,7 @@ Requisiciones
                         @foreach ($requisicion as $data)
                         <tr>
                             <td>{{ $data->numerorequisicion }}</td>
+                            <td><small>{{ $data->nombreusuario ?? '' }}</small></td>
                             <td>{{ date('d/m/Y', strtotime($data->fecha)) }}</td>
                             <td>{{ $data->nombreempresa }}</td>
                             <td><small>{{ $data->nombrecentrocosto }}</small></td>

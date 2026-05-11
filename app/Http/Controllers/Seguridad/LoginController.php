@@ -2,14 +2,14 @@
 
 namespace App\Http\Controllers\Seguridad;
 
-use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use Illuminate\Foundation\Auth\AuthenticatesUsers;
-use App\Models\Seguridad\Usuario;
+use Illuminate\Http\Request;
 
 class LoginController extends Controller
 {
     use AuthenticatesUsers;
+
     protected $redirectTo = '/';
 
     public function __construct()
@@ -27,10 +27,12 @@ class LoginController extends Controller
         $roles = $user->roles()->get();
         $empresas = $user->usuario_empresas()->get();
         if ($roles->isNotEmpty()) {
+            $user->loadMissing(['centrocostos', 'sectorLegajocompra']);
             $user->setSession($roles->toArray(), $empresas->toArray());
         } else {
             $this->guard()->logout();
             $request->session()->invalidate();
+
             return redirect('seguridad/login')->withErrors(['error' => 'Este usuario no tiene un rol activo']);
         }
     }
