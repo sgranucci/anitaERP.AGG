@@ -40,10 +40,13 @@
             </select>
         </td>
         <td>
-            <select name="requisicion_estado_al_aprobar[]" class="form-control form-control-sm">
+            <select name="documento_estado_al_aprobar[]" class="form-control form-control-sm">
                 <option value="">—</option>
                 @foreach(($requisicion_estados_arbol_enum ?? []) as $estReq)
                     <option value="{{ $estReq['nombre'] }}">{{ str_replace('_', ' ', $estReq['nombre']) }}</option>
+                @endforeach
+                @foreach(($ordencompra_estados_arbol_enum ?? []) as $estOc)
+                    <option value="{{ $estOc['nombre'] }}">{{ $estOc['nombre'] }}</option>
                 @endforeach
             </select>
         </td>

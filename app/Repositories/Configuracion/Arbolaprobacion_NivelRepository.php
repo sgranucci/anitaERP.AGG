@@ -66,7 +66,7 @@ class Arbolaprobacion_NivelRepository implements Arbolaprobacion_NivelRepository
         $desdemontos = $data['desdemontos'] ?? [];
         $hastamontos = $data['hastamontos'] ?? [];
         $moneda_ids = $data['moneda_ids'] ?? [];
-        $estados_req = $data['requisicion_estado_al_aprobar'] ?? [];
+        $estados_req = $data['documento_estado_al_aprobar'] ?? [];
 
         $guardados = [];
 
@@ -83,7 +83,7 @@ class Arbolaprobacion_NivelRepository implements Arbolaprobacion_NivelRepository
                 'desdemonto' => $desdemontos[$i] ?? null,
                 'hastamonto' => $hastamontos[$i] ?? null,
                 'moneda_id' => $moneda_ids[$i],
-                'requisicion_estado_al_aprobar' => $estReq,
+                'documento_estado_al_aprobar' => $estReq,
             ];
 
             if ($rowId) {

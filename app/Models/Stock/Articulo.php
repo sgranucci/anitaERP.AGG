@@ -1497,13 +1497,13 @@ class Articulo extends Model implements Auditable
 			if ($cuenta)
 				$codigoCuentaContableVenta = $cuenta->codigo;
 			else
-				$codigoCuentaContableVenta = NULL;
+				$codigoCuentaContableVenta = 0;
 									
 			$cuenta = Cuentacontable::select('id', 'codigo')->where('id' , $request->cuentacontablevariacionprecio_id)->first();
 			if ($cuenta)
 				$codigoCuentacontableVariacionPrecio = $cuenta->codigo;
 			else
-				$codigoCuentacontableVariacionPrecio = NULL;
+				$codigoCuentacontableVariacionPrecio = 0;
 					
 			$centrocosto = Centrocosto::select('id', 'codigo')->where('id' , $request->centrocostovariacionprecio_id)->first();
 			if ($centrocosto)
@@ -1986,13 +1986,13 @@ class Articulo extends Model implements Auditable
 				if ($cuenta)
 					$codigoCuentaContableVenta = $cuenta->codigo;
 				else
-					$codigoCuentaContableVenta = NULL;
+					$codigoCuentaContableVenta = 0;
 										
 				$cuenta = Cuentacontable::select('id', 'codigo')->where('id' , $request->cuentacontablevariacionprecio_id)->first();
 				if ($cuenta)
 					$codigoCuentacontableVariacionPrecio = $cuenta->codigo;
 				else
-					$codigoCuentacontableVariacionPrecio = NULL;
+					$codigoCuentacontableVariacionPrecio = 0;
 						
 				$centrocosto = Centrocosto::select('id', 'codigo')->where('id' , $request->centrocostovariacionprecio_id)->first();
 				if ($centrocosto)

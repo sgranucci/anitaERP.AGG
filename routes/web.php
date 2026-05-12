@@ -712,6 +712,7 @@ Route::delete('configuracion/arbolaprobacion/{id}', 'Configuracion\Arbolaprobaci
 
 Route::get('arbolaprobacion/aprobar/{tipocomprobante}/{comprobante_id}/{hash}', 'Configuracion\ArbolaprobacionController@aprobar');
 Route::post('arbolaprobacion/aprobar-requisicion', 'Configuracion\ArbolaprobacionController@confirmarAprobacionRequisicion')->name('aprobar_requisicion_externo');
+Route::post('arbolaprobacion/aprobar-ordencompra', 'Configuracion\ArbolaprobacionController@confirmarAprobacionOrdencompra')->name('aprobar_ordencompra_externo');
 Route::get('arbolaprobacion/buscarechazo/{tipocomprobante}/{comprobante_id}/{hash}', 'Configuracion\ArbolaprobacionController@buscaRechazo')->name('busca_rechazo');
 Route::put('arbolaprobacion/rechazar', 'Configuracion\ArbolaprobacionController@rechazar')->name('rechazar');
 
@@ -1727,6 +1728,21 @@ Route::get('compras/ordencompra/{id}/editar', 'Compras\OrdencompraController@edi
 Route::put('compras/ordencompra/{id}', 'Compras\OrdencompraController@actualizar')->name('actualizar_ordencompra');
 Route::delete('compras/ordencompra/{id}', 'Compras\OrdencompraController@eliminar')->name('eliminar_ordencompra');
 Route::get('compras/listaordencompra/{formato?}/{busqueda?}', 'Compras\OrdencompraController@listar')->name('listar_ordencompra');
+Route::get('compras/ordencompra/requisiciones-aprobadas', 'Compras\OrdencompraController@buscarRequisicionesAprobadas')->name('ordencompra_buscar_requisiciones');
+Route::get('compras/ordencompra/plantilla-requisicion', 'Compras\OrdencompraController@plantillaRequisicion')->name('ordencompra_plantilla_requisicion');
+Route::get('compras/ordencompra/cotizacion-moneda-fecha', 'Compras\OrdencompraController@cotizacionMonedaFecha')->name('ordencompra_cotizacion_moneda_fecha');
+Route::post('compras/ordencompra/calcular-totales', 'Compras\OrdencompraController@calcularTotales')->name('ordencompra_calcular_totales');
+Route::post('compras/ordencompra/sugerir-cuotas-condicionpago', 'Compras\OrdencompraController@sugerirCuotasCondicionpago')->name('ordencompra_sugerir_cuotas');
+Route::get('compras/ordencompra/{id}/imprimir-pdf', 'Compras\OrdencompraController@imprimirPdf')->name('imprimir_pdf_ordencompra');
+Route::get('compras/ordencompra/{id}/archivo/{archivo}', 'Compras\OrdencompraController@descargarArchivo')->name('ordencompra_archivo');
+Route::get('compras/ordencompra/{id}/historia-legajo', 'Compras\OrdencompraController@leerHistoriaLegajo')->name('ordencompra_historia_legajo');
+Route::get('compras/ordencompra/{id}/historia-estados', 'Compras\OrdencompraController@leerHistoriaEstados')->name('ordencompra_historia_estados');
+Route::get('compras/ordencompra/{id}/movimiento-aprobacion', 'Compras\OrdencompraController@leerMovimientoAprobacion')->name('ordencompra_movimiento_aprobacion');
+Route::post('compras/ordencompra/{id}/cambiar-estado', 'Compras\OrdencompraController@cambiarEstado')->name('ordencompra_cambiar_estado');
+Route::post('compras/ordencompra/{id}/reactivar', 'Compras\OrdencompraController@reactivarSuspendida')->name('ordencompra_reactivar');
+Route::post('compras/ordencompra/{id}/cambiar-sector', 'Compras\OrdencompraController@cambiarSector')->name('ordencompra_cambiar_sector');
+Route::get('compras/ordencompra/soloconsulta/{id}', 'Compras\OrdencompraController@soloConsulta')->name('solo_consulta_ordencompra');
+Route::get('compras/ordencompra/visualizar/{id}/{hash}', 'Compras\OrdencompraController@visualizar')->name('visualizar_ordencompra');
 
 /* Modulo receptivo */
 
@@ -2414,6 +2430,7 @@ Route::get('presupuesto/listacapex/{formato?}/{busqueda?}', 'Presupuesto\CapexCo
 Route::get('presupuesto/leercapexpartidamonto/{capex_partida_id}', 'Presupuesto\CapexController@leerCapexPartidaMonto')->name('lee_capex_partida_monto');
 
 Route::post('presupuesto/consulta_capex', 'Presupuesto\CapexController@consultaCapex')->name('consulta_capex');
+Route::post('presupuesto/resolver-capex-codigo', 'Presupuesto\CapexController@resolverCapexPorCodigo')->name('resolver_capex_codigo');
 Route::get('presupuesto/leer_capex/{capex_id}', 'Presupuesto\CapexController@leerCapexPorId')->name('leer_capex');
 
 /*
@@ -2435,6 +2452,7 @@ Route::get('presupuesto/listapartidagasto/{formato?}/{busqueda?}', 'Presupuesto\
 Route::get('presupuesto/leerpartidagastopartidamonto/{partidagasto_partida_id}', 'Presupuesto\PartidagastoController@leerPartidagastoPartidaMonto')->name('lee_partidagasto_partida_monto');
 
 Route::post('presupuesto/consulta_partidagasto', 'Presupuesto\PartidagastoController@consultaPartidagasto')->name('consulta_partidagasto');
+Route::post('presupuesto/resolver-partidagasto-codigo', 'Presupuesto\PartidagastoController@resolverPartidagastoPorCodigo')->name('resolver_partidagasto_codigo');
 Route::get('presupuesto/leer_partidagasto/{partidagasto_id}', 'Presupuesto\PartidagastoController@leerPartidagastoPorId')->name('leer_partidagasto');
 
 /*

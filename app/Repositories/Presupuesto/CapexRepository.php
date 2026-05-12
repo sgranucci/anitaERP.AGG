@@ -178,4 +178,67 @@ class CapexRepository implements CapexRepositoryInterface
 
 		return $output;
 	}
+
+	public function diagnosticarCodigoLinea(string $codigo, int $empresa_id, ?int $centrocostodestino_id): array
+	{
+		$empresa_id = (int) $empresa_id;
+		if ($empresa_id <= 0) {
+			return ['ok' => false, 'row' => null, 'mensaje' => 'Seleccione una empresa en el encabezado.'];
+		}
+		$codigo = trim($codigo);
+		if ($codigo === '') {
+			return ['ok' => false, 'row' => null, 'mensaje' => 'Indique el código CAPEX.'];
+		}
+
+		$ultimoPresupuestoId = (int) Presupuesto::query()->max('id');
+		if ($ultimoPresupuestoId <= 0) {
+			return ['ok' => false, 'row' => null, 'mensaje' => 'No hay presupuestos cargados.'];
+		}
+
+		$matches = $this->model->query()
+			->where('empresa_id', $empresa_id)
+			->where('presupuesto_id', $ultimoPresupuestoId)
+			->where(function ($w) use ($codigo) {
+				$w->where('codigo', $codigo);
+				if (is_numeric($codigo)) {
+					$w->orWhere('codigo', (string) ((int) (0 + $codigo)));
+				}
+			})
+			->get();
+
+		if ($matches->isEmpty()) {
+			return ['ok' => false, 'row' => null, 'mensaje' => 'No existe CAPEX con ese código en el presupuesto vigente para la empresa.'];
+		}
+
+		$matches = $matches->filter(function ($r) {
+			return (string) $r->estado === 'ACTIVO';
+		});
+		if ($matches->isEmpty()) {
+			return ['ok' => false, 'row' => null, 'mensaje' => 'El CAPEX no está ACTIVO.'];
+		}
+
+		$centrocostodestino_id = (int) ($centrocostodestino_id ?? 0);
+
+		if ($matches->count() === 1) {
+			return ['ok' => true, 'row' => $matches->first(), 'mensaje' => null];
+		}
+
+		if ($centrocostodestino_id > 0) {
+			$row = $matches->firstWhere('centrocosto_id', $centrocostodestino_id);
+			if ($row) {
+				return ['ok' => true, 'row' => $row, 'mensaje' => null];
+			}
+
+			return ['ok' => false, 'row' => null, 'mensaje' => 'Hay varios CAPEX con ese código en el presupuesto vigente; ninguno coincide con el centro de costo de destino de la línea.'];
+		}
+
+		return ['ok' => false, 'row' => null, 'mensaje' => 'Hay varios CAPEX con ese código en el presupuesto vigente; indique centro de costo destino o elija desde la lupa.'];
+	}
+
+	public function resolverPorCodigoLinea(string $codigo, int $empresa_id, ?int $centrocostodestino_id): ?Capex
+	{
+		$d = $this->diagnosticarCodigoLinea($codigo, $empresa_id, $centrocostodestino_id);
+
+		return $d['ok'] ? $d['row'] : null;
+	}
 }

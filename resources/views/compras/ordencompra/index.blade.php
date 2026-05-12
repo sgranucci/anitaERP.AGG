@@ -1,124 +1,213 @@
 @extends("theme.$theme.layout")
 @section('titulo')
-Ordenes de Compra
+Órdenes de compra
 @endsection
 
-@section("scripts")
-<script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
+@section('scripts')
+<script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
+<script>
+$(function () {
+    $('.js-oc-index-abrir-estado').on('click', function () {
+        $('#formIndexOcEstado').attr('action', $(this).data('url'));
+        var cur = $(this).data('estado-actual') || '';
+        $('#index_oc_estado_nuevo').val(cur);
+        $('#index_oc_estado_obs').val('');
+        $('#modalIndexOcCambiarEstado').modal('show');
+    });
+    $('.js-oc-index-abrir-sector').on('click', function () {
+        $('#formIndexOcSector').attr('action', $(this).data('url'));
+        var sid = $(this).data('sector-id');
+        if (sid) {
+            $('#index_oc_sector_nuevo').val(String(sid));
+        }
+        $('#index_oc_sector_obs').val('');
+        $('#index_oc_sector_leyenda').val('');
+        $('#modalIndexOcCambiarSector').modal('show');
+    });
+});
+</script>
 @endsection
-
-<?php use App\Helpers\biblioteca ?>
 
 @section('contenido')
+<div class="modal fade" id="modalIndexOcCambiarEstado" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <form method="POST" id="formIndexOcEstado" action="">
+                @csrf
+                <div class="modal-header">
+                    <h5 class="modal-title">Cambiar estado</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="index_oc_estado_nuevo">Nuevo estado</label>
+                        <select name="estado" id="index_oc_estado_nuevo" class="form-control" required>
+                            @foreach ($estados as $est)
+                                <option value="{{ $est }}">{{ $est }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="index_oc_estado_obs">Observación</label>
+                        <textarea name="observacion" id="index_oc_estado_obs" class="form-control" rows="2" maxlength="2000"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalIndexOcCambiarSector" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <form method="POST" id="formIndexOcSector" action="">
+                @csrf
+                <div class="modal-header">
+                    <h5 class="modal-title">Cambiar sector de legajo</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="index_oc_sector_nuevo">Sector</label>
+                        <select name="sector_legajocompra_id" id="index_oc_sector_nuevo" class="form-control" required>
+                            @foreach ($sectores as $sec)
+                                <option value="{{ $sec->id }}">{{ $sec->nombre }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="index_oc_sector_obs">Observación</label>
+                        <input type="text" name="observacion" id="index_oc_sector_obs" class="form-control" maxlength="255">
+                    </div>
+                    <div class="form-group">
+                        <label for="index_oc_sector_leyenda">Leyenda</label>
+                        <textarea name="leyenda" id="index_oc_sector_leyenda" class="form-control" rows="2" maxlength="2000"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Registrar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
+        @if (!empty($sectorUsuario))
+            <p class="text-muted small mb-2">Filtrado por su sector de legajo de compras asignado.</p>
+        @endif
         <div class="card card-info">
             <div class="card-header">
-                <h3 class="card-title">Ordenes de Compra</h3>
+                <h3 class="card-title">Órdenes de compra</h3>
                 <div class="card-tools">
-                    <a href="#" {{--"{{route('crear_ordencompra')}}"--}} class="btn btn-outline-secondary btn-sm">
-                       	@if (can('crear-ordencompra', false))
-                        	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
-						@endif
-                    </a>
+                    @if (can('crear-ordencompra', false))
+                        <a href="{{ route('crear_ordencompra') }}" class="btn btn-outline-secondary btn-sm">
+                            <i class="fa fa-fw fa-plus-circle"></i> Nueva orden
+                        </a>
+                    @endif
+                </div>
+                <div class="d-md-flex justify-content-md-end">
+                    <form action="{{ route('consultar_ordencompra') }}" method="GET" class="d-flex">
+                        <div class="btn-group">
+                            <input type="text" name="busqueda" class="form-control" placeholder="Búsqueda…" value="{{ $busqueda ?? '' }}">
+                            <button type="submit" class="btn btn-default"><span class="fa fa-search"></span></button>
+                        </div>
+                    </form>
                 </div>
             </div>
             <div class="card-body table-responsive p-0">
-                <table class="table table-striped table-bordered table-hover" id="tabla-data-2">
+                @include('includes.exportar-tabla', ['ruta' => 'listar_ordencompra', 'busqueda' => $busqueda ?? ''])
+                <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead>
                         <tr>
-                            <th class="width10">ID</th>
+                            <th>Número</th>
+                            <th>Solicitante</th>
                             <th>Fecha</th>
-                            <th>Entrega</th>
                             <th>Empresa</th>
+                            <th>Centro costo</th>
                             <th>Proveedor</th>
-                            <th>CC Origen</th>
-                            <th>CC Destino</th>
-                            <th>Moneda</th>
-                            <th>Cotizacion</th>
-                            <th>Anticipada</th>
+                            <th>Sector</th>
                             <th>Estado</th>
-                            <th>Items</th>
+                            <th class="text-right">Σ ítems</th>
                             <th class="width40" data-orderable="false"></th>
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach ($ordencompra as $data)
-							@if ($data->estado == '4')
-                        		<tr class="table-danger">
-							@else
-                        		<tr>
-							@endif
-                            <td>{{$data->id}}</td>
-                            <td>{{date('d/m/Y', strtotime($data->fecha))}}</td>
-                            <td>{{date('d/m/Y', strtotime($data->fechaentrega))}}</td>
-                            <td>{{$data->nombreempresa}}</td>
-                            <td><small>{{$data->nombreproveedor}}</small></td>
-                            <td><small>{{$data->ccorigen}}</small></td>
-                            <td><small>{{$data->ccdestino}}</small></td>
-                            <td>
-                                @foreach ($moneda_query as $moneda)
-                                    @if ($moneda->codigo == $data->codigomoneda)
-                                        <small>{{$moneda->nombre ?? ''}}</small>
+                        @foreach ($ordencompra as $row)
+                            <tr>
+                                <td>{{ $row->numeroordencompra }}</td>
+                                <td><small>{{ $row->nombreusuario ?? '' }}</small></td>
+                                <td>{{ date('d/m/Y', strtotime($row->fecha)) }}</td>
+                                <td>{{ $row->nombreempresa }}</td>
+                                <td><small>{{ $row->nombrecentrocosto }}</small></td>
+                                <td><small>{{ $row->nombreproveedor }}</small></td>
+                                <td><small>{{ $row->nombresector ?? '—' }}</small></td>
+                                <td><small>{{ $row->estadoordencompra }}</small></td>
+                                <td class="text-right text-nowrap">
+                                    <small>{{ number_format((float) ($row->monto_lineas ?? 0), 2, ',', '.') }}</small>
+                                </td>
+                                <td>
+                                    @if (can('editar-ordencompra', false))
+                                        <a href="{{ route('editar_ordencompra', ['id' => $row->id]) }}" class="btn-accion-tabla tooltipsC" title="Editar">
+                                            <i class="fa fa-edit"></i>
+                                        </a>
                                     @endif
-                                @endforeach
-                            </td>
-                            <td style="text-align: right;"><small>{{number_format($data->cotizacion,4)}}</small></td>
-                            <td><small>{{$data->esanticipo}}</small></td>
-                            <td>
-                                @switch($data->estado)
-                                    @case('0')
-                                        <small>PENDIENTE</small>
-                                    @break
-                                    @case('1')    
-                                        <small>ENTR.PARCIAL</small>
-                                    @break
-                                    @case('2')    
-                                        <small>ENTREGADO</small>
-                                    @break
-                                    @case('3')    
-                                        <small>FACTURADO</small>
-                                    @break
-                                    @case('4')    
-                                        <small>SUSPENDIDO</small>
-                                    @break
-                                    @case('C')    
-                                        <small>CERRADA</small>
-                                    @break
-                                    @case('D')    
-                                        <small>CERRADA CON DIF.</small>
-                                    @break
-                                    @case('A')    
-                                        <small>A AUTORIZAR</small>
-                                    @break 
-                                @endswitch
-                            </td>
-                            <td>
-                                @if ($items)
-                                    @foreach ($items as $item)
-                                        @if ($item->id == $data->id)
-                                            <small>{{$item->sku}}-{{$item->descarticulo}}-Cant.:{{$item->cantidad}}-Precio:{{$item->precio}}</small><br>
-                                        @endif
-                                    @endforeach
-                                @endif
-                            </td>
-                            <td>
-                       			@if (can('editar-ordencompra', false))
-                                	<a href="#" {{--"{{route('editar_ordencompra', ['id' => $data->id])}}"--}} class="btn-accion-tabla tooltipsC" title="Editar este registro">
-                                    <i class="fa fa-edit"></i>
-                                	</a>
-								@endif
-                       			@if (can('borrar-ordencompra', false))
-                                <form action="#" {{--"{{route('eliminar_ordencompra', ['id' => $data->id])}}"--}} class="d-inline form-eliminar" method="POST">
-                                    @csrf @method("delete")
-                                    <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">
-                                        <i class="fa fa-times-circle text-danger"></i>
-                                    </button>
-                                </form>
-								@endif
-                            </td>
-                        </tr>
+                                    @if (can('listar-ordencompra', false))
+                                        <a href="{{ route('solo_consulta_ordencompra', ['id' => $row->id]) }}" class="btn-accion-tabla tooltipsC" title="Solo consulta">
+                                            <i class="fa fa-eye"></i>
+                                        </a>
+                                    @endif
+                                    @if (can('listar-ordencompra', false) || can('editar-ordencompra', false))
+                                        <a href="{{ route('imprimir_pdf_ordencompra', ['id' => $row->id]) }}" class="btn-accion-tabla tooltipsC" title="Imprimir orden (PDF vertical)" target="_blank" rel="noopener noreferrer">
+                                            <i class="fa fa-print"></i>
+                                        </a>
+                                        <a href="{{ route('imprimir_pdf_ordencompra', ['id' => $row->id, 'formato' => 'apaisado']) }}" class="btn-accion-tabla tooltipsC" title="PDF Legal apaisado" target="_blank" rel="noopener noreferrer">
+                                            <i class="fa fa-arrows-alt-h"></i>
+                                        </a>
+                                    @endif
+                                    @if (!empty($row->requisicion_id) && (can('editar-requisicion', false) || can('listar-requisicion', false)))
+                                        <a href="{{ route('editar_requisicion', ['id' => $row->requisicion_id]) }}" class="btn-accion-tabla tooltipsC text-warning" title="Ver requisición" target="_blank" rel="noopener noreferrer">
+                                            <i class="fa fa-link"></i>
+                                        </a>
+                                    @endif
+                                    @if (can('actualizar-ordencompra', false))
+                                        <button type="button" class="btn-accion-tabla tooltipsC js-oc-index-abrir-estado text-dark" title="Cambiar estado"
+                                            data-url="{{ route('ordencompra_cambiar_estado', ['id' => $row->id]) }}"
+                                            data-estado-actual="{{ $row->estadoordencompra }}">
+                                            <i class="fa fa-random"></i>
+                                        </button>
+                                        <button type="button" class="btn-accion-tabla tooltipsC js-oc-index-abrir-sector text-dark" title="Cambiar sector"
+                                            data-url="{{ route('ordencompra_cambiar_sector', ['id' => $row->id]) }}"
+                                            data-sector-id="{{ $row->sector_legajocompra_id }}">
+                                            <i class="fa fa-folder-open"></i>
+                                        </button>
+                                    @endif
+                                    @if (($row->estadoordencompra ?? '') === \App\Support\Compras\OrdencompraEstados::SUSPENDIDA && can('actualizar-ordencompra', false))
+                                        <form action="{{ route('ordencompra_reactivar', ['id' => $row->id]) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Reactivar a PENDIENTE?');">
+                                            @csrf
+                                            <button type="submit" class="btn-accion-tabla tooltipsC text-warning" title="Reactivar">
+                                                <i class="fa fa-undo"></i>
+                                            </button>
+                                        </form>
+                                    @endif
+                                    @if (can('borrar-ordencompra', false))
+                                        <form action="{{ route('eliminar_ordencompra', ['id' => $row->id]) }}" class="d-inline form-eliminar" method="POST">
+                                            @csrf
+                                            @method('delete')
+                                            <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar">
+                                                <i class="fa fa-times-circle text-danger"></i>
+                                            </button>
+                                        </form>
+                                    @endif
+                                </td>
+                            </tr>
                         @endforeach
                     </tbody>
                 </table>

@@ -216,11 +216,15 @@ class PartidagastoRepository implements PartidagastoRepositoryInterface
 		}
 
 		foreach ($data as $row) {
+			$conceptoArt = optional($row->articulos)->descripcion;
+			$conceptoTxt = ($conceptoArt !== null && trim((string) $conceptoArt) !== '')
+				? trim((string) $conceptoArt)
+				: '(Sin descripción en artículo — partida asignada)';
 			$output['data'] .= '<tr>';
 			$output['data'] .= '<td class="id">'.e($row->id).'</td>';
 			$output['data'] .= '<td class="codigo">'.e($row->codigo).'</td>';
 			$output['data'] .= '<td class="detalle">'.e($row->detalle).'</td>';
-			$output['data'] .= '<td class="concepto">'.e($row->articulos->descripcion).'</td>';
+			$output['data'] .= '<td class="concepto">'.e($conceptoTxt).'</td>';
 			$output['data'] .= '<td>'
 				.'<a class="btn btn-warning btn-sm eligeconsultapartidagasto">Elegir</a> '
 				.'<a class="btn btn-info btn-sm" href="'.e(url('presupuesto/partidagasto/'.$row->id.'/editar')).'" target="_blank" rel="noopener">Consultar</a>'
@@ -229,5 +233,63 @@ class PartidagastoRepository implements PartidagastoRepositoryInterface
 		}
 
 		return $output;
+	}
+
+	public function diagnosticarCodigoLinea(string $codigo, int $empresa_id, ?int $centrocostodestino_id): array
+	{
+		$empresa_id = (int) $empresa_id;
+		if ($empresa_id <= 0) {
+			return ['ok' => false, 'row' => null, 'mensaje' => 'Seleccione una empresa en el encabezado.'];
+		}
+		$codigo = trim($codigo);
+		if ($codigo === '') {
+			return ['ok' => false, 'row' => null, 'mensaje' => 'Indique el código de partida.'];
+		}
+
+		$ultimoPresupuestoId = (int) Presupuesto::query()->max('id');
+		if ($ultimoPresupuestoId <= 0) {
+			return ['ok' => false, 'row' => null, 'mensaje' => 'No hay presupuestos cargados.'];
+		}
+
+		// Solo presupuesto vigente: evita tomar una fila vieja que luego se rechaza por presupuesto_id.
+		$matches = $this->model->query()
+			->with('articulos')
+			->where('empresa_id', $empresa_id)
+			->where('presupuesto_id', $ultimoPresupuestoId)
+			->where(function ($w) use ($codigo) {
+				$w->where('codigo', $codigo);
+				if (is_numeric($codigo)) {
+					$w->orWhere('codigo', (string) ((int) (0 + $codigo)));
+				}
+			})
+			->get();
+
+		if ($matches->isEmpty()) {
+			return ['ok' => false, 'row' => null, 'mensaje' => 'No existe partida de gastos con ese código en el presupuesto vigente para la empresa.'];
+		}
+
+		$centrocostodestino_id = (int) ($centrocostodestino_id ?? 0);
+
+		if ($matches->count() === 1) {
+			return ['ok' => true, 'row' => $matches->first(), 'mensaje' => null];
+		}
+
+		if ($centrocostodestino_id > 0) {
+			$row = $matches->firstWhere('centrocosto_id', $centrocostodestino_id);
+			if ($row) {
+				return ['ok' => true, 'row' => $row, 'mensaje' => null];
+			}
+
+			return ['ok' => false, 'row' => null, 'mensaje' => 'Hay varias partidas con ese código en el presupuesto vigente; ninguna coincide con el centro de costo de destino de la línea.'];
+		}
+
+		return ['ok' => false, 'row' => null, 'mensaje' => 'Hay varias partidas con ese código en el presupuesto vigente; indique centro de costo destino en la línea o elija desde la lupa.'];
+	}
+
+	public function resolverPorCodigoLinea(string $codigo, int $empresa_id, ?int $centrocostodestino_id): ?Partidagasto
+	{
+		$d = $this->diagnosticarCodigoLinea($codigo, $empresa_id, $centrocostodestino_id);
+
+		return $d['ok'] ? $d['row'] : null;
 	}
 }

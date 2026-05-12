@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Configuracion;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionArbolaprobacion;
 use App\Models\Compras\Requisicion_Estado;
+use App\Support\Compras\OrdencompraEstados;
 use App\Models\Configuracion\Arbolaprobacion;
 use App\Models\Configuracion\Arbolaprobacion_Movimiento;
 use App\Repositories\Configuracion\Arbolaprobacion_MovimientoRepositoryInterface;
@@ -83,9 +84,10 @@ class ArbolaprobacionController extends Controller
         $estado_enum = Arbolaprobacion::$enumEstado;
 
         $requisicion_estados_arbol_enum = Requisicion_Estado::estadosArbolRequisicionConfigurables();
+        $ordencompra_estados_arbol_enum = OrdencompraEstados::estadosArbolConfigurables();
 
         return view('configuracion.arbolaprobacion.crear', compact('empresa_query', 'centrocosto_query', 'moneda_query',
-            'tipoarbol_enum', 'recordatorio_enum', 'estado_enum', 'requisicion_estados_arbol_enum'));
+            'tipoarbol_enum', 'recordatorio_enum', 'estado_enum', 'requisicion_estados_arbol_enum', 'ordencompra_estados_arbol_enum'));
     }
 
     /**
@@ -140,9 +142,10 @@ class ArbolaprobacionController extends Controller
         $estado_enum = Arbolaprobacion::$enumEstado;
 
         $requisicion_estados_arbol_enum = Requisicion_Estado::estadosArbolRequisicionConfigurables();
+        $ordencompra_estados_arbol_enum = OrdencompraEstados::estadosArbolConfigurables();
 
         return view('configuracion.arbolaprobacion.editar', compact('data', 'empresa_query', 'centrocosto_query', 'moneda_query',
-            'tipoarbol_enum', 'recordatorio_enum', 'estado_enum', 'requisicion_estados_arbol_enum'));
+            'tipoarbol_enum', 'recordatorio_enum', 'estado_enum', 'requisicion_estados_arbol_enum', 'ordencompra_estados_arbol_enum'));
     }
 
     /**
@@ -222,6 +225,9 @@ class ArbolaprobacionController extends Controller
             case 'RE':
                 $arbolaprobacion_movimiento = $this->arbolaprobacion_movimientoRepository->findPorRequisicion($comprobante_id);
                 break;
+            case 'OC':
+                $arbolaprobacion_movimiento = $this->arbolaprobacion_movimientoRepository->findPorOrdencompra($comprobante_id);
+                break;
         }
 
         foreach ($arbolaprobacion_movimiento as $movimiento) {
@@ -246,6 +252,17 @@ class ArbolaprobacionController extends Controller
             ]));
         }
 
+        if ($flEncontro && $tipocomprobante === 'OC') {
+            $datos = $this->arbolaprobacionService->portalDatosOrdencompraPorHash((int) $comprobante_id, $hash, 'aprobacion');
+            if ($datos === null) {
+                return $this->portalFinOrdencompra(false, 'No tiene aprobación pendiente o el enlace ya no es válido.');
+            }
+
+            return view('configuracion.arbolaprobacion.ordencompra_portal_aprobar', array_merge($datos, [
+                'hash_aprobacion' => $hash,
+            ]));
+        }
+
         if ($flEncontro) {
             $this->arbolaprobacionService->aprobar($tipocomprobante, $comprobante_id, $aprobacion_id, $usuario_id);
 
@@ -254,6 +271,10 @@ class ArbolaprobacionController extends Controller
 
         if ($tipocomprobante === 'RE') {
             return $this->portalFinRequisicion(false, 'No tiene aprobación pendiente o el enlace ya no es válido.');
+        }
+
+        if ($tipocomprobante === 'OC') {
+            return $this->portalFinOrdencompra(false, 'No tiene aprobación pendiente o el enlace ya no es válido.');
         }
 
         return redirect()->route('inicio')->with('mensaje', 'No tiene aprobación pendiente')->send();
@@ -303,7 +324,59 @@ class ArbolaprobacionController extends Controller
         return $this->portalFinRequisicion(false, 'Este paso ya fue gestionado por otro usuario o el enlace ya no es válido.');
     }
 
+    public function confirmarAprobacionOrdencompra(Request $request)
+    {
+        $request->validate([
+            'comprobante_id' => 'required|integer',
+            'aprobacion_id' => 'required|integer',
+            'usuario_id' => 'required|integer',
+            'hash_aprobacion' => 'required|string',
+            'observacion' => 'nullable|string|max:4000',
+        ]);
+
+        $datos = $this->arbolaprobacionService->portalDatosOrdencompraPorHash(
+            (int) $request->comprobante_id,
+            $request->hash_aprobacion,
+            'aprobacion'
+        );
+
+        if ($datos === null
+            || (int) $datos['movimiento']->id !== (int) $request->aprobacion_id
+            || (int) $datos['movimiento']->destinatariousuario_id !== (int) $request->usuario_id
+        ) {
+            return $this->portalFinOrdencompra(false, 'No se pudo confirmar la aprobación: enlace inválido o ya fue procesada por otro usuario.');
+        }
+
+        $this->arbolaprobacionService->aprobar(
+            'OC',
+            (int) $request->comprobante_id,
+            (int) $request->aprobacion_id,
+            (int) $request->usuario_id,
+            $request->input('observacion')
+        );
+
+        $movPost = Arbolaprobacion_Movimiento::find((int) $request->aprobacion_id);
+        $nombreAprobado = Arbolaprobacion_Movimiento::$enumEstado[array_search('A', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
+        $nombrePendiente = Arbolaprobacion_Movimiento::$enumEstado[array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
+        if ($movPost && $movPost->estado === $nombreAprobado) {
+            return $this->portalFinOrdencompra(true, 'La orden de compra fue aprobada en este nivel. Si el flujo continúa, recibirá nuevas notificaciones por correo.');
+        }
+        if ($movPost && $movPost->estado === $nombrePendiente) {
+            return $this->portalFinOrdencompra(false, 'No se pudo registrar la aprobación. Intente nuevamente.');
+        }
+
+        return $this->portalFinOrdencompra(false, 'Este paso ya fue gestionado por otro usuario o el enlace ya no es válido.');
+    }
+
     protected function portalFinRequisicion(bool $ok, string $mensaje)
+    {
+        return view('configuracion.arbolaprobacion.requisicion_portal_fin', [
+            'ok' => $ok,
+            'mensaje' => $mensaje,
+        ]);
+    }
+
+    protected function portalFinOrdencompra(bool $ok, string $mensaje)
     {
         return view('configuracion.arbolaprobacion.requisicion_portal_fin', [
             'ok' => $ok,
@@ -326,6 +399,9 @@ class ArbolaprobacionController extends Controller
                 break;
             case 'RE':
                 $arbolaprobacion_movimiento = $this->arbolaprobacion_movimientoRepository->findPorRequisicion($comprobante_id);
+                break;
+            case 'OC':
+                $arbolaprobacion_movimiento = $this->arbolaprobacion_movimientoRepository->findPorOrdencompra($comprobante_id);
                 break;
         }
 
@@ -355,12 +431,31 @@ class ArbolaprobacionController extends Controller
             ]));
         }
 
+        if ($flEncontro && $tipocomprobante === 'OC') {
+            $datos = $this->arbolaprobacionService->portalDatosOrdencompraPorHash((int) $comprobante_id, $hash, 'rechazo');
+            if ($datos === null) {
+                return $this->portalFinOrdencompra(false, 'No tiene aprobación pendiente o el enlace ya no es válido.');
+            }
+
+            return view('configuracion.arbolaprobacion.ordencompra_portal_rechazar', array_merge($datos, [
+                'hash_rechazo' => $hash,
+                'tipocomprobante' => $tipocomprobante,
+                'comprobante_id' => $comprobante_id,
+                'aprobacion_id' => $aprobacion_id,
+                'usuario_id' => $usuario_id,
+            ]));
+        }
+
         if ($flEncontro) {
             return view('configuracion.arbolaprobacion.rechazar', compact('tipocomprobante', 'comprobante_id', 'aprobacion_id', 'usuario_id'));
         }
 
         if ($tipocomprobante === 'RE') {
             return $this->portalFinRequisicion(false, 'No tiene aprobación pendiente o el enlace ya no es válido.');
+        }
+
+        if ($tipocomprobante === 'OC') {
+            return $this->portalFinOrdencompra(false, 'No tiene aprobación pendiente o el enlace ya no es válido.');
         }
 
         return redirect()->route('inicio')->with('mensaje', 'No tiene aprobación pendiente')->send();
@@ -394,7 +489,21 @@ class ArbolaprobacionController extends Controller
             }
         }
 
+        if ($portalPublico && $tipocomprobante === 'OC' && filled($request->hash_rechazo)) {
+            $datos = $this->arbolaprobacionService->portalDatosOrdencompraPorHash((int) $comprobante_id, $request->hash_rechazo, 'rechazo');
+            if ($datos === null
+                || (int) $datos['movimiento']->id !== (int) $aprobacion_id
+                || (int) $datos['movimiento']->destinatariousuario_id !== (int) $usuario_id
+            ) {
+                return $this->portalFinOrdencompra(false, 'No se pudo confirmar el rechazo: enlace inválido o ya fue procesado.');
+            }
+        }
+
         if ($tipocomprobante === 'RE' && $portalPublico) {
+            $request->validate(['observacion' => 'required|string|min:3|max:4000']);
+        }
+
+        if ($tipocomprobante === 'OC' && $portalPublico) {
             $request->validate(['observacion' => 'required|string|min:3|max:4000']);
         }
 
@@ -414,6 +523,20 @@ class ArbolaprobacionController extends Controller
             return $this->portalFinRequisicion(false, 'Este paso ya fue gestionado por otro usuario o el enlace ya no es válido.');
         }
 
+        if ($portalPublico && $tipocomprobante === 'OC') {
+            $movPost = Arbolaprobacion_Movimiento::find((int) $aprobacion_id);
+            $nombreRechazado = Arbolaprobacion_Movimiento::$enumEstado[array_search('R', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
+            $nombrePendiente = Arbolaprobacion_Movimiento::$enumEstado[array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
+            if ($movPost && $movPost->estado === $nombreRechazado) {
+                return $this->portalFinOrdencompra(true, 'El rechazo quedó registrado correctamente; la orden quedó en estado suspendido.');
+            }
+            if ($movPost && $movPost->estado === $nombrePendiente) {
+                return $this->portalFinOrdencompra(false, 'No se pudo registrar el rechazo. Intente nuevamente.');
+            }
+
+            return $this->portalFinOrdencompra(false, 'Este paso ya fue gestionado por otro usuario o el enlace ya no es válido.');
+        }
+
         return redirect()->route('inicio')->with('mensaje', 'Rechazo realizado con éxito')->send();
     }
 
@@ -428,6 +551,10 @@ class ArbolaprobacionController extends Controller
             case 'RE':
                 return response()->json(
                     $this->arbolaprobacionService->movimientosRequisicionConAvisoGrabacion((int) $comprobante_id)
+                );
+            case 'OC':
+                return response()->json(
+                    $this->arbolaprobacionService->movimientosOrdencompraConAvisoGrabacion((int) $comprobante_id)
                 );
         }
 

@@ -11,6 +11,7 @@ use App\Models\Compras\Condicionpago;
 use App\Models\Compras\Condicionentrega;
 use App\Models\Compras\Condicioncompra;
 use App\Repositories\Compras\RequisicionRepositoryInterface;
+use App\Repositories\Presupuesto\PartidagastoRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Configuracion\Arbolaprobacion_MovimientoRepositoryInterface;
@@ -40,6 +41,7 @@ class RequisicionController extends Controller
     private $requisicionService;
     private $arbolaprobacion_movimientoRepository;
     private $arbolaprobacionService;
+    private $partidagastoRepository;
 
     public function __construct(
         RequisicionRepositoryInterface $requisicionrepository,
@@ -51,6 +53,7 @@ class RequisicionController extends Controller
         RequisicionQueryInterface $requisicionquery,
         Arbolaprobacion_MovimientoRepositoryInterface $arbolaprobacion_movimientorepository,
         ArbolaprobacionService $arbolaprobacionservice,
+        PartidagastoRepositoryInterface $partidagastorepository,
     ) {
         $this->requisicionRepository = $requisicionrepository;
         $this->empresaRepository = $empresarepository;
@@ -61,6 +64,7 @@ class RequisicionController extends Controller
         $this->requisicionQuery = $requisicionquery;
         $this->arbolaprobacion_movimientoRepository = $arbolaprobacion_movimientorepository;
         $this->arbolaprobacionService = $arbolaprobacionservice;
+        $this->partidagastoRepository = $partidagastorepository;
     }
 
     public function index(Request $request)
@@ -322,6 +326,19 @@ class RequisicionController extends Controller
     public function leerHistoriaRequisicion($requisicion_id)
     {
         return $this->requisicionService->leeHistoriaRequisicion($requisicion_id);
+    }
+
+    /**
+     * Alias histórico: misma consulta que presupuesto/consulta_partidagasto (modal de líneas).
+     */
+    public function consultaPartidagastoRequisicion(Request $request)
+    {
+        $empresa_id = (int) $request->input('empresa_id', 0);
+        $consulta = $request->input('consulta', '');
+        $centrocostodestino_id = $request->input('centrocostodestino_id');
+        $payload = $this->partidagastoRepository->consultaPartidagasto($consulta, $empresa_id, $centrocostodestino_id);
+
+        return response()->json($payload);
     }
 
     /**

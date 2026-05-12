@@ -318,6 +318,40 @@ class CapexController extends Controller
         return response()->json($payload);
     }
 
+    public function resolverCapexPorCodigo(Request $request)
+    {
+        $codigo = trim((string) $request->input('codigo', ''));
+        $empresa_id = (int) $request->input('empresa_id', 0);
+        $ccRaw = $request->input('centrocostodestino_id');
+        $centrocostodestino_id = ($ccRaw === null || $ccRaw === '') ? null : (int) $ccRaw;
+
+        if ($empresa_id <= 0) {
+            return response()->json(['ok' => false, 'mensaje' => 'Seleccione una empresa en el encabezado.'], 422);
+        }
+        if ($codigo === '') {
+            return response()->json(['ok' => false, 'mensaje' => 'Indique el código CAPEX.'], 422);
+        }
+
+        $diag = $this->capexRepository->diagnosticarCodigoLinea($codigo, $empresa_id, $centrocostodestino_id);
+        if (! $diag['ok']) {
+            return response()->json([
+                'ok' => false,
+                'mensaje' => $diag['mensaje'] ?? 'CAPEX no encontrado.',
+            ], 404);
+        }
+        $row = $diag['row'];
+
+        $nombre = (string) ($row->nombre ?? '');
+        $descripcion = $nombre !== '' ? $nombre : (string) ($row->detalle ?? '');
+
+        return response()->json([
+            'ok' => true,
+            'id' => $row->id,
+            'codigo' => $row->codigo,
+            'descripcion' => $descripcion,
+        ]);
+    }
+
     public function leerCapexPorId($capex_id)
     {
         try {

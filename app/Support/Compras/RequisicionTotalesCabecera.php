@@ -151,4 +151,35 @@ final class RequisicionTotalesCabecera
 
         return 1.0;
     }
+
+    /**
+     * Cotización de venta (pesos por unidad de moneda extranjera) para una moneda concreta en una fecha.
+     * La moneda base (ARS, id 1) devuelve 1.
+     */
+    public static function cotizacionVentaPorMonedaEnFecha(
+        CotizacionQueryInterface $cotizacionQuery,
+        string $fechaYmd,
+        int $monedaId,
+    ): float {
+        if ($monedaId <= 1) {
+            return 1.0;
+        }
+
+        $cotRecord = $cotizacionQuery->leeCotizacionDiaria($fechaYmd);
+        if (! $cotRecord instanceof Cotizacion) {
+            return 1.0;
+        }
+
+        $cotRecord->loadMissing('cotizacion_monedas');
+
+        foreach ($cotRecord->cotizacion_monedas as $cotizacionMoneda) {
+            if ((int) $cotizacionMoneda->moneda_id === $monedaId) {
+                $valor = (float) $cotizacionMoneda->cotizacionventa;
+
+                return $valor > 0 ? $valor : 1.0;
+            }
+        }
+
+        return 1.0;
+    }
 }

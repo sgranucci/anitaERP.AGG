@@ -27,7 +27,7 @@ class ValidacionArbolaprobacion extends FormRequest
             'nombre' => 'required|max:255|unique:arbolaprobacion,nombre,' . $this->route('id'),
             'empresa_id' => 'required',
             'estado' => 'required',
-            'requisicion_estado_al_aprobar.*' => 'nullable|string|max:50',
+            'documento_estado_al_aprobar.*' => 'nullable|string|max:50',
         ];
     }
 }

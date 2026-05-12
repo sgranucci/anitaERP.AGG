@@ -34,7 +34,7 @@ function buscar_datos_partidagasto(consulta) {
 function activa_eventos_consultapartidagasto() {
 	$(document).off('click.consultaPdgReq', '.consultapartidagasto').on('click.consultaPdgReq', '.consultapartidagasto', function (event) {
 		event.preventDefault();
-		var $row = $(this).closest('tr.item-requisicion-articulo');
+		var $row = $(this).closest('tr.item-requisicion-articulo, tr.item-ordencompra-articulo');
 		ptrPartidagastoId = $row.find('.partidagasto_id');
 		ptrCodigoPartidagasto = $row.find('.codigopartidagasto');
 		ptrDetallePartidagasto = $row.find('.descripcionpartidagasto');
@@ -67,11 +67,87 @@ function activa_eventos_consultapartidagasto() {
 		var id = $tr.find('td.id').text().trim();
 		var codigo = $tr.find('td.codigo').text().trim();
 		var concepto = $tr.find('td.concepto').text().trim();
+		if (!concepto) {
+			concepto = '(Sin descripción en artículo — partida asignada)';
+		}
 
 		$(ptrPartidagastoId).val(id);
 		$(ptrCodigoPartidagasto).val(codigo);
 		$(ptrDetallePartidagasto).val(concepto);
 
 		$('#consultapartidagastoModal').modal('hide');
+	});
+
+	$(document).off('keydown.ocPdgCodigo', '.codigopartidagasto').on('keydown.ocPdgCodigo', '.codigopartidagasto', function (e) {
+		if (e.which === 13) {
+			e.preventDefault();
+			$(this).blur();
+		}
+	});
+
+	$(document).off('blur.ocPdgCodigo', '.codigopartidagasto').on('blur.ocPdgCodigo', '.codigopartidagasto', function () {
+		var $inp = $(this);
+		if ($inp.prop('readonly')) {
+			return;
+		}
+		var $row = $inp.closest('tr.item-requisicion-articulo, tr.item-ordencompra-articulo');
+		var codigo = ($inp.val() || '').trim();
+		var empresaId = $('#empresa_id').val();
+		var ccDest = $row.find('select[name="centrocostodestino_ids[]"]').val() || '';
+
+		if (!codigo) {
+			$row.find('.partidagasto_id').val('');
+			$row.find('.descripcionpartidagasto').val('');
+			return;
+		}
+		if (!empresaId) {
+			alert('Seleccione una empresa en el encabezado.');
+			return;
+		}
+
+		$.ajax({
+			url: carpetaBasePartidagasto() + '/presupuesto/resolver-partidagasto-codigo',
+			type: 'POST',
+			dataType: 'json',
+			headers: {
+				'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+			},
+			data: {
+				codigo: codigo,
+				empresa_id: empresaId,
+				centrocostodestino_id: ccDest
+			}
+		})
+			.done(function (res) {
+				if (res && res.ok) {
+					$row.find('.partidagasto_id').val(res.id);
+					$inp.val(res.codigo);
+					$row.find('.descripcionpartidagasto').val(
+						res.descripcion && String(res.descripcion).trim() !== ''
+							? res.descripcion
+							: '(Sin descripción en artículo — partida asignada)'
+					);
+				} else {
+					$row.find('.partidagasto_id').val('');
+					$row.find('.descripcionpartidagasto').val('');
+					alert((res && res.mensaje) ? res.mensaje : 'Partida no encontrada.');
+				}
+			})
+			.fail(function (xhr) {
+				$row.find('.partidagasto_id').val('');
+				$row.find('.descripcionpartidagasto').val('');
+				var msg = 'Partida no encontrada o no disponible para el centro de costo / presupuesto actual.';
+				if (xhr.responseJSON && xhr.responseJSON.mensaje) {
+					msg = xhr.responseJSON.mensaje;
+				} else if (xhr.responseText) {
+					try {
+						var j = JSON.parse(xhr.responseText);
+						if (j && j.mensaje) {
+							msg = j.mensaje;
+						}
+					} catch (eIgn) {}
+				}
+				alert(msg);
+			});
 	});
 }

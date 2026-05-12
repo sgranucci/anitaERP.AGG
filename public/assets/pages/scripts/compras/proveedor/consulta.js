@@ -34,18 +34,18 @@ function buscar_datos_proveedor(consulta) {
     });
 }
 
-// Si pulsamos tecla enter en un Input no envia formulario
-$("input").keydown(function (e){
-    // Capturamos qué telca ha sido
-    var keyCode= e.which;
-    // Si la tecla es el Intro/Enter
-    if (keyCode == 13){
-      // Evitamos que se ejecute eventos
-      e.preventDefault();
-      // Devolvemos falso
-      return false;
-    }
-  });
+// Enter en input: no dispara submit accidental, salvo en formulario de orden de compra.
+$(document).off('keydown.ocNoEnterSubmitProveedor', 'input').on('keydown.ocNoEnterSubmitProveedor', 'input', function (e) {
+	var keyCode = e.which;
+	if (keyCode !== 13) {
+		return;
+	}
+	if ($(this).closest('#form-ordencompra-general').length) {
+		return;
+	}
+	e.preventDefault();
+	return false;
+});
 
 $(document).on('keyup', '#consultaproveedor', function () {
     var valor = $(this).val();
@@ -137,6 +137,7 @@ function activa_eventos_consultaproveedor()
         let proveedor_id = $("#proveedor_id").val();
         if (!proveedor_id) {
             $("#nombreproveedor").val('');
+            $("#codigoproveedor").val('');
             $("#proveedor").val('');
             actualizarCondicionPagoProveedorDesdeJson(null);
             return;
@@ -148,6 +149,7 @@ function activa_eventos_consultaproveedor()
             if (data)
             {
                 $("#proveedor_id").val(data.id);
+                $("#codigoproveedor").val(data.codigo || '');
                 $("#nombreproveedor").val(data.nombre);
                 $("#proveedor").val(data.nombre);
                 actualizarCondicionPagoProveedorDesdeJson(data);

@@ -164,12 +164,17 @@
                     <td>
                         @php
                             $idxNivel = $loop->index;
-                            $selEstReq = old('requisicion_estado_al_aprobar.'.$idxNivel, $arbolaprobacion_niveles->requisicion_estado_al_aprobar ?? '');
+                            $nombreTipoOc = \App\Models\Configuracion\Arbolaprobacion::$enumTipoArbol[array_search('OC', array_column(\App\Models\Configuracion\Arbolaprobacion::$enumTipoArbol, 'valor'))]['nombre'];
+                            $tipoArbolSel = old('tipoarbol', isset($data) ? ($data->tipoarbol ?? '') : '');
+                            $docEstadosOpciones = ($tipoArbolSel === $nombreTipoOc)
+                                ? ($ordencompra_estados_arbol_enum ?? [])
+                                : ($requisicion_estados_arbol_enum ?? []);
+                            $selDoc = old('documento_estado_al_aprobar.'.$idxNivel, $arbolaprobacion_niveles->documento_estado_al_aprobar ?? '');
                         @endphp
-                        <select name="requisicion_estado_al_aprobar[]" class="form-control form-control-sm" title="Opcional; aplica al aprobar este nivel">
+                        <select name="documento_estado_al_aprobar[]" class="form-control form-control-sm" title="Opcional; estado del documento al aprobar este nivel">
                             <option value="">—</option>
-                            @foreach(($requisicion_estados_arbol_enum ?? []) as $estReq)
-                                <option value="{{ $estReq['nombre'] }}" {{ $selEstReq == $estReq['nombre'] ? 'selected' : '' }}>{{ str_replace('_', ' ', $estReq['nombre']) }}</option>
+                            @foreach($docEstadosOpciones as $estDoc)
+                                <option value="{{ $estDoc['nombre'] }}" {{ $selDoc == $estDoc['nombre'] ? 'selected' : '' }}>{{ str_replace('_', ' ', $estDoc['nombre']) }}</option>
                             @endforeach
                         </select>
                     </td>

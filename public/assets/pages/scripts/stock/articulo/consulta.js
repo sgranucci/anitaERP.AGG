@@ -54,16 +54,18 @@ function buscar_datos_articulo(consulta) {
     });
 }
 
-// Si pulsamos tecla enter en un Input no envia formulario
-$("input").keydown(function (e){
-    // Capturamos qué telca ha sido
-    var keyCode= e.which;
-    // Si la tecla es el Intro/Enter
-    if (keyCode == 13){
-      e.preventDefault();
-      return false;
-    }
-  });
+// Enter en input: no dispara submit accidental, salvo en formulario de orden de compra (allí se deja el comportamiento por defecto).
+$(document).off('keydown.ocNoEnterSubmitArticulo', 'input').on('keydown.ocNoEnterSubmitArticulo', 'input', function (e) {
+	var keyCode = e.which;
+	if (keyCode !== 13) {
+		return;
+	}
+	if ($(this).closest('#form-ordencompra-general').length) {
+		return;
+	}
+	e.preventDefault();
+	return false;
+});
 
 function activa_eventos_consultaarticulo()
 {
@@ -201,7 +203,7 @@ function activa_eventos_consultaarticulo()
 
     });
 
-    $('.articulo_id').on('change', function (event) {
+    $(document).off('change.ocArticuloIdLinea', '.articulo_id').on('change.ocArticuloIdLinea', '.articulo_id', function (event) {
         event.preventDefault();
         var ptrrenglon = this;
 
@@ -231,73 +233,89 @@ function activa_eventos_consultaarticulo()
 
     });
 
-    $('.codigoarticulo').on('change', function (event) {
+    $(document).off('change.ocCodigoArticuloLinea', '.codigoarticulo').on('change.ocCodigoArticuloLinea', '.codigoarticulo', function (event) {
         event.preventDefault();
         var ptrrenglon = this;
+        var $tr = $(ptrrenglon).closest('tr');
 
-        let sku = $(this).val();
-        let url_res = carpetaBase+'/stock/leerunarticuloporsku/'+sku;
+        let sku = ($(this).val() || '').trim();
+        if (!sku) {
+            $tr.find('.articulo_id').val('');
+            $tr.find('.descripcionarticulo').val('');
+            return;
+        }
 
-        $.get(url_res, function(data){
-            if (data)
+        let url_res = carpetaBase + '/stock/leerunarticuloporsku/' + encodeURIComponent(sku);
+
+        $.get(url_res, function (data) {
+            if (!data || !data.id) {
+                $tr.find('.articulo_id').val('');
+                $tr.find('.descripcionarticulo').val('');
+                alert('No se encontró artículo con ese SKU.');
+                return;
+            }
+
+            $tr.find('.articulo_id').val(data.id);
+            $tr.find('.descripcionarticulo').val(data.descripcion);
+            $tr.find('.unidadmedida_id').val(data.unidadmedida_id);
+            $tr.find('.categoria_id').val(data.categoria_id);
+            $tr.find('.subcategoria_id').val(data.subcategoria_id);
+
+            $.each(data.unidadesdemedidas, function (index, value) {
+                if (index == 'abreviatura') {
+                    $tr.find('.unidadmedida').val(value);
+                }
+            });
+
+            $("#articulo_id").val(data.id);
+            $("#descripcionarticulo").val(data.descripcion);
+            $("#nombrearticulo").val(data.descripcion);
+            $("#unidadmedida").val(data.unidadmedida);
+            $("#codigoarticulo").val(data.sku);
+
+            let unidadmedida = $tr.find('.unidadmedida').val();
+
+            if (unidadmedida != null)
             {
-                $(ptrarticulo_id).val(data.id);
-                $(ptrnombrearticulo).val(data.descripcion);
-
-                $(ptrrenglon).parents("tr").find(".articulo_id").val(data.id);
-			    $(ptrrenglon).parents("tr").find(".descripcionarticulo").val(data.descripcion);
-                $(ptrrenglon).parents("tr").find(".unidadmedida_id").val(data.unidadmedida_id);
-                $(ptrrenglon).parents("tr").find(".categoria_id").val(data.categoria_id);
-                $(ptrrenglon).parents("tr").find(".subcategoria_id").val(data.subcategoria_id);
-
-                $.each(data.unidadesdemedidas, function(index,value){
-                    if (index == 'abreviatura')
-                        $(ptrrenglon).parents("tr").find(".unidadmedida").val(value);
-                });
-
-                $("#articulo_id").val(data.id);
-                $("#descripcionarticulo").val(data.descripcion);
-                $("#nombrearticulo").val(data.descripcion);
-                $("#unidadmedida").val(data.unidadmedida);
-                $("#codigoarticulo").val(data.sku);
-
-                let unidadmedida = $(ptrrenglon).parents("tr").find(".unidadmedida").val();
-
-                if (unidadmedida != null)                
-                {
-                    if (unidadmedida.toUpperCase() == 'CAJ')
-                        $(ptrrenglon).parents("tr").find(".caja").focus();
-
-                    if (unidadmedida.toUpperCase() == 'UN')
-                        $(ptrrenglon).parents("tr").find(".pieza").focus();
-
-                    if (unidadmedida.toUpperCase() == 'KG' || unidadmedida.toUpperCase() == 'KIL')                    
-                        $(ptrrenglon).parents("tr").find(".pieza").focus();  
-                }
-                if (window.asignaPrecio)
-                    asignaPrecio(ptrrenglon, data.id, '');
-
-                if (window.controlDescuento) {
-                    if (!controlDescuento(ptrrenglon))
-                    {
-                        alert("No puede cargar el artículo");
-                        borraRenglon();
-                    }
+                if (unidadmedida.toUpperCase() == 'CAJ') {
+                    $tr.find('.caja').focus();
                 }
 
-                // Si es salamin tira saca opciones que no van del descuento
-                if (window.armaSelectDescuentoVenta) {
-                    armaSelectDescuentoVenta(ptrrenglon);
+                if (unidadmedida.toUpperCase() == 'UN') {
+                    $tr.find('.pieza').focus();
                 }
 
-                if (window.rellenaAtributosArticuloOrdenProduccion) {
-                    window.rellenaAtributosArticuloOrdenProduccion(data);
-                }
-
-                if (window.onArticuloSeleccionado) {
-                    window.onArticuloSeleccionado(data, { row: $(ptrrenglon).closest('tr') });
+                if (unidadmedida.toUpperCase() == 'KG' || unidadmedida.toUpperCase() == 'KIL') {
+                    $tr.find('.pieza').focus();
                 }
             }
+            if (window.asignaPrecio) {
+                asignaPrecio(ptrrenglon, data.id, '');
+            }
+
+            if (window.controlDescuento) {
+                if (!controlDescuento(ptrrenglon))
+                {
+                    alert("No puede cargar el artículo");
+                    borraRenglon();
+                }
+            }
+
+            if (window.armaSelectDescuentoVenta) {
+                armaSelectDescuentoVenta(ptrrenglon);
+            }
+
+            if (window.rellenaAtributosArticuloOrdenProduccion) {
+                window.rellenaAtributosArticuloOrdenProduccion(data);
+            }
+
+            if (window.onArticuloSeleccionado) {
+                window.onArticuloSeleccionado(data, { row: $tr });
+            }
+        }).fail(function () {
+            $tr.find('.articulo_id').val('');
+            $tr.find('.descripcionarticulo').val('');
+            alert('No se encontró artículo con ese SKU.');
         });
 
         setTimeout(() => {

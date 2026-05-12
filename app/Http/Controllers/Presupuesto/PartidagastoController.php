@@ -353,6 +353,45 @@ class PartidagastoController extends Controller
         return response()->json($payload);
     }
 
+    public function resolverPartidagastoPorCodigo(Request $request)
+    {
+        $codigo = trim((string) $request->input('codigo', ''));
+        $empresa_id = (int) $request->input('empresa_id', 0);
+        $ccRaw = $request->input('centrocostodestino_id');
+        $centrocostodestino_id = ($ccRaw === null || $ccRaw === '') ? null : (int) $ccRaw;
+
+        if ($empresa_id <= 0) {
+            return response()->json(['ok' => false, 'mensaje' => 'Seleccione una empresa en el encabezado.'], 422);
+        }
+        if ($codigo === '') {
+            return response()->json(['ok' => false, 'mensaje' => 'Indique el código de partida.'], 422);
+        }
+
+        $diag = $this->partidagastoRepository->diagnosticarCodigoLinea($codigo, $empresa_id, $centrocostodestino_id);
+        if (! $diag['ok']) {
+            return response()->json([
+                'ok' => false,
+                'mensaje' => $diag['mensaje'] ?? 'Partida no encontrada.',
+            ], 404);
+        }
+        $row = $diag['row'];
+
+        $descripcion = ($row->articulos && $row->articulos->descripcion)
+            ? (string) $row->articulos->descripcion
+            : (string) ($row->detalle ?? '');
+        $descripcion = trim($descripcion);
+        if ($descripcion === '') {
+            $descripcion = '(Sin descripción en artículo — partida asignada)';
+        }
+
+        return response()->json([
+            'ok' => true,
+            'id' => $row->id,
+            'codigo' => $row->codigo,
+            'descripcion' => $descripcion,
+        ]);
+    }
+
     public function leerPartidagastoPorId($partidagasto_id)
     {
         try {

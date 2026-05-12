@@ -340,6 +340,113 @@ class ImpuestoService extends FacturacionService
 		return $conceptosTotales;
 	}
 
+	/**
+	 * Solo impuestos nacionales (IVA sobre netos): sin IIBB, sin percepción IVA, sin detracción asociada a percepciones,
+	 * sin líneas de logística El Bierzo. Los importes del arreglo deben estar en moneda ya homogénea (p. ej. moneda del primer ítem).
+	 *
+	 * @param  array<int, array<string, mixed>>  $dataItem  cantidad, precio, preciosindescuento, impuesto_id, incluyeimpuesto, descuentofinal, kilodescuento
+	 * @return array{
+	 *   subtotal_bruto_sin_iva: float,
+	 *   importe_descuento: float,
+	 *   neto_sin_iva: float,
+	 *   iva_total: float,
+	 *   total: float,
+	 *   filas_iva: list<array{tasa: float, importe: float}>
+	 * }
+	 */
+	public function calculaImpuestosNacionalesItems(array &$dataItem, bool $flConIva = true): array
+	{
+		$descuentoFinal = 0.;
+		$porcDescuento = 0.;
+		$netos = [];
+		$subtotales = [];
+		$flGrabaComprobanteDividido = false;
+		$tasaDetraccion = 0.;
+		$porcentajeDescuentoImportePie = 0.;
+		$subtotalBruto = 0.;
+
+		foreach ($dataItem as $idx => $item) {
+			if (($item['cantidad'] ?? 0) == 0) {
+				continue;
+			}
+			$neto = self::calculaNetoItem($item, $flGrabaComprobanteDividido, $flConIva, $tasaDetraccion, $porcentajeDescuentoImportePie);
+			if (($neto['totalSinDescuento'] ?? 0) == 0) {
+				continue;
+			}
+			$subtotalBruto += (float) $neto['totalSinDescuento'];
+			$totalItem = $neto['totalSinDescuento'];
+			self::agregaItemTotales('Subtotal', 0, $totalItem, 0, 0, 0, $subtotales);
+			$descuentoFinal += $neto['totalDescuento'];
+			$porcDescuento = $neto['porcentajeDescuento'];
+			$impuesto = Impuesto::findOrFail($item['impuesto_id']);
+			$valorTasaImpuesto = $impuesto->valor;
+			$totalNetoLinea = round((float) $neto['totalConDescuento'], 2);
+			$dataItem[$idx]['totalcondescuento'] = $totalNetoLinea;
+			self::agregaItemTotales(
+				($valorTasaImpuesto == 0. ? 'Exento' : 'Gravado al '.$valorTasaImpuesto.'%'),
+				$valorTasaImpuesto,
+				$totalNetoLinea,
+				$impuesto->id,
+				$impuesto->codigo,
+				$impuesto->codigoarca,
+				$netos
+			);
+		}
+
+		if (($descuentoFinal + $porcentajeDescuentoImportePie) != 0.) {
+			$detalle = $porcDescuento != 0. ? 'Descuento Gral. '.$porcDescuento.'%' : 'Descuento';
+			self::agregaItemTotales($detalle, $porcDescuento, -$descuentoFinal, 0, 0, 0, $subtotales);
+		}
+
+		$impuestosArr = [];
+		if ($flConIva) {
+			for ($i = 0; $i < count($netos); $i++) {
+				if ($netos[$i]['tasa'] != 0.) {
+					$importe = round($netos[$i]['importe'] * $netos[$i]['tasa'] / 100., 2);
+					$impuestosArr[] = [
+						'concepto' => 'Iva '.$netos[$i]['tasa'].'%',
+						'baseimponible' => $netos[$i]['importe'],
+						'tasa' => $netos[$i]['tasa'],
+						'importe' => $importe,
+						'impuesto_id' => $netos[$i]['impuesto_id'],
+						'codigo' => $netos[$i]['codigo'],
+						'codigoarca' => $netos[$i]['codigoarca'],
+					];
+				}
+			}
+		}
+
+		$conceptosTotales = array_merge($subtotales, $netos, $impuestosArr);
+		$totalFinal = 0.;
+		for ($i = 0; $i < count($conceptosTotales); $i++) {
+			if ($conceptosTotales[$i]['concepto'] != 'Subtotal'
+				&& substr((string) $conceptosTotales[$i]['concepto'], 0, 9) != 'Descuento') {
+				$totalFinal += $conceptosTotales[$i]['importe'];
+			}
+		}
+
+		$netoSinIva = 0.;
+		for ($i = 0; $i < count($netos); $i++) {
+			$netoSinIva += $netos[$i]['importe'];
+		}
+
+		$ivaTotal = 0.;
+		$filasIva = [];
+		foreach ($impuestosArr as $row) {
+			$ivaTotal += $row['importe'];
+			$filasIva[] = ['tasa' => (float) $row['tasa'], 'importe' => (float) $row['importe']];
+		}
+
+		return [
+			'subtotal_bruto_sin_iva' => round($subtotalBruto, 4),
+			'importe_descuento' => round($descuentoFinal, 4),
+			'neto_sin_iva' => round($netoSinIva, 4),
+			'iva_total' => round($ivaTotal, 4),
+			'total' => round($totalFinal, 4),
+			'filas_iva' => $filasIva,
+		];
+	}
+
 	// Busca un valor en array
 
 	public function buscaValor($arrayconcepto, $concepto, $key, $valor)

@@ -34,7 +34,7 @@ function buscar_datos_capex(consulta) {
 function activa_eventos_consultacapex() {
 	$(document).off('click.consultaCapexReq', '.consultacapex').on('click.consultaCapexReq', '.consultacapex', function (event) {
 		event.preventDefault();
-		var $row = $(this).closest('tr.item-requisicion-articulo');
+		var $row = $(this).closest('tr.item-requisicion-articulo, tr.item-ordencompra-articulo');
 		ptrCapexId = $row.find('.capex_id');
 		ptrCodigoCapex = $row.find('.codigocapex');
 		ptrDetalleCapex = $row.find('.descripcioncapex');
@@ -73,5 +73,74 @@ function activa_eventos_consultacapex() {
 		$(ptrDetalleCapex).val(concepto);
 
 		$('#consultacapexModal').modal('hide');
+	});
+
+	$(document).off('keydown.ocCapexCodigo', '.codigocapex').on('keydown.ocCapexCodigo', '.codigocapex', function (e) {
+		if (e.which === 13) {
+			e.preventDefault();
+			$(this).blur();
+		}
+	});
+
+	$(document).off('blur.ocCapexCodigo', '.codigocapex').on('blur.ocCapexCodigo', '.codigocapex', function () {
+		var $inp = $(this);
+		if ($inp.prop('readonly')) {
+			return;
+		}
+		var $row = $inp.closest('tr.item-requisicion-articulo, tr.item-ordencompra-articulo');
+		var codigo = ($inp.val() || '').trim();
+		var empresaId = $('#empresa_id').val();
+		var ccDest = $row.find('select[name="centrocostodestino_ids[]"]').val() || '';
+
+		if (!codigo) {
+			$row.find('.capex_id').val('');
+			$row.find('.descripcioncapex').val('');
+			return;
+		}
+		if (!empresaId) {
+			alert('Seleccione una empresa en el encabezado.');
+			return;
+		}
+
+		$.ajax({
+			url: carpetaBaseCapex() + '/presupuesto/resolver-capex-codigo',
+			type: 'POST',
+			dataType: 'json',
+			headers: {
+				'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+			},
+			data: {
+				codigo: codigo,
+				empresa_id: empresaId,
+				centrocostodestino_id: ccDest
+			}
+		})
+			.done(function (res) {
+				if (res && res.ok) {
+					$row.find('.capex_id').val(res.id);
+					$inp.val(res.codigo);
+					$row.find('.descripcioncapex').val(res.descripcion || '');
+				} else {
+					$row.find('.capex_id').val('');
+					$row.find('.descripcioncapex').val('');
+					alert((res && res.mensaje) ? res.mensaje : 'CAPEX no encontrado.');
+				}
+			})
+			.fail(function (xhr) {
+				$row.find('.capex_id').val('');
+				$row.find('.descripcioncapex').val('');
+				var msg = 'CAPEX no encontrado o no disponible para el centro de costo / presupuesto actual.';
+				if (xhr.responseJSON && xhr.responseJSON.mensaje) {
+					msg = xhr.responseJSON.mensaje;
+				} else if (xhr.responseText) {
+					try {
+						var j = JSON.parse(xhr.responseText);
+						if (j && j.mensaje) {
+							msg = j.mensaje;
+						}
+					} catch (eIgn) {}
+				}
+				alert(msg);
+			});
 	});
 }

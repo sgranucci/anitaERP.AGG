@@ -2,6 +2,8 @@
 
 namespace App\Repositories\Presupuesto;
 
+use App\Models\Presupuesto\Capex;
+
 interface CapexRepositoryInterface extends RepositoryInterface
 {
 
@@ -14,5 +16,15 @@ interface CapexRepositoryInterface extends RepositoryInterface
      * @return array{data: string}
      */
     public function consultaCapex($consulta, $empresa_id, $centrocostodestino_id = null);
+
+    /**
+     * CAPEX exacto por código (último presupuesto, empresa, ACTIVO y opcionalmente CC destino).
+     */
+    public function resolverPorCodigoLinea(string $codigo, int $empresa_id, ?int $centrocostodestino_id): ?Capex;
+
+    /**
+     * @return array{ok: bool, row: ?Capex, mensaje: ?string}
+     */
+    public function diagnosticarCodigoLinea(string $codigo, int $empresa_id, ?int $centrocostodestino_id): array;
 }
 

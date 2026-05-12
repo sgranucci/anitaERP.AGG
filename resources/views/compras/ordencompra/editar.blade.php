@@ -1,0 +1,176 @@
+@extends(!empty($acceso_visualizacion_por_hash) ? 'layouts.requisicion-visualizar-hash' : "theme.$theme.layout")
+@section('titulo')
+Órdenes de compra
+@endsection
+
+@section('scripts')
+<script src="{{ asset('assets/pages/scripts/admin/crear.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/presupuesto/partidagasto/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/presupuesto/capex/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/proveedor/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/ordencompra/formulario.js') }}" type="text/javascript"></script>
+@endsection
+
+@section('contenido')
+<div class="row" id="ordencompra-editar-root">
+    <div class="col-lg-12">
+        @include('includes.form-error')
+        @include('includes.mensaje')
+
+        @if (isset($data) && $data && empty($visualizar))
+            <div class="modal fade" id="modalOcCambiarEstado" tabindex="-1" role="dialog" aria-hidden="true">
+                <div class="modal-dialog" role="document">
+                    <div class="modal-content">
+                        <form method="POST" action="{{ route('ordencompra_cambiar_estado', ['id' => $data->id]) }}">
+                            @csrf
+                            <div class="modal-header">
+                                <h5 class="modal-title">Cambiar estado</h5>
+                                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="form-group">
+                                    <label for="oc_estado_nuevo">Nuevo estado</label>
+                                    <select name="estado" id="oc_estado_nuevo" class="form-control" required>
+                                        @foreach ($estados_oc as $est)
+                                            <option value="{{ $est }}" {{ ($data->estadoordencompra ?? '') === $est ? 'selected' : '' }}>{{ $est }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="oc_estado_obs">Observación</label>
+                                    <textarea name="observacion" id="oc_estado_obs" class="form-control" rows="3" maxlength="2000" placeholder="Opcional"></textarea>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                                <button type="submit" class="btn btn-primary">Guardar</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal fade" id="modalOcCambiarSector" tabindex="-1" role="dialog" aria-hidden="true">
+                <div class="modal-dialog" role="document">
+                    <div class="modal-content">
+                        <form method="POST" action="{{ route('ordencompra_cambiar_sector', ['id' => $data->id]) }}">
+                            @csrf
+                            <div class="modal-header">
+                                <h5 class="modal-title">Cambiar sector de legajo</h5>
+                                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="form-group">
+                                    <label for="oc_sector_nuevo">Sector</label>
+                                    <select name="sector_legajocompra_id" id="oc_sector_nuevo" class="form-control" required>
+                                        @foreach ($sectores_legajo as $sec)
+                                            <option value="{{ $sec->id }}" {{ (int) ($data->sector_legajocompra_id ?? 0) === (int) $sec->id ? 'selected' : '' }}>{{ $sec->nombre }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="oc_sector_obs">Observación</label>
+                                    <input type="text" name="observacion" id="oc_sector_obs" class="form-control" maxlength="255" placeholder="Motivo del traslado">
+                                </div>
+                                <div class="form-group">
+                                    <label for="oc_sector_leyenda">Leyenda / detalle</label>
+                                    <textarea name="leyenda" id="oc_sector_leyenda" class="form-control" rows="2" maxlength="2000"></textarea>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                                <button type="submit" class="btn btn-primary">Registrar cambio</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        @endif
+
+        <div class="card card-danger">
+            <div class="card-header">
+                <h3 class="card-title">
+                    @if (isset($data) && $data)
+                        Orden de compra {{ $data->numeroordencompra }}
+                    @else
+                        Nueva orden de compra
+                    @endif
+                </h3>
+                <div class="card-tools">
+                    @if (empty($acceso_visualizacion_por_hash))
+                        <a href="{{ route('consultar_ordencompra') }}" class="btn btn-outline-info btn-sm">
+                            <i class="fa fa-fw fa-reply-all"></i> Volver al listado
+                        </a>
+                    @endif
+                    @if (isset($data) && $data && (can('listar-ordencompra', false) || can('editar-ordencompra', false)))
+                        <a href="{{ route('imprimir_pdf_ordencompra', ['id' => $data->id]) }}" class="btn btn-primary btn-sm" title="Descargar PDF de la orden de compra (Legal vertical)" target="_blank" rel="noopener noreferrer">
+                            <i class="fas fa-file-pdf"></i> Imprimir orden (PDF)
+                        </a>
+                        <a href="{{ route('imprimir_pdf_ordencompra', ['id' => $data->id, 'formato' => 'apaisado']) }}" class="btn btn-outline-primary btn-sm" title="PDF en Legal apaisado (todas las columnas de ítems)" target="_blank" rel="noopener noreferrer">
+                            <i class="fas fa-file-pdf"></i> PDF apaisado
+                        </a>
+                    @endif
+                    @if (isset($data) && $data && empty($visualizar))
+                        @if (can('actualizar-ordencompra', false))
+                            <button type="button" class="btn btn-outline-light btn-sm" data-toggle="modal" data-target="#modalOcCambiarEstado">
+                                <i class="fa fa-random"></i> Cambiar estado
+                            </button>
+                            <button type="button" class="btn btn-outline-light btn-sm" data-toggle="modal" data-target="#modalOcCambiarSector">
+                                <i class="fa fa-folder-open"></i> Cambiar sector
+                            </button>
+                        @endif
+                        @if (!empty($data->requisicion_id) && (can('editar-requisicion', false) || can('listar-requisicion', false)))
+                            <a href="{{ route('editar_requisicion', ['id' => $data->requisicion_id]) }}" class="btn btn-outline-warning btn-sm" target="_blank" rel="noopener noreferrer" title="Abre la requisición que originó esta OC">
+                                <i class="fa fa-link"></i> Ver requisición
+                            </a>
+                        @endif
+                        @if (($data->estadoordencompra ?? '') === \App\Support\Compras\OrdencompraEstados::SUSPENDIDA && can('actualizar-ordencompra', false))
+                            <form action="{{ route('ordencompra_reactivar', ['id' => $data->id]) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Pasar la orden de compra de SUSPENDIDA a PENDIENTE?');">
+                                @csrf
+                                <button type="submit" class="btn btn-warning btn-sm">Reactivar a pendiente</button>
+                            </form>
+                        @endif
+                    @endif
+                </div>
+            </div>
+
+            <form action="{{ isset($data) && $data ? route('actualizar_ordencompra', ['id' => $data->id]) : route('guardar_ordencompra') }}"
+                method="POST" id="form-ordencompra-general" class="form-horizontal form--label-right" enctype="multipart/form-data" autocomplete="off" novalidate>
+                @csrf
+                @if (isset($data) && $data)
+                    @method('PUT')
+                @endif
+
+                <div class="text-center py-2 border-bottom rounded-top bg-white">
+                    <button type="button" id="oc-boton-principal" class="btn btn-primary btn-sm mx-1 oc-tab-solapa font-weight-bold">Datos principales</button>
+                    <button type="button" id="oc-boton-articulos" class="btn btn-info btn-sm mx-1 oc-tab-solapa">Artículos</button>
+                    <button type="button" id="oc-boton-comprobantes" class="btn btn-info btn-sm mx-1 oc-tab-solapa">Comprobantes a venir</button>
+                    <button type="button" id="oc-boton-archivos" class="btn btn-info btn-sm mx-1 oc-tab-solapa">
+                        <span class="fa fa-paperclip"></span> Archivos asociados
+                    </button>
+                    @if (isset($data) && $data)
+                        <button type="button" id="oc-boton-historia-legajo" class="btn btn-info btn-sm mx-1 oc-tab-solapa">Historia legajo</button>
+                        <button type="button" id="oc-boton-historia-estados" class="btn btn-info btn-sm mx-1 oc-tab-solapa">Historia estados</button>
+                        <button type="button" id="oc-boton-arbol" class="btn btn-info btn-sm mx-1 oc-tab-solapa">Árbol aprobación</button>
+                    @endif
+                </div>
+
+                <div class="card-body">
+                    @include('compras.ordencompra.form')
+                </div>
+
+                @if (empty($visualizar))
+                    <div class="card-footer">
+                        <button type="submit" class="btn btn-success">
+                            <i class="fa fa-save"></i>
+                            {{ isset($data) && $data ? 'Actualizar' : 'Guardar' }}
+                        </button>
+                    </div>
+                @endif
+            </form>
+            @include('compras.ordencompra.form_modales_y_json')
+        </div>
+    </div>
+</div>
+@endsection

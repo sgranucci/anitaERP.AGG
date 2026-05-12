@@ -569,6 +569,7 @@
 
 		// Activa eventos de consulta
 		activa_eventos_consultacliente();
+		activa_eventos_consultaarticulo();
 
 		$('.articulo').on('click', function (event) {
 

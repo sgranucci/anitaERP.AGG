@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Storage;
 use OwenIt\Auditing\Contracts\Auditable;
 use App\Models\Seguridad\Usuario;
 use App\Models\Ordenventa\Ordenventa;
+use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Requisicion;
 use App\Traits\Configuracion\Arbolaprobacion_MovimientoTrait;
 
@@ -35,6 +36,11 @@ class Arbolaprobacion_Movimiento extends Model implements Auditable
 	public function requisiciones()
 	{
     	return $this->belongsTo(Requisicion::class, 'requisicion_id');
+	}
+
+	public function ordencompras()
+	{
+    	return $this->belongsTo(Ordencompra::class, 'ordencompra_id');
 	}
 
     public function enviousuarios()

@@ -12,6 +12,7 @@ use App\Repositories\Compras\Requisicion_ArticuloRepositoryInterface;
 use App\Repositories\Compras\Requisicion_ArchivoRepositoryInterface;
 use App\Repositories\Presupuesto\PartidagastoRepositoryInterface;
 use App\Repositories\Presupuesto\CapexRepositoryInterface;
+use App\Support\Compras\ValidacionPresupuestoPartidaCapexLineas;
 use App\Services\Configuracion\ArbolaprobacionService;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
@@ -78,6 +79,12 @@ class RequisicionService
         } catch (\RuntimeException $e) {
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         } catch (\Exception $e) {
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        }
+
+        try {
+            ValidacionPresupuestoPartidaCapexLineas::validar($data);
+        } catch (\InvalidArgumentException $e) {
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         }
 
@@ -197,6 +204,12 @@ class RequisicionService
             } catch (\RuntimeException $e) {
                 return ['mensaje' => 'error', 'errores' => $e->getMessage()];
             }
+        }
+
+        try {
+            ValidacionPresupuestoPartidaCapexLineas::validar($data);
+        } catch (\InvalidArgumentException $e) {
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         }
 
         DB::beginTransaction();

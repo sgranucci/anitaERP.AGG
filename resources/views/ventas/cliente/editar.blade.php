@@ -106,7 +106,10 @@
                     </button>
                     <button type="button" id="botonform8" class="btn btn-info btn-sm">
                         <span class="fa fa-copy"></span> CM05
-                    </button>                    
+                    </button>
+                    <button type="button" id="btn-consulta-arca-padron-crear" class="btn btn-outline-secondary btn-sm" title="Ingresá el CUIT y consultá el padrón ARCA">
+                        <i class="fa fa-search"></i> Consulta padrón ARCA
+                    </button>
                 </div>     
                 <div class="card-body" style="padding-bottom: 0; padding-top: 5px;">
                     @include('ventas.cliente.form1')
@@ -127,6 +130,7 @@
             		</div>
             	</div>
             </form>
+            @include('compras.proveedor.arca-cuit-entry-modal')
         </div>
     </div>
 </div>

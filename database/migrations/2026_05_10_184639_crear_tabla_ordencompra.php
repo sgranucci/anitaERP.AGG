@@ -27,7 +27,6 @@ return new class extends Migration
             $table->string('lugarentrega', 255)->nullable();
             $table->unsignedBigInteger('transporte_id')->nullable();
             $table->foreign('transporte_id', 'fk_ordencompra_transporte')->references('id')->on('transporte')->onDelete('set null')->onUpdate('set null');
-            $table->string('codigo', 50)->nullable();
             $table->string('tratamiento', 50);
             $table->unsignedBigInteger('proveedor_id')->nullable();
             $table->foreign('proveedor_id', 'fk_ordencompra_proveedor')->references('id')->on('proveedor')->onDelete('restrict')->onUpdate('restrict');

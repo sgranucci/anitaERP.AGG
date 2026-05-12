@@ -65,4 +65,11 @@ class Arbolaprobacion_MovimientoRepository implements Arbolaprobacion_Movimiento
                 ->orderBy('nivel')->orderBy('id')
                 ->with('enviousuarios')->with('destinatariousuarios')->get();
     }
+
+    public function findPorOrdencompra($id)
+    {
+        return $this->model->where('ordencompra_id', $id)->where('deleted_at', null)
+            ->orderBy('nivel')->orderBy('id')
+            ->with('enviousuarios')->with('destinatariousuarios')->get();
+    }
 }

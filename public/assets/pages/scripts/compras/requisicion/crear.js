@@ -119,6 +119,9 @@ $(function () {
 			}
 		}
 		$tbody.append($clone);
+		setTimeout(function () {
+			$tbody.find('tr.item-requisicion-articulo').last().find('.codigoarticulo').trigger('focus');
+		}, 0);
 	});
 
 	$(document).on('click', '.eliminar_requisicion_articulo', function (event) {

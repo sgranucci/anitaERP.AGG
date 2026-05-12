@@ -33,9 +33,6 @@ Requisiciones
                     <button type="button" id="botonform1" class="btn btn-primary btn-sm">
                         <i class="fa fa-user"></i> Datos principales
                     </button>
-                    <button type="button" id="botonform3" class="btn btn-info btn-sm">
-                        <span class="fa fa-copy"></span> Historia
-                    </button>
                     <button type="button" id="botonform4" class="btn btn-info btn-sm">
                         <span class="fa fa-paperclip"></span> Archivos asociados
                     </button>
@@ -46,13 +43,6 @@ Requisiciones
                         <strong>Aviso:</strong> <span class="texto"></span>
                     </div>
                     @include('compras.requisicion.form')
-                    <div class="form3" style="display:none;">
-                        <h5>Historia de estados</h5>
-                        <table class="table table-bordered">
-                            <thead><tr><th>Fecha</th><th>Estado</th><th>Usuario</th><th>Observación</th></tr></thead>
-                            <tbody class="container-historia"></tbody>
-                        </table>
-                    </div>
                     <div class="form4" id="requisicion-solapa-archivos-adjuntos" style="display:none;">
                         @include('compras.requisicion.partials.solapa_agregar_archivos', ['data' => $data ?? null])
                     </div>

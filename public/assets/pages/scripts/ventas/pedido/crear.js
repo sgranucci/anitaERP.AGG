@@ -368,7 +368,7 @@
 			});
         });
 
-		$('.codigoarticulolocal').on('change', function (event) {
+		$(document).off('change.ocPedidoCodigoLocal', '.codigoarticulolocal').on('change.ocPedidoCodigoLocal', '.codigoarticulolocal', function (event) {
 			event.preventDefault();
 			var articulo = $(this);
 			var articulo_ant = $(this).parents("tr").find(".articulo_id_previo").val();

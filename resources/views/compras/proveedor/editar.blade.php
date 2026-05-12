@@ -94,6 +94,9 @@
                     <button type="button" id="botonform5" class="btn btn-info btn-sm">
                         <span class="fa fa-copy"></span> Archivos asociados
                     </button>
+                    <button type="button" id="btn-consulta-arca-padron-crear" class="btn btn-outline-secondary btn-sm" title="Ingresá el CUIT y consultá el padrón ARCA">
+                        <i class="fa fa-search"></i> Consulta padrón ARCA
+                    </button>
                 </div>
                 <div class="card-body" style="padding-bottom: 0; padding-top: 5px;">
                     @include('compras.proveedor.form1')
@@ -101,6 +104,9 @@
                         @include('compras.proveedor.form2')
                     @else
                         @include('compras.proveedor.formronly2')
+                        {{-- Endpoint ARCA + modales (formronly2 no incluye tab2 ni vistas ARCA) --}}
+                        <div id="tab2" class="d-none" data-arca-constancia-url="{{ route('arca_constancia_inscripcion') }}" aria-hidden="true"></div>
+                        @include('compras.proveedor.arca-padron-modals')
                     @endif
                     @include('compras.proveedor.form3')
                     @include('compras.proveedor.form4')
@@ -115,6 +121,7 @@
             		</div>
             	</div>
             </form>
+            @include('compras.proveedor.arca-cuit-entry-modal')
         </div>
     </div>
 </div>
