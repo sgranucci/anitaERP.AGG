@@ -19,6 +19,7 @@ use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Ventas\FormapagoRepositoryInterface;
 use App\Services\Compras\OrdencompraGestionService;
+use App\Services\Compras\OrdencompraOpcionesPrecioService;
 use App\Services\Configuracion\ArbolaprobacionService;
 use App\Services\Configuracion\ImpuestoService;
 use App\Support\Compras\NotaOcPdfRecorteMargenIzquierdo;
@@ -107,7 +108,7 @@ class OrdencompraController extends Controller
         can('borrar-ordencompra');
 
         if ($request->ajax()) {
-            if ($this->ordencompraRepository->delete($id)) {
+            if ($this->ordencompraGestionService->eliminar((int) $id)) {
                 return response()->json(['mensaje' => 'ok']);
             }
 
@@ -195,6 +196,60 @@ class OrdencompraController extends Controller
             $data = $this->ordencompraGestionService->plantillaDesdeRequisicion($id);
         } catch (\InvalidArgumentException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json($data);
+    }
+
+    /**
+     * Opciones de precio para una línea de OC generada desde requisición (lista proveedor, presupuesto activo/elegido, precio requisición).
+     */
+    public function opcionesPrecioLineaOc(Request $request, OrdencompraOpcionesPrecioService $opcionesPrecioService)
+    {
+        if (! can('crear-ordencompra', false) && ! can('editar-ordencompra', false)) {
+            return response()->json(['message' => 'Sin permisos'], 403);
+        }
+        $request->validate([
+            'requisicion_id' => 'required|integer|exists:requisicion,id',
+            'requisicion_articulo_id' => 'required|integer|exists:requisicion_articulo,id',
+            'articulo_id' => 'required|integer|exists:articulo,id',
+            'fecha_referencia' => 'nullable|date',
+            'proveedor_id' => 'nullable|integer|exists:proveedor,id',
+            'condicioncompra_id' => 'nullable|integer|exists:condicioncompra,id',
+            'condicionentrega_id' => 'nullable|integer|exists:condicionentrega,id',
+            'condicionpago_id' => 'nullable|integer|exists:condicionpago,id',
+        ]);
+
+        $fechaRef = $request->query('fecha_referencia');
+        if (! is_string($fechaRef) || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaRef)) {
+            $fechaRef = date('Y-m-d');
+        }
+
+        $proveedorId = $request->query('proveedor_id');
+        $proveedorId = ($proveedorId !== null && $proveedorId !== '' && (int) $proveedorId > 0)
+            ? (int) $proveedorId
+            : null;
+
+        $ccId = $request->query('condicioncompra_id');
+        $ccId = ($ccId !== null && $ccId !== '' && (int) $ccId > 0) ? (int) $ccId : null;
+        $ceId = $request->query('condicionentrega_id');
+        $ceId = ($ceId !== null && $ceId !== '' && (int) $ceId > 0) ? (int) $ceId : null;
+        $cpId = $request->query('condicionpago_id');
+        $cpId = ($cpId !== null && $cpId !== '' && (int) $cpId > 0) ? (int) $cpId : null;
+
+        $data = $opcionesPrecioService->opcionesLinea(
+            (int) $request->query('requisicion_id'),
+            (int) $request->query('requisicion_articulo_id'),
+            (int) $request->query('articulo_id'),
+            $proveedorId,
+            $ccId,
+            $ceId,
+            $cpId,
+            $fechaRef
+        );
+
+        if (isset($data['message'])) {
+            return response()->json($data, 422);
         }
 
         return response()->json($data);

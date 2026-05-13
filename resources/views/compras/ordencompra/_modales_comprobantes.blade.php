@@ -62,6 +62,10 @@
             </div>
             <div class="modal-body">
                 <input type="hidden" id="oc_cuotas_comp_idx" value="">
+                <div class="alert alert-light border small mb-3 py-2" id="oc_cuotas_comp_detalle_wrap">
+                    <span class="text-muted d-block mb-1">Detalle del comprobante (cabecera)</span>
+                    <div id="oc_cuotas_comp_detalle_text" class="mb-0 small">—</div>
+                </div>
                 <p class="text-muted small mb-3">Arme las cuotas con importe, vencimiento, forma de pago y misma moneda que el comprobante a venir (no la de la orden de compra en general). La suma de importes debe coincidir con el monto total de ese comprobante.</p>
 
                 <ul class="nav nav-pills mb-3" id="oc-cuotas-pills" role="tablist">
@@ -103,15 +107,21 @@
                     </div>
                     <div class="tab-pane fade" id="oc-cuotas-pane-manual">
                         <div class="form-row align-items-end">
-                            <div class="form-group col-md-3">
-                                <label>Cantidad de cuotas</label>
-                                <input type="number" min="1" max="60" id="oc_cuotas_cantidad_manual" class="form-control" value="1">
+                            <div class="form-group col-md-2">
+                                <label>Cantidad (N)</label>
+                                <input type="number" min="1" max="60" id="oc_cuotas_cantidad_manual" class="form-control" value="1" title="Número de cuotas a generar">
                             </div>
-                            <div class="form-group col-md-6">
-                                <button type="button" class="btn btn-outline-secondary btn-sm" id="oc_cuotas_btn_crear_manual">Crear / reemplazar filas vacías</button>
-                                <span class="text-muted small ml-2">Distribuye el monto total en partes iguales y la misma fecha de vencimiento inicial; luego edite cada fila.</span>
+                            <div class="form-group col-md-3">
+                                <label>Fecha 1ª cuota <small class="text-muted font-weight-normal">(mensual)</small></label>
+                                <input type="date" id="oc_cuotas_fecha_primera_manual" class="form-control" title="Vencimiento de la primera cuota; las siguientes suman 1 mes">
+                            </div>
+                            <div class="form-group col-md-7">
+                                <label class="d-block">&nbsp;</label>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="oc_cuotas_btn_crear_manual">Crear / reemplazar (misma fecha)</button>
+                                <button type="button" class="btn btn-outline-danger btn-sm ml-1" id="oc_cuotas_btn_mensual">Generar cuotas mensuales</button>
                             </div>
                         </div>
+                        <p class="text-muted small mb-0">Usa el <strong>Monto</strong> de la solapa «Por condición de pago» (mismo comprobante). Partes iguales: <em>misma fecha</em> repite el vencimiento en todas las filas; <em>mensual</em> aplica +1 mes entre cuotas. Luego puede editar importes y fechas en la tabla.</p>
                     </div>
                 </div>
 

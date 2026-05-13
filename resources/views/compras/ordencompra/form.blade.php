@@ -278,7 +278,44 @@
 
 <div id="oc-solapa-articulos" class="oc-solapa" style="display:none;">
     <h5>Artículos</h5>
+    <style>
+        #tabla-articulos-ordencompra tr.item-ordencompra-articulo-sub td {
+            border-top: none !important;
+            padding-top: 0.15rem !important;
+            padding-bottom: 0.15rem !important;
+            vertical-align: middle;
+        }
+        #tabla-articulos-ordencompra .oc-meta-fila-una-linea {
+            display: flex;
+            flex-wrap: nowrap;
+            align-items: center;
+            gap: 0.35rem 0.75rem;
+            line-height: 1.25;
+        }
+        #tabla-articulos-ordencompra .oc-meta-fila-una-linea > .oc-meta-bloque {
+            display: flex;
+            flex-wrap: nowrap;
+            align-items: center;
+            min-width: 0;
+        }
+        #tabla-articulos-ordencompra .oc-meta-fila-una-linea > .oc-meta-bloque-detalle {
+            flex: 1 1 58%;
+        }
+        #tabla-articulos-ordencompra .oc-meta-fila-una-linea > .oc-meta-bloque-origen {
+            flex: 1 1 38%;
+            max-width: 42%;
+        }
+        #tabla-articulos-ordencompra .oc-linea-item-leyenda {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-size: 0.8125rem;
+            min-width: 0;
+            flex: 1 1 0;
+        }
+    </style>
     @php
+        $ocColspanMetaArticulos = $soloLectura ? 12 : 13;
         $fechaDocOc = old('fecha', (isset($data) && $data && $data->fecha) ? substr($data->fecha, 0, 10) : date('Y-m-d'));
         $ocMonedaPesoId = (int) (
             optional($moneda_query->firstWhere('abreviatura', '$'))->id
@@ -300,7 +337,8 @@
                 <th style="width: 9%;">CC destino</th>
                 <th style="width: 20%;">Partida presupuesto</th>
                 <th style="width: 18%;">CAPEX</th>
-                <th style="width: 9%;">Det. línea</th>
+                <th style="width: 8%;">Det. línea</th>
+                <th style="width: 7%;" class="text-nowrap">Origen</th>
                 @if (!$soloLectura)
                     <th style="width: 4%;"></th>
                 @endif
@@ -335,11 +373,19 @@
                     if (! empty($_pgId) && trim((string) $_pgDesc) === '') {
                         $_pgDesc = '(Sin descripción en artículo — partida asignada)';
                     }
+                    $_reqArtId = old('requisicion_articulo_ids.'.$idx, $linea->requisicion_articulo_id ?? '');
+                    $_poTipo = old('precio_origen_tipos.'.$idx, $linea->precio_origen_tipo ?? '');
+                    $_poRef = old('precio_origen_ref_ids.'.$idx, $linea->precio_origen_ref_id ?? '');
+                    $_poEtiq = old('precio_origen_etiquetas.'.$idx, $linea->precio_origen_etiqueta ?? '');
                 @endphp
                 <tr class="item-ordencompra-articulo">
                     <td>
                         <input type="hidden" class="ordencompra_articulo_id" name="ordencompra_articulo_ids[]" value="{{ old('ordencompra_articulo_ids.'.$idx, $linea->id ?? '') }}">
                         <input type="hidden" class="articulo_id" name="articulo_ids[]" value="{{ old('articulo_ids.'.$idx, $linea->articulo_id ?? '') }}">
+                        <input type="hidden" class="oc-requisicion-articulo-id" name="requisicion_articulo_ids[]" value="{{ $_reqArtId }}">
+                        <input type="hidden" class="oc-precio-origen-tipo" name="precio_origen_tipos[]" value="{{ $_poTipo }}">
+                        <input type="hidden" class="oc-precio-origen-ref-id" name="precio_origen_ref_ids[]" value="{{ $_poRef }}">
+                        <input type="hidden" class="oc-precio-origen-etiqueta" name="precio_origen_etiquetas[]" value="{{ $_poEtiq }}">
                         <input type="hidden" name="descuentos_linea[]" value="{{ old('descuentos_linea.'.$idx, $linea->descuento ?? '') }}">
                         <input type="hidden" name="cantidadalternativas[]" value="{{ old('cantidadalternativas.'.$idx, $linea->cantidadalternativa ?? '') }}">
                         <textarea name="detalle_articulos[]" class="d-none oc-ta-detalle-linea" aria-hidden="true">{{ old('detalle_articulos.'.$idx, $linea->detalle ?? '') }}</textarea>
@@ -419,17 +465,23 @@
                                 value="{{ old('descripcioncapexs.'.$idx, optional($linea->capexs)->nombre ?? '') }}" readonly title="{{ old('descripcioncapexs.'.$idx, optional($linea->capexs)->nombre ?? '') }}">
                         </div>
                     </td>
-                    <td class="align-middle">
+                    <td class="align-middle p-1 text-center">
                         @if (!$soloLectura)
-                            <button type="button" title="Editar detalle de la línea" class="btn btn-sm btn-outline-secondary oc-abrir-detalle-linea mb-1">
+                            <button type="button" title="Editar detalle de la línea" class="btn btn-sm btn-outline-secondary oc-abrir-detalle-linea">
                                 <i class="fa fa-align-left"></i>
                             </button>
                         @else
-                            <button type="button" title="Ver detalle de la línea" class="btn btn-sm btn-outline-secondary oc-abrir-detalle-linea mb-1">
+                            <button type="button" title="Ver detalle de la línea" class="btn btn-sm btn-outline-secondary oc-abrir-detalle-linea">
                                 <i class="fa fa-eye"></i>
                             </button>
                         @endif
-                        <div class="oc-detalle-linea-badge small text-muted text-truncate" style="max-width: 10rem;"></div>
+                    </td>
+                    <td class="align-middle p-1 text-center">
+                        @if (!$soloLectura)
+                            <button type="button" class="btn btn-sm btn-outline-primary oc-btn-origen-precio py-0 px-1" style="font-size: 0.7rem; line-height: 1.2;" title="Elegir origen del precio (lista, presupuesto o requisición)">
+                                <i class="fa fa-tags" aria-hidden="true"></i><span class="sr-only"> Origen</span>
+                            </button>
+                        @endif
                     </td>
                     @if (!$soloLectura)
                         <td class="text-center">
@@ -438,6 +490,20 @@
                             </button>
                         </td>
                     @endif
+                </tr>
+                <tr class="item-ordencompra-articulo-sub">
+                    <td colspan="{{ $ocColspanMetaArticulos }}" class="px-2 bg-light">
+                        <div class="oc-meta-fila-una-linea">
+                            <div class="oc-meta-bloque oc-meta-bloque-detalle">
+                                <span class="font-weight-bold text-secondary small text-nowrap flex-shrink-0 mr-1">Detalle línea</span>
+                                <div class="oc-detalle-linea-badge oc-linea-item-leyenda text-body"></div>
+                            </div>
+                            <div class="oc-meta-bloque oc-meta-bloque-origen border-left pl-2 ml-1">
+                                <span class="font-weight-bold text-secondary small text-nowrap flex-shrink-0 mr-1">Origen precio</span>
+                                <div class="oc-origen-precio-resumen oc-linea-item-leyenda text-body" title="{{ $_poEtiq }}">{{ $_poEtiq !== '' && $_poEtiq !== null ? $_poEtiq : '—' }}</div>
+                            </div>
+                        </div>
+                    </td>
                 </tr>
             @endforeach
         </tbody>
@@ -462,6 +528,26 @@
                     @if (!$soloLectura)
                         <button type="button" class="btn btn-primary btn-sm" id="oc_detalle_linea_guardar">Guardar</button>
                     @endif
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modalOcOrigenPrecio" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header py-2">
+                    <h5 class="modal-title">Origen del precio de la línea</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted mb-2" id="modalOcOrigenPrecioSubtitulo"></p>
+                    <div id="modalOcOrigenPrecioCargando" class="text-center text-muted py-3 d-none">Cargando opciones…</div>
+                    <div id="modalOcOrigenPrecioError" class="alert alert-danger d-none"></div>
+                    <div id="modalOcOrigenPrecioOpciones"></div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cerrar</button>
                 </div>
             </div>
         </div>
@@ -558,6 +644,7 @@
                     <th>Vencimiento</th>
                     <th class="text-right">Monto</th>
                     <th>Moneda</th>
+                    <th style="max-width: 14rem;">Detalle</th>
                     <th>Cuotas</th>
                     <th class="text-nowrap" data-orderable="false"></th>
                 </tr>
@@ -588,7 +675,7 @@
     <div id="oc-solapa-historia-estados" class="oc-solapa" style="display:none;">
         <h5>Historia de estados</h5>
         <table class="table table-bordered table-sm" id="tabla-historia-estados">
-            <thead><tr><th>Fecha</th><th>Estado</th><th>Observación</th></tr></thead>
+            <thead><tr><th>Fecha y hora</th><th>Estado</th><th>Observación</th></tr></thead>
             <tbody></tbody>
         </table>
     </div>

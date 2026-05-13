@@ -17,6 +17,7 @@ use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Configuracion\Arbolaprobacion_MovimientoRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Ventas\FormapagoRepositoryInterface;
+use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Proveedor;
 use App\Models\Compras\Requisicion_Archivo;
 use App\Services\Compras\RequisicionService;
@@ -180,6 +181,64 @@ class RequisicionController extends Controller
         return redirect('compras/requisicion')->with('mensaje', $mensaje);
     }
 
+    /**
+     * Comprobantes vinculados a la requisición (órdenes de compra; más adelante recepciones y facturas).
+     */
+    public function comprobantesAsociados(int $id)
+    {
+        if (! can('listar-requisicion', false) && ! can('editar-requisicion', false)) {
+            return response()->json(['message' => 'No tiene permisos para esta consulta.'], 403);
+        }
+
+        if (! $this->requisicionQuery->requisicionAccesiblePorUsuario($id)) {
+            return response()->json(['message' => 'Requisición no encontrada o sin acceso.'], 404);
+        }
+
+        $req = $this->requisicionRepository->find($id);
+        if (! $req) {
+            return response()->json(['message' => 'Requisición no encontrada.'], 404);
+        }
+
+        $ocs = Ordencompra::query()
+            ->where('requisicion_id', $id)
+            ->orderBy('fecha', 'desc')
+            ->orderBy('id', 'desc')
+            ->get(['id', 'numeroordencompra', 'fecha', 'estadoordencompra']);
+
+        $puedeVerOc = can('listar-ordencompra', false);
+        $puedeImprimirOc = can('listar-ordencompra', false) || can('editar-ordencompra', false);
+
+        $filas = [];
+        foreach ($ocs as $oc) {
+            $fila = [
+                'tipo' => 'orden_compra',
+                'tipo_etiqueta' => 'Orden de compra',
+                'id' => $oc->id,
+                'numero' => $oc->numeroordencompra,
+                'fecha' => $oc->fecha ? date('d/m/Y', strtotime((string) $oc->fecha)) : '',
+                'estado' => (string) ($oc->estadoordencompra ?? ''),
+            ];
+            if ($puedeVerOc) {
+                $fila['url_ver'] = route('solo_consulta_ordencompra', ['id' => $oc->id]);
+            }
+            if ($puedeImprimirOc) {
+                $fila['url_imprimir_vertical'] = route('imprimir_pdf_ordencompra', ['id' => $oc->id]);
+                $fila['url_imprimir_apaisado'] = route('imprimir_pdf_ordencompra', ['id' => $oc->id, 'formato' => 'apaisado']);
+            }
+            $filas[] = $fila;
+        }
+
+        return response()->json([
+            'numerorequisicion' => $req->numerorequisicion,
+            'requisicion_id' => $req->id,
+            'filas' => $filas,
+            'proximamente' => [
+                'Recepciones de proveedores asociadas a la orden de compra',
+                'Facturas de compra vinculadas a esa orden',
+            ],
+        ]);
+    }
+
     public function imprimirPdf($id)
     {
         if (! can('listar-requisicion', false) && ! can('editar-requisicion', false)) {
@@ -257,6 +316,7 @@ class RequisicionController extends Controller
 
         $acceso_visualizacion_por_hash = false;
         $visualizar = false;
+        $tiene_ordencompra_asociada = $this->tieneOrdencompraAsociadaRequisicion((int) $data->id);
 
         return view('compras.requisicion.editar', compact(
             'data',
@@ -274,7 +334,8 @@ class RequisicionController extends Controller
             'tratamiento_enum',
             'contratacionDirecta_enum',
             'acceso_visualizacion_por_hash',
-            'visualizar'
+            'visualizar',
+            'tiene_ordencompra_asociada'
         ));
     }
 
@@ -659,6 +720,7 @@ class RequisicionController extends Controller
             $contratacionDirecta_enum = Requisicion::$enumContratacionDirecta;
             $visualizar = true;
             $acceso_visualizacion_por_hash = filled($hash);
+            $tiene_ordencompra_asociada = $this->tieneOrdencompraAsociadaRequisicion((int) $data->id);
 
             return view('compras.requisicion.editar', compact(
                 'data',
@@ -673,10 +735,16 @@ class RequisicionController extends Controller
                 'tratamiento_enum',
                 'contratacionDirecta_enum',
                 'visualizar',
-                'acceso_visualizacion_por_hash'
+                'acceso_visualizacion_por_hash',
+                'tiene_ordencompra_asociada'
             ));
         }
 
         return redirect()->route('inicio')->with('mensaje', 'No tienes permisos para visualizar la requisición')->send();
+    }
+
+    private function tieneOrdencompraAsociadaRequisicion(int $requisicionId): bool
+    {
+        return Ordencompra::query()->where('requisicion_id', $requisicionId)->exists();
     }
 }

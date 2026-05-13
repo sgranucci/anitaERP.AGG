@@ -12,22 +12,29 @@ Requisiciones
 <script src="{{asset("assets/pages/scripts/compras/requisicion/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/requisicion/consulta-listasprecio.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/requisicion/presupuestos.js")}}" type="text/javascript"></script>
+@include('compras.requisicion.partials.comprobantes_asociados_script')
 @endsection
 
 @section('contenido')
+@include('compras.requisicion.partials.comprobantes_asociados_modal')
 <div class="row" id="editar">
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
         <div class="card card-danger">
             <div class="card-header">
-                <h3 class="card-title">Requisición {{ $data->numerorequisicion }}</h3>
+                <h3 class="card-title">Requisición &nbsp;ID:&nbsp;{{ $data->id }}&nbsp;Número {{ $data->numerorequisicion }}</h3>
                 <div class="card-tools">
                     @if(empty($acceso_visualizacion_por_hash))
                         @if (can('listar-requisicion', false) || can('editar-requisicion', false))
                         <a href="{{ route('imprimir_pdf_requisicion', ['id' => $data->id]) }}" class="btn btn-primary" title="Listar la requisición en PDF" target="_blank" rel="noopener noreferrer">
                             <i class="fas fa-file-pdf"> Listar Requisición</i>
                         </a>
+                        @endif
+                        @if (!empty($tiene_ordencompra_asociada) && (can('editar-requisicion', false) || can('listar-requisicion', false)))
+                        <button type="button" class="btn btn-outline-warning btn-sm ml-1 js-requisicion-comprobantes" title="Ver comprobantes asociados (órdenes de compra)" data-id="{{ $data->id }}" data-numero="{{ $data->numerorequisicion }}">
+                            <i class="fas fa-link"></i> Ver comprobantes
+                        </button>
                         @endif
                         <a href="{{ route('consultar_requisicion') }}" class="btn btn-outline-info btn-sm">
                             <i class="fa fa-fw fa-reply-all"></i> Volver al listado
@@ -65,7 +72,7 @@ Requisiciones
                     <div class="form3" style="display:none;">
                         <h5>Historia de estados</h5>
                         <table class="table table-bordered">
-                            <thead><tr><th>Fecha</th><th>Estado</th><th>Usuario</th><th>Observación</th></tr></thead>
+                            <thead><tr><th>Fecha y hora</th><th>Estado</th><th>Usuario</th><th>Observación</th></tr></thead>
                             <tbody class="container-historia"></tbody>
                         </table>
                     </div>

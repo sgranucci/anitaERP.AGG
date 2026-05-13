@@ -14,6 +14,8 @@ use App\Repositories\Compras\Ordencompra_ArchivoRepositoryInterface;
 use App\Repositories\Compras\Ordencompra_ArticuloRepositoryInterface;
 use App\Repositories\Compras\Ordencompra_EstadoRepositoryInterface;
 use App\Repositories\Compras\OrdencompraRepositoryInterface;
+use App\Repositories\Compras\Requisicion_EstadoRepositoryInterface;
+use App\Repositories\Compras\RequisicionRepositoryInterface;
 use App\Services\Configuracion\ArbolaprobacionService;
 use App\Support\Compras\OrdencompraCondicionesContratacionGenerator;
 use App\Support\Compras\ValidacionPresupuestoPartidaCapexLineas;
@@ -34,6 +36,9 @@ class OrdencompraGestionService
         private Ordencompra_ArticuloRepositoryInterface $ordencompraArticuloRepository,
         private Ordencompra_ArchivoRepositoryInterface $ordencompraArchivoRepository,
         private ArbolaprobacionService $arbolaprobacionService,
+        private RequisicionRepositoryInterface $requisicionRepository,
+        private Requisicion_EstadoRepositoryInterface $requisicionEstadoRepository,
+        private RequisicionPresupuestoService $requisicionPresupuestoService,
     ) {
     }
 
@@ -117,6 +122,7 @@ class OrdencompraGestionService
                 'codigocapex' => $cpx ? (string) ($cpx->codigo ?? '') : '',
                 'descripcioncapex' => $cpx ? (string) ($cpx->nombre ?? '') : '',
                 'cotizacion' => 1,
+                'requisicion_articulo_id' => (int) $lin->id,
             ];
         }
 
@@ -216,6 +222,12 @@ class OrdencompraGestionService
         }
 
         try {
+            $this->validarOrigenPrecioDesdeRequisicion($payload);
+        } catch (\InvalidArgumentException $e) {
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        }
+
+        try {
             $this->arbolaprobacionService->validaOrdencompraRequestContraArbolOpcional($payload);
         } catch (\RuntimeException $e) {
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
@@ -226,19 +238,29 @@ class OrdencompraGestionService
 
         $cab = $this->armaCabeceraDesdeRequest($payload, OrdencompraEstados::PENDIENTE, $sectorId, $uid);
 
+        if (! empty($cab['requisicion_id'])) {
+            try {
+                $this->assertRequisicionAprobadaParaAsociarOc((int) $cab['requisicion_id']);
+            } catch (\InvalidArgumentException $e) {
+                return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+            }
+        }
+
         $oc = null;
         DB::beginTransaction();
         try {
             $oc = $this->ordencompraRepository->create($cab);
 
             $this->ordencompraEstadoRepository->create([
-                'fechas' => [Carbon::now()->format('Y-m-d')],
+                'fechas' => [Carbon::now()->toDateTimeString()],
                 'estados' => [OrdencompraEstados::PENDIENTE],
                 'usuario_ids' => [$uid],
                 'observacionestados' => ['Alta de orden de compra'],
             ], $oc->id);
 
             $this->ordencompraArticuloRepository->syncFromRequest(array_merge($payload, ['fecha' => $cab['fecha']]), $oc->id);
+
+            $this->marcarPresupuestoElegidoSiAplica($payload, (int) ($cab['requisicion_id'] ?? 0));
 
             $this->sincronizarComprobantesCuotas($oc->id, $payload, $uid);
             $this->regenerarCondicionesContratacion($oc->id);
@@ -257,6 +279,10 @@ class OrdencompraGestionService
 
             if ($this->arbolaprobacionService->empresaTieneArbolOrdencompraActivoUnico((int) $oc->empresa_id)) {
                 $this->arbolaprobacionService->procesaArbolaprobacion('OC', $oc->id, 'insert');
+            }
+
+            if (! empty($cab['requisicion_id'])) {
+                $this->marcarRequisicionGeneroOc((int) $cab['requisicion_id'], $uid, 'Alta de orden de compra');
             }
 
             DB::commit();
@@ -293,6 +319,12 @@ class OrdencompraGestionService
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         }
 
+        try {
+            $this->validarOrigenPrecioDesdeRequisicion($payload);
+        } catch (\InvalidArgumentException $e) {
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        }
+
         if (($existente->estadoordencompra ?? '') === OrdencompraEstados::PENDIENTE) {
             try {
                 $payload['ordencompra_id'] = $id;
@@ -305,10 +337,22 @@ class OrdencompraGestionService
         $cab = $this->armaCabeceraDesdeRequest($payload, $existente->estadoordencompra, $existente->sector_legajocompra_id, $existente->creousuario_id);
         unset($cab['creousuario_id']);
 
+        $oldReqId = $existente->requisicion_id ? (int) $existente->requisicion_id : null;
+        $newReqId = ! empty($cab['requisicion_id']) ? (int) $cab['requisicion_id'] : null;
+
+        if ($newReqId !== null && $newReqId !== $oldReqId) {
+            try {
+                $this->assertRequisicionAprobadaParaAsociarOc($newReqId);
+            } catch (\InvalidArgumentException $e) {
+                return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+            }
+        }
+
         DB::beginTransaction();
         try {
             $this->ordencompraRepository->update($cab, $id);
             $this->ordencompraArticuloRepository->syncFromRequest(array_merge($payload, ['fecha' => $cab['fecha']]), $id);
+            $this->marcarPresupuestoElegidoSiAplica($payload, (int) ($cab['requisicion_id'] ?? 0));
             $this->sincronizarComprobantesCuotas($id, $payload, Auth::user()->id);
             $this->regenerarCondicionesContratacion($id);
             $this->ordencompraArchivoRepository->update($request, $id);
@@ -316,6 +360,16 @@ class OrdencompraGestionService
             if (($existente->estadoordencompra ?? '') === OrdencompraEstados::PENDIENTE
                 && $this->arbolaprobacionService->empresaTieneArbolOrdencompraActivoUnico((int) $cab['empresa_id'])) {
                 $this->arbolaprobacionService->procesaArbolaprobacion('OC', $id, 'insert');
+            }
+
+            if ($oldReqId !== $newReqId) {
+                $uidAct = Auth::user()->id;
+                if ($oldReqId) {
+                    $this->marcarRequisicionAprobadaSiGeneroOc($oldReqId, $uidAct, 'Actualización de orden de compra: se desasoció la requisición');
+                }
+                if ($newReqId) {
+                    $this->marcarRequisicionGeneroOc($newReqId, $uidAct, 'Actualización de orden de compra: requisición asociada');
+                }
             }
 
             DB::commit();
@@ -326,6 +380,29 @@ class OrdencompraGestionService
         }
 
         return ['mensaje' => 'ok'];
+    }
+
+    public function eliminar(int $id): bool
+    {
+        $oc = Ordencompra::query()->select('id', 'requisicion_id')->find($id);
+        if (! $oc) {
+            return false;
+        }
+
+        DB::beginTransaction();
+        try {
+            if ($oc->requisicion_id) {
+                $this->marcarRequisicionAprobadaSiGeneroOc((int) $oc->requisicion_id, Auth::user()->id, 'Eliminación de orden de compra');
+            }
+            $this->ordencompraRepository->delete($id);
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return false;
+        }
+
+        return true;
     }
 
     public function cambiarEstado(int $id, string $nuevoEstado, string $observacion): array
@@ -340,7 +417,7 @@ class OrdencompraGestionService
             $this->ordencompraRepository->update(['estadoordencompra' => $nuevoEstado], $id);
             $this->ordencompraEstadoRepository->creaEstado(
                 $id,
-                Carbon::now()->format('Y-m-d'),
+                Carbon::now()->toDateTimeString(),
                 $nuevoEstado,
                 Auth::user()->id,
                 $observacion !== '' ? $observacion : 'Cambio de estado'
@@ -410,6 +487,83 @@ class OrdencompraGestionService
             ->orderByDesc('fecha')
             ->orderByDesc('id')
             ->get();
+    }
+
+    private static function nombreEstadoRequisicionAprobada(): string
+    {
+        return Requisicion_Estado::$enumEstado[array_search('A', array_column(Requisicion_Estado::$enumEstado, 'valor'), true)]['nombre'];
+    }
+
+    private static function nombreEstadoRequisicionGeneroOc(): string
+    {
+        return Requisicion_Estado::$enumEstado[array_search('O', array_column(Requisicion_Estado::$enumEstado, 'valor'), true)]['nombre'];
+    }
+
+    /** Texto de estado usado antes del nombre completo (datos históricos). */
+    private static function nombreLegacyGeneroOrdenCompraRequisicion(): string
+    {
+        return 'GENERO OC';
+    }
+
+    private function estadoRequisicionEquivaleAGeneroOc(?string $estado): bool
+    {
+        if ($estado === null || $estado === '') {
+            return false;
+        }
+
+        return $estado === self::nombreEstadoRequisicionGeneroOc()
+            || $estado === self::nombreLegacyGeneroOrdenCompraRequisicion();
+    }
+
+    private function assertRequisicionAprobadaParaAsociarOc(int $requisicionId): void
+    {
+        $req = Requisicion::query()->select('id', 'estado')->find($requisicionId);
+        if (! $req) {
+            throw new \InvalidArgumentException('La requisición asociada no existe.');
+        }
+        if ($req->estado !== self::nombreEstadoRequisicionAprobada()) {
+            throw new \InvalidArgumentException('La requisición debe estar en estado APROBADA para asociarla a la orden de compra.');
+        }
+    }
+
+    private function registrarCambioEstadoRequisicion(int $requisicionId, string $nombreEstado, int $usuarioId, string $observacion): void
+    {
+        $this->requisicionRepository->update(['estado' => $nombreEstado], $requisicionId);
+        $this->requisicionEstadoRepository->creaEstado(
+            $requisicionId,
+            Carbon::now()->toDateTimeString(),
+            $nombreEstado,
+            $usuarioId,
+            $observacion
+        );
+    }
+
+    private function marcarRequisicionGeneroOc(int $requisicionId, int $usuarioId, string $observacion): void
+    {
+        $this->registrarCambioEstadoRequisicion(
+            $requisicionId,
+            self::nombreEstadoRequisicionGeneroOc(),
+            $usuarioId,
+            $observacion
+        );
+        $this->arbolaprobacionService->anulaMovimientosArbolPendientesAbiertosRequisicion(
+            $requisicionId,
+            'Sin efecto (requisición en GENERO ORDEN COMPRA)'
+        );
+    }
+
+    private function marcarRequisicionAprobadaSiGeneroOc(int $requisicionId, int $usuarioId, string $observacion): void
+    {
+        $req = Requisicion::query()->select('id', 'estado')->find($requisicionId);
+        if (! $req || ! $this->estadoRequisicionEquivaleAGeneroOc($req->estado)) {
+            return;
+        }
+        $this->registrarCambioEstadoRequisicion(
+            $requisicionId,
+            self::nombreEstadoRequisicionAprobada(),
+            $usuarioId,
+            $observacion
+        );
     }
 
     /**
@@ -579,5 +733,78 @@ class OrdencompraGestionService
         }
         $texto = OrdencompraCondicionesContratacionGenerator::desdeModelo($oc);
         $this->ordencompraRepository->update(['condiciones_contratacion' => $texto], $ordencompraId);
+    }
+
+    /**
+     * Si la OC está ligada a una requisición, cada línea que traiga requisicion_articulo_id debe tener origen de precio explícito.
+     *
+     * @param  array<string, mixed>  $payload
+     *
+     * @throws \InvalidArgumentException
+     */
+    private function validarOrigenPrecioDesdeRequisicion(array $payload): void
+    {
+        $reqId = ! empty($payload['requisicion_id']) ? (int) $payload['requisicion_id'] : 0;
+        if ($reqId <= 0) {
+            return;
+        }
+
+        $articuloIds = $payload['articulo_ids'] ?? [];
+        $cantidades = $payload['cantidades'] ?? [];
+        $reqArtIds = $payload['requisicion_articulo_ids'] ?? [];
+        $tipos = $payload['precio_origen_tipos'] ?? [];
+        $refs = $payload['precio_origen_ref_ids'] ?? [];
+
+        $validTipos = [
+            OrdencompraOpcionesPrecioService::ORIGEN_LISTA,
+            OrdencompraOpcionesPrecioService::ORIGEN_PRESUPUESTO,
+            OrdencompraOpcionesPrecioService::ORIGEN_REQUISICION,
+        ];
+
+        $n = is_array($articuloIds) ? count($articuloIds) : 0;
+        for ($i = 0; $i < $n; $i++) {
+            $aid = $articuloIds[$i] ?? null;
+            $cant = (float) ($cantidades[$i] ?? 0);
+            if ($aid === null || $aid === '' || $cant <= 0) {
+                continue;
+            }
+            $rid = isset($reqArtIds[$i]) ? (int) $reqArtIds[$i] : 0;
+            if ($rid <= 0) {
+                continue;
+            }
+            $tipo = trim((string) ($tipos[$i] ?? ''));
+            if ($tipo === '' || ! in_array($tipo, $validTipos, true)) {
+                throw new \InvalidArgumentException(
+                    'Línea '.($i + 1).': debe elegir el origen del precio (lista de proveedor, presupuesto o requisición) con el botón «Origen precio».'
+                );
+            }
+        }
+
+        $pids = OrdencompraOpcionesPrecioService::presupuestoIdsDistintosUsados(
+            is_array($tipos) ? $tipos : [],
+            is_array($refs) ? $refs : []
+        );
+        if (count($pids) > 1) {
+            throw new \InvalidArgumentException('No puede combinar precios de más de un presupuesto en la misma orden de compra.');
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function marcarPresupuestoElegidoSiAplica(array $payload, int $requisicionId): void
+    {
+        if ($requisicionId <= 0) {
+            return;
+        }
+        $tipos = $payload['precio_origen_tipos'] ?? [];
+        $refs = $payload['precio_origen_ref_ids'] ?? [];
+        $ids = OrdencompraOpcionesPrecioService::presupuestoIdsDistintosUsados(
+            is_array($tipos) ? $tipos : [],
+            is_array($refs) ? $refs : []
+        );
+        if (count($ids) === 1) {
+            $this->requisicionPresupuestoService->marcarComoElegidoParaOc($requisicionId, $ids[0]);
+        }
     }
 }

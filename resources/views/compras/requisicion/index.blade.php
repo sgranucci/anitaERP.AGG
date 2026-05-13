@@ -5,9 +5,11 @@ Requisiciones
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
+@include('compras.requisicion.partials.comprobantes_asociados_script')
 @endsection
 
 @section('contenido')
+@include('compras.requisicion.partials.comprobantes_asociados_modal')
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
@@ -70,27 +72,32 @@ Requisiciones
                             <td>
                                 @if (can('editar-requisicion', false))
                                 <a href="{{ route('editar_requisicion', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Editar">
-                                    <i class="fa fa-edit"></i>
+                                    <i class="fas fa-edit"></i>
                                 </a>
                                 @if (($data->estado ?? '') === ($estado_en_compras ?? 'EN COMPRAS'))
                                 <form action="{{ route('enviar_arbol_requisicion', ['id' => $data->id]) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Enviar esta requisición al árbol de aprobación para continuar el circuito?');">
                                     @csrf
                                     <button type="submit" class="btn-accion-tabla tooltipsC text-success" title="Envía al árbol de aprobación">
-                                        <i class="fa fa-sitemap"></i>
+                                        <i class="fas fa-sitemap"></i>
                                     </button>
                                 </form>
                                 @endif
                                 @endif
                                 @if (can('listar-requisicion', false) || can('editar-requisicion', false))
                                 <a href="{{ route('imprimir_pdf_requisicion', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Listar la requisición (PDF)" target="_blank" rel="noopener noreferrer">
-                                    <i class="fa fa-print"></i>
+                                    <i class="fas fa-print"></i>
                                 </a>
-                                @endif                                
+                                @endif
+                                @if ((int) ($data->ordencompra_vinculadas_count ?? 0) > 0 && (can('editar-requisicion', false) || can('listar-requisicion', false)))
+                                <button type="button" class="btn-accion-tabla tooltipsC text-warning js-requisicion-comprobantes" title="Ver comprobantes asociados (órdenes de compra)" data-id="{{ $data->id }}" data-numero="{{ $data->numerorequisicion }}">
+                                    <i class="fas fa-link"></i>
+                                </button>
+                                @endif
                                 @if (can('borrar-requisicion', false))
                                 <form action="{{ route('eliminar_requisicion', ['id' => $data->id]) }}" class="d-inline form-eliminar" method="POST">
                                     @csrf @method("delete")
                                     <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar">
-                                        <i class="fa fa-times-circle text-danger"></i>
+                                        <i class="fas fa-times-circle text-danger"></i>
                                     </button>
                                 </form>
                                 @endif

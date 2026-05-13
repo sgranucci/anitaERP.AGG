@@ -9,6 +9,59 @@
 		});
 	}
 
+	// Lee el estado actual (no necesariamente persistido) de la grilla de ítems
+	// del tab "Datos principales". Permite que la pantalla de presupuestos
+	// refleje cambios de precio/cantidad/artículo/moneda hechos por el usuario
+	// antes de haber grabado la requisición.
+	function obtenerLineasItemsDOM() {
+		var $tabla = $('#tabla-articulos-requisicion');
+		if (!$tabla.length) {
+			return { lineas: [], nuevasSinGrabar: 0 };
+		}
+		var lineas = [];
+		var nuevasSinGrabar = 0;
+		$tabla.find('tbody tr.item-requisicion-articulo').each(function () {
+			var $tr = $(this);
+			var articuloId = parseInt($tr.find('.articulo_id').val(), 10);
+			if (!articuloId || isNaN(articuloId)) {
+				return;
+			}
+			var ridRaw = $tr.find('.requisicion_articulo_id').val();
+			var rid = parseInt(ridRaw, 10);
+			if (!rid || isNaN(rid)) {
+				nuevasSinGrabar++;
+				return;
+			}
+			var $monedaSel = $tr.find('select[name="moneda_linea_ids[]"]');
+			var monedaAbrev = '';
+			if ($monedaSel.length) {
+				monedaAbrev = $.trim($monedaSel.find('option:selected').text());
+			}
+			var cantidad = parseFloat($tr.find('.cantidad-linea').val());
+			var precio = parseFloat($tr.find('.precio-linea').val());
+			lineas.push({
+				requisicion_articulo_id: rid,
+				articulo_codigo: $.trim($tr.find('.codigoarticulo').val() || ''),
+				articulo_descripcion: $.trim($tr.find('.descripcionarticulo').val() || ''),
+				cantidad: isNaN(cantidad) ? 0 : cantidad,
+				precio_requisicion: isNaN(precio) ? 0 : precio,
+				moneda_abreviatura: monedaAbrev
+			});
+		});
+		return { lineas: lineas, nuevasSinGrabar: nuevasSinGrabar };
+	}
+
+	// Reemplaza la caché de líneas con la información viva del DOM cuando hay
+	// líneas válidas en el formulario de ítems. Devuelve cuántas líneas nuevas
+	// sin grabar quedaron fuera para que el caller pueda avisar al usuario.
+	function sincronizarCacheLineasConItemsDOM() {
+		var info = obtenerLineasItemsDOM();
+		if (info.lineas.length) {
+			lineasReqCache = info.lineas;
+		}
+		return info;
+	}
+
 	function box() {
 		return $('#solapa-presupuestos-requisicion');
 	}
@@ -99,6 +152,17 @@
 	}
 
 	function abrirModalNuevo() {
+		var infoDom = sincronizarCacheLineasConItemsDOM();
+		if (!lineasReqCache.length) {
+			alert('La requisición no tiene líneas de artículo válidas; no se puede pedir presupuesto.');
+			return;
+		}
+		if (infoDom.nuevasSinGrabar > 0) {
+			alert(
+				'Hay ' + infoDom.nuevasSinGrabar + ' línea(s) nueva(s) en los ítems que aún no fueron grabadas en la requisición. ' +
+				'Para incluirlas en el presupuesto, primero actualice la requisición.'
+			);
+		}
 		$('#presupuesto_edit_id').val('');
 		ocultarEnlacesPdfModal();
 		$('#presupuesto_fecha').val(new Date().toISOString().slice(0, 10));
@@ -142,6 +206,21 @@
 						precio_requisicion: a.precio_requisicion,
 						moneda_abreviatura: a.moneda_abreviatura
 					};
+				});
+			}
+			// Si el usuario modificó los ítems en el tab "Datos principales", reflejamos
+			// el estado vivo del formulario. Para no ocultar cotizaciones de un presupuesto
+			// existente que apunten a una línea que el usuario haya quitado del DOM sin
+			// grabar, hacemos un merge por requisicion_articulo_id en vez de reemplazar.
+			var infoDom = obtenerLineasItemsDOM();
+			if (infoDom.lineas.length) {
+				var domPorId = {};
+				infoDom.lineas.forEach(function (ln) {
+					domPorId[Number(ln.requisicion_articulo_id)] = ln;
+				});
+				lineasReqCache = (lineasReqCache || []).map(function (ln) {
+					var d = domPorId[Number(ln.requisicion_articulo_id)];
+					return d ? d : ln;
 				});
 			}
 			$('#presupuesto_edit_id').val(det.id);

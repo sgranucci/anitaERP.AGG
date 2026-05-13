@@ -65,7 +65,7 @@ class RequisicionService
         $data = $request->all();
         $pendiente = Requisicion_Estado::$enumEstado[array_search('P', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
 
-        $data['fechas'][] = Carbon::now()->format('Y-m-d');
+        $data['fechas'][] = Carbon::now()->toDateTimeString();
         $data['estados'][] = $pendiente;
         $data['usuario_ids'][] = Auth::user()->id;
         $data['observacionestados'][] = 'Alta de requisición';
@@ -164,7 +164,7 @@ class RequisicionService
             $nombreEnArbol = Requisicion_Estado::$enumEstado[array_search('R', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
             $this->requisicion_estadoRepository->creaEstado(
                 $id,
-                Carbon::now()->format('Y-m-d'),
+                Carbon::now()->toDateTimeString(),
                 $nombreEnArbol,
                 Auth::user()->id,
                 'Enviada al árbol de aprobación (desde EN_COMPRAS)'
@@ -249,7 +249,7 @@ class RequisicionService
 
                 $this->requisicion_estadoRepository->creaEstado(
                     $id,
-                    Carbon::now()->format('Y-m-d'),
+                    Carbon::now()->toDateTimeString(),
                     $nombreEstado,
                     Auth::user()->id,
                     $estado['observacion'] ?? 'Cambio de estado'
@@ -490,7 +490,7 @@ class RequisicionService
                     $estado = 'PENDIENTE';
                     break;
                 case '1':
-                    $estado = 'GENERO_ORDEN_COMPRA';
+                    $estado = Requisicion_Estado::$enumEstado[array_search('O', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
                     break;
                 case '2':
                     $estado = 'PARCIAL';

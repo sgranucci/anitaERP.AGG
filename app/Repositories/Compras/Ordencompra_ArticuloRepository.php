@@ -56,6 +56,11 @@ class Ordencompra_ArticuloRepository implements Ordencompra_ArticuloRepositoryIn
                 'centrocostodestino_id' => $data['centrocostodestino_ids'][$i] ?? $data['centrocosto_id'],
                 'partidagasto_id' => ! empty($data['partidagasto_ids'][$i]) ? $data['partidagasto_ids'][$i] : null,
                 'capex_id' => ! empty($data['capex_ids'][$i]) ? $data['capex_ids'][$i] : null,
+                'requisicion_articulo_id' => ! empty($data['requisicion_articulo_ids'][$i]) ? (int) $data['requisicion_articulo_ids'][$i] : null,
+                'precio_origen_tipo' => ! empty($data['precio_origen_tipos'][$i]) ? (string) $data['precio_origen_tipos'][$i] : null,
+                'precio_origen_ref_id' => isset($data['precio_origen_ref_ids'][$i]) && $data['precio_origen_ref_ids'][$i] !== '' && $data['precio_origen_ref_ids'][$i] !== null
+                    ? (int) $data['precio_origen_ref_ids'][$i] : null,
+                'precio_origen_etiqueta' => isset($data['precio_origen_etiquetas'][$i]) ? (string) $data['precio_origen_etiquetas'][$i] : null,
             ];
 
             $idCandidato = $idsEntrantes[$i] ?? null;

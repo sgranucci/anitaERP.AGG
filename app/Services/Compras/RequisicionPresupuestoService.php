@@ -374,4 +374,28 @@ class RequisicionPresupuestoService
     {
         return $this->directorioPresupuesto($requisicionId, $presupuestoId).'/'.$archivo->nombrearchivo;
     }
+
+    /**
+     * Marca un presupuesto de la requisición como ELEGIDO y normaliza los demás que estuvieran en ELEGIDO.
+     * Usado al generar OC cuando el precio proviene del presupuesto.
+     */
+    public function marcarComoElegidoParaOc(int $requisicionId, int $presupuestoId): void
+    {
+        $pres = $this->presupuestoRepository->findCabecera($requisicionId, $presupuestoId);
+        if (! $pres) {
+            return;
+        }
+        $activo = Requisicion_Presupuesto::$enumEstado[array_search('A', array_column(Requisicion_Presupuesto::$enumEstado, 'valor'), true)]['nombre'];
+        if ($pres->estado !== $activo) {
+            return;
+        }
+        $elegido = Requisicion_Presupuesto::$enumEstado[array_search('E', array_column(Requisicion_Presupuesto::$enumEstado, 'valor'), true)]['nombre'];
+
+        DB::transaction(function () use ($requisicionId, $presupuestoId, $pres, $elegido, $activo) {
+            $this->presupuestoRepository->demoteOtrosElegidos($requisicionId, $presupuestoId, $elegido, $activo);
+            if ($pres->estado !== $elegido) {
+                $this->presupuestoRepository->updateCabecera($pres, ['estado' => $elegido]);
+            }
+        });
+    }
 }

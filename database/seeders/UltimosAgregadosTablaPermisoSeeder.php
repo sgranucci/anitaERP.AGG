@@ -73,6 +73,12 @@ class UltimosAgregadosTablaPermisoSeeder extends Seeder
             ['id' => '2030', 'nombre' => 'Borrar tipo de liquido de freno', 'slug' => 'borrar-tipo-de-liquido-de-freno', 'menu_id' => 203, 'created_at' => $now, 'updated_at' => $now],
             ['id' => '1006', 'nombre' => 'Editar articulos', 'slug' => 'editar-articulos', 'menu_id' => 10, 'created_at' => $now, 'updated_at' => $now],
             ['id' => '1007', 'nombre' => 'Actualizar articulos', 'slug' => 'actualizar-articulos', 'menu_id' => 10, 'created_at' => $now, 'updated_at' => $now],
+            ['id' => '2111', 'nombre' => 'Listar ordenes de compra', 'slug' => 'listar-ordencompra', 'menu_id' => 225, 'created_at' => $now, 'updated_at' => $now],
+            ['id' => '2112', 'nombre' => 'Ingresar ordenes de compra', 'slug' => 'crear-ordencompra', 'menu_id' => 225, 'created_at' => $now, 'updated_at' => $now],
+            ['id' => '2113', 'nombre' => 'Editar ordenes de compra', 'slug' => 'editar-ordencompra', 'menu_id' => 225, 'created_at' => $now, 'updated_at' => $now],
+            ['id' => '2114', 'nombre' => 'Actualizar ordenes de compra', 'slug' => 'actualizar-ordencompra', 'menu_id' => 225, 'created_at' => $now, 'updated_at' => $now],
+            ['id' => '2115', 'nombre' => 'Borrar ordenes de compra', 'slug' => 'borrar-ordencompra', 'menu_id' => 225, 'created_at' => $now, 'updated_at' => $now],
+
 
         ];
         DB::table('permiso')->insert($permiso);

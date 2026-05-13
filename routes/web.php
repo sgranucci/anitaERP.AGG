@@ -1682,6 +1682,7 @@ Route::get('compras/requisicion/crear', 'Compras\RequisicionController@crear')->
 Route::post('compras/requisicion', 'Compras\RequisicionController@guardar')->name('guardar_requisicion');
 Route::get('compras/requisicion/{id}/editar', 'Compras\RequisicionController@editar')->name('editar_requisicion');
 Route::get('compras/requisicion/{id}/imprimir-pdf', 'Compras\RequisicionController@imprimirPdf')->name('imprimir_pdf_requisicion');
+Route::get('compras/requisicion/{id}/comprobantes-asociados', 'Compras\RequisicionController@comprobantesAsociados')->name('requisicion_comprobantes_asociados');
 Route::get('compras/requisicion/{id}/archivo/{archivo}', 'Compras\RequisicionController@descargarArchivo')->name('requisicion_archivo');
 Route::get('compras/requisicion/{requisicion}/presupuestos/{presupuesto}/pdf', 'Compras\RequisicionPresupuestoController@pdfPresupuesto')->name('requisicion_presupuesto_pdf');
 Route::get('compras/requisicion/{requisicion}/presupuestos/{presupuesto}/imprimir', 'Compras\RequisicionPresupuestoController@formularioImpresionPresupuesto')->name('requisicion_presupuesto_impresion');
@@ -1730,6 +1731,7 @@ Route::delete('compras/ordencompra/{id}', 'Compras\OrdencompraController@elimina
 Route::get('compras/listaordencompra/{formato?}/{busqueda?}', 'Compras\OrdencompraController@listar')->name('listar_ordencompra');
 Route::get('compras/ordencompra/requisiciones-aprobadas', 'Compras\OrdencompraController@buscarRequisicionesAprobadas')->name('ordencompra_buscar_requisiciones');
 Route::get('compras/ordencompra/plantilla-requisicion', 'Compras\OrdencompraController@plantillaRequisicion')->name('ordencompra_plantilla_requisicion');
+Route::get('compras/ordencompra/opciones-precio-linea', 'Compras\OrdencompraController@opcionesPrecioLineaOc')->name('ordencompra_opciones_precio_linea');
 Route::get('compras/ordencompra/cotizacion-moneda-fecha', 'Compras\OrdencompraController@cotizacionMonedaFecha')->name('ordencompra_cotizacion_moneda_fecha');
 Route::post('compras/ordencompra/calcular-totales', 'Compras\OrdencompraController@calcularTotales')->name('ordencompra_calcular_totales');
 Route::post('compras/ordencompra/sugerir-cuotas-condicionpago', 'Compras\OrdencompraController@sugerirCuotasCondicionpago')->name('ordencompra_sugerir_cuotas');

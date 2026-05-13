@@ -17,11 +17,6 @@ class TablaPermisoSeeder extends Seeder
     {
         $now = Carbon::now()->toDateTimeString();
         $permiso = [
-            ['id' => '2031', 'nombre' => 'Ingresar sector legajo compra', 'slug' => 'crear-sector-legajocompra', 'menu_id' => 228, 'created_at' => $now, 'updated_at' => $now],
-            ['id' => '2032', 'nombre' => 'Listar sector legajo compra', 'slug' => 'listar-sector-legajocompra', 'menu_id' => 228, 'created_at' => $now, 'updated_at' => $now],
-            ['id' => '2033', 'nombre' => 'Editar sector legajo compra', 'slug' => 'editar-sector-legajocompra', 'menu_id' => 228, 'created_at' => $now, 'updated_at' => $now],
-            ['id' => '2034', 'nombre' => 'Actualizar sector legajo compra', 'slug' => 'actualizar-sector-legajocompra', 'menu_id' => 228, 'created_at' => $now, 'updated_at' => $now],
-            ['id' => '2035', 'nombre' => 'Borrar sector legajo compra', 'slug' => 'borrar-sector-legajocompra', 'menu_id' => 228, 'created_at' => $now, 'updated_at' => $now],
             ['id' => '2111', 'nombre' => 'Listar ordenes de compra', 'slug' => 'listar-ordencompra', 'menu_id' => 225, 'created_at' => $now, 'updated_at' => $now],
             ['id' => '2112', 'nombre' => 'Ingresar ordenes de compra', 'slug' => 'crear-ordencompra', 'menu_id' => 225, 'created_at' => $now, 'updated_at' => $now],
             ['id' => '2113', 'nombre' => 'Editar ordenes de compra', 'slug' => 'editar-ordencompra', 'menu_id' => 225, 'created_at' => $now, 'updated_at' => $now],

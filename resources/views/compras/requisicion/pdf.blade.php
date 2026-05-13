@@ -174,7 +174,7 @@
     <table>
         <thead>
             <tr>
-                <th>Fecha</th>
+                <th>Fecha y hora</th>
                 <th>Estado</th>
                 <th>Usuario</th>
                 <th>Observación</th>

@@ -8,6 +8,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Compras\RequisicionTotalesCabecera;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 class RequisicionQuery implements RequisicionQueryInterface
@@ -31,6 +32,36 @@ class RequisicionQuery implements RequisicionQueryInterface
     public function first()
     {
         return $this->model->first();
+    }
+
+    public function requisicionAccesiblePorUsuario(int $id): bool
+    {
+        $empresas = $this->empresaRepository->traeEmpresasAsignadas();
+        $oficina_compra_id = Auth::user()->oficinacompra_id;
+        $centrocosto_id = Auth::user()->centrocosto_id;
+        $centrocostoFiltro = null;
+
+        if (can('usuario-requisicion-compras', false)) {
+            $centrocostoFiltro = null;
+        }
+
+        if (can('usuario-requisicion-resto', false)) {
+            $centrocostoFiltro = $centrocosto_id;
+        }
+
+        $q = $this->model->newQuery()
+            ->where('requisicion.id', $id)
+            ->whereIn('requisicion.empresa_id', $empresas);
+
+        if ($oficina_compra_id) {
+            $q->where('requisicion.oficinacompra_id', $oficina_compra_id);
+        }
+
+        if ($centrocostoFiltro) {
+            $q->where('requisicion.centrocosto_id', $centrocostoFiltro);
+        }
+
+        return $q->exists();
     }
 
     public function leeRequisicion($busqueda, $flPaginando = null, $withArticulos = false)
@@ -76,6 +107,8 @@ class RequisicionQuery implements RequisicionQueryInterface
         if (Schema::hasColumn($this->model->getTable(), 'nroinscripcion')) {
             $select[] = 'requisicion.nroinscripcion as nroinscripcion';
         }
+
+        $select[] = DB::raw('(SELECT COUNT(*) FROM ordencompra WHERE ordencompra.requisicion_id = requisicion.id) AS ordencompra_vinculadas_count');
 
         $q = $this->model->select($select)
             ->join('empresa', 'empresa.id', '=', 'requisicion.empresa_id')

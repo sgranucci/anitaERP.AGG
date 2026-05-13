@@ -15,6 +15,10 @@ class Requisicion_Estado extends Model implements Auditable
     protected $fillable = ['requisicion_id', 'fecha', 'estado', 'observacion', 'usuario_id'];
     protected $table = 'requisicion_estado';
 
+    protected $casts = [
+        'fecha' => 'datetime',
+    ];
+
     public function requisiciones()
     {
         return $this->belongsTo(Requisicion::class, 'requisicion_id', 'id');

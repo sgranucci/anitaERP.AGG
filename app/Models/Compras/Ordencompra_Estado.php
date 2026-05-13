@@ -11,6 +11,10 @@ class Ordencompra_Estado extends Model
 
     protected $fillable = ['ordencompra_id', 'fecha', 'estado', 'usuario_id', 'observacion'];
 
+    protected $casts = [
+        'fecha' => 'datetime',
+    ];
+
     public function ordencompras()
     {
         return $this->belongsTo(Ordencompra::class, 'ordencompra_id');

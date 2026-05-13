@@ -70,6 +70,11 @@ class Requisicion extends Model implements Auditable
         return $this->belongsTo(Formapago::class, 'formapago_id');
     }
 
+    public function ordencompras()
+    {
+        return $this->hasMany(Ordencompra::class, 'requisicion_id');
+    }
+
     public function usuarios()
     {
         return $this->belongsTo(Usuario::class, 'creousuario_id');

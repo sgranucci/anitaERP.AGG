@@ -14,8 +14,9 @@ class Ordencompra_Articulo extends Model
     protected $table = 'ordencompra_articulo';
 
     protected $fillable = [
-        'ordencompra_id', 'fechaentrega', 'articulo_id', 'cantidad', 'precio', 'moneda_id', 'cotizacion',
+        'ordencompra_id', 'requisicion_articulo_id', 'fechaentrega', 'articulo_id', 'cantidad', 'precio', 'moneda_id', 'cotizacion',
         'descuento', 'cantidadalternativa', 'detalle', 'centrocostodestino_id', 'partidagasto_id', 'capex_id',
+        'precio_origen_tipo', 'precio_origen_ref_id', 'precio_origen_etiqueta',
     ];
 
     public function ordencompras()
@@ -46,5 +47,10 @@ class Ordencompra_Articulo extends Model
     public function capexs()
     {
         return $this->belongsTo(Capex::class, 'capex_id');
+    }
+
+    public function requisicion_articulos()
+    {
+        return $this->belongsTo(Requisicion_Articulo::class, 'requisicion_articulo_id');
     }
 }

@@ -28,6 +28,7 @@ use Carbon\Carbon;
 use DB;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Mail;
 
 class ArbolaprobacionService
@@ -231,6 +232,18 @@ class ArbolaprobacionService
             $requisicion = $this->requisicionRepository->find($comprobante_id);
             $totalesReq = RequisicionTotalesCabecera::desdeModelo($requisicion, $this->cotizacionQuery);
 
+            $nombreAprobadaReq = Requisicion_Estado::$enumEstado[array_search('A', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
+            $nombreGeneroOcReq = Requisicion_Estado::$enumEstado[array_search('O', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
+            $nombreCumplidaReq = Requisicion_Estado::$enumEstado[array_search('C', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
+            if (in_array($requisicion->estado, [$nombreAprobadaReq, $nombreGeneroOcReq, $nombreCumplidaReq, 'GENERO OC'], true)) {
+                $this->anulaMovimientosArbolPendientesAbiertosRequisicion(
+                    $comprobante_id,
+                    'Sin efecto (requisición ya no en circuito activo del árbol de aprobación)'
+                );
+
+                return 0;
+            }
+
             $estadoAprobacionActual = $this->leeAprobacionComprobante($tipoarbol, $comprobante_id);
             $proximoNivel = $this->buscaProximoNivel($arbol, $centrocostoArbol,
                 $estadoAprobacionActual['nivelactual'],
@@ -347,6 +360,15 @@ class ArbolaprobacionService
         while (true) {
             $ordencompra = $this->ordencompraRepository->find($comprobante_id);
             $totalesOc = OrdencompraTotalesCabecera::desdeModelo($ordencompra, $this->cotizacionQuery);
+
+            if ($ordencompra->estadoordencompra !== OrdencompraEstados::PENDIENTE) {
+                $this->anulaMovimientosArbolPendientesAbiertosOrdencompra(
+                    $comprobante_id,
+                    'Sin efecto (orden de compra ya no en circuito activo del árbol de aprobación)'
+                );
+
+                return 0;
+            }
 
             $estadoAprobacionActual = $this->leeAprobacionComprobante($tipoarbol, $comprobante_id);
             $proximoNivel = $this->buscaProximoNivel($arbol, $centrocostoArbol,
@@ -766,6 +788,50 @@ class ArbolaprobacionService
         ]);
     }
 
+    /**
+     * Marca como sin efecto los movimientos de árbol aún pendientes (cabecera ya avanzó fuera del circuito).
+     */
+    public function anulaMovimientosArbolPendientesAbiertosRequisicion(int $requisicionId, string $observacion): void
+    {
+        if ($requisicionId <= 0) {
+            return;
+        }
+        $nombrePendiente = Arbolaprobacion_Movimiento::$enumEstado[array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
+        $nombreSinEfecto = Arbolaprobacion_Movimiento::$enumEstado[array_search('X', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
+        $obs = Str::limit(trim($observacion) !== '' ? trim($observacion) : 'Sin efecto', 255, '');
+        Arbolaprobacion_Movimiento::query()
+            ->where('requisicion_id', $requisicionId)
+            ->where('estado', $nombrePendiente)
+            ->whereNull('fechaproceso')
+            ->update([
+                'fechaproceso' => Carbon::now(),
+                'estado' => $nombreSinEfecto,
+                'observacion' => $obs,
+            ]);
+    }
+
+    /**
+     * @see anulaMovimientosArbolPendientesAbiertosRequisicion
+     */
+    public function anulaMovimientosArbolPendientesAbiertosOrdencompra(int $ordencompraId, string $observacion): void
+    {
+        if ($ordencompraId <= 0) {
+            return;
+        }
+        $nombrePendiente = Arbolaprobacion_Movimiento::$enumEstado[array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
+        $nombreSinEfecto = Arbolaprobacion_Movimiento::$enumEstado[array_search('X', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
+        $obs = Str::limit(trim($observacion) !== '' ? trim($observacion) : 'Sin efecto', 255, '');
+        Arbolaprobacion_Movimiento::query()
+            ->where('ordencompra_id', $ordencompraId)
+            ->where('estado', $nombrePendiente)
+            ->whereNull('fechaproceso')
+            ->update([
+                'fechaproceso' => Carbon::now(),
+                'estado' => $nombreSinEfecto,
+                'observacion' => $obs,
+            ]);
+    }
+
     private function finalizaOrdenVentaTrasArbolCompleto(int $ordenventa_id, $usuarioHistoriaId): void
     {
         $estado = Ordenventa_Estado::$enumEstado[array_search('P', array_column(Ordenventa_Estado::$enumEstado, 'valor'))]['nombre'];
@@ -789,7 +855,7 @@ class ArbolaprobacionService
 
         $this->requisicion_estadoRepository->creaEstado(
             $requisicion_id,
-            Carbon::now()->format('Y-m-d'),
+            Carbon::now()->toDateTimeString(),
             $aprobada,
             $usuarioHistoriaId,
             'Requisición aprobada (árbol completo)'
@@ -807,7 +873,7 @@ class ArbolaprobacionService
 
         $this->ordencompra_estadoRepository->creaEstado(
             $ordencompra_id,
-            Carbon::now()->format('Y-m-d'),
+            Carbon::now()->toDateTimeString(),
             $aprobada,
             $usuarioHistoriaId,
             'Orden de compra aprobada (árbol completo)'
@@ -826,7 +892,7 @@ class ArbolaprobacionService
 
         $this->ordencompra_estadoRepository->creaEstado(
             $ordencompra_id,
-            Carbon::now()->format('Y-m-d'),
+            Carbon::now()->toDateTimeString(),
             $estadoNombre,
             $usuarioHistoriaId,
             $observacion
@@ -897,7 +963,7 @@ class ArbolaprobacionService
 
         $this->requisicion_estadoRepository->creaEstado(
             $requisicion_id,
-            Carbon::now()->format('Y-m-d'),
+            Carbon::now()->toDateTimeString(),
             $estadoNombre,
             $usuarioHistoriaId,
             $observacion
@@ -1018,7 +1084,7 @@ class ArbolaprobacionService
                     $estado = Requisicion_Estado::$enumEstado[array_search('S', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
                     $this->requisicion_estadoRepository->creaEstado(
                         $comprobante_id,
-                        Carbon::now()->format('Y-m-d'),
+                        Carbon::now()->toDateTimeString(),
                         $estado,
                         $usuario_id,
                         'Requisición suspendida / rechazada en árbol: '.$observacion
@@ -1029,7 +1095,7 @@ class ArbolaprobacionService
                     $estadoOc = OrdencompraEstados::SUSPENDIDA;
                     $this->ordencompra_estadoRepository->creaEstado(
                         (int) $comprobante_id,
-                        Carbon::now()->format('Y-m-d'),
+                        Carbon::now()->toDateTimeString(),
                         $estadoOc,
                         (int) $usuario_id,
                         'Orden de compra suspendida / rechazada en árbol: '.$observacion
@@ -1153,13 +1219,51 @@ class ArbolaprobacionService
     }
 
     /**
+     * En la consulta del árbol: si la requisición ya no está en el circuito activo de aprobación,
+     * oculta ruido: cualquier movimiento "Sin efecto" y los pendientes sin procesar que quedaron en BD.
+     *
+     * @param  \Illuminate\Support\Collection<int, array<string, mixed>>  $movimientos
+     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
+     */
+    private function filtraMovimientosArbolRequisicionParaVistaConsulta($movimientos, ?Requisicion $req)
+    {
+        if (! $req) {
+            return $movimientos;
+        }
+        $nombresDocFueraCircuitoActivo = [
+            Requisicion_Estado::$enumEstado[array_search('A', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'],
+            Requisicion_Estado::$enumEstado[array_search('O', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'],
+            Requisicion_Estado::$enumEstado[array_search('C', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'],
+            'GENERO OC',
+        ];
+        if (! in_array($req->estado, $nombresDocFueraCircuitoActivo, true)) {
+            return $movimientos;
+        }
+        $nombrePendienteMov = Arbolaprobacion_Movimiento::$enumEstado[array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
+        $nombreSinEfecto = Arbolaprobacion_Movimiento::$enumEstado[array_search('X', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
+
+        return $movimientos->filter(function (array $row) use ($nombrePendienteMov, $nombreSinEfecto) {
+            $estado = (string) ($row['estado'] ?? '');
+            if ($estado === $nombreSinEfecto) {
+                return false;
+            }
+            if ($estado === $nombrePendienteMov && empty($row['fechaproceso'])) {
+                return false;
+            }
+
+            return true;
+        })->values();
+    }
+
+    /**
      * @return array{movimientos: array<int, array<string, mixed>>, aviso_grabacion_pendiente: string|null}
      */
     public function movimientosRequisicionConAvisoGrabacion(int $requisicionId): array
     {
         $movs = $this->arbolaprobacion_movimientoRepository->findPorRequisicion($requisicionId);
-        $enriquecidos = $this->adjuntaIndicacionEstadoRequisicionMovimientos($movs, $requisicionId);
         $req = $this->requisicionRepository->find($requisicionId);
+        $enriquecidos = $this->adjuntaIndicacionEstadoRequisicionMovimientos($movs, $requisicionId);
+        $enriquecidos = $this->filtraMovimientosArbolRequisicionParaVistaConsulta($enriquecidos, $req);
         $aviso = null;
         if ($req) {
             $pendiente = Requisicion_Estado::$enumEstado[array_search('P', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
@@ -1478,13 +1582,42 @@ class ArbolaprobacionService
     }
 
     /**
+     * Igual que en requisiciones: si la orden ya no está en PENDIENTE de cabecera, no listar
+     * movimientos "Sin efecto" ni pendientes de árbol sin procesar.
+     *
+     * @param  \Illuminate\Support\Collection<int, array<string, mixed>>  $movimientos
+     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
+     */
+    private function filtraMovimientosArbolOrdencompraParaVistaConsulta($movimientos, ?Ordencompra $oc)
+    {
+        if (! $oc || $oc->estadoordencompra === OrdencompraEstados::PENDIENTE) {
+            return $movimientos;
+        }
+        $nombrePendienteMov = Arbolaprobacion_Movimiento::$enumEstado[array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
+        $nombreSinEfecto = Arbolaprobacion_Movimiento::$enumEstado[array_search('X', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
+
+        return $movimientos->filter(function (array $row) use ($nombrePendienteMov, $nombreSinEfecto) {
+            $estado = (string) ($row['estado'] ?? '');
+            if ($estado === $nombreSinEfecto) {
+                return false;
+            }
+            if ($estado === $nombrePendienteMov && empty($row['fechaproceso'])) {
+                return false;
+            }
+
+            return true;
+        })->values();
+    }
+
+    /**
      * @return array{movimientos: array<int, array<string, mixed>>, aviso_grabacion_pendiente: string|null}
      */
     public function movimientosOrdencompraConAvisoGrabacion(int $ordencompraId): array
     {
         $movs = $this->arbolaprobacion_movimientoRepository->findPorOrdencompra($ordencompraId);
-        $enriquecidos = $this->adjuntaIndicacionEstadoOrdencompraMovimientos($movs, $ordencompraId);
         $oc = $this->ordencompraRepository->find($ordencompraId);
+        $enriquecidos = $this->adjuntaIndicacionEstadoOrdencompraMovimientos($movs, $ordencompraId);
+        $enriquecidos = $this->filtraMovimientosArbolOrdencompraParaVistaConsulta($enriquecidos, $oc);
         $aviso = null;
         if ($oc && $oc->estadoordencompra === OrdencompraEstados::PENDIENTE) {
             try {

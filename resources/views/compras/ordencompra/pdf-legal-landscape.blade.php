@@ -133,9 +133,9 @@
 <body>
     @php
         use App\Support\Configuracion\EmpresaLogoArchivo;
-        $logoEmpresaDat = EmpresaLogoArchivo::dataUriDesdeNombre(trim((string) config('app.empresa')));
+        $nombreEmpresaOc = trim((string) ($data->empresas->nombre ?? ''));
+        $logoEmpresaDat = EmpresaLogoArchivo::dataUriDesdeNombre($nombreEmpresaOc !== '' ? $nombreEmpresaOc : null);
         $logoEmpresaDataUri = $logoEmpresaDat['uri'] ?? null;
-        $nombreMarca = trim((string) config('app.empresa'));
         $fechaOc = $data->fecha ? date('d/m/Y', strtotime($data->fecha)) : '—';
     @endphp
     <table class="pdf-cabecera">
@@ -145,7 +145,7 @@
                 @if ($logoEmpresaDataUri)
                     <img class="logo-empresa" src="{{ $logoEmpresaDataUri }}" alt="">
                 @endif
-                <div class="pdf-cabecera-marca">{{ $nombreMarca !== '' ? $nombreMarca : ($data->empresas->nombre ?? '—') }}</div>
+                <div class="pdf-cabecera-marca">{{ $nombreEmpresaOc !== '' ? $nombreEmpresaOc : '—' }}</div>
             </td>
             <td style="text-align: right;">
                 <p class="titulo-doc">ORDEN DE COMPRA NRO {{ $data->numeroordencompra }}</p>
@@ -279,6 +279,7 @@
                     $fEnt = $linea->fechaentrega ? date('d/m/y', strtotime($linea->fechaentrega)) : '—';
                     $ccCod = optional($ccDest)->codigo ?? '—';
                     $detLin = trim((string) ($linea->detalle ?? ''));
+                    $origTxt = trim((string) ($linea->precio_origen_etiqueta ?? ''));
                 @endphp
                 <tr>
                     <td class="cen items-col-idx" style="width:3%;">{{ $i + 1 }}</td>
@@ -301,6 +302,9 @@
                         columnas F.ent. = fecha entrega línea; CC = centro costo destino; P./Cp. = partida o CAPEX.
                         Subtotal (sin IVA)@if ($monOcItems !== ''), en moneda OC ({{ $monOcItems }})@endif = cant. × P.unit. × cotización.
                         Entrega {{ $fEnt }}, CC {{ $ccCod }}, Part./CAPEX {{ $refPartCpx }}.
+                        @if ($origTxt !== '')
+                            Origen precio: {{ $origTxt }}@if (! empty($linea->precio_origen_tipo)) ({{ $linea->precio_origen_tipo }}@if (! empty($linea->precio_origen_ref_id)), ref. {{ $linea->precio_origen_ref_id }}@endif)@endif.
+                        @endif
                     </td>
                 </tr>
             @endforeach
@@ -319,7 +323,7 @@
         </colgroup>
         <thead>
             <tr>
-                <th>Fecha</th>
+                <th>Fecha y hora</th>
                 <th>Estado</th>
                 <th>Usuario</th>
                 <th>Observación</th>

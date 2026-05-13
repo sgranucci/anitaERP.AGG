@@ -256,22 +256,48 @@ $(function () {
 		$.get(url, function (historia) {
 			var $w = $(".container-historia").empty();
 			$.each(historia, function (_, value) {
-				var fecha = value.fecha ? value.fecha.substring(0, 10) : '';
+				var fechaTxt = formatearFechaHoraEstado(value.fecha);
+				var estadoEsc = $('<div>').text(value.estado || '').html();
+				var usrEsc = $('<div>').text(value.usuarios && value.usuarios.nombre ? value.usuarios.nombre : '').html();
+				var obsEsc = $('<div>').text(value.observacion || '').html();
 				$w.append(
-					'<tr><td><input type="date" class="form-control" value="' + fecha + '" readonly></td>' +
-					'<td><input type="text" class="form-control" value="' + (value.estado || '') + '" readonly></td>' +
-					'<td><input type="text" class="form-control" value="' + (value.usuarios && value.usuarios.nombre ? value.usuarios.nombre : '') + '" readonly></td>' +
-					'<td><input type="text" class="form-control" value="' + (value.observacion || '') + '" readonly></td></tr>'
+					'<tr><td><input type="text" class="form-control" value="' + $('<div>').text(fechaTxt).html() + '" readonly></td>' +
+					'<td><input type="text" class="form-control" value="' + estadoEsc + '" readonly></td>' +
+					'<td><input type="text" class="form-control" value="' + usrEsc + '" readonly></td>' +
+					'<td><input type="text" class="form-control" value="' + obsEsc + '" readonly></td></tr>'
 				);
 			});
 		});
+	}
+
+	function formatearFechaHoraEstado(raw) {
+		if (raw == null || raw === '') {
+			return '';
+		}
+		var s = String(raw).replace('T', ' ');
+		if (s.length >= 19) {
+			return s.substring(0, 19);
+		}
+		return s;
 	}
 
 	function fechaArbolTexto(raw) {
 		if (raw == null || raw === '') {
 			return '';
 		}
-		return String(raw).substring(0, 19).replace('T', ' ');
+		var s = String(raw).replace('T', ' ').trim();
+		var m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/);
+		if (!m) {
+			return s;
+		}
+		var out = m[3] + '-' + m[2] + '-' + m[1];
+		if (m[4] !== undefined) {
+			out += ' ' + m[4] + ':' + m[5];
+			if (m[6] !== undefined) {
+				out += ':' + m[6];
+			}
+		}
+		return out;
 	}
 
 	function leeArbol() {
