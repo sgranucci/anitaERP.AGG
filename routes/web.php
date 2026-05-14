@@ -811,6 +811,7 @@ Route::post('stock/product/consultaarticulo', 'Stock\ArticuloFerliController@con
 // Articulos
 Route::get('stock/articulo', 'Stock\ArticuloController@index')->name('articulo');
 Route::get('stock/articulo/crear', 'Stock\ArticuloController@crear')->name('crear_articulo');
+Route::post('stock/articulo/sincronizar-anita', 'Stock\ArticuloController@sincronizarDesdeAnita')->name('sincronizar_articulo_anita');
 Route::post('stock/articulo', 'Stock\ArticuloController@guardar')->name('guardar_articulo');
 Route::get('stock/articulo/{id}/editar', 'Stock\ArticuloController@editar')->name('editar_articulo');
 Route::put('stock/articulo/{id}', 'Stock\ArticuloController@actualizar')->name('actualizar_articulo');
@@ -829,6 +830,7 @@ Route::get('stock/formula-articulo', 'Stock\FormulaArticuloController@index')->n
 Route::get('stock/formula-articulo/crear', 'Stock\FormulaArticuloController@crear')->name('crear_formula_articulo');
 Route::post('stock/formula-articulo', 'Stock\FormulaArticuloController@guardar')->name('guardar_formula_articulo');
 Route::get('stock/formula-articulo/buscar', 'Stock\FormulaArticuloController@buscarJson')->name('buscar_formula_articulo');
+Route::post('stock/formula-articulo/sincronizar-anita', 'Stock\FormulaArticuloController@sincronizarDesdeAnita')->name('sincronizar_formula_articulo_anita');
 Route::get('stock/formula-articulo/{id}/editar', 'Stock\FormulaArticuloController@editar')->name('editar_formula_articulo');
 Route::put('stock/formula-articulo/{id}', 'Stock\FormulaArticuloController@actualizar')->name('actualizar_formula_articulo');
 Route::delete('stock/formula-articulo/{id}', 'Stock\FormulaArticuloController@eliminar')->name('eliminar_formula_articulo');

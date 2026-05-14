@@ -16,11 +16,12 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Importa stkcmae / stkcmov (Anita Informix) a formula_articulo / formula_articulo_hijo.
+ * Cabecera: stkcmae.stkcm_articulo se cruza con articulo.sku (sin ceros a la izquierda) para formula_articulo.articulo_id.
  *
  * Conexión on-line: mismo criterio que {@see Articulo::sincronizarConAnita()} — {@see ApiAnita::apiCall()}
  * con acc=list, tabla y campos (UNLOAD vía puente SSH/HTTP según ANITA_BRIDGE_TYPE).
  *
- * Formato archivo: mismo orden que UNLOAD Informix con delimitador | (sin cabecera).
+ * Formato archivo stkcmae: | con columnas UNLOAD en orden; si hay 6+ campos, el segundo es stkcm_articulo (código artículo Anita).
  * stkcmov en FRASLE puede incluir stkcv_ranura como novena columna.
  */
 class FormulaArticuloAnitaSyncService
@@ -46,18 +47,17 @@ class FormulaArticuloAnitaSyncService
     /**
      * Lista remota stkcmae vía ApiAnita (equivalente a un list masivo como en Articulo::traerRegistroDeAnita).
      *
-     * @return list<array{stkcm_formula:int, stkcm_formula_codigo:string, stkcm_detalle:string, stkcm_cant_porcion:float}>
+     * @return list<array{stkcm_formula:int, stkcm_formula_codigo:string, stkcm_articulo:string, stkcm_detalle:string, stkcm_cant_porcion:float}>
      */
     public function listarStkcmaeDesdeAnita(): array
     {
-        $camposMae = 'stkcm_formula, stkcm_detalle, stkcm_coef_venta, stkcm_cod_impuesto, stkcm_cant_porcion';
+        $camposMae = 'stkcm_formula, stkcm_articulo, stkcm_detalle, stkcm_coef_venta, stkcm_cod_impuesto, stkcm_cant_porcion';
         $payload = [
             'acc' => 'list',
             'tabla' => 'stkcmae',
             'campos' => $camposMae,
             'orderBy' => 'stkcm_formula',
         ];
-
         return $this->normalizarFilasStkcmae($this->decodificarRespuestaList($this->apiAnita->apiCall($payload)));
     }
 
@@ -112,7 +112,7 @@ class FormulaArticuloAnitaSyncService
 
     /**
      * @param  list<mixed>  $filas
-     * @return list<array{stkcm_formula:int, stkcm_formula_codigo:string, stkcm_detalle:string, stkcm_cant_porcion:float}>
+     * @return list<array{stkcm_formula:int, stkcm_formula_codigo:string, stkcm_articulo:string, stkcm_detalle:string, stkcm_cant_porcion:float}>
      */
     private function normalizarFilasStkcmae(array $filas): array
     {
@@ -126,6 +126,7 @@ class FormulaArticuloAnitaSyncService
             $maeNorm[] = [
                 'stkcm_formula' => (int) $s,
                 'stkcm_formula_codigo' => $s === '' ? '' : mb_substr($s, 0, 50),
+                'stkcm_articulo' => trim((string) ($row['stkcm_articulo'] ?? '')),
                 'stkcm_detalle' => trim((string) ($row['stkcm_detalle'] ?? '')),
                 'stkcm_cant_porcion' => (float) ($row['stkcm_cant_porcion'] ?? 0),
             ];
@@ -178,7 +179,7 @@ class FormulaArticuloAnitaSyncService
     }
 
     /**
-     * @param  list<array{stkcm_formula:int, stkcm_formula_codigo:string, stkcm_detalle:string, stkcm_cant_porcion:float}>  $mae
+     * @param  list<array{stkcm_formula:int, stkcm_formula_codigo:string, stkcm_articulo:string, stkcm_detalle:string, stkcm_cant_porcion:float}>  $mae
      * @param  list<array{stkcv_formula:int, stkcv_linea:int, stkcv_art_hijo:string, stkcv_cantidad:float, stkcv_formula_hija:int, stkcv_factor_costo:float, stkcv_deposito:int, stkcv_opcional:string, stkcv_ranura:?int}>  $mov
      * @return array{formulas:int, lineas:int, advertencias:list<string>}
      */
@@ -205,6 +206,45 @@ class FormulaArticuloAnitaSyncService
             $movPorFormula[$fid][] = $linea;
         }
 
+        $idsFormulasMae = [];
+        foreach ($mae as $cab) {
+            $f = (int) $cab['stkcm_formula'];
+            if ($f > 0) {
+                $idsFormulasMae[$f] = true;
+            }
+        }
+        $movLineasHuerfanasPorFormula = [];
+        foreach ($mov as $linea) {
+            $fid = (int) $linea['stkcv_formula'];
+            if ($fid <= 0 || isset($idsFormulasMae[$fid])) {
+                continue;
+            }
+            $movLineasHuerfanasPorFormula[$fid] = ($movLineasHuerfanasPorFormula[$fid] ?? 0) + 1;
+        }
+        if ($movLineasHuerfanasPorFormula !== []) {
+            arsort($movLineasHuerfanasPorFormula);
+            $totalHuerf = array_sum($movLineasHuerfanasPorFormula);
+            $ejemplos = array_slice(array_keys($movLineasHuerfanasPorFormula), 0, 20);
+            $advertencias[] = sprintf(
+                'stkcmov tiene %d línea(s) con stkcv_formula sin cabecera en stkcmae (no se importan). Ejemplos de fórmula Anita: %s.',
+                $totalHuerf,
+                implode(', ', $ejemplos)
+            );
+        }
+
+        $movLineasFormulaCero = 0;
+        foreach ($mov as $linea) {
+            if ((int) $linea['stkcv_formula'] <= 0) {
+                $movLineasFormulaCero++;
+            }
+        }
+        if ($movLineasFormulaCero > 0) {
+            $advertencias[] = sprintf(
+                'stkcmov: %d línea(s) con stkcv_formula en cero o inválido (no se importan).',
+                $movLineasFormulaCero
+            );
+        }
+
         $estadoActiva = $this->nombreEstadoActiva();
         $mapAnitaAErp = [];
         $formulas = 0;
@@ -218,7 +258,8 @@ class FormulaArticuloAnitaSyncService
                     continue;
                 }
 
-                $articuloCabeceraId = $this->resolverArticuloCabeceraId($anitaF);
+                $stkcmArticulo = (string) ($cab['stkcm_articulo'] ?? '');
+                $articuloCabeceraId = $this->resolverArticuloCabeceraId($anitaF, $stkcmArticulo);
                 $existente = Formula_Articulo::query()->where('anita_stkcm_formula', $anitaF)->first();
                 $codigoAnita = (string) ($cab['stkcm_formula_codigo'] ?? '');
                 $codigoDb = $codigoAnita !== '' ? $codigoAnita : ($anitaF > 0 ? (string) $anitaF : null);
@@ -251,6 +292,10 @@ class FormulaArticuloAnitaSyncService
                         $usuarioId,
                         self::OBS_ALTA_ANITA
                     );
+                }
+
+                if (trim($stkcmArticulo) !== '' && $articuloCabeceraId === null) {
+                    $advertencias[] = "Fórmula Anita {$anitaF}: stkcm_articulo \"".trim($stkcmArticulo)."\" no coincide con articulo.sku (con o sin ceros a la izquierda) y no hay artículo vinculado por articulo.formula ni cabecera previa en formula_articulo.";
                 }
 
                 $mapAnitaAErp[$anitaF] = (int) $formula->id;
@@ -320,7 +365,7 @@ class FormulaArticuloAnitaSyncService
                 }
 
                 $this->actualizarArticulosFormulaAnita($anitaF, $erpId);
-                $articuloCabeceraId = $this->resolverArticuloCabeceraId($anitaF);
+                $articuloCabeceraId = $this->resolverArticuloCabeceraId($anitaF, (string) ($cab['stkcm_articulo'] ?? ''));
                 if ($articuloCabeceraId !== null) {
                     Articulo::query()->where('id', $articuloCabeceraId)->update(['formula' => $erpId]);
                 }
@@ -336,7 +381,7 @@ class FormulaArticuloAnitaSyncService
     }
 
     /**
-     * @return list<array{stkcm_formula:int, stkcm_formula_codigo:string, stkcm_detalle:string, stkcm_cant_porcion:float}>
+     * @return list<array{stkcm_formula:int, stkcm_formula_codigo:string, stkcm_articulo:string, stkcm_detalle:string, stkcm_cant_porcion:float}>
      */
     private function parseArchivoStkcmae(string $path): array
     {
@@ -353,11 +398,21 @@ class FormulaArticuloAnitaSyncService
                 continue;
             }
             $s = $p[0];
+            if (count($p) >= 6) {
+                $stkcmArticulo = $p[1];
+                $detalle = $p[2];
+                $cantPorcion = (float) $p[5];
+            } else {
+                $stkcmArticulo = '';
+                $detalle = $p[1];
+                $cantPorcion = (float) $p[4];
+            }
             $out[] = [
                 'stkcm_formula' => (int) $s,
                 'stkcm_formula_codigo' => $s === '' ? '' : mb_substr($s, 0, 50),
-                'stkcm_detalle' => $p[1],
-                'stkcm_cant_porcion' => (float) $p[4],
+                'stkcm_articulo' => $stkcmArticulo,
+                'stkcm_detalle' => $detalle,
+                'stkcm_cant_porcion' => $cantPorcion,
             ];
         }
 
@@ -433,8 +488,21 @@ class FormulaArticuloAnitaSyncService
         return in_array($f, ['S', '1', 'Y', 'O', 'SI'], true);
     }
 
-    private function resolverArticuloCabeceraId(int $anitaFormula): ?int
+    /**
+     * Resuelve el artículo cabecera de la fórmula: primero stkcmae.stkcm_articulo contra articulo.sku
+     * (sin ceros a la izquierda, igual que en líneas stkcmov); si no, artículo con articulo.formula igual al número Anita;
+     * si no, articulo_id ya guardado en formula_articulo para esa anita_stkcm_formula.
+     */
+    private function resolverArticuloCabeceraId(int $anitaFormula, string $stkcmArticulo = ''): ?int
     {
+        $stkcmArticulo = trim($stkcmArticulo);
+        if ($stkcmArticulo !== '') {
+            $porSku = $this->resolverArticuloIdPorCodigoAnita($stkcmArticulo);
+            if ($porSku !== null) {
+                return $porSku;
+            }
+        }
+
         $porFormulaAnita = Articulo::query()
             ->where('formula', $anitaFormula)
             ->orderBy('id')

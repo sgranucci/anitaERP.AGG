@@ -301,10 +301,17 @@ class Articulo extends Model implements Auditable
         }
     }
 
-    public function sincronizarConAnita()
+    /**
+     * Lista códigos en stkmae (Anita) y da de alta en el ERP los que aún no existen (misma lógica histórica).
+     *
+     * @return array{en_anita:int, importados:int, omitidos_ya_en_erp:int, advertencias:list<string>}
+     */
+    public function sincronizarConAnita(): array
     {
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
+
+        $advertencias = [];
 
         $apiAnita = new ApiAnita;
         $data = ['acc' => 'list',
@@ -312,17 +319,37 @@ class Articulo extends Model implements Auditable
             'tabla' => $this->tableAnita];
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
-        $datosLocal = Articulo::all();
-        $datosLocalArray = [];
-        foreach ($datosLocal as $value) {
-            $datosLocalArray[] = $value->{$this->keyField};
+        if (! is_array($dataAnita)) {
+            return [
+                'en_anita' => 0,
+                'importados' => 0,
+                'omitidos_ya_en_erp' => 0,
+                'advertencias' => ['La respuesta del listado Anita (stkmae) no es un arreglo JSON válido.'],
+            ];
         }
 
+        $datosLocalArray = Articulo::query()->pluck($this->keyField)->all();
+
+        $importados = 0;
+        $omitidos = 0;
+
         foreach ($dataAnita as $value) {
-            if (! in_array(ltrim($value->{$this->keyField}, '0'), $datosLocalArray)) {
-                $this->traerRegistroDeAnita($value->{$this->keyFieldAnita}, true);
+            if (in_array(ltrim($value->{$this->keyField}, '0'), $datosLocalArray)) {
+                $omitidos++;
+
+                continue;
             }
+            $this->traerRegistroDeAnita($value->{$this->keyFieldAnita}, true);
+            $importados++;
+            $datosLocalArray[] = ltrim($value->{$this->keyField}, '0');
         }
+
+        return [
+            'en_anita' => count($dataAnita),
+            'importados' => $importados,
+            'omitidos_ya_en_erp' => $omitidos,
+            'advertencias' => $advertencias,
+        ];
     }
 
     public function traerRegistroDeAnita($key, $fl_crea_registro)
@@ -492,8 +519,23 @@ class Articulo extends Model implements Auditable
 
         $usuario_id = Auth::user()->id;
 
-        if (count($dataAnita) > 0) {
+        if (! is_array($dataAnita) || count($dataAnita) < 1) {
+            return;
+        }
+
+        // No exigir que el primer carácter sea distinto de "0": en stkmae el código suele ir ceros a la izquierda;
+        // la condición anterior impedía persistir casi todos los artículos.
+        $codigoMaeRaw = trim((string) ($dataAnita[0]->stkm_articulo ?? ''));
+        if ($codigoMaeRaw === '' || ltrim($codigoMaeRaw, '0') === '') {
+            return;
+        }
+
+        {
             $data = $dataAnita[0];
+
+            // Valores por defecto: los switch de AGG/FRASLE no cubren todos los códigos posibles de Anita.
+            $estado = 'ACTIVO';
+            $noFactura = '0';
 
             $categoria = Categoria::select('id', 'codigo')->where('codigo', ltrim($data->stkm_agrupacion, '0'))->first();
             if ($categoria) {

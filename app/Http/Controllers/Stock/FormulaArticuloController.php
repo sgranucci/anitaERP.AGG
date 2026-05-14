@@ -35,30 +35,50 @@ class FormulaArticuloController extends Controller
 
         $busqueda = $request->busqueda;
 
-        if (Formula_Articulo::query()->count() === 0) {
-            try {
-                ini_set('memory_limit', '-1');
-                ini_set('max_execution_time', '0');
-                $usuarioId = Auth::check() ? (int) Auth::id() : 1;
-                $ret = $this->formulaArticuloAnitaSyncService->sincronizarDesdeApi($usuarioId);
-                $msg = 'Sincronización inicial desde Anita: '.$ret['formulas'].' fórmulas, '.$ret['lineas'].' líneas de detalle.';
-                if (! empty($ret['advertencias'])) {
-                    $msg .= ' '.implode(' ', array_slice($ret['advertencias'], 0, 5));
-                }
-                session()->flash('mensaje', $msg);
-            } catch (\Throwable $e) {
-                Log::warning('FormulaArticulo index: sincronización Anita falló: '.$e->getMessage(), ['exception' => $e]);
-                session()->flash('errores', ['No se pudo importar fórmulas desde Anita (tabla vacía). '.$e->getMessage()]);
-            }
-        }
-
         $formulas = $this->formulaArticuloQuery->leeFormulaArticulo($busqueda, true, true);
+        $sinFormulasCargadas = Formula_Articulo::query()->count() === 0;
 
         return view('stock.formula_articulo.index', [
             'formulas' => $formulas,
             'busqueda' => $busqueda,
             'estado_enum' => Formula_Articulo_Estado::$enumEstado,
+            'sinFormulasCargadas' => $sinFormulasCargadas,
         ]);
+    }
+
+    /**
+     * Importación masiva desde Anita (ApiAnita). Puede superar el timeout del proxy web (504);
+     * en ese caso usar: php artisan formula-articulo:sincronizar-anita
+     */
+    public function sincronizarDesdeAnita(Request $request)
+    {
+        can('actualizar-formula-articulo');
+
+        if (! $request->isMethod('post')) {
+            abort(405);
+        }
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+        set_time_limit(0);
+        ignore_user_abort(true);
+
+        try {
+            $usuarioId = Auth::check() ? (int) Auth::id() : 1;
+            $ret = $this->formulaArticuloAnitaSyncService->sincronizarDesdeApi($usuarioId);
+            $msg = 'Sincronización desde Anita: '.$ret['formulas'].' fórmulas, '.$ret['lineas'].' líneas de detalle.';
+            if (! empty($ret['advertencias'])) {
+                $msg .= ' '.implode(' ', array_slice($ret['advertencias'], 0, 8));
+            }
+
+            return redirect()->route('consultar_formula_articulo')->with('mensaje', $msg);
+        } catch (\Throwable $e) {
+            Log::warning('FormulaArticulo sincronizarDesdeAnita: '.$e->getMessage(), ['exception' => $e]);
+
+            return redirect()->route('consultar_formula_articulo')->with('errores', [
+                'No se completó la sincronización desde Anita. Si el error fue por tiempo de espera (504), ejecute en el servidor: php artisan formula-articulo:sincronizar-anita — Detalle: '.$e->getMessage(),
+            ]);
+        }
     }
 
     public function listar(Request $request, $formato = null, $busqueda = null)

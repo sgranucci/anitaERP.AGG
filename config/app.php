@@ -21,6 +21,12 @@ return [
     'app_carpeta' => env('APP_CARPETA', '/anitaERP/public'),
 
     /*
+    | When true, opening the stock article list runs Anita sync in the same HTTP request, which can
+    | exceed reverse-proxy limits and return 504 Gateway Timeout.
+    */
+    'anita_sync_articulo_index' => (bool) env('ANITA_SYNC_ARTICULO_INDEX', false),
+
+    /*
     |--------------------------------------------------------------------------
     | Application Environment
     |--------------------------------------------------------------------------
