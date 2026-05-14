@@ -64,6 +64,7 @@ Route::group(['prefix' => 'admin', 'namespace' => 'Admin', 'middleware' => ['aut
     Route::put('rol/{id}', 'RolController@actualizar')->name('actualizar_rol');
     Route::delete('rol/{id}', 'RolController@eliminar')->name('eliminar_rol');
     /* RUTAS MENU_ROL */
+    Route::get('menu-rol/permisos', 'MenuRolController@permisosPorMenu')->name('menu_rol_permisos');
     Route::get('menu-rol', 'MenuRolController@index')->name('menu_rol');
     Route::post('menu-rol', 'MenuRolController@guardar')->name('guardar_menu_rol');
     /* RUTAS PERMISO_ROL */
