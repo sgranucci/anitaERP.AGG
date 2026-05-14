@@ -7,73 +7,142 @@
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
 <script>
     var ptrRenglon;
+    var urlMovimientosInterbanking = @json(route('interbanking_movimientos'));
 
-    $(document).ready(function(){
-        $('.enviaconsulta').click(function(e){
-            e.preventDefault(); // Previene que el enlace recargue la página
+    function padBankNumber3(s) {
+        var d = (s || '').replace(/\D/g, '');
+        if (d === '') {
+            return '';
+        }
+        d = d.replace(/^0+/, '');
+        if (d === '') {
+            d = '0';
+        }
+        while (d.length < 3) {
+            d = '0' + d;
+        }
+        if (d.length > 3) {
+            d = d.slice(-3);
+        }
+        return d;
+    }
 
+    function leeMovimientosInterbanking() {
+        var $tr = $(ptrRenglon).closest('tr');
+        var empresa_id = $tr.find('.empresa_id').text().trim();
+        var account_number = $tr.find('.account_number').text().trim();
+        var bank_number = padBankNumber3($tr.find('.bank_number').text());
+        var account_type = ($tr.find('.account_type').text().trim() || 'CC').substring(0, 2).toUpperCase();
+        if (account_type !== 'CC' && account_type !== 'CA') {
+            account_type = 'CC';
+        }
+        var currencyRaw = ($tr.find('.currency').text().trim() || 'ARS').toUpperCase();
+        var currency = 'ARS';
+        if (currencyRaw === 'USD' || currencyRaw === 'U$S' || currencyRaw === 'US$') {
+            currency = 'USD';
+        } else if (currencyRaw === 'ARS' || currencyRaw === '$') {
+            currency = 'ARS';
+        }
+
+        var params = {
+            empresa_id: empresa_id,
+            account_number: account_number,
+            bank_number: bank_number,
+            account_type: account_type,
+            currency: currency,
+            movement_type: $('#ib_movimiento_tipo').val(),
+            limit: $('#ib_limit').val() || '100',
+            page: $('#ib_page').val() || '0'
+        };
+        var ds = $('#ib_date_since').val();
+        var du = $('#ib_date_until').val();
+        if (ds) {
+            params.date_since = ds;
+        }
+        if (du) {
+            params.date_until = du;
+        }
+
+        $('#tbody-movimientodiario').html('<tr><td colspan="8">Consultando…</td></tr>');
+        $('#ib_movimientos_pie').text('');
+
+        if (!empresa_id || !account_number || !bank_number) {
+            $('#tbody-movimientodiario').html('<tr><td colspan="8">Faltan datos de cuenta o empresa para consultar movimientos.</td></tr>');
+            return;
+        }
+
+        $.get(urlMovimientosInterbanking, params, function (resp) {
+            $('#tbody-movimientodiario').empty();
+            if (!resp.ok) {
+                $('#tbody-movimientodiario').append($('<tr/>').append($('<td colspan="8"/>').text(resp.error || 'Error al consultar.')));
+                return;
+            }
+            var rows = resp.movements_detail || [];
+            var gen = resp.general_data || {};
+            var pie = 'Total registros: ' + (gen.total_rows != null ? gen.total_rows : '—')
+                + ' | Página: ' + (gen.page != null ? gen.page : params.page)
+                + ' | Límite: ' + (gen.limit != null ? gen.limit : params.limit);
+            $('#ib_movimientos_pie').text(pie);
+
+            if (rows.length === 0) {
+                $('#tbody-movimientodiario').append($('<tr/>').append($('<td colspan="8"/>').text('Sin movimientos para los filtros indicados.')));
+                return;
+            }
+
+            $.each(rows, function (i, m) {
+                var dc = (m.debit_credit_type || '').toString().toUpperCase();
+                var monto = parseFloat(m.amount);
+                if (isNaN(monto)) {
+                    monto = 0;
+                }
+                var debito = dc === 'D' ? fNumero(monto, 2) : '';
+                var credito = dc === 'C' ? fNumero(monto, 2) : '';
+                var fecha = m.process_date ? new Date(m.process_date).toLocaleString('es-AR') : '';
+
+                var tr = $('<tr/>');
+                tr.append($('<td/>').append($('<input type="text" class="form-control form-control-sm" readonly/>').val(fecha)));
+                tr.append($('<td/>').append($('<input type="text" class="form-control form-control-sm" style="text-align:right;" readonly/>').val(debito)));
+                tr.append($('<td/>').append($('<input type="text" class="form-control form-control-sm" style="text-align:right;" readonly/>').val(credito)));
+                tr.append($('<td/>').append($('<input type="text" class="form-control form-control-sm" readonly/>').val(m.code_description_bank || '')));
+                tr.append($('<td/>').append($('<input type="text" class="form-control form-control-sm" readonly/>').val(m.operation_code_ib || '')));
+                tr.append($('<td/>').append($('<input type="text" class="form-control form-control-sm" readonly/>').val(m.voucher_number != null ? String(m.voucher_number) : '')));
+                tr.append($('<td/>').append($('<input type="text" class="form-control form-control-sm" readonly/>').val(m.account_cbu || '')));
+                tr.append($('<td/>').append($('<input type="text" class="form-control form-control-sm" readonly/>').val(m.depositor_description || '')));
+                $('#tbody-movimientodiario').append(tr);
+            });
+        }).fail(function () {
+            $('#tbody-movimientodiario').html('<tr><td colspan="8">Error de comunicación con el servidor.</td></tr>');
+        });
+    }
+
+    $(document).ready(function () {
+        $(document).on('click', '.enviaconsulta', function (e) {
+            e.preventDefault();
             ptrRenglon = this;
-
-            enviaConsulta();
+            $('#movimientodiarioModal').modal('show');
         });
-    });    
 
-    function enviaConsulta()
-    {
-		$("#movimientodiarioModal").modal('show');
-	}
-
-	// Controla apertura modal de movimientodiario
-	$('#movimientodiarioModal').on('show.bs.modal', function (event) {
-		var modal = $(this);
-		let tituloModal = "Movimientos de Cuentas Interbanking ";
-        let bank_number = $(ptrRenglon).parents("tr").find(".bank_number").text();
-        let account_number = $(ptrRenglon).parents("tr").find(".account_number").text();
-        let account_name = $(ptrRenglon).parents("tr").find(".account_name").text();
-        let account_type = $(ptrRenglon).parents("tr").find(".account_type").text();
-        let account_label = $(ptrRenglon).parents("tr").find(".account_label").text();
-        let currency = $(ptrRenglon).parents("tr").find(".currency").text();
-        let historical_balances = $(ptrRenglon).parents("tr").find(".historical_balances").val();
-
-        let data = JSON.parse(historical_balances);
-
-		modal.find('.modal-title').text(tituloModal);
-		modal.find('#movimientodiarioModal').empty();
-		modal.find('#movimientodiarioModal').append('');
-
-		var wrapper = $("#tbody-movimientodiario");
-
-        $(wrapper).empty();
-
-        $.each(data, function(index,value){
-            let debito = fNumero(parseFloat(value.total_debits), 2)
-            let credito = fNumero(parseFloat(value.total_credits), 2)
-            let saldo = fNumero(parseFloat(value.day_balance), 2)
-
-            $(wrapper).append('<tr>'+
-                        '<td>'+
-                            '<input type="text" class="form-control historiafecha" value="'+new Date(value.operation_date).toLocaleString("es-AR")+'" readonly>'+
-                        '</td>'+
-                        '<td>'+
-                            '<input type="text" style="text-align: right;" class="form-control historiadebito" value="'+debito+'" readonly>'+
-                        '</td>'+
-                        '<td>'+
-                            '<input type="text" style="text-align: right;" class="form-control historiacredito" value="'+credito+'" readonly>'+
-                        '</td>'+
-                        '<td>'+
-                            '<input type="text" style="text-align: right;" class="form-control historiasaldo" value="'+saldo+'" readonly>'+
-                        '</td>'+
-                    '</tr>');
+        $(document).on('click', '#ib_movimientos_consultar', function () {
+            leeMovimientosInterbanking();
         });
-	});
+    });
 
-	$('#aceptamovimientodiarioModal').on('click', function () {
-		$('#movimientodiarioModal').modal('hide');
-	});
+    $('#movimientodiarioModal').on('show.bs.modal', function () {
+        var $tr = $(ptrRenglon).closest('tr');
+        var account_number = $tr.find('.account_number').text().trim();
+        var account_name = $tr.find('.account_name').text().trim();
+        $(this).find('.modal-title').text('Movimientos Interbanking — ' + account_number + (account_name ? ' — ' + account_name : ''));
+        $('#ib_movimiento_tipo').val('dia');
+        $('#ib_date_since').val('');
+        $('#ib_date_until').val('');
+        $('#ib_limit').val('100');
+        $('#ib_page').val('0');
+        leeMovimientosInterbanking();
+    });
 
-	$('#movimientodiarioModal').on('hidden.bs.modal', function () {
-	});
-
+    $('#aceptamovimientodiarioModal').on('click', function () {
+        $('#movimientodiarioModal').modal('hide');
+    });
 </script>
 @endsection
 
@@ -88,6 +157,12 @@
             <div class="card-header">
                 <h3 class="card-title">Cuentas Interbanking</h3>
                 <div class="card-tools">
+                    @if (can('listar-interbanking-movimientos-persistidos', false))
+                        <a href="{{ route('interbanking_movimientos_persistidos') }}" class="btn btn-tool btn-sm">Movimientos persistidos</a>
+                    @endif
+                    @if (can('listar-saldos-interbanking-historico', false))
+                        <a href="{{ route('interbanking_saldos_historicos') }}" class="btn btn-tool btn-sm">Consulta saldos históricos</a>
+                    @endif
                 </div>
             </div>
             <div class="card-body table-responsive p-0">
@@ -116,20 +191,20 @@
                             <td>
                                 {{ $data['nombrebanco'] ?? '' }}
                                 <span class="bank_number" style="display:none">{{ $data['bank_number'] ?? $data['bankNumber'] ?? '' }}</span>
+                                <span class="empresa_id" style="display:none">{{ $data['empresa_id'] ?? '' }}</span>
                             </td>
                             <td class="currency">{{$data['currency'] ?? ''}}</td>
                             <td class="account_number">{{$data['account_number'] ?? ''}}</td>
                             <td class="account_type">{{$data['account_type'] ?? ''}}</td>
                             <td class="account_label">{{$data['account_label'] ?? ''}}</td>
                             <td class="account_name">{{$data['account_name'] ?? ''}}</td>
-                            <td>REBISCO</td>
+                            <td>{{ $data['nombre_empresa'] ?? '' }}</td>
                             <td>{{\Carbon\Carbon::parse($data['row_date'])->format('d/m/Y')}}</td>
                             <td style="text-align:right;">{{number_format($data['balances']['countable_balance'] ?? 0, 2)}}</td>
                             <td style="text-align:right;">{{number_format($data['balances']['initial_operating_balance'] ?? 0, 2)}}</td>
                             <td style="text-align:right;">{{number_format($data['balances']['current_operating_balance'] ?? 0, 2)}}</td>
                             <td style="text-align:right;">{{number_format($data['balances']['projected_balance_24hs'] ?? 0, 2)}}</td>
                             <td style="text-align:right;">{{number_format($data['balances']['projected_balance_48hs'] ?? 0, 2)}}</td>
-                            <input type="hidden" class="historical_balances" value="{{json_encode($data['historical_balances'])}}">
                             <td>
                        			@if (can('ver-movimientos-cuenta-interbanking', false))
                                     <a href="#" class="btn-accion-tabla enviaconsulta tooltipsC" title="Ver movimientos de la cuenta">

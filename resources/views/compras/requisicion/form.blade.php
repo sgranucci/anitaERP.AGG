@@ -207,17 +207,25 @@
                 : (auth()->user()->centrocosto_id ?? 1)
         );
     @endphp
+    <style>
+        #tabla-articulos-requisicion tbody tr.req-requisicion-linea-cerrada td {
+            background-color: rgba(25, 135, 84, 0.1);
+        }
+        #tabla-articulos-requisicion tbody tr.req-requisicion-linea-cerrada:hover td {
+            background-color: rgba(25, 135, 84, 0.16);
+        }
+    </style>
     <table class="table" id="tabla-articulos-requisicion" data-requisicion-cc-destino-default="{{ $centrocostoDefaultDestino }}">
         <thead>
             <tr>
-                <th style="width: 13%;">Artículo</th>
-                <th style="width: 16%;">Descripción</th>
+                <th style="width: 14%;">Artículo</th>
+                <th style="width: 17%;">Descripción</th>
                 <th style="width: 8%;">Cantidad</th>
                 <th style="width: 9%;">Precio unit.</th>
                 <th style="width: 5%;">Moneda</th>
-                <th style="width: 10%;">CC destino</th>
-                <th style="width: 22%;">Partida presupuesto</th>
-                <th style="width: 22%;">Capex</th>
+                <th style="width: 11%;">CC destino</th>
+                <th style="width: 23%;">Partida presupuesto</th>
+                <th style="width: 23%;">Capex</th>
                 @if(!$soloLectura)
                 <th style="width: 4%;"></th>
                 @endif
@@ -230,7 +238,11 @@
                     : collect([new \App\Models\Compras\Requisicion_Articulo()]);
             @endphp
             @foreach ($lineas as $idx => $linea)
-            <tr class="item-requisicion-articulo">
+            @php
+                $_etiqCierre = trim((string) old('precio_origen_etiqueta_linea.'.$idx, $linea->precio_origen_etiqueta ?? ''));
+                $_lineaCerrada = $_etiqCierre !== '';
+            @endphp
+            <tr class="item-requisicion-articulo{{ $_lineaCerrada ? ' req-requisicion-linea-cerrada' : '' }}"@if($_lineaCerrada) title="{{ e($_etiqCierre) }}"@endif>
                 <td>
                     <input type="hidden" class="requisicion_articulo_id" name="requisicion_articulo_ids[]" value="{{ old('requisicion_articulo_ids.'.$idx, $linea->id ?? '') }}">
                     <div class="form-group row celda-articulo-requisicion mb-0 d-flex align-items-center flex-nowrap">
@@ -271,24 +283,24 @@
                         @endforeach
                     </select>
                 </td>
-                <td>
-                    <div class="form-group row celda-partidagasto">
+                <td class="align-middle">
+                    <div class="celda-partidagasto d-flex align-items-center flex-nowrap">
                         <input type="hidden" class="partidagasto_id" name="partidagasto_ids[]" value="{{ old('partidagasto_ids.'.$idx, $linea->partidagasto_id ?? '') }}" >
-                        <button type="button" title="Consulta partidas (último presupuesto)" style="padding:1;" class="btn-accion-tabla consultapartidagasto tooltipsC">
+                        <button type="button" title="Consulta partidas (último presupuesto)" style="padding:1;" class="btn-accion-tabla consultapartidagasto tooltipsC flex-shrink-0">
                                 <i class="fa fa-search text-primary"></i>
                         </button>
-                        <input type="text" class="codigopartidagasto col-lg-3 form-control" name="codigopartidagastos[]" value="{{ optional($linea->partidagastos)->codigo ?? '' }}" {{ $soloLectura ? 'readonly' : '' }} >
-                        <input type="text" class="descripcionpartidagasto col-lg-8 form-control" name="descripcionpartidagastos[]" value="{{ old('descripcionpartidagastos.'.$idx, optional($linea->partidagastos?->articulos)->detalle ?? '') }}" readonly>
+                        <input type="text" class="codigopartidagasto form-control form-control-sm ml-1" style="width: 4.25rem; flex: 0 0 auto;" name="codigopartidagastos[]" value="{{ optional($linea->partidagastos)->codigo ?? '' }}" {{ $soloLectura ? 'readonly' : '' }} >
+                        <input type="text" class="descripcionpartidagasto form-control form-control-sm ml-1 flex-grow-1" style="min-width: 0; font-size: 0.8rem;" name="descripcionpartidagastos[]" value="{{ old('descripcionpartidagastos.'.$idx, optional($linea->partidagastos?->articulos)->detalle ?? '') }}" readonly title="{{ old('descripcionpartidagastos.'.$idx, optional($linea->partidagastos?->articulos)->detalle ?? '') }}">
                     </div>
                 </td>
-                <td>
-                    <div class="form-group row celda-capex">
+                <td class="align-middle">
+                    <div class="celda-capex d-flex align-items-center flex-nowrap">
                         <input type="hidden" class="capex_id" name="capex_ids[]" value="{{ old('capex_ids.'.$idx, $linea->capex_id ?? '') }}">
-                        <button type="button" title="Consulta CAPEX (último presupuesto)" style="padding:1;" class="btn-accion-tabla consultacapex tooltipsC">
+                        <button type="button" title="Consulta CAPEX (último presupuesto)" style="padding:1;" class="btn-accion-tabla consultacapex tooltipsC flex-shrink-0">
                                 <i class="fa fa-search text-primary"></i>
                         </button>
-                        <input type="text" class="codigocapex col-lg-3 form-control" name="codigocapexs[]" value="{{ optional($linea->capexs)->codigo ?? '' }}" {{ $soloLectura ? 'readonly' : '' }} >
-                        <input type="text" class="descripcioncapex col-lg-8 form-control" name="descripcioncapexs[]" value="{{ old('descripcioncapexs.'.$idx, optional($linea->capexs)->nombre ?? '') }}" readonly>
+                        <input type="text" class="codigocapex form-control form-control-sm ml-1" style="width: 4.25rem; flex: 0 0 auto;" name="codigocapexs[]" value="{{ optional($linea->capexs)->codigo ?? '' }}" {{ $soloLectura ? 'readonly' : '' }} >
+                        <input type="text" class="descripcioncapex form-control form-control-sm ml-1 flex-grow-1" style="min-width: 0; font-size: 0.8rem;" name="descripcioncapexs[]" value="{{ old('descripcioncapexs.'.$idx, optional($linea->capexs)->nombre ?? '') }}" readonly title="{{ old('descripcioncapexs.'.$idx, optional($linea->capexs)->nombre ?? '') }}">
                     </div>
                 </td>
                 @if(!$soloLectura)

@@ -30,6 +30,7 @@
                         <tr>
                             <th class="width20">ID</th>
                             <th>Nombre</th>
+                            <th>Unicidad CUIT</th>
                             <th class="width80" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -38,6 +39,7 @@
                         <tr>
                             <td>{{$data->id}}</td>
                             <td>{{$data->nombre}}</td>
+                            <td>{{ $data->controla_unicidad_cuit ?? 'CONTROLA' }}</td>
                             <td>
                        			@if (can('editar-tipo-servicio-proveedor', false))
                                 	<a href="{{route('editar_tiposervicio_proveedor', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">

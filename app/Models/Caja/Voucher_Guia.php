@@ -2,31 +2,30 @@
 
 namespace App\Models\Caja;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\Receptivo\Guia;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Voucher_Guia extends Model
+class Voucher_Guia extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     use SoftDeletes;
+
     protected $fillable = [
-							'voucher_id', 'guia_id', 'tipocomision',  
-							'porcentajecomision', 'montocomision', 'ordenservicio_id'
-							];
+        'voucher_id', 'guia_id', 'tipocomision',
+        'porcentajecomision', 'montocomision', 'ordenservicio_id',
+    ];
+
     protected $table = 'voucher_guia';
 
     public function vouchers()
-	{
-    	return $this->belongsTo(Voucher::class, 'voucher_id');
-	}
+    {
+        return $this->belongsTo(Voucher::class, 'voucher_id');
+    }
 
     public function guias()
-	{
-    	return $this->belongsTo(Guia::class, 'guia_id');
-	}
-
+    {
+        return $this->belongsTo(Guia::class, 'guia_id');
+    }
 }
-
-
-

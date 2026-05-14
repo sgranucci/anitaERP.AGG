@@ -108,10 +108,17 @@
                 	</div>
                 </div>    
                 <div class="form-group row">
-    				<label for="formula" class="col-lg-4 col-form-label">Fórmula</label>
+    				<label for="formula" class="col-lg-4 col-form-label">Fórmula (id)</label>
     				<div class="col-lg-2">
     					<input type="number" name="formula" id="formula" class="form-control" value="{{old('formula', $producto->formula ?? '')}}"/>
                 	</div>
+                    <div class="col-lg-4 d-flex align-items-end">
+                        @if (can('listar-formula-articulo', false) || can('listar-articulos', false))
+                        <button type="button" class="btn btn-outline-info btn-sm ml-2" id="btn-consulta-formula-articulo" title="Ver fórmula" disabled>
+                            <i class="fa fa-flask"></i> Consultar fórmula
+                        </button>
+                        @endif
+                    </div>
                 </div>                 
 
 				@if (config('app.empresa') == 'FRASLE')

@@ -36,6 +36,11 @@ Requisiciones
                             <i class="fas fa-link"></i> Ver comprobantes
                         </button>
                         @endif
+                        @if (!empty($requisicion_wizard_multiples_oc_url))
+                        <a href="{{ $requisicion_wizard_multiples_oc_url }}" class="btn btn-success btn-sm ml-1" title="Generar una o más órdenes de compra desde esta requisición (misma lógica que el alta de OC)">
+                            <i class="fa fa-shopping-cart"></i> Generar órdenes de compra
+                        </a>
+                        @endif
                         <a href="{{ route('consultar_requisicion') }}" class="btn btn-outline-info btn-sm">
                             <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                         </a>

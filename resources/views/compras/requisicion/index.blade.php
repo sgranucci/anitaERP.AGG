@@ -88,6 +88,11 @@ Requisiciones
                                     <i class="fas fa-print"></i>
                                 </a>
                                 @endif
+                                @if (can('crear-ordencompra', false) && ($data->estado ?? '') === ($estado_aprobada_requisicion ?? ''))
+                                <a href="{{ route('requisicion_wizard_multiples_oc', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC text-success" title="Generar órdenes de compra (oficina y permisos se validan al abrir)">
+                                    <i class="fa fa-shopping-cart"></i>
+                                </a>
+                                @endif
                                 @if ((int) ($data->ordencompra_vinculadas_count ?? 0) > 0 && (can('editar-requisicion', false) || can('listar-requisicion', false)))
                                 <button type="button" class="btn-accion-tabla tooltipsC text-warning js-requisicion-comprobantes" title="Ver comprobantes asociados (órdenes de compra)" data-id="{{ $data->id }}" data-numero="{{ $data->numerorequisicion }}">
                                     <i class="fas fa-link"></i>

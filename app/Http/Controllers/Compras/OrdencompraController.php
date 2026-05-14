@@ -6,12 +6,16 @@ use App\Http\Controllers\Controller;
 use App\Models\Compras\Condicioncompra;
 use App\Models\Compras\Condicionentrega;
 use App\Models\Compras\Condicionpago;
-use App\Models\Compras\Proveedor;
-use App\Models\Configuracion\Moneda;
 use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Ordencompra_Archivo;
+use App\Models\Compras\Proveedor;
+use App\Models\Compras\Requisicion;
+use App\Models\Compras\Requisicion_Estado;
 use App\Models\Compras\Sector_Legajocompra;
+use App\Models\Configuracion\Moneda;
 use App\Models\Ventas\Transporte;
+use App\Queries\Compras\RequisicionQueryInterface;
+use App\Queries\Configuracion\CotizacionQueryInterface;
 use App\Repositories\Compras\OrdencompraRepositoryInterface;
 use App\Repositories\Configuracion\Arbolaprobacion_MovimientoRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
@@ -28,7 +32,6 @@ use App\Support\Compras\OrdencompraPdfContextoRequisicion;
 use App\Support\Compras\OrdencompraTotalesCabecera;
 use App\Support\Compras\OrdencompraTotalesResumen;
 use App\Support\Compras\RequisicionTotalesCabecera;
-use App\Queries\Configuracion\CotizacionQueryInterface;
 use Auth;
 use Illuminate\Http\Request;
 use Jurosh\PDFMerge\PDFMerger;
@@ -46,8 +49,8 @@ class OrdencompraController extends Controller
         private FormapagoRepositoryInterface $formapagoRepository,
         private CotizacionQueryInterface $cotizacionQuery,
         private ImpuestoService $impuestoService,
-    ) {
-    }
+        private RequisicionQueryInterface $requisicionQuery,
+    ) {}
 
     public function index(Request $request)
     {
@@ -67,14 +70,14 @@ class OrdencompraController extends Controller
     {
         can('crear-ordencompra');
 
-        return $this->formularioOrdencompra(null, false);
+        return $this->formularioOrdencompra(null, false, null);
     }
 
     public function guardar(Request $request)
     {
         can('crear-ordencompra');
 
-        $ret = $this->ordencompraGestionService->guardar($request);
+        $ret = $this->ordencompraGestionService->guardar($request, false);
 
         if (($ret['mensaje'] ?? '') === 'ok') {
             return redirect()->route('editar_ordencompra', ['id' => $ret['id']])->with('mensaje', 'Orden de compra creada con éxito');
@@ -87,7 +90,7 @@ class OrdencompraController extends Controller
     {
         can('editar-ordencompra');
 
-        return $this->formularioOrdencompra((int) $id, false);
+        return $this->formularioOrdencompra((int) $id, false, null);
     }
 
     public function actualizar(Request $request, $id)
@@ -173,7 +176,7 @@ class OrdencompraController extends Controller
             return redirect()->route('inicio')->with('mensaje', 'No tiene permisos para visualizar la orden de compra');
         }
 
-        return $this->formularioOrdencompra((int) $id, true);
+        return $this->formularioOrdencompra((int) $id, true, null);
     }
 
     public function buscarRequisicionesAprobadas(Request $request)
@@ -512,7 +515,142 @@ class OrdencompraController extends Controller
         return response()->download($rutaPdfOc, $nombreArchivo)->deleteFileAfterSend(true);
     }
 
-    private function formularioOrdencompra(?int $id, bool $soloLectura)
+    public function wizardMultiplesDesdeRequisicion(int $requisicion_id)
+    {
+        can('crear-ordencompra');
+        if (! $this->requisicionQuery->requisicionAccesiblePorUsuario($requisicion_id)) {
+            abort(404);
+        }
+        $req = Requisicion::query()->select('id', 'estado', 'numerorequisicion')->find($requisicion_id);
+        if (! $req) {
+            abort(404);
+        }
+        $aprobada = Requisicion_Estado::$enumEstado[array_search('A', array_column(Requisicion_Estado::$enumEstado, 'valor'), true)]['nombre'];
+        if ($req->estado !== $aprobada) {
+            return redirect()->route('solo_consulta_requisicion', ['id' => $requisicion_id])
+                ->with('mensaje', 'Solo se pueden generar órdenes de compra desde una requisición en estado APROBADA.');
+        }
+
+        $empresa_query = $this->empresaRepository->allFiltrado();
+        $centrocosto_query = $this->centrocostoRepository->all();
+        $moneda_query = $this->monedaRepository->all();
+        $formapago_query = $this->formapagoRepository->all();
+        $proveedor_query = Proveedor::orderBy('nombre')->get();
+        $condicionpago_query = Condicionpago::orderBy('nombre')->get();
+        $condicionentrega_query = Condicionentrega::orderBy('nombre')->get();
+        $condicioncompra_query = Condicioncompra::orderBy('nombre')->get();
+        $transporte_query = Transporte::orderBy('nombre')->get();
+        $tratamiento_enum = Ordencompra::$enumTratamientoCompra;
+        $tipos_comprobante = [
+            ['valor' => 'FACTURA', 'nombre' => 'Factura'],
+            ['valor' => 'NOTA_CREDITO', 'nombre' => 'Nota de crédito'],
+            ['valor' => 'NOTA_DEBITO', 'nombre' => 'Nota de débito'],
+        ];
+        $wizardRequisicionId = $requisicion_id;
+
+        return view('compras.ordencompra.wizard_desde_requisicion', compact(
+            'empresa_query',
+            'centrocosto_query',
+            'moneda_query',
+            'formapago_query',
+            'proveedor_query',
+            'condicionpago_query',
+            'condicionentrega_query',
+            'condicioncompra_query',
+            'transporte_query',
+            'tratamiento_enum',
+            'tipos_comprobante',
+            'wizardRequisicionId'
+        ));
+    }
+
+    public function generarMultiplesOcDesdeRequisicion(Request $request, int $requisicion_id)
+    {
+        can('crear-ordencompra');
+        if (! $this->requisicionQuery->requisicionAccesiblePorUsuario($requisicion_id)) {
+            return response()->json(['message' => 'Requisición no encontrada o sin acceso.'], 404);
+        }
+        if ((int) $request->input('requisicion_id', 0) !== $requisicion_id) {
+            return response()->json(['message' => 'El identificador de requisición no coincide.'], 422);
+        }
+        // Soporta dos formatos:
+        //   (a) `ordenes` array directo (compatibilidad con JS legacy);
+        //   (b) `ordenes_json` string JSON (wizard nuevo que envía multipart con archivos).
+        $ordenes = $request->input('ordenes', null);
+        if ($ordenes === null) {
+            $rawJson = (string) $request->input('ordenes_json', '');
+            if ($rawJson !== '') {
+                $decoded = json_decode($rawJson, true);
+                $ordenes = is_array($decoded) ? $decoded : [];
+            }
+        }
+        $lineasSin = $request->input('lineas_sin_orden', null);
+        if ($lineasSin === null) {
+            $rawSin = (string) $request->input('lineas_sin_orden_json', '');
+            if ($rawSin !== '') {
+                $decodedSin = json_decode($rawSin, true);
+                $lineasSin = is_array($decodedSin) ? $decodedSin : [];
+            }
+        }
+        if (! is_array($ordenes)) {
+            $ordenes = [];
+        }
+        if (! is_array($lineasSin)) {
+            $lineasSin = [];
+        }
+        if ($ordenes === [] && $lineasSin === []) {
+            return response()->json(['message' => 'No hay órdenes para generar ni líneas a cerrar.'], 422);
+        }
+
+        // Archivos por grupo (campo `archivos_grupo_{idx}[]` cuando se postea multipart).
+        $archivosPorOrden = [];
+        foreach (array_keys($ordenes) as $idx) {
+            $archivos = $request->file('archivos_grupo_'.$idx);
+            if ($archivos === null) {
+                continue;
+            }
+            if (! is_array($archivos)) {
+                $archivos = [$archivos];
+            }
+            $archivosPorOrden[$idx] = array_values(array_filter($archivos, static fn ($f) => $f !== null));
+        }
+
+        $ret = $this->ordencompraGestionService->generarMultiplesOrdenesCompraDesdeRequisicion(
+            $requisicion_id,
+            $ordenes,
+            $lineasSin,
+            $archivosPorOrden
+        );
+        if (($ret['mensaje'] ?? '') !== 'ok') {
+            return response()->json([
+                'message' => $ret['errores'] ?? 'Error',
+                'partial' => $ret['partial'] ?? false,
+                'ids' => $ret['ids'] ?? [],
+            ], 422);
+        }
+
+        $numeros = [];
+        foreach ($ret['ids'] ?? [] as $ocId) {
+            $oc = Ordencompra::query()->select('id', 'numeroordencompra')->find($ocId);
+            if ($oc) {
+                $numeros[] = [
+                    'id' => $oc->id,
+                    'numeroordencompra' => $oc->numeroordencompra,
+                    'url_imprimir' => route('imprimir_pdf_ordencompra', ['id' => $oc->id]),
+                    'url_imprimir_apaisado' => route('imprimir_pdf_ordencompra', ['id' => $oc->id, 'formato' => 'apaisado']),
+                ];
+            }
+        }
+
+        return response()->json([
+            'mensaje' => 'ok',
+            'ordencompra_ids' => $ret['ids'] ?? [],
+            'ordenes' => $numeros,
+            'advertencias' => $ret['advertencias'] ?? [],
+        ]);
+    }
+
+    private function formularioOrdencompra(?int $id, bool $soloLectura, ?int $wizardRequisicionId = null)
     {
         $data = null;
         if ($id !== null) {
@@ -570,7 +708,8 @@ class OrdencompraController extends Controller
             'visualizar',
             'acceso_visualizacion_por_hash',
             'proximoNumeroordencompra',
-            'oc_totales_resumen'
+            'oc_totales_resumen',
+            'wizardRequisicionId'
         ));
     }
 }

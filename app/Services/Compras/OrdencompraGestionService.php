@@ -8,6 +8,7 @@ use App\Models\Compras\Ordencompra_Comprobante;
 use App\Models\Compras\Ordencompra_Comprobante_Cuota;
 use App\Models\Compras\Ordencompra_Historia;
 use App\Models\Compras\Requisicion;
+use App\Models\Compras\Requisicion_Articulo;
 use App\Models\Compras\Requisicion_Estado;
 use App\Models\Compras\Sector_Legajocompra;
 use App\Repositories\Compras\Ordencompra_ArchivoRepositoryInterface;
@@ -18,9 +19,8 @@ use App\Repositories\Compras\Requisicion_EstadoRepositoryInterface;
 use App\Repositories\Compras\RequisicionRepositoryInterface;
 use App\Services\Configuracion\ArbolaprobacionService;
 use App\Support\Compras\OrdencompraCondicionesContratacionGenerator;
-use App\Support\Compras\ValidacionPresupuestoPartidaCapexLineas;
 use App\Support\Compras\OrdencompraEstados;
-use App\Support\Compras\OrdencompraTotalesCabecera;
+use App\Support\Compras\ValidacionPresupuestoPartidaCapexLineas;
 use Auth;
 use Carbon\Carbon;
 use DB;
@@ -39,8 +39,7 @@ class OrdencompraGestionService
         private RequisicionRepositoryInterface $requisicionRepository,
         private Requisicion_EstadoRepositoryInterface $requisicionEstadoRepository,
         private RequisicionPresupuestoService $requisicionPresupuestoService,
-    ) {
-    }
+    ) {}
 
     public function idSectorCompras(): ?int
     {
@@ -200,7 +199,78 @@ class OrdencompraGestionService
         return $salida;
     }
 
-    public function guardar(Request $request): array
+    /**
+     * @param  array<int, array<string, mixed>>  $ordenesPayloads  Cada elemento: cuerpo POST equivalente a guardar una OC.
+     * @param  array<int>  $lineasSinOrdenRequisicionArticuloIds  Líneas de requisición que se cierran sin OC (sin precio elegido).
+     * @param  array<int, array<int, \Symfony\Component\HttpFoundation\File\UploadedFile>>  $archivosPorOrden  Archivos a adjuntar a la OC creada por cada índice del array de órdenes.
+     * @return array{mensaje: string, errores?: string, ids?: array<int>, advertencias?: array<string>, partial?: bool}
+     */
+    public function generarMultiplesOrdenesCompraDesdeRequisicion(
+        int $requisicionId,
+        array $ordenesPayloads,
+        array $lineasSinOrdenRequisicionArticuloIds,
+        array $archivosPorOrden = []
+    ): array {
+        $lineasSinOrdenRequisicionArticuloIds = array_values(array_unique(array_map('intval', $lineasSinOrdenRequisicionArticuloIds)));
+        if ($lineasSinOrdenRequisicionArticuloIds !== []) {
+            $n = Requisicion_Articulo::query()
+                ->where('requisicion_id', $requisicionId)
+                ->whereIn('id', $lineasSinOrdenRequisicionArticuloIds)
+                ->count();
+            if ($n !== count($lineasSinOrdenRequisicionArticuloIds)) {
+                return ['mensaje' => 'error', 'errores' => 'Alguna línea indicada como «sin orden» no pertenece a esta requisición.'];
+            }
+        }
+
+        $creados = [];
+        $advertencias = [];
+
+        foreach ($ordenesPayloads as $idx => $payload) {
+            if (! is_array($payload)) {
+                continue;
+            }
+            $payload['requisicion_id'] = $requisicionId;
+            $files = [];
+            if (! empty($archivosPorOrden[$idx]) && is_array($archivosPorOrden[$idx])) {
+                $files = ['nombrearchivos' => array_values($archivosPorOrden[$idx])];
+            }
+            $sub = Request::create('/compras/ordencompra', 'POST', $payload, [], $files);
+            $ret = $this->guardar($sub, true);
+            if (($ret['mensaje'] ?? '') !== 'ok') {
+                return [
+                    'mensaje' => 'error',
+                    'errores' => 'Fallo al generar la orden #'.(((int) $idx) + 1).': '.($ret['errores'] ?? 'Error'),
+                    'ids' => $creados,
+                    'advertencias' => $advertencias,
+                    'partial' => $creados !== [],
+                ];
+            }
+            if (! empty($ret['id'])) {
+                $creados[] = (int) $ret['id'];
+            }
+        }
+
+        if ($lineasSinOrdenRequisicionArticuloIds !== []) {
+            $etiqueta = 'Línea cerrada sin orden de compra: no se seleccionó origen de precio al generar desde la requisición.';
+            Requisicion_Articulo::query()
+                ->where('requisicion_id', $requisicionId)
+                ->whereIn('id', $lineasSinOrdenRequisicionArticuloIds)
+                ->update(['precio_origen_etiqueta' => $etiqueta]);
+            $advertencias[] = count($lineasSinOrdenRequisicionArticuloIds).' ítem(es) quedaron sin OC (línea cerrada en la requisición); la requisición pasa a «'.self::nombreEstadoRequisicionGeneroOc().'» si estaba aprobada.';
+        }
+
+        if ($creados !== [] || $lineasSinOrdenRequisicionArticuloIds !== []) {
+            $this->marcarRequisicionGeneroOc($requisicionId, Auth::user()->id, 'Generación de órdenes de compra desde requisición');
+        }
+
+        return [
+            'mensaje' => 'ok',
+            'ids' => $creados,
+            'advertencias' => $advertencias,
+        ];
+    }
+
+    public function guardar(Request $request, bool $omitirMarcarRequisicionGeneroOc = false): array
     {
         $v = Validator::make($request->all(), $this->reglasCabecera());
         if ($v->fails()) {
@@ -281,7 +351,7 @@ class OrdencompraGestionService
                 $this->arbolaprobacionService->procesaArbolaprobacion('OC', $oc->id, 'insert');
             }
 
-            if (! empty($cab['requisicion_id'])) {
+            if (! $omitirMarcarRequisicionGeneroOc && ! empty($cab['requisicion_id'])) {
                 $this->marcarRequisicionGeneroOc((int) $cab['requisicion_id'], $uid, 'Alta de orden de compra');
             }
 
@@ -521,8 +591,10 @@ class OrdencompraGestionService
         if (! $req) {
             throw new \InvalidArgumentException('La requisición asociada no existe.');
         }
-        if ($req->estado !== self::nombreEstadoRequisicionAprobada()) {
-            throw new \InvalidArgumentException('La requisición debe estar en estado APROBADA para asociarla a la orden de compra.');
+        $ok = $req->estado === self::nombreEstadoRequisicionAprobada()
+            || $this->estadoRequisicionEquivaleAGeneroOc($req->estado);
+        if (! $ok) {
+            throw new \InvalidArgumentException('La requisición debe estar en estado APROBADA o GENERO ORDEN COMPRA para asociarla a la orden de compra.');
         }
     }
 
@@ -540,6 +612,16 @@ class OrdencompraGestionService
 
     private function marcarRequisicionGeneroOc(int $requisicionId, int $usuarioId, string $observacion): void
     {
+        $req = Requisicion::query()->select('id', 'estado')->find($requisicionId);
+        if (! $req) {
+            return;
+        }
+        if ($this->estadoRequisicionEquivaleAGeneroOc($req->estado)) {
+            return;
+        }
+        if ($req->estado !== self::nombreEstadoRequisicionAprobada()) {
+            return;
+        }
         $this->registrarCambioEstadoRequisicion(
             $requisicionId,
             self::nombreEstadoRequisicionGeneroOc(),

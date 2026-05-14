@@ -2,9 +2,9 @@
 
 namespace App\Http\Requests;
 
-use Illuminate\Foundation\Http\FormRequest;
+use App\Models\Compras\Tiposervicio_Proveedor;
 use App\Rules\Compras\RuleProveedor;
-use App\Models\Compras\Proveedor;
+use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class ValidacionProveedor extends FormRequest
@@ -26,6 +26,13 @@ class ValidacionProveedor extends FormRequest
      */
     public function rules()
     {
+        $nroInscripcionRules = ['required', new RuleProveedor('nroinscripcion')];
+        if ($this->tipoServicioProveedorControlaUnicidadCuit()) {
+            $nroInscripcionRules[] = Rule::unique('proveedor', 'nroinscripcion')
+                ->ignore($this->route('id'))
+                ->whereNull('deleted_at');
+        }
+
         return [
             'nombre' => 'required|max:255|',
             'domicilio' => 'required|max:255|',
@@ -36,9 +43,27 @@ class ValidacionProveedor extends FormRequest
             'condicionpago_id' => ['integer', 'nullable'],
             'cuentacontable_id' => 'required',
             'cuentacontableme_id' => 'required',
-            'nroinscripcion' => ['required', new RuleProveedor('nroinscripcion'), Rule::unique('proveedor', 'nroinscripcion')->ignore($this->route('id'))->whereNull('deleted_at')],
+            'nroinscripcion' => $nroInscripcionRules,
             'retieneiva' => ['required', new RuleProveedor('retieneiva')],
             'nroIIBB' => 'sometimes|max:100|',
         ];
+    }
+
+    /**
+     * Si el tipo de servicio del proveedor está configurado como NO CONTROLA, no se aplica unicidad de CUIT.
+     */
+    private function tipoServicioProveedorControlaUnicidadCuit(): bool
+    {
+        $tipoId = $this->input('tiposervicio_proveedor_id');
+        if ($tipoId === null || $tipoId === '') {
+            return true;
+        }
+
+        $tipo = Tiposervicio_Proveedor::query()->find((int) $tipoId);
+        if ($tipo === null) {
+            return true;
+        }
+
+        return $tipo->controla_unicidad_cuit !== Tiposervicio_Proveedor::UNICIDAD_CUIT_NO_CONTROLA;
     }
 }

@@ -2,16 +2,18 @@
 
 namespace App\Models\Caja;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
+use App\Models\Configuracion\Condicioniva;
 use App\Models\Configuracion\Localidad;
 use App\Models\Configuracion\Provincia;
-use App\Models\Configuracion\Condicioniva;
+use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Banco extends Model
+class Banco extends Model implements Auditable
 {
-    protected $fillable = ['nombre', 'codigo', 'domicilio', 'provincia_id', 'localidad_id', 
-                            'codigopostal', 'telefono', 'email', 'nroinscripcion', 'condicioniva_id'];
+    use \OwenIt\Auditing\Auditable;
+
+    protected $fillable = ['nombre', 'codigo', 'domicilio', 'provincia_id', 'localidad_id',
+        'codigopostal', 'telefono', 'email', 'nroinscripcion', 'condicioniva_id'];
 
     protected $table = 'banco';
 
@@ -29,6 +31,4 @@ class Banco extends Model
     {
         return $this->belongsTo(Condicioniva::class, 'condicioniva_id');
     }
-
 }
-

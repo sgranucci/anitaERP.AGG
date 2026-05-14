@@ -96,6 +96,9 @@
                     @else
                         Nueva orden de compra
                     @endif
+                    @if (!empty($wizardRequisicionId))
+                        <span class="badge badge-info ml-2">Desde requisición #{{ (int) $wizardRequisicionId }} — múltiples OC</span>
+                    @endif
                 </h3>
                 <div class="card-tools">
                     @if (empty($acceso_visualizacion_por_hash))
@@ -157,6 +160,12 @@
                 </div>
 
                 <div class="card-body">
+                    @if (!empty($wizardRequisicionId))
+                        <div class="alert alert-info">
+                            <strong>Generación múltiple:</strong> en la solapa <em>Artículos</em> elija el <strong>origen del precio</strong> en cada ítem. Se creará una orden de compra por cada combinación distinta de proveedor y condiciones de compra/entrega. En <em>Comprobantes a venir</em> cargue los comprobantes; la misma definición se aplicará a cada OC generada. Puede dejar ítems sin precio: se cerrarán en la requisición con leyenda en la columna de cierre.
+                            <a href="{{ route('solo_consulta_requisicion', ['id' => (int) $wizardRequisicionId]) }}" class="alert-link">Volver a la requisición</a>
+                        </div>
+                    @endif
                     @include('compras.ordencompra.form')
                 </div>
 
@@ -170,6 +179,18 @@
                 @endif
             </form>
             @include('compras.ordencompra.form_modales_y_json')
+            @if (!empty($wizardRequisicionId))
+                @php
+                    $wizardRequisicionMetaJson = json_encode([
+                        'requisicion_id' => (int) $wizardRequisicionId,
+                        'post_url' => route('requisicion_generar_multiples_oc', ['id' => (int) $wizardRequisicionId]),
+                        'csrf' => csrf_token(),
+                        'volver_url' => route('solo_consulta_requisicion', ['id' => (int) $wizardRequisicionId]),
+                    ], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE);
+                @endphp
+                <script type="application/json" id="wizard-requisicion-multiples-meta">{!! $wizardRequisicionMetaJson !!}</script>
+                <script src="{{ asset('assets/pages/scripts/compras/requisicion/wizard-multiples-oc.js') }}" type="text/javascript"></script>
+            @endif
         </div>
     </div>
 </div>

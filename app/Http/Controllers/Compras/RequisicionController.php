@@ -2,46 +2,54 @@
 
 namespace App\Http\Controllers\Compras;
 
+use App\Exports\Compras\RequisicionExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionRequisicion;
-use App\Models\Compras\Requisicion_Estado;
-use App\Models\Compras\Requisicion;
-use App\Models\Configuracion\Oficinacompra;
-use App\Models\Compras\Condicionpago;
-use App\Models\Compras\Condicionentrega;
 use App\Models\Compras\Condicioncompra;
-use App\Repositories\Compras\RequisicionRepositoryInterface;
-use App\Repositories\Presupuesto\PartidagastoRepositoryInterface;
-use App\Repositories\Configuracion\EmpresaRepositoryInterface;
-use App\Repositories\Configuracion\MonedaRepositoryInterface;
-use App\Repositories\Configuracion\Arbolaprobacion_MovimientoRepositoryInterface;
-use App\Repositories\Contable\CentrocostoRepositoryInterface;
-use App\Repositories\Ventas\FormapagoRepositoryInterface;
+use App\Models\Compras\Condicionentrega;
+use App\Models\Compras\Condicionpago;
 use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Proveedor;
+use App\Models\Compras\Requisicion;
 use App\Models\Compras\Requisicion_Archivo;
-use App\Services\Compras\RequisicionService;
-use App\Services\Configuracion\ArbolaprobacionService;
+use App\Models\Compras\Requisicion_Estado;
+use App\Models\Configuracion\Oficinacompra;
+use App\Models\Stock\Articulo;
 use App\Queries\Compras\RequisicionQueryInterface;
 use App\Queries\Configuracion\CotizacionQueryInterface;
-use App\Exports\Compras\RequisicionExport;
+use App\Repositories\Compras\RequisicionRepositoryInterface;
+use App\Repositories\Configuracion\Arbolaprobacion_MovimientoRepositoryInterface;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Repositories\Configuracion\MonedaRepositoryInterface;
+use App\Repositories\Contable\CentrocostoRepositoryInterface;
+use App\Repositories\Presupuesto\PartidagastoRepositoryInterface;
+use App\Repositories\Ventas\FormapagoRepositoryInterface;
+use App\Services\Compras\RequisicionService;
+use App\Services\Configuracion\ArbolaprobacionService;
 use App\Support\Compras\RequisicionTotalesCabecera;
-use App\Models\Stock\Articulo;
 use Illuminate\Http\Request;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 
 class RequisicionController extends Controller
 {
     private $empresaRepository;
+
     private $centrocostoRepository;
+
     private $monedaRepository;
+
     private $formapagoRepository;
+
     private $requisicionRepository;
+
     private $requisicionQuery;
+
     private $requisicionService;
+
     private $arbolaprobacion_movimientoRepository;
+
     private $arbolaprobacionService;
+
     private $partidagastoRepository;
 
     public function __construct(
@@ -71,23 +79,26 @@ class RequisicionController extends Controller
     public function index(Request $request)
     {
         can('listar-requisicion');
-        //$this->requisicionService->sincronizarConAnita();
+        // $this->requisicionService->sincronizarConAnita();
         $hay_requisiciones = $this->requisicionQuery->first();
 
-        if (!$hay_requisiciones)
-			$this->requisicionService->sincronizarConAnita();
+        if (! $hay_requisiciones) {
+            $this->requisicionService->sincronizarConAnita();
+        }
 
         $busqueda = $request->busqueda;
 
         $requisicion = $this->requisicionQuery->leeRequisicion($busqueda, true, true);
 
+        $estadoAprobada = Requisicion_Estado::$enumEstado[array_search('A', array_column(Requisicion_Estado::$enumEstado, 'valor'), true)]['nombre'];
         $datas = [
             'requisicion' => $requisicion,
             'busqueda' => $busqueda,
             'estado_enum' => Requisicion_Estado::$enumEstado,
             'estado_en_compras' => Requisicion_Estado::$enumEstado[array_search('K', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'],
+            'estado_aprobada_requisicion' => $estadoAprobada,
             'tratamiento_enum' => Requisicion::$enumTratamiento,
-            'contratacionDirecta_enum' => Requisicion::$enumContratacionDirecta
+            'contratacionDirecta_enum' => Requisicion::$enumContratacionDirecta,
         ];
 
         return view('compras.requisicion.index', $datas);
@@ -127,13 +138,15 @@ class RequisicionController extends Controller
         }
 
         $requisicion = $this->requisicionQuery->leeRequisicion($busqueda, true, true);
+        $estadoAprobada = Requisicion_Estado::$enumEstado[array_search('A', array_column(Requisicion_Estado::$enumEstado, 'valor'), true)]['nombre'];
         $datas = [
             'requisicion' => $requisicion,
             'busqueda' => $busqueda,
             'estado_enum' => Requisicion_Estado::$enumEstado,
             'estado_en_compras' => Requisicion_Estado::$enumEstado[array_search('K', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'],
+            'estado_aprobada_requisicion' => $estadoAprobada,
             'tratamiento_enum' => Requisicion::$enumTratamiento,
-            'contratacionDirecta_enum' => Requisicion::$enumContratacionDirecta
+            'contratacionDirecta_enum' => Requisicion::$enumContratacionDirecta,
         ];
 
         return view('compras.requisicion.index', $datas);
@@ -317,6 +330,10 @@ class RequisicionController extends Controller
         $acceso_visualizacion_por_hash = false;
         $visualizar = false;
         $tiene_ordencompra_asociada = $this->tieneOrdencompraAsociadaRequisicion((int) $data->id);
+        $puede_wizard_generar_multiples_oc = $this->requisicionQuery->puedeUsuarioGenerarMultiplesOcDesdeRequisicion($data);
+        $requisicion_wizard_multiples_oc_url = $puede_wizard_generar_multiples_oc
+            ? route('requisicion_wizard_multiples_oc', ['id' => $data->id])
+            : null;
 
         return view('compras.requisicion.editar', compact(
             'data',
@@ -335,7 +352,9 @@ class RequisicionController extends Controller
             'contratacionDirecta_enum',
             'acceso_visualizacion_por_hash',
             'visualizar',
-            'tiene_ordencompra_asociada'
+            'tiene_ordencompra_asociada',
+            'puede_wizard_generar_multiples_oc',
+            'requisicion_wizard_multiples_oc_url'
         ));
     }
 
@@ -702,9 +721,9 @@ class RequisicionController extends Controller
                     break;
                 }
             }
-        }
-        else
+        } else {
             $flEncontro = true;
+        }
 
         if ($flEncontro) {
             $data = $this->requisicionRepository->find($id);
@@ -721,6 +740,10 @@ class RequisicionController extends Controller
             $visualizar = true;
             $acceso_visualizacion_por_hash = filled($hash);
             $tiene_ordencompra_asociada = $this->tieneOrdencompraAsociadaRequisicion((int) $data->id);
+            $puede_wizard_generar_multiples_oc = $this->requisicionQuery->puedeUsuarioGenerarMultiplesOcDesdeRequisicion($data);
+            $requisicion_wizard_multiples_oc_url = $puede_wizard_generar_multiples_oc
+                ? route('requisicion_wizard_multiples_oc', ['id' => $data->id])
+                : null;
 
             return view('compras.requisicion.editar', compact(
                 'data',
@@ -736,7 +759,9 @@ class RequisicionController extends Controller
                 'contratacionDirecta_enum',
                 'visualizar',
                 'acceso_visualizacion_por_hash',
-                'tiene_ordencompra_asociada'
+                'tiene_ordencompra_asociada',
+                'puede_wizard_generar_multiples_oc',
+                'requisicion_wizard_multiples_oc_url'
             ));
         }
 

@@ -24,7 +24,8 @@ class ValidacionTiposervicio_Proveedor extends FormRequest
     public function rules()
     {
         return [
-            'nombre' => 'required|max:255|unique:tiposervicio_proveedor,nombre,' . $this->route('id'),
+            'nombre' => 'required|max:255|unique:tiposervicio_proveedor,nombre,'.$this->route('id'),
+            'controla_unicidad_cuit' => 'required|in:CONTROLA,NO CONTROLA',
         ];
     }
 }

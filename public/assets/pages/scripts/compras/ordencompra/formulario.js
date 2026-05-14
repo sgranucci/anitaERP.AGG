@@ -369,27 +369,52 @@ $(function () {
 				if (data.opcion_requisicion) {
 					var oq = data.opcion_requisicion;
 					var mid = oq.moneda_id || ocMonedaPesoId;
-					addBtn(
-						ORQ,
-						oq.precio,
-						mid,
-						oq.ref_id,
-						oq.etiqueta || 'Precio requisición',
-						'Precio: ' + ocFmtPrecio(oq.precio) + ' ' + ocMonedaLabel(mid)
+					var $br = $('<button type="button" class="btn btn-outline-primary btn-block text-left mb-2 oc-aplica-opcion-precio"/>');
+					$br.data('tipo', ORQ);
+					$br.data('precio', oq.precio);
+					$br.data('monedaId', mid);
+					$br.data('refId', oq.ref_id != null ? oq.ref_id : '');
+					$br.data('etiqueta', oq.etiqueta || 'Precio requisición');
+					$br.data('ocPrecioMeta', {
+						proveedor_id: oq.proveedor_id != null ? oq.proveedor_id : 0,
+						condicioncompra_id: oq.condicioncompra_id != null ? oq.condicioncompra_id : 0,
+						condicionentrega_id: oq.condicionentrega_id != null ? oq.condicionentrega_id : 0,
+						condicionpago_id: oq.condicionpago_id != null ? oq.condicionpago_id : 0
+					});
+					$br.html(
+						'<strong>' + ocHtmlEsc(oq.etiqueta || 'Precio requisición') + '</strong><br><span class="small text-muted">' +
+							'Precio: ' + ocFmtPrecio(oq.precio) + ' ' + ocMonedaLabel(mid) +
+							'</span>'
 					);
+					$box.append($br);
 				}
 				(data.opciones_lista || []).forEach(function (L) {
 					var mid = L.moneda_id || ocMonedaPesoId;
-					addBtn(
-						OL,
-						L.precio,
-						mid,
-						L.ref_id,
-						L.etiqueta || 'Lista proveedor',
-						'Precio neto: ' + ocFmtPrecio(L.precio) + ' ' + ocMonedaLabel(mid) +
-							(L.lista_id ? ' · Lista id ' + L.lista_id : '') +
-							(L.linea_lista_id ? ' · Línea lista id ' + L.linea_lista_id : '')
+					var $bl = $('<button type="button" class="btn btn-outline-primary btn-block text-left mb-2 oc-aplica-opcion-precio"/>');
+					$bl.data('tipo', OL);
+					$bl.data('precio', L.precio);
+					$bl.data('monedaId', mid);
+					$bl.data('refId', L.ref_id != null ? L.ref_id : '');
+					$bl.data('etiqueta', L.etiqueta || 'Lista proveedor');
+					$bl.data('ocPrecioMeta', {
+						proveedor_id: L.proveedor_id != null ? L.proveedor_id : 0,
+						condicioncompra_id: L.condicioncompra_id != null ? L.condicioncompra_id : 0,
+						condicionentrega_id: L.condicionentrega_id != null ? L.condicionentrega_id : 0,
+						condicionpago_id: L.condicionpago_id != null ? L.condicionpago_id : 0
+					});
+					var subL =
+						'Precio neto: ' +
+						ocFmtPrecio(L.precio) +
+						' ' +
+						ocMonedaLabel(mid) +
+						(L.lista_id ? ' · Lista id ' + L.lista_id : '') +
+						(L.linea_lista_id ? ' · Línea lista id ' + L.linea_lista_id : '');
+					$bl.html(
+						'<strong>' + ocHtmlEsc(L.etiqueta || 'Lista proveedor') + '</strong><br><span class="small text-muted">' +
+							ocHtmlEsc(subL) +
+							'</span>'
 					);
+					$box.append($bl);
 				});
 				(data.opciones_presupuesto || []).forEach(function (P) {
 					var mid = P.moneda_id || ocMonedaPesoId;
@@ -406,6 +431,12 @@ $(function () {
 						condicioncompra_id: P.condicioncompra_id,
 						condicionentrega_id: P.condicionentrega_id,
 						condicionpago_id: P.condicionpago_id
+					});
+					$bp.data('ocPrecioMeta', {
+						proveedor_id: P.proveedor_id != null ? P.proveedor_id : 0,
+						condicioncompra_id: P.condicioncompra_id != null ? P.condicioncompra_id : 0,
+						condicionentrega_id: P.condicionentrega_id != null ? P.condicionentrega_id : 0,
+						condicionpago_id: P.condicionpago_id != null ? P.condicionpago_id : 0
 					});
 					var subP =
 						'Precio: ' +
@@ -451,6 +482,12 @@ $(function () {
 					ocAplicarCabeceraDesdePresupuestoMeta(meta);
 				}
 			}
+		}
+		var pm = $b.data('ocPrecioMeta');
+		if (pm && typeof pm === 'object' && ptrOcOrigenPrecioRow && ptrOcOrigenPrecioRow.length) {
+			ptrOcOrigenPrecioRow.data('ocGrupoMeta', pm);
+		} else if (ptrOcOrigenPrecioRow && ptrOcOrigenPrecioRow.length) {
+			ptrOcOrigenPrecioRow.removeData('ocGrupoMeta');
 		}
 		ocAplicarSeleccionOrigenPrecio(
 			tipo,
@@ -1361,6 +1398,18 @@ $(function () {
 	}
 
 	$('#form-ordencompra-general').on('submit', function (e) {
+		if ($('#wizard-requisicion-multiples-meta').length && typeof window.reqOcWizardInterceptSubmit === 'function') {
+			try {
+				ocSyncComprobantesToHidden();
+			} catch (errSync) {
+				e.preventDefault();
+				e.stopPropagation();
+				alert('Error al preparar comprobantes. Revise la solapa Comprobantes a venir o recargue la página.');
+				return false;
+			}
+			window.reqOcWizardInterceptSubmit(e, this);
+			return false;
+		}
 		var form = this;
 		try {
 			ocSyncComprobantesToHidden();
@@ -1638,6 +1687,8 @@ $(function () {
 			}
 		});
 	}
+
+	window.ocAplicarPlantillaRequisicionDesdeId = ocAplicarPlantillaRequisicion;
 
 	$('#btn-consulta-requisicion-modal').on('click', function () {
 		$('#consultarequisicionModal').modal('show');
