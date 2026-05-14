@@ -16,11 +16,13 @@
 				<input type="hidden" id="condicioniva_query" value="{{$condicioniva_query}}">
 				<span class="input-group-text">#</span>
 				<input type="text" name="numerodocumento" id="numerodocumento" class="col-lg-3 form-control" value="{{$data->numerodocumento??''}}">
-				<button type="button" id="btn-consulta-arca-cliente" title="Consultar padrón ARCA" class="btn-accion-tabla tooltipsC" style="padding:1;" onclick="return window.consultaArcaCliente?.(event)">
-					<i class="fa fa-search text-primary"></i>
-				</button>
-				<span id="arca-loading-cliente" style="display:none; margin-left:8px; color:#6c757d; font-size: 0.95em;">
-					<i class="fa fa-spinner fa-spin" aria-hidden="true"></i> Consultando a ARCA...
+				<span class="d-inline-block position-relative pl-1 align-middle">
+					<button type="button" id="btn-consulta-arca-cliente" title="Consultar padrón ARCA" class="btn-accion-tabla tooltipsC" style="padding:1;" onclick="return window.consultaArcaCliente?.(event)">
+						<i class="fa fa-search text-primary"></i>
+					</button>
+					<span id="arca-loading-cliente" style="display:none; position:absolute; left:100%; top:50%; transform:translateY(-50%); margin-left:8px; white-space:nowrap; color:#6c757d; font-size:0.95em; z-index:5;">
+						<i class="fa fa-spinner fa-spin" aria-hidden="true"></i> Consultando a ARCA...
+					</span>
 				</span>
 			</div>			
 			<div class="form-group row">

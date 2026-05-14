@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Caja;
 
+use App\Exports\Caja\InterbankingMovimientoHistoricoExport;
 use App\Http\Controllers\Controller;
 use App\Models\Caja\InterbankingMovimiento;
 use App\Repositories\Caja\BancoRepositoryInterface;
@@ -9,10 +10,12 @@ use App\Services\Caja\InterbankingMovimientoPersistenciaService;
 use App\Services\Caja\InterbankingService;
 use Auth;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Session;
 use Illuminate\View\View;
+use Maatwebsite\Excel\Excel;
 
 class InterbankingMovimientoHistoricoController extends Controller
 {
@@ -35,40 +38,9 @@ class InterbankingMovimientoHistoricoController extends Controller
             abort(403);
         }
 
-        $fechaHasta = $request->input('fecha_hasta')
-            ? Carbon::parse($request->input('fecha_hasta'))->endOfDay()
-            : Carbon::now()->endOfDay();
-        $fechaDesde = $request->input('fecha_desde')
-            ? Carbon::parse($request->input('fecha_desde'))->startOfDay()
-            : Carbon::now()->subDays(30)->startOfDay();
+        [$fechaDesde, $fechaHasta] = $this->resolverRangoFechas($request);
 
-        $query = InterbankingMovimiento::query()
-            ->with('empresa:id,nombre')
-            ->whereIn('empresa_id', $empresaIdsPermitidas)
-            ->whereBetween('process_date', [$fechaDesde, $fechaHasta])
-            ->orderByDesc('process_date')
-            ->orderByDesc('id');
-
-        if ($empresaId !== null) {
-            $query->where('empresa_id', $empresaId);
-        }
-
-        if ($request->filled('currency')) {
-            $query->where('currency', $request->string('currency')->toString());
-        }
-
-        if ($request->filled('movement_type')) {
-            $query->where('movement_type', $request->string('movement_type')->toString());
-        }
-
-        if ($request->filled('account_number')) {
-            $q = '%'.$request->string('account_number')->toString().'%';
-            $query->where('account_number', 'like', $q);
-        }
-
-        if ($request->filled('bank_number')) {
-            $query->where('bank_number', $this->normalizarBankNumber3($request->string('bank_number')->toString()));
-        }
+        $query = $this->movimientosQuery($request, $empresaIdsPermitidas, $fechaDesde, $fechaHasta, $empresaId);
 
         $registros = $query->paginate(50)->appends($request->query())->through(function (InterbankingMovimiento $r) {
             $r->setAttribute('nombrebanco', $this->resolverNombreBanco($r->bank_number));
@@ -94,6 +66,62 @@ class InterbankingMovimientoHistoricoController extends Controller
             'fechaHasta',
             'prefill'
         ));
+    }
+
+    public function exportar(Request $request, string $formato)
+    {
+        can('listar-interbanking-movimientos-persistidos');
+
+        $user = Auth::user();
+        $user->loadMissing('usuario_empresas');
+        $empresaIdsPermitidas = $user->usuario_empresas->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+        $empresaId = $request->integer('empresa_id') ?: null;
+        if ($empresaId !== null && ! in_array($empresaId, $empresaIdsPermitidas, true)) {
+            abort(403);
+        }
+
+        [$fechaDesde, $fechaHasta] = $this->resolverRangoFechas($request);
+
+        $registros = $this->movimientosQuery($request, $empresaIdsPermitidas, $fechaDesde, $fechaHasta, $empresaId)
+            ->get()
+            ->map(function (InterbankingMovimiento $r) {
+                $r->setAttribute('nombrebanco', $this->resolverNombreBanco($r->bank_number));
+                $r->setAttribute('nombreempresa', $r->empresa->nombre ?? '');
+
+                return $r;
+            });
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        switch ($formato) {
+            case 'PDF':
+                $view = \View::make('caja.interbanking.listado_movimientos_historicos', compact('registros'))
+                    ->render();
+                $path = storage_path('pdf/listados');
+                if (! is_dir($path)) {
+                    mkdir($path, 0775, true);
+                }
+                $nombre_pdf = 'listado_interbanking_movimientos_historicos';
+
+                $pdf = \App::make('dompdf.wrapper');
+                $pdf->setPaper('legal', 'landscape');
+                $pdf->loadHTML($view, 'UTF-8')->save($path.'/'.$nombre_pdf.'.pdf');
+
+                return response()->download($path.'/'.$nombre_pdf.'.pdf');
+
+            case 'EXCEL':
+                return (new InterbankingMovimientoHistoricoExport($registros))
+                    ->download('interbanking_movimientos_historicos.xlsx');
+
+            case 'CSV':
+                return (new InterbankingMovimientoHistoricoExport($registros))
+                    ->download('interbanking_movimientos_historicos.csv', Excel::CSV);
+
+            default:
+                abort(404);
+        }
     }
 
     public function sincronizar(Request $request): RedirectResponse
@@ -194,5 +222,58 @@ class InterbankingMovimientoHistoricoController extends Controller
         }
 
         return 'Banco no encontrado';
+    }
+
+    /**
+     * @return array{0: Carbon, 1: Carbon}
+     */
+    private function resolverRangoFechas(Request $request): array
+    {
+        $fechaHasta = $request->input('fecha_hasta')
+            ? Carbon::parse($request->input('fecha_hasta'))->endOfDay()
+            : Carbon::now()->endOfDay();
+        $fechaDesde = $request->input('fecha_desde')
+            ? Carbon::parse($request->input('fecha_desde'))->startOfDay()
+            : Carbon::now()->subDays(30)->startOfDay();
+
+        return [$fechaDesde, $fechaHasta];
+    }
+
+    private function movimientosQuery(
+        Request $request,
+        array $empresaIdsPermitidas,
+        Carbon $fechaDesde,
+        Carbon $fechaHasta,
+        ?int $empresaId
+    ): Builder {
+        $query = InterbankingMovimiento::query()
+            ->with('empresa:id,nombre')
+            ->whereIn('empresa_id', $empresaIdsPermitidas)
+            ->whereBetween('process_date', [$fechaDesde, $fechaHasta])
+            ->orderByDesc('process_date')
+            ->orderByDesc('id');
+
+        if ($empresaId !== null) {
+            $query->where('empresa_id', $empresaId);
+        }
+
+        if ($request->filled('currency')) {
+            $query->where('currency', $request->string('currency')->toString());
+        }
+
+        if ($request->filled('movement_type')) {
+            $query->where('movement_type', $request->string('movement_type')->toString());
+        }
+
+        if ($request->filled('account_number')) {
+            $q = '%'.$request->string('account_number')->toString().'%';
+            $query->where('account_number', 'like', $q);
+        }
+
+        if ($request->filled('bank_number')) {
+            $query->where('bank_number', $this->normalizarBankNumber3($request->string('bank_number')->toString()));
+        }
+
+        return $query;
     }
 }

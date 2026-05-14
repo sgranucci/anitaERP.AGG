@@ -1477,8 +1477,9 @@ Route::get('caja/listar_una_cobranza/{id}', 'Caja\CobranzaController@listarUnaCo
 Route::get('caja/interbanking', 'Caja\InterbankingController@index')->name('interbanking');
 // Movimientos Interbanking (JSON): GET .../caja/interbanking/movimientos?empresa_id=&account_number=&bank_number=011&movement_type=dia — ver PHPDoc en InterbankingController::movimientos y config/interbanking.php
 Route::get('caja/interbanking/movimientos', 'Caja\InterbankingController@movimientos')->name('interbanking_movimientos');
-Route::get('caja/interbanking/movimientos-persistidos', 'Caja\InterbankingMovimientoHistoricoController@index')->name('interbanking_movimientos_persistidos');
 Route::post('caja/interbanking/movimientos-persistidos/sincronizar', 'Caja\InterbankingMovimientoHistoricoController@sincronizar')->name('interbanking_movimientos_sincronizar');
+Route::get('caja/interbanking/movimientos-persistidos/{formato}', 'Caja\InterbankingMovimientoHistoricoController@exportar')->name('lista_interbanking_movimientos_historicos');
+Route::get('caja/interbanking/movimientos-persistidos', 'Caja\InterbankingMovimientoHistoricoController@index')->name('interbanking_movimientos_persistidos');
 Route::get('caja/interbanking/saldos-historicos/{formato}', 'Caja\InterbankingSaldoHistoricoController@exportar')->name('lista_interbanking_saldos_historicos');
 Route::get('caja/interbanking/saldos-historicos', 'Caja\InterbankingSaldoHistoricoController@index')->name('interbanking_saldos_historicos');
 

@@ -1,5 +1,7 @@
 <?php
 
+$padronBase = env('ARCA_PADRON_BASE', storage_path('app/arca/sr_padron'));
+
 return [
     /*
     |--------------------------------------------------------------------------
@@ -20,7 +22,7 @@ return [
     'wsaa' => [
         'homo' => [
             // Homologación: el certificado público actual es *.afip.gob.ar
-            'wsdl' => 'https://wsaahomo.afip.gob.ar/ws/services/LoginCms?WSDL',
+            'wsdl' => 'https://wsaahomo.afip.gov.ar/ws/services/LoginCms?WSDL',
             'url' => 'https://wsaahomo.afip.gob.ar/ws/services/LoginCms',
         ],
         'prod' => [
@@ -54,20 +56,27 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Certificados (PEM)
+    | Almacenamiento WSAA / certificados — Padrón (sin subcarpetas por empresa)
     |--------------------------------------------------------------------------
     |
-    | Por seguridad estos archivos deberían estar en storage y NO versionados.
+    | Misma idea que WSFE (storage/app/arca/wsfe/...), en una sola raíz:
+    |   sr_padron/certs/   cert.crt, privada.key
+    |   sr_padron/ta/      tickets de acceso WSAA (padrón)
+    |   sr_padron/tmp/     firma PKCS7 del TRA
+    |
+    | Facturación WSFE sigue en config/arca_wsfe.php → app/arca/wsfe/...
+    |
+    | Si migrás desde la ubicación antigua (app/arca/certs, app/arca/ta, app/arca/tmp),
+    | copiá los archivos a sr_padron/... o definí ARCA_CERT_PATH / ARCA_PADRON_BASE.
     |
     */
-    'cert_path' => env('ARCA_CERT_PATH', storage_path('app/arca/certs/cert.crt')),
-    'private_key_path' => env('ARCA_PRIVATE_KEY_PATH', storage_path('app/arca/certs/privada.key')),
+    'padron_base_storage' => $padronBase,
+
+    'cert_path' => env('ARCA_CERT_PATH', $padronBase.'/certs/cert.crt'),
+    'private_key_path' => env('ARCA_PRIVATE_KEY_PATH', $padronBase.'/certs/privada.key'),
     'private_key_passphrase' => env('ARCA_PRIVATE_KEY_PASSPHRASE', ''),
 
-    /*
-    |--------------------------------------------------------------------------
-    | Cache del TA
-    |--------------------------------------------------------------------------
-    */
-    'ta_storage_dir' => storage_path('app/arca/ta'),
+    'ta_storage_dir' => env('ARCA_TA_STORAGE', $padronBase.'/ta'),
+
+    'tmp_dir' => env('ARCA_TMP_DIR', $padronBase.'/tmp'),
 ];

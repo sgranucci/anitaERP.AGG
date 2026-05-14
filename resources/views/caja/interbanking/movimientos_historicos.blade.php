@@ -23,7 +23,13 @@
             </div>
             <div class="card-body">
                 <div class="d-flex flex-wrap align-items-end justify-content-between mb-3">
-                    <form method="get" action="{{ route('interbanking_movimientos_persistidos') }}" class="d-flex flex-wrap align-items-end ml-auto">
+                    <div class="d-flex flex-wrap align-items-end mb-2 mr-2">
+                        @include('includes.exportar-tabla-queryparams', [
+                            'ruta' => 'lista_interbanking_movimientos_historicos',
+                            'queryparams' => request()->only(['empresa_id', 'fecha_desde', 'fecha_hasta', 'currency', 'movement_type', 'account_number', 'bank_number']),
+                        ])
+                    </div>
+                    <form method="get" action="{{ route('interbanking_movimientos_persistidos') }}" class="d-flex flex-wrap align-items-end justify-content-end ml-auto">
                         <div class="form-group mr-2 mb-2">
                             <label for="empresa_id" class="mr-1">Empresa</label>
                             <select name="empresa_id" id="empresa_id" class="form-control">

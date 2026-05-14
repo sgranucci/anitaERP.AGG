@@ -15,6 +15,6 @@ class Conceptogasto extends Model implements Auditable
 
     public function conceptogasto_cuentacontables()
     {
-        return $this->hasMany(Conceptogasto_cuentacontable::class)->with('cuentacontables');
+        return $this->hasMany(Conceptogasto_Cuentacontable::class)->with('cuentacontables');
     }
 }

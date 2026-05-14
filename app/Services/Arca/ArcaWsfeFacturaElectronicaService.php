@@ -1,0 +1,662 @@
+<?php
+
+namespace App\Services\Arca;
+
+use App\Repositories\Configuracion\CondicionivaRepositoryInterface;
+use Exception;
+use SoapClient;
+use SoapFault;
+
+/**
+ * WSFEv1 (COMPG / RG 4291) vía SOAP, con certificados y TA bajo storage/app/arca/wsfe/
+ * (independiente del padrón: config/arca.php → storage/app/arca/sr_padron/...).
+ */
+class ArcaWsfeFacturaElectronicaService
+{
+    public function __construct(
+        private WsaaService $wsaa,
+        private CondicionivaRepositoryInterface $condicionivaRepository,
+    ) {}
+
+    /**
+     * Último comprobante autorizado (equivalente a SolicitarUltimoCompEnviado para wsfev1).
+     */
+    public function feCompUltimoAutorizado(int $empresaId, int $ptoVta, int $cbteTipo): int
+    {
+        $this->assertTransporteSoap();
+        $cuit = $this->cuitEmisor($empresaId);
+        $ctx = $this->resolveWsaaContext($empresaId);
+        $ts = $this->wsaa->getTokenSign((string) config('arca_wsfe.wsaa_service_id'), $ctx);
+        $client = $this->soapClient();
+
+        try {
+            $raw = $client->FECompUltimoAutorizado([
+                'Auth' => [
+                    'Token' => $ts['token'],
+                    'Sign' => $ts['sign'],
+                    'Cuit' => $cuit,
+                ],
+                'PtoVta' => $ptoVta,
+                'CbteTipo' => $cbteTipo,
+            ]);
+        } catch (SoapFault $e) {
+            throw new Exception($this->formatSoapFault('FECompUltimoAutorizado', $e, $client));
+        }
+
+        $result = $raw->FECompUltimoAutorizadoResult ?? null;
+        if ($result === null) {
+            throw new Exception('WSFE: FECompUltimoAutorizado sin resultado.');
+        }
+
+        $errs = $this->normalizeErrCollection($result->Errors ?? null);
+        if ($errs !== []) {
+            throw new Exception('WSFE — FECompUltimoAutorizado: '.$this->formatErrList($errs));
+        }
+
+        return (int) ($result->CbteNro ?? 0);
+    }
+
+    /**
+     * Consulta un comprobante ya emitido (verificación post-FECAESolicitar).
+     */
+    public function feCompConsultar(int $empresaId, int $ptoVta, int $cbteTipo, int $cbteNro): object
+    {
+        $this->assertTransporteSoap();
+        $cuit = $this->cuitEmisor($empresaId);
+        $ctx = $this->resolveWsaaContext($empresaId);
+        $ts = $this->wsaa->getTokenSign((string) config('arca_wsfe.wsaa_service_id'), $ctx);
+        $client = $this->soapClient();
+
+        try {
+            $raw = $client->FECompConsultar([
+                'Auth' => [
+                    'Token' => $ts['token'],
+                    'Sign' => $ts['sign'],
+                    'Cuit' => $cuit,
+                ],
+                'FeCompConsReq' => [
+                    'CbteTipo' => $cbteTipo,
+                    'CbteNro' => $cbteNro,
+                    'PtoVta' => $ptoVta,
+                ],
+            ]);
+        } catch (SoapFault $e) {
+            throw new Exception($this->formatSoapFault('FECompConsultar', $e, $client));
+        }
+
+        return $raw->FECompConsultarResult ?? $raw;
+    }
+
+    /**
+     * Autorización CAE para comprobante nacional (wsfev1), misma forma de datos que FacturaElectronicaService::solicitaCAE.
+     *
+     * @param  object  $puntoventa  modelo Puntoventa (codigo, webservice)
+     * @return array{cae: string, fechavencimientocae: string, resultado: string, observaciones: string, emision_tipo: ?string}
+     *
+     * @throws Exception mensajes listos para mostrar al usuario
+     */
+    public function solicitaCaeDomestico(int $empresaId, object $puntoventa, int $cbteTipo, array $datos): array
+    {
+        $this->assertTransporteSoap();
+        if (($puntoventa->webservice ?? '') !== 'wsfev1') {
+            throw new Exception('ARCA WSFE: solo aplica a webservice wsfev1 (comprobantes nacionales).');
+        }
+
+        $cuit = $this->cuitEmisor($empresaId);
+        $ctx = $this->resolveWsaaContext($empresaId);
+        $ts = $this->wsaa->getTokenSign((string) config('arca_wsfe.wsaa_service_id'), $ctx);
+        $client = $this->soapClient();
+
+        $ptoVta = (int) $puntoventa->codigo;
+        $det = $this->buildFecaDetRequest($cbteTipo, $ptoVta, $datos);
+
+        $feReq = [
+            'FeCabReq' => [
+                'CantReg' => 1,
+                'PtoVta' => $ptoVta,
+                'CbteTipo' => $cbteTipo,
+            ],
+            'FeDetReq' => [
+                'FECAEDetRequest' => $det,
+            ],
+        ];
+
+        try {
+            $raw = $client->FECAESolicitar([
+                'Auth' => [
+                    'Token' => $ts['token'],
+                    'Sign' => $ts['sign'],
+                    'Cuit' => $cuit,
+                ],
+                'FeCAEReq' => $feReq,
+            ]);
+        } catch (SoapFault $e) {
+            throw new Exception($this->formatSoapFault('FECAESolicitar', $e, $client));
+        }
+
+        $result = $raw->FECAESolicitarResult ?? null;
+        if ($result === null) {
+            throw new Exception('WSFE: FECAESolicitar sin resultado.');
+        }
+
+        $cabErrs = $this->normalizeErrCollection($result->Errors ?? null);
+        $feCab = $result->FeCabResp ?? null;
+        $feDet = $result->FeDetResp ?? null;
+        $detResp = $this->unwrapFecaDetResponse($feDet);
+
+        $detErrs = $this->normalizeErrCollection($detResp->Errors ?? null);
+        $obs = $this->normalizeObsCollection($detResp->Observaciones ?? null);
+
+        $allErrs = array_merge($cabErrs, $detErrs);
+        if ($allErrs !== []) {
+            throw new Exception('WSFE — FECAESolicitar: '.$this->formatErrList($allErrs));
+        }
+
+        $resultado = (string) ($detResp->Resultado ?? '');
+        $cae = trim((string) ($detResp->CAE ?? ''));
+        $caeVto = (string) ($detResp->CAEFchVto ?? '');
+
+        if ($resultado !== 'A' && $resultado !== 'P') {
+            $msg = 'Resultado: '.$resultado;
+            if ($obs !== []) {
+                $msg .= ' | '.$this->formatObsList($obs);
+            }
+
+            throw new Exception('WSFE — comprobante no autorizado. '.$msg);
+        }
+
+        if ($cae === '' || $caeVto === '') {
+            throw new Exception('WSFE — respuesta sin CAE o fecha de vencimiento (Resultado='.$resultado.').');
+        }
+
+        // Verificación explícita en ARCA (manual COMPG: FECompConsultar)
+        $cbteNro = (int) $datos['numerocomprobante'];
+        $this->verificarConConsulta(
+            $empresaId,
+            $cuit,
+            $ptoVta,
+            $cbteTipo,
+            $cbteNro,
+            $cae,
+            (float) $datos['total'],
+            $client,
+            $ctx
+        );
+
+        $obsText = $obs !== [] ? $this->formatObsList($obs) : '';
+
+        return [
+            'cae' => $cae,
+            'fechavencimientocae' => $caeVto,
+            'resultado' => $resultado,
+            'observaciones' => $obsText,
+            'emision_tipo' => isset($detResp->EmisionTipo) ? (string) $detResp->EmisionTipo : null,
+        ];
+    }
+
+    public function feDummy(int $empresaId): array
+    {
+        $this->assertTransporteSoap();
+        $ctx = $this->resolveWsaaContext($empresaId);
+        $this->wsaa->getTokenSign((string) config('arca_wsfe.wsaa_service_id'), $ctx);
+        $client = $this->soapClient();
+
+        try {
+            $raw = $client->FEDummy();
+        } catch (SoapFault $e) {
+            throw new Exception($this->formatSoapFault('FEDummy', $e, $client));
+        }
+
+        $r = $raw->FEDummyResult ?? null;
+        if ($r === null) {
+            throw new Exception('WSFE: FEDummy sin resultado.');
+        }
+
+        return [
+            'appserver' => (string) ($r->AppServer ?? ''),
+            'dbserver' => (string) ($r->DbServer ?? ''),
+            'authserver' => (string) ($r->AuthServer ?? ''),
+        ];
+    }
+
+    private function assertTransporteSoap(): void
+    {
+        if ((string) config('arca_wsfe.transporte', 'afip_php') !== 'soap') {
+            throw new Exception(
+                'ARCA WSFE: el transporte SOAP solo está activo con arca_wsfe.transporte=soap (env ARCA_WSFE_TRANSPORTE).'
+            );
+        }
+    }
+
+    /**
+     * Consulta si un comprobante figura autorizado en ARCA (mismo criterio que ConsultaCompEnviado vía XML).
+     *
+     * @return array{cae: string, fechavencimientocae: string}|int -1 si no hay match autorizado
+     */
+    public function consultaComprobanteEmitido(int $empresaId, int $ptoVta, int $cbteTipo, int $numero): array|int
+    {
+        $this->assertTransporteSoap();
+        try {
+            $result = $this->feCompConsultar($empresaId, $ptoVta, $cbteTipo, $numero);
+        } catch (Exception $e) {
+            return -1;
+        }
+
+        $errs = $this->normalizeErrCollection($result->Errors ?? null);
+        if ($errs !== []) {
+            return -1;
+        }
+
+        $rg = $result->ResultGet ?? null;
+        if ($rg === null) {
+            return -1;
+        }
+
+        $res = (string) ($rg->Resultado ?? '');
+        if (! in_array($res, ['A', 'P'], true)) {
+            return -1;
+        }
+
+        $cae = trim((string) ($rg->CodAutorizacion ?? ''));
+        $vto = (string) ($rg->FchVto ?? '');
+        if ($cae === '' || $vto === '') {
+            return -1;
+        }
+
+        return ['cae' => $cae, 'fechavencimientocae' => $vto];
+    }
+
+    private function soapClient(): SoapClient
+    {
+        $env = (string) config('arca.env', 'homo');
+        $wsdl = config("arca_wsfe.wsfe.{$env}.wsdl");
+        if (! is_string($wsdl) || $wsdl === '') {
+            throw new Exception("ARCA WSFE: WSDL no configurado para env={$env}.");
+        }
+        $timeout = max(10, (int) config('arca_wsfe.soap_timeout', 60));
+
+        return new SoapClient($wsdl, [
+            'soap_version' => SOAP_1_2,
+            'trace' => 1,
+            'exceptions' => true,
+            'cache_wsdl' => WSDL_CACHE_NONE,
+            'connection_timeout' => $timeout,
+            'default_socket_timeout' => $timeout,
+        ]);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function resolveWsaaContext(int $empresaId): array
+    {
+        $base = rtrim((string) config('arca_wsfe.base_storage'), '/');
+        $emp = config("arca_wsfe.empresas.{$empresaId}");
+        if (! is_array($emp) || empty($emp['carpeta_cert'])) {
+            throw new Exception(
+                "ARCA WSFE: agregue la empresa {$empresaId} en config/arca_wsfe.php (empresas.*.carpeta_cert) ".
+                'y copie cert.crt / privada.key en storage/app/arca/wsfe/certs/{carpeta}/'
+            );
+        }
+        $cdir = $base.'/certs/'.$emp['carpeta_cert'];
+
+        return [
+            'cert_path' => $cdir.'/cert.crt',
+            'private_key_path' => $cdir.'/privada.key',
+            'private_key_passphrase' => (string) ($emp['private_key_passphrase'] ?? ''),
+            'ta_storage_dir' => $base.'/ta',
+            'cache_key' => 'fe_emp'.$empresaId,
+            'tmp_dir' => $base.'/tmp',
+        ];
+    }
+
+    private function cuitEmisor(int $empresaId): int
+    {
+        $row = \App\Models\Configuracion\Empresa::query()->find($empresaId);
+        if ($row === null || $row->nroinscripcion === null || trim((string) $row->nroinscripcion) === '') {
+            throw new Exception("ARCA WSFE: la empresa {$empresaId} no tiene CUIT (nroinscripcion).");
+        }
+        $d = preg_replace('/\D+/', '', (string) $row->nroinscripcion) ?? '';
+
+        return (int) $d;
+    }
+
+    private function buildFecaDetRequest(int $cbteTipo, int $ptoVta, array $datos): array
+    {
+        $condIvaRec = null;
+        if ((int) $datos['fechacomprobante'] >= 20250406) {
+            $condicioniva = $this->condicionivaRepository->find($datos['condicioniva_id']);
+            $condIvaRec = $condicioniva ? (int) $condicioniva->codigoexterno : 1;
+        }
+
+        $concepto = isset($datos['concepto']) ? (int) $datos['concepto'] : 1;
+
+        $det = [
+            'Concepto' => $concepto,
+            'DocTipo' => (int) $datos['tipodoc'],
+            'DocNro' => (int) preg_replace('/\D+/', '', (string) $datos['numerodocumento']),
+            'CbteDesde' => (int) $datos['numerocomprobante'],
+            'CbteHasta' => (int) $datos['numerocomprobante'],
+            'CbteFch' => (string) $datos['fechacomprobante'],
+            'ImpTotal' => $this->money($datos['total']),
+            'ImpTotConc' => $this->money($datos['nogravado']),
+            'ImpNeto' => $this->money($datos['gravado']),
+            'ImpOpEx' => $this->money($datos['exento']),
+            'ImpTrib' => $this->money($datos['tributo']),
+            'ImpIVA' => $this->money($datos['iva']),
+            'MonId' => (string) $datos['moneda'],
+            'MonCotiz' => $this->moneyCotiz($datos['cotizacion'] ?? 1),
+        ];
+
+        if ($concepto === 2 || $concepto === 3) {
+            $det['FchServDesde'] = $datos['fecha_serv_desde'] ?? $datos['fechacomprobante'];
+            $det['FchServHasta'] = $datos['fecha_serv_hasta'] ?? $datos['fechacomprobante'];
+            $det['FchVtoPago'] = $datos['fechavencimiento'] ?? $datos['fechacomprobante'];
+        }
+
+        if ($condIvaRec !== null) {
+            $det['CondicionIVAReceptorId'] = $condIvaRec;
+        }
+
+        $periodo = $this->buildPeriodoAsocIfApplies($cbteTipo, $datos);
+        if ($periodo !== null) {
+            $det['PeriodoAsoc'] = $periodo;
+        }
+
+        $cbtesAsoc = $this->buildCbtesAsoc($datos['comprobantesasociados'] ?? []);
+        if ($cbtesAsoc !== null) {
+            $det['CbtesAsoc'] = $cbtesAsoc;
+        }
+
+        $tributos = $this->buildTributos($datos['tributos'] ?? []);
+        if ($tributos !== null) {
+            $det['Tributos'] = $tributos;
+        }
+
+        $iva = $this->buildIva($datos['impuestos'] ?? []);
+        if ($iva !== null) {
+            $det['Iva'] = $iva;
+        }
+
+        return $det;
+    }
+
+    /**
+     * @return array{FchDesde: string, FchHasta: string}|null
+     */
+    private function buildPeriodoAsocIfApplies(int $cbteTipo, array $datos): ?array
+    {
+        $desde = (int) ($datos['fechaasignaciondesde'] ?? 0);
+        $asoc = $datos['comprobantesasociados'] ?? [];
+        if ($desde <= 0 || count($asoc) > 0) {
+            return null;
+        }
+        if (! in_array($cbteTipo, [3, 8, 203, 53], true)) {
+            return null;
+        }
+
+        return [
+            'FchDesde' => (string) $datos['fechaasignaciondesde'],
+            'FchHasta' => (string) $datos['fechaasignacionhasta'],
+        ];
+    }
+
+    private function buildCbtesAsoc(array $lista): ?array
+    {
+        $out = [];
+        foreach ($lista as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $out[] = [
+                'CbteAsoc' => [
+                    'Tipo' => (int) ($row['tipo'] ?? 0),
+                    'PtoVta' => (int) ($row['ptovta'] ?? 0),
+                    'Nro' => (int) ($row['nro'] ?? 0),
+                ],
+            ];
+        }
+
+        return $out === [] ? null : $out;
+    }
+
+    private function buildTributos(array $lista): ?array
+    {
+        $out = [];
+        foreach ($lista as $t) {
+            if (! is_array($t) || (float) ($t['importe'] ?? 0) == 0.0) {
+                continue;
+            }
+            $out[] = [
+                'Tributo' => [
+                    'Id' => (int) ($t['id'] ?? 0),
+                    'Desc' => (string) ($t['desc'] ?? ''),
+                    'BaseImp' => $this->money($t['base_imp'] ?? 0),
+                    'Alic' => $this->money($t['alicuota'] ?? 0),
+                    'Importe' => $this->money($t['importe'] ?? 0),
+                ],
+            ];
+        }
+
+        return $out === [] ? null : $out;
+    }
+
+    private function buildIva(array $lista): ?array
+    {
+        $out = [];
+        foreach ($lista as $i) {
+            if (! is_array($i) || (float) ($i['importe'] ?? 0) == 0.0) {
+                continue;
+            }
+            $out[] = [
+                'AlicIva' => [
+                    'Id' => (int) ($i['id'] ?? 0),
+                    'BaseImp' => $this->money($i['base_imp'] ?? 0),
+                    'Importe' => $this->money($i['importe'] ?? 0),
+                ],
+            ];
+        }
+
+        return $out === [] ? null : $out;
+    }
+
+    private function verificarConConsulta(
+        int $empresaId,
+        int $cuit,
+        int $ptoVta,
+        int $cbteTipo,
+        int $cbteNro,
+        string $caeEsperado,
+        float $impTotalEsperado,
+        SoapClient $client,
+        array $ctx,
+    ): void {
+        $ts = $this->wsaa->getTokenSign((string) config('arca_wsfe.wsaa_service_id'), $ctx);
+
+        try {
+            $raw = $client->FECompConsultar([
+                'Auth' => [
+                    'Token' => $ts['token'],
+                    'Sign' => $ts['sign'],
+                    'Cuit' => $cuit,
+                ],
+                'FeCompConsReq' => [
+                    'CbteTipo' => $cbteTipo,
+                    'CbteNro' => $cbteNro,
+                    'PtoVta' => $ptoVta,
+                ],
+            ]);
+        } catch (SoapFault $e) {
+            throw new Exception(
+                'WSFE — el CAE fue otorgado pero la verificación FECompConsultar falló: '.
+                $this->formatSoapFault('FECompConsultar', $e, $client).
+                ' No se debe persistir el comprobante hasta resolver la inconsistencia.'
+            );
+        }
+
+        $result = $raw->FECompConsultarResult ?? null;
+        if ($result === null) {
+            throw new Exception('WSFE — FECompConsultar sin resultado tras autorizar. No persistir el comprobante.');
+        }
+
+        $errs = $this->normalizeErrCollection($result->Errors ?? null);
+        if ($errs !== []) {
+            throw new Exception(
+                'WSFE — tras autorizar, FECompConsultar devolvió errores: '.$this->formatErrList($errs).
+                ' No persistir el comprobante.'
+            );
+        }
+
+        $rg = $result->ResultGet ?? null;
+        if ($rg === null) {
+            throw new Exception('WSFE — FECompConsultar sin ResultGet. No persistir el comprobante.');
+        }
+
+        $res = (string) ($rg->Resultado ?? '');
+        if ($res !== 'A' && $res !== 'P') {
+            throw new Exception('WSFE — consulta post-emisión con Resultado='.$res.'. No persistir el comprobante.');
+        }
+
+        $caeOk = trim((string) ($rg->CodAutorizacion ?? ''));
+        if ($caeOk !== $caeEsperado) {
+            throw new Exception(
+                "WSFE — CAE divergente tras consulta (emitido {$caeEsperado}, consulta {$caeOk}). No persistir el comprobante."
+            );
+        }
+
+        $impCons = (float) ($rg->ImpTotal ?? 0);
+        if (abs($impCons - $impTotalEsperado) > 0.02) {
+            throw new Exception(
+                'WSFE — importe total divergente en consulta (enviado '.
+                number_format($impTotalEsperado, 2, '.', '').
+                ', ARCA '.number_format($impCons, 2, '.', '').
+                '). No persistir el comprobante.'
+            );
+        }
+    }
+
+    private function unwrapFecaDetResponse(?object $feDet): object
+    {
+        if ($feDet === null) {
+            return (object) [];
+        }
+        $r = $feDet->FECAEDetResponse ?? null;
+        if (is_array($r)) {
+            return (object) ($r[0] ?? []);
+        }
+        if (is_object($r)) {
+            return $r;
+        }
+
+        return (object) [];
+    }
+
+    /**
+     * @return list<array{code: string, msg: string}>
+     */
+    private function normalizeErrCollection(mixed $errors): array
+    {
+        if ($errors === null) {
+            return [];
+        }
+        $errs = $errors->Err ?? null;
+        if ($errs === null) {
+            return [];
+        }
+
+        return $this->normalizeErrLike($errs);
+    }
+
+    /**
+     * @return list<array{code: string, msg: string}>
+     */
+    private function normalizeObsCollection(mixed $obs): array
+    {
+        if ($obs === null) {
+            return [];
+        }
+        $o = $obs->Obs ?? null;
+        if ($o === null) {
+            return [];
+        }
+
+        return $this->normalizeErrLike($o);
+    }
+
+    /**
+     * @return list<array{code: string, msg: string}>
+     */
+    private function normalizeErrLike(mixed $node): array
+    {
+        $out = [];
+        if (is_array($node)) {
+            foreach ($node as $item) {
+                foreach ($this->normalizeErrLike($item) as $e) {
+                    $out[] = $e;
+                }
+            }
+
+            return $out;
+        }
+        if (! is_object($node)) {
+            return [];
+        }
+        if (isset($node->Code) || isset($node->Msg)) {
+            $out[] = [
+                'code' => (string) ($node->Code ?? ''),
+                'msg' => (string) ($node->Msg ?? ''),
+            ];
+
+            return $out;
+        }
+
+        foreach (get_object_vars($node) as $child) {
+            foreach ($this->normalizeErrLike($child) as $e) {
+                $out[] = $e;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<array{code: string, msg: string}>  $list
+     */
+    private function formatErrList(array $list): string
+    {
+        $parts = [];
+        foreach ($list as $e) {
+            $parts[] = '['.$e['code'].'] '.$e['msg'];
+        }
+
+        return implode(' | ', $parts);
+    }
+
+    /**
+     * @param  list<array{code: string, msg: string}>  $list
+     */
+    private function formatObsList(array $list): string
+    {
+        return $this->formatErrList($list);
+    }
+
+    private function formatSoapFault(string $op, SoapFault $e, SoapClient $client): string
+    {
+        $base = $op.': '.$e->getMessage();
+        if ($client->__getLastResponse()) {
+            $base .= ' | Última respuesta (recorte): '.mb_substr($client->__getLastResponse(), 0, 500);
+        }
+
+        return $base;
+    }
+
+    private function money(mixed $v): float
+    {
+        return round((float) $v, 2);
+    }
+
+    private function moneyCotiz(mixed $v): string
+    {
+        return number_format((float) $v, 6, '.', '');
+    }
+}
