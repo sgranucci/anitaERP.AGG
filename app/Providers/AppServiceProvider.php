@@ -218,6 +218,31 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Stock\Formula_ArticuloRepositoryInterface',
+            'App\Repositories\Stock\Formula_ArticuloRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Stock\Formula_Articulo_EstadoRepositoryInterface',
+            'App\Repositories\Stock\Formula_Articulo_EstadoRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Stock\Formula_Articulo_HijoRepositoryInterface',
+            'App\Repositories\Stock\Formula_Articulo_HijoRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Stock\Formula_Articulo_ArchivoRepositoryInterface',
+            'App\Repositories\Stock\Formula_Articulo_ArchivoRepository',
+        );
+
+        $this->app->bind(
+            'App\Queries\Stock\FormulaArticuloQueryInterface',
+            'App\Queries\Stock\FormulaArticuloQuery',
+        );
+
+        $this->app->bind(
             'App\Repositories\Stock\LoteRepositoryInterface',
             'App\Repositories\Stock\LoteRepository',
         );

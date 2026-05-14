@@ -2,6 +2,7 @@
 
 namespace App\Services\Compras;
 
+use App\Models\Compras\Requisicion;
 use App\Models\Compras\Requisicion_Articulo;
 use App\Models\Compras\Requisicion_Presupuesto;
 use App\Models\Compras\Requisicion_Presupuesto_Articulo;
@@ -44,6 +45,9 @@ class OrdencompraOpcionesPrecioService
             return ['message' => 'Línea de requisición no encontrada o no coincide con el artículo.'];
         }
 
+        $reqCab = Requisicion::query()->select('id', 'proveedor_id')->find($requisicionId);
+        $provReq = (int) (($reqCab !== null ? $reqCab->proveedor_id : null) ?? 0);
+
         $opcionRequisicion = [
             'origen' => self::ORIGEN_REQUISICION,
             'precio' => (float) $ra->precio,
@@ -51,6 +55,10 @@ class OrdencompraOpcionesPrecioService
             'etiqueta' => 'Precio cargado en la requisición',
             'ref_id' => (int) $ra->id,
             'detalle' => 'Requisición línea #'.$ra->id,
+            'proveedor_id' => $provReq,
+            'condicioncompra_id' => 0,
+            'condicionentrega_id' => 0,
+            'condicionpago_id' => 0,
         ];
 
         $filasLista = [];
@@ -146,6 +154,10 @@ class OrdencompraOpcionesPrecioService
                 'fechavigencia' => $r->linea_fechavigencia ? substr((string) $r->linea_fechavigencia, 0, 10) : '',
                 'etiqueta' => 'Lista proveedor: '.($r->lista_nombre ?? '').' (vig. '.substr((string) $r->linea_fechavigencia, 0, 10).')',
                 'ref_id' => (int) $r->linea_lista_id,
+                'proveedor_id' => $proveedorId,
+                'condicioncompra_id' => 0,
+                'condicionentrega_id' => 0,
+                'condicionpago_id' => 0,
             ];
         }
 

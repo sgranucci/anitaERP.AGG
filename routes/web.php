@@ -812,6 +812,7 @@ Route::post('stock/product/consultaarticulo', 'Stock\ArticuloFerliController@con
 // Articulos
 Route::get('stock/articulo', 'Stock\ArticuloController@index')->name('articulo');
 Route::get('stock/articulo/crear', 'Stock\ArticuloController@crear')->name('crear_articulo');
+Route::post('stock/articulo/sincronizar-anita', 'Stock\ArticuloController@sincronizarDesdeAnita')->name('sincronizar_articulo_anita');
 Route::post('stock/articulo', 'Stock\ArticuloController@guardar')->name('guardar_articulo');
 Route::get('stock/articulo/{id}/editar', 'Stock\ArticuloController@editar')->name('editar_articulo');
 Route::put('stock/articulo/{id}', 'Stock\ArticuloController@actualizar')->name('actualizar_articulo');
@@ -825,6 +826,21 @@ Route::get('stock/leerunarticuloporsku/{sku}', 'Stock\ArticuloController@leeUnAr
 
 Route::post('stock/articulo/consultaarticulo', 'Stock\ArticuloController@consultaArticulo')->name('consulta_articulo');
 Route::get('stock/listaarticulo/{formato?}/{busqueda?}', 'Stock\ArticuloController@listar')->name('lista_articulo');
+
+Route::get('stock/formula-articulo', 'Stock\FormulaArticuloController@index')->name('consultar_formula_articulo');
+Route::get('stock/formula-articulo/crear', 'Stock\FormulaArticuloController@crear')->name('crear_formula_articulo');
+Route::post('stock/formula-articulo', 'Stock\FormulaArticuloController@guardar')->name('guardar_formula_articulo');
+Route::get('stock/formula-articulo/buscar', 'Stock\FormulaArticuloController@buscarJson')->name('buscar_formula_articulo');
+Route::post('stock/formula-articulo/sincronizar-anita', 'Stock\FormulaArticuloController@sincronizarDesdeAnita')->name('sincronizar_formula_articulo_anita');
+Route::get('stock/formula-articulo/{id}/editar', 'Stock\FormulaArticuloController@editar')->name('editar_formula_articulo');
+Route::put('stock/formula-articulo/{id}', 'Stock\FormulaArticuloController@actualizar')->name('actualizar_formula_articulo');
+Route::delete('stock/formula-articulo/{id}', 'Stock\FormulaArticuloController@eliminar')->name('eliminar_formula_articulo');
+Route::get('stock/lista-formula-articulo/{formato?}/{busqueda?}', 'Stock\FormulaArticuloController@listar')->name('listar_formula_articulo');
+Route::get('stock/formula-articulo/{id}/archivo/{archivo}', 'Stock\FormulaArticuloController@descargarArchivo')->name('formula_articulo_archivo');
+Route::get('stock/leer_historia_formula_articulo/{formula_articulo_id}', 'Stock\FormulaArticuloController@leerHistoria')->name('leer_historia_formula_articulo');
+Route::get('stock/formula-articulo/{id}/articulos-asociados', 'Stock\FormulaArticuloController@articulosAsociados')->name('articulos_asociados_formula_articulo');
+Route::get('stock/formula-articulo/{id}/modal', 'Stock\FormulaArticuloController@modal')->name('formula_articulo_modal');
+
 Route::get('stock/replicar_cuentacontable_articulo/{empresa_id}/{tipoimputacion}/{cuentacontable_id}', 'Stock\ArticuloController@replicarCuentaContableArticulo')->name('replicar_cuentacontable_articulo');
 
 // Actualiza estado articulo desde programas externos
@@ -1462,6 +1478,13 @@ Route::get('caja/listar_una_cobranza/{id}', 'Caja\CobranzaController@listarUnaCo
  */
 
 Route::get('caja/interbanking', 'Caja\InterbankingController@index')->name('interbanking');
+// Movimientos Interbanking (JSON): GET .../caja/interbanking/movimientos?empresa_id=&account_number=&bank_number=011&movement_type=dia — ver PHPDoc en InterbankingController::movimientos y config/interbanking.php
+Route::get('caja/interbanking/movimientos', 'Caja\InterbankingController@movimientos')->name('interbanking_movimientos');
+Route::post('caja/interbanking/movimientos-persistidos/sincronizar', 'Caja\InterbankingMovimientoHistoricoController@sincronizar')->name('interbanking_movimientos_sincronizar');
+Route::get('caja/interbanking/movimientos-persistidos/{formato}', 'Caja\InterbankingMovimientoHistoricoController@exportar')->name('lista_interbanking_movimientos_historicos');
+Route::get('caja/interbanking/movimientos-persistidos', 'Caja\InterbankingMovimientoHistoricoController@index')->name('interbanking_movimientos_persistidos');
+Route::get('caja/interbanking/saldos-historicos/{formato}', 'Caja\InterbankingSaldoHistoricoController@exportar')->name('lista_interbanking_saldos_historicos');
+Route::get('caja/interbanking/saldos-historicos', 'Caja\InterbankingSaldoHistoricoController@index')->name('interbanking_saldos_historicos');
 
 // Modulo de compras
 
@@ -1704,6 +1727,8 @@ Route::post('compras/requisicion/consulta_partidagasto', 'Compras\RequisicionCon
 Route::get('compras/requisicion/leer_partidagasto/{partidagasto_id}', 'Compras\RequisicionController@leerPartidagastoRequisicionPorId')->name('leer_partidagasto_requisicion');
 Route::get('compras/requisicion/visualizar/{id}/{hash}', 'Compras\RequisicionController@visualizar')->name('visualizar_requisicion');
 Route::get('compras/requisicion/soloconsulta/{id}', 'Compras\RequisicionController@soloConsulta')->name('solo_consulta_requisicion');
+Route::get('compras/requisicion/{id}/wizard-multiples-oc', 'Compras\OrdencompraController@wizardMultiplesDesdeRequisicion')->name('requisicion_wizard_multiples_oc');
+Route::post('compras/requisicion/{id}/generar-multiples-oc', 'Compras\OrdencompraController@generarMultiplesOcDesdeRequisicion')->name('requisicion_generar_multiples_oc');
 
 /*
  * Listas de precio proveedor

@@ -2,18 +2,19 @@
 
 namespace App\Models\Caja;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
-use App\Models\Caja\Cuentacaja;
 use App\Traits\Caja\ChequeraTrait;
+use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Chequera extends Model
+class Chequera extends Model implements Auditable
 {
     use ChequeraTrait;
+    use \OwenIt\Auditing\Auditable;
 
-    protected $fillable = ['tipochequera', 'tipocheque', 'codigo', 
-                            'cuentacaja_id', 'estado', 'fechauso', 'desdenumerocheque',
-                            'hastanumerocheque'];
+    protected $fillable = ['tipochequera', 'tipocheque', 'codigo',
+        'cuentacaja_id', 'estado', 'fechauso', 'desdenumerocheque',
+        'hastanumerocheque'];
+
     protected $table = 'chequera';
 
     public function cuentacajas()
@@ -21,4 +22,3 @@ class Chequera extends Model
         return $this->belongsTo(Cuentacaja::class, 'cuentacaja_id');
     }
 }
-

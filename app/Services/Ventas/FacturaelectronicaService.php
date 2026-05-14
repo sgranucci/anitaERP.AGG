@@ -11,15 +11,28 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
 use App\ApiAnita;
+use App\Services\Arca\ArcaWsfeFacturaElectronicaService;
 
 class FacturaElectronicaService 
 {
 	protected $condicionivaRepository;
 
-	public function __construct(CondicionivaRepositoryInterface $condicionivarepository)
-    {
+	protected ArcaWsfeFacturaElectronicaService $arcaWsfeFacturaElectronicaService;
+
+	public function __construct(
+		CondicionivaRepositoryInterface $condicionivarepository,
+		ArcaWsfeFacturaElectronicaService $arcaWsfeFacturaElectronicaService,
+	) {
     	$this->condicionivaRepository = $condicionivarepository;
+		$this->arcaWsfeFacturaElectronicaService = $arcaWsfeFacturaElectronicaService;
     }
+
+	/** Comprobantes nacionales wsfev1 vía SOAP (config arca_wsfe.transporte = soap). */
+	private function debeUsarSoapWsfe(object $puntoventa): bool
+	{
+		return ($puntoventa->webservice ?? '') === 'wsfev1'
+			&& (string) config('arca_wsfe.transporte', 'afip_php') === 'soap';
+	}
 
 	public function traeUltimoNumeroComprobante($nroinscripcion, $tipotransaccion, $puntoventa)
 	{
@@ -29,6 +42,24 @@ class FacturaElectronicaService
 		}
 		else
 		{
+			if ($this->debeUsarSoapWsfe($puntoventa)) {
+				$empresaId = (int) ($puntoventa->empresa_id ?? 0);
+				if ($empresaId < 1) {
+					return -1;
+				}
+				try {
+					$n = $this->arcaWsfeFacturaElectronicaService->feCompUltimoAutorizado(
+						$empresaId,
+						(int) $puntoventa->codigo,
+						(int) $tipotransaccion
+					);
+
+					return $n > 0 ? (string) $n : -1;
+				} catch (\Throwable $e) {
+					return -1;
+				}
+			}
+
 			$req['solicitud']['servicio'] = $puntoventa->webservice;
 			$req['solicitud']['funcion'] = 'SolicitarUltimoCompEnviado';
 			$req['datos']['cuit']   = (double) str_replace("-","",$nroinscripcion);
@@ -82,6 +113,28 @@ class FacturaElectronicaService
 
 	public function solicitaCAE($nroinscripcion, $tipotransaccion, $puntoventa, $datos)
 	{
+		if ($this->debeUsarSoapWsfe($puntoventa)) {
+			$empresaId = (int) ($puntoventa->empresa_id ?? 0);
+			if ($empresaId < 1) {
+				return ['Error' => 'Punto de venta sin empresa asociada; no se puede emitir con WSFE SOAP.'];
+			}
+			try {
+				$out = $this->arcaWsfeFacturaElectronicaService->solicitaCaeDomestico(
+					$empresaId,
+					$puntoventa,
+					(int) $tipotransaccion,
+					$datos
+				);
+
+				return [
+					'cae' => $out['cae'],
+					'fechavencimientocae' => $out['fechavencimientocae'],
+				];
+			} catch (\Throwable $e) {
+				return ['Error' => $e->getMessage()];
+			}
+		}
+
 		// Si es exportacion tiene que pedir request
 		if ($puntoventa->webservice == 'wsfex_v1')
 		{
@@ -414,6 +467,20 @@ class FacturaElectronicaService
 
 	public function consultaCompEnviado($nroinscripcion, $tipotransaccion, $puntoventa, $numero)
 	{
+		if ($this->debeUsarSoapWsfe($puntoventa)) {
+			$empresaId = (int) ($puntoventa->empresa_id ?? 0);
+			if ($empresaId < 1) {
+				return -1;
+			}
+
+			return $this->arcaWsfeFacturaElectronicaService->consultaComprobanteEmitido(
+				$empresaId,
+				(int) $puntoventa->codigo,
+				(int) $tipotransaccion,
+				(int) $numero
+			);
+		}
+
 		$req['solicitud']['servicio'] = $puntoventa->webservice;
 		$req['solicitud']['funcion'] = 'ConsultaCompEnviado';
 		$req['datos']['cuit']   = (double) str_replace("-","",$nroinscripcion);

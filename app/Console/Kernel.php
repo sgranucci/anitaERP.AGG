@@ -14,13 +14,14 @@ class Kernel extends ConsoleKernel
      * @return void
      */
     protected $commands = [
-        'App\Console\Commands\LeeCotizacionApi'
+        'App\Console\Commands\LeeCotizacionApi',
     ];
-    
+
     protected function schedule(Schedule $schedule)
     {
         // $schedule->command('inspire')->hourly();
         $schedule->command('cotizacion:leeapi')->daily()->at('06:00');
+        $schedule->command('interbanking:persistir-saldos-diarios')->daily()->at('07:15');
         $schedule->command('padron-iibb-tasa:purge')->monthlyOn(10, '03:00');
         $schedule->command('padron-iibb-arba:purge')->monthlyOn(10, '03:05');
         $schedule->command('padron-iibb-caba:purge')->monthlyOn(10, '03:10');

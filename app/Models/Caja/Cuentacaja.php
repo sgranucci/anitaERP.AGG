@@ -2,20 +2,21 @@
 
 namespace App\Models\Caja;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
 use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Moneda;
 use App\Models\Contable\Cuentacontable;
-use App\Models\Caja\Banco;
 use App\Traits\Caja\CuentacajaTrait;
+use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Cuentacaja extends Model
+class Cuentacaja extends Model implements Auditable
 {
     use CuentacajaTrait;
+    use \OwenIt\Auditing\Auditable;
 
-    protected $fillable = ['nombre', 'codigo', 'tipocuenta', 'banco_id', 
-                            'empresa_id', 'cuentacontable_id', 'moneda_id', 'cbu'];
+    protected $fillable = ['nombre', 'codigo', 'tipocuenta', 'banco_id',
+        'empresa_id', 'cuentacontable_id', 'moneda_id', 'cbu'];
+
     protected $table = 'cuentacaja';
 
     public function bancos()
@@ -38,4 +39,3 @@ class Cuentacaja extends Model
         return $this->belongsTo(Cuentacontable::class, 'cuentacontable_id');
     }
 }
-

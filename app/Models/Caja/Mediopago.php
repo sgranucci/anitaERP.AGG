@@ -2,12 +2,14 @@
 
 namespace App\Models\Caja;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
 use App\Models\Configuracion\Empresa;
+use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Mediopago extends Model
+class Mediopago extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
+
     protected $fillable = ['nombre', 'codigo', 'cuentacaja_id', 'empresa_id'];
 
     protected $table = 'mediopago';
@@ -21,6 +23,4 @@ class Mediopago extends Model
     {
         return $this->belongsTo(Empresa::class, 'empresa_id');
     }
-
 }
-

@@ -37,7 +37,9 @@ class RequisicionQuery implements RequisicionQueryInterface
     public function requisicionAccesiblePorUsuario(int $id): bool
     {
         $empresas = $this->empresaRepository->traeEmpresasAsignadas();
-        $oficina_compra_id = Auth::user()->oficinacompra_id;
+        $oficina_compra_id = config('requisicion.filtro_oficina_compras_activo', false)
+            ? Auth::user()->oficinacompra_id
+            : null;
         $centrocosto_id = Auth::user()->centrocosto_id;
         $centrocostoFiltro = null;
 
@@ -64,13 +66,28 @@ class RequisicionQuery implements RequisicionQueryInterface
         return $q->exists();
     }
 
+    public function puedeUsuarioGenerarMultiplesOcDesdeRequisicion(Requisicion $r): bool
+    {
+        if (! can('crear-ordencompra', false)) {
+            return false;
+        }
+        if (! $this->requisicionAccesiblePorUsuario((int) $r->id)) {
+            return false;
+        }
+        $aprobada = \App\Models\Compras\Requisicion_Estado::$enumEstado[array_search('A', array_column(\App\Models\Compras\Requisicion_Estado::$enumEstado, 'valor'), true)]['nombre'];
+
+        return ($r->estado ?? '') === $aprobada;
+    }
+
     public function leeRequisicion($busqueda, $flPaginando = null, $withArticulos = false)
     {
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
         $empresas = $this->empresaRepository->traeEmpresasAsignadas();
-        $oficina_compra_id = Auth::user()->oficinacompra_id;
+        $oficina_compra_id = config('requisicion.filtro_oficina_compras_activo', false)
+            ? Auth::user()->oficinacompra_id
+            : null;
 
         $centrocosto_id = Auth::user()->centrocosto_id;
         $centrocostoFiltro = null;

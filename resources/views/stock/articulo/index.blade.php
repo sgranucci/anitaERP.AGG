@@ -56,6 +56,14 @@ function limpiaFiltros(){
                         	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
 						@endif
                     </a>
+                    @if (can('actualizar-articulos', false))
+                    <form action="{{ route('sincronizar_articulo_anita') }}" method="POST" class="d-inline" onsubmit="return confirm('La sincronizaci\u00f3n puede tardar muchos minutos. Solo se dan de alta art\u00edculos que existan en Anita y a\u00fan no est\u00e9n en el ERP. Si aparece error 504 (tiempo de espera), ejecute en el servidor:\nphp artisan articulo:sincronizar-anita\n\n\u00bfContinuar?');">
+                        @csrf
+                        <button type="submit" class="btn btn-outline-primary btn-sm" title="Importar desde Anita (stkmae) artículos que falten en el ERP">
+                            <i class="fa fa-fw fa-refresh"></i> Sincronizar desde Anita
+                        </button>
+                    </form>
+                    @endif
     				<a href="#" onclick="configurarSalida()" class="btn btn-outline-secondary btn-sm">
 						<i class="fa fa-fw fa-cog"></i> Configura salida
 					</a>

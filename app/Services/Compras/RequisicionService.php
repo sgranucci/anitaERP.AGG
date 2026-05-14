@@ -6,34 +6,45 @@ use App\ApiAnita;
 use App\Models\Compras\Requisicion_Estado;
 use App\Models\Stock\Articulo;
 use App\Queries\Compras\ProveedorQueryInterface;
-use App\Repositories\Compras\RequisicionRepositoryInterface;
-use App\Repositories\Compras\Requisicion_EstadoRepositoryInterface;
-use App\Repositories\Compras\Requisicion_ArticuloRepositoryInterface;
-use App\Repositories\Compras\Requisicion_ArchivoRepositoryInterface;
-use App\Repositories\Presupuesto\PartidagastoRepositoryInterface;
-use App\Repositories\Presupuesto\CapexRepositoryInterface;
-use App\Support\Compras\ValidacionPresupuestoPartidaCapexLineas;
-use App\Services\Configuracion\ArbolaprobacionService;
-use App\Repositories\Contable\CentrocostoRepositoryInterface;
-use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Queries\Stock\ArticuloQueryInterface;
-use Carbon\Carbon;
+use App\Repositories\Compras\Requisicion_ArchivoRepositoryInterface;
+use App\Repositories\Compras\Requisicion_ArticuloRepositoryInterface;
+use App\Repositories\Compras\Requisicion_EstadoRepositoryInterface;
+use App\Repositories\Compras\RequisicionRepositoryInterface;
+use App\Repositories\Configuracion\MonedaRepositoryInterface;
+use App\Repositories\Contable\CentrocostoRepositoryInterface;
+use App\Repositories\Presupuesto\CapexRepositoryInterface;
+use App\Repositories\Presupuesto\PartidagastoRepositoryInterface;
+use App\Services\Configuracion\ArbolaprobacionService;
+use App\Support\Compras\ValidacionPresupuestoPartidaCapexLineas;
 use Auth;
+use Carbon\Carbon;
 use DB;
 
 class RequisicionService
 {
     private $proveedorQuery;
+
     private $requisicionRepository;
+
     private $requisicion_estadoRepository;
+
     private $requisicion_articuloRepository;
+
     private $requisicion_archivoRepository;
+
     private $arbolaprobacionService;
+
     private $partidagastoRepository;
+
     private $capexRepository;
+
     private $centrocostoRepository;
+
     private $articuloQuery;
+
     private $monedaRepository;
+
     public function __construct(
         ProveedorQueryInterface $proveedorQuery,
         RequisicionRepositoryInterface $requisicionRepository,
@@ -114,7 +125,8 @@ class RequisicionService
     }
 
     /**
-     * En EN_COMPRAS solo puede intervenir un usuario cuya oficina de compra coincida con la de la requisición.
+     * En EN_COMPRAS solo puede intervenir un usuario cuya oficina de compra coincida con la de la requisición,
+     * cuando config('requisicion.filtro_oficina_compras_activo') es true.
      * Si la requisición no tiene oficinacompra_id, se asume la oficina 1 para la comparación.
      */
     public function usuarioPuedeEditarRequisicionEnCompras($requisicion): bool
@@ -124,6 +136,9 @@ class RequisicionService
         }
         $nombreEnCompras = Requisicion_Estado::$enumEstado[array_search('K', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
         if ($requisicion->estado !== $nombreEnCompras) {
+            return true;
+        }
+        if (! config('requisicion.filtro_oficina_compras_activo', false)) {
             return true;
         }
         $oficinaRequisicion = (int) ($requisicion->oficinacompra_id ?? 1);
@@ -284,11 +299,11 @@ class RequisicionService
             'tratamiento' => $data['tratamiento'] ?? '',
             'motivotratamiento' => $data['motivotratamiento'] ?? '',
             'contrataciondirecta' => $data['contrataciondirecta'] ?? '',
-            'proveedor_id' => !empty($data['proveedor_id']) ? $data['proveedor_id'] : null,
+            'proveedor_id' => ! empty($data['proveedor_id']) ? $data['proveedor_id'] : null,
             'nroinscripcion' => $data['nroinscripcion'] ?? null,
-            'formapago_id' => !empty($data['formapago_id']) ? $data['formapago_id'] : null,
+            'formapago_id' => ! empty($data['formapago_id']) ? $data['formapago_id'] : null,
             'estado' => $data['estado'] ?? null,
-            'ordencompra_id' => !empty($data['ordencompra_id']) ? $data['ordencompra_id'] : null,
+            'ordencompra_id' => ! empty($data['ordencompra_id']) ? $data['ordencompra_id'] : null,
             'creousuario_id' => $data['creousuario_id'] ?? Auth::user()->id,
         ];
     }
@@ -300,7 +315,7 @@ class RequisicionService
     private function validaYCalculaOficinaCompraIdDesdeArticulos(array $data): ?int
     {
         $ids = $data['articulo_ids'] ?? null;
-        if (!is_array($ids)) {
+        if (! is_array($ids)) {
             return null;
         }
 
@@ -342,7 +357,7 @@ class RequisicionService
         $proveedor = $this->proveedorQuery->traeProveedorporId($proveedor_id);
 
         if ($proveedor) {
-            $apiAnita = new ApiAnita();
+            $apiAnita = new ApiAnita;
             $leeAnita = [
                 'acc' => 'list',
                 'sistema' => 'compras',
@@ -371,7 +386,7 @@ class RequisicionService
             if ($dataAnita) {
                 $requisicion = $dataAnita;
 
-                $apiAnita = new ApiAnita();
+                $apiAnita = new ApiAnita;
                 $leeAnita = [
                     'acc' => 'list',
                     'sistema' => 'compras',
@@ -400,33 +415,36 @@ class RequisicionService
         return ['Error' => 'Sin informacion'];
     }
 
-    public function sincronizarConAnita(){
+    public function sincronizarConAnita()
+    {
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'list', 
-						'campos' => 'reqm_nro',
-						'tabla' => 'reqmae',
-						'sistema' => 'compras',
-                    'whereArmado' => " WHERE reqm_fecha >= 20250100" );
+        $apiAnita = new ApiAnita;
+        $data = ['acc' => 'list',
+            'campos' => 'reqm_nro',
+            'tabla' => 'reqmae',
+            'sistema' => 'compras',
+            'whereArmado' => ' WHERE reqm_fecha >= 20250100'];
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
         $off = 0;
-		foreach ($dataAnita as $value) 
-        {   $off++;
-            if ($off > 14700)
+        foreach ($dataAnita as $value) {
+            $off++;
+            if ($off > 14700) {
                 $this->traerRegistroDeAnita($value->reqm_nro);
+            }
         }
     }
 
-    public function traerRegistroDeAnita($key){
+    public function traerRegistroDeAnita($key)
+    {
 
-        $apiAnita = new ApiAnita();
-        $data = array( 
-            'acc' => 'list', 
-			'tabla' => 'reqmae, outer usuario', 
-			'sistema' => 'compras',
+        $apiAnita = new ApiAnita;
+        $data = [
+            'acc' => 'list',
+            'tabla' => 'reqmae, outer usuario',
+            'sistema' => 'compras',
             'campos' => '
                     reqm_nro,
                     reqm_fecha,
@@ -451,41 +469,43 @@ class RequisicionService
                     reqm_mot_urgencia,
                     reqm_cont_directa,
                     usu_nombre as nombreusuario',
-            'whereArmado' => " WHERE reqm_nro='".$key."' AND reqm_usuario=usu_usuario"
-        );
+            'whereArmado' => " WHERE reqm_nro='".$key."' AND reqm_usuario=usu_usuario",
+        ];
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
-		$usuario_id = Auth::user()->id;
+        $usuario_id = Auth::user()->id;
 
         if (count($dataAnita) > 0) {
             $dataRequisicion = $dataAnita[0];
 
             // Lee el proveedor
-            $proveedor = $this->proveedorQuery->traeProveedorporCodigo(ltrim($dataRequisicion->reqm_proveedor,'0'));
+            $proveedor = $this->proveedorQuery->traeProveedorporCodigo(ltrim($dataRequisicion->reqm_proveedor, '0'));
 
             $proveedor_id = null;
-            if ($proveedor)
+            if ($proveedor) {
                 $proveedor_id = $proveedor->id;
+            }
 
             // Lee el centro de costo
-			$centrocosto = $this->centrocostoRepository->findPorCodigo($dataRequisicion->reqm_ccosto);
-			
-			if ($centrocosto)
-				$centrocosto_id = $centrocosto->id;	
-			else
-				$centrocosto_id = null;
+            $centrocosto = $this->centrocostoRepository->findPorCodigo($dataRequisicion->reqm_ccosto);
+
+            if ($centrocosto) {
+                $centrocosto_id = $centrocosto->id;
+            } else {
+                $centrocosto_id = null;
+            }
 
             $moneda = $this->monedaRepository->findPorCodigo($dataRequisicion->reqm_cod_mon);
-            if ($moneda)
+            if ($moneda) {
                 $moneda_id = $moneda->id;
-            else
+            } else {
                 $moneda_id = null;
+            }
 
             // Asume forma de pago TRANSFERENCIA
             $formapago_id = 2;
 
-            switch($dataRequisicion->reqm_estado)
-            {
+            switch ($dataRequisicion->reqm_estado) {
                 case '0':
                     $estado = 'PENDIENTE';
                     break;
@@ -527,32 +547,32 @@ class RequisicionService
             $fechaEntrega = $fechaEntrega->toDateString(); // "2026-05-01"
 
             $arrayCampos = [
-				'empresa_id' => $dataRequisicion->reqm_empresa, 
-				'centrocosto_id' => $centrocosto_id, 
-                'fecha' => $fecha, 
-                'fechaentrega' => $fechaEntrega, 
-                'numerorequisicion' => $dataRequisicion->reqm_nro, 
-                'detalle' => $dataRequisicion->reqm_leyenda, 
+                'empresa_id' => $dataRequisicion->reqm_empresa,
+                'centrocosto_id' => $centrocosto_id,
+                'fecha' => $fecha,
+                'fechaentrega' => $fechaEntrega,
+                'numerorequisicion' => $dataRequisicion->reqm_nro,
+                'detalle' => $dataRequisicion->reqm_leyenda,
                 'comentario' => 'Creo Usuario: '.$dataRequisicion->nombreusuario,
-                'tratamiento' => $dataRequisicion->reqm_es_urgente == 'S' ? 'Urgente' : 'Normal', 
-                'motivotratamiento' => $dataRequisicion->reqm_mot_urgencia, 
-                'contrataciondirecta' => $dataRequisicion->reqm_cont_directa == 'S' ? 'Si' : 'No', 
-                'proveedor_id' => $proveedor_id, 
-                'formapago_id' => $formapago_id, 
-                'estado' => $estado, 
+                'tratamiento' => $dataRequisicion->reqm_es_urgente == 'S' ? 'Urgente' : 'Normal',
+                'motivotratamiento' => $dataRequisicion->reqm_mot_urgencia,
+                'contrataciondirecta' => $dataRequisicion->reqm_cont_directa == 'S' ? 'Si' : 'No',
+                'proveedor_id' => $proveedor_id,
+                'formapago_id' => $formapago_id,
+                'estado' => $estado,
                 'creousuario_id' => $usuario_id,
                 'oficinacompra_id' => null,
-			];
+            ];
 
-			$requisicion = $this->requisicionRepository->createDesdeAnita($arrayCampos);
+            $requisicion = $this->requisicionRepository->createDesdeAnita($arrayCampos);
 
-			// Arma movimientos
-			$apiAnita = new ApiAnita();
-			$data = array( 
-				'acc' => 'list', 
-				'tabla' => 'reqmov', 
-				'sistema' => 'compras',
-				'campos' => '
+            // Arma movimientos
+            $apiAnita = new ApiAnita;
+            $data = [
+                'acc' => 'list',
+                'tabla' => 'reqmov',
+                'sistema' => 'compras',
+                'campos' => '
                         reqv_nro,             
                         reqv_nro_orden,       
                         reqv_articulo,        
@@ -582,16 +602,16 @@ class RequisicionService
                         reqv_cantidad_oc,     
                         reqv_nro_interno,    
                         reqv_precio_ori,     
-                        reqv_motivo_ahorro', 
-				'whereArmado' => " WHERE reqv_nro='".$key."' "
-			);
-			$dataAnita = json_decode($apiAnita->apiCall($data));
+                        reqv_motivo_ahorro',
+                'whereArmado' => " WHERE reqv_nro='".$key."' ",
+            ];
+            $dataAnita = json_decode($apiAnita->apiCall($data));
 
             // Lee reqmref
-            $apiAnita = new ApiAnita();
-            $data = array( 
-                'acc' => 'list', 
-                'tabla' => 'reqmref', 
+            $apiAnita = new ApiAnita;
+            $data = [
+                'acc' => 'list',
+                'tabla' => 'reqmref',
                 'sistema' => 'compras',
                 'campos' => ' 
                     reqr_nro_requi,
@@ -612,45 +632,47 @@ class RequisicionService
                     reqr_cta_contable,
                     reqr_ccosto,
                     reqr_importe',
-                'whereArmado' => " WHERE reqr_nro_requi='".$key."' "
-            );
+                'whereArmado' => " WHERE reqr_nro_requi='".$key."' ",
+            ];
             $dataAnitaReqmref = json_decode($apiAnita->apiCall($data));
 
-            if (isset($dataAnitaReqmref[0]))
+            if (isset($dataAnitaReqmref[0])) {
                 $dataReqmref = $dataAnitaReqmref[0];
-            else
+            } else {
                 $dataReqmref = null;
+            }
 
-			if ($dataAnita && count($dataAnita) > 0)    
-            {
-                foreach ($dataAnita as $data)
-                {
+            if ($dataAnita && count($dataAnita) > 0) {
+                foreach ($dataAnita as $data) {
                     $fechaObjeto = Carbon::createFromFormat('Ymd', $data->reqv_fecha_ent);
                     $fecha = $fechaObjeto->toDateString(); // "2026-05-01"
 
-                    $articulo = $this->articuloQuery->traeArticuloPorSku(ltrim($data->reqv_articulo,'0'));
-                    if ($articulo)
+                    $articulo = $this->articuloQuery->traeArticuloPorSku(ltrim($data->reqv_articulo, '0'));
+                    if ($articulo) {
                         $articulo_id = $articulo->id;
-                    else
+                    } else {
                         $articulo_id = null;
+                    }
 
                     $centrocostodestino = $this->centrocostoRepository->findPorCodigo($data->reqv_ccosto);
-                    if ($centrocostodestino)
+                    if ($centrocostodestino) {
                         $centrocostodestino_id = $centrocostodestino->id;
-                    else
+                    } else {
                         $centrocostodestino_id = null;
+                    }
 
                     $partidagasto_id = null;
                     $capex_id = null;
-                    if ($dataReqmref)
-                    {
+                    if ($dataReqmref) {
                         $partidagasto = $this->partidagastoRepository->findPorCodigo($dataReqmref->reqr_partida);
-                        if ($partidagasto)
+                        if ($partidagasto) {
                             $partidagasto_id = $partidagasto->id;
+                        }
 
                         $capex = $this->capexRepository->findPorCodigo($dataReqmref->reqr_proyecto);
-                        if ($capex)
+                        if ($capex) {
                             $capex_id = $capex->id;
+                        }
                     }
 
                     $arrayCampos = [
@@ -667,42 +689,41 @@ class RequisicionService
                         'motivoahorro' => $data->reqv_motivo_ahorro ?? '',
                         'partidagasto_id' => $partidagasto_id,
                         'capex_id' => $capex_id,
-                        ];
+                    ];
 
                     $requisicion_articulo = $this->requisicion_articuloRepository->createUnique($arrayCampos);
                 }
-			}
+            }
             // Lee los archivos asociados
-            $apiAnita = new ApiAnita();
-            $data = array( 
-                'acc' => 'list', 
-                'tabla' => 'reqarch', 
+            $apiAnita = new ApiAnita;
+            $data = [
+                'acc' => 'list',
+                'tabla' => 'reqarch',
                 'sistema' => 'compras',
-                'campos' => 'reqa_nro_req, reqa_nro_linea, reqa_archivo, reqa_usuario, reqa_fecha_act, reqa_hora_act',  
-                'whereArmado' => " WHERE reqa_nro_req='".$key."' "
-            );
+                'campos' => 'reqa_nro_req, reqa_nro_linea, reqa_archivo, reqa_usuario, reqa_fecha_act, reqa_hora_act',
+                'whereArmado' => " WHERE reqa_nro_req='".$key."' ",
+            ];
             $dataAnita = json_decode($apiAnita->apiCall($data));
 
-            foreach ($dataAnita as $dataArchivo)
-            {
+            foreach ($dataAnita as $dataArchivo) {
                 $data = [
-                        'requisicion_id' => $requisicion->id,
-                        'nombrearchivo' => $dataArchivo->reqa_archivo,
-                    ];
+                    'requisicion_id' => $requisicion->id,
+                    'nombrearchivo' => $dataArchivo->reqa_archivo,
+                ];
 
                 $requisicion_archivo = $this->requisicion_archivoRepository->createDesdeAnita($data);
             }
 
-			// Crea estado
-			$data = [];
-			$data['fechas'][] = Carbon::now();
-			$data['estados'][] = $estado;
-			$data['usuario_ids'][] = Auth::user()->id;
-			$data['observacionestados'][] = 'Alta de requisición desde Anita';
+            // Crea estado
+            $data = [];
+            $data['fechas'][] = Carbon::now();
+            $data['estados'][] = $estado;
+            $data['usuario_ids'][] = Auth::user()->id;
+            $data['observacionestados'][] = 'Alta de requisición desde Anita';
 
-			$data['creousuario_id'] = Auth::user()->id;
+            $data['creousuario_id'] = Auth::user()->id;
 
-			$requisicion_estado = $this->requisicion_estadoRepository->create($data, $requisicion->id);
-		}
-	}
+            $requisicion_estado = $this->requisicion_estadoRepository->create($data, $requisicion->id);
+        }
+    }
 }

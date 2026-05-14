@@ -38,12 +38,14 @@ use App\Repositories\Stock\Articulo_CuentacontableRepositoryInterface;
 use App\Repositories\Stock\Articulo_EstadoRepositoryInterface;
 use App\Repositories\Stock\ArticuloRepositoryInterface;
 use App\Repositories\Ventas\DescuentoventaRepositoryInterface;
+use App\Services\Stock\ArticuloAnitaSyncService;
 use App\Services\Stock\PrecioService;
 use Auth;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Mail;
@@ -80,6 +82,8 @@ class ArticuloController extends Controller
 
     protected $precioService;
 
+    private ArticuloAnitaSyncService $articuloAnitaSyncService;
+
     public function __construct(Articulo_CajaRepositoryInterface $articulo_cajaRepository,
         Articulo_CostoRepositoryInterface $articulo_costoRepository,
         Articulo_EstadoRepositoryInterface $articulo_estadoRepository,
@@ -94,7 +98,8 @@ class ArticuloController extends Controller
         EmpresaRepositoryInterface $empresaRepository,
         SeteoModeloetiquetaRepositoryInterface $seteoModeloetiquetaRepository,
         SeteosalidaRepositoryInterface $seteosalidarepository,
-        PrecioService $precioservice)
+        PrecioService $precioservice,
+        ArticuloAnitaSyncService $articuloAnitaSyncService)
     {
         $this->articulo_cajaRepository = $articulo_cajaRepository;
         $this->articulo_costoRepository = $articulo_costoRepository;
@@ -111,6 +116,42 @@ class ArticuloController extends Controller
         $this->seteoModeloetiquetaRepository = $seteoModeloetiquetaRepository;
         $this->seteoSalidaRepository = $seteosalidarepository;
         $this->precioService = $precioservice;
+        $this->articuloAnitaSyncService = $articuloAnitaSyncService;
+    }
+
+    /**
+     * Importación desde Anita (stkmae). Puede superar el timeout del proxy (504);
+     * en ese caso usar: php artisan articulo:sincronizar-anita
+     */
+    public function sincronizarDesdeAnita(Request $request)
+    {
+        can('actualizar-articulos');
+
+        if (! $request->isMethod('post')) {
+            abort(405);
+        }
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+        set_time_limit(0);
+        ignore_user_abort(true);
+
+        try {
+            $ret = $this->articuloAnitaSyncService->sincronizarDesdeAnita();
+            $msg = 'Sincronización desde Anita: '.$ret['en_anita'].' códigos en Anita, '
+                .$ret['importados'].' altas ejecutadas, '.$ret['omitidos_ya_en_erp'].' ya existían en el ERP.';
+            if (! empty($ret['advertencias'])) {
+                $msg .= ' '.implode(' ', array_slice($ret['advertencias'], 0, 8));
+            }
+
+            return redirect()->route('articulo')->with('mensaje', $msg);
+        } catch (\Throwable $e) {
+            Log::warning('Articulo sincronizarDesdeAnita: '.$e->getMessage(), ['exception' => $e]);
+
+            return redirect()->route('articulo')->with('errores', [
+                'No se completó la sincronización desde Anita. Si el error fue por tiempo de espera (504), ejecute en el servidor: php artisan articulo:sincronizar-anita — Detalle: '.$e->getMessage(),
+            ]);
+        }
     }
 
     public function index(Request $request)
@@ -122,7 +163,7 @@ class ArticuloController extends Controller
 
         $articulos = $this->articuloRepository->leeArticulo($busqueda, true);
 
-        if ($articulos->isEmpty()) {
+        if ($articulos->isEmpty() && config('app.anita_sync_articulo_index')) {
             $Articulo = new Articulo;
             $Articulo->sincronizarConAnita();
 

@@ -3,19 +3,18 @@
 namespace App\Models\Caja;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
-use App\Models\Contable\Cuentacontable;
-use App\Models\Caja\Conceptogasto_Cuentacontable;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Conceptogasto extends Model
+class Conceptogasto extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
+
     protected $fillable = ['nombre'];
+
     protected $table = 'conceptogasto';
 
     public function conceptogasto_cuentacontables()
-	{
-    	return $this->hasMany(Conceptogasto_cuentacontable::class)->with('cuentacontables');
-	}
-
+    {
+        return $this->hasMany(Conceptogasto_Cuentacontable::class)->with('cuentacontables');
+    }
 }
-

@@ -2,14 +2,13 @@
 
 namespace App\Models\Compras;
 
-use Illuminate\Database\Eloquent\Model;
-use OwenIt\Auditing\Contracts\Auditable;
 use App\Models\Configuracion\Moneda;
 use App\Models\Contable\Centrocosto;
-use App\Models\Stock\Articulo;
-use App\Models\Presupuesto\Partidagasto;
 use App\Models\Presupuesto\Capex;
-use App\Models\Presupuesto\Capex_Partida;
+use App\Models\Presupuesto\Partidagasto;
+use App\Models\Stock\Articulo;
+use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
 class Requisicion_Articulo extends Model implements Auditable
 {
@@ -18,6 +17,7 @@ class Requisicion_Articulo extends Model implements Auditable
     protected $fillable = [
         'requisicion_id', 'fechaentrega', 'articulo_id', 'cantidad', 'precio', 'moneda_id', 'cantidadalternativa',
         'detalle', 'centrocostodestino_id', 'preciooriginal', 'motivoahorro', 'partidagasto_id', 'capex_id',
+        'precio_origen_etiqueta',
     ];
 
     protected $table = 'requisicion_articulo';
@@ -51,5 +51,4 @@ class Requisicion_Articulo extends Model implements Auditable
     {
         return $this->belongsTo(Capex::class, 'capex_id');
     }
-
 }

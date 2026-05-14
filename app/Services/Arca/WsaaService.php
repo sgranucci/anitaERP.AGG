@@ -9,17 +9,26 @@ use SoapClient;
 
 class WsaaService
 {
-    public function getTokenSign(string $serviceId): array
+    /**
+     * Obtiene Token y Sign para un servicio WSAA.
+     *
+     * @param  array|null  $context  Si no es null, firma y cachea TA con rutas propias
+     *                                 (p. ej. WSFE: storage/app/arca/wsfe). Claves:
+     *                                 cert_path, private_key_path, ?private_key_passphrase,
+     *                                 ta_storage_dir, cache_key (sufijo único por certificado/CUIT),
+     *                                 ?tmp_dir (firma PKCS7)
+     */
+    public function getTokenSign(string $serviceId, ?array $context = null): array
     {
-        $cached = $this->readCachedTa($serviceId);
+        $cached = $this->readCachedTa($serviceId, $context);
         if ($cached !== null) {
             return $cached;
         }
 
-        $taXml = $this->requestNewTa($serviceId);
+        $taXml = $this->requestNewTa($serviceId, $context);
         $parsed = $this->parseTa($taXml);
 
-        $this->writeCachedTa($serviceId, $taXml);
+        $this->writeCachedTa($serviceId, $taXml, $context);
 
         return [
             'token' => $parsed['token'],
@@ -28,10 +37,10 @@ class WsaaService
         ];
     }
 
-    private function requestNewTa(string $serviceId): string
+    private function requestNewTa(string $serviceId, ?array $context = null): string
     {
         $traXml = $this->createTraXml($serviceId);
-        $cms = $this->signTra($traXml);
+        $cms = $this->signTra($traXml, $context);
 
         $wsaa = $this->wsaaConfig();
 
@@ -80,11 +89,22 @@ class WsaaService
         return $out;
     }
 
-    private function signTra(string $traXml): string
+    private function signTra(string $traXml, ?array $context = null): string
     {
-        $certPath = config('arca.cert_path');
-        $keyPath = config('arca.private_key_path');
-        $pass = config('arca.private_key_passphrase', '');
+        if ($context !== null) {
+            $certPath = $context['cert_path'] ?? null;
+            $keyPath = $context['private_key_path'] ?? null;
+            $pass = (string) ($context['private_key_passphrase'] ?? '');
+            $tmpDir = $context['tmp_dir'] ?? storage_path('app/arca/wsfe/tmp');
+        } else {
+            $certPath = config('arca.cert_path');
+            $keyPath = config('arca.private_key_path');
+            $pass = config('arca.private_key_passphrase', '');
+            $tmpDir = config('arca.tmp_dir');
+            if (! is_string($tmpDir) || $tmpDir === '') {
+                $tmpDir = rtrim((string) config('arca.padron_base_storage', ''), '/').'/tmp';
+            }
+        }
 
         if (! is_string($certPath) || ! file_exists($certPath)) {
             throw new Exception("WSAA: certificado no encontrado en {$certPath}");
@@ -92,13 +112,11 @@ class WsaaService
         if (! is_string($keyPath) || ! file_exists($keyPath)) {
             throw new Exception("WSAA: clave privada no encontrada en {$keyPath}");
         }
-
-        $tmpDir = storage_path('app/arca/tmp');
         try {
             $this->ensureDir($tmpDir, 'directorio temporal');
         } catch (Exception $e) {
             // Fallback: para la firma PKCS7, alcanza con un tmp del sistema.
-            $tmpDir = rtrim(sys_get_temp_dir(), '/').'/anitaERP/arca/tmp';
+            $tmpDir = rtrim(sys_get_temp_dir(), '/').'/anitaERP/arca/sr_padron/tmp';
             $this->ensureDir($tmpDir, 'directorio temporal (fallback /tmp)');
         }
 
@@ -161,9 +179,9 @@ class WsaaService
         ];
     }
 
-    private function readCachedTa(string $serviceId): ?array
+    private function readCachedTa(string $serviceId, ?array $context = null): ?array
     {
-        $file = $this->taFile($serviceId);
+        $file = $this->taFile($serviceId, $context);
         if (! file_exists($file)) {
             return null;
         }
@@ -193,24 +211,32 @@ class WsaaService
         return $parsed;
     }
 
-    private function writeCachedTa(string $serviceId, string $taXml): void
+    private function writeCachedTa(string $serviceId, string $taXml, ?array $context = null): void
     {
-        $dir = config('arca.ta_storage_dir');
+        $dir = $context !== null
+            ? ($context['ta_storage_dir'] ?? null)
+            : config('arca.ta_storage_dir');
         if (! is_string($dir) || $dir === '') {
             throw new Exception('WSAA: ta_storage_dir inválido');
         }
         $this->ensureDir($dir, 'cache TA');
 
-        file_put_contents($this->taFile($serviceId), $taXml);
+        file_put_contents($this->taFile($serviceId, $context), $taXml);
     }
 
-    private function taFile(string $serviceId): string
+    private function taFile(string $serviceId, ?array $context = null): string
     {
         $env = (string) config('arca.env', 'homo');
         $safe = preg_replace('/[^a-zA-Z0-9_.-]/', '_', $serviceId);
-        $dir = (string) config('arca.ta_storage_dir');
+        if ($context !== null) {
+            $dir = (string) ($context['ta_storage_dir'] ?? '');
+            $suffix = isset($context['cache_key']) ? '__'.preg_replace('/[^a-zA-Z0-9_.-]/', '_', (string) $context['cache_key']) : '';
+        } else {
+            $dir = (string) config('arca.ta_storage_dir');
+            $suffix = '';
+        }
 
-        return rtrim($dir, '/')."/ta_{$env}_{$safe}.xml";
+        return rtrim($dir, '/')."/ta_{$env}_{$safe}{$suffix}.xml";
     }
 
     private function wsaaConfig(): array
@@ -229,7 +255,13 @@ class WsaaService
     {
         if (is_dir($dir)) {
             if (! is_writable($dir)) {
-                throw new Exception("WSAA: {$purpose} existe pero no es escribible: '{$dir}'");
+                @chmod($dir, 0775);
+            }
+            if (! is_writable($dir)) {
+                throw new Exception(
+                    "WSAA: {$purpose} existe pero no es escribible: '{$dir}'. ".
+                    'Ej.: chmod -R g+rwX sobre storage/app/arca/sr_padron (y wsfe) para el grupo del servidor web.'
+                );
             }
 
             return;

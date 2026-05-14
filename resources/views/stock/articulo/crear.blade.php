@@ -81,4 +81,8 @@
     </div>
 </div>
 @include('includes.contable.modalconsultacuentacontable')
+@include('stock.formula_articulo.partials.modal_ver_formula_articulo')
+@if (can('listar-formula-articulo', false) || can('listar-articulos', false))
+<script src="{{ asset('assets/pages/scripts/stock/articulo/formula-modal.js') }}" type="text/javascript"></script>
+@endif
 @endsection

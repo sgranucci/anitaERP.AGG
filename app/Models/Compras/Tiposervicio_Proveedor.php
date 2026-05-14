@@ -3,10 +3,14 @@
 namespace App\Models\Compras;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
 
 class Tiposervicio_Proveedor extends Model
 {
-    protected $fillable = ['nombre'];
+    public const UNICIDAD_CUIT_CONTROLA = 'CONTROLA';
+
+    public const UNICIDAD_CUIT_NO_CONTROLA = 'NO CONTROLA';
+
+    protected $fillable = ['nombre', 'controla_unicidad_cuit'];
+
     protected $table = 'tiposervicio_proveedor';
 }
