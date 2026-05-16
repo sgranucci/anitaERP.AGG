@@ -1,0 +1,45 @@
+---
+description: Estándar de exportaciones PDF/Excel/CSV para listados del módulo Compras
+alwaysApply: true
+---
+
+# Exportaciones de listados (Compras)
+
+Referencia: **requisiciones** (`RequisicionExport`, `requisicion/listado.blade.php`, `exports/compras/requisicionindex.blade.php`).
+
+## Estructura obligatoria
+
+1. **Repository**: método `listadoExport($busqueda, …)` con columnas de cabecera + joins; eager load de líneas/ítems.
+2. **Repository (PDF volumen alto)**: `listadoExportCursor()` para el mismo query sin cargar todo en memoria (ver OC).
+3. **Export Excel/CSV**: clase `FromView` en `app/Exports/Compras/{Modulo}Export.php`, copiando `RequisicionExport`:
+   - Logos fila 1 vía `EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion`
+   - Título fusionado A:U, cabecera `#85C1E9`, freeze bajo cabecera, wrap columna U (ítems)
+   - 21 columnas (A–U), mismos anchos que `RequisicionExport`
+4. **Vistas pareadas**:
+   - PDF: `resources/views/compras/{modulo}/listado.blade.php` (legal landscape, logos, tabla `.data`)
+   - Excel: `resources/views/exports/compras/{modulo}index.blade.php` (fila logo opcional + título + thead)
+5. **Partial ítems**: `partials/export_items_detalle.blade.php` (SKU, cantidad, precio, CC destino, partida, CAPEX, entrega, obs.; separador `\n` Excel / `<br>` PDF).
+6. **Controller** `listar($formato)`: `ini_set` memoria/tiempo; `PDF` / `EXCEL` / `CSV` en switch; botones con `@include('includes.exportar-tabla')`.
+
+## PDF con muchos registros
+
+Usar servicio por lotes (patrón `OrdencompraListadoPdfService`):
+
+- Cursor `listadoExportCursor`, chunks ~400 filas.
+- Por lote: cargar ítems (`whereIn ordencompra_id`), aplicar totales de cabecera, renderizar **la misma** vista `listado.blade.php`.
+- Primer lote: `mostrarCabecera => true` (logos + título); siguientes: `false` (solo tabla con thead).
+- Un solo PDF: DomPDF por parte; varias partes: `PDFMerger` horizontal; borrar temporales en `finally`.
+
+No duplicar plantillas ni columnas entre PDF directo y PDF por lotes.
+
+## Logos
+
+`EmpresaLogoArchivo`: varias empresas en el listado → logo default `config('app.empresa')`; una sola → `{nombreEmpresa}.png`.
+
+## Totales de cabecera
+
+Aplicar clase `*TotalesCabecera` (ej. `OrdencompraTotalesCabecera::aplicarAtributosVirtuales`) para columnas Mon. cab. y Monto.
+
+## Nuevos módulos
+
+Al agregar un CRUD con exportación, replicar este stack completo antes de inventar columnas o estilos distintos. Ajustar solo etiquetas de columna propias del dominio (ej. OC: sector legajo, condición compra).

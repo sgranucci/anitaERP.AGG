@@ -13,6 +13,16 @@
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
+        @if (! empty($sinPuntosCargados ?? false))
+        <div class="alert alert-info">
+            @if (config('app.anita_sync_puntoventa_index'))
+            No hay puntos de venta en el ERP. Para importar desde Anita ejecute en el servidor:
+            <code>php artisan puntoventa:sincronizar-anita</code>
+            @else
+            No hay puntos de venta en el ERP. Cree registros con <strong>Nuevo registro</strong> o active <code>ANITA_SYNC_PUNTOVENTA_INDEX</code> para sincronizar al abrir este listado.
+            @endif
+        </div>
+        @endif
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Puntos de Venta</h3>
@@ -22,6 +32,14 @@
                         	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
 						@endif
                     </a>
+                    @if (config('app.anita_sync_puntoventa_index') && can('actualizar-puntos-de-venta', false))
+                    <form action="{{ route('sincronizar_puntoventa_anita') }}" method="POST" class="d-inline" onsubmit="return confirm('La sincronizaci\u00f3n puede tardar varios minutos. Si aparece error 504 (tiempo de espera), ejecute en el servidor:\nphp artisan puntoventa:sincronizar-anita\n\n\u00bfContinuar?');">
+                        @csrf
+                        <button type="submit" class="btn btn-outline-primary btn-sm" title="Importar o actualizar desde Anita (tabla sucursal)">
+                            <i class="fa fa-fw fa-refresh"></i> Sincronizar desde Anita
+                        </button>
+                    </form>
+                    @endif
                 </div>
             </div>
             <div class="card-body table-responsive p-0">

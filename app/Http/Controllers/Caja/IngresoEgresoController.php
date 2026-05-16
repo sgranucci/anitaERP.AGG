@@ -31,7 +31,6 @@ class IngresoEgresoController extends Controller
     private $caja_movimiento_archivoRepository;
     private $tipotransaccion_cajaRepository;
     private $conceptogastoRepository;
-    private $mediopagoRepository;
     private $cuentacajaRepository;
     private $monedaRepository;
     private $empresaRepository;
@@ -44,7 +43,6 @@ class IngresoEgresoController extends Controller
 	public function __construct(Caja_MovimientoRepositoryInterface $caja_movimientorepository,
                                 Tipotransaccion_CajaRepositoryInterface $tipotransaccion_cajarepository,
                                 ConceptogastoRepositoryInterface $conceptogastorepository,
-                                MediopagoRepositoryInterface $mediopagorepository,
                                 CuentacajaRepositoryInterface $cuentacajarepository,
                                 MonedaRepositoryInterface $monedarepository,
                                 EmpresaRepositoryInterface $empresarepository,
@@ -58,7 +56,6 @@ class IngresoEgresoController extends Controller
         $this->caja_movimientoRepository = $caja_movimientorepository;
         $this->tipotransaccion_cajaRepository = $tipotransaccion_cajarepository;
         $this->conceptogastoRepository = $conceptogastorepository;
-        $this->mediopagoRepository = $mediopagorepository;
         $this->cuentacajaRepository = $cuentacajarepository;
         $this->monedaRepository = $monedarepository;
         $this->empresaRepository = $empresarepository;
@@ -145,7 +142,6 @@ class IngresoEgresoController extends Controller
 
         $tipotransaccion_caja_query = $this->tipotransaccion_cajaRepository->all();
         $conceptogasto_query = $this->conceptogastoRepository->all();
-        $mediopago_query = $this->mediopagoRepository->all();
         $moneda_query = $this->monedaRepository->all();
         $empresa_query = $this->empresaRepository->all();
         $cuentacaja_query = $this->cuentacajaRepository->all();
@@ -164,7 +160,7 @@ class IngresoEgresoController extends Controller
             $origen = 'movimientocaja';
         }
         return view('caja.ingresoegreso.crear', compact('tipotransaccion_caja_query', 'moneda_query', 
-                                                'mediopago_query', 'conceptogasto_query',
+                                                'conceptogasto_query',
                                                 'empresa_query', 'cuentacaja_query', 'cuentacontable_query',
                                                 'centrocosto_query', 'caja_id', 'nombreCaja', 'origen'));
     }
@@ -199,7 +195,6 @@ class IngresoEgresoController extends Controller
 
         $tipotransaccion_caja_query = $this->tipotransaccion_cajaRepository->all();
         $conceptogasto_query = $this->conceptogastoRepository->all();
-        $mediopago_query = $this->mediopagoRepository->all();
         $moneda_query = $this->monedaRepository->all();
         $empresa_query = $this->empresaRepository->all();
         $cuentacaja_query = $this->cuentacajaRepository->all();
@@ -218,7 +213,7 @@ class IngresoEgresoController extends Controller
 
         return view('caja.ingresoegreso.editar', compact('data', 
                                                     'tipotransaccion_caja_query', 'moneda_query',
-                                                    'mediopago_query', 'conceptogasto_query',
+                                                    'conceptogasto_query',
                                                     'empresa_query', 'cuentacaja_query', 'cuentacontable_query',
                                                     'centrocosto_query', 'caja_id', 'nombreCaja', 'origen'));
     }

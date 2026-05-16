@@ -318,6 +318,11 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Caja\UsocuentacajaRepositoryInterface',
+            'App\Repositories\Caja\UsocuentacajaRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Caja\BancoRepositoryInterface',
             'App\Repositories\Caja\BancoRepository',
         );
@@ -1449,6 +1454,31 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             'App\Repositories\Stock\CapacidadRepositoryInterface',
             'App\Repositories\Stock\CapacidadRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Stock\MesaGastronomiaRepositoryInterface',
+            'App\Repositories\Stock\MesaGastronomiaRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Stock\UbicacionGastronomiaRepositoryInterface',
+            'App\Repositories\Stock\UbicacionGastronomiaRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Stock\DescuentoGastronomiaRepositoryInterface',
+            'App\Repositories\Stock\DescuentoGastronomiaRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Stock\MozoGastronomiaRepositoryInterface',
+            'App\Repositories\Stock\MozoGastronomiaRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Stock\ConfiguracionPuntoventaGastronomiaRepositoryInterface',
+            'App\Repositories\Stock\ConfiguracionPuntoventaGastronomiaRepository',
         );
 
         $this->app->bind(

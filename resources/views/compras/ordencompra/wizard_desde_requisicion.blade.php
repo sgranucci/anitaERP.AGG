@@ -62,6 +62,7 @@ Generar órdenes de compra desde requisición
         'opciones_url' => route('ordencompra_opciones_precio_linea'),
         'cotizacion_url' => route('ordencompra_cotizacion_moneda_fecha'),
         'sugerir_cuotas_url' => route('ordencompra_sugerir_cuotas'),
+        'calcular_totales_url' => route('ordencompra_calcular_totales'),
         'volver_url' => route('solo_consulta_requisicion', ['id' => (int) $wizardRequisicionId]),
         'index_oc_url' => route('consultar_ordencompra'),
         'csrf' => csrf_token(),
@@ -117,6 +118,12 @@ Generar órdenes de compra desde requisición
     }
     #wizard-oc-cabeceras .tab-pane .card-body {
         padding-top: 0.75rem;
+    }
+    #wizard-oc-cabeceras .wz-grupo-totales-line {
+        white-space: nowrap;
+        overflow-x: auto;
+        font-size: 0.8125rem;
+        line-height: 1.35;
     }
     .wizard-oc-tabla-comprobantes td,
     .wizard-oc-tabla-archivos td {
@@ -371,6 +378,14 @@ Generar órdenes de compra desde requisición
                                 <div class="col-lg-8">
                                     <input type="text" class="form-control form-control-sm wz-grupo-comentario" maxlength="255" placeholder="Sobrescribe el comentario compartido">
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mt-1 mb-2">
+                        <div class="col-12">
+                            <div class="wz-grupo-totales-line border-top pt-1 text-muted" title="Estimado según ítems de esta OC, fecha de documento y % de descuento general (datos compartidos).">
+                                <span class="wz-grupo-totales-text">—</span>
                             </div>
                         </div>
                     </div>

@@ -37,7 +37,37 @@ function limpiaFiltros(){
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Precios</h3>
-                <div class="card-tools">
+                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    <form method="get" action="{{ route('precio') }}" class="form-inline mr-2 mb-1 mb-sm-0">
+                        <label class="mr-1 mb-0 small text-white-50" for="fecha_vigencia">Vigentes al</label>
+                        <input type="date" id="fecha_vigencia" name="fecha_vigencia" value="{{ $fechaVigenciaFiltro }}" class="form-control form-control-sm mr-2" title="Fecha de vigencia de referencia">
+                        <label class="mr-1 mb-0 small text-white-50" for="listaprecio_id">Lista</label>
+                        <select id="listaprecio_id" name="listaprecio_id" class="form-control form-control-sm mr-2" title="Lista de precios">
+                            <option value="">Todas las listas</option>
+                            @foreach($listasPrecio as $lista)
+                                <option value="{{ $lista->id }}" {{ $listaprecioIdFiltro !== null && (int) $listaprecioIdFiltro === (int) $lista->id ? 'selected' : '' }}>{{ $lista->nombre }}</option>
+                            @endforeach
+                        </select>
+                        @if(!empty($filtrosParaVista['filter_column']) && is_array($filtrosParaVista['filter_column']))
+                            @foreach($filtrosParaVista['filter_column'] as $i => $fc)
+                                @if(is_array($fc))
+                                    @foreach($fc as $k => $v)
+                                        @if(is_array($v))
+                                            @foreach($v as $j => $vv)
+                                                <input type="hidden" name="filter_column[{{ $i }}][{{ $k }}][{{ $j }}]" value="{{ $vv }}">
+                                            @endforeach
+                                        @else
+                                            <input type="hidden" name="filter_column[{{ $i }}][{{ $k }}]" value="{{ $v }}">
+                                        @endif
+                                    @endforeach
+                                @endif
+                            @endforeach
+                        @endif
+                        @if(!empty($filtrosParaVista['lasturl']))
+                            <input type="hidden" name="lasturl" value="{{ $filtrosParaVista['lasturl'] }}">
+                        @endif
+                        <button type="submit" class="btn btn-light btn-sm"><i class="fa fa-search"></i></button>
+                    </form>
 					@if (session()->get('filtrosPrecios') == '')
 						<a href="javascript:void(0)" class="btn btn-outline-secondary btn-sm" id='btn_advanced_filter' data-url-parameter='' 
 							title='Filtros y b£squedas avanzadas' class="btn btn-sm btn-default ">

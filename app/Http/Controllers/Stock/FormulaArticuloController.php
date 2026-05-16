@@ -54,6 +54,10 @@ class FormulaArticuloController extends Controller
     {
         can('actualizar-formula-articulo');
 
+        if (! config('app.anita_sync_formula_articulo_index')) {
+            abort(403);
+        }
+
         if (! $request->isMethod('post')) {
             abort(405);
         }

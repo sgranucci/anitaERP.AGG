@@ -27,6 +27,31 @@ return [
     'anita_sync_articulo_index' => (bool) env('ANITA_SYNC_ARTICULO_INDEX', false),
 
     /*
+    | When true, the stock "fórmulas de artículos" index shows the button to sync formulas from Anita (ApiAnita).
+    */
+    'anita_sync_formula_articulo_index' => (bool) env('ANITA_SYNC_FORMULA_ARTICULO_INDEX', true),
+
+    /*
+    | When true, the stock "mesas gastronomía" index shows the button to sync from Anita (ApiAnita).
+    */
+    'anita_sync_mesa_gastronomia_index' => (bool) env('ANITA_SYNC_MESA_GASTRONOMIA_INDEX', true),
+
+    /*
+    | When true, the stock "descuentos gastronomía" index shows the button to sync from Anita (ApiAnita).
+    */
+    'anita_sync_descuento_gastronomia_index' => (bool) env('ANITA_SYNC_DESCUENTO_GASTRONOMIA_INDEX', true),
+
+    /*
+    | When true, the stock "mozos gastronomía" index shows the button to sync from Anita (ApiAnita).
+    */
+    'anita_sync_mozo_gastronomia_index' => (bool) env('ANITA_SYNC_MOZO_GASTRONOMIA_INDEX', true),
+
+    /*
+    | When true, opening ventas/puntoventa with lista vacía dispara sync con Anita en la misma petición HTTP.
+    */
+    'anita_sync_puntoventa_index' => (bool) env('ANITA_SYNC_PUNTOVENTA_INDEX', false),
+
+    /*
     |--------------------------------------------------------------------------
     | Application Environment
     |--------------------------------------------------------------------------

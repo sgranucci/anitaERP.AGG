@@ -4,6 +4,8 @@ namespace App\Repositories\Compras;
 
 interface Ordencompra_ArticuloRepositoryInterface
 {
+    public function createDesdeAnita(array $data);
+
     /**
      * @param  array<string, mixed>  $data
      */

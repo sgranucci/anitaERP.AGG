@@ -3,19 +3,35 @@
 namespace App\Repositories\Compras;
 
 use App\Models\Compras\Ordencompra;
+use App\Queries\Configuracion\CotizacionQueryInterface;
+use App\Support\Compras\OrdencompraTotalesCabecera;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class OrdencompraRepository implements OrdencompraRepositoryInterface
 {
-    public function __construct(private Ordencompra $model)
-    {
+    public function __construct(
+        private Ordencompra $model,
+        private CotizacionQueryInterface $cotizacionQuery,
+    ) {
     }
 
     public function create(array $data)
     {
         $data = self::limpiaPayloadCabecera($data);
         $data['numeroordencompra'] = self::siguienteNumero();
+
+        return $this->model->create($data);
+    }
+
+    /**
+     * Alta desde Anita: id secuencial (auto); numeroordencompra = penmp_nro en $data.
+     */
+    public function createDesdeAnita(array $data)
+    {
+        unset($data['id']);
 
         return $this->model->create($data);
     }
@@ -57,7 +73,48 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
         return $this->find($id);
     }
 
-    public function listadoIndex(?string $busqueda, ?int $sectorUsuarioId)
+    public function existeRegistro(): bool
+    {
+        return $this->model->query()->exists();
+    }
+
+    public function listadoIndex(?string $busqueda, ?int $sectorUsuarioId, bool $paginar = false)
+    {
+        $q = $this->queryListadoIndex($busqueda, $sectorUsuarioId);
+
+        return $paginar ? $q->paginate(10) : $q->get();
+    }
+
+    public function listadoIndexCursor(?string $busqueda, ?int $sectorUsuarioId)
+    {
+        return $this->queryListadoIndex($busqueda, $sectorUsuarioId)->cursor();
+    }
+
+    public function listadoExport(?string $busqueda, ?int $sectorUsuarioId): Collection
+    {
+        $collection = $this->queryListadoExport($busqueda, $sectorUsuarioId)
+            ->with([
+                'ordencompra_articulos.articulos',
+                'ordencompra_articulos.monedas',
+                'ordencompra_articulos.centrocostos_destino',
+                'ordencompra_articulos.partidagastos.articulos',
+                'ordencompra_articulos.capexs',
+            ])
+            ->get();
+
+        foreach ($collection as $oc) {
+            OrdencompraTotalesCabecera::aplicarAtributosVirtuales($oc, $this->cotizacionQuery);
+        }
+
+        return $collection;
+    }
+
+    public function listadoExportCursor(?string $busqueda, ?int $sectorUsuarioId)
+    {
+        return $this->queryListadoExport($busqueda, $sectorUsuarioId)->cursor();
+    }
+
+    private function queryListadoIndex(?string $busqueda, ?int $sectorUsuarioId)
     {
         $q = $this->model->query()
             ->select([
@@ -83,22 +140,93 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
             ->orderByDesc('ordencompra.fecha')
             ->orderByDesc('ordencompra.id');
 
+        $this->aplicarFiltrosListado($q, $busqueda, $sectorUsuarioId);
+
+        return $q;
+    }
+
+    private function queryListadoExport(?string $busqueda, ?int $sectorUsuarioId)
+    {
+        $select = [
+            'ordencompra.id',
+            'ordencompra.numeroordencompra',
+            'ordencompra.fecha',
+            'ordencompra.fechaentrega',
+            'ordencompra.estadoordencompra',
+            'ordencompra.requisicion_id',
+            'ordencompra.comentario',
+            'ordencompra.detalle',
+            'ordencompra.tratamiento',
+            'empresa.nombre as nombreempresa',
+            'centrocosto.codigo as codigocentrocosto',
+            'centrocosto.nombre as nombrecentrocosto',
+            'proveedor.codigo as codigoproveedor',
+            'proveedor.nombre as nombreproveedor',
+            'usuario.nombre as nombreusuario',
+            'sector_legajocompra.nombre as nombresector',
+            'condicioncompra.nombre as nombrecondicioncompra',
+            'requisicion.numerorequisicion',
+            'requisicion.motivotratamiento',
+            'requisicion.contrataciondirecta',
+        ];
+
+        if (Schema::hasColumn('requisicion', 'nroinscripcion')) {
+            $select[] = 'requisicion.nroinscripcion as nroinscripcion';
+        }
+
+        $q = $this->model->query()
+            ->select($select)
+            ->leftJoin('empresa', 'empresa.id', '=', 'ordencompra.empresa_id')
+            ->leftJoin('centrocosto', 'centrocosto.id', '=', 'ordencompra.centrocosto_id')
+            ->leftJoin('proveedor', 'proveedor.id', '=', 'ordencompra.proveedor_id')
+            ->leftJoin('usuario', 'usuario.id', '=', 'ordencompra.creousuario_id')
+            ->leftJoin('sector_legajocompra', 'sector_legajocompra.id', '=', 'ordencompra.sector_legajocompra_id')
+            ->leftJoin('condicioncompra', 'condicioncompra.id', '=', 'ordencompra.condicioncompra_id')
+            ->leftJoin('requisicion', 'requisicion.id', '=', 'ordencompra.requisicion_id')
+            ->orderByDesc('ordencompra.fecha')
+            ->orderByDesc('ordencompra.id');
+
+        $this->aplicarFiltrosListado($q, $busqueda, $sectorUsuarioId, true);
+
+        return $q;
+    }
+
+    private function aplicarFiltrosListado($q, ?string $busqueda, ?int $sectorUsuarioId, bool $export = false): void
+    {
         if ($sectorUsuarioId !== null && $sectorUsuarioId > 0) {
             $q->where('ordencompra.sector_legajocompra_id', $sectorUsuarioId);
         }
 
-        if ($busqueda !== null && $busqueda !== '') {
-            $b = '%'.str_replace(['%', '_'], ['\\%', '\\_'], $busqueda).'%';
-            $q->where(function ($w) use ($b) {
-                $w->where('ordencompra.numeroordencompra', 'like', $b)
-                    ->orWhere('ordencompra.comentario', 'like', $b)
-                    ->orWhere('ordencompra.detalle', 'like', $b)
-                    ->orWhere('proveedor.nombre', 'like', $b)
-                    ->orWhere('empresa.nombre', 'like', $b);
-            });
+        if ($busqueda === null || $busqueda === '') {
+            return;
         }
 
-        return $q->get();
+        $b = '%'.str_replace(['%', '_'], ['\\%', '\\_'], trim($busqueda)).'%';
+        $q->where(function ($w) use ($b, $export) {
+            $w->where('ordencompra.numeroordencompra', 'like', $b)
+                ->orWhere('ordencompra.comentario', 'like', $b)
+                ->orWhere('ordencompra.detalle', 'like', $b)
+                ->orWhere('ordencompra.estadoordencompra', 'like', $b)
+                ->orWhere('ordencompra.tratamiento', 'like', $b)
+                ->orWhere('proveedor.nombre', 'like', $b)
+                ->orWhere('proveedor.codigo', 'like', $b)
+                ->orWhere('empresa.nombre', 'like', $b)
+                ->orWhere('centrocosto.nombre', 'like', $b)
+                ->orWhere('centrocosto.codigo', 'like', $b)
+                ->orWhere('usuario.nombre', 'like', $b);
+
+            if ($export) {
+                $w->orWhere('sector_legajocompra.nombre', 'like', $b)
+                    ->orWhere('condicioncompra.nombre', 'like', $b)
+                    ->orWhere('requisicion.numerorequisicion', 'like', $b)
+                    ->orWhere('requisicion.motivotratamiento', 'like', $b)
+                    ->orWhere('requisicion.contrataciondirecta', 'like', $b);
+
+                if (Schema::hasColumn('requisicion', 'nroinscripcion')) {
+                    $w->orWhere('requisicion.nroinscripcion', 'like', $b);
+                }
+            }
+        });
     }
 
     public function proximoNumeroOrdencompra(): int

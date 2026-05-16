@@ -663,6 +663,12 @@ class ArticuloController extends Controller
             }
         });
 
+        $skuPrefijoRaw = $request->input('sku_prefijo');
+        $skuPrefijo = is_string($skuPrefijoRaw) ? trim($skuPrefijoRaw) : '';
+        if ($skuPrefijo !== '' && preg_match('/^[A-Za-z0-9_-]{1,24}$/', $skuPrefijo)) {
+            $query->where('articulo.sku', 'like', $skuPrefijo.'%');
+        }
+
         $query = $query->orderBy('articulo.descripcion')->limit(250)->get();
 
         $output = [];

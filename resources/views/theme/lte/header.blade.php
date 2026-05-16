@@ -32,6 +32,11 @@ use Carbon\Carbon;
             </li>
         @endguest
         @auth
+            <li class="nav-item">
+                <a href="{{ route('ayuda') }}" class="nav-link font-weight-bold" title="Centro de ayuda y manuales">
+                    <i class="fas fa-book-open"></i> Centro de ayuda
+                </a>
+            </li>
             <li class="nav-item dropdown">
                 <a href="{{route('cambia_password')}}" class="nav-link">
                     <i class="fa fa-lock"></i> Cambia password

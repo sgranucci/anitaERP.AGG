@@ -8,9 +8,15 @@
         $formapago_query->map(fn ($f) => ['id' => (int) $f->id, 'nombre' => (string) ($f->nombre ?? '')])->values()->all(),
         $ocJsonFlags
     );
+    $ocTotRef = $oc_totales_resumen ?? \App\Support\Compras\OrdencompraTotalesResumen::vacioParaVista();
+    $ocTotalesReferenciaJson = json_encode([
+        'total' => (float) ($ocTotRef['total'] ?? 0),
+        'moneda_id' => (int) ($ocTotRef['moneda_id'] ?? 1),
+    ], $ocJsonFlags);
 @endphp
 <script type="application/json" id="oc-json-monedas">{!! $ocMonedasJson !!}</script>
 <script type="application/json" id="oc-json-formapagos">{!! $ocFormapagosJson !!}</script>
+<script type="application/json" id="oc-json-totales-referencia">{!! $ocTotalesReferenciaJson !!}</script>
 
 @include('includes.stock.modalconsultaarticulo')
 @include('includes.presupuesto.modalconsultapartidagasto')

@@ -102,6 +102,7 @@ class VentaRepository implements VentaRepositoryInterface
                                 ->with('ordenventas')
                                 ->with('asientos')
                                 ->with('pedidos')
+                                ->with('cobranzas')
                                 ->find($id)) {
             throw new ModelNotFoundException("Registro no encontrado");
         }
@@ -122,6 +123,7 @@ class VentaRepository implements VentaRepositoryInterface
                                 ->with('ordenventas')                                    
                                 ->with('asientos')
                                 ->with('pedidos')
+                                ->with('cobranzas')
                                 ->findOrFail($id)) {
             throw new ModelNotFoundException("Registro no encontrado");
         }

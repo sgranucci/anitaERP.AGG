@@ -33,6 +33,11 @@ function buscar_datos_articulo(consulta) {
     if (consultaArticuloAjax && consultaArticuloAjax.readyState !== 4) {
         consultaArticuloAjax.abort();
     }
+    var postData = { consulta: consulta };
+    var prefFiltro = $('#consultaarticuloModal').data('articuloSkuPrefijoFiltro');
+    if (typeof prefFiltro === 'string' && prefFiltro.length > 0) {
+        postData.sku_prefijo = prefFiltro;
+    }
     consultaArticuloAjax = $.ajax({
         url: carpetaBase+'/stock/articulo/consultaarticulo',
         type: 'POST',
@@ -40,9 +45,7 @@ function buscar_datos_articulo(consulta) {
 	    headers: {
         	'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
     	},
-        data: {
-            consulta: consulta,
-        },
+        data: postData,
     })
     .done (function(respuesta) {
         aplicarRespuestaConsultaArticulo(respuesta);
@@ -63,6 +66,9 @@ $(document).off('keydown.ocNoEnterSubmitArticulo', 'input').on('keydown.ocNoEnte
 	if ($(this).closest('#form-ordencompra-general').length) {
 		return;
 	}
+	if ($(this).hasClass('gastro-carga-sku')) {
+		return;
+	}
 	e.preventDefault();
 	return false;
 });
@@ -71,6 +77,8 @@ function activa_eventos_consultaarticulo()
 {
     // Consulta de artículo (delegado para filas agregadas dinámicamente)
     $(document).off('click.consultaArtBtn', '.consultaarticulo').on('click.consultaArtBtn', '.consultaarticulo', function (event) {
+        var prefijoSku = ($(this).attr('data-sku-prefijo-filtro') || '').trim();
+        $('#consultaarticuloModal').data('articuloSkuPrefijoFiltro', prefijoSku);
 
         //if ($(this).parents("tr").find(".articulo_id").length > 0) {
             ptrarticulo_id = $(this).closest("tr").find(".articulo_id");
@@ -91,6 +99,10 @@ function activa_eventos_consultaarticulo()
             consultaArticuloAjax.abort();
         }
         $("#datos").html(htmlTablaConsultaArticuloMensaje('Escriba al menos ' + CONSULTA_ARTICULO_MIN_LEN + ' caracteres para buscar.'));
+    });
+
+    $('#consultaarticuloModal').off('hidden.bs.modal.consultaArtPrefijo').on('hidden.bs.modal.consultaArtPrefijo', function () {
+        $('#consultaarticuloModal').removeData('articuloSkuPrefijoFiltro');
     });
 
     $('#consultaarticuloModal').off('shown.bs.modal.consultaArt').on('shown.bs.modal.consultaArt', function () {

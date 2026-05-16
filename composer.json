@@ -7,6 +7,7 @@
     "require": {
         "php": "^8.2",
         "barryvdh/laravel-dompdf": "^3.1",
+        "chrome-php/chrome": "^1.15",
         "guzzlehttp/guzzle": "^7.2",
         "intervention/image": "^4.0",
         "intervention/image-laravel": "^4.0",
@@ -17,6 +18,7 @@
         "laravel/ui": "^4.6",
         "maatwebsite/excel": "^3.1",
         "owen-it/laravel-auditing": "^14.0",
+        "phpoffice/phpword": "^1.4",
         "predis/predis": "^3.4",
         "simplesoftwareio/simple-qrcode": "^4.2",
         "tightenco/ziggy": "^2.6"

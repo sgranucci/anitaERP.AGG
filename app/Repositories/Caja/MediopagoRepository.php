@@ -36,50 +36,32 @@ class MediopagoRepository implements MediopagoRepositoryInterface
 		if (!$hay_mediopagos)
 			self::sincronizarConAnita();
 
-        return $this->model->with('empresas')->with('cuentacajas')->orderBy('nombre','ASC')->get();
+        return $this->model->with('empresas')->with('cuentacajas')->orderBy('nombre', 'ASC')->get();
     }
 
     public function create(array $data)
     {
-        $mediopago = $this->model->create($data);
-		//
-		// Graba anita
-		self::guardarAnita($data);
+        throw new \BadMethodCallException('Los medios de pago se gestionan por sincronización con Anita.');
     }
 
     public function update(array $data, $id)
     {
-        $mediopago = $this->model->findOrFail($id)
-            ->update($data);
-		//
-		// Actualiza anita
-		self::actualizarAnita($data, $data['codigo']);
-
-		return $mediopago;
+        throw new \BadMethodCallException('Los medios de pago se gestionan por sincronización con Anita.');
     }
 
     public function delete($id)
     {
-    	$mediopago = Mediopago::find($id);
-		//
-		// Elimina anita
-		self::eliminarAnita($mediopago->codigo);
-
-        $mediopago = $this->model->destroy($id);
-
-		return $mediopago;
+        throw new \BadMethodCallException('Los medios de pago se gestionan por sincronización con Anita.');
     }
 
     public function find($id)
     {
-        return $this->model->with('empresas')
-											->with('cuentacajas')->find($id);
+        return $this->model->with('empresas')->with('cuentacajas')->find($id);
     }
 
     public function findOrFail($id)
     {
-        if (null == $mediopago = $this->model->with('empresas')
-										->with('cuentacajas')->findOrFail($id)) {
+        if (null == $mediopago = $this->model->with('empresas')->with('cuentacajas')->findOrFail($id)) {
             throw new ModelNotFoundException("Registro no encontrado");
         }
 
@@ -88,8 +70,7 @@ class MediopagoRepository implements MediopagoRepositoryInterface
 
 	public function findPorCodigo($codigo)
     {
-        return $this->model->with('empresas')
-										->with('cuentacajas')->where('codigo', $codigo)->first();
+        return $this->model->with('empresas')->with('cuentacajas')->where('codigo', $codigo)->first();
     }
 
     public function sincronizarConAnita(){

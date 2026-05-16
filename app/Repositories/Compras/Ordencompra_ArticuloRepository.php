@@ -10,6 +10,11 @@ class Ordencompra_ArticuloRepository implements Ordencompra_ArticuloRepositoryIn
     {
     }
 
+    public function createDesdeAnita(array $data)
+    {
+        return $this->model->create($data);
+    }
+
     public function syncFromRequest(array $data, int $ordencompra_id): void
     {
         if (! isset($data['articulo_ids']) || ! is_array($data['articulo_ids'])) {

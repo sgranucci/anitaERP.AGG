@@ -425,6 +425,96 @@ Route::put('stock/capacidad/{id}', 'Stock\CapacidadController@actualizar')->name
 Route::delete('stock/capacidad/{id}', 'Stock\CapacidadController@eliminar')->name('eliminar_capacidad');
 
 /*
+ * Mesas gastronomía
+ */
+
+Route::get('stock/mesa-gastronomia', 'Stock\MesaGastronomiaController@index')->name('consultar_mesa_gastronomia');
+Route::get('stock/mesa-gastronomia/crear', 'Stock\MesaGastronomiaController@crear')->name('crear_mesa_gastronomia');
+Route::post('stock/mesa-gastronomia', 'Stock\MesaGastronomiaController@guardar')->name('guardar_mesa_gastronomia');
+Route::post('stock/mesa-gastronomia/sincronizar-anita', 'Stock\MesaGastronomiaController@sincronizarDesdeAnita')->name('sincronizar_mesa_gastronomia_anita');
+Route::get('stock/mesa-gastronomia/{id}/editar', 'Stock\MesaGastronomiaController@editar')->name('editar_mesa_gastronomia');
+Route::put('stock/mesa-gastronomia/{id}', 'Stock\MesaGastronomiaController@actualizar')->name('actualizar_mesa_gastronomia');
+Route::delete('stock/mesa-gastronomia/{id}', 'Stock\MesaGastronomiaController@eliminar')->name('eliminar_mesa_gastronomia');
+
+/*
+ * Ubicaciones gastronomía
+ */
+
+Route::get('stock/ubicaciones-gastronomia', 'Stock\UbicacionGastronomiaController@index')->name('consultar_ubicaciones_gastronomia');
+Route::get('stock/ubicaciones-gastronomia/crear', 'Stock\UbicacionGastronomiaController@crear')->name('crear_ubicaciones_gastronomia');
+Route::post('stock/ubicaciones-gastronomia', 'Stock\UbicacionGastronomiaController@guardar')->name('guardar_ubicaciones_gastronomia');
+Route::get('stock/ubicaciones-gastronomia/{id}/editar', 'Stock\UbicacionGastronomiaController@editar')->name('editar_ubicaciones_gastronomia');
+Route::put('stock/ubicaciones-gastronomia/{id}', 'Stock\UbicacionGastronomiaController@actualizar')->name('actualizar_ubicaciones_gastronomia');
+Route::delete('stock/ubicaciones-gastronomia/{id}', 'Stock\UbicacionGastronomiaController@eliminar')->name('eliminar_ubicaciones_gastronomia');
+
+/*
+ * Descuentos gastronomía
+ */
+
+Route::get('stock/descuento-gastronomia', 'Stock\DescuentoGastronomiaController@index')->name('consultar_descuento_gastronomia');
+Route::get('stock/descuento-gastronomia/crear', 'Stock\DescuentoGastronomiaController@crear')->name('crear_descuento_gastronomia');
+Route::post('stock/descuento-gastronomia', 'Stock\DescuentoGastronomiaController@guardar')->name('guardar_descuento_gastronomia');
+Route::post('stock/descuento-gastronomia/sincronizar-anita', 'Stock\DescuentoGastronomiaController@sincronizarDesdeAnita')->name('sincronizar_descuento_gastronomia_anita');
+Route::get('stock/descuento-gastronomia/{id}/editar', 'Stock\DescuentoGastronomiaController@editar')->name('editar_descuento_gastronomia');
+Route::put('stock/descuento-gastronomia/{id}', 'Stock\DescuentoGastronomiaController@actualizar')->name('actualizar_descuento_gastronomia');
+Route::delete('stock/descuento-gastronomia/{id}', 'Stock\DescuentoGastronomiaController@eliminar')->name('eliminar_descuento_gastronomia');
+
+/*
+ * Mozos gastronomía
+ */
+
+Route::get('stock/mozo-gastronomia', 'Stock\MozoGastronomiaController@index')->name('consultar_mozo_gastronomia');
+Route::get('stock/mozo-gastronomia/crear', 'Stock\MozoGastronomiaController@crear')->name('crear_mozo_gastronomia');
+Route::post('stock/mozo-gastronomia', 'Stock\MozoGastronomiaController@guardar')->name('guardar_mozo_gastronomia');
+Route::post('stock/mozo-gastronomia/sincronizar-anita', 'Stock\MozoGastronomiaController@sincronizarDesdeAnita')->name('sincronizar_mozo_gastronomia_anita');
+Route::get('stock/mozo-gastronomia/{id}/editar', 'Stock\MozoGastronomiaController@editar')->name('editar_mozo_gastronomia');
+Route::put('stock/mozo-gastronomia/{id}', 'Stock\MozoGastronomiaController@actualizar')->name('actualizar_mozo_gastronomia');
+Route::delete('stock/mozo-gastronomia/{id}', 'Stock\MozoGastronomiaController@eliminar')->name('eliminar_mozo_gastronomia');
+
+/*
+ * Configuración punto de venta gastronomía
+ */
+
+Route::get('stock/configuracion-puntoventa-gastronomia', 'Stock\ConfiguracionPuntoventaGastronomiaController@index')->name('consultar_configuracion_puntoventa_gastronomia');
+Route::get('stock/configuracion-puntoventa-gastronomia/crear', 'Stock\ConfiguracionPuntoventaGastronomiaController@crear')->name('crear_configuracion_puntoventa_gastronomia');
+Route::post('stock/configuracion-puntoventa-gastronomia', 'Stock\ConfiguracionPuntoventaGastronomiaController@guardar')->name('guardar_configuracion_puntoventa_gastronomia');
+Route::get('stock/configuracion-puntoventa-gastronomia/{id}/editar', 'Stock\ConfiguracionPuntoventaGastronomiaController@editar')->name('editar_configuracion_puntoventa_gastronomia');
+Route::put('stock/configuracion-puntoventa-gastronomia/{id}', 'Stock\ConfiguracionPuntoventaGastronomiaController@actualizar')->name('actualizar_configuracion_puntoventa_gastronomia');
+Route::delete('stock/configuracion-puntoventa-gastronomia/{id}', 'Stock\ConfiguracionPuntoventaGastronomiaController@eliminar')->name('eliminar_configuracion_puntoventa_gastronomia');
+
+/*
+ * Gastronomía — proceso facturación y consulta del día
+ */
+
+Route::get('stock/gastronomia/proceso-facturacion', 'Stock\GastronomiaProcesoFacturacionController@index')->name('gastronomia_proceso_facturacion');
+
+Route::get('stock/gastronomia/api/config', 'Stock\GastronomiaProcesoFacturacionController@apiConfig')->name('gastronomia_api_config');
+Route::get('stock/gastronomia/api/mesas', 'Stock\GastronomiaProcesoFacturacionController@apiMesas')->name('gastronomia_api_mesas');
+Route::get('stock/gastronomia/api/cuentas-activas', 'Stock\GastronomiaProcesoFacturacionController@apiCuentasActivas')->name('gastronomia_api_cuentas_activas');
+Route::get('stock/gastronomia/api/cuenta/{id}', 'Stock\GastronomiaProcesoFacturacionController@apiCuentaVer')->name('gastronomia_api_cuenta_ver');
+Route::post('stock/gastronomia/api/abrir-mesa', 'Stock\GastronomiaProcesoFacturacionController@apiAbrirMesa')->name('gastronomia_api_abrir_mesa');
+Route::post('stock/gastronomia/api/abrir-cuenta', 'Stock\GastronomiaProcesoFacturacionController@apiAbrirCuenta')->name('gastronomia_api_abrir_cuenta');
+Route::patch('stock/gastronomia/api/cuenta/{id}', 'Stock\GastronomiaProcesoFacturacionController@apiActualizarCuenta')->name('gastronomia_api_actualizar_cuenta');
+Route::post('stock/gastronomia/api/cuenta/{id}/linea', 'Stock\GastronomiaProcesoFacturacionController@apiAgregarLinea')->name('gastronomia_api_agregar_linea');
+Route::delete('stock/gastronomia/api/cuenta/{cuentaId}/linea/{lineaId}', 'Stock\GastronomiaProcesoFacturacionController@apiEliminarLinea')->name('gastronomia_api_eliminar_linea');
+Route::patch('stock/gastronomia/api/cuenta/{cuentaId}/linea/{lineaId}', 'Stock\GastronomiaProcesoFacturacionController@apiActualizarCantidadLinea')->name('gastronomia_api_actualizar_cantidad_linea');
+Route::get('stock/gastronomia/api/articulo-catalogo-por-sku', 'Stock\GastronomiaProcesoFacturacionController@apiArticuloCatalogoPorSku')->name('gastronomia_api_articulo_catalogo_por_sku');
+Route::post('stock/gastronomia/api/cuenta/{id}/cerrar', 'Stock\GastronomiaProcesoFacturacionController@apiCerrarCuenta')->name('gastronomia_api_cerrar_cuenta');
+Route::get('stock/gastronomia/api/articulos-catalogo', 'Stock\GastronomiaProcesoFacturacionController@apiArticulosCatalogo')->name('gastronomia_api_articulos_catalogo');
+Route::get('stock/gastronomia/api/opcionales-articulo/{articuloId}', 'Stock\GastronomiaProcesoFacturacionController@apiOpcionalesArticulo')->name('gastronomia_api_opcionales_articulo');
+Route::get('stock/gastronomia/api/mozos', 'Stock\GastronomiaProcesoFacturacionController@apiMozos')->name('gastronomia_api_mozos');
+Route::get('stock/gastronomia/api/descuentos-gastronomia', 'Stock\GastronomiaProcesoFacturacionController@apiDescuentos')->name('gastronomia_api_descuentos');
+Route::get('stock/gastronomia/api/monedas', 'Stock\GastronomiaProcesoFacturacionController@apiMonedas')->name('gastronomia_api_monedas');
+Route::get('stock/gastronomia/api/usos-cuentacaja', 'Stock\GastronomiaProcesoFacturacionController@apiUsosCuentacaja')->name('gastronomia_api_usos_cuentacaja');
+Route::get('stock/gastronomia/api/cuentas-caja', 'Stock\GastronomiaProcesoFacturacionController@apiCuentasCaja')->name('gastronomia_api_cuentas_caja');
+Route::get('stock/gastronomia/api/cotizacion', 'Stock\GastronomiaProcesoFacturacionController@apiCotizacion')->name('gastronomia_api_cotizacion');
+Route::post('stock/gastronomia/api/emitir-factura', 'Stock\GastronomiaProcesoFacturacionController@apiEmitirFactura')->name('gastronomia_api_emitir_factura');
+
+Route::get('stock/gastronomia/facturas-dia', 'Stock\GastronomiaFacturasDiaController@index')->name('gastronomia_facturas_dia');
+Route::get('stock/lista-gastronomia-facturas-dia/{formato}', 'Stock\GastronomiaFacturasDiaController@exportar')->name('listar_gastronomia_facturas_dia');
+Route::get('stock/gastronomia/facturas-dia/{ventaId}/ver', 'Stock\GastronomiaFacturasDiaController@ver')->name('gastronomia_facturas_dia_ver');
+
+/*
  * Tipo líquido de freno
  */
 
@@ -1047,6 +1137,7 @@ Route::delete('ventas/tipotransaccion/{id}', 'Ventas\TipotransaccionController@e
  */
 
 Route::get('ventas/puntoventa', 'Ventas\PuntoventaController@index')->name('puntoventa');
+Route::post('ventas/puntoventa/sincronizar-anita', 'Ventas\PuntoventaController@sincronizarDesdeAnita')->name('sincronizar_puntoventa_anita');
 Route::get('ventas/puntoventa/crear', 'Ventas\PuntoventaController@crear')->name('crear_puntoventa');
 Route::post('ventas/puntoventa', 'Ventas\PuntoventaController@guardar')->name('guardar_puntoventa');
 Route::get('ventas/puntoventa/{id}/editar', 'Ventas\PuntoventaController@editar')->name('editar_puntoventa');
@@ -1365,15 +1456,14 @@ Route::put('caja/tipocuentacaja/{id}', 'Caja\TipocuentacajaController@actualizar
 Route::delete('caja/tipocuentacaja/{id}', 'Caja\TipocuentacajaController@eliminar')->name('eliminar_tipocuentacaja');
 
 /*
- * Medio de pago
+ * Uso de medio de pago
  */
-
-Route::get('caja/mediopago', 'Caja\MediopagoController@index')->name('mediopago');
-Route::get('caja/mediopago/crear', 'Caja\MediopagoController@crear')->name('crear_mediopago');
-Route::post('caja/mediopago', 'Caja\MediopagoController@guardar')->name('guardar_mediopago');
-Route::get('caja/mediopago/{id}/editar', 'Caja\MediopagoController@editar')->name('editar_mediopago');
-Route::put('caja/mediopago/{id}', 'Caja\MediopagoController@actualizar')->name('actualizar_mediopago');
-Route::delete('caja/mediopago/{id}', 'Caja\MediopagoController@eliminar')->name('eliminar_mediopago');
+Route::get('caja/usocuentacaja', 'Caja\UsocuentacajaController@index')->name('consultar_usocuentacaja');
+Route::get('caja/usocuentacaja/crear', 'Caja\UsocuentacajaController@crear')->name('crear_usocuentacaja');
+Route::post('caja/usocuentacaja', 'Caja\UsocuentacajaController@guardar')->name('guardar_usocuentacaja');
+Route::get('caja/usocuentacaja/{id}/editar', 'Caja\UsocuentacajaController@editar')->name('editar_usocuentacaja');
+Route::put('caja/usocuentacaja/{id}', 'Caja\UsocuentacajaController@actualizar')->name('actualizar_usocuentacaja');
+Route::delete('caja/usocuentacaja/{id}', 'Caja\UsocuentacajaController@eliminar')->name('eliminar_usocuentacaja');
 
 /*
  * Voucher
@@ -1770,6 +1860,18 @@ Route::post('compras/ordencompra/{id}/reactivar', 'Compras\OrdencompraController
 Route::post('compras/ordencompra/{id}/cambiar-sector', 'Compras\OrdencompraController@cambiarSector')->name('ordencompra_cambiar_sector');
 Route::get('compras/ordencompra/soloconsulta/{id}', 'Compras\OrdencompraController@soloConsulta')->name('solo_consulta_ordencompra');
 Route::get('compras/ordencompra/visualizar/{id}/{hash}', 'Compras\OrdencompraController@visualizar')->name('visualizar_ordencompra');
+
+/*
+ * Centro de ayuda (manuales por módulo)
+ */
+Route::get('ayuda', 'AyudaController@index')->name('ayuda');
+
+/*
+ * Manual de usuario — Módulo Compras
+ */
+Route::get('compras/manual', 'Compras\ManualComprasController@index')->name('manual_compras');
+Route::get('compras/manual/descargar-pdf', 'Compras\ManualComprasController@descargarPdf')->name('manual_compras_pdf');
+Route::get('compras/manual/descargar-word', 'Compras\ManualComprasController@descargarWord')->name('manual_compras_word');
 
 /* Modulo receptivo */
 

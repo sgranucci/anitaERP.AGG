@@ -58,8 +58,12 @@ $(document).ready(function () {
         @include('includes.mensaje')
         @if (! empty($sinFormulasCargadas ?? false))
         <div class="alert alert-info">
+            @if (config('app.anita_sync_formula_articulo_index'))
             No hay f&oacute;rmulas en el ERP. Para importar desde Anita use el bot&oacute;n <strong>Sincronizar desde Anita</strong> (puede tardar varios minutos) o, si el navegador devuelve tiempo de espera agotado (504), ejecute en el servidor:
             <code>php artisan formula-articulo:sincronizar-anita</code>
+            @else
+            No hay f&oacute;rmulas en el ERP. Cree registros con <strong>Nuevo registro</strong> o cargue los datos seg&uacute;n el procedimiento definido para esta instalaci&oacute;n.
+            @endif
         </div>
         @endif
         <div class="card card-info">
@@ -71,7 +75,7 @@ $(document).ready(function () {
                         <i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
                     </a>
                     @endif
-                    @if (can('actualizar-formula-articulo', false))
+                    @if (config('app.anita_sync_formula_articulo_index') && can('actualizar-formula-articulo', false))
                     <form action="{{ route('sincronizar_formula_articulo_anita') }}" method="POST" class="d-inline" onsubmit="return confirm('La sincronizaci\u00f3n puede tardar muchos minutos. Si aparece error 504 (tiempo de espera), ejecute en el servidor:\nphp artisan formula-articulo:sincronizar-anita\n\n\u00bfContinuar?');">
                         @csrf
                         <button type="submit" class="btn btn-outline-primary btn-sm" title="Importar stkcmae y stkcmov desde Anita (ApiAnita)">

@@ -107,6 +107,7 @@ $(function () {
             <div class="card-header">
                 <h3 class="card-title">Órdenes de compra</h3>
                 <div class="card-tools">
+                    @include('includes.compras.boton-manual')
                     @if (can('crear-ordencompra', false))
                         <a href="{{ route('crear_ordencompra') }}" class="btn btn-outline-secondary btn-sm">
                             <i class="fa fa-fw fa-plus-circle"></i> Nueva orden
@@ -212,6 +213,11 @@ $(function () {
                     </tbody>
                 </table>
             </div>
+            @if (method_exists($ordencompra, 'links'))
+            <div class="card-footer">
+                {{ $ordencompra->appends(request()->query())->links() }}
+            </div>
+            @endif
         </div>
     </div>
 </div>

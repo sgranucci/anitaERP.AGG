@@ -1426,7 +1426,7 @@ class Articulo extends Model implements Auditable
                 break;
 
             case 'AGG':
-                $tipoarticulo = TipoArticulo::find($request->tipoarticulo_id);
+                $tipoarticulo = Tipoarticulo::find($request->tipoarticulo_id);
 
                 if ($tipoarticulo) {
                     $abreviaturaTipoArticulo = $tipoarticulo->abreviatura;
@@ -1575,7 +1575,7 @@ class Articulo extends Model implements Auditable
                 break;
 
             case 'FRASLE':
-                $tipoarticulo = TipoArticulo::find($request->tipoarticulo_id);
+                $tipoarticulo = Tipoarticulo::find($request->tipoarticulo_id);
 
                 if ($tipoarticulo) {
                     $abreviaturaTipoArticulo = $tipoarticulo->abreviatura;
@@ -1986,7 +1986,7 @@ class Articulo extends Model implements Auditable
                     break;
 
                 case 'AGG':
-                    $tipoarticulo = TipoArticulo::find($request->tipoarticulo_id);
+                    $tipoarticulo = Tipoarticulo::find($request->tipoarticulo_id);
 
                     if ($tipoarticulo) {
                         $abreviaturaTipoArticulo = $tipoarticulo->abreviatura;
@@ -2071,7 +2071,7 @@ class Articulo extends Model implements Auditable
                     break;
 
                 case 'FRASLE':
-                    $tipoarticulo = TipoArticulo::find($request->tipoarticulo_id);
+                    $tipoarticulo = Tipoarticulo::find($request->tipoarticulo_id);
 
                     if ($tipoarticulo) {
                         $abreviaturaTipoArticulo = $tipoarticulo->abreviatura;
