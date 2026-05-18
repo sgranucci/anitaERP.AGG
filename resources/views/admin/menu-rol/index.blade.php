@@ -7,27 +7,38 @@ Menú - Rol
 <script src="{{asset("assets/pages/scripts/admin/menu-rol/index.js")}}" type="text/javascript"></script>
 <script src="https://unpkg.com/sticky-table-headers"></script>
 <script>
-    $('table').stickyTableHeaders();
+    $('#tabla-data').stickyTableHeaders();
 </script>
 @endsection
 
 @section('contenido')
+<div id="menu-rol-page"
+    data-permisos-url="{{ route('menu_rol_permisos') }}"
+    data-guardar-menu-rol-url="{{ route('guardar_menu_rol') }}"
+    data-guardar-permiso-rol-url="{{ route('guardar_permiso_rol') }}"
+    data-centrocosto="{{ e(request('centrocosto', '')) }}">
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
         <div class="card card-success">
             <div class="card-header">
-                <h3 class="card-title">Menús - Rol</h3>
+                <h3 class="card-title">Menús y permisos por rol</h3>
                 <div class="d-md-flex justify-content-md-end">
 					<form action="{{ route('menu_rol') }}" method="GET">
 						<div class="btn-group">
-							<input type="text" name="centrocosto" class="form-control" placeholder="Filtra C.Costo ..."> 
+							<input type="text" name="centrocosto" class="form-control" placeholder="Filtra C.Costo (código o nombre)…" value="{{ old('centrocosto', request('centrocosto')) }}">
 							<button type="submit" class="btn btn-default">
 								<span class="fa fa-search"></span>
 							</button>
 						</div>
 					</form>
                 </div>
+            </div>
+            <div class="card-body pb-0">
+                <p class="text-muted small mb-2">
+                    Use el ícono <i class="fa fa-key"></i> junto a cada menú para abrir los permisos vinculados a esa opción.
+                    Las columnas de roles respetan el filtro por centro de costo (si no filtra, se listan todos los roles).
+                </p>
             </div>
             <div class="card-body table-responsive p-0">
                 @csrf
@@ -45,67 +56,45 @@ Menú - Rol
                         @if ($menu["menu_id"] != 0)
                             @break
                         @endif
-                            <tr>
-                                <td class="font-weight-bold"><i class="fa fa-arrows-alt"></i> {{$menu["nombre"]}}</td>
-                                @foreach($rols as $id => $nombre)
-                                    <td class="text-center">
-                                        <input
-                                        type="checkbox"
-                                        class="menu_rol"
-                                        name="menu_rol[]"
-                                        data-menuid={{$menu[ "id"]}}
-                                        value="{{$id}}" {{in_array($id, array_column($menusRols[$menu["id"]], "id"))? "checked" : ""}}>
-                                    </td>
-                                @endforeach
-                            </tr>
-                            @foreach($menu["submenu"] as $key => $hijo)
-                                <tr>
-                                    <td class="pl-40"><i class="fa fa-arrow-right"></i> {{ $hijo["nombre"] }}</td>
-                                    @foreach($rols as $id => $nombre)
-                                        <td class="text-center">
-                                            <input
-                                            type="checkbox"
-                                            class="menu_rol"
-                                            name="menu_rol[]"
-                                            data-menuid={{$hijo[ "id"]}}
-                                            value="{{$id}}" {{in_array($id, array_column($menusRols[$hijo["id"]], "id"))? "checked" : ""}}>
-                                        </td>
-                                    @endforeach
-                                </tr>
-                                @foreach ($hijo["submenu"] as $key => $hijo2)
-                                    <tr>
-                                        <td class="pl-30"><i class="fa fa-arrow-right"></i> {{$hijo2["nombre"]}}</td>
-                                        @foreach($rols as $id => $nombre)
-                                            <td class="text-center">
-                                                <input
-                                                type="checkbox"
-                                                class="menu_rol"
-                                                name="menu_rol[]"
-                                                data-menuid={{$hijo2[ "id"]}}
-                                                value="{{$id}}" {{in_array($id, array_column($menusRols[$hijo2["id"]], "id"))? "checked" : ""}}>
-                                            </td>
-                                        @endforeach
-                                    </tr>
-                                    @foreach ($hijo2["submenu"] as $key => $hijo3)
-                                        <tr>
-                                            <td class="pl-40"><i class="fa fa-arrow-right"></i> {{$hijo3["nombre"]}}</td>
-                                            @foreach($rols as $id => $nombre)
-                                            <td class="text-center">
-                                                <input
-                                                type="checkbox"
-                                                class="menu_rol"
-                                                name="menu_rol[]"
-                                                data-menuid={{$hijo3[ "id"]}}
-                                                value="{{$id}}" {{in_array($id, array_column($menusRols[$hijo3["id"]], "id"))? "checked" : ""}}>
-                                            </td>
-                                            @endforeach
-                                        </tr>
-                                    @endforeach
-                                @endforeach
-                            @endforeach
+                            @include('admin.menu-rol.partials.fila-menu', [
+                                'item' => $menu,
+                                'rols' => $rols,
+                                'menusRols' => $menusRols,
+                                'nivel' => 0,
+                            ])
                         @endforeach
-                    </tbodys=>
+                    </tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+
+<div class="modal fade" id="modalPermisosMenu" tabindex="-1" role="dialog" aria-labelledby="modalPermisosMenuLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalPermisosMenuLabel">Permisos del menú</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="modalPermisosMenuCargando" class="text-center p-4 text-muted" style="display: none;">
+                    Cargando permisos…
+                </div>
+                <div id="modalPermisosMenuError" class="alert alert-danger" style="display: none;"></div>
+                <div id="modalPermisosMenuContenedor" class="table-responsive"></div>
+                <div id="modalPermisosMenuSinRoles" class="alert alert-warning" style="display: none;">
+                    No hay roles que coincidan con el filtro de centro de costo. Ajuste el filtro y vuelva a intentar.
+                </div>
+                <div id="modalPermisosMenuVacio" class="alert alert-info" style="display: none;">
+                    No hay permisos asociados a este ítem de menú (<code>menu_id</code> en la tabla permiso).
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
             </div>
         </div>
     </div>
