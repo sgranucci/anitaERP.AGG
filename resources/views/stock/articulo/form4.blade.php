@@ -16,7 +16,8 @@
                 </div>
 				<div class="form-group row">
     				<label for="nofactura" class="col-lg-4 col-form-label requerido">Facturable</label>
-					<select id="nofactura" name="nofactura" class="col-lg-8 form-control">
+					<div class="col-lg-8">
+					<select id="nofactura" name="nofactura" class="form-control">
                         <option value="">-- Seleccionar --</option>
                         @foreach($nofactura_enum as $key => $value)
                             @if( isset($producto) && (int) $value['id'] == (int) old('nofactura', $producto->nofactura ?? ''))
@@ -26,12 +27,14 @@
                             @endif
                         @endforeach
                     </select>
+                    </div>
               	</div>				
             </div>
             <div class="col-sm-6">
 				<div class="form-group row">
     				<label for="impuesto_id" class="col-lg-4 col-form-label requerido">Impuesto aplicado</label>
-					<select id="impuesto_id" name="impuesto_id" class="col-lg-8 form-control">
+					<div class="col-lg-8">
+					<select id="impuesto_id" name="impuesto_id" class="form-control">
                         <option value="">-- Seleccionar --</option>
                         @foreach($codimp as $key => $value)
                             @if( isset($producto) && (int) $value->id == (int) old('impuesto_id', $producto->impuesto_id ?? ''))
@@ -41,6 +44,7 @@
                             @endif
                         @endforeach
                     </select>
+                    </div>
               	</div>
                 @if (strtoupper(config('app.empresa')) == 'CALZADOS FERLI S.A.')
                     <div class="form-group row">

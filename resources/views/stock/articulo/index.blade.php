@@ -9,6 +9,7 @@ Art&iacute;culos
 <script src="{{asset("assets/pages/scripts/configuracion/salida.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/configuracion/configurar_salida.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/configuracion/configurar_modeloetiqueta.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/stock/articulo/consulta-precios.js")}}" type="text/javascript"></script>
 
 <script>
 
@@ -128,6 +129,16 @@ function limpiaFiltros(){
                                 </td>
                                 <td>{{ $articulo->estado }}</td>
                             <td>
+                       			@if (can('listar-precios', false) || can('listar-articulos', false))
+                                	<button type="button"
+                                	    class="btn-accion-tabla consultapreciosarticulo tooltipsC"
+                                	    title="Consultar precios en listas de venta"
+                                	    data-articulo-id="{{ $articulo->id }}"
+                                	    data-articulo-sku="{{ $articulo->codigoarticulo ?? $articulo->sku ?? '' }}"
+                                	    data-articulo-descripcion="{{ $articulo->descripcion ?? '' }}">
+                                        <i class="fas fa-dollar-sign text-success"></i>
+                                	</button>
+								@endif
                        			@if (can('editar-articulos', false))
                                 	<a href="{{route('editar_articulo', ['id' => $articulo->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                         <i class="fa fa-edit"></i>
@@ -156,4 +167,5 @@ function limpiaFiltros(){
     </div>
 </div>
 {{ $articulos->appends(['busqueda' => $busqueda])->links() }}
+@include('includes.stock.modalconsultaprecioarticulo')
 @endsection

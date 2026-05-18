@@ -4,6 +4,13 @@ Nueva f&oacute;rmula de art&iacute;culo
 @endsection
 
 @section("scripts")
+<script>
+window.formulaArticuloSubformulaConsulta = {
+    urlFormulaBase: @json(rtrim(config('app.app_carpeta'), '/') . '/stock/formula-articulo'),
+    urlArticuloBase: @json(rtrim(config('app.app_carpeta'), '/') . '/stock/articulo'),
+    urlCostosUltimaCompra: @json(route('costos_ultima_compra_formula_articulo'))
+};
+</script>
 <script src="{{ asset('assets/pages/scripts/admin/crear.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/formula_articulo/formulario.js') }}" type="text/javascript"></script>
@@ -55,4 +62,5 @@ Nueva f&oacute;rmula de art&iacute;culo
 </div>
 @include('includes.stock.modalconsultaarticulo')
 @include('includes.stock.modalconsultaformula')
+@include('stock.formula_articulo.partials.modal_ver_formula_articulo')
 @endsection

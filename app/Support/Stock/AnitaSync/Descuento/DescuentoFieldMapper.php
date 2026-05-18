@@ -2,7 +2,8 @@
 
 namespace App\Support\Stock\AnitaSync\Descuento;
 
-use App\Models\Stock\DescuentoGastronomia;
+use App\Models\Ventas\DescuentoGastronomia;
+use App\Models\Ventas\Cliente;
 
 /**
  * Mapeo campo a campo: descuento (Anita) → descuento_gastronomia (ERP).
@@ -48,6 +49,26 @@ final class DescuentoFieldMapper
         return (float) ($row->dto_valor ?? 0);
     }
 
+    public static function mapClienteId(object $row): ?int
+    {
+        $codigoAnita = trim((string) ($row->dto_cliente ?? ''));
+        if ($codigoAnita === '' || $codigoAnita === '0') {
+            return null;
+        }
+
+        $codigo = ltrim($codigoAnita, '0');
+        if ($codigo === '') {
+            return null;
+        }
+
+        $cliente = Cliente::query()
+            ->where('codigo', $codigo)
+            ->orWhere('codigo', $codigoAnita)
+            ->first();
+
+        return $cliente ? (int) $cliente->id : null;
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -58,6 +79,7 @@ final class DescuentoFieldMapper
             'nombre' => self::mapNombre($row),
             'tipovalor' => self::mapTipovalor($row),
             'valor' => self::mapValor($row),
+            'cliente_id' => self::mapClienteId($row),
         ];
     }
 }

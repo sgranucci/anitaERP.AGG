@@ -49,6 +49,8 @@ class ImpuestoService extends FacturacionService
 		if (!isset($flGrabaComprobanteDividido))
 			$flGrabaComprobanteDividido = false;
 
+		$omitirPercepciones = ! empty($dataCliente['omitir_percepciones']);
+
 		// Asigna datos cliente
 		$nroInscripcion = $dataCliente['numerodocumento'];
 		$retieneIva = $dataCliente['retieneiva'];
@@ -103,16 +105,17 @@ class ImpuestoService extends FacturacionService
 			$totalBrutoAuxiliar += ($item['cantidad'] * $item['precio']);
 
 		// Calcula las tasas de percepcion para agregar a la tasa de detraccion
-        if (env('ANITA_AGENTE_PERCEPCION_IVA') == 'si' && $retieneIva != 'S' && config('facturacion.USA_DETRACCION') == 'S')
+        if (! $omitirPercepciones && env('ANITA_AGENTE_PERCEPCION_IVA') == 'si' && $retieneIva != 'S' && config('facturacion.USA_DETRACCION') == 'S')
 			$tasaDetraccion += env('ANITA_TASA_PERCEPCION_IVA');
 
-		// Agrega impuestos provinciales
+		// Agrega impuestos provinciales (también en tasa de detracción si aplica)
 		$percepcionesIIBB = [];
-		if (!$flGrabaComprobanteDividido)
-			$percepcionesIIBB = $this->IIBBService->calculaPercepcionIIBB($totalBrutoAuxiliar, $nroInscripcion, 
-																		$condicioniibb_id, $provincia, $cm05, $fechaFactura);
+		if (! $omitirPercepciones && ! $flGrabaComprobanteDividido) {
+			$percepcionesIIBB = $this->IIBBService->calculaPercepcionIIBB($totalBrutoAuxiliar, $nroInscripcion,
+				$condicioniibb_id, $provincia, $cm05, $fechaFactura);
+		}
 
-		if (config('facturacion.USA_DETRACCION') == 'S')
+		if (config('facturacion.USA_DETRACCION') == 'S' && ! $omitirPercepciones)
 		{
 			foreach ($percepcionesIIBB as $percepcion)
 				$tasaDetraccion += $percepcion['tasa'];
@@ -264,7 +267,7 @@ class ImpuestoService extends FacturacionService
 		}
 
 		// Agrega percepcion de iva si es agente de percepcion y el cliente no lo es
-        if (env('ANITA_AGENTE_PERCEPCION_IVA') == 'si' && $retieneIva != 'S' && !$flGrabaComprobanteDividido)
+        if (! $omitirPercepciones && env('ANITA_AGENTE_PERCEPCION_IVA') == 'si' && $retieneIva != 'S' && !$flGrabaComprobanteDividido)
 		{
 			$importeNeto = $importePercepcion = 0.;
 			for ($i = 0; $i < count($netos); $i++)
@@ -288,7 +291,7 @@ class ImpuestoService extends FacturacionService
 
 		// Agrega impuestos provinciales
 		$percepcionesIIBB = [];
-		if (!$flGrabaComprobanteDividido)
+		if (! $omitirPercepciones && ! $flGrabaComprobanteDividido)
 		{
 			$importeNeto = 0.;
 			for ($i = 0; $i < count($netos); $i++)
@@ -331,6 +334,8 @@ class ImpuestoService extends FacturacionService
 
 			self::agregaItemTotales($detalle, 0, -$descuentoImportePie, 0, 0, 0, $conceptosTotales);
 		}
+
+		$totalFinal = round($totalFinal, 2);
 
 		$conceptosTotales[] = ["concepto"=>"Total",
 								"tasa"=>0,

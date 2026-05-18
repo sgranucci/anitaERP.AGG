@@ -56,6 +56,10 @@ class ValidacionConfiguracionPuntoventaGastronomia extends FormRequest
             'salida_comanda_id' => 'required|exists:salida,id',
             'salida_factura_id' => 'required|exists:salida,id',
             'listaprecio_id' => 'required|exists:listaprecio,id',
+            'deposito_venta_id' => 'required|exists:depmae,id',
+            'deposito_insumos_id' => 'required|exists:depmae,id',
+            'tipotransaccion_id' => 'required|exists:tipotransaccion,id',
+            'tipotransaccion_caja_id' => 'required|exists:tipotransaccion_caja,id',
         ];
     }
 
@@ -69,6 +73,10 @@ class ValidacionConfiguracionPuntoventaGastronomia extends FormRequest
             'salida_comanda_id' => 'salida de comandas',
             'salida_factura_id' => 'salida de facturas',
             'listaprecio_id' => 'lista de precios',
+            'deposito_venta_id' => 'depósito de artículos facturados',
+            'deposito_insumos_id' => 'depósito de descuento de insumos',
+            'tipotransaccion_id' => 'tipo de transacción (factura)',
+            'tipotransaccion_caja_id' => 'tipo de transacción de caja (cobranza)',
         ];
     }
 }

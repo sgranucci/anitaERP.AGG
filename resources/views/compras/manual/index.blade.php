@@ -51,31 +51,11 @@
                 </div>
             </section>
 
-            @php
-                $capturas = config('manual_compras.capturas', []);
-                $capturaPorSeccion = collect($capturas)->keyBy('seccion');
-            @endphp
-
             @foreach ($meta['secciones'] as $i => $sec)
                 <article id="cap-{{ $i }}" class="mc-chapter">
                     <h2>{{ $sec['titulo'] }}</h2>
 
-                    @php $cap = $capturaPorSeccion->get($sec['titulo']); @endphp
-                    @if ($cap)
-                        @php
-                            $baseName = preg_replace('/\.(svg|png)$/i', '', $cap['archivo']);
-                            $imgDir = public_path('docs/manual-compras/img');
-                            $imgFile = is_file($imgDir . '/' . $baseName . '.png')
-                                ? $baseName . '.png'
-                                : (is_file($imgDir . '/' . $baseName . '.svg') ? $baseName . '.svg' : null);
-                        @endphp
-                        @if ($imgFile)
-                        <figure class="mc-figure">
-                            <img src="{{ asset('docs/manual-compras/img/' . $imgFile) }}" alt="{{ $cap['titulo'] }}" loading="lazy">
-                            <figcaption>{{ $cap['titulo'] }}</figcaption>
-                        </figure>
-                        @endif
-                    @endif
+                    @include('compras.manual.partials.capturas-seccion', ['sec' => $sec])
 
                     @foreach ($sec['parrafos'] ?? [] as $p)
                         <p>{{ $p }}</p>
@@ -88,6 +68,8 @@
                             @endforeach
                         </ul>
                     @endif
+
+                    @include('compras.manual.partials.herramientas-seccion', ['sec' => $sec])
 
                     @if (!empty($sec['tabla']))
                         @if (!empty($sec['tabla']['caption']))

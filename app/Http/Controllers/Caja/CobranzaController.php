@@ -213,11 +213,19 @@ class CobranzaController extends Controller
      */
     public function editar($id, $origen = null)
     {
+        if (!isset($origen)) {
+            $origen = 'cobranza';
+        }
+
+        // Cobranza POS gastronomía: sin comprobantes de cuenta corriente; solo consulta.
+        if ($origen === 'gastronomia') {
+            can('listar-cobranza');
+
+            return redirect()->route('listar_una_cobranza', ['id' => $id]);
+        }
+
         can('editar-cobranza');
 
-        if (!isset($origen))
-            $origen = 'cobranza';
-        
         $data = $this->cobranzaRepository->find($id);
 
         $tipotransaccion_caja_query = $this->tipotransaccion_cajaRepository->all();

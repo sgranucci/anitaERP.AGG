@@ -34,8 +34,10 @@
         <div class="form-group row">
             <label for="codigo" class="col-lg-3 col-form-label">C&oacute;digo f&oacute;rmula</label>
             <div class="col-lg-9">
-                <input type="text" name="codigo" id="codigo" class="form-control" maxlength="50" value="{{ old('codigo', $data->codigo ?? '') }}" placeholder="N&uacute;mero de f&oacute;rmula en Anita (stkcm_formula)" />
+                <input type="text" name="codigo" id="codigo" class="form-control" maxlength="50" value="{{ old('codigo', $data->codigo ?? '') }}" placeholder="{{ $esEdicion ? 'Código de fórmula' : 'Número de fórmula en Anita (stkcm_formula)' }}" />
+                @if (! $esEdicion)
                 <small class="text-muted">Opcional. Si sincroniza desde Anita, se guarda el valor de <code>stkcm_formula</code>.</small>
+                @endif
             </div>
         </div>
         <div class="form-group row">
@@ -60,6 +62,9 @@
         </div>
 
         <h5 class="mb-3">&Iacute;tems de la f&oacute;rmula</h5>
+        @if (! empty($costoTotal ?? null))
+            @include('stock.formula_articulo.partials.costo_total_resumen', ['costoTotal' => $costoTotal])
+        @endif
         <style>
             /* Misma altura en cada celda: inputs, selects, input-group y botones */
             #tabla-formula-hijos tbody tr.fila-formula-hijo > td { vertical-align: middle; }
@@ -101,6 +106,21 @@
                 flex: 1 1 0%;
                 min-width: 0;
             }
+            #tabla-formula-hijos .js-sku-link-articulo-linea.text-primary {
+                font-weight: 500;
+                text-decoration: none;
+            }
+            #tabla-formula-hijos .js-sku-link-articulo-linea.text-primary:hover {
+                text-decoration: underline;
+            }
+            #tabla-formula-hijos .js-sku-link-articulo-linea.sin-articulo {
+                pointer-events: none;
+                text-decoration: none;
+                cursor: default;
+            }
+            #tabla-formula-hijos .js-ver-subformula-linea.sin-subformula {
+                opacity: 0.45;
+            }
         </style>
         <div class="table-responsive">
             <table class="table table-bordered" id="tabla-formula-hijos" data-gastronomia-opcional="{{ $formulaGastronomiaOpcional ? '1' : '0' }}">
@@ -109,6 +129,7 @@
                         <th style="min-width: 300px;">Art&iacute;culo</th>
                         <th style="width:100px;">Cantidad</th>
                         <th style="width:130px;">Factor costo</th>
+                        <th style="width:6.5rem;" class="text-right" title="Anita stkmae.stkm_pre_compra3">Ult. compra</th>
                         <th>Subf&oacute;rmula</th>
                         @if ($formulaGastronomiaOpcional)
                         <th style="width:90px;">Opcional</th>
@@ -141,7 +162,7 @@
                                 <input type="hidden" class="subcategoria_id" value="" />
                                 <input type="hidden" class="unidadmedida" value="" />
                                 <div class="d-flex flex-nowrap w-100 celda-articulo-formula-linea" style="gap: 3px;">
-                                    <input type="text" readonly class="form-control form-control-sm codigoarticulo flex-shrink-0 text-monospace" style="width: 18ch; min-width: 18ch; flex: 0 0 18ch; box-sizing: border-box;" value="{{ $osku }}" placeholder="SKU" title="SKU" />
+                                    @include('stock.formula_articulo.partials.link_sku_articulo_linea', ['articuloId' => $oaid, 'sku' => $osku])
                                     <input type="text" readonly class="form-control form-control-sm descripcionarticulo text-truncate" value="{{ $odesc }}" placeholder="Descripci&oacute;n" title="{{ $odesc }}" />
                                     <button type="button" title="Consulta art&iacute;culos" class="btn btn-sm btn-outline-secondary consultaarticulo tooltipsC flex-shrink-0"><i class="fa fa-search text-primary"></i></button>
                                 </div>
@@ -149,11 +170,17 @@
                             <td class="p-1 align-middle"><input type="number" step="0.01" name="cantidades[]" class="form-control form-control-sm" value="{{ old("cantidades.$i", $h->cantidad ?? '') }}" /></td>
                             <td class="p-1 align-middle"><input type="number" step="0.01" name="factorcostos[]" class="form-control form-control-sm" style="min-width: 5.5rem;" value="{{ old("factorcostos.$i", $h->factorcosto ?? '1') }}" /></td>
                             <td class="p-1 align-middle">
+                                @include('stock.formula_articulo.partials.costo_ultima_compra_celda', [
+                                    'costoUltimaCompra' => $h->costo_ultima_compra ?? null,
+                                ])
+                            </td>
+                            <td class="p-1 align-middle">
                                 <input type="hidden" name="formula_hija_ids[]" class="fh_formula_hija_id" value="{{ $fhid }}" />
                                 <div class="input-group input-group-sm">
                                     <input type="text" readonly class="form-control fh_formula_hija_label" value="{{ $fhlab }}" placeholder="Opcional" />
                                     <div class="input-group-append">
-                                        <button type="button" class="btn btn-sm btn-outline-secondary js-consulta-formula-linea" data-exclude="{{ $data->id ?? 0 }}"><i class="fa fa-flask"></i></button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary js-consulta-formula-linea" data-exclude="{{ $data->id ?? 0 }}" title="Buscar subf&oacute;rmula"><i class="fa fa-flask"></i></button>
+                                        <button type="button" class="btn btn-sm btn-outline-info js-ver-subformula-linea{{ $fhid ? '' : ' sin-subformula' }}" title="Consultar subf&oacute;rmula" data-formula-id="{{ $fhid }}"><i class="fa fa-eye"></i></button>
                                     </div>
                                 </div>
                             </td>

@@ -35,6 +35,8 @@ use App\Models\Configuracion\Localidad;
 use App\Models\Configuracion\Moneda;
 use App\Models\Caja\Caja_Movimiento_Estado;
 use App\Models\Caja\Cobranza_Estado;
+use App\Models\Ventas\Venta;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -1534,5 +1536,222 @@ class CobranzaService
                                                     'mediopago_query', 'tipotransaccion_caja_id', 'empresa_id',
                                                     'empresa_query',  'retencion_cobranza_query',
                                                     'centrocosto_query', 'caja_id', 'nombreCaja', 'origen'));		
+	}
+
+	/**
+	 * Cobranza confirmada desde POS gastronomía (sin pantalla de caja ni cuenta corriente).
+	 *
+	 * @param  array{
+	 *   venta:Venta,
+	 *   empresa_id:int,
+	 *   tipotransaccion_caja_id:int,
+	 *   lineas:list<array{cuentacaja_id:int,moneda_id:int,monto:float,cotizacion:float,observacion:string}>,
+	 *   totalfinalcobranza:float,
+	 *   monedafinalcobranza_id:int,
+	 *   cotizacion_cobranza:float,
+	 *   genera_contabilidad:bool
+	 * }  $payload
+	 * @return array{cobranza_id:int,caja_movimiento_id:int}
+	 */
+	public function guardaCobranzaGastronomia(array $payload): array
+	{
+		/** @var Venta $venta */
+		$venta = $payload['venta'];
+		$venta->loadMissing(['clientes', 'puntoventas']);
+
+		session(['empresa_id' => $payload['empresa_id']]);
+
+		$montoAplicado = abs((float) $venta->total);
+		$fecha = $venta->fecha ?? Carbon::now()->format('Y-m-d');
+
+		$data = [
+			'empresa_id' => $payload['empresa_id'],
+			'tipotransaccion_caja_id' => $payload['tipotransaccion_caja_id'],
+			'cliente_id' => (int) $venta->cliente_id,
+			'venta_id' => (int) $venta->id,
+			'fecha' => $fecha,
+			'caja_id' => null,
+			'ordenventa_id' => 0,
+			'totalfinalcobranza' => $payload['totalfinalcobranza'],
+			'monedafinalcobranza_id' => $payload['monedafinalcobranza_id'],
+			'cotizacion_cobranza' => $payload['cotizacion_cobranza'],
+			'cuentacaja_ids' => [],
+			'moneda_ids' => [],
+			'montos' => [],
+			'cotizaciones' => [],
+			'observaciones' => [],
+		];
+
+		foreach ($payload['lineas'] as $linea) {
+			$data['cuentacaja_ids'][] = $linea['cuentacaja_id'];
+			$data['moneda_ids'][] = $linea['moneda_id'];
+			$data['montos'][] = $linea['monto'];
+			$data['cotizaciones'][] = $linea['cotizacion'];
+			$data['observaciones'][] = $linea['observacion'];
+		}
+
+		$data['numerotransaccion'] = $this->cobranzaRepository->ultimoNumeroTransaccion(
+			$data['empresa_id'],
+			$data['tipotransaccion_caja_id']
+		);
+		$data['usuario_id'] = Auth::id();
+		$data['detalle'] = 'Cobranza gastronomía — Factura '.$venta->codigo;
+		$data['estado'] = Cobranza_Estado::$enumEstado[0]['nombre'];
+		$data['fechas'] = [Carbon::now()];
+		$data['estados'] = [Cobranza_Estado::$enumEstado[0]['nombre']];
+		$data['observacionestados'] = ['Alta de Cobranza (gastronomía)'];
+		$data['usuario_ids'] = [Auth::id()];
+
+		if ($payload['genera_contabilidad']) {
+			$this->aplicarAsientoContableGastronomia($data, $montoAplicado, (int) $venta->moneda_id, (float) ($venta->cotizacion ?: 1.));
+		}
+
+		DB::beginTransaction();
+		try {
+			$cobranza = $this->cobranzaRepository->create($data);
+			if (! $cobranza || $cobranza === 'Error') {
+				throw new Exception('No se pudo crear la cobranza.');
+			}
+
+			$request = new Request($data);
+			self::agregaGastronomia($data, $cobranza, $request);
+
+			$cajaMovimientoId = (int) (\App\Models\Caja\Caja_Movimiento::query()
+				->where('cobranza_id', $cobranza->id)
+				->orderByDesc('id')
+				->value('id') ?? 0);
+
+			DB::commit();
+
+			return [
+				'cobranza_id' => (int) $cobranza->id,
+				'caja_movimiento_id' => $cajaMovimientoId,
+			];
+		} catch (\Throwable $e) {
+			DB::rollBack();
+			throw $e;
+		}
+	}
+
+	/**
+	 * Persiste movimiento de caja sin cuenta corriente ni cobranza_comprobante (misma regla que factura gastronomía).
+	 *
+	 * @param  array<string, mixed>  $data
+	 */
+	private function agregaGastronomia(array $data, $cobranza, Request $request): void
+	{
+		$data['cobranza_id'] = $cobranza->id;
+
+		$this->cobranza_retencionRepository->create($data, $cobranza->id);
+		$this->cobranza_estadoRepository->create($data, $cobranza->id);
+		$this->cobranza_archivoRepository->create($request, $cobranza->id);
+
+		$caja_movimiento = $this->caja_movimientoRepository->create($data);
+		$this->caja_movimiento_cuentacajaRepository->create($data, $caja_movimiento->id);
+
+		$data['fechas'] = [];
+		$data['estados'] = [];
+		$data['observacionestados'] = [];
+		$data['fechas'][] = Carbon::now();
+		$data['estados'][] = Caja_Movimiento_Estado::$enumEstado[0]['valor'];
+		$data['observacionestados'][] = 'Alta de Movimiento de Caja';
+
+		$this->caja_movimiento_estadoRepository->create($data, $caja_movimiento->id);
+
+		$this->chequeRepository->guardarChequeCobranza($data, 'create', $cobranza->id);
+
+		if (isset($data['cuentacontable_ids']) && $data['estado'] != Cobranza_Estado::$enumEstado[1]['nombre']) {
+			$tipoasiento = $this->tipoasientoRepository->findPorAbreviatura('TES');
+
+			if ($tipoasiento) {
+				$data['tipoasiento_id'] = $tipoasiento->id;
+			} else {
+				throw new Exception('Error en grabacion, no existe tipo de asiento de tesoreria');
+			}
+
+			$data['moneda_ids'] = $data['monedaasiento_ids'];
+			$data['centrocosto_ids'] = $data['centrocostoasiento_ids'];
+			$data['debes'] = $data['debeasientos'];
+			$data['haberes'] = $data['haberasientos'];
+			$data['cotizaciones'] = $data['cotizacionasientos'];
+			$data['observaciones'] = $data['observacionasientos'];
+			$data['cobranza_id'] = $cobranza->id;
+			$data['observacion'] = $data['detalle'];
+
+			for ($i = 0; $i < count($data['observaciones']); $i++) {
+				if ($data['observaciones'][$i] == null) {
+					$data['observaciones'][$i] = $data['detalle'];
+				}
+			}
+
+			$asiento = $this->asientoRepository->create($data);
+
+			if ($asiento == 'Error') {
+				throw new Exception('Error en grabacion anita.');
+			}
+
+			if ($asiento) {
+				$this->asiento_movimientoRepository->create($data, $asiento->id);
+			}
+		}
+	}
+
+	/**
+	 * @param  array<string, mixed>  $data
+	 */
+	private function aplicarAsientoContableGastronomia(
+		array &$data,
+		float $montoComprobante,
+		int $monedaComprobanteId,
+		float $cotizacionComprobante,
+	): void {
+		$datosCaja = [];
+		foreach ($data['cuentacaja_ids'] as $i => $cuentacajaId) {
+			$datosCaja[] = (object) [
+				'cuentacaja_ids' => $cuentacajaId,
+				'moneda_ids' => $data['moneda_ids'][$i],
+				'montos' => $data['montos'][$i],
+				'cotizaciones' => $data['cotizaciones'][$i],
+			];
+		}
+
+		$datosComprobantes = [(object) [
+			'montos' => $montoComprobante,
+			'moneda_ids' => $monedaComprobanteId,
+			'cotizaciones' => $cotizacionComprobante,
+		]];
+
+		$resultado = $this->generaAsientoContable([
+			'datoscaja' => json_encode($datosCaja),
+			'datoscontables' => json_encode([]),
+			'datoscheques' => json_encode([]),
+			'datosretenciones' => json_encode([]),
+			'datoscomprobantes' => json_encode($datosComprobantes),
+			'tipotransaccion_caja_id' => json_encode($data['tipotransaccion_caja_id']),
+			'empresa_id' => json_encode($data['empresa_id']),
+		]);
+
+		$lineas = $resultado['asiento'] ?? [];
+		if ($lineas === []) {
+			return;
+		}
+
+		$data['cuentacontable_ids'] = [];
+		$data['monedaasiento_ids'] = [];
+		$data['centrocostoasiento_ids'] = [];
+		$data['debeasientos'] = [];
+		$data['haberasientos'] = [];
+		$data['cotizacionasientos'] = [];
+		$data['observacionasientos'] = [];
+
+		foreach ($lineas as $linea) {
+			$data['cuentacontable_ids'][] = $linea['cuentacontable_id'];
+			$data['monedaasiento_ids'][] = $linea['moneda_id'];
+			$data['centrocostoasiento_ids'][] = $linea['centrocosto_id'] ?? null;
+			$data['debeasientos'][] = $linea['debe'] ?? 0;
+			$data['haberasientos'][] = $linea['haber'] ?? 0;
+			$data['cotizacionasientos'][] = $linea['cotizacion'] ?? 1;
+			$data['observacionasientos'][] = $linea['observacion'] ?? $data['detalle'];
+		}
 	}
 }

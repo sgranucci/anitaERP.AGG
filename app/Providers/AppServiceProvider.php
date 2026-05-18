@@ -243,6 +243,11 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Queries\Stock\PrecioQueryInterface',
+            'App\Queries\Stock\PrecioQuery',
+        );
+
+        $this->app->bind(
             'App\Repositories\Stock\LoteRepositoryInterface',
             'App\Repositories\Stock\LoteRepository',
         );
@@ -615,6 +620,41 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             'App\Repositories\Ventas\PuntoventaRepositoryInterface',
             'App\Repositories\Ventas\PuntoventaRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Ventas\ConfiguracionPuntoventaGastronomiaRepositoryInterface',
+            'App\Repositories\Ventas\ConfiguracionPuntoventaGastronomiaRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Ventas\MesaGastronomiaRepositoryInterface',
+            'App\Repositories\Ventas\MesaGastronomiaRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Ventas\UbicacionGastronomiaRepositoryInterface',
+            'App\Repositories\Ventas\UbicacionGastronomiaRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Ventas\DescuentoGastronomiaRepositoryInterface',
+            'App\Repositories\Ventas\DescuentoGastronomiaRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Ventas\MozoGastronomiaRepositoryInterface',
+            'App\Repositories\Ventas\MozoGastronomiaRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Ventas\TurnoGastronomiaRepositoryInterface',
+            'App\Repositories\Ventas\TurnoGastronomiaRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Ventas\JornadaGastronomiaRepositoryInterface',
+            'App\Repositories\Ventas\JornadaGastronomiaRepository',
         );
 
         $this->app->bind(
@@ -1454,31 +1494,6 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             'App\Repositories\Stock\CapacidadRepositoryInterface',
             'App\Repositories\Stock\CapacidadRepository',
-        );
-
-        $this->app->bind(
-            'App\Repositories\Stock\MesaGastronomiaRepositoryInterface',
-            'App\Repositories\Stock\MesaGastronomiaRepository',
-        );
-
-        $this->app->bind(
-            'App\Repositories\Stock\UbicacionGastronomiaRepositoryInterface',
-            'App\Repositories\Stock\UbicacionGastronomiaRepository',
-        );
-
-        $this->app->bind(
-            'App\Repositories\Stock\DescuentoGastronomiaRepositoryInterface',
-            'App\Repositories\Stock\DescuentoGastronomiaRepository',
-        );
-
-        $this->app->bind(
-            'App\Repositories\Stock\MozoGastronomiaRepositoryInterface',
-            'App\Repositories\Stock\MozoGastronomiaRepository',
-        );
-
-        $this->app->bind(
-            'App\Repositories\Stock\ConfiguracionPuntoventaGastronomiaRepositoryInterface',
-            'App\Repositories\Stock\ConfiguracionPuntoventaGastronomiaRepository',
         );
 
         $this->app->bind(

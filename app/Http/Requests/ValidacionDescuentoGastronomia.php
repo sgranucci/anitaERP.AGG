@@ -2,7 +2,7 @@
 
 namespace App\Http\Requests;
 
-use App\Models\Stock\DescuentoGastronomia;
+use App\Models\Ventas\DescuentoGastronomia;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -26,6 +26,7 @@ class ValidacionDescuentoGastronomia extends FormRequest
                 DescuentoGastronomia::TIPO_APLICA,
             ])],
             'valor' => 'required|numeric',
+            'cliente_id' => 'nullable|integer|exists:cliente,id',
         ];
     }
 }

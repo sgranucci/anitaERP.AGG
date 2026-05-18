@@ -264,6 +264,38 @@ body.manual-compras {
     border-top: 1px solid var(--mc-border);
 }
 
+.mc-herramientas {
+    margin: 1.5rem 0;
+    padding: 1rem 1.15rem;
+    border-radius: var(--mc-radius);
+    background: var(--mc-surface);
+    border: 1px solid var(--mc-border);
+}
+
+.mc-herramientas-title {
+    font-size: 1rem;
+    margin: 0 0 .75rem;
+    font-weight: 600;
+    color: var(--mc-accent);
+}
+
+.mc-herramientas-table th {
+    background: color-mix(in srgb, var(--mc-accent) 12%, var(--mc-surface-2));
+}
+
+.mc-herramientas-table td:first-child {
+    white-space: nowrap;
+}
+
+.mc-perm {
+    font-size: .72rem;
+    padding: .15rem .35rem;
+    border-radius: 4px;
+    background: var(--mc-surface-2);
+    color: var(--mc-muted);
+    word-break: break-word;
+}
+
 .anexo-permisos { margin-top: 1rem; }
 
 .anexo-nota {

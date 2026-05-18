@@ -3,7 +3,9 @@
 namespace App\Services\Stock;
 
 use App\Models\Stock\Articulo;
+use App\Models\Stock\Formula_Articulo;
 use App\Models\Stock\Formula_Articulo_Estado;
+use App\Support\Stock\FormulaArticuloSku;
 use App\Models\Stock\Formula_Articulo_Hijo;
 use App\Repositories\Stock\Formula_Articulo_ArchivoRepositoryInterface;
 use App\Repositories\Stock\Formula_Articulo_EstadoRepositoryInterface;
@@ -233,5 +235,108 @@ class FormulaArticuloService
         }
 
         return false;
+    }
+
+    /**
+     * Resuelve el id de formula_articulo (ERP) para un artículo.
+     * Prioriza vínculo por formula_articulo.articulo_id; evita usar articulo.formula si apunta a otra cabecera.
+     *
+     * @return array{formula_id: int|null, origen: string|null, mensaje: string|null}
+     */
+    public function resolverIdParaArticulo(int $articuloId): array
+    {
+        $articulo = Articulo::query()->select('id', 'sku', 'descripcion', 'formula')->find($articuloId);
+        if (! $articulo) {
+            return [
+                'formula_id' => null,
+                'origen' => null,
+                'mensaje' => 'Artículo no encontrado.',
+            ];
+        }
+
+        $activa = $this->nombreEstadoActiva();
+
+        $porArticuloId = Formula_Articulo::query()
+            ->where('articulo_id', $articuloId)
+            ->orderByRaw('CASE WHEN estado = ? THEN 0 ELSE 1 END', [$activa])
+            ->orderByDesc('id')
+            ->first();
+
+        if ($porArticuloId) {
+            return [
+                'formula_id' => (int) $porArticuloId->id,
+                'origen' => 'articulo_id',
+                'mensaje' => null,
+            ];
+        }
+
+        $codigoDesdeSku = FormulaArticuloSku::codigoDesdeSku((string) $articulo->sku);
+        if ($codigoDesdeSku !== null) {
+            $porCodigoSku = Formula_Articulo::query()
+                ->where(function ($q) use ($codigoDesdeSku) {
+                    $q->where('anita_stkcm_formula', $codigoDesdeSku)
+                        ->orWhere('codigo', (string) $codigoDesdeSku);
+                })
+                ->orderByRaw('CASE WHEN estado = ? THEN 0 ELSE 1 END', [$activa])
+                ->orderByDesc('id')
+                ->first();
+
+            if ($porCodigoSku) {
+                return [
+                    'formula_id' => (int) $porCodigoSku->id,
+                    'origen' => 'codigo_sku',
+                    'mensaje' => null,
+                ];
+            }
+        }
+
+        $legacy = (int) ($articulo->formula ?? 0);
+        if ($legacy <= 0) {
+            return [
+                'formula_id' => null,
+                'origen' => null,
+                'mensaje' => 'No hay fórmula vinculada a este artículo. Cree o sincronice una fórmula con articulo_id = '.$articuloId.' (SKU '.$articulo->sku.').',
+            ];
+        }
+
+        $porAnita = Formula_Articulo::query()
+            ->where('anita_stkcm_formula', $legacy)
+            ->orderByRaw('CASE WHEN estado = ? THEN 0 ELSE 1 END', [$activa])
+            ->orderByDesc('id')
+            ->first();
+
+        if ($porAnita) {
+            return [
+                'formula_id' => (int) $porAnita->id,
+                'origen' => 'anita_stkcm_formula',
+                'mensaje' => null,
+            ];
+        }
+
+        $porId = Formula_Articulo::query()->find($legacy);
+        if ($porId && ($porId->articulo_id === null || (int) $porId->articulo_id === $articuloId)) {
+            return [
+                'formula_id' => (int) $porId->id,
+                'origen' => 'id',
+                'mensaje' => null,
+            ];
+        }
+
+        return [
+            'formula_id' => null,
+            'origen' => null,
+            'mensaje' => 'El campo Fórmula (id) del artículo ('.$legacy.') no corresponde a una fórmula de este SKU. Vincule la fórmula en el CRUD de fórmulas con articulo_id = '.$articuloId.' o sincronice desde Anita.',
+        ];
+    }
+
+    private function nombreEstadoActiva(): string
+    {
+        foreach (Formula_Articulo_Estado::$enumEstado as $e) {
+            if (($e['valor'] ?? '') === 'A') {
+                return (string) $e['nombre'];
+            }
+        }
+
+        return 'ACTIVA';
     }
 }

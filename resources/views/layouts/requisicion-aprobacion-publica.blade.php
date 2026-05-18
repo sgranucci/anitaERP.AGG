@@ -23,7 +23,7 @@
     <div class="wrapper">
         <nav class="main-header navbar navbar-expand-md navbar-light navbar-white border-bottom-0 shadow-sm">
             <div class="container portal-wrap d-flex flex-wrap align-items-center justify-content-between">
-                <span class="navbar-brand mb-0 h6 font-weight-bold">Anita ERP — Aprobación</span>
+                <span class="navbar-brand mb-0 h6 font-weight-bold">Anita ERP — @yield('portal_nav_subtitulo', 'Aprobación')</span>
             </div>
         </nav>
         <div class="content-wrapper py-3 py-md-4">

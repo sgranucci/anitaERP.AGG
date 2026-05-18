@@ -81,11 +81,13 @@
 				<thead>
 					<tr>
 						<th style="width=150px; word-wrap: break-word; text-align: left;">
-							<strong>Cliente: {{ $venta->clientes->nombre ?? ''}}</strong><br>
+							<strong>Cliente: {{ \App\Support\Ventas\GastronomiaVentaDisplaySupport::nombreReceptorFactura($venta) }}</strong><br>
 							<p style="font-size: 16px"> 
-								{{ $venta->clientes->domicilio ?? ''}}<br>
+								{{ \App\Support\Ventas\GastronomiaVentaDisplaySupport::domicilioReceptorFactura($venta) }}<br>
+								@if (! \App\Support\Ventas\GastronomiaVentaDisplaySupport::usaSnapshotReceptorEnVenta($venta))
 								{{ $venta->clientes->localidades->nombre ?? ''}} ({{$venta->clientes->codigopostal ?? ''}})<br>
 								{{ $venta->clientes->provincias->nombre ?? ''}} {{ $venta->clientes->paises->nombre ?? ''}}<br>
+								@endif
 								@if (isset($venta->transportes->nombre))
 									Transporte: {{ $venta->transportes->nombre ?? ''}}<br>
 								@endif
@@ -96,11 +98,20 @@
 						</th>
 						<th style="width=150px; word-wrap: break-word; text-align: right;">
 							<p style="font-size: 16px">
-								Código: {{ $venta->clientes->codigo ?? ''}}<br>
+								@php $codCli = \App\Support\Ventas\GastronomiaVentaDisplaySupport::codigoClienteMaestro($venta); @endphp
+								@if ($codCli !== '')
+								Código: {{ $codCli }}<br>
+								@endif
+								@if (! \App\Support\Ventas\GastronomiaVentaDisplaySupport::usaSnapshotReceptorEnVenta($venta))
 								Teléfono: {{$venta->clientes->telefono}}<br>
+								@endif
 								I.V.A.: {{$venta->clientes->condicionivas->nombre}}<br>
+								@if (\App\Support\Ventas\GastronomiaVentaDisplaySupport::usaSnapshotReceptorEnVenta($venta))
+								Doc.: {{ \App\Support\Ventas\GastronomiaVentaDisplaySupport::documentoReceptorFactura($venta) }}<br>
+								@else
 								{{$venta->clientes->tipodocumentos->abreviatura}}: {{$venta->clientes->numerodocumento}}<br>
 								Ingresos Brutos: {{$venta->clientes->condicioniibbs->nombre}} {{$venta->clientes->nroiibb}}<br>
+								@endif
 							</p>
 						</th>
 					</tr=>
@@ -311,11 +322,13 @@
 				<thead>
 					<tr>
 						<th style="width=150px; word-wrap: break-word; text-align: left;">
-							<strong>Cliente: {{ $venta->clientes->nombre ?? ''}}</strong><br>
+							<strong>Cliente: {{ \App\Support\Ventas\GastronomiaVentaDisplaySupport::nombreReceptorFactura($venta) }}</strong><br>
 							<p style="font-size: 16px"> 
-								{{ $venta->clientes->domicilio ?? ''}}<br>
+								{{ \App\Support\Ventas\GastronomiaVentaDisplaySupport::domicilioReceptorFactura($venta) }}<br>
+								@if (! \App\Support\Ventas\GastronomiaVentaDisplaySupport::usaSnapshotReceptorEnVenta($venta))
 								{{ $venta->clientes->localidades->nombre ?? ''}} ({{$venta->clientes->codigopostal ?? ''}})<br>
 								{{ $venta->clientes->provincias->nombre ?? ''}} {{ $venta->clientes->paises->nombre ?? ''}}<br>
+								@endif
 								@if (isset($venta->transportes->nombre))
 									Transporte: {{ $venta->transportes->nombre ?? ''}}<br>
 								@endif
@@ -326,11 +339,20 @@
 						</th>
 						<th style="width=150px; word-wrap: break-word; text-align: right;">
 							<p style="font-size: 16px">
-								Código: {{ $venta->clientes->codigo ?? ''}}<br>
+								@php $codCli = \App\Support\Ventas\GastronomiaVentaDisplaySupport::codigoClienteMaestro($venta); @endphp
+								@if ($codCli !== '')
+								Código: {{ $codCli }}<br>
+								@endif
+								@if (! \App\Support\Ventas\GastronomiaVentaDisplaySupport::usaSnapshotReceptorEnVenta($venta))
 								Teléfono: {{$venta->clientes->telefono}}<br>
+								@endif
 								I.V.A.: {{$venta->clientes->condicionivas->nombre}}<br>
+								@if (\App\Support\Ventas\GastronomiaVentaDisplaySupport::usaSnapshotReceptorEnVenta($venta))
+								Doc.: {{ \App\Support\Ventas\GastronomiaVentaDisplaySupport::documentoReceptorFactura($venta) }}<br>
+								@else
 								{{$venta->clientes->tipodocumentos->abreviatura}}: {{$venta->clientes->numerodocumento}}<br>
 								Ingresos Brutos: {{$venta->clientes->condicioniibbs->nombre}} {{$venta->clientes->nroiibb}}<br>
+								@endif
 							</p>
 						</th>
 					</tr=>

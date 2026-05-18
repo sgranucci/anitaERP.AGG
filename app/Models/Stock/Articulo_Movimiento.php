@@ -12,7 +12,7 @@ use App\Models\Ventas\Venta;
 class Articulo_Movimiento extends Model
 {
     //use SoftDeletes;
-    protected $fillable = ['fecha','fechajornada', 'tipotransaccion_id', 'venta_id', 'movimientostock_id',
+    protected $fillable = ['fecha','fechajornada', 'tipotransaccion_id', 'venta_id', 'venta_emision_id', 'movimientostock_id',
                         'pedido_combinacion_id', 'ordentrabajo_id', 'lote', 'articulo_id', 'combinacion_id', 
                         'concepto', 'modulo_id', 'cantidad', 
                         'pieza', 'caja',
@@ -76,5 +76,15 @@ class Articulo_Movimiento extends Model
 	{
     	return $this->belongsTo(Venta::class, 'venta_id', 'id');
 	}
+
+    public function venta_emisiones()
+    {
+        return $this->belongsTo(\App\Models\Ventas\Venta_Emision::class, 'venta_emision_id', 'id');
+    }
+
+    public function depositos()
+    {
+        return $this->belongsTo(Depmae::class, 'deposito_id');
+    }
 
 }

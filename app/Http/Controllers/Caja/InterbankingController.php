@@ -4,8 +4,11 @@ namespace App\Http\Controllers\Caja;
 
 use App\Http\Controllers\Controller;
 use App\Repositories\Caja\BancoRepositoryInterface;
+use App\Models\Caja\InterbankingTransferencia;
+use App\Support\Caja\InterbankingTransferenciaComprobanteSupport;
 use App\Services\Caja\InterbankingSaldoPersistenciaService;
 use App\Services\Caja\InterbankingService;
+use App\Services\Caja\InterbankingTransferenciaPersistenciaService;
 use Auth;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Session;
@@ -18,13 +21,19 @@ class InterbankingController extends Controller
 
     private InterbankingSaldoPersistenciaService $interbankingSaldoPersistenciaService;
 
-    public function __construct(InterbankingService $interbankingService,
+    private InterbankingTransferenciaPersistenciaService $transferenciaPersistenciaService;
+
+    public function __construct(
+        InterbankingService $interbankingService,
         BancoRepositoryInterface $bancoRepository,
-        InterbankingSaldoPersistenciaService $interbankingSaldoPersistenciaService)
-    {
+        InterbankingSaldoPersistenciaService $interbankingSaldoPersistenciaService,
+        InterbankingTransferenciaPersistenciaService $transferenciaPersistenciaService,
+        private InterbankingTransferenciaComprobanteSupport $comprobanteSupport
+    ) {
         $this->interbankingService = $interbankingService;
         $this->bancoRepository = $bancoRepository;
         $this->interbankingSaldoPersistenciaService = $interbankingSaldoPersistenciaService;
+        $this->transferenciaPersistenciaService = $transferenciaPersistenciaService;
     }
 
     /**
@@ -147,6 +156,119 @@ class InterbankingController extends Controller
         );
 
         return response()->json($resultado);
+    }
+
+    /**
+     * Comprobantes de transferencias Interbanking (JSON).
+     *
+     * `GET /caja/interbanking/transferencias?empresa_id=1&date_since=2026-01-01&date_until=2026-01-31`
+     * Filtros opcionales de débito/crédito: `debit_*`, `credit_*` (ver validación).
+     * Nombre de ruta: `interbanking_transferencias`.
+     *
+     * @return \Illuminate\Http\JsonResponse Cuerpo alineado a {@see InterbankingService::leeTransferencias()}
+     */
+    public function transferencias(Request $request)
+    {
+        can('ver-transferencias-cuenta-interbanking');
+
+        $validated = $request->validate([
+            'empresa_id' => 'required|integer|min:1',
+            'debit_account_number' => 'nullable|string|max:64',
+            'debit_account_type' => 'nullable|string|in:CC,CA',
+            'debit_bank_number' => 'nullable|string|regex:/^[0-9]{3}$/',
+            'debit_currency' => 'nullable|string|in:ARS,USD',
+            'credit_account_number' => 'nullable|string|max:64',
+            'credit_account_type' => 'nullable|string|in:CC,CA',
+            'credit_bank_number' => 'nullable|string|regex:/^[0-9]{3}$/',
+            'credit_currency' => 'nullable|string|in:ARS,USD',
+            'date_since' => 'nullable|date_format:Y-m-d',
+            'date_until' => 'nullable|date_format:Y-m-d|after_or_equal:date_since',
+            'limit' => 'nullable|integer|min:1|max:500',
+            'page' => 'nullable|integer|min:0',
+        ]);
+
+        $user = Auth::user();
+        $user->loadMissing('usuario_empresas');
+        $empresaIds = $user->usuario_empresas->pluck('id')->map(fn ($id) => (int) $id)->all();
+        if (! in_array((int) $validated['empresa_id'], $empresaIds, true)) {
+            return response()->json([
+                'ok' => false,
+                'general_data' => null,
+                'transfers' => [],
+                'error' => 'No tiene acceso a la empresa indicada.',
+            ], 403);
+        }
+
+        $paramsApi = [
+            'debit_account_number' => $validated['debit_account_number'] ?? null,
+            'debit_account_type' => $validated['debit_account_type'] ?? null,
+            'debit_bank_number' => $validated['debit_bank_number'] ?? null,
+            'debit_currency' => $validated['debit_currency'] ?? null,
+            'credit_account_number' => $validated['credit_account_number'] ?? null,
+            'credit_account_type' => $validated['credit_account_type'] ?? null,
+            'credit_bank_number' => $validated['credit_bank_number'] ?? null,
+            'credit_currency' => $validated['credit_currency'] ?? null,
+            'date_since' => $validated['date_since'] ?? null,
+            'date_until' => $validated['date_until'] ?? null,
+            'limit' => array_key_exists('limit', $validated) ? (int) $validated['limit'] : null,
+            'page' => array_key_exists('page', $validated) ? (int) $validated['page'] : null,
+        ];
+
+        $resultado = $this->interbankingService->leeTransferencias(
+            (int) $validated['empresa_id'],
+            $paramsApi
+        );
+
+        if (! empty($resultado['ok'])) {
+            $filtroDebito = [
+                'debit_bank_number' => $paramsApi['debit_bank_number'] ?? null,
+                'debit_account_number' => $paramsApi['debit_account_number'] ?? null,
+                'debit_account_type' => $paramsApi['debit_account_type'] ?? null,
+                'debit_currency' => $paramsApi['debit_currency'] ?? null,
+            ];
+            $resultado['filas_persistidas'] = $this->transferenciaPersistenciaService->persistirLote(
+                (int) $validated['empresa_id'],
+                $filtroDebito,
+                $resultado['transfers'] ?? []
+            );
+
+            $transferIds = [];
+            foreach ($resultado['transfers'] ?? [] as $fila) {
+                if (is_array($fila) && isset($fila['transfer_id'])) {
+                    $transferIds[] = $fila['transfer_id'];
+                }
+            }
+            if ($transferIds !== []) {
+                $resultado['comprobante_ids'] = InterbankingTransferencia::query()
+                    ->where('empresa_id', (int) $validated['empresa_id'])
+                    ->whereIn('transfer_id', $transferIds)
+                    ->pluck('id', 'transfer_id');
+            }
+        }
+
+        return response()->json($resultado);
+    }
+
+    /**
+     * Detalle legible de una fila devuelta por la API (modal transferencias en saldos en vivo).
+     */
+    public function detalleTransferenciaApi(Request $request)
+    {
+        can('ver-transferencias-cuenta-interbanking');
+
+        $validated = $request->validate([
+            'transfer' => 'required|array',
+        ]);
+
+        $fila = $validated['transfer'];
+        $secciones = $this->comprobanteSupport->seccionesDetalleDesdeApi($fila);
+        $titulo = 'Transferencia #'.($fila['transfer_id'] ?? '');
+
+        return response()->json([
+            'ok' => true,
+            'titulo' => $titulo,
+            'html' => view('caja.interbanking.partials.detalle_transferencia_contenido', compact('secciones'))->render(),
+        ]);
     }
 
     /**

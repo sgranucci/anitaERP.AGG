@@ -2,7 +2,7 @@
 
 namespace App\Console\Commands;
 
-use App\Services\Stock\MesaGastronomiaAnitaSyncService;
+use App\Services\Ventas\MesaGastronomiaAnitaSyncService;
 use Illuminate\Console\Command;
 
 class SincronizarMesaGastronomiaDesdeAnita extends Command

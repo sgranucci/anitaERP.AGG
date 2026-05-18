@@ -22,3 +22,6 @@ td { border: 1px solid #bbb; padding: 5px 8px; vertical-align: top; }
 .mc-figure { margin: 1em 0; text-align: center; }
 .mc-figure img { max-width: 100%; border: 1px solid #ddd; border-radius: 6px; }
 .mc-figure figcaption { font-size: 9pt; color: #666; margin-top: .35em; }
+.mc-herramientas { margin: 1em 0; padding: 0.6em 0.8em; border: 1px solid #dee2e6; border-radius: 6px; background: #f8f9fa; }
+.mc-herramientas h3 { font-size: 11pt; color: #2E75B6; margin: 0 0 0.5em; }
+.mc-herramientas code { font-size: 8pt; background: #eee; padding: 1px 4px; }

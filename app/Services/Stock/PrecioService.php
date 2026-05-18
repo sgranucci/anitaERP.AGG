@@ -10,6 +10,9 @@ use App\Models\Stock\Precio;
 use App\Models\Stock\Listaprecio;
 use App\Models\Stock\Talle;
 use App\Models\Stock\Linea;
+use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
@@ -278,5 +281,66 @@ class PrecioService
 			];
 		}
 		return($data);
+	}
+
+	/**
+	 * Alta de precio (siempre crea un registro nuevo).
+	 */
+	public function crearDesdeFormulario(Request $request): Precio
+	{
+		$fechavigencia = Carbon::createFromFormat('d-m-Y', $request->fechavigencia);
+
+		return Precio::create([
+			'articulo_id' => $request->articulo_id,
+			'listaprecio_id' => $request->listaprecio_id,
+			'fechavigencia' => $fechavigencia,
+			'moneda_id' => $request->moneda_id,
+			'precio' => $request->precio,
+			'precioanterior' => 0,
+			'usuarioultcambio_id' => Auth::id(),
+		]);
+	}
+
+	/**
+	 * Actualiza el registro si la fecha de vigencia no cambia; si cambia, crea uno nuevo y conserva el anterior.
+	 *
+	 * @return array{precio: Precio, creado_nueva_vigencia: bool}
+	 */
+	public function actualizarDesdeFormulario(Request $request, int $id): array
+	{
+		$precioRegistro = Precio::findOrFail($id);
+		$fechavigencia = Carbon::createFromFormat('d-m-Y', $request->fechavigencia);
+		$fechaOriginal = Carbon::parse($precioRegistro->fechavigencia)->format('Y-m-d');
+		$fechaNueva = $fechavigencia->format('Y-m-d');
+
+		$payload = [
+			'listaprecio_id' => $request->listaprecio_id,
+			'moneda_id' => $request->moneda_id,
+			'precio' => $request->precio,
+			'usuarioultcambio_id' => Auth::id(),
+		];
+
+		if ($fechaOriginal === $fechaNueva) {
+			$precioRegistro->update(array_merge($payload, [
+				'fechavigencia' => $fechavigencia,
+				'precioanterior' => $precioRegistro->precio,
+			]));
+
+			return [
+				'precio' => $precioRegistro->fresh(),
+				'creado_nueva_vigencia' => false,
+			];
+		}
+
+		$precioNuevo = Precio::create(array_merge($payload, [
+			'articulo_id' => $precioRegistro->articulo_id,
+			'fechavigencia' => $fechavigencia,
+			'precioanterior' => $precioRegistro->precio,
+		]));
+
+		return [
+			'precio' => $precioNuevo,
+			'creado_nueva_vigencia' => true,
+		];
 	}
 }

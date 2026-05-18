@@ -1,0 +1,44 @@
+---
+description: Blade — no usar @if/@endif inline pegados al HTML
+globs: resources/views/**/*.blade.php
+alwaysApply: false
+---
+
+# Directivas @if en Blade
+
+No escribir `@if`, `@elseif`, `@else` ni `@endif` en la **misma línea** que texto o etiquetas HTML. El compilador de Blade puede fallar con errores como `unexpected token "endif", expecting end of file`.
+
+## Prohibido
+
+```blade
+<label>Título@if ($condicion)<span>*</span>@endif</label>
+<span>Texto@if ($x) extra@endif</span>
+<button>@if ($ok) Guardar@else Cancelar@endif</button>
+```
+
+Evitar también `@if ($var ?? true)` inline; usar variable ya resuelta en el controlador o bloques multilínea.
+
+## Correcto
+
+```blade
+<label>
+    Título
+    @if ($condicion)
+        <span class="text-danger">*</span>
+    @endif
+</label>
+
+@if ($gastroCuentasLibresHabilitadas)
+    · <kbd>+</kbd> Nueva cuenta
+@endif
+```
+
+Alternativa sin ramas: `{{ $condicion ? '*' : '' }}` solo para fragmentos muy cortos sin HTML anidado.
+
+## Tras editar vistas
+
+```bash
+php artisan view:clear
+```
+
+Verificar compilación con `php artisan view:cache` si hubo error en runtime.

@@ -71,6 +71,15 @@ class Cliente_Cm05Repository implements Cliente_Cm05RepositoryInterface
         return $cliente_cm05;
     }
 
+	private function normalizarCoeficiente($valor)
+	{
+		if ($valor === null || $valor === '') {
+			return null;
+		}
+
+		return round((float) $valor, 4);
+	}
+
 	private function guardarCliente_Cm05($data, $funcion, $id = null)
 	{
 		if ($funcion == 'update')
@@ -112,7 +121,7 @@ class Cliente_Cm05Repository implements Cliente_Cm05RepositoryInterface
 									"cliente_id" => $id,
 									"provincia_id" => $provincia_ids[$i],
 									"tipopercepcion" => $tipopercepciones[$i],
-									"coeficiente" => $coeficientes[$i],
+									"coeficiente" => self::normalizarCoeficiente($coeficientes[$i]),
 									"fechavigencia" => $fechavigencias[$i],
 									"certificadonoretencion" => $certificadonoretenciones[$i],
 									"desdefechanoretencion" => $desdefechanoretenciones[$i],
@@ -135,7 +144,7 @@ class Cliente_Cm05Repository implements Cliente_Cm05RepositoryInterface
 						"cliente_id" => $id,
 						"provincia_id" => $provincia_ids[$i_movimiento],
 						"tipopercepcion" => $tipopercepciones[$i_movimiento],
-						"coeficiente" => $coeficientes[$i_movimiento],
+						"coeficiente" => self::normalizarCoeficiente($coeficientes[$i_movimiento]),
 						"fechavigencia" => $fechavigencias[$i_movimiento],
 						"certificadonoretencion" => $certificadonoretenciones[$i_movimiento],
 						"desdefechanoretencion" => $desdefechanoretenciones[$i_movimiento],

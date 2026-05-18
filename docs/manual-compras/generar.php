@@ -23,7 +23,6 @@ $outDir = __DIR__;
 $manual = app(ManualComprasService::class);
 $contenido = $manual->meta();
 $capturas = config('manual_compras.capturas', []);
-$capturaPorSeccion = collect($capturas)->keyBy('seccion');
 
 $baseName = 'Manual_Usuario_AnitaERP_Modulo_Compras';
 $docxPath = $outDir . '/' . $baseName . '.docx';
@@ -66,8 +65,7 @@ $section->addPageBreak();
 
 foreach ($contenido['secciones'] as $sec) {
     $section->addTitle($sec['titulo'], 2);
-    $cap = $capturaPorSeccion->get($sec['titulo']);
-    if ($cap) {
+    foreach (capturasParaSeccion($sec, $capturas) as $cap) {
         $imgPath = capturaPngPath($cap);
         if ($imgPath) {
             $section->addImage($imgPath, ['width' => 450, 'alignment' => Jc::CENTER]);
@@ -84,6 +82,7 @@ foreach ($contenido['secciones'] as $sec) {
         }
         $section->addTextBreak(1);
     }
+    addWordHerramientas($section, $sec);
     if (! empty($sec['tabla'])) {
         addWordTable($section, $sec['tabla']);
     }
@@ -91,7 +90,7 @@ foreach ($contenido['secciones'] as $sec) {
 
 IOFactory::createWriter($phpWord, 'Word2007')->save($docxPath);
 
-$htmlBody = buildHtml($contenido, $capturaPorSeccion);
+$htmlBody = buildHtml($contenido, $capturas);
 $css = file_get_contents(__DIR__ . '/estilos-pdf.css');
 $fullHtml = '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><style>' . $css . '</style></head><body>' . $htmlBody . '</body></html>';
 file_put_contents($htmlPath, $fullHtml);
@@ -121,7 +120,50 @@ function addWordTable($section, array $tabla): void
     $section->addTextBreak(1);
 }
 
-function buildHtml(array $contenido, $capturaPorSeccion): string
+/**
+ * @return array<int, array{archivo: string, titulo: string}>
+ */
+function capturasParaSeccion(array $sec, array $capturasCfg): array
+{
+    $out = [];
+    foreach ($capturasCfg as $key => $cap) {
+        if (($cap['seccion'] ?? '') === ($sec['titulo'] ?? '')) {
+            $out[] = $cap;
+        }
+    }
+    if (! empty($sec['captura_id']) && isset($capturasCfg[$sec['captura_id']])) {
+        $out[] = $capturasCfg[$sec['captura_id']];
+    }
+
+    return $out;
+}
+
+function addWordHerramientas($section, array $sec): void
+{
+    $grupos = $sec['herramientas_grupos'] ?? null;
+    if ($grupos === null && empty($sec['herramientas'])) {
+        return;
+    }
+
+    $bloques = $grupos ?? [['titulo' => 'Herramientas de la pantalla', 'items' => $sec['herramientas']]];
+    foreach ($bloques as $bloque) {
+        if (empty($bloque['items'])) {
+            continue;
+        }
+        $section->addText($bloque['titulo'], ['bold' => true, 'size' => 11, 'color' => '2E75B6']);
+        addWordTable($section, [
+            'headers' => ['Herramienta', 'Ubicación', 'Qué hace', 'Permiso'],
+            'rows' => array_map(static fn (array $h): array => [
+                $h['herramienta'],
+                $h['ubicacion'],
+                $h['accion'],
+                $h['permiso'],
+            ], $bloque['items']),
+        ]);
+    }
+}
+
+function buildHtml(array $contenido, array $capturasCfg): string
 {
     $h = '<div class="cover page-break"><h1>' . e($contenido['titulo']) . '</h1>';
     $h .= '<h2>' . e($contenido['subtitulo']) . '</h2>';
@@ -137,8 +179,7 @@ function buildHtml(array $contenido, $capturaPorSeccion): string
 
     foreach ($contenido['secciones'] as $sec) {
         $h .= '<section class="chapter"><h2>' . e($sec['titulo']) . '</h2>';
-        $cap = $capturaPorSeccion->get($sec['titulo']);
-        if ($cap) {
+        foreach (capturasParaSeccion($sec, $capturasCfg) as $cap) {
             $png = preg_replace('/\.(svg|png)$/i', '', $cap['archivo']) . '.png';
             $imgPath = public_path('docs/manual-compras/img/' . $png);
             if (is_file($imgPath)) {
@@ -156,6 +197,7 @@ function buildHtml(array $contenido, $capturaPorSeccion): string
             }
             $h .= '</ul>';
         }
+        $h .= renderHerramientasHtml($sec);
         if (! empty($sec['tabla'])) {
             if (! empty($sec['tabla']['caption'])) {
                 $h .= '<p class="table-caption">' . e($sec['tabla']['caption']) . '</p>';
@@ -178,6 +220,36 @@ function buildHtml(array $contenido, $capturaPorSeccion): string
     }
 
     return $h;
+}
+
+function renderHerramientasHtml(array $sec): string
+{
+    $grupos = $sec['herramientas_grupos'] ?? null;
+    if ($grupos === null && empty($sec['herramientas'])) {
+        return '';
+    }
+
+    $bloques = $grupos ?? [['titulo' => 'Herramientas de la pantalla', 'items' => $sec['herramientas']]];
+    $html = '';
+    foreach ($bloques as $bloque) {
+        if (empty($bloque['items'])) {
+            continue;
+        }
+        $html .= '<div class="mc-herramientas"><h3>' . e($bloque['titulo']) . '</h3><table><thead><tr>';
+        foreach (['Herramienta', 'Ubicación', 'Qué hace', 'Permiso'] as $hd) {
+            $html .= '<th>' . e($hd) . '</th>';
+        }
+        $html .= '</tr></thead><tbody>';
+        foreach ($bloque['items'] as $h) {
+            $html .= '<tr><td><strong>' . e($h['herramienta']) . '</strong></td>';
+            $html .= '<td>' . e($h['ubicacion']) . '</td>';
+            $html .= '<td>' . e($h['accion']) . '</td>';
+            $html .= '<td><code>' . e($h['permiso']) . '</code></td></tr>';
+        }
+        $html .= '</tbody></table></div>';
+    }
+
+    return $html;
 }
 
 function e(string $s): string

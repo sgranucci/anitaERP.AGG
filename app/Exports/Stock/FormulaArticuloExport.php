@@ -3,6 +3,8 @@
 namespace App\Exports\Stock;
 
 use App\Queries\Stock\FormulaArticuloQueryInterface;
+use App\Services\Stock\FormulaArticuloCostoTotalService;
+use App\Services\Stock\StkmaeUltimaCompraAnitaService;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
@@ -55,6 +57,8 @@ class FormulaArticuloExport implements FromView, ShouldAutoSize, WithColumnForma
                 $busqueda = trim($busqueda);
             }
             $formulas = $this->formulaQuery->leeFormulaArticulo($busqueda, false, true);
+            app(StkmaeUltimaCompraAnitaService::class)->enriquecerFormulasPaginadasConCosto($formulas);
+            app(FormulaArticuloCostoTotalService::class)->enriquecerFormulasConCostoTotal($formulas);
 
             $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($formulas);
             $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;

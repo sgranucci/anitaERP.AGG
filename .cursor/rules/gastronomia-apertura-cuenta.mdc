@@ -1,0 +1,52 @@
+---
+description: Gastronomía POS — apertura de mesa/cuenta (cubiertos, mozo, config) y Blade en vistas
+globs: resources/views/ventas/gastronomia/**,public/assets/pages/scripts/ventas/gastronomia/**,app/Services/Ventas/Gastronomia/**,config/gastronomia.php,app/Http/Controllers/Ventas/GastronomiaProcesoFacturacionController.php
+alwaysApply: false
+---
+
+# Apertura de mesa / cuenta libre (gastronomía)
+
+Al **abrir** una mesa nueva o una cuenta libre, deben cargarse cubiertos y mozo según configuración. No abrir la cuenta en backend con `cubiertos: 0` y `mozo_gastronomia_id: null` si la config lo exige.
+
+## Variables (`config/gastronomia.php` / `.env`)
+
+| Clave | Env | Default | Uso |
+|-------|-----|---------|-----|
+| `cubiertos_obligatorio_al_abrir` | `GASTRONOMIA_CUBIERTOS_OBLIGATORIO_AL_ABRIR` | `true` | Exige cubiertos > 0 al abrir |
+| `cubiertos_default_al_abrir` | `GASTRONOMIA_CUBIERTOS_DEFAULT_AL_ABRIR` | `1` | Valor si no se ingresa nada |
+| `mozo_obligatorio_al_abrir` | `GASTRONOMIA_MOZO_OBLIGATORIO_AL_ABRIR` | `true` | Exige mozo al abrir |
+| `cuentas_libres_habilitadas` | `GASTRONOMIA_CUENTAS_LIBRES_HABILITADAS` | `true` | Modo cuentas libres y atajo `+` |
+
+Exponer en `window.GASTRONOMIA` y en `api/config` para el JS del POS.
+
+## Flujo POS
+
+1. **Mesa ya ocupada** (`ocupada` / cuenta reutilizada): no mostrar modal de apertura; cargar cuenta existente.
+2. **Mesa nueva o cuenta libre**: modal `#modal-abrir-cuenta` con cubiertos (default desde config) y selector de mozo (`api/mozos`).
+3. **Atajo `+`**: solo si `cuentas_libres_habilitadas` y modo «Cuentas libres» activo; ignorar si el foco está en input/textarea/select.
+4. Tras abrir, validar también en backend antes de `agregarLinea` (`validarCabeceraOperativa`).
+
+## Backend
+
+- `GastronomiaCuentaService::resolverDatosAperturaCuenta()` centraliza default, obligatoriedad y existencia del mozo.
+- `abrirMesa` / `abrirCuentaLibre` reciben `cubiertos` y `mozo_gastronomia_id` en el request.
+- `apiAbrirCuenta` debe rechazar si `cuentas_libres_habilitadas` es false.
+
+## Blade (evitar error de compilación)
+
+No escribir `@if` / `@endif` **en la misma línea** pegados al texto HTML (p. ej. `Mozo@if (...)*@endif`). El compilador de Blade puede fallar con `unexpected token "endif"`.
+
+```blade
+{{-- ❌ Prohibido --}}
+<label>Mozo@if ($mozo_obligatorio_al_abrir)<span>*</span>@endif</label>
+
+{{-- ✅ Correcto --}}
+<label>
+    Mozo
+    @if ($mozo_obligatorio_al_abrir)
+        <span class="text-danger">*</span>
+    @endif
+</label>
+```
+
+Tras cambiar vistas: `php artisan view:clear`.

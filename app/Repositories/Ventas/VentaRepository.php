@@ -145,17 +145,13 @@ class VentaRepository implements VentaRepositoryInterface
             'whereArmado' => " WHERE penm_tipo='".$tipo."' and penm_letra='".$letra."' 
                                     and penm_sucursal='".$sucursal."' " 
         );
-        $dataAnita = json_decode($apiAnita->apiCall($data));
-        
-        if (count($dataAnita) > 0)
-        {
-            $nro = (int) $dataAnita[0]->ultnro + 1;
+        $fila = ApiAnita::primeraFilaLista($apiAnita->apiCall($data));
+
+        if ($fila !== null && isset($fila->ultnro)) {
+            return (int) $fila->ultnro + 1;
         }
-        
-        if (!isset($nro))
-            return 'error';
-        
-        return $nro;
+
+        return 'error';
     }
 
     public function numeraAnita($tipo, $letra, $sucursal, $path_sistema = null)
@@ -173,43 +169,60 @@ class VentaRepository implements VentaRepositoryInterface
         );
         if (isset($path_sistema))
             $data['path_sistema'] = $path_sistema;
-        $dataAnita = json_decode($apiAnita->apiCall($data));
-
-        if (count($dataAnita) > 0)
-        {
-            $claveNumero = $dataAnita[0]->compe_numero;
-
-            $apiAnita = new ApiAnita();
-            $data = array( 
-                'acc' => 'list', 
-                'tabla' => 'numerador', 
-                'campos' => '
-                    num_ult_numero
-                ' , 
-                'whereArmado' => " WHERE num_clave='".$claveNumero."' " 
-            );
-            if (isset($path_sistema))
-                $data['path_sistema'] = $path_sistema;
-            $dataAnita = json_decode($apiAnita->apiCall($data));
-
-            $numero = $dataAnita[0]->num_ult_numero + 1;
-
-            $apiAnita = new ApiAnita();
-            $data = array( 'acc' => 'update', 
-                    'tabla' => 'numerador',
-                    'valores' => "num_ult_numero = '".$numero."' ",
-                    'whereArmado' => " WHERE num_clave = '".$claveNumero."' " 
-                    );
-            if (isset($path_sistema))
-                $data['path_sistema'] = $path_sistema;                    
-            $numerador = $apiAnita->apiCall($data);
-
-            if (strpos($numerador, 'Error') !== false)
-                return 'Error al actualizar numerador';
+        $rawCompe = $apiAnita->apiCall($data);
+        $errCompe = ApiAnita::extraerMensajeError($rawCompe);
+        if ($errCompe !== null) {
+            return 'Error al leer compemis: '.$errCompe;
         }
-        else
-          //  return 'Error no tiene numerador';
-            $numero = 0;
+
+        $filaCompe = ApiAnita::primeraFilaLista((string) $rawCompe);
+        if ($filaCompe === null || ! isset($filaCompe->compe_numero)) {
+            return 0;
+        }
+
+        $claveNumero = $filaCompe->compe_numero;
+
+        $apiAnita = new ApiAnita();
+        $data = array(
+            'acc' => 'list',
+            'tabla' => 'numerador',
+            'campos' => '
+                num_ult_numero
+            ',
+            'whereArmado' => " WHERE num_clave='".$claveNumero."' ",
+        );
+        if (isset($path_sistema)) {
+            $data['path_sistema'] = $path_sistema;
+        }
+
+        $rawNumerador = $apiAnita->apiCall($data);
+        $errNumerador = ApiAnita::extraerMensajeError($rawNumerador);
+        if ($errNumerador !== null) {
+            return 'Error al leer numerador: '.$errNumerador;
+        }
+
+        $filaNumerador = ApiAnita::primeraFilaLista((string) $rawNumerador);
+        if ($filaNumerador === null || ! isset($filaNumerador->num_ult_numero)) {
+            return 'Error al actualizar numerador';
+        }
+
+        $numero = (int) $filaNumerador->num_ult_numero + 1;
+
+        $apiAnita = new ApiAnita();
+        $data = array(
+            'acc' => 'update',
+            'tabla' => 'numerador',
+            'valores' => "num_ult_numero = '".$numero."' ",
+            'whereArmado' => " WHERE num_clave = '".$claveNumero."' ",
+        );
+        if (isset($path_sistema)) {
+            $data['path_sistema'] = $path_sistema;
+        }
+        $numerador = $apiAnita->apiCall($data);
+
+        if (ApiAnita::extraerMensajeError($numerador) !== null) {
+            return 'Error al actualizar numerador';
+        }
 
         return $numero;
     }

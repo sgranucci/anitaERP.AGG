@@ -83,6 +83,14 @@ $(document).ready(function () {
                         </button>
                     </form>
                     @endif
+                    @if (can('actualizar-formula-articulo', false))
+                    <form action="{{ route('vincular_formula_articulo_por_codigo') }}" method="POST" class="d-inline" onsubmit="return confirm('Vincular cada f\u00f3rmula con el art\u00edculo cuyo SKU coincide (c\u00f3digo Anita \u2192 V0000, ej. 365 \u2192 V0365) y actualizar articulo.formula.\n\n\u00bfContinuar?');">
+                        @csrf
+                        <button type="submit" class="btn btn-outline-success btn-sm" title="Vincular fórmulas con artículos por código → SKU V####">
+                            <i class="fa fa-fw fa-link"></i> Vincular con artículos
+                        </button>
+                    </form>
+                    @endif
                 </div>
                 <div class="d-md-flex justify-content-md-end">
                     <form action="{{ route('consultar_formula_articulo') }}" method="GET">
@@ -98,7 +106,9 @@ $(document).ready(function () {
             <div class="card-body table-responsive p-0">
                 @include('includes.exportar-tabla', ['ruta' => 'listar_formula_articulo', 'busqueda' => $busqueda ?? ''])
                 @php
+                    use App\Support\Stock\FormulaArticuloGastronomia;
                     $indexTieneRanura = config('app.empresa') === 'FRASLE' && \Illuminate\Support\Facades\Schema::hasColumn('formula_articulo_hijo', 'ranura');
+                    $indexGastOpc = FormulaArticuloGastronomia::opcionalesHabilitados();
                 @endphp
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead>
@@ -117,11 +127,11 @@ $(document).ready(function () {
                         @foreach ($formulas as $data)
                         <tr>
                             <td>{{ $data->id }}</td>
-                            <td><small class="text-monospace">@if(! empty($data->codigo)){{ $data->codigo }}@else<span class="text-muted">&mdash;</span>@endif</small></td>
+                            <td><small class="text-monospace">@if(! empty($data->codigo)){{ $data->codigo }}@else<span class="text-muted">&mdash;</span>@endif</small>@include('stock.formula_articulo.partials.costo_total_index', ['formula' => $data])</td>
                             <td>
                                 <small>
                                     @if (! empty($data->articulo_id))
-                                        <a href="{{ route('editar_articulo', ['id' => $data->articulo_id]) }}" target="_blank" rel="noopener">{{ $data->articulo_sku ?? '' }}</a>
+                                        <a href="{{ route('editar_articulo', ['id' => $data->articulo_id, 'origen' => 'modal_consulta']) }}" class="text-primary" target="_blank" rel="noopener">{{ $data->articulo_sku ?? '' }}</a>
                                         — {{ $data->articulo_descripcion ?? '' }}
                                     @else
                                         <span class="text-muted">Sin art&iacute;culo cabecera</span>
@@ -139,51 +149,12 @@ $(document).ready(function () {
                             </td>
                             <td class="small">
                                 @forelse ($data->formula_articulo_hijos ?? [] as $h)
-                                    @php
-                                        $idxDep = $h->depositos ?? null;
-                                        $idxDepStr = $idxDep ? trim(($idxDep->codigo ?? '').' '.($idxDep->nombre ?? '')) : '';
-                                    @endphp
-                                    <div class="mb-1 pb-1 @if(! $loop->last) border-bottom border-light @endif">
-                                        @if($h->articulo_id)
-                                            <div>
-                                                <a href="{{ route('editar_articulo', ['id' => $h->articulo_id]) }}" target="_blank" rel="noopener">{{ $h->articulos->sku ?? '' }}</a>
-                                                <span class="text-muted"> — {{ $h->articulos->descripcion ?? '' }}</span>
-                                            </div>
-                                            <div class="text-right text-nowrap"><small class="text-muted">Cant. {{ number_format((float) ($h->cantidad ?? 0), 2, ',', '.') }} · FC {{ number_format((float) ($h->factorcosto ?? 0), 2, ',', '.') }}</small></div>
-                                            @if($idxDepStr !== '')
-                                                <div><small class="text-muted">Dep.: {{ $idxDepStr }}</small></div>
-                                            @endif
-                                            @if($indexTieneRanura && ($h->ranura ?? '') !== '' && $h->ranura !== null)
-                                                <div><small class="text-muted">Ranura: {{ $h->ranura }}</small></div>
-                                            @endif
-                                        @elseif($h->formula_hija_id)
-                                            @php
-                                                $subArt = optional($h->formula_hija)->articulos;
-                                                $fhIdx = $h->formula_hija;
-                                            @endphp
-                                            <div>
-                                                <a href="{{ route('editar_formula_articulo', ['id' => $h->formula_hija_id]) }}" target="_blank" rel="noopener">F&oacute;rmula #{{ $h->formula_hija_id }}</a>
-                                                @if($subArt)
-                                                    <span class="text-muted"> — {{ $subArt->sku ?? '' }} — {{ $subArt->descripcion ?? '' }}</span>
-                                                @else
-                                                    <span class="text-muted"> — <em>Sin art&iacute;culo cabecera en subf&oacute;rmula</em></span>
-                                                @endif
-                                            </div>
-                                            <div class="text-right text-nowrap"><small class="text-muted">Cant. {{ number_format((float) ($h->cantidad ?? 0), 2, ',', '.') }} · FC {{ number_format((float) ($h->factorcosto ?? 0), 2, ',', '.') }}</small></div>
-                                            @if($fhIdx && trim((string) ($fhIdx->codigo ?? '')) !== '')
-                                                <div><small class="text-muted">C&oacute;d. subf.: {{ $fhIdx->codigo }}</small></div>
-                                            @endif
-                                            @if($fhIdx && trim((string) ($fhIdx->detalle ?? '')) !== '')
-                                                <div class="text-muted"><small>{!! nl2br(e($fhIdx->detalle)) !!}</small></div>
-                                            @endif
-                                            @if($idxDepStr !== '')
-                                                <div><small class="text-muted">Dep.: {{ $idxDepStr }}</small></div>
-                                            @endif
-                                            @if($indexTieneRanura && ($h->ranura ?? '') !== '' && $h->ranura !== null)
-                                                <div><small class="text-muted">Ranura: {{ $h->ranura }}</small></div>
-                                            @endif
-                                        @endif
-                                    </div>
+                                    @include('stock.formula_articulo.partials.index_linea_item', [
+                                        'h' => $h,
+                                        'loop' => $loop,
+                                        'indexGastOpc' => $indexGastOpc,
+                                        'indexTieneRanura' => $indexTieneRanura,
+                                    ])
                                 @empty
                                     <span class="text-muted">&mdash;</span>
                                 @endforelse

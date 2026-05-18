@@ -19,25 +19,44 @@ class CapturarPantallasManualInterno extends Command
 
     protected $description = 'Captura pantallas reales del ERP (render interno, sin Chrome)';
 
-    /** @var array<string, array{path: string, auth: bool}> */
+    /** @var array<string, array{path: string, auth: bool, post?: string}> */
     private array $pantallas = [
         'login' => ['path' => '/seguridad/login', 'auth' => false],
         'proveedor-listado' => ['path' => '/compras/proveedor', 'auth' => true],
+        'proveedor-edicion' => ['path' => '', 'auth' => true],
         'requisicion-listado' => ['path' => '/compras/requisicion', 'auth' => true],
+        'requisicion-edicion' => ['path' => '', 'auth' => true],
+        'presupuestos-tab' => ['path' => '', 'auth' => true, 'post' => 'presupuestos'],
         'listaprecio-proveedor' => ['path' => '/compras/listaprecio_proveedor', 'auth' => true],
         'ordencompra-listado' => ['path' => '/compras/ordencompra', 'auth' => true],
+        'ordencompra-edicion' => ['path' => '', 'auth' => true],
         'tablas-maestras' => ['path' => '/compras/condicionpago', 'auth' => true],
     ];
 
     public function handle(): int
     {
+        $proveedorId = \Illuminate\Support\Facades\DB::table('proveedor')->orderByDesc('id')->value('id');
+        if ($proveedorId) {
+            $this->pantallas['proveedor-edicion']['path'] = '/compras/proveedor/' . $proveedorId . '/editar';
+        }
+
         $reqId = \Illuminate\Support\Facades\DB::table('requisicion')->orderByDesc('id')->value('id');
         if ($reqId) {
-            $this->pantallas['presupuestos-tab'] = [
-                'path' => '/compras/requisicion/' . $reqId . '/editar',
-                'auth' => true,
-            ];
+            // soloconsulta evita redirección cuando el usuario no puede editar el registro
+            $pathReq = '/compras/requisicion/soloconsulta/' . $reqId;
+            $this->pantallas['requisicion-edicion']['path'] = $pathReq;
+            $this->pantallas['presupuestos-tab']['path'] = $pathReq;
         }
+
+        $ocId = \Illuminate\Support\Facades\DB::table('ordencompra')->orderByDesc('id')->value('id');
+        if ($ocId) {
+            $this->pantallas['ordencompra-edicion']['path'] = '/compras/ordencompra/' . $ocId . '/editar';
+        }
+
+        $this->pantallas = array_filter(
+            $this->pantallas,
+            static fn (array $cfg): bool => ! $cfg['auth'] || ($cfg['path'] ?? '') !== ''
+        );
 
         $outDir = public_path('docs/manual-compras/img');
         File::ensureDirectoryExists($outDir);
@@ -61,6 +80,9 @@ class CapturarPantallasManualInterno extends Command
             }
 
             $html = $this->obtenerHtml($cfg['path']);
+            if (! empty($cfg['post'])) {
+                $html = $this->aplicarPostProceso($html, (string) $cfg['post']);
+            }
             if ($html === null) {
                 $this->warn("  ✗ {$nombre}: sin contenido");
 
@@ -128,6 +150,29 @@ class CapturarPantallasManualInterno extends Command
 
         $this->pdfPrimeraPaginaAPng($tmpPdf, $pngPath);
         @unlink($tmpPdf);
+    }
+
+    private function aplicarPostProceso(?string $html, string $tipo): ?string
+    {
+        if ($html === null) {
+            return null;
+        }
+
+        if ($tipo === 'presupuestos') {
+            $html = preg_replace(
+                '/id="solapa-presupuestos-requisicion"[^>]*style="display:\s*none;?"/i',
+                'id="solapa-presupuestos-requisicion" style="display:block;"',
+                $html
+            ) ?? $html;
+            $html = preg_replace(
+                '/class="form1"([^>]*)style="display:\s*block;?"/i',
+                'class="form1"$1 style="display:none;"',
+                $html,
+                1
+            ) ?? $html;
+        }
+
+        return $html;
     }
 
     private function prepararHtmlParaCaptura(string $html): string

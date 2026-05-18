@@ -1343,6 +1343,20 @@ class ClienteRepository implements ClienteRepositoryInterface
     {
 		$columns = ['cliente.id', 'cliente.nombre', 'cliente.codigo', 'cliente.domicilio', 'provincia.nombre', 'localidad.nombre'];
         $columnsOut = ['id', 'nombre', 'codigo', 'domicilio', 'provincia', 'localidad'];
+		$colspan = count($columnsOut) + 1;
+
+		$consulta = is_string($consulta) ? trim($consulta) : '';
+		$minLen = preg_match('/^\d+$/', $consulta) ? 1 : 2;
+
+		if (mb_strlen($consulta) < $minLen) {
+			$hint = 'Ingrese al menos '.$minLen
+				.($minLen === 1 ? ' dígito' : ' caracteres')
+				.' para buscar (solo clientes activos).';
+
+			return json_encode([
+				'data' => '<tr><td colspan="'.$colspan.'" class="text-muted">'.$hint.'</td></tr>',
+			], JSON_UNESCAPED_UNICODE);
+		}
 
 		$consulta = strtoupper($consulta);
 
@@ -1355,8 +1369,8 @@ class ClienteRepository implements ClienteRepositoryInterface
 									'localidad.nombre as localidad')
 							->leftjoin('provincia', 'provincia.id', '=', 'cliente.provincia_id')
 							->leftjoin('localidad', 'localidad.id', '=', 'cliente.localidad_id')
-							->where('deleted_at', null)
-							->where('cliente.estado', '0');
+							->activos()
+							->whereNull('cliente.deleted_at');
 
 		// Filtra vendedores
 		$vendedores = $this->vendedorRepository->leeVendedoresAsociados();
@@ -1364,15 +1378,16 @@ class ClienteRepository implements ClienteRepositoryInterface
 		if (count($vendedores) > 0)
 			$data = $data->where('vendedor_id', $vendedores);
 
-		$data = $data->Where(function ($query) use ($count, $consulta, $columns) {
+		$data = $data->where(function ($query) use ($count, $consulta, $columns) {
                         			for ($i = 0; $i < $count; $i++)
-                            			$query->orWhere($columns[$i], "LIKE", '%'. $consulta . '%');
-                            })	
+                            			$query->orWhere($columns[$i], 'LIKE', '%'.$consulta.'%');
+                            })
 							->orderBy('cliente.nombre', 'asc')
-                            ->get();								
+							->limit(250)
+                            ->get();
 
         $output = [];
-		$output['data'] = '';	
+		$output['data'] = '';
         $flSinDatos = true;
         $count = count($columns);
 		if (count($data) > 0)
@@ -1382,7 +1397,7 @@ class ClienteRepository implements ClienteRepositoryInterface
                 $flSinDatos = false;
                 $output['data'] .= '<tr>';
                 for ($i = 0; $i < $count; $i++)
-                    $output['data'] .= '<td class="'.$columnsOut[$i].'">' . $row->{$columnsOut[$i]} . '</td>';	
+                    $output['data'] .= '<td class="'.$columnsOut[$i].'">' . $row->{$columnsOut[$i]} . '</td>';
                 $output['data'] .= '<td><a class="btn btn-warning btn-sm eligeconsultacliente">Elegir</a></td>';
                 $output['data'] .= '</tr>';
 			}
@@ -1390,11 +1405,10 @@ class ClienteRepository implements ClienteRepositoryInterface
 
         if ($flSinDatos)
 		{
-			$output['data'] .= '<tr>';
-			$output['data'] .= '<td>Sin resultados</td>';
-			$output['data'] .= '</tr>';
+			$output['data'] .= '<tr><td colspan="'.$colspan.'">Sin resultados</td></tr>';
 		}
-		return(json_encode($output, JSON_UNESCAPED_UNICODE));
-    }    
+
+		return json_encode($output, JSON_UNESCAPED_UNICODE);
+    }
 
 }

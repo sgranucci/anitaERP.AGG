@@ -1,0 +1,2959 @@
+(function () {
+    const G = window.GASTRONOMIA || {};
+    let empresaId = G.empresaId || null;
+    const prefijoSku = (G.prefijoSku || 'V').toString();
+    const skuDigitosSufijo = Math.max(0, parseInt(String(G.skuCatalogoDigitosSufijo || '0'), 10) || 0);
+    const wsfeReceptorCfUmbralMonto = Math.max(0, parseFloat(String(G.wsfeReceptorCfUmbralMonto || '0')) || 0);
+
+    let cuentaId = null;
+    let cuentaActivaMesaId = null;
+    let cuentaActivaSubtotalArs = null;
+    let cuentaActivaConLineas = null;
+    let lastDescuentoGastronomiaMeta = null;
+    const IMPORTE_MINIMO_FACTURA = 0.01;
+    let modoMesa = true;
+    let pendingArticulo = null;
+    let pendingOpcionalesCtx = null;
+    let pendingAbrirCuentaResolver = null;
+    let pendingAbrirCuentaReject = null;
+
+    function cubiertosDefaultApertura() {
+        return Math.max(0, parseInt(String(G.cubiertosDefaultAlAbrir ?? '1'), 10) || 0);
+    }
+
+    function requiereDatosAperturaAlAbrir() {
+        return !!(G.cubiertosObligatorioAlAbrir || G.mozoObligatorioAlAbrir);
+    }
+
+    function aplicarConfigAperturaDesdeApi(data) {
+        if (!data) return;
+        if (data.cubiertos_default_al_abrir != null) {
+            G.cubiertosDefaultAlAbrir = data.cubiertos_default_al_abrir;
+        }
+        if (data.cubiertos_obligatorio_al_abrir != null) {
+            G.cubiertosObligatorioAlAbrir = !!data.cubiertos_obligatorio_al_abrir;
+        }
+        if (data.mozo_obligatorio_al_abrir != null) {
+            G.mozoObligatorioAlAbrir = !!data.mozo_obligatorio_al_abrir;
+        }
+        if (data.cuentas_libres_habilitadas != null) {
+            G.cuentasLibresHabilitadas = !!data.cuentas_libres_habilitadas;
+        }
+        aplicarVisibilidadCuentasLibres();
+    }
+
+    function aplicarVisibilidadCuentasLibres() {
+        const habilitadas = G.cuentasLibresHabilitadas !== false;
+        const btnModoCuenta = document.getElementById('btn-modo-cuenta');
+        if (btnModoCuenta) {
+            btnModoCuenta.classList.toggle('d-none', !habilitadas);
+        }
+        if (!habilitadas && !modoMesa) {
+            setModo(true, { silent: true });
+        }
+    }
+
+    function esCampoTextoEditable(el) {
+        if (!el || !el.tagName) return false;
+        const tag = el.tagName.toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || tag === 'select') {
+            if (el.disabled || el.readOnly) return false;
+            const type = (el.type || '').toLowerCase();
+            if (type === 'checkbox' || type === 'radio' || type === 'button' || type === 'submit') {
+                return false;
+            }
+            return true;
+        }
+        return !!el.isContentEditable;
+    }
+
+    function esAtajoNuevaCuentaLibre(e) {
+        return e.key === '+' || e.code === 'NumpadAdd' || (e.key === '=' && e.shiftKey);
+    }
+
+    function appPath(path) {
+        const raw = typeof carpetaBase !== 'undefined' && carpetaBase != null ? String(carpetaBase) : '';
+        const base = raw.replace(/\/$/, '');
+        const p = path.startsWith('/') ? path : '/' + path;
+        return base + p;
+    }
+
+    function hdrJson() {
+        return {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            'X-CSRF-TOKEN': G.csrf,
+            'X-Requested-With': 'XMLHttpRequest',
+        };
+    }
+
+    async function api(path, opts) {
+        const url = appPath(path);
+        const sep = url.includes('?') ? '&' : '?';
+        const res = await fetch(url + sep + '_=' + Date.now(), opts);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            const detail =
+                data.error ||
+                data.mensaje ||
+                data.message ||
+                (data.errors ? JSON.stringify(data.errors) : '') ||
+                '';
+            const err = new Error(detail || 'HTTP ' + res.status);
+            err.payload = data;
+            err.httpStatus = res.status;
+            throw err;
+        }
+        return data;
+    }
+
+    /** Control pulsado antes de F5 (algunos navegadores no marcan ctrlKey en F5). */
+    let teclaControlPulsada = false;
+    let iframeImpresionFactura = null;
+
+    function obtenerIframeImpresionFactura() {
+        if (iframeImpresionFactura && document.body.contains(iframeImpresionFactura)) {
+            return iframeImpresionFactura;
+        }
+        iframeImpresionFactura = document.getElementById('gastro-iframe-impresion-factura');
+        if (!iframeImpresionFactura) {
+            iframeImpresionFactura = document.createElement('iframe');
+            iframeImpresionFactura.id = 'gastro-iframe-impresion-factura';
+            iframeImpresionFactura.setAttribute('aria-hidden', 'true');
+            iframeImpresionFactura.title = 'Impresión factura';
+            iframeImpresionFactura.style.cssText =
+                'position:absolute;width:0;height:0;border:0;left:-9999px;top:-9999px;';
+            document.body.appendChild(iframeImpresionFactura);
+        }
+        return iframeImpresionFactura;
+    }
+
+    function limpiarIframeImpresionFactura() {
+        const iframe = iframeImpresionFactura;
+        if (!iframe) {
+            return;
+        }
+        if (iframe._gastroBlobUrl) {
+            try {
+                URL.revokeObjectURL(iframe._gastroBlobUrl);
+            } catch (e) {
+                /* ignore */
+            }
+            iframe._gastroBlobUrl = null;
+        }
+        iframe.removeAttribute('src');
+    }
+
+    async function imprimirFacturaPdf(ventaId) {
+        const vid = parseInt(String(ventaId), 10);
+        if (!vid) {
+            limpiarIframeImpresionFactura();
+            return false;
+        }
+        const url = G.rutas.listaPdfFacturaBase + '/' + vid;
+        const iframe = obtenerIframeImpresionFactura();
+        limpiarIframeImpresionFactura();
+
+        try {
+            const res = await fetch(url, { credentials: 'same-origin' });
+            if (!res.ok) {
+                throw new Error('No se pudo obtener el PDF de la factura.');
+            }
+            const blob = await res.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            iframe._gastroBlobUrl = blobUrl;
+
+            await new Promise((resolve, reject) => {
+                const onLoad = () => {
+                    iframe.removeEventListener('load', onLoad);
+                    iframe.removeEventListener('error', onError);
+                    resolve();
+                };
+                const onError = () => {
+                    iframe.removeEventListener('load', onLoad);
+                    iframe.removeEventListener('error', onError);
+                    reject(new Error('No se pudo cargar el PDF para impresión.'));
+                };
+                iframe.addEventListener('load', onLoad);
+                iframe.addEventListener('error', onError);
+                iframe.src = blobUrl;
+            });
+
+            const win = iframe.contentWindow;
+            if (win) {
+                win.focus();
+                win.print();
+            }
+            return true;
+        } catch (e) {
+            limpiarIframeImpresionFactura();
+            toast(e.message || 'Error al imprimir la factura.', 'error');
+            return false;
+        }
+    }
+
+    const UMBRAL_AVISO_PERSISTENTE = 90;
+
+    function debeUsarAvisoPersistente(msg, type) {
+        const s = String(msg || '').trim();
+        if (!s) return false;
+        if (type === 'warning' && s.length >= UMBRAL_AVISO_PERSISTENTE) return true;
+        if (type === 'error' && (s.length >= UMBRAL_AVISO_PERSISTENTE || /factura emitida/i.test(s))) return true;
+        return false;
+    }
+
+    function formatearTextoAviso(msg) {
+        return String(msg || '')
+            .replace(/\s{2,}/g, ' ')
+            .replace(/([.!?])\s+(?=[A-ZÁÉÍÓÚÑ])/g, '$1\n\n')
+            .trim();
+    }
+
+    let gastroAvisoKeyHandler = null;
+
+    function cerrarAvisoPersistente() {
+        const modal = document.getElementById('modal-gastro-aviso');
+        if (modal && window.jQuery) {
+            window.jQuery(modal).modal('hide');
+        }
+        if (gastroAvisoKeyHandler) {
+            document.removeEventListener('keydown', gastroAvisoKeyHandler, true);
+            gastroAvisoKeyHandler = null;
+        }
+    }
+
+    function mostrarAvisoPersistente(mensaje, tipo, opciones) {
+        const opts = opciones || {};
+        const modal = document.getElementById('modal-gastro-aviso');
+        if (!modal) {
+            alert(formatearTextoAviso(mensaje));
+            return;
+        }
+        const t = tipo || 'warning';
+        const titulos = {
+            warning: opts.titulo || 'Aviso',
+            error: opts.titulo || 'Error',
+            success: opts.titulo || 'Operación completada',
+            info: opts.titulo || 'Información',
+        };
+        const headerCls = {
+            warning: 'bg-warning text-dark',
+            error: 'bg-danger text-white',
+            success: 'bg-success text-white',
+            info: 'bg-info text-white',
+        };
+        const header = document.getElementById('modal-gastro-aviso-header');
+        const tituloEl = document.getElementById('modal-gastro-aviso-titulo');
+        const detalleEl = document.getElementById('modal-gastro-aviso-detalle');
+        const mensajeEl = document.getElementById('modal-gastro-aviso-mensaje');
+        const btnAceptar = document.getElementById('modal-gastro-aviso-aceptar');
+        if (header) {
+            header.className = 'modal-header py-2 ' + (headerCls[t] || headerCls.warning);
+        }
+        if (tituloEl) tituloEl.textContent = titulos[t] || titulos.warning;
+        const detalle = opts.detalle ? String(opts.detalle).trim() : '';
+        if (detalleEl) {
+            if (detalle) {
+                detalleEl.textContent = detalle;
+                detalleEl.classList.remove('d-none');
+            } else {
+                detalleEl.textContent = '';
+                detalleEl.classList.add('d-none');
+            }
+        }
+        if (mensajeEl) mensajeEl.textContent = formatearTextoAviso(mensaje);
+        if (gastroAvisoKeyHandler) {
+            document.removeEventListener('keydown', gastroAvisoKeyHandler, true);
+        }
+        gastroAvisoKeyHandler = function (ev) {
+            if (!modal.classList.contains('show')) return;
+            if (ev.key === 'Enter' || ev.key === 'Escape' || ev.key === ' ') {
+                ev.preventDefault();
+                cerrarAvisoPersistente();
+            }
+        };
+        document.addEventListener('keydown', gastroAvisoKeyHandler, true);
+        if (window.jQuery) {
+            const $m = window.jQuery(modal);
+            $m.off('hidden.bs.modal.gastroAviso').on('hidden.bs.modal.gastroAviso', function () {
+                if (gastroAvisoKeyHandler) {
+                    document.removeEventListener('keydown', gastroAvisoKeyHandler, true);
+                    gastroAvisoKeyHandler = null;
+                }
+            });
+            $m.modal('show');
+            window.setTimeout(function () {
+                if (btnAceptar) btnAceptar.focus();
+            }, 350);
+        } else {
+            alert((detalle ? detalle + '\n\n' : '') + formatearTextoAviso(mensaje));
+        }
+    }
+
+    function toast(msg, type, opciones) {
+        const t = type || 'info';
+        if (opciones && opciones.persistente) {
+            mostrarAvisoPersistente(msg, t, opciones);
+            return;
+        }
+        if (debeUsarAvisoPersistente(msg, t)) {
+            mostrarAvisoPersistente(msg, t, opciones);
+            return;
+        }
+        if (window.toastr) {
+            const opts =
+                t === 'warning' || t === 'error'
+                    ? { timeOut: 8000, extendedTimeOut: 4000, closeButton: true, progressBar: true }
+                    : {};
+            toastr[t](msg, '', opts);
+        } else {
+            alert(msg);
+        }
+    }
+
+    function setFacturacionLoading(isLoading, mensaje) {
+        const btn = document.getElementById('tool-facturar');
+        const badge = document.getElementById('gastro-facturacion-loading');
+        const texto = badge ? badge.querySelector('.gastro-facturacion-loading-text') : null;
+        if (badge) badge.style.display = isLoading ? 'inline-block' : 'none';
+        if (texto && mensaje) texto.textContent = mensaje;
+        if (btn) {
+            btn.disabled = !!isLoading;
+            btn.style.pointerEvents = isLoading ? 'none' : '';
+            btn.style.opacity = isLoading ? '0.6' : '';
+        }
+    }
+
+    function limpiarCobranza(opciones) {
+        const dejarFilaVacia = !opciones || opciones.filaVacia !== false;
+        const tbody = document.getElementById('tbody-gastro-cuenta-table');
+        if (tbody) tbody.innerHTML = '';
+        totalFacturadoArs = 0;
+        cotizacionExtranjera = { monedaId: null, cotizacion: 1, abrev: '' };
+        const hCot = document.getElementById('gastro-cotizacion-extranjera');
+        const hMon = document.getElementById('gastro-moneda-extranjera-id');
+        if (hCot) hCot.value = '';
+        if (hMon) hMon.value = '';
+        actualizarBarraCotizacion();
+        const wrap = document.getElementById('gastro-totales-cobranza');
+        if (wrap) wrap.innerHTML = '';
+        if (dejarFilaVacia) {
+            agregarRenglonCobranza(false);
+        }
+    }
+
+    function recogerMediosPagoFromGrid() {
+        const medios = [];
+        document.querySelectorAll('#tbody-gastro-cuenta-table tr').forEach((tr) => {
+            const cuentacajaId = parseInt(tr.querySelector('.cuentacaja_id')?.value || '0', 10);
+            const monedaId = parseInt(tr.querySelector('.moneda_id')?.value || '0', 10);
+            const monto = parseFloat(tr.querySelector('.monto')?.value || '');
+            if (!cuentacajaId || !monedaId || Number.isNaN(monto) || monto <= 0) return;
+            const cot =
+                monedaId > MONEDA_PESOS_ID && cotizacionExtranjera.monedaId === monedaId
+                    ? cotizacionExtranjera.cotizacion
+                    : null;
+            medios.push({
+                cuentacaja_id: cuentacajaId,
+                moneda_id: monedaId,
+                monto: monto,
+                cotizacion: cot,
+            });
+        });
+        return medios;
+    }
+
+    function parseMontoArsTexto(raw) {
+        const s = String(raw || '').trim();
+        if (!s) return 0;
+        if (/,\d{1,2}$/.test(s)) {
+            return parseFloat(s.replace(/\./g, '').replace(',', '.'));
+        }
+        return parseFloat(s.replace(/,/g, ''));
+    }
+
+    function descuentoGastronomiaParaCalculo(cuenta) {
+        if (cuenta && cuenta.descuento_gastronomia) {
+            return cuenta.descuento_gastronomia;
+        }
+        return lastDescuentoGastronomiaMeta;
+    }
+
+    function subtotalBrutoLineasCuenta(cuenta) {
+        let sub = 0;
+        (cuenta && cuenta.lineas ? cuenta.lineas : []).forEach((ln) => {
+            const pu = Number(ln.precio_unitario);
+            const cant = Number(ln.cantidad);
+            const pct = Number(ln.descuento_linea_pct || 0);
+            sub += cant * pu * (1 - pct / 100);
+        });
+        return Math.round(sub * 100) / 100;
+    }
+
+    function evaluarFacturaCortesiaDesdeCuenta(cuenta) {
+        const desc = descuentoGastronomiaParaCalculo(cuenta);
+        const subBruto = subtotalBrutoLineasCuenta(cuenta || cuentaActivaConLineas);
+        if (!desc) {
+            return { cortesia: false, subtotalBruto: subBruto };
+        }
+        const val = Number(desc.valor || 0);
+        if (desc.tipovalor === 'P' && val >= 100) {
+            return { cortesia: true, subtotalBruto: subBruto };
+        }
+        if (desc.tipovalor === 'I' && subBruto > 0 && val >= subBruto - 0.001) {
+            return { cortesia: true, subtotalBruto: subBruto };
+        }
+        return { cortesia: false, subtotalBruto: subBruto };
+    }
+
+    function esFacturaCortesia(montoArsOpt, cuentaOpt) {
+        const monto =
+            montoArsOpt != null && !Number.isNaN(Number(montoArsOpt)) ? Number(montoArsOpt) : leerTotalAFacturarArs();
+        if (monto > 0 && monto <= 0.02) {
+            return true;
+        }
+        return evaluarFacturaCortesiaDesdeCuenta(cuentaOpt || cuentaActivaConLineas).cortesia;
+    }
+
+    function leerTotalAFacturarArs() {
+        if (cuentaActivaSubtotalArs != null && cuentaActivaSubtotalArs > 0) {
+            return cuentaActivaSubtotalArs;
+        }
+        const wrap = document.getElementById('panel-detalle-lineas');
+        const elSub = wrap ? wrap.querySelector('[data-subtotal-estimado]') : null;
+        if (elSub) {
+            const v = parseFloat(elSub.getAttribute('data-subtotal-estimado') || '');
+            if (!Number.isNaN(v) && v >= 0) {
+                return v;
+            }
+        }
+        const txt = wrap ? wrap.textContent : '';
+        const m =
+            txt.match(/Total a facturar \(\$\):\s*([\d.,]+)/) ||
+            txt.match(/Subtotal estimado \(\$\):\s*([\d.,]+)/) ||
+            txt.match(/Subtotal estimado:\s*([\d.,]+)/);
+        if (m) {
+            return parseMontoArsTexto(m[1]);
+        }
+        if (evaluarFacturaCortesiaDesdeCuenta(cuentaActivaConLineas).cortesia) {
+            return IMPORTE_MINIMO_FACTURA;
+        }
+        return totalFacturadoArs > 0 ? totalFacturadoArs : 0;
+    }
+
+    function leerSubtotalEstimadoArs() {
+        return leerTotalAFacturarArs();
+    }
+
+    function cuentaTieneLineasFacturables() {
+        const wrap = document.getElementById('panel-detalle-lineas');
+        return !!(wrap && wrap.querySelector('tbody tr'));
+    }
+
+    let pendingDescuentoResolver = null;
+    let esperarDescuentoCleanup = null;
+
+    function debeIgnorarAtajoPos() {
+        const ids = [
+            'modal-cantidad',
+            'modal-opcionales',
+            'modal-abrir-cuenta',
+            'consultacuentacajaModal',
+            'consultamozoModal',
+            'consultaclienteModal',
+            'consultadescuentoModal',
+            'consultaclienteModal',
+        ];
+        for (let i = 0; i < ids.length; i++) {
+            const el = document.getElementById(ids[i]);
+            if (el && el.classList.contains('show')) {
+                return true;
+            }
+        }
+        const badge = document.getElementById('gastro-facturacion-loading');
+        if (badge && badge.style.display !== 'none') {
+            return true;
+        }
+        return false;
+    }
+
+    function limpiarEsperaDescuento(mensajeRechazo) {
+        if (esperarDescuentoCleanup) {
+            esperarDescuentoCleanup();
+            esperarDescuentoCleanup = null;
+        }
+        if (mensajeRechazo && pendingDescuentoResolver) {
+            pendingDescuentoResolver.reject(new Error(mensajeRechazo));
+        }
+        pendingDescuentoResolver = null;
+    }
+
+    function etiquetaDescuentoAplicado(desc) {
+        if (!desc) return 'Descuento';
+        const val = Number(desc.valor || 0);
+        if (desc.tipovalor === 'P') {
+            return `${desc.nombre || 'Descuento'} (${val}%)`;
+        }
+        if (desc.tipovalor === 'I') {
+            return `${desc.nombre || 'Descuento'} ($ ${val.toFixed(2)})`;
+        }
+        return desc.nombre || 'Descuento';
+    }
+
+    function subtotalLineasSinDescuentoCabecera(cuenta) {
+        let sub = 0;
+        (cuenta.lineas || []).forEach((ln) => {
+            const pu = Number(ln.precio_unitario);
+            const cant = Number(ln.cantidad);
+            const pct = Number(ln.descuento_linea_pct || 0);
+            sub += cant * pu * (1 - pct / 100);
+        });
+        return Math.round(sub * 100) / 100;
+    }
+
+    function htmlDetalleSubtotalConDescuento(cuenta, subFinal) {
+        const subBruto = subtotalLineasSinDescuentoCabecera(cuenta);
+        const desc = cuenta.descuento_gastronomia || null;
+        let html = '';
+        if (desc && subBruto > subFinal + 0.001) {
+            const ahorro = Math.round((subBruto - subFinal) * 100) / 100;
+            html +=
+                '<div class="text-right text-muted small">' +
+                etiquetaDescuentoAplicado(desc) +
+                ': -$ ' +
+                ahorro.toFixed(2) +
+                ' (antes $ ' +
+                subBruto.toFixed(2) +
+                ')</div>';
+        }
+        html +=
+            '<div class="text-right mt-1" data-subtotal-estimado="' +
+            subFinal.toFixed(2) +
+            '"><strong>Total a facturar ($):</strong> ' +
+            subFinal.toFixed(2) +
+            '</div>';
+        return html;
+    }
+
+    async function cargarDescuentoPorCodigoApi(codigo) {
+        const cod = (codigo || '').trim();
+        if (!cod) {
+            throw new Error('Código de descuento vacío');
+        }
+        const res = await fetch(
+            appPath('/ventas/descuento-gastronomia/leer/' + encodeURIComponent(cod)),
+            {
+                headers: {
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+            },
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.id) {
+            throw new Error(data.error || 'Descuento no encontrado');
+        }
+        if (typeof pintarDescuentoEnPantalla === 'function') {
+            pintarDescuentoEnPantalla(data);
+        }
+        enfocarClienteInternoTrasDescuento();
+        return data;
+    }
+
+    function enfocarClienteInternoTrasDescuento() {
+        const panelCli = document.getElementById('panel-cliente-descuento');
+        if (!panelCli || panelCli.classList.contains('d-none')) {
+            return;
+        }
+        setTimeout(() => enfocarCampoClienteInternoCodigo(), 0);
+    }
+
+    function tieneDescuentoEnPantalla() {
+        return !!(document.getElementById('descuento_gastronomia_id').value || '').trim();
+    }
+
+    function validarClienteInternoDescuentoEnPantalla() {
+        if (!tieneDescuentoEnPantalla()) {
+            return null;
+        }
+        const cliId = (document.getElementById('cliente_descuento_id').value || '').trim();
+        if (!cliId) {
+            return 'Indique el cliente interno del descuento (quien invita o centro de costos). No es el cliente de la factura.';
+        }
+        return null;
+    }
+
+    function validarDescuentoConCliente(data) {
+        if (!data || !data.id) {
+            throw new Error('Debe seleccionar un descuento gastronomía.');
+        }
+        if (typeof mostrarPanelClienteInternoDescuento === 'function') {
+            mostrarPanelClienteInternoDescuento(true);
+        }
+        const errCli = validarClienteInternoDescuentoEnPantalla();
+        if (errCli) {
+            throw new Error(errCli);
+        }
+    }
+
+    function validarDescuentoEnPantalla(exigirDescuento) {
+        if (exigirDescuento && !tieneDescuentoEnPantalla()) {
+            return 'Debe indicar un descuento gastronomía (F8 o campo Descuento).';
+        }
+        return validarClienteInternoDescuentoEnPantalla();
+    }
+
+    let pendingClienteInternoResolver = null;
+    let esperarClienteInternoCleanup = null;
+
+    function limpiarEsperaClienteInterno(mensajeRechazo) {
+        if (esperarClienteInternoCleanup) {
+            esperarClienteInternoCleanup();
+            esperarClienteInternoCleanup = null;
+        }
+        if (mensajeRechazo && pendingClienteInternoResolver) {
+            pendingClienteInternoResolver.reject(new Error(mensajeRechazo));
+        }
+        pendingClienteInternoResolver = null;
+    }
+
+    async function cargarClienteInternoPorCodigoApi(codigo) {
+        const cod = (codigo || '').trim();
+        if (!cod) {
+            throw new Error('Código de cliente interno vacío.');
+        }
+        const res = await fetch(appPath('/ventas/leerunclienteporcodigo/' + encodeURIComponent(cod)), {
+            headers: {
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data || !data.id) {
+            throw new Error('Cliente interno no encontrado.');
+        }
+        if (String(data.estado) !== '0') {
+            throw new Error('Cliente ' + (data.nombre || cod) + ' no está activo.');
+        }
+        if (typeof aplicarClienteInternoDescuentoEnPantalla === 'function') {
+            aplicarClienteInternoDescuentoEnPantalla(data);
+        }
+        return data;
+    }
+
+    function enfocarCampoDescuentoCodigo() {
+        const el = document.getElementById('codigodescuento');
+        if (el && typeof el.focus === 'function') {
+            el.focus();
+            if (typeof el.select === 'function') el.select();
+        }
+    }
+
+    function enfocarCampoClienteInternoCodigo() {
+        const el = document.getElementById('codigocliente_descuento');
+        if (el && typeof el.focus === 'function') {
+            el.focus();
+            if (typeof el.select === 'function') el.select();
+        }
+    }
+
+    function esperarClienteInternoEnCampo(silencioso) {
+        return new Promise((resolve, reject) => {
+            limpiarEsperaClienteInterno();
+            const codInp = document.getElementById('codigocliente_descuento');
+            if (!codInp) {
+                reject(new Error('Campo de cliente interno no disponible.'));
+                return;
+            }
+
+            pendingClienteInternoResolver = {
+                resolve: (cli) => {
+                    limpiarEsperaClienteInterno();
+                    resolve(cli);
+                },
+                reject: (err) => {
+                    limpiarEsperaClienteInterno();
+                    reject(err);
+                },
+            };
+
+            const onKey = async (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const cod = (codInp.value || '').trim();
+                    if (!cod) {
+                        toast('Ingrese el código del cliente interno.', 'warning');
+                        return;
+                    }
+                    try {
+                        const cli = await cargarClienteInternoPorCodigoApi(cod);
+                        // aplicarClienteInternoDescuentoEnPantalla ya resolvió vía gastroOnClienteInternoDescuentoElegido
+                        if (pendingClienteInternoResolver) {
+                            pendingClienteInternoResolver.resolve(cli);
+                        }
+                    } catch (err) {
+                        toast(err.message || String(err), 'error');
+                    }
+                    return;
+                }
+                if (e.key === 'Tab' && e.shiftKey) {
+                    e.preventDefault();
+                    enfocarCampoDescuentoCodigo();
+                }
+            };
+
+            esperarClienteInternoCleanup = () => {
+                codInp.removeEventListener('keydown', onKey, true);
+            };
+
+            if (!silencioso) {
+                toast('Indique cliente interno del descuento (código + Enter) o use la lupa.', 'info');
+            }
+            codInp.addEventListener('keydown', onKey, true);
+            enfocarCampoClienteInternoCodigo();
+        });
+    }
+
+    async function asegurarClienteInternoDescuento(silencioso) {
+        if (!tieneDescuentoEnPantalla()) {
+            return;
+        }
+        if (typeof mostrarPanelClienteInternoDescuento === 'function') {
+            mostrarPanelClienteInternoDescuento(true);
+        }
+        const err = validarClienteInternoDescuentoEnPantalla();
+        if (!err) {
+            return;
+        }
+        await esperarClienteInternoEnCampo(silencioso);
+        const err2 = validarClienteInternoDescuentoEnPantalla();
+        if (err2) {
+            throw new Error(err2);
+        }
+    }
+
+    let recalculandoTotalDescuento = false;
+
+    async function recalcularTotalCuentaConDescuento() {
+        if (!cuentaId || recalculandoTotalDescuento) return null;
+        recalculandoTotalDescuento = true;
+        try {
+            return await guardarCabecera(true);
+        } catch (e) {
+            toast('No se pudo actualizar el total con el descuento: ' + e.message, 'warning');
+            throw e;
+        } finally {
+            recalculandoTotalDescuento = false;
+        }
+    }
+
+    function esperarDescuentoEnCampo(silencioso) {
+        return new Promise((resolve, reject) => {
+            limpiarEsperaDescuento();
+            const codInp = document.getElementById('codigodescuento');
+            if (!codInp) {
+                reject(new Error('Campo de descuento no disponible.'));
+                return;
+            }
+
+            pendingDescuentoResolver = {
+                resolve: (data) => {
+                    limpiarEsperaDescuento();
+                    resolve(data);
+                },
+                reject: (err) => {
+                    limpiarEsperaDescuento();
+                    reject(err);
+                },
+            };
+
+            const onKey = async (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const cod = (codInp.value || '').trim();
+                    if (!cod) {
+                        toast('Ingrese el código de descuento.', 'warning');
+                        return;
+                    }
+                    try {
+                        await cargarDescuentoPorCodigoApi(cod);
+                    } catch (err) {
+                        toast(err.message || String(err), 'error');
+                    }
+                    return;
+                }
+                if (e.key === 'Tab' && !e.shiftKey) {
+                    const panelCli = document.getElementById('panel-cliente-descuento');
+                    if (panelCli && !panelCli.classList.contains('d-none')) {
+                        e.preventDefault();
+                        enfocarCampoClienteInternoCodigo();
+                    }
+                }
+            };
+
+            codInp.addEventListener('keydown', onKey, true);
+            esperarDescuentoCleanup = () => {
+                codInp.removeEventListener('keydown', onKey, true);
+            };
+
+            if (!silencioso) {
+                toast('Indique código de descuento (Enter) o use la lupa. Tab → cliente interno.', 'info');
+            }
+            enfocarCampoDescuentoCodigo();
+        });
+    }
+
+    async function asegurarDescuentoObligatorio(opciones) {
+        const silencioso = !!(opciones && opciones.silencioso);
+        const descId = (document.getElementById('descuento_gastronomia_id').value || '').trim();
+        const cod = (document.getElementById('codigodescuento').value || '').trim();
+        let data = null;
+        if (descId && cod) {
+            try {
+                data = await cargarDescuentoPorCodigoApi(cod);
+            } catch (_) {
+                data = { id: parseInt(descId, 10) };
+            }
+        } else if (cod) {
+            data = await cargarDescuentoPorCodigoApi(cod);
+        } else {
+            data = await esperarDescuentoEnCampo(silencioso);
+        }
+        await asegurarClienteInternoDescuento(silencioso);
+        await recalcularTotalCuentaConDescuento();
+        return data;
+    }
+
+    function envolverPintarDescuentoParaRecalculo() {
+        if (typeof pintarDescuentoEnPantalla !== 'function' || pintarDescuentoEnPantalla._gastroEnvuelto) {
+            return;
+        }
+        const prev = pintarDescuentoEnPantalla;
+        const envuelto = function (data) {
+            if (data && data.id) {
+                lastDescuentoGastronomiaMeta = {
+                    tipovalor: data.tipovalor,
+                    valor: data.valor,
+                };
+            } else {
+                lastDescuentoGastronomiaMeta = null;
+            }
+            prev(data);
+            if (pendingDescuentoResolver && data && data.id) {
+                pendingDescuentoResolver.resolve(data);
+            }
+            if (data && data.id) {
+                enfocarClienteInternoTrasDescuento();
+                if (cuentaId) {
+                    const cliId = (document.getElementById('cliente_descuento_id').value || '').trim();
+                    if (cliId) {
+                        void recalcularTotalCuentaConDescuento();
+                    }
+                }
+            }
+        };
+        envuelto._gastroEnvuelto = true;
+        window.pintarDescuentoEnPantalla = envuelto;
+    }
+
+    async function facturarConDescuento() {
+        if (!cuentaId) {
+            return toast('Seleccione una mesa o cuenta con consumos.', 'warning');
+        }
+        if (!cuentaTieneLineasFacturables()) {
+            return toast('La cuenta no tiene artículos para facturar.', 'warning');
+        }
+
+        try {
+            await asegurarDescuentoObligatorio({ silencioso: true });
+            await emitirFactura({ exigirDescuento: true, prepararCobranzaSiFalta: true });
+        } catch (e) {
+            toast(e.message || String(e), 'error');
+        }
+    }
+
+    async function prepararCobranzaEfectivo(montoArs) {
+        let cc = G.cuentacajaEfectivo;
+        if (!cc || !cc.id) {
+            try {
+                const cfg = await api('/ventas/gastronomia/api/config', { headers: hdrJson() });
+                if (cfg.cuentacaja_efectivo && cfg.cuentacaja_efectivo.id) {
+                    G.cuentacajaEfectivo = cfg.cuentacaja_efectivo;
+                    cc = G.cuentacajaEfectivo;
+                } else if (cfg.cuentacaja_efectivo_error) {
+                    G.cuentacajaEfectivoError = cfg.cuentacaja_efectivo_error;
+                }
+            } catch (e) {
+                /* usar mensaje genérico */
+            }
+        }
+        if (!cc || !cc.id) {
+            throw new Error(
+                G.cuentacajaEfectivoError ||
+                    'Configure GASTRONOMIA_CUENTACAJA_EFECTIVO_POR_EMPRESA para la empresa de esta terminal (ej. {"1":25,"2":24,"3":23}).',
+            );
+        }
+        if (G.cobranzaConfigError) {
+            throw new Error(G.cobranzaConfigError);
+        }
+        const monEfectivo = parseInt(String(cc.moneda_id || MONEDA_PESOS_ID), 10);
+        if (monEfectivo <= MONEDA_PESOS_ID) {
+            cotizacionExtranjera = { monedaId: null, cotizacion: 1, abrev: '' };
+            const hCot = document.getElementById('gastro-cotizacion-extranjera');
+            const hMon = document.getElementById('gastro-moneda-extranjera-id');
+            if (hCot) hCot.value = '';
+            if (hMon) hMon.value = '';
+            actualizarBarraCotizacion();
+        }
+        limpiarCobranza({ filaVacia: false });
+        setTotalFacturadoArs(montoArs);
+        const tbody = document.getElementById('tbody-gastro-cuenta-table');
+        const tr = filaCobranzaDesdeTemplate();
+        if (!tr || !tbody) {
+            throw new Error('No se pudo preparar la cobranza en efectivo.');
+        }
+        tbody.appendChild(tr);
+        wireEventosFilaCobranza(tr);
+        asignarCuentaCajaEnFila(tr, cc);
+        const ccId = (tr.querySelector('.cuentacaja_id')?.value || '').trim();
+        const monId = parseInt(tr.querySelector('.moneda_id')?.value || '0', 10);
+        if (!ccId || !monId) {
+            throw new Error(
+                'No se pudo asignar la cuenta de caja de efectivo en la grilla. Revise GASTRONOMIA_CUENTACAJA_EFECTIVO_POR_EMPRESA.',
+            );
+        }
+        await revisarMonedaExtranjeraEnGrilla();
+        actualizarDatoSaldoMonto(tr);
+        const montoInp = tr.querySelector('.monto');
+        const montoFila = saldoPendienteEnMonedaFila(tr);
+        if (montoInp) {
+            montoInp.value = (montoFila > 0 ? montoFila : montoArs).toFixed(2);
+            montoInp.dataset.montoEditadoManual = '1';
+        }
+        sumarMontosCobranza();
+        if (!recogerMediosPagoFromGrid().length) {
+            throw new Error(
+                'No se pudo preparar el medio de cobro en efectivo (cuenta de caja, moneda o monto).',
+            );
+        }
+    }
+
+    async function efectivizar() {
+        if (!cuentaId) {
+            return toast('Seleccione una mesa o cuenta con consumos.', 'warning');
+        }
+        if (!cuentaTieneLineasFacturables()) {
+            return toast('La cuenta no tiene artículos para facturar.', 'warning');
+        }
+        try {
+            await emitirFactura({ prepararCobranzaSiFalta: true });
+        } catch (e) {
+            toast(e.message || String(e), 'error');
+        }
+    }
+
+    function validarCobranzaConMedios(medios) {
+        if (!medios || medios.length === 0) {
+            return 'Indique al menos un medio de cobro (cuenta de caja y monto).';
+        }
+        let totalArs = 0;
+        medios.forEach((m) => {
+            const cot = m.cotizacion || cotizacionFilaCobranza(m.moneda_id);
+            totalArs += m.monto * coeficienteAPesos(m.moneda_id, cot);
+        });
+        if (totalFacturadoArs > 0 && Math.abs(totalArs - totalFacturadoArs) > TOLERANCIA_MONTO_COBRANZA) {
+            return (
+                'El total de cobranza ($ ' +
+                totalArs.toFixed(2) +
+                ') debe coincidir con el total a facturar ($ ' +
+                totalFacturadoArs.toFixed(2) +
+                ').'
+            );
+        }
+        return null;
+    }
+
+    function validarCobranzaAntesFacturar() {
+        const medios = recogerMediosPagoFromGrid();
+        const errMedios = validarCobranzaConMedios(medios);
+        if (errMedios) {
+            return errMedios;
+        }
+        for (const tr of document.querySelectorAll('#tbody-gastro-cuenta-table tr')) {
+            if (!validarMontoCobranza(tr)) {
+                return 'Revise los montos de cobranza antes de facturar.';
+            }
+        }
+        return null;
+    }
+
+    function labelCodigoNombre(codigo, nombre) {
+        const c = codigo != null && String(codigo).trim() !== '' ? String(codigo).trim() + ' — ' : '';
+        return c + (nombre || '');
+    }
+
+    function etiquetaMesa(mesa) {
+        if (!mesa) return '';
+        if (mesa.numeromesa != null && String(mesa.numeromesa).trim() !== '') {
+            return 'Mesa ' + mesa.numeromesa;
+        }
+        if (mesa.nombre && String(mesa.nombre).trim() !== '') {
+            return 'Mesa ' + mesa.nombre;
+        }
+        if (mesa.codigo && String(mesa.codigo).trim() !== '') {
+            return 'Mesa ' + mesa.codigo;
+        }
+        return 'Mesa';
+    }
+
+    function etiquetaCuentaActiva(cuenta) {
+        if (!cuenta) {
+            return { titulo: '', detalle: '', esMesa: false, mesaId: null };
+        }
+        const id = cuenta.id;
+        const esMesa = cuenta.tipo === 'mesa' || !!cuenta.mesa_gastronomia_id;
+        if (!cuenta.tipo && !cuenta.mesa_gastronomia_id && !cuenta.mesa) {
+            return {
+                titulo: 'Cuenta #' + id,
+                detalle: 'Cargando datos…',
+                esMesa: false,
+                mesaId: null,
+            };
+        }
+        if (esMesa) {
+            const titulo = etiquetaMesa(cuenta.mesa) || 'Mesa (cuenta #' + id + ')';
+            let detalle = 'Cuenta interna #' + id;
+            if (cuenta.cubiertos > 0) {
+                detalle += ' · ' + cuenta.cubiertos + ' cubiertos';
+            }
+            if (cuenta.mozo && cuenta.mozo.nombre) {
+                detalle += ' · Mozo: ' + cuenta.mozo.nombre;
+            }
+            return {
+                titulo,
+                detalle,
+                esMesa: true,
+                mesaId: cuenta.mesa_gastronomia_id || (cuenta.mesa ? cuenta.mesa.id : null),
+            };
+        }
+        return {
+            titulo: 'Cuenta libre #' + id,
+            detalle: 'Sin mesa asignada',
+            esMesa: false,
+            mesaId: null,
+        };
+    }
+
+    function lineaIndicadorCuentaActiva(cuenta, subtotal) {
+        const info = etiquetaCuentaActiva(cuenta);
+        let linea = info.titulo;
+        if (info.detalle) {
+            linea += ' · ' + info.detalle;
+        }
+        if (subtotal != null && subtotal > 0) {
+            linea += ' · Subtotal $' + Number(subtotal).toFixed(2);
+        }
+        return { linea, info };
+    }
+
+    function actualizarIndicadorCuentaActiva(cuenta, subtotal) {
+        const bar = document.getElementById('gastro-bar-cuenta-activa');
+        const lineaEl = document.getElementById('gastro-cuenta-activa-linea');
+        const headerChip = document.getElementById('gastro-header-cuenta-chip');
+        const badgeCuenta = document.getElementById('gastro-indicador-cuenta');
+
+        if (!cuentaId || !cuenta) {
+            cuentaActivaMesaId = null;
+            if (bar) bar.classList.add('d-none');
+            if (lineaEl) {
+                lineaEl.textContent = '—';
+                lineaEl.removeAttribute('title');
+            }
+            if (headerChip) {
+                headerChip.classList.add('d-none');
+                headerChip.textContent = '';
+                headerChip.classList.remove('es-mesa', 'es-cuenta');
+            }
+            if (badgeCuenta) {
+                badgeCuenta.classList.add('d-none');
+                badgeCuenta.textContent = '';
+                badgeCuenta.classList.remove('badge-warning', 'badge-info');
+            }
+            return;
+        }
+
+        const { linea, info } = lineaIndicadorCuentaActiva(cuenta, subtotal);
+        cuentaActivaMesaId = info.mesaId || null;
+
+        if (bar) bar.classList.remove('d-none');
+        if (lineaEl) {
+            lineaEl.textContent = linea;
+            lineaEl.setAttribute('title', linea);
+        }
+
+        if (headerChip) {
+            headerChip.textContent = info.titulo;
+            headerChip.classList.remove('d-none', 'es-mesa', 'es-cuenta');
+            headerChip.classList.add(info.esMesa ? 'es-mesa' : 'es-cuenta');
+            headerChip.setAttribute('aria-hidden', 'false');
+        }
+
+        if (badgeCuenta) {
+            badgeCuenta.textContent = info.titulo;
+            badgeCuenta.classList.remove('d-none', 'badge-warning', 'badge-info', 'badge-dark');
+            badgeCuenta.classList.add(info.esMesa ? 'badge-warning' : 'badge-info');
+        }
+    }
+
+    function tieneClienteMaestroAsignado() {
+        const cid = document.getElementById('cliente_id');
+        return !!(cid && String(cid.value || '').trim() !== '');
+    }
+
+    function actualizarPanelReceptorManual(subtotal) {
+        const panel = document.getElementById('panel-factura-receptor-manual');
+        if (!panel) return;
+        const requiere =
+            wsfeReceptorCfUmbralMonto > 0 &&
+            subtotal >= wsfeReceptorCfUmbralMonto &&
+            !tieneClienteMaestroAsignado();
+        panel.classList.toggle('d-none', !requiere);
+    }
+
+    function limpiarEstadoCuentaActiva() {
+        cuentaId = null;
+        cuentaActivaMesaId = null;
+        cuentaActivaSubtotalArs = null;
+        cuentaActivaConLineas = null;
+        lastDescuentoGastronomiaMeta = null;
+        actualizarIndicadorCuentaActiva(null);
+        document.getElementById('btn-cerrar-cuenta').classList.add('d-none');
+        document.getElementById('panel-detalle-lineas').innerHTML = '';
+        document.getElementById('cliente_id').value = '';
+        document.getElementById('nombrecliente').value = '';
+        document.getElementById('codigocliente').value = '';
+        const mozoId = document.getElementById('mozo_gastronomia_id');
+        const mozoCod = document.getElementById('codigomozo');
+        const mozoNom = document.getElementById('nombremozo');
+        if (mozoId) mozoId.value = '';
+        if (mozoCod) mozoCod.value = '';
+        if (mozoNom) mozoNom.value = '';
+        const fldCub = document.getElementById('fld-cubiertos');
+        if (fldCub) fldCub.value = String(cubiertosDefaultApertura());
+        if (typeof pintarDescuentoEnPantalla === 'function') {
+            pintarDescuentoEnPantalla(null);
+        } else {
+            const descId = document.getElementById('descuento_gastronomia_id');
+            const descCod = document.getElementById('codigodescuento');
+            const descNom = document.getElementById('nombredescuento');
+            if (descId) descId.value = '';
+            if (descCod) descCod.value = '';
+            if (descNom) descNom.value = '';
+        }
+        limpiarFormularioArticuloLinea();
+        const fn = document.getElementById('fld-factura-receptor-nombre');
+        const fd = document.getElementById('fld-factura-receptor-documento');
+        const fdom = document.getElementById('fld-factura-receptor-domicilio');
+        if (fn) fn.value = '';
+        if (fd) fd.value = '';
+        if (fdom) fdom.value = '';
+        actualizarPanelReceptorManual(0);
+        limpiarCobranza();
+    }
+
+    const MONEDA_PESOS_ID = 1;
+    const monedaAbrevPorId = {};
+    let cuentacajaxcodigo = null;
+    let totalFacturadoArs = 0;
+    let cotizacionExtranjera = { monedaId: null, cotizacion: 1, abrev: '' };
+
+    async function cargarMonedasFactura() {
+        const data = await api('/ventas/gastronomia/api/monedas', { headers: hdrJson() });
+        (data.monedas || []).forEach((m) => {
+            monedaAbrevPorId[m.id] = m.abreviatura || m.nombre || String(m.id);
+        });
+        const hid = document.getElementById('factura-moneda-id');
+        if (hid) hid.value = MONEDA_PESOS_ID;
+    }
+
+    function coeficienteAPesos(monedaId, cotizacion) {
+        const mon = parseInt(String(monedaId), 10);
+        const cot = parseFloat(cotizacion) || 1;
+        if (typeof calculaCoeficienteMoneda === 'function') {
+            return calculaCoeficienteMoneda(MONEDA_PESOS_ID, mon, cot);
+        }
+        if (mon === MONEDA_PESOS_ID) return 1;
+        if (mon > MONEDA_PESOS_ID) return cot;
+        return 1;
+    }
+
+    const TOLERANCIA_MONTO_COBRANZA = 0.02;
+
+    function cotizacionFilaCobranza(monId) {
+        return monId > MONEDA_PESOS_ID && cotizacionExtranjera.monedaId === monId
+            ? cotizacionExtranjera.cotizacion
+            : 1;
+    }
+
+    function montoCobranzaEnArs(tr) {
+        const montoInp = tr.querySelector('.monto');
+        const monId = parseInt(tr.querySelector('.moneda_id')?.value || '0', 10);
+        const val = parseFloat(montoInp?.value || '');
+        if (!monId || Number.isNaN(val) || val === 0) return 0;
+        return val * coeficienteAPesos(monId, cotizacionFilaCobranza(monId));
+    }
+
+    function totalCobranzaArsAntesDe(tr) {
+        let total = 0;
+        document.querySelectorAll('#tbody-gastro-cuenta-table tr').forEach((row) => {
+            if (row === tr) return;
+            total += montoCobranzaEnArs(row);
+        });
+        return total;
+    }
+
+    function saldoPendienteArs(tr) {
+        return Math.max(0, totalFacturadoArs - totalCobranzaArsAntesDe(tr));
+    }
+
+    function saldoPendienteEnMonedaFila(tr) {
+        const monId = parseInt(tr.querySelector('.moneda_id')?.value || '0', 10);
+        const saldoArs = saldoPendienteArs(tr);
+        if (saldoArs <= 0) return 0;
+        const coef = coeficienteAPesos(monId || MONEDA_PESOS_ID, cotizacionFilaCobranza(monId));
+        if (coef <= 0) return saldoArs;
+        return Math.round((saldoArs / coef) * 100) / 100;
+    }
+
+    function montoCobranzaVacioOEsSugerido(montoInp) {
+        if (montoInp.dataset.montoEditadoManual === '1') {
+            return false;
+        }
+        const val = (montoInp.value || '').trim();
+        if (val === '') return true;
+        const cur = parseFloat(val);
+        const prev = parseFloat(montoInp.dataset.saldoValidacion || '');
+        if (Number.isNaN(cur)) return true;
+        if (!Number.isNaN(prev) && Math.abs(cur - prev) < TOLERANCIA_MONTO_COBRANZA) return true;
+        return false;
+    }
+
+    function actualizarDatoSaldoMonto(tr) {
+        const montoInp = tr.querySelector('.monto');
+        if (!montoInp) return;
+        const saldoMon = saldoPendienteEnMonedaFila(tr);
+        const saldoArs = saldoPendienteArs(tr);
+        const cuentaId = tr.querySelector('.cuentacaja_id')?.value;
+        if (totalFacturadoArs > 0 && cuentaId && saldoMon > 0 && montoCobranzaVacioOEsSugerido(montoInp)) {
+            montoInp.value = saldoMon.toFixed(2);
+            delete montoInp.dataset.montoEditadoManual;
+        }
+        montoInp.dataset.saldoValidacion = saldoMon.toFixed(2);
+        montoInp.dataset.saldoValidacionArs = saldoArs.toFixed(2);
+        if (totalFacturadoArs > 0) {
+            const abr =
+                monedaAbrevPorId[parseInt(tr.querySelector('.moneda_id')?.value || '0', 10)] || '$';
+            montoInp.placeholder = '';
+            montoInp.title =
+                'Saldo pendiente de la factura: $ ' +
+                saldoArs.toFixed(2) +
+                ' · máximo en ' +
+                abr +
+                ': ' +
+                saldoMon.toFixed(2);
+        } else {
+            montoInp.placeholder = '';
+            montoInp.removeAttribute('title');
+            delete montoInp.dataset.saldoValidacion;
+            delete montoInp.dataset.saldoValidacionArs;
+            delete montoInp.dataset.montoEditadoManual;
+        }
+    }
+
+    function actualizarDatosSaldoTodasFilas() {
+        document.querySelectorAll('#tbody-gastro-cuenta-table tr').forEach(actualizarDatoSaldoMonto);
+    }
+
+    function validarMontoCobranza(tr, silencioso) {
+        const montoInp = tr.querySelector('.monto');
+        if (!montoInp || totalFacturadoArs <= 0) return true;
+        const val = parseFloat(montoInp.value || '');
+        if (Number.isNaN(val) || val === 0) return true;
+        const maxMon = saldoPendienteEnMonedaFila(tr);
+        if (val > maxMon + TOLERANCIA_MONTO_COBRANZA) {
+            if (!silencioso) {
+                toast(
+                    'El monto supera el saldo pendiente ($ ' +
+                        saldoPendienteArs(tr).toFixed(2) +
+                        '). Máximo: ' +
+                        maxMon.toFixed(2),
+                    'warning',
+                );
+                montoInp.focus();
+                montoInp.select();
+            }
+            return false;
+        }
+        return true;
+    }
+
+    async function cargarCotizacionMoneda(monedaId) {
+        const mid = parseInt(String(monedaId), 10);
+        if (!(mid > MONEDA_PESOS_ID)) {
+            cotizacionExtranjera = { monedaId: null, cotizacion: 1, abrev: '' };
+            actualizarBarraCotizacion();
+            return;
+        }
+        try {
+            const cot = await api(`/ventas/gastronomia/api/cotizacion?moneda_id=${mid}`, { headers: hdrJson() });
+            cotizacionExtranjera = {
+                monedaId: mid,
+                cotizacion: parseFloat(cot.cotizacion) || 1,
+                abrev: monedaAbrevPorId[mid] || String(mid),
+            };
+            const hCot = document.getElementById('gastro-cotizacion-extranjera');
+            const hMon = document.getElementById('gastro-moneda-extranjera-id');
+            if (hCot) hCot.value = cotizacionExtranjera.cotizacion;
+            if (hMon) hMon.value = mid;
+        } catch (e) {
+            toast('No se pudo cargar cotización: ' + e.message, 'warning');
+            cotizacionExtranjera = { monedaId: null, cotizacion: 1, abrev: '' };
+        }
+        actualizarBarraCotizacion();
+    }
+
+    function actualizarBarraCotizacion() {
+        const bar = document.getElementById('gastro-cobranza-cotiz-bar');
+        if (!bar) return;
+        if (cotizacionExtranjera.monedaId > MONEDA_PESOS_ID) {
+            bar.classList.remove('d-none');
+            bar.textContent =
+                'Cotización ' +
+                cotizacionExtranjera.abrev +
+                ': ' +
+                cotizacionExtranjera.cotizacion.toFixed(4) +
+                ' (aplica a todas las cuentas en moneda extranjera)';
+        } else {
+            bar.classList.add('d-none');
+            bar.textContent = '';
+        }
+    }
+
+    async function revisarMonedaExtranjeraEnGrilla() {
+        let monedaExt = null;
+        document.querySelectorAll('#tbody-gastro-cuenta-table tr').forEach((tr) => {
+            const mid = parseInt(tr.querySelector('.moneda_id')?.value || '0', 10);
+            if (mid > MONEDA_PESOS_ID) monedaExt = mid;
+        });
+        if (!monedaExt) {
+            cotizacionExtranjera = { monedaId: null, cotizacion: 1, abrev: '' };
+            const hCot = document.getElementById('gastro-cotizacion-extranjera');
+            const hMon = document.getElementById('gastro-moneda-extranjera-id');
+            if (hCot) hCot.value = '';
+            if (hMon) hMon.value = '';
+            actualizarBarraCotizacion();
+            return;
+        }
+        if (cotizacionExtranjera.monedaId !== monedaExt) {
+            await cargarCotizacionMoneda(monedaExt);
+        }
+    }
+
+    function filaCobranzaDesdeTemplate() {
+        const tpl = document.getElementById('gastro-template-renglon-cuenta');
+        if (!tpl || !tpl.content) return null;
+        return tpl.content.firstElementChild.cloneNode(true);
+    }
+
+    function agregarRenglonCobranza(enfocarCodigo) {
+        const tr = filaCobranzaDesdeTemplate();
+        if (!tr) return;
+        document.getElementById('tbody-gastro-cuenta-table').appendChild(tr);
+        wireEventosFilaCobranza(tr);
+        if (enfocarCodigo !== false) {
+            const cod = tr.querySelector('.codigo');
+            if (cod) cod.focus();
+        }
+        sumarMontosCobranza();
+    }
+
+    function asignarCuentaCajaEnFila(tr, cuenta) {
+        if (!tr || !cuenta || !cuenta.id) return;
+        const monIdNuevo = parseInt(String(cuenta.moneda_id || '0'), 10);
+        if (
+            monIdNuevo > MONEDA_PESOS_ID &&
+            cotizacionExtranjera.monedaId > MONEDA_PESOS_ID &&
+            cotizacionExtranjera.monedaId !== monIdNuevo
+        ) {
+            toast(
+                'Ya hay cotización cargada para ' +
+                    cotizacionExtranjera.abrev +
+                    '. Use cuentas de la misma moneda extranjera o quite las otras líneas.',
+                'warning',
+            );
+            return;
+        }
+        const idInp = tr.querySelector('.cuentacaja_id');
+        const codInp = tr.querySelector('.codigo');
+        const nomInp = tr.querySelector('.nombre');
+        const monIdInp = tr.querySelector('.moneda_id');
+        const monLbl = tr.querySelector('.moneda-label');
+        if (idInp) idInp.value = cuenta.id;
+        if (codInp) codInp.value = cuenta.codigo || '';
+        if (nomInp) nomInp.value = cuenta.nombre || '';
+        const monId = cuenta.moneda_id || '';
+        if (monIdInp) monIdInp.value = monId;
+        if (monLbl) {
+            monLbl.textContent =
+                cuenta.moneda_abreviatura || monedaAbrevPorId[monId] || (monId ? String(monId) : '—');
+        }
+        void revisarMonedaExtranjeraEnGrilla().then(() => {
+            actualizarDatoSaldoMonto(tr);
+            const monto = tr.querySelector('.monto');
+            if (monto) monto.focus();
+            sumarMontosCobranza();
+        });
+    }
+
+    function limpiarCuentaEnFila(tr) {
+        if (!tr) return;
+        const idInp = tr.querySelector('.cuentacaja_id');
+        const nomInp = tr.querySelector('.nombre');
+        const monIdInp = tr.querySelector('.moneda_id');
+        const monLbl = tr.querySelector('.moneda-label');
+        if (idInp) idInp.value = '';
+        if (nomInp) nomInp.value = '';
+        if (monIdInp) monIdInp.value = '';
+        if (monLbl) monLbl.textContent = '—';
+        const montoInp = tr.querySelector('.monto');
+        if (montoInp) {
+            montoInp.value = '';
+            delete montoInp.dataset.montoEditadoManual;
+            delete montoInp.dataset.saldoValidacion;
+            delete montoInp.dataset.saldoValidacionArs;
+        }
+    }
+
+    async function leerCuentaCajaPorCodigoGastro(codigo) {
+        const enc = encodeURIComponent(String(codigo || '').trim());
+        if (!enc) return { id: 0 };
+        try {
+            return await api(`/ventas/gastronomia/api/cuentacaja-por-codigo/${enc}`, { headers: hdrJson() });
+        } catch (e) {
+            return { id: 0, error: e.message || 'No se pudo validar la cuenta de caja.' };
+        }
+    }
+
+    function abrirConsultaCuentacajaGastro(tr) {
+        const emp = document.getElementById('empresa_id') || document.getElementById('gastro-empresa-id');
+        if (emp && empresaId) emp.value = empresaId;
+        cuentacajaxcodigo = tr.querySelector('.cuentacaja_id');
+        nombrexcodigo = tr.querySelector('.nombre');
+        codigoxcodigo = tr.querySelector('.codigo');
+        if (typeof $ === 'undefined') return;
+        $('#consultacuentacajaModal').one('shown.bs.modal.gastroCuenta', function () {
+            if (typeof buscar_datos_cuentacaja === 'function') {
+                buscar_datos_cuentacaja('');
+            }
+            $(this).find('#consultacuentacaja').trigger('focus');
+        });
+        $('#consultacuentacajaModal').modal('show');
+    }
+
+    function wireEventosFilaCobranza(tr) {
+        const btnConsulta = tr.querySelector('.consultacuentacaja');
+        if (btnConsulta) {
+            btnConsulta.addEventListener('click', () => {
+                if (!empresaId) {
+                    toast('Configure el punto de venta (empresa).', 'warning');
+                    return;
+                }
+                abrirConsultaCuentacajaGastro(tr);
+            });
+        }
+
+        const codInp = tr.querySelector('.codigo');
+        if (codInp) {
+            const buscarPorCodigo = async () => {
+                const codigo = codInp.value.trim();
+                if (!codigo) {
+                    limpiarCuentaEnFila(tr);
+                    void revisarMonedaExtranjeraEnGrilla().then(sumarMontosCobranza);
+                    return;
+                }
+                const data = await leerCuentaCajaPorCodigoGastro(codigo);
+                if (data && data.id > 0) {
+                    asignarCuentaCajaEnFila(tr, data);
+                } else {
+                    toast(
+                        data?.error || 'No existe cuenta de caja con uso Gastronomía para ese código.',
+                        'warning',
+                    );
+                    limpiarCuentaEnFila(tr);
+                    codInp.focus();
+                    codInp.select();
+                    void revisarMonedaExtranjeraEnGrilla().then(sumarMontosCobranza);
+                }
+            };
+            codInp.addEventListener('change', () => {
+                void buscarPorCodigo();
+            });
+            codInp.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    void buscarPorCodigo();
+                }
+            });
+        }
+
+        const montoInp = tr.querySelector('.monto');
+        if (montoInp) {
+            montoInp.addEventListener('focus', () => actualizarDatoSaldoMonto(tr));
+            montoInp.addEventListener('change', () => {
+                if (!validarMontoCobranza(tr)) return;
+                sumarMontosCobranza();
+            });
+            montoInp.addEventListener('input', () => {
+                montoInp.dataset.montoEditadoManual = '1';
+                sumarMontosCobranza();
+            });
+            montoInp.addEventListener('keydown', (e) => {
+                if (e.key !== 'Enter') return;
+                e.preventDefault();
+                e.stopPropagation();
+                if (!validarMontoCobranza(tr)) return;
+                sumarMontosCobranza();
+                const cuentaId = tr.querySelector('.cuentacaja_id')?.value;
+                if (!cuentaId) {
+                    toast('Ingrese la cuenta de caja antes del monto.', 'warning');
+                    tr.querySelector('.codigo')?.focus();
+                    return;
+                }
+                const tbody = document.getElementById('tbody-gastro-cuenta-table');
+                const rows = tbody ? Array.from(tbody.querySelectorAll('tr')) : [];
+                const idx = rows.indexOf(tr);
+                if (idx >= 0 && idx < rows.length - 1) {
+                    rows[idx + 1].querySelector('.codigo')?.focus();
+                    return;
+                }
+                agregarRenglonCobranza(true);
+            });
+        }
+
+        const btnDel = tr.querySelector('.gastro-eliminar-cuenta');
+        if (btnDel) {
+            btnDel.addEventListener('click', (e) => {
+                e.preventDefault();
+                tr.remove();
+                void revisarMonedaExtranjeraEnGrilla().then(sumarMontosCobranza);
+            });
+        }
+    }
+
+    function sumarMontosCobranza() {
+        actualizarDatosSaldoTodasFilas();
+        const totales = {};
+        let totalCobranzaArs = 0;
+        document.querySelectorAll('#tbody-gastro-cuenta-table tr').forEach((tr) => {
+            const montoInp = tr.querySelector('.monto');
+            const monId = parseInt(tr.querySelector('.moneda_id')?.value || '0', 10);
+            const val = parseFloat(montoInp?.value || '');
+            if (!monId || Number.isNaN(val) || val === 0) return;
+            totales[monId] = (totales[monId] || 0) + val;
+            totalCobranzaArs += montoCobranzaEnArs(tr);
+        });
+        const wrap = document.getElementById('gastro-totales-cobranza');
+        if (!wrap) return;
+        const partes = Object.keys(totales).map((mid) => {
+            const abr = monedaAbrevPorId[mid] || mid;
+            return `${abr}: ${totales[mid].toFixed(2)}`;
+        });
+        let html = '';
+        if (partes.length) {
+            html += `<div class="text-right mt-1 text-muted" style="font-size:0.875em;">${partes.join(' · ')}</div>`;
+        }
+        html += `<div class="text-right mt-1"><strong>Total cobranza ($):</strong> ${totalCobranzaArs.toFixed(2)}</div>`;
+        if (totalFacturadoArs > 0) {
+            const pendiente = Math.max(0, totalFacturadoArs - totalCobranzaArs);
+            html += `<div class="text-right mt-1"><strong>Saldo pendiente ($):</strong> ${pendiente.toFixed(2)}</div>`;
+            const diff = Math.abs(totalCobranzaArs - totalFacturadoArs);
+            const ok = diff < TOLERANCIA_MONTO_COBRANZA;
+            let extra = '';
+            if (!ok && totalCobranzaArs > 0) {
+                extra = ` <span class="gastro-total-diff">(diferencia ${diff.toFixed(2)})</span>`;
+            } else if (ok && totalCobranzaArs > 0) {
+                extra = ' <span class="text-success">✓</span>';
+            }
+            html += `<div class="text-right mt-1"><strong>Total factura ($):</strong> ${totalFacturadoArs.toFixed(2)}${extra}</div>`;
+        }
+        wrap.innerHTML = html;
+    }
+
+    function setTotalFacturadoArs(monto) {
+        totalFacturadoArs = Math.max(0, parseFloat(monto) || 0);
+        sumarMontosCobranza();
+    }
+
+    function initCobranzaGrid() {
+        const tbody = document.getElementById('tbody-gastro-cuenta-table');
+        if (!tbody) return;
+
+        document.getElementById('gastro-agrega-renglon-cuenta')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            agregarRenglonCobranza(true);
+        });
+
+        if (typeof $ !== 'undefined') {
+            $(document).off('click.gastroCuentaElige', '.eligeconsultacuentacaja');
+            $(document).on('click.gastroCuentaElige', '.eligeconsultacuentacaja', function () {
+                if (!cuentacajaxcodigo) return;
+                const trModal = $(this).parents('tr');
+                const id = trModal.find('.cuentacaja_id').html();
+                const nombre = trModal.find('.nombre').html();
+                const codigo = trModal.find('.codigo').html();
+                const moneda_id = trModal.find('.moneda_id').html();
+                const tr = cuentacajaxcodigo.closest('tr');
+                asignarCuentaCajaEnFila(tr, {
+                    id: parseInt(id, 10),
+                    nombre,
+                    codigo,
+                    moneda_id: parseInt(moneda_id, 10),
+                    moneda_abreviatura: monedaAbrevPorId[moneda_id] || '',
+                });
+                void revisarMonedaExtranjeraEnGrilla();
+                $('#consultacuentacajaModal').modal('hide');
+                cuentacajaxcodigo = null;
+            });
+        }
+
+        agregarRenglonCobranza(true);
+    }
+
+    async function cargarMesas() {
+        const data = await api(`/ventas/gastronomia/api/mesas?empresa_id=${empresaId}`, { headers: hdrJson() });
+        const panel = document.getElementById('panel-mesas');
+        panel.innerHTML = '';
+        (data.mesas || []).forEach((m) => {
+            const esActiva = cuentaId && cuentaActivaMesaId === m.id;
+            let cls = m.ocupada ? 'warning' : 'light';
+            if (esActiva) cls = 'primary';
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = `btn btn-sm btn-${cls} m-1${esActiva ? ' btn-gastro-mesa-activa' : ''}`;
+            btn.textContent = `${m.numeromesa} ${m.ocupada ? '(abierta)' : ''}${esActiva ? ' ★' : ''}`;
+            btn.addEventListener('click', () => abrirMesa(m.id, !!m.ocupada));
+            panel.appendChild(btn);
+        });
+    }
+
+    async function cargarCuentasActivas() {
+        const data = await api(`/ventas/gastronomia/api/cuentas-activas?empresa_id=${empresaId}`, { headers: hdrJson() });
+        const panel = document.getElementById('panel-cuentas');
+        panel.innerHTML = '';
+        (data.cuentas || []).forEach((c) => {
+            const esActiva = cuentaId === c.id;
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className =
+                'btn btn-sm m-1' +
+                (esActiva ? ' btn-primary btn-gastro-cuenta-activa' : ' btn-outline-primary');
+            btn.textContent = 'Cuenta #' + c.id + (esActiva ? ' ★' : '');
+            btn.addEventListener('click', () => seleccionarCuenta(c.id));
+            panel.appendChild(btn);
+        });
+    }
+
+    function resetCamposModalAbrirCuenta(titulo) {
+        const tit = document.getElementById('modal-abrir-cuenta-titulo');
+        if (tit) tit.textContent = titulo || 'Abrir cuenta';
+        const cub = document.getElementById('abrir-cubiertos');
+        if (cub) cub.value = String(cubiertosDefaultApertura());
+        const mozoId = document.getElementById('abrir-mozo_gastronomia_id');
+        const mozoCod = document.getElementById('abrir-codigomozo');
+        const mozoNom = document.getElementById('abrir-nombremozo');
+        if (mozoId) mozoId.value = '';
+        if (mozoCod) mozoCod.value = '';
+        if (mozoNom) mozoNom.value = '';
+    }
+
+    function leerDatosAperturaDesdeModal() {
+        const cub = document.getElementById('abrir-cubiertos');
+        const mozoIdEl = document.getElementById('abrir-mozo_gastronomia_id');
+        const mozoId = mozoIdEl && mozoIdEl.value ? parseInt(mozoIdEl.value, 10) : 0;
+        return {
+            cubiertos: cub ? cub.value : cubiertosDefaultApertura(),
+            mozo_gastronomia_id: mozoId > 0 ? mozoId : null,
+        };
+    }
+
+    function focusCodigoMozoModalAbrir() {
+        const el = document.getElementById('abrir-codigomozo');
+        if (el && typeof el.focus === 'function') {
+            el.focus();
+            if (typeof el.select === 'function') {
+                el.select();
+            }
+        }
+    }
+
+    function confirmarModalAbrirTrasMozo() {
+        const datos = leerDatosAperturaDesdeModal();
+        const errMsg = validarDatosAperturaCliente(datos);
+        if (errMsg) {
+            toast(errMsg, 'warning');
+            focusCodigoMozoModalAbrir();
+            return;
+        }
+        confirmarModalAbrirCuenta();
+    }
+
+    function aplicarMozoEnModalAbrir(data) {
+        const wrap = document.getElementById('modal-abrir-cuenta-mozo-wrap');
+        if (!wrap || !data || !data.id) {
+            return false;
+        }
+        const idEl = wrap.querySelector('.mozo_gastronomia_id');
+        const codEl = wrap.querySelector('.codigomozo');
+        const nomEl = wrap.querySelector('.nombremozo');
+        if (idEl) idEl.value = data.id;
+        if (codEl) codEl.value = data.codigo != null ? String(data.codigo) : '';
+        if (nomEl) nomEl.value = data.nombre || '';
+        return true;
+    }
+
+    async function cargarMozoPorCodigoModalAbrir(codigo) {
+        const cod = String(codigo || '').trim();
+        if (!cod) {
+            return null;
+        }
+        const q = empresaId ? `?empresa_id=${encodeURIComponent(empresaId)}` : '';
+        try {
+            const data = await api(
+                `/ventas/mozo-gastronomia/leer/${encodeURIComponent(cod)}${q}`,
+                { headers: hdrJson() },
+            );
+            if (data && data.id) {
+                aplicarMozoEnModalAbrir(data);
+                return data;
+            }
+        } catch (_) {
+            /* mozo no encontrado */
+        }
+        return null;
+    }
+
+    async function resolverCodigoMozoModalAbrir(opciones) {
+        const opts = opciones || {};
+        const codEl = document.getElementById('abrir-codigomozo');
+        const cod = codEl ? String(codEl.value || '').trim() : '';
+        if (cod) {
+            const data = await cargarMozoPorCodigoModalAbrir(cod);
+            if (!data) {
+                toast('Mozo no encontrado.', 'warning');
+                focusCodigoMozoModalAbrir();
+                return false;
+            }
+        } else if (opts.confirmar && G.mozoObligatorioAlAbrir) {
+            toast('Indique el código del mozo.', 'warning');
+            focusCodigoMozoModalAbrir();
+            return false;
+        }
+        if (opts.confirmar) {
+            confirmarModalAbrirTrasMozo();
+            return true;
+        }
+        const btn = document.getElementById('modal-abrir-cuenta-confirmar');
+        if (btn && typeof btn.focus === 'function') {
+            btn.focus();
+        }
+        return true;
+    }
+
+    function onKeydownCodigoMozoModalAbrir(e) {
+        const esEnter = e.key === 'Enter';
+        const esTab = e.key === 'Tab' && !e.shiftKey;
+        if (!esEnter && !esTab) {
+            return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        if (esEnter) {
+            void resolverCodigoMozoModalAbrir({ confirmar: true });
+        } else {
+            void resolverCodigoMozoModalAbrir({ confirmar: false });
+        }
+    }
+
+    function validarDatosAperturaCliente(datos) {
+        const cub = parseInt(String(datos.cubiertos ?? ''), 10);
+        if (G.cubiertosObligatorioAlAbrir && (!(cub > 0) || Number.isNaN(cub))) {
+            return 'Indique la cantidad de cubiertos.';
+        }
+        if (G.mozoObligatorioAlAbrir && !datos.mozo_gastronomia_id) {
+            return 'Seleccione el mozo.';
+        }
+        return null;
+    }
+
+    function cerrarPromesaAperturaCuenta(err, datos) {
+        const resolve = pendingAbrirCuentaResolver;
+        const reject = pendingAbrirCuentaReject;
+        pendingAbrirCuentaResolver = null;
+        pendingAbrirCuentaReject = null;
+        if (err && reject) {
+            reject(err);
+        } else if (resolve) {
+            resolve(datos || {});
+        }
+    }
+
+    function solicitarDatosAperturaCuenta(titulo) {
+        return new Promise((resolve, reject) => {
+            pendingAbrirCuentaResolver = resolve;
+            pendingAbrirCuentaReject = reject;
+            resetCamposModalAbrirCuenta(titulo);
+            if (typeof $ !== 'undefined') {
+                const $modal = $('#modal-abrir-cuenta');
+                $modal.off('shown.bs.modal.gastroAbrir');
+                $modal.on('shown.bs.modal.gastroAbrir', function () {
+                    focusCodigoMozoModalAbrir();
+                });
+                $modal.modal('show');
+            }
+        });
+    }
+
+    function confirmarModalAbrirCuenta() {
+        const datos = leerDatosAperturaDesdeModal();
+        const errMsg = validarDatosAperturaCliente(datos);
+        if (errMsg) {
+            toast(errMsg, 'warning');
+            focusCodigoMozoModalAbrir();
+            return;
+        }
+        cerrarPromesaAperturaCuenta(null, datos);
+        if (typeof $ !== 'undefined') {
+            $('#modal-abrir-cuenta').modal('hide');
+        }
+    }
+
+    function cancelarModalAbrirCuenta() {
+        cerrarPromesaAperturaCuenta(new Error('cancelado'));
+    }
+
+    async function resolverDatosAperturaNuevaCuenta(mesaOcupada, tituloModal) {
+        if (mesaOcupada) {
+            return {};
+        }
+        if (!requiereDatosAperturaAlAbrir()) {
+            return {
+                cubiertos: cubiertosDefaultApertura(),
+                mozo_gastronomia_id: null,
+            };
+        }
+        return solicitarDatosAperturaCuenta(tituloModal);
+    }
+
+    async function abrirMesa(mesaId, mesaOcupada) {
+        try {
+            let body = { mesa_id: mesaId, empresa_id: empresaId };
+            if (!mesaOcupada) {
+                const apertura = await resolverDatosAperturaNuevaCuenta(false, 'Abrir mesa');
+                body = Object.assign(body, apertura);
+            }
+            const r = await api('/ventas/gastronomia/api/abrir-mesa', {
+                method: 'POST',
+                headers: hdrJson(),
+                body: JSON.stringify(body),
+            });
+            seleccionarCuenta(r.cuenta_id);
+            toast(r.reutilizada ? 'Mesa ya abierta — cargando cuenta.' : 'Mesa abierta.', 'success');
+            cargarMesas();
+        } catch (e) {
+            if (e.message !== 'cancelado') {
+                toast(e.message, 'error');
+            }
+        }
+    }
+
+    async function nuevaCuentaLibre() {
+        if (G.cuentasLibresHabilitadas === false) {
+            return toast('Las cuentas libres no están habilitadas.', 'warning');
+        }
+        try {
+            const apertura = await resolverDatosAperturaNuevaCuenta(false, 'Nueva cuenta libre');
+            const r = await api('/ventas/gastronomia/api/abrir-cuenta', {
+                method: 'POST',
+                headers: hdrJson(),
+                body: JSON.stringify(Object.assign({ empresa_id: empresaId }, apertura)),
+            });
+            seleccionarCuenta(r.cuenta_id);
+            toast('Cuenta libre creada.', 'success');
+            cargarCuentasActivas();
+        } catch (e) {
+            if (e.message !== 'cancelado') {
+                toast(e.message, 'error');
+            }
+        }
+    }
+
+    function getTrLineaArticulo() {
+        return document.getElementById('tr-gastro-linea-articulo');
+    }
+
+    function limpiarFormularioArticuloLinea() {
+        const tr = getTrLineaArticulo();
+        if (!tr) return;
+        tr.querySelector('.articulo_id').value = '';
+        const cod = tr.querySelector('.codigoarticulo');
+        if (cod) cod.value = '';
+        const suf = tr.querySelector('.gastro-sku-sufijo');
+        if (suf) suf.value = '';
+        tr.querySelector('.descripcionarticulo').value = '';
+        tr.querySelector('.categoria_id').value = '';
+        tr.querySelector('.subcategoria_id').value = '';
+        tr.querySelector('.unidadmedida_id').value = '';
+    }
+
+    function focusSkuConsumo() {
+        const tr = getTrLineaArticulo();
+        if (!tr) return;
+        const el = tr.querySelector('.gastro-sku-sufijo') || tr.querySelector('.gastro-carga-sku');
+        if (el && typeof el.focus === 'function') {
+            el.focus();
+            if (typeof el.select === 'function') el.select();
+        }
+    }
+
+    function composeSkuDesdeSufijoDigitos(sufijoRaw) {
+        const digits = String(sufijoRaw || '').replace(/\D/g, '');
+        if (!digits) return '';
+        if (skuDigitosSufijo <= 0) return '';
+        const padded = digits.padStart(skuDigitosSufijo, '0').slice(-skuDigitosSufijo);
+        return prefijoSku + padded;
+    }
+
+    function syncSufijoDesdeSkuCompleto(sku) {
+        const tr = getTrLineaArticulo();
+        if (!tr || skuDigitosSufijo <= 0) return;
+        const el = tr.querySelector('.gastro-sku-sufijo');
+        if (!el) return;
+        if (!sku || !skuPermitidoGastronomia(sku)) {
+            el.value = '';
+            return;
+        }
+        const p = prefijoSku.toUpperCase();
+        const s = String(sku).toUpperCase();
+        if (!s.startsWith(p)) {
+            el.value = '';
+            return;
+        }
+        const tail = s.slice(p.length).replace(/\D/g, '') || '0';
+        const padded = tail.padStart(skuDigitosSufijo, '0').slice(-skuDigitosSufijo);
+        el.value = String(parseInt(padded, 10));
+    }
+
+    function skuIngresadoEnFila() {
+        const tr = getTrLineaArticulo();
+        if (!tr) return '';
+        if (skuDigitosSufijo > 0) {
+            const suf = tr.querySelector('.gastro-sku-sufijo');
+            return composeSkuDesdeSufijoDigitos(suf ? suf.value : '');
+        }
+        const cod = tr.querySelector('.codigoarticulo');
+        return (cod && cod.value ? cod.value : '').trim();
+    }
+
+    async function fetchArticuloCatalogoPorSku(fullSku) {
+        const enc = encodeURIComponent(fullSku);
+        return api(`/ventas/gastronomia/api/articulo-catalogo-por-sku?sku=${enc}`, { headers: hdrJson() });
+    }
+
+    async function patchCantidadLinea(lineaId, nuevaCantidad) {
+        if (!cuentaId) return;
+        if (!(nuevaCantidad >= 0.0001)) {
+            toast('La cantidad no puede ser menor al mínimo permitido.', 'warning');
+            return;
+        }
+        try {
+            const data = await api(`/ventas/gastronomia/api/cuenta/${cuentaId}/linea/${lineaId}`, {
+                method: 'PATCH',
+                headers: hdrJson(),
+                body: JSON.stringify({ cantidad: nuevaCantidad }),
+            });
+            pintarLineas(data.cuenta);
+            focusSkuConsumo();
+        } catch (e) {
+            toast(e.message, 'error');
+        }
+    }
+
+    function articuloSeleccionadoEnFila() {
+        const tr = getTrLineaArticulo();
+        if (!tr) return null;
+        const id = parseInt(tr.querySelector('.articulo_id').value || '0', 10);
+        if (!id) return null;
+        const codEl = tr.querySelector('.codigoarticulo');
+        let sku = codEl ? (codEl.value || '').trim() : '';
+        if (!sku) {
+            sku = skuIngresadoEnFila();
+        }
+        const descripcion = (tr.querySelector('.descripcionarticulo').value || '').trim();
+        return { id, sku, descripcion };
+    }
+
+    function skuPermitidoGastronomia(sku) {
+        const s = (sku || '').toUpperCase();
+        const p = prefijoSku.toUpperCase();
+        if (skuDigitosSufijo > 0) {
+            const esc = p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            return new RegExp(`^${esc}\\d{${skuDigitosSufijo}}$`).test(s);
+        }
+        return s.startsWith(p);
+    }
+
+    function mensajeSkuCatalogoGastronomia() {
+        if (skuDigitosSufijo > 0) {
+            return (
+                prefijoSku +
+                ' seguido de ' +
+                skuDigitosSufijo +
+                ' dígitos (ej. ' +
+                prefijoSku +
+                '0'.repeat(Math.max(0, skuDigitosSufijo - 1)) +
+                '1)'
+            );
+        }
+        return 'SKU debe comenzar con ' + prefijoSku;
+    }
+
+    async function seleccionarCuenta(id) {
+        cuentaId = id;
+        document.getElementById('btn-cerrar-cuenta').classList.remove('d-none');
+        actualizarIndicadorCuentaActiva({ id: id });
+        try {
+            const data = await api(`/ventas/gastronomia/api/cuenta/${id}`, { headers: hdrJson() });
+            const c = data.cuenta;
+            const cli = c.cliente || null;
+            const idInternoCf = c.cliente_id && c.factura_consumidor_final ? '' : c.cliente_id || '';
+            document.getElementById('cliente_id').value = idInternoCf;
+            if (c.factura_consumidor_final && !idInternoCf) {
+                document.getElementById('nombrecliente').value = c.receptor_factura_nombre || 'CONSUMIDOR FINAL';
+                document.getElementById('codigocliente').value = '';
+            } else {
+                document.getElementById('nombrecliente').value = cli ? cli.nombre || '' : '';
+                document.getElementById('codigocliente').value = cli && cli.codigo != null ? String(cli.codigo) : '';
+            }
+            document.getElementById('fld-cubiertos').value = c.cubiertos || 0;
+            const mozo = c.mozo || null;
+            document.getElementById('mozo_gastronomia_id').value = c.mozo_gastronomia_id || '';
+            document.getElementById('codigomozo').value = mozo && mozo.codigo != null ? String(mozo.codigo) : '';
+            document.getElementById('nombremozo').value = mozo ? mozo.nombre || '' : '';
+            const desc = c.descuento_gastronomia || null;
+            if (typeof pintarDescuentoEnPantalla === 'function') {
+                pintarDescuentoEnPantalla(
+                    desc
+                        ? {
+                              id: desc.id,
+                              codigo: desc.codigo,
+                              nombre: desc.nombre,
+                              cliente: desc.cliente || null,
+                          }
+                        : null,
+                );
+            } else {
+                document.getElementById('descuento_gastronomia_id').value = c.descuento_gastronomia_id || '';
+            }
+            const cliInterno = c.cliente_interno_descuento || null;
+            if (cliInterno && typeof aplicarClienteInternoDescuentoEnPantalla === 'function') {
+                aplicarClienteInternoDescuentoEnPantalla(cliInterno);
+            } else if (desc && desc.cliente && typeof aplicarClienteInternoDescuentoEnPantalla === 'function') {
+                aplicarClienteInternoDescuentoEnPantalla(desc.cliente);
+            }
+            const fn = document.getElementById('fld-factura-receptor-nombre');
+            const fd = document.getElementById('fld-factura-receptor-documento');
+            const fdom = document.getElementById('fld-factura-receptor-domicilio');
+            if (fn) fn.value = c.factura_receptor_nombre || '';
+            if (fd) fd.value = c.factura_receptor_documento || '';
+            if (fdom) fdom.value = c.factura_receptor_domicilio || '';
+            pintarLineas(c);
+            limpiarFormularioArticuloLinea();
+            cargarMesas();
+            cargarCuentasActivas();
+            setTimeout(() => focusSkuConsumo(), 50);
+        } catch (e) {
+            toast(e.message, 'error');
+        }
+    }
+
+    function subtotalEstimadoDesdeCuenta(cuenta) {
+        if (cuenta && cuenta.subtotal_estimado != null && !Number.isNaN(Number(cuenta.subtotal_estimado))) {
+            return Number(cuenta.subtotal_estimado);
+        }
+        if (evaluarFacturaCortesiaDesdeCuenta(cuenta).cortesia) {
+            return IMPORTE_MINIMO_FACTURA;
+        }
+        let sub = subtotalBrutoLineasCuenta(cuenta);
+        const desc = cuenta.descuento_gastronomia || null;
+        if (desc) {
+            const val = Number(desc.valor || 0);
+            if (desc.tipovalor === 'P') {
+                sub *= 1 - val / 100;
+            } else if (desc.tipovalor === 'I') {
+                sub -= val;
+            }
+        }
+        return Math.max(0, Math.round(sub * 100) / 100);
+    }
+
+    function actualizarEtiquetaReceptorFactura(cuenta) {
+        const nomInp = document.getElementById('nombrecliente');
+        if (!nomInp) return;
+        if (cuenta && cuenta.factura_consumidor_final) {
+            const nombreCf =
+                cuenta.receptor_factura_nombre ||
+                (typeof G !== 'undefined' && G.receptorCfNombre) ||
+                'CONSUMIDOR FINAL';
+            if (!tieneClienteMaestroAsignado()) {
+                nomInp.value = nombreCf;
+                nomInp.placeholder = nombreCf;
+            }
+        }
+    }
+
+    function pintarLineas(cuenta) {
+        cuentaActivaConLineas = cuenta;
+        if (cuenta && cuenta.descuento_gastronomia) {
+            lastDescuentoGastronomiaMeta = {
+                tipovalor: cuenta.descuento_gastronomia.tipovalor,
+                valor: cuenta.descuento_gastronomia.valor,
+            };
+        } else if (!tieneDescuentoEnPantalla()) {
+            lastDescuentoGastronomiaMeta = null;
+        }
+        const wrap = document.getElementById('panel-detalle-lineas');
+        const sub = subtotalEstimadoDesdeCuenta(cuenta);
+        let html = '<table class="table table-sm table-striped mb-0"><thead><tr><th>#</th><th>Artículo</th><th>Cant.</th><th>P.U.</th><th></th></tr></thead><tbody>';
+        (cuenta.lineas || []).forEach((ln) => {
+            const pu = Number(ln.precio_unitario);
+            const cant = Number(ln.cantidad);
+            const op = ln.opcionales_json ? JSON.stringify(ln.opcionales_json) : '';
+            html += `<tr>
+        <td>${ln.numero_linea}</td>
+        <td>${ln.articulo ? ln.articulo.sku + ' — ' + ln.articulo.descripcion : ''}<br><small class="text-muted">${op}</small></td>
+        <td class="text-nowrap align-middle">
+          <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 btn-gastro-qty" data-dir="-1" data-linea="${ln.id}" data-cant="${cant}" title="Menos">−</button>
+          <span class="mx-1">${cant}</span>
+          <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 btn-gastro-qty" data-dir="1" data-linea="${ln.id}" data-cant="${cant}" title="Más">+</button>
+        </td>
+        <td>${pu.toFixed(2)}</td>
+        <td><button type="button" class="btn btn-sm btn-link text-danger btn-del-linea" data-linea="${ln.id}">quitar</button></td>
+      </tr>`;
+        });
+        html += '</tbody></table>';
+        html += htmlDetalleSubtotalConDescuento(cuenta, sub);
+        wrap.innerHTML = html;
+        cuentaActivaSubtotalArs = sub;
+        setTotalFacturadoArs(sub);
+        actualizarIndicadorCuentaActiva(cuenta, sub);
+        actualizarPanelReceptorManual(sub);
+        actualizarEtiquetaReceptorFactura(cuenta);
+        wrap.querySelectorAll('.btn-del-linea').forEach((b) =>
+            b.addEventListener('click', () => eliminarLinea(b.getAttribute('data-linea'))),
+        );
+        wrap.querySelectorAll('.btn-gastro-qty').forEach((b) => {
+            b.addEventListener('click', () => {
+                const lineaId = b.getAttribute('data-linea');
+                const cur = parseFloat(b.getAttribute('data-cant'));
+                const dir = parseInt(b.getAttribute('data-dir'), 10);
+                const next = cur + dir;
+                if (!(next >= 0.0001)) {
+                    toast('La cantidad no puede ser menor al mínimo permitido.', 'warning');
+                    return;
+                }
+                void patchCantidadLinea(lineaId, next);
+            });
+        });
+    }
+
+    function bodyCabeceraCuenta() {
+        const cid = document.getElementById('cliente_id').value;
+        const cliInterno = (document.getElementById('cliente_descuento_id').value || '').trim();
+        const descId = (document.getElementById('descuento_gastronomia_id').value || '').trim();
+        return {
+            cliente_id: cid && String(cid).trim() !== '' ? cid : null,
+            cubiertos: document.getElementById('fld-cubiertos').value,
+            mozo_gastronomia_id: document.getElementById('mozo_gastronomia_id').value || null,
+            descuento_gastronomia_id: descId || null,
+            cliente_interno_descuento_id: descId && cliInterno ? cliInterno : null,
+            factura_receptor_nombre: (document.getElementById('fld-factura-receptor-nombre') || {}).value || '',
+            factura_receptor_documento: (document.getElementById('fld-factura-receptor-documento') || {}).value || '',
+            factura_receptor_domicilio: (document.getElementById('fld-factura-receptor-domicilio') || {}).value || '',
+        };
+    }
+
+    async function guardarCabecera(silencioso) {
+        if (!cuentaId) {
+            if (!silencioso) toast('Seleccione mesa/cuenta', 'warning');
+            return null;
+        }
+        try {
+            const data = await api(`/ventas/gastronomia/api/cuenta/${cuentaId}`, {
+                method: 'PATCH',
+                headers: hdrJson(),
+                body: JSON.stringify(bodyCabeceraCuenta()),
+            });
+            if (!silencioso) toast('Cabecera guardada.', 'success');
+            pintarLineas(data.cuenta);
+            return data.cuenta;
+        } catch (e) {
+            if (!silencioso) toast(e.message, 'error');
+            throw e;
+        }
+    }
+
+    function iniciarAltaLinea(articulo) {
+        pendingArticulo = articulo;
+        $('#modal-cantidad').modal('show');
+    }
+
+    async function procesarAltaConsumo(articulo, cantidad) {
+        const opData = await api(`/ventas/gastronomia/api/opcionales-articulo/${articulo.id}`, { headers: hdrJson() });
+
+        if (opData.grupos && opData.grupos.length) {
+            pendingOpcionalesCtx = { articulo, cantidad };
+            const body = document.getElementById('modal-opcionales-body');
+            body.innerHTML = '';
+            opData.grupos.forEach((g) => {
+                const orden = String(g.orden);
+                const div = document.createElement('div');
+                div.className = 'mb-2';
+                div.innerHTML = `<label class="small mb-0">Opción orden ${orden}</label>`;
+                const sel = document.createElement('select');
+                sel.className = 'form-control form-control-sm opcional-grupo';
+                sel.dataset.orden = orden;
+                sel.innerHTML = '<option value="">—</option>';
+                g.opciones.forEach((o) => {
+                    sel.innerHTML += `<option value="${o.articulo_id}">${o.sku} — ${o.descripcion}</option>`;
+                });
+                div.appendChild(sel);
+                body.appendChild(div);
+            });
+            $('#modal-opcionales').modal('show');
+            return;
+        }
+
+        await agregarLineaApi(articulo, cantidad, {});
+    }
+
+    async function continuarDespuesCantidad() {
+        const cant = parseFloat(document.getElementById('fld-cantidad-linea').value || '0');
+        if (!(cant > 0)) return toast('Cantidad inválida', 'warning');
+        $('#modal-cantidad').modal('hide');
+
+        const art = pendingArticulo;
+        pendingArticulo = null;
+        if (!art) return;
+
+        await procesarAltaConsumo(art, cant);
+    }
+
+    function aplicarArticuloResueltoEnFila(a) {
+        const tr = getTrLineaArticulo();
+        if (!tr || !a) return;
+        tr.querySelector('.articulo_id').value = a.id;
+        const cod = tr.querySelector('.codigoarticulo');
+        if (cod) cod.value = a.sku || '';
+        tr.querySelector('.descripcionarticulo').value = a.descripcion || '';
+        syncSufijoDesdeSkuCompleto(a.sku || '');
+    }
+
+    /**
+     * Misma búsqueda por SKU que Enter: valida cuenta, arma SKU, consulta catálogo y completa la fila.
+     * @returns {{ ok: boolean, articulo: object|null }}
+     */
+    async function resolverSkuConsumoEnFila() {
+        if (!cuentaId) {
+            toast('Seleccione mesa o cuenta.', 'warning');
+            return { ok: false, articulo: null };
+        }
+        const fullSku = skuIngresadoEnFila();
+        if (!fullSku) {
+            toast('Ingrese el código del artículo.', 'warning');
+            return { ok: false, articulo: null };
+        }
+        if (!skuPermitidoGastronomia(fullSku)) {
+            toast('Código inválido: use ' + mensajeSkuCatalogoGastronomia() + '.', 'warning');
+            return { ok: false, articulo: null };
+        }
+        try {
+            const data = await fetchArticuloCatalogoPorSku(fullSku);
+            const a = data.articulo;
+            if (!a || !a.id) {
+                toast('Artículo no encontrado.', 'warning');
+                limpiarFormularioArticuloLinea();
+                focusSkuConsumo();
+                return { ok: false, articulo: null };
+            }
+            aplicarArticuloResueltoEnFila(a);
+            return { ok: true, articulo: a };
+        } catch (e) {
+            toast(e.message || 'No se encontró el artículo', 'warning');
+            limpiarFormularioArticuloLinea();
+            focusSkuConsumo();
+            return { ok: false, articulo: null };
+        }
+    }
+
+    async function intentarAgregarConsumoDesdeTeclado() {
+        const { ok, articulo } = await resolverSkuConsumoEnFila();
+        if (!ok || !articulo) return;
+        await procesarAltaConsumo(articulo, 1);
+    }
+
+    async function resolverSkuPorTabYEnfocarAgregar() {
+        const { ok } = await resolverSkuConsumoEnFila();
+        if (!ok) return;
+        const btn = document.getElementById('btn-agregar-consumo');
+        if (btn && typeof btn.focus === 'function') btn.focus();
+    }
+
+    async function confirmarOpcionales() {
+        const selects = document.querySelectorAll('#modal-opcionales-body select.opcional-grupo');
+        const map = {};
+        selects.forEach((s) => {
+            map[s.dataset.orden] = s.value ? parseInt(s.value, 10) : null;
+        });
+        $('#modal-opcionales').modal('hide');
+        const ctx = pendingOpcionalesCtx;
+        pendingOpcionalesCtx = null;
+        if (!ctx) return;
+        await agregarLineaApi(ctx.articulo, ctx.cantidad, map);
+    }
+
+    async function agregarLineaApi(articulo, cantidad, opcionales) {
+        if (!cuentaId) return toast('Seleccione cuenta', 'warning');
+        try {
+            const payload = {
+                articulo_id: articulo.id,
+                cantidad: cantidad,
+                opcionales: opcionales,
+            };
+            if (articulo.precio_sugerido != null && articulo.precio_sugerido !== '') {
+                payload.precio_unitario = articulo.precio_sugerido;
+            }
+            const data = await api(`/ventas/gastronomia/api/cuenta/${cuentaId}/linea`, {
+                method: 'POST',
+                headers: hdrJson(),
+                body: JSON.stringify(payload),
+            });
+            toast('Línea agregada', 'success');
+            pintarLineas(data.cuenta);
+            limpiarFormularioArticuloLinea();
+            cargarMesas();
+            cargarCuentasActivas();
+            focusSkuConsumo();
+        } catch (e) {
+            if (e.message && e.message.includes('fetch')) toast(String(e), 'error');
+            else toast(e.message, 'error');
+        }
+    }
+
+    async function eliminarLinea(lineaId) {
+        if (!cuentaId) return;
+        try {
+            const data = await api(`/ventas/gastronomia/api/cuenta/${cuentaId}/linea/${lineaId}`, {
+                method: 'DELETE',
+                headers: hdrJson(),
+            });
+            pintarLineas(data.cuenta);
+            focusSkuConsumo();
+        } catch (e) {
+            toast(e.message, 'error');
+        }
+    }
+
+    async function cerrarCuenta() {
+        if (!cuentaId) return;
+        if (!confirm('¿Cerrar cuenta sin facturar?')) return;
+        try {
+            await api(`/ventas/gastronomia/api/cuenta/${cuentaId}/cerrar`, {
+                method: 'POST',
+                headers: hdrJson(),
+                body: '{}',
+            });
+            toast('Cuenta cerrada', 'success');
+            limpiarEstadoCuentaActiva();
+            cargarMesas();
+            cargarCuentasActivas();
+        } catch (e) {
+            toast(e.message, 'error');
+        }
+    }
+
+    async function validarEmisionServidor(mediosPago, efectivizar) {
+        const body = {
+            cuenta_id: cuentaId,
+            moneda_id: MONEDA_PESOS_ID,
+            medios_pago: mediosPago || [],
+        };
+        if (efectivizar) {
+            body.efectivizar = true;
+        }
+        const data = await api('/ventas/gastronomia/api/validar-emision', {
+            method: 'POST',
+            headers: hdrJson(),
+            body: JSON.stringify(body),
+        });
+        if (data.errores && data.errores.length) {
+            throw new Error(data.errores.join(' '));
+        }
+    }
+
+    async function emitirFactura(opciones) {
+        const opts = opciones || {};
+        const errDesc = validarDescuentoEnPantalla(!!opts.exigirDescuento);
+        if (errDesc) {
+            return toast(errDesc, 'warning');
+        }
+        if (!cuentaId) {
+            return toast('Seleccione cuenta', 'warning');
+        }
+        try {
+            setFacturacionLoading(true, 'Validando…');
+            const cuenta = await guardarCabecera(true);
+            const montoArs = subtotalEstimadoDesdeCuenta(cuenta) || leerTotalAFacturarArs();
+            const esCortesia = esFacturaCortesia(montoArs, cuenta);
+            setTotalFacturadoArs(montoArs > 0 ? montoArs : esCortesia ? IMPORTE_MINIMO_FACTURA : 0);
+
+            let mediosPago = Array.isArray(opts.mediosPago) ? opts.mediosPago.slice() : [];
+
+            if (!esCortesia) {
+                if (montoArs <= 0) {
+                    return toast('El total a facturar debe ser mayor a cero.', 'warning');
+                }
+                if (!mediosPago.length) {
+                    mediosPago = recogerMediosPagoFromGrid();
+                }
+                if (!mediosPago.length && opts.prepararCobranzaSiFalta !== false) {
+                    await prepararCobranzaEfectivo(montoArs);
+                    mediosPago = recogerMediosPagoFromGrid();
+                }
+                const errCob = validarCobranzaConMedios(mediosPago);
+                if (errCob) {
+                    return toast(errCob, 'warning');
+                }
+                for (const tr of document.querySelectorAll('#tbody-gastro-cuenta-table tr')) {
+                    if (!validarMontoCobranza(tr)) {
+                        return toast('Revise los montos de cobranza antes de facturar.', 'warning');
+                    }
+                }
+            } else {
+                mediosPago = [];
+            }
+
+            await validarEmisionServidor(mediosPago, false);
+            setFacturacionLoading(true, 'Facturando y registrando cobranza…');
+            const data = await api('/ventas/gastronomia/api/emitir-factura', {
+                method: 'POST',
+                headers: hdrJson(),
+                body: JSON.stringify({
+                    cuenta_id: cuentaId,
+                    moneda_id: MONEDA_PESOS_ID,
+                    medios_pago: mediosPago,
+                }),
+            });
+            const vid = data.venta_id;
+            if (vid) {
+                setFacturacionLoading(true, 'Imprimiendo factura…');
+                await imprimirFacturaPdf(vid);
+            }
+            if (data.warn) {
+                mostrarAvisoPersistente(data.warn, 'warning', {
+                    titulo: 'Factura emitida — revisar avisos',
+                    detalle: data.factura ? 'Comprobante: ' + data.factura : '',
+                });
+            } else {
+                toast('Factura emitida: ' + (data.factura || ''), 'success');
+            }
+            cargarMesas();
+            cargarCuentasActivas();
+            limpiarEstadoCuentaActiva();
+        } catch (e) {
+            const detalleErr = (e.payload && e.payload.factura) ? 'Comprobante: ' + e.payload.factura : '';
+            if (debeUsarAvisoPersistente(e.message, 'error')) {
+                mostrarAvisoPersistente(e.message, 'error', {
+                    titulo: 'Error al facturar',
+                    detalle: detalleErr,
+                });
+            } else {
+                toast(e.message, 'error');
+            }
+        } finally {
+            setFacturacionLoading(false);
+        }
+    }
+
+    function setModo(mesa, opciones) {
+        const opts = opciones || {};
+        modoMesa = mesa;
+        document.getElementById('panel-mesas').classList.toggle('d-none', !mesa);
+        document.getElementById('panel-cuentas').classList.toggle('d-none', mesa);
+        document.getElementById('btn-modo-mesa').classList.toggle('active', mesa);
+        document.getElementById('btn-modo-cuenta').classList.toggle('active', !mesa);
+        const btnNueva = document.getElementById('btn-nueva-cuenta-libre');
+        if (btnNueva) {
+            btnNueva.classList.toggle('d-none', mesa || G.cuentasLibresHabilitadas === false);
+        }
+        if (!opts.silent) {
+            void guardarPreferenciaModoSeleccion(mesa);
+        }
+    }
+
+    function aplicarPreferenciaModoSeleccion(modo) {
+        setModo(modo !== 'cuenta', { silent: true });
+    }
+
+    async function guardarPreferenciaModoSeleccion(mesa) {
+        if (!mesa && G.cuentasLibresHabilitadas === false) {
+            return;
+        }
+        try {
+            await api('/ventas/gastronomia/api/preferencia-modo-seleccion', {
+                method: 'POST',
+                headers: hdrJson(),
+                body: JSON.stringify({ modo: mesa ? 'mesa' : 'cuenta' }),
+            });
+        } catch (_) {
+            /* preferencia no crítica */
+        }
+    }
+
+    function wireConsultaClienteInternoDescuento() {
+        if (typeof $ === 'undefined') {
+            return;
+        }
+        $(document).off('click.gastroCliInterno', '.consultaclienteinternodescuento');
+        $(document).on('click.gastroCliInterno', '.consultaclienteinternodescuento', function () {
+            if (typeof ptrcliente_id !== 'undefined') {
+                ptrcliente_id = $('#cliente_descuento_id');
+            }
+            if (typeof ptrnombrecliente !== 'undefined') {
+                ptrnombrecliente = $('#nombrecliente_descuento');
+            }
+            $('#consultaclienteModal').modal('show');
+        });
+    }
+
+    function wireConsultasSistema() {
+        if (typeof activa_eventos_consultacliente === 'function') {
+            activa_eventos_consultacliente();
+        }
+        wireConsultaClienteInternoDescuento();
+        if (typeof activa_eventos_consultaarticulo === 'function') {
+            activa_eventos_consultaarticulo();
+        }
+        if (typeof activa_eventos_consultamozo === 'function') {
+            activa_eventos_consultamozo();
+        }
+        if (typeof activa_eventos_consultadescuento === 'function') {
+            activa_eventos_consultadescuento();
+        }
+        window.onArticuloSeleccionado = function (dataArticulo) {
+            if (!dataArticulo || !dataArticulo.id) return;
+            if (!skuPermitidoGastronomia(dataArticulo.sku)) {
+                toast(
+                    'Este artículo no pertenece al catálogo gastronomía (' + mensajeSkuCatalogoGastronomia() + ').',
+                    'warning',
+                );
+                limpiarFormularioArticuloLinea();
+                return;
+            }
+            const tr = document.getElementById('tr-gastro-linea-articulo');
+            if (tr) {
+                tr.querySelector('.articulo_id').value = dataArticulo.id;
+                const cod = tr.querySelector('.codigoarticulo');
+                if (cod) cod.value = dataArticulo.sku || '';
+                tr.querySelector('.descripcionarticulo').value = dataArticulo.descripcion || '';
+                syncSufijoDesdeSkuCompleto(dataArticulo.sku || '');
+            }
+        };
+    }
+
+    function esTeclaF5(e) {
+        return e.key === 'F5' || e.code === 'F5' || e.keyCode === 116;
+    }
+
+    function esTeclaF8(e) {
+        return e.key === 'F8' || e.code === 'F8' || e.keyCode === 119;
+    }
+
+    function modificadorControlActivo(e) {
+        return !!(
+            teclaControlPulsada ||
+            e.ctrlKey ||
+            e.metaKey ||
+            (typeof e.getModifierState === 'function' && e.getModifierState('Control'))
+        );
+    }
+
+    function wireCamposDescuentoTeclado() {
+        const codDesc = document.getElementById('codigodescuento');
+        const codCli = document.getElementById('codigocliente_descuento');
+
+        if (codDesc) {
+            codDesc.addEventListener('keydown', async (e) => {
+                if (pendingDescuentoResolver) return;
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const cod = (codDesc.value || '').trim();
+                    if (!cod) return;
+                    try {
+                        await cargarDescuentoPorCodigoApi(cod);
+                    } catch (err) {
+                        toast(err.message || String(err), 'error');
+                    }
+                    return;
+                }
+                if (e.key === 'Tab' && !e.shiftKey) {
+                    const panelCli = document.getElementById('panel-cliente-descuento');
+                    if (panelCli && !panelCli.classList.contains('d-none')) {
+                        e.preventDefault();
+                        enfocarCampoClienteInternoCodigo();
+                    }
+                }
+            });
+        }
+
+        if (codCli) {
+            codCli.addEventListener('keydown', async (e) => {
+                if (pendingClienteInternoResolver) return;
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const cod = (codCli.value || '').trim();
+                    if (!cod) return;
+                    try {
+                        await cargarClienteInternoPorCodigoApi(cod);
+                    } catch (err) {
+                        toast(err.message || String(err), 'error');
+                    }
+                }
+            });
+        }
+    }
+
+    function registrarEventosUi() {
+        document.addEventListener(
+            'keydown',
+            function (e) {
+                if (e.key === 'Control' || e.key === 'Meta') {
+                    teclaControlPulsada = true;
+                }
+            },
+            true,
+        );
+        document.addEventListener(
+            'keyup',
+            function (e) {
+                if (e.key === 'Control' || e.key === 'Meta') {
+                    teclaControlPulsada = false;
+                }
+            },
+            true,
+        );
+        window.addEventListener('blur', function () {
+            teclaControlPulsada = false;
+        });
+
+        wireCamposDescuentoTeclado();
+
+        document.getElementById('btn-modo-mesa').addEventListener('click', () => {
+            setModo(true);
+        });
+        const btnModoCuenta = document.getElementById('btn-modo-cuenta');
+        if (btnModoCuenta) {
+            btnModoCuenta.addEventListener('click', () => {
+                if (G.cuentasLibresHabilitadas === false) {
+                    return toast('Las cuentas libres no están habilitadas.', 'warning');
+                }
+                setModo(false);
+            });
+        }
+        document.getElementById('btn-nueva-cuenta-libre').addEventListener('click', () => {
+            void nuevaCuentaLibre();
+        });
+        const btnConfirmarAbrir = document.getElementById('modal-abrir-cuenta-confirmar');
+        if (btnConfirmarAbrir) {
+            btnConfirmarAbrir.addEventListener('click', confirmarModalAbrirCuenta);
+        }
+        const abrirCub = document.getElementById('abrir-cubiertos');
+        if (abrirCub) {
+            abrirCub.addEventListener(
+                'keydown',
+                (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        focusCodigoMozoModalAbrir();
+                    }
+                },
+                true,
+            );
+        }
+        const abrirCodMozo = document.getElementById('abrir-codigomozo');
+        if (abrirCodMozo) {
+            abrirCodMozo.addEventListener('keydown', onKeydownCodigoMozoModalAbrir, true);
+            abrirCodMozo.addEventListener('blur', function () {
+                const cod = String(abrirCodMozo.value || '').trim();
+                if (!cod) return;
+                const idEl = document.getElementById('abrir-mozo_gastronomia_id');
+                if (idEl && String(idEl.value || '').trim() !== '') return;
+                void cargarMozoPorCodigoModalAbrir(cod);
+            });
+        }
+        const abrirMozoId = document.getElementById('abrir-mozo_gastronomia_id');
+        if (abrirMozoId) {
+            abrirMozoId.addEventListener(
+                'keydown',
+                (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        confirmarModalAbrirTrasMozo();
+                    }
+                },
+                true,
+            );
+        }
+        if (typeof $ !== 'undefined') {
+            $('#modal-abrir-cuenta').on('hidden.bs.modal', function () {
+                if (pendingAbrirCuentaReject) {
+                    cancelarModalAbrirCuenta();
+                }
+            });
+            $('#consultamozoModal').on('hidden.bs.modal.gastroAbrir', function () {
+                const modalAbrir = document.getElementById('modal-abrir-cuenta');
+                if (modalAbrir && modalAbrir.classList.contains('show')) {
+                    focusCodigoMozoModalAbrir();
+                }
+            });
+        }
+        document.getElementById('btn-guardar-cabecera').addEventListener('click', () => {
+            void guardarCabecera(false);
+        });
+        const clienteIdInput = document.getElementById('cliente_id');
+        if (clienteIdInput) {
+            clienteIdInput.addEventListener('change', () => {
+                const wrap = document.getElementById('panel-detalle-lineas');
+                const txt = wrap ? wrap.textContent : '';
+                const m = txt.match(/Subtotal estimado:\s*([\d.,]+)/);
+                const sub = m ? parseFloat(m[1].replace(/\./g, '').replace(',', '.')) : 0;
+                actualizarPanelReceptorManual(sub);
+            });
+        }
+        document.getElementById('btn-cerrar-cuenta').addEventListener('click', cerrarCuenta);
+        document.getElementById('btn-agregar-consumo').addEventListener('click', async () => {
+            let articuloParaModal = articuloSeleccionadoEnFila();
+            if (!articuloParaModal || !articuloParaModal.id) {
+                const { ok, articulo } = await resolverSkuConsumoEnFila();
+                if (ok && articulo) articuloParaModal = articulo;
+            }
+            if (!articuloParaModal || !articuloParaModal.id) {
+                return toast('Seleccione un artículo (lupa o SKU).', 'warning');
+            }
+            if (!skuPermitidoGastronomia(articuloParaModal.sku)) {
+                return toast('Código inválido: use ' + mensajeSkuCatalogoGastronomia() + '.', 'warning');
+            }
+            iniciarAltaLinea(articuloParaModal);
+        });
+        document.getElementById('modal-cantidad-confirmar').addEventListener('click', continuarDespuesCantidad);
+        document.getElementById('modal-opcionales-confirmar').addEventListener('click', confirmarOpcionales);
+        document.getElementById('tool-facturar').addEventListener('click', () => {
+            void emitirFactura();
+        });
+        document.addEventListener(
+            'keydown',
+            function (e) {
+                if (
+                    G.cuentasLibresHabilitadas !== false &&
+                    !modoMesa &&
+                    esAtajoNuevaCuentaLibre(e) &&
+                    !debeIgnorarAtajoPos() &&
+                    !esCampoTextoEditable(e.target)
+                ) {
+                    if (!e.ctrlKey && !e.altKey && !e.metaKey) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        void nuevaCuentaLibre();
+                        return;
+                    }
+                }
+
+                if (!esTeclaF5(e) && !esTeclaF8(e)) return;
+                if (debeIgnorarAtajoPos()) return;
+
+                if (esTeclaF5(e)) {
+                    if (modificadorControlActivo(e)) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        void emitirFactura();
+                        return;
+                    }
+                    if (e.altKey || e.shiftKey) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    void efectivizar();
+                    return;
+                }
+
+                if (esTeclaF8(e)) {
+                    if (modificadorControlActivo(e) || e.altKey || e.shiftKey) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    void facturarConDescuento();
+                }
+            },
+            true,
+        );
+        document.getElementById('tool-asignar-cliente').addEventListener('click', () => {
+            const el = document.getElementById('cliente_id');
+            if (el) el.focus();
+        });
+        document.getElementById('tool-descuento').addEventListener('click', () => {
+            const el = document.getElementById('codigodescuento') || document.getElementById('descuento_gastronomia_id');
+            if (el) el.focus();
+        });
+
+        document.addEventListener(
+            'keydown',
+            function (e) {
+                if (e.key !== 'Enter' && e.key !== 'Tab') return;
+                const t = e.target;
+                if (!t || !t.classList || !t.classList.contains('gastro-carga-sku')) return;
+                if (!t.closest('#tr-gastro-linea-articulo')) return;
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    void intentarAgregarConsumoDesdeTeclado();
+                    return;
+                }
+                if (e.key === 'Tab' && !e.shiftKey) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    void resolverSkuPorTabYEnfocarAgregar();
+                }
+            },
+            true,
+        );
+
+        document.addEventListener('input', function (e) {
+            const t = e.target;
+            if (!t.classList || !t.classList.contains('gastro-sku-sufijo')) return;
+            const d = String(t.value || '').replace(/\D/g, '');
+            if (t.value !== d) t.value = d;
+        });
+
+        if (typeof $ !== 'undefined') {
+            $('#modal-opcionales').on('hidden.bs.modal', function () {
+                setTimeout(() => focusSkuConsumo(), 80);
+            });
+        }
+    }
+
+    async function cargarConfigPv() {
+        const data = await api('/ventas/gastronomia/api/config', { headers: hdrJson() });
+        if (data.empresa_id) {
+            empresaId = data.empresa_id;
+            G.empresaId = empresaId;
+            G.tieneCfgPv = true;
+            G.empresaNombre = data.empresa_nombre || null;
+            ['empresa_id', 'gastro-empresa-id'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.value = empresaId;
+            });
+        }
+        if (data.usocuentacaja_gastronomia_id) {
+            G.usocuentacajaGastronomiaId = parseInt(data.usocuentacaja_gastronomia_id, 10);
+        }
+        if (data.cuentacaja_efectivo && data.cuentacaja_efectivo.id) {
+            G.cuentacajaEfectivo = data.cuentacaja_efectivo;
+            G.cuentacajaEfectivoError = null;
+        } else {
+            G.cuentacajaEfectivo = null;
+            G.cuentacajaEfectivoError = data.cuentacaja_efectivo_error || null;
+            if (G.cuentacajaEfectivoError) {
+                console.warn('Gastronomía F5:', G.cuentacajaEfectivoError);
+            }
+        }
+        G.cuentacajaEfectivoIdConfig = data.cuentacaja_efectivo_id || null;
+        if (data.receptor_cf_nombre) {
+            G.receptorCfNombre = data.receptor_cf_nombre;
+        }
+        if (data.cobranza_config_error) {
+            G.cobranzaConfigError = data.cobranza_config_error;
+            toast(data.cobranza_config_error, 'warning');
+        } else {
+            G.cobranzaConfigError = null;
+        }
+        if (data.modo_seleccion_preferido) {
+            G.modoSeleccionPreferido = data.modo_seleccion_preferido;
+            if (G.cuentasLibresHabilitadas !== false) {
+                aplicarPreferenciaModoSeleccion(data.modo_seleccion_preferido);
+            }
+        }
+        aplicarConfigAperturaDesdeApi(data);
+        return data;
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        registrarEventosUi();
+        aplicarVisibilidadCuentasLibres();
+        if (G.cuentasLibresHabilitadas !== false) {
+            aplicarPreferenciaModoSeleccion(G.modoSeleccionPreferido || 'mesa');
+        } else {
+            setModo(true, { silent: true });
+        }
+        wireConsultasSistema();
+        envolverPintarDescuentoParaRecalculo();
+        window.gastroOnClienteInternoDescuentoElegido = function (cli) {
+            if (pendingClienteInternoResolver && cli && cli.id) {
+                pendingClienteInternoResolver.resolve(cli);
+            }
+            if (cuentaId && tieneDescuentoEnPantalla() && cli && cli.id) {
+                void recalcularTotalCuentaConDescuento();
+            }
+        };
+
+        try {
+            await cargarConfigPv();
+        } catch (e) {
+            toast(e.message, 'warning');
+        }
+
+        try {
+            await cargarMonedasFactura();
+        } catch (e) {
+            toast('No se pudieron cargar monedas: ' + e.message, 'error');
+        }
+
+        initCobranzaGrid();
+
+        try {
+            await cargarMesas();
+        } catch (e) {
+            toast('Mesas: ' + e.message, 'error');
+        }
+
+        try {
+            await cargarCuentasActivas();
+        } catch (e) {
+            toast('Cuentas activas: ' + e.message, 'error');
+        }
+
+        setTimeout(() => focusSkuConsumo(), 200);
+    });
+})();

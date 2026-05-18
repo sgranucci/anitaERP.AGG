@@ -10,6 +10,7 @@ use App\Models\Stock\Formula_Articulo_Estado;
 use App\Models\Stock\Formula_Articulo_Hijo;
 use App\Repositories\Stock\Formula_Articulo_EstadoRepositoryInterface;
 use App\Support\Stock\FormulaArticuloGastronomia;
+use App\Support\Stock\FormulaArticuloSku;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -31,6 +32,7 @@ class FormulaArticuloAnitaSyncService
     public function __construct(
         private ApiAnita $apiAnita,
         private Formula_Articulo_EstadoRepositoryInterface $formulaArticuloEstadoRepository,
+        private FormulaArticuloVinculoService $formulaArticuloVinculoService,
     ) {}
 
     /**
@@ -377,6 +379,15 @@ class FormulaArticuloAnitaSyncService
             throw $e;
         }
 
+        $vinculo = $this->formulaArticuloVinculoService->vincularPorCodigoSku(false);
+        if ($vinculo['formulas_vinculadas'] > 0 || $vinculo['articulos_corregidos'] > 0) {
+            $advertencias[] = 'Vínculo código→SKU: '.$vinculo['formulas_vinculadas'].' fórmula(s) actualizada(s), '
+                .$vinculo['articulos_corregidos'].' artículo(s) corregido(s).';
+        }
+        foreach (array_slice($vinculo['sin_articulo'], 0, 20) as $msg) {
+            $advertencias[] = $msg;
+        }
+
         return ['formulas' => $formulas, 'lineas' => $lineas, 'advertencias' => $advertencias];
     }
 
@@ -535,8 +546,19 @@ class FormulaArticuloAnitaSyncService
         }
 
         $id = Articulo::query()->where('sku', $c)->value('id');
+        if ($id !== null) {
+            return (int) $id;
+        }
 
-        return $id !== null ? (int) $id : null;
+        if (ctype_digit($c)) {
+            $skuV = FormulaArticuloSku::skuDesdeCodigo((int) $c);
+            $id = Articulo::query()->where('sku', $skuV)->value('id');
+            if ($id !== null) {
+                return (int) $id;
+            }
+        }
+
+        return null;
     }
 
     private function resolverDepositoId(int $codDepAnita): ?int

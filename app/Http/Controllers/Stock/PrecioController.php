@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Stock;
 
+use App\Exports\Stock\PrecioExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionPrecio;
 use App\Imports\Stock\PrecioImport;
@@ -10,14 +11,15 @@ use App\Models\Stock\Articulo;
 use App\Models\Stock\Listaprecio;
 use App\Models\Stock\Precio;
 use App\Models\Stock\Talle;
+use App\Queries\Stock\PrecioQueryInterface;
 use App\Repositories\Stock\ArticuloRepositoryInterface;
 use App\Repositories\Ventas\ClienteRepositoryInterface;
 use App\Services\Stock\PrecioService;
 use Auth;
 use Carbon\Carbon;
-use DB;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Maatwebsite\Excel\Excel as ExcelFormat;
 use Maatwebsite\Excel\Facades\Excel;
 use Maatwebsite\Excel\HeadingRowImport;
 
@@ -29,10 +31,12 @@ class PrecioController extends Controller
 
     private $articuloRepository;
 
-    public function __construct(PrecioService $precioservice,
+    public function __construct(
+        PrecioService $precioservice,
         ArticuloRepositoryInterface $articulorepository,
-        ClienteRepositoryInterface $clienterepository)
-    {
+        ClienteRepositoryInterface $clienterepository,
+        private PrecioQueryInterface $precioQuery,
+    ) {
         $this->precioService = $precioservice;
         $this->articuloRepository = $articulorepository;
         $this->clienteRepository = $clienterepository;
@@ -47,124 +51,93 @@ class PrecioController extends Controller
     {
         can('listar-precios');
 
-        $filtros = [];
-        if ($request->url() != $request->fullUrl()) {
-            $url = urldecode($request->fullUrl());
-            $components = parse_url($url);
-            parse_str($components['query'] ?? '', $filtros);
-
-            session(['filtrosPrecios' => $filtros]);
-        } else {
-            $filtros = session('filtrosPrecios');
+        if (! Precio::query()->exists()) {
+            (new Precio)->sincronizarConAnita();
         }
 
-        $fechaVigenciaFiltro = $request->filled('fecha_vigencia')
-            ? Carbon::parse($request->fecha_vigencia)->format('Y-m-d')
-            : (is_array($filtros) && ! empty($filtros['fecha_vigencia'] ?? null)
-                ? Carbon::parse($filtros['fecha_vigencia'])->format('Y-m-d')
-                : Carbon::today()->format('Y-m-d'));
+        $f = $this->precioQuery->resolverFiltrosDesdeRequest($request);
+        $listasPrecio = Listaprecio::orderBy('nombre')->get();
+        $datas = $this->precioQuery->leePrecios(
+            $f['fecha_vigencia'],
+            $f['listaprecio_id'],
+            $f['filtros'],
+            $f['busqueda'] !== '' ? $f['busqueda'] : null,
+            true
+        );
 
-        $listaprecioIdFiltro = $request->input('listaprecio_id');
-        if (($listaprecioIdFiltro === null || $listaprecioIdFiltro === '')
-            && is_array($filtros) && isset($filtros['listaprecio_id']) && $filtros['listaprecio_id'] !== null && $filtros['listaprecio_id'] !== '') {
-            $listaprecioIdFiltro = (int) $filtros['listaprecio_id'];
+        return view('stock.precio.index', [
+            'datas' => $datas,
+            'fechaVigenciaFiltro' => $f['fecha_vigencia'],
+            'listaprecioIdFiltro' => $f['listaprecio_id'],
+            'listasPrecio' => $listasPrecio,
+            'filtrosParaVista' => $f['filtros'],
+            'busqueda' => $f['busqueda'],
+        ]);
+    }
+
+    public function listar(Request $request, ?string $formato = null)
+    {
+        can('listar-precios');
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $f = $this->precioQuery->resolverFiltrosDesdeRequest($request);
+
+        switch ($formato) {
+            case 'PDF':
+                $precios = $this->precioQuery->leePrecios(
+                    $f['fecha_vigencia'],
+                    $f['listaprecio_id'],
+                    $f['filtros'],
+                    $f['busqueda'] !== '' ? $f['busqueda'] : null,
+                    false
+                );
+                $fechaReferencia = $f['fecha_vigencia'];
+                $view = \View::make('stock.precio.listado', compact('precios', 'fechaReferencia'))->render();
+                $path = storage_path('pdf/listados');
+                if (! is_dir($path)) {
+                    mkdir($path, 0775, true);
+                }
+                $nombre_pdf = 'listado_precios';
+                $pdf = \App::make('dompdf.wrapper');
+                $pdf->setPaper('legal', 'landscape');
+                $pdf->loadHTML($view, 'UTF-8')->save($path.'/'.$nombre_pdf.'.pdf');
+
+                return response()->download($path.'/'.$nombre_pdf.'.pdf');
+
+            case 'EXCEL':
+                return (new PrecioExport($this->precioQuery))
+                    ->parametros($f['fecha_vigencia'], $f['listaprecio_id'], $f['filtros'], $f['busqueda'])
+                    ->download('precios.xlsx');
+
+            case 'CSV':
+                return (new PrecioExport($this->precioQuery))
+                    ->parametros($f['fecha_vigencia'], $f['listaprecio_id'], $f['filtros'], $f['busqueda'])
+                    ->download('precios.csv', ExcelFormat::CSV);
         }
-        if ($listaprecioIdFiltro !== null && $listaprecioIdFiltro !== '') {
-            $listaprecioIdFiltro = (int) $listaprecioIdFiltro;
-        } else {
-            $listaprecioIdFiltro = null;
+
+        if (! Precio::query()->exists()) {
+            (new Precio)->sincronizarConAnita();
         }
 
         $listasPrecio = Listaprecio::orderBy('nombre')->get();
-
-        $datas = $this->aplicarFiltrosEstadoPrecioIndex(
-            $this->precioIndexBaseQuery($fechaVigenciaFiltro, $listaprecioIdFiltro),
-            $filtros
+        $datas = $this->precioQuery->leePrecios(
+            $f['fecha_vigencia'],
+            $f['listaprecio_id'],
+            $f['filtros'],
+            $f['busqueda'] !== '' ? $f['busqueda'] : null,
+            true
         );
 
-        $datas = $datas->whereExists(function ($query) {
-            $query->select(DB::raw(1))
-                ->from('combinacion')
-                ->whereRaw('combinacion.articulo_id = precio.articulo_id');
-        })->get();
-
-        if ($datas->isEmpty()) {
-            $Precio = new Precio;
-            $Precio->sincronizarConAnita();
-
-            $datas = $this->aplicarFiltrosEstadoPrecioIndex(
-                $this->precioIndexBaseQuery($fechaVigenciaFiltro, $listaprecioIdFiltro),
-                $filtros
-            )->whereExists(function ($query) {
-                $query->select(DB::raw(1))
-                    ->from('combinacion')
-                    ->whereRaw('combinacion.articulo_id = precio.articulo_id');
-            })->get();
-        }
-
-        $filtrosParaVista = is_array($filtros) ? $filtros : [];
-
-        return view('stock.precio.index', compact(
-            'datas',
-            'fechaVigenciaFiltro',
-            'listaprecioIdFiltro',
-            'listasPrecio',
-            'filtrosParaVista'
-        ));
-    }
-
-    /**
-     * Precios del índice: última vigencia por artículo y lista con fechavigencia <= fecha de referencia.
-     */
-    private function precioIndexBaseQuery(string $fechaReferencia, ?int $listaprecioIdFiltro)
-    {
-        $q = Precio::with('articulos')->with('listaprecios')->with('monedas')->with('usuarios')
-            ->whereRaw(
-                'precio.fechavigencia = (SELECT MAX(p3.fechavigencia) FROM precio AS p3 WHERE p3.articulo_id = precio.articulo_id AND p3.listaprecio_id = precio.listaprecio_id AND p3.fechavigencia <= ?)',
-                [$fechaReferencia]
-            );
-
-        if ($listaprecioIdFiltro !== null) {
-            $q->where('precio.listaprecio_id', $listaprecioIdFiltro);
-        }
-
-        return $q;
-    }
-
-    /**
-     * Filtros avanzados del índice (modal): estado facturable del artículo.
-     *
-     * @param  \Illuminate\Database\Eloquent\Builder<\App\Models\Stock\Precio>  $builder
-     * @return \Illuminate\Database\Eloquent\Builder<\App\Models\Stock\Precio>
-     */
-    private function aplicarFiltrosEstadoPrecioIndex($builder, $filtros)
-    {
-        if ($filtros == '' || empty($filtros['filter_column'] ?? null) || ! is_array($filtros['filter_column'])) {
-            return $builder;
-        }
-
-        for ($ii = 0; $ii < count($filtros['filter_column']); $ii++) {
-            if (($filtros['filter_column'][$ii]['type'] ?? '') == '') {
-                continue;
-            }
-            if (($filtros['filter_column'][$ii]['column'] ?? '') == 'estado' &&
-                ($filtros['filter_column'][$ii]['type'] ?? '') == '=') {
-                switch ($filtros['filter_column'][$ii]['value'] ?? '') {
-                    case 'F':
-                        $builder = $builder->whereHas('articulos', function ($query) {
-                            $query->where('nofactura', '0');
-                        });
-                        break;
-                    case 'N':
-                        $builder = $builder->whereHas('articulos', function ($query) {
-                            $query->where('nofactura', '1');
-                        });
-                        break;
-                }
-            }
-        }
-
-        return $builder;
+        return view('stock.precio.index', [
+            'datas' => $datas,
+            'fechaVigenciaFiltro' => $f['fecha_vigencia'],
+            'listaprecioIdFiltro' => $f['listaprecio_id'],
+            'listasPrecio' => $listasPrecio,
+            'filtrosParaVista' => $f['filtros'],
+            'busqueda' => $f['busqueda'],
+        ]);
     }
 
     public function asignaPrecioPorTalle($articulo_id, $talle_id)
@@ -259,7 +232,9 @@ class PrecioController extends Controller
         $listaprecio_query = Listaprecio::all();
         $moneda_query = Moneda::all();
 
-        return view('stock.precio.crear', compact('articulo_query', 'listaprecio_query', 'moneda_query'));
+        $esEdicion = false;
+
+        return view('stock.precio.crear', compact('articulo_query', 'listaprecio_query', 'moneda_query', 'esEdicion'));
     }
 
     /**
@@ -270,17 +245,7 @@ class PrecioController extends Controller
      */
     public function guardar(ValidacionPrecio $request)
     {
-        $fechavigencia = Carbon::createFromFormat('d-m-Y', $request->fechavigencia);
-
-        $precio = Precio::create([
-            'articulo_id' => $request->articulo_id,
-            'listaprecio_id' => $request->listaprecio_id,
-            'fechavigencia' => $fechavigencia,
-            'moneda_id' => $request->moneda_id,
-            'precio' => $request->precio,
-            'precioanterior' => 0,
-            'usuarioultcambio_id' => Auth::user()->id,
-        ]);
+        $precio = $this->precioService->crearDesdeFormulario($request);
 
         // Lee nuevo precio con relaciones para interface Anita
         $precio = Precio::where('id', $precio->id)->with('articulos:id,descripcion,sku')->with('listaprecios')->with('monedas')->with('usuarios')->first();
@@ -298,16 +263,19 @@ class PrecioController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function editar($id)
+    public function editar(Request $request, $id)
     {
         can('editar-precios');
 
-        $precio = Precio::where('id', $id)->with('articulos:id,descripcion,sku')->with('listaprecios')->with('monedas')->with('usuarios')->first();
+        $precio = Precio::where('id', $id)->with('articulos:id,descripcion,detalle,sku')->with('listaprecios')->with('monedas')->with('usuarios')->first();
         $articulo_query = Articulo::select('id', 'sku', 'descripcion')->where('sku', 'not like', '%FON%')->where('sku', 'not like', '%SER%')->orderby('descripcion')->get();
         $listaprecio_query = Listaprecio::all();
         $moneda_query = Moneda::all();
 
-        return view('stock.precio.editar', compact('precio', 'articulo_query', 'listaprecio_query', 'moneda_query'));
+        $esEdicion = true;
+        $retornoArticuloPrecios = $this->resolverRetornoArticuloPrecios($request);
+
+        return view('stock.precio.editar', compact('precio', 'articulo_query', 'listaprecio_query', 'moneda_query', 'esEdicion', 'retornoArticuloPrecios'));
     }
 
     /**
@@ -321,29 +289,59 @@ class PrecioController extends Controller
     {
         can('actualizar-precios');
 
-        // Lee precio anterior
-        $precio_ant = Precio::select('precio')->where('id', $id)->first();
-        $fechavigencia = Carbon::createFromFormat('d-m-Y', $request->fechavigencia);
+        $resultado = $this->precioService->actualizarDesdeFormulario($request, (int) $id);
+        $precio = $resultado['precio'];
 
-        $precio = Precio::where('id', $id)->findOrFail($id)
-            ->update([
-                'articulo_id' => $request->articulo_id,
-                'listaprecio_id' => $request->listaprecio_id,
-                'fechavigencia' => $fechavigencia,
-                'moneda_id' => $request->moneda_id,
-                'precio' => $request->precio,
-                'precioanterior' => $precio_ant->precio,
-                'usuarioultcambio_id' => Auth::user()->id,
-            ]);
-
-        // Lee nuevo precio con relaciones para interface Anita
-        $precio = Precio::where('id', $id)->with('articulos:id,descripcion,sku')->with('listaprecios')->with('monedas')->with('usuarios')->first();
+        // Lee precio con relaciones para interface Anita
+        $precio = Precio::where('id', $precio->id)->with('articulos:id,descripcion,detalle,sku')->with('listaprecios')->with('monedas')->with('usuarios')->first();
 
         // Actualiza anita
         // $Precio = new Precio();
         // $Precio->actualizarAnita($precio);
 
-        return redirect('stock/precio')->with('mensaje', 'Precio actualizado con exito');
+        $mensaje = $resultado['creado_nueva_vigencia']
+            ? 'Se registró una nueva vigencia de precio; el registro anterior se conservó en el historial.'
+            : 'Precio actualizado con exito';
+
+        return $this->redirectDespuesDeGuardarPrecio($request, $mensaje);
+    }
+
+    /**
+     * Historial de precios de venta del artículo en todas las listas donde figura (JSON).
+     */
+    public function consultaPreciosArticulo(Request $request)
+    {
+        if (! can('listar-precios', false) && ! can('listar-articulos', false)) {
+            return response()->json(['message' => 'No tiene permisos para esta consulta.'], 403);
+        }
+
+        $articuloId = (int) $request->query('articulo_id', 0);
+        if ($articuloId <= 0) {
+            return response()->json(['message' => 'Indique un artículo válido.'], 422);
+        }
+
+        $articulo = Articulo::query()->select('id', 'sku', 'descripcion')->find($articuloId);
+        if (! $articulo) {
+            return response()->json(['message' => 'Artículo no encontrado.'], 404);
+        }
+
+        $fechaRef = $request->query('fecha_referencia');
+        if (! is_string($fechaRef) || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaRef)) {
+            $fechaRef = Carbon::today()->format('Y-m-d');
+        }
+
+        $data = $this->precioQuery->leeHistorialPreciosArticulo($articuloId, $fechaRef);
+
+        $puedeEditar = can('editar-precios', false);
+        foreach ($data['filas'] as &$fila) {
+            $fila['puede_editar'] = $puedeEditar;
+            if ($puedeEditar) {
+                $fila['editar_url'] = route('editar_precio', ['id' => $fila['id']]);
+            }
+        }
+        unset($fila);
+
+        return response()->json($data);
     }
 
     /**
@@ -356,7 +354,7 @@ class PrecioController extends Controller
     {
         can('borrar-precios');
 
-        $precio = Precio::where('id', $id)->with('articulos:id,descripcion,sku')->with('listaprecios')->with('monedas')->with('usuarios')->first();
+        $precio = Precio::where('id', $id)->with('articulos:id,descripcion,detalle,sku')->with('listaprecios')->with('monedas')->with('usuarios')->first();
 
         // Elimina anita
         // $Precio = new Precio();
@@ -417,5 +415,49 @@ class PrecioController extends Controller
         session()->forget('filtrosPrecios');
 
         return json_encode(['ok']);
+    }
+
+    /**
+     * @return array{articulo_id: int, origen: string, fecha_referencia: string}|null
+     */
+    private function resolverRetornoArticuloPrecios(Request $request): ?array
+    {
+        $articuloId = (int) $request->input('retorno_articulo_id', $request->query('retorno_articulo_id', 0));
+        $origen = (string) $request->input('retorno_origen', $request->query('retorno_origen', ''));
+
+        if ($articuloId <= 0 || ! in_array($origen, ['index', 'editar'], true)) {
+            return null;
+        }
+
+        $fecha = (string) $request->input('retorno_fecha_referencia', $request->query('retorno_fecha_referencia', ''));
+        if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha)) {
+            $fecha = Carbon::today()->format('Y-m-d');
+        }
+
+        return [
+            'articulo_id' => $articuloId,
+            'origen' => $origen,
+            'fecha_referencia' => $fecha,
+        ];
+    }
+
+    private function redirectDespuesDeGuardarPrecio(Request $request, string $mensaje)
+    {
+        $retorno = $this->resolverRetornoArticuloPrecios($request);
+        if ($retorno === null) {
+            return redirect('stock/precio')->with('mensaje', $mensaje);
+        }
+
+        $params = [
+            'abrir_consulta_precios' => 1,
+            'articulo_id' => $retorno['articulo_id'],
+            'fecha_referencia' => $retorno['fecha_referencia'],
+        ];
+
+        $url = $retorno['origen'] === 'editar'
+            ? route('editar_articulo', ['id' => $retorno['articulo_id']])
+            : route('articulo');
+
+        return redirect($url.'?'.http_build_query($params))->with('mensaje', $mensaje);
     }
 }

@@ -94,7 +94,13 @@ class CuentacajaController extends Controller
      */
     public function editar($id)
     {
-        can('editar-cuentas-de-caja');
+        $soloConsulta = request()->query('origen') === 'modal_consulta';
+        if ($soloConsulta) {
+            can('listar-cuentas-de-caja');
+        } else {
+            can('editar-cuentas-de-caja');
+        }
+
         $data = $this->repository->findOrFail($id);
         $empresa_query = $this->empresaRepository->all();
         $moneda_query = $this->monedaRepository->all();
@@ -104,7 +110,7 @@ class CuentacajaController extends Controller
         $tipocuenta_enum = Cuentacaja::$enumTipocuenta;
 
         return view('caja.cuentacaja.editar', compact('data', 'empresa_query', 'banco_query', 'cuentacontable_query',
-                                                    'tipocuenta_enum', 'moneda_query', 'usocuentacaja_query'));
+                                                    'tipocuenta_enum', 'moneda_query', 'usocuentacaja_query', 'soloConsulta'));
     }
 
     /**
@@ -116,6 +122,10 @@ class CuentacajaController extends Controller
      */
     public function actualizar(ValidacionCuentacaja $request, $id)
     {
+        if ($request->input('origen') === 'modal_consulta') {
+            abort(403);
+        }
+
         can('actualizar-cuentas-de-caja');
 
         $this->repository->update($request->all(), $id);
@@ -153,6 +163,7 @@ class CuentacajaController extends Controller
 
         $empresaId = $request->empresa_id;
         $consulta = $request->consulta;
+        $usoCuentacajaId = (int) $request->get('usocuentacaja_id');
         $count = count($columns);
 
         $query = CuentaCaja::select('cuentacaja.id as cuentacaja_id', 'cuentacaja.codigo', 
@@ -161,12 +172,28 @@ class CuentacajaController extends Controller
                 'cuentacaja.moneda_id', 'moneda.nombre as nombremoneda')
 				->leftJoin('empresa','cuentacaja.empresa_id','=','empresa.id')
                 ->leftJoin('cuentacontable','cuentacaja.cuentacontable_id','=','cuentacontable.id')
-                ->leftJoin('moneda','cuentacaja.moneda_id','=','moneda.id')
-                ->orWhere(function ($query) use ($count, $consulta, $columns) {
-                        for ($i = 0; $i < $count; $i++)
-                            $query->orWhere($columns[$i], "LIKE", '%'. $consulta . '%');
-                })
-                ->get();
+                ->leftJoin('moneda','cuentacaja.moneda_id','=','moneda.id');
+
+        if ($usoCuentacajaId > 0) {
+            $query->whereHas('usocuentacajas', fn ($r) => $r->whereKey($usoCuentacajaId));
+        }
+
+        $empresaIdInt = (int) $empresaId;
+        if ($empresaIdInt > 0) {
+            $query->where(function ($q) use ($empresaIdInt) {
+                $q->where('cuentacaja.empresa_id', $empresaIdInt)->orWhereNull('cuentacaja.empresa_id');
+            });
+        }
+
+        if ($consulta) {
+            $query->where(function ($q) use ($count, $consulta, $columns) {
+                for ($i = 0; $i < $count; $i++) {
+                    $q->orWhere($columns[$i], 'LIKE', '%'.$consulta.'%');
+                }
+            });
+        }
+
+        $query = $query->orderBy('cuentacaja.nombre')->get();
 
         $output = [];
 		$output['data'] = '';	

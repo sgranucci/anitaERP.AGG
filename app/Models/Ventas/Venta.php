@@ -79,6 +79,12 @@ class Venta extends Model implements Auditable
         );
     }
 
+    /** Cobranza POS gastronomía (venta_id en tabla cobranza). */
+    public function cobranzasDirectas()
+    {
+        return $this->hasMany(Cobranza::class, 'venta_id');
+    }
+
     public function actividad_arcas()
 	{
     	return $this->hasMany(Actividad_Arca::class, 'actividad_arca_id');

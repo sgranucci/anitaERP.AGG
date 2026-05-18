@@ -3,8 +3,8 @@
 namespace App\Console\Commands;
 
 use App\Models\Configuracion\Empresa;
-use App\Models\Stock\MozoGastronomia;
-use App\Repositories\Stock\MozoGastronomiaRepositoryInterface;
+use App\Models\Ventas\MozoGastronomia;
+use App\Repositories\Ventas\MozoGastronomiaRepositoryInterface;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 

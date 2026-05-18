@@ -5,6 +5,30 @@
 
 @section("scripts")
 <script src="{{ asset("assets/pages/scripts/admin/index.js") }}" type="text/javascript"></script>
+@if (can('sincronizar-interbanking-movimientos', false))
+<script type="text/javascript">
+$(function () {
+    var $panel = $('#ib-movimientos-sync-panel');
+    var $btn = $('#ib-btn-toggle-sync-movimientos');
+    var labelAbrir = '<i class="fa fa-cloud-download"></i> Consultar Interbanking y guardar movimientos…';
+    var labelCerrar = '<i class="fa fa-times"></i> Ocultar consulta a Interbanking';
+
+    function setPanelAbierto(abierto) {
+        $panel.toggleClass('d-none', !abierto);
+        $btn.attr('aria-expanded', abierto ? 'true' : 'false');
+        $btn.html(abierto ? labelCerrar : labelAbrir);
+    }
+
+    $btn.on('click', function () {
+        setPanelAbierto($panel.hasClass('d-none'));
+    });
+
+    @if (request()->boolean('abrir_sincronizacion') || session()->has('errores'))
+    setPanelAbierto(true);
+    @endif
+});
+</script>
+@endif
 @endsection
 
 @section('contenido')
@@ -18,6 +42,9 @@
                     <a href="{{ route('interbanking') }}" class="btn btn-tool btn-sm">Saldos en vivo</a>
                     @if (can('listar-saldos-interbanking-historico', false))
                         <a href="{{ route('interbanking_saldos_historicos') }}" class="btn btn-tool btn-sm">Saldos históricos</a>
+                    @endif
+                    @if (can('listar-interbanking-transferencias-persistidas', false))
+                        <a href="{{ route('interbanking_transferencias_persistidas') }}" class="btn btn-tool btn-sm">Transferencias persistidas</a>
                     @endif
                 </div>
             </div>
@@ -82,11 +109,25 @@
                 </div>
 
                 @if (can('sincronizar-interbanking-movimientos', false))
-                <div class="card card-outline card-secondary mb-3">
+                <div class="alert alert-light border mb-3 py-2">
+                    <p class="small text-muted mb-2">
+                        <strong>Filtro del listado:</strong> busca únicamente movimientos ya guardados en el ERP (no consulta Interbanking en ese momento).
+                        Para leer movimientos en la API de Interbanking y almacenarlos en la base local, use el botón siguiente; es un proceso aparte del filtro.
+                    </p>
+                    <button type="button"
+                        class="btn btn-outline-success btn-sm"
+                        id="ib-btn-toggle-sync-movimientos"
+                        aria-expanded="false"
+                        aria-controls="ib-movimientos-sync-panel">
+                        <i class="fa fa-cloud-download"></i> Consultar Interbanking y guardar movimientos…
+                    </button>
+                </div>
+                <div class="card card-outline card-secondary mb-3 d-none" id="ib-movimientos-sync-panel">
                     <div class="card-header">
-                        <h3 class="card-title">Traer movimientos desde Interbanking (API) y persistir</h3>
+                        <h3 class="card-title mb-0">Lectura en Interbanking (API) y persistencia</h3>
                     </div>
                     <div class="card-body">
+                        <p class="text-muted small">Consulta la API de Interbanking con los parámetros indicados y guarda o actualiza los movimientos en la tabla local. No modifica el filtro del listado superior.</p>
                         <form method="post" action="{{ route('interbanking_movimientos_sincronizar') }}" class="form-row align-items-end flex-wrap">
                             @csrf
                             <input type="hidden" name="fecha_desde" value="{{ request('fecha_desde', $fechaDesde->format('Y-m-d')) }}">
@@ -185,7 +226,7 @@
                             </tr>
                             @empty
                             <tr>
-                                <td colspan="10" class="text-center text-muted">No hay movimientos persistidos para el criterio. Use «Sincronizar» si tiene permiso.</td>
+                                <td colspan="10" class="text-center text-muted">No hay movimientos persistidos para el criterio.@if (can('sincronizar-interbanking-movimientos', false)) Puede traer datos desde Interbanking con el botón «Consultar Interbanking y guardar movimientos».@endif</td>
                             </tr>
                             @endforelse
                         </tbody>

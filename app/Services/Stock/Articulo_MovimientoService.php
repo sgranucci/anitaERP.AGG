@@ -52,12 +52,30 @@ class Articulo_MovimientoService
 				$dataMovimiento['deposito_id'] = 1;
 			if ($dataMovimiento['listaprecio_id'] == 'NaN')
 				$dataMovimiento['listaprecio_id'] = null;
-			if ($dataMovimiento['listaprecio_id'] == 0)
-				$dataMovimiento['listaprecio_id'] = 1;
+			if (! isset($dataMovimiento['listaprecio_id'])
+				|| $dataMovimiento['listaprecio_id'] === ''
+				|| (int) $dataMovimiento['listaprecio_id'] <= 0)
+				$dataMovimiento['listaprecio_id'] = null;
 			if ($dataMovimiento['moneda_id'] == 'NaN')
 				$dataMovimiento['moneda_id'] = null;
 			if ($dataMovimiento['incluyeimpuesto'] == 'NaN')
-				$dataMovimiento['incluyeimpuesto'] = null;	
+				$dataMovimiento['incluyeimpuesto'] = null;
+			foreach ([
+				'pedido_combinacion_id',
+				'ordentrabajo_id',
+				'modulo_id',
+				'movimientostock_id',
+				'pedido_articulo_id',
+				'venta_emision_id',
+				'loteimportacion_id',
+				'combinacion_id',
+			] as $fk) {
+				if (! isset($dataMovimiento[$fk])
+					|| $dataMovimiento[$fk] === ''
+					|| (int) $dataMovimiento[$fk] <= 0) {
+					$dataMovimiento[$fk] = null;
+				}
+			}
 
 			$articulo_movimiento = $this->articulo_movimientoRepository->create($dataMovimiento);
 

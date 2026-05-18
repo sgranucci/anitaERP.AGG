@@ -7,7 +7,7 @@
 return [
     'titulo' => 'Manual de Usuario',
     'subtitulo' => 'Anita ERP — Módulo de Compras',
-    'version' => '1.1',
+    'version' => '1.3',
     'fecha' => null,
     'empresa' => null,
     'url_base' => null,
@@ -22,6 +22,7 @@ return [
         ],
         [
             'titulo' => '2. Acceso al sistema',
+            'herramientas_clave' => 'login',
             'parrafos' => [
                 'Para ingresar al sistema, abra el navegador web (se recomienda Google Chrome o Microsoft Edge en versión actual) y acceda a la URL de la aplicación proporcionada por el administrador.',
                 'Pantalla de inicio de sesión: ingrese su nombre de usuario (campo Usuario) y contraseña. Presione el botón Login para autenticarse.',
@@ -67,6 +68,7 @@ return [
         ],
         [
             'titulo' => '4. Tablas maestras de Compras',
+            'herramientas_clave' => 'tablas_maestras',
             'parrafos' => [
                 'Antes de operar con proveedores y documentos, el administrador debe mantener las tablas auxiliares del módulo. Todas siguen el mismo patrón: listado, botón Crear, formulario de alta/edición y eliminación lógica según corresponda.',
                 'Acceso desde el menú Compras → Tablas (o submenús equivalentes según configuración en base de datos).',
@@ -95,6 +97,10 @@ return [
         ],
         [
             'titulo' => '5. Proveedores',
+            'herramientas_grupos' => [
+                ['titulo' => 'Pantalla de listado', 'clave' => 'proveedor_listado', 'incluir_listado' => true],
+                ['titulo' => 'Ficha de edición / alta', 'clave' => 'proveedor_edicion'],
+            ],
             'parrafos' => [
                 'La gestión de proveedores centraliza los datos comerciales, impositivos y contables de cada contraparte. Ruta principal: compras/proveedor.',
             ],
@@ -130,6 +136,8 @@ return [
         ],
         [
             'titulo' => '7. Listas de precio de proveedor',
+            'herramientas_clave' => 'listaprecio_listado',
+            'herramientas_incluir_listado' => true,
             'parrafos' => [
                 'Las listas de precio de proveedor almacenan precios pactados por artículo con vigencia. No deben confundirse con las listas de precio de venta del módulo Stock (stock/listaprecio).',
                 'Ruta: compras/listaprecio_proveedor. Al primer acceso con tabla vacía, el sistema puede sincronizar listas desde Anita automáticamente.',
@@ -144,6 +152,10 @@ return [
         ],
         [
             'titulo' => '8. Requisiciones de compra',
+            'herramientas_grupos' => [
+                ['titulo' => 'Listado de requisiciones', 'clave' => 'requisicion_listado', 'incluir_listado' => true],
+                ['titulo' => 'Formulario de edición', 'clave' => 'requisicion_edicion'],
+            ],
             'parrafos' => [
                 'La requisición es la solicitud interna de compra. Inicia el circuito documental. Ruta: compras/requisicion.',
                 'Al abrir el listado sin datos locales, puede ejecutarse sincronización inicial desde Anita.',
@@ -174,6 +186,7 @@ return [
         ],
         [
             'titulo' => '9. Presupuestos de requisición',
+            'captura_id' => 'presupuesto',
             'parrafos' => [
                 'Los presupuestos registran las cotizaciones de proveedores vinculadas a una requisición. Se gestionan en la solapa Presupuestos del formulario de requisición.',
                 'Por cada presupuesto se indica proveedor, fecha, condiciones de entrega/compra/pago (texto), precio unitario por línea de requisición y archivos de respaldo.',
@@ -182,6 +195,10 @@ return [
         ],
         [
             'titulo' => '10. Órdenes de compra',
+            'herramientas_grupos' => [
+                ['titulo' => 'Listado de órdenes de compra', 'clave' => 'ordencompra_listado', 'incluir_listado' => true],
+                ['titulo' => 'Formulario de orden de compra', 'clave' => 'ordencompra_edicion'],
+            ],
             'parrafos' => [
                 'La orden de compra (OC) es el documento formal enviado al proveedor. Ruta: compras/ordencompra. El listado puede filtrarse por sector de legajo del usuario.',
             ],

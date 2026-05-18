@@ -1,7 +1,7 @@
 <div class="form-group row">
 	<label for="fechavigencia" class="col-lg-3 col-form-label requerido">Fecha de vigencia</label>
 	<div class="col-lg-3">
-		<input type="text" name="fechavigencia" id="fechavigencia" class="form-control" value="{{old('fechavigencia', \Carbon\Carbon::parse(strtotime($precio->fechavigencia ?? date('d-m-Y')))->formatLocalized('%d-%m-%Y') ?? date('d-m-Y'))}}" required/>
+		<input type="text" name="fechavigencia" id="fechavigencia" class="form-control" value="{{ old('fechavigencia', !empty($precio?->fechavigencia) ? \Carbon\Carbon::parse($precio->fechavigencia)->format('d-m-Y') : date('d-m-Y')) }}" required/>
 	</div>
 </div>
 <div class="form-group row">

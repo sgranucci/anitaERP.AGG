@@ -11,7 +11,7 @@
         <p class="text-muted">Cargando...</p>
       </div>
       <div class="modal-footer">
-        <a href="#" class="btn btn-primary d-none" id="modalVerFormulaArticuloIrCrud" target="_blank" rel="noopener">Abrir en CRUD</a>
+        <a href="#" class="btn btn-primary d-none" id="modalVerFormulaArticuloIrCrud" target="_blank" rel="noopener">Editar f&oacute;rmula</a>
         <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
       </div>
     </div>

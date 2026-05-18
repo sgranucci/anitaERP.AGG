@@ -120,123 +120,223 @@ class InterbankingService
     }
 
     /**
+     * GET autenticado a la API con renovación de token y un reintento ante HTTP 401.
+     *
+     * @param  callable(array{ok: true, access_token: string, client_id: string, customer_id: string}): string  $construirUrl
+     * @return array{ok: bool, http_code: int, data: array|null, error: string|null}
+     */
+    private function ejecutarGetAutenticado(int $empresaId, callable $construirUrl, string $operacion): array
+    {
+        try {
+            $ctx = $this->contextoApiInterbanking($empresaId);
+            if (! $ctx['ok']) {
+                return [
+                    'ok' => false,
+                    'http_code' => 0,
+                    'data' => null,
+                    'error' => $ctx['error'],
+                ];
+            }
+
+            for ($intento = 1; $intento <= 2; $intento++) {
+                if ($intento > 1) {
+                    $this->pideTokenInterbanking($empresaId);
+                    $ctx = $this->contextoApiInterbanking($empresaId);
+                    if (! $ctx['ok']) {
+                        return [
+                            'ok' => false,
+                            'http_code' => 401,
+                            'data' => null,
+                            'error' => $ctx['error'],
+                        ];
+                    }
+                }
+
+                $url = $construirUrl($ctx);
+                $headers = $this->cabecerasApiInterbanking($ctx);
+
+                $ch = curl_init();
+                curl_setopt($ch, CURLOPT_URL, $url);
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+                curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'GET');
+
+                $response = curl_exec($ch);
+                $errno = curl_errno($ch);
+                $curlErr = curl_error($ch);
+                $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+
+                if ($errno !== 0) {
+                    Log::warning("Interbanking {$operacion} cURL", [
+                        'empresa_id' => $empresaId,
+                        'errno' => $errno,
+                        'error' => $curlErr,
+                    ]);
+
+                    return [
+                        'ok' => false,
+                        'http_code' => 0,
+                        'data' => null,
+                        'error' => 'No se pudo conectar con Interbanking: '.$curlErr,
+                    ];
+                }
+
+                $data = json_decode($response, true);
+
+                if ($httpCode === 401 && $intento === 1) {
+                    Log::info("Interbanking {$operacion}: HTTP 401, renovando token OAuth", [
+                        'empresa_id' => $empresaId,
+                        'client_id' => $ctx['client_id'],
+                    ]);
+
+                    continue;
+                }
+
+                if (! is_array($data)) {
+                    Log::warning("Interbanking {$operacion}: respuesta no es JSON", [
+                        'empresa_id' => $empresaId,
+                        'http' => $httpCode,
+                        'fragmento' => is_string($response) ? substr($response, 0, 500) : null,
+                    ]);
+
+                    return [
+                        'ok' => false,
+                        'http_code' => $httpCode,
+                        'data' => null,
+                        'error' => 'Respuesta inválida del servicio (HTTP '.$httpCode.').',
+                    ];
+                }
+
+                if ($httpCode < 200 || $httpCode >= 300) {
+                    Log::warning("Interbanking {$operacion}: error HTTP", [
+                        'empresa_id' => $empresaId,
+                        'http' => $httpCode,
+                        'client_id' => $ctx['client_id'],
+                        'cuerpo' => $data,
+                    ]);
+
+                    return [
+                        'ok' => false,
+                        'http_code' => $httpCode,
+                        'data' => $data,
+                        'error' => $this->mensajeErrorHttpInterbanking($data, $httpCode),
+                    ];
+                }
+
+                return [
+                    'ok' => true,
+                    'http_code' => $httpCode,
+                    'data' => $data,
+                    'error' => null,
+                ];
+            }
+        } catch (Throwable $e) {
+            Log::warning("Interbanking {$operacion}: excepción", [
+                'empresa_id' => $empresaId,
+                'exception' => $e->getMessage(),
+            ]);
+
+            return [
+                'ok' => false,
+                'http_code' => 0,
+                'data' => null,
+                'error' => 'Error al consultar Interbanking.',
+            ];
+        }
+
+        return [
+            'ok' => false,
+            'http_code' => 401,
+            'data' => null,
+            'error' => 'No autorizado en Interbanking (HTTP 401) tras renovar token.',
+        ];
+    }
+
+    /**
+     * @param  array{ok: true, access_token: string, client_id: string, customer_id: string}  $ctx
+     * @return list<string>
+     */
+    private function cabecerasApiInterbanking(array $ctx): array
+    {
+        return [
+            'Authorization: Bearer '.$ctx['access_token'],
+            'accept: application/json',
+            'client_id: '.$ctx['client_id'],
+        ];
+    }
+
+    private function mensajeErrorHttpInterbanking(array $data, int $httpCode): string
+    {
+        $msg = $data['message']
+            ?? $data['error']
+            ?? $data['error_description']
+            ?? ($data['code'] ?? null)
+            ?? ('Código HTTP '.$httpCode);
+        if (is_array($msg)) {
+            $msg = json_encode($msg);
+        }
+
+        return (string) $msg;
+    }
+
+    /**
      * Consulta saldos en Interbanking.
      *
      * @return array{ok: bool, accounts: array, error: string|null}
      */
     public function leeSaldos($empresa_id, $currency)
     {
-        $ctx = $this->contextoApiInterbanking((int) $empresa_id);
-        if (! $ctx['ok']) {
-            return [
-                'ok' => false,
-                'accounts' => [],
-                'error' => $ctx['error'],
-            ];
-        }
-
-        $params = [
-            'currency' => $currency,
-            'customer-id' => $ctx['customer_id'],
-        ];
-
+        $empresaId = (int) $empresa_id;
         $baseUrl = 'https://api-gw.interbanking.com.ar/api/prod/v1/accounts/balances';
-        $url = $baseUrl.'?'.http_build_query($params);
 
-        $headers = [
-            'Authorization: Bearer '.$ctx['access_token'],
-            'accept: application/json',
-            'client_id: '.$ctx['client_id'],
-        ];
+        $resultado = $this->ejecutarGetAutenticado(
+            $empresaId,
+            fn (array $ctx): string => $baseUrl.'?'.http_build_query([
+                'currency' => $currency,
+                'customer-id' => $ctx['customer_id'],
+            ]),
+            'saldos'
+        );
 
-        $ch = curl_init();
-
-        try {
-            curl_setopt($ch, CURLOPT_URL, $url);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'GET');
-
-            $response = curl_exec($ch);
-            $errno = curl_errno($ch);
-            $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
-            if ($errno !== 0) {
-                $curlErr = curl_error($ch);
-                Log::warning('Interbanking cURL', ['errno' => $errno, 'error' => $curlErr]);
-
-                return [
-                    'ok' => false,
-                    'accounts' => [],
-                    'error' => 'No se pudo conectar con Interbanking: '.$curlErr,
-                ];
-            }
-
-            $data = json_decode($response, true);
-
-            if (! is_array($data)) {
-                Log::warning('Interbanking: respuesta no es JSON', [
-                    'http' => $httpCode,
-                    'fragmento' => is_string($response) ? substr($response, 0, 500) : null,
-                ]);
-
-                return [
-                    'ok' => false,
-                    'accounts' => [],
-                    'error' => 'Respuesta inválida del servicio (HTTP '.$httpCode.').',
-                ];
-            }
-
-            if ($httpCode < 200 || $httpCode >= 300) {
-                $msg = $data['message']
-                    ?? $data['error']
-                    ?? $data['error_description']
-                    ?? ('Código HTTP '.$httpCode);
-                Log::warning('Interbanking: error HTTP', ['http' => $httpCode, 'cuerpo' => $data]);
-
-                return [
-                    'ok' => false,
-                    'accounts' => [],
-                    'error' => $msg,
-                ];
-            }
-
-            if (! array_key_exists('accounts', $data)) {
-                Log::warning('Interbanking: JSON sin clave accounts', ['claves' => array_keys($data)]);
-
-                return [
-                    'ok' => false,
-                    'accounts' => [],
-                    'error' => 'La respuesta no incluye el listado de cuentas (accounts).',
-                ];
-            }
-
-            if (! is_array($data['accounts'])) {
-                Log::warning('Interbanking: accounts no es un array');
-
-                return [
-                    'ok' => false,
-                    'accounts' => [],
-                    'error' => 'Formato inesperado en la respuesta de cuentas.',
-                ];
-            }
-
+        if (! $resultado['ok']) {
             return [
-                'ok' => true,
-                'accounts' => $data['accounts'],
-                'error' => null,
+                'ok' => false,
+                'accounts' => [],
+                'error' => $resultado['error'],
             ];
-        } catch (Throwable $e) {
-            Log::warning('Interbanking: excepción en leeSaldos', ['exception' => $e->getMessage()]);
+        }
+
+        $data = $resultado['data'];
+
+        if (! array_key_exists('accounts', $data)) {
+            Log::warning('Interbanking saldos: JSON sin clave accounts', [
+                'empresa_id' => $empresaId,
+                'claves' => array_keys($data),
+            ]);
 
             return [
                 'ok' => false,
                 'accounts' => [],
-                'error' => 'Error al consultar Interbanking.',
+                'error' => 'La respuesta no incluye el listado de cuentas (accounts).',
             ];
-        } finally {
-            curl_close($ch);
         }
+
+        if (! is_array($data['accounts'])) {
+            Log::warning('Interbanking saldos: accounts no es un array', ['empresa_id' => $empresaId]);
+
+            return [
+                'ok' => false,
+                'accounts' => [],
+                'error' => 'Formato inesperado en la respuesta de cuentas.',
+            ];
+        }
+
+        return [
+            'ok' => true,
+            'accounts' => $data['accounts'],
+            'error' => null,
+        ];
     }
 
     /**
@@ -275,16 +375,6 @@ class InterbankingService
             ];
         }
 
-        $ctx = $this->contextoApiInterbanking($empresaId);
-        if (! $ctx['ok']) {
-            return [
-                'ok' => false,
-                'general_data' => null,
-                'movements_detail' => [],
-                'error' => $ctx['error'],
-            ];
-        }
-
         $accountNumber = trim($accountNumber);
         if ($accountNumber === '') {
             return [
@@ -295,127 +385,215 @@ class InterbankingService
             ];
         }
 
-        $query = [
-            'bank-number' => $bankNumber,
-            'customer-id' => $ctx['customer_id'],
-            'account-type' => $paramsQuery['account_type'] ?? 'CC',
-            'currency' => $paramsQuery['currency'] ?? 'ARS',
-        ];
-
-        if (! empty($paramsQuery['date_since'])) {
-            $query['date-since'] = $paramsQuery['date_since'];
-        }
-        if (! empty($paramsQuery['date_until'])) {
-            $query['date-until'] = $paramsQuery['date_until'];
-        }
-        if (isset($paramsQuery['limit'])) {
-            $query['limit'] = (string) max(1, (int) $paramsQuery['limit']);
-        }
-        if (isset($paramsQuery['page'])) {
-            $query['page'] = (string) max(0, (int) $paramsQuery['page']);
-        }
-
         $pathAccount = rawurlencode($accountNumber);
         $pathTipo = rawurlencode($movementType);
         $baseUrl = 'https://api-gw.interbanking.com.ar/api/prod/v2/accounts/'.$pathAccount.'/movements/'.$pathTipo;
-        $url = $baseUrl.'?'.http_build_query($query);
 
-        $headers = [
-            'Authorization: Bearer '.$ctx['access_token'],
-            'accept: application/json',
-            'client_id: '.$ctx['client_id'],
-        ];
-
-        $ch = curl_init();
-
-        try {
-            curl_setopt($ch, CURLOPT_URL, $url);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'GET');
-
-            $response = curl_exec($ch);
-            $errno = curl_errno($ch);
-            $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
-            if ($errno !== 0) {
-                $curlErr = curl_error($ch);
-                Log::warning('Interbanking movimientos cURL', ['errno' => $errno, 'error' => $curlErr]);
-
-                return [
-                    'ok' => false,
-                    'general_data' => null,
-                    'movements_detail' => [],
-                    'error' => 'No se pudo conectar con Interbanking: '.$curlErr,
+        $resultado = $this->ejecutarGetAutenticado(
+            $empresaId,
+            function (array $ctx) use ($baseUrl, $bankNumber, $paramsQuery): string {
+                $query = [
+                    'bank-number' => $bankNumber,
+                    'customer-id' => $ctx['customer_id'],
+                    'account-type' => $paramsQuery['account_type'] ?? 'CC',
+                    'currency' => $paramsQuery['currency'] ?? 'ARS',
                 ];
-            }
 
-            $data = json_decode($response, true);
-
-            if (! is_array($data)) {
-                Log::warning('Interbanking movimientos: respuesta no es JSON', [
-                    'http' => $httpCode,
-                    'fragmento' => is_string($response) ? substr($response, 0, 500) : null,
-                ]);
-
-                return [
-                    'ok' => false,
-                    'general_data' => null,
-                    'movements_detail' => [],
-                    'error' => 'Respuesta inválida del servicio (HTTP '.$httpCode.').',
-                ];
-            }
-
-            if ($httpCode < 200 || $httpCode >= 300) {
-                $msg = $data['message']
-                    ?? $data['error']
-                    ?? $data['error_description']
-                    ?? ($data['code'] ?? null)
-                    ?? ('Código HTTP '.$httpCode);
-                if (is_array($msg)) {
-                    $msg = json_encode($msg);
+                if (! empty($paramsQuery['date_since'])) {
+                    $query['date-since'] = $paramsQuery['date_since'];
                 }
-                Log::warning('Interbanking movimientos: error HTTP', ['http' => $httpCode, 'cuerpo' => $data]);
+                if (! empty($paramsQuery['date_until'])) {
+                    $query['date-until'] = $paramsQuery['date_until'];
+                }
+                if (isset($paramsQuery['limit'])) {
+                    $query['limit'] = (string) max(1, (int) $paramsQuery['limit']);
+                }
+                if (isset($paramsQuery['page'])) {
+                    $query['page'] = (string) max(0, (int) $paramsQuery['page']);
+                }
 
-                return [
-                    'ok' => false,
-                    'general_data' => null,
-                    'movements_detail' => [],
-                    'error' => (string) $msg,
-                ];
-            }
+                return $baseUrl.'?'.http_build_query($query);
+            },
+            'movimientos'
+        );
 
-            $general = $data['general_data'] ?? null;
-            $detalle = $data['movements_detail'] ?? null;
-            if (! is_array($detalle)) {
-                Log::warning('Interbanking movimientos: sin movements_detail', ['claves' => array_keys($data)]);
-
-                return [
-                    'ok' => false,
-                    'general_data' => is_array($general) ? $general : null,
-                    'movements_detail' => [],
-                    'error' => 'La respuesta no incluye movements_detail.',
-                ];
-            }
-
-            return [
-                'ok' => true,
-                'general_data' => is_array($general) ? $general : null,
-                'movements_detail' => $detalle,
-                'error' => null,
-            ];
-        } catch (Throwable $e) {
-            Log::warning('Interbanking: excepción en leeMovimientos', ['exception' => $e->getMessage()]);
-
+        if (! $resultado['ok']) {
             return [
                 'ok' => false,
                 'general_data' => null,
                 'movements_detail' => [],
-                'error' => 'Error al consultar movimientos en Interbanking.',
+                'error' => $resultado['error'],
             ];
-        } finally {
-            curl_close($ch);
         }
+
+        $data = $resultado['data'];
+        $general = $data['general_data'] ?? null;
+        $detalle = $data['movements_detail'] ?? null;
+
+        if (! is_array($detalle)) {
+            Log::warning('Interbanking movimientos: sin movements_detail', [
+                'empresa_id' => $empresaId,
+                'claves' => array_keys($data),
+            ]);
+
+            return [
+                'ok' => false,
+                'general_data' => is_array($general) ? $general : null,
+                'movements_detail' => [],
+                'error' => 'La respuesta no incluye movements_detail.',
+            ];
+        }
+
+        return [
+            'ok' => true,
+            'general_data' => is_array($general) ? $general : null,
+            'movements_detail' => $detalle,
+            'error' => null,
+        ];
+    }
+
+    /**
+     * Comprobantes de transferencias (OpenAPI Transferencias v1.09).
+     *
+     * URL externa: `GET https://api-gw.interbanking.com.ar/api/prod/v1/transfers/vouchers`
+     * con query `customer-id` (obligatorio), filtros opcionales de débito/crédito, `date-since`, `date-until`, `limit`, `page`
+     * y cabeceras `Authorization: Bearer …`, `client_id: …`.
+     *
+     * @param  array{
+     *     debit_account_number?: string|null,
+     *     debit_account_type?: string|null,
+     *     debit_bank_number?: string|null,
+     *     debit_currency?: string|null,
+     *     credit_account_number?: string|null,
+     *     credit_account_type?: string|null,
+     *     credit_bank_number?: string|null,
+     *     credit_currency?: string|null,
+     *     date_since?: string|null,
+     *     date_until?: string|null,
+     *     limit?: int|null,
+     *     page?: int|null
+     * }  $paramsQuery
+     * @return array{ok: bool, general_data: array|null, transfers: array<int, mixed>, error: string|null}
+     */
+    public function leeTransferencias(int $empresaId, array $paramsQuery): array
+    {
+        foreach (['debit_bank_number', 'credit_bank_number'] as $bankKey) {
+            if (! array_key_exists($bankKey, $paramsQuery) || $paramsQuery[$bankKey] === null || $paramsQuery[$bankKey] === '') {
+                continue;
+            }
+            $bank = $paramsQuery[$bankKey];
+            if (! is_string($bank) || ! preg_match('/^[0-9]{3}$/', $bank)) {
+                return [
+                    'ok' => false,
+                    'general_data' => null,
+                    'transfers' => [],
+                    'error' => $bankKey.' debe ser un código de 3 dígitos.',
+                ];
+            }
+        }
+
+        foreach (['debit_account_type', 'credit_account_type'] as $typeKey) {
+            if (! array_key_exists($typeKey, $paramsQuery) || $paramsQuery[$typeKey] === null || $paramsQuery[$typeKey] === '') {
+                continue;
+            }
+            $tipo = $paramsQuery[$typeKey];
+            if (! is_string($tipo) || ! in_array($tipo, ['CC', 'CA'], true)) {
+                return [
+                    'ok' => false,
+                    'general_data' => null,
+                    'transfers' => [],
+                    'error' => $typeKey.' debe ser CC o CA.',
+                ];
+            }
+        }
+
+        foreach (['debit_currency', 'credit_currency'] as $currencyKey) {
+            if (! array_key_exists($currencyKey, $paramsQuery) || $paramsQuery[$currencyKey] === null || $paramsQuery[$currencyKey] === '') {
+                continue;
+            }
+            $moneda = $paramsQuery[$currencyKey];
+            if (! is_string($moneda) || ! in_array($moneda, ['ARS', 'USD'], true)) {
+                return [
+                    'ok' => false,
+                    'general_data' => null,
+                    'transfers' => [],
+                    'error' => $currencyKey.' debe ser ARS o USD.',
+                ];
+            }
+        }
+
+        $mapOptional = [
+            'debit_account_number' => 'debit-account-number',
+            'debit_account_type' => 'debit-account-type',
+            'debit_bank_number' => 'debit-bank-number',
+            'debit_currency' => 'debit-currency',
+            'credit_account_number' => 'credit-account-number',
+            'credit_account_type' => 'credit-account-type',
+            'credit_bank_number' => 'credit-bank-number',
+            'credit_currency' => 'credit-currency',
+            'date_since' => 'date-since',
+            'date_until' => 'date-until',
+        ];
+
+        $queryBase = [];
+
+        foreach ($mapOptional as $inputKey => $apiKey) {
+            if (empty($paramsQuery[$inputKey])) {
+                continue;
+            }
+            $queryBase[$apiKey] = (string) $paramsQuery[$inputKey];
+        }
+
+        if (isset($paramsQuery['limit'])) {
+            $queryBase['limit'] = (string) max(1, (int) $paramsQuery['limit']);
+        }
+        if (isset($paramsQuery['page'])) {
+            $queryBase['page'] = (string) max(0, (int) $paramsQuery['page']);
+        }
+
+        $baseUrl = 'https://api-gw.interbanking.com.ar/api/prod/v1/transfers/vouchers';
+
+        $resultado = $this->ejecutarGetAutenticado(
+            $empresaId,
+            fn (array $ctx): string => $baseUrl.'?'.http_build_query(array_merge($queryBase, [
+                'customer-id' => $ctx['customer_id'],
+            ])),
+            'transferencias'
+        );
+
+        if (! $resultado['ok']) {
+            return [
+                'ok' => false,
+                'general_data' => null,
+                'transfers' => [],
+                'error' => $resultado['error'],
+            ];
+        }
+
+        $data = $resultado['data'];
+        $general = $data['general_data'] ?? null;
+        $transferencias = $data['transfers'] ?? null;
+
+        if (! is_array($transferencias)) {
+            Log::warning('Interbanking transferencias: sin transfers', [
+                'empresa_id' => $empresaId,
+                'claves' => array_keys($data),
+            ]);
+
+            return [
+                'ok' => false,
+                'general_data' => is_array($general) ? $general : null,
+                'transfers' => [],
+                'error' => 'La respuesta no incluye transfers.',
+            ];
+        }
+
+        return [
+            'ok' => true,
+            'general_data' => is_array($general) ? $general : null,
+            'transfers' => $transferencias,
+            'error' => null,
+        ];
     }
 
     private function ensureTokenInterbanking(int $empresaId): void
