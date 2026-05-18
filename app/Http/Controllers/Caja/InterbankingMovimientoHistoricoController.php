@@ -151,9 +151,12 @@ class InterbankingMovimientoHistoricoController extends Controller
         if (! preg_match('/^[0-9]{3}$/', $bankNumber)) {
             Session::flash('errores', ['El código de banco debe poder normalizarse a 3 dígitos numéricos.']);
 
-            return redirect()->route('interbanking_movimientos_persistidos', $request->only([
-                'empresa_id', 'fecha_desde', 'fecha_hasta', 'currency', 'account_number', 'bank_number', 'movement_type',
-            ]));
+            return redirect()->route('interbanking_movimientos_persistidos', array_merge(
+                $request->only([
+                    'empresa_id', 'fecha_desde', 'fecha_hasta', 'currency', 'account_number', 'bank_number', 'movement_type',
+                ]),
+                ['abrir_sincronizacion' => 1]
+            ));
         }
 
         $resultado = $this->movimientoPersistenciaService->sincronizarDesdeApi(
@@ -170,8 +173,10 @@ class InterbankingMovimientoHistoricoController extends Controller
             80
         );
 
+        $abrirSincronizacion = false;
         if (! $resultado['ok']) {
             Session::flash('errores', ['Interbanking: '.($resultado['error'] ?? 'Error al sincronizar.')]);
+            $abrirSincronizacion = true;
         } else {
             Session::flash('mensaje', 'Sincronización finalizada: '.$resultado['filas_guardadas'].' movimiento(s) procesados en '.$resultado['paginas'].' página(s) de API.');
         }
@@ -184,6 +189,7 @@ class InterbankingMovimientoHistoricoController extends Controller
             'account_number' => $validated['account_number'],
             'bank_number' => $bankNumber,
             'movement_type' => $validated['movement_type'],
+            'abrir_sincronizacion' => $abrirSincronizacion ? 1 : null,
         ], fn ($v) => $v !== null && $v !== ''));
     }
 

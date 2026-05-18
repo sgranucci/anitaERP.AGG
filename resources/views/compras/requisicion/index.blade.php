@@ -17,6 +17,7 @@ Requisiciones
             <div class="card-header">
                 <h3 class="card-title">Requisiciones</h3>
                 <div class="card-tools">
+                    @include('includes.compras.boton-manual')
                     @if (can('crear-requisicion', false))
                     <a href="{{ route('crear_requisicion') }}" class="btn btn-outline-secondary btn-sm">
                         <i class="fa fa-fw fa-plus-circle"></i> Nuevo registro

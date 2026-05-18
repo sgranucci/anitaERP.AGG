@@ -1,0 +1,484 @@
+<?php
+
+namespace App\Services\Ventas\Gastronomia;
+
+use App\Models\Configuracion\Actividad_Arca;
+use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
+use App\Models\Ventas\CuentaGastronomia;
+use App\Models\Ventas\VentaGastronomiaEmision;
+use App\Models\Ventas\Venta;
+use App\Models\Ventas\Tipotransaccion;
+use App\Support\Stock\FormulaArticuloGastronomia;
+use App\Support\Ventas\GastronomiaIdentificadorPc;
+use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
+use App\Support\Ventas\GastronomiaMovimientoStockSupport;
+use App\Support\Ventas\GastronomiaPuntoventaEmisionLock;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use InvalidArgumentException;
+use RuntimeException;
+use Throwable;
+
+/**
+ * Orquesta la emisión de factura desde una cuenta gastronómica (validaciones, PV, receptor, persistencia).
+ * Factura + cobranza + ingredientes + cierre de cuenta en una sola transacción: ante cualquier fallo no queda nada grabado.
+ */
+final class GastronomiaFacturaEmisionService
+{
+    public function __construct(
+        private readonly GastronomiaFacturacionService $facturacionGastronomiaService,
+        private readonly GastronomiaFormulaOpcionalesService $opcionalesService,
+        private readonly GastronomiaFormulaConsumoService $consumoFormulaService,
+        private readonly GastronomiaCuentaService $cuentaService,
+        private readonly GastronomiaReceptorFacturacionService $receptorFacturacionService,
+        private readonly GastronomiaCobranzaService $cobranzaGastronomiaService,
+        private readonly GastronomiaPreflightEmisionService $preflightEmisionService,
+        private readonly GastronomiaJornadaService $jornadaService,
+    ) {
+    }
+
+    /**
+     * @param  list<array{cuentacaja_id:int,moneda_id:int,monto:float,cotizacion?:float|null,observacion?:string|null}>  $mediosPago
+     * @return list<string>
+     */
+    public function erroresPreflightEmision(CuentaGastronomia $cuenta, int $monedaId, array $mediosPago): array
+    {
+        $cuenta->loadMissing([
+            'lineas.articulo',
+            'cliente',
+            'descuentoGastronomia',
+            'mesa',
+            'configuracionPuntoventa',
+        ]);
+
+        $cfg = $cuenta->configuracionPuntoventa ?? $this->cuentaService->resolverConfiguracionPv();
+        if (! $cfg) {
+            return $this->preflightEmisionService->erroresAntesDeEmitir($cuenta, null, $monedaId, $mediosPago, []);
+        }
+
+        [$articuloIds, $cantidades, $precios, $descripciones] = $this->construirArraysFactura($cuenta);
+
+        $tipoFacturaId = (int) ($cfg->tipotransaccion_id ?? 0);
+        if ($tipoFacturaId <= 0) {
+            $tipoFacturaId = (int) config('gastronomia.tipotransaccion_factura_id', 0);
+        }
+
+        try {
+            $pvResolucion = ArcaWsfeEmisionResiliencia::resolverPuntoventaEmision(
+                (int) $cfg->puntoventa_cae_id,
+                (int) $cfg->puntoventa_caea_id,
+                false
+            );
+            $puntoventaId = $pvResolucion['puntoventa_id'];
+        } catch (InvalidArgumentException) {
+            $puntoventaId = 0;
+        }
+
+        try {
+            $receptor = $this->receptorFacturacionService->resolverParaFacturar($cuenta);
+        } catch (InvalidArgumentException $e) {
+            return array_merge(
+                $this->preflightEmisionService->erroresAntesDeEmitir($cuenta, $cfg, $monedaId, $mediosPago, []),
+                [$e->getMessage()]
+            );
+        }
+
+        $leyenda = $this->leyendaCuenta($cuenta);
+
+        $payload = $this->armarPayloadFacturaBase(
+            $cfg,
+            $tipoFacturaId,
+            $puntoventaId,
+            $leyenda,
+            $receptor,
+            $monedaId,
+            $articuloIds,
+            $cantidades,
+            $precios,
+            $descripciones,
+            null,
+        );
+
+        try {
+            $payload = $this->jornadaService->aplicarFechasAlPayload($payload, (int) $cuenta->empresa_id);
+        } catch (InvalidArgumentException $e) {
+            return [$e->getMessage()];
+        }
+
+        return $this->preflightEmisionService->erroresAntesDeEmitir($cuenta, $cfg, $monedaId, $mediosPago, $payload);
+    }
+
+    /**
+     * @param  list<array{cuentacaja_id:int,moneda_id:int,monto:float,cotizacion?:float|null,observacion?:string|null}>  $mediosPago
+     * @return array{venta_id?:int,factura?:string,warn?:string,error?:string,sin_cobranza?:bool,cobranza_id?:int}
+     */
+    public function emitirFacturaDesdeCuenta(
+        CuentaGastronomia $cuenta,
+        int $monedaId,
+        ?int $actividadArcaId = null,
+        bool $forzarPvCaea = false,
+        array $mediosPago = [],
+        bool $bloqueoPvYaAdquirido = false,
+    ): array {
+        $cuenta->loadMissing([
+            'lineas.articulo.formula_articulo.formula_articulo_hijos',
+            'cliente',
+            'descuentoGastronomia',
+            'mesa',
+            'configuracionPuntoventa',
+        ]);
+
+        if ($cuenta->lineas->isEmpty()) {
+            return ['error' => 'La cuenta no tiene consumos cargados.'];
+        }
+
+        if ($cuenta->estado !== CuentaGastronomia::ESTADO_ABIERTA) {
+            return ['error' => 'La cuenta no está abierta.'];
+        }
+
+        foreach ($cuenta->lineas as $linea) {
+            $art = $linea->articulo;
+            if (! $art) {
+                return ['error' => 'Artículo inexistente en línea '.$linea->id.'.'];
+            }
+
+            if (FormulaArticuloGastronomia::opcionalesHabilitados()) {
+                $grupos = $this->opcionalesService->gruposOpcionalesPorArticulo($art);
+                if ($grupos !== []) {
+                    $opcMap = [];
+                    foreach (($linea->opcionales_json ?? []) as $k => $v) {
+                        $opcMap[(string) $k] = $v !== null ? (int) $v : null;
+                    }
+                    try {
+                        $this->opcionalesService->validarSeleccionOpcionales($art, $opcMap);
+                    } catch (InvalidArgumentException $e) {
+                        return ['error' => $e->getMessage()];
+                    }
+                }
+            }
+        }
+
+        $cfg = $cuenta->configuracionPuntoventa ?? $this->cuentaService->resolverConfiguracionPv();
+        if (! $cfg) {
+            return ['error' => 'No hay configuración de punto de venta gastronomía para este equipo ('.GastronomiaIdentificadorPc::resolver().').'];
+        }
+
+        $tipoFacturaId = (int) ($cfg->tipotransaccion_id ?? 0);
+        if ($tipoFacturaId <= 0) {
+            $tipoFacturaId = (int) config('gastronomia.tipotransaccion_factura_id', 0);
+        }
+        if ($tipoFacturaId <= 0) {
+            return ['error' => 'Configure el tipo de transacción (factura) en la configuración del punto de venta gastronomía de esta terminal.'];
+        }
+
+        $pvResolucion = ArcaWsfeEmisionResiliencia::resolverPuntoventaEmision(
+            (int) $cfg->puntoventa_cae_id,
+            (int) $cfg->puntoventa_caea_id,
+            $forzarPvCaea
+        );
+        $puntoventaId = $pvResolucion['puntoventa_id'];
+        $usaCaea = $pvResolucion['usa_caea'];
+
+        [$articuloIds, $cantidades, $precios, $descripciones] = $this->construirArraysFactura($cuenta);
+
+        try {
+            $receptor = $this->receptorFacturacionService->resolverParaFacturar($cuenta);
+        } catch (InvalidArgumentException $e) {
+            return ['error' => $e->getMessage()];
+        }
+
+        $payload = $this->armarPayloadFacturaBase(
+            $cfg,
+            $tipoFacturaId,
+            $puntoventaId,
+            $this->leyendaCuenta($cuenta),
+            $receptor,
+            $monedaId,
+            $articuloIds,
+            $cantidades,
+            $precios,
+            $descripciones,
+            $actividadArcaId,
+        );
+
+        try {
+            $payload = $this->jornadaService->aplicarFechasAlPayload($payload, (int) $cuenta->empresa_id);
+        } catch (InvalidArgumentException $e) {
+            return ['error' => $e->getMessage()];
+        }
+
+        try {
+            $this->preflightEmisionService->exigirListoParaEmitir(
+                $cuenta,
+                $cfg,
+                $monedaId,
+                $mediosPago,
+                $payload,
+            );
+        } catch (InvalidArgumentException $e) {
+            return ['error' => $e->getMessage()];
+        }
+
+        $lockPv = null;
+        if (! $bloqueoPvYaAdquirido) {
+            try {
+                $lockPv = GastronomiaPuntoventaEmisionLock::adquirir($puntoventaId);
+            } catch (InvalidArgumentException $e) {
+                return ['error' => $e->getMessage()];
+            }
+        }
+
+        try {
+            try {
+                return DB::transaction(function () use (
+                    $cuenta,
+                    $cfg,
+                    $payload,
+                    $mediosPago,
+                    $monedaId,
+                    $tipoFacturaId,
+                    $puntoventaId,
+                ) {
+                    return $this->ejecutarEmisionEnTransaccion(
+                        $cuenta,
+                        $cfg,
+                        $payload,
+                        $mediosPago,
+                        $monedaId,
+                        $tipoFacturaId,
+                        $puntoventaId,
+                    );
+                });
+            } catch (Throwable $e) {
+                Log::error('gastronomia.emitir_factura.fallo', [
+                    'cuenta_id' => $cuenta->id,
+                    'msg' => $e->getMessage(),
+                ]);
+
+                if (! $forzarPvCaea && ArcaWsfeEmisionResiliencia::debeReintentarTransaccionConCaea($e->getMessage(), $usaCaea)) {
+                    return $this->emitirFacturaDesdeCuenta(
+                        $cuenta,
+                        $monedaId,
+                        $actividadArcaId,
+                        true,
+                        $mediosPago,
+                        true,
+                    );
+                }
+
+                return ['error' => GastronomiaMovimientoStockSupport::mensajeErrorEmision($e)];
+            }
+        } finally {
+            if (! $bloqueoPvYaAdquirido) {
+                GastronomiaPuntoventaEmisionLock::liberar($lockPv);
+            }
+        }
+    }
+
+    /**
+     * @param  list<array{cuentacaja_id:int,moneda_id:int,monto:float,cotizacion?:float|null,observacion?:string|null}>  $mediosPago
+     * @return array{venta_id:int,factura:string,warn?:string,sin_cobranza?:bool,cobranza_id?:int}
+     */
+    private function ejecutarEmisionEnTransaccion(
+        CuentaGastronomia $cuenta,
+        ConfiguracionPuntoventaGastronomia $cfg,
+        array $payload,
+        array $mediosPago,
+        int $monedaId,
+        int $tipoFacturaId,
+        int $puntoventaId,
+    ): array {
+        // 1) Número ARCA + grabación venta/ítems (CAE diferido vía omitir_solicitud_arca_cae).
+        $resultado = $this->facturacionGastronomiaService->emitirComprobante($payload, $cuenta);
+
+        if (! empty($resultado['error'])) {
+            throw new InvalidArgumentException((string) $resultado['error']);
+        }
+
+        $facturaTxt = trim((string) ($resultado['factura'] ?? ''));
+        if ($facturaTxt === '') {
+            throw new RuntimeException('El servicio de facturación no devolvió el número de comprobante.');
+        }
+
+        $ventaId = (int) ($resultado['venta_id'] ?? 0);
+        $venta = $ventaId > 0 ? Venta::query()->find($ventaId) : null;
+        if (! $venta) {
+            $venta = $this->resolverVentaPorEtiqueta($puntoventaId, $facturaTxt);
+        }
+        if (! $venta) {
+            throw new RuntimeException(
+                'No se pudo recuperar la venta interna tras emitir el comprobante '.$facturaTxt
+                .'. Revise ARCA y la tabla venta antes de reintentar.'
+            );
+        }
+
+        $sinCobranza = ! empty($resultado['sin_cobranza']);
+        $cobranzaId = null;
+
+        // 2) Cobranza
+        if (! $sinCobranza) {
+            $cobRes = $this->cobranzaGastronomiaService->registrarCobranzaPos(
+                $venta->fresh(),
+                $mediosPago,
+                $cfg,
+            );
+            $cobranzaId = isset($cobRes['cobranza_id']) ? (int) $cobRes['cobranza_id'] : null;
+        }
+
+        // 3) Ingredientes por fórmula
+        $tipo = Tipotransaccion::query()->find($tipoFacturaId);
+        $nombreTipo = $tipo !== null ? (string) ($tipo->nombre ?? 'Venta') : 'Venta';
+
+        $this->consumoFormulaService->registrarMovimientosIngredientes(
+            $venta,
+            $cuenta->fresh(['lineas.articulo']),
+            $cfg,
+            $tipoFacturaId,
+            $nombreTipo,
+            (string) $payload['fechafactura'],
+            $monedaId,
+            (string) ($payload['fechajornada'] ?? $payload['fechafactura']),
+        );
+
+        // 4) CAE/CAEA en ARCA (último paso fiscal, con recuperación si falla la comunicación).
+        if (! empty($resultado['cae_pendiente']) && is_array($resultado['cae_pendiente'])) {
+            $this->facturacionGastronomiaService->completarSolicitudCaePendiente($resultado['cae_pendiente']);
+        }
+
+        VentaGastronomiaEmision::updateOrCreate(
+            ['venta_id' => $venta->id],
+            [
+                'cuenta_gastronomia_id' => $cuenta->id,
+                'identificador_pc' => GastronomiaIdentificadorPc::resolver(),
+                'configuracion_puntoventa_gastronomia_id' => $cfg->id,
+            ],
+        );
+
+        // 5) Cerrar cuenta/mesa
+        $this->cuentaService->marcarFacturada($cuenta->fresh(), $venta->id);
+
+        $warn = ArcaWsfeEmisionResiliencia::mensajeAvisoModoCaeaForzado();
+        if (! empty($resultado['factura_cortesia_total'])) {
+            $warnCortesia = 'Factura de cortesía ($'.number_format(
+                GastronomiaFacturacionService::IMPORTE_MINIMO_FACTURA,
+                2,
+                ',',
+                '.',
+            ).'); no requiere cobranza.';
+            $warn = $warn ? $warn."\n\n".$warnCortesia : $warnCortesia;
+        }
+
+        return array_filter([
+            'venta_id' => $venta->id,
+            'factura' => $facturaTxt,
+            'warn' => $warn,
+            'sin_cobranza' => $sinCobranza,
+            'cobranza_id' => $cobranzaId,
+        ], fn ($v) => $v !== null && $v !== '' && $v !== false);
+    }
+
+    /**
+     * @param  array{cliente_id:int}  $receptor
+     * @param  list<int>  $articuloIds
+     * @param  list<float|int|string>  $cantidades
+     * @param  list<float|int|string>  $precios
+     * @param  list<string>  $descripciones
+     * @return array<string, mixed>
+     */
+    private function armarPayloadFacturaBase(
+        ConfiguracionPuntoventaGastronomia $cfg,
+        int $tipoFacturaId,
+        int $puntoventaId,
+        string $leyenda,
+        array $receptor,
+        int $monedaId,
+        array $articuloIds,
+        array $cantidades,
+        array $precios,
+        array $descripciones,
+        ?int $actividadArcaId,
+    ): array {
+        $payload = [
+            'tipotransaccion_id' => (int) $tipoFacturaId,
+            'puntoventa_id' => (int) $puntoventaId,
+            'fechafactura' => now()->format('Y-m-d'),
+            'leyendafactura' => $leyenda,
+            'actividad_arca_id' => $actividadArcaId ?? (int) (Actividad_Arca::query()->orderBy('id')->value('id') ?? 1),
+            'cliente_id' => $receptor['cliente_id'],
+            'moneda_id' => $monedaId,
+            'listaprecio_id' => (int) ($cfg->listaprecio_id ?? 1),
+            'descuentolinea' => 0.,
+            'articulo_ids' => $articuloIds,
+            'cantidades' => $cantidades,
+            'precios' => $precios,
+            'descripcionarticulos' => $descripciones,
+        ];
+
+        $this->receptorFacturacionService->aplicarReceptorAlPayloadFacturacion($payload, $receptor);
+
+        return $payload;
+    }
+
+    private function leyendaCuenta(CuentaGastronomia $cuenta): string
+    {
+        if ($cuenta->tipo === CuentaGastronomia::TIPO_MESA && $cuenta->mesa) {
+            return 'Mesa '.$cuenta->mesa->numeromesa.' '.$cuenta->mesa->nombre;
+        }
+
+        return 'Cuenta gastronomía #'.$cuenta->id;
+    }
+
+    /**
+     * @return array{0:list<int>,1:list<float|string>,2:list<float|string>,3:list<string>}
+     */
+    private function construirArraysFactura(CuentaGastronomia $cuenta): array
+    {
+        $articuloIds = [];
+        $cantidades = [];
+        $precios = [];
+        $descripciones = [];
+
+        foreach ($cuenta->lineas as $linea) {
+            $pct = (float) $linea->descuento_linea_pct;
+            $precioNet = (float) $linea->precio_unitario * (1 - $pct / 100);
+
+            $articuloIds[] = (int) $linea->articulo_id;
+            $cantidades[] = (float) $linea->cantidad;
+            $precios[] = $precioNet;
+            $descripciones[] = '';
+
+            foreach (($linea->opcionales_json ?? []) as $aid) {
+                if (! $aid) {
+                    continue;
+                }
+
+                $articuloIds[] = (int) $aid;
+                $cantidades[] = (float) $linea->cantidad;
+                $precios[] = 0.;
+                $descripciones[] = '';
+            }
+        }
+
+        return [$articuloIds, $cantidades, $precios, $descripciones];
+    }
+
+    private function resolverVentaPorEtiqueta(int $puntoventaId, string $facturaTxt): ?Venta
+    {
+        $facturaTxt = trim($facturaTxt);
+        if ($facturaTxt === '') {
+            return null;
+        }
+
+        if (! preg_match('/^\S+\s+\S\s+(\d+)-(\d+)$/u', $facturaTxt, $m)) {
+            return null;
+        }
+
+        $numero = (int) $m[2];
+
+        return Venta::query()
+            ->where('puntoventa_id', $puntoventaId)
+            ->where('numerocomprobante', $numero)
+            ->orderByDesc('id')
+            ->first();
+    }
+}

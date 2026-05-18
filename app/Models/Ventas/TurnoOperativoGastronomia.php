@@ -1,0 +1,93 @@
+<?php
+
+namespace App\Models\Ventas;
+
+use App\Models\Configuracion\Empresa;
+use App\Models\Seguridad\Usuario;
+use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
+
+class TurnoOperativoGastronomia extends Model implements Auditable
+{
+    use \OwenIt\Auditing\Auditable;
+
+    public const ESTADO_HABILITADO = 'habilitado';
+
+    public const ESTADO_CERRADO = 'cerrado';
+
+    protected $table = 'turno_operativo_gastronomia';
+
+    protected $fillable = [
+        'empresa_id',
+        'jornada_gastronomia_id',
+        'turno_gastronomia_id',
+        'configuracion_puntoventa_gastronomia_id',
+        'identificador_pc',
+        'estado',
+        'usuario_habilitacion_id',
+        'usuario_habilitado_id',
+        'monto_habilitacion',
+        'observacion_habilitacion',
+        'habilitacion_en',
+        'usuario_cierre_id',
+        'cierre_en',
+        'monto_facturacion_turno',
+        'monto_facturacion_dia',
+        'redondeo_invitaciones',
+        'redondeo_turno',
+        'sobrante_faltante',
+        'observacion_cierre',
+    ];
+
+    protected $casts = [
+        'habilitacion_en' => 'datetime',
+        'cierre_en' => 'datetime',
+        'monto_habilitacion' => 'float',
+        'monto_facturacion_turno' => 'float',
+        'monto_facturacion_dia' => 'float',
+        'redondeo_invitaciones' => 'float',
+        'redondeo_turno' => 'float',
+        'sobrante_faltante' => 'float',
+    ];
+
+    public function empresa()
+    {
+        return $this->belongsTo(Empresa::class, 'empresa_id');
+    }
+
+    public function jornada()
+    {
+        return $this->belongsTo(JornadaGastronomia::class, 'jornada_gastronomia_id');
+    }
+
+    public function turno()
+    {
+        return $this->belongsTo(TurnoGastronomia::class, 'turno_gastronomia_id');
+    }
+
+    public function configuracionPuntoventa()
+    {
+        return $this->belongsTo(ConfiguracionPuntoventaGastronomia::class, 'configuracion_puntoventa_gastronomia_id');
+    }
+
+    public function usuarioHabilitacion()
+    {
+        return $this->belongsTo(Usuario::class, 'usuario_habilitacion_id');
+    }
+
+    public function usuarioHabilitado()
+    {
+        return $this->belongsTo(Usuario::class, 'usuario_habilitado_id');
+    }
+
+    public function usuarioCierre()
+    {
+        return $this->belongsTo(Usuario::class, 'usuario_cierre_id');
+    }
+
+    public function cierresParciales()
+    {
+        return $this->hasMany(CierreParcialTurnoGastronomia::class, 'turno_operativo_gastronomia_id')
+            ->orderBy('numero_parcial');
+    }
+}

@@ -4,6 +4,8 @@ namespace App\Traits\Ventas;
 
 trait ClienteTrait {
 
+	public const ESTADO_ACTIVO = '0';
+
 	public static $enumRetieneiva = [
 		'N' => 'Percibir Iva',
 		'S' => 'No Percibir Iva',
@@ -50,4 +52,15 @@ trait ClienteTrait {
 		'S' => "Agrega Bonificacion",
 		'N' => "No Agrega Bonificacion"
 		];
+
+	/**
+	 * Clientes habilitados (estado activo, nombre cargado).
+	 */
+	public function scopeActivos($query)
+	{
+		$table = $query->getModel()->getTable();
+
+		return $query->where($table.'.estado', self::ESTADO_ACTIVO)
+			->where($table.'.nombre', '!=', ' ');
+	}
 }

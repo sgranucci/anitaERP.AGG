@@ -2,6 +2,8 @@
 
 /**
  * Credenciales Interbanking (OAuth client_credentials + customer_id por índice de empresa).
+ * Todas las consultas GET (saldos, movimientos, transferencias) usan el mismo token por empresa
+ * (`storage/app/tokeninterbanking_{empresa_id}.json`), renovación preventiva por vigencia y reintento ante HTTP 401.
  *
  * Movimientos (consulta vía Anita, proxy a la API de Interbanking):
  * - Ruta HTTP: GET `{APP_URL}/caja/interbanking/movimientos` (nombre de ruta: `interbanking_movimientos`).
@@ -22,6 +24,28 @@
  * Movimientos persistidos (base local + sincronización desde la API):
  * - Listado: GET `{APP_URL}/caja/interbanking/movimientos-persistidos` — permiso `listar-interbanking-movimientos-persistidos`.
  * - Sincronizar: POST `{APP_URL}/caja/interbanking/movimientos-persistidos/sincronizar` — permiso `sincronizar-interbanking-movimientos`.
+ *
+ * Transferencias / comprobantes (consulta vía Anita, proxy a la API de Interbanking):
+ * - Ruta HTTP: GET `{APP_URL}/caja/interbanking/transferencias` (nombre de ruta: `interbanking_transferencias`).
+ * - Permiso: `ver-transferencias-cuenta-interbanking`. El usuario debe pertenecer a `empresa_id`.
+ * - Query string (snake_case):
+ *   - `empresa_id` (obligatorio): token OAuth y `customer-id`.
+ *   - `date_since`, `date_until` (opcional): `Y-m-d` (máx. 60 días por consulta en la API).
+ *   - Filtros opcionales débito: `debit_account_number`, `debit_account_type` (`CC`|`CA`), `debit_bank_number` (3 dígitos), `debit_currency` (`ARS`|`USD`).
+ *   - Filtros opcionales crédito: `credit_account_number`, `credit_account_type`, `credit_bank_number`, `credit_currency`.
+ *   - `limit` (opcional, 1–500), `page` (opcional, desde 0).
+ * - Respuesta JSON: `ok`, `general_data`, `transfers`, `error`.
+ * - Desde PHP: `app(InterbankingService::class)->leeTransferencias($empresaId, ['date_since' => '2026-01-01', ...])`.
+ * - API externa: `GET https://api-gw.interbanking.com.ar/api/prod/v1/transfers/vouchers` (Transferencias v1.09).
+ * - Cada consulta exitosa persiste/actualiza filas en `interbanking_transferencia` (dedupe por hash).
+ *
+ * Transferencias persistidas (listado + sincronización masiva):
+ * - Listado: GET `{APP_URL}/caja/interbanking/transferencias-persistidas` — permiso `listar-interbanking-transferencias-persistidas`.
+ * - Sincronizar: POST `{APP_URL}/caja/interbanking/transferencias-persistidas/sincronizar` — permiso `sincronizar-interbanking-transferencias`.
+ * - Automático (scheduler): `php artisan interbanking:persistir-transferencias`
+ *   - Lunes a viernes (no feriados): cada hora, ventana 14 días incluyendo hoy.
+ *   - Sábados, domingos y feriados: una vez al día (08:00), ventana 60 días incluyendo hoy.
+ *   - Feriados: tabla `feriado` (configuración). Requiere `php artisan schedule:run` en cron.
  */
 
 // Constantes de arbol de aprobacion

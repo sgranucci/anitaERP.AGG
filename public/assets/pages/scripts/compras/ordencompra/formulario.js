@@ -552,6 +552,8 @@ $(function () {
 	var ocMonedas = ocJsonParse('oc-json-monedas', []);
 	var ocFormapagos = ocJsonParse('oc-json-formapagos', []);
 	var ocComprobantesState = [];
+	/** Total orden y moneda de referencia (misma lógica que el panel de totales). */
+	var ocTotalesReferencia = { total: 0, moneda_id: 1 };
 
 	function ocMonedaAbrev(monedaId) {
 		var m = ocMonedas.find(function (x) { return String(x.id) === String(monedaId); });
@@ -662,8 +664,14 @@ $(function () {
 		if (idx < 0) {
 			$('#oc_comp_cab_tipo').val('FACTURA');
 			$('#oc_comp_cab_fecha').val($('#fecha').val() || '');
-			$('#oc_comp_cab_monto').val('');
-			$('#oc_comp_cab_moneda').val($('#oc_comp_cab_moneda option:first').val());
+			var pend = ocMontoPendienteComprobantesMonedaRef();
+			if (pend != null && pend > 0) {
+				$('#oc_comp_cab_monto').val(pend);
+				$('#oc_comp_cab_moneda').val(String(ocTotalesReferencia.moneda_id));
+			} else {
+				$('#oc_comp_cab_monto').val('');
+				$('#oc_comp_cab_moneda').val($('#oc_comp_cab_moneda option:first').val());
+			}
 			$('#oc_comp_cab_detalle').val('');
 		} else {
 			var c = ocComprobantesState[idx];
@@ -734,6 +742,31 @@ $(function () {
 			return 0;
 		}
 		return Math.round(n * 100) / 100;
+	}
+
+	(function ocInitTotalesReferenciaDesdeDom() {
+		var ini = ocJsonParse('oc-json-totales-referencia', { total: 0, moneda_id: 1 });
+		ocTotalesReferencia.total = ocRound2Money(parseFloat(ini.total) || 0);
+		ocTotalesReferencia.moneda_id = parseInt(ini.moneda_id, 10) || 1;
+	})();
+
+	/**
+	 * Total de la OC (moneda del primer ítem) menos comprobantes a venir ya cargados en esa moneda.
+	 * Se usa como monto sugerido al agregar un comprobante para que la suma pueda alinearse al total de la orden.
+	 */
+	function ocMontoPendienteComprobantesMonedaRef() {
+		var totalRef = ocTotalesReferencia.total;
+		var midRef = parseInt(ocTotalesReferencia.moneda_id, 10) || 1;
+		if (!Number.isFinite(totalRef) || totalRef <= 0) {
+			return null;
+		}
+		var sum = 0;
+		ocComprobantesState.forEach(function (c) {
+			if (parseInt(c.moneda_id, 10) === midRef && c.monto != null) {
+				sum += parseFloat(c.monto) || 0;
+			}
+		});
+		return ocRound2Money(Math.max(0, totalRef - sum));
 	}
 
 	/** Suma `add` meses calendario a YYYY-MM-DD (ajusta día si el mes destino es más corto). */
@@ -1254,6 +1287,10 @@ $(function () {
 		).done(function (res) {
 			if (!res || typeof res !== 'object') {
 				return;
+			}
+			if (res.total != null && res.moneda_id != null) {
+				ocTotalesReferencia.total = ocRound2Money(parseFloat(res.total) || 0);
+				ocTotalesReferencia.moneda_id = parseInt(res.moneda_id, 10) || 1;
 			}
 			$('#oc-tot-mon-abrev').text(res.moneda_abrev || '—');
 			$('#oc-tot-final-moneda').text(res.moneda_abrev || '—');

@@ -439,7 +439,7 @@ class FacturanteService
 				'moneda_id' => 1,
 				'listaprecio_id' => 1,
 				'despacho' => '',
-				'loteimportacion_id' => 0,
+				'loteimportacion_id' => null,
 				'ordentrabajo_id' => 0,
 				'pedido_combinacion_id' => 0,
 				'medidas' => $medida

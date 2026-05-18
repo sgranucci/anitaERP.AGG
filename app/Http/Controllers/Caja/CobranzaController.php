@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionCobranza;
 use App\Repositories\Caja\CobranzaRepositoryInterface;
 use App\Repositories\Caja\Tipotransaccion_CajaRepositoryInterface;
-use App\Repositories\Caja\MediopagoRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Caja\CuentacajaRepositoryInterface;
@@ -32,7 +31,6 @@ class CobranzaController extends Controller
     private $caja_movimiento_archivoRepository;
     private $retencion_cobranzaRepository;
     private $tipotransaccion_cajaRepository;
-    private $mediopagoRepository;
     private $cuentacajaRepository;
     private $monedaRepository;
     private $empresaRepository;
@@ -49,7 +47,6 @@ class CobranzaController extends Controller
 	public function __construct(CobranzaRepositoryInterface $cobranzarepository,
                                 Retencion_CobranzaRepositoryInterface $retencion_cobranzaRepository,
                                 Tipotransaccion_CajaRepositoryInterface $tipotransaccion_cajarepository,
-                                MediopagoRepositoryInterface $mediopagorepository,
                                 CuentacajaRepositoryInterface $cuentacajarepository,
                                 MonedaRepositoryInterface $monedarepository,
                                 EmpresaRepositoryInterface $empresarepository,
@@ -63,7 +60,6 @@ class CobranzaController extends Controller
         $this->cobranzaRepository = $cobranzarepository;
         $this->retencion_cobranzaRepository = $retencion_cobranzaRepository;
         $this->tipotransaccion_cajaRepository = $tipotransaccion_cajarepository;
-        $this->mediopagoRepository = $mediopagorepository;
         $this->cuentacajaRepository = $cuentacajarepository;
         $this->monedaRepository = $monedarepository;
         $this->empresaRepository = $empresarepository;
@@ -149,7 +145,6 @@ class CobranzaController extends Controller
         can('crear-cobranza');
 
         $tipotransaccion_caja_query = $this->tipotransaccion_cajaRepository->all();
-        $mediopago_query = $this->mediopagoRepository->all();
         $moneda_query = $this->monedaRepository->all();
         $empresa_query = $this->empresaRepository->allFiltrado();
         $centrocosto_query = $this->centrocostoRepository->all();
@@ -190,7 +185,7 @@ class CobranzaController extends Controller
         $empresa_id = session('empresa_id');
 
         return view('caja.cobranza.crear', compact('tipotransaccion_caja_query', 'moneda_query', 
-                                                'mediopago_query', 'tipotransaccion_caja_id', 'empresa_id',
+                                                'tipotransaccion_caja_id', 'empresa_id',
                                                 'empresa_query',  'retencion_cobranza_query', 
                                                 'venta_id', 'referer', 'ordenventa_id',
                                                 'centrocosto_query', 'caja_id', 'nombreCaja', 'origen'));
@@ -218,15 +213,22 @@ class CobranzaController extends Controller
      */
     public function editar($id, $origen = null)
     {
+        if (!isset($origen)) {
+            $origen = 'cobranza';
+        }
+
+        // Cobranza POS gastronomía: sin comprobantes de cuenta corriente; solo consulta.
+        if ($origen === 'gastronomia') {
+            can('listar-cobranza');
+
+            return redirect()->route('listar_una_cobranza', ['id' => $id]);
+        }
+
         can('editar-cobranza');
 
-        if (!isset($origen))
-            $origen = 'cobranza';
-        
         $data = $this->cobranzaRepository->find($id);
 
         $tipotransaccion_caja_query = $this->tipotransaccion_cajaRepository->all();
-        $mediopago_query = $this->mediopagoRepository->all();
         $moneda_query = $this->monedaRepository->all();
         $empresa_query = $this->empresaRepository->allFiltrado();
         $centrocosto_query = $this->centrocostoRepository->all();
@@ -247,7 +249,7 @@ class CobranzaController extends Controller
 
         return view('caja.cobranza.editar', compact('data', 
                                                     'tipotransaccion_caja_query', 'moneda_query',
-                                                    'mediopago_query', 'tipotransaccion_caja_id', 'empresa_id',
+                                                    'tipotransaccion_caja_id', 'empresa_id',
                                                     'empresa_query',  'retencion_cobranza_query',
                                                     'centrocosto_query', 'caja_id', 'nombreCaja', 'origen'));
     }

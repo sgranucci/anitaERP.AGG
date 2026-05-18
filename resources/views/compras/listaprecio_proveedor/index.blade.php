@@ -15,6 +15,7 @@ Listas de precio — proveedores
             <div class="card-header">
                 <h3 class="card-title">Listas de precio de proveedores</h3>
                 <div class="card-tools">
+                    @include('includes.compras.boton-manual')
                     @if (can('crear-listaprecio-proveedor', false))
                     <a href="{{ route('crear_listaprecio_proveedor') }}" class="btn btn-outline-secondary btn-sm">
                         <i class="fa fa-fw fa-plus-circle"></i> Nuevo registro

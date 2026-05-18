@@ -89,8 +89,21 @@
                 </tr>
             </thead>
             <tbody id="tbody-comprobante-table">
-            @if ($data->cobranza_comprobantes ?? '') 
-                @foreach (old('cuenta', $data->cobranza_comprobantes->count() ? $data->cobranza_comprobantes : ['']) as $comprobante)
+            @php
+                $comprobantesCobranza = old('cuenta');
+                if ($comprobantesCobranza === null) {
+                    $comprobantesCobranza = ($data->cobranza_comprobantes ?? null)?->isNotEmpty()
+                        ? $data->cobranza_comprobantes
+                        : collect();
+                } else {
+                    $comprobantesCobranza = collect($comprobantesCobranza);
+                }
+            @endphp
+            @if ($comprobantesCobranza->isNotEmpty())
+                @foreach ($comprobantesCobranza as $comprobante)
+                    @if (! is_object($comprobante))
+                        @continue
+                    @endif
                     <tr class="item-comprobante">
                         <td>
                             <input type="text" class="codigocomprobante form-control" name="codigocomprobantes[]" value="{{$comprobante->cliente_cuentacorrientes->ventas->codigo ?? ''}}" >

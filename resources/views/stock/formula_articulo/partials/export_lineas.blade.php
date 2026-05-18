@@ -20,11 +20,11 @@
 	@endphp
 	@if($sku !== '' || $desc !== '')
 		@if($enlaces && !empty($h->articulo_id))
-			<a href="{{ route('editar_articulo', ['id' => $h->articulo_id]) }}">Art. {{ $h->articulo_id }}</a>
+			<a href="{{ route('editar_articulo', ['id' => $h->articulo_id, 'origen' => 'modal_consulta']) }}">{{ $sku !== '' ? $sku : 'Art. '.$h->articulo_id }}</a> — {{ $desc }}
 		@else
 			Art. {{ $h->articulo_id }} {{ $sku }} — {{ $desc }}
 		@endif
-		| Cant: {{ $h->cantidad }} | FC: {{ $h->factorcosto }}
+		| Cant: {{ $h->cantidad }} | FC: {{ $h->factorcosto }}@if(isset($h->costo_ultima_compra) && $h->costo_ultima_compra !== null) | Costo: {{ number_format((float) $h->costo_ultima_compra, 2, ',', '.') }}@endif
 		@if ($gastOpc)
 			| Opc: {{ $h->esopcional ? 'Sí' : 'No' }}
 			@if ($h->esopcional && $h->ordenopcional !== null && $h->ordenopcional !== '')
@@ -46,7 +46,7 @@
 		@if ($subDesc !== '')
 			— {{ $subDesc }}
 		@endif
-		| Cant: {{ $h->cantidad }} | FC: {{ $h->factorcosto }}
+		| Cant: {{ $h->cantidad }} | FC: {{ $h->factorcosto }}@if(isset($h->costo_ultima_compra) && $h->costo_ultima_compra !== null) | Costo: {{ number_format((float) $h->costo_ultima_compra, 2, ',', '.') }}@endif
 		@if ($gastOpc)
 			| Opc: {{ $h->esopcional ? 'Sí' : 'No' }}
 			@if ($h->esopcional && $h->ordenopcional !== null && $h->ordenopcional !== '')

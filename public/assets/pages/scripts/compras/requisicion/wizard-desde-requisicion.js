@@ -48,6 +48,8 @@
 	var compEditCtx = { grupoIdx: -1, compIdx: -1 }; // contexto al abrir modal de comprobantes
 	var pendingPrecioRow = null;
 	var requisicionProveedorId = 0; // proveedor sugerido por la requisición (para consultas de lista de precio)
+	var wzTotalesCabTimer = null;
+	var wzTotalesCabReqId = 0;
 
 	// ---------------------------------------------------------------------
 	// Helpers
@@ -355,6 +357,7 @@
 			pintarComprobantesGrupo(idx);
 			pintarArchivosGrupo(idx);
 		});
+		wzScheduleRefrescarTotalesCabeceras();
 	}
 
 	function pintarComprobantesGrupo(gidx) {
@@ -499,24 +502,28 @@
 		if (lineas[idx]) {
 			lineas[idx].cantidad = $(this).val();
 		}
+		wzScheduleRefrescarTotalesCabeceras();
 	});
 	$(document).on('input', '#wizard-oc-tabla-articulos-body .wz-lin-precio', function () {
 		var idx = parseInt($(this).closest('tr').data('linIdx'), 10);
 		if (lineas[idx]) {
 			lineas[idx].precio = $(this).val();
 		}
+		wzScheduleRefrescarTotalesCabeceras();
 	});
 	$(document).on('input', '#wizard-oc-tabla-articulos-body .wz-lin-cotiz', function () {
 		var idx = parseInt($(this).closest('tr').data('linIdx'), 10);
 		if (lineas[idx]) {
 			lineas[idx].cotizacion = $(this).val();
 		}
+		wzScheduleRefrescarTotalesCabeceras();
 	});
 	$(document).on('change', '#wizard-oc-tabla-articulos-body .wz-lin-moneda', function () {
 		var idx = parseInt($(this).closest('tr').data('linIdx'), 10);
 		if (lineas[idx]) {
 			lineas[idx].moneda_id = parseInt($(this).val(), 10);
 		}
+		wzScheduleRefrescarTotalesCabeceras();
 	});
 	$(document).on('change', '#wizard-oc-tabla-articulos-body .wz-lin-fechaentrega', function () {
 		var idx = parseInt($(this).closest('tr').data('linIdx'), 10);
@@ -738,6 +745,7 @@
 		var tabLabel = 'OC ' + (gidx + 1) + ' — ' + (proveedorNombre(pid) || '<sin prov.>');
 		$('#wz-oc-tab-' + gidx).text(tabLabel);
 		actualizarBotonGenerar();
+		$('#consultaproveedorModal').modal('hide');
 	});
 
 	// ---------------------------------------------------------------------
@@ -768,6 +776,144 @@
 		renderGruposResumen(lineasSinOrigenParaResumen());
 	});
 
+	function wzScheduleRefrescarTotalesCabeceras() {
+		if (wzTotalesCabTimer) {
+			clearTimeout(wzTotalesCabTimer);
+		}
+		wzTotalesCabTimer = setTimeout(function () {
+			wzTotalesCabTimer = null;
+			wzRefrescarTotalesCabecerasOcsImpl();
+		}, 350);
+	}
+
+	function wzTextoTotalesUnaLinea(tot) {
+		var m = tot.moneda_abrev || monedaAbrev(tot.moneda_id);
+		return (
+			'Bruto ' +
+			fmtNum(tot.subtotal_bruto_sin_iva, 2) +
+			' ' +
+			m +
+			' · Desc. ' +
+			fmtNum(tot.importe_descuento, 2) +
+			' ' +
+			m +
+			' · IVA ' +
+			fmtNum(tot.iva_total, 2) +
+			' ' +
+			m +
+			' · Total ' +
+			fmtNum(tot.total, 2) +
+			' ' +
+			m
+		);
+	}
+
+	function wzRefrescarTotalesCabecerasOcsImpl() {
+		var myReq = ++wzTotalesCabReqId;
+		if (!$('#wizard-oc-cabeceras').length) {
+			return;
+		}
+		grupos.forEach(function (g, gidx) {
+			var $text = $('#wizard-oc-cabeceras [data-gidx="' + gidx + '"] .wz-grupo-totales-text');
+			if (!$text.length) {
+				return;
+			}
+			$text.text('Actualizando…');
+			wzFetchTotalesGrupo(gidx, function (tot) {
+				if (myReq !== wzTotalesCabReqId) {
+					return;
+				}
+				if (!tot) {
+					$text.text('Sin importes (revise cantidad/precio o moneda de las líneas de esta OC).');
+					return;
+				}
+				if (tot._fail) {
+					$text.addClass('text-danger').text('No se pudo calcular importes.');
+					return;
+				}
+				$text.removeClass('text-danger').text(wzTextoTotalesUnaLinea(tot));
+			});
+		});
+	}
+
+	function wzRound2(x) {
+		var n = Number(x);
+		if (!Number.isFinite(n)) {
+			return 0;
+		}
+		return Math.round(n * 100) / 100;
+	}
+
+	function wzFetchTotalesGrupo(gidx, done) {
+		var g = grupos[gidx];
+		if (!g || !META.calcular_totales_url) {
+			done(null);
+			return;
+		}
+		var liDel = g.lineasIdx.map(function (i) {
+			return lineas[i];
+		}).filter(Boolean);
+		var articulo_ids = [];
+		var cantidades = [];
+		var precios = [];
+		var moneda_linea_ids = [];
+		var cotizaciones_linea = [];
+		liDel.forEach(function (l) {
+			if (!l.articulo_id || !(parseFloat(l.cantidad) > 0)) {
+				return;
+			}
+			articulo_ids.push(l.articulo_id);
+			cantidades.push(l.cantidad);
+			precios.push(parseFloat(l.precio) || 0);
+			moneda_linea_ids.push(parseInt(l.moneda_id, 10) || 1);
+			var c = parseFloat(l.cotizacion);
+			cotizaciones_linea.push(c > 0 ? c : 1);
+		});
+		if (!articulo_ids.length) {
+			done(null);
+			return;
+		}
+		$.post(META.calcular_totales_url, {
+			_token: META.csrf,
+			fecha: $('#wz_fecha').val() || '',
+			descuento: $('#wz_descuento').val() || '',
+			articulo_ids: articulo_ids,
+			cantidades: cantidades,
+			precios: precios,
+			moneda_linea_ids: moneda_linea_ids,
+			cotizaciones_linea: cotizaciones_linea
+		})
+			.done(function (res) {
+				if (res && typeof res === 'object' && res.total != null) {
+					var mid = parseInt(res.moneda_id, 10) || 1;
+					done({
+						total: wzRound2(parseFloat(res.total) || 0),
+						moneda_id: mid,
+						moneda_abrev: (res.moneda_abrev && String(res.moneda_abrev)) || monedaAbrev(mid),
+						subtotal_bruto_sin_iva: wzRound2(parseFloat(res.subtotal_bruto_sin_iva) || 0),
+						importe_descuento: wzRound2(parseFloat(res.importe_descuento) || 0),
+						neto_sin_iva: wzRound2(parseFloat(res.neto_sin_iva) || 0),
+						iva_total: wzRound2(parseFloat(res.iva_total) || 0)
+					});
+				} else {
+					done(null);
+				}
+			})
+			.fail(function () {
+				done({ _fail: true });
+			});
+	}
+
+	function wzMontoPendienteCompVenir(g, monedaRefId, totalRef) {
+		var sum = 0;
+		(g.comprobantes || []).forEach(function (c) {
+			if (parseInt(c.moneda_id, 10) === monedaRefId && c.monto != null) {
+				sum += parseFloat(c.monto) || 0;
+			}
+		});
+		return wzRound2(Math.max(0, totalRef - sum));
+	}
+
 	function abrirModalComprobante(gidx, cidx) {
 		compEditCtx = { grupoIdx: gidx, compIdx: cidx };
 		var g = grupos[gidx];
@@ -775,10 +921,36 @@
 		$('#oc_comp_cab_idx').val(cidx);
 		$('#oc_comp_cab_tipo').val(c ? c.tipocomprobante : 'FACTURA');
 		$('#oc_comp_cab_fecha').val(c ? (c.fechavencimiento || '') : $('#wz_fechaentrega').val());
-		$('#oc_comp_cab_monto').val(c ? c.monto : '');
-		$('#oc_comp_cab_moneda').val(c ? c.moneda_id : META.moneda_peso_id);
 		$('#oc_comp_cab_detalle').val(c ? (c.detalle || '') : '');
-		$('#modalOcComprobanteCabecera').modal('show');
+
+		function aplicarMonedaMontoDefecto(montoVal, monedaVal) {
+			$('#oc_comp_cab_moneda').val(String(monedaVal));
+			if (montoVal != null && montoVal > 0) {
+				$('#oc_comp_cab_monto').val(montoVal);
+			} else {
+				$('#oc_comp_cab_monto').val('');
+			}
+		}
+
+		if (c) {
+			aplicarMonedaMontoDefecto(c.monto, c.moneda_id);
+			$('#modalOcComprobanteCabecera').modal('show');
+			return;
+		}
+
+		wzFetchTotalesGrupo(gidx, function (tot) {
+			if (tot && tot.total > 0) {
+				var pend = wzMontoPendienteCompVenir(g, tot.moneda_id, tot.total);
+				if (pend > 0) {
+					aplicarMonedaMontoDefecto(pend, tot.moneda_id);
+				} else {
+					aplicarMonedaMontoDefecto(null, META.moneda_peso_id);
+				}
+			} else {
+				aplicarMonedaMontoDefecto(null, META.moneda_peso_id);
+			}
+			$('#modalOcComprobanteCabecera').modal('show');
+		});
 	}
 
 	$(document).on('click', '#oc_comp_cab_guardar', function () {
@@ -1182,6 +1354,10 @@
 	// ---------------------------------------------------------------------
 	$(function () {
 		cargarPlantilla();
+
+		$('#wz_descuento, #wz_fecha').on('change input', function () {
+			wzScheduleRefrescarTotalesCabeceras();
+		});
 
 		$('#consultaproveedorModal').on('hidden.bs.modal', function () {
 			window.wzCambiarProveedorGrupo = null;

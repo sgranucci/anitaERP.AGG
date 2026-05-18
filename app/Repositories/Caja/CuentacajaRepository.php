@@ -41,15 +41,21 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
         if (!$hay_cuentacaja)
             self::sincronizarConAnita();
 
-        return $this->model->with('empresas')->with('cuentacontables')->with("bancos")->get();
+        return $this->model->with('empresas')->with('cuentacontables')->with('bancos')->with('usocuentacajas')->get();
     }
 
     public function create(array $data)
     {
+        $usoIds = array_key_exists('usocuentacaja_ids', $data)
+            ? array_filter((array) ($data['usocuentacaja_ids'] ?? []))
+            : [];
+        unset($data['usocuentacaja_ids']);
+
         DB::beginTransaction();
         try 
         {
             $cuentacaja = $this->model->create($data);
+            $cuentacaja->usocuentacajas()->sync($usoIds);
 
             // Graba anita
 		    $anita = self::guardarAnita($data);
@@ -72,10 +78,20 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
 
     public function update(array $data, $id)
     {
+        $usoIds = null;
+        if (array_key_exists('usocuentacaja_ids', $data)) {
+            $usoIds = array_filter((array) ($data['usocuentacaja_ids'] ?? []));
+            unset($data['usocuentacaja_ids']);
+        }
+
         DB::beginTransaction();
         try 
         {
-            $cuentacaja = $this->model->findOrFail($id)->update($data);
+            $cuentacaja = $this->model->findOrFail($id);
+            $cuentacaja->update($data);
+            if (is_array($usoIds)) {
+                $cuentacaja->usocuentacajas()->sync($usoIds);
+            }
 
             // Actualiza anita
 		    $anita = self::actualizarAnita($data, $data['codigo']);
@@ -128,7 +144,7 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
 
     public function findOrFail($id)
     {
-        if (null == $cuentacaja = $this->model->findOrFail($id)) {
+        if (null == $cuentacaja = $this->model->with('usocuentacajas')->findOrFail($id)) {
             throw new ModelNotFoundException("Registro no encontrado");
         }
 

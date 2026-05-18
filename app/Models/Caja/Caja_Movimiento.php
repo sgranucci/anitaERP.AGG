@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use App\Models\Configuracion\Empresa;
 use App\Models\Ventas\Cliente;
+use App\Models\Ventas\Venta;
 use App\Models\Compras\Proveedor;
 use App\Models\Contable\Asiento;
 use Auth;
@@ -18,6 +19,7 @@ class Caja_Movimiento extends Model implements Auditable
     protected $fillable = ['empresa_id', 'tipotransaccion_caja_id', 'numerotransaccion', 'fecha', 
                             'caja_id', 'proveedor_id', 'cliente_id', 'conceptogasto_id', 
                             'cobranza_id',
+                            'venta_id',
                             'detalle',
                             'usuario_id',
                             'ordenservicio_id',
@@ -49,8 +51,13 @@ class Caja_Movimiento extends Model implements Auditable
 
     public function cobranzas()
 	{
-    	return $this->belongsTo(Cobranza::class, 'id', 'caja_movimiento_id');
+    	return $this->belongsTo(Cobranza::class, 'cobranza_id');
 	}
+
+    public function ventas()
+    {
+        return $this->belongsTo(Venta::class, 'venta_id');
+    }
 
     public function empresas()
     {

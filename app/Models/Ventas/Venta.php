@@ -12,6 +12,8 @@ use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Cliente;
 use App\Models\Contable\Asiento;
 use App\Models\Ordenventa\Ordenventa;
+use App\Models\Caja\Caja_Movimiento;
+use App\Models\Caja\Cobranza;
 use OwenIt\Auditing\Contracts\Auditable;
 
 class Venta extends Model implements Auditable
@@ -59,6 +61,29 @@ class Venta extends Model implements Auditable
 	{
     	return $this->hasMany(Asiento::class, 'venta_id')->with('asiento_movimientos');
 	}
+
+    public function caja_movimientos()
+    {
+        return $this->hasMany(Caja_Movimiento::class, 'venta_id');
+    }
+
+    public function cobranzas()
+    {
+        return $this->hasManyThrough(
+            Cobranza::class,
+            Caja_Movimiento::class,
+            'venta_id',
+            'id',
+            'id',
+            'cobranza_id'
+        );
+    }
+
+    /** Cobranza POS gastronomía (venta_id en tabla cobranza). */
+    public function cobranzasDirectas()
+    {
+        return $this->hasMany(Cobranza::class, 'venta_id');
+    }
 
     public function actividad_arcas()
 	{

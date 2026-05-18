@@ -17,6 +17,7 @@ Proveedores
             <div class="card-header">
                 <h3 class="card-title">Proveedores</h3>
                 <div class="card-tools">
+                    @include('includes.compras.boton-manual')
                     <a href="{{route('crear_proveedor')}}" class="btn btn-outline-secondary btn-sm">
                        	@if (can('crear-proveedor', false))
                         	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro

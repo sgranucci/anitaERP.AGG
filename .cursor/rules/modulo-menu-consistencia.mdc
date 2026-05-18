@@ -1,0 +1,50 @@
+---
+description: Alinear módulo de fuentes (rutas, namespaces, vistas, menú) en anitaERP
+alwaysApply: true
+---
+
+# Consistencia módulo ↔ menú
+
+Cada pantalla del ERP pertenece a un **módulo de negocio** (Ventas, Stock, Compras, etc.). Ese módulo debe coincidir en menú, rutas y código fuente.
+
+## Regla principal
+
+El prefijo de URL del menú (`menu.url`) define el módulo. Todo el CRUD debe vivir en ese mismo módulo:
+
+| Capa | Convención | Ejemplo (Ventas) |
+|------|------------|------------------|
+| Menú BD | `{modulo}/{recurso}` | `ventas/configuracion-puntoventa-gastronomia` |
+| Rutas `web.php` | mismo prefijo | `Route::get('ventas/configuracion-puntoventa-gastronomia', …)` |
+| Controller | `App\Http\Controllers\{Modulo}\…` | `Ventas\ConfiguracionPuntoventaGastronomiaController` |
+| Model / Repository | `App\Models\{Modulo}\…`, `App\Repositories\{Modulo}\…` | `App\Models\Ventas\ConfiguracionPuntoventaGastronomia` |
+| Vistas | `resources/views/{modulo}/…` | `ventas.configuracion_puntoventa_gastronomia.*` |
+| Scripts públicos | `public/assets/pages/scripts/{modulo}/…` | `ventas/configuracion_puntoventa_gastronomia/form.js` |
+| Binding IoC | `App\Repositories\{Modulo}\…` en `AppServiceProvider` | sección Ventas, no Stock |
+
+`{Modulo}` = PascalCase del segmento de URL (`ventas` → `Ventas`, `stock` → `Stock`).
+
+## Al mover o crear un ABM
+
+1. Actualizar **menú** (migración o `menu.url`) al prefijo definitivo.
+2. Mover **rutas**, controller, model, repository, vistas y JS al mismo módulo.
+3. Actualizar imports en servicios/consumidores (`use App\Models\Ventas\…`).
+4. **No** dejar rutas legacy ni `Route::redirect` al módulo viejo (generan confusión y duplican permisos/bookmarks).
+5. Migraciones históricas con URL antigua: no editarlas; usar migración nueva que actualice `menu.url` si hace falta.
+
+## Excepciones válidas
+
+- APIs de proceso transversal bajo otro prefijo (ej. facturación gastronomía en `stock/gastronomia/api/`) si el menú y el ABM de configuración están en Ventas.
+- Tablas BD con nombre legacy: la tabla puede no cambiar; el **namespace PHP** sí debe seguir al módulo del menú.
+- `App\Http\Requests\Validacion*` puede quedar en la raíz `Http\Requests` (convención del proyecto).
+
+## Comprobación rápida
+
+Antes de cerrar un cambio de módulo:
+
+```bash
+# No debe quedar el recurso bajo el módulo incorrecto
+rg "stock/configuracion-puntoventa" routes resources app
+rg "Repositories\\\\Stock\\\\ConfiguracionPuntoventa" app
+```
+
+Referencias cruzadas desde otro módulo (ej. Stock → modelo Ventas) están bien; rutas/CRUD duplicados en otro prefijo, no.

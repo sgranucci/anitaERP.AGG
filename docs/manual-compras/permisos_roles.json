@@ -1,0 +1,320 @@
+{
+    "administrador": [
+        {
+            "slug": "actualizar-requisicion",
+            "nombre": "Actualizar requisiciones"
+        },
+        {
+            "slug": "actualizar-retencion-cobranza",
+            "nombre": "Actualiza retencion cobranza"
+        },
+        {
+            "slug": "borrar-requisicion",
+            "nombre": "Borrar requisiciones"
+        },
+        {
+            "slug": "borrar-retencion-cobranza",
+            "nombre": "Borra retencion cobranza"
+        },
+        {
+            "slug": "crear-requisicion",
+            "nombre": "Ingresar requisiciones"
+        },
+        {
+            "slug": "crear-retencion-cobranza",
+            "nombre": "Ingresa retencion cobranza"
+        },
+        {
+            "slug": "editar-requisicion",
+            "nombre": "Editar requisiciones"
+        },
+        {
+            "slug": "editar-retencion-cobranza",
+            "nombre": "Edita retencion cobranza"
+        },
+        {
+            "slug": "listar-requisicion",
+            "nombre": "Listar requisiciones"
+        },
+        {
+            "slug": "listar-requisicion-proveedor",
+            "nombre": "Listar requisiciones del proveedor"
+        },
+        {
+            "slug": "listar-retencion-cobranza",
+            "nombre": "Lista retencion cobranza"
+        }
+    ],
+    "Enc-compras": [
+        {
+            "slug": "actualizar-encuesta",
+            "nombre": "Actualizar encuestas"
+        },
+        {
+            "slug": "actualizar-ordencompra",
+            "nombre": "Actualizar ordenes de compra"
+        },
+        {
+            "slug": "actualizar-proveedor",
+            "nombre": "Actualizar proveedor"
+        },
+        {
+            "slug": "actualizar-requisicion",
+            "nombre": "Actualizar requisiciones"
+        },
+        {
+            "slug": "actualizar-tipo-servicio-proveedor",
+            "nombre": "Actualizar tipo de servicio de proveedores"
+        },
+        {
+            "slug": "actualizar-tipo-suspension-proveedor",
+            "nombre": "Actualizar tipo suspension proveedor"
+        },
+        {
+            "slug": "borrar-encuesta",
+            "nombre": "Borrar encuestas"
+        },
+        {
+            "slug": "borrar-ordencompra",
+            "nombre": "Borrar ordenes de compra"
+        },
+        {
+            "slug": "borrar-proveedor",
+            "nombre": "Borrar proveedor"
+        },
+        {
+            "slug": "borrar-requisicion",
+            "nombre": "Borrar requisiciones"
+        },
+        {
+            "slug": "borrar-tipo-servicio-proveedor",
+            "nombre": "Borrar tipo de servicio de proveedores"
+        },
+        {
+            "slug": "borrar-tipo-suspension-proveedor",
+            "nombre": "Borrar tipo suspension proveedor"
+        },
+        {
+            "slug": "crear-encuesta",
+            "nombre": "Ingresar encuestas"
+        },
+        {
+            "slug": "crear-ordencompra",
+            "nombre": "Ingresar ordenes de compra"
+        },
+        {
+            "slug": "crear-proveedor",
+            "nombre": "Ingresar proveedor"
+        },
+        {
+            "slug": "crear-requisicion",
+            "nombre": "Ingresar requisiciones"
+        },
+        {
+            "slug": "crear-sector-legajocompra",
+            "nombre": "Ingresar sector legajo compra"
+        },
+        {
+            "slug": "crear-tipo-servicio-proveedor",
+            "nombre": "Ingresar tipo de servicio de proveedores"
+        },
+        {
+            "slug": "crear-tipo-suspension-proveedor",
+            "nombre": "Ingresar tipo suspension proveedor"
+        },
+        {
+            "slug": "editar-encuesta",
+            "nombre": "Editar encuestas"
+        },
+        {
+            "slug": "editar-ordencompra",
+            "nombre": "Editar ordenes de compra"
+        },
+        {
+            "slug": "editar-precarga-proveedores",
+            "nombre": "Editar precarga proveedores"
+        },
+        {
+            "slug": "editar-proveedor",
+            "nombre": "Editar proveedor"
+        },
+        {
+            "slug": "editar-requisicion",
+            "nombre": "Editar requisiciones"
+        },
+        {
+            "slug": "editar-sector-legajocompra",
+            "nombre": "Editar sector legajo compra"
+        },
+        {
+            "slug": "editar-tipo-servicio-proveedor",
+            "nombre": "Editar tipo de servicio de proveedores"
+        },
+        {
+            "slug": "editar-tipo-suspension-proveedor",
+            "nombre": "Editar tipo suspension proveedor"
+        },
+        {
+            "slug": "listar-cuentacorriente-proveedor",
+            "nombre": "Listar cuenta corriente del proveedor"
+        },
+        {
+            "slug": "listar-encuesta",
+            "nombre": "Listar encuestas"
+        },
+        {
+            "slug": "listar-encuesta-proveedor",
+            "nombre": "Listar encuestas del proveedor"
+        },
+        {
+            "slug": "listar-ordencompra",
+            "nombre": "Listar ordenes de compra"
+        },
+        {
+            "slug": "listar-ordencompra-proveedor",
+            "nombre": "Listar ordenes de compra del proveedor"
+        },
+        {
+            "slug": "listar-precarga-proveedores",
+            "nombre": "Listar precarga proveedores"
+        },
+        {
+            "slug": "listar-proveedor",
+            "nombre": "Listar proveedor"
+        },
+        {
+            "slug": "listar-requisicion",
+            "nombre": "Listar requisiciones"
+        },
+        {
+            "slug": "listar-requisicion-proveedor",
+            "nombre": "Listar requisiciones del proveedor"
+        },
+        {
+            "slug": "listar-sector-legajocompra",
+            "nombre": "Listar sector legajo compra"
+        },
+        {
+            "slug": "listar-tipo-servicio-proveedor",
+            "nombre": "Listar tipo de servicio de proveedores"
+        },
+        {
+            "slug": "listar-tipo-suspension-proveedor",
+            "nombre": "Listar tipo suspension proveedor"
+        },
+        {
+            "slug": "usuario-requisicion-compras",
+            "nombre": "Usuario requisiciones compras"
+        }
+    ],
+    "Op-Compras": [
+        {
+            "slug": "actualizar-encuesta",
+            "nombre": "Actualizar encuestas"
+        },
+        {
+            "slug": "actualizar-ordencompra",
+            "nombre": "Actualizar ordenes de compra"
+        },
+        {
+            "slug": "actualizar-proveedor",
+            "nombre": "Actualizar proveedor"
+        },
+        {
+            "slug": "actualizar-requisicion",
+            "nombre": "Actualizar requisiciones"
+        },
+        {
+            "slug": "borrar-encuesta",
+            "nombre": "Borrar encuestas"
+        },
+        {
+            "slug": "borrar-ordencompra",
+            "nombre": "Borrar ordenes de compra"
+        },
+        {
+            "slug": "borrar-proveedor",
+            "nombre": "Borrar proveedor"
+        },
+        {
+            "slug": "borrar-requisicion",
+            "nombre": "Borrar requisiciones"
+        },
+        {
+            "slug": "crear-encuesta",
+            "nombre": "Ingresar encuestas"
+        },
+        {
+            "slug": "crear-ordencompra",
+            "nombre": "Ingresar ordenes de compra"
+        },
+        {
+            "slug": "crear-proveedor",
+            "nombre": "Ingresar proveedor"
+        },
+        {
+            "slug": "crear-requisicion",
+            "nombre": "Ingresar requisiciones"
+        },
+        {
+            "slug": "editar-encuesta",
+            "nombre": "Editar encuestas"
+        },
+        {
+            "slug": "editar-ordencompra",
+            "nombre": "Editar ordenes de compra"
+        },
+        {
+            "slug": "editar-precarga-proveedores",
+            "nombre": "Editar precarga proveedores"
+        },
+        {
+            "slug": "editar-proveedor",
+            "nombre": "Editar proveedor"
+        },
+        {
+            "slug": "editar-requisicion",
+            "nombre": "Editar requisiciones"
+        },
+        {
+            "slug": "listar-cuentacorriente-proveedor",
+            "nombre": "Listar cuenta corriente del proveedor"
+        },
+        {
+            "slug": "listar-encuesta",
+            "nombre": "Listar encuestas"
+        },
+        {
+            "slug": "listar-encuesta-proveedor",
+            "nombre": "Listar encuestas del proveedor"
+        },
+        {
+            "slug": "listar-ordencompra",
+            "nombre": "Listar ordenes de compra"
+        },
+        {
+            "slug": "listar-ordencompra-proveedor",
+            "nombre": "Listar ordenes de compra del proveedor"
+        },
+        {
+            "slug": "listar-precarga-proveedores",
+            "nombre": "Listar precarga proveedores"
+        },
+        {
+            "slug": "listar-proveedor",
+            "nombre": "Listar proveedor"
+        },
+        {
+            "slug": "listar-requisicion",
+            "nombre": "Listar requisiciones"
+        },
+        {
+            "slug": "listar-requisicion-proveedor",
+            "nombre": "Listar requisiciones del proveedor"
+        },
+        {
+            "slug": "usuario-requisicion-compras",
+            "nombre": "Usuario requisiciones compras"
+        }
+    ]
+}

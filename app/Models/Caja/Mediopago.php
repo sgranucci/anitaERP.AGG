@@ -23,4 +23,5 @@ class Mediopago extends Model implements Auditable
     {
         return $this->belongsTo(Empresa::class, 'empresa_id');
     }
+
 }

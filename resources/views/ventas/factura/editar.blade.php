@@ -76,7 +76,7 @@
                 <div class="card-body">
         			<input type="hidden" id="codigo" name="codigo" value="{{$data->codigo}}" >
         			<input type="hidden" id="venta_id" name="venta_id" value="{{$data->id??''}}" >
-                    @php $datos = ["funcion" => "editar"]; @endphp
+                    @php $datos = ['funcion' => 'editar', 'consultaFacturasDia' => $consultaFacturasDia ?? false]; @endphp
                     @include('ventas.factura.form', $datos)
                     @include('includes.contable.formasientoexterno')
                 </div>

@@ -1,5 +1,12 @@
 function buscar_datos_cuentacaja(consulta) {
-    let empresa_id = $("#empresa_id").val();
+    let empresa_id = $('#empresa_id').val() || $('#gastro-empresa-id').val() || '';
+    if (typeof window.GASTRONOMIA !== 'undefined' && window.GASTRONOMIA.empresaId) {
+        empresa_id = window.GASTRONOMIA.empresaId;
+    }
+    let usocuentacaja_id = '';
+    if (typeof window.GASTRONOMIA !== 'undefined' && parseInt(window.GASTRONOMIA.usocuentacajaGastronomiaId, 10) > 0) {
+        usocuentacaja_id = parseInt(window.GASTRONOMIA.usocuentacajaGastronomiaId, 10);
+    }
 
     $.ajax({
         url: carpetaBase+'/caja/cuentacaja/consultacuentacaja',
@@ -10,7 +17,8 @@ function buscar_datos_cuentacaja(consulta) {
     	},
         data: {
             consulta: consulta,
-            empresa_id: empresa_id
+            empresa_id: empresa_id,
+            usocuentacaja_id: usocuentacaja_id,
         },
     })
     .done (function(respuesta) {

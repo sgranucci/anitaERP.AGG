@@ -4,6 +4,153 @@
  */
 var ptrFormulaHijaRow = null;
 
+function urlFormulaArticuloBase() {
+    var cfg = window.formulaArticuloSubformulaConsulta || {};
+    if (cfg.urlFormulaBase) {
+        return String(cfg.urlFormulaBase).replace(/\/$/, '');
+    }
+    if (typeof carpetaBase !== 'undefined' && carpetaBase) {
+        return String(carpetaBase).replace(/\/$/, '') + '/stock/formula-articulo';
+    }
+    return '/stock/formula-articulo';
+}
+
+function urlCostosUltimaCompraFormula() {
+    var cfg = window.formulaArticuloSubformulaConsulta || {};
+    if (cfg.urlCostosUltimaCompra) {
+        return String(cfg.urlCostosUltimaCompra);
+    }
+    if (typeof carpetaBase !== 'undefined' && carpetaBase) {
+        return String(carpetaBase).replace(/\/$/, '') + '/stock/formula-articulo/costos-ultima-compra';
+    }
+    return '/stock/formula-articulo/costos-ultima-compra';
+}
+
+function formateaCostoUltimaCompra(valor) {
+    if (valor === null || valor === undefined || valor === '') {
+        return '';
+    }
+    var n = parseFloat(valor);
+    if (isNaN(n)) {
+        return '';
+    }
+    return n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function actualizaCostoUltimaCompraFila($row) {
+    var $inp = $row.find('.js-costo-ultima-compra');
+    if (!$inp.length) {
+        return;
+    }
+    var sku = ($row.find('input.codigoarticulo').val() || '').trim();
+    if (sku === '') {
+        $inp.val('');
+        return;
+    }
+    $.get(urlCostosUltimaCompraFormula(), { skus: [sku] }, function (resp) {
+        var costos = (resp && resp.costos) ? resp.costos : {};
+        var c = costos[sku];
+        if (c === undefined || c === null) {
+            $inp.val('');
+        } else {
+            $inp.val(formateaCostoUltimaCompra(c));
+        }
+    }).fail(function () {
+        $inp.val('');
+    });
+}
+
+function urlEditarArticulo(id) {
+    var cfg = window.formulaArticuloSubformulaConsulta || {};
+    var base = cfg.urlArticuloBase;
+    if (!base && typeof carpetaBase !== 'undefined' && carpetaBase) {
+        base = String(carpetaBase).replace(/\/$/, '') + '/stock/articulo';
+    }
+    if (!base) {
+        base = '/stock/articulo';
+    }
+    return String(base).replace(/\/$/, '') + '/' + parseInt(id, 10) + '/editar?origen=modal_consulta';
+}
+
+function actualizaLinkSkuArticuloLinea($row) {
+    var $link = $row.find('.js-sku-link-articulo-linea');
+    if (!$link.length) {
+        return;
+    }
+    var id = parseInt($row.find('.articulo_id').val(), 10) || 0;
+    var sku = ($row.find('input.codigoarticulo').val() || '').trim();
+    if (id > 0 && sku !== '') {
+        $link
+            .attr('href', urlEditarArticulo(id))
+            .attr('target', '_blank')
+            .attr('rel', 'noopener')
+            .removeAttr('aria-disabled tabindex')
+            .text(sku)
+            .removeClass('text-muted sin-articulo')
+            .addClass('text-primary');
+    } else {
+        $link
+            .attr('href', '#')
+            .removeAttr('target rel')
+            .attr('aria-disabled', 'true')
+            .attr('tabindex', '-1')
+            .text(sku !== '' ? sku : '—')
+            .removeClass('text-primary')
+            .addClass('text-muted sin-articulo');
+    }
+}
+
+function leeFormulaHijaIdFila($row) {
+    var fid = parseInt($row.find('.fh_formula_hija_id').val(), 10) || 0;
+    if (fid <= 0) {
+        fid = parseInt($row.find('.js-ver-subformula-linea').data('formula-id'), 10) || 0;
+    }
+    return fid;
+}
+
+function actualizaBotonVerSubformula($row) {
+    var fid = leeFormulaHijaIdFila($row);
+    var $btn = $row.find('.js-ver-subformula-linea');
+    $btn.data('formula-id', fid > 0 ? fid : '');
+    $btn.toggleClass('sin-subformula', fid <= 0);
+}
+
+function abrirModalSubformula(fid) {
+    if (!$('#modalVerFormulaArticulo').length) {
+        alert('No est\u00e1 disponible la vista modal de f\u00f3rmula en esta pantalla.');
+        return;
+    }
+    var id = parseInt(fid, 10) || 0;
+    if (id <= 0) {
+        alert('Seleccione una subf\u00f3rmula primero (bot\u00f3n con icono de matraz).');
+        return;
+    }
+    var base = urlFormulaArticuloBase();
+    var urlModal = base + '/' + id + '/modal';
+    var urlEditar = base + '/' + id + '/editar?origen=modal_consulta';
+    $('#modalVerFormulaArticuloBody').html('<p class="text-muted">Cargando...</p>');
+    $('#modalVerFormulaArticuloIrCrud').attr('href', urlEditar).removeClass('d-none');
+    $('#modalVerFormulaArticulo').modal('show');
+    $.ajax({
+        url: urlModal,
+        method: 'GET',
+        dataType: 'html',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    })
+        .done(function (html) {
+            $('#modalVerFormulaArticuloBody').html(html);
+        })
+        .fail(function (xhr) {
+            var msg = 'No se pudo cargar la subf\u00f3rmula.';
+            if (xhr.status === 403) {
+                msg = 'No tiene permisos para consultar esta f\u00f3rmula.';
+            } else if (xhr.status === 404) {
+                msg = 'La subf\u00f3rmula seleccionada no existe o fue eliminada.';
+            }
+            $('#modalVerFormulaArticuloBody').html('<p class="text-danger">' + msg + '</p>');
+        });
+}
+
 function actualizaLabelCabeceraFormula() {
     var sku = $('#formula_cabecera_sku').val() || '';
     var d = $('#formula_cabecera_desc').val() || '';
@@ -160,6 +307,8 @@ $(document).ready(function () {
         var $rowLinea = $art.closest('tr.fila-formula-hijo');
         $('#consultaarticuloModal').off('hidden.bs.modal.formulaFocusCant').one('hidden.bs.modal.formulaFocusCant', function () {
             if ($rowLinea.length && $rowLinea.closest('#tabla-formula-hijos').length) {
+                actualizaLinkSkuArticuloLinea($rowLinea);
+                actualizaCostoUltimaCompraFila($rowLinea);
                 var $cant = $rowLinea.find('input[name="cantidades[]"]').first();
                 if ($cant.length) {
                     setTimeout(function () {
@@ -199,7 +348,7 @@ $(document).ready(function () {
                     var ida = r.id != null ? String(r.id) : '';
                     var sku = r.sku != null ? String(r.sku) : '';
                     var desc = r.descripcion != null ? String(r.descripcion) : '';
-                    var link = carpetaBase + '/stock/articulo/' + ida + '/editar';
+                    var link = urlEditarArticulo(parseInt(ida, 10) || 0);
                     html += '<tr><td>' + $('<div>').text(ida).html() + '</td>' +
                         '<td><a href="' + link + '" target="_blank" rel="noopener noreferrer">' + $('<div>').text(sku).html() + '</a></td>' +
                         '<td>' + $('<div>').text(desc).html() + '</td></tr>';
@@ -214,7 +363,10 @@ $(document).ready(function () {
     });
 
     $('.fila-formula-hijo').each(function () {
-        formulaArticuloToggleOrdenOpcional($(this));
+        var $row = $(this);
+        formulaArticuloToggleOrdenOpcional($row);
+        actualizaBotonVerSubformula($row);
+        actualizaLinkSkuArticuloLinea($row);
     });
 
     $(document).on('change', 'select.js-esopcional-formula', function () {
@@ -244,6 +396,13 @@ $(document).ready(function () {
         $('#consultaformulaModal').modal('show');
     });
 
+    $(document).on('click', '.js-ver-subformula-linea', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $row = $(this).closest('tr.fila-formula-hijo');
+        abrirModalSubformula(leeFormulaHijaIdFila($row));
+    });
+
     $('#consultaformulaModal').on('shown.bs.modal', function () {
         $('#consulta_formula').focus();
     });
@@ -259,8 +418,11 @@ $(document).ready(function () {
         var id = tr.find('.fid').text().trim();
         var sku = tr.find('.fsku').text().trim();
         if (ptrFormulaHijaRow) {
-            $(ptrFormulaHijaRow).find('.fh_formula_hija_id').val(id);
-            $(ptrFormulaHijaRow).find('.fh_formula_hija_label').val(sku + ' F#' + id);
+            var $rowSel = $(ptrFormulaHijaRow);
+            $rowSel.find('.fh_formula_hija_id').val(id);
+            $rowSel.find('.fh_formula_hija_label').val(sku + ' F#' + id);
+            $rowSel.find('.js-ver-subformula-linea').data('formula-id', id);
+            actualizaBotonVerSubformula($rowSel);
         }
         $('#consultaformulaModal').modal('hide');
     });
@@ -268,8 +430,10 @@ $(document).ready(function () {
     $('#js-agregar-fila-formula').on('click', function () {
         var $r = $('.fila-formula-hijo').first().clone();
         $r.find('input[type=hidden]').val('');
-        $r.find('input[type=text]').val('');
+        $r.find('input[type=text]').not('.codigoarticulo').val('');
+        $r.find('input.codigoarticulo').val('');
         $r.find('input[type=number]').not('.js-ordenopcional-formula').val('');
+        $r.find('.js-costo-ultima-compra').val('');
         $r.find('select[name="esopcional[]"]').prop('selectedIndex', 0);
         $r.find('select[name="deposito_ids[]"]').prop('selectedIndex', 0);
         var $oo = $r.find('input.js-ordenopcional-formula');
@@ -278,6 +442,8 @@ $(document).ready(function () {
         }
         $('#tabla-formula-hijos tbody').append($r);
         formulaArticuloToggleOrdenOpcional($r);
+        actualizaBotonVerSubformula($r);
+        actualizaLinkSkuArticuloLinea($r);
     });
 
     $(document).on('click', '.js-eliminar-fila-formula', function () {

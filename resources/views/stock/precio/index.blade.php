@@ -16,7 +16,7 @@ function limpiaFiltros(){
 
     $.ajax({
         type: "POST",
-        url: '/anitaERP/public/stock/precio/limpiafiltro',
+        url: '{{ route('precio.limpiafiltro') }}',
 		data: data,
         success: function(response){
 			window.location.replace(window.location.pathname);
@@ -27,8 +27,6 @@ function limpiaFiltros(){
 
 @endsection
 
-<?php use App\Helpers\biblioteca ?>
-
 @section('contenido')
 <meta name="csrf-token" content="{{ csrf_token() }}" />
 <div class="row">
@@ -37,10 +35,41 @@ function limpiaFiltros(){
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Precios</h3>
-                <div class="card-tools">
+                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    <form method="get" action="{{ route('precio') }}" class="form-inline mr-2 mb-1 mb-sm-0">
+                        <label class="mr-1 mb-0 small text-white-50" for="fecha_vigencia">Vigentes al</label>
+                        <input type="date" id="fecha_vigencia" name="fecha_vigencia" value="{{ $fechaVigenciaFiltro }}" class="form-control form-control-sm mr-2" title="Fecha de vigencia de referencia">
+                        <label class="mr-1 mb-0 small text-white-50" for="listaprecio_id">Lista</label>
+                        <select id="listaprecio_id" name="listaprecio_id" class="form-control form-control-sm mr-2" title="Lista de precios">
+                            <option value="">Todas las listas</option>
+                            @foreach($listasPrecio as $lista)
+                                <option value="{{ $lista->id }}" {{ $listaprecioIdFiltro !== null && (int) $listaprecioIdFiltro === (int) $lista->id ? 'selected' : '' }}>{{ $lista->nombre }}</option>
+                            @endforeach
+                        </select>
+                        <input type="text" name="busqueda" class="form-control form-control-sm mr-2" placeholder="Búsqueda …" value="{{ $busqueda ?? '' }}" title="SKU, artículo, lista o moneda">
+                        @if(!empty($filtrosParaVista['filter_column']) && is_array($filtrosParaVista['filter_column']))
+                            @foreach($filtrosParaVista['filter_column'] as $i => $fc)
+                                @if(is_array($fc))
+                                    @foreach($fc as $k => $v)
+                                        @if(is_array($v))
+                                            @foreach($v as $j => $vv)
+                                                <input type="hidden" name="filter_column[{{ $i }}][{{ $k }}][{{ $j }}]" value="{{ $vv }}">
+                                            @endforeach
+                                        @else
+                                            <input type="hidden" name="filter_column[{{ $i }}][{{ $k }}]" value="{{ $v }}">
+                                        @endif
+                                    @endforeach
+                                @endif
+                            @endforeach
+                        @endif
+                        @if(!empty($filtrosParaVista['lasturl']))
+                            <input type="hidden" name="lasturl" value="{{ $filtrosParaVista['lasturl'] }}">
+                        @endif
+                        <button type="submit" class="btn btn-light btn-sm"><i class="fa fa-search"></i></button>
+                    </form>
 					@if (session()->get('filtrosPrecios') == '')
 						<a href="javascript:void(0)" class="btn btn-outline-secondary btn-sm" id='btn_advanced_filter' data-url-parameter='' 
-							title='Filtros y b£squedas avanzadas' class="btn btn-sm btn-default ">
+							title='Filtros y búsquedas avanzadas' class="btn btn-sm btn-default ">
 								<i class="fa fa-filter"></i> Filtros
 						</a>
 					@endif
@@ -62,43 +91,42 @@ function limpiaFiltros(){
                 </div>
             </div>
             <div class="card-body table-responsive p-0">
-                <table class="table table-striped table-bordered table-hover" id="tabla-data">
+                @php
+                    $exportQueryParams = array_filter([
+                        'fecha_vigencia' => $fechaVigenciaFiltro,
+                        'listaprecio_id' => $listaprecioIdFiltro,
+                        'busqueda' => $busqueda ?? '',
+                    ], fn ($v) => $v !== null && $v !== '');
+                @endphp
+                @include('includes.exportar-tabla-queryparams', [
+                    'ruta' => 'listar_precio',
+                    'queryparams' => $exportQueryParams,
+                ])
+                <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead>
                         <tr>
                             <th class="width20">ID</th>
-                            <th>Articulo</th>
+                            <th>SKU</th>
+                            <th>Descripción</th>
                             <th>Lista de precios</th>
                             <th>Fecha vigencia</th>
                             <th>Moneda</th>
-                            <th>Precio</th>
-                            <th>Precio anterior</th>
+                            <th class="text-right">Precio</th>
+                            <th class="text-right">Precio anterior</th>
                             <th class="width80" data-orderable="false"></th>
                         </tr>
                     </thead>
                     <tbody>
-						@foreach($datas as $precio)
+						@forelse($datas as $precio)
     						<tr data-entry-id="{{ $precio->id }}">
-        						<td>
-            						{{ $precio->id ?? '' }}
-        						</td>
-        						<td>
-            						{{ $precio->articulos->sku ?? '' }} {{ $precio->articulos->descripcion ?? '' }}
-        						</td>
-        						<td>
-            						{{ $precio->listaprecios->nombre ?? '' }}
-        						</td>
-        						<td>
-            						{{date("d/m/Y", strtotime($precio->fechavigencia ?? ''))}} 
-        						</td>
-        						<td>
-            						{{ $precio->monedas->nombre ?? '' }}
-        						</td>
-        						<td style="text-align: right">
-            						{{ number_format($precio->precio, 2) }}
-        						</td>
-        						<td style="text-align: right">
-            						{{ number_format($precio->precioanterior, 2) }}
-        						</td>
+        						<td>{{ $precio->id }}</td>
+        						<td><small>{{ $precio->sku }}</small></td>
+        						<td><small>{{ $precio->articulo_descripcion }}</small></td>
+        						<td><small>{{ $precio->listaprecio_nombre }}</small></td>
+        						<td><small>{{ $precio->fechavigencia ? date('d/m/Y', strtotime($precio->fechavigencia)) : '' }}</small></td>
+        						<td><small>{{ $precio->moneda_nombre }}</small></td>
+        						<td class="text-right"><small>{{ number_format((float) $precio->precio, 2, ',', '.') }}</small></td>
+        						<td class="text-right"><small>{{ number_format((float) $precio->precioanterior, 2, ',', '.') }}</small></td>
         						<td>
                        			@if (can('editar-precios', false))
                                 	<a href="{{route('editar_precio', ['id' => $precio->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
@@ -115,10 +143,19 @@ function limpiaFiltros(){
 								@endif
                             	</td>
                         	</tr>
-                        @endforeach
+                        @empty
+                        <tr>
+                            <td colspan="9" class="text-center text-muted">No hay precios para los filtros seleccionados.</td>
+                        </tr>
+                        @endforelse
                     </tbody>
                 </table>
             </div>
+            @if(method_exists($datas, 'links'))
+            <div class="card-footer">
+                {{ $datas->links() }}
+            </div>
+            @endif
         </div>
     </div>
 </div>

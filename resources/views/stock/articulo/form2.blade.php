@@ -16,7 +16,8 @@
                 </div>
 				<div class="form-group row">
     				<label for="unidadmedida2_id" class="col-lg-4 col-form-label requerido">Unidad de medida</label>
-					<select id="unidadmedida2_id" name="unidadmedida2_id" class="col-lg-4 form-control unidadmedida" required>
+					<div class="col-lg-4">
+					<select id="unidadmedida2_id" name="unidadmedida2_id" class="form-control unidadmedida" required>
                         <option value="">-- Seleccionar --</option>
                         @foreach($unidadmedida as $key => $value)
                             @if( isset($producto) && (int) $value->id == (int) old('unidadmedida_id', $producto->unidadmedida_id ?? ''))
@@ -30,10 +31,12 @@
                             @endif
                         @endforeach
                     </select>
+                    </div>
                 </div>
 				<div class="form-group row">
     				<label for="unidadmedidaalternativa2_id" class="col-lg-4 col-form-label requerido">Unidad de medida alternativa</label>
-					<select id="unidadmedidaalternativa2_id" name="unidadmedidaalternativa2_id" class="col-lg-4 form-control unidadmedidaalternativa" required>
+					<div class="col-lg-4">
+					<select id="unidadmedidaalternativa2_id" name="unidadmedidaalternativa2_id" class="form-control unidadmedidaalternativa" required>
                         <option value="">-- Seleccionar --</option>
                         @foreach($unidadmedida as $key => $value)
                             @if( isset($producto) && (int) $value->id == (int) old('unidadmedidaalternativa_id', $producto->unidadmedidaalternativa_id ?? ''))
@@ -47,12 +50,13 @@
                             @endif
                         @endforeach
                     </select>
+                    </div>
                 </div>   
                 @if (config('app.empresa') == 'FRASLE')                       
                     <div class="form-group row">
                         <label for="tipoproducto_id" class="col-lg-4 col-form-label">Tipo de producto</label>
                         <div class="col-lg-8">
-                            <select id="tipoproducto_id" name="tipoproducto_id" class="col-lg-6 form-control">
+                            <select id="tipoproducto_id" name="tipoproducto_id" class="form-control">
                                 <option value="">-- Seleccionar --</option>
                                 @foreach($tipoproducto_query as $key => $value)
                                     @if( isset($producto) && (int) $value->id == (int) old('tipoproducto_id', $producto->tipoproducto_id ?? ''))
@@ -69,7 +73,7 @@
 					<div class="form-group row">
 						<label for="capacidad_id" class="col-lg-4 col-form-label">Capacidad</label>
 						<div class="col-lg-8">
-							<select id="capacidad_id" name="capacidad_id" class="col-lg-6 form-control">
+							<select id="capacidad_id" name="capacidad_id" class="form-control">
 								<option value="">-- Seleccionar --</option>
 								@foreach($capacidad_query as $key => $value)
 									@if( isset($producto) && (int) $value->id == (int) old('capacidad_id', $producto->capacidad_id ?? ''))
@@ -108,24 +112,34 @@
                 	</div>
                 </div>    
                 <div class="form-group row">
-    				<label for="formula" class="col-lg-4 col-form-label">Fórmula (id)</label>
+    				<label for="formula" class="col-lg-4 col-form-label">Fórmula (id Anita / ERP)</label>
     				<div class="col-lg-2">
     					<input type="number" name="formula" id="formula" class="form-control" value="{{old('formula', $producto->formula ?? '')}}"/>
                 	</div>
                     <div class="col-lg-4 d-flex align-items-end">
                         @if (can('listar-formula-articulo', false) || can('listar-articulos', false))
-                        <button type="button" class="btn btn-outline-info btn-sm ml-2" id="btn-consulta-formula-articulo" title="Ver fórmula" disabled>
-                            <i class="fa fa-flask"></i> Consultar fórmula
-                        </button>
+                        <span class="d-inline-block ml-2 tooltipsC" id="tooltip-consulta-formula-articulo" title="Consultar fórmula vinculada a este artículo">
+                            <button type="button" class="btn btn-outline-info btn-sm" id="btn-consulta-formula-articulo">
+                                <i class="fa fa-flask"></i> Consultar fórmula
+                            </button>
+                        </span>
                         @endif
                     </div>
-                </div>                 
+                </div>
+                @if (can('listar-formula-articulo', false) || can('listar-articulos', false))
+                <div class="form-group row">
+                    <div class="col-lg-4"></div>
+                    <div class="col-lg-8">
+                        <small class="form-text text-muted">La consulta busca la fórmula por vínculo articulo_id en el CRUD de fórmulas; el número del campo solo se usa si coincide con este artículo.</small>
+                    </div>
+                </div>
+                @endif
 
 				@if (config('app.empresa') == 'FRASLE')
 					<div class="form-group row">
 						<label for="color_id" class="col-lg-4 col-form-label">Color</label>
 						<div class="col-lg-8">
-							<select id="color_id" name="color_id" class="col-lg-6 form-control">
+							<select id="color_id" name="color_id" class="form-control">
 								<option value="">-- Seleccionar --</option>
 								@foreach($color_query as $key => $value)
 									@if( isset($producto) && (int) $value->id == (int) old('color_id', $producto->color_id ?? ''))
@@ -142,7 +156,7 @@
 					<div class="form-group row">
 						<label for="tipoliquido_id" class="col-lg-4 col-form-label">Tipo l&iacute;quido</label>
 						<div class="col-lg-8">
-							<select id="tipoliquido_id" name="tipoliquido_id" class="col-lg-6 form-control">
+							<select id="tipoliquido_id" name="tipoliquido_id" class="form-control">
 								<option value="">-- Seleccionar --</option>
 								@foreach($tipoliquido_query as $key => $value)
 									@if( isset($producto) && (int) $value->id == (int) old('tipoliquido_id', $producto->tipoliquido_id ?? ''))

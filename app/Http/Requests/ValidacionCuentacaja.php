@@ -28,6 +28,9 @@ class ValidacionCuentacaja extends FormRequest
             'banco_id' => ['integer', 'nullable'],
             'cuentacontable_id' => 'required|integer',
             'empresa_id' => ['integer', 'nullable'],
+            'cuenta_interbanking' => 'nullable|max:255',
+            'usocuentacaja_ids' => 'nullable|array',
+            'usocuentacaja_ids.*' => 'integer|exists:usocuentacaja,id',
         ];
     }
 }

@@ -9,6 +9,16 @@
 <script src="{{asset("assets/pages/scripts/stock/articulo/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/contable/cuentacontable/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/articulo/crear.js")}}" type="text/javascript"></script>
+@if (can('listar-formula-articulo', false) || can('listar-articulos', false))
+<script>
+window.consultaFormulaArticuloConfig = {
+    urlResolverBase: @json(url('stock/formula-articulo/resolver-por-articulo')),
+    urlFormulaBase: @json(url('stock/formula-articulo')),
+    puedeEditar: @json(can('editar-formula-articulo', false))
+};
+</script>
+<script src="{{ asset('assets/pages/scripts/stock/articulo/formula-modal.js') }}" type="text/javascript"></script>
+@endif
 @endsection
 
 @section('contenido')
@@ -82,7 +92,4 @@
 </div>
 @include('includes.contable.modalconsultacuentacontable')
 @include('stock.formula_articulo.partials.modal_ver_formula_articulo')
-@if (can('listar-formula-articulo', false) || can('listar-articulos', false))
-<script src="{{ asset('assets/pages/scripts/stock/articulo/formula-modal.js') }}" type="text/javascript"></script>
-@endif
 @endsection

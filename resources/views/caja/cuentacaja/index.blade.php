@@ -37,6 +37,8 @@
                             <th>Cuenta contable</th>
                             <th>Moneda</th>
                             <th>CBU</th>
+                            <th>Cuenta Interbanking</th>
+                            <th>Usos</th>
                             <th class="width80" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -57,6 +59,8 @@
                             <td>{{$data->cuentacontables->codigo ?? ''}}-{{$data->cuentacontables->nombre??''}}</td>
                             <td>{{$data->monedas->nombre ?? ''}}</td>
                             <td>{{$data->cbu}}</td>
+                            <td>{{$data->cuenta_interbanking}}</td>
+                            <td><small>{{ $data->usocuentacajas->pluck('nombre')->implode(', ') }}</small></td>
                             <td>
                        			@if (can('editar-cuentas-de-caja', false))
                                 	<a href="{{route('editar_cuentacaja', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">

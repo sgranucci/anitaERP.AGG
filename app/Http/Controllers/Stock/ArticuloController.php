@@ -528,6 +528,7 @@ class ArticuloController extends Controller
         $tipoimputacion_enum = Articulo_Cuentacontable::$enumTipoImputacion;
 
         $referer = request()->headers->get('referer');
+        $ocultarVolver = request()->query('origen') === 'modal_consulta';
 
         $nofactura_enum = Articulo_Estado::$enumNoFactura;
         $estado_enum = Articulo_Estado::$enumEstado;
@@ -556,7 +557,7 @@ class ArticuloController extends Controller
             'deposito_query', 'numeroparte_enum', 'oficinacompra_query',
             'divide_enum',
             'tipoproducto_query', 'capacidad_query', 'color_query', 'tipoliquido_query',
-            'puedeActualizarArticulo'));
+            'puedeActualizarArticulo', 'ocultarVolver'));
     }
 
     public function actualizar(ValidacionArticulo $request, $id)
@@ -608,6 +609,12 @@ class ArticuloController extends Controller
             return ['errores' => $e->getMessage()];
         }
 
+        if ($request->input('origen') === 'modal_consulta') {
+            return redirect()
+                ->route('editar_articulo', ['id' => $id, 'origen' => 'modal_consulta'])
+                ->with('status', 'Artículo actualizado con éxito');
+        }
+
         return redirect('stock/articulo')->with('status', 'Artículo actualizado con éxito');
     }
 
@@ -641,8 +648,12 @@ class ArticuloController extends Controller
         $consultaRaw = $request->input('consulta');
         $consulta = is_string($consultaRaw) ? trim($consultaRaw) : '';
 
-        if (mb_strlen($consulta) < 2) {
-            $mensaje = '<tr><td colspan="6" class="text-muted">Ingrese al menos 2 caracteres para buscar.</td></tr>';
+        $skuDigitosSufijo = max(0, (int) $request->input('sku_digitos_sufijo', 0));
+        $minLen = \App\Support\Ventas\GastronomiaSkuCatalogoSupport::longitudMinimaBusqueda($consulta, $skuDigitosSufijo);
+
+        if (mb_strlen($consulta) < $minLen) {
+            $mensaje = '<tr><td colspan="6" class="text-muted">Ingrese al menos '.$minLen
+                .($minLen === 1 ? ' dígito' : ' caracteres').' para buscar.</td></tr>';
 
             return response()->json(['data' => $mensaje], 200, [], JSON_UNESCAPED_UNICODE);
         }
@@ -655,13 +666,45 @@ class ArticuloController extends Controller
             ->leftJoin('linea', 'articulo.linea_id', '=', 'linea.id');
 
         $cont = count($columns);
-        $like = '%'.$consulta.'%';
-        $query->where(function ($q) use ($columns, $cont, $like) {
-            $q->where($columns[0], 'LIKE', $like);
-            for ($i = 1; $i < $cont; $i++) {
-                $q->orWhere($columns[$i], 'LIKE', $like);
-            }
-        });
+
+        $skuPrefijoRaw = $request->input('sku_prefijo');
+        $skuPrefijo = is_string($skuPrefijoRaw) ? trim($skuPrefijoRaw) : '';
+        $skuPrefijoUpper = $skuPrefijo !== '' && preg_match('/^[A-Za-z0-9_-]{1,24}$/', $skuPrefijo)
+            ? mb_strtoupper($skuPrefijo, 'UTF-8')
+            : '';
+
+        if ($skuPrefijoUpper !== '' && $skuDigitosSufijo > 0) {
+            \App\Support\Ventas\GastronomiaSkuCatalogoSupport::aplicarScopeFormatoCatalogo(
+                $query,
+                $skuPrefijoUpper,
+                $skuDigitosSufijo,
+                'articulo.sku',
+            );
+            \App\Support\Ventas\GastronomiaSkuCatalogoSupport::aplicarFiltroTerminoCatalogo(
+                $query,
+                $consulta,
+                $skuPrefijoUpper,
+                $skuDigitosSufijo,
+                'articulo.sku',
+            );
+        } elseif ($skuPrefijoUpper !== '') {
+            $query->whereRaw('UPPER(articulo.sku) LIKE ?', [$skuPrefijoUpper.'%']);
+            \App\Support\Ventas\GastronomiaSkuCatalogoSupport::aplicarFiltroTerminoCatalogo(
+                $query,
+                $consulta,
+                $skuPrefijoUpper,
+                0,
+                'articulo.sku',
+            );
+        } else {
+            $like = '%'.$consulta.'%';
+            $query->where(function ($q) use ($columns, $cont, $like) {
+                $q->where($columns[0], 'LIKE', $like);
+                for ($i = 1; $i < $cont; $i++) {
+                    $q->orWhere($columns[$i], 'LIKE', $like);
+                }
+            });
+        }
 
         $query = $query->orderBy('articulo.descripcion')->limit(250)->get();
 

@@ -1,5 +1,6 @@
-var ptrproveedor_id;
-var ptrnombreproveedor;
+var proveedorxcodigo = $();
+var ptrproveedor_id = $();
+var ptrnombreproveedor = $();
 
 function actualizarCondicionPagoProveedorDesdeJson(data) {
     if (!$('#condicionpago_proveedor_show').length) {
@@ -82,10 +83,16 @@ function activa_eventos_consultaproveedor()
         let nombre = $(this).parents("tr").find(".nombreproveedor").html();
         let codigo = $(this).parents("tr").find(".codigoproveedor").html();
 
-        // Asigna a grilla los valores devueltos por consulta
-        $(proveedorxcodigo).val(seleccion);
-        $(ptrproveedor_id).val(seleccion);
-        $(ptrnombreproveedor).val(nombre);
+        // Asigna a grilla los valores devueltos por consulta (si hubo apertura desde fila con .proveedor_id)
+        if (proveedorxcodigo && proveedorxcodigo.length) {
+            $(proveedorxcodigo).val(seleccion);
+        }
+        if (ptrproveedor_id && ptrproveedor_id.length) {
+            $(ptrproveedor_id).val(seleccion);
+        }
+        if (ptrnombreproveedor && ptrnombreproveedor.length) {
+            $(ptrnombreproveedor).val(nombre);
+        }
 
         // Asigna nueva reserva
         $("#proveedor_id").val(seleccion);

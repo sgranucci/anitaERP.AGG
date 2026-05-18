@@ -14,6 +14,10 @@ class Cliente_Cm05 extends Model implements Auditable
     use Cliente_Cm05Trait;
     protected $fillable = ['cliente_id', 'provincia_id', 'tipopercepcion', 'coeficiente', 'fechavigencia', 
                             'certificadonoretencion', 'desdefechanoretencion', 'hastafechanoretencion', 'creousuario_id'];
+
+    protected $casts = [
+        'coeficiente' => 'decimal:4',
+    ];
 	
     protected $table = 'cliente_cm05';
 

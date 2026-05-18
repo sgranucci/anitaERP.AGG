@@ -1,0 +1,59 @@
+---
+description: Gastronomía — cliente de factura e invitación (descuento) son independientes
+globs: resources/views/ventas/gastronomia/**,public/assets/pages/scripts/ventas/gastronomia/**,public/assets/pages/scripts/ventas/descuento_gastronomia/**,app/Services/Ventas/Gastronomia/**,app/Models/Ventas/CuentaGastronomia.php
+alwaysApply: false
+---
+
+# Cliente de factura vs cliente de invitación (gastronomía)
+
+En el facturador de gastronomía existen **dos clientes distintos** que no deben sincronizarse ni copiarse entre sí.
+
+| Rol | Campos UI | Persistencia (cuenta) |
+|-----|-----------|------------------------|
+| **Cliente para facturar** | `cliente_id`, `codigocliente`, `nombrecliente` (+ receptor manual CF si aplica) | `cliente_id` en cuenta |
+| **Cliente interno del descuento** (invita / centro de costo) | `cliente_descuento_id`, `codigocliente_descuento`, `nombrecliente_descuento` | `cliente_interno_descuento_id` |
+
+## Reglas
+
+1. **Nunca** copiar el cliente interno del descuento al bloque «Cliente para facturar» (ni al elegir en modal, ni por código, ni en hooks como `gastroOnClienteInternoDescuentoElegido`).
+2. **Nunca** usar `leeUnCliente()` hacia `#cliente_id` cuando el origen es `cliente_descuento_id` / `consultaclienteinternodescuento`.
+3. El modal `consultacliente` con `ptrcliente_id` apuntando a `#cliente_descuento_id` solo debe actualizar campos del panel de invitación (`aplicarClienteInternoDescuentoEnPantalla`).
+4. Ambos pueden estar vacíos o completos de forma independiente; validar el interno del descuento no implica completar el de factura.
+
+## Ejemplo incorrecto
+
+```javascript
+// ❌ Prohibido
+$('#cliente_id').val(cliInvitacion.id);
+sincronizarClienteDescuentoAFactura(cli);
+```
+
+## Ejemplo correcto
+
+```javascript
+// ✅ Solo panel invitación
+aplicarClienteInternoDescuentoEnPantalla(cliInvitacion);
+// cliente_id / codigocliente / nombrecliente: otro flujo (.consultacliente en fila de factura)
+```
+
+# Descuento cabecera 100 % (factura de cortesía)
+
+Cuando el descuento gastronomía de cabecera es **100 %** (o importe que cubre el subtotal), la emisión es factura de cortesía:
+
+| Concepto | Regla |
+|----------|--------|
+| Total comprobante | **$0,01** (`GastronomiaFacturacionService::IMPORTE_MINIMO_FACTURA`) |
+| Ítems | Todos los consumos de la cuenta; descuento de pie ajustado para total ≈ $0,01; IVA exento por renglón |
+| IVA | **No** grabar IVA: `impuesto_ids` = exento (`config gastronomia.impuesto_exento_id`, default 1), `incluyeimpuestos` = `N` |
+| Cobranza | Sin cobranza (`sin_cobranza`) |
+
+Implementación: `evaluarDescuentoCabecera` → `aplicarReglasCortesiaEnPayload` → `generaComprobanteGeneral`. No recalcular con el IVA del artículo original ni colapsar a un solo ítem.
+
+# Emisión gastronomía e Informix (Anita)
+
+Al facturar desde gastronomía **debe replicar** la venta en Informix legacy vía **bridge HTTP** (`ANITA_BRIDGE_TYPE=HTTP`, respaldo `gastronomia.anita_bridge_type`).
+
+Si `grabaAnita` o la consulta previa fallan, propagar el mensaje al POS (`error` / `mensaje` en JSON 422). Prefijo claro: `Error en grabación Anita: …`.
+
+Desactivar solo con `GASTRONOMIA_SINCRONIZAR_ANITA=false` (casos excepcionales sin Informix).
+```

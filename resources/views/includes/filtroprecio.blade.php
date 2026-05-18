@@ -82,6 +82,8 @@
                             <button class="btn btn-primary btn-submit" type="submit">Enviar</button>
                         </div>
 
+                        <input type="hidden" name="fecha_vigencia" value="{{ $fechaVigenciaFiltro }}">
+                        <input type="hidden" name="listaprecio_id" value="{{ $listaprecioIdFiltro !== null ? $listaprecioIdFiltro : '' }}">
                         <input type="hidden" name="filter_column[0][column]" id="estado" value="estado">
                         <input type="hidden" name="lasturl" value="{{route('precio')}}">
                     </form>

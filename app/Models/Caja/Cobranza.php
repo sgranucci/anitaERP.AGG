@@ -10,6 +10,7 @@ use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Moneda;
 use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Cliente_Cuentacorriente;
+use App\Models\Ventas\Venta;
 use App\Models\Contable\Asiento;
 use Auth;
 
@@ -17,7 +18,7 @@ class Cobranza extends Model implements Auditable
 {
     use \OwenIt\Auditing\Auditable;
     protected $fillable = ['empresa_id', 'tipotransaccion_caja_id', 'numerotransaccion', 'fecha', 
-                            'caja_id', 'cliente_id', 'detalle', 'estado', 'monto', 'cotizacion', 'moneda_id',
+                            'caja_id', 'cliente_id', 'venta_id', 'detalle', 'estado', 'monto', 'cotizacion', 'moneda_id',
                             'usuario_id'];
 
     protected $table = 'cobranza';
@@ -77,6 +78,11 @@ class Cobranza extends Model implements Auditable
     public function clientes()
     {
         return $this->belongsTo(Cliente::class, 'cliente_id');
+    }
+
+    public function ventas()
+    {
+        return $this->belongsTo(Venta::class, 'venta_id');
     }
 
     public function monedas()

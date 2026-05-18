@@ -15,7 +15,7 @@ class Cuentacaja extends Model implements Auditable
     use \OwenIt\Auditing\Auditable;
 
     protected $fillable = ['nombre', 'codigo', 'tipocuenta', 'banco_id',
-        'empresa_id', 'cuentacontable_id', 'moneda_id', 'cbu'];
+        'empresa_id', 'cuentacontable_id', 'moneda_id', 'cbu', 'cuenta_interbanking'];
 
     protected $table = 'cuentacaja';
 
@@ -37,5 +37,10 @@ class Cuentacaja extends Model implements Auditable
     public function cuentacontables()
     {
         return $this->belongsTo(Cuentacontable::class, 'cuentacontable_id');
+    }
+
+    public function usocuentacajas()
+    {
+        return $this->belongsToMany(Usocuentacaja::class, 'cuentacaja_usocuentacaja', 'cuentacaja_id', 'usocuentacaja_id');
     }
 }

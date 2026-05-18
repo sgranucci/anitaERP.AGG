@@ -106,9 +106,26 @@
 	<div class="col-sm-6">
 		<div class="form-group row">
 			<label for="fechafactura" class="col-lg-4 col-form-label requerido">Fecha</label>
-			<div class="col-lg-3">
-				<input type="date" name="fechafactura" id="fechafactura" class="form-control" value="{{substr(old('fechafactura', $data->fecha ?? date('Y-m-d')),0,10)}}" required>
-			</div>
+			@if (! empty($consultaFacturasDia))
+				@php
+					$fechaVenta = old('fechafactura', $data->fecha ?? date('Y-m-d'));
+					$fechaVentaYmd = substr((string) $fechaVenta, 0, 10);
+				@endphp
+				<div class="col-lg-3">
+					<input type="text" id="fechafactura_display" class="form-control" readonly
+					       value="{{ $fechaVentaYmd !== '' ? \Illuminate\Support\Carbon::parse($fechaVentaYmd)->format('d-m-Y') : '' }}">
+					<input type="hidden" name="fechafactura" id="fechafactura" value="{{ $fechaVentaYmd }}">
+				</div>
+				<label for="hora_creacion_factura" class="col-lg-2 col-form-label">Hora creación</label>
+				<div class="col-lg-3">
+					<input type="text" id="hora_creacion_factura" class="form-control" readonly
+					       value="{{ $data->created_at ? $data->created_at->format('H:i:s') : '—' }}">
+				</div>
+			@else
+				<div class="col-lg-3">
+					<input type="date" name="fechafactura" id="fechafactura" class="form-control" value="{{substr(old('fechafactura', $data->fecha ?? date('Y-m-d')),0,10)}}" required>
+				</div>
+			@endif
 		</div>
 		<div class="form-group row">
 			<label for="recipient-name" class="col-lg-4 col-form-label">Descuento de l&iacute;nea</label>

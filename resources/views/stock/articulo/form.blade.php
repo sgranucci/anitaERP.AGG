@@ -16,7 +16,8 @@
                 </div>
 				<div class="form-group row">
     				<label for="tipoarticulo_id" class="col-lg-4 col-form-label requerido">Tipo del art&iacute;culo</label>
-					<select id="tipoarticulo_id" name="tipoarticulo_id" class="col-lg-8 form-control" required>
+    				<div class="col-lg-8">
+    					<select id="tipoarticulo_id" name="tipoarticulo_id" class="form-control" required>
                         <option value="">-- Seleccionar --</option>
                         @foreach($tiposArticulos as $key => $value)
                             @if( isset($producto) && (int) $value->id == (int) old('tipoarticulo_id', $producto->tipoarticulo_id ?? ''))
@@ -26,10 +27,12 @@
                             @endif
                         @endforeach
                     </select>
+    				</div>
               	</div>
 				<div class="form-group row">
     				<label for="categoria_id" class="col-lg-4 col-form-label requerido">Categor&iacute;a</label>
-					<select id="categoria_id" name="categoria_id" class="col-lg-8 form-control" required>
+					<div class="col-lg-8">
+					<select id="categoria_id" name="categoria_id" class="form-control" required>
                         <option value="">-- Seleccionar --</option>
                         @foreach($categoria as $key => $value)
                             @if( isset($producto) && (int) $value->id == (int) $producto->categoria_id )
@@ -39,10 +42,12 @@
                             @endif
                         @endforeach
                     </select>
+                    </div>
                 </div>
 				<div class="form-group row">
     				<label for="subcategoria_id" class="col-lg-4 col-form-label">Subcategor&iacute;a</label>
-					<select id="subcategoria_id" name="subcategoria_id" class="col-lg-8 form-control">
+					<div class="col-lg-8">
+					<select id="subcategoria_id" name="subcategoria_id" class="form-control">
                         <option value="">-- Seleccionar --</option>
                         @foreach($subcategoria as $key => $value)
                             @if( isset($producto) && (int) $value->id == (int) $producto->subcategoria_id )
@@ -52,11 +57,13 @@
                             @endif
                         @endforeach
                     </select>
+                    </div>
                 </div>
                 @if (config('app.empresa') == 'EL BIERZO')
                     <div class="form-group row">
                         <label for="divide" class="col-lg-4 col-form-label">Divide</label>
-                        <select id="divide" name="divide" class="col-lg-3 form-control">
+                        <div class="col-lg-3">
+                        <select id="divide" name="divide" class="form-control">
                             @foreach($divide_enum as $key => $value)
                                 @if( isset($producto) && $value['nombre'] == old('divide', $producto->divide ?? ''))
                                     <option value="{{ $value['nombre'] }}" selected="select">{{ $value['nombre'] }}</option>    
@@ -65,13 +72,15 @@
                                 @endif
                             @endforeach
                         </select>
+                        </div>
                     </div>  
                 @endif
             </div>
             <div class="col-sm-6">
 				<div class="form-group row">
     				<label for="usoarticulo_id" class="col-lg-4 col-form-label requerido">Uso de art&iacute;culo</label>
-					<select id="usoarticulo_id" name="usoarticulo_id" class="col-lg-3 form-control" required>
+					<div class="col-lg-3">
+					<select id="usoarticulo_id" name="usoarticulo_id" class="form-control" required>
                         <option value="">-- Seleccionar --</option>
                         @foreach($usosArticulos as $key => $value)
                             @if( isset($producto) && (int) $value->id == (int) old('usoarticulo_id', $producto->usoarticulo_id ?? ''))
@@ -81,12 +90,16 @@
                             @endif
                         @endforeach
                     </select>
+                    </div>
                     <label for="estado" class="col-lg-2 col-form-label">Estado</label>
-                    <input type="text" name="estado" id="estado" class="col-lg-2 form-control" value="{{old('estado', $producto->estado ?? 'ACTIVO')}}" readonly>
+                    <div class="col-lg-2">
+                        <input type="text" name="estado" id="estado" class="form-control" value="{{old('estado', $producto->estado ?? 'ACTIVO')}}" readonly>
+                    </div>
               	</div>
 				<div class="form-group row">
     				<label for="unidadmedida" class="col-lg-4 col-form-label requerido">Unidad de medida</label>
-					<select id="unidadmedida_id" name="unidadmedida_id" class="col-lg-4 form-control unidadmedida" required>
+					<div class="col-lg-4">
+					<select id="unidadmedida_id" name="unidadmedida_id" class="form-control unidadmedida" required>
                         <option value="">-- Seleccionar --</option>
                         @foreach($unidadmedida as $key => $value)
                             @if( isset($producto) && (int) $value->id == (int) old('unidadmedida_id', $producto->unidadmedida_id ?? ''))
@@ -100,10 +113,12 @@
                             @endif
                         @endforeach
                     </select>
+                    </div>
                 </div>
 				<div class="form-group row">
     				<label for="unidadmedidaalternativa_id" class="col-lg-4 col-form-label requerido">Unidad de medida alternativa</label>
-					<select id="unidadmedidaalternativa_id" name="unidadmedidaalternativa_id" class="col-lg-4 form-control unidadmedidaalternativa" required>
+					<div class="col-lg-4">
+					<select id="unidadmedidaalternativa_id" name="unidadmedidaalternativa_id" class="form-control unidadmedidaalternativa" required>
                         <option value="">-- Seleccionar --</option>
                         @foreach($unidadmedida as $key => $value)
                             @if( isset($producto) && (int) $value->id == (int) old('unidadmedidaalternativa_id', $producto->unidadmedidaalternativa_id ?? ''))
@@ -117,11 +132,13 @@
                             @endif
                         @endforeach
                     </select>
+                    </div>
                 </div>  
                 @if (config('app.empresa') == 'AGG')
                     <div class="form-group row">
                         <label for="numeroparte" class="col-lg-4 col-form-label">Número de parte</label>
-                        <select id="numeroparte" name="numeroparte" class="col-lg-3 form-control">
+                        <div class="col-lg-3">
+                        <select id="numeroparte" name="numeroparte" class="form-control">
                             @foreach($numeroparte_enum as $key => $value)
                                 @if( isset($producto) && (int) $value['id'] == (int) old('numeroparte', $producto->numeroparte ?? ''))
                                     <option value="{{ $value['id'] }}" selected="select">{{ $value['nombre'] }}</option>    
@@ -130,13 +147,17 @@
                                 @endif
                             @endforeach
                         </select>
+                        </div>
                         <label for="ubicacionparte" class="col-lg-2 col-form-label">Ubic. de parte</label>
-                        <input type="text" name="ubicacionparte" id="ubicacionparte" class="col-lg-2 form-control" value="{{old('ubicacionparte', $producto->ubicacionparte ?? '')}}"/>
-                    </div>  
+                        <div class="col-lg-2">
+                            <input type="text" name="ubicacionparte" id="ubicacionparte" class="form-control" value="{{old('ubicacionparte', $producto->ubicacionparte ?? '')}}"/>
+                        </div>
+                    </div>
                 @endif
                 <div class="form-group row">
     				<label for="mventa_id" class="col-lg-4 col-form-label">Marca</label>
-					<select id="mventa_id" name="mventa_id" class="col-lg-8 form-control">
+					<div class="col-lg-8">
+					<select id="mventa_id" name="mventa_id" class="form-control">
                         <option value="">-- Seleccionar --</option>
                         @foreach($marca as $key => $value)
                             @if( isset($producto) && (int) $value->id == (int) $producto->mventa_id )
@@ -146,10 +167,12 @@
                             @endif
                         @endforeach
                     </select>
+                    </div>
                 </div>
 				<div class="form-group row">
     				<label for="linea_id" class="col-lg-4 col-form-label">Linea</label>
-					<select id="linea_id" name="linea_id" class="col-lg-8 form-control">
+					<div class="col-lg-8">
+					<select id="linea_id" name="linea_id" class="form-control">
                         <option value="">-- Seleccionar --</option>
                         @foreach($linea as $key => $value)
                             @if( isset($producto) && $value->id == $producto->linea_id)
@@ -159,6 +182,7 @@
                             @endif
                         @endforeach
                     </select>
+                    </div>
                 </div>                     
             </div>
         </div>

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 520" width="920" height="520">
+  <defs>
+    <linearGradient id="hdr" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#343a40"/><stop offset="100%" stop-color="#454d55"/></linearGradient>
+    <filter id="sh" x="-2%" y="-2%" width="104%" height="104%"><feDropShadow dx="0" dy="4" stdDeviation="8" flood-opacity=".12"/></filter>
+  </defs>
+  <rect width="920" height="520" rx="12" fill="#f4f6f9" filter="url(#sh)"/>
+  <rect x="0" y="0" width="920" height="48" rx="12" fill="url(#hdr)"/>
+  <rect x="0" y="36" width="920" height="12" fill="url(#hdr)"/>
+  <text x="24" y="30" fill="#fff" font-family="Segoe UI, system-ui, sans-serif" font-size="15" font-weight="600">Anita ERP</text>
+  <text x="120" y="30" fill="#adb5bd" font-family="Segoe UI, system-ui, sans-serif" font-size="13">/ Compras / Login</text>
+  <rect x="16" y="64" width="200" height="440" rx="8" fill="#fff" stroke="#dee2e6"/>
+  <rect x="16" y="64" width="200" height="36" rx="8" fill="#007bff" opacity=".15"/>
+  <text x="28" y="88" fill="#007bff" font-family="Segoe UI, system-ui, sans-serif" font-size="12" font-weight="600">Menú Compras</text>
+  <rect x="232" y="64" width="672" height="440" rx="8" fill="#fff" stroke="#dee2e6"/>
+  
+  <rect x="280" y="120" width="360" height="280" rx="10" fill="#fff" stroke="#dee2e6"/>
+  <text x="460" y="165" text-anchor="middle" fill="#1f4e79" font-family="Segoe UI,sans-serif" font-size="22" font-weight="700">Anita ERP</text>
+  <text x="460" y="192" text-anchor="middle" fill="#6c757d" font-family="Segoe UI,sans-serif" font-size="13">Inicio de Sesión</text>
+  <rect x="310" y="215" width="300" height="36" rx="4" fill="#f8f9fa" stroke="#ced4da"/>
+  <text x="322" y="238" fill="#868e96" font-family="Segoe UI,sans-serif" font-size="12">Usuario</text>
+  <rect x="310" y="262" width="300" height="36" rx="4" fill="#f8f9fa" stroke="#ced4da"/>
+  <text x="322" y="285" fill="#868e96" font-family="Segoe UI,sans-serif" font-size="12">Contraseña</text>
+  <rect x="506" y="318" width="104" height="34" rx="4" fill="#007bff"/>
+  <text x="558" y="340" text-anchor="middle" fill="#fff" font-family="Segoe UI,sans-serif" font-size="13" font-weight="600">Login</text>
+
+</svg>

@@ -1,7 +1,39 @@
 var ptrcliente_id;
 var ptrnombrecliente;
+var ultimaConsultaClienteTermino = '';
+var ultimoDatosClienteHtml = '';
+
+function mensajeInicialConsultaCliente() {
+    return '<tr><td colspan="7" class="text-muted">Ingrese al menos 2 caracteres para buscar (solo clientes activos).</td></tr>';
+}
+
+function parsearHtmlConsultaCliente(respuesta) {
+    const resp = String(respuesta || '').replace(/\\/g, '');
+    try {
+        const parsed = JSON.parse(resp);
+        return parsed.data || '';
+    } catch (e) {
+        return resp;
+    }
+}
+
+function guardarUltimaConsultaCliente(termino, html) {
+    ultimaConsultaClienteTermino = termino;
+    ultimoDatosClienteHtml = html;
+}
+
+function restaurarUltimaConsultaClienteEnModal() {
+    if (ultimoDatosClienteHtml) {
+        $('#consultacliente').val(ultimaConsultaClienteTermino);
+        $('#datoscliente').html(ultimoDatosClienteHtml);
+        return;
+    }
+    $('#consultacliente').val('');
+    $('#datoscliente').html(mensajeInicialConsultaCliente());
+}
 
 function buscar_datos_cliente(consulta) {
+    var termino = (consulta != null && consulta !== undefined) ? String(consulta).trim() : '';
 
     $.ajax({
         url: carpetaBase+'/ventas/consultacliente',
@@ -11,13 +43,15 @@ function buscar_datos_cliente(consulta) {
         	'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
     	},
         data: {
-            consulta: consulta,
+            consulta: termino,
         },
     })
     .done (function(respuesta) {
-		const resp = respuesta.replace(/\\/g, '');
-        $("#datoscliente").html("");
-        $("#datoscliente").html(resp);
+        const html = parsearHtmlConsultaCliente(respuesta);
+        $("#datoscliente").html(html);
+        if (termino !== '') {
+            guardarUltimaConsultaCliente(termino, html);
+        }
     })
     .fail (function() {
         console.log("error");
@@ -38,30 +72,26 @@ $("input").keydown(function (e){
   });
 
 $(document).on('keyup', '#consultacliente', function () {
-    var valor = $(this).val();
-    if (valor != "") {
-        buscar_datos_cliente(valor);
-    } else {
-        buscar_datos_cliente();
+    var valor = String($(this).val() || '').trim();
+    if (valor === '' && ultimoDatosClienteHtml) {
+        $('#datoscliente').html(ultimoDatosClienteHtml);
+        return;
     }
+    buscar_datos_cliente(valor);
 });
 
 function activa_eventos_consultacliente()
 {
     $('.consultacliente').on('click', function (event) {
-        let cliente_id = $("#cliente_id").val();
-
         ptrcliente_id = $(this).parents("tr").find(".cliente_id");
 		ptrnombrecliente = $(this).parents("tr").find(".nombrecliente");
 
         // Abre modal de consulta
         $("#consultaclienteModal").modal('show');
-
-        ($.isNumeric(cliente_id))
-            buscar_datos_cliente();
     });
 
     $('#consultaclienteModal').on('shown.bs.modal', function () {
+        restaurarUltimaConsultaClienteEnModal();
         $(this).find('[autofocus]').focus();
     })
 
@@ -76,8 +106,25 @@ function activa_eventos_consultacliente()
         let nombre = $(this).parents("tr").find(".nombre").html();
         let codigo = $(this).parents("tr").find(".codigo").html();
 
-        $(ptrcliente_id).val(seleccion);
-        $(ptrnombrecliente).val(nombre);
+        if (ptrcliente_id && ptrcliente_id.length) {
+            $(ptrcliente_id).val(seleccion);
+        }
+        if (ptrnombrecliente && ptrnombrecliente.length) {
+            $(ptrnombrecliente).val(nombre);
+        }
+
+        if (ptrcliente_id && ptrcliente_id.attr('id') === 'cliente_descuento_id') {
+            $('#codigocliente_descuento').val(codigo || '');
+            if (typeof aplicarClienteInternoDescuentoEnPantalla === 'function') {
+                aplicarClienteInternoDescuentoEnPantalla({
+                    id: seleccion,
+                    codigo: codigo,
+                    nombre: nombre,
+                });
+            }
+            $('#consultaclienteModal').modal('hide');
+            return;
+        }
 
         leeUnCliente(seleccion, 0)
 

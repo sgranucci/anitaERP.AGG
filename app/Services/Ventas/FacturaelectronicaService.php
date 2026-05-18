@@ -453,16 +453,13 @@ class FacturaElectronicaService
 						'whereArmado' => " WHERE caea_cuit = '".$nroinscripcion."' AND
 												caea_desde_fecha <= ".$inicioQuincena." AND
 												caea_hasta_fecha >= ".$finQuincena);
-		$dataAnita = json_decode($apiAnita->apiCall($data));
+		$fila = ApiAnita::primeraFilaLista($apiAnita->apiCall($data));
 
-		$resultado = 'E';
-		if (count($dataAnita) > 0)
-			$resultado = 'A';
-		
-		if ($resultado == 'A')
-			return ['cae' => $dataAnita[0]->caea_nro_caea, 'fechavencimientocae' => $finQuincena];
-		else	
-			return ['Error' => 'No pudo asignar CAEA'];
+		if ($fila !== null && isset($fila->caea_nro_caea)) {
+			return ['cae' => $fila->caea_nro_caea, 'fechavencimientocae' => $finQuincena];
+		}
+
+		return ['Error' => 'No pudo asignar CAEA'];
 	}
 
 	public function consultaCompEnviado($nroinscripcion, $tipotransaccion, $puntoventa, $numero)

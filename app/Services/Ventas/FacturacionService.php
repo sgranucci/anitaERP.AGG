@@ -621,7 +621,7 @@ class FacturacionService
 		$this->abreviaturaIncoterm = '';
 
 		$this->cuentacontable_id = $cliente->cuentacontable_id;
-		$this->codigoCuentaContable = $cliente->cuentascontables->codigo;
+		$this->codigoCuentaContable = $cliente->cuentascontables?->codigo ?? '';
 
 		if (isset($cliente->condicionventa_id))
 			$condicionventa_id = $cliente->condicionventa_id;
@@ -818,7 +818,7 @@ class FacturacionService
 							'comprobantesasociados' => $comprobantesAsociados,
 							'fechaasignaciondesde' => date('Ymd', strtotime($fechaAsignacion)),
 							'fechaasignacionhasta' => date('Ymd', strtotime($fechaFactura)),
-							'pais' => $cliente->paises->codigo,
+							'pais' => $cliente->paises?->codigo ?? '',
 							'nombrecliente' => $cliente->nombre,
 							'domicilio' => $cliente->domicilio,
 							'formapago' => $cliente->condicionventas->nombre ?? '',
@@ -1217,7 +1217,7 @@ class FacturacionService
 			return ['error' => 'Cliente inexistente'];
 		
 		$this->cuentacontable_id = $cliente->cuentacontable_id;
-		$this->codigoCuentaContable = $cliente->cuentascontables->codigo;
+		$this->codigoCuentaContable = $cliente->cuentascontables?->codigo ?? '';
 
 		if (isset($cliente->condicionventa_id))
 			$condicionventa_id = $cliente->condicionventa_id;
@@ -1333,7 +1333,7 @@ class FacturacionService
 							'comprobantesasociados' => $comprobantesAsociados,
 							'fechaasignaciondesde' => date('Ymd', strtotime($fechaAsignacion)),
 							'fechaasignacionhasta' => date('Ymd', strtotime($fechaFactura)),
-							'pais' => $cliente->paises->codigo,
+							'pais' => $cliente->paises?->codigo ?? '',
 							'nombrecliente' => $cliente->nombre,
 							'domicilio' => $cliente->domicilio,
 							'formapago' => $cliente->condicionventas->nombre ?? 'CONTADO',
@@ -1559,7 +1559,7 @@ class FacturacionService
 		if (!$cliente)
 			return ['error' => 'Cliente inexistente'];
 		
-		if ($cliente->numerodocumento == null)
+		if (! isset($data['arca_receptor']) && $cliente->numerodocumento == null)
 			return ['error' => 'No tiene Documento'];
 			
 		// Saca letra del comprobante
@@ -1581,6 +1581,11 @@ class FacturacionService
 		$descripciones = $data['descripcionarticulos'];
 		$cantidades = $data['cantidades'];
 		$precios = $data['precios'];
+		$listaprecioGlobalId = isset($data['listaprecio_id']) ? (int) $data['listaprecio_id'] : null;
+		$listaspreciosIds = $data['listasprecios_id'] ?? null;
+		$incluyeimpuestosInput = $data['incluyeimpuestos'] ?? null;
+		$impuestosIdsInput = $data['impuesto_ids'] ?? null;
+		$incluyePorLista = [];
 
 		for ($offItem = 0; $offItem < count($cantidades); $offItem++)
 		{
@@ -1601,11 +1606,9 @@ class FacturacionService
 				$sku = $articulo->sku;
 				$articulo_id = $articulo->id;
 				$descripcion = $articulo->descripcion;
-				$codigoUnidadMedida = $articulo->unidadesdemedidas->codigo;
+				$codigoUnidadMedida = $articulo->unidadesdemedidas?->codigo ?? 1;
 				$impuesto_id = $articulo->impuesto_id;
-				$incluyeImpuesto = 1;
 				$cuentaContable_id = $articulo->cuentacontableventa_id;
-				$listaprecio_id = 1;
 			}
 			else
 			{
@@ -1614,9 +1617,7 @@ class FacturacionService
 				$descripcion = $descripciones[$offItem];
 				$codigoUnidadMedida = 1;
 				$sku = '';
-				$impuesto_id = 3;
-				$incluyeImpuesto = 1;
-				$listaprecio_id = 1;
+				$impuesto_id = (int) config('gastronomia.impuesto_exento_id', 1);
 
 				$cuentaVenta = config('facturacion.CUENTACONTABLE_VENTA');
 
@@ -1625,6 +1626,27 @@ class FacturacionService
 				$cuentaContable_id = null;
 				if ($cuentacontable)
 					$cuentaContable_id = $cuentacontable->id;
+			}
+
+			$listaprecio_id = 1;
+			if (is_array($listaspreciosIds) && isset($listaspreciosIds[$offItem]) && (string) $listaspreciosIds[$offItem] !== '') {
+				$listaprecio_id = (int) $listaspreciosIds[$offItem];
+			} elseif ($listaprecioGlobalId) {
+				$listaprecio_id = $listaprecioGlobalId;
+			}
+
+			if (is_array($impuestosIdsInput) && isset($impuestosIdsInput[$offItem]) && (string) $impuestosIdsInput[$offItem] !== '') {
+				$impuesto_id = (int) $impuestosIdsInput[$offItem];
+			}
+
+			if (is_array($incluyeimpuestosInput) && isset($incluyeimpuestosInput[$offItem]) && (string) $incluyeimpuestosInput[$offItem] !== '') {
+				$incluyeImpuesto = $incluyeimpuestosInput[$offItem];
+			} else {
+				if (! array_key_exists($listaprecio_id, $incluyePorLista)) {
+					$listaPrecio = Listaprecio::find($listaprecio_id);
+					$incluyePorLista[$listaprecio_id] = $listaPrecio ? $listaPrecio->incluyeimpuesto : '1';
+				}
+				$incluyeImpuesto = $incluyePorLista[$listaprecio_id];
 			}
 
 			// Lee el descuento 
@@ -1679,6 +1701,15 @@ class FacturacionService
 							"descuentoimportepie" => $this->descuentoImportePie,
 							"id" => $cliente->id
 							];
+		if (! empty($data['omitir_percepciones'])) {
+			$datosCliente['omitir_percepciones'] = true;
+			$datosCliente['condicioniibb_id'] = (int) config('gastronomia.consumidor_final_condicioniibb_id', 4);
+			$datosCliente['retieneiva'] = 'N';
+			$datosCliente['provincia'] = null;
+			if (! empty($data['venta_receptor']['numerodocumento'])) {
+				$datosCliente['numerodocumento'] = $data['venta_receptor']['numerodocumento'];
+			}
+		}
 		// Calcula impuestos
 		$conceptosTotales = $this->impuestoService->calculaImpuestoVenta($dataFactura, $datosCliente, $fechaFactura, 
 																			$this->flGrabaComprobanteDividido);
@@ -1700,6 +1731,10 @@ class FacturacionService
 
 		// Recalcula factura
 		$calculoFactura = Self::calculaFacturaGeneral($data);
+
+		if (isset($calculoFactura['error'])) {
+			return ['error' => $calculoFactura['error']];
+		}
 
 		$puntoventa_id = $data['puntoventa_id'];
 		$tipoTransaccion_id = $data['tipotransaccion_id'];
@@ -1783,9 +1818,23 @@ class FacturacionService
 		$cliente = $this->clienteQuery->traeClienteporId($cliente_id);
 		if (!$cliente)
 			return ['error' => 'Cliente inexistente'];
+
+		$clienteGraba = clone $cliente;
+		if (! empty($data['venta_receptor']) && is_array($data['venta_receptor'])) {
+			$vr = $data['venta_receptor'];
+			if (isset($vr['nombre'])) {
+				$clienteGraba->nombre = $vr['nombre'];
+			}
+			if (isset($vr['numerodocumento'])) {
+				$clienteGraba->numerodocumento = $vr['numerodocumento'];
+			}
+			if (array_key_exists('domicilio', $vr)) {
+				$clienteGraba->domicilio = $vr['domicilio'];
+			}
+		}
 		
 		$this->cuentacontable_id = $cliente->cuentacontable_id;
-		$this->codigoCuentaContable = $cliente->cuentascontables->codigo;
+		$this->codigoCuentaContable = $cliente->cuentascontables?->codigo ?? '';
 
 		if (isset($cliente->condicionventa_id))
 			$condicionventa_id = $cliente->condicionventa_id;
@@ -1896,10 +1945,30 @@ class FacturacionService
 					if ($moneda)
 						$codigoMoneda = $moneda->abreviatura;
 
+					$arcaTipodoc = $cliente->tipodocumentos->codigoexterno;
+					$arcaNumerodoc = $cliente->numerodocumento;
+					$arcaNombre = $cliente->nombre;
+					$arcaDomicilio = $cliente->domicilio;
+					if (! empty($data['arca_receptor']) && is_array($data['arca_receptor'])) {
+						$ar = $data['arca_receptor'];
+						if (isset($ar['tipodoc'])) {
+							$arcaTipodoc = $ar['tipodoc'];
+						}
+						if (isset($ar['numerodocumento'])) {
+							$arcaNumerodoc = $ar['numerodocumento'];
+						}
+						if (isset($ar['nombre'])) {
+							$arcaNombre = $ar['nombre'];
+						}
+						if (array_key_exists('domicilio', $ar)) {
+							$arcaDomicilio = $ar['domicilio'];
+						}
+					}
+
 					$dataCAE = [
 							'codigoempresa' => $empresa->codigo,
-							'tipodoc' => $cliente->tipodocumentos->codigoexterno,
-							'numerodocumento' => $cliente->numerodocumento,
+							'tipodoc' => $arcaTipodoc,
+							'numerodocumento' => $arcaNumerodoc,
 							'condicioniva_id' => $cliente->condicioniva_id,
 							'numerocomprobante' => $numero,
 							'fechacomprobante' => date('Ymd', strtotime($fechaFactura)),
@@ -1917,9 +1986,9 @@ class FacturacionService
 							'comprobantesasociados' => $comprobantesAsociados,
 							'fechaasignaciondesde' => date('Ymd', strtotime($fechaAsignacion)),
 							'fechaasignacionhasta' => date('Ymd', strtotime($fechaFactura)),
-							'pais' => $cliente->paises->codigo,
-							'nombrecliente' => $cliente->nombre,
-							'domicilio' => $cliente->domicilio,
+							'pais' => $cliente->paises?->codigo ?? '',
+							'nombrecliente' => $arcaNombre,
+							'domicilio' => $arcaDomicilio,
 							'formapago' => $cliente->condicionventas->nombre ?? 'CONTADO',
 							'formapagoexportacion' => null,
 							'incoterms' => null,
@@ -1927,11 +1996,12 @@ class FacturacionService
 							'items' => $dataFactura
 					];
 				}
+				$opcionesEmision = $data['opciones_emision'] ?? null;
 				$graba = Self::grabaFacturaERP($empresa, $codigoTipoTransaccion, $tipotransaccion, $fechaFactura,  
-									$cliente, $totalComprobante, $moneda_id, $cotizacion, $leyenda,  
+									$clienteGraba, $totalComprobante, $moneda_id, $cotizacion, $leyenda,  
 									$letra, $puntoventa, $numero, $ordenventa_id, $conceptosTotales, $cuentacorriente,
 									$dataFactura, $asientoContable, $detalleContable, $signo, $centrocosto_id, $codigoCentrocosto,
-									$dataCAE, $venta_id, $referenciaFactura, $actividad_arca_id);
+									$dataCAE, $venta_id, $referenciaFactura, $actividad_arca_id, $opcionesEmision);
 			}
 			else
 				$graba = ['error' => 'No pudo numerar comprobate'];
@@ -2049,7 +2119,7 @@ class FacturacionService
 							return ['error' => 'No tiene CUIT'];
 							
 						$this->cuentacontable_id = $cliente->cuentacontable_id;
-						$this->codigoCuentaContable = $cliente->cuentascontables->codigo;
+						$this->codigoCuentaContable = $cliente->cuentascontables?->codigo ?? '';
 
 						// Saca letra del comprobante
 						$condicioniva = $this->condicionivaRepository->find($cliente->condicioniva_id);
@@ -2323,7 +2393,7 @@ class FacturacionService
 							'comprobantesasociados' => $comprobantesAsociados,
 							'fechaasignaciondesde' => date('Ymd', strtotime($fechaAsignacion)),
 							'fechaasignacionhasta' => date('Ymd', strtotime($fechaFactura)),
-							'pais' => $cliente->paises->codigo,
+							'pais' => $cliente->paises?->codigo ?? '',
 							'nombrecliente' => $cliente->nombre,
 							'domicilio' => $cliente->domicilio,
 							'formapago' => $cliente->condicionventas->nombre,
@@ -2587,12 +2657,21 @@ class FacturacionService
 									$cliente, $totalComprobante, $moneda_id, $cotizacion, $leyenda,  
 									$letra, $puntoventa, $numero, $ordenventa_id, $conceptosTotales, $cuentacorriente,
 									$dataFactura, $asientoContable, $detalleContable, $signo, $centrocosto_id, $codigoCentrocosto,
-									$dataCAE, $venta_id, $referenciaFactura, $actividad_arca_id)
+									$dataCAE, $venta_id, $referenciaFactura, $actividad_arca_id, $opcionesEmision = null)
 	{
+		$omitirMovimientoStock = is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_movimiento_stock']);
+		$omitirContabilidad = is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_contabilidad']);
+		$omitirCuentaCorriente = is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_cuenta_corriente']);
+		$omitirSolicitudArcaCae = is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_solicitud_arca_cae']);
+		$omitirSincronizacionAnita = is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_sincronizacion_anita']);
+		$transaccionExterna = DB::transactionLevel() > 0;
+
 		$numeroOrdenventa = 0;
 
-		// Graba la factura
-		DB::beginTransaction();
+		// Graba la factura (participa en transacción externa si ya hay una abierta, ej. gastronomía).
+		if (! $transaccionExterna) {
+			DB::beginTransaction();
+		}
 		try 
 		{
 			if ($codigoTipoTransaccion >= '200')
@@ -2600,8 +2679,13 @@ class FacturacionService
 			else
 				$tipoAnita = $tipotransaccion->abreviatura;
 
+			$fechaJornada = $fechaFactura;
+			if (is_array($opcionesEmision) && ! empty($opcionesEmision['fechajornada'])) {
+				$fechaJornada = $opcionesEmision['fechajornada'];
+			}
+
 			$venta = ['fecha' => $fechaFactura,
-				'fechajornada' => $fechaFactura,
+				'fechajornada' => $fechaJornada,
 				'empresa_id' => $puntoventa->empresa_id,
 				'tipotransaccion_id' => $tipotransaccion->id,
 				'puntoventa_id' => $puntoventa->id,
@@ -2640,12 +2724,14 @@ class FacturacionService
 				'ordenventa_id' => $ordenventa_id
 			];	
 
-			// Verifica si ya existe en anita
-			$ventaAnita = Self::buscaVentaAnita(substr($venta['codigo'], 0, 3), $letra, $puntoventa->codigo, $venta['numerocomprobante']);
-			// Si existe retorna con error
-			if ($ventaAnita == $venta['numerocomprobante'])
-			{
-				throw new Exception('El comprobante '.$venta['numerocomprobante'].' ya existe en ANITA');
+			if (! $omitirSincronizacionAnita) {
+				// Verifica si ya existe en anita
+				$ventaAnita = Self::buscaVentaAnita(substr($venta['codigo'], 0, 3), $letra, $puntoventa->codigo, $venta['numerocomprobante']);
+				// Si existe retorna con error
+				if ($ventaAnita == $venta['numerocomprobante'])
+				{
+					throw new Exception('El comprobante '.$venta['numerocomprobante'].' ya existe en Anita');
+				}
 			}
 
 			// Graba venta
@@ -2689,6 +2775,7 @@ class FacturacionService
 				}
 			} 
 			// Graba cuenta corriente
+			if (! $omitirCuentaCorriente) {
 			foreach($cuentacorriente as $cuota)
 			{
 				$data = [
@@ -2747,31 +2834,32 @@ class FacturacionService
 						throw new Exception('No pudo aplicar nota de crédito');
 				}
 			}
+			}
 			// Arma tabla de emision del comprobante
 			$numeroItem = 0;
 			$dataArticuloMovimiento = [];
 			foreach($dataFactura as $itemEmision)
 			{
-				if (isset($itemEmision['articulo_id']))
+				if (! $omitirMovimientoStock && isset($itemEmision['articulo_id']))
 				{
 					$dataArticuloMovimiento = [
 						'fecha' => $fechaFactura,
 						'fechajornada' => $fechaFactura,
-						'tipotransaccion_id' => $tipoTransaccion_id,
+						'tipotransaccion_id' => $tipotransaccion->id,
 						'venta_id' => $vta->id,
-						'pedido_combinacion_id' => $itemEmision['pedido_combinacion_id'],
-						'ordentrabajo_id' => $itemEmision['ordentrabajo_id'],
+						'pedido_combinacion_id' => $itemEmision['pedido_combinacion_id'] ?? null,
+						'ordentrabajo_id' => $itemEmision['ordentrabajo_id'] ?? null,
 						'lote' => 0,
 						'articulo_id' => $itemEmision['articulo_id'],
-						'combinacion_id' => $itemEmision['combinacion_id'],
-						'codigocombinacion' => $itemEmision['codigocombinacion'],
-						'modulo_id' => $itemEmision['modulo_id'],
+						'combinacion_id' => $itemEmision['combinacion_id'] ?? null,
+						'codigocombinacion' => $itemEmision['codigocombinacion'] ?? null,
+						'modulo_id' => $itemEmision['modulo_id'] ?? null,
 						'concepto' => $tipotransaccion->nombre,
 						'cantidad' => $itemEmision['cantidad'],
 						'precio' => $itemEmision['precio'],
 						'costo' => 0,
-						'despacho' => $itemEmision['despacho'],
-						'loteimportacion_id' => $itemEmision['loteimportacion_id'],
+						'despacho' => $itemEmision['despacho'] ?? null,
+						'loteimportacion_id' => $itemEmision['loteimportacion_id'] ?? null,
 						'descuento' => $itemEmision['descuento'],
 						'descuentointegrado' => $itemEmision['descuentointegrado'],
 						'moneda_id' => $itemEmision['moneda_id'],
@@ -2791,11 +2879,14 @@ class FacturacionService
 					'incluyeimpuesto' => $itemEmision['incluyeimpuesto'], 
 					'moneda_id' => $itemEmision['moneda_id'], 
 					'descuento' => $itemEmision['descuento'], 
-					'descuentointegrado' => $itemEmision['descuentointegrado']
+					'descuentointegrado' => $itemEmision['descuentointegrado'],
 				];
+				if (! empty($itemEmision['articulo_id'])) {
+					$dataEmision['articulo_id'] = $itemEmision['articulo_id'];
+				}
 				$venta_emision = $this->venta_emisionRepository->create($dataEmision);
 
-				if (isset($itemEmision['articulo_id']))
+				if (! $omitirMovimientoStock && isset($itemEmision['articulo_id']) && $dataArticuloMovimiento !== [])
 				{				
 					$dataTalle = [];
 					$articulo_movimiento = $this->articulo_movimientoService->
@@ -2804,31 +2895,56 @@ class FacturacionService
 				}
 			}
 			// Graba contabilidad
+			if (! $omitirContabilidad) {
 			Self::grabaAsientoContable($asientoContable, $puntoventa->empresa_id, $fechaFactura, $vta->id, 
 									$detalleContable, $centrocosto_id,
 									$moneda_id, $cotizacion, $signo, $cliente->cuentacontable_id,
 									substr($venta['codigo'],0,3), $letra, $puntoventa->codigo, $venta['numerocomprobante']);
+			}
+
+			$ret = [
+				'factura' => substr($venta['codigo'], 0, 3).' '.$letra.' '.$puntoventa->codigo.'-'.$venta['numerocomprobante'],
+				'error' => '',
+				'venta_id' => $vta->id,
+			];
 
 			if ($puntoventa->modofacturacion != 'M')
 			{
-				// Graba anita
-				$anita = self::grabaAnita($puntoventa->codigo, $letra, 0, 0,
-							$venta, $dataCAE, $conceptosTotales, $cuentacorriente, $dataFactura, $signo,
-							$codigoTipoTransaccion, null,
-							true, $numeroOrdenventa, $codigoCentrocosto, $referenciaFactura);
+				if (! $omitirSincronizacionAnita) {
+					// Graba anita
+					$anita = self::grabaAnita($puntoventa->codigo, $letra, 0, 0,
+								$venta, $dataCAE, $conceptosTotales, $cuentacorriente, $dataFactura, $signo,
+								$codigoTipoTransaccion, null,
+								true, $numeroOrdenventa, $codigoCentrocosto, $referenciaFactura);
 
-				if (isset($anita['error']))
-				{
-					if ($anita['error'] == 'Error')
-						throw new Exception('Error en grabacion anita. '.$anita['mensaje']);
+					if (isset($anita['error']))
+					{
+						if ($anita['error'] === 'Errvend') {
+							throw new Exception('Error en grabación Anita: el cliente no tiene vendedor asignado.');
+						}
 
-					if ($anita['error'] == 'Errvend')
-						throw new Exception('No tiene vendedor asignado.');
+						$detalle = trim((string) ($anita['mensaje'] ?? $anita['error'] ?? 'Error desconocido'));
+						throw new Exception('Error en grabación Anita: '.$detalle);
+					}
 				}
 
-				// Solicita generacion comprobante ARCA
-				Self::solicitaComprobanteARCA($empresa, $codigoTipoTransaccion, substr($venta['codigo'], 0, 3), 
-					$letra, $puntoventa, $venta['numerocomprobante'], $fechaFactura, $dataCAE, $vta->id);
+				if ($omitirSolicitudArcaCae) {
+					$ret['cae_pendiente'] = [
+						'empresa' => $empresa,
+						'codigo_tipo_transaccion' => $codigoTipoTransaccion,
+						'tipo_anita' => substr($venta['codigo'], 0, 3),
+						'letra' => $letra,
+						'puntoventa' => $puntoventa,
+						'numero_comprobante' => $numero,
+						'fecha_factura' => $fechaFactura,
+						'data_cae' => $dataCAE,
+						'venta_id' => $vta->id,
+					];
+				} else {
+					// Solicita CAE/CAEA en ARCA (último paso del flujo estándar).
+					Self::solicitaComprobanteARCA($empresa, $codigoTipoTransaccion, substr($venta['codigo'], 0, 3),
+						$letra, $puntoventa, $venta['numerocomprobante'], $fechaFactura, $dataCAE, $vta->id);
+				}
 			}
 
 			// Si tiene orden de venta y es nota de credito anula marca en OV
@@ -2839,20 +2955,25 @@ class FacturacionService
 					substr($venta['codigo'],0,3), $letra, $puntoventa->codigo, $venta['numerocomprobante'], $vta->id);
 			}
 
-			DB::commit();
+			if (! $transaccionExterna) {
+				DB::commit();
+			}
 
-			return ['factura' => substr($venta['codigo'],0,3).' '.$letra.' '.$puntoventa->codigo.'-'.$venta['numerocomprobante'], 'error' => ''];
+			return $ret;
 		} catch (\Exception $e) {
-			DB::rollback();
+			if (! $transaccionExterna) {
+				DB::rollback();
 
-			// Borra factura de anita
-			if ($venta['codigo'] ?? '')
-				self::borraAnita(substr($venta['codigo'], 0, 3), $letra, 
-									$puntoventa->codigo, $venta['numerocomprobante'], $empresa->codigo);
+				// Borra factura de anita
+				if ($venta['codigo'] ?? '') {
+					self::borraAnita(substr($venta['codigo'], 0, 3), $letra,
+						$puntoventa->codigo, $venta['numerocomprobante'], $empresa->codigo);
+				}
 
-			dd($e->getMessage());
+				return ['error' => $e->getMessage()];
+			}
 
-			return ['error' => $e->getMessage()];
+			throw $e;
 		}
 	}
 
@@ -3121,8 +3242,10 @@ class FacturacionService
 		}
 
         $vta = $apiAnita->apiCall($data);
-		if (strpos($vta, 'Error') !== false)
-			return ['error' => 'Error venta', 'mensaje' => $vta];
+		$errVta = ApiAnita::extraerMensajeError($vta);
+		if ($errVta !== null) {
+			return ['error' => 'Error', 'mensaje' => 'venta: '.$errVta];
+		}
 		// Graba venibr
 		foreach ($conceptostotales as $concepto)
 		{
@@ -3156,9 +3279,10 @@ class FacturacionService
 					}
 
 					$venibr = $apiAnita->apiCall($data);
-
-					if (strpos($venibr, 'Error') !== false)
-						return ['error' => 'Error venibr', 'mensaje' => $venibr];
+					$errVenibr = ApiAnita::extraerMensajeError($venibr);
+					if ($errVenibr !== null) {
+						return ['error' => 'Error', 'mensaje' => 'percepción IIBB (venibr): '.$errVenibr];
+					}
 				}
 			}
 			// Graba vengrav
@@ -3191,9 +3315,10 @@ class FacturacionService
 				}
 						
 				$vengrav = $apiAnita->apiCall($data);
-
-				if (strpos($vengrav, 'Error') !== false)
-					return ['error' => 'Error vengrav', 'mensaje' => $vengrav];	
+				$errVengrav = ApiAnita::extraerMensajeError($vengrav);
+				if ($errVengrav !== null) {
+					return ['error' => 'Error', 'mensaje' => 'IVA (vengrav): '.$errVengrav];
+				}
 			}
 		}
 		
@@ -3265,9 +3390,10 @@ class FacturacionService
 			}
 
 			$climov = $apiAnita->apiCall($data);
-
-			if (strpos($climov, 'Error') !== false)
-				return ['error' => 'Error climov', 'mensaje' => $climov];				
+			$errClimov = ApiAnita::extraerMensajeError($climov);
+			if ($errClimov !== null) {
+				return ['error' => 'Error', 'mensaje' => 'cuenta corriente (climov): '.$errClimov];
+			}
 		}
 	
 		$leyenda = '';
@@ -3331,9 +3457,10 @@ class FacturacionService
 		}
 
 		$comprob = $apiAnita->apiCall($data);
-		
-		if (strpos($comprob, 'Error') !== false)
-			return ['error' => 'Error comprob', 'mensaje' => $comprob];				
+		$errComprob = ApiAnita::extraerMensajeError($comprob);
+		if ($errComprob !== null) {
+			return ['error' => 'Error', 'mensaje' => 'comprobante (comprob): '.$errComprob];
+		}
 
 		// Agrupa por medida / partida para anita
 		$flGrabaStock = false;
@@ -3408,8 +3535,8 @@ class FacturacionService
 						$dataItem[] = [
 							'partida' => 0,
 							'cantidad' => $item['cantidad'],
-							'pieza' => $item['pieza'],
-							'caja' => $item['caja'],
+							'pieza' => $item['pieza'] ?? 0,
+							'caja' => $item['caja'] ?? 0,
 							'precio' => $precio,
 							'descuento' => $item['descuento'],
 							'impuesto_id' => $item['impuesto_id'],
@@ -3814,11 +3941,12 @@ class FacturacionService
             ' , 
             'whereArmado' => " WHERE clico_cliente='".$cliente."' and clico_marca = '".$marca."' " 
         );
-        $dataAnita = json_decode($apiAnita->apiCall($data));
+        $fila = ApiAnita::primeraFilaLista($apiAnita->apiCall($data));
 
-		if (isset($dataAnita[0]))
-			return $dataAnita[0]->clico_vendedor;
-		
+		if ($fila !== null && isset($fila->clico_vendedor)) {
+			return $fila->clico_vendedor;
+		}
+
 		return 0;
 	}
 
@@ -3840,11 +3968,18 @@ class FacturacionService
 		{
 			$data['path_sistema'] = '/usr2/villafranca';
 		}							
-		$dataAnita = json_decode($apiAnita->apiCall($data));
+		$raw = $apiAnita->apiCall($data);
+		$err = ApiAnita::extraerMensajeError($raw);
+		if ($err !== null) {
+			throw new Exception('Error en grabación Anita (consulta comprobante): '.$err);
+		}
 
-		if (count($dataAnita) > 0)
-			return $dataAnita[0]->ven_nro;
-		
+		// Sin filas = comprobante no existe aún en Informix (caso esperado antes de grabar).
+		$fila = ApiAnita::primeraFilaLista((string) $raw);
+		if ($fila !== null && isset($fila->ven_nro)) {
+			return $fila->ven_nro;
+		}
+
 		return 0;
 	}
 
@@ -3864,11 +3999,12 @@ class FacturacionService
 		{
 			$data['path_sistema'] = '/usr2/villafranca';
 		}							
-		$dataAnita = json_decode($apiAnita->apiCall($data));
+		$filaTipo = ApiAnita::primeraFilaLista($apiAnita->apiCall($data));
 
 		$tipoComp = '01';
-		if ($dataAnita)
-			$tipoComp = $dataAnita[0]->tcomp_tipo_comp;
+		if ($filaTipo !== null && isset($filaTipo->tcomp_tipo_comp)) {
+			$tipoComp = $filaTipo->tcomp_tipo_comp;
+		}
 
 		$apiAnita = new ApiAnita();
         $data = array( 'acc' => 'list', 
@@ -3885,11 +4021,12 @@ class FacturacionService
 		{
 			$data['path_sistema'] = '/usr2/villafranca';
 		}							
-		$dataAnita = json_decode($apiAnita->apiCall($data));
+		$filaUltimo = ApiAnita::primeraFilaLista($apiAnita->apiCall($data));
 
-		if (count($dataAnita) > 0)
-			return $dataAnita[0]->ultimonumero;
-		
+		if ($filaUltimo !== null && isset($filaUltimo->ultimonumero)) {
+			return $filaUltimo->ultimonumero;
+		}
+
 		return 0;
 	}
 
@@ -4148,9 +4285,12 @@ class FacturacionService
 		{
 			$data['path_sistema'] = '/usr2/villafranca';
 		}					
-		$dataAnita = json_decode($apiAnita->apiCall($data));
+		$fila = ApiAnita::primeraFilaLista($apiAnita->apiCall($data));
+		if ($fila === null || ! isset($fila->num_ult_numero)) {
+			throw new Exception('No pudo leer numerador de operación en Anita');
+		}
 
-		$numeroOperacion = $dataAnita[0]->num_ult_numero + 1;
+		$numeroOperacion = (int) $fila->num_ult_numero + 1;
 
 		// Actualiza numero
 		$apiAnita = new ApiAnita();
@@ -4657,6 +4797,7 @@ class FacturacionService
         $puntoventadefault_id = cache()->get(generaKey('puntoventa'));
 
         $urlOrigen = request()->headers->get('referer');
+        $consultaFacturasDia = request()->query('origen') === 'gastronomia_facturas_dia';
 
         return view('ventas.factura.editar', compact('data', 
 			'mventa_query', 'modulo_query', 
@@ -4664,7 +4805,7 @@ class FacturacionService
 			'tipotransaccion_query', 'tipotransacciondefault_id', 'puntoventa_query', 'puntoventadefault_id',
             'deposito_query', 'lote_query', 'cliente_query','vendedor_query', 'condicionventa_query',
             'transporte_query', 'formapago_query', 'incoterm_query', 'flGeneraNotaDeCredito', 'moneda_query',
-			'actividad_arca_query', 'urlOrigen')); 
+			'actividad_arca_query', 'urlOrigen', 'consultaFacturasDia')); 
 	}
 
 	/*
@@ -4704,6 +4845,26 @@ class FacturacionService
         $lote_query = $this->loteRepository->all();
     }
 
+	/**
+	 * Completa la solicitud de CAE/CAEA pendiente (gastronomía u otros flujos con omitir_solicitud_arca_cae).
+	 *
+	 * @param  array<string, mixed>  $caePendiente
+	 */
+	public function completarSolicitudCaePendiente(array $caePendiente): void
+	{
+		$this->solicitaComprobanteARCA(
+			$caePendiente['empresa'],
+			$caePendiente['codigo_tipo_transaccion'],
+			$caePendiente['tipo_anita'],
+			$caePendiente['letra'],
+			$caePendiente['puntoventa'],
+			$caePendiente['numero_comprobante'],
+			$caePendiente['fecha_factura'],
+			$caePendiente['data_cae'],
+			$caePendiente['venta_id'],
+		);
+	}
+
 	// Solicita CAE o CAEA
 	private function solicitaComprobanteARCA($empresa, $codigoTipoTransaccion, $tipoAnita, $letra, $puntoventa, $numeroComprobante, $fechaFactura, $dataCAE, $venta_id)
 	{
@@ -4713,20 +4874,44 @@ class FacturacionService
 		{
 			case 'C':
 			case 'E':
-				$cae = $this->facturaelectronicaService->solicitaCAE(
-					$empresa->nroinscripcion,
-					$codigoTipoTransaccion,
-					$puntoventa,
-					$dataCAE);
+				try {
+					$cae = $this->facturaelectronicaService->solicitaCAE(
+						$empresa->nroinscripcion,
+						$codigoTipoTransaccion,
+						$puntoventa,
+						$dataCAE);
+				} catch (\Throwable $e) {
+					$cae = ['Error' => $e->getMessage()];
+				}
 				$flGrabaCae = true;
 
 				//$cae = ['cae' => '74040779002259', 'fechavencimientocae' => '20240201'];
-				
-				if (isset($cae['Error']))
-					throw new Exception('No pudo asignar CAE.'.$cae['Error']);
 
-				if ($cae['fechavencimientocae'] == 0)
+				if (isset($cae['Error'])) {
+					$msgError = (string) $cae['Error'];
+					if (\App\Support\Ventas\ArcaWsfeEmisionResiliencia::esFallaComunicacionSinRespuestaClara($msgError)) {
+						$caeRecuperado = $this->recuperarCaeTrasFallaComunicacion(
+							$empresa,
+							$codigoTipoTransaccion,
+							$puntoventa,
+							(int) $numeroComprobante,
+						);
+						if ($caeRecuperado !== null) {
+							$cae = $caeRecuperado;
+						} else {
+							throw new Exception(
+								'No hubo respuesta de ARCA al solicitar el CAE del comprobante '.$numeroComprobante
+								.'. Se consultó el último número autorizado y ARCA no confirma ese comprobante. Detalle: '.$msgError
+							);
+						}
+					} else {
+						throw new Exception('No pudo asignar CAE. '.$msgError);
+					}
+				}
+
+				if (($cae['fechavencimientocae'] ?? 0) == 0) {
 					throw new Exception('No pudo asignar CAE');
+				}
 				break;
 			case 'A':
 				if ($empresa->nroinscripcion)
@@ -4763,6 +4948,44 @@ class FacturacionService
 		}	
 
 		return 'Success';
+	}
+
+	/**
+	 * Tras falla de comunicación al pedir CAE: consulta último comprobante autorizado y, si coincide, recupera CAE.
+	 *
+	 * @return array{cae:string,fechavencimientocae:string}|null
+	 */
+	private function recuperarCaeTrasFallaComunicacion($empresa, $codigoTipoTransaccion, $puntoventa, int $numeroComprobante): ?array
+	{
+		if (! in_array($puntoventa->modofacturacion, ['C', 'E'], true)) {
+			return null;
+		}
+
+		$ultimo = $this->facturaelectronicaService->traeUltimoNumeroComprobante(
+			$empresa->nroinscripcion,
+			$codigoTipoTransaccion,
+			$puntoventa,
+		);
+
+		if ($ultimo === -1 || (int) $ultimo < $numeroComprobante) {
+			return null;
+		}
+
+		$consulta = $this->facturaelectronicaService->consultaCompEnviado(
+			$empresa->nroinscripcion,
+			$codigoTipoTransaccion,
+			$puntoventa,
+			$numeroComprobante,
+		);
+
+		if (! is_array($consulta) || empty($consulta['cae'])) {
+			return null;
+		}
+
+		return [
+			'cae' => (string) $consulta['cae'],
+			'fechavencimientocae' => (string) ($consulta['fechavencimientocae'] ?? ''),
+		];
 	}
 
 	// Genera un Remito
