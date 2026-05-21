@@ -262,6 +262,11 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Stock\Tipotransaccion_StockRepositoryInterface',
+            'App\Repositories\Stock\Tipotransaccion_StockRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Stock\Articulo_CostoRepositoryInterface',
             'App\Repositories\Stock\Articulo_CostoRepository',
         );

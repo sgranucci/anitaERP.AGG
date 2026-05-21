@@ -6,6 +6,9 @@ use Symfony\Component\Process\Exception\ProcessFailedException;
 use App\Repositories\Stock\Articulo_MovimientoRepositoryInterface;
 use App\Repositories\Stock\Articulo_Movimiento_TalleRepositoryInterface;
 use App\Repositories\Ventas\TipotransaccionRepositoryInterface;
+use App\Repositories\Stock\Tipotransaccion_StockRepositoryInterface;
+use App\Models\Ventas\Tipotransaccion;
+use App\Models\Stock\Tipotransaccion_Stock;
 use App\Repositories\Ventas\Ordentrabajo_TareaRepositoryInterface;
 use App\Queries\Stock\Articulo_MovimientoQueryInterface;
 use App\Models\Stock\Modulo;
@@ -19,6 +22,7 @@ class Articulo_MovimientoService
 	protected $articulo_movimientoRepository;
 	protected $articulo_movimiento_talleRepository;
 	protected $tipotransaccionRepository;
+	protected $tipotransaccionStockRepository;
 	protected $articulo_movimientoQuery;
 	protected $ordentrabajo_tareaRepository;
 
@@ -26,6 +30,7 @@ class Articulo_MovimientoService
 								Articulo_MovimientoRepositoryInterface $articulo_movimientorepository,
 								Articulo_Movimiento_TalleRepositoryInterface $articulo_movimiento_tallerepository,
 								TipotransaccionRepositoryInterface $tipotransaccionrepository,
+								Tipotransaccion_StockRepositoryInterface $tipotransaccionstockrepository,
 								Ordentrabajo_tareaRepositoryInterface $ordentrabajo_tarearepository,
 								Articulo_MovimientoQueryInterface $articulo_movimientoquery
 								)
@@ -34,18 +39,25 @@ class Articulo_MovimientoService
 		$this->articulo_movimiento_talleRepository = $articulo_movimiento_tallerepository;
 		$this->articulo_movimientoQuery = $articulo_movimientoquery;
 		$this->tipotransaccionRepository = $tipotransaccionrepository;
+		$this->tipotransaccionStockRepository = $tipotransaccionstockrepository;
 		$this->ordentrabajo_tareaRepository = $ordentrabajo_tarearepository;
     }
 	
 	public function guardaArticuloMovimiento($funcion, $dataMovimiento, $dataTalle)
 	{
-		// Lee tipo de transaccion
-		$tipotransaccion = $this->tipotransaccionRepository->find($dataMovimiento['tipotransaccion_id']);
-		// No usa transacciones porque se llama desde otro servicio con transaccion activa
+		$tipotransaccion = $this->resolveTipoTransaccion($dataMovimiento);
 		if ($tipotransaccion)
 		{
 			$signoCantidad = $dataMovimiento['signo_cantidad'] ?? $tipotransaccion->signo;
 			unset($dataMovimiento['signo_cantidad']);
+			unset($dataMovimiento['tipotransaccion_id'], $dataMovimiento['tipotransaccion_stock_id']);
+			if ($tipotransaccion instanceof Tipotransaccion_Stock) {
+				$dataMovimiento['tipotransaccion_stock_id'] = $tipotransaccion->id;
+				$dataMovimiento['tipotransaccion_id'] = null;
+			} else {
+				$dataMovimiento['tipotransaccion_id'] = $tipotransaccion->id;
+				$dataMovimiento['tipotransaccion_stock_id'] = null;
+			}
 			$dataMovimiento['cantidad'] = $dataMovimiento['cantidad'] * ($signoCantidad == 'S' ? 1 : -1);
 			$dataMovimiento['precio'] = str_replace(',', '', $dataMovimiento['precio']);
 
@@ -126,9 +138,9 @@ class Articulo_MovimientoService
 		
 			if ($articulo_movimiento)
 			{
-				$tipotransaccion = $this->tipotransaccionRepository->find($articulo_movimiento->tipotransaccion_id);
+				$tipotransaccion = $this->resolveTipoTransaccionDesdeMovimiento($articulo_movimiento);
 
-				$data['cantidad'] = $data['cantidad']*($tipotransaccion->signo == 'S' ? 1 : -1);	
+				$data['cantidad'] = $data['cantidad']*($tipotransaccion->signo == 'S' ? 1 : -1);
 			}
 		}
 		return $this->articulo_movimientoRepository->updatePorPedidoCombinacionId($pedido_combinacion_id, $data);
@@ -148,9 +160,9 @@ class Articulo_MovimientoService
 			{
 				$data['articulo_movimiento_id'] = $articulo_movimiento->id;
 
-				$tipotransaccion = $this->tipotransaccionRepository->find($articulo_movimiento->tipotransaccion_id);
+				$tipotransaccion = $this->resolveTipoTransaccionDesdeMovimiento($articulo_movimiento);
 				if (array_key_exists('cantidad', $data) && $data['cantidad'] > 0)
-					$data['cantidad'] = $data['cantidad']*($tipotransaccion->signo == 'S' ? 1 : -1);	
+					$data['cantidad'] = $data['cantidad']*($tipotransaccion->signo == 'S' ? 1 : -1);
 				 
 				$articulo_movimiento_talle = $this->articulo_movimiento_talleRepository->create($data);
 			}
@@ -161,7 +173,7 @@ class Articulo_MovimientoService
 		{
 			$articulo_movimiento = $this->articulo_movimientoRepository->find($data['articulo_movimiento_id']);
 
-			$tipotransaccion = $this->tipotransaccionRepository->find($articulo_movimiento->tipotransaccion_id);
+			$tipotransaccion = $this->resolveTipoTransaccionDesdeMovimiento($articulo_movimiento);
 
 			if (array_key_exists('cantidad', $data))
 			{
@@ -177,6 +189,35 @@ class Articulo_MovimientoService
 		}
 
 		return $articulo_movimiento_talle;
+	}
+
+	/**
+	 * @param  array<string, mixed>  $dataMovimiento
+	 */
+	private function resolveTipoTransaccion(array $dataMovimiento): Tipotransaccion|Tipotransaccion_Stock
+	{
+		if (! empty($dataMovimiento['tipotransaccion_stock_id'])) {
+			return $this->tipotransaccionStockRepository->find((int) $dataMovimiento['tipotransaccion_stock_id']);
+		}
+
+		if (! empty($dataMovimiento['tipotransaccion_id'])) {
+			return $this->tipotransaccionRepository->find((int) $dataMovimiento['tipotransaccion_id']);
+		}
+
+		throw new \Exception('No encontro tipo de transaccion.');
+	}
+
+	private function resolveTipoTransaccionDesdeMovimiento($articulo_movimiento): Tipotransaccion|Tipotransaccion_Stock
+	{
+		if (! empty($articulo_movimiento->tipotransaccion_stock_id)) {
+			return $this->tipotransaccionStockRepository->find((int) $articulo_movimiento->tipotransaccion_stock_id);
+		}
+
+		if (! empty($articulo_movimiento->tipotransaccion_id)) {
+			return $this->tipotransaccionRepository->find((int) $articulo_movimiento->tipotransaccion_id);
+		}
+
+		throw new \Exception('No encontro tipo de transaccion.');
 	}
 
 	// Genera datos reporte stock de OT

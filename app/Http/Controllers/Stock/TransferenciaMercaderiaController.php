@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Stock;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionTransferenciaMercaderia;
 use App\Models\Stock\Depmae;
-use App\Repositories\Ventas\TipotransaccionRepository;
+use App\Repositories\Stock\Tipotransaccion_StockRepository;
 use App\Services\Stock\TransferenciaMercaderiaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -14,14 +14,14 @@ class TransferenciaMercaderiaController extends Controller
 {
     public function __construct(
         private TransferenciaMercaderiaService $transferenciaService,
-        private TipotransaccionRepository $tipotransaccionRepository,
+        private Tipotransaccion_StockRepository $tipotransaccionStockRepository,
     ) {}
 
     public function index()
     {
         can('crear-transferencia-mercaderia');
 
-        $tipotransacciones = $this->tipotransaccionRepository->all(['T'], ['A']);
+        $tipotransacciones = $this->tipotransaccionStockRepository->all(['T'], ['A']);
         $defaults = $this->transferenciaService->defaultsUsuario();
 
         $depSalida = $this->resolverDepositoDefault($defaults['deposito_salida_id'] ?? null);

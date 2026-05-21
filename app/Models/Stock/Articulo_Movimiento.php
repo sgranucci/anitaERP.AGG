@@ -12,7 +12,7 @@ use App\Models\Ventas\Venta;
 class Articulo_Movimiento extends Model
 {
     //use SoftDeletes;
-    protected $fillable = ['fecha','fechajornada', 'tipotransaccion_id', 'venta_id', 'venta_emision_id', 'movimientostock_id',
+    protected $fillable = ['fecha','fechajornada', 'tipotransaccion_id', 'tipotransaccion_stock_id', 'venta_id', 'venta_emision_id', 'movimientostock_id',
                         'pedido_combinacion_id', 'ordentrabajo_id', 'lote', 'articulo_id', 'combinacion_id', 
                         'concepto', 'modulo_id', 'cantidad', 
                         'pieza', 'caja',

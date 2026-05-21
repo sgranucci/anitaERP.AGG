@@ -17,6 +17,7 @@ use App\Repositories\Ventas\Ordentrabajo_Combinacion_TalleRepositoryInterface;
 use App\Repositories\Ventas\Ordentrabajo_TareaRepositoryInterface;
 use App\Repositories\Ventas\PuntoventaRepositoryInterface;
 use App\Repositories\Ventas\TipotransaccionRepositoryInterface;
+use App\Repositories\Stock\Tipotransaccion_StockRepositoryInterface;
 use App\Repositories\Ventas\VentaRepositoryInterface;
 use App\Repositories\Ventas\Venta_EmisionRepositoryInterface;
 use App\Repositories\Ventas\Venta_ImpuestoRepositoryInterface;
@@ -109,6 +110,7 @@ class FacturacionService
 	protected $cliente_entregaRepository;
 	protected $puntoventaRepository;
 	protected $tipotransaccionRepository;
+	protected $tipotransaccionStockRepository;
 	protected $condicionivaRepository;
 	protected $transporteRepository;
 	protected $incotermRepository;
@@ -163,6 +165,7 @@ class FacturacionService
 								Ordentrabajo_TareaRepositoryInterface $ordentrabajotarearepository,
 								TareaRepositoryInterface $tarearepository,
 								TipotransaccionRepositoryInterface $tipotransaccionrepository,
+								Tipotransaccion_StockRepositoryInterface $tipotransaccionstockrepository,
 								CondicionivaRepositoryInterface $condicionivarepository,
 								PuntoventaRepositoryInterface $puntoventarepository,
 								PedidoQueryInterface $pedidoquery,
@@ -210,6 +213,7 @@ class FacturacionService
         $this->ordentrabajo_tareaRepository = $ordentrabajotarearepository;
 		$this->tareaRepository = $tarearepository;
 		$this->tipotransaccionRepository = $tipotransaccionrepository;
+		$this->tipotransaccionStockRepository = $tipotransaccionstockrepository;
 		$this->condicionivaRepository = $condicionivarepository;
 		$this->puntoventaRepository = $puntoventarepository;
         $this->pedidoQuery = $pedidoquery;
@@ -1536,10 +1540,52 @@ class FacturacionService
 			return 'Error con punto de venta asignado';
 	}
 
+	/**
+	 * Convierte kilos/pesada y descuentoventa_ids (grilla pedido) al formato de calculaFacturaGeneral.
+	 */
+	protected function normalizaItemsFacturaGeneralDesdePedido(array $data): array
+	{
+		if (! facturaUsaLayoutItemsPedido()) {
+			return $data;
+		}
+
+		$kilos = $data['kilos'] ?? null;
+		if (! is_array($kilos)) {
+			return $data;
+		}
+
+		$pesadas = $data['pesadas'] ?? [];
+		$descuentoventaIds = $data['descuentoventa_ids'] ?? [];
+		$cantidades = [];
+		$descuentosLinea = [];
+
+		foreach ($kilos as $i => $kilo) {
+			$pesada = $pesadas[$i] ?? '';
+			$valor = ($kilo !== '' && $kilo !== null) ? $kilo : $pesada;
+			$cantidades[] = $valor;
+
+			$descPct = 0.;
+			if (! empty($descuentoventaIds[$i])) {
+				$descuentoventa = $this->descuentoventaRepository->find((int) $descuentoventaIds[$i]);
+				if ($descuentoventa) {
+					$descPct = (float) $descuentoventa->porcentajedescuento;
+				}
+			}
+			$descuentosLinea[$i] = $descPct;
+		}
+
+		$data['cantidades'] = $cantidades;
+		$data['_descuentos_linea_item'] = $descuentosLinea;
+
+		return $data;
+	}
+
 	// Calcula factura general
 
 	public function calculaFacturaGeneral($data)
 	{
+		$data = $this->normalizaItemsFacturaGeneralDesdePedido($data);
+
 		// Guarda tipo de transaccion y punto de venta en cache
 		Cache::forever(generaKey('tipotransaccion'), $data['tipotransaccion_id']);
 		Cache::forever(generaKey('puntoventa'), $data['puntoventa_id']);
@@ -1649,8 +1695,13 @@ class FacturacionService
 				$incluyeImpuesto = $incluyePorLista[$listaprecio_id];
 			}
 
-			// Lee el descuento 
-			$this->descuentoLinea = $data['descuentolinea'];
+			// Lee el descuento por línea (grilla pedido) o descuento global
+			$descuentosLineaItem = $data['_descuentos_linea_item'] ?? null;
+			if (is_array($descuentosLineaItem) && array_key_exists($offItem, $descuentosLineaItem)) {
+				$this->descuentoLinea = (float) $descuentosLineaItem[$offItem];
+			} else {
+				$this->descuentoLinea = (float) ($data['descuentolinea'] ?? 0);
+			}
 
 			$precioUnitario = $precios[$offItem];
 			$cantidad = $cantidades[$offItem];
@@ -1725,6 +1776,8 @@ class FacturacionService
 
 	public function generaComprobanteGeneral(array $data)
 	{
+		$data = $this->normalizaItemsFacturaGeneralDesdePedido($data);
+
 		// Guarda tipo de transaccion y punto de venta en cache
 		Cache::forever(generaKey('tipotransaccion'), $data['tipotransaccion_id']);
 		Cache::forever(generaKey('puntoventa'), $data['puntoventa_id']);
@@ -4968,7 +5021,8 @@ class FacturacionService
 
 				if (isset($cae['Error'])) {
 					$msgError = (string) $cae['Error'];
-					if (\App\Support\Ventas\ArcaWsfeEmisionResiliencia::esFallaComunicacionSinRespuestaClara($msgError)) {
+					$wsPv = (string) ($puntoventa->webservice ?? '');
+					if (\App\Support\Ventas\ArcaWsfeEmisionResiliencia::esFallaComunicacionSinRespuestaClara($msgError, $wsPv)) {
 						$caeRecuperado = $this->recuperarCaeTrasFallaComunicacion(
 							$empresa,
 							$codigoTipoTransaccion,
@@ -4995,10 +5049,33 @@ class FacturacionService
 			case 'A':
 				if ($empresa->nroinscripcion)
 				{
-					$cae = $this->facturaelectronicaService->buscaCAEA($empresa->nroinscripcion, $fechaFactura);
+					$wsPv = (string) ($puntoventa->webservice ?? '');
+					if ($wsPv === 'wsmtxca' && (string) config('arca_mtxca.transporte', 'afip_php') === 'soap') {
+						try {
+							$cae = $this->facturaelectronicaService->solicitaCAE(
+								$empresa->nroinscripcion,
+								$codigoTipoTransaccion,
+								$puntoventa,
+								$dataCAE);
+						} catch (\Throwable $e) {
+							$cae = ['Error' => $e->getMessage()];
+						}
+						if (isset($cae['Error'])) {
+							$msgError = (string) $cae['Error'];
+							if (\App\Support\Ventas\ArcaWsfeEmisionResiliencia::esFallaComunicacionSinRespuestaClara($msgError, $wsPv)) {
+								throw new Exception(
+									'No hubo respuesta de ARCA al informar el comprobante CAEA '.$numeroComprobante.'. Detalle: '.$msgError
+								);
+							}
+							throw new Exception('No pudo informar comprobante CAEA (MTXCA). '.$msgError);
+						}
+					} else {
+						$cae = $this->facturaelectronicaService->buscaCAEA($empresa->nroinscripcion, $fechaFactura);
 
-					if (isset($cae['Error']))
-						throw new Exception('No pudo asignar CAEA, no esta pedido para la quincena');
+						if (isset($cae['Error'])) {
+							throw new Exception('No pudo asignar CAEA, no esta pedido para la quincena');
+						}
+					}
 				}
 				else
 					throw new Exception('No pudo asignar CAEA, no tiene CUIT cargado');
@@ -5084,7 +5161,8 @@ class FacturacionService
 		if ($totalComprobante == 0.)
 			return ['error' => 'Factura en 0'];
 
-		$data['tipotransaccion_id'] = config('facturacion.TIPO_REMITO_ID');
+		$data['tipotransaccion_stock_id'] = $this->tipotransaccionStockRepository
+			->findIdPorAbreviatura(config('facturacion.TIPO_REMITO'));
 		$data['lote'] = '';
 
 		$numeroRemito = $this->ventaRepository->traeUltimoNumeroRemito(config('facturacion.TIPO_REMITO'),

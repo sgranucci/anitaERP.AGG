@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Ventas\Puntoventa;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -34,6 +35,7 @@ class ValidacionPuntoventa extends FormRequest
                 Rule::unique('puntoventa', 'codigo')->where(fn ($q) => $q->where('empresa_id', $this->empresa_id))->ignore($id),
             ],
             'empresa_id' => 'required',
+            'webservice' => ['nullable', Rule::in(array_keys(Puntoventa::$enumWebservice))],
         ];
     }
 }

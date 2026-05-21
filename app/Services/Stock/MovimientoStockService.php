@@ -4,7 +4,7 @@ namespace App\Services\Stock;
 use App\Repositories\Stock\ArticuloRepositoryInterface;
 use App\Repositories\Stock\MovimientoStockRepositoryInterface;
 use App\Services\Stock\Articulo_MovimientoService;
-use App\Repositories\Ventas\TipotransaccionRepositoryInterface;
+use App\Repositories\Stock\Tipotransaccion_StockRepositoryInterface;
 use App\Repositories\Ventas\PedidoRepositoryInterface;
 use App\Repositories\Ventas\Pedido_ArticuloRepositoryInterface;
 use App\Models\Stock\Talle;
@@ -14,7 +14,7 @@ use DB;
 class MovimientoStockService 
 {
 	protected $movimientostockRepository;
-	protected $tipotransaccionRepository;
+	protected $tipotransaccionStockRepository;
 	protected $articulo_movimientoService;
 	protected $articuloRepository;
 	protected $pedidoRepository;
@@ -23,7 +23,7 @@ class MovimientoStockService
     public function __construct(MovimientoStockRepositoryInterface $movimientostockrepository,
 								ArticuloRepositoryInterface $articulorepository,
 								Articulo_MovimientoService $articulo_movimientoservice,
-								TipotransaccionRepositoryInterface $tipotransaccionrepository,
+								Tipotransaccion_StockRepositoryInterface $tipotransaccionstockrepository,
 								PedidoRepositoryInterface $pedidoRepository,
 								Pedido_ArticuloRepositoryInterface $pedido_articuloRepository
 								)
@@ -31,7 +31,7 @@ class MovimientoStockService
         $this->movimientostockRepository = $movimientostockrepository;
 		$this->articuloRepository = $articulorepository;
 		$this->articulo_movimientoService = $articulo_movimientoservice;
-		$this->tipotransaccionRepository = $tipotransaccionrepository;
+		$this->tipotransaccionStockRepository = $tipotransaccionstockrepository;
 		$this->pedidoRepository = $pedidoRepository;
 		$this->pedido_articuloRepository = $pedido_articuloRepository;
     }
@@ -69,11 +69,13 @@ class MovimientoStockService
 		DB::beginTransaction();
 		try 
 		{
-			// Lee el tipo de transaccion
-			$tipotransaccion = $this->tipotransaccionRepository->find($data['tipotransaccion_id']);
+			$tipotransaccionStockId = $this->resolveTipotransaccionStockId($data);
+			$data['tipotransaccion_stock_id'] = $tipotransaccionStockId;
+
+			$tipotransaccion = $this->tipotransaccionStockRepository->find($tipotransaccionStockId);
 
 			if (!$tipotransaccion)
-				throw new Exception('No puede leer tipo de transacción');
+				throw new Exception('No puede leer tipo de transacción de stock');
 
 			$signoCantidadMovimiento = $data['signo_cantidad'] ?? $tipotransaccion->signo;
 
@@ -164,7 +166,7 @@ class MovimientoStockService
 						'fecha' => $data['fecha'],
 						'fechajornada' => $data['fecha'],
 						'signo_cantidad' => $signoCantidadMovimiento,
-						'tipotransaccion_id' => $data['tipotransaccion_id'],
+						'tipotransaccion_stock_id' => $tipotransaccionStockId,
 						'movimientostock_id' => $movimientostock_id,
 						'deposito_id' => $data['deposito_id'],
 						'venta_id' => null,
@@ -247,6 +249,19 @@ class MovimientoStockService
 		}
 		
 		return ['id'=>$movimientostock_id, 'codigo'=>$data['codigo']];
+	}
+
+	private function resolveTipotransaccionStockId(array $data): int
+	{
+		if (! empty($data['tipotransaccion_stock_id'])) {
+			return (int) $data['tipotransaccion_stock_id'];
+		}
+
+		if (! empty($data['tipotransaccion_id'])) {
+			return (int) $data['tipotransaccion_id'];
+		}
+
+		throw new \Exception('Debe indicar tipo de transacción de stock');
 	}
 
 	public function borraMovimientoStock($id)

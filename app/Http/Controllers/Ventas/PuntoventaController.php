@@ -66,11 +66,11 @@ class PuntoventaController extends Controller
     {
         can('crear-puntos-de-venta');
         $this->armaTablasVista($pais_query, $provincia_query, $modofacturacionEnum,
-            $estadoEnum, $empresa_query, $actividad_arca_query);
+            $estadoEnum, $empresa_query, $actividad_arca_query, $webserviceEnum);
 
         return view('ventas.puntoventa.crear', compact('pais_query', 'provincia_query',
             'empresa_query', 'modofacturacionEnum',
-            'estadoEnum', 'actividad_arca_query'));
+            'estadoEnum', 'actividad_arca_query', 'webserviceEnum'));
     }
 
     /**
@@ -97,11 +97,11 @@ class PuntoventaController extends Controller
         can('editar-tipos-transaccion');
         $data = $this->repository->findOrFail($id);
         $this->armaTablasVista($pais_query, $provincia_query, $modofacturacionEnum,
-            $estadoEnum, $empresa_query, $actividad_arca_query);
+            $estadoEnum, $empresa_query, $actividad_arca_query, $webserviceEnum);
 
         return view('ventas.puntoventa.editar', compact('data', 'pais_query', 'provincia_query',
             'empresa_query', 'modofacturacionEnum',
-            'estadoEnum', 'actividad_arca_query'));
+            'estadoEnum', 'actividad_arca_query', 'webserviceEnum'));
     }
 
     /**
@@ -197,13 +197,14 @@ class PuntoventaController extends Controller
     }
 
     private function armaTablasVista(&$pais_query, &$provincia_query, &$modofacturacion_enum,
-        &$estado_enum, &$empresa_query, &$actividad_arca_query)
+        &$estado_enum, &$empresa_query, &$actividad_arca_query, &$webservice_enum)
     {
         $pais_query = Pais::orderBy('nombre')->get();
         $provincia_query = Provincia::orderBy('nombre')->get();
         $empresa_query = Empresa::orderBy('nombre')->get();
         $modofacturacion_enum = Puntoventa::$enumModoFacturacion;
         $estado_enum = Puntoventa::$enumEstado;
+        $webservice_enum = Puntoventa::$enumWebservice;
         $actividad_arca_query = $this->actividad_arcaRepository->all();
     }
 }

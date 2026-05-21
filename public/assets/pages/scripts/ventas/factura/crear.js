@@ -60,36 +60,75 @@
 	var flCrear;
 	var flModificaAsiento;
 
+	window.FL_FACTURA_LAYOUT_PEDIDO = window.FL_FACTURA_LAYOUT_PEDIDO || (
+		document.querySelector('#datosfactura') &&
+		document.querySelector('#datosfactura').dataset.layoutItemsPedido === '1'
+	);
+
+	function guardarPreferenciasFactura() {
+		if (!window.FACTURA_URLS || !window.FACTURA_URLS.preferencias) {
+			return;
+		}
+		$.post(window.FACTURA_URLS.preferencias, {
+			_token: $('meta[name="csrf-token"]').attr('content'),
+			tipotransaccion_id: $('#tipotransaccion_id').val() || '',
+			puntoventa_id: $('#puntoventa_id').val() || ''
+		});
+	}
+
 	// Realiza submit
 	function subm()
 	{
         var tipotransaccion_id = $("#tipotransaccion_id").val();
+		var puntoventa_id = $("#puntoventa_id").val();
 
         if (tipotransaccion_id == '')
         {
-            alert('No puede grabar sin un tipo de transacción');
+            alert('Debe elegir un tipo de transacción');
             return;
         }
+
+		if (puntoventa_id == '' || puntoventa_id == null)
+		{
+			alert('Debe elegir un punto de venta');
+			return;
+		}
+
+		if (window.FL_FACTURA_LAYOUT_PEDIDO && typeof sincronizarCantidadesItemsFactura === 'function') {
+			sincronizarCantidadesItemsFactura();
+		}
         // Controla datos correctos
 		var item = 0;
 		var flError = false;
-		
-		$("#tbody-tabla .articulo").each(function(index) {
-			var articulo = $(this).val();
-			item = item + 1;
+		var selectorRenglones = window.FL_FACTURA_LAYOUT_PEDIDO
+			? '#tbody-tabla tr.item-pedido'
+			: '#tbody-tabla tr.item-factura, #tbody-tabla tr.item-pedido';
 
-			if (articulo == '')
+		$(selectorRenglones).each(function(index) {
+			item = item + 1;
+			var $tr = $(this);
+			var articulo_id = $tr.find('.articulo_id').val();
+			var codigo = $tr.find('.codigoarticulo').val();
+
+			if (!articulo_id && !codigo)
 			{
-				alert("Codigo de articulo nulo en item "+item);
+				alert('Código de artículo nulo en ítem ' + item);
 				flError = true;
+				return false;
 			}
 
-			var cantidad = $(this).parents("tr").find(".cantidad").val();
+			var cantidad = $tr.find('.cantidad').val();
+			if (window.FL_FACTURA_LAYOUT_PEDIDO) {
+				var kilo = $tr.find('.kilo').val();
+				var pesada = $tr.find('.pesada').val();
+				cantidad = (kilo !== '' && kilo != null) ? kilo : pesada;
+			}
 
-			if (cantidad == null)
+			if (cantidad == null || cantidad === '')
 			{
-				alert("Cantidad nula en item "+item);
-				return;
+				alert('Cantidad nula en ítem ' + item);
+				flError = true;
+				return false;
 			}
 		});
 
@@ -438,6 +477,15 @@
 			selectPuntoVenta.append('<option value="' + item.id + '"'+op+'>' + item.codigo + '-' + item.nombre + '</option>');
 		});
 
+		if (puntoVentaDefault) {
+			selectPuntoVenta.val(puntoVentaDefault);
+			leePuntoVenta(puntoVentaDefault);
+			$.get(carpetaBase + '/ventas/leeunpuntoventa/' + puntoVentaDefault, function (data) {
+				$('#actividad_arca_id').val(data.actividad_arca_id);
+				$('#actividad_arca_id').attr('readonly', data.actividad_arca_id > 0);
+			});
+		}
+
 		// Arma select de puntos de venta del remito
 		selectPuntoVentaRemito.empty();
 		selectPuntoVentaRemito.append('<option value="">-- Seleccionar punto de venta --</option>');
@@ -474,7 +522,10 @@
 	
 			// Lee punto de venta si es de exportacion
 			leePuntoVenta(puntoventa_id);
+			guardarPreferenciasFactura();
 		});
+
+		$('#tipotransaccion_id').on('change', guardarPreferenciasFactura);
 
 		$("#botonform1").click(function(){
 			$(".form1").show();
@@ -542,6 +593,11 @@
 
 	function activa_eventos(flInicio)
 	{
+		if (window.FL_FACTURA_LAYOUT_PEDIDO && typeof activa_eventosFacturaBierzo === 'function') {
+			activa_eventosFacturaBierzo(flInicio);
+			return;
+		}
+
 		// Si esta agregando items desactiva los eventos
 		if (!flInicio)
 		{
@@ -1090,8 +1146,13 @@
 		$(document).on('click', '.historiaitem', historiaItem);
 
 		// Si no tiene items agrega el primero
-		if(!$('.item-factura').length)
+		if (!$('.item-factura').length && !$('.item-pedido').length) {
 			agregaRenglon();
+		}
+
+		if (window.FL_FACTURA_LAYOUT_PEDIDO && typeof initFacturaEnterNavigation === 'function') {
+			initFacturaEnterNavigation();
+		}
     });
 
     function agregaRenglon(){
@@ -1103,6 +1164,10 @@
         actualizaRenglones();
 
 		activa_eventos(false);
+
+		if (window.FL_FACTURA_LAYOUT_PEDIDO) {
+			$('#itemspedido-table').find('tr').last().find('.codigoarticulo').focus();
+		}
     }
 
 	// Anula item 
@@ -1550,6 +1615,10 @@
 
 	function calculaFactura()
 	{
+		if (window.FL_FACTURA_LAYOUT_PEDIDO && typeof sincronizarCantidadesItemsFactura === 'function') {
+			sincronizarCantidadesItemsFactura();
+		}
+
 		$('#tbody-tabla-total-factura').empty();
 
 		const tiempoTranscurrido = Date.now();

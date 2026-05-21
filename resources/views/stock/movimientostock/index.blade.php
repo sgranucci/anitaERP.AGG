@@ -48,7 +48,7 @@ Movimientos de Stock
             						{{date("d/m/Y", strtotime($movimientostock['fecha'] ?? ''))}} 
         						</td>
         						<td>
-            						<b>{{ $movimientostock['tipostransaccion']['nombre'] ?? '' }}</b>
+            						<b>{{ $movimientostock['tipotransaccion_stock']['nombre'] ?? '' }}</b>
         						</td>
         						<td>
                 					<small> {{$movimientostock['codigo']}}</small>

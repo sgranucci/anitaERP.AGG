@@ -75,10 +75,10 @@ class IIBBService
 
 		if ($condicioniibb->formacalculo != 'N' && $condicioniibb->estado == 'A')
 		{
-			$jurisdiccionesPercepcion = explode(",", env("ANITA_AGENTE_PERCEPCION_IIBB"));
-			$tasasDescarte = explode(",", env("ANITA_TASAS_DESCARTE_IIBB"));
-			$minimoNeto = explode(",", env("ANITA_MINIMO_NETO_IIBB"));
-			$minimaPercepcion = explode(",", env("ANITA_MINIMA_PERCEPCION_IIBB"));
+			$jurisdiccionesPercepcion = array_values(array_filter(array_map('trim', explode(',', (string) config('anita.agente_percepcion_iibb', '')))));
+			$tasasDescarte = array_map('trim', explode(',', (string) config('anita.tasas_descarte_iibb', '0,0')));
+			$minimoNeto = array_map('trim', explode(',', (string) config('anita.minimo_neto_iibb', '0,0')));
+			$minimaPercepcion = array_map('trim', explode(',', (string) config('anita.minima_percepcion_iibb', '0,0')));
 
 			// Lee provincia en donde es local el cliente
 			$jurisdiccionCliente = null;
@@ -97,6 +97,10 @@ class IIBBService
 			for ($i = 0; $i < count($jurisdiccionesPercepcion); $i++)
 			{
 				$provincia = $this->provinciaRepository->findPorJurisdiccion($jurisdiccionesPercepcion[$i]);
+
+				if (! $provincia) {
+					continue;
+				}
 
 				if (!isset($minimoNeto[$i]))
 					$minimoNeto[$i] = 0;

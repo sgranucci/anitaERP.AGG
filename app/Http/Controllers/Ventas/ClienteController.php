@@ -368,7 +368,8 @@ class ClienteController extends Controller
 
         $this->armaTablasVista($pais_query, $provincia_query, $condicioniva_query, $zonavta_query,
         	$subzonavta_query, $vendedor_query, $transporte_query, $condicionventa_query, $listaprecio_query,
-        	$cuentacontable_query, $retieneiva_enum, $condicioniibb_enum, $vaweb_enum, $estado_enum, '', $tasaarba,
+        	$cuentacontable_query, $retieneiva_enum, $condicioniibb_enum, $vaweb_enum, $estado_enum,
+            $data->numerodocumento ?? '', $tasaarba,
 			$tasacaba, $modofacturacion_enum, $cajaespecial_enum, $abasto_query, $coeficiente_query, 
             $distribuidor_query,
             $emitecertificado_enum, $emitenotadecredito_enum, $agregabonificacion_enum, $descuentoventa_query,
@@ -511,19 +512,35 @@ class ClienteController extends Controller
 			$tasaIibbArba = $this->iibbService->leeTasaPercepcion($nroinscripcion, '902');
             $tasaIibbCaba = $this->iibbService->leeTasaPercepcion($nroinscripcion, '901');
 
-            if ($tasaIibbArba == '')
-				$tasaarba = 'No esta en padron';
-            else    
-                $tasaarba = round($tasaIibbArba['tasa'], 2).'%';
+            $tasaArbaValor = $this->tasaPercepcionDesdePadron($tasaIibbArba);
+            $tasaarba = $tasaArbaValor === null ? 'No esta en padron' : round($tasaArbaValor, 2).'%';
 
-			if ($tasaIibbCaba == '' || $tasaIibbCaba['tasa'] < 0.00001)
-				$tasacaba = 'No esta en padron';
-            else
-                $tasacaba = round($tasaIibbCaba, 2).'%';
+            $tasaCabaValor = $this->tasaPercepcionDesdePadron($tasaIibbCaba);
+            $tasacaba = ($tasaCabaValor === null || $tasaCabaValor < 0.00001)
+                ? 'No esta en padron'
+                : round($tasaCabaValor, 2).'%';
 		}
 		else
 			$tasaarba = $tasacaba = '';
 	}
+
+    /**
+     * Tasa de percepción IIBB según registro de padrón (ARBA/CABA: modelo; otras jurisd.: array con "tasa").
+     */
+    private function tasaPercepcionDesdePadron($registroPadron): ?float
+    {
+        if (!$registroPadron) {
+            return null;
+        }
+
+        if (is_array($registroPadron)) {
+            $tasa = $registroPadron['tasapercepcion'] ?? $registroPadron['tasa'] ?? null;
+        } else {
+            $tasa = $registroPadron->tasapercepcion ?? $registroPadron->tasa ?? null;
+        }
+
+        return ($tasa !== null && $tasa !== '') ? (float) $tasa : null;
+    }
 
     // Reporte maestro de clientes
     public function indexReporteCliente()

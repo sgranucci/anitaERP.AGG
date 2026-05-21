@@ -1,6 +1,12 @@
 <div class="card form1">
 <div class="row">
-	<div class="col-sm-6" id="datosfactura" data-puntoventa="{{$puntoventa_query}}" data-tipotransaccion="{{$tipotransaccion_query}}" data-incoterm="{{$incoterm_query}}" data-formapago="{{$formapago_query}}">
+	@php
+		$layoutItemsPedido = $layoutItemsPedido ?? facturaUsaLayoutItemsPedido();
+		$tipotransaccionSeleccionada = old('tipotransaccion_id', $data->tipotransaccion_id ?? ($tipotransacciondefault_id ?? ''));
+		$unidadmedida_query = $unidadmedida_query ?? [];
+		$descuentoventa_query = $descuentoventa_query ?? collect();
+	@endphp
+	<div class="col-sm-6" id="datosfactura" data-puntoventa="{{$puntoventa_query}}" data-tipotransaccion="{{$tipotransaccion_query}}" data-incoterm="{{$incoterm_query ?? ''}}" data-formapago="{{$formapago_query ?? ''}}" data-layout-items-pedido="{{ $layoutItemsPedido ? '1' : '0' }}">
 		<input type="hidden" id="codigofactura" class="form-control" value="{{old('codigofactura', $data->codigo ?? '')}}" />
 		<div class="form-group row" id="tipotransaccion">
 			<label for="recipient-name" class="col-lg-3 col-form-label requerido">Tipo de transacci&oacute;n</label>
@@ -12,7 +18,7 @@
 						<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>
 						@php $flPrimero = false; @endphp
 					@else
-						@if( (int) $value->id == (int) old('tipotransaccion_id', $data->tipotransaccion_id ?? ''))
+						@if( (int) $value->id == (int) $tipotransaccionSeleccionada)
 							<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
 						@else
 							<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
@@ -23,7 +29,7 @@
 		</div>
 		<div class="form-group row" id="puntoventa">
 			<label for="recipient-name" class="col-lg-3 col-form-label requerido">Punto de venta</label>
-			<input type="hidden" id="puntoventadefault_id" class="form-control" value="{{old('puntoventadefault_id', $data->puntoventa_id ?? '')}}" />
+			<input type="hidden" id="puntoventadefault_id" class="form-control" value="{{old('puntoventadefault_id', $puntoventadefault_id ?? ($data->puntoventa_id ?? ''))}}" />
 			<select name="puntoventa_id" id="puntoventa_id" data-placeholder="Punto de venta" class="col-lg-5 form-control required" data-fouc>
 			</select>
 			<label for="recipient-name" class="col-lg-2 col-form-label requerido">Actividad</label>
@@ -179,16 +185,26 @@
     			<tr>
     				<th style="width: 5%;">Item</th>
     				<th style="width: 12%;">Art&iacute;culo</th>
+					@if ($layoutItemsPedido)
+					<th style="width: 16%;">Descripci&oacute;n Art&iacute;culo</th>
+					<th>UMD</th>
+    				<th style="width: 9%;">Cajas</th>
+    				<th style="width: 9%;">Piezas</th>
+    				<th style="width: 9%;">Kilos</th>
+					<th style="width: 9%;">Pesada</th>
+					<th>Descuento</th>
+					@else
 					<th style="width: 50%;">Detalle</th>
     				<th style="width: 10%;">Cantidad</th>
 					<th style="width: 10%;">Descuento</th>
-    				<th style="width: 10%; text-align: right;">Precio</th>
+					@endif
+    				<th style="width: 9%; text-align: right;">Precio</th>
     			</tr>				
     		</thead>
     		<tbody id="tbody-tabla">
 		 		@if ($data->venta_emisiones[0] ?? '') 
 					@foreach ($data->venta_emisiones as $item)
-            			<tr class="item-factura">
+            			<tr class="{{ $layoutItemsPedido ? 'item-pedido' : 'item-factura' }}">
                				<td>
                					<input type="text" name="items[]" class="form-control item" value="{{ $loop->index+1 }}" readonly>
                 				<input type="hidden" name="listasprecios_id[]" class="form-control listaprecio_id" readonly value="{{old('listaprecios_id', $item->listaprecio_id??'')}}" />
@@ -213,14 +229,23 @@
                                 </div>
                             </td>		
                             <td>
-                                <input type="text" style="WIDTH: 700px; HEIGHT: 38px" class="descripcionarticulo form-control" name="descripcionarticulos[]" value="{{$item->detalle ?? ''}}">
-                            </td>										
+                                <input type="text" style="WIDTH: {{ $layoutItemsPedido ? '220' : '700' }}px; HEIGHT: 38px" class="descripcionarticulo form-control" name="descripcionarticulos[]" value="{{$item->detalle ?? ''}}" @if($layoutItemsPedido) readonly @endif>
+                            </td>
+							@if ($layoutItemsPedido)
+							<td></td>
+							<td><input type="text" name="cajas[]" class="form-control caja" value="" /></td>
+							<td><input type="text" name="piezas[]" class="form-control pieza" value="" /></td>
+							<td><input type="text" name="kilos[]" class="form-control kilo" value="{{number_format(old('cantidades.'.$loop->index, optional($item)->cantidad),2)}}" /></td>
+							<td><input type="text" name="pesadas[]" class="form-control pesada" value="" /></td>
+							<td></td>
+							@else
 							<td>
 								<input type="text" name="cantidades[]" class="form-control cantidad" value="{{number_format(old('cantidades.'.$loop->index, optional($item)->cantidad),2)}}" />
                 			</td>		
 							<td>
 								<input type="text" name="descuentos[]" class="form-control descuento" value="{{number_format(old('descuentos.'.$loop->index, optional($item)->descuento),2)}}" />
-                			</td>								
+                			</td>
+							@endif								
                 			<td>
                 				<input type="text" style="text-align: right;" name="precios[]" class="form-control precio" readonly value="{{number_format(old('precios.'.$loop->index, optional($item)->precio),2)}}" />
                 			</td>							
@@ -234,7 +259,15 @@
 				@endif
        		</tbody>
        	</table>
-		@include('ventas.factura.template')
+		@if ($layoutItemsPedido)
+			<input type="hidden" id="categoria_secos_id" class="form-control" value="{{config('cliente.CATEGORIA_SECOS_ID')}}" />
+			<input type="hidden" id="subcategoria_maquina_id" class="form-control" value="{{config('cliente.SUBCATEGORIA_MAQUINA_ID')}}" />
+			<input type="hidden" id="subcategoria_tira_id" class="form-control" value="{{config('cliente.SUBCATEGORIA_TIRA_ID')}}" />
+			<input type="hidden" id="topedescuento" class="form-control" value="{{config('cliente.TOPE_DESCUENTO')}}" />
+			@include('ventas.factura.template_bierzo')
+		@else
+			@include('ventas.factura.template')
+		@endif
 	    <div class="row col-md-12">
         	<div class="col-md-2">
         		<button id="agrega_renglon" class="pull-right btn btn-danger">+ Agrega rengl&oacute;n</button>

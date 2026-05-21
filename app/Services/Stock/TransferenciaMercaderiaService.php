@@ -3,12 +3,14 @@
 namespace App\Services\Stock;
 
 use App\Models\Stock\Depmae;
-use App\Models\Ventas\Tipotransaccion;
-use App\Repositories\Ventas\TipotransaccionRepositoryInterface;
+use App\Models\Stock\Tipotransaccion_Stock;
+use App\Repositories\Stock\Tipotransaccion_StockRepositoryInterface;
+use Illuminate\Support\Facades\DB;
 use App\Support\Stock\TransferenciaMercaderiaSignoSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class TransferenciaMercaderiaService
 {
@@ -20,7 +22,7 @@ class TransferenciaMercaderiaService
 
     public function __construct(
         private MovimientoStockService $movimientoStockService,
-        private TipotransaccionRepositoryInterface $tipotransaccionRepository,
+        private Tipotransaccion_StockRepositoryInterface $tipotransaccionStockRepository,
         private StkdepSaldoAnitaService $stkdepSaldoAnitaService,
     ) {}
 
@@ -29,7 +31,7 @@ class TransferenciaMercaderiaService
         return [
             'deposito_salida_id' => cache()->get(generaKey(self::CACHE_DEPOSITO_SALIDA)),
             'deposito_entrada_id' => cache()->get(generaKey(self::CACHE_DEPOSITO_ENTRADA)),
-            'tipotransaccion_id' => cache()->get(generaKey(self::CACHE_TIPO_TRANSACCION)),
+            'tipotransaccion_stock_id' => $this->resolverTipoTransaccionStockIdCacheado(),
         ];
     }
 
@@ -41,8 +43,9 @@ class TransferenciaMercaderiaService
         if (! empty($data['deposito_entrada_id'])) {
             Cache::forever(generaKey(self::CACHE_DEPOSITO_ENTRADA), (int) $data['deposito_entrada_id']);
         }
-        if (! empty($data['tipotransaccion_id'])) {
-            Cache::forever(generaKey(self::CACHE_TIPO_TRANSACCION), (int) $data['tipotransaccion_id']);
+        $tipoStockId = (int) ($data['tipotransaccion_stock_id'] ?? $data['tipotransaccion_id'] ?? 0);
+        if ($tipoStockId > 0) {
+            Cache::forever(generaKey(self::CACHE_TIPO_TRANSACCION), $tipoStockId);
         }
     }
 
@@ -62,7 +65,7 @@ class TransferenciaMercaderiaService
     {
         $depositoSalidaId = (int) ($cabecera['deposito_salida_id'] ?? 0);
         $depositoEntradaId = (int) ($cabecera['deposito_entrada_id'] ?? 0);
-        $tipotransaccionId = (int) ($cabecera['tipotransaccion_id'] ?? 0);
+        $tipotransaccionId = (int) ($cabecera['tipotransaccion_stock_id'] ?? $cabecera['tipotransaccion_id'] ?? 0);
 
         if ($depositoSalidaId <= 0 || $depositoEntradaId <= 0) {
             return ['ok' => false, 'mensaje' => 'Debe indicar depósito de salida y de entrada.'];
@@ -77,7 +80,7 @@ class TransferenciaMercaderiaService
             return ['ok' => false, 'mensaje' => 'Indique al menos un artículo con cantidad a transferir.'];
         }
 
-        $tipoTransferencia = $this->tipotransaccionRepository->find($tipotransaccionId);
+        $tipoTransferencia = $this->tipotransaccionStockRepository->find($tipotransaccionId);
         $this->validarTipoTransferencia($tipoTransferencia);
 
         $depositoSalida = Depmae::query()->findOrFail($depositoSalidaId);
@@ -218,7 +221,7 @@ class TransferenciaMercaderiaService
     /**
      * @return array{id: int, codigo: string}
      */
-    private function validarTipoTransferencia(?Tipotransaccion $tipo): void
+    private function validarTipoTransferencia(?Tipotransaccion_Stock $tipo): void
     {
         if ($tipo === null) {
             throw new \RuntimeException('Tipo de transacción no encontrado.');
@@ -244,7 +247,7 @@ class TransferenciaMercaderiaService
         bool $esSalida
     ): array {
         $data = array_merge($payloadLineas, [
-            'tipotransaccion_id' => $tipotransaccionId,
+            'tipotransaccion_stock_id' => $tipotransaccionId,
             'signo_cantidad' => TransferenciaMercaderiaSignoSupport::signoCantidad($esSalida),
             'fecha' => $fecha,
             'fechajornada' => $fecha,
@@ -275,6 +278,28 @@ class TransferenciaMercaderiaService
             'id' => (int) $resultado['id'],
             'codigo' => (string) ($resultado['codigo'] ?? $codigo),
         ];
+    }
+
+    private function resolverTipoTransaccionStockIdCacheado(): ?int
+    {
+        $cached = (int) cache()->get(generaKey(self::CACHE_TIPO_TRANSACCION));
+        if ($cached <= 0) {
+            return null;
+        }
+
+        if (Tipotransaccion_Stock::query()->whereKey($cached)->exists()) {
+            return $cached;
+        }
+
+        if (! Schema::hasTable('tipotransaccion_stock_map')) {
+            return null;
+        }
+
+        $mapped = DB::table('tipotransaccion_stock_map')
+            ->where('tipotransaccion_id', $cached)
+            ->value('tipotransaccion_stock_id');
+
+        return $mapped ? (int) $mapped : null;
     }
 
 }

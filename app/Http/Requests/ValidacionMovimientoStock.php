@@ -24,7 +24,8 @@ class ValidacionMovimientoStock extends FormRequest
     public function rules()
     {
         return [
-            'tipotransaccion_id' => 'required',
+            'tipotransaccion_stock_id' => 'required_without:tipotransaccion_id',
+            'tipotransaccion_id' => 'required_without:tipotransaccion_stock_id',
             'fecha' => 'required',
         ];
     }

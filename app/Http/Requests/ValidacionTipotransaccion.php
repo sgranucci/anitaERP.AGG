@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class ValidacionTipotransaccion extends FormRequest
 {
@@ -26,7 +27,8 @@ class ValidacionTipotransaccion extends FormRequest
         return [
             'nombre' => 'required|max:255|unique:tipotransaccion,nombre,' . $this->route('id'),
             'abreviatura' => 'required|max:5|unique:tipotransaccion,abreviatura,' . $this->route('id'),
-            'codigo' => 'sometimes|max:999'
+            'codigo' => 'required|string|max:50',
+            'operacion' => ['required', Rule::in(array_keys(\App\Traits\Ventas\TipotransaccionTrait::$enumOperacion))],
         ];
     }
 }

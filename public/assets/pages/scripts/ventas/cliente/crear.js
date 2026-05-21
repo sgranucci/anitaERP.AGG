@@ -273,7 +273,10 @@
         $('#agrega_renglon_articulo_suspendido').on('click', agregaRenglonArticuloSuspendido);
         $(document).on('click', '.eliminar_articulo_suspendido', borraRenglonArticuloSuspendido);        
         $('#agrega_renglon_cm05').on('click', agregaRenglonCm05);
-        $(document).on('click', '.eliminar_cm05', borraRenglonCm05);  
+        $(document).on('click', '.eliminar_cm05', borraRenglonCm05);
+        $(document).on('blur', '#cm05-table .coeficiente', formatearCoeficienteCm05Input);
+        aplicarFormatoCoeficientesCm05();
+        $('#form-general').on('submit', aplicarFormatoCoeficientesCm05);
     });
 
 	function activa_eventos(flInicio)
@@ -433,6 +436,46 @@
     		$(this).val(item++);
     	});
 	}    
+
+    function formatearCoeficienteCm05(valor) {
+        if (valor === '' || valor === null || typeof valor === 'undefined') {
+            return '';
+        }
+
+        var texto = String(valor).trim().replace(',', '.');
+        if (texto === '') {
+            return '';
+        }
+
+        var num = parseFloat(texto);
+        if (isNaN(num)) {
+            return valor;
+        }
+
+        if (num < 0) {
+            num = 0;
+        } else if (num > 100) {
+            num = 100;
+        }
+
+        return num.toFixed(4);
+    }
+
+    function formatearCoeficienteCm05Input() {
+        var formateado = formatearCoeficienteCm05($(this).val());
+        if (formateado !== '') {
+            $(this).val(formateado);
+        }
+    }
+
+    function aplicarFormatoCoeficientesCm05() {
+        $('#cm05-table .coeficiente').each(function() {
+            var formateado = formatearCoeficienteCm05($(this).val());
+            if (formateado !== '') {
+                $(this).val(formateado);
+            }
+        });
+    }
 
     function agregaRenglonCm05(){
     	event.preventDefault();

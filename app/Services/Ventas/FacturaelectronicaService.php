@@ -11,6 +11,8 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
 use App\ApiAnita;
+use App\Services\Arca\ArcaCaeaLocalService;
+use App\Services\Arca\ArcaMtxcaFacturaElectronicaService;
 use App\Services\Arca\ArcaWsfeCaeaService;
 use App\Services\Arca\ArcaWsfeFacturaElectronicaService;
 
@@ -22,14 +24,22 @@ class FacturaElectronicaService
 
 	protected ArcaWsfeCaeaService $arcaWsfeCaeaService;
 
+	protected ArcaMtxcaFacturaElectronicaService $arcaMtxcaFacturaElectronicaService;
+
+	protected ArcaCaeaLocalService $arcaCaeaLocalService;
+
 	public function __construct(
 		CondicionivaRepositoryInterface $condicionivarepository,
 		ArcaWsfeFacturaElectronicaService $arcaWsfeFacturaElectronicaService,
 		ArcaWsfeCaeaService $arcaWsfeCaeaService,
+		ArcaMtxcaFacturaElectronicaService $arcaMtxcaFacturaElectronicaService,
+		ArcaCaeaLocalService $arcaCaeaLocalService,
 	) {
     	$this->condicionivaRepository = $condicionivarepository;
 		$this->arcaWsfeFacturaElectronicaService = $arcaWsfeFacturaElectronicaService;
 		$this->arcaWsfeCaeaService = $arcaWsfeCaeaService;
+		$this->arcaMtxcaFacturaElectronicaService = $arcaMtxcaFacturaElectronicaService;
+		$this->arcaCaeaLocalService = $arcaCaeaLocalService;
     }
 
 	/** Comprobantes nacionales wsfev1 vía SOAP (config arca_wsfe.transporte = soap). */
@@ -37,6 +47,13 @@ class FacturaElectronicaService
 	{
 		return ($puntoventa->webservice ?? '') === 'wsfev1'
 			&& (string) config('arca_wsfe.transporte', 'afip_php') === 'soap';
+	}
+
+	/** Factura con detalle wsmtxca vía SOAP (config arca_mtxca.transporte = soap). */
+	private function debeUsarSoapMtxca(object $puntoventa): bool
+	{
+		return ($puntoventa->webservice ?? '') === 'wsmtxca'
+			&& (string) config('arca_mtxca.transporte', 'afip_php') === 'soap';
 	}
 
 	public function traeUltimoNumeroComprobante($nroinscripcion, $tipotransaccion, $puntoventa)
@@ -47,17 +64,25 @@ class FacturaElectronicaService
 		}
 		else
 		{
-			if ($this->debeUsarSoapWsfe($puntoventa)) {
+			if ($this->debeUsarSoapWsfe($puntoventa) || $this->debeUsarSoapMtxca($puntoventa)) {
 				$empresaId = (int) ($puntoventa->empresa_id ?? 0);
 				if ($empresaId < 1) {
 					return -1;
 				}
 				try {
-					$n = $this->arcaWsfeFacturaElectronicaService->feCompUltimoAutorizado(
-						$empresaId,
-						(int) $puntoventa->codigo,
-						(int) $tipotransaccion
-					);
+					if ($this->debeUsarSoapMtxca($puntoventa)) {
+						$n = $this->arcaMtxcaFacturaElectronicaService->consultarUltimoComprobanteAutorizado(
+							$empresaId,
+							(int) $puntoventa->codigo,
+							(int) $tipotransaccion
+						);
+					} else {
+						$n = $this->arcaWsfeFacturaElectronicaService->feCompUltimoAutorizado(
+							$empresaId,
+							(int) $puntoventa->codigo,
+							(int) $tipotransaccion
+						);
+					}
 
 					return $n > 0 ? (string) $n : -1;
 				} catch (\Throwable $e) {
@@ -118,6 +143,45 @@ class FacturaElectronicaService
 
 	public function solicitaCAE($nroinscripcion, $tipotransaccion, $puntoventa, $datos)
 	{
+		if ($this->debeUsarSoapMtxca($puntoventa)) {
+			$empresaId = (int) ($puntoventa->empresa_id ?? 0);
+			if ($empresaId < 1) {
+				return ['Error' => 'Punto de venta sin empresa asociada; no se puede emitir con MTXCA SOAP.'];
+			}
+			try {
+				if (($puntoventa->modofacturacion ?? '') === 'A') {
+					$caea = $this->buscaCAEA($nroinscripcion, $datos['fechacomprobante'] ?? date('Y-m-d'));
+					if (isset($caea['Error'])) {
+						return $caea;
+					}
+					$out = $this->arcaMtxcaFacturaElectronicaService->informarComprobanteCaeaDomestico(
+						$empresaId,
+						$puntoventa,
+						(int) $tipotransaccion,
+						$datos,
+						[
+							'caea' => $caea['cae'],
+							'fechavencimiento' => $caea['fechavencimientocae'],
+						],
+					);
+				} else {
+					$out = $this->arcaMtxcaFacturaElectronicaService->solicitaCaeDomestico(
+						$empresaId,
+						$puntoventa,
+						(int) $tipotransaccion,
+						$datos
+					);
+				}
+
+				return [
+					'cae' => $out['cae'],
+					'fechavencimientocae' => $out['fechavencimientocae'],
+				];
+			} catch (\Throwable $e) {
+				return ['Error' => $e->getMessage()];
+			}
+		}
+
 		if ($this->debeUsarSoapWsfe($puntoventa)) {
 			$empresaId = (int) ($puntoventa->empresa_id ?? 0);
 			if ($empresaId < 1) {
@@ -435,53 +499,29 @@ class FacturaElectronicaService
 
 	public function buscaCAEA($nroinscripcion, $fechafactura)
 	{
-		$nroinscripcion = str_replace("-","",$nroinscripcion);
-
-		$fechaCarbon = Carbon::parse($fechafactura);
-
-		// Calcular el inicio y fin de la quincena
-		if ($fechaCarbon->day <= 15) {
-			$inicioQuincena = $fechaCarbon->copy()->startOfMonth()->format('Ymd');
-			$finQuincena = $fechaCarbon->copy()->startOfMonth()->addDays(14)->format('Ymd');
-		} else {
-			$inicioQuincena = $fechaCarbon->copy()->startOfMonth()->addDays(15)->format('Ymd');
-			$finQuincena = $fechaCarbon->copy()->endOfMonth()->format('Ymd');
+		$local = $this->arcaCaeaLocalService->buscarCaeaParaFactura($nroinscripcion, $fechafactura);
+		if ($local !== null) {
+			return $local;
 		}
 
-		$local = $this->arcaWsfeCaeaService->buscarCaeaVigentePorCuit($nroinscripcion, $fechaCarbon);
-		if ($local !== null && $local->estaAutorizado()) {
-			$vto = $local->fecha_vigencia_hasta
-				? $local->fecha_vigencia_hasta->format('Ymd')
-				: $finQuincena;
-
-			return ['cae' => $local->nro_caea, 'fechavencimientocae' => $vto];
-		}
-
-		$apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'list', 
-						'tabla' => 'caea', 
-						'campos' => '
-							caea_nro_caea,
-							caea_fecha_tope
-						' ,
-						'whereArmado' => " WHERE caea_cuit = '".$nroinscripcion."' AND
-												caea_desde_fecha <= ".$inicioQuincena." AND
-												caea_hasta_fecha >= ".$finQuincena);
-		$fila = ApiAnita::primeraFilaLista($apiAnita->apiCall($data));
-
-		if ($fila !== null && isset($fila->caea_nro_caea)) {
-			return ['cae' => $fila->caea_nro_caea, 'fechavencimientocae' => $finQuincena];
-		}
-
-		return ['Error' => 'No pudo asignar CAEA'];
+		return ['Error' => 'No pudo asignar CAEA: no está en arca_caea para la quincena (verifique arca:solicitar-caea-quincenal)'];
 	}
 
 	public function consultaCompEnviado($nroinscripcion, $tipotransaccion, $puntoventa, $numero)
 	{
-		if ($this->debeUsarSoapWsfe($puntoventa)) {
+		if ($this->debeUsarSoapWsfe($puntoventa) || $this->debeUsarSoapMtxca($puntoventa)) {
 			$empresaId = (int) ($puntoventa->empresa_id ?? 0);
 			if ($empresaId < 1) {
 				return -1;
+			}
+
+			if ($this->debeUsarSoapMtxca($puntoventa)) {
+				return $this->arcaMtxcaFacturaElectronicaService->consultaComprobanteEmitido(
+					$empresaId,
+					(int) $puntoventa->codigo,
+					(int) $tipotransaccion,
+					(int) $numero
+				);
 			}
 
 			return $this->arcaWsfeFacturaElectronicaService->consultaComprobanteEmitido(

@@ -10,6 +10,10 @@ use Carbon\Carbon;
 use Exception;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * Importación puntual desde Anita (Informix) hacia arca_caea.
+ * No forma parte del ciclo quincenal: el CAEA vigente lo pide arca:solicitar-caea-quincenal vía ARCA.
+ */
 class ArcaCaeaImportacionAnitaService
 {
     private const DESDE_DEFAULT_YMD = 20260101;
@@ -77,6 +81,91 @@ class ArcaCaeaImportacionAnitaService
                     $id = $fila->caea_serial ?? '?';
                     $stats['detalle_errores'][] = "Anita serial {$id}: ".$e->getMessage();
                 }
+            }
+        }
+
+        return $stats;
+    }
+
+    /**
+     * Importa un rango acotado (p. ej. quincenas en ventana). Uso manual; no invocar desde jobs automáticos.
+     *
+     * @return array{leidos: int, importados: int, actualizados: int, omitidos: int, sin_empresa: int, errores: int}
+     */
+    public function importarQuincenasEnVentana(?int $empresaIdFiltro = null, bool $force = false): array
+    {
+        $quincenas = CaeaQuincenaSupport::quincenasEnVentanaSolicitud();
+        if ($quincenas === []) {
+            return [
+                'leidos' => 0,
+                'importados' => 0,
+                'actualizados' => 0,
+                'omitidos' => 0,
+                'sin_empresa' => 0,
+                'errores' => 0,
+                'detalle_sin_empresa' => [],
+                'detalle_errores' => [],
+            ];
+        }
+
+        $desde = PHP_INT_MAX;
+        $hasta = 0;
+        foreach ($quincenas as $q) {
+            $fechas = CaeaQuincenaSupport::fechasQuincena((int) $q['periodo'], (int) $q['orden']);
+            $d = (int) $fechas['desde']->format('Ymd');
+            $h = (int) $fechas['hasta']->format('Ymd');
+            $desde = min($desde, $d);
+            $hasta = max($hasta, $h);
+        }
+
+        return $this->importarHistoricos($desde, $hasta, $empresaIdFiltro, false, $force, true);
+    }
+
+    /**
+     * Importa la quincena de una fecha (y opcionalmente un CUIT) desde Anita → arca_caea. Solo uso manual.
+     */
+    public function importarQuincenaDeFecha(Carbon|string $fechaFactura, ?int $empresaIdFiltro = null, ?string $cuitFiltro = null): array
+    {
+        $po = CaeaQuincenaSupport::periodoOrdenDesdeFecha($fechaFactura);
+        $fechas = CaeaQuincenaSupport::fechasQuincena($po['periodo'], $po['orden']);
+        $desde = (int) $fechas['desde']->format('Ymd');
+        $hasta = (int) $fechas['hasta']->format('Ymd');
+
+        $mapa = $this->mapaEmpresasPorCuit(true, $empresaIdFiltro);
+        if ($cuitFiltro !== null && $cuitFiltro !== '') {
+            $cuitNorm = $this->normalizarCuit($cuitFiltro);
+            $mapa = isset($mapa[$cuitNorm]) ? [$cuitNorm => $mapa[$cuitNorm]] : [];
+        }
+
+        $filas = $this->listarCaeaDesdeAnita($desde, $hasta);
+        $stats = [
+            'leidos' => 0,
+            'importados' => 0,
+            'actualizados' => 0,
+            'omitidos' => 0,
+            'sin_empresa' => 0,
+            'errores' => 0,
+            'detalle_sin_empresa' => [],
+            'detalle_errores' => [],
+        ];
+
+        foreach ($filas as $fila) {
+            $cuitFila = $this->normalizarCuit($fila->caea_cuit ?? '');
+            if ($cuitFiltro !== null && $cuitFiltro !== '' && $cuitFila !== $this->normalizarCuit($cuitFiltro)) {
+                continue;
+            }
+            $stats['leidos']++;
+            try {
+                $resultado = $this->importarFilaAnita($fila, $mapa, false, false);
+                match ($resultado) {
+                    'importado' => $stats['importados']++,
+                    'actualizado' => $stats['actualizados']++,
+                    'omitido' => $stats['omitidos']++,
+                    'sin_empresa' => $stats['sin_empresa']++,
+                    default => null,
+                };
+            } catch (Exception $e) {
+                $stats['errores']++;
             }
         }
 

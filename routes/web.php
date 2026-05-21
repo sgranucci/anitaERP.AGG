@@ -888,6 +888,17 @@ Route::delete('stock/movimientostock/{id}', 'Stock\MovimientoStockController@eli
 Route::get('stock/listarmovimientostock/{id}', 'Stock\MovimientoStockController@listarMovimientoStock')->name('listar_movimientostock');
 
 /*
+ * Tipos de transacciones de stock
+ */
+Route::get('stock/tipotransaccion_stock', 'Stock\Tipotransaccion_StockController@index')->name('tipotransaccion_stock');
+Route::get('stock/tipotransaccion_stock/crear', 'Stock\Tipotransaccion_StockController@crear')->name('crear_tipotransaccion_stock');
+Route::post('stock/tipotransaccion_stock', 'Stock\Tipotransaccion_StockController@guardar')->name('guardar_tipotransaccion_stock');
+Route::get('stock/tipotransaccion_stock/{id}/editar', 'Stock\Tipotransaccion_StockController@editar')->name('editar_tipotransaccion_stock');
+Route::put('stock/tipotransaccion_stock/{id}', 'Stock\Tipotransaccion_StockController@actualizar')->name('actualizar_tipotransaccion_stock');
+Route::delete('stock/tipotransaccion_stock/{id}', 'Stock\Tipotransaccion_StockController@eliminar')->name('eliminar_tipotransaccion_stock');
+Route::get('stock/leertipotransaccion_stock/{id}', 'Stock\Tipotransaccion_StockController@leer')->name('leer_tipotransaccion_stock');
+
+/*
  * Transferencia ágil de mercadería (móvil / tablet)
  */
 Route::get('stock/transferencia-mercaderia', 'Stock\TransferenciaMercaderiaController@index')->name('transferencia_mercaderia');
@@ -1054,6 +1065,7 @@ Route::delete('ventas/formapago/{id}', 'Ventas\FormapagoController@eliminar')->n
  */
 
 Route::get('ventas/tipotransaccion', 'Ventas\TipotransaccionController@index')->name('tipotransaccion');
+Route::get('ventas/tipotransaccion/arca-tipos-cbte', 'Ventas\TipotransaccionController@tiposCbteArca')->name('tipotransaccion_arca_tipos_cbte');
 Route::get('ventas/tipotransaccion/crear', 'Ventas\TipotransaccionController@crear')->name('crear_tipotransaccion');
 Route::post('ventas/tipotransaccion', 'Ventas\TipotransaccionController@guardar')->name('guardar_tipotransaccion');
 Route::get('ventas/tipotransaccion/{id}/editar', 'Ventas\TipotransaccionController@editar')->name('editar_tipotransaccion');
@@ -1280,6 +1292,7 @@ Route::post('ventas/ordenestrabajo/borrarOt', 'Ventas\OrdentrabajoController@bor
 
 Route::get('ventas/factura', 'Ventas\FacturacionController@index')->name('factura');
 Route::get('ventas/factura/crear', 'Ventas\FacturacionController@crear')->name('crear_factura');
+Route::post('ventas/factura/preferencias', 'Ventas\FacturacionController@preferencias')->name('factura_preferencias');
 Route::post('ventas/factura', 'Ventas\FacturacionController@guardar')->name('guardar_factura');
 Route::get('ventas/factura/{id}/editar', 'Ventas\FacturacionController@editar')->name('editar_factura');
 Route::put('ventas/factura/grabacomprobante', 'Ventas\FacturacionController@grabaComprobante')->name('grabar_comprobante');

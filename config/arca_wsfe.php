@@ -87,9 +87,12 @@ return [
     'wsfe' => [
         'homo' => [
             'wsdl' => 'https://wswhomo.afip.gov.ar/wsfev1/service.asmx?WSDL',
+            /** Copia local opcional: storage/app/arca/wsfe/wsdl/homo/service.wsdl o ARCA_WSFE_WSDL_LOCAL */
+            'wsdl_local' => storage_path('app/arca/wsfe/wsdl/homo/service.wsdl'),
         ],
         'prod' => [
             'wsdl' => 'https://servicios1.afip.gov.ar/wsfev1/service.asmx?WSDL',
+            'wsdl_local' => storage_path('app/arca/wsfe/wsdl/prod/service.wsdl'),
         ],
     ],
 

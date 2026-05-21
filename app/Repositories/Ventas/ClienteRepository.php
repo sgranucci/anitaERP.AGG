@@ -127,7 +127,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 		$vendedores = $this->vendedorRepository->leeVendedoresAsociados();
 
         $cliente = $this->model->with("cliente_entregas")->with("cliente_seguimientos")
-										->with("cliente_cm05s")
+										->with("cliente_cm05s.provincias")
 										->with("cliente_articulo_suspendidos")->with("cliente_archivos")
 										->with("provincias")->with("localidades")->with("paises")
 										->with("tipossuspensioncliente")->with('zonavtas')
@@ -151,7 +151,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 		$vendedores = $this->vendedorRepository->leeVendedoresAsociados();
 
 		$cliente = $this->model->with("cliente_entregas")->with("cliente_seguimientos")
-										->with("cliente_cm05s")
+										->with("cliente_cm05s.provincias")
 										->with("cliente_articulo_suspendidos")->with("cliente_archivos")
 										->with("provincias")->with("localidades")->with("paises")
 										->with("tipossuspensioncliente")->with('zonavtas')
@@ -172,7 +172,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 	public function findPorNumeroDocumento($numerodocumento)
     {
 		$cliente = $this->model->with("cliente_entregas")->with("cliente_seguimientos")
-										->with("cliente_cm05s")
+										->with("cliente_cm05s.provincias")
 										->with("cliente_articulo_suspendidos")->with("cliente_archivos")
 										->with("provincias")->with("localidades")->with("paises")
 										->with("tipossuspensioncliente")->with('zonavtas')
@@ -187,7 +187,7 @@ class ClienteRepository implements ClienteRepositoryInterface
     public function findOrFail($id)
     {
         if (null == $cliente = $this->model->with("cliente_entregas")->with("cliente_seguimientos")
-											->with("cliente_cm05s")
+											->with("cliente_cm05s.provincias")
 											->with("cliente_articulo_suspendidos")->with("cliente_archivos")
 											->with("provincias")->with("localidades")->with("paises")
 											->with("tipossuspensioncliente")->with('zonavtas')

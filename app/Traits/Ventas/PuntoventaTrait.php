@@ -19,4 +19,11 @@ trait PuntoventaTrait {
 			'A' => 'Activa',
 			'S' => 'Suspendida',
 			];
+
+	/** Valores usados en puntoventa.webservice (FacturaelectronicaService / servicios ARCA SOAP). */
+	public static $enumWebservice = [
+		'wsfev1' => 'WSFE v1 — Comprobantes nacionales (ARCA SOAP)',
+		'wsmtxca' => 'WSMTXCA — Factura con detalle / ítems (ARCA SOAP)',
+		'wsfex_v1' => 'WSFEX v1 — Factura de exportación (módulo AFIP)',
+	];
 }

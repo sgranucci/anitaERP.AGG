@@ -60,6 +60,59 @@ class ArcaWsfeFacturaElectronicaService
     }
 
     /**
+     * Catálogo AFIP de tipos de comprobante (FEParamGetTiposCbte).
+     *
+     * @return list<array{id: int, codigo: string, descripcion: string}>
+     */
+    public function feParamGetTiposCbte(int $empresaId): array
+    {
+        $this->assertTransporteSoap();
+        $cuit = $this->cuitEmisor($empresaId);
+        $ctx = $this->resolveWsaaContext($empresaId);
+        $ts = $this->wsaa->getTokenSign((string) config('arca_wsfe.wsaa_service_id'), $ctx);
+        $client = $this->soapClient();
+
+        try {
+            $raw = $client->FEParamGetTiposCbte([
+                'Auth' => [
+                    'Token' => $ts['token'],
+                    'Sign' => $ts['sign'],
+                    'Cuit' => $cuit,
+                ],
+            ]);
+        } catch (SoapFault $e) {
+            throw new Exception($this->formatSoapFault('FEParamGetTiposCbte', $e, $client));
+        }
+
+        $result = $raw->FEParamGetTiposCbteResult ?? null;
+        if ($result === null) {
+            throw new Exception('WSFE: FEParamGetTiposCbte sin resultado.');
+        }
+
+        $errs = $this->normalizeErrCollection($result->Errors ?? null);
+        if ($errs !== []) {
+            throw new Exception('WSFE — FEParamGetTiposCbte: '.$this->formatErrList($errs));
+        }
+
+        $items = [];
+        foreach ($this->normalizeCbteTipoCollection($result->ResultGet ?? null) as $row) {
+            $id = (int) ($row['id'] ?? 0);
+            if ($id < 1) {
+                continue;
+            }
+            $items[] = [
+                'id' => $id,
+                'codigo' => str_pad((string) $id, 3, '0', STR_PAD_LEFT),
+                'descripcion' => (string) ($row['descripcion'] ?? ''),
+            ];
+        }
+
+        usort($items, static fn (array $a, array $b): int => $a['id'] <=> $b['id']);
+
+        return $items;
+    }
+
+    /**
      * Consulta un comprobante ya emitido (verificación post-FECAESolicitar).
      */
     public function feCompConsultar(int $empresaId, int $ptoVta, int $cbteTipo, int $cbteNro): object
@@ -403,20 +456,124 @@ class ArcaWsfeFacturaElectronicaService
     private function soapClient(): SoapClient
     {
         $env = (string) config('arca.env', 'homo');
-        $wsdl = config("arca_wsfe.wsfe.{$env}.wsdl");
-        if (! is_string($wsdl) || $wsdl === '') {
-            throw new Exception("ARCA WSFE: WSDL no configurado para env={$env}.");
-        }
+        $wsdl = $this->resolveWsfeWsdl($env);
         $timeout = max(10, (int) config('arca_wsfe.soap_timeout', 60));
 
         return new SoapClient($wsdl, [
             'soap_version' => SOAP_1_2,
             'trace' => 1,
             'exceptions' => true,
-            'cache_wsdl' => WSDL_CACHE_NONE,
+            'cache_wsdl' => WSDL_CACHE_DISK,
             'connection_timeout' => $timeout,
             'default_socket_timeout' => $timeout,
+            'stream_context' => $this->soapStreamContext($timeout),
         ]);
+    }
+
+    /**
+     * Contexto SSL para AFIP/ARCA (OpenSSL 3: sin SECLEVEL=1 falla con "dh key too small" / "Could not connect to host").
+     */
+    /**
+     * @return resource
+     */
+    private function soapStreamContext(int $timeout)
+    {
+        return stream_context_create([
+            'http' => [
+                'timeout' => $timeout,
+                'user_agent' => 'anitaERP-ARCA-WSFE',
+            ],
+            'ssl' => [
+                'verify_peer' => true,
+                'verify_peer_name' => true,
+                'ciphers' => 'DEFAULT@SECLEVEL=1',
+            ],
+        ]);
+    }
+
+    /**
+     * WSDL local (storage o ARCA_WSFE_WSDL_LOCAL) evita descargar el XML en cada request
+     * cuando el servidor no puede resolver o abrir la URL remota de AFIP.
+     */
+    private function resolveWsfeWsdl(string $env): string
+    {
+        $override = env('ARCA_WSFE_WSDL_LOCAL');
+        if (is_string($override) && $override !== '' && is_readable($override)) {
+            return $override;
+        }
+
+        $configured = config("arca_wsfe.wsfe.{$env}.wsdl_local");
+        if (is_string($configured) && $configured !== '' && is_readable($configured)) {
+            return $configured;
+        }
+
+        $base = rtrim((string) config('arca_wsfe.base_storage'), '/');
+        $localDefault = $base.'/wsdl/'.$env.'/service.wsdl';
+        if (is_readable($localDefault)) {
+            return $localDefault;
+        }
+
+        $remote = config("arca_wsfe.wsfe.{$env}.wsdl");
+        if (! is_string($remote) || $remote === '') {
+            throw new Exception("ARCA WSFE: WSDL no configurado para env={$env}.");
+        }
+
+        if ($this->tryCacheWsdlFromRemote($remote, $localDefault)) {
+            return $localDefault;
+        }
+
+        return $remote;
+    }
+
+    private function tryCacheWsdlFromRemote(string $remoteUrl, string $localPath): bool
+    {
+        try {
+            $dir = dirname($localPath);
+            if (! is_dir($dir) && ! @mkdir($dir, 0755, true) && ! is_dir($dir)) {
+                return false;
+            }
+
+            $timeout = max(10, (int) config('arca_wsfe.soap_timeout', 60));
+
+            $ctx = stream_context_create([
+                'http' => ['timeout' => $timeout],
+                'ssl' => [
+                    'verify_peer' => true,
+                    'verify_peer_name' => true,
+                ],
+            ]);
+
+            $body = @file_get_contents($remoteUrl, false, $ctx);
+            if (is_string($body) && $body !== '' && @file_put_contents($localPath, $body) !== false) {
+                return is_readable($localPath);
+            }
+
+            return $this->tryCacheWsdlViaCurl($remoteUrl, $localPath, $timeout);
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /**
+     * AFIP/ARCA a veces exige OpenSSL SECLEVEL=1 (error "dh key too small" con el default del sistema).
+     */
+    private function tryCacheWsdlViaCurl(string $remoteUrl, string $localPath, int $timeout): bool
+    {
+        if (! function_exists('exec')) {
+            return false;
+        }
+
+        $cmd = sprintf(
+            'curl -fsSL --max-time %d --ciphers %s %s -o %s 2>/dev/null',
+            $timeout,
+            escapeshellarg('DEFAULT@SECLEVEL=1'),
+            escapeshellarg($remoteUrl),
+            escapeshellarg($localPath)
+        );
+
+        @exec($cmd, $out, $code);
+
+        return $code === 0 && is_readable($localPath);
     }
 
     /**
@@ -679,6 +836,35 @@ class ArcaWsfeFacturaElectronicaService
                 '). No persistir el comprobante.'
             );
         }
+    }
+
+    /**
+     * @return list<array{id: int, descripcion: string}>
+     */
+    private function normalizeCbteTipoCollection(mixed $resultGet): array
+    {
+        if ($resultGet === null) {
+            return [];
+        }
+
+        $nodes = $resultGet->CbteTipo ?? null;
+        if ($nodes === null) {
+            return [];
+        }
+
+        $out = [];
+        $list = is_array($nodes) ? $nodes : [$nodes];
+        foreach ($list as $node) {
+            if (! is_object($node)) {
+                continue;
+            }
+            $out[] = [
+                'id' => (int) ($node->Id ?? 0),
+                'descripcion' => trim((string) ($node->Desc ?? '')),
+            ];
+        }
+
+        return $out;
     }
 
     private function unwrapFecaDetResponse(?object $feDet): object

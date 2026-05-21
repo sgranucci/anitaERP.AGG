@@ -20,7 +20,7 @@ Comprobantes de Venta
 
 				<div class="card-tools">
 					<a href="{{route('crear_factura')}}" class="btn btn-outline-secondary btn-gt">
-                       	@if (can('crear-movimientos-de-stock', false))
+                       	@if (can('crear-factura', false))
                         	<i class="fa fa-fw fa-plus-circle"></i> Nuevo comprobante
 						@endif
                     </a>

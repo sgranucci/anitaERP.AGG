@@ -16,7 +16,7 @@ class ImportarCaeaHistoricosDesdeAnita extends Command
                             {--force : Sobrescribir registros ya autorizados en arca_caea}
                             {--dry-run : Simular sin grabar en MySQL}';
 
-    protected $description = 'Importa CAEA históricos desde Anita (Informix) a la tabla arca_caea de anitaERP (ejecución manual)';
+    protected $description = 'Importación única/manual: CAEA históricos desde Anita → arca_caea (no usar en el flujo quincenal automático)';
 
     public function handle(ArcaCaeaImportacionAnitaService $importacion): int
     {

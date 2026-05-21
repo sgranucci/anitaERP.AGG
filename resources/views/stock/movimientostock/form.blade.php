@@ -3,10 +3,10 @@
         <input type="hidden" id="codigomovimientostock" class="form-control" value="{{old('codigomovimientostock', $movimientostock->codigo ?? '')}}" />
 		<div class="form-group row" id="tipotransaccion">
 			<label for="recipient-name" class="col-lg-3 col-form-label requerido">Tipo de transacci&oacute;n</label>
-			<select name="tipotransaccion_id" id="tipotransaccion_id" data-placeholder="Tipo de transacci&oacute;n" class="col-lg-6 form-control" data-fouc required>
+			<select name="tipotransaccion_stock_id" id="tipotransaccion_stock_id" data-placeholder="Tipo de transacci&oacute;n" class="col-lg-6 form-control" data-fouc required>
 				<option value="">-- Seleccionar transacción  --</option>
 				@foreach($tipotransaccion_query as $key => $value)
-					@if( (int) $value->id == (int) old('tipotransaccion_id', $movimientostock->tipotransaccion_id ?? ''))
+					@if( (int) $value->id == (int) old('tipotransaccion_stock_id', $movimientostock->tipotransaccion_stock_id ?? ''))
 						<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
 					@else
 						<option value="{{ $value->id }}">{{ $value->nombre }}</option>    

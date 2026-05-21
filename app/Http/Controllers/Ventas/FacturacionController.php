@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Ventas;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use App\Services\Ventas\FacturacionService;
 use App\Queries\Ventas\ClienteQueryInterface;
@@ -17,7 +19,9 @@ use App\Repositories\Ventas\IncotermRepositoryInterface;
 use App\Repositories\Ventas\FormapagoRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Configuracion\Actividad_ArcaRepositoryInterface;
+use App\Repositories\Ventas\DescuentoventaRepositoryInterface;
 use App\Models\Stock\Mventa;
+use App\Models\Stock\Unidadmedida;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Modulo;
 use App\Models\Stock\Listaprecio;
@@ -37,6 +41,7 @@ class FacturacionController extends Controller
     private $transporteRepository;
     private $monedaRepository;
     private $actividad_arcaRepository;
+    private $descuentoventaRepository;
 
     public function __construct(FacturacionService $facturacionservice,
                                 LoteRepositoryInterface $loterepository,
@@ -47,7 +52,8 @@ class FacturacionController extends Controller
 								FormapagoRepositoryInterface $formpagorepository,
                                 TransporteRepositoryInterface $transporterepository,
                                 MonedaRepositoryInterface $monedarepository,
-                                Actividad_ArcaRepositoryInterface $actividad_arcarepository)
+                                Actividad_ArcaRepositoryInterface $actividad_arcarepository,
+                                DescuentoventaRepositoryInterface $descuentoventarepository)
     {
         $this->middleware('auth');
 
@@ -61,6 +67,7 @@ class FacturacionController extends Controller
         $this->transporteRepository = $transporterepository;
         $this->monedaRepository = $monedarepository;
         $this->actividad_arcaRepository = $actividad_arcarepository;
+        $this->descuentoventaRepository = $descuentoventarepository;
     }
 
     /**
@@ -143,11 +150,43 @@ class FacturacionController extends Controller
         $tipotransacciondefault_id = cache()->get(generaKey('tipotransaccion'));
         $puntoventadefault_id = cache()->get(generaKey('puntoventa'));
 
+        if (! $puntoventadefault_id && config('facturacion.PUNTOVENTA_FACTURACION')) {
+            $puntoventadefault_id = config('facturacion.PUNTOVENTA_FACTURACION');
+        }
+
+        $data = new \stdClass();
+        $layoutItemsPedido = facturaUsaLayoutItemsPedido();
+        $descuentoventa_query = collect();
+        $unidadmedida_query = [];
+
+        if ($layoutItemsPedido) {
+            $descuentoventa_query = $this->descuentoventaRepository->all();
+            $unidadmedida_query = Unidadmedida::all()->toArray();
+            array_splice($unidadmedida_query, 1, 1);
+        }
+
         return view('ventas.factura.crear', compact(
-            'mventa_query', 'modulo_query', 'listaprecio_query', 
+            'data',
+            'mventa_query', 'modulo_query', 'listaprecio_query',
             'tipotransaccion_query', 'tipotransacciondefault_id', 'puntoventa_query', 'puntoventadefault_id',
             'deposito_query', 'lote_query', 'cliente_query', 'vendedor_query', 'condicionventa_query',
-            'transporte_query', 'formapago_query', 'incoterm_query', 'moneda_query', 'actividad_arca_query'));
+            'transporte_query', 'formapago_query', 'incoterm_query', 'moneda_query', 'actividad_arca_query',
+            'layoutItemsPedido', 'descuentoventa_query', 'unidadmedida_query'));
+    }
+
+    public function preferencias(Request $request): JsonResponse
+    {
+        can('crear-factura');
+
+        if ($request->filled('tipotransaccion_id')) {
+            Cache::forever(generaKey('tipotransaccion'), (int) $request->input('tipotransaccion_id'));
+        }
+
+        if ($request->filled('puntoventa_id')) {
+            Cache::forever(generaKey('puntoventa'), (int) $request->input('puntoventa_id'));
+        }
+
+        return response()->json(['ok' => true]);
     }
 
     /**

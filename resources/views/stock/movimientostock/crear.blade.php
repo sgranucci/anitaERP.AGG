@@ -9,9 +9,9 @@
 <script>
     function sub()
 	{
-        var tipotransaccion_id = $("#tipotransaccion_id").val();
+        var tipotransaccion_stock_id = $("#tipotransaccion_stock_id").val();
 
-        if (tipotransaccion_id == '')
+        if (tipotransaccion_stock_id == '')
         {
             alert('No puede grabar sin un tipo de transacción');
             return;

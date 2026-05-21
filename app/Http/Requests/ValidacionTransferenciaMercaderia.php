@@ -16,7 +16,8 @@ class ValidacionTransferenciaMercaderia extends FormRequest
         return [
             'deposito_salida_id' => 'required|integer|exists:depmae,id',
             'deposito_entrada_id' => 'required|integer|exists:depmae,id|different:deposito_salida_id',
-            'tipotransaccion_id' => 'required|integer|exists:tipotransaccion,id',
+            'tipotransaccion_stock_id' => 'required_without:tipotransaccion_id|integer|exists:tipotransaccion_stock,id',
+            'tipotransaccion_id' => 'required_without:tipotransaccion_stock_id|integer',
             'lineas' => 'required|array|min:1',
             'lineas.*.articulo_id' => 'required|integer|exists:articulo,id',
             'lineas.*.cantidad' => 'required|numeric|gt:0',

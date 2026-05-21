@@ -88,4 +88,22 @@ return [
     'private_key_passphrase' => env('ARCA_PRIVATE_KEY_PASSPHRASE', ''),
     'ta_storage_dir' => env('ARCA_TA_STORAGE', $padronBase.'/ta'),
     'tmp_dir' => env('ARCA_TMP_DIR', $padronBase.'/tmp'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Catálogo tipos de comprobante AFIP (ABM tipotransaccion, etc.)
+    |--------------------------------------------------------------------------
+    |
+    | null / vacío: inferir por puntos de venta activos en modo CAE (modofacturacion=C).
+    | wsmtxca | wsfev1: forzar el webservice ARCA para FEParamGetTiposCbte / consultarTiposComprobante.
+    */
+    'tipos_cbte' => [
+        'webservice' => env('ARCA_TIPOS_CBTE_WEBSERVICE'),
+        /** Guardar catálogo en tabla arca_tipo_comprobante tras cada consulta ARCA exitosa */
+        'persistir_en_bd' => filter_var(env('ARCA_TIPOS_CBTE_PERSISTIR', true), FILTER_VALIDATE_BOOLEAN),
+        /** Si refresh=0, usar BD si ya hay sincronización para empresa + webservice */
+        'usar_bd_sin_refresh' => filter_var(env('ARCA_TIPOS_CBTE_USAR_BD', true), FILTER_VALIDATE_BOOLEAN),
+        /** Bloquear si CUIT del cert ≠ empresa.nroinscripcion (desactivado por defecto; afip.php puede usar otro CUIT en el XML) */
+        'validar_cuit_certificado' => filter_var(env('ARCA_TIPOS_CBTE_VALIDAR_CUIT', false), FILTER_VALIDATE_BOOLEAN),
+    ],
 ];

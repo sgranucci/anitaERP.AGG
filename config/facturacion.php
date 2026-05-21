@@ -5,6 +5,7 @@ switch(strtoupper(config('app.empresa')))
 {
     case "EL BIERZO":
         return [
+            "LAYOUT_ITEMS_PEDIDO" => true,
             "DIGITOS_SUCURSAL" => "5",
             "DIGITOS_COMPROBANTE" => "8",
             "LIMITE_FCE" => 5549862,
@@ -25,6 +26,7 @@ switch(strtoupper(config('app.empresa')))
             "TIPO_REMITO" => 'REM',
             "LETRA_REMITO" => 'R',
             "TIPO_REMITO_ID" => 9,
+            // Remito en stock: se resuelve por abreviatura TIPO_REMITO en tipotransaccion_stock
             "DEPOSITO_VENTA_ID" => 1,
             "NETEA_DESCUENTO_LINEA" => false, // false deja precio de lista en el renglon siempre y manda el descuento resultante al pie
                                               // true netea el descuento en el precio de cada linea de la factura sin mandar descuento resultante al pie

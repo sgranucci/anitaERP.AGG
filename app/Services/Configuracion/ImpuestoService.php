@@ -36,6 +36,8 @@ class ImpuestoService extends FacturacionService
 
 	public function calculaImpuestoVenta(&$dataItem, $dataCliente, $fechaFactura, $flGrabaComprobanteDividido = null)
 	{
+		$dataItem = $this->normalizaItemsCalculoImpuesto($dataItem);
+
 		// Inicializa variables
 		$totalFinal = 0.;
 		$descuentoItem = 0.;
@@ -361,6 +363,8 @@ class ImpuestoService extends FacturacionService
 	 */
 	public function calculaImpuestosNacionalesItems(array &$dataItem, bool $flConIva = true): array
 	{
+		$dataItem = $this->normalizaItemsCalculoImpuesto($dataItem);
+
 		$descuentoFinal = 0.;
 		$porcDescuento = 0.;
 		$netos = [];
@@ -494,9 +498,47 @@ class ImpuestoService extends FacturacionService
 		}
 	}
 
+	/**
+	 * Completa claves de ítem de facturación que pueden omitirse en el payload (API, OC, etc.).
+	 *
+	 * @param  array<int, array<string, mixed>>  $dataItem
+	 * @return array<int, array<string, mixed>>
+	 */
+	private function normalizaItemsCalculoImpuesto(array $dataItem): array
+	{
+		foreach ($dataItem as $idx => $item) {
+			$dataItem[$idx] = $this->normalizaItemCalculoImpuesto($item);
+		}
+
+		return $dataItem;
+	}
+
+	/**
+	 * @param  array<string, mixed>  $item
+	 * @return array<string, mixed>
+	 */
+	private function normalizaItemCalculoImpuesto(array $item): array
+	{
+		$cantidad = (float) ($item['cantidad'] ?? 0);
+		$precio = (float) ($item['precio'] ?? 0);
+
+		return array_merge($item, [
+			'cantidad' => $cantidad,
+			'precio' => $precio,
+			'preciosindescuento' => (float) ($item['preciosindescuento'] ?? $precio),
+			'kilodescuento' => (float) ($item['kilodescuento'] ?? $cantidad),
+			'incluyeimpuesto' => $item['incluyeimpuesto'] ?? 'N',
+			'descuentofinal' => (float) ($item['descuentofinal'] ?? 0),
+		]);
+	}
+
 	public function calculaNetoItem($item, $flGrabaComprobanteDividido, $flConIva, $tasaDetraccion, $porcentajeDescuentoImportePie)
 	{
-		$totalNeto = $totalDescuento = $porcentajeDescuento = 0;
+		$item = $this->normalizaItemCalculoImpuesto($item);
+
+		$importeSinDto = 0.;
+		$totalNeto = $totalDescuento = $porcentajeDescuento = 0.;
+		$totalDescuentoItem = 0.;
 
 		if ($item['cantidad'] != 0)
 		{

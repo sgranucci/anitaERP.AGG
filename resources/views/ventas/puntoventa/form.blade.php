@@ -6,20 +6,20 @@
 </div>
 <div class="form-group row">
     <label for="codigo" class="col-lg-3 col-form-label requerido">Codigo ARCA</label>
-    <div class="col-lg-1">
+    <div class="col-lg-2">
        <input type="text" name="codigo" id="codigo" class="form-control" value="{{old('codigo', $data->codigo ?? '')}}" required/>
     </div>
 </div>
 <div class="form-group row">
-    <label for="codigo" class="col-lg-3 col-form-label">Actividad ARCA</label>
+    <label for="actividad_arca_id" class="col-lg-3 col-form-label">Actividad ARCA</label>
     <div class="col-lg-4">
         <select name="actividad_arca_id" id="actividad_arca_id" data-placeholder="Actividad ARCA" class="form-control" data-fouc>
             <option value="">Multiples Actividades</option>
             @foreach($actividad_arca_query as $key => $value)
                 @if( (int) $value->id == (int) old('actividad_arca_id', $data->actividad_arca_id ?? ''))
-                    <option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
+                    <option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>
                 @else
-                    <option value="{{ $value->id }}">{{ $value->nombre }}</option>    
+                    <option value="{{ $value->id }}">{{ $value->nombre }}</option>
                 @endif
             @endforeach
         </select>
@@ -32,15 +32,15 @@
     </div>
 </div>
 <div class="form-group row">
-    <label for="codigo" class="col-lg-3 col-form-label requerido">Empresa</label>
-    <div class="col-lg-2">
-        <select name="empresa_id" id="empresa_id" data-placeholder="Empresa" class="form-control required" data-fouc>
+    <label for="empresa_id" class="col-lg-3 col-form-label requerido">Empresa</label>
+    <div class="col-lg-4">
+        <select name="empresa_id" id="empresa_id" data-placeholder="Empresa" class="form-control required" data-fouc required>
             <option value="">-- Seleccionar --</option>
             @foreach($empresa_query as $key => $value)
                 @if( (int) $value->id == (int) old('empresa_id', $data->empresa_id ?? ''))
-                    <option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
+                    <option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>
                 @else
-                    <option value="{{ $value->id }}">{{ $value->nombre }}</option>    
+                    <option value="{{ $value->id }}">{{ $value->nombre }}</option>
                 @endif
             @endforeach
         </select>
@@ -56,9 +56,9 @@
                     <option value="">-- Seleccionar --</option>
                     @foreach($pais_query as $key => $value)
                         @if( (int) $value->id == (int) old('pais_id', $data->pais_id ?? ''))
-                            <option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
+                            <option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>
                         @else
-                            <option value="{{ $value->id }}">{{ $value->nombre }}</option>    
+                            <option value="{{ $value->id }}">{{ $value->nombre }}</option>
                         @endif
                     @endforeach
                 </select>
@@ -71,9 +71,9 @@
                     <option value="">-- Seleccionar --</option>
                     @foreach($provincia_query as $key => $value)
                         @if( (int) $value->id == (int) old('provincia_id', $data->provincia_id ?? ''))
-                            <option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
+                            <option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>
                         @else
-                            <option value="{{ $value->id }}">{{ $value->nombre }}</option>    
+                            <option value="{{ $value->id }}">{{ $value->nombre }}</option>
                         @endif
                     @endforeach
                 </select>
@@ -106,41 +106,60 @@
 </div>
 <div class="form-group row">
     <label for="telefono" class="col-lg-3 col-form-label requerido">Telefono</label>
-    <span class="input-group-text"><i class="fas fa-phone"></i></span>
-    <div class="col-lg-3">
-    <input type="text" name="telefono" id="telefono" class="form-control" value="{{old('telefono', $data->telefono ?? '')}}" required/>
+    <div class="col-lg-4">
+        <div class="input-group">
+            <span class="input-group-text"><i class="fas fa-phone"></i></span>
+            <input type="text" name="telefono" id="telefono" class="form-control" value="{{old('telefono', $data->telefono ?? '')}}" required/>
+        </div>
     </div>
 </div>
 <div class="form-group row">
     <label for="email" class="col-lg-3 col-form-label">Email</label>
-    <span class="input-group-text"><i class="fas fa-envelope"></i></span>
-    <div class="col-lg-5">
-        <input type="email" name="email" id="email" class="form-control" value="{{old('email', $data->email ?? '')}}" placeholder="Ingrese email">
+    <div class="col-lg-4">
+        <div class="input-group">
+            <span class="input-group-text"><i class="fas fa-envelope"></i></span>
+            <input type="email" name="email" id="email" class="form-control" value="{{old('email', $data->email ?? '')}}" placeholder="Ingrese email">
+        </div>
+    </div>
+</div>
+@php
+    $webserviceActual = old('webservice', $data->webservice ?? '');
+@endphp
+<div class="form-group row">
+    <label for="modofacturacion" class="col-lg-3 col-form-label requerido">Modo Facturaci&oacute;n</label>
+    <div class="col-lg-4">
+        <select name="modofacturacion" id="modofacturacion" class="form-control" required>
+            <option value="">-- Elija modo de facturaci&oacute;n --</option>
+            @foreach($modofacturacionEnum as $value => $modofacturacion)
+                @if( $value == old('modofacturacion', $data->modofacturacion ?? ''))
+                    <option value="{{ $value }}" selected="select">{{ $modofacturacion }}</option>
+                @else
+                    <option value="{{ $value }}">{{ $modofacturacion }}</option>
+                @endif
+            @endforeach
+        </select>
     </div>
 </div>
 <div class="form-group row">
-    <label for="modofacturacion" class="col-lg-3 col-form-label requerido">Modo Facturaci&oacute;n</label>
-    <select name="modofacturacion" class="col-lg-3 form-control" required>
-        <option value="">-- Elija modo de facturaci&oacute;n --</option>
-        @foreach($modofacturacionEnum as $value => $modofacturacion)
-            @if( $value == old('modofacturacion', $data->modofacturacion ?? ''))
-                <option value="{{ $value }}" selected="select">{{ $modofacturacion }}</option>    
-            @else
-                <option value="{{ $value }}">{{ $modofacturacion }}</option>    
-            @endif
-        @endforeach
-    </select>
-</div>
-<div class="form-group row">
     <label for="webservice" class="col-lg-3 col-form-label">Web Service</label>
-    <div class="col-lg-2">
-        <input type="text" name="webservice" id="webservice" class="form-control" value="{{old('webservice', $data->webservice ?? '')}}"/>
+    <div class="col-lg-4">
+        <select name="webservice" id="webservice" class="form-control" data-fouc>
+            <option value="">-- Seleccionar --</option>
+            @foreach($webserviceEnum as $value => $etiqueta)
+                @if($value === $webserviceActual)
+                    <option value="{{ $value }}" selected="select">{{ $etiqueta }}</option>
+                @else
+                    <option value="{{ $value }}">{{ $etiqueta }}</option>
+                @endif
+            @endforeach
+        </select>
     </div>
 </div>
 <div class="form-group row">
     <label for="pathafip" class="col-lg-3 col-form-label">Path m&oacute;dulo AFIP</label>
-    <div class="col-lg-3">
+    <div class="col-lg-4">
         <input type="text" name="pathafip" id="pathafip" class="form-control" value="{{old('pathafip', $data->pathafip ?? '')}}"/>
+        <small class="form-text text-muted">Requerido para WSFEX v1 (módulo AFIP en disco). WSFE y WSMTXCA usan certificados ARCA en <code>storage/app/arca/</code>.</small>
     </div>
 </div>
 <input type="hidden" id="estado" name="estado" value="{{$data->estado ?? 'A'}}" >

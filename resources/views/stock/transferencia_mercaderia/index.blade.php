@@ -159,12 +159,12 @@
                             'descripcion' => optional($depEntrada)->nombre ?? '',
                         ])
                         <div class="form-group col-12 mb-2">
-                            <label for="tipotransaccion_id">Tipo de transacción</label>
-                            <select id="tipotransaccion_id" class="form-control" required>
+                            <label for="tipotransaccion_stock_id">Tipo de transacción</label>
+                            <select id="tipotransaccion_stock_id" class="form-control" required>
                                 <option value="">— Seleccionar —</option>
                                 @foreach ($tipotransacciones as $t)
                                     <option value="{{ $t->id }}"
-                                        @if ((int) ($defaults['tipotransaccion_id'] ?? 0) === (int) $t->id) selected @endif>
+                                        @if ((int) ($defaults['tipotransaccion_stock_id'] ?? 0) === (int) $t->id) selected @endif>
                                         {{ $t->nombre }}
                                     </option>
                                 @endforeach

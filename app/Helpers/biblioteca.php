@@ -182,6 +182,21 @@ function generaKey($key)
     return $key.'-'.auth()->id();
 }
 
+/**
+ * Grilla de ítems estilo pedido en factura (EL BIERZO).
+ * Usa config/facturacion.php y, si falta en caché, el nombre de empresa.
+ */
+function facturaUsaLayoutItemsPedido(): bool
+{
+    $layout = config('facturacion.LAYOUT_ITEMS_PEDIDO');
+
+    if ($layout !== null) {
+        return (bool) $layout;
+    }
+
+    return strtoupper((string) config('app.empresa')) === 'EL BIERZO';
+}
+
 // Redondea numeros
 function redondear($n, $dec, $prec) 
 {

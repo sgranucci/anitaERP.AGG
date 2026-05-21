@@ -31,14 +31,14 @@ class MovimientoStockRepository implements MovimientoStockRepositoryInterface
 
     public function all()
     {
-        $ret = $this->model->with('articulos_movimiento')->with('tipostransaccion')->with('mventas')->get();
+        $ret = $this->model->with('articulos_movimiento')->with('tipotransaccion_stock')->with('mventas')->get();
 
         return $ret;
     }
 
     public function find($id)
     {
-        if (null == $movimientostock = $this->model->where('id', $id)->with('articulos_movimiento')->with('tipostransaccion')->first()) {
+        if (null == $movimientostock = $this->model->where('id', $id)->with('articulos_movimiento')->with('tipotransaccion_stock')->first()) {
             throw new ModelNotFoundException("Registro no encontrado");
         }
 

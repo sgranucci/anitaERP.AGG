@@ -24,7 +24,7 @@
             </select>
         </td>							
         <td>
-            <input type="number" min="0" max="100" step="0.0001" class="coeficiente form-control" name="coeficientes[]" value="">
+            <input type="text" inputmode="decimal" class="coeficiente form-control" name="coeficientes[]" value="" autocomplete="off">
         </td>
         <td>
             <input type="date" class="fechavigencia form-control" name="fechavigencias[]" value="">

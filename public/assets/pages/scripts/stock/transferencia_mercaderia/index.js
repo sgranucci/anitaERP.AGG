@@ -24,8 +24,8 @@
         }
     }
 
-    function tipotransaccionId() {
-        return parseInt($('#tipotransaccion_id').val(), 10) || 0;
+    function tipotransaccionStockId() {
+        return parseInt($('#tipotransaccion_stock_id').val(), 10) || 0;
     }
 
     function guardarPreferencias() {
@@ -36,7 +36,7 @@
             _token: $('meta[name="csrf-token"]').attr('content'),
             deposito_salida_id: depositoSalidaId() || '',
             deposito_entrada_id: depositoEntradaId() || '',
-            tipotransaccion_id: tipotransaccionId() || '',
+            tipotransaccion_stock_id: tipotransaccionStockId() || '',
         });
     }
 
@@ -218,7 +218,7 @@
     function grabarTransferencia() {
         var depSal = depositoSalidaId();
         var depEnt = depositoEntradaId();
-        var tipo = tipotransaccionId();
+        var tipo = tipotransaccionStockId();
         var lineas = lineasConCantidad();
 
         if (!depSal || !depEnt) {
@@ -270,7 +270,7 @@
                 _token: $('meta[name="csrf-token"]').attr('content'),
                 deposito_salida_id: depSal,
                 deposito_entrada_id: depEnt,
-                tipotransaccion_id: tipo,
+                tipotransaccion_stock_id: tipo,
                 lineas: lineas,
             },
             dataType: 'json',
@@ -305,7 +305,7 @@
         $('#tm_filtro_desc').on('input', aplicarFiltro);
         $(document).on('input change', '.tm-cant', actualizarBotonTransferir);
 
-        $('#tipotransaccion_id').on('change', guardarPreferencias);
+        $('#tipotransaccion_stock_id').on('change', guardarPreferencias);
 
         $('#deposito_salida_id').on('change', function () {
             if ($(this).closest('#tm_deposito_salida').length) {
