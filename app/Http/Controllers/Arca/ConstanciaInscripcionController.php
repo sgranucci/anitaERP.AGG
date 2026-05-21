@@ -26,18 +26,23 @@ class ConstanciaInscripcionController extends Controller
                     'ok' => false,
                     'message' => (string) $data['error'],
                     'data' => $data,
+                    'soap' => $data['soap'] ?? null,
                 ], 422);
             }
 
             return response()->json([
                 'ok' => true,
                 'data' => $data,
+                'soap' => $data['soap'] ?? null,
             ]);
         } catch (Exception $e) {
-            return response()->json([
+            $soap = $this->service->getLastSoapTrace();
+
+            return response()->json(array_filter([
                 'ok' => false,
                 'message' => $e->getMessage(),
-            ], 500);
+                'soap' => $soap,
+            ]), 500);
         }
     }
 }

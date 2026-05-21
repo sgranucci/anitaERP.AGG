@@ -62,6 +62,108 @@
 
 	let lastArcaData = null;
 	let lastArcaPayloadTree = null;
+	/** @type {{ request: string, response: string }|null} */
+	let lastArcaSoap = null;
+
+	function pickSoapFromJson(json) {
+		if (!json) return null;
+		if (json.soap && (json.soap.request || json.soap.response)) return json.soap;
+		if (json.data && json.data.soap && (json.data.soap.request || json.data.soap.response)) {
+			return json.data.soap;
+		}
+		return null;
+	}
+
+	function storeArcaSoap(soap) {
+		lastArcaSoap = soap && (soap.request || soap.response) ? soap : null;
+	}
+
+	function dataForTreeView(data) {
+		if (!data || typeof data !== 'object') return data;
+		const copy = Object.assign({}, data);
+		delete copy.soap;
+		return copy;
+	}
+
+	function renderArcaSoapPanel() {
+		const section = byId('arca-soap-section');
+		const reqPre = byId('arca-soap-request');
+		const resPre = byId('arca-soap-response');
+		const reqEmpty = byId('arca-soap-request-empty');
+		const resEmpty = byId('arca-soap-response-empty');
+		if (!section) return;
+
+		const req = lastArcaSoap && lastArcaSoap.request ? String(lastArcaSoap.request) : '';
+		const res = lastArcaSoap && lastArcaSoap.response ? String(lastArcaSoap.response) : '';
+		const hasSoap = !!(req || res);
+
+		section.style.display = hasSoap ? 'block' : 'none';
+		if (!hasSoap) return;
+
+		if (reqPre) {
+			reqPre.textContent = req;
+			reqPre.style.display = req ? 'block' : 'none';
+		}
+		if (reqEmpty) reqEmpty.style.display = req ? 'none' : 'block';
+
+		if (resPre) {
+			resPre.textContent = res;
+			resPre.style.display = res ? 'block' : 'none';
+		}
+		if (resEmpty) resEmpty.style.display = res ? 'none' : 'block';
+	}
+
+	async function copyTextToClipboard(text, okMsg) {
+		const t = text == null ? '' : String(text);
+		if (!t) {
+			alert('No hay contenido para copiar.');
+			return;
+		}
+		try {
+			if (navigator.clipboard && navigator.clipboard.writeText) {
+				await navigator.clipboard.writeText(t);
+			} else {
+				const ta = document.createElement('textarea');
+				ta.value = t;
+				ta.setAttribute('readonly', '');
+				ta.style.position = 'fixed';
+				ta.style.left = '-9999px';
+				document.body.appendChild(ta);
+				ta.select();
+				document.execCommand('copy');
+				document.body.removeChild(ta);
+			}
+			if (okMsg) alert(okMsg);
+		} catch (e) {
+			alert('No se pudo copiar al portapapeles.');
+		}
+	}
+
+	function soapBothText() {
+		if (!lastArcaSoap) return '';
+		const parts = [];
+		if (lastArcaSoap.request) {
+			parts.push('=== SOAP REQUEST ===\n' + lastArcaSoap.request);
+		}
+		if (lastArcaSoap.response) {
+			parts.push('=== SOAP RESPONSE ===\n' + lastArcaSoap.response);
+		}
+		return parts.join('\n\n');
+	}
+
+	function promptOpenSoapAfterError(message) {
+		if (!lastArcaSoap) {
+			alert(message || 'Error consultando padrón ARCA.');
+			return;
+		}
+		const abrir = confirm(
+			(message || 'Error consultando padrón ARCA.') +
+				'\n\n¿Abrir el XML SOAP (request/response) para enviar a mesa de ayuda ARCA?'
+		);
+		if (abrir) {
+			openArcaFullPayloadView();
+		}
+	}
 
 	function setArcaLoadingProveedor(isLoading) {
 		const btn = byId('btn-consulta-arca-proveedor');
@@ -94,7 +196,8 @@
 
 	function openArcaPreview({ cuit, data }) {
 		lastArcaData = { cuit, data };
-		lastArcaPayloadTree = data || null;
+		storeArcaSoap(data && data.soap ? data.soap : null);
+		lastArcaPayloadTree = dataForTreeView(data);
 
 		const df = data && data.domicilioFiscal ? data.domicilioFiscal : {};
 
@@ -224,10 +327,14 @@
 		} else {
 			if (title) {
 				const cuit = lastArcaData && lastArcaData.cuit ? lastArcaData.cuit : '';
-				title.textContent = cuit ? 'Respuesta normalizada e incluye el objeto raw del web service (CUIT ' + cuit + ').' : '';
+				title.textContent = cuit
+					? 'Datos normalizados, raw del WS y XML SOAP de la última llamada (CUIT ' + cuit + ').'
+					: '';
 			}
 			root.appendChild(buildTreeDom(lastArcaPayloadTree, 'respuesta', 0));
 		}
+
+		renderArcaSoapPanel();
 
 		const overlay = byId('arca-full-overlay');
 		if (overlay) overlay.style.display = 'flex';
@@ -338,12 +445,15 @@
 			}
 
 			const json = await resp.json();
+			storeArcaSoap(pickSoapFromJson(json));
+
 			if (!resp.ok || !json.ok) {
-				alert(json.message || 'Error consultando padrón ARCA.');
+				promptOpenSoapAfterError(json.message || 'Error consultando padrón ARCA.');
 				return false;
 			}
 
 			const data = json.data || {};
+			if (!data.soap && json.soap) data.soap = json.soap;
 			openArcaPreview({ cuit: cuit, data: data });
 			return true;
 		} catch (err) {
@@ -451,6 +561,25 @@
 		if (expandBtn) {
 			expandBtn.addEventListener('click', function () {
 				openArcaFullPayloadView();
+			});
+		}
+
+		const copyReq = byId('arca-soap-copy-request');
+		if (copyReq) {
+			copyReq.addEventListener('click', function () {
+				copyTextToClipboard(lastArcaSoap && lastArcaSoap.request, 'Request SOAP copiado.');
+			});
+		}
+		const copyRes = byId('arca-soap-copy-response');
+		if (copyRes) {
+			copyRes.addEventListener('click', function () {
+				copyTextToClipboard(lastArcaSoap && lastArcaSoap.response, 'Response SOAP copiado.');
+			});
+		}
+		const copyBoth = byId('arca-soap-copy-both');
+		if (copyBoth) {
+			copyBoth.addEventListener('click', function () {
+				copyTextToClipboard(soapBothText(), 'Request y response SOAP copiados.');
 			});
 		}
 

@@ -22,6 +22,12 @@
 	.arca-tree-v { color: #212529; }
 	.arca-tree-null { font-style: italic; color: #868e96; }
 	#arca-full-tree details { margin: 2px 0; border-left: 1px solid #e9ecef; padding-left: 6px; }
+	.arca-soap-block { margin-top: 16px; border-top: 1px solid #e9ecef; padding-top: 12px; }
+	.arca-soap-block h6 { font-size: 13px; font-weight: 600; margin: 0 0 8px; }
+	.arca-soap-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+	.arca-soap-pre { margin: 0; padding: 10px 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 11px; line-height: 1.4; max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+	.arca-soap-empty { color: #868e96; font-size: 12px; font-style: italic; }
+	.arca-soap-warn { margin-bottom: 12px; color: #856404; background: #fff3cd; border: 1px solid #ffeeba; padding: 8px 10px; border-radius: 6px; font-size: 12px; }
 </style>
 <div id="arca-preview-overlay" role="dialog" aria-modal="true" aria-labelledby="arca-preview-title">
 	<div id="arca-preview-modal">
@@ -41,7 +47,7 @@
 			<div id="arca-prev-warn" class="warn"></div>
 		</div>
 		<div class="ft">
-			<button type="button" class="btn btn-outline-secondary btn-sm" id="arca-preview-expand-full" title="Incluye datos normalizados y el objeto raw del servicio">Ver respuesta completa del web service</button>
+			<button type="button" class="btn btn-outline-secondary btn-sm" id="arca-preview-expand-full" title="Datos normalizados, raw del WS y XML SOAP request/response">Ver respuesta completa / SOAP</button>
 			<button type="button" class="btn btn-light" id="arca-preview-cancel">Cancelar</button>
 			<button type="button" class="btn btn-primary" id="arca-preview-apply">Aplicar al formulario</button>
 		</div>
@@ -60,6 +66,28 @@
 		<div class="bd">
 			<p class="text-muted small" style="margin-bottom:10px;">Podés expandir y contraer cada grupo. El bloque <strong>raw</strong> replica la estructura devuelta por el web service.</p>
 			<div id="arca-full-tree"></div>
+			<div id="arca-soap-section" class="arca-soap-block" style="display:none;">
+				<div id="arca-soap-warn" class="arca-soap-warn">
+					El XML incluye <strong>token</strong> y <strong>sign</strong> de acceso. Usalo solo para soporte ARCA o diagnóstico interno; no lo reenvíes por canales públicos.
+				</div>
+				<div class="arca-soap-block">
+					<h6>SOAP request (última llamada a personaServiceA5)</h6>
+					<div class="arca-soap-toolbar">
+						<button type="button" class="btn btn-outline-secondary btn-sm" id="arca-soap-copy-request">Copiar request</button>
+					</div>
+					<pre id="arca-soap-request" class="arca-soap-pre"></pre>
+					<div id="arca-soap-request-empty" class="arca-soap-empty" style="display:none;">Sin request capturado (la consulta no llegó al web service).</div>
+				</div>
+				<div class="arca-soap-block">
+					<h6>SOAP response</h6>
+					<div class="arca-soap-toolbar">
+						<button type="button" class="btn btn-outline-secondary btn-sm" id="arca-soap-copy-response">Copiar response</button>
+						<button type="button" class="btn btn-outline-secondary btn-sm" id="arca-soap-copy-both">Copiar request + response</button>
+					</div>
+					<pre id="arca-soap-response" class="arca-soap-pre"></pre>
+					<div id="arca-soap-response-empty" class="arca-soap-empty" style="display:none;">Sin response capturado.</div>
+				</div>
+			</div>
 		</div>
 		<div class="ft">
 			<button type="button" class="btn btn-primary" id="arca-full-close-foot">Cerrar</button>

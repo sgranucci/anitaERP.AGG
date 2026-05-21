@@ -9,10 +9,23 @@ use SoapClient;
 
 class ConstanciaInscripcionService
 {
+    /** @var array{request: string, response: string}|null */
+    private ?array $lastSoapTrace = null;
+
     public function __construct(private WsaaService $wsaaService) {}
+
+    /**
+     * @return array{request: string, response: string}|null
+     */
+    public function getLastSoapTrace(): ?array
+    {
+        return $this->lastSoapTrace;
+    }
 
     public function getPersonaV2(string $cuitConsultada): array
     {
+        $this->lastSoapTrace = null;
+
         $cuitConsultada = $this->soloDigitos($cuitConsultada);
         if (strlen($cuitConsultada) !== 11) {
             throw new Exception('CUIT inválida (debe tener 11 dígitos)');
@@ -33,19 +46,37 @@ class ConstanciaInscripcionService
             'cache_wsdl' => WSDL_CACHE_NONE,
         ]);
 
-        $resp = $client->getPersona_v2([
-            'token' => $ts['token'],
-            'sign' => $ts['sign'],
-            'cuitRepresentada' => $cuitRepresentada,
-            'idPersona' => $cuitConsultada,
-        ]);
+        try {
+            $resp = $client->getPersona_v2([
+                'token' => $ts['token'],
+                'sign' => $ts['sign'],
+                'cuitRepresentada' => $cuitRepresentada,
+                'idPersona' => $cuitConsultada,
+            ]);
 
-        $personaReturn = $resp->personaReturn ?? null;
-        if ($personaReturn === null) {
-            throw new Exception('Respuesta inválida del WS (sin personaReturn)');
+            $personaReturn = $resp->personaReturn ?? null;
+            if ($personaReturn === null) {
+                throw new Exception('Respuesta inválida del WS (sin personaReturn)');
+            }
+
+            $data = $this->normalizarPersonaReturn($personaReturn);
+            $data['soap'] = $this->captureSoapTrace($client);
+
+            return $data;
+        } finally {
+            $this->lastSoapTrace = $this->captureSoapTrace($client);
         }
+    }
 
-        return $this->normalizarPersonaReturn($personaReturn);
+    /**
+     * @return array{request: string, response: string}
+     */
+    private function captureSoapTrace(SoapClient $client): array
+    {
+        return [
+            'request' => (string) ($client->__getLastRequest() ?: ''),
+            'response' => (string) ($client->__getLastResponse() ?: ''),
+        ];
     }
 
     /**
