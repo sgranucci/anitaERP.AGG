@@ -171,16 +171,28 @@ $('#usuario_id').on('change', function (event) {
 function activa_eventos_consultausuario()
 {
     $('.consultausuario').on('click', function (event) {
-        let usuario_id = $("#usuario_id").val();
+        var $btn = $(this);
+        var ptrId = $btn.data('ptrusuario_id') || $btn.attr('data-ptrusuario_id');
+        var ptrNom = $btn.data('ptrnombre') || $btn.attr('data-ptrnombre');
+        var ptrCod = $btn.data('ptrusuario_codigo') || $btn.attr('data-ptrusuario_codigo');
 
-        ptrusuario_id = $(this).closest("tr").find(".usuario_id_arbol, .usuario_id").first();
-        ptrusuario_codigo = $(this).closest("tr").find(".usuario_codigo_arbol");
-		ptrnombreusuario = $(this).closest("tr").find(".nombreusuario");
+        if (ptrId && ptrNom) {
+            ptrusuario_id = ptrId;
+            ptrnombreusuario = ptrNom;
+            ptrusuario_codigo = ptrCod || null;
+        } else {
+            ptrusuario_id = $btn.closest('tr').find('.usuario_id_arbol, .usuario_id').first();
+            ptrusuario_codigo = $btn.closest('tr').find('.usuario_codigo_arbol');
+            ptrnombreusuario = $btn.closest('tr').find('.nombreusuario');
+        }
 
-        $("#consultausuarioModal").modal('show');
+        var usuario_id = $('#usuario_id').val();
 
-        ($.isNumeric(usuario_id))
+        $('#consultausuarioModal').modal('show');
+
+        if ($.isNumeric(usuario_id)) {
             buscar_datos_usuario();
+        }
     });
 
     $('#consultausuarioModal').on('shown.bs.modal', function () {

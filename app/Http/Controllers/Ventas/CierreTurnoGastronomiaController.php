@@ -7,17 +7,24 @@ use App\Http\Controllers\Controller;
 use App\Models\Ventas\CierreParcialTurnoGastronomia;
 use App\Models\Ventas\TurnoOperativoGastronomia;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Services\Ventas\Gastronomia\GastronomiaCuentaService;
+use App\Services\Ventas\Gastronomia\GastronomiaTurnoOperativoService;
 use App\Support\Ventas\GastronomiaCierreTurnoReporteSupport;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
+use App\Support\Ventas\GastronomiaTurnoOperativoTotalesSupport;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use InvalidArgumentException;
 use Maatwebsite\Excel\Excel;
+use Throwable;
 
 class CierreTurnoGastronomiaController extends Controller
 {
     public function __construct(
         private GastronomiaCierreTurnoReporteSupport $reporteSupport,
         private EmpresaRepositoryInterface $empresaRepository,
+        private GastronomiaCuentaService $cuentaService,
+        private GastronomiaTurnoOperativoService $turnoOperativoService,
     ) {
     }
 
@@ -32,11 +39,28 @@ class CierreTurnoGastronomiaController extends Controller
             $empresaId = (int) $empresaQuery->first()->id;
         }
 
+        $cfg = $this->cuentaService->resolverConfiguracionPv($request);
+        $turnoOperativo = null;
+        if ($cfg !== null && GastronomiaTurnoOperativoService::requiereHabilitacionTurno()) {
+            $turnoOperativo = $this->turnoOperativoService->estadoParaTerminal($cfg, $identificadorPc);
+        }
+
+        $fechaDesdeDefault = Carbon::today()->subDays(7)->format('Y-m-d');
+        $fechaHastaDefault = Carbon::today()->format('Y-m-d');
+        if ($turnoOperativo !== null
+            && ! empty($turnoOperativo['turno_habilitado'])
+            && ! empty($turnoOperativo['habilitacion_en'])) {
+            $fechaDesdeTurno = Carbon::parse((string) $turnoOperativo['habilitacion_en'])->format('Y-m-d');
+            if ($fechaDesdeTurno < $fechaDesdeDefault) {
+                $fechaDesdeDefault = $fechaDesdeTurno;
+            }
+        }
+
         $filtros = [
             'empresa_id' => $empresaId,
             'identificador_pc' => $request->input('identificador_pc', $identificadorPc),
-            'fecha_desde' => $request->input('fecha_desde', Carbon::today()->subDays(7)->format('Y-m-d')),
-            'fecha_hasta' => $request->input('fecha_hasta', Carbon::today()->format('Y-m-d')),
+            'fecha_desde' => $request->input('fecha_desde', $fechaDesdeDefault),
+            'fecha_hasta' => $request->input('fecha_hasta', $fechaHastaDefault),
             'tipo' => $request->input('tipo', ''),
         ];
 
@@ -48,6 +72,63 @@ class CierreTurnoGastronomiaController extends Controller
             'filtros' => $filtros,
             'empresa_query' => $empresaQuery,
             'identificador_pc_default' => $identificadorPc,
+            'turno_operativo' => $turnoOperativo,
+            'requiere_habilitacion_turno' => GastronomiaTurnoOperativoService::requiereHabilitacionTurno(),
+            'puede_ver_comprobante' => can('ver-comprobante-cierre-turno-gastronomia', false),
+            'puede_ver_factura' => can('ver-factura-gastronomia', false),
+        ]);
+    }
+
+    public function apiComprobantes(Request $request)
+    {
+        can('listar-cierres-turno-gastronomia');
+
+        $tipo = trim((string) $request->input('tipo', ''));
+        $id = (int) $request->input('id', 0);
+        if ($id <= 0 || ! in_array($tipo, ['parcial', 'cierre'], true)) {
+            return response()->json(['ok' => false, 'error' => 'Registro de cierre inválido.'], 422);
+        }
+
+        try {
+            $alcance = $this->reporteSupport->alcanceComprobantesRegistro($tipo, $id);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        }
+
+        $this->assertAccesoEmpresa((int) $alcance['empresa_id']);
+
+        $page = (int) $request->input('page', 1);
+        $perPage = (int) $request->input('per_page', GastronomiaTurnoOperativoTotalesSupport::CONCILIACION_FILAS_POR_PAGINA);
+        $soloDiferencias = $request->boolean('solo_diferencias');
+
+        try {
+            $grilla = GastronomiaTurnoOperativoTotalesSupport::grillaConciliacionRespuesta(
+                $alcance['identificador_pc'],
+                (int) $alcance['empresa_id'],
+                $alcance['fecha_jornada'],
+                $alcance['desde'],
+                max(1, $page),
+                $perPage,
+                $soloDiferencias,
+                $alcance['hasta'],
+            );
+        } catch (Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'error' => 'Error al listar comprobantes: '.$e->getMessage(),
+            ], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'alcance' => [
+                'titulo' => $alcance['titulo'],
+                'subtitulo' => $alcance['subtitulo'],
+            ],
+            'grilla' => $grilla,
+            'url_factura_ver_base' => can('ver-factura-gastronomia', false)
+                ? url('ventas/gastronomia/facturas-dia')
+                : null,
         ]);
     }
 

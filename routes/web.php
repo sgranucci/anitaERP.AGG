@@ -332,6 +332,8 @@ Route::delete('stock/mventa/{id}', 'Stock\MventaController@eliminar')->name('eli
 
 Route::get('stock/depmae', 'Stock\DepmaeController@index')->name('depmae');
 Route::get('stock/depmae/crear', 'Stock\DepmaeController@crear')->name('crear_depmae');
+Route::post('stock/depmae/consultadeposito', 'Stock\DepmaeController@consultaDeposito')->name('consulta_depmae');
+Route::get('stock/depmae/leer/{codigo}', 'Stock\DepmaeController@leeUnDepositoPorCodigo')->name('leer_depmae');
 Route::post('stock/depmae', 'Stock\DepmaeController@guardar')->name('guardar_depmae');
 Route::get('stock/depmae/{id}/editar', 'Stock\DepmaeController@editar')->name('editar_depmae');
 Route::put('stock/depmae/{id}', 'Stock\DepmaeController@actualizar')->name('actualizar_depmae');
@@ -884,6 +886,15 @@ Route::get('stock/movimientostock/{id}/editar', 'Stock\MovimientoStockController
 Route::put('stock/movimientostock/{id}', 'Stock\MovimientoStockController@actualizar')->name('actualizar_movimientostock');
 Route::delete('stock/movimientostock/{id}', 'Stock\MovimientoStockController@eliminar')->name('eliminar_movimientostock');
 Route::get('stock/listarmovimientostock/{id}', 'Stock\MovimientoStockController@listarMovimientoStock')->name('listar_movimientostock');
+
+/*
+ * Transferencia ágil de mercadería (móvil / tablet)
+ */
+Route::get('stock/transferencia-mercaderia', 'Stock\TransferenciaMercaderiaController@index')->name('transferencia_mercaderia');
+Route::post('stock/transferencia-mercaderia/preferencias', 'Stock\TransferenciaMercaderiaController@preferencias')->name('transferencia_mercaderia_preferencias');
+Route::get('stock/transferencia-mercaderia/inventario', 'Stock\TransferenciaMercaderiaController@inventario')->name('transferencia_mercaderia_inventario');
+Route::post('stock/transferencia-mercaderia', 'Stock\TransferenciaMercaderiaController@guardar')->name('transferencia_mercaderia_guardar');
+
 // Modulo de ventas
 // Reportes de ventas
 
@@ -1142,20 +1153,39 @@ Route::get('ventas/gastronomia/cierres-turno', 'Ventas\CierreTurnoGastronomiaCon
 Route::get('ventas/lista-gastronomia-cierres-turno/{formato}', 'Ventas\CierreTurnoGastronomiaController@exportar')->name('listar_gastronomia_cierres_turno');
 Route::get('ventas/gastronomia/cierres-turno/parcial/{id}/comprobante', 'Ventas\CierreTurnoGastronomiaController@comprobanteParcial')->name('gastronomia_cierre_turno_comprobante_parcial');
 Route::get('ventas/gastronomia/cierres-turno/cierre/{id}/comprobante', 'Ventas\CierreTurnoGastronomiaController@comprobanteCierre')->name('gastronomia_cierre_turno_comprobante_cierre');
+Route::get('ventas/gastronomia/cierres-turno/api/comprobantes', 'Ventas\CierreTurnoGastronomiaController@apiComprobantes')->name('gastronomia_cierres_turno_api_comprobantes');
 
 Route::get('ventas/gastronomia/habilitacion-turno', 'Ventas\HabilitacionTurnoGastronomiaController@index')->name('gastronomia_habilitacion_turno');
 Route::get('ventas/gastronomia/habilitacion-turno/api/estado', 'Ventas\HabilitacionTurnoGastronomiaController@apiEstado')->name('gastronomia_habilitacion_turno_api_estado');
 Route::post('ventas/gastronomia/habilitacion-turno/api/habilitar', 'Ventas\HabilitacionTurnoGastronomiaController@apiHabilitar')->name('gastronomia_habilitacion_turno_api_habilitar');
+Route::post('ventas/gastronomia/habilitacion-turno/api/cierre-parcial', 'Ventas\HabilitacionTurnoGastronomiaController@apiCierreParcial')->name('gastronomia_habilitacion_turno_api_cierre_parcial');
 Route::post('ventas/gastronomia/habilitacion-turno/api/cerrar', 'Ventas\HabilitacionTurnoGastronomiaController@apiCerrar')->name('gastronomia_habilitacion_turno_api_cerrar');
+Route::get('ventas/gastronomia/habilitacion-turno/api/conciliacion-turno', 'Ventas\HabilitacionTurnoGastronomiaController@apiConciliacionTurno')->name('gastronomia_habilitacion_turno_api_conciliacion_turno');
+Route::get('ventas/gastronomia/habilitacion-turno/api/conciliacion-medio', 'Ventas\HabilitacionTurnoGastronomiaController@apiConciliacionMedio')->name('gastronomia_habilitacion_turno_api_conciliacion_medio');
+Route::get('ventas/gastronomia/habilitacion-turno/informe-mozo-pdf', 'Ventas\HabilitacionTurnoGastronomiaController@informeMozoPdf')->name('gastronomia_habilitacion_turno_informe_mozo_pdf');
 
 Route::get('ventas/gastronomia/jornada', 'Ventas\JornadaGastronomiaController@index')->name('gastronomia_jornada');
 Route::get('ventas/gastronomia/jornada/api/estado/{empresaId}', 'Ventas\JornadaGastronomiaController@apiEstado')->name('gastronomia_jornada_api_estado');
 Route::post('ventas/gastronomia/jornada/api/abrir', 'Ventas\JornadaGastronomiaController@apiAbrir')->name('gastronomia_jornada_api_abrir');
 Route::post('ventas/gastronomia/jornada/api/cerrar', 'Ventas\JornadaGastronomiaController@apiCerrar')->name('gastronomia_jornada_api_cerrar');
 
+Route::get('ventas/gastronomia/saneamiento-turno', 'Ventas\GastronomiaSaneamientoTurnoController@index')->name('gastronomia_saneamiento_turno');
+Route::get('ventas/gastronomia/saneamiento-turno/api/diagnostico', 'Ventas\GastronomiaSaneamientoTurnoController@apiDiagnostico')->name('gastronomia_saneamiento_turno_api_diagnostico');
+Route::post('ventas/gastronomia/saneamiento-turno/api/extender-cierre', 'Ventas\GastronomiaSaneamientoTurnoController@apiExtenderCierre')->name('gastronomia_saneamiento_turno_api_extender_cierre');
+Route::post('ventas/gastronomia/saneamiento-turno/api/crear-retroactivo', 'Ventas\GastronomiaSaneamientoTurnoController@apiCrearRetroactivo')->name('gastronomia_saneamiento_turno_api_crear_retroactivo');
+Route::post('ventas/gastronomia/saneamiento-turno/api/recalcular-totales', 'Ventas\GastronomiaSaneamientoTurnoController@apiRecalcularTotales')->name('gastronomia_saneamiento_turno_api_recalcular_totales');
+Route::post('ventas/gastronomia/saneamiento-turno/api/cerrar-cuentas-pendientes', 'Ventas\GastronomiaSaneamientoTurnoController@apiCerrarCuentasPendientes')->name('gastronomia_saneamiento_turno_api_cerrar_cuentas');
+Route::get('ventas/gastronomia/saneamiento-turno/informe-pdf', 'Ventas\GastronomiaSaneamientoTurnoController@informePdf')->name('gastronomia_saneamiento_turno_informe_pdf');
+
 Route::get('ventas/gastronomia/facturas-dia', 'Ventas\GastronomiaFacturasDiaController@index')->name('gastronomia_facturas_dia');
 Route::get('ventas/lista-gastronomia-facturas-dia/{formato}', 'Ventas\GastronomiaFacturasDiaController@exportar')->name('listar_gastronomia_facturas_dia');
 Route::get('ventas/gastronomia/facturas-dia/{ventaId}/ver', 'Ventas\GastronomiaFacturasDiaController@ver')->name('gastronomia_facturas_dia_ver');
+Route::post('ventas/gastronomia/facturas-dia/{ventaId}/reimprimir-ticket', 'Ventas\GastronomiaFacturasDiaController@reimprimirTicket')->name('gastronomia_facturas_dia_reimprimir_ticket');
+
+Route::get('ventas/arca-caea', 'Ventas\ArcaCaeaController@index')->name('arca_caea');
+Route::get('ventas/arca-caea/{id}', 'Ventas\ArcaCaeaController@show')->name('arca_caea_ver');
+Route::post('ventas/arca-caea/solicitar', 'Ventas\ArcaCaeaController@solicitar')->name('arca_caea_solicitar');
+Route::post('ventas/arca-caea/{id}/reintentar', 'Ventas\ArcaCaeaController@reintentar')->name('arca_caea_reintentar');
 
 Route::get('ventas/puntoventa', 'Ventas\PuntoventaController@index')->name('puntoventa');
 Route::post('ventas/puntoventa/sincronizar-anita', 'Ventas\PuntoventaController@sincronizarDesdeAnita')->name('sincronizar_puntoventa_anita');

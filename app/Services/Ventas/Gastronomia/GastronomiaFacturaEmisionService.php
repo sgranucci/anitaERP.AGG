@@ -13,6 +13,7 @@ use App\Support\Ventas\GastronomiaIdentificadorPc;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
 use App\Support\Ventas\GastronomiaMovimientoStockSupport;
 use App\Support\Ventas\GastronomiaPuntoventaEmisionLock;
+use App\Services\Ventas\Gastronomia\Waitry\WaitryComandaService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
@@ -34,6 +35,9 @@ final class GastronomiaFacturaEmisionService
         private readonly GastronomiaCobranzaService $cobranzaGastronomiaService,
         private readonly GastronomiaPreflightEmisionService $preflightEmisionService,
         private readonly GastronomiaJornadaService $jornadaService,
+        private readonly GastronomiaFacturaTicketService $facturaTicketService,
+        private readonly GastronomiaInsumoStkmovAnitaService $insumoStkmovAnitaService,
+        private readonly WaitryComandaService $waitryComandaService,
     ) {
     }
 
@@ -230,7 +234,7 @@ final class GastronomiaFacturaEmisionService
 
         try {
             try {
-                return DB::transaction(function () use (
+                $resultado = DB::transaction(function () use (
                     $cuenta,
                     $cfg,
                     $payload,
@@ -249,6 +253,10 @@ final class GastronomiaFacturaEmisionService
                         $puntoventaId,
                     );
                 });
+
+                $resultado = $this->aplicarImpresionTicketTrasEmision($resultado, $cfg, $cuenta);
+
+                return $this->aplicarWaitryComandaTrasEmision($resultado, $cuenta, $mediosPago);
             } catch (Throwable $e) {
                 Log::error('gastronomia.emitir_factura.fallo', [
                     'cuenta_id' => $cuenta->id,
@@ -288,93 +296,115 @@ final class GastronomiaFacturaEmisionService
         int $tipoFacturaId,
         int $puntoventaId,
     ): array {
-        // 1) Número ARCA + grabación venta/ítems (CAE diferido vía omitir_solicitud_arca_cae).
-        $resultado = $this->facturacionGastronomiaService->emitirComprobante($payload, $cuenta);
+        $ventaAnitaRevertir = null;
 
-        if (! empty($resultado['error'])) {
-            throw new InvalidArgumentException((string) $resultado['error']);
-        }
+        try {
+            // 1) Número ARCA + grabación venta/ítems (CAE diferido vía omitir_solicitud_arca_cae).
+            $resultado = $this->facturacionGastronomiaService->emitirComprobante($payload, $cuenta);
 
-        $facturaTxt = trim((string) ($resultado['factura'] ?? ''));
-        if ($facturaTxt === '') {
-            throw new RuntimeException('El servicio de facturación no devolvió el número de comprobante.');
-        }
+            if (! empty($resultado['error'])) {
+                throw new InvalidArgumentException((string) $resultado['error']);
+            }
 
-        $ventaId = (int) ($resultado['venta_id'] ?? 0);
-        $venta = $ventaId > 0 ? Venta::query()->find($ventaId) : null;
-        if (! $venta) {
-            $venta = $this->resolverVentaPorEtiqueta($puntoventaId, $facturaTxt);
-        }
-        if (! $venta) {
-            throw new RuntimeException(
-                'No se pudo recuperar la venta interna tras emitir el comprobante '.$facturaTxt
-                .'. Revise ARCA y la tabla venta antes de reintentar.'
-            );
-        }
+            $facturaTxt = trim((string) ($resultado['factura'] ?? ''));
+            if ($facturaTxt === '') {
+                throw new RuntimeException('El servicio de facturación no devolvió el número de comprobante.');
+            }
 
-        $sinCobranza = ! empty($resultado['sin_cobranza']);
-        $cobranzaId = null;
+            $ventaId = (int) ($resultado['venta_id'] ?? 0);
+            $venta = $ventaId > 0 ? Venta::query()->find($ventaId) : null;
+            if (! $venta) {
+                $venta = $this->resolverVentaPorEtiqueta($puntoventaId, $facturaTxt);
+            }
+            if (! $venta) {
+                throw new RuntimeException(
+                    'No se pudo recuperar la venta interna tras emitir el comprobante '.$facturaTxt
+                    .'. Revise ARCA y la tabla venta antes de reintentar.'
+                );
+            }
 
-        // 2) Cobranza
-        if (! $sinCobranza) {
-            $cobRes = $this->cobranzaGastronomiaService->registrarCobranzaPos(
-                $venta->fresh(),
-                $mediosPago,
+            if (config('gastronomia.sincronizar_anita_al_facturar', true)) {
+                $ventaAnitaRevertir = $venta;
+            }
+
+            $sinCobranza = ! empty($resultado['sin_cobranza']);
+            $cobranzaId = null;
+
+            // 2) Cobranza
+            if (! $sinCobranza) {
+                $cobRes = $this->cobranzaGastronomiaService->registrarCobranzaPos(
+                    $venta->fresh(),
+                    $mediosPago,
+                    $cfg,
+                );
+                $cobranzaId = isset($cobRes['cobranza_id']) ? (int) $cobRes['cobranza_id'] : null;
+            }
+
+            // 3) Ingredientes por fórmula
+            $tipo = Tipotransaccion::query()->find($tipoFacturaId);
+            $nombreTipo = $tipo !== null ? (string) ($tipo->nombre ?? 'Venta') : 'Venta';
+
+            $this->consumoFormulaService->registrarMovimientosIngredientes(
+                $venta,
+                $cuenta->fresh(['lineas.articulo']),
                 $cfg,
+                $tipoFacturaId,
+                $nombreTipo,
+                (string) $payload['fechafactura'],
+                $monedaId,
+                (string) ($payload['fechajornada'] ?? $payload['fechafactura']),
             );
-            $cobranzaId = isset($cobRes['cobranza_id']) ? (int) $cobRes['cobranza_id'] : null;
+
+            $this->insumoStkmovAnitaService->replicarMovimientosInsumos(
+                $venta->fresh(),
+                $cfg,
+                (float) ($payload['descuentopie'] ?? 0),
+            );
+
+            // 4) CAE/CAEA en ARCA (último paso fiscal, con recuperación si falla la comunicación).
+            if (! empty($resultado['cae_pendiente']) && is_array($resultado['cae_pendiente'])) {
+                $this->facturacionGastronomiaService->completarSolicitudCaePendiente($resultado['cae_pendiente']);
+            }
+
+            VentaGastronomiaEmision::updateOrCreate(
+                ['venta_id' => $venta->id],
+                [
+                    'cuenta_gastronomia_id' => $cuenta->id,
+                    'identificador_pc' => GastronomiaIdentificadorPc::resolver(),
+                    'configuracion_puntoventa_gastronomia_id' => $cfg->id,
+                ],
+            );
+
+            // 5) Cerrar cuenta/mesa
+            $this->cuentaService->marcarFacturada($cuenta->fresh(), $venta->id);
+
+            $ventaAnitaRevertir = null;
+
+            $warn = ArcaWsfeEmisionResiliencia::mensajeAvisoModoCaeaForzado();
+            if (! empty($resultado['factura_cortesia_total'])) {
+                $warnCortesia = 'Factura de cortesía ($'.number_format(
+                    GastronomiaFacturacionService::IMPORTE_MINIMO_FACTURA,
+                    2,
+                    ',',
+                    '.',
+                ).'); no requiere cobranza.';
+                $warn = $warn ? $warn."\n\n".$warnCortesia : $warnCortesia;
+            }
+
+            return array_filter([
+                'venta_id' => $venta->id,
+                'factura' => $facturaTxt,
+                'warn' => $warn,
+                'sin_cobranza' => $sinCobranza,
+                'cobranza_id' => $cobranzaId,
+            ], fn ($v) => $v !== null && $v !== '' && $v !== false);
+        } catch (Throwable $e) {
+            if ($ventaAnitaRevertir !== null) {
+                $this->facturacionGastronomiaService->revertirVentaEnAnitaSiHabilitado($ventaAnitaRevertir);
+            }
+
+            throw $e;
         }
-
-        // 3) Ingredientes por fórmula
-        $tipo = Tipotransaccion::query()->find($tipoFacturaId);
-        $nombreTipo = $tipo !== null ? (string) ($tipo->nombre ?? 'Venta') : 'Venta';
-
-        $this->consumoFormulaService->registrarMovimientosIngredientes(
-            $venta,
-            $cuenta->fresh(['lineas.articulo']),
-            $cfg,
-            $tipoFacturaId,
-            $nombreTipo,
-            (string) $payload['fechafactura'],
-            $monedaId,
-            (string) ($payload['fechajornada'] ?? $payload['fechafactura']),
-        );
-
-        // 4) CAE/CAEA en ARCA (último paso fiscal, con recuperación si falla la comunicación).
-        if (! empty($resultado['cae_pendiente']) && is_array($resultado['cae_pendiente'])) {
-            $this->facturacionGastronomiaService->completarSolicitudCaePendiente($resultado['cae_pendiente']);
-        }
-
-        VentaGastronomiaEmision::updateOrCreate(
-            ['venta_id' => $venta->id],
-            [
-                'cuenta_gastronomia_id' => $cuenta->id,
-                'identificador_pc' => GastronomiaIdentificadorPc::resolver(),
-                'configuracion_puntoventa_gastronomia_id' => $cfg->id,
-            ],
-        );
-
-        // 5) Cerrar cuenta/mesa
-        $this->cuentaService->marcarFacturada($cuenta->fresh(), $venta->id);
-
-        $warn = ArcaWsfeEmisionResiliencia::mensajeAvisoModoCaeaForzado();
-        if (! empty($resultado['factura_cortesia_total'])) {
-            $warnCortesia = 'Factura de cortesía ($'.number_format(
-                GastronomiaFacturacionService::IMPORTE_MINIMO_FACTURA,
-                2,
-                ',',
-                '.',
-            ).'); no requiere cobranza.';
-            $warn = $warn ? $warn."\n\n".$warnCortesia : $warnCortesia;
-        }
-
-        return array_filter([
-            'venta_id' => $venta->id,
-            'factura' => $facturaTxt,
-            'warn' => $warn,
-            'sin_cobranza' => $sinCobranza,
-            'cobranza_id' => $cobranzaId,
-        ], fn ($v) => $v !== null && $v !== '' && $v !== false);
     }
 
     /**
@@ -460,6 +490,103 @@ final class GastronomiaFacturaEmisionService
         }
 
         return [$articuloIds, $cantidades, $precios, $descripciones];
+    }
+
+    /**
+     * @param  array{venta_id?:int,factura?:string,warn?:string,sin_cobranza?:bool,cobranza_id?:int}  $resultado
+     * @return array{venta_id?:int,factura?:string,warn?:string,sin_cobranza?:bool,cobranza_id?:int,impresion_ticket?:string,impresion_ticket_mensaje?:string}
+     */
+    private function aplicarImpresionTicketTrasEmision(
+        array $resultado,
+        ConfiguracionPuntoventaGastronomia $cfg,
+        CuentaGastronomia $cuenta,
+    ): array {
+        $ventaId = (int) ($resultado['venta_id'] ?? 0);
+        if ($ventaId <= 0) {
+            return $resultado;
+        }
+
+        $imp = $this->facturaTicketService->imprimirTrasEmision($ventaId, $cfg, $cuenta);
+        if (! empty($imp['omitida'])) {
+            return $resultado;
+        }
+
+        if (! empty($imp['ok'])) {
+            $resultado['impresion_ticket'] = 'ok';
+
+            return $resultado;
+        }
+
+        $mensaje = trim((string) ($imp['mensaje'] ?? 'No se pudo imprimir el ticket térmico.'));
+        $resultado['impresion_ticket'] = 'error';
+        $resultado['impresion_ticket_mensaje'] = $mensaje;
+        $warnPrevio = trim((string) ($resultado['warn'] ?? ''));
+        $avisoTicket = 'Factura emitida; impresión térmica: '.$mensaje;
+        $resultado['warn'] = $warnPrevio !== '' ? $warnPrevio."\n\n".$avisoTicket : $avisoTicket;
+
+        return $resultado;
+    }
+
+    /**
+     * Envío a cocina Waitry: nunca revierte la factura; solo aviso en warn.
+     *
+     * @param  array{venta_id?:int,factura?:string,warn?:string,sin_cobranza?:bool,cobranza_id?:int,impresion_ticket?:string,impresion_ticket_mensaje?:string}  $resultado
+     * @param  list<array{cuentacaja_id:int,moneda_id:int,monto:float,cotizacion?:float|null,observacion?:string|null}>  $mediosPago
+     * @return array<string, mixed>
+     */
+    private function aplicarWaitryComandaTrasEmision(
+        array $resultado,
+        CuentaGastronomia $cuenta,
+        array $mediosPago,
+    ): array {
+        $ventaId = (int) ($resultado['venta_id'] ?? 0);
+        if ($ventaId <= 0) {
+            return $resultado;
+        }
+
+        $facturaTxt = trim((string) ($resultado['factura'] ?? ''));
+        $sinCobranza = ! empty($resultado['sin_cobranza']);
+        $pagada = ! $sinCobranza && $mediosPago !== [];
+
+        try {
+            $waitry = $this->waitryComandaService->enviarComandaTrasFactura(
+                $ventaId,
+                $cuenta,
+                $facturaTxt,
+                $pagada,
+            );
+        } catch (Throwable $e) {
+            Log::error('gastronomia.waitry.excepcion', [
+                'venta_id' => $ventaId,
+                'msg' => $e->getMessage(),
+            ]);
+            $waitry = [
+                'ok' => false,
+                'mensaje' => 'Waitry: error inesperado al enviar comanda.',
+            ];
+        }
+
+        if (! empty($waitry['omitida'])) {
+            return $resultado;
+        }
+
+        if (! empty($waitry['ok'])) {
+            $resultado['waitry_comanda'] = 'ok';
+            if (isset($waitry['waitry_order_id'])) {
+                $resultado['waitry_order_id'] = $waitry['waitry_order_id'];
+            }
+
+            return $resultado;
+        }
+
+        $mensaje = trim((string) ($waitry['mensaje'] ?? 'No se pudo enviar la comanda a Waitry.'));
+        $resultado['waitry_comanda'] = 'error';
+        $resultado['waitry_comanda_mensaje'] = $mensaje;
+        $warnPrevio = trim((string) ($resultado['warn'] ?? ''));
+        $aviso = 'Factura emitida; comanda Waitry: '.$mensaje;
+        $resultado['warn'] = $warnPrevio !== '' ? $warnPrevio."\n\n".$aviso : $aviso;
+
+        return $resultado;
     }
 
     private function resolverVentaPorEtiqueta(int $puntoventaId, string $facturaTxt): ?Venta

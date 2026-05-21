@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App;
 use App\Models\Admin\Menu;
+use App\Support\AyudaManuales;
 use App\Models\Ventas\Ordentrabajo_Tarea;
 use App\Models\Ventas\Pedido_Combinacion;
 use App\Models\Ventas\Pedido_Combinacion_Estado;
@@ -31,6 +32,9 @@ class AppServiceProvider extends ServiceProvider
             $nivelActual = 0;
             $menus = Menu::getMenu(true, $nivelActual);
             $view->with('menusComposer', $menus);
+        });
+        View::composer('theme.lte.header', function ($view) {
+            $view->with('urlCentroAyuda', AyudaManuales::urlCentroAyuda());
         });
         View::share('theme', 'lte');
 

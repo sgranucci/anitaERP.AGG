@@ -23,8 +23,20 @@ class ValidacionDepmae extends FormRequest
      */
     public function rules()
     {
+        $id = $this->route('id');
+
         return [
-            'nombre' => 'required|max:50|unique:depmae,nombre,' . $this->route('id'),
+            'codigo' => 'required|max:20|unique:depmae,codigo,'.$id,
+            'nombre' => 'required|max:50|unique:depmae,nombre,'.$id,
+            'tipodeposito' => 'required',
+        ];
+    }
+
+    public function attributes(): array
+    {
+        return [
+            'codigo' => 'código',
+            'nombre' => 'descripción',
         ];
     }
 }

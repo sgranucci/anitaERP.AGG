@@ -2,12 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\AyudaManuales;
 use Illuminate\Support\Facades\Auth;
 
 class AyudaController extends Controller
 {
     /**
-     * Portal genérico de manuales (extensible a otros módulos).
+     * Índice de manuales por módulo (bajadas y enlaces al manual completo).
      */
     public function index()
     {
@@ -15,16 +16,8 @@ class AyudaController extends Controller
             return redirect()->route('login');
         }
 
-        $manuales = [
-            [
-                'modulo' => 'Compras',
-                'descripcion' => 'Proveedores, tablas, requisiciones, listas de precio, presupuestos y órdenes de compra.',
-                'url' => route('manual_compras'),
-                'icono' => 'fa-shopping-cart',
-                'disponible' => true,
-            ],
-        ];
-
-        return view('ayuda.index', compact('manuales'));
+        return view('ayuda.index', [
+            'manuales' => AyudaManuales::catalogo(),
+        ]);
     }
 }

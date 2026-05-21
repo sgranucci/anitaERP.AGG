@@ -28,6 +28,20 @@
     </style>
 </head>
 <body>
+    @if (!empty($d['solo_totales_mozo']))
+    <table style="width:100%; margin-bottom:14px; border:3px solid #c0392b; background:#fdecea;">
+        <tr>
+            <td style="padding:10px 12px; text-align:center; font-size:13px; font-weight:bold; color:#922b21;">
+                INFORME INFORMATIVO — NO CIERRA EL TURNO
+                <br>
+                <span style="font-size:10px; font-weight:normal;">
+                    Solo totales por mozo. El turno permanece habilitado; no reemplaza un cierre parcial ni definitivo.
+                </span>
+            </td>
+        </tr>
+    </table>
+    @endif
+
     <table class="cabecera-doc">
         <tr>
             <td style="width: 35%;">
@@ -84,59 +98,168 @@
         @endif
     </table>
 
+    @if (empty($d['solo_totales_mozo']))
     <h2>Facturación del turno (esta terminal)</h2>
     <table>
         <tr class="total-grande">
-            <td class="lbl">Total facturado turno</td>
-            <td class="num">${{ number_format((float) ($totalesTurno['total_general'] ?? 0), 2, ',', '.') }}</td>
+            <td class="lbl">Total ventas (comprobantes)</td>
+            <td class="num">${{ number_format((float) ($totalesTurno['total_ventas'] ?? $totalesTurno['total_general'] ?? 0), 2, ',', '.') }}</td>
             <td class="lbl">Comprobantes</td>
             <td class="num">{{ (int) ($totalesTurno['cantidad_comprobantes'] ?? 0) }}</td>
         </tr>
+        <tr>
+            <td class="lbl">Invitaciones $0,01 sin cobranza</td>
+            <td class="num">${{ number_format((float) ($totalesTurno['total_invitaciones'] ?? 0), 2, ',', '.') }} ({{ (int) ($totalesTurno['cantidad_invitaciones'] ?? 0) }} comp.)</td>
+            <td class="lbl">Ventas con cobranza esperada</td>
+            <td class="num">${{ number_format((float) ($totalesTurno['total_ventas_cobrables'] ?? 0), 2, ',', '.') }}</td>
+        </tr>
+        <tr>
+            <td class="lbl">Cobrado (cobranzas de facturas)</td>
+            <td class="num">${{ number_format((float) ($totalesTurno['total_cobrado'] ?? 0), 2, ',', '.') }}</td>
+            <td class="lbl">Conciliación</td>
+            <td class="num">
+                @if (!empty($totalesTurno['conciliacion_ok']))
+                    Cuadra
+                @else
+                    Diferencia: ${{ number_format(abs((float) ($totalesTurno['diferencia_cobranza'] ?? 0)), 2, ',', '.') }}
+                    @if ((float) ($totalesTurno['diferencia_cobranza'] ?? 0) > 0)
+                        (sobra en caja)
+                    @elseif ((float) ($totalesTurno['diferencia_cobranza'] ?? 0) < 0)
+                        (falta en caja)
+                    @endif
+                @endif
+            </td>
+        </tr>
     </table>
 
+    @else
+    <h2>Totales por mozo (turno en curso)</h2>
+    <p class="muted" style="font-size:11px; margin:0 0 8px;">
+        Documento de consulta. No registra cierre parcial ni definitivo salvo que se indique en el sistema.
+    </p>
+    @endif
+
+    @if (!empty($d['solo_totales_mozo']))
+    <p class="muted" style="font-size:11px; margin:0 0 8px;">Cobranzas por mozo desde la habilitación del turno.</p>
+    @else
+    <p class="muted" style="font-size:11px; margin:0 0 8px;">Cobranzas leídas de cada comprobante emitido.</p>
+    @endif
+    @forelse ($totalesTurno['por_mozo'] ?? [] as $m)
+    <table style="margin-bottom:10px;">
+        <tr class="total-grande">
+            <td class="lbl" colspan="2">{{ $m['mozo_nombre'] ?? 'Sin mozo' }}</td>
+            <td class="num">{{ (int) ($m['cantidad'] ?? 0) }} comp.</td>
+            <td class="num">Fact. ${{ number_format((float) ($m['total'] ?? 0), 2, ',', '.') }} · Cob. ${{ number_format((float) ($m['total_cobrado'] ?? 0), 2, ',', '.') }}</td>
+        </tr>
+        @forelse ($m['por_medio_pago'] ?? [] as $p)
+        <tr>
+            <td class="lbl" style="padding-left:16px;">{{ $p['nombre'] ?? $p['codigo'] ?? '—' }}</td>
+            <td class="num" colspan="3">${{ number_format((float) ($p['total'] ?? 0), 2, ',', '.') }}</td>
+        </tr>
+        @empty
+        <tr><td colspan="4" class="muted" style="padding-left:16px;">Sin cobranzas en comprobantes de este mozo.</td></tr>
+        @endforelse
+    </table>
+    @empty
+    <p class="muted">Sin comprobantes por mozo.</p>
+    @endforelse
+
+    @if (!empty($d['solo_totales_mozo']))
+    <h2>Resumen general del turno (al momento del informe)</h2>
+    <p class="muted" style="font-size:11px; margin:0 0 8px;">
+        Totales acumulados de la terminal desde la habilitación, consolidados por medio de pago.
+    </p>
+    <table>
+        <tr class="total-grande">
+            <td class="lbl">Total ventas (comprobantes)</td>
+            <td class="num">${{ number_format((float) ($totalesTurno['total_ventas'] ?? $totalesTurno['total_general'] ?? 0), 2, ',', '.') }}</td>
+            <td class="lbl">Comprobantes</td>
+            <td class="num">{{ (int) ($totalesTurno['cantidad_comprobantes'] ?? 0) }}</td>
+        </tr>
+        <tr>
+            <td class="lbl">Invitaciones $0,01 sin cobranza</td>
+            <td class="num">${{ number_format((float) ($totalesTurno['total_invitaciones'] ?? 0), 2, ',', '.') }} ({{ (int) ($totalesTurno['cantidad_invitaciones'] ?? 0) }} comp.)</td>
+            <td class="lbl">Ventas con cobranza esperada</td>
+            <td class="num">${{ number_format((float) ($totalesTurno['total_ventas_cobrables'] ?? 0), 2, ',', '.') }}</td>
+        </tr>
+        <tr>
+            <td class="lbl">Cobrado (cobranzas de facturas)</td>
+            <td class="num">${{ number_format((float) ($totalesTurno['total_cobrado'] ?? 0), 2, ',', '.') }}</td>
+            <td class="lbl">Conciliación</td>
+            <td class="num">
+                @if (!empty($totalesTurno['conciliacion_ok']))
+                    Cuadra
+                @else
+                    Diferencia: ${{ number_format(abs((float) ($totalesTurno['diferencia_cobranza'] ?? 0)), 2, ',', '.') }}
+                    @if ((float) ($totalesTurno['diferencia_cobranza'] ?? 0) > 0)
+                        (sobra en caja)
+                    @elseif ((float) ($totalesTurno['diferencia_cobranza'] ?? 0) < 0)
+                        (falta en caja)
+                    @endif
+                @endif
+            </td>
+        </tr>
+    </table>
+
+    @if (!empty($totalesTurno['por_medio_pago']))
+    <h2>Total general por medio de pago</h2>
     <table>
         <thead>
             <tr>
-                <th style="width:50%;">Por mozo</th>
-                <th style="width:50%;">Por medio de pago</th>
+                <th>Medio de pago</th>
+                <th class="num">Cobrado</th>
             </tr>
         </thead>
         <tbody>
+            @foreach ($totalesTurno['por_medio_pago'] as $p)
             <tr>
-                <td>
-                    <table style="border:none;">
-                        @forelse ($totalesTurno['por_mozo'] ?? [] as $m)
-                        <tr>
-                            <td style="border:none; border-bottom:1px solid #ddd;">{{ $m['mozo_nombre'] ?? '—' }}</td>
-                            <td style="border:none; border-bottom:1px solid #ddd;" class="num">${{ number_format((float) ($m['total'] ?? 0), 2, ',', '.') }} ({{ (int) ($m['cantidad'] ?? 0) }})</td>
-                        </tr>
-                        @empty
-                        <tr><td style="border:none;" class="muted">Sin datos</td></tr>
-                        @endforelse
-                    </table>
-                </td>
-                <td>
-                    <table style="border:none;">
-                        @forelse ($totalesTurno['por_medio_pago'] ?? [] as $p)
-                        <tr>
-                            <td style="border:none; border-bottom:1px solid #ddd;">{{ $p['nombre'] ?? $p['codigo'] ?? '—' }}</td>
-                            <td style="border:none; border-bottom:1px solid #ddd;" class="num">${{ number_format((float) ($p['total'] ?? 0), 2, ',', '.') }}</td>
-                        </tr>
-                        @empty
-                        <tr><td style="border:none;" class="muted">Sin datos</td></tr>
-                        @endforelse
-                    </table>
-                </td>
+                <td>{{ $p['nombre'] ?? $p['codigo'] ?? '—' }}</td>
+                <td class="num">${{ number_format((float) ($p['total'] ?? 0), 2, ',', '.') }}</td>
             </tr>
+            @endforeach
         </tbody>
+        <tfoot>
+            <tr class="total-grande">
+                <td class="lbl">Total cobrado en turno</td>
+                <td class="num">${{ number_format((float) ($totalesTurno['total_cobrado'] ?? 0), 2, ',', '.') }}</td>
+            </tr>
+        </tfoot>
     </table>
+    @endif
+    @endif
 
-    @if ($totalesDia !== null)
+    @if (empty($d['solo_totales_mozo']) && !empty($totalesTurno['por_medio_pago']))
+    <h2>Total final por medio de pago</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Medio de pago</th>
+                <th class="num">Cobrado</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach ($totalesTurno['por_medio_pago'] as $p)
+            <tr>
+                <td>{{ $p['nombre'] ?? $p['codigo'] ?? '—' }}</td>
+                <td class="num">${{ number_format((float) ($p['total'] ?? 0), 2, ',', '.') }}</td>
+            </tr>
+            @endforeach
+        </tbody>
+        <tfoot>
+            <tr class="total-grande">
+                <td class="lbl">Total</td>
+                <td class="num">${{ number_format((float) ($totalesTurno['total_cobrado'] ?? 0), 2, ',', '.') }}</td>
+            </tr>
+        </tfoot>
+    </table>
+    @endif
+
+    @if (empty($d['solo_totales_mozo']) && $totalesDia !== null)
     <h2>Acumulado del día (esta terminal, jornada)</h2>
     <table>
         <tr class="total-grande">
             <td class="lbl">Total acumulado día</td>
-            <td class="num" colspan="3">${{ number_format((float) ($totalesDia['total_general'] ?? 0), 2, ',', '.') }}</td>
+            <td class="num" colspan="3">${{ number_format((float) ($totalesDia['total_ventas'] ?? $totalesDia['total_general'] ?? 0), 2, ',', '.') }}</td>
         </tr>
     </table>
     @endif

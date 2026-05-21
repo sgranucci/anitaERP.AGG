@@ -90,6 +90,7 @@ class ArticuloRepository implements ArticuloRepositoryInterface
                                 'usoarticulo.nombre as nombreusoarticulo',
                                 'articulo.numeroparte as numeroparte',
                                 'articulo.ubicacionparte as ubicacionparte',
+                                'articulo.depositoentrega_id as depositoentrega_id',
                                 'articulo.nofactura',
                                 'articulo.estado as estado')
                                 ->leftJoin('categoria','articulo.categoria_id','=','categoria.id')

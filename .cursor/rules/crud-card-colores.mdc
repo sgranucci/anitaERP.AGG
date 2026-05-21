@@ -1,0 +1,52 @@
+---
+description: Colores de barra superior (card-header) en pantallas ABM del ERP
+globs: resources/views/**/{index,crear,editar,consultar}.blade.php
+alwaysApply: false
+---
+
+# Colores de card en ABM (AdminLTE)
+
+La **barra superior** de cada pantalla ABM usa la variante AdminLTE en el contenedor `card`, no clases sueltas en `card-header`.
+
+## Convención obligatoria
+
+| Pantalla | Clase en el contenedor | Color de barra |
+|----------|------------------------|----------------|
+| Listado / consultar (`index`, `consultar`) | `card card-info` | Celeste / info |
+| Alta (`crear`) | `card card-danger` | Rojo |
+| Modificación (`editar`) | `card card-danger` | Rojo (igual que crear) |
+
+Referencia: `resources/views/compras/condicionentrega/` y la mayoría de ABM en Compras / Configuración.
+
+## Prohibido en ABM estándar
+
+- `card card-primary` en `editar` (azul; no es el estándar del sistema).
+- `card` sin variante en listados o formularios ABM.
+- Mezclar colores distintos entre `crear` y `editar` del mismo recurso.
+
+## Pantallas operativas (no CRUD clásico)
+
+Pantallas de proceso (jornada, habilitación de turno, facturación POS) con una sola vista tipo listado: usar `card card-info` en el card principal.
+
+## Plantilla mínima
+
+```blade
+{{-- index.blade.php --}}
+<div class="card card-info">
+    <div class="card-header">...</div>
+</div>
+
+{{-- crear.blade.php / editar.blade.php --}}
+<div class="card card-danger">
+    <div class="card-header">...</div>
+</div>
+```
+
+Botón «Volver al listado» en formularios: `btn btn-outline-info btn-sm`.
+
+## Comprobación rápida
+
+```bash
+rg 'card card-primary' resources/views --glob '**/editar.blade.php'
+rg 'card card-primary' resources/views --glob '**/crear.blade.php'
+```

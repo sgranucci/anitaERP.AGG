@@ -1,0 +1,7 @@
+{
+    "ok": true,
+    "response": {
+        "orderId": 987654,
+        "externalId": "12345"
+    }
+}

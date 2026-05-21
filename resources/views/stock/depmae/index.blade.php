@@ -29,7 +29,7 @@ Dep&oacute;sitos
                     <thead>
                         <tr>
                             <th class="width20">ID</th>
-                            <th>Nombre</th>
+                            <th>Descripción</th>
                             <th>Tipo de depósito</th>
                             <th>Código ANITA</th>
                             <th class="width80" data-orderable="false"></th>

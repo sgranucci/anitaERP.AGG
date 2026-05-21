@@ -209,6 +209,29 @@
         left: -9999px;
         top: -9999px;
     }
+    #modal-f8-descuento .gastro-campo-consulta {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.35rem;
+    }
+    #modal-f8-descuento .gastro-campo-id {
+        width: 72px;
+        flex: 0 0 72px;
+    }
+    #modal-f8-descuento .gastro-campo-codigo {
+        width: 110px;
+        flex: 0 0 110px;
+    }
+    #modal-f8-descuento .gastro-campo-nombre {
+        flex: 1 1 180px;
+        min-width: 0;
+    }
+    #gastro-descuento-en-modal-aviso {
+        font-size: 0.85rem;
+        color: #6c757d;
+        font-style: italic;
+    }
 </style>
 @endsection
 
@@ -258,6 +281,7 @@
 <script src="{{ asset('assets/pages/scripts/ventas/descuento_gastronomia/consulta.js') }}"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/gastronomia/proceso_facturacion.js') }}"></script>
 @if ($requiere_habilitacion_turno ?? true)
+<script src="{{ asset('assets/pages/scripts/ventas/gastronomia/totales_turno_render.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/gastronomia/totales_turno_render.js')) }}"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/gastronomia/turno_operativo_pos.js') }}"></script>
 @endif
 @endsection
@@ -283,15 +307,17 @@
                 Terminal: <strong>{{ $identificador_pc_actual }}</strong> · Empresa: <strong>{{ $empresa_nombre }}</strong> —
             @endif
             SKU catálogo: prefijo <strong>{{ $prefijo_sku }}</strong>
-            @if ((int) $sku_catalogo_digitos_sufijo > 0)
-                — ingreso rápido: <strong>{{ (int) $sku_catalogo_digitos_sufijo }}</strong> dígitos tras el prefijo (<code>GASTRONOMIA_SKU_CATALOGO_DIGITOS_SUFIJO</code>)
-            @endif
             —
             tipo transacción factura:
             @if ($cfg_tipotransaccion_nombre ?? null)
                 <strong>{{ $cfg_tipotransaccion_nombre }}</strong>
             @else
                 <span class="text-danger">no configurado en PV gastronomía</span>
+            @endif
+            @if (! empty($jornada['jornada_abierta']))
+                —
+                Jornada <strong>{{ $jornada['fecha_jornada'] }}</strong> abierta
+                · facturas con fecha <strong>{{ $jornada['fecha_factura_hoy'] }}</strong>
             @endif
         </div>
 
@@ -301,15 +327,10 @@
                 <a href="{{ route('gastronomia_jornada', ['empresa_id' => $empresa_id]) }}">Jornada gastronomía</a>
                 antes de operar o facturar.
             </div>
-        @elseif (! empty($jornada['jornada_abierta']))
-            <div class="alert alert-secondary py-2 mb-3">
-                Jornada <strong>{{ $jornada['fecha_jornada'] }}</strong> abierta
-                · facturas con fecha <strong>{{ $jornada['fecha_factura_hoy'] }}</strong>
-            </div>
         @endif
 
         @if (($requiere_habilitacion_turno ?? true) && $tiene_cfg_pv)
-            <div class="alert py-2 mb-3 {{ empty($turno_operativo['turno_habilitado']) ? 'alert-danger' : 'alert-info' }}" id="gastro-alerta-turno">
+            <div class="alert py-2 mb-3 {{ empty($turno_operativo['turno_habilitado']) ? 'alert-danger' : 'alert-secondary' }}" id="gastro-alerta-turno">
                 @if (empty($turno_operativo['turno_habilitado']))
                     No hay <strong>turno habilitado</strong> en esta terminal.
                     <a href="{{ route('gastronomia_habilitacion_turno') }}">Habilitar turno</a>
@@ -317,7 +338,9 @@
                 @else
                     Turno <strong>{{ $turno_operativo['turno_nombre'] ?? '' }}</strong>
                     — {{ $turno_operativo['usuario_habilitado'] ?? '' }}
-                    — habilitación ${{ number_format((float) ($turno_operativo['monto_habilitacion'] ?? 0), 2, ',', '.') }}
+                    — Jornada <strong>{{ $turno_operativo['fecha_jornada_fmt'] ?? ($turno_operativo['fecha_jornada'] ?? '') }}</strong>
+                    — Habilitado {{ $turno_operativo['habilitacion_en_fmt'] ?? ($turno_operativo['habilitacion_en'] ?? '') }}
+                    — Monto ${{ number_format((float) ($turno_operativo['monto_habilitacion'] ?? 0), 2, ',', '.') }}
                     — parciales: {{ (int) ($turno_operativo['cierres_parciales'] ?? 0) }}
                 @endif
             </div>
@@ -337,7 +360,7 @@
                     <span><i class="fa fa-cutlery"></i> Mesa / cuenta</span>
                     <span id="gastro-header-cuenta-chip" class="gastro-header-cuenta-chip d-none ml-2" aria-hidden="true"></span>
                     <span class="text-muted small ml-2">
-                        <kbd>F5</kbd> Efectivizar · <kbd>Ctrl</kbd>+<kbd>F5</kbd> Facturar · <kbd>F8</kbd> Facturar con descuento (código + Enter; lupa opcional)
+                        <kbd>F5</kbd> Efectivizar · <kbd>F8</kbd> Facturar con descuento (modal centrado; código + Enter; lupa opcional)
                         @if ($gastroCuentasLibresHabilitadas)
                             · <kbd>+</kbd> Nueva cuenta libre
                         @endif
@@ -413,28 +436,33 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="form-group col-md-12 mb-2">
-                                <label class="small mb-0">Descuento gastronomía</label>
-                                <div class="gastro-campo-consulta">
-                                    <input type="text" class="form-control form-control-sm gastro-campo-id descuento_gastronomia_id" id="descuento_gastronomia_id" name="descuento_gastronomia_id" value="" placeholder="ID" autocomplete="off">
-                                    <button type="button" title="Consulta descuentos" class="btn-accion-tabla consultadescuento tooltipsC">
-                                        <i class="fa fa-search text-primary"></i>
-                                    </button>
-                                    <input type="text" class="form-control form-control-sm gastro-campo-codigo codigodescuento" id="codigodescuento" name="codigodescuento" value="" placeholder="Código" autocomplete="off">
-                                    <input type="text" class="form-control form-control-sm gastro-campo-nombre nombredescuento" id="nombredescuento" name="nombredescuento" value="" placeholder="Nombre" autocomplete="off" readonly>
+                            <div id="gastro-descuento-slot-original" class="col-md-12 px-0">
+                                <div id="gastro-descuento-en-modal-aviso" class="d-none mb-2">Descuento y cliente interno se cargan en el modal central (F8).</div>
+                                <div id="gastro-descuento-movable">
+                                    <div class="form-group col-md-12 mb-2">
+                                        <label class="small mb-0">Descuento gastronomía</label>
+                                        <div class="gastro-campo-consulta">
+                                            <input type="text" class="form-control form-control-sm gastro-campo-id descuento_gastronomia_id" id="descuento_gastronomia_id" name="descuento_gastronomia_id" value="" placeholder="ID" autocomplete="off">
+                                            <button type="button" title="Consulta descuentos" class="btn-accion-tabla consultadescuento tooltipsC">
+                                                <i class="fa fa-search text-primary"></i>
+                                            </button>
+                                            <input type="text" class="form-control form-control-sm gastro-campo-codigo codigodescuento" id="codigodescuento" name="codigodescuento" value="" placeholder="Código" autocomplete="off">
+                                            <input type="text" class="form-control form-control-sm gastro-campo-nombre nombredescuento" id="nombredescuento" name="nombredescuento" value="" placeholder="Nombre" autocomplete="off" readonly>
+                                        </div>
+                                    </div>
+                                    <div id="panel-cliente-descuento" class="form-group col-md-12 mb-2 d-none">
+                                        <label class="small mb-0 text-primary">Cliente interno del descuento <span class="text-danger">*</span></label>
+                                        <div class="gastro-campo-consulta mt-1">
+                                            <input type="text" class="form-control form-control-sm gastro-campo-id cliente_interno_descuento_id" id="cliente_descuento_id" value="" placeholder="ID" autocomplete="off">
+                                            <button type="button" title="Consulta cliente interno (invita / centro de costo)" class="btn-accion-tabla consultaclienteinternodescuento tooltipsC">
+                                                <i class="fa fa-search text-primary"></i>
+                                            </button>
+                                            <input type="text" class="form-control form-control-sm gastro-campo-codigo codigoclienteinternodescuento" id="codigocliente_descuento" value="" placeholder="Código" autocomplete="off">
+                                            <input type="text" class="form-control form-control-sm gastro-campo-nombre nombreclienteinternodescuento" id="nombrecliente_descuento" value="" placeholder="Nombre / razón social" autocomplete="off" readonly>
+                                        </div>
+                                        <small class="form-text text-muted">Quien invita o centro de costos donde se carga la invitación. <strong>No</strong> es el cliente de la factura.</small>
+                                    </div>
                                 </div>
-                            </div>
-                            <div id="panel-cliente-descuento" class="form-group col-md-12 mb-2 d-none">
-                                <label class="small mb-0 text-primary">Cliente interno del descuento <span class="text-danger">*</span></label>
-                                <div class="gastro-campo-consulta mt-1">
-                                    <input type="text" class="form-control form-control-sm gastro-campo-id cliente_interno_descuento_id" id="cliente_descuento_id" value="" placeholder="ID" autocomplete="off">
-                                    <button type="button" title="Consulta cliente interno (invita / centro de costo)" class="btn-accion-tabla consultaclienteinternodescuento tooltipsC">
-                                        <i class="fa fa-search text-primary"></i>
-                                    </button>
-                                    <input type="text" class="form-control form-control-sm gastro-campo-codigo codigoclienteinternodescuento" id="codigocliente_descuento" value="" placeholder="Código" autocomplete="off">
-                                    <input type="text" class="form-control form-control-sm gastro-campo-nombre nombreclienteinternodescuento" id="nombrecliente_descuento" value="" placeholder="Nombre / razón social" autocomplete="off" readonly>
-                                </div>
-                                <small class="form-text text-muted">Quien invita o centro de costos donde se carga la invitación. <strong>No</strong> es el cliente de la factura.</small>
                             </div>
                             <div class="col-md-12">
                                 <button type="button" class="btn btn-sm btn-primary" id="btn-guardar-cabecera"><i class="fa fa-save"></i> Guardar datos cuenta</button>
@@ -503,8 +531,8 @@
                                 <button type="button" class="btn btn-outline-secondary" id="tool-descuento" title="Enfocar descuento"><i class="fa fa-percent"></i></button>
                                 <a href="{{ route('gastronomia_facturas_dia') }}" class="btn btn-outline-primary" title="Facturas del día"><i class="fa fa-calendar-day"></i></a>
                                 @if ($requiere_habilitacion_turno ?? true)
-                                <button type="button" class="btn btn-outline-warning" id="btn-cierre-parcial-turno" title="Cierre parcial del turno"><i class="fa fa-list-alt"></i></button>
-                                <button type="button" class="btn btn-outline-danger" id="btn-cerrar-turno-pos" title="Cerrar turno"><i class="fa fa-lock"></i></button>
+                                <a href="{{ route('gastronomia_habilitacion_turno', ['accion' => 'cierre_parcial']) }}" class="btn btn-outline-warning" title="Cierre parcial del turno"><i class="fa fa-list-alt"></i></a>
+                                <a href="{{ route('gastronomia_habilitacion_turno', ['accion' => 'cierre_definitivo']) }}" class="btn btn-outline-danger" title="Cierre definitivo del turno"><i class="fa fa-lock"></i></a>
                                 @endif
                             </div>
                             <span id="gastro-facturacion-loading" style="display:none; color:#6c757d; font-size:0.95em; white-space:nowrap;">
@@ -660,6 +688,28 @@
             <div class="modal-footer py-2">
                 <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cancelar</button>
                 <button type="button" class="btn btn-sm btn-primary" id="modal-abrir-cuenta-confirmar">Abrir cuenta</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal F8: descuento + cliente interno (mismo DOM que la tarjeta; portal desde JS) -->
+<div class="modal fade" id="modal-f8-descuento" tabindex="-1" role="dialog" aria-labelledby="modal-f8-descuento-titulo" data-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0" id="modal-f8-descuento-titulo">Facturar con descuento gastronomía</h6>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">&times;</button>
+            </div>
+            <div class="modal-body py-3">
+                <p class="small text-muted mb-3">
+                    Revise o cargue el descuento y el cliente interno si el descuento lo requiere. Si ya estaban cargados en la cuenta, aparecen aquí igual.
+                </p>
+                <div id="gastro-descuento-slot-modal"></div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-sm btn-primary" id="modal-f8-descuento-confirmar">Facturar</button>
             </div>
         </div>
     </div>

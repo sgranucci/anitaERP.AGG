@@ -33,7 +33,7 @@ use Carbon\Carbon;
         @endguest
         @auth
             <li class="nav-item">
-                <a href="{{ route('ayuda') }}" class="nav-link font-weight-bold" title="Centro de ayuda y manuales">
+                <a href="{{ $urlCentroAyuda }}" class="nav-link font-weight-bold" title="Manual de usuario del sistema" target="_blank" rel="noopener">
                     <i class="fas fa-book-open"></i> Centro de ayuda
                 </a>
             </li>

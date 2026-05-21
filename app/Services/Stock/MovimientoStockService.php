@@ -75,6 +75,8 @@ class MovimientoStockService
 			if (!$tipotransaccion)
 				throw new Exception('No puede leer tipo de transacción');
 
+			$signoCantidadMovimiento = $data['signo_cantidad'] ?? $tipotransaccion->signo;
+
 			if ($funcion == 'create')
 			{
 				// Si no existe el codigo numera secuencial
@@ -161,6 +163,7 @@ class MovimientoStockService
 					$dataArticuloMovimiento = [
 						'fecha' => $data['fecha'],
 						'fechajornada' => $data['fecha'],
+						'signo_cantidad' => $signoCantidadMovimiento,
 						'tipotransaccion_id' => $data['tipotransaccion_id'],
 						'movimientostock_id' => $movimientostock_id,
 						'deposito_id' => $data['deposito_id'],
@@ -214,7 +217,7 @@ class MovimientoStockService
 								$dataTalle[] = [
 									'id' => null,
 									'talle_id' => $medida->talle_id,
-									'cantidad' => $medida->cantidad*($tipotransaccion->signo == 'S' ? 1 : -1),
+									'cantidad' => $medida->cantidad * ($signoCantidadMovimiento == 'S' ? 1 : -1),
 									'precio' => $precios[$i],
 								];
 							}

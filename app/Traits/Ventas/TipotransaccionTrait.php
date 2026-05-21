@@ -9,7 +9,8 @@ trait TipotransaccionTrait {
 		'U' => 'Venta Bienes de Uso',
 		'C' => 'Devolución de venta',
 		'E' => 'Entradas de stock',
-		'S' => 'Salidas de stock'
+		'S' => 'Salidas de stock',
+		'T' => 'Transferencia de stock',
 		];
 	
 	public static $enumSigno = [

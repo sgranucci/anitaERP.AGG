@@ -8,6 +8,44 @@
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
 <script>
 (function () {
+    var csrfToken = document.querySelector('meta[name="csrf-token"]');
+    var token = csrfToken ? csrfToken.getAttribute('content') : '';
+
+    document.querySelectorAll('.js-fd-reimprimir-ticket').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var ventaId = btn.getAttribute('data-venta-id');
+            if (!ventaId || btn.disabled) return;
+            btn.disabled = true;
+            fetch('{{ url('ventas/gastronomia/facturas-dia') }}/' + ventaId + '/reimprimir-ticket', {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': token,
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+            })
+                .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+                .then(function (res) {
+                    if (res.ok && res.body.ok) {
+                        if (typeof toastr !== 'undefined') toastr.success(res.body.mensaje || 'Ticket enviado.');
+                        else alert(res.body.mensaje || 'Ticket enviado.');
+                    } else {
+                        var msg = (res.body && (res.body.error || res.body.mensaje)) || 'Error al reimprimir.';
+                        if (typeof toastr !== 'undefined') toastr.error(msg);
+                        else alert(msg);
+                    }
+                })
+                .catch(function () {
+                    if (typeof toastr !== 'undefined') toastr.error('Error de comunicación al reimprimir.');
+                    else alert('Error de comunicación al reimprimir.');
+                })
+                .finally(function () { btn.disabled = false; });
+        });
+    });
+
     document.querySelectorAll('.js-fd-toggle-insumos').forEach(function (btn) {
         btn.addEventListener('click', function (e) {
             e.preventDefault();
@@ -32,6 +70,21 @@
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
+        @if (! empty($jornada['jornada_abierta']))
+            <div class="alert alert-info py-2 mb-2">
+                Jornada <strong>{{ $jornada['fecha_jornada'] }}</strong> abierta
+                @if (! request()->filled('fecha'))
+                    · filtro por defecto: fecha de jornada
+                @endif
+                @if (! empty($jornada['fecha_factura_hoy']) && ($jornada['fecha_factura_hoy'] ?? '') !== ($jornada['fecha_jornada'] ?? ''))
+                    · comprobantes con fecha calendario <strong>{{ $jornada['fecha_factura_hoy'] }}</strong>
+                @endif
+            </div>
+        @elseif ($jornada !== null)
+            <div class="alert alert-secondary py-2 mb-2">
+                Sin jornada abierta para esta empresa. Mostrando fecha de jornada indicada o el día de hoy.
+            </div>
+        @endif
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Facturas gastronomía del día</h3>
@@ -41,7 +94,7 @@
                 <div class="d-md-flex justify-content-md-end align-items-md-end flex-wrap">
                     <form action="{{ route('gastronomia_facturas_dia') }}" method="GET" class="d-flex flex-wrap align-items-end mb-2 mb-md-0">
                         <div class="form-group mb-0 mr-2">
-                            <label for="fecha_fd" class="small text-muted mb-0 d-block">Fecha</label>
+                            <label for="fecha_fd" class="small text-muted mb-0 d-block">Fecha jornada</label>
                             <input type="date" id="fecha_fd" name="fecha" value="{{ $fecha }}" class="form-control form-control-sm">
                         </div>
                         <div class="form-group mb-0 mr-2">
@@ -103,7 +156,7 @@
                 ])
                 @php
                     $colInsumos = ($articulo_filtro ?? null) !== null;
-                    $colSpanEmpty = 9 + (($todas_pc ?? false) ? 1 : 0) + ($colInsumos ? 3 : 0);
+                    $colSpanEmpty = 10 + (($todas_pc ?? false) ? 1 : 0) + ($colInsumos ? 3 : 0);
                 @endphp
                 <table class="table table-striped table-bordered table-hover mb-0" id="tabla-paginada">
                     <thead>
@@ -115,7 +168,8 @@
                             @if ($todas_pc ?? false)
                                 <th>PC emisión</th>
                             @endif
-                            <th>Fecha</th>
+                            <th>Fecha jornada</th>
+                            <th>Fecha comprob.</th>
                             <th>Comprobante</th>
                             <th>Cliente</th>
                             <th>Punto de venta</th>
@@ -168,6 +222,13 @@
                                     <td><small>{{ $r->identificador_pc ?? '—' }}</small></td>
                                 @endif
                                 <td class="text-nowrap"><small>
+                                    @if ($v?->fechajornada)
+                                        {{ \Illuminate\Support\Carbon::parse($v->fechajornada)->format('d-m-Y') }}
+                                    @else
+                                        <span class="text-muted">—</span>
+                                    @endif
+                                </small></td>
+                                <td class="text-nowrap"><small>
                                     @if ($v?->fecha)
                                         {{ \Illuminate\Support\Carbon::parse($v->fecha)->format('d-m-Y') }}@if ($v->created_at)<span class="text-muted" title="Hora de creación"> {{ $v->created_at->format('H:i:s') }}</span>@endif
                                     @else
@@ -211,6 +272,12 @@
                                         </a>
                                     @endif
                                     @if ($v)
+                                        <button type="button"
+                                            class="btn-accion-tabla tooltipsC js-fd-reimprimir-ticket border-0 bg-transparent p-0"
+                                            data-venta-id="{{ $v->id }}"
+                                            title="Reimprimir ticket térmico">
+                                            <i class="fas fa-receipt text-secondary"></i>
+                                        </button>
                                         <a href="{{ url('ventas/listaunafactura/'.$v->id) }}" target="_blank" rel="noopener" class="btn-accion-tabla tooltipsC" title="PDF comprobante">
                                             <i class="fas fa-file-pdf text-danger"></i>
                                         </a>

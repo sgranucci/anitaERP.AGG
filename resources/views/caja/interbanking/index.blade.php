@@ -55,7 +55,7 @@
         return {
             banco: cuenta.bank_name || cuenta.bankName || '—',
             denominacion: cuenta.account_label || cuenta.accountLabel || cuenta.denomination || cuenta.name || '—',
-            cuit: cuenta.taxpayer_cuit || cuenta.taxpayerCuit || cuenta.cuit || '—',
+            cuit: cuenta.taxpayer_cuit || cuenta.taxpayerCuit || cuenta.customer_cuit || cuenta.customerCuit || cuenta.cuit || '—',
             cbu: cuenta.account_cbu || cuenta.accountCbu || cuenta.cbu || '—'
         };
     }

@@ -35,6 +35,8 @@ class Kernel extends ConsoleKernel
         $schedule->command('padron-iibb-tasa:purge')->monthlyOn(10, '03:00');
         $schedule->command('padron-iibb-arba:purge')->monthlyOn(10, '03:05');
         $schedule->command('padron-iibb-caba:purge')->monthlyOn(10, '03:10');
+
+        $schedule->command('arca:solicitar-caea-quincenal')->dailyAt('06:30');
     }
 
     /**

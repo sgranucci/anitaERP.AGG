@@ -2672,6 +2672,9 @@ class FacturacionService
 		if (! $transaccionExterna) {
 			DB::beginTransaction();
 		}
+		$venta = [];
+		$replicacionAnitaIntentada = false;
+
 		try 
 		{
 			if ($codigoTipoTransaccion >= '200')
@@ -2911,6 +2914,7 @@ class FacturacionService
 			if ($puntoventa->modofacturacion != 'M')
 			{
 				if (! $omitirSincronizacionAnita) {
+					$replicacionAnitaIntentada = true;
 					// Graba anita
 					$anita = self::grabaAnita($puntoventa->codigo, $letra, 0, 0,
 								$venta, $dataCAE, $conceptosTotales, $cuentacorriente, $dataFactura, $signo,
@@ -2961,20 +2965,95 @@ class FacturacionService
 
 			return $ret;
 		} catch (\Exception $e) {
+			$this->revertirVentaEnAnitaSiGrabada(
+				$venta,
+				$letra,
+				$puntoventa,
+				$empresa,
+				$omitirSincronizacionAnita,
+				$replicacionAnitaIntentada,
+			);
+
 			if (! $transaccionExterna) {
 				DB::rollback();
-
-				// Borra factura de anita
-				if ($venta['codigo'] ?? '') {
-					self::borraAnita(substr($venta['codigo'], 0, 3), $letra,
-						$puntoventa->codigo, $venta['numerocomprobante'], $empresa->codigo);
-				}
 
 				return ['error' => $e->getMessage()];
 			}
 
 			throw $e;
 		}
+	}
+
+	/**
+	 * Elimina en Informix (Anita) un comprobante ya replicado, p. ej. si falla un paso posterior en gastronomía.
+	 *
+	 * @param  array<string, mixed>|null  $ventaArray  Datos de venta armados en grabaFacturaERP.
+	 */
+	public function revertirVentaEnAnitaSiGrabada(
+		?array $ventaArray,
+		string $letra,
+		$puntoventa,
+		$empresa,
+		bool $omitirSincronizacionAnita = false,
+		bool $replicacionAnitaIntentada = false,
+	): void {
+		if ($omitirSincronizacionAnita || ! $replicacionAnitaIntentada || ! is_array($ventaArray)) {
+			return;
+		}
+
+		if (! $puntoventa || ($puntoventa->modofacturacion ?? '') === 'M') {
+			return;
+		}
+
+		$codigo = trim((string) ($ventaArray['codigo'] ?? ''));
+		if ($codigo === '') {
+			return;
+		}
+
+		self::borraAnita(
+			substr($codigo, 0, 3),
+			$letra,
+			$puntoventa->codigo,
+			$ventaArray['numerocomprobante'],
+			$empresa->codigo,
+		);
+	}
+
+	/**
+	 * Elimina en Anita el comprobante asociado a una venta del ERP (rollback tras emisión gastronomía).
+	 */
+	public function borraAnitaDesdeVenta(\App\Models\Ventas\Venta $venta): void
+	{
+		$codigo = trim((string) ($venta->codigo ?? ''));
+		if ($codigo === '') {
+			return;
+		}
+
+		$puntoventa = $this->puntoventaRepository->find($venta->puntoventa_id);
+		if (! $puntoventa || ($puntoventa->modofacturacion ?? '') === 'M') {
+			return;
+		}
+
+		$empresa = Empresa::query()->find($puntoventa->empresa_id);
+		if (! $empresa) {
+			return;
+		}
+
+		$letra = 'Z';
+		if ($venta->condicioniva_id) {
+			$condicioniva = $this->condicionivaRepository->find($venta->condicioniva_id);
+			if ($condicioniva) {
+				$letra = (string) $condicioniva->letra;
+			}
+		}
+
+		self::borraAnita(
+			substr($codigo, 0, 3),
+			$letra,
+			$puntoventa->codigo,
+			$venta->numerocomprobante,
+			$empresa->codigo,
+		);
 	}
 
 	// Graba factura en Anita

@@ -44,7 +44,9 @@ class Articulo_MovimientoService
 		// No usa transacciones porque se llama desde otro servicio con transaccion activa
 		if ($tipotransaccion)
 		{
-			$dataMovimiento['cantidad'] = $dataMovimiento['cantidad'] * ($tipotransaccion->signo == 'S' ? 1 : -1);
+			$signoCantidad = $dataMovimiento['signo_cantidad'] ?? $tipotransaccion->signo;
+			unset($dataMovimiento['signo_cantidad']);
+			$dataMovimiento['cantidad'] = $dataMovimiento['cantidad'] * ($signoCantidad == 'S' ? 1 : -1);
 			$dataMovimiento['precio'] = str_replace(',', '', $dataMovimiento['precio']);
 
 			//if (!array_key_exists('deposito_id', $dataMovimiento))

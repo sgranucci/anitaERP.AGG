@@ -194,6 +194,137 @@ class ArcaWsfeFacturaElectronicaService
         ];
     }
 
+    /**
+     * Solicita CAEA para periodo/orden (WSFE FECAEASolicitar).
+     *
+     * @return array{
+     *     caea: string,
+     *     periodo: int,
+     *     orden: int,
+     *     fch_vig_desde: string,
+     *     fch_vig_hasta: string,
+     *     fch_tope_inf: string,
+     *     fch_proceso: string,
+     *     observaciones: string,
+     *     tiene_observaciones: bool
+     * }
+     */
+    public function feCaeaSolicitar(int $empresaId, int $periodo, int $orden): array
+    {
+        $this->assertTransporteSoap();
+        $cuit = $this->cuitEmisor($empresaId);
+        $ctx = $this->resolveWsaaContext($empresaId);
+        $ts = $this->wsaa->getTokenSign((string) config('arca_wsfe.wsaa_service_id'), $ctx);
+        $client = $this->soapClient();
+
+        try {
+            $raw = $client->FECAEASolicitar([
+                'Auth' => [
+                    'Token' => $ts['token'],
+                    'Sign' => $ts['sign'],
+                    'Cuit' => $cuit,
+                ],
+                'FeCAEAReq' => [
+                    'Periodo' => $periodo,
+                    'Orden' => $orden,
+                ],
+            ]);
+        } catch (SoapFault $e) {
+            throw new Exception($this->formatSoapFault('FECAEASolicitar', $e, $client));
+        }
+
+        return $this->parseFeCaeaResult($raw->FECAEASolicitarResult ?? null, 'FECAEASolicitar');
+    }
+
+    /**
+     * Consulta CAEA otorgado (WSFE FECAEAConsultar).
+     *
+     * @return array{
+     *     caea: string,
+     *     periodo: int,
+     *     orden: int,
+     *     fch_vig_desde: string,
+     *     fch_vig_hasta: string,
+     *     fch_tope_inf: string,
+     *     fch_proceso: string,
+     *     observaciones: string,
+     *     tiene_observaciones: bool
+     * }
+     */
+    public function feCaeaConsultar(int $empresaId, int $periodo, int $orden): array
+    {
+        $this->assertTransporteSoap();
+        $cuit = $this->cuitEmisor($empresaId);
+        $ctx = $this->resolveWsaaContext($empresaId);
+        $ts = $this->wsaa->getTokenSign((string) config('arca_wsfe.wsaa_service_id'), $ctx);
+        $client = $this->soapClient();
+
+        try {
+            $raw = $client->FECAEAConsultar([
+                'Auth' => [
+                    'Token' => $ts['token'],
+                    'Sign' => $ts['sign'],
+                    'Cuit' => $cuit,
+                ],
+                'Periodo' => $periodo,
+                'Orden' => $orden,
+            ]);
+        } catch (SoapFault $e) {
+            throw new Exception($this->formatSoapFault('FECAEAConsultar', $e, $client));
+        }
+
+        return $this->parseFeCaeaResult($raw->FECAEAConsultarResult ?? null, 'FECAEAConsultar');
+    }
+
+    /**
+     * @return array{
+     *     caea: string,
+     *     periodo: int,
+     *     orden: int,
+     *     fch_vig_desde: string,
+     *     fch_vig_hasta: string,
+     *     fch_tope_inf: string,
+     *     fch_proceso: string,
+     *     observaciones: string,
+     *     tiene_observaciones: bool
+     * }
+     */
+    private function parseFeCaeaResult(?object $result, string $operacion): array
+    {
+        if ($result === null) {
+            throw new Exception("WSFE: {$operacion} sin resultado.");
+        }
+
+        $errs = $this->normalizeErrCollection($result->Errors ?? null);
+        if ($errs !== []) {
+            throw new Exception('WSFE — '.$operacion.': '.$this->formatErrList($errs));
+        }
+
+        $rg = $result->ResultGet ?? null;
+        if ($rg === null) {
+            throw new Exception("WSFE: {$operacion} sin ResultGet.");
+        }
+
+        $caea = trim((string) ($rg->CAEA ?? ''));
+        if ($caea === '') {
+            throw new Exception("WSFE — {$operacion} sin CAEA en la respuesta.");
+        }
+
+        $obs = $this->normalizeObsCollection($rg->Observaciones ?? null);
+
+        return [
+            'caea' => $caea,
+            'periodo' => (int) ($rg->Periodo ?? 0),
+            'orden' => (int) ($rg->Orden ?? 0),
+            'fch_vig_desde' => (string) ($rg->FchVigDesde ?? ''),
+            'fch_vig_hasta' => (string) ($rg->FchVigHasta ?? ''),
+            'fch_tope_inf' => (string) ($rg->FchTopeInf ?? ''),
+            'fch_proceso' => (string) ($rg->FchProceso ?? ''),
+            'observaciones' => $obs !== [] ? $this->formatObsList($obs) : '',
+            'tiene_observaciones' => $obs !== [],
+        ];
+    }
+
     public function feDummy(int $empresaId): array
     {
         $this->assertTransporteSoap();

@@ -19,6 +19,7 @@ class GastronomiaCuentaService
 {
     public function __construct(
         private readonly GastronomiaJornadaService $jornadaService,
+        private readonly GastronomiaTurnoOperativoService $turnoOperativoService,
     ) {
     }
     /**
@@ -405,6 +406,11 @@ class GastronomiaCuentaService
         if (! $this->puedeEditarLineas($cuenta)) {
             throw new InvalidArgumentException('No puede cargar consumos en esta cuenta desde esta PC.');
         }
+
+        $this->turnoOperativoService->exigirTurnoHabilitadoSiConfigurado(
+            GastronomiaIdentificadorPc::resolver(),
+            (int) $cuenta->empresa_id,
+        );
 
         $this->validarCabeceraOperativa($cuenta);
 

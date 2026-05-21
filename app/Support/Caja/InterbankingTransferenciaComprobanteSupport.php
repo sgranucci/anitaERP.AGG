@@ -23,6 +23,8 @@ final class InterbankingTransferenciaComprobanteSupport
         'name' => 'Denominación',
         'taxpayer_cuit' => 'CUIT',
         'taxpayerCuit' => 'CUIT',
+        'customer_cuit' => 'CUIT',
+        'customerCuit' => 'CUIT',
         'cuit' => 'CUIT',
         'account_cbu' => 'CBU',
         'accountCbu' => 'CBU',
@@ -255,7 +257,7 @@ final class InterbankingTransferenciaComprobanteSupport
         return [
             'banco' => $banco !== '' ? $banco : '—',
             'denominacion' => $this->texto($data, ['account_label', 'accountLabel', 'denomination', 'name']) ?: '—',
-            'cuit' => $this->texto($data, ['taxpayer_cuit', 'taxpayerCuit', 'cuit']) ?: '—',
+            'cuit' => $this->texto($data, ['taxpayer_cuit', 'taxpayerCuit', 'customer_cuit', 'customerCuit', 'cuit']) ?: '—',
             'cbu' => $cbu !== '' ? $cbu : '—',
         ];
     }
@@ -327,6 +329,7 @@ final class InterbankingTransferenciaComprobanteSupport
             'account_label' => '/"account_label"\s*:\s*"([^"]+)/',
             'bank_name' => '/"bank_name"\s*:\s*"([^"]+)"/',
             'taxpayer_cuit' => '/"taxpayer_cuit"\s*:\s*"([^"]+)/',
+            'customer_cuit' => '/"customer_cuit"\s*:\s*"([^"]+)/',
             'bank_number' => '/"bank_number"\s*:\s*"([^"]+)"/',
         ];
 

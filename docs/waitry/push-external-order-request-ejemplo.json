@@ -1,0 +1,41 @@
+{
+    "timestamp": {
+        "date": "2024-11-19 12:51:02.768000",
+        "timezone_type": null,
+        "timezone": null
+    },
+    "totalAmount": 30.0,
+    "notes": "PRUEBA 3",
+    "placeId": 101811,
+    "table": {
+        "tableId": 87447
+    },
+    "orderItems": [
+        {
+            "timestamp": {
+                "date": "2024-11-19T11:51:09+00:00",
+                "timezone_type": 0,
+                "timezone": "+00:00"
+            },
+            "count": 1,
+            "notes": null,
+            "price": 30.0,
+            "tax": 2.97,
+            "discount": 0.0,
+            "discountPrice": null,
+            "subtotal": 30.0,
+            "paid": false,
+            "item": {
+                "name": "Menú Trattoria Sant'Elmo",
+                "price": 30.0,
+                "externalId": "1234",
+                "externalCode": "123123"
+            },
+            "orderItemVariations": []
+        }
+    ],
+    "paid": true,
+    "external_id": "12345",
+    "client_name": "Juan",
+    "external_client_id": "90165296"
+}

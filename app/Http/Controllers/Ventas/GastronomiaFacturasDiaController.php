@@ -6,6 +6,9 @@ use App\Exports\Ventas\GastronomiaFacturasDiaExport;
 use App\Http\Controllers\Controller;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Models\Ventas\Venta;
+use App\Services\Ventas\Gastronomia\GastronomiaCuentaService;
+use App\Services\Ventas\Gastronomia\GastronomiaFacturaTicketService;
+use App\Services\Ventas\Gastronomia\GastronomiaJornadaService;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
 use App\Support\Ventas\GastronomiaDepositoConfigSupport;
 use App\Support\Ventas\GastronomiaVentaDetalleSupport;
@@ -16,12 +19,19 @@ use Maatwebsite\Excel\Excel;
 
 class GastronomiaFacturasDiaController extends Controller
 {
+    public function __construct(
+        private readonly GastronomiaFacturaTicketService $facturaTicketService,
+        private readonly GastronomiaCuentaService $cuentaService,
+        private readonly GastronomiaJornadaService $jornadaService,
+    ) {}
+
     public function index(Request $request)
     {
         can('listar-facturas-gastronomia-dia');
 
         $pc = GastronomiaIdentificadorPc::resolver($request);
-        $fecha = $request->get('fecha', Carbon::today()->format('Y-m-d'));
+        $fecha = $this->resolverFechaFiltro($request);
+        $jornada = $this->estadoJornadaParaRequest($request);
         $busqueda = trim((string) $request->get('busqueda', ''));
 
         $todasPc = $request->boolean('todas_pc');
@@ -50,6 +60,7 @@ class GastronomiaFacturasDiaController extends Controller
             'articulo_sku' => $articuloSku,
             'articulo_filtro' => $articuloFiltro,
             'insumos_por_venta' => $insumosPorVenta,
+            'jornada' => $jornada,
         ]);
     }
 
@@ -71,7 +82,7 @@ class GastronomiaFacturasDiaController extends Controller
                 return $r;
             });
 
-        $fecha = $request->get('fecha', Carbon::today()->format('Y-m-d'));
+        $fecha = $this->resolverFechaFiltro($request);
         $identificador_pc = GastronomiaIdentificadorPc::resolver($request);
 
         ini_set('memory_limit', '-1');
@@ -103,6 +114,26 @@ class GastronomiaFacturasDiaController extends Controller
         }
 
         abort(404);
+    }
+
+    public function reimprimirTicket(int $ventaId)
+    {
+        can('ver-factura-gastronomia');
+
+        if (! VentaGastronomiaEmision::query()->where('venta_id', $ventaId)->exists()) {
+            return response()->json(['ok' => false, 'error' => 'La venta no corresponde a una emisión gastronomía.'], 404);
+        }
+
+        $resultado = $this->facturaTicketService->reimprimirTicketVenta($ventaId);
+
+        if (! empty($resultado['ok'])) {
+            return response()->json(['ok' => true, 'mensaje' => 'Ticket enviado a la impresora.']);
+        }
+
+        return response()->json([
+            'ok' => false,
+            'error' => $resultado['mensaje'] ?? 'No se pudo reimprimir el ticket.',
+        ], 422);
     }
 
     public function ver(int $ventaId)
@@ -159,7 +190,7 @@ class GastronomiaFacturasDiaController extends Controller
     private function registrosFacturasDiaQuery(Request $request, ?object $articuloFiltro = null): Builder
     {
         $pc = GastronomiaIdentificadorPc::resolver($request);
-        $fecha = $request->get('fecha', Carbon::today()->format('Y-m-d'));
+        $fecha = $this->resolverFechaFiltro($request);
         $busqueda = trim((string) $request->get('busqueda', ''));
         $todasPc = $request->boolean('todas_pc');
 
@@ -188,7 +219,7 @@ class GastronomiaFacturasDiaController extends Controller
             $q->where('identificador_pc', $pc);
         }
 
-        $q->whereHas('venta', fn ($qq) => $qq->whereDate('fecha', $fecha));
+        $q->whereHas('venta', fn ($qq) => $qq->whereDate('fechajornada', $fecha));
 
         if ($articuloFiltro !== null) {
             $articuloId = (int) $articuloFiltro->id;
@@ -211,5 +242,35 @@ class GastronomiaFacturasDiaController extends Controller
         }
 
         return $q->orderByDesc('venta_id');
+    }
+
+    /**
+     * Sin ?fecha= en la URL: fecha de jornada abierta (empresa del PV de esta terminal); si no hay, hoy.
+     */
+    private function resolverFechaFiltro(Request $request): string
+    {
+        if ($request->filled('fecha')) {
+            return (string) $request->input('fecha');
+        }
+
+        $jornada = $this->estadoJornadaParaRequest($request);
+        if (! empty($jornada['jornada_abierta']) && ! empty($jornada['fecha_jornada'])) {
+            return (string) $jornada['fecha_jornada'];
+        }
+
+        return Carbon::today()->format('Y-m-d');
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function estadoJornadaParaRequest(Request $request): ?array
+    {
+        $cfg = $this->cuentaService->resolverConfiguracionPv($request);
+        if ($cfg === null) {
+            return null;
+        }
+
+        return $this->jornadaService->estadoParaEmpresa((int) $cfg->empresa_id);
     }
 }

@@ -342,7 +342,7 @@ $(document).ready(function () {
             var rows = (resp && resp.datos) ? resp.datos : [];
             var html = '';
             if (!rows.length) {
-                html = '<tr><td colspan="3" class="text-muted">Ning&uacute;n art&iacute;culo vincula esta f&oacute;rmula por el campo f&oacute;rmula.</td></tr>';
+                html = '<tr><td colspan="3" class="text-muted">Ning&uacute;n art&iacute;culo vincula esta f&oacute;rmula (ni una f&oacute;rmula que la incluya como subf&oacute;rmula).</td></tr>';
             } else {
                 rows.forEach(function (r) {
                     var ida = r.id != null ? String(r.id) : '';

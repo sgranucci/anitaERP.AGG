@@ -8,7 +8,7 @@
                 </button>
             </div>
             <div class="modal-body">
-                <p class="text-muted small">Listado de art&iacute;culos cuyo campo <em>f&oacute;rmula</em> referencia esta definici&oacute;n (puede incluir el de cabecera si est&aacute; vinculado).</p>
+                <p class="text-muted small">Art&iacute;culos cuyo campo <em>f&oacute;rmula</em> apunta a esta definici&oacute;n o a alguna f&oacute;rmula que la incluye como subf&oacute;rmula.</p>
                 <div class="table-responsive">
                     <table class="table table-sm table-striped table-bordered mb-0">
                         <thead class="thead-light">

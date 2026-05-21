@@ -96,6 +96,7 @@ function limpiaFiltros(){
                             <th>Uso</th>
                             <th>Nro.Parte</th>
                             <th>Ubic.Parte</th>
+                            <th class="text-right" title="Saldo en Anita (stkdep) para artículos LAB con depósito de entrega">Saldo dep.</th>
                             <th>Facturable</th>
                             <th>Estado</th>
                             <th data-orderable="false"></th>
@@ -124,6 +125,11 @@ function limpiaFiltros(){
                                 </td>
                                 <td>{{$articulo->numeroparte ?? ''}}</td>
                                 <td>{{$articulo->ubicacionparte ?? ''}}</td>
+                                <td class="text-right">
+                                    @if(isset($saldosStkdep[$articulo->id]))
+                                        {{ number_format($saldosStkdep[$articulo->id], 2, ',', '.') }}
+                                    @endif
+                                </td>
                                 <td>
                                     {{ ($articulo->nofactura == '0' ? 'Facturable' : ($articulo->nofactura == '1' ? 'No facturable' : '' )) }}
                                 </td>

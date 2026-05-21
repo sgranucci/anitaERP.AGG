@@ -11,20 +11,10 @@
     }
 
     function renderTotalesHtml(totales, titulo) {
-        if (!totales) {
-            return '';
+        if (window.GastronomiaTotalesTurnoRender) {
+            return window.GastronomiaTotalesTurnoRender.renderTotalesHtml(totales, titulo);
         }
-        var html = '<p><strong>' + titulo + '</strong> — Total: $' + fmt(totales.total_general) + '</p>';
-        html += '<div class="row"><div class="col-md-6"><em>Por mozo</em><ul class="pl-3 mb-2">';
-        (totales.por_mozo || []).forEach(function (m) {
-            html += '<li>' + (m.mozo_nombre || '—') + ': $' + fmt(m.total) + ' (' + m.cantidad + ' comp.)</li>';
-        });
-        html += '</ul></div><div class="col-md-6"><em>Por medio de pago</em><ul class="pl-3">';
-        (totales.por_medio_pago || []).forEach(function (p) {
-            html += '<li>' + (p.nombre || p.codigo) + ': $' + fmt(p.total) + '</li>';
-        });
-        html += '</ul></div></div>';
-        return html;
+        return '';
     }
 
     function actualizarAlertaTurno(estado) {
@@ -34,9 +24,11 @@
         }
         G.turnoOperativo = estado;
         if (estado.turno_habilitado) {
-            el.className = 'alert alert-info py-2 mb-3';
+            el.className = 'alert alert-secondary py-2 mb-3';
             el.innerHTML = 'Turno <strong>' + (estado.turno_nombre || '') + '</strong>'
                 + ' — ' + (estado.usuario_habilitado || '')
+                + ' — Jornada <strong>' + (estado.fecha_jornada_fmt || estado.fecha_jornada || '—') + '</strong>'
+                + ' — Habilitado ' + (estado.habilitacion_en_fmt || estado.habilitacion_en || '—')
                 + ' — parciales: ' + (estado.cierres_parciales || 0);
         } else {
             el.className = 'alert alert-danger py-2 mb-3';

@@ -1,9 +1,13 @@
+@php
+    $asientoEdicion = $data->asientos->first();
+    $lineasAsiento = $asientoEdicion?->asiento_movimientos ?? collect();
+@endphp
 <div class="card formasientoexterno" style="display: none">
-    <input type="hidden" name="tipoasiento_id" id="tipoasiento_id" value="{{old('tipoasiento_id', $data->asientos[0]->tipoasiento_id ?? '')}}">
-    <input type="hidden" name="fechaasiento" id="fechasiento" value="{{old('fecha', $data->asientos[0]->fecha ?? date('Y-m-d'))}}">
-    <input type="hidden" name="observacionasiento" id="observacionasiento" value="{{old('observacion', $data->asientos[0]->observacion ?? '')}}">
-    <input type="hidden" name="numeroasiento" value="{{ $data->asientos[0]->numeroasiento ?? '' }}" />
-    <input type="hidden" name="idasiento" value="{{ $data->asientos[0]->idasiento ?? '' }}" />
+    <input type="hidden" name="tipoasiento_id" id="tipoasiento_id" value="{{old('tipoasiento_id', $asientoEdicion->tipoasiento_id ?? '')}}">
+    <input type="hidden" name="fechaasiento" id="fechasiento" value="{{old('fecha', $asientoEdicion->fecha ?? date('Y-m-d'))}}">
+    <input type="hidden" name="observacionasiento" id="observacionasiento" value="{{old('observacion', $asientoEdicion->observacion ?? '')}}">
+    <input type="hidden" name="numeroasiento" value="{{ $asientoEdicion->numeroasiento ?? '' }}" />
+    <input type="hidden" name="idasiento" value="{{ $asientoEdicion->idasiento ?? '' }}" />
     <h3>Cuentas</h3>
     <div class="card-body">
         <table class="table" id="cuenta-asiento-table">
@@ -21,8 +25,8 @@
                 </tr>
             </thead>
             <tbody id="tbody-cuenta-asiento-table" class="container-asiento">
-            @if ($data->asientos[0]->asiento_movimientos ?? $data->asientos->asiento_movimientos ?? '')
-                @foreach ($data->asientos[0]->asiento_movimientos ?? $data->asientos->asiento_movimientos ?? '' as $cuenta)
+            @if ($lineasAsiento->isNotEmpty())
+                @foreach ($lineasAsiento as $cuenta)
                     <tr class="item-cuenta-asiento">
                         <td>
                             <div class="form-group row" id="cuentacontable">

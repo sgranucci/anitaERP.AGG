@@ -22,7 +22,7 @@
      data-puede-cerrar="{{ $puede_cerrar ? '1' : '0' }}">
     <div class="col-lg-12">
         @include('includes.mensaje')
-        <div class="card card-primary">
+        <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Apertura y cierre de jornada</h3>
             </div>

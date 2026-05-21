@@ -4,7 +4,10 @@ namespace App\Services\Ventas\Gastronomia;
 
 use App\Models\Ventas\CuentaGastronomia;
 use App\Models\Ventas\DescuentoGastronomia;
+use App\Models\Ventas\Venta;
 use App\Services\Ventas\FacturacionService;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 use InvalidArgumentException;
 
 /**
@@ -82,6 +85,25 @@ final class GastronomiaFacturacionService
         }
 
         return $resultado;
+    }
+
+    /**
+     * Si la venta ya se replicó en Informix y falla un paso posterior (cobranza, CAE, etc.), borra el comprobante en Anita.
+     */
+    public function revertirVentaEnAnitaSiHabilitado(?Venta $venta): void
+    {
+        if (! $venta || ! config('gastronomia.sincronizar_anita_al_facturar', true)) {
+            return;
+        }
+
+        try {
+            $this->facturacionService->borraAnitaDesdeVenta($venta);
+        } catch (Throwable $e) {
+            Log::error('gastronomia.revertir_anita.fallo', [
+                'venta_id' => $venta->id,
+                'msg' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**

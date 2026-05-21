@@ -107,8 +107,6 @@
         return data;
     }
 
-    /** Control pulsado antes de F5 (algunos navegadores no marcan ctrlKey en F5). */
-    let teclaControlPulsada = false;
     let iframeImpresionFactura = null;
 
     function obtenerIframeImpresionFactura() {
@@ -452,6 +450,145 @@
 
     let pendingDescuentoResolver = null;
     let esperarDescuentoCleanup = null;
+    let pendingModalF8DescuentoResolver = null;
+    let modalF8DescuentoEnCurso = false;
+    let modalF8DescuentoConfirmadoOk = false;
+
+    function avisoDescuentoEnModal(visible) {
+        const aviso = document.getElementById('gastro-descuento-en-modal-aviso');
+        if (aviso) {
+            aviso.classList.toggle('d-none', !visible);
+        }
+    }
+
+    function slotDescuentoOriginal() {
+        return document.getElementById('gastro-descuento-slot-original');
+    }
+
+    function slotDescuentoModal() {
+        return document.getElementById('gastro-descuento-slot-modal');
+    }
+
+    function bloqueDescuentoMovable() {
+        return document.getElementById('gastro-descuento-movable');
+    }
+
+    function descuentoEnModalF8() {
+        const bloque = bloqueDescuentoMovable();
+        const slotModal = slotDescuentoModal();
+        return !!(bloque && slotModal && slotModal.contains(bloque));
+    }
+
+    function moverBloqueDescuentoAlModal() {
+        const bloque = bloqueDescuentoMovable();
+        const slotModal = slotDescuentoModal();
+        if (bloque && slotModal) {
+            slotModal.appendChild(bloque);
+        }
+        avisoDescuentoEnModal(true);
+    }
+
+    function restaurarBloqueDescuentoEnTarjeta() {
+        const bloque = bloqueDescuentoMovable();
+        const slotOriginal = slotDescuentoOriginal();
+        if (bloque && slotOriginal) {
+            slotOriginal.appendChild(bloque);
+        }
+        avisoDescuentoEnModal(false);
+    }
+
+    function rechazarModalF8Descuento(mensaje) {
+        if (pendingModalF8DescuentoResolver) {
+            pendingModalF8DescuentoResolver.reject(new Error(mensaje || 'Operación cancelada.'));
+            pendingModalF8DescuentoResolver = null;
+        }
+        modalF8DescuentoEnCurso = false;
+    }
+
+    function cerrarModalF8Descuento() {
+        if (typeof $ !== 'undefined') {
+            $('#modal-f8-descuento').modal('hide');
+            return;
+        }
+        const modal = document.getElementById('modal-f8-descuento');
+        if (modal) {
+            modal.classList.remove('show');
+            modal.style.display = 'none';
+            modal.setAttribute('aria-hidden', 'true');
+        }
+        document.body.classList.remove('modal-open');
+        document.querySelectorAll('.modal-backdrop').forEach((el) => el.remove());
+        restaurarBloqueDescuentoEnTarjeta();
+        limpiarEsperaDescuento('Operación cancelada.');
+        limpiarEsperaClienteInterno('Operación cancelada.');
+        rechazarModalF8Descuento('Operación cancelada.');
+    }
+
+    function abrirModalF8Descuento() {
+        return new Promise((resolve, reject) => {
+            if (modalF8DescuentoEnCurso) {
+                reject(new Error('Ya hay un modal de descuento abierto.'));
+                return;
+            }
+            modalF8DescuentoEnCurso = true;
+            modalF8DescuentoConfirmadoOk = false;
+            pendingModalF8DescuentoResolver = {
+                resolve: () => {
+                    pendingModalF8DescuentoResolver = null;
+                    modalF8DescuentoEnCurso = false;
+                    resolve();
+                },
+                reject: (err) => {
+                    pendingModalF8DescuentoResolver = null;
+                    modalF8DescuentoEnCurso = false;
+                    reject(err);
+                },
+            };
+
+            if (tieneDescuentoEnPantalla() && typeof mostrarPanelClienteInternoDescuento === 'function') {
+                mostrarPanelClienteInternoDescuento(true);
+            }
+
+            moverBloqueDescuentoAlModal();
+
+            if (typeof $ !== 'undefined') {
+                $('#modal-f8-descuento').modal('show');
+            } else {
+                const modal = document.getElementById('modal-f8-descuento');
+                if (modal) {
+                    modal.classList.add('show');
+                    modal.style.display = 'block';
+                    modal.removeAttribute('aria-hidden');
+                }
+                setTimeout(() => enfocarCampoDescuentoCodigo(), 80);
+            }
+        });
+    }
+
+    async function confirmarModalF8Descuento() {
+        const btn = document.getElementById('modal-f8-descuento-confirmar');
+        if (btn) {
+            btn.disabled = true;
+        }
+        try {
+            await asegurarDescuentoObligatorio({ silencioso: true });
+            modalF8DescuentoConfirmadoOk = true;
+            if (pendingModalF8DescuentoResolver) {
+                pendingModalF8DescuentoResolver.resolve();
+            }
+            if (typeof $ !== 'undefined') {
+                $('#modal-f8-descuento').modal('hide');
+            } else {
+                restaurarBloqueDescuentoEnTarjeta();
+            }
+        } catch (e) {
+            toast(e.message || String(e), 'error');
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+            }
+        }
+    }
 
     function debeIgnorarAtajoPos() {
         const ids = [
@@ -463,6 +600,7 @@
             'consultaclienteModal',
             'consultadescuentoModal',
             'consultaclienteModal',
+            'modal-f8-descuento',
         ];
         for (let i = 0; i < ids.length; i++) {
             const el = document.getElementById(ids[i]);
@@ -566,6 +704,24 @@
             return;
         }
         setTimeout(() => enfocarCampoClienteInternoCodigo(), 0);
+    }
+
+    function enfocarPrimerCampoPendienteModalF8() {
+        if (!tieneDescuentoEnPantalla()) {
+            enfocarCampoDescuentoCodigo();
+            return;
+        }
+        const errCli = validarClienteInternoDescuentoEnPantalla();
+        if (errCli) {
+            enfocarCampoClienteInternoCodigo();
+            return;
+        }
+        const btn = document.getElementById('modal-f8-descuento-confirmar');
+        if (btn && typeof btn.focus === 'function') {
+            btn.focus();
+            return;
+        }
+        enfocarCampoDescuentoCodigo();
     }
 
     function tieneDescuentoEnPantalla() {
@@ -726,6 +882,12 @@
         if (!err) {
             return;
         }
+        if (descuentoEnModalF8()) {
+            enfocarCampoClienteInternoCodigo();
+            throw new Error(
+                'Indique el cliente interno del descuento (código + Enter o lupa) y pulse Facturar.',
+            );
+        }
         await esperarClienteInternoEnCampo(silencioso);
         const err2 = validarClienteInternoDescuentoEnPantalla();
         if (err2) {
@@ -818,6 +980,8 @@
             }
         } else if (cod) {
             data = await cargarDescuentoPorCodigoApi(cod);
+        } else if (descuentoEnModalF8()) {
+            throw new Error('Indique el código de descuento (Enter o lupa) y pulse Facturar.');
         } else {
             data = await esperarDescuentoEnCampo(silencioso);
         }
@@ -867,10 +1031,12 @@
         }
 
         try {
-            await asegurarDescuentoObligatorio({ silencioso: true });
+            await abrirModalF8Descuento();
             await emitirFactura({ exigirDescuento: true, prepararCobranzaSiFalta: true });
         } catch (e) {
-            toast(e.message || String(e), 'error');
+            if (e && e.message && e.message !== 'Operación cancelada.') {
+                toast(e.message || String(e), 'error');
+            }
         }
     }
 
@@ -2467,10 +2633,8 @@
                     medios_pago: mediosPago,
                 }),
             });
-            const vid = data.venta_id;
-            if (vid) {
-                setFacturacionLoading(true, 'Imprimiendo factura…');
-                await imprimirFacturaPdf(vid);
+            if (data.impresion_ticket === 'error' && data.impresion_ticket_mensaje) {
+                toast(data.impresion_ticket_mensaje, 'warning');
             }
             if (data.warn) {
                 mostrarAvisoPersistente(data.warn, 'warning', {
@@ -2592,15 +2756,6 @@
         return e.key === 'F8' || e.code === 'F8' || e.keyCode === 119;
     }
 
-    function modificadorControlActivo(e) {
-        return !!(
-            teclaControlPulsada ||
-            e.ctrlKey ||
-            e.metaKey ||
-            (typeof e.getModifierState === 'function' && e.getModifierState('Control'))
-        );
-    }
-
     function wireCamposDescuentoTeclado() {
         const codDesc = document.getElementById('codigodescuento');
         const codCli = document.getElementById('codigocliente_descuento');
@@ -2614,6 +2769,14 @@
                     if (!cod) return;
                     try {
                         await cargarDescuentoPorCodigoApi(cod);
+                        if (descuentoEnModalF8()) {
+                            const errCli = validarClienteInternoDescuentoEnPantalla();
+                            if (errCli) {
+                                enfocarCampoClienteInternoCodigo();
+                            } else {
+                                void confirmarModalF8Descuento();
+                            }
+                        }
                     } catch (err) {
                         toast(err.message || String(err), 'error');
                     }
@@ -2638,6 +2801,9 @@
                     if (!cod) return;
                     try {
                         await cargarClienteInternoPorCodigoApi(cod);
+                        if (descuentoEnModalF8() && !validarClienteInternoDescuentoEnPantalla()) {
+                            void confirmarModalF8Descuento();
+                        }
                     } catch (err) {
                         toast(err.message || String(err), 'error');
                     }
@@ -2647,28 +2813,6 @@
     }
 
     function registrarEventosUi() {
-        document.addEventListener(
-            'keydown',
-            function (e) {
-                if (e.key === 'Control' || e.key === 'Meta') {
-                    teclaControlPulsada = true;
-                }
-            },
-            true,
-        );
-        document.addEventListener(
-            'keyup',
-            function (e) {
-                if (e.key === 'Control' || e.key === 'Meta') {
-                    teclaControlPulsada = false;
-                }
-            },
-            true,
-        );
-        window.addEventListener('blur', function () {
-            teclaControlPulsada = false;
-        });
-
         wireCamposDescuentoTeclado();
 
         document.getElementById('btn-modo-mesa').addEventListener('click', () => {
@@ -2741,6 +2885,51 @@
                     focusCodigoMozoModalAbrir();
                 }
             });
+            $('#modal-f8-descuento').on('shown.bs.modal', function () {
+                setTimeout(() => enfocarPrimerCampoPendienteModalF8(), 80);
+            });
+            $('#modal-f8-descuento').on('hidden.bs.modal', function () {
+                restaurarBloqueDescuentoEnTarjeta();
+                if (!modalF8DescuentoConfirmadoOk) {
+                    limpiarEsperaDescuento('Operación cancelada.');
+                    limpiarEsperaClienteInterno('Operación cancelada.');
+                    rechazarModalF8Descuento('Operación cancelada.');
+                }
+                modalF8DescuentoConfirmadoOk = false;
+            });
+            $('#consultadescuentoModal').on('hidden.bs.modal.gastroF8', function () {
+                if (descuentoEnModalF8()) {
+                    setTimeout(() => enfocarPrimerCampoPendienteModalF8(), 80);
+                }
+            });
+            $('#consultaclienteModal').on('hidden.bs.modal.gastroF8', function () {
+                if (descuentoEnModalF8()) {
+                    setTimeout(() => enfocarPrimerCampoPendienteModalF8(), 80);
+                }
+            });
+            $('#modal-f8-descuento').on('keydown.gastroF8', function (e) {
+                if (e.key !== 'Enter' || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) {
+                    return;
+                }
+                const t = e.target;
+                if (!t || t.tagName === 'TEXTAREA') {
+                    return;
+                }
+                if (t.classList && (t.classList.contains('codigodescuento') || t.classList.contains('codigoclienteinternodescuento'))) {
+                    return;
+                }
+                if (t.id === 'modal-f8-descuento-confirmar') {
+                    return;
+                }
+                e.preventDefault();
+                void confirmarModalF8Descuento();
+            });
+        }
+        const btnModalF8Confirmar = document.getElementById('modal-f8-descuento-confirmar');
+        if (btnModalF8Confirmar) {
+            btnModalF8Confirmar.addEventListener('click', () => {
+                void confirmarModalF8Descuento();
+            });
         }
         document.getElementById('btn-guardar-cabecera').addEventListener('click', () => {
             void guardarCabecera(false);
@@ -2797,13 +2986,7 @@
                 if (debeIgnorarAtajoPos()) return;
 
                 if (esTeclaF5(e)) {
-                    if (modificadorControlActivo(e)) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        void emitirFactura();
-                        return;
-                    }
-                    if (e.altKey || e.shiftKey) return;
+                    if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
                     e.preventDefault();
                     e.stopPropagation();
                     void efectivizar();
@@ -2811,7 +2994,7 @@
                 }
 
                 if (esTeclaF8(e)) {
-                    if (modificadorControlActivo(e) || e.altKey || e.shiftKey) return;
+                    if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
                     e.preventDefault();
                     e.stopPropagation();
                     void facturarConDescuento();
@@ -2925,6 +3108,14 @@
             }
             if (cuentaId && tieneDescuentoEnPantalla() && cli && cli.id) {
                 void recalcularTotalCuentaConDescuento();
+            }
+            if (descuentoEnModalF8() && cli && cli.id && !validarClienteInternoDescuentoEnPantalla()) {
+                setTimeout(() => {
+                    const btn = document.getElementById('modal-f8-descuento-confirmar');
+                    if (btn && typeof btn.focus === 'function') {
+                        btn.focus();
+                    }
+                }, 50);
             }
         };
 

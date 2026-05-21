@@ -1,0 +1,14 @@
+# Logs de colas y scheduler AnitaERP
+# Instalar: deploy/logrotate/aplicar-logrotate.sh
+
+/var/www/html/anitaERP/storage/logs/schedule.log
+/var/www/html/anitaERP/storage/logs/queue-worker.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+    su www-data www-data
+}

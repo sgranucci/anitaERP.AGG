@@ -9,6 +9,7 @@ use App\Support\Configuracion\EmpresaLogoArchivo;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use InvalidArgumentException;
 
 /**
  * Datos para listados y comprobantes PDF/Excel de cierres de turno gastronomía.
@@ -18,6 +19,79 @@ final class GastronomiaCierreTurnoReporteSupport
     public function __construct(
         private EmpresaRepositoryInterface $empresaRepository,
     ) {
+    }
+
+    /**
+     * Ventana temporal de facturas incluidas en un cierre parcial o definitivo.
+     *
+     * @return array{
+     *   identificador_pc: string,
+     *   empresa_id: int,
+     *   fecha_jornada: string,
+     *   desde: Carbon,
+     *   hasta: Carbon,
+     *   titulo: string,
+     *   subtitulo: string
+     * }
+     */
+    public function alcanceComprobantesRegistro(string $tipo, int $id): array
+    {
+        if ($tipo === 'parcial') {
+            $parcial = CierreParcialTurnoGastronomia::query()
+                ->with(['turnoOperativo.jornada', 'turnoOperativo.turno'])
+                ->findOrFail($id);
+
+            $turno = $parcial->turnoOperativo;
+            if ($turno === null || $turno->habilitacion_en === null) {
+                throw new InvalidArgumentException('Turno operativo no encontrado para el cierre parcial.');
+            }
+
+            $hasta = $parcial->created_at ?? now();
+            $fechaJornada = $turno->jornada?->fecha_jornada?->format('Y-m-d')
+                ?? $hasta->format('Y-m-d');
+
+            return [
+                'identificador_pc' => (string) $parcial->identificador_pc,
+                'empresa_id' => (int) $turno->empresa_id,
+                'fecha_jornada' => $fechaJornada,
+                'desde' => Carbon::parse($turno->habilitacion_en),
+                'hasta' => Carbon::parse($hasta),
+                'titulo' => 'Comprobantes del cierre parcial #'.$parcial->numero_parcial,
+                'subtitulo' => ($turno->turno?->nombre ?? 'Turno')
+                    .' · Op. #'.$turno->id
+                    .' · '.$turno->habilitacion_en->format('d/m/Y H:i')
+                    .' — '.$hasta->format('d/m/Y H:i'),
+            ];
+        }
+
+        if ($tipo === 'cierre') {
+            $turno = TurnoOperativoGastronomia::query()
+                ->with(['jornada', 'turno'])
+                ->where('estado', TurnoOperativoGastronomia::ESTADO_CERRADO)
+                ->findOrFail($id);
+
+            if ($turno->habilitacion_en === null || $turno->cierre_en === null) {
+                throw new InvalidArgumentException('El turno cerrado no tiene fechas de habilitación o cierre.');
+            }
+
+            $fechaJornada = $turno->jornada?->fecha_jornada?->format('Y-m-d')
+                ?? $turno->cierre_en->format('Y-m-d');
+
+            return [
+                'identificador_pc' => (string) $turno->identificador_pc,
+                'empresa_id' => (int) $turno->empresa_id,
+                'fecha_jornada' => $fechaJornada,
+                'desde' => Carbon::parse($turno->habilitacion_en),
+                'hasta' => Carbon::parse($turno->cierre_en),
+                'titulo' => 'Comprobantes del cierre definitivo',
+                'subtitulo' => ($turno->turno?->nombre ?? 'Turno')
+                    .' · Op. #'.$turno->id
+                    .' · '.$turno->habilitacion_en->format('d/m/Y H:i')
+                    .' — '.$turno->cierre_en->format('d/m/Y H:i'),
+            ];
+        }
+
+        throw new InvalidArgumentException('Tipo de registro de cierre inválido.');
     }
 
     /**
@@ -37,10 +111,16 @@ final class GastronomiaCierreTurnoReporteSupport
         $turno = $parcial->turnoOperativo;
         $totales = is_array($parcial->totales_json) ? $parcial->totales_json : [];
 
+        $soloMozo = ! empty($totales['solo_totales_mozo']);
+
         return $this->armarDatosComprobante(
             tipo: 'parcial',
-            titulo: 'Cierre parcial de turno gastronomía',
-            subtitulo: 'Comprobante Nº '.$parcial->numero_parcial.' — Turno operativo #'.$parcial->turno_operativo_gastronomia_id,
+            titulo: $soloMozo
+                ? 'Informe por mozo (sin cierre de turno)'
+                : 'Cierre parcial de turno gastronomía',
+            subtitulo: $soloMozo
+                ? 'Solo totales por mozo — el turno permanece habilitado'
+                : 'Comprobante Nº '.$parcial->numero_parcial.' — Turno operativo #'.$parcial->turno_operativo_gastronomia_id,
             turno: $turno,
             totalesTurno: $totales,
             totalesDia: null,
@@ -51,6 +131,51 @@ final class GastronomiaCierreTurnoReporteSupport
             redondeoTurno: null,
             sobranteFaltante: null,
             observacionCierre: null,
+            soloTotalesMozo: $soloMozo,
+        );
+    }
+
+    /**
+     * PDF informativo: totales por mozo sin registrar cierre parcial.
+     *
+     * @return array<string, mixed>
+     */
+    public function datosInformeSoloMozo(TurnoOperativoGastronomia $turno, string $identificadorPc): array
+    {
+        $turno->loadMissing([
+            'turno',
+            'jornada',
+            'empresa',
+            'usuarioHabilitado',
+            'usuarioHabilitacion',
+        ]);
+
+        $fechaJornada = $turno->jornada?->fecha_jornada?->format('Y-m-d')
+            ?? Carbon::today()->format('Y-m-d');
+
+        $totales = GastronomiaTurnoOperativoTotalesSupport::calcular(
+            $identificadorPc,
+            (int) $turno->empresa_id,
+            $fechaJornada,
+            $turno->habilitacion_en,
+        );
+        $totales['solo_totales_mozo'] = true;
+
+        return $this->armarDatosComprobante(
+            tipo: 'informe_mozo',
+            titulo: 'Informe por mozo — turno en curso',
+            subtitulo: 'NO es cierre parcial ni cierre definitivo — solo consulta de totales',
+            turno: $turno,
+            totalesTurno: $totales,
+            totalesDia: null,
+            fechaEmision: now(),
+            usuarioRegistro: null,
+            montoHabilitacion: (float) $turno->monto_habilitacion,
+            redondeoInvitaciones: null,
+            redondeoTurno: null,
+            sobranteFaltante: null,
+            observacionCierre: null,
+            soloTotalesMozo: true,
         );
     }
 
@@ -244,12 +369,14 @@ final class GastronomiaCierreTurnoReporteSupport
         ?float $sobranteFaltante,
         ?string $observacionCierre,
         int $cantidadParciales = 0,
+        bool $soloTotalesMozo = false,
     ): array {
         $empresaNombre = $turno?->empresa?->nombre ?? '';
         $logo = EmpresaLogoArchivo::dataUriDesdeNombre($empresaNombre);
 
         return [
             'tipo' => $tipo,
+            'solo_totales_mozo' => $soloTotalesMozo,
             'titulo' => $titulo,
             'subtitulo' => $subtitulo,
             'logo' => $logo,

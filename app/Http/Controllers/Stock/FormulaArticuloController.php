@@ -298,7 +298,7 @@ class FormulaArticuloController extends Controller
     }
 
     /**
-     * Artículos con articulo.formula = id (listado para modal en edición).
+     * Artículos con articulo.formula en esta fórmula o en alguna que la incluye como subfórmula.
      */
     public function articulosAsociados(int $id)
     {
@@ -306,8 +306,13 @@ class FormulaArticuloController extends Controller
             abort(403);
         }
 
+        $formulaIds = $this->formulaArticuloService->idsFormulasParaArticulosAsociados($id);
+        if ($formulaIds === []) {
+            return response()->json(['datos' => []]);
+        }
+
         $rows = Articulo::query()
-            ->where('formula', $id)
+            ->whereIn('formula', $formulaIds)
             ->orderBy('sku')
             ->get(['id', 'sku', 'descripcion']);
 

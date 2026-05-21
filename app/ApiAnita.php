@@ -85,6 +85,10 @@ class ApiAnita {
         $bddPath = rtrim((string) config('anita.bdd_path', ''), '/');
         $data['DB_NAME'] = $bdd;
         $data['IFX_DB_PATH'] = ($bddPath !== '' ? $bddPath.'/' : '').$bdd;
+        $data['sistema'] = $bdd;
+        if ($bddPath !== '') {
+            $data['path_sistema'] = $bddPath;
+        }
 
         try {
             $url = self::urlBridge($this->servidorAnita);
@@ -126,6 +130,34 @@ class ApiAnita {
     }
 
     /**
+     * Quita advertencias PHP del body del bridge (insert/update) sin ocultar errores Informix.
+     */
+    public static function limpiarRespuestaBridgeEscritura(string $respuesta): string
+    {
+        $lineas = preg_split('/\R/', $respuesta) ?: [];
+        $limpias = [];
+        foreach ($lineas as $linea) {
+            if (preg_match('/^\s*(?:Warning|Notice|Deprecated|Fatal error)\b/i', $linea)) {
+                continue;
+            }
+            $limpias[] = $linea;
+        }
+
+        return trim(implode("\n", $limpias));
+    }
+
+    /**
+     * Respuesta legacy del bridge en INSERT/UPDATE/DELETE exitoso.
+     */
+    public static function respuestaBridgeEscrituraExitosa(string $respuesta): bool
+    {
+        $limpia = self::limpiarRespuestaBridgeEscritura($respuesta);
+
+        return $limpia !== ''
+            && preg_match('/\d+\s+row\(s\)\s+(?:inserted|updated|deleted)\b/i', $limpia) === 1;
+    }
+
+    /**
      * Detecta error en la respuesta del bridge (HTTP o legacy).
      * [] es válido: lista sin filas (consulta) o OK en insert/update (bridge legacy).
      */
@@ -156,8 +188,25 @@ class ApiAnita {
             return null;
         }
 
-        if (stripos($trim, 'error') !== false) {
-            return $trim;
+        $limpia = self::limpiarRespuestaBridgeEscritura($trim);
+        if (self::respuestaBridgeEscrituraExitosa($trim)) {
+            return null;
+        }
+
+        if (strcasecmp($limpia, 'Error') === 0) {
+            return 'Error en ejecución SQL Informix (revise el archivo .ret en el servidor Anita)';
+        }
+
+        if (stripos($trim, '<b>warning</b>') !== false || stripos($trim, '<b>fatal error</b>') !== false) {
+            return strip_tags(html_entity_decode($trim));
+        }
+
+        if ($limpia === '' && preg_match('/\b(?:Warning|Notice|Fatal error)\b/i', $trim)) {
+            return 'Advertencia PHP en bridge Anita (actualice apiERP.php en el servidor)';
+        }
+
+        if (stripos($limpia, 'error') !== false) {
+            return $limpia;
         }
 
         return null;

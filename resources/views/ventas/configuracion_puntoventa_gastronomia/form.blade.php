@@ -161,5 +161,10 @@
                 </option>
             @endforeach
         </select>
+        <small class="form-text text-muted">
+            Ticket térmico al facturar (comando en Configuración → Salidas, con <code>%s</code> = archivo ESC/POS).
+            Ej.: <code>{{ base_path('bin/gastronomia-print-ticket.sh') }} "%s" IP_IMPRESORA 9100</code>.
+            El PDF queda en Facturas del día.
+        </small>
     </div>
 </div>

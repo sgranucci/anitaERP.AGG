@@ -152,6 +152,45 @@ class FormulaArticuloService
     }
 
     /**
+     * IDs de fórmulas cuyos artículos deben listarse para una fórmula dada:
+     * la propia y todas las que la incluyen como subfórmula (ascendentes).
+     *
+     * @return list<int>
+     */
+    public function idsFormulasParaArticulosAsociados(int $formulaId): array
+    {
+        if ($formulaId <= 0) {
+            return [];
+        }
+
+        $ids = [$formulaId];
+        $visitados = [$formulaId => true];
+        $frontera = [$formulaId];
+
+        while ($frontera !== []) {
+            $actual = array_pop($frontera);
+
+            $padres = Formula_Articulo_Hijo::query()
+                ->where('formula_hija_id', $actual)
+                ->pluck('formula_articulo_id')
+                ->map(fn ($v) => (int) $v)
+                ->unique()
+                ->all();
+
+            foreach ($padres as $padreId) {
+                if (isset($visitados[$padreId])) {
+                    continue;
+                }
+                $visitados[$padreId] = true;
+                $ids[] = $padreId;
+                $frontera[] = $padreId;
+            }
+        }
+
+        return array_values(array_unique($ids));
+    }
+
+    /**
      * @param  array<string, mixed>  $data
      */
     private function validaLineasYSubformulas(?int $formulaId, array $data): ?string

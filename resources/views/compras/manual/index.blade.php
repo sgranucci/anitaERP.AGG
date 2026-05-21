@@ -16,7 +16,7 @@
     <aside class="mc-sidebar">
         <div class="mc-sidebar-brand">
             <h1>Anita ERP</h1>
-            <p>Centro de ayuda · Compras</p>
+            <p>Manual de usuario · Compras</p>
         </div>
         <nav class="mc-nav">
             @foreach ($meta['secciones'] as $i => $sec)
@@ -30,7 +30,7 @@
             <div class="mc-search-wrap">
                 <input type="search" id="mc-search" class="mc-search" placeholder="Buscar en el manual…" autocomplete="off">
             </div>
-            <a href="{{ route('ayuda') }}" class="mc-btn"><span aria-hidden="true">←</span> Centro de ayuda</a>
+            <a href="{{ route('ayuda') }}" class="mc-btn" title="Resúmenes por módulo"><span aria-hidden="true">☰</span> Índice de manuales</a>
             <a href="{{ url('/') }}" class="mc-btn">ERP</a>
             <button type="button" id="mc-theme-toggle" class="mc-btn" title="Cambiar tema">Tema</button>
             <a href="{{ route('manual_compras_pdf') }}" class="mc-btn" target="_blank" rel="noopener">PDF</a>

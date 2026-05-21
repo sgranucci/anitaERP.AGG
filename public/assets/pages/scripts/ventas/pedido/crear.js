@@ -50,6 +50,146 @@
 	var descuentoCliente;
 	var kiloanulacion;
 	var itemPedido_id;
+	var flSaltarFocusDescuentoPedido = false;
+
+	function esCampoPedidoEnfocable(el) {
+		if (!el || el.tagName === 'TEXTAREA') {
+			return false;
+		}
+		if (el.matches('input[type="hidden"], [readonly], [disabled]')) {
+			return false;
+		}
+		if (!el.matches('input, select')) {
+			return false;
+		}
+		return el.offsetParent !== null;
+	}
+
+	function obtenerCamposPedidoEnfocables() {
+		var nodos = document.querySelectorAll(
+			'#formgeneral input:not([type="hidden"]):not([readonly]):not([disabled]), ' +
+			'#formgeneral select:not([disabled])'
+		);
+		return Array.prototype.filter.call(nodos, esCampoPedidoEnfocable);
+	}
+
+	function focuseCampoPedido(el) {
+		if (!el || !esCampoPedidoEnfocable(el)) {
+			return;
+		}
+
+		el.focus();
+
+		if (el.tagName === 'INPUT' && (el.type === 'text' || el.type === '')) {
+			el.select();
+		}
+	}
+
+	function codigoArticuloSiguienteRenglon($tr) {
+		var $siguiente = $tr.nextAll('tr.item-pedido').first();
+
+		if (!$siguiente.length) {
+			return null;
+		}
+
+		var codigo = $siguiente.find('.codigoarticulo')[0];
+
+		return codigo && esCampoPedidoEnfocable(codigo) ? codigo : null;
+	}
+
+	function obtenerSiguienteCampoPedido(actual) {
+		var $actual = $(actual);
+		var $tr = $actual.closest('#itemspedido-table tr.item-pedido');
+
+		if ($tr.length) {
+			if (actual.classList.contains('codigoarticulo') || actual.classList.contains('unidadmedida_id')) {
+				return 'defer';
+			}
+
+			if (actual.classList.contains('caja') || actual.classList.contains('pieza')) {
+				var $kilo = $tr.find('.kilo');
+
+				if ($kilo.length && esCampoPedidoEnfocable($kilo[0])) {
+					return 'redondea:kilo';
+				}
+
+				return 'redondea:descuento';
+			}
+
+			if (actual.classList.contains('kilo')) {
+				return 'redondea:descuento';
+			}
+
+			if (actual.classList.contains('pesada')) {
+				var $descuento = $tr.find('.descuentoventa_id');
+
+				if ($descuento.length && esCampoPedidoEnfocable($descuento[0])) {
+					return $descuento[0];
+				}
+
+				return codigoArticuloSiguienteRenglon($tr);
+			}
+
+			if (actual.classList.contains('descuentoventa_id')) {
+				return codigoArticuloSiguienteRenglon($tr);
+			}
+		}
+
+		var campos = obtenerCamposPedidoEnfocables();
+		var indice = campos.indexOf(actual);
+
+		if (indice >= 0 && indice < campos.length - 1) {
+			return campos[indice + 1];
+		}
+
+		return null;
+	}
+
+	function avanzarCampoPedidoConEnter(event) {
+		if (event.key !== 'Enter' && event.which !== 13) {
+			return;
+		}
+		if (!esCampoPedidoEnfocable(event.target)) {
+			return;
+		}
+
+		event.preventDefault();
+
+		var $target = $(event.target);
+		var $tr = $target.closest('#itemspedido-table tr.item-pedido');
+		var accion = obtenerSiguienteCampoPedido(event.target);
+
+		if (accion === 'defer') {
+			$target.trigger('change');
+			return;
+		}
+
+		if (typeof accion === 'string' && accion.indexOf('redondea:') === 0) {
+			flSaltarFocusDescuentoPedido = accion === 'redondea:kilo';
+			$target.trigger('change');
+
+			if (accion === 'redondea:descuento' && !$tr.length) {
+				flSaltarFocusDescuentoPedido = false;
+			}
+
+			return;
+		}
+
+		if (accion) {
+			focuseCampoPedido(accion);
+		}
+	}
+
+	function initPedidoEnterNavigation() {
+		var form = document.getElementById('formgeneral');
+
+		if (!form || form.dataset.pedidoEnterNav) {
+			return;
+		}
+
+		form.dataset.pedidoEnterNav = '1';
+		form.addEventListener('keydown', avanzarCampoPedidoConEnter, true);
+	}
 	
 	function completarCliente_Entrega(cliente_id){
         var loc_id;
@@ -289,6 +429,8 @@
 	}
 
     $(function () {
+		initPedidoEnterNavigation();
+
 		var articulo_id;
 		var combinacion_id;
 		var modulo_id;
@@ -343,19 +485,12 @@
 			$(document).off('change', '.desc_combinacion');
 			$(document).off('change', '.desc_modulo');
 			$(document).off('change', '.cantidadesportalles');
-			$('#itemspedido-table input').off('keydown');
 		}
 
 		activa_eventos_consultacliente();
 		activa_eventos_consultaarticulo();
 		activa_eventos_consultatransporte();
 		activa_eventos_consultazonavta();
-
-		$('#itemspedido-table input').keydown(function(event){
-			if(event.which == 13) {
-				event.preventDefault();
-			}
-		});
 
 		$('.codigocliente').on('change', function (event) {
 			event.preventDefault();
@@ -460,14 +595,13 @@
 
 			$(this).parents("tr").find(".unidadmedida").val(unidadmedida);
 
-			if (unidadmedida.toUpperCase() == 'CAJ')
+			if (unidadmedida.toUpperCase() == 'CAJ') {
 				$(this).parents("tr").find(".caja").focus();
-			
-			if (unidadmedida.toUpperCase() == 'UN')
+			} else if (unidadmedida.toUpperCase() == 'UN' || unidadmedida.toUpperCase() == 'KG') {
 				$(this).parents("tr").find(".pieza").focus();
-
-			if (unidadmedida.toUpperCase() == 'KG')
-				$(this).parents("tr").find(".pieza").focus();
+			} else {
+				$(this).parents("tr").find(".kilo").focus();
+			}
 		});
 
         $(".caja").on('change', function() {
@@ -1680,7 +1814,17 @@
 
 				TotalPedido();
 
-				$(ptr).parents("tr").find(".descuentoventa_id").focus();
+				if (flSaltarFocusDescuentoPedido) {
+					var $kilo = $(ptr).parents("tr").find(".kilo");
+
+					if ($kilo.length && !$kilo.prop('readonly')) {
+						$kilo.focus().select();
+					}
+
+					flSaltarFocusDescuentoPedido = false;
+				} else {
+					$(ptr).parents("tr").find(".descuentoventa_id").focus();
+				}
 			});
 			setTimeout(() => {
 			}, 300);

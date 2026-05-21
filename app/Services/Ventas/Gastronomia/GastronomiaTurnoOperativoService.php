@@ -50,7 +50,24 @@ final class GastronomiaTurnoOperativoService
         $empresaId = (int) $cfg->empresa_id;
         $activo = $this->turnoHabilitadoEnPc($identificadorPc);
         $jornada = $this->jornadaService->jornadaAbierta($empresaId);
-        $fechaJornada = $jornada?->fecha_jornada?->format('Y-m-d') ?? Carbon::today()->format('Y-m-d');
+
+        if ($activo !== null) {
+            $activo->loadMissing('jornada');
+            $fechaJornada = $activo->jornada?->fecha_jornada?->format('Y-m-d')
+                ?? $jornada?->fecha_jornada?->format('Y-m-d')
+                ?? Carbon::today()->format('Y-m-d');
+        } else {
+            $fechaJornada = $jornada?->fecha_jornada?->format('Y-m-d') ?? Carbon::today()->format('Y-m-d');
+        }
+
+        $fechaJornadaFmt = $activo?->jornada?->fecha_jornada?->format('d/m/Y')
+            ?? $jornada?->fecha_jornada?->format('d/m/Y')
+            ?? Carbon::parse($fechaJornada)->format('d/m/Y');
+
+        $erroresHabilitacion = [];
+        if ($activo === null && $jornada !== null) {
+            $erroresHabilitacion = $this->erroresAntesDeHabilitar($cfg, $identificadorPc, $jornada);
+        }
 
         $totalesTurno = null;
         $totalesDia = null;
@@ -78,20 +95,79 @@ final class GastronomiaTurnoOperativoService
             'usuario_habilitado' => $activo?->usuarioHabilitado?->nombre,
             'monto_habilitacion' => $activo !== null ? (float) $activo->monto_habilitacion : null,
             'habilitacion_en' => $activo?->habilitacion_en?->format('Y-m-d H:i:s'),
+            'habilitacion_en_fmt' => $activo?->habilitacion_en?->format('d/m/Y H:i') ?? null,
             'jornada_id' => $activo?->jornada_gastronomia_id ?? $jornada?->id,
             'fecha_jornada' => $fechaJornada,
+            'fecha_jornada_fmt' => $fechaJornadaFmt,
             'cierres_parciales' => $activo
                 ? $activo->cierresParciales()->count()
                 : 0,
+            'cierres_parciales_lista' => $activo
+                ? $activo->cierresParciales()
+                    ->orderByDesc('numero_parcial')
+                    ->get()
+                    ->map(fn (CierreParcialTurnoGastronomia $p) => [
+                        'id' => $p->id,
+                        'numero_parcial' => $p->numero_parcial,
+                        'fecha' => $p->created_at?->format('d/m/Y H:i'),
+                        'total' => (float) $p->total_facturacion_turno,
+                        'solo_totales_mozo' => ! empty(is_array($p->totales_json) ? ($p->totales_json['solo_totales_mozo'] ?? false) : false),
+                    ])
+                    ->values()
+                    ->all()
+                : [],
             'totales_turno' => $totalesTurno,
             'totales_dia' => $totalesDia,
-            'puede_habilitar' => $activo === null && $jornada !== null,
+            'puede_habilitar' => $activo === null && $jornada !== null && $erroresHabilitacion === []
+                && $this->hayTurnoMaestroPendienteDeHabilitar($empresaId, (int) $jornada->id, $identificadorPc),
+            'errores_habilitacion' => $erroresHabilitacion,
+            'turnos_gastronomia_cerrados_ids' => $jornada !== null
+                ? $this->idsTurnosMaestroCerradosEnJornada((int) $jornada->id, $identificadorPc)
+                : [],
+            'facturas_huerfanas' => $activo === null && $jornada !== null
+                ? $this->detalleFacturasHuerfanas($identificadorPc, $empresaId, $jornada)['cantidad']
+                : 0,
             'puede_cierre_parcial' => $activo !== null,
             'puede_cerrar_turno' => $activo !== null,
+            'es_ultimo_turno_dia' => $activo !== null
+                ? $this->esUltimoTurnoDelDia($activo)
+                : false,
             'errores_cierre' => $activo !== null
                 ? $this->erroresAntesDeCerrar($activo)
                 : [],
+            'cuentas_sin_facturar' => $activo !== null
+                ? $this->contarCuentasSinFacturarEnTerminal($activo)
+                : 0,
+            'url_facturas_dia' => route('gastronomia_facturas_dia', ['empresa_id' => $empresaId]),
         ];
+    }
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Collection<int, CuentaGastronomia>
+     */
+    public function listarCuentasSinFacturarEnTerminal(TurnoOperativoGastronomia $turno)
+    {
+        $cfgId = (int) $turno->configuracion_puntoventa_gastronomia_id;
+        $pc = (string) $turno->identificador_pc;
+
+        return CuentaGastronomia::query()
+            ->with(['mesa', 'mozo', 'lineas'])
+            ->where('empresa_id', (int) $turno->empresa_id)
+            ->whereIn('estado', [
+                CuentaGastronomia::ESTADO_ABIERTA,
+                CuentaGastronomia::ESTADO_CERRADA,
+            ])
+            ->where(function ($q) use ($cfgId, $pc) {
+                $q->where('configuracion_puntoventa_gastronomia_id', $cfgId)
+                    ->orWhere('identificador_pc', $pc);
+            })
+            ->orderBy('id')
+            ->get();
+    }
+
+    public function contarCuentasSinFacturarEnTerminal(TurnoOperativoGastronomia $turno): int
+    {
+        return $this->listarCuentasSinFacturarEnTerminal($turno)->count();
     }
 
     public function exigirTurnoHabilitadoSiConfigurado(string $identificadorPc, int $empresaId): void
@@ -169,6 +245,18 @@ final class GastronomiaTurnoOperativoService
             throw new InvalidArgumentException('El monto de habilitación no puede ser negativo.');
         }
 
+        if ($this->turnoMaestroYaCerradoEnJornada((int) $jornada->id, $identificadorPc, (int) $turno->id)) {
+            throw new InvalidArgumentException(
+                'El turno "'.$turno->nombre.'" ya fue habilitado y cerrado en esta jornada para la terminal '
+                .$identificadorPc.'. Elija otro turno del día.'
+            );
+        }
+
+        $erroresHabilitacion = $this->erroresAntesDeHabilitar($cfg, $identificadorPc, $jornada);
+        if ($erroresHabilitacion !== []) {
+            throw new InvalidArgumentException(implode(' ', $erroresHabilitacion));
+        }
+
         return TurnoOperativoGastronomia::query()->create([
             'empresa_id' => $empresaId,
             'jornada_gastronomia_id' => (int) $jornada->id,
@@ -187,6 +275,7 @@ final class GastronomiaTurnoOperativoService
     public function registrarCierreParcial(
         TurnoOperativoGastronomia $turno,
         string $identificadorPc,
+        bool $soloTotalesMozo = false,
     ): CierreParcialTurnoGastronomia {
         $this->exigirTurnoActivoEnPc($turno, $identificadorPc);
 
@@ -199,6 +288,9 @@ final class GastronomiaTurnoOperativoService
             $fechaJornada,
             $turno->habilitacion_en,
         );
+        if ($soloTotalesMozo) {
+            $totales['solo_totales_mozo'] = true;
+        }
 
         $numero = (int) CierreParcialTurnoGastronomia::query()
             ->where('turno_operativo_gastronomia_id', $turno->id)
@@ -238,11 +330,14 @@ final class GastronomiaTurnoOperativoService
         $fechaJornada = $turno->jornada?->fecha_jornada?->format('Y-m-d')
             ?? Carbon::today()->format('Y-m-d');
 
+        $cierreEn = now();
+
         $totalesTurno = GastronomiaTurnoOperativoTotalesSupport::calcular(
             $identificadorPc,
             (int) $turno->empresa_id,
             $fechaJornada,
             $turno->habilitacion_en,
+            $cierreEn,
         );
 
         $totalesDia = GastronomiaTurnoOperativoTotalesSupport::calcular(
@@ -255,7 +350,7 @@ final class GastronomiaTurnoOperativoService
         $turno->update([
             'estado' => TurnoOperativoGastronomia::ESTADO_CERRADO,
             'usuario_cierre_id' => Auth::id(),
-            'cierre_en' => now(),
+            'cierre_en' => $cierreEn,
             'monto_facturacion_turno' => $totalesTurno['total_general'],
             'monto_facturacion_dia' => $totalesDia['total_general'],
             'redondeo_invitaciones' => isset($datosCierre['redondeo_invitaciones'])
@@ -287,20 +382,138 @@ final class GastronomiaTurnoOperativoService
 
         $this->validarCierreNoPosteriorAJornadaSiguiente($turno, $errores);
 
-        $cuentasPc = CuentaGastronomia::query()
-            ->where('empresa_id', $empresaId)
-            ->whereIn('estado', [
-                CuentaGastronomia::ESTADO_ABIERTA,
-                CuentaGastronomia::ESTADO_CERRADA,
-            ])
-            ->where(function ($q) use ($cfgId, $pc) {
-                $q->where('configuracion_puntoventa_gastronomia_id', $cfgId)
-                    ->orWhere('identificador_pc', $pc);
-            })
-            ->count();
+        if ($this->esUltimoTurnoDelDia($turno)) {
+            $cuentasPc = $this->contarCuentasSinFacturarEnTerminal($turno);
 
-        if ($cuentasPc > 0) {
-            $errores[] = 'Hay '.$cuentasPc.' cuenta(s) sin facturar en esta terminal ('.$pc.').';
+            if ($cuentasPc > 0) {
+                $errores[] = 'Hay '.$cuentasPc.' cuenta(s) o mesa(s) sin facturar en esta terminal ('.$pc.'). '
+                    .'Al cerrar el último turno del día deben quedar todas facturadas o cerradas sin consumo.';
+            }
+        }
+
+        return $errores;
+    }
+
+    public function esUltimoTurnoDelDia(TurnoOperativoGastronomia $turno): bool
+    {
+        $turno->loadMissing('turno');
+        $ordenActual = (int) ($turno->turno?->orden ?? 0);
+        $maxOrden = (int) TurnoGastronomia::query()
+            ->where('empresa_id', (int) $turno->empresa_id)
+            ->where('activo', true)
+            ->max('orden');
+
+        if ($maxOrden <= 0) {
+            return true;
+        }
+
+        return $ordenActual >= $maxOrden;
+    }
+
+    /**
+     * @return array{cantidad:int, ejemplos:list<array{venta_id:int, codigo:string, hora:string}>}
+     */
+    public function detalleFacturasHuerfanas(
+        string $identificadorPc,
+        int $empresaId,
+        JornadaGastronomia $jornada,
+    ): array {
+        $fechaJornada = $jornada->fecha_jornada?->format('Y-m-d') ?? Carbon::today()->format('Y-m-d');
+
+        return GastronomiaTurnoOperativoTotalesSupport::facturasHuerfanasDelDia(
+            $identificadorPc,
+            $empresaId,
+            $fechaJornada,
+            (int) $jornada->id,
+        );
+    }
+
+    /**
+     * @return list<int>
+     */
+    public function idsTurnosMaestroCerradosEnJornada(int $jornadaGastronomiaId, string $identificadorPc): array
+    {
+        if ($identificadorPc === '') {
+            return [];
+        }
+
+        return TurnoOperativoGastronomia::query()
+            ->where('jornada_gastronomia_id', $jornadaGastronomiaId)
+            ->where('identificador_pc', $identificadorPc)
+            ->where('estado', TurnoOperativoGastronomia::ESTADO_CERRADO)
+            ->pluck('turno_gastronomia_id')
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    public function turnoMaestroYaCerradoEnJornada(
+        int $jornadaGastronomiaId,
+        string $identificadorPc,
+        int $turnoGastronomiaId,
+    ): bool {
+        if ($identificadorPc === '' || $turnoGastronomiaId <= 0) {
+            return false;
+        }
+
+        return TurnoOperativoGastronomia::query()
+            ->where('jornada_gastronomia_id', $jornadaGastronomiaId)
+            ->where('identificador_pc', $identificadorPc)
+            ->where('turno_gastronomia_id', $turnoGastronomiaId)
+            ->where('estado', TurnoOperativoGastronomia::ESTADO_CERRADO)
+            ->exists();
+    }
+
+    public function hayTurnoMaestroPendienteDeHabilitar(
+        int $empresaId,
+        int $jornadaGastronomiaId,
+        string $identificadorPc,
+    ): bool {
+        $cerrados = $this->idsTurnosMaestroCerradosEnJornada($jornadaGastronomiaId, $identificadorPc);
+        $activos = TurnoGastronomia::query()
+            ->where('empresa_id', $empresaId)
+            ->where('activo', true)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id);
+
+        foreach ($activos as $id) {
+            if (! in_array($id, $cerrados, true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function erroresAntesDeHabilitar(
+        ConfiguracionPuntoventaGastronomia $cfg,
+        string $identificadorPc,
+        JornadaGastronomia $jornada,
+    ): array {
+        if (! self::requiereHabilitacionTurno()) {
+            return [];
+        }
+
+        $errores = [];
+        $huerfanas = $this->detalleFacturasHuerfanas($identificadorPc, (int) $cfg->empresa_id, $jornada);
+
+        if ($huerfanas['cantidad'] > 0) {
+            $detalle = '';
+            $ejemplos = $huerfanas['ejemplos'];
+            if ($ejemplos !== []) {
+                $refs = array_map(
+                    fn (array $e) => trim(($e['codigo'] !== '' ? $e['codigo'] : '#'.$e['venta_id']).' '.$e['hora']),
+                    $ejemplos,
+                );
+                $detalle = ' Ej.: '.implode(', ', $refs).'.';
+            }
+
+            $errores[] = 'Hay '.$huerfanas['cantidad'].' factura(s) de la jornada en esta terminal '
+                .'fuera de cualquier turno cerrado. Concilie o revise Facturas del día antes de habilitar un nuevo turno.'.$detalle;
         }
 
         return $errores;

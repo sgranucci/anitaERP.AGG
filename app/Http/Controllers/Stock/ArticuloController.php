@@ -40,6 +40,7 @@ use App\Repositories\Stock\ArticuloRepositoryInterface;
 use App\Repositories\Ventas\DescuentoventaRepositoryInterface;
 use App\Services\Stock\ArticuloAnitaSyncService;
 use App\Services\Stock\PrecioService;
+use App\Services\Stock\StkdepSaldoAnitaService;
 use Auth;
 use Carbon\Carbon;
 use Exception;
@@ -84,6 +85,8 @@ class ArticuloController extends Controller
 
     private ArticuloAnitaSyncService $articuloAnitaSyncService;
 
+    private StkdepSaldoAnitaService $stkdepSaldoAnitaService;
+
     public function __construct(Articulo_CajaRepositoryInterface $articulo_cajaRepository,
         Articulo_CostoRepositoryInterface $articulo_costoRepository,
         Articulo_EstadoRepositoryInterface $articulo_estadoRepository,
@@ -99,7 +102,8 @@ class ArticuloController extends Controller
         SeteoModeloetiquetaRepositoryInterface $seteoModeloetiquetaRepository,
         SeteosalidaRepositoryInterface $seteosalidarepository,
         PrecioService $precioservice,
-        ArticuloAnitaSyncService $articuloAnitaSyncService)
+        ArticuloAnitaSyncService $articuloAnitaSyncService,
+        StkdepSaldoAnitaService $stkdepSaldoAnitaService)
     {
         $this->articulo_cajaRepository = $articulo_cajaRepository;
         $this->articulo_costoRepository = $articulo_costoRepository;
@@ -117,6 +121,7 @@ class ArticuloController extends Controller
         $this->seteoSalidaRepository = $seteosalidarepository;
         $this->precioService = $precioservice;
         $this->articuloAnitaSyncService = $articuloAnitaSyncService;
+        $this->stkdepSaldoAnitaService = $stkdepSaldoAnitaService;
     }
 
     /**
@@ -170,7 +175,18 @@ class ArticuloController extends Controller
             $articulos = $this->articuloRepository->leeArticulo($busqueda, true);
         }
 
-        $datas = ['articulos' => $articulos, 'busqueda' => $busqueda];
+        $saldosStkdep = [];
+        try {
+            $saldosStkdep = $this->stkdepSaldoAnitaService->saldosStkdepPorArticulosLab($articulos);
+        } catch (\Throwable $e) {
+            Log::warning('Articulo index: no se pudo consultar saldo stkdep', ['exception' => $e->getMessage()]);
+        }
+
+        $datas = [
+            'articulos' => $articulos,
+            'busqueda' => $busqueda,
+            'saldosStkdep' => $saldosStkdep,
+        ];
 
         return view('stock.articulo.index', $datas);
     }

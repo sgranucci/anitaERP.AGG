@@ -1,0 +1,2 @@
+# Opcional: carga automática de .env al importar api_anita
+python-dotenv>=1.0.0

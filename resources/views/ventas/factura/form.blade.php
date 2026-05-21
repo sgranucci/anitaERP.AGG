@@ -10,7 +10,7 @@
 				@foreach($tipotransaccion_query as $key => $value)
 					@if (isset($flGeneraNotaDeCredito) && $flPrimero)
 						<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>
-						@php $flPrimero = false; $endphp
+						@php $flPrimero = false; @endphp
 					@else
 						@if( (int) $value->id == (int) old('tipotransaccion_id', $data->tipotransaccion_id ?? ''))
 							<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    

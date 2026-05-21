@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
 use App\ApiAnita;
+use App\Services\Arca\ArcaWsfeCaeaService;
 use App\Services\Arca\ArcaWsfeFacturaElectronicaService;
 
 class FacturaElectronicaService 
@@ -19,12 +20,16 @@ class FacturaElectronicaService
 
 	protected ArcaWsfeFacturaElectronicaService $arcaWsfeFacturaElectronicaService;
 
+	protected ArcaWsfeCaeaService $arcaWsfeCaeaService;
+
 	public function __construct(
 		CondicionivaRepositoryInterface $condicionivarepository,
 		ArcaWsfeFacturaElectronicaService $arcaWsfeFacturaElectronicaService,
+		ArcaWsfeCaeaService $arcaWsfeCaeaService,
 	) {
     	$this->condicionivaRepository = $condicionivarepository;
 		$this->arcaWsfeFacturaElectronicaService = $arcaWsfeFacturaElectronicaService;
+		$this->arcaWsfeCaeaService = $arcaWsfeCaeaService;
     }
 
 	/** Comprobantes nacionales wsfev1 vía SOAP (config arca_wsfe.transporte = soap). */
@@ -441,6 +446,15 @@ class FacturaElectronicaService
 		} else {
 			$inicioQuincena = $fechaCarbon->copy()->startOfMonth()->addDays(15)->format('Ymd');
 			$finQuincena = $fechaCarbon->copy()->endOfMonth()->format('Ymd');
+		}
+
+		$local = $this->arcaWsfeCaeaService->buscarCaeaVigentePorCuit($nroinscripcion, $fechaCarbon);
+		if ($local !== null && $local->estaAutorizado()) {
+			$vto = $local->fecha_vigencia_hasta
+				? $local->fecha_vigencia_hasta->format('Ymd')
+				: $finQuincena;
+
+			return ['cae' => $local->nro_caea, 'fechavencimientocae' => $vto];
 		}
 
 		$apiAnita = new ApiAnita();

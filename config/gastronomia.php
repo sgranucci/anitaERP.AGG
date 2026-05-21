@@ -126,6 +126,33 @@ return [
      */
     'cuentas_libres_habilitadas' => filter_var(env('GASTRONOMIA_CUENTAS_LIBRES_HABILITADAS', true), FILTER_VALIDATE_BOOLEAN),
 
+    /**
+     * Tras emitir en el POS: imprimir ticket térmico vía salida_factura (comando con %s).
+     * El PDF (listaunafactura) queda para consulta y reimpresión manual.
+     */
+    'ticket_impresion_automatica' => filter_var(env('GASTRONOMIA_TICKET_IMPRESION_AUTOMATICA', true), FILTER_VALIDATE_BOOLEAN),
+
+    /** Ancho en caracteres del papel (80 mm ≈ 42). */
+    'ticket_ancho_caracteres' => max(32, (int) env('GASTRONOMIA_TICKET_ANCHO', 42)),
+
+    /** Codificación de caracteres para ESC/POS (ISO-8859-1 o UTF-8 según impresora). */
+    'ticket_codificacion' => env('GASTRONOMIA_TICKET_CODIFICACION', 'ISO-8859-1'),
+
+    /** Tamaño del QR en impresora Epson (1–8). */
+    'ticket_qr_size' => max(1, min(8, (int) env('GASTRONOMIA_TICKET_QR_SIZE', 6))),
+
+    /** Timeout del comando de salida (segundos). */
+    'ticket_comando_timeout_segundos' => max(5, (int) env('GASTRONOMIA_TICKET_COMANDO_TIMEOUT', 30)),
+
+    /**
+     * Guarda copia legible (.txt) en storage/app/gastronomia/tickets/preview/ (pruebas sin impresora).
+     * Por defecto activo en APP_ENV=local.
+     */
+    'ticket_guardar_preview' => filter_var(
+        env('GASTRONOMIA_TICKET_GUARDAR_PREVIEW', env('APP_ENV', 'production') === 'local'),
+        FILTER_VALIDATE_BOOLEAN
+    ),
+
     'cuentacaja_efectivo_por_empresa' => (static function (): array {
         $raw = env('GASTRONOMIA_CUENTACAJA_EFECTIVO_POR_EMPRESA');
         if ($raw === null || $raw === '') {

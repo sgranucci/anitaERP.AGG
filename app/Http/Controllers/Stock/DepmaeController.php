@@ -41,8 +41,9 @@ class DepmaeController extends Controller
         can('crear-depositos');
 
         $tipodeposito_enum = Depmae::$enumTipoDeposito;
+        $data = new Depmae();
 
-        return view('stock.depmae.crear', compact('tipodeposito_enum'));
+        return view('stock.depmae.crear', compact('tipodeposito_enum', 'data'));
     }
 
     /**
@@ -53,11 +54,12 @@ class DepmaeController extends Controller
      */
     public function guardar(ValidacionDepmae $request)
     {
-        $depmae = Depmae::create($request->all());
+        can('crear-depositos');
 
-		// Graba anita
-		$Depmae = new Depmae();
-        $Depmae->guardarAnita($request, $depmae->id);
+        $depmae = Depmae::create($request->only(['codigo', 'nombre', 'tipodeposito']));
+
+        $Depmae = new Depmae();
+        $Depmae->guardarAnita($request, $request->codigo);
 
         return redirect('stock/depmae')->with('mensaje', 'Deposito creado con exito');
     }
@@ -76,6 +78,65 @@ class DepmaeController extends Controller
         $tipodeposito_enum = Depmae::$enumTipoDeposito;
 
         return view('stock.depmae.editar', compact('data', 'tipodeposito_enum'));
+    }
+
+    public function consultaDeposito(Request $request)
+    {
+        if (! can('listar-depositos', false) && ! can('crear-transferencia-mercaderia', false)) {
+            abort(403);
+        }
+
+        $consulta = strtoupper(trim((string) ($request->get('consulta') ?? '')));
+
+        $query = Depmae::query()->select('id', 'codigo', 'nombre', 'tipodeposito');
+        if ($consulta !== '') {
+            $query->where(function ($q) use ($consulta) {
+                $q->where('codigo', 'LIKE', '%'.$consulta.'%')
+                    ->orWhere('nombre', 'LIKE', '%'.$consulta.'%')
+                    ->orWhere('tipodeposito', 'LIKE', '%'.$consulta.'%');
+            });
+        }
+
+        $data = $query->orderBy('nombre')->limit(200)->get();
+
+        $output = ['data' => ''];
+        if ($data->isEmpty()) {
+            $output['data'] = '<tr><td colspan="5">Sin resultados</td></tr>';
+        } else {
+            foreach ($data as $row) {
+                $output['data'] .= '<tr>';
+                $output['data'] .= '<td class="id">'.e($row->id).'</td>';
+                $output['data'] .= '<td class="codigo">'.e($row->codigo).'</td>';
+                $output['data'] .= '<td class="descripcion">'.e($row->nombre).'</td>';
+                $output['data'] .= '<td class="tipodeposito">'.e($row->tipodeposito).'</td>';
+                $output['data'] .= '<td><a class="btn btn-warning btn-sm eligeconsultadeposito">Elegir</a></td>';
+                $output['data'] .= '</tr>';
+            }
+        }
+
+        return json_encode($output, JSON_UNESCAPED_UNICODE);
+    }
+
+    public function leeUnDepositoPorCodigo(string $codigo)
+    {
+        if (! can('listar-depositos', false) && ! can('crear-transferencia-mercaderia', false)) {
+            abort(403);
+        }
+
+        $deposito = Depmae::query()
+            ->where('codigo', trim($codigo))
+            ->first();
+
+        if (! $deposito) {
+            return response()->json(['error' => 'Depósito no encontrado'], 404);
+        }
+
+        return response()->json([
+            'id' => $deposito->id,
+            'codigo' => $deposito->codigo,
+            'descripcion' => $deposito->nombre,
+            'tipodeposito' => $deposito->tipodeposito,
+        ]);
     }
 
     /**
