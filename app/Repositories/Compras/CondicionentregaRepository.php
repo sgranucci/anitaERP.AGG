@@ -109,6 +109,10 @@ class CondicionentregaRepository implements CondicionentregaRepositoryInterface
 						'tabla' => $this->tableAnita );
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
+        if (! is_array($dataAnita)) {
+            return;
+        }
+
         $datosLocal = Condicionentrega::all();
         $datosLocalArray = [];
         foreach ($datosLocal as $value) {
@@ -138,17 +142,19 @@ class CondicionentregaRepository implements CondicionentregaRepositoryInterface
 
 		$usuario_id = Auth::user()->id;
 
-        if (count($dataAnita) > 0) {
-            $data = $dataAnita[0];
-
-			$arr_campos = [
-				"nombre" => $data->conem_desc,
-				"codigo" => $data->conem_condicion,
-                "dias" => $data->conem_dias
-            	];
-	
-        	$condicionentrega = $this->model->create($arr_campos);
+        if (! is_array($dataAnita) || count($dataAnita) === 0) {
+            return;
         }
+
+        $data = $dataAnita[0];
+
+        $arr_campos = [
+            'nombre' => $data->conem_desc,
+            'codigo' => $data->conem_condicion,
+            'dias' => $data->conem_dias,
+        ];
+
+        $this->model->create($arr_campos);
     }
 
 	public function guardarAnita($request) {
@@ -202,11 +208,12 @@ class CondicionentregaRepository implements CondicionentregaRepositoryInterface
 				);
 		$dataAnita = json_decode($apiAnita->apiCall($data));
 
-		if (count($dataAnita) > 0) 
-		{
-			$codigo = ltrim($dataAnita[0]->{$this->keyFieldAnita}, '0');
-			$codigo = $codigo + 1;
-		}
+		if (! is_array($dataAnita) || count($dataAnita) === 0) {
+            return;
+        }
+
+        $codigo = ltrim($dataAnita[0]->{$this->keyFieldAnita}, '0');
+        $codigo = $codigo + 1;
 	}
 	
 }

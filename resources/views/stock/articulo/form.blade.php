@@ -14,6 +14,12 @@
     					<input type="text" name="descripcion" id="descripcion" class="form-control descripcion" value="{{old('descripcion', $producto->descripcion ?? '')}}" required/>
                 	</div>
                 </div>
+                <div class="form-group row">
+    				<label for="codigobarra" class="col-lg-4 col-form-label">C&oacute;digo de barra</label>
+    				<div class="col-lg-5">
+    					<input type="text" name="codigobarra" id="codigobarra" class="form-control" maxlength="50" value="{{old('codigobarra', $producto->codigobarra ?? '')}}"/>
+                	</div>
+                </div>
 				<div class="form-group row">
     				<label for="tipoarticulo_id" class="col-lg-4 col-form-label requerido">Tipo del art&iacute;culo</label>
     				<div class="col-lg-8">

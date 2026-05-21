@@ -82,7 +82,8 @@ class ArticuloRepository implements ArticuloRepositoryInterface
         
         $articulo = $this->model->select(
                                 'articulo.id as id', 
-                                'articulo.sku as codigoarticulo', 
+                                'articulo.sku as codigoarticulo',
+                                'articulo.codigobarra as codigobarra',
                                 'articulo.descripcion as descripcion', 
                                 'unidadmedida.nombre as nombreunidadmedida', 
                                 'categoria.nombre as nombrecategoria', 
@@ -99,6 +100,7 @@ class ArticuloRepository implements ArticuloRepositoryInterface
                                 ->leftJoin('usoarticulo','articulo.usoarticulo_id','=','usoarticulo.id')
                                 ->where('articulo.id', $busqueda)
                                 ->orWhere('articulo.sku', 'like', '%'.$busqueda.'%')
+                                ->orWhere('articulo.codigobarra', 'like', '%'.$busqueda.'%')
                                 ->orWhere('articulo.descripcion', 'like', '%'.$busqueda.'%')
 								->orWhere('unidadmedida.nombre', 'like', '%'.$busqueda.'%')
                                 ->orWhere('articulo.ubicacionparte', 'like', '%'.$busqueda.'%')

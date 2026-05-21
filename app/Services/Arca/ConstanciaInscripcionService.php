@@ -18,13 +18,13 @@ class ConstanciaInscripcionService
             throw new Exception('CUIT inválida (debe tener 11 dígitos)');
         }
 
-        $serviceId = (string) config('arca.ws_sr_constancia_inscripcion.service_id');
-        $cuitRepresentada = (string) config('arca.cuit_representada');
+        $serviceId = (string) config('arca.padron.ws_sr_constancia_inscripcion.service_id');
+        $cuitRepresentada = (string) config('arca.padron.cuit_representada');
         if ($cuitRepresentada === '') {
-            throw new Exception('ARCA_CUIT_REPRESENTADA no configurada');
+            throw new Exception('ARCA_CUIT_REPRESENTADA no configurada (solo padrón; ver config/arca.php padron.cuit_representada)');
         }
 
-        $ts = $this->wsaaService->getTokenSign($serviceId);
+        $ts = $this->wsaaService->getTokenSign($serviceId, $this->wsaaContextPadron());
 
         $wsdl = $this->wsdl();
         $client = new SoapClient($wsdl, [
@@ -48,10 +48,27 @@ class ConstanciaInscripcionService
         return $this->normalizarPersonaReturn($personaReturn);
     }
 
+    /**
+     * WSAA y certificados del padrón (config/arca.php → padron.*). Separado de WSFE.
+     *
+     * @return array<string, string>
+     */
+    private function wsaaContextPadron(): array
+    {
+        return [
+            'cert_path' => (string) config('arca.padron.cert_path'),
+            'private_key_path' => (string) config('arca.padron.private_key_path'),
+            'private_key_passphrase' => (string) config('arca.padron.private_key_passphrase', ''),
+            'ta_storage_dir' => (string) config('arca.padron.ta_storage_dir'),
+            'cache_key' => 'padron',
+            'tmp_dir' => (string) config('arca.padron.tmp_dir'),
+        ];
+    }
+
     private function wsdl(): string
     {
         $env = (string) config('arca.env', 'homo');
-        $wsdl = config("arca.ws_sr_constancia_inscripcion.{$env}.wsdl");
+        $wsdl = config("arca.padron.ws_sr_constancia_inscripcion.{$env}.wsdl");
         if (! is_string($wsdl) || $wsdl === '') {
             throw new Exception("WSDL no configurado para env={$env}");
         }

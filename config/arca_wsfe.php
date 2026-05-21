@@ -4,8 +4,76 @@
  * Facturación electrónica vía WSFEv1 (COMPG / RG 4291).
  *
  * Rutas separadas del WS de padrón (config/arca.php → storage/app/arca/sr_padron/...).
- * Certificados por empresa: storage/app/arca/wsfe/certs/{carpeta}/cert.crt y privada.key
+ * Certificados por empresa_id: storage/app/arca/wsfe/certs/{carpeta}/cert.crt y privada.key
+ *
+ * La carpeta se resuelve según EMPRESA (.env, misma variable que config/app.php → app.empresa).
+ * Ver empresas_por_entorno. Los certificados no van en Git (solo la estructura de carpetas en el servidor).
+ *
+ * CUIT emisor (CAE, CAEA, consultas WSFE): empresa.nroinscripcion por empresa_id.
+ * ARCA_CUIT_REPRESENTADA (.env / config/arca.php padron) es solo para el WS de padrón A5.
  */
+
+/**
+ * @return array<int, array{carpeta_cert: string}>
+ */
+$resolveArcaWsfeEmpresas = static function (): array {
+    /** @var array<string, array<int, string>> empresa instalación → empresa_id → nombre de carpeta bajo wsfe/certs/ */
+    $porEntorno = [
+        'EL BIERZO' => [
+            1 => 'bierzo',
+        ],
+        'AGG' => [
+            1 => 'biyemas',
+            2 => 'kandiko',
+            3 => 'rebisco',
+        ],
+        'INTERFORMING' => [
+            1 => 'interforming',
+        ],
+        'FRASLE' => [
+            1 => 'frasle',
+        ],
+    ];
+
+    $empresaInstalacion = trim((string) env('EMPRESA', 'AGG'), " \t\n\r\0\x0B'\"");
+
+    $carpetas = $porEntorno[$empresaInstalacion] ?? [];
+
+    $jsonOverride = env('ARCA_WSFE_EMPRESAS_JSON');
+    if (is_string($jsonOverride) && $jsonOverride !== '') {
+        $decoded = json_decode($jsonOverride, true);
+        if (is_array($decoded)) {
+            $carpetas = [];
+            foreach ($decoded as $empresaId => $carpeta) {
+                if (is_numeric($empresaId) && is_string($carpeta) && $carpeta !== '') {
+                    $carpetas[(int) $empresaId] = $carpeta;
+                }
+            }
+        }
+    }
+
+    $carpetaUnica = env('ARCA_WSFE_CARPETA_CERT');
+    if (is_string($carpetaUnica) && trim($carpetaUnica) !== '') {
+        $carpetaUnica = trim($carpetaUnica);
+        if ($carpetas === []) {
+            $carpetas[1] = $carpetaUnica;
+        } else {
+            foreach (array_keys($carpetas) as $empresaId) {
+                $carpetas[$empresaId] = $carpetaUnica;
+            }
+        }
+    }
+
+    $empresas = [];
+    foreach ($carpetas as $empresaId => $carpetaCert) {
+        $empresas[(int) $empresaId] = [
+            'carpeta_cert' => (string) $carpetaCert,
+        ];
+    }
+
+    return $empresas;
+};
+
 return [
     /*
     | afip_php: módulo externo (storage/.../afip.php + XML), comportamiento histórico.
@@ -29,13 +97,31 @@ return [
     'base_storage' => storage_path('app/arca/wsfe'),
 
     /**
-     * Mapeo empresa_id → carpeta bajo certs/ (biyemas, kandiko, rebisco, etc.)
+     * Mapeo por instalación (EMPRESA en .env). Referencia versionada en Git.
+     * En runtime se expone resuelto en la clave empresas.
      */
-    'empresas' => [
-        1 => ['carpeta_cert' => 'biyemas'],
-        2 => ['carpeta_cert' => 'kandiko'],
-        3 => ['carpeta_cert' => 'rebisco'],
+    'empresas_por_entorno' => [
+        'EL BIERZO' => [
+            1 => 'bierzo',
+        ],
+        'AGG' => [
+            1 => 'biyemas',
+            2 => 'kandiko',
+            3 => 'rebisco',
+        ],
+        'INTERFORMING' => [
+            1 => 'interforming',
+        ],
+        'FRASLE' => [
+            1 => 'frasle',
+        ],
     ],
+
+    /**
+     * empresa_id → carpeta bajo storage/app/arca/wsfe/certs/ para el entorno actual (EMPRESA).
+     * Opcional: ARCA_WSFE_CARPETA_CERT o ARCA_WSFE_EMPRESAS_JSON='{"1":"bierzo"}'.
+     */
+    'empresas' => $resolveArcaWsfeEmpresas(),
 
     /** Timeout SOAP en segundos */
     'soap_timeout' => (int) env('ARCA_WSFE_SOAP_TIMEOUT', 60),

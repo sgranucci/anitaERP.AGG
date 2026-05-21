@@ -10,6 +10,9 @@ use SoapFault;
 /**
  * WSFEv1 (COMPG / RG 4291) vía SOAP, con certificados y TA bajo storage/app/arca/wsfe/
  * (independiente del padrón: config/arca.php → storage/app/arca/sr_padron/...).
+ *
+ * CUIT emisor hacia AFIP/ARCA: empresa.nroinscripcion (tabla empresa).
+ * No usar ARCA_CUIT_REPRESENTADA (.env); esa variable es solo para el WS de padrón A5.
  */
 class ArcaWsfeFacturaElectronicaService
 {
@@ -424,9 +427,12 @@ class ArcaWsfeFacturaElectronicaService
         $base = rtrim((string) config('arca_wsfe.base_storage'), '/');
         $emp = config("arca_wsfe.empresas.{$empresaId}");
         if (! is_array($emp) || empty($emp['carpeta_cert'])) {
+            $entorno = (string) config('app.empresa', '');
             throw new Exception(
-                "ARCA WSFE: agregue la empresa {$empresaId} en config/arca_wsfe.php (empresas.*.carpeta_cert) ".
-                'y copie cert.crt / privada.key en storage/app/arca/wsfe/certs/{carpeta}/'
+                "ARCA WSFE: la empresa {$empresaId} no está configurada para el entorno «{$entorno}». ".
+                'Revise EMPRESA en .env y config/arca_wsfe.php (empresas_por_entorno), '.
+                'o defina ARCA_WSFE_CARPETA_CERT / ARCA_WSFE_EMPRESAS_JSON. '.
+                'Copie cert.crt y privada.key en storage/app/arca/wsfe/certs/{carpeta}/'
             );
         }
         $cdir = $base.'/certs/'.$emp['carpeta_cert'];
@@ -441,13 +447,22 @@ class ArcaWsfeFacturaElectronicaService
         ];
     }
 
+    /**
+     * CUIT del emisor en WSFEv1. Fuente única: tabla empresa (no ARCA_CUIT_REPRESENTADA del .env).
+     */
     private function cuitEmisor(int $empresaId): int
     {
         $row = \App\Models\Configuracion\Empresa::query()->find($empresaId);
         if ($row === null || $row->nroinscripcion === null || trim((string) $row->nroinscripcion) === '') {
-            throw new Exception("ARCA WSFE: la empresa {$empresaId} no tiene CUIT (nroinscripcion).");
+            throw new Exception(
+                "ARCA WSFE: la empresa {$empresaId} no tiene CUIT en empresa.nroinscripcion ".
+                '(no se usa ARCA_CUIT_REPRESENTADA; esa clave es solo para consulta de padrón).'
+            );
         }
         $d = preg_replace('/\D+/', '', (string) $row->nroinscripcion) ?? '';
+        if ($d === '' || strlen($d) !== 11) {
+            throw new Exception("ARCA WSFE: CUIT inválido en empresa.nroinscripcion para empresa {$empresaId}.");
+        }
 
         return (int) $d;
     }

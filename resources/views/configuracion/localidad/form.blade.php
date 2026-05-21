@@ -18,15 +18,17 @@
 </div>
 <div class="form-group row">
     <label for="provincia_id" class="col-lg-3 col-form-label requerido">Provincia</label>
-	<select name="provincia_id" class="col-lg-3 form-control" required>
-		<option value="">-- Elija pa&iacute;s --</option>
-		@foreach ($provincia_query as $provincia)
-			<option value="{{ $provincia->id }}"
-				@if (old('provincia_id', $data->provincia_id ?? '') == $provincia->id) selected @endif
-				>{{ $provincia->nombre }}
-			</option>
-		@endforeach
-	</select>
+    <div class="col-lg-8">
+        <select name="provincia_id" id="provincia_id" class="form-control" required>
+            <option value="">-- Elija provincia --</option>
+            @foreach ($provincia_query as $provincia)
+                <option value="{{ $provincia->id }}"
+                    @if (old('provincia_id', $data->provincia_id ?? '') == $provincia->id) selected @endif
+                    >{{ $provincia->nombre }}
+                </option>
+            @endforeach
+        </select>
+    </div>
 </div>
 <div class="form-group row">
     <label for="codigosenasa" class="col-lg-3 col-form-label">C&oacute;digo SENASA</label>

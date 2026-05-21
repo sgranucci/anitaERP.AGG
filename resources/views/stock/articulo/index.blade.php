@@ -89,6 +89,7 @@ function limpiaFiltros(){
                     <thead>
                         <tr>
                             <th>SKU</th>
+                            <th>C&oacute;d. barra</th>
                             <th>Descripci&oacute;n</th>
                             <th>Unidad de Medida</th>
                             <th>Categoría</th>
@@ -107,6 +108,9 @@ function limpiaFiltros(){
     						<tr>
         						<td>
             						{{ $articulo->codigoarticulo ?? '' }}
+        						</td>
+        						<td>
+            						{{ $articulo->codigobarra ?? '' }}
         						</td>
         						<td>
             						{{ $articulo->descripcion ?? '' }}
