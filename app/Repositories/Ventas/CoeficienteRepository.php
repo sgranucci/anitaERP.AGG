@@ -158,7 +158,7 @@ class CoeficienteRepository implements CoeficienteRepositoryInterface
                 '".$request['porcentajedivision']."',
 				'".$request['tasa']."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -172,14 +172,14 @@ class CoeficienteRepository implements CoeficienteRepositoryInterface
                 coef_tasa 	                = '".$request['tasa']."' "
 					,
 				'whereArmado' => " WHERE coef_codigo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 'sistema' => 'ventas', 'tabla' => $this->tableAnita, 
 				'whereArmado' => " WHERE coef_codigo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	// Devuelve ultimo codigo de coeficientes + 1 para agregar nuevos en Anita

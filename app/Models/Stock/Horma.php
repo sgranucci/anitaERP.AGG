@@ -59,19 +59,19 @@ class Horma extends Model
             'campos' => ' hor_horma, hor_desc',
             'valores' => " '".$id."', '".$request->nombre."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
         $apiAnita = new ApiAnita();
 		$data = array( 'acc' => 'update', 'tabla' => 'horma', 'valores' => " hor_desc = '".
 					$request->nombre."' ", 'whereArmado' => " WHERE hor_horma = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 'tabla' => 'horma', 'whereArmado' => " WHERE hor_horma = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 }

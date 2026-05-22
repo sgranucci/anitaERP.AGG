@@ -232,7 +232,7 @@ class Cliente_ArchivoRepository implements Cliente_ArchivoRepositoryInterface
 				'".$fechahoy."',
 				'".$hora."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	private function eliminarAnita($cliente) {
@@ -240,6 +240,6 @@ class Cliente_ArchivoRepository implements Cliente_ArchivoRepositoryInterface
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita, 
 				'sistema' => 'ventas',
 				'whereArmado' => " WHERE clima_cliente = '".str_pad($cliente, 6, "0", STR_PAD_LEFT)."' ");
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 }

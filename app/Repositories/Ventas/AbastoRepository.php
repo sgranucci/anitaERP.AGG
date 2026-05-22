@@ -160,7 +160,7 @@ class AbastoRepository implements AbastoRepositoryInterface
 				'".$request['nombre']."',
 				'".$request['tasa']."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -173,14 +173,14 @@ class AbastoRepository implements AbastoRepositoryInterface
                 aba_tasa 	                = '".$request['tasa']."' "
 					,
 				'whereArmado' => " WHERE aba_abasto = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 'sistema' => 'ventas', 'tabla' => $this->tableAnita, 
 				'whereArmado' => " WHERE aba_abasto = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	// Devuelve ultimo codigo de abastos + 1 para agregar nuevos en Anita

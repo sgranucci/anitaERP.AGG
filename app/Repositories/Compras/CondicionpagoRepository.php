@@ -222,7 +222,7 @@ class CondicionpagoRepository implements CondicionpagoRepositoryInterface
 						'".$request['codigo']."', 
 						'".$request['nombre']."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
     	for ($i_cuota=0; $i_cuota < count($cuotas); $i_cuota++) 
 		{
@@ -245,7 +245,7 @@ class CondicionpagoRepository implements CondicionpagoRepositoryInterface
 						'".$intereses[$i_cuota]."' "
         		);
 		}
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id, $cuotas, $tiposplazo, $plazos, $fechasvencimiento, $porcentajes, $intereses) {
@@ -266,14 +266,14 @@ class CondicionpagoRepository implements CondicionpagoRepositoryInterface
 							conpm_desc = '".$request['nombre']."' ", 
             	'whereArmado' => " WHERE ".$this->keyField." = '".$request['codigo']."' " 
 				);
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
 		// Elimina los movimientos
         $data = array( 'acc' => 'delete', 
 			'tabla' => $this->tableAnita[1],
 			'sistema' => 'compras',
             'whereArmado' => " WHERE conpv_codigo = '".$request['codigo']."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
 		// Graba los movimientos
     	for ($i_cuota=0; $i_cuota < count($cuotas); $i_cuota++) 
@@ -296,7 +296,7 @@ class CondicionpagoRepository implements CondicionpagoRepositoryInterface
 						'".$porcentajes[$i_cuota]."' ,
 						'".$intereses[$i_cuota]."' "
         		);
-        	$apiAnita->apiCall($data);
+        	$apiAnita->apiCallEscritura($data);
 		}
 	}
 
@@ -306,13 +306,13 @@ class CondicionpagoRepository implements CondicionpagoRepositoryInterface
 			'sistema' => 'compras',
 			'tabla' => $this->tableAnita[0],
             'whereArmado' => " WHERE ".$this->keyField." = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
         $data = array( 'acc' => 'delete', 
 			'sistema' => 'compras',
 			'tabla' => $this->tableAnita[1],
             'whereArmado' => " WHERE conpv_codigo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}    
 
 		// Devuelve ultimo codigo de clientes + 1 para agregar nuevos en Anita

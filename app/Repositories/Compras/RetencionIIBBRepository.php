@@ -266,7 +266,7 @@ class RetencionIIBBRepository implements RetencionIIBBRepositoryInterface
 						'".$cuentaContable."',
 						'".$request['nombre']."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -332,7 +332,7 @@ class RetencionIIBBRepository implements RetencionIIBBRepositoryInterface
 							", 
             	'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$provincia_id."' " 
 				);
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
 	}
 
@@ -342,6 +342,6 @@ class RetencionIIBBRepository implements RetencionIIBBRepositoryInterface
 			'sistema' => 'compras',
 			'tabla' => $this->tableAnita[0],
             'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}    
 }

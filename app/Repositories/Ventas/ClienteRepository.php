@@ -17,19 +17,24 @@ use App\Models\Ventas\Abasto;
 use App\Models\Ventas\Coeficiente;
 use App\Models\Ventas\Cliente_Articulo_Suspendido;
 use App\Models\Ventas\Cliente_Seguimiento;
+use App\Models\Ventas\Cliente_Cm05;
 use App\Models\Ventas\Distribuidor;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Listaprecio;
 use App\Models\Stock\Mventa;
 use App\Models\Configuracion\Tipodocumento;
+use App\Models\Configuracion\Condicioniva;
 use App\Repositories\Ventas\DescuentoventaRepositoryInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
+use App\Traits\AnitaBridgeEscritura;
 use Carbon\Carbon;
 use Auth;
 
 class ClienteRepository implements ClienteRepositoryInterface
 {
+    use AnitaBridgeEscritura;
+
     protected $model;
     protected $tableAnita = ['climae', 'cliley', 'clicomi', 'movscli', 'stksuspcli'];
     protected $keyField = 'codigo';
@@ -70,7 +75,6 @@ class ClienteRepository implements ClienteRepositoryInterface
 
         $cliente = $this->model->create($data);
 
-		// Graba anita
 		self::guardarAnita($data);
 
 		return $cliente;
@@ -80,8 +84,8 @@ class ClienteRepository implements ClienteRepositoryInterface
     {
         $cliente = $this->model->findOrFail($id)
             ->update($data);
-		
-		// Actualiza anita
+
+		$data['tiene_cm05'] = $this->model->find($id)?->cliente_cm05s()->exists() ?? false;
 		self::actualizarAnita($data, $data['codigo']);
 
 		return $cliente;
@@ -423,11 +427,18 @@ class ClienteRepository implements ClienteRepositoryInterface
 			else
 				$vendedor_id = NULL;
 	
-        	$condicionventa = Condicionventa::select('id')->where('id' , $data->clim_cond_venta)->first();
-			if ($condicionventa)
+        	$codigoCondicionVenta = trim((string) ($data->clim_cond_venta ?? ''));
+        	$condicionventa = $codigoCondicionVenta !== ''
+				? Condicionventa::select('id')->where('codigo', $codigoCondicionVenta)->first()
+				: null;
+			if (! $condicionventa && $codigoCondicionVenta !== '' && ctype_digit($codigoCondicionVenta)) {
+				$condicionventa = Condicionventa::select('id')->where('id', (int) $codigoCondicionVenta)->first();
+			}
+			if ($condicionventa) {
 				$condicionventa_id = $condicionventa->id;
-			else
+			} else {
 				$condicionventa_id = NULL;
+			}
 	
         	$listaprecio = Listaprecio::select('id')->where('codigo' , $data->clim_lista_precio)->first();
 			if ($listaprecio)
@@ -507,6 +518,11 @@ class ClienteRepository implements ClienteRepositoryInterface
 			case 'N':
 			case 'E':
 				$condicioniibb_id = 4;
+				break;
+			case '7':
+				if (config('app.empresa') === 'INTERFORMING') {
+					$condicioniibb_id = 1;
+				}
 				break;
 			}
 
@@ -673,57 +689,74 @@ class ClienteRepository implements ClienteRepositoryInterface
 				}
 			}
 		}
+
+		if (config('app.empresa') === 'INTERFORMING') {
+			$clienteModel = $cliente instanceof Cliente
+				? $cliente
+				: Cliente::where('codigo', ltrim($data->clim_cliente, '0'))->first();
+			if ($clienteModel) {
+				$this->importarCm05DesdeAnita($apiAnita, trim((string) $data->clim_cuit), $clienteModel->id);
+			}
+		}
     }
 
-	private function guardarAnita($request) {
-        $apiAnita = new ApiAnita();
+	/**
+	 * Escapa comillas simples para literales SQL Informix ('' dentro de '...').
+	 */
+	private function sqlLit($value): string
+	{
+		return str_replace("'", "''", (string) ($value ?? ''));
+	}
 
+	/**
+	 * Arma el payload HTTP (acc insert) para climae sin ejecutar el bridge.
+	 */
+	public function payloadInsertClimae(array $request): array
+	{
 		$this->setCamposAnita($request, $cuentacontable, $condicioniva, $condicioniibb, $codigotransporte,
-								$codigolocalidad, $codigoprovincia, $codigopais, $codigozonavta, $codigovendedor,
-								$codigolistaprecio, $codigoabasto, $codigocoeficiente,
-								$emitecertificado, $emitenotadecredito, $agregabonificacion, $regimen);
+			$codigolocalidad, $codigoprovincia, $codigopais, $codigozonavta, $codigovendedor,
+			$codigolistaprecio, $codigoabasto, $codigocoeficiente,
+			$emitecertificado, $emitenotadecredito, $agregabonificacion, $regimen);
 
-        $fecha = Carbon::now();
-		$fecha = $fecha->format('Ymd');
+		$fecha = Carbon::now()->format('Ymd');
 
-		if (config("app.empresa") == "EL BIERZO")
-		{
-			$desdefecha_exclusionpercepcioniva = $request['desdefecha_exclusionpercepcioniva'];
-			if ($desdefecha_exclusionpercepcioniva)
-				$dfexcl_piva = $desdefecha_exclusionpercepcioniva->format('Ymd');
-			else
-				$dfexcl_piva = '00000000';
-
-			$hastafecha_exclusionpercepcioniva = $request['hastafecha_exclusionpercepcioniva'];
-			if ($hastafecha_exclusionpercepcioniva)
-				$hfexcl_piva = $hastafecha_exclusionpercepcioniva->format('Ymd');
-			else
-				$hfexcl_piva = '00000000';
+		if (config('app.empresa') == 'EL BIERZO') {
+			$desdefecha_exclusionpercepcioniva = $request['desdefecha_exclusionpercepcioniva'] ?? null;
+			$dfexcl_piva = $desdefecha_exclusionpercepcioniva
+				? $desdefecha_exclusionpercepcioniva->format('Ymd')
+				: '00000000';
+			$hastafecha_exclusionpercepcioniva = $request['hastafecha_exclusionpercepcioniva'] ?? null;
+			$hfexcl_piva = $hastafecha_exclusionpercepcioniva
+				? $hastafecha_exclusionpercepcioniva->format('Ymd')
+				: '00000000';
 		}
 
-		$nombre = preg_replace('([^A-Za-z0-9 ])', '', $request['nombre']);
-		$contacto = preg_replace('([^A-Za-z0-9 ])', '', $request['contacto']);
-		$domicilio = preg_replace('([^A-Za-z0-9 ])', '', $request['domicilio']);
+		$nombre = preg_replace('([^A-Za-z0-9 ])', '', $request['nombre'] ?? '');
+		$contacto = preg_replace('([^A-Za-z0-9 ])', '', $request['contacto'] ?? '');
+		$domicilio = preg_replace('([^A-Za-z0-9 ])', '', $request['domicilio'] ?? '');
 
-		$tipodocumento = Tipodocumento::find($request['tipodocumento_id']);
+		$tipodocumento = ! empty($request['tipodocumento_id'])
+			? Tipodocumento::find($request['tipodocumento_id'])
+			: null;
 
-		$documento = $request['numerodocumento'];
-		if ($tipodocumento)
-		{
-			if ($tipodocumento->codigoexterno != "80")
-				$documento = $tipodocumento->abreviatura.' '.$request['numerodocumento'];
+		$documento = $this->sqlLit($request['numerodocumento'] ?? '');
+		if ($tipodocumento && $tipodocumento->codigoexterno != '80') {
+			$documento = $this->sqlLit($tipodocumento->abreviatura.' '.($request['numerodocumento'] ?? ''));
 		}
 
-		if (config('app.empresa') == 'AGG' || config('app.empresa') == 'INTERFORMING')
-			$campo_ing_bruto = 'clim_nro_ing_br';
-		else
-			$campo_ing_bruto = 'clim_nro_ing_bruto';
+		$campo_ing_bruto = (config('app.empresa') == 'AGG' || config('app.empresa') == 'INTERFORMING')
+			? 'clim_nro_ing_br'
+			: 'clim_nro_ing_bruto';
 
-		$horarioAtencion = $request['horarioatencion'];
+		$horarioAtencion = $this->sqlLit($request['horarioatencion'] ?? '');
+		$urlweb = $this->sqlLit($request['urlweb'] ?? '');
+		$cuentacontableSql = $this->sqlLit($cuentacontable ?? '');
 
-        $data = array( 'tabla' => $this->tableAnita[0], 'acc' => 'insert',
+		return [
+			'tabla' => $this->tableAnita[0],
+			'acc' => 'insert',
 			'sistema' => 'ventas',
-            'campos' => ' 
+			'campos' => '
 					clim_cliente, clim_nombre, clim_contacto, clim_direccion, clim_localidad, clim_cod_postal, clim_provincia, clim_telefono,
 					clim_cuit, clim_cond_iva, clim_porc_excen, clim_letra, clim_cond_venta, clim_cta_contable, clim_credito, clim_dias_atraso,
 					clim_zonavta, clim_subzona, clim_zonamult, clim_vendedor, clim_cobrador, clim_expreso, clim_tipo_empresa, clim_dir_cobranza,
@@ -731,29 +764,29 @@ class ClienteRepository implements ClienteRepositoryInterface
 					clim_proveedor, clim_minimo_fact, clim_estado_cli, clim_dias_cobranza, clim_dias_atencion, clim_hs_atencion,clim_pais,
 					clim_perc_ing_br, '.$campo_ing_bruto.', clim_dir_postal, clim_loc_postal, clim_cp_postal, clim_fantasia, clim_fecha_alta,
 					clim_ley_liberado, clim_regimen, clim_leyenda_fact, clim_prov_postal, clim_lugar_de_pago, clim_excl_perc_iva, clim_fe_excl_piva,
-					clim_dto_integrado, clim_fecha_boletin, clim_e_mail, clim_fax'.(config("app.empresa") == 'EL BIERZO' ?
+					clim_dto_integrado, clim_fecha_boletin, clim_e_mail, clim_fax'.(config('app.empresa') == 'EL BIERZO' ?
 					',clim_abasto, clim_distribuidor, clim_coef, clim_logistica, clim_emite_cert, clim_emite_nc, clim_coef_extra,clim_referencia,
 					clim_cod_localidad, clim_cod_provincia, clim_agrega_bonif, clim_e_mail2, clim_dfexcl_piva, clim_hfexcl_piva' : '').
 					(config('app.empresa') == 'INTERFORMING' ? ', clim_url, clim_hs_atencion2' : ''),
-            'valores' => " 
-				'".str_pad($request['codigo'], 6, "0", STR_PAD_LEFT)."', 
-				'".$nombre."',
-				'".$contacto."',
-				'".$domicilio."',
-				'".$request['desc_localidad']."',
-				'".$request['codigopostal']."',
-				'".$request['desc_provincia']."',
-				'".$request['telefono']."',
+			'valores' => "
+				'".str_pad($request['codigo'], 6, '0', STR_PAD_LEFT)."',
+				'".$this->sqlLit($nombre)."',
+				'".$this->sqlLit($contacto)."',
+				'".$this->sqlLit($domicilio)."',
+				'".$this->sqlLit($request['desc_localidad'] ?? '')."',
+				'".$this->sqlLit($request['codigopostal'] ?? '')."',
+				'".$this->sqlLit($request['desc_provincia'] ?? '')."',
+				'".$this->sqlLit($request['telefono'] ?? '')."',
 				'".$documento."',
 				'".$condicioniva."',
 				'0',
-				'".$request['letra']."',
-				'".($request['condicionventa_id']>0?$request['condicionventa_id']:0)."',
-				'".$cuentacontable."',
+				'".$this->sqlLit($request['letra'] ?? '')."',
+				'".$this->codigoCondicionVentaAnita($request['condicionventa_id'] ?? 0)."',
+				'".$cuentacontableSql."',
 				'0',
 				'0',
 				'".$codigozonavta."',
-				'".($request['subzonavta_id']>0?$request['subzonavta_id']:0)."',
+				'".(($request['subzonavta_id'] ?? 0) > 0 ? $request['subzonavta_id'] : 0)."',
 				'".$codigoprovincia."',
 				'".$codigovendedor."',
 				'".$codigovendedor."',
@@ -761,57 +794,196 @@ class ClienteRepository implements ClienteRepositoryInterface
 				'0',
 				' ',
 				' ',
-				'".$request['lugarentrega']."',
-				'".$request['retieneiva']."',
+				'".$this->sqlLit($request['lugarentrega'] ?? '')."',
+				'".$this->sqlLit($request['retieneiva'] ?? 'N')."',
 				'".$codigolistaprecio."',
-				'".($request['descuento'] > 0 ? $request['descuento'] : 0)."',
+				'".(($request['descuento'] ?? 0) > 0 ? $request['descuento'] : 0)."',
 				'0',
 				'0',
 				' ',
 				'0',
-				'".$request['estado']."',
+				'".$this->sqlLit($request['estado'] ?? '0')."',
 				' ',
 				' ',
 				' ',
 				'".$codigopais."',
 				'".$condicioniibb."',
-				'".$request['nroiibb']."',
+				'".$this->sqlLit($request['nroiibb'] ?? '')."',
 				' ',
 				' ',
 				' ',
-				'".$request['fantasia']."',
+				'".$this->sqlLit($request['fantasia'] ?? '')."',
 				'".$fecha."',
 				' ',
 				'".$regimen."',
 				'0',
-				'".$request['desc_provincia']."',
+				'".$this->sqlLit($request['desc_provincia'] ?? '')."',
 				' ',
 				' ',
 				'0',
 				' ',
 				'0',
-                '".substr($request['email'],0,40)."',
-				'".'FAX'."'".
-				(config('app.empresa') == "EL BIERZO" ? ",
+				'".substr($this->sqlLit($request['email'] ?? ''), 0, 40)."',
+				'FAX'".
+				(config('app.empresa') == 'EL BIERZO' ? ",
 				'".$codigoabasto."',
-				'".'0'."',
+				'0',
 				'".$codigocoeficiente."',
-				'".$request['porcentajelogistica']."',
+				'".($request['porcentajelogistica'] ?? 0)."',
 				'".$emitecertificado."',
 				'".$emitenotadecredito."',
-				'".$request['coeficienteextra']."',
-				'".'0'."',
+				'".($request['coeficienteextra'] ?? 0)."',
+				'0',
 				'".$codigolocalidad."',
 				'".$codigoprovincia."',
 				'".$agregabonificacion."',
-				'".substr($request['email'],40,40)."',
+				'".substr($this->sqlLit($request['email'] ?? ''), 40, 40)."',
 				'".$dfexcl_piva."',
-				'".$hfexcl_piva."' " : "").
-				(config('app.empresa') == "INTERFORMING" ? ",
-				'".$horarioAtencion."',
-				'".$request['urlweb']."' " : "")
-        );
-        $climae = $apiAnita->apiCall($data);
+				'".$hfexcl_piva."' " : '').
+				(config('app.empresa') == 'INTERFORMING' ? ",
+				'".$urlweb."',
+				'".$horarioAtencion."' " : ''),
+		];
+	}
+
+	/**
+	 * SQL INSERT climae que enviaría el bridge (misma lógica que guardarAnita).
+	 */
+	public function previewInsertClimaeSqlPorCodigo(string $codigo): string
+	{
+		$codigoNorm = ltrim($codigo, '0');
+		$cliente = $this->model->where('codigo', $codigoNorm)->first();
+		if ($cliente === null) {
+			throw new ModelNotFoundException('Cliente ERP no encontrado con código '.$codigo);
+		}
+
+		$payload = $this->payloadInsertClimae($this->datosRequestDesdeCliente($cliente));
+		$apiAnita = new ApiAnita();
+
+		return trim(preg_replace('/\s\s+/', ' ', $apiAnita->armarSql($payload)));
+	}
+
+	protected function anitaBridgeLogEvento(): string
+	{
+		return 'cliente.anita_bridge.fallo';
+	}
+
+	/**
+	 * Arma el array de request que esperan guardarAnita/actualizarAnita a partir del modelo ERP.
+	 */
+	private function datosRequestDesdeCliente(Cliente $cliente): array
+	{
+		$cliente->loadMissing(['localidades', 'provincias', 'cliente_articulo_suspendidos', 'cliente_cm05s']);
+
+		$condicioniva = $cliente->condicioniva_id
+			? Condicioniva::find($cliente->condicioniva_id)
+			: null;
+
+		$defaults = [
+			'codigo' => $cliente->codigo,
+			'nombre' => $cliente->nombre ?? '',
+			'contacto' => $cliente->contacto ?? '',
+			'domicilio' => $cliente->domicilio ?? '',
+			'desc_localidad' => $cliente->localidades->nombre ?? '',
+			'desc_provincia' => $cliente->provincias->nombre ?? '',
+			'codigopostal' => $cliente->codigopostal ?? '',
+			'telefono' => $cliente->telefono ?? '',
+			'letra' => $condicioniva?->letra ?? '',
+			'numerodocumento' => $cliente->numerodocumento ?? '',
+			'tipodocumento_id' => $cliente->tipodocumento_id,
+			'condicionventa_id' => $cliente->condicionventa_id ?? 0,
+			'subzonavta_id' => $cliente->subzonavta_id ?? 0,
+			'vendedor_id' => $cliente->vendedor_id ?? 0,
+			'lugarentrega' => $cliente->lugarentrega ?? '',
+			'retieneiva' => $cliente->retieneiva ?? 'N',
+			'descuento' => $cliente->descuento ?? 0,
+			'estado' => $cliente->estado ?? '0',
+			'nroiibb' => $cliente->nroiibb ?? '',
+			'fantasia' => $cliente->fantasia ?? '',
+			'email' => $cliente->email ?? '',
+			'leyenda' => $cliente->leyenda ?? '',
+			'horarioatencion' => $cliente->horarioatencion ?? '',
+			'urlweb' => $cliente->urlweb ?? '',
+			'condicioniva_id' => $cliente->condicioniva_id ?? 1,
+			'condicioniibb_id' => $cliente->condicioniibb_id ?? 4,
+			'cuentacontable_id' => $cliente->cuentacontable_id,
+			'transporte_id' => $cliente->transporte_id ?? 0,
+			'localidad_id' => $cliente->localidad_id ?? 0,
+			'provincia_id' => $cliente->provincia_id ?? 0,
+			'pais_id' => $cliente->pais_id ?? 1,
+			'zonavta_id' => $cliente->zonavta_id ?? 0,
+			'listaprecio_id' => $cliente->listaprecio_id ?? 0,
+			'porcentajelogistica' => $cliente->porcentajelogistica ?? 0,
+			'coeficienteextra' => $cliente->coeficienteextra ?? 0,
+			'emitecertificado' => $cliente->emitecertificado ?? 'No Emite Certificado',
+			'emitenotadecredito' => $cliente->emitenotadecredito ?? 'No Emite Nota de Credito',
+			'agregabonificacion' => $cliente->agregabonificacion ?? 'No Agrega Bonificacion',
+			'modofacturacion' => $cliente->modofacturacion ?? 'N',
+			'abasto_id' => $cliente->abasto_id ?? 0,
+			'coeficiente_id' => $cliente->coeficiente_id ?? 0,
+			'desdefecha_exclusionpercepcioniva' => $cliente->desdefecha_exclusionpercepcioniva,
+			'hastafecha_exclusionpercepcioniva' => $cliente->hastafecha_exclusionpercepcioniva,
+			'articulo_suspendido_ids' => $cliente->cliente_articulo_suspendidos
+				->pluck('articulo_id')
+				->filter()
+				->values()
+				->all(),
+			'tiene_cm05' => $cliente->cliente_cm05s->isNotEmpty(),
+		];
+
+		return array_merge($cliente->toArray(), $defaults);
+	}
+
+	/**
+	 * Replica en Informix un cliente ya existente en el ERP (insert si no está en climae, update si existe).
+	 */
+	public function replicarClienteEnAnitaPorCodigo(string $codigo): string
+	{
+		$codigoNorm = ltrim($codigo, '0');
+		$cliente = $this->model->where('codigo', $codigoNorm)->first();
+		if ($cliente === null) {
+			throw new ModelNotFoundException('Cliente ERP no encontrado con código '.$codigo);
+		}
+
+		$apiAnita = new ApiAnita();
+		$consulta = [
+			'acc' => 'list',
+			'tabla' => $this->tableAnita[0],
+			'sistema' => 'ventas',
+			'campos' => $this->keyFieldAnita,
+			'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".str_pad($codigoNorm, 6, '0', STR_PAD_LEFT)."' ",
+		];
+		$existeEnAnita = ApiAnita::decodificarListaFilas((string) $apiAnita->apiCall($consulta)) !== [];
+
+		$datos = $this->datosRequestDesdeCliente($cliente);
+
+		if ($existeEnAnita) {
+			self::actualizarAnita($datos, $codigoNorm);
+			$this->sincronizarCm05Anita($apiAnita, $datos, $codigoNorm);
+
+			return 'actualizado';
+		}
+
+		self::guardarAnita($datos);
+		$this->sincronizarCm05Anita($apiAnita, $datos, $codigoNorm);
+
+		return 'insertado';
+	}
+
+	/**
+	 * Actualiza climae en Anita después de grabar tablas asociadas (CM05, entregas, etc.).
+	 */
+	public function sincronizarAnitaDespuesDeGrabado(int $clienteId): void
+	{
+		$cliente = $this->model->findOrFail($clienteId);
+		$datos = $this->datosRequestDesdeCliente($cliente);
+		self::actualizarAnita($datos, $datos['codigo']);
+	}
+
+	private function guardarAnita($request) {
+        $apiAnita = new ApiAnita();
+		$data = $this->payloadInsertClimae($request);
+        $this->apiCallAnitaEscritura($apiAnita, $data, 'climae insert');
 
 		// Graba leyenda
 		$leyenda = explode("\n", $request['leyenda']);
@@ -831,7 +1003,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 								'".preg_replace("/\r/", "", $ley)."' "
 						);
 
-        	$apiAnita->apiCall($data);
+        	$this->apiCallAnitaEscritura($apiAnita, $data, 'cliley insert');
 		}
 
 		// Graba articulos suspendidos
@@ -854,13 +1026,13 @@ class ClienteRepository implements ClienteRepositoryInterface
 							'".str_pad($articulo->sku, 13, "0", STR_PAD_LEFT)."' "
 					);
 
-        			$apiAnita->apiCall($data);
+        			$this->apiCallAnitaEscritura($apiAnita, $data, 'stksuspcli insert');
 				}
 			}
 		}
 
 		// Graba comisiones
-		if ($request['vendedor_id'] > 0 && config('app.empresa', 'Calzados Ferli'))
+		if ($request['vendedor_id'] > 0 && config('app.empresa') == 'Calzados Ferli')
 		{
 			$mventa = Mventa::all();
 			foreach ($mventa as $marca)
@@ -878,9 +1050,11 @@ class ClienteRepository implements ClienteRepositoryInterface
 								'".$request['vendedor_id']."' "
 						);
 
-        		$apiAnita->apiCall($data);
+        		$this->apiCallAnitaEscritura($apiAnita, $data, 'clicomi insert');
 			}
 		}
+
+		$this->sincronizarCm05Anita($apiAnita, $request, $request['codigo']);
 	}
 
 	private function actualizarAnita($request, $id) {
@@ -945,7 +1119,7 @@ class ClienteRepository implements ClienteRepositoryInterface
                 clim_cuit 	                    = '".$documento."',
                 clim_cond_iva 	                = '".$condicioniva."',
                 clim_letra 	                    = '".$request['letra']."',
-                clim_cond_venta 	            = '".($request['condicionventa_id'] > 0 ? $request['condicionventa_id'] : 0)."',
+                clim_cond_venta 	            = '".$this->codigoCondicionVentaAnita($request['condicionventa_id'] ?? 0)."',
                 clim_cta_contable 	            = '".$cuentacontable."',
                 clim_zonavta 	                = '".$codigozonavta."',
                 clim_subzona 	                = '".($request['subzonavta_id']>0?$request['subzonavta_id']:0)."',
@@ -983,12 +1157,12 @@ class ClienteRepository implements ClienteRepositoryInterface
 				clim_hs_atencion2               = '".$horarioAtencion."' " : "")
 				,
 				'whereArmado' => " WHERE clim_cliente = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
-        $climae = $apiAnita->apiCall($data);
+        $this->apiCallAnitaEscritura($apiAnita, $data, 'climae update');
 
 		// Borra leyenda
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[1], 
 				'whereArmado' => " WHERE clil_cliente = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
-        $apiAnita->apiCall($data);
+        $this->apiCallAnitaEscritura($apiAnita, $data, 'cliley delete');
 
 		// Graba leyenda
 		$leyenda = explode("\n", $request['leyenda']);
@@ -1008,7 +1182,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 								'".preg_replace("/\r/", "", $ley)."' "
 						);
 
-        	$apiAnita->apiCall($data);
+        	$this->apiCallAnitaEscritura($apiAnita, $data, 'cliley insert');
 		}
 
 		// Borra articulos suspendidos
@@ -1017,7 +1191,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 			$data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[4], 
 					'sistema' => 'ventas',
 					'whereArmado' => " WHERE stksc_cliente = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
-			$apiAnita->apiCall($data);
+			$this->apiCallAnitaEscritura($apiAnita, $data, 'stksuspcli delete');
 
 			// Graba articulos suspendidos
 			if (isset($request['articulo_suspendido_ids']))
@@ -1039,19 +1213,19 @@ class ClienteRepository implements ClienteRepositoryInterface
 								'".str_pad($articulo->sku, 13, "0", STR_PAD_LEFT)."' "
 						);
 
-						$apiAnita->apiCall($data);
+						$this->apiCallAnitaEscritura($apiAnita, $data, 'stksuspcli insert');
 					}
 				}		
 			}
 		}
 
 		// Borra comisiones
-		if ($request['vendedor_id'] > 0 && config('app.empresa', 'Calzados Ferli'))
+		if ($request['vendedor_id'] > 0 && config('app.empresa') == 'Calzados Ferli')
 		{
 			$data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[2], 
 					'sistema' => 'ventas',
 					'whereArmado' => " WHERE clico_cliente = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
-			$apiAnita->apiCall($data);
+			$this->apiCallAnitaEscritura($apiAnita, $data, 'clicomi delete');
 
 			// Graba comisiones
 			$mventa = Mventa::all();
@@ -1070,9 +1244,11 @@ class ClienteRepository implements ClienteRepositoryInterface
 								'".$request['vendedor_id']."' "
 						);
 
-        		$apiAnita->apiCall($data);
+        		$this->apiCallAnitaEscritura($apiAnita, $data, 'clicomi insert');
 			}
 		}
+
+		$this->sincronizarCm05Anita($apiAnita, $request, $id);
 	}
 
 	private function eliminarAnita($id) {
@@ -1080,13 +1256,13 @@ class ClienteRepository implements ClienteRepositoryInterface
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[0], 
 				'sistema' => 'ventas',
 				'whereArmado' => " WHERE clim_cliente = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
-        $apiAnita->apiCall($data);
+        $this->apiCallAnitaEscritura($apiAnita, $data, 'climae delete');
 
 		// Borra leyenda
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[1], 
 				'sistema' => 'ventas',
 				'whereArmado' => " WHERE clil_cliente = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
-        $apiAnita->apiCall($data);
+        $this->apiCallAnitaEscritura($apiAnita, $data, 'cliley delete');
 
 		if (config("app.empresa") == "EL BIERZO")
 		{
@@ -1094,13 +1270,13 @@ class ClienteRepository implements ClienteRepositoryInterface
 			$data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[4], 
 					'sistema' => 'ventas',
 					'whereArmado' => " WHERE stksc_cliente = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
-			$apiAnita->apiCall($data);
+			$this->apiCallAnitaEscritura($apiAnita, $data, 'stksuspcli delete');
 
 			// Borra seguimiento de clientes
 			$data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[3], 
 					'sistema' => 'ventas',
 					'whereArmado' => " WHERE movsc_cliente = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
-			$apiAnita->apiCall($data);
+			$this->apiCallAnitaEscritura($apiAnita, $data, 'movscli delete');
 		}
 	}
 
@@ -1118,9 +1294,8 @@ class ClienteRepository implements ClienteRepositoryInterface
 				'valores' => " 
 				clim_emite_nc = '".$emitenotadecredito."' ",
 				'whereArmado' => " WHERE clim_cliente = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
-        $anita = $apiAnita->apiCall($data);
 
-		return $anita;
+		return $this->apiCallAnitaEscritura($apiAnita, $data, 'climae emite_nc');
 	}
 
 	// Devuelve ultimo codigo de clientes + 1 para agregar nuevos en Anita
@@ -1167,6 +1342,8 @@ class ClienteRepository implements ClienteRepositoryInterface
 									&$codigolistaprecio, &$codigoabasto, &$codigocoeficiente,
 									&$emitecertificado, &$emitenotadecredito, &$agregabonificacion, &$regimen)
 	{
+		$regimen = '0';
+
        	$cuenta = Cuentacontable::select('id', 'codigo')->where('id' , $request['cuentacontable_id'])->first();
 		if ($cuenta)
 			$cuentacontable = $cuenta->codigo;
@@ -1196,22 +1373,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 			$condicioniva = '5';
 			break;
 		}
-		$condicioniibb = '2';
-		switch($request['condicioniibb_id'])
-		{
-		case 3:
-			$condicioniibb = '1';
-			break;
-		case 1:
-			$condicioniibb = '2';
-			break;
-		case 2:
-			$condicioniibb = '3';
-			break;
-		case 4:
-			$condicioniibb = 'N';
-			break;
-		}
+		$condicioniibb = $this->codigoPercIngBrAnita($request);
 
 		if (config("app.empresa") == "EL BIERZO")
 		{
@@ -1235,7 +1397,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 			else
 				$regimen = '1';
 		}
-		$localidad = Localidad::select('id', 'codigo')->where('id' , $request['cuentacontable_id'])->first();
+		$localidad = Localidad::select('id', 'codigo')->where('id', $request['localidad_id'] ?? 0)->first();
 		if ($localidad)
 			$codigolocalidad = $localidad->codigo;
 		else
@@ -1247,11 +1409,12 @@ class ClienteRepository implements ClienteRepositoryInterface
 		else
 			$codigoprovincia = 0;
 
-		$pais = Pais::select('id', 'codigo')->where('id' , $request['pais_id'])->first();
-		if ($pais)
-			$codigopais = $pais->codigo;
-		else
+		$pais = Pais::select('id', 'codigo')->where('id', $request['pais_id'])->first();
+		if ($pais && ($codigo = $pais->codigoAnita()) !== null) {
+			$codigopais = $codigo;
+		} else {
 			$codigopais = 1;
+		}
 
 		$zonavta = Zonavta::select('id', 'codigo')->where('id' , $request['zonavta_id'])->first();
 		if ($zonavta)
@@ -1285,6 +1448,236 @@ class ClienteRepository implements ClienteRepositoryInterface
 			else
 				$codigocoeficiente = 0;
 		}
+	}
+
+	/**
+	 * Código condmae (Informix / clim_cond_venta) desde condicionventa.codigo del ERP.
+	 */
+	private function codigoCondicionVentaAnita($condicionventaId): string
+	{
+		if ((int) $condicionventaId <= 0) {
+			return '0';
+		}
+
+		$condicion = Condicionventa::find($condicionventaId);
+		if ($condicion) {
+			$codigo = trim((string) ($condicion->codigo ?? ''));
+			if ($codigo !== '') {
+				return $codigo;
+			}
+		}
+
+		return '0';
+	}
+
+	/**
+	 * clim_perc_ing_br: en INTERFORMING con jurisdicciones CM05 graba 7 (CM05); el resto mantiene convenio/local/etc.
+	 */
+	private function codigoPercIngBrAnita(array $request): string
+	{
+		if (config('app.empresa') === 'INTERFORMING' && ! empty($request['tiene_cm05'])) {
+			return '7';
+		}
+
+		$condicioniibb = '2';
+		switch ($request['condicioniibb_id'] ?? null) {
+			case 3:
+				$condicioniibb = '1';
+				break;
+			case 1:
+				$condicioniibb = '2';
+				break;
+			case 2:
+				$condicioniibb = '3';
+				break;
+			case 4:
+				$condicioniibb = 'N';
+				break;
+		}
+
+		return $condicioniibb;
+	}
+
+	/**
+	 * CUIT en formato Anita (clim_cuit / clii_cuit), hasta 13 caracteres.
+	 */
+	private function cuitAnitaDesdeRequest(array $request): string
+	{
+		$tipodocumento = ! empty($request['tipodocumento_id'])
+			? Tipodocumento::find($request['tipodocumento_id'])
+			: null;
+
+		$documento = trim((string) ($request['numerodocumento'] ?? ''));
+		if ($tipodocumento && $tipodocumento->codigoexterno != '80') {
+			$documento = trim($tipodocumento->abreviatura.' '.$documento);
+		}
+
+		return substr($documento, 0, 13);
+	}
+
+	private function cuitAnitaDesdeCliente(Cliente $cliente): string
+	{
+		return $this->cuitAnitaDesdeRequest([
+			'numerodocumento' => $cliente->numerodocumento,
+			'tipodocumento_id' => $cliente->tipodocumento_id,
+		]);
+	}
+
+	private function fechaAnitaInformix($fecha): string
+	{
+		if ($fecha === null || $fecha === '') {
+			return '00000000';
+		}
+
+		return Carbon::parse($fecha)->format('Ymd');
+	}
+
+	/**
+	 * ERP tipopercepcion → cliibr.clii_codigo_perc (1=percibe, 2=no percibe, 3=agente).
+	 */
+	private function codigoPercCliibrAnita(string $tipopercepcion): string
+	{
+		return match ($tipopercepcion) {
+			'N' => '2',
+			default => '1',
+		};
+	}
+
+	/**
+	 * cliibr.clii_codigo_perc → ERP tipopercepcion.
+	 */
+	private function tipopercepcionDesdeCliibr(string $codigoPerc, $coeficiente): string
+	{
+		if ($codigoPerc === '2') {
+			return 'N';
+		}
+
+		if ($codigoPerc === '1' && (float) $coeficiente > 0) {
+			return 'C';
+		}
+
+		return 'P';
+	}
+
+	/**
+	 * Replica jurisdicciones CM05 del ERP a Informix (cliibr), solo INTERFORMING.
+	 */
+	private function sincronizarCm05Anita(ApiAnita $apiAnita, array $request, $codigoCliente): void
+	{
+		if (config('app.empresa') !== 'INTERFORMING') {
+			return;
+		}
+
+		$tabla = (string) config('cliente_anita.cm05_tabla', 'cliibr');
+		if ($tabla === '') {
+			return;
+		}
+
+		$cliente = $this->model->where('codigo', ltrim((string) $codigoCliente, '0'))->first();
+		if ($cliente === null) {
+			return;
+		}
+
+		$cuit = $this->cuitAnitaDesdeCliente($cliente);
+		if ($cuit === '') {
+			return;
+		}
+
+		$cuitSql = $this->sqlLit($cuit);
+		$cm05s = $cliente->cliente_cm05s()->with('provincias')->get();
+
+		$data = [
+			'acc' => 'delete',
+			'tabla' => $tabla,
+			'sistema' => 'ventas',
+			'whereArmado' => " WHERE clii_cuit = '".$cuitSql."' ",
+		];
+		$this->apiCallAnitaEscritura($apiAnita, $data, 'cliibr delete');
+
+		foreach ($cm05s as $cm05) {
+			$zonamult = (int) ($cm05->provincias?->codigo ?? 0);
+			if ($zonamult <= 0) {
+				continue;
+			}
+
+			$codigoPerc = $this->codigoPercCliibrAnita((string) $cm05->tipopercepcion);
+			$coeficiente = $cm05->coeficiente ?? 0;
+			$certificado = in_array($cm05->certificadonoretencion, ['S', 'N'], true)
+				? $cm05->certificadonoretencion
+				: 'N';
+
+			$data = [
+				'tabla' => $tabla,
+				'acc' => 'insert',
+				'sistema' => 'ventas',
+				'campos' => 'clii_cuit, clii_zonamult, clii_codigo_perc, clii_vigencia, clii_coeficiente, clii_cert_no_ret, clii_dfecha_no_ret, clii_hfecha_no_ret',
+				'valores' => " '".$cuitSql."', '".$zonamult."', '".$codigoPerc."', '".$this->fechaAnitaInformix($cm05->fechavigencia)."', '".$coeficiente."', '".$certificado."', '".$this->fechaAnitaInformix($cm05->desdefechanoretencion)."', '".$this->fechaAnitaInformix($cm05->hastafechanoretencion)."' ",
+			];
+			$this->apiCallAnitaEscritura($apiAnita, $data, 'cliibr insert');
+		}
+	}
+
+	/**
+	 * Importa cliibr (Anita) → cliente_cm05 (ERP), solo INTERFORMING.
+	 */
+	private function importarCm05DesdeAnita(ApiAnita $apiAnita, string $cuitAnita, int $clienteId): void
+	{
+		if (config('app.empresa') !== 'INTERFORMING' || trim($cuitAnita) === '') {
+			return;
+		}
+
+		$tabla = (string) config('cliente_anita.cm05_tabla', 'cliibr');
+		$cuitSql = $this->sqlLit(trim($cuitAnita));
+
+		$data = [
+			'acc' => 'list',
+			'sistema' => 'ventas',
+			'tabla' => $tabla,
+			'campos' => 'clii_cuit, clii_zonamult, clii_codigo_perc, clii_vigencia, clii_coeficiente, clii_cert_no_ret, clii_dfecha_no_ret, clii_hfecha_no_ret',
+			'whereArmado' => " WHERE clii_cuit = '".$cuitSql."' ",
+		];
+		$filas = json_decode($apiAnita->apiCall($data));
+		if (! is_array($filas) || count($filas) === 0) {
+			return;
+		}
+
+		Cliente_Cm05::where('cliente_id', $clienteId)->delete();
+
+		$usuarioId = Auth::id() ?? 1;
+
+		foreach ($filas as $fila) {
+			$provincia = Provincia::select('id')->where('codigo', $fila->clii_zonamult)->first();
+			if (! $provincia) {
+				continue;
+			}
+
+			$coeficiente = (float) ($fila->clii_coeficiente ?? 0);
+			$codigoPerc = trim((string) ($fila->clii_codigo_perc ?? '1'));
+
+			Cliente_Cm05::create([
+				'cliente_id' => $clienteId,
+				'provincia_id' => $provincia->id,
+				'tipopercepcion' => $this->tipopercepcionDesdeCliibr($codigoPerc, $coeficiente),
+				'coeficiente' => $coeficiente > 0 ? $coeficiente : null,
+				'fechavigencia' => $this->fechaErpDesdeAnita($fila->clii_vigencia ?? null),
+				'certificadonoretencion' => in_array(trim((string) ($fila->clii_cert_no_ret ?? 'N')), ['S', 'N'], true)
+					? trim((string) $fila->clii_cert_no_ret)
+					: 'N',
+				'desdefechanoretencion' => $this->fechaErpDesdeAnita($fila->clii_dfecha_no_ret ?? null),
+				'hastafechanoretencion' => $this->fechaErpDesdeAnita($fila->clii_hfecha_no_ret ?? null),
+				'creousuario_id' => $usuarioId,
+			]);
+		}
+	}
+
+	private function fechaErpDesdeAnita($fechaAnita): ?string
+	{
+		$fecha = (int) $fechaAnita;
+		if ($fecha <= 0) {
+			return null;
+		}
+
+		return Carbon::createFromFormat('Ymd', (string) $fecha)->format('Y-m-d');
 	}
 
 	public function leeCliente($busqueda, $flPaginando = null)

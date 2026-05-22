@@ -206,7 +206,7 @@ class CentrocostoRepository implements CentrocostoRepositoryInterface
                     '0',
                     '".$request['abreviatura']."' "
             );            
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -231,7 +231,7 @@ class CentrocostoRepository implements CentrocostoRepositoryInterface
                     ccos_abreviatura 	            = '".$request['abreviatura']."' "
                         ,
                     'whereArmado' => " WHERE ccos_codigo = '".$id."' " );            
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
@@ -239,7 +239,7 @@ class CentrocostoRepository implements CentrocostoRepositoryInterface
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita, 
                 'sistema' => 'contab',
 				'whereArmado' => " WHERE ccos_codigo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 }

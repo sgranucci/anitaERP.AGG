@@ -231,7 +231,7 @@ class ProvinciaRepository implements ProvinciaRepositoryInterface
 										'".$request['abreviatura']."',
 										'".$request['jurisdiccion']."' "
             );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -255,7 +255,7 @@ class ProvinciaRepository implements ProvinciaRepositoryInterface
 							provi_abrev = '".$request['abreviatura']."',
 							provi_jurisdiccion = '".$request['jurisdiccion']."' ",
 						'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$request['codigo']."' " );            
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
@@ -264,7 +264,7 @@ class ProvinciaRepository implements ProvinciaRepositoryInterface
                     'sistema' => 'shared',
 					'tabla' => $this->tableAnita,
 					'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$request['codigo']."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
     public function consultaProvincia($consulta)

@@ -84,8 +84,6 @@ class AsientoRepository implements AsientoRepositoryInterface
 		// Actualiza anita asi borra el asiento anterior por si ya existe
 		//$anita = self::actualizarAnita($data);
 
-		if (strpos($anita, 'Error') !== false)
-			throw new Exception($anita);
 
 		return $asiento;
     }
@@ -99,8 +97,6 @@ class AsientoRepository implements AsientoRepositoryInterface
 		// Actualiza anita
 		$anita = self::actualizarAnita($data);
 
-		if (strpos($anita, 'Error') !== false)
-			throw new Exception($anita);
 
 		return $asiento;
     }
@@ -120,8 +116,6 @@ class AsientoRepository implements AsientoRepositoryInterface
 						
 			$anita = self::eliminarAnita($codigoEmpresa, $asiento->numeroasiento);
 
-			if (strpos($anita, 'Error') !== false)
-				return 'Error';
 
         	$asiento = $this->model->destroy($id);
 		}
@@ -623,9 +617,7 @@ class AsientoRepository implements AsientoRepositoryInterface
       			);
 				if (isset($this->path_sistema))
 					$data['path_sistema'] = $this->path_sistema;	
-        		$asiento = $apiAnita->apiCall($data);
-				if (strpos($asiento, 'Error') !== false)
-					return 'Error grabación ctamov anita';
+        		$asiento = $apiAnita->apiCallEscritura($data);
 			}
 		}
 		return 'Success';
@@ -647,13 +639,11 @@ class AsientoRepository implements AsientoRepositoryInterface
 									$request['numeroasiento']."' ");
 		if (isset($this->path_sistema))
 			$data['path_sistema'] = $this->path_sistema;										
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
 		// Crea el asiento
 		$asiento = Self::guardarAnita($request);
 
-		if (strpos($asiento, 'Error') !== false)
-			return 'Error grabación ctamov anita';	
 
 		return 'Success';
 	}
@@ -666,7 +656,7 @@ class AsientoRepository implements AsientoRepositoryInterface
 				'whereArmado' => " WHERE ctav_empresa = '".$empresa."' and ctav_nro_asiento = '".$codigo."' ");
 		if (isset($this->path_sistema))
 			$data['path_sistema'] = $this->path_sistema;	
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	// Devuelve ultimo codigo de asientos + 1 para agregar nuevos en Anita
@@ -718,7 +708,7 @@ class AsientoRepository implements AsientoRepositoryInterface
 						'whereArmado' => " WHERE num_clave='501'" );
 			if (isset($this->path_sistema))
 				$data['path_sistema'] = $this->path_sistema;						
-			$numerador = $apiAnita->apiCall($data);
+			$numerador = $apiAnita->apiCallEscritura($data);
 		}
 		else
 		{
@@ -758,7 +748,7 @@ class AsientoRepository implements AsientoRepositoryInterface
 							'whereArmado' => " WHERE numa_sistema='contab' and numa_programa='a-ctamov.c' and numa_referencia='".$codigoEmpresa."'" );
 				if (isset($this->path_sistema))
 					$data['path_sistema'] = $this->path_sistema;						
-				$numerador = $apiAnita->apiCall($data);
+				$numerador = $apiAnita->apiCallEscritura($data);
 			}
 		}
 

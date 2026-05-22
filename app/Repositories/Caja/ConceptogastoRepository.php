@@ -191,7 +191,7 @@ class ConceptogastoRepository implements ConceptogastoRepositoryInterface
 				'".$id."', 
                 '".$request['nombre']."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -204,7 +204,7 @@ class ConceptogastoRepository implements ConceptogastoRepositoryInterface
                 coper_desc = '".$request['nombre']."' "
 					,
 				'whereArmado' => " WHERE coper_concepto = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
@@ -212,7 +212,7 @@ class ConceptogastoRepository implements ConceptogastoRepositoryInterface
         $data = array( 'acc' => 'delete', 'tabla' => 'concoper', 
                 'sistema' => 'che_ban',
 				'whereArmado' => " WHERE coper_concepto = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 	
 }

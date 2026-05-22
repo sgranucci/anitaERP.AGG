@@ -77,19 +77,19 @@ class Serigrafia extends Model
             'campos' => ' seri_serigrafia, seri_desc, seri_articulo ',
             'valores' => " '".$id."', '".$request->nombre."', '".str_pad($sku, 13, "0", STR_PAD_LEFT)."'"
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id, $sku) {
         $apiAnita = new ApiAnita();
 		$data = array( 'acc' => 'update', 'tabla' => 'serigrafia', 'valores' => " seri_desc = '".
 					$request->nombre."', seri_articulo = '".str_pad($sku, 13, "0", STR_PAD_LEFT)."' ", 'whereArmado' => " WHERE seri_serigrafia = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 'tabla' => 'serigrafia', 'whereArmado' => " WHERE seri_serigrafia = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 }

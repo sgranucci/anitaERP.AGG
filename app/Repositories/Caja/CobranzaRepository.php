@@ -42,8 +42,6 @@ class CobranzaRepository implements CobranzaRepositoryInterface
 		// Graba anita
 		$anita = self::guardarAnita($data);
 
-		if (strpos($anita, 'Error') !== false)
-			throw new Exception($anita);
 
 		return $cobranza;
     }
@@ -59,8 +57,6 @@ class CobranzaRepository implements CobranzaRepositoryInterface
 		// Actualiza anita
 		$anita = self::actualizarAnita($data);
 
-		if (strpos($anita, 'Error') !== false)
-			throw new Exception($anita);
 
 		return $cobranza;
     }
@@ -81,8 +77,6 @@ class CobranzaRepository implements CobranzaRepositoryInterface
 			$anita = self::eliminarAnita($codigoEmpresa, $cobranza->tipotransaccion_caja_id,
 										$cobranza->numerotransaccion);
 
-			if (strpos($anita, 'Error') !== false)
-				return 'Error';
 
         	$cobranza = $this->model->destroy($id);
 		}

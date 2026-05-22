@@ -133,7 +133,7 @@ class Localidad extends Model
 										'".$codigoprovincia."',
 										'".$request->nombre."' "
             );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -163,7 +163,7 @@ class Localidad extends Model
 						    loc_provincia = '".$codigoprovincia."',
 							loc_desc = '".$request->nombre."' ",
 						'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$request->codigo."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
@@ -172,6 +172,6 @@ class Localidad extends Model
                     'sistema' => 'shared',
 					'tabla' => $this->table,
 					'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$request->codigo."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 }

@@ -1223,6 +1223,12 @@ Route::get('ventas/cliente/crear/{tipoalta?}', 'Ventas\ClienteController@crear')
 Route::post('ventas/cliente', 'Ventas\ClienteController@guardar')->name('guardar_cliente');
 Route::post('ventas/clienteprovisorio', 'Ventas\ClienteController@guardarClienteProvisorio')->name('guardar_cliente_provisorio');
 Route::get('ventas/cliente/{id}/editar', 'Ventas\ClienteController@editar')->name('editar_cliente');
+Route::get('ventas/cliente/{cliente_id}/suitecrm-cuenta', 'Ventas\ClienteSuitecrmCuentaController@show')->name('cliente_suitecrm_cuenta');
+Route::post('ventas/cliente/{cliente_id}/suitecrm-cuenta/sincronizar', 'Ventas\ClienteSuitecrmCuentaController@sincronizar')->name('sincronizar_cliente_suitecrm_cuenta');
+Route::get('ventas/cliente/{cliente_id}/suitecrm-notas', 'Ventas\ClienteSuitecrmNotaController@index')->name('cliente_suitecrm_notas');
+Route::post('ventas/cliente/{cliente_id}/suitecrm-notas', 'Ventas\ClienteSuitecrmNotaController@store')->name('guardar_cliente_suitecrm_nota');
+Route::put('ventas/cliente/{cliente_id}/suitecrm-notas/{nota_id}', 'Ventas\ClienteSuitecrmNotaController@update')->name('actualizar_cliente_suitecrm_nota');
+Route::delete('ventas/cliente/{cliente_id}/suitecrm-notas/{nota_id}', 'Ventas\ClienteSuitecrmNotaController@destroy')->name('eliminar_cliente_suitecrm_nota');
 Route::put('ventas/cliente/{id}', 'Ventas\ClienteController@actualizar')->name('actualizar_cliente');
 Route::delete('ventas/cliente/{id}', 'Ventas\ClienteController@eliminar')->name('eliminar_cliente');
 Route::get('ventas/leercliente_entrega/{cliente_id}', 'Ventas\ClienteController@leerCliente_Entrega')->name('leer_cliente_entrega');

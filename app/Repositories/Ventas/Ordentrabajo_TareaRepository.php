@@ -372,7 +372,7 @@ class Ordentrabajo_TareaRepository implements Ordentrabajo_TareaRepositoryInterf
 				'".$request['cantidad']."',
 				'".$request['costo']."' "
         );
-        return $apiAnita->apiCall($data);
+        return $apiAnita->apiCallEscritura($data);
 	}
 
 	private function actualizarAnita($request, $id) {
@@ -395,7 +395,7 @@ class Ordentrabajo_TareaRepository implements Ordentrabajo_TareaRepositoryInterf
 					ordtt_costo   		= '".$request['costo']."' "
 					,
 				'whereArmado' => " WHERE ordtt_nro_orden = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	private function eliminarAnita($id) {
@@ -403,7 +403,7 @@ class Ordentrabajo_TareaRepository implements Ordentrabajo_TareaRepositoryInterf
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita, 
 				'whereArmado' => " WHERE ordtt_nro_orden = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 }
 

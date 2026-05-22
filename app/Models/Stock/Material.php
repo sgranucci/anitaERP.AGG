@@ -65,7 +65,7 @@ class Material extends Model
             'campos' => ' marm_marca, marm_desc, marm_formula ',
             'valores' => " '".$codigo."', '".$request->nombre."', '".$request->formula."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request) {
@@ -75,7 +75,7 @@ class Material extends Model
 		$data = array( 'acc' => 'update', 'tabla' => $this->tableAnita, 
 				'valores' => " marm_desc = '".$request->nombre."' , marm_marca = '".$codigo."' , marm_formula = '".$request->formula."'",
 				'whereArmado' => " WHERE marm_marca = '".$codigo."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($codigo) {
@@ -84,6 +84,6 @@ class Material extends Model
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita, 
 			'whereArmado' => " WHERE marm_marca = '".$codigo."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 }

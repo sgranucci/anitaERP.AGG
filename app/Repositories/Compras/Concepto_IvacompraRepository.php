@@ -301,7 +301,7 @@ class Concepto_IvacompraRepository implements Concepto_IvacompraRepositoryInterf
                 '".$alicuotaIva."',
                 '".$request['retieneIIBB']."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
         if (isset($request['condicioniva_ids']))
         {
@@ -325,7 +325,7 @@ class Concepto_IvacompraRepository implements Concepto_IvacompraRepositoryInterf
                                 '".$condicioniva_ids[$i_rango]."' "
                         );
                         
-                    $apiAnita->apiCall($data);
+                    $apiAnita->apiCallEscritura($data);
                 }
             }
         }
@@ -351,7 +351,7 @@ class Concepto_IvacompraRepository implements Concepto_IvacompraRepositoryInterf
                 concc_alicuota_iva      = '".$alicuotaIva."',
                 concc_retiene_ibr       = '".$request['retieneIIBB']." ' ",
 				'whereArmado' => " WHERE concc_concepto = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
         // Elimina los movimientos
         $apiAnita = new ApiAnita();
@@ -360,7 +360,7 @@ class Concepto_IvacompraRepository implements Concepto_IvacompraRepositoryInterf
             'tabla' => 'concciva',
             'sistema' => 'compras',
             'whereArmado' => " WHERE conci_concepto = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
         if (isset($request['condicioniva_ids']))
         {
@@ -385,7 +385,7 @@ class Concepto_IvacompraRepository implements Concepto_IvacompraRepositoryInterf
                                 '".$condicioniva_ids[$i_rango]."' "
                         );
 
-                    $apiAnita->apiCall($data);
+                    $apiAnita->apiCallEscritura($data);
                 }
             }
         }
@@ -459,7 +459,7 @@ class Concepto_IvacompraRepository implements Concepto_IvacompraRepositoryInterf
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita, 
                 'sistema' => 'compras',
 				'whereArmado' => " WHERE concc_concepto = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
         // Elimina los movimientos
         $apiAnita = new ApiAnita();
@@ -468,7 +468,7 @@ class Concepto_IvacompraRepository implements Concepto_IvacompraRepositoryInterf
             'tabla' => 'concciva',
             'sistema' => 'compras',
             'whereArmado' => " WHERE conci_concepto = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 	
 }

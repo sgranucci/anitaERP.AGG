@@ -90,19 +90,19 @@ class Caja extends Model
             'campos' => ' numca_codigo, numca_desde_nro, numca_hasta_nro, numca_articulo ',
             'valores' => " '".$id."', '".$request->desdenro."', '".$request->hastanro."', '".str_pad($sku, 13, "0", STR_PAD_LEFT)."'"
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id, $sku) {
         $apiAnita = new ApiAnita();
 		$data = array( 'acc' => 'update', 'tabla' => $this->tableAnita, 
 					'valores' => " numca_desde_nro = '".$request->desdenro."', numca_hasta_nro = '".$request->hastanro."', numca_articulo = '".str_pad($sku, 13, "0", STR_PAD_LEFT)."' ", 'whereArmado' => " WHERE numca_codigo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita, 'whereArmado' => " WHERE numca_codigo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 }

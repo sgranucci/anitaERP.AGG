@@ -247,7 +247,7 @@ class OrdentrabajoRepository implements OrdentrabajoRepositoryInterface
 				'".$request['fl_impresa']."',
 				'".$request['fl_stock']."' "
         );
-        return $apiAnita->apiCall($data);
+        return $apiAnita->apiCallEscritura($data);
 	}
 
 	private function actualizarAnita($request, $id) {
@@ -288,7 +288,7 @@ class OrdentrabajoRepository implements OrdentrabajoRepositoryInterface
 				ordtm_fl_stock        = '".$request['fl_stock']."' "
 					,
 				'whereArmado' => " WHERE ordtm_nro_orden = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	private function eliminarAnita($id) {
@@ -296,7 +296,7 @@ class OrdentrabajoRepository implements OrdentrabajoRepositoryInterface
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[0], 
 				'whereArmado' => " WHERE ordtm_nro_orden = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	// Actualiza numerador de OT en Anita
@@ -309,6 +309,6 @@ class OrdentrabajoRepository implements OrdentrabajoRepositoryInterface
 				'valores' => "num_ult_numero = '".$nro."' ",
 				'whereArmado' => " WHERE num_clave = '031' " 
 				);
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 }

@@ -77,19 +77,19 @@ class Fondo extends Model
             'campos' => ' fon_fondo, fon_desc, fon_articulo ',
             'valores' => " '".$codigo."', '".$request->nombre."', '".str_pad($sku, 13, "0", STR_PAD_LEFT)."'"
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id, $sku, $codigo) {
         $apiAnita = new ApiAnita();
 		$data = array( 'acc' => 'update', 'tabla' => 'fondo', 'valores' => " fon_desc = '".
 					$request->nombre."', fon_articulo = '".str_pad($sku, 13, "0", STR_PAD_LEFT)."' ", 'whereArmado' => " WHERE fon_fondo = '".$codigo."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 'tabla' => 'fondo', 'whereArmado' => " WHERE fon_fondo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 }

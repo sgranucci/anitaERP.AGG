@@ -210,9 +210,6 @@ class CobranzaService
 			} catch (\Exception $e) {
 				DB::rollback();
 
-				// Borra el asiento creado
-				dd($e->getMessage());
-
 				return ['errores' => $e->getMessage()];
 			}
 		}
@@ -776,9 +773,7 @@ class CobranzaService
 							'".'0'."'"
 					);
 
-        $pago = $apiAnita->apiCall($grabaAnita);
-		if (strpos($pago, 'Error') !== false)
-			return ['error' => 'Error pago', 'mensaje' => $pago];
+        $pago = $apiAnita->apiCallEscritura($grabaAnita);
 
 		// Graba cuentas de caja
 		if (isset($data['cuentacaja_ids']))
@@ -847,10 +842,8 @@ class CobranzaService
 									'".' '."'"
 							);  
 							
-				$auxpag = $apiAnita->apiCall($grabaAnita);
+				$auxpag = $apiAnita->apiCallEscritura($grabaAnita);
 
-				if (strpos($auxpag, 'Error') !== false)
-					return ['error' => 'Error auxpag', 'mensaje' => $auxpag];
 
 				// Graba tesmov
 				$apiAnita = new ApiAnita();
@@ -894,10 +887,8 @@ class CobranzaService
 									'".$moneda_ids[$i]."'"
 							);
 							
-				$tesmov = $apiAnita->apiCall($grabaAnita);
+				$tesmov = $apiAnita->apiCallEscritura($grabaAnita);
 
-				if (strpos($tesmov, 'Error') !== false)
-					return ['error' => 'Error tesmov', 'mensaje' => $tesmov];
 			}
 		}
 
@@ -970,10 +961,8 @@ class CobranzaService
 									'".'C'."',
 									'".$empresa."'"
 							);
-				$climov = $apiAnita->apiCall($grabaAnita);
+				$climov = $apiAnita->apiCallEscritura($grabaAnita);
 
-				if (strpos($climov, 'Error') !== false)
-					return ['error' => 'Error climov 1', 'mensaje' => $climov];	
 				
 				// Modifica lo aplicado a la factura
 				$apiAnita = new ApiAnita();
@@ -991,10 +980,8 @@ class CobranzaService
 									cliv_sucursal = '".$sucursalComprobante."' AND
 									cliv_nro      = '".$nroComprobante."' " );
 
-				$climov = $apiAnita->apiCall($grabaAnita);		
+				$climov = $apiAnita->apiCallEscritura($grabaAnita);		
 				
-				if (strpos($climov, 'Error') !== false)
-					return ['error' => 'Error climov 2', 'mensaje' => $climov];	
 													
 				// Graba aplmov
 				$apiAnita = new ApiAnita();
@@ -1041,10 +1028,8 @@ class CobranzaService
 										'".$numeroRecibo."',
 										'".date('Ymd', strtotime($fecha))."'"
 							);
-				$aplmov = $apiAnita->apiCall($grabaAnita);
+				$aplmov = $apiAnita->apiCallEscritura($grabaAnita);
 
-				if (strpos($aplmov, 'Error') !== false)
-					return ['error' => 'Error aplmov', 'mensaje' => $aplmov];	
 				
 				// Graba auxpag del comprobante
 				$apiAnita = new ApiAnita();
@@ -1094,10 +1079,8 @@ class CobranzaService
 									'".' '."'"
 							);  
 							
-				$auxpag = $apiAnita->apiCall($grabaAnita);
+				$auxpag = $apiAnita->apiCallEscritura($grabaAnita);
 
-				if (strpos($auxpag, 'Error') !== false)
-					return ['error' => 'Error auxpag 2', 'mensaje' => $auxpag];
 			}
 		}
 
@@ -1198,10 +1181,8 @@ class CobranzaService
 								"
 							);
 
-				$ctermae = $apiAnita->apiCall($grabaAnita);
+				$ctermae = $apiAnita->apiCallEscritura($grabaAnita);
 
-				if (strpos($ctermae, 'Error') !== false)
-					return ['error' => 'Error ctermae', 'mensaje' => $ctermae];			
 
 				// Graba auxpag del comprobante
 				$apiAnita = new ApiAnita();
@@ -1251,10 +1232,8 @@ class CobranzaService
 									'".' '."'"
 							);  
 							
-				$auxpag = $apiAnita->apiCall($grabaAnita);
+				$auxpag = $apiAnita->apiCallEscritura($grabaAnita);
 
-				if (strpos($auxpag, 'Error') !== false)
-					return ['error' => 'Error auxpag 2', 'mensaje' => $auxpag];			
 			}
 		}
 
@@ -1322,10 +1301,8 @@ class CobranzaService
 									'".' '."'"
 							);  
 							
-				$auxpag = $apiAnita->apiCall($grabaAnita);
+				$auxpag = $apiAnita->apiCallEscritura($grabaAnita);
 
-				if (strpos($auxpag, 'Error') !== false)
-					return ['error' => 'Error auxpag 3', 'mensaje' => $auxpag];			
 			}
 		}
 		
@@ -1345,7 +1322,7 @@ class CobranzaService
 												pag_rec = '".$numero."'
 						" );
 
-		$apiAnita->apiCall($grabaAnita);
+		$apiAnita->apiCallEscritura($grabaAnita);
 	}
 
     public function traeUltimoChequeDeTercero()

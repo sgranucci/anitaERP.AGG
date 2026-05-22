@@ -106,7 +106,7 @@ class Articulo_CajaRepository implements Articulo_CajaRepositoryInterface
 								'".str_pad($sku, 13, "0", STR_PAD_LEFT)."', 
 								'".$caja_id."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($sku, $caja_id) {
@@ -115,7 +115,7 @@ class Articulo_CajaRepository implements Articulo_CajaRepositoryInterface
 					'tabla' => $this->tableAnita, 
 					'valores' => " stkca_codigo_caja = '". $caja_id."' ", 
 					'whereArmado' => " WHERE stkca_articulo = '".str_pad($sku, 13, "0", STR_PAD_LEFT)."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($sku) {
@@ -123,7 +123,7 @@ class Articulo_CajaRepository implements Articulo_CajaRepositoryInterface
         $data = array( 'acc' => 'delete', 
 						'tabla' => $this->tableAnita, 
 						'whereArmado' => " WHERE stkca_articulo = '".str_pad($sku, 13, "-", STR_PAD_LEFT)."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 }

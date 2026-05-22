@@ -65,19 +65,19 @@ class Forro extends Model
             'campos' => ' forr_forro, forr_desc ',
             'valores' => " '".$id."', '".$request->nombre."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
         $apiAnita = new ApiAnita();
 		$data = array( 'acc' => 'update', 'tabla' => 'forro', 'valores' => " forr_desc = '".
 					$request->nombre."' ", 'whereArmado' => " WHERE forr_forro = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 'tabla' => 'forro', 'whereArmado' => " WHERE forr_forro = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 }

@@ -72,6 +72,10 @@ class CondicionventaController extends Controller
 
 		if ($condicionventa)
 		{
+			if (trim((string) ($condicionventa->codigo ?? '')) === '') {
+				$condicionventa->update(['codigo' => (string) $condicionventa->id]);
+				$condicionventa->refresh();
+			}
     		$cuotas = $request->input('cuotas', []);
     		$tiposplazo = $request->input('tiposplazo', []);
     		$plazos = $request->input('plazos', []);
@@ -99,7 +103,7 @@ class CondicionventaController extends Controller
 
 			// Graba anita
 			$Condicionventa = new Condicionventa();
-        	$Condicionventa->guardarAnita($request, $condicionventa->id, $cuotas, $tiposplazo, $plazos, $fechasvencimiento, $porcentajes, $intereses);
+        	$Condicionventa->guardarAnita($request, $condicionventa->codigo, $cuotas, $tiposplazo, $plazos, $fechasvencimiento, $porcentajes, $intereses);
 		}
 
     	return redirect('ventas/condicionventa')->with('mensaje', 'Condicion de venta creada con exito');
@@ -172,7 +176,12 @@ class CondicionventaController extends Controller
 
 			// Actualiza anita
 			$Condicionventa = new Condicionventa();
-        		$Condicionventa->actualizarAnita($request, $id, $cuotas, $tiposplazo, $plazos, $fechasvencimiento, $porcentajes, $intereses);
+        	$codigoAnita = trim((string) ($condicionventa->codigo ?? ''));
+			if ($codigoAnita === '') {
+				$codigoAnita = (string) $condicionventa->id;
+				$condicionventa->update(['codigo' => $codigoAnita]);
+			}
+        		$Condicionventa->actualizarAnita($request, $codigoAnita, $cuotas, $tiposplazo, $plazos, $fechasvencimiento, $porcentajes, $intereses);
 		}
         return redirect('ventas/condicionventa')->with('mensaje', 'Condicion de venta actualizada con exito');
     }
@@ -193,7 +202,11 @@ class CondicionventaController extends Controller
 
 			// Elimina anita
 			$Condicionventa = new Condicionventa();
-        	$Condicionventa->eliminarAnita($condicionventa->id);
+        	$codigoAnita = trim((string) ($condicionventa->codigo ?? ''));
+			if ($codigoAnita === '') {
+				$codigoAnita = (string) $condicionventa->id;
+			}
+        	$Condicionventa->eliminarAnita($codigoAnita);
 
 			$fl_borro = false;
             if (($condicionventa = Condicionventa::destroy($id)))

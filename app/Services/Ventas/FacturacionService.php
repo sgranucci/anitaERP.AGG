@@ -3114,6 +3114,22 @@ class FacturacionService
 		);
 	}
 
+	/**
+	 * Escritura Anita con validación de respuesta; devuelve array de error o null si OK.
+	 *
+	 * @return array{error: string, mensaje: string}|null
+	 */
+	private function apiCallAnitaEscritura(ApiAnita $apiAnita, array $payload, string $contexto): ?array
+	{
+		try {
+			$apiAnita->apiCallEscritura($payload, $contexto, 'facturacion.anita_bridge.fallo');
+
+			return null;
+		} catch (\RuntimeException $e) {
+			return ['error' => 'Error', 'mensaje' => $e->getMessage()];
+		}
+	}
+
 	// Graba factura en Anita
 	public function grabaAnita($puntoventa, $letra, $puntoventaremito, $numeroremito, $venta, 
 								$dataCAE, $conceptostotales, $cuentacorriente, $datatalle, $signo, 
@@ -3378,10 +3394,9 @@ class FacturacionService
 			$data['path_sistema'] = '/usr2/villafranca';
 		}
 
-        $vta = $apiAnita->apiCall($data);
-		$errVta = ApiAnita::extraerMensajeError($vta);
+		$errVta = $this->apiCallAnitaEscritura($apiAnita, $data, 'venta insert');
 		if ($errVta !== null) {
-			return ['error' => 'Error', 'mensaje' => 'venta: '.$errVta];
+			return $errVta;
 		}
 		// Graba venibr
 		foreach ($conceptostotales as $concepto)
@@ -3415,10 +3430,9 @@ class FacturacionService
 						$data['path_sistema'] = '/usr2/villafranca';
 					}
 
-					$venibr = $apiAnita->apiCall($data);
-					$errVenibr = ApiAnita::extraerMensajeError($venibr);
+					$errVenibr = $this->apiCallAnitaEscritura($apiAnita, $data, 'venibr insert');
 					if ($errVenibr !== null) {
-						return ['error' => 'Error', 'mensaje' => 'percepción IIBB (venibr): '.$errVenibr];
+						return $errVenibr;
 					}
 				}
 			}
@@ -3451,10 +3465,9 @@ class FacturacionService
 					$data['path_sistema'] = '/usr2/villafranca';
 				}
 						
-				$vengrav = $apiAnita->apiCall($data);
-				$errVengrav = ApiAnita::extraerMensajeError($vengrav);
+				$errVengrav = $this->apiCallAnitaEscritura($apiAnita, $data, 'vengrav insert');
 				if ($errVengrav !== null) {
-					return ['error' => 'Error', 'mensaje' => 'IVA (vengrav): '.$errVengrav];
+					return $errVengrav;
 				}
 			}
 		}
@@ -3526,10 +3539,9 @@ class FacturacionService
 				$data['path_sistema'] = '/usr2/villafranca';
 			}
 
-			$climov = $apiAnita->apiCall($data);
-			$errClimov = ApiAnita::extraerMensajeError($climov);
+			$errClimov = $this->apiCallAnitaEscritura($apiAnita, $data, 'climov insert');
 			if ($errClimov !== null) {
-				return ['error' => 'Error', 'mensaje' => 'cuenta corriente (climov): '.$errClimov];
+				return $errClimov;
 			}
 		}
 	
@@ -3593,10 +3605,9 @@ class FacturacionService
 			$data['path_sistema'] = '/usr2/villafranca';
 		}
 
-		$comprob = $apiAnita->apiCall($data);
-		$errComprob = ApiAnita::extraerMensajeError($comprob);
+		$errComprob = $this->apiCallAnitaEscritura($apiAnita, $data, 'comprob insert');
 		if ($errComprob !== null) {
-			return ['error' => 'Error', 'mensaje' => 'comprobante (comprob): '.$errComprob];
+			return $errComprob;
 		}
 
 		// Agrupa por medida / partida para anita
@@ -3800,10 +3811,10 @@ class FacturacionService
 				$data['path_sistema'] = '/usr2/villafranca';
 			}
 
-			$compaux = $apiAnita->apiCall($data);
-
-			if (strpos($compaux, 'Error') !== false)
-				return ['error' => 'Error compaux', 'mensaje' => $compaux];
+			$errCompaux = $this->apiCallAnitaEscritura($apiAnita, $data, 'compaux insert');
+			if ($errCompaux !== null) {
+				return $errCompaux;
+			}
 				
 			// Graba stkmov
 			$apiAnita = new ApiAnita();
@@ -3914,9 +3925,10 @@ class FacturacionService
 					$data['path_sistema'] = '/usr2/villafranca';
 				}
 
-				$stkmov = $apiAnita->apiCall($data);
-				if (strpos($stkmov, 'Error') !== false)
-					return ['error' => 'Error stkmov', 'mensaje' => $stkmov];				
+				$errStkmov = $this->apiCallAnitaEscritura($apiAnita, $data, 'stkmov insert');
+				if ($errStkmov !== null) {
+					return $errStkmov;
+				}				
 
 				if (config('app.empresa') == 'Calzados Ferli')
 				{
@@ -3966,9 +3978,10 @@ class FacturacionService
 						$data['path_sistema'] = '/usr2/villafranca';
 					}
 
-					$stkvmed = $apiAnita->apiCall($data);
-					if (strpos($stkvmed, 'Error') !== false)
-						return ['error' => 'Error stkvmed', 'mensaje' => $stkvmed];				
+					$errStkvmed = $this->apiCallAnitaEscritura($apiAnita, $data, 'stkvmed insert');
+					if ($errStkvmed !== null) {
+						return $errStkvmed;
+					}				
 				}
 			}
 		}
@@ -4006,10 +4019,10 @@ class FacturacionService
 						$data['path_sistema'] = '/usr2/villafranca';
 					}
 
-					$compley = $apiAnita->apiCall($data);
-
-					if (strpos($compley, 'Error') !== false)
-						return ['error' => 'Error compley', 'mensaje' => $compley];			
+					$errCompley = $this->apiCallAnitaEscritura($apiAnita, $data, 'compley insert');
+					if ($errCompley !== null) {
+						return $errCompley;
+					}			
 				}
 			}
 		}
@@ -4105,7 +4118,7 @@ class FacturacionService
 		{
 			$data['path_sistema'] = '/usr2/villafranca';
 		}							
-		$raw = $apiAnita->apiCall($data);
+		$raw = $apiAnita->apiCallEscritura($data);
 		$err = ApiAnita::extraerMensajeError($raw);
 		if ($err !== null) {
 			throw new Exception('Error en grabación Anita (consulta comprobante): '.$err);
@@ -4183,7 +4196,7 @@ class FacturacionService
 		{
 			$data['path_sistema'] = '/usr2/villafranca';
 		}						
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data, 'venta delete', 'facturacion.anita_bridge.fallo');
 
 		$apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 
@@ -4198,7 +4211,7 @@ class FacturacionService
 		{
 			$data['path_sistema'] = '/usr2/villafranca';
 		}						
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data, 'venibr delete', 'facturacion.anita_bridge.fallo');
 
 		$apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 
@@ -4213,7 +4226,7 @@ class FacturacionService
 		{
 			$data['path_sistema'] = '/usr2/villafranca';
 		}						
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data, 'vengrav delete', 'facturacion.anita_bridge.fallo');
 
 		$apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 
@@ -4228,7 +4241,7 @@ class FacturacionService
 		{
 			$data['path_sistema'] = '/usr2/villafranca';
 		}						
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data, 'vencae delete', 'facturacion.anita_bridge.fallo');
 
 		$apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 
@@ -4243,7 +4256,7 @@ class FacturacionService
 		{
 			$data['path_sistema'] = '/usr2/villafranca';
 		}						
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data, 'climov delete', 'facturacion.anita_bridge.fallo');
 
 		$apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 
@@ -4258,7 +4271,7 @@ class FacturacionService
 		{
 			$data['path_sistema'] = '/usr2/villafranca';
 		}						
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data, 'comprob delete', 'facturacion.anita_bridge.fallo');
 
 		$apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 
@@ -4273,7 +4286,7 @@ class FacturacionService
 		{
 			$data['path_sistema'] = '/usr2/villafranca';
 		}						
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data, 'compaux delete', 'facturacion.anita_bridge.fallo');
 
 		$apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 
@@ -4288,7 +4301,7 @@ class FacturacionService
 		{
 			$data['path_sistema'] = '/usr2/villafranca';
 		}						
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data, 'compley delete', 'facturacion.anita_bridge.fallo');
 
 		$apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 
@@ -4303,7 +4316,7 @@ class FacturacionService
 		{
 			$data['path_sistema'] = '/usr2/villafranca';
 		}						
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data, 'stkmov delete', 'facturacion.anita_bridge.fallo');
 
 		if (config('app.empresa') == 'Calzados Ferli')
 		{
@@ -4316,7 +4329,7 @@ class FacturacionService
 													stkvm_sucursal = '".$puntoventa."' AND
 													stkvm_nro = '".$numero."'
 							" );
-			$apiAnita->apiCall($data);
+			$apiAnita->apiCallEscritura($data, 'stkvmed delete', 'facturacion.anita_bridge.fallo');
 		}
 
 		$apiAnita = new ApiAnita();
@@ -4332,7 +4345,7 @@ class FacturacionService
 		{
 			$data['path_sistema'] = '/usr2/villafranca';
 		}			
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data, 'subdiario delete', 'facturacion.anita_bridge.fallo');
 
 		$apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 
@@ -4347,7 +4360,7 @@ class FacturacionService
 		{
 			$data['path_sistema'] = '/usr2/villafranca';
 		}						
-        $apiAnita->apiCall($data);		
+        $apiAnita->apiCallEscritura($data, 'ctamov delete', 'facturacion.anita_bridge.fallo');
 	}
 
 	public function grabaVenCae($tipo, $letra, $puntoventa, $numerocomprobante, $cae, $fechavencimientocae)
@@ -4390,10 +4403,10 @@ class FacturacionService
 		{
 			$data['path_sistema'] = '/usr2/villafranca';
 		}							
-		$vencae = $apiAnita->apiCall($data);
-
-		if (strpos($vencae, 'Error') !== false)
+		$errVencae = $this->apiCallAnitaEscritura($apiAnita, $data, 'vencae insert');
+		if ($errVencae !== null) {
 			return 'Error';
+		}
 
 		return 'Success';
 	}
@@ -4440,7 +4453,10 @@ class FacturacionService
 		{
 			$data['path_sistema'] = '/usr2/villafranca';
 		}								
-		$numerador = $apiAnita->apiCall($data);
+		$errNumerador = $this->apiCallAnitaEscritura($apiAnita, $data, 'numerador update');
+		if ($errNumerador !== null) {
+			throw new Exception($errNumerador['mensaje']);
+		}
 
 		return $numeroOperacion;
 	}

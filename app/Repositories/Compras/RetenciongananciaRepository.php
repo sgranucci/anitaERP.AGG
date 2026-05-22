@@ -238,7 +238,7 @@ class RetenciongananciaRepository implements RetenciongananciaRepositoryInterfac
 						'".$request['cantidadperiodoacumula']."',
 						'".$request['valorunitario']."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
 		$desdeMontos = $request['desdemontos'];
 		$hastaMontos = $request['hastamontos'];
@@ -271,7 +271,7 @@ class RetenciongananciaRepository implements RetenciongananciaRepositoryInterfac
 							'".$request['codigo']."' "
 					);
 
-				$apiAnita->apiCall($data);
+				$apiAnita->apiCallEscritura($data);
 			}
 		}
 	}
@@ -298,14 +298,14 @@ class RetenciongananciaRepository implements RetenciongananciaRepositoryInterfac
 							", 
             	'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$request['codigo']."' " 
 				);
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
 		// Elimina los movimientos
         $data = array( 'acc' => 'delete', 
 			'tabla' => $this->tableAnita[1],
 			'sistema' => 'compras',
             'whereArmado' => " WHERE esc_codigo = '".$request['codigo']."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
 		$desdeMontos = $request['desdemontos'];
 		$hastaMontos = $request['hastamontos'];
@@ -336,7 +336,7 @@ class RetenciongananciaRepository implements RetenciongananciaRepositoryInterfac
 							'".$porcentajeRetenciones[$i_rango]."' ,
 							'".$request['codigo']."' "
 					);
-				$apiAnita->apiCall($data);
+				$apiAnita->apiCallEscritura($data);
 			}
 		}
 	}
@@ -347,13 +347,13 @@ class RetenciongananciaRepository implements RetenciongananciaRepositoryInterfac
 			'sistema' => 'compras',
 			'tabla' => $this->tableAnita[0],
             'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
         $data = array( 'acc' => 'delete', 
 			'sistema' => 'compras',
 			'tabla' => $this->tableAnita[1],
             'whereArmado' => " WHERE esc_codigo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}    
 
 		// Devuelve ultimo codigo de clientes + 1 para agregar nuevos en Anita

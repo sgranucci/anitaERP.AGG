@@ -36,6 +36,9 @@ class AppServiceProvider extends ServiceProvider
         View::composer('theme.lte.header', function ($view) {
             $view->with('urlCentroAyuda', AyudaManuales::urlCentroAyuda());
         });
+        View::composer(['ventas.cliente.editar'], function ($view) {
+            $view->with('suitecrmHabilitado', \App\Support\SuitecrmPermiso::integracionActiva());
+        });
         View::share('theme', 'lte');
 
         App::setLocale('es');

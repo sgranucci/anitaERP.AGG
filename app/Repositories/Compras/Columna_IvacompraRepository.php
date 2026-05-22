@@ -163,7 +163,7 @@ class Columna_IvacompraRepository implements Columna_IvacompraRepositoryInterfac
                 '".' '."', 
 				'".'D'."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -177,7 +177,7 @@ class Columna_IvacompraRepository implements Columna_IvacompraRepositoryInterfac
                 coli_desc_columna               = '".$request['nombrecolumna']."' "
 					,
 				'whereArmado' => " WHERE coli_columna = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
@@ -185,7 +185,7 @@ class Columna_IvacompraRepository implements Columna_IvacompraRepositoryInterfac
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita, 
                 'sistema' => 'compras',
 				'whereArmado' => " WHERE coli_columna = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 	
 }

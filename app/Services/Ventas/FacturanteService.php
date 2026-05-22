@@ -321,10 +321,8 @@ class FacturanteService
 					'".'0'."'
 					"
 			);
-			$subdiario = $apiAnita->apiCall($data);
+			$subdiario = $apiAnita->apiCallEscritura($data);
 
-			if (strpos($subdiario, 'Error') !== false)
-				return 'Error';
 
 			$vencae = $this->facturacionService->grabaVenCae(substr($venta['codigo'], 0, 3), $letra, 
 				$puntoVenta, $venta['numerocomprobante'], $cae['cae'], 
@@ -572,10 +570,8 @@ class FacturanteService
 				//		'".'0'."'
 				//		"
 				//);
-				//$subdiario = $apiAnita->apiCall($data);
+				//$subdiario = $apiAnita->apiCallEscritura($data);
 
-				//if (strpos($subdiario, 'Error') !== false)
-				//	return 'Error';
 
 				// Numera el remito
 				if ($this->ventaRepository->numeraAnita('PRE', $letra, $puntoVenta) == 'Error')
@@ -662,10 +658,8 @@ class FacturanteService
 							'".'I'."'
 						"
 				);
-		$climov = $apiAnita->apiCall($data);
+		$climov = $apiAnita->apiCallEscritura($data);
 
-		if (strpos($climov, 'Error') !== false)
-			return 'Error';
 	}	
 
 	private function grabaTesmov($cuenta, $fecha, $tipo, $letra, $puntoventa, $numero, $total)
@@ -697,10 +691,8 @@ class FacturanteService
 				' '
 				"
 		);
-		$tesmov = $apiAnita->apiCall($data);
+		$tesmov = $apiAnita->apiCallEscritura($data);
 
-		if (strpos($tesmov, 'Error') !== false)
-			return 'Error';
 	}	
 
 	private function generaCuenta($tarjeta)

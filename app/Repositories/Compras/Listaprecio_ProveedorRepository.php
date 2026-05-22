@@ -41,10 +41,7 @@ class Listaprecio_ProveedorRepository implements Listaprecio_ProveedorRepository
 
     public function persistirEnAnita(int $listaprecio_proveedor_id): void
     {
-        $anita = $this->actualizarAnitaDesdeErp($listaprecio_proveedor_id);
-        if (isset($anita['error'])) {
-            throw new Exception('Error en grabación anita. '.$anita['mensaje']);
-        }
+        $this->actualizarAnitaDesdeErp($listaprecio_proveedor_id);
     }
 
     public function importarDesdeAnita(int $lispm_nro): void
@@ -295,10 +292,7 @@ class Listaprecio_ProveedorRepository implements Listaprecio_ProveedorRepository
                 '".$usuario."'
             ",
         ];
-        $resp = $apiAnita->apiCall($dataCab);
-        if (strpos((string) $resp, 'Error') !== false) {
-            return ['error' => 'Error listapmae', 'mensaje' => $resp];
-        }
+        $apiAnita->apiCallEscritura($dataCab, null, 'listaprecio_proveedor.anita_bridge.fallo');
 
         return $this->grabarMovimientosAnitaDesdeErp($listaprecio_proveedor_id);
     }
@@ -356,10 +350,7 @@ class Listaprecio_ProveedorRepository implements Listaprecio_ProveedorRepository
             ",
             'whereArmado' => " WHERE lispm_nro = '".$listaprecio_proveedor_id."' ",
         ];
-        $resp = $apiAnita->apiCall($dataCab);
-        if (strpos((string) $resp, 'Error') !== false) {
-            return ['error' => 'Error listapmae', 'mensaje' => $resp];
-        }
+        $apiAnita->apiCallEscritura($dataCab, null, 'listaprecio_proveedor.anita_bridge.fallo');
 
         // Borra movimientos y regraba
         $dataDel = [
@@ -368,10 +359,7 @@ class Listaprecio_ProveedorRepository implements Listaprecio_ProveedorRepository
             'sistema' => 'compras',
             'whereArmado' => " WHERE listpv_nro = '".$listaprecio_proveedor_id."' ",
         ];
-        $respDel = $apiAnita->apiCall($dataDel);
-        if (strpos((string) $respDel, 'Error') !== false) {
-            return ['error' => 'Error listapmov delete', 'mensaje' => $respDel];
-        }
+        $apiAnita->apiCallEscritura($dataDel, null, 'listaprecio_proveedor.anita_bridge.fallo');
 
         return $this->grabarMovimientosAnitaDesdeErp($listaprecio_proveedor_id);
     }
@@ -426,10 +414,7 @@ class Listaprecio_ProveedorRepository implements Listaprecio_ProveedorRepository
                 ",
             ];
 
-            $resp = $apiAnita->apiCall($dataMov);
-            if (strpos((string) $resp, 'Error') !== false) {
-                return ['error' => 'Error listapmov', 'mensaje' => $resp];
-            }
+            $apiAnita->apiCallEscritura($dataMov, null, 'listaprecio_proveedor.anita_bridge.fallo');
             $orden++;
         }
 

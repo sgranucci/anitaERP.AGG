@@ -177,7 +177,7 @@ class CodigosenasaRepository implements CodigosenasaRepositoryInterface
                 '".$frio."',
                 '".$request['prefijo']."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -200,14 +200,14 @@ class CodigosenasaRepository implements CodigosenasaRepositoryInterface
                 cods_prefijo   = '".$request['prefijo']."' "
                 ,
 				'whereArmado' => " WHERE cods_codigo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 'sistema' => 'ventas', 'tabla' => $this->tableAnita, 
 				'whereArmado' => " WHERE cods_codigo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 }

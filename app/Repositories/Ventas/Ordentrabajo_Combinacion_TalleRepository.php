@@ -278,7 +278,7 @@ class Ordentrabajo_Combinacion_TalleRepository implements Ordentrabajo_Combinaci
 				'".$request['cantfact']."',
 				'".$request['aplique']."' "
         );
-        return $apiAnita->apiCall($data);
+        return $apiAnita->apiCallEscritura($data);
 	}
 
 	private function actualizarAnita($request, $id) {
@@ -302,7 +302,7 @@ class Ordentrabajo_Combinacion_TalleRepository implements Ordentrabajo_Combinaci
 					ordtv_aplique 		= '".$request['aplique']."' "
 					,
 				'whereArmado' => " WHERE ordtv_nro_orden = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	private function eliminarAnita($id) {
@@ -310,7 +310,7 @@ class Ordentrabajo_Combinacion_TalleRepository implements Ordentrabajo_Combinaci
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita, 
 				'whereArmado' => " WHERE ordtv_nro_orden = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 }
 

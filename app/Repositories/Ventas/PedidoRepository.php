@@ -330,7 +330,7 @@ class PedidoRepository implements PedidoRepositoryInterface
 				'".$request['cantidadmodificada']."',
 				'".$request['usuarioalta']."' " : " ")
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
 		// Guarda pendmov
 		for ($i = 0; $i < count($request['skus']); $i++)
@@ -410,7 +410,7 @@ class PedidoRepository implements PedidoRepositoryInterface
 					'".$request['cantidades'][$i]."',
 					'".$request['piezas'][$i]."' "
 			);
-			$apiAnita->apiCall($data);
+			$apiAnita->apiCallEscritura($data);
 		}
 	}
 
@@ -441,7 +441,7 @@ class PedidoRepository implements PedidoRepositoryInterface
 					,
 				'whereArmado' => " WHERE penm_tipo = '".$tipo."' AND penm_letra = '".$letra."' 
 									AND penm_sucursal = ".$sucursal."' AND penm_nro = ".$nro."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	private function eliminarAnita($tipo, $letra, $sucursal, $nro) {
@@ -450,7 +450,7 @@ class PedidoRepository implements PedidoRepositoryInterface
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita, 
 				'whereArmado' => " WHERE penm_tipo = '".$tipo."' AND penm_letra = '".$letra."' 
 									AND penm_sucursal = '".$sucursal."' AND penm_nro = '".$nro."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	// Devuelve ultimo codigo de clientes + 1 para agregar nuevos en Anita

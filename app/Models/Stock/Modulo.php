@@ -149,7 +149,7 @@ class Modulo extends Model
             'campos' => $campos,
             'valores' => $valores
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id, $talles, $cantidades) {
@@ -178,7 +178,7 @@ class Modulo extends Model
 				'tabla' => $this->table,
 				'valores' => $valores,
 				'whereArmado' => " WHERE modu_modulo = '".$modulo_id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
@@ -193,6 +193,6 @@ class Modulo extends Model
         $data = array( 'acc' => 'delete', 
 			'tabla' => $this->table,
 			'whereArmado' => " WHERE modu_modulo = '".$modulo_id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 }

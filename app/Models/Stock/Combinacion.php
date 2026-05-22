@@ -286,7 +286,7 @@ class Combinacion extends Model
 				'".$request->observacion."',
 				'".$request->estado."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
 		// Graba stkfich
 		$data = array( 'tabla' => $this->tableAnita[1], 
@@ -325,7 +325,7 @@ class Combinacion extends Model
 				'".'0'."',
 				'".'0'."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $origen) {
@@ -364,7 +364,7 @@ class Combinacion extends Model
 					comb_observacion = '".$request->observacion."',
 					comb_estado = '".$request->estado."' ",
 				'whereArmado' => " WHERE comb_articulo = '".str_pad($articulo->sku, 13, "0", STR_PAD_LEFT)."' AND comb_combinacion = '".$request->codigo."' ");
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
 		if ($origen == 'tecnica')
 		{
@@ -433,7 +433,7 @@ class Combinacion extends Model
 						stkfi_plvi_34_40 = '".$request->plvista_34_40."',
 						stkfi_plvi_41_45 = '".$request->plvista_41_45."' ",
 					'whereArmado' => " WHERE stkfi_articulo = '".str_pad($articulo->sku, 13, "0", STR_PAD_LEFT)."' AND stkfi_combinacion = '".$request->codigo."' ");
-        	$apiAnita->apiCall($data);
+        	$apiAnita->apiCallEscritura($data);
 		}
 	}
 
@@ -446,7 +446,7 @@ class Combinacion extends Model
 				'valores' => " 
 					comb_estado = 'I'",
 				'whereArmado' => " WHERE comb_estado = 'A'");
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($articulo, $combinacion) {
@@ -455,12 +455,12 @@ class Combinacion extends Model
 		// Borra combinacion
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[0], 
 				'whereArmado' => " WHERE comb_articulo = '".str_pad($articulo, 13, "0", STR_PAD_LEFT)."' AND comb_combinacion = '".$combinacion."' ");
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
 		// Borra stkfich
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[1], 
 				'whereArmado' => " WHERE stkfi_articulo = '".str_pad($articulo, 13, "0", STR_PAD_LEFT)."' AND stkfi_combinacion = '".$combinacion."' ");
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
     public function actualizaEstadoAnita() {

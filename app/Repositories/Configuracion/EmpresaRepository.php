@@ -208,7 +208,7 @@ class EmpresaRepository implements EmpresaRepositoryInterface
                                 ".'0'.", 
                                 '".'0'."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request) {
@@ -222,7 +222,7 @@ class EmpresaRepository implements EmpresaRepositoryInterface
                             empm_direccion = '".$request['domicilio']."', 
                             empm_cuit = '".$request['nroinscripcion']."' ", 
 						'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$request['codigo']."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
@@ -230,7 +230,7 @@ class EmpresaRepository implements EmpresaRepositoryInterface
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita,
                     'sistema' => 'contab',
 					'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 }

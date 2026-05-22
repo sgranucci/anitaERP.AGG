@@ -219,7 +219,7 @@ class MaterialcapelladaRepository implements MaterialcapelladaRepositoryInterfac
 				'".'0'."',
 				'".'0'."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request) {
@@ -228,7 +228,7 @@ class MaterialcapelladaRepository implements MaterialcapelladaRepositoryInterfac
 		$data = array( 'acc' => 'update', 'tabla' => 'stkmae', 
 					'valores' => " stkm_desc = '".$request['nombre']."' ",
 					'whereArmado' => " WHERE stkm_articulo = '".str_pad($articulo->sku, 13, "0", STR_PAD_LEFT)."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
@@ -236,6 +236,6 @@ class MaterialcapelladaRepository implements MaterialcapelladaRepositoryInterfac
 		$articulo = Articulo::select('sku')->where('id', '=', $id)->first();
         $data = array( 'acc' => 'delete', 'tabla' => 'stkmae', 
 					'whereArmado' => " WHERE stkm_articulo = '".str_pad($articulo->sku, 13, "0", STR_PAD_LEFT)."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 }

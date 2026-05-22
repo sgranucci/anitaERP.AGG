@@ -143,7 +143,7 @@ class Categoria extends Model
             'campos' => ' stka_agrupacion, stka_desc',
             'valores' => " '".$codigo."', '".$request->nombre."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -160,7 +160,7 @@ class Categoria extends Model
         $data = array( 'tabla' => $this->tableAnita, 'acc' => 'update',
 					'valores' => " stka_desc = '".  $request->nombre."'", 
 					'whereArmado' => " WHERE stka_agrupacion = '".$codigo."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
@@ -169,6 +169,6 @@ class Categoria extends Model
         $data = array( 'acc' => 'delete', 
 			'tabla' => $this->tableAnita, 
 			'whereArmado' => " WHERE stka_id = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 }

@@ -59,19 +59,19 @@ class Plarmado extends Model
             'campos' => ' plarm_codigo, plarm_desc ',
             'valores' => " '".$id."', '".$request->nombre."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
         $apiAnita = new ApiAnita();
 		$data = array( 'acc' => 'update', 'tabla' => 'plarmado', 'valores' => " plarm_desc = '".
 					$request->nombre."' ", 'whereArmado' => " WHERE plarm_codigo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 'tabla' => 'plarmado', 'whereArmado' => " WHERE plarm_codigo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 }

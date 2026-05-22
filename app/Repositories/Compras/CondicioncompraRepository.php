@@ -159,7 +159,7 @@ class CondicioncompraRepository implements CondicioncompraRepositoryInterface
 				'".$request['codigo']."', 
 				'".$request['nombre']."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -172,7 +172,7 @@ class CondicioncompraRepository implements CondicioncompraRepositoryInterface
                 concm_desc 	               			= '".$request['nombre']."' "
 					,
 				'whereArmado' => " WHERE concm_condicion = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
@@ -180,7 +180,7 @@ class CondicioncompraRepository implements CondicioncompraRepositoryInterface
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita, 
                 'sistema' => 'compras',
 				'whereArmado' => " WHERE concm_condicion = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	// Devuelve ultimo codigo de clientes + 1 para agregar nuevos en Anita

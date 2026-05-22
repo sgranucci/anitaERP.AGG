@@ -43,6 +43,7 @@ Condiciones de Venta
                     <thead>
                         <tr>
                             <th class="width20">ID</th>
+                            <th class="width20">C&oacute;digo Anita</th>
                             <th>Nombre</th>
                             <th>Cuotas</th>
                             <th class="width80" data-orderable="false"></th>
@@ -53,6 +54,9 @@ Condiciones de Venta
     						<tr data-entry-id="{{ $condicionventa->id }}">
         						<td>
             						{{ $condicionventa->id ?? '' }}
+        						</td>
+        						<td>
+            						{{ $condicionventa->codigo ?? '' }}
         						</td>
         						<td>
             						{{ $condicionventa->nombre ?? '' }}

@@ -214,7 +214,7 @@ class Capeart extends Model
 				'".$tipo."',
 				'".($tipocalculo == 'true' ? 'D' : 'P')."'"
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($articulo, $combinacion) {
@@ -222,6 +222,6 @@ class Capeart extends Model
         $data = array( 'acc' => 'delete', 
 						'tabla' => $this->table, 
 						'whereArmado' => " WHERE capea_articulo = '".str_pad($articulo, 13, "0", STR_PAD_LEFT)."' AND capea_combinacion = '".$combinacion."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 }

@@ -145,7 +145,7 @@ class EnvasesenasaRepository implements EnvasesenasaRepositoryInterface
 				'".$id."', 
 				'".$request['nombre']."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -159,14 +159,14 @@ class EnvasesenasaRepository implements EnvasesenasaRepositoryInterface
                 envs_desc 	                = '".$request['nombre']."' "
 					,
 				'whereArmado' => " WHERE envs_codigo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 'sistema' => 'ventas', 'tabla' => $this->tableAnita, 
 				'whereArmado' => " WHERE envs_codigo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 }

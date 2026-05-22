@@ -143,7 +143,7 @@ class StkmaeUltimaCompraAnitaService
         ];
 
         try {
-            $respuesta = $this->apiAnita->apiCall($payload);
+            $respuesta = $this->apiAnita->apiCallEscritura($payload);
         } catch (\Throwable $e) {
             Log::warning('StkmaeUltimaCompraAnita: error ApiAnita', ['exception' => $e]);
 

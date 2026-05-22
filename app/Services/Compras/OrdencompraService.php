@@ -35,7 +35,7 @@ class OrdencompraService
 				penmp_nro=".$numeroOrdenCompra." and
 				penmp_proveedor=prom_proveedor"
         );
-        $raw = (string) $apiAnita->apiCall($leeAnita);
+        $raw = (string) $apiAnita->apiCallEscritura($leeAnita);
         $filas = ApiAnita::decodificarListaFilas($raw);
 
 		if (count($filas) > 0) {

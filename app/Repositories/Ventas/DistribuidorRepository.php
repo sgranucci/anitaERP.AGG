@@ -154,7 +154,7 @@ class DistribuidorRepository implements DistribuidorRepositoryInterface
 				'".$request['nombre']."',
 				'".$request['porcentajecomision']."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -167,14 +167,14 @@ class DistribuidorRepository implements DistribuidorRepositoryInterface
                 distr_porc_com 	                = '".$request['porcentajecomision']."' "
 					,
 				'whereArmado' => " WHERE distr_distribuidor = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 'sistema' => 'ventas', 'tabla' => $this->tableAnita, 
 				'whereArmado' => " WHERE distr_distribuidor = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	// Devuelve ultimo codigo de distribuidors + 1 para agregar nuevos en Anita

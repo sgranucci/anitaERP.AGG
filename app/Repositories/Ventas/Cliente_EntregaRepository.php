@@ -326,7 +326,7 @@ class Cliente_EntregaRepository implements Cliente_EntregaRepositoryInterface
 				'".$codigospostales[$linea]."',
 				'".$codigotransporte."' "
         );
-        $ret = $apiAnita->apiCall($data);
+        $ret = $apiAnita->apiCallEscritura($data);
 	}
 
 	private function eliminarAnita($cliente) {
@@ -334,7 +334,7 @@ class Cliente_EntregaRepository implements Cliente_EntregaRepositoryInterface
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita, 
 				'sistema' => 'ventas',
 				'whereArmado' => " WHERE entc_cliente = '".str_pad($cliente, 6, "0", STR_PAD_LEFT)."' ");
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	private function setCamposAnita($transporte_id, &$codigotransporte)

@@ -66,7 +66,7 @@ class Zonavta extends Model
             'valores' => " '".$id."', 
 						   '".$request->nombre."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -76,7 +76,7 @@ class Zonavta extends Model
 					'valores' => " 
 								zonv_desc = '".  $request->nombre."' ",
 					'whereArmado' => " WHERE zonv_codigo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
@@ -85,7 +85,7 @@ class Zonavta extends Model
                         'sistema' => 'ventas',
 						'tabla' => 'zonavta', 
 						'whereArmado' => " WHERE zonv_codigo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
     
 }

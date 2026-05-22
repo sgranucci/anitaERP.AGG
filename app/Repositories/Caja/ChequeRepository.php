@@ -85,8 +85,6 @@ class ChequeRepository implements ChequeRepositoryInterface
         // Graba anita
         $anita = self::guardarAnita($data);
 
-        if (strpos($anita, 'Error') !== false)
-            throw new Exception('No pudo grabar ANITA');
 
         return($cheque);
     }
@@ -98,8 +96,6 @@ class ChequeRepository implements ChequeRepositoryInterface
         // Actualiza anita
         $anita = self::actualizarAnita($data, $data['codigo']);
 
-        if (strpos($anita, 'Error') !== false)
-            throw new Exception('No pudo grabar ANITA');
 
         return($cheque);
     }
@@ -113,8 +109,6 @@ class ChequeRepository implements ChequeRepositoryInterface
 
         $cheque = $this->model->destroy($id);
 
-        if (strpos($anita, 'Error') !== false)
-            throw new Exception('No pudo grabar ANITA');
 
         return $cheque;
     }
@@ -426,7 +420,7 @@ class ChequeRepository implements ChequeRepositoryInterface
                     //.".$numeroEcheq."'"
             );
         }
-        $anita = $apiAnita->apiCall($data);
+        $anita = $apiAnita->apiCallEscritura($data);
 
         return $anita;
 	}
@@ -471,7 +465,7 @@ class ChequeRepository implements ChequeRepositoryInterface
                     'whereArmado' => " WHERE cpro_cuenta = '".str_pad($codigo, 8, "0", STR_PAD_LEFT)."' AND
                                         cpro_nro_cheque = '".$request['numerocheque']."'");
         }
-        $anita = $apiAnita->apiCall($data);
+        $anita = $apiAnita->apiCallEscritura($data);
 
         return $anita;
 	}
@@ -490,7 +484,7 @@ class ChequeRepository implements ChequeRepositoryInterface
                     'whereArmado' => " WHERE cpro_cuenta = '".str_pad($cuenta, 8, "0", STR_PAD_LEFT)."' AND
                                         cpro_nro_cheque = '".$numeroCheque."'");
         }
-        $anita = $apiAnita->apiCall($data);
+        $anita = $apiAnita->apiCallEscritura($data);
         
         return $anita;
 	}

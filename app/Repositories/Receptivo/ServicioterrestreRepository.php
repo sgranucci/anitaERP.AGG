@@ -252,7 +252,7 @@ class ServicioterrestreRepository implements ServicioterrestreRepositoryInterfac
 						'".$request['porcentajeganancia']."',
 						'".$request['prepago']."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -298,7 +298,7 @@ class ServicioterrestreRepository implements ServicioterrestreRepositoryInterfac
             	'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$request['codigo']."' " 
 				);
 
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
@@ -307,7 +307,7 @@ class ServicioterrestreRepository implements ServicioterrestreRepositoryInterfac
 			'sistema' => 'receptivo',
 			'tabla' => $this->tableAnita,
             'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}    
 
 	// Devuelve ultimo codigo de retenciones de iva + 1 para agregar nuevos en Anita

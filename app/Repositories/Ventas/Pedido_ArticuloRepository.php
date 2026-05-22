@@ -429,7 +429,7 @@ class Pedido_ArticuloRepository implements Pedido_ArticuloRepositoryInterface
 						'".'0'."', 
 						'".'0'."' ")
        				);
-    			$apiAnita->apiCall($data);
+    			$apiAnita->apiCallEscritura($data);
 			}
 		}
 	}
@@ -451,7 +451,7 @@ class Pedido_ArticuloRepository implements Pedido_ArticuloRepositoryInterface
 				'whereArmado' => " WHERE penv_tipo = '".$tipo."' AND penv_letra = '".$letra."' 
 									AND penv_sucursal = '".$sucursal."' AND penv_nro = '".$nro."'
 									AND penv_orden = '".$orden."'" );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnitaNroOt($nro_orden, $codigo, $orden) {
@@ -471,7 +471,7 @@ class Pedido_ArticuloRepository implements Pedido_ArticuloRepositoryInterface
 				'whereArmado' => " WHERE penv_tipo = '".$tipo."' AND penv_letra = '".$letra."' 
 									AND penv_sucursal = '".$sucursal."' AND penv_nro = '".$nro."'
 									AND penv_orden = '".$orden."'" );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function cierrePedidoAnita($hastafecha) {
@@ -483,7 +483,7 @@ class Pedido_ArticuloRepository implements Pedido_ArticuloRepositoryInterface
     				penv_imprime_ped       = 'C',
 					penv_cantentr          = penv_cantidad",
 				'whereArmado' => " WHERE penv_fecha <= '".$hastafecha."' AND penv_nro_orden <= 0 AND penv_tipo='PED'");
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	private function eliminarAnita($tipo, $letra, $sucursal, $nro, $numeroitem = null) {
@@ -505,7 +505,7 @@ class Pedido_ArticuloRepository implements Pedido_ArticuloRepositoryInterface
 									AND penv_sucursal = '".$sucursal."' AND penv_nro = '".$nro."' "
 						);
 		}
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	// Devuelve ultimo codigo de clientes + 1 para agregar nuevos en Anita

@@ -60,8 +60,6 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
             // Graba anita
 		    $anita = self::guardarAnita($data);
 
-            if (strpos($anita, 'Error') !== false)
-                throw new Exception('No pudo grabar ANITA');
 
             DB::commit();
 
@@ -96,8 +94,6 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
             // Actualiza anita
 		    $anita = self::actualizarAnita($data, $data['codigo']);
 
-            if (strpos($anita, 'Error') !== false)
-                throw new Exception('No pudo grabar ANITA');
 
             DB::commit();
 
@@ -123,8 +119,6 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
 
             $cuentacaja = $this->model->destroy($id);
 
-            if (strpos($anita, 'Error') !== false)
-                throw new Exception('No pudo grabar ANITA');
 
             DB::commit();   
 
@@ -278,7 +272,7 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
                 '0',
 				'".$empresa."' "
         );
-        $anita = $apiAnita->apiCall($data);
+        $anita = $apiAnita->apiCallEscritura($data);
 
         $data = array( 'tabla' => 'tesmcbu', 'acc' => 'insert',
 			'sistema' => 'che_ban',
@@ -290,7 +284,7 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
                 '".str_pad($request['codigo'], 8, "0", STR_PAD_LEFT)."', 
                 '".$request['cbu']."' "
         );
-        $anita2 = $apiAnita->apiCall($data);
+        $anita2 = $apiAnita->apiCallEscritura($data);
 
         return $anita && $anita2;
 	}
@@ -312,7 +306,7 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
                         tesm_empresa 	                = '".$empresa."' "
 				,
 				'whereArmado' => " WHERE tesm_cuenta = '".str_pad($request['codigo'], 8, "0", STR_PAD_LEFT)."' " );
-        $anita = $apiAnita->apiCall($data);
+        $anita = $apiAnita->apiCallEscritura($data);
 
         $data = array( 'tabla' => 'tesmcbu', 'acc' => 'update',
 			'sistema' => 'che_ban',
@@ -321,7 +315,7 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
                 tesmc_nro_cbu  = '".$request['cbu']."' "
             ,
             'whereArmado' => " WHERE tesmc_cuenta = '".str_pad($request['codigo'], 8, "0", STR_PAD_LEFT)."' " );
-        $anita2 = $apiAnita->apiCall($data);
+        $anita2 = $apiAnita->apiCallEscritura($data);
 
         return $anita && $anita2;
 	}
@@ -331,12 +325,12 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita, 
 				'sistema' => 'che_ban',
 				'whereArmado' => " WHERE tesm_cuenta = '".str_pad($id, 8, "0", STR_PAD_LEFT)."' " );
-        $anita = $apiAnita->apiCall($data);
+        $anita = $apiAnita->apiCallEscritura($data);
 
         $data = array( 'acc' => 'delete', 'tabla' => 'tesmcbu',
 				'sistema' => 'che_ban',
 				'whereArmado' => " WHERE tesmc_cuenta = '".str_pad($id, 8, "0", STR_PAD_LEFT)."' " );
-        $anita2 = $apiAnita->apiCall($data);        
+        $anita2 = $apiAnita->apiCallEscritura($data);        
         
         return $anita&&$anita2;
 	}

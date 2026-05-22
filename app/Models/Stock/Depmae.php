@@ -100,7 +100,7 @@ class Depmae extends Model
                 'valores' => " '".$request->codigo."', '".$request->nombre."', 'S', '".$tipoDeposito."' "
             );
         }
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -120,7 +120,7 @@ class Depmae extends Model
                           depm_tipo_deposito = '".$tipoDeposito."' ", 
                         'whereArmado' => " WHERE depm_deposito = '".$request->codigo."' " );            
         }
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
@@ -130,6 +130,6 @@ class Depmae extends Model
             $data = array( 'acc' => 'delete', 'tabla' => 'depmae', 'whereArmado' => " WHERE depm_deposito = '".$id."' " );
         else
             $data = array( 'acc' => 'delete', 'tabla' => 'depmae', 'whereArmado' => " WHERE depm_deposito = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 }

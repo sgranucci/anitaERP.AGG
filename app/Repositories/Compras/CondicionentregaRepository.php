@@ -172,7 +172,7 @@ class CondicionentregaRepository implements CondicionentregaRepositoryInterface
                 '".$request['nombre']."',
 				'".$request['dias']."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -186,7 +186,7 @@ class CondicionentregaRepository implements CondicionentregaRepositoryInterface
                 conem_desc 	               			= '".$request['nombre']."' "
 					,
 				'whereArmado' => " WHERE conem_condicion = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
@@ -194,7 +194,7 @@ class CondicionentregaRepository implements CondicionentregaRepositoryInterface
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita, 
                 'sistema' => 'compras',
 				'whereArmado' => " WHERE conem_condicion = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	// Devuelve ultimo codigo de clientes + 1 para agregar nuevos en Anita

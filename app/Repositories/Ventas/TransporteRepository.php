@@ -336,7 +336,7 @@ class TransporteRepository implements TransporteRepositoryInterface
 				'".$condicioniva_id."',
 				'0'"
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -384,14 +384,14 @@ class TransporteRepository implements TransporteRepositoryInterface
                 expr_cond_iva 	                = '".$condicioniva."' "
 					,
 				'whereArmado' => " WHERE expr_codigo = '".$id."' " );			
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 'sistema' => 'ventas', 'tabla' => $this->tableAnita, 
 				'whereArmado' => " WHERE expr_codigo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	private function setCondicionIvaAnita($data, &$condicioniva)

@@ -180,7 +180,7 @@ class RetencionsussRepository implements RetencionsussRepositoryInterface
 						'".$request['valorretencion']."',
 						'".$request['minimoimponible']."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -200,7 +200,7 @@ class RetencionsussRepository implements RetencionsussRepositoryInterface
 							", 
             	'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$request['codigo']."' " 
 				);
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
@@ -209,7 +209,7 @@ class RetencionsussRepository implements RetencionsussRepositoryInterface
 			'sistema' => 'compras',
 			'tabla' => $this->tableAnita,
             'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}    
 
 	// Devuelve ultimo codigo de retenciones de suss + 1 para agregar nuevos en Anita

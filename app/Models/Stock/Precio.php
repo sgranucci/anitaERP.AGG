@@ -100,7 +100,7 @@ class Precio extends Model
             'campos' => ' stkp_articulo, stkp_lista, stkp_precio, stkp_precio_ant, stkp_cod_mon, stkp_fe_ult_act, stkp_usuario, stkp_terminal',
             'valores' => " '".$codigo."', '".$request->listaprecios->codigo."', '".$request->precio."', '".$request->precioanterior."', '".$request->moneda_id."', '".$fecha_vigencia."', '".$usuario."', 'www'"
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request) {
@@ -116,7 +116,7 @@ class Precio extends Model
 				'tabla' => $this->tableAnita,
             	'valores' => " stkp_articulo = '".$codigo."', stkp_lista = '".$request->listaprecios->codigo."', stkp_precio = '".$request->precio."', stkp_precio_ant = '".$request->precioanterior."', stkp_cod_mon = '".$request->moneda_id."', stkp_fe_ult_act = '".$fecha_vigencia."', stkp_usuario = '".$usuario."', stkp_terminal = ' '",
             	'whereArmado' => " WHERE ".$this->keyFieldAnita[0]." = '".$codigo."' AND ".$this->keyFieldAnita[1]." = '".$request->listaprecios->codigo."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($codigo, $lista) {
@@ -124,6 +124,6 @@ class Precio extends Model
         $data = array( 'acc' => 'delete', 
 						'tabla' => $this->tableAnita, 
             			'whereArmado' => " WHERE ".$this->keyFieldAnita[0]." = '".$codigo."' AND ".$this->keyFieldAnita[1]." = '".$lista."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 }

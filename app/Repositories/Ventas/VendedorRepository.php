@@ -333,7 +333,7 @@ class VendedorRepository implements VendedorRepositoryInterface
                             '".$data['comisioncobranza']."',
                             '".' '."' "
             );
-        return $apiAnita->apiCall($data);
+        return $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($data, $id) {
@@ -372,7 +372,7 @@ class VendedorRepository implements VendedorRepositoryInterface
                                 vend_legajo = '".$data['legajo_id']."',
                                 vend_codigo = '".$data['codigo']."' ",
 					'whereArmado' => " WHERE vend_codigo = '".$id."' " );
-        return $apiAnita->apiCall($data);
+        return $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
@@ -381,6 +381,6 @@ class VendedorRepository implements VendedorRepositoryInterface
                         'sistema' => 'ventas',
 						'tabla' => 'vendedor', 
 						'whereArmado' => " WHERE vend_codigo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}    
 }

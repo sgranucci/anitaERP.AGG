@@ -1772,11 +1772,8 @@ class Articulo extends Model implements Auditable
                 ];
                 break;
         }
-        $articulo = $apiAnita->apiCall($data);
+        $articulo = $apiAnita->apiCallEscritura($data);
 
-        if (strpos($articulo, 'Error') !== false) {
-            return ['error' => 'Error articulo', 'mensaje' => $articulo];
-        }
 
         // Debe grabar stcustom y stkmgastro
         if (config('app.empresa') == 'AGG') {
@@ -1887,11 +1884,8 @@ class Articulo extends Model implements Auditable
             ];
         }
 
-        $stcustom = $apiAnita->apiCall($data);
+        $stcustom = $apiAnita->apiCallEscritura($data);
 
-        if (strpos($stcustom, 'Error') !== false) {
-            return ['error' => 'Error stcustom', 'mensaje' => $stcustom];
-        }
 
         return ['success'];
     }
@@ -2211,11 +2205,8 @@ class Articulo extends Model implements Auditable
                     break;
             }
         }
-        $stkmae = $apiAnita->apiCall($data);
+        $stkmae = $apiAnita->apiCallEscritura($data);
 
-        if (strpos($stkmae, 'Error') !== false) {
-            return ['error' => 'Error stkmae', 'mensaje' => $stkmae];
-        }
 
         // Debe grabar stcustom y stkmgastro
         if (config('app.empresa') == 'AGG') {
@@ -2325,11 +2316,8 @@ class Articulo extends Model implements Auditable
             ];
         }
 
-        $stcustom = $apiAnita->apiCall($data);
+        $stcustom = $apiAnita->apiCallEscritura($data);
 
-        if (strpos($stcustom, 'Error') !== false) {
-            return ['error' => 'Error stcustom', 'mensaje' => $stcustom];
-        }
 
         return ['success'];
     }
@@ -2339,7 +2327,7 @@ class Articulo extends Model implements Auditable
         $apiAnita = new ApiAnita;
         $data = ['acc' => 'delete', 'tabla' => $this->tableAnita,
             'whereArmado' => " WHERE stkm_articulo = '".str_pad($id, 13, '0', STR_PAD_LEFT)."' "];
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
         $data = [
             'acc' => 'delete',
@@ -2347,7 +2335,7 @@ class Articulo extends Model implements Auditable
             'sistema' => 'ventas',
             'whereArmado' => " WHERE stkmg_articulo='".str_pad($id, 13, '0', STR_PAD_LEFT)."' ",
         ];
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
         $data = [
             'acc' => 'delete',
@@ -2355,7 +2343,7 @@ class Articulo extends Model implements Auditable
             'sistema' => 'ventas',
             'whereArmado' => " WHERE clave='".str_pad($id, 13, '0', STR_PAD_LEFT)."'",
         ];
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
     }
 
     private function armaVariableBierzo($request, &$codigoSenasa, &$tipoArticulo, &$tipoProducto, &$sectorSellado, &$sala,

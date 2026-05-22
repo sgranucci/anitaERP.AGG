@@ -20,12 +20,13 @@ class PaisController extends Controller
         can('listar-paises');
         $datas = Pais::orderBy('id')->get();
 
-		if ($datas->isEmpty())
-		{
-			$Pais = new Pais();
-        	$Pais->sincronizarConAnita();
-	
-        	$datas = Pais::orderBy('id')->get();
+		$pais = new Pais();
+		if ($datas->isEmpty()) {
+			$pais->sincronizarConAnita();
+			$datas = Pais::orderBy('id')->get();
+		} elseif ($datas->contains(fn ($row) => trim((string) ($row->codigo ?? '')) === '')) {
+			$pais->sincronizarCodigosDesdeAnita();
+			$datas = Pais::orderBy('id')->get();
 		}
 
         return view('configuracion.pais.index', compact('datas'));
@@ -52,9 +53,8 @@ class PaisController extends Controller
     {
         $pais = Pais::create($request->all());
 
-		// Graba anita
-		$Pais = new Pais();
-        $Pais->guardarAnita($request, $pais->id);
+		$modeloPais = new Pais();
+        $modeloPais->guardarAnita($request, $request->codigo);
 
         return redirect('configuracion/pais')->with('mensaje', 'Pais creado con exito');
     }
@@ -83,11 +83,11 @@ class PaisController extends Controller
     public function actualizar(ValidacionPais $request, $id)
     {
         can('actualizar-paises');
-        Pais::findOrFail($id)->update($request->all());
+        $pais = Pais::findOrFail($id);
+        $pais->update($request->all());
 
-		// Actualiza anita
-		$Pais = new Pais();
-        $Pais->actualizarAnita($request, $id);
+		$modeloPais = new Pais();
+        $modeloPais->actualizarAnita($request, $pais->codigo);
 
         return redirect('configuracion/pais')->with('mensaje', 'Pais actualizado con exito');
     }
@@ -102,9 +102,8 @@ class PaisController extends Controller
     {
         can('borrar-paises');
 
-		// Elimina anita
-		$Pais = new Pais();
-        $Pais->eliminarAnita($id);
+		$modeloPais = new Pais();
+        $modeloPais->eliminarAnita($id);
 
         if ($request->ajax()) {
             if (Pais::destroy($id)) {

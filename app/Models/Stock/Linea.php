@@ -161,7 +161,7 @@ class Linea extends Model
 				'campos' => ' linm_linea, linm_desc, linm_numeracion, linm_max_hormas, linm_cod_numer, linm_lista_precio',
 				'valores' => " '".$codigo."', '".$request->nombre."', '".$tiponumeracion->codigo."', '".$request->maxhorma."', '".$request->numeracion_id."', '".$request->listaprecio_id."' "
 			);
-			$apiAnita->apiCall($data);
+			$apiAnita->apiCallEscritura($data);
 
 			for ($modulo = 0; $modulo < count($modulos); $modulo++)
 			{
@@ -169,7 +169,7 @@ class Linea extends Model
 					'campos' => 'linmo_linea, linmo_modulo',
 					'valores' => " '".$codigo."', '".$modulos[$modulo]."' "
 				);
-				$apiAnita->apiCall($data);
+				$apiAnita->apiCallEscritura($data);
 			}
 		}
 		else
@@ -178,7 +178,7 @@ class Linea extends Model
 				'campos' => ' linm_linea, linm_desc',
 				'valores' => " '".$codigo."', '".$request->nombre."' "
 			);
-			$apiAnita->apiCall($data);
+			$apiAnita->apiCallEscritura($data);
 		}
 	}
 
@@ -194,7 +194,7 @@ class Linea extends Model
 			$data = array( 'acc' => 'update', 'tabla' => 'linmae', 
 						'valores' => " linm_desc = '".$request->nombre."' , linm_numeracion = '".$tiponumeracion->codigo."' , linm_max_hormas = '".$request->maxhorma."' , linm_cod_numer = '".$request->numeracion_id."' , linm_lista_precio = '".$request->listaprecio_id."' ", 
 						'whereArmado' => " WHERE linm_linea = '".$codigo."' " );
-			$apiAnita->apiCall($data);
+			$apiAnita->apiCallEscritura($data);
 
 			for ($modulo = 0; $modulo < count($modulos); $modulo++)
 			{
@@ -202,13 +202,13 @@ class Linea extends Model
 				$data = array( 'acc' => 'delete', 
 					'tabla' => 'linmod',
 					'whereArmado' => " WHERE linmo_linea = '".$codigo."' " );
-				$apiAnita->apiCall($data);
+				$apiAnita->apiCallEscritura($data);
 
 				// Graba los modulos de las lineas
 				$data = array( 'tabla' => 'linmod', 'acc' => 'insert',
 					'campos' => 'linmo_linea, linmo_modulo',
 					'valores' => " '".$codigo."', '".$modulos[$modulo]."' ");
-				$apiAnita->apiCall($data);
+				$apiAnita->apiCallEscritura($data);
 			}
 		}
 		else
@@ -216,7 +216,7 @@ class Linea extends Model
 			$data = array( 'acc' => 'update', 'tabla' => 'linmae', 
 						'valores' => " linm_desc = '".$request->nombre."' ",
 						'whereArmado' => " WHERE linm_linea = '".$codigo."' " );
-			$apiAnita->apiCall($data);
+			$apiAnita->apiCallEscritura($data);
 		}
 	}
 
@@ -227,14 +227,14 @@ class Linea extends Model
         $data = array( 'acc' => 'delete', 
 			'tabla' => $this->tableAnita,
 			'whereArmado' => " WHERE linm_linea = '".$codigo."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
 		if (config('app.empresa') == 'Calzados Ferli')
 		{
 			$data = array( 'acc' => 'delete', 
 				'tabla' => 'linmod', 
 				'whereArmado' => " WHERE linmo_linea = '".$codigo."' " );
-			$apiAnita->apiCall($data);
+			$apiAnita->apiCallEscritura($data);
 		}
 	}
 }

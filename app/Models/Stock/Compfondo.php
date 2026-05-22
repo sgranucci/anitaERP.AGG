@@ -59,19 +59,19 @@ class Compfondo extends Model
             'campos' => ' cfond_compfondo, cfond_desc ',
             'valores' => " '".$id."', '".$request->nombre."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
         $apiAnita = new ApiAnita();
 		$data = array( 'acc' => 'update', 'tabla' => 'compfondo', 'valores' => " cfond_desc = '".
 					$request->nombre."' ", 'whereArmado' => " WHERE cfond_compfondo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 'tabla' => 'compfondo', 'whereArmado' => " WHERE cfond_compfondo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 }

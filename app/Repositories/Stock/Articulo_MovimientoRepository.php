@@ -180,9 +180,7 @@ dd($medida);
                         )
             );
 
-            $stkmov = $apiAnita->apiCall($data);
-            if (strpos($stkmov, 'Error') !== false)
-                return ['error' => 'Error stkmov', 'mensaje' => $stkmov];				
+            $stkmov = $apiAnita->apiCallEscritura($data);
 
         return ['mensaje' => 'Success'];
     }

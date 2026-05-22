@@ -51,8 +51,6 @@ class ChequeraRepository implements ChequeraRepositoryInterface
             // Graba anita
 		    $anita = self::guardarAnita($data);
 
-            if (strpos($anita, 'Error') !== false)
-                throw new Exception('No pudo grabar ANITA');
 
             DB::commit();
 
@@ -77,8 +75,6 @@ class ChequeraRepository implements ChequeraRepositoryInterface
             // Actualiza anita
 		    $anita = self::actualizarAnita($data, $data['codigo']);
 
-            if (strpos($anita, 'Error') !== false)
-                throw new Exception('No pudo grabar ANITA');
 
             DB::commit();
 
@@ -104,8 +100,6 @@ class ChequeraRepository implements ChequeraRepositoryInterface
 
             $chequera = $this->model->destroy($id);
 
-            if (strpos($anita, 'Error') !== false)
-                throw new Exception('No pudo grabar ANITA');
 
             DB::commit();   
 
@@ -248,7 +242,7 @@ class ChequeraRepository implements ChequeraRepositoryInterface
                 'A',
 				'".($request['tipocheque'] == 'C' ? 'N' : $request['tipocheque'])."' "
         );
-        $anita = $apiAnita->apiCall($data);
+        $anita = $apiAnita->apiCallEscritura($data);
 
         return $anita;
 	}
@@ -282,7 +276,7 @@ class ChequeraRepository implements ChequeraRepositoryInterface
                         cproc_tipo_cheque 	            = '".($request['tipocheque'] == 'C' ? 'N' : $request['tipocheque'])."' "
 				,
 				'whereArmado' => " WHERE cproc_nro_chequera = '".$request['codigo']."' " );
-        $anita = $apiAnita->apiCall($data);
+        $anita = $apiAnita->apiCallEscritura($data);
 
         return $anita;
 	}
@@ -292,7 +286,7 @@ class ChequeraRepository implements ChequeraRepositoryInterface
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita, 
 				'sistema' => 'che_ban',
 				'whereArmado' => " WHERE cproc_nro_chequera = '".$id."' " );
-        $anita = $apiAnita->apiCall($data);
+        $anita = $apiAnita->apiCallEscritura($data);
         
         return $anita;
 	}

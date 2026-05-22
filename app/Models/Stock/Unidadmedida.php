@@ -66,7 +66,7 @@ class Unidadmedida extends Model
             'campos' => ' stkum_umd, stkum_desc, stkum_abreviatura ',
             'valores' => " '".$id."', '".$request->nombre."' , '".$request->abreviatura."'"
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -75,7 +75,7 @@ class Unidadmedida extends Model
 				'valores' => " stkum_desc = '".$request->nombre.
 					"' , stkum_abreviatura = '".$request->abreviatura."'", 
 				'whereArmado' => " WHERE stkum_umd = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
@@ -83,6 +83,6 @@ class Unidadmedida extends Model
         $data = array( 'acc' => 'delete', 
 						'tabla' => $this->tableAnita, 
 						'whereArmado' => " WHERE stkum_umd = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 }

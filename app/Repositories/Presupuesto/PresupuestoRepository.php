@@ -301,7 +301,7 @@ class PresupuestoRepository implements PresupuestoRepositoryInterface
                                 '".$request['detalle']."', 
                                 '".$request['anio']."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
         // Graba escenarios
         $nombres = $request['nombres'];
@@ -331,7 +331,7 @@ class PresupuestoRepository implements PresupuestoRepositoryInterface
                                         '".'1.0'."',
                                         '".$tipo."' "
                 );
-                $apiAnita->apiCall($data);
+                $apiAnita->apiCallEscritura($data);
             }
         }
 	}
@@ -353,14 +353,14 @@ class PresupuestoRepository implements PresupuestoRepositoryInterface
                             cdescripcion = '".$request['detalle']."', 
                             ianio = '".$request['anio']."' ", 
 						'whereArmado' => " WHERE ipresupuestoid='".$request['codigo']."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
         // Graba escenarios
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 'tabla' => 'escenariospresup',
                     'sistema' => 'base_admin',
 					'whereArmado' => " WHERE ipresupuestoid='".$request['codigo']."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
         $nombres = $request['nombres'];
         $tipos = $request['tipos'];
@@ -389,7 +389,7 @@ class PresupuestoRepository implements PresupuestoRepositoryInterface
                                         '".'1.0'."',
                                         '".$tipo."' "
                 );
-                $apiAnita->apiCall($data);
+                $apiAnita->apiCallEscritura($data);
             }
         }        
 	}
@@ -399,14 +399,14 @@ class PresupuestoRepository implements PresupuestoRepositoryInterface
         $data = array( 'acc' => 'delete', 'tabla' => 'presupuestos',
                     'sistema' => 'base_admin',
 					'whereArmado' => " WHERE ipresupuestoid='".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
         // Borra escenarios
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 'tabla' => 'escenariospresup',
                     'sistema' => 'base_admin',
 					'whereArmado' => " WHERE ipresupuestoid='".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
    	// Devuelve ultimo codigo de presupuesto + 1 para agregar nuevos en Anita

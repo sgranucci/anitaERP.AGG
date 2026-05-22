@@ -27,6 +27,7 @@ class ValidacionVendedor extends FormRequest
             'nombre' => 'required|max:50|unique:vendedor,nombre,' . $this->route('id'),
             'comisionventa' => 'sometimes|numeric|max:100',
             'comisioncobranza' => 'sometimes|numeric|max:100',
+            'codigo' => 'nullable|max:10',
         ];
     }
 }

@@ -346,9 +346,7 @@ class PartidagastoService
 							'".'1'."'"
 					);
 
-        $proyectopartidagasto = $apiAnita->apiCall($grabaAnita);
-		if (strpos($proyectopartidagasto, 'Error') !== false)
-			return ['error' => 'Error proyectopartidagasto', 'mensaje' => $proyectopartidagasto];
+        $proyectopartidagasto = $apiAnita->apiCallEscritura($grabaAnita);
 
 		return ['Success'];
 	}
@@ -445,10 +443,8 @@ class PartidagastoService
 							iescenarioid = '".$codigoEscenario."' ",
 						'whereArmado' => " WHERE ipartidaid ='".$data['codigo']."' "
 					);
-        $proyectopartidagasto = $apiAnita->apiCall($grabaAnita);
+        $proyectopartidagasto = $apiAnita->apiCallEscritura($grabaAnita);
 
-		if (strpos($proyectopartidagasto, 'Error') !== false)
-			return ['error' => 'Error proyectopartidagasto', 'mensaje' => $proyectopartidagasto];
 
 		return ['Success'];
 	}
@@ -463,10 +459,8 @@ class PartidagastoService
 						'whereArmado' => " WHERE ipartidaid='".$data['codigo']."' "
 						);
 
-		$proyectopartidagasto = $apiAnita->apiCall($grabaAnita);
+		$proyectopartidagasto = $apiAnita->apiCallEscritura($grabaAnita);
 
-		if (strpos($proyectopartidagasto, 'Error') !== false)
-			return ['error' => 'Error borrando proyectopartidagasto', 'mensaje' => $proyectopartidagasto];	
 	}
 
 	public function sincronizarConAnita(){

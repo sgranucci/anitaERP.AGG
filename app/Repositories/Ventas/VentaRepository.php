@@ -169,7 +169,7 @@ class VentaRepository implements VentaRepositoryInterface
         );
         if (isset($path_sistema))
             $data['path_sistema'] = $path_sistema;
-        $rawCompe = $apiAnita->apiCall($data);
+        $rawCompe = $apiAnita->apiCallEscritura($data);
         $errCompe = ApiAnita::extraerMensajeError($rawCompe);
         if ($errCompe !== null) {
             return 'Error al leer compemis: '.$errCompe;
@@ -195,7 +195,7 @@ class VentaRepository implements VentaRepositoryInterface
             $data['path_sistema'] = $path_sistema;
         }
 
-        $rawNumerador = $apiAnita->apiCall($data);
+        $rawNumerador = $apiAnita->apiCallEscritura($data);
         $errNumerador = ApiAnita::extraerMensajeError($rawNumerador);
         if ($errNumerador !== null) {
             return 'Error al leer numerador: '.$errNumerador;
@@ -218,7 +218,7 @@ class VentaRepository implements VentaRepositoryInterface
         if (isset($path_sistema)) {
             $data['path_sistema'] = $path_sistema;
         }
-        $numerador = $apiAnita->apiCall($data);
+        $numerador = $apiAnita->apiCallEscritura($data);
 
         if (ApiAnita::extraerMensajeError($numerador) !== null) {
             return 'Error al actualizar numerador';

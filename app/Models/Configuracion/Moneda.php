@@ -68,7 +68,7 @@ class Moneda extends Model
             			'campos' => ' mon_codigo, mon_desc, mon_abreviatura',
             			'valores' => " '".$id."', '".$request->nombre."', '".$request->abreviatura."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -78,13 +78,13 @@ class Moneda extends Model
 						'tabla' => $this->table, 
 						'valores' => " mon_desc = '".$request->nombre."', mon_abreviatura = '".$request->abreviatura."' ", 
 						'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 'sistema' => 'shared', 'tabla' => 'moneda', 
 					'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 }

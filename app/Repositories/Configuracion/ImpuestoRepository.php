@@ -166,7 +166,7 @@ class ImpuestoRepository implements ImpuestoRepositoryInterface
             			'campos' => ' impv_codigo, impv_desc, impv_tasa, impv_fecha',
             			'valores' => " '".$request['codigo']."', '".$request['nombre']."', '".$request['valor']."', '".$fechavigencia."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -180,14 +180,14 @@ class ImpuestoRepository implements ImpuestoRepositoryInterface
                         'sistema' => 'shared',
 						'valores' => " impv_desc = '".$request['nombre']."', impv_tasa = '".$request['valor']."', impv_fecha = '".$fechavigencia."' ", 
 						'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita,
 					'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 }

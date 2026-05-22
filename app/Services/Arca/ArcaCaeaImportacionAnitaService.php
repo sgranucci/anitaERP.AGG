@@ -263,7 +263,7 @@ class ArcaCaeaImportacionAnitaService
             'orderBy' => 'caea_serial',
         ];
 
-        $raw = (string) $api->apiCall($payload);
+        $raw = (string) $api->apiCallEscritura($payload);
         $decoded = json_decode(trim($raw), true);
         if (is_array($decoded) && isset($decoded['Error'])) {
             $detalle = (string) $decoded['Error'];

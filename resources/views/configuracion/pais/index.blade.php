@@ -30,7 +30,8 @@ Paises
                         <tr>
                             <th class="width20">ID</th>
                             <th>Nombre</th>
-                            <th>C&oacute;digo</th>
+                            <th>C&oacute;digo Anita</th>
+                            <th>C&oacute;digo AFIP</th>
                             <th class="width80" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -40,6 +41,7 @@ Paises
                             <td>{{$data->id}}</td>
                             <td>{{$data->nombre}}</td>
                             <td>{{$data->codigo}}</td>
+                            <td>{{$data->codigo_afip}}</td>
                             <td>
                        			@if (can('editar-paises', false))
                                 	<a href="{{route('editar_pais', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">

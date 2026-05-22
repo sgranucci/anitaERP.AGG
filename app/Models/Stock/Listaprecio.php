@@ -107,7 +107,7 @@ class Listaprecio extends Model
 				prem_formula, prem_usuario, prem_fe_ult_act ',
             'valores' => " '".$request->codigo."', '".$request->nombre."', '".$this->graba_incl_impuesto($request->incluyeimpuesto)."', '".$fecha_vigencia."', '0', '".$request->formula."', '".$usuario."', '".$fecha_vigencia."'"
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request) {
@@ -121,7 +121,7 @@ class Listaprecio extends Model
 				'tabla' => $this->tableAnita,
 				'valores' => " prem_desc = '".$request->nombre."' , prem_incl_impuesto = '".$this->graba_incl_impuesto($request->incluyeimpuesto)."' , prem_vigencia = '".$fecha_vigencia."' , prem_formula = '".$request->formula."' , prem_usuario = '".$usuario."' , prem_fe_ult_act = '".$fecha_vigencia."'",
 				'whereArmado' => " WHERE prem_lista = '".$request->codigo."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
@@ -129,6 +129,6 @@ class Listaprecio extends Model
         $data = array( 'acc' => 'delete', 
 						'tabla' => $this->tableAnita, 
 						'whereArmado' => " WHERE prem_lista = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 }

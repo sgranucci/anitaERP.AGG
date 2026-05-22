@@ -44,6 +44,8 @@ use App\Queries\Ventas\Cliente_EntregaQueryInterface;
 use App\Services\Configuracion\IIBBService;
 use App\Services\Ventas\FacturacionService;
 use App\Services\Caja\CobranzaService;
+use App\Services\Crm\SuitecrmAccountService;
+use App\Support\SuitecrmPermiso;
 use App\Mail\Ventas\ClienteProvisorio;
 use App\Mail\Ventas\ClienteDefinitivo;
 use App\Exports\Ventas\ClienteExport;
@@ -294,7 +296,9 @@ class ClienteController extends Controller
 
                 $cliente_archivo = $this->cliente_archivoRepository->create($request, $cliente->id);
 
-                if (isset($request->urlOrigen))
+                $this->clienteRepository->sincronizarAnitaDespuesDeGrabado($cliente->id);
+
+                if ($request->filled('urlOrigen'))
                 {       
                     if (str_contains($request->urlOrigen, 'ordenventa'))
                         $this->ordenventaRepository->find($request->idRemoto)->update(['cliente_id' => $cliente->id]);
@@ -304,8 +308,11 @@ class ClienteController extends Controller
             DB::commit();
         } catch (\Exception $e) {
             DB::rollback();
-            return ['errores' => $e->getMessage()];
+
+            return redirect()->back()->withInput()->withErrors(['errores' => $e->getMessage()]);
         }
+
+        $suitecrmAviso = $this->sincronizarSuitecrmCuentaTrasGrabado($cliente ?? null);
 
         if (config('cliente.ENVIA_MAIL_ALTA_CLIENTE_DEFINITIVO') == 'SI')
         {
@@ -315,10 +322,11 @@ class ClienteController extends Controller
             Mail::to($receivers)->send(new ClienteDefinitivo($request));
         }
 
-        if (isset($request->urlOrigen))
-            return redirect($request->urlOrigen);
+        if ($request->filled('urlOrigen')) {
+            return redirect($request->urlOrigen)->with($this->flashSuitecrm($suitecrmAviso, 'Cliente creado con éxito'));
+        }
 
-        return redirect('ventas/cliente')->with('mensaje', 'Cliente creado con éxito');
+        return redirect('ventas/cliente')->with($this->flashSuitecrm($suitecrmAviso, 'Cliente creado con éxito'));
     }
 
     public function guardarClienteProvisorio(ValidacionClienteProvisorio $request)
@@ -340,19 +348,24 @@ class ClienteController extends Controller
                 $cliente_articulo_suspendido = $this->cliente_articulo_suspendidoRepository->create($request->all(), $cliente->id);
 
                 $cliente_archivo = $this->cliente_archivoRepository->create($request, $cliente->id);
+
+                $this->clienteRepository->sincronizarAnitaDespuesDeGrabado($cliente->id);
             }
             DB::commit();
         } catch (\Exception $e) {
             DB::rollback();
-            return ['errores' => $e->getMessage()];
+
+            return redirect()->back()->withInput()->withErrors(['errores' => $e->getMessage()]);
         }
+
+        $suitecrmAviso = $this->sincronizarSuitecrmCuentaTrasGrabado($cliente ?? null);
 
         // Procesa envio del correo para aprobacion del cliente provisorio
         $receivers = config('cliente.MAIL_CLIENTE_PROVISORIO');
 
         Mail::to($receivers)->send(new ClienteProvisorio($request));
 
-        return redirect('ventas/pedido/crear')->with('mensaje', 'Cliente creado con exito');
+        return redirect('ventas/pedido/crear')->with($this->flashSuitecrm($suitecrmAviso, 'Cliente creado con exito'));
     }
 
     /**
@@ -387,6 +400,11 @@ class ClienteController extends Controller
         if (!isset($tipoalta))
             $tipoalta = config('cliente.tipoalta')['DEFINITIVO'][0];
 
+        $suitecrmHabilitado = SuitecrmPermiso::puedeVerSolapa();
+        $suitecrmPuedeEditar = can('gestionar-notas-suitecrm-cliente', false)
+            || can('actualizar-clientes', false);
+        $suitecrmPuedeSincronizarCuenta = SuitecrmPermiso::puedeSincronizarCuenta();
+
         return view('ventas.cliente.editar', compact('data', 'pais_query', 'provincia_query',
 			'condicioniva_query', 'zonavta_query', 'subzonavta_query', 'vendedor_query', 'transporte_query',
 			'condicionventa_query', 'listaprecio_query', 'retieneiva_enum', 'condicioniibb_enum', 'cuentacontable_query',
@@ -394,7 +412,8 @@ class ClienteController extends Controller
             'cajaespecial_enum', 'urlOrigen',
             'tiposuspensioncliente_query', 'abasto_query', 'coeficiente_query',
             'emitecertificado_enum', 'emitenotadecredito_enum', 'agregabonificacion_enum', 'distribuidor_query', 'descuentoventa_query',
-            'tipodocumento_query', 'tipopercepcion_enum', 'certificadonoretencion_enum', 'condicioniibb_query'));
+            'tipodocumento_query', 'tipopercepcion_enum', 'certificadonoretencion_enum', 'condicioniibb_query',
+            'suitecrmHabilitado', 'suitecrmPuedeEditar', 'suitecrmPuedeSincronizarCuenta'));
     }
 
     /**
@@ -425,16 +444,22 @@ class ClienteController extends Controller
 
             // Graba archivos asociados
             $this->cliente_archivoRepository->update($request, $id);
+
+            $this->clienteRepository->sincronizarAnitaDespuesDeGrabado($id);
             DB::commit();
         } catch (\Exception $e) {
             DB::rollback();
-            return ['errores' => $e->getMessage()];
+
+            return redirect()->back()->withInput()->withErrors(['errores' => $e->getMessage()]);
         }
 
-        if (isset($request->urlOrigen))
-            return redirect($request->urlOrigen);
+        $suitecrmAviso = $this->sincronizarSuitecrmCuentaTrasGrabado(Cliente::find($id));
 
-        return redirect('ventas/cliente')->with('mensaje', 'Cliente actualizado con exito');
+        if ($request->filled('urlOrigen')) {
+            return redirect($request->urlOrigen)->with($this->flashSuitecrm($suitecrmAviso, 'Cliente actualizado con exito'));
+        }
+
+        return redirect('ventas/cliente')->with($this->flashSuitecrm($suitecrmAviso, 'Cliente actualizado con exito'));
     }
 
     /**
@@ -698,5 +723,50 @@ class ClienteController extends Controller
     public function leerCuentaCorrienteAplicacion($cliente_cuentacorriente_id)
     {
         return $this->cliente_cuentacorrienteRepository->consultarAplicacion($cliente_cuentacorriente_id);
+    }
+
+    /**
+     * Sincroniza account + accounts_cstm en SuiteCRM tras alta/actualización en Anita.
+     *
+     * @return string|null Aviso si falló o quedó pendiente; null si OK o no aplica
+     */
+    private function sincronizarSuitecrmCuentaTrasGrabado($cliente): ?string
+    {
+        if (! $cliente instanceof Cliente) {
+            return null;
+        }
+
+        $service = app(SuitecrmAccountService::class);
+        if (! $service->isHabilitado() || ! SuitecrmPermiso::puedeSincronizarCuenta()) {
+            return null;
+        }
+
+        try {
+            $cliente = Cliente::with(['localidades', 'provincias', 'paises'])->find($cliente->id);
+            if (! $cliente) {
+                return null;
+            }
+
+            $resultado = $service->sincronizar($cliente);
+            if ($resultado['ok']) {
+                return null;
+            }
+
+            return $resultado['mensaje'] ?? 'No se pudo sincronizar con SuiteCRM.';
+        } catch (\Throwable $e) {
+            return 'SuiteCRM: '.$e->getMessage();
+        }
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function flashSuitecrm(?string $suitecrmAviso, string $mensajeBase): array
+    {
+        if ($suitecrmAviso !== null && $suitecrmAviso !== '') {
+            return ['mensaje' => $mensajeBase.' — '.$suitecrmAviso];
+        }
+
+        return ['mensaje' => $mensajeBase];
     }
 }

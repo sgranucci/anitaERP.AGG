@@ -57,7 +57,7 @@
     <div class="form-group row">
         <label for="codigo" class="col-lg-3 col-form-label">Código Anita</label>
         <div class="col-lg-2">
-            <input type="text" name="codigo" id="codigo" class="form-control" value="{{old('codigo', $data->codigo ?? '')}}" readonly/>
+            <input type="text" name="codigo" id="codigo" class="form-control" value="{{old('codigo', $data->codigo ?? '')}}" @if(isset($data->id)) readonly @endif maxlength="10"/>
         </div>
     </div>
     <div class="form-group row">

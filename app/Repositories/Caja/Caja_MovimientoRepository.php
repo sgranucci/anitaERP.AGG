@@ -48,8 +48,6 @@ class Caja_MovimientoRepository implements Caja_MovimientoRepositoryInterface
 		// Graba anita
 		$anita = self::guardarAnita($data);
 
-		if (strpos($anita, 'Error') !== false)
-			throw new Exception($anita);
 
 		return $caja_movimiento;
     }
@@ -63,8 +61,6 @@ class Caja_MovimientoRepository implements Caja_MovimientoRepositoryInterface
 		// Actualiza anita
 		$anita = self::actualizarAnita($data);
 
-		if (strpos($anita, 'Error') !== false)
-			throw new Exception($anita);
 
 		return $caja_movimiento;
     }
@@ -85,8 +81,6 @@ class Caja_MovimientoRepository implements Caja_MovimientoRepositoryInterface
 			$anita = self::eliminarAnita($codigoEmpresa, $caja_movimiento->tipotransaccion_caja_id,
 										$caja_movimiento->numerotransaccion);
 
-			if (strpos($anita, 'Error') !== false)
-				return 'Error';
 
         	$caja_movimiento = $this->model->destroy($id);
 		}

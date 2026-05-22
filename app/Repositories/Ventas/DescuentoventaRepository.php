@@ -126,7 +126,7 @@ class DescuentoventaRepository implements DescuentoventaRepositoryInterface
                 '".$request['cantidaddescuento']."',
                 '".$estado."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -165,14 +165,14 @@ class DescuentoventaRepository implements DescuentoventaRepositoryInterface
                 dtov_cantidaddto 	            = '".$request['cantidaddescuento']."',
                 dtov_estado 	                = '".$estado."' ",
 				'whereArmado' => " WHERE dtov_descuento = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 'sistema' => 'ventas', 'tabla' => $this->tableAnita, 
 				'whereArmado' => " WHERE dtov_descuento = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 }

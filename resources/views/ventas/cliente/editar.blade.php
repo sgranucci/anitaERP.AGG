@@ -14,6 +14,10 @@
 <script src="{{asset("assets/pages/scripts/ventas/zonavta/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/cliente/arca-padron.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/cliente/crear.js")}}" type="text/javascript"></script>
+@if (config('suitecrm.habilitado'))
+@php($suitecrmNotasJs = public_path('assets/pages/scripts/ventas/cliente/suitecrm-notas.js'))
+<script src="{{ asset('assets/pages/scripts/ventas/cliente/suitecrm-notas.js') }}?v={{ file_exists($suitecrmNotasJs) ? filemtime($suitecrmNotasJs) : time() }}" type="text/javascript"></script>
+@endif
 <script src="{{asset("assets/pages/scripts/admin/imprimirHtml.js")}}" type="text/javascript"></script>
 <script>
     $(function () {
@@ -107,6 +111,11 @@
                     <button type="button" id="botonform8" class="btn btn-info btn-sm">
                         <span class="fa fa-copy"></span> CM05
                     </button>
+                    @if (config('suitecrm.habilitado'))
+                    <button type="button" id="botonform9" class="btn btn-info btn-sm">
+                        <span class="fa fa-comments"></span> SuiteCRM
+                    </button>
+                    @endif
                     <button type="button" id="btn-consulta-arca-padron-crear" class="btn btn-outline-secondary btn-sm" title="Ingresá el CUIT y consultá el padrón ARCA">
                         <i class="fa fa-search"></i> Consulta padrón ARCA
                     </button>
@@ -120,6 +129,9 @@
                     @include('ventas.cliente.form6')
                     @include('ventas.cliente.form7')
                     @include('ventas.cliente.form8')
+                    @if (config('suitecrm.habilitado'))
+                        @include('ventas.cliente.form9')
+                    @endif
                     @include('ventas.cliente.suspensionmodal')
                 </div>
                 <div class="card-footer" style="padding-top: 0">
@@ -133,5 +145,8 @@
             @include('compras.proveedor.arca-cuit-entry-modal')
         </div>
     </div>
+    @if (config('suitecrm.habilitado'))
+        @include('ventas.cliente.suitecrm-nota-modal')
+    @endif
 </div>
 @endsection

@@ -300,9 +300,7 @@ class CapexService
 							'".date_format(Carbon::now(), 'Ymd')."',
 							'".date_format(Carbon::now(), 'H:i')."'"
 					);
-        $proyectocapex = $apiAnita->apiCall($grabaAnita);
-		if (strpos($proyectocapex, 'Error') !== false)
-			return ['error' => 'Error proyectocapex', 'mensaje' => $proyectocapex];
+        $proyectocapex = $apiAnita->apiCallEscritura($grabaAnita);
 
 		// Graba partidas del capex
 		if (isset($data['moneda_ids']))
@@ -398,10 +396,8 @@ class CapexService
 									'".$codigoPresupuesto."'"
 							);  
 							
-				$partidacapex = $apiAnita->apiCall($grabaAnita);
+				$partidacapex = $apiAnita->apiCallEscritura($grabaAnita);
 
-				if (strpos($partidacapex, 'Error') !== false)
-					return ['error' => 'Error partidacapex', 'mensaje' => $partidacapex];
 			}
 		}
 		return ['Success'];
@@ -441,10 +437,8 @@ class CapexService
 						'whereArmado' => " WHERE inroproyecto='".$data['codigo']."' "
 					);
 
-        $proyectocapex = $apiAnita->apiCall($grabaAnita);
+        $proyectocapex = $apiAnita->apiCallEscritura($grabaAnita);
 
-		if (strpos($proyectocapex, 'Error') !== false)
-			return ['error' => 'Error proyectocapex', 'mensaje' => $proyectocapex];
 
 		// Graba partidas del capex
 		if (isset($data['moneda_ids']))
@@ -625,10 +619,8 @@ class CapexService
 								);  				
 				}
 								
-				$partidacapex = $apiAnita->apiCall($grabaAnita);
+				$partidacapex = $apiAnita->apiCallEscritura($grabaAnita);
 
-				if (strpos($partidacapex, 'Error') !== false)
-					return ['error' => 'Error partidacapex', 'mensaje' => $partidacapex];
 			}
 		}
 		// Busca las partidas por numero de proyecto para ver si quedan algunas por borrar
@@ -665,7 +657,7 @@ class CapexService
 						'whereArmado' => " WHERE inropartida='".$nroPartida."' AND inroproyecto='".$nroProyecto."' "
 						);
 
-				$partidacapex = $apiAnita->apiCall($grabaAnita);
+				$partidacapex = $apiAnita->apiCallEscritura($grabaAnita);
 			}
 		}
 
@@ -682,10 +674,8 @@ class CapexService
 						'whereArmado' => " WHERE inroproyecto='".$data['codigo']."' "
 						);
 
-		$proyectocapex = $apiAnita->apiCall($grabaAnita);
+		$proyectocapex = $apiAnita->apiCallEscritura($grabaAnita);
 
-		if (strpos($proyectocapex, 'Error') !== false)
-			return ['error' => 'Error borrando proyectocapex', 'mensaje' => $proyectocapex];	
 		
         $apiAnita = new ApiAnita();
         $grabaAnita = array( 'acc' => 'delete', 
@@ -694,10 +684,8 @@ class CapexService
 						'whereArmado' => " WHERE inroproyecto='".$data['codigo']."' "
 						);
 
-		$partidacapex = $apiAnita->apiCall($grabaAnita);
+		$partidacapex = $apiAnita->apiCallEscritura($grabaAnita);
 
-		if (strpos($partidacapex, 'Error') !== false)
-			return ['error' => 'Error borrando partidacapex', 'mensaje' => $partidacapex];		
 	}
 
 	public function sincronizarConAnita(){

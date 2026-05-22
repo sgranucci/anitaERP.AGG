@@ -70,10 +70,12 @@ class VendedorController extends Controller
         {
             DB::beginTransaction();
 
-            $codigo = '';
-            self::ultimoCodigo($codigo);
-
             $data = $request->all();
+            $codigo = trim((string) ($data['codigo'] ?? ''));
+            if ($codigo === '' || config('app.empresa') !== 'INTERFORMING') {
+                $codigo = '';
+                self::ultimoCodigo($codigo);
+            }
             $data['codigo'] = $codigo;
 
             $vendedor = $this->vendedorRepository->create($data);

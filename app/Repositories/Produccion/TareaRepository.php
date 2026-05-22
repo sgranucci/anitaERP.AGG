@@ -146,7 +146,7 @@ class TareaRepository implements TareaRepositoryInterface
 				'".$id."', 
 				'".$request['nombre']."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	private function actualizarAnita($request, $id) {
@@ -157,14 +157,14 @@ class TareaRepository implements TareaRepositoryInterface
                 tar_desc 	                = '".$request['nombre']."' "
 					,
 				'whereArmado' => " WHERE tar_tarea = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	private function eliminarAnita($id) {
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita, 
 				'whereArmado' => " WHERE tar_tarea = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 }

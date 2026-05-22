@@ -319,7 +319,7 @@ class Tipotransaccion_CompraRepository implements Tipotransaccion_CompraReposito
 				'".$tomaRetencion."',
 				'".$request['estado']."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
 		// Graba centros de costo
 		Self::grabaCentrocosto($request);
@@ -355,13 +355,13 @@ class Tipotransaccion_CompraRepository implements Tipotransaccion_CompraReposito
 					tcomp_estado      = '".$request['estado']."' "
 					,
 				'whereArmado' => " WHERE tcomp_clave = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
 		// Borra centros de costo
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[1], 
 				'sistema' => 'compras',
 				'whereArmado' => " WHERE ccostc_tipo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
 		// Graba centros de costo
 		Self::grabaCentrocosto($request);
@@ -370,7 +370,7 @@ class Tipotransaccion_CompraRepository implements Tipotransaccion_CompraReposito
 		$data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[2], 
 				'sistema' => 'compras',
 				'whereArmado' => " WHERE contc_tipo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
 		// Graba formas de pago
 		Self::grabaConcepto_Ivacompra($request);
@@ -408,7 +408,7 @@ class Tipotransaccion_CompraRepository implements Tipotransaccion_CompraReposito
 								'".$codigoCentroCosto."', 
 								'".$request['abreviatura']."' "
 						);
-				$anita = $apiAnita->apiCall($data);
+				$anita = $apiAnita->apiCallEscritura($data);
 			}
 		}
 	}
@@ -446,7 +446,7 @@ class Tipotransaccion_CompraRepository implements Tipotransaccion_CompraReposito
 						'".$i_concepto."',
 						'".$codigoConceptoIvaCompra."' "
 				);
-				$apiAnita->apiCall($data);
+				$apiAnita->apiCallEscritura($data);
 			}
 		}
 	}
@@ -456,19 +456,19 @@ class Tipotransaccion_CompraRepository implements Tipotransaccion_CompraReposito
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[0], 
 				'sistema' => 'compras',
 				'whereArmado' => " WHERE tcomp_clave = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
 		// Borra centros de costo
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[1], 
 				'sistema' => 'compras',
 				'whereArmado' => " WHERE ccostc_tipo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
 		// Borra conceptos de iva compra
 		$data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[2], 
 			'sistema' => 'compras',
 			'whereArmado' => " WHERE contc_tipo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 }

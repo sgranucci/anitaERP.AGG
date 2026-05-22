@@ -24,8 +24,9 @@ class ValidacionPais extends FormRequest
     public function rules()
     {
         return [
-            'nombre' => 'required|max:255|unique:pais,nombre,' . $this->route('id'),
-            'codigo' => 'required|max:50,' 
+            'nombre' => 'required|max:30|unique:pais,nombre,'.$this->route('id'),
+            'codigo' => 'required|max:10',
+            'codigo_afip' => 'nullable|max:3',
         ];
     }
 }

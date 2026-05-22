@@ -183,7 +183,7 @@ class MediopagoRepository implements MediopagoRepositoryInterface
 				'".$tipoImputacion."',
 				'".'S'."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -204,7 +204,7 @@ class MediopagoRepository implements MediopagoRepositoryInterface
                 tctes_imputacion            = '".$imputacion."' "
 					,
 				'whereArmado' => " WHERE tctes_clave = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
@@ -212,7 +212,7 @@ class MediopagoRepository implements MediopagoRepositoryInterface
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita, 
 				'sistema' => 'che_ban',
 				'whereArmado' => " WHERE banm_codigo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 }

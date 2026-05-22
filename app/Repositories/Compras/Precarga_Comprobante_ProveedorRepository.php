@@ -123,7 +123,7 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
                 '".$request['subtotal']."',
                 '".$request['total']."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -143,7 +143,7 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
                         prec_total 	               	= '".$request['total']."' "
 					,
 				'whereArmado' => " WHERE prec_id = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
@@ -151,7 +151,7 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita, 
                 'sistema' => 'compras',
 				'whereArmado' => " WHERE prec_id = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
     public function leePrecargaComprobanteProveedor($busqueda, $flPaginando = null)

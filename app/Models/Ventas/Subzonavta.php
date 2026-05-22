@@ -67,7 +67,7 @@ class Subzonavta extends Model
             'valores' => " '".$id."', 
 						   '".$request->nombre."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -78,7 +78,7 @@ class Subzonavta extends Model
 					'valores' => " 
 						subz_desc = '".  $request->nombre."' ",
 					'whereArmado' => " WHERE subz_codigo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
@@ -87,7 +87,7 @@ class Subzonavta extends Model
                         'sistema' => 'ventas',
 						'tabla' => 'subzonavta', 
 						'whereArmado' => " WHERE subz_codigo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 }
 

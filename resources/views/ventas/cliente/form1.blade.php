@@ -160,7 +160,9 @@
 		<input type="hidden" id="tipoalta" name="tipoalta" value="{{$tipoalta ?? ''}}" >
 		<input type="hidden" id="tiposuspension_id" name="tiposuspension_id" value="{{$data->tiposuspension_id ?? ''}}" >
 		<input type="hidden" id="tiposuspensioncliente_query" value="{{$tiposuspensioncliente_query ?? ''}}" >
-		<input type="hidden" name="urlOrigen" value="{{$urlOrigen ?? ''}}" >
+		@if (!empty($urlOrigen))
+		<input type="hidden" name="urlOrigen" value="{{ $urlOrigen }}">
+		@endif
 		<input type="hidden" name="idRemoto" value="{{$idRemoto ?? ''}}" >
 		<input type="hidden" id="cliente_id" value="{{$data->id ?? ''}}" >
 </div>

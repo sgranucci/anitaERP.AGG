@@ -62,19 +62,19 @@ class Subcategoria extends Model
             'campos' => ' subc_id, subc_desc ',
             'valores' => " '".$request->codigo."', '".$request->nombre."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
         $apiAnita = new ApiAnita();
 		$data = array( 'acc' => 'update', 'tabla' => 'subcategoria', 'valores' => " subc_desc = '".
 					$request->nombre."' ", 'whereArmado' => " WHERE subc_id = '".$request->codigo."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($codigo) {
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 'tabla' => 'subcategoria', 'whereArmado' => " WHERE subc_id = '".$codigo."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 }

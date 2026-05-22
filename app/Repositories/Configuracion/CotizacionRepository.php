@@ -51,8 +51,6 @@ class CotizacionRepository implements CotizacionRepositoryInterface
 		// Graba anita
 		$anita = self::guardarAnita($data);
 
-		if (strpos($anita, 'Error') !== false)
-			throw new Exception($anita);
 
 		return $cotizacion;
     }
@@ -66,8 +64,6 @@ class CotizacionRepository implements CotizacionRepositoryInterface
 		// Actualiza anita
 		$anita = self::actualizarAnita($data);
 
-		if (strpos($anita, 'Error') !== false)
-			throw new Exception($anita);
 
 		return $cotizacion;
     }
@@ -83,8 +79,6 @@ class CotizacionRepository implements CotizacionRepositoryInterface
 
 			$anita = self::eliminarAnita($fecha);
 
-			if (strpos($anita, 'Error') !== false)
-				return 'Error';
 
         	$cotizacion = $this->model->destroy($id);
 		}
@@ -318,10 +312,8 @@ class CotizacionRepository implements CotizacionRepositoryInterface
 						'".($cotizacionVenta[9] > 0 ? $cotizacionVenta[9] : 0)."',
 						'".$fechaFormateada."' "
        		);
-			$cotizacion = $apiAnita->apiCall($data);
+			$cotizacion = $apiAnita->apiCallEscritura($data);
 			
-			if (strpos($cotizacion, 'Error') !== false)
-				return 'Error grabación cotizacion anita';
 
 			// Graba cotizacion de compra
 			$apiAnita = new ApiAnita();
@@ -352,10 +344,8 @@ class CotizacionRepository implements CotizacionRepositoryInterface
 						'".($cotizacionCompra[9] > 0 ? $cotizacionCompra[9] : 0)."',
 						'".$fechaFormateada."' "
 			);
-			$cotizacion = $apiAnita->apiCall($data);
+			$cotizacion = $apiAnita->apiCallEscritura($data);
 
-			if (strpos($cotizacion, 'Error') !== false)
-				return 'Error grabación cotiz_comp anita';
 		}
 		return 'Success';
 	}
@@ -378,13 +368,13 @@ class CotizacionRepository implements CotizacionRepositoryInterface
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[0], 
 				'sistema' => 'shared',
 				'whereArmado' => " WHERE cot_fecha = '".$fecha."'");
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
 		$apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[1], 
 				'sistema' => 'shared',
 				'whereArmado' => " WHERE cotc_fecha = '".$fecha."'");
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 }

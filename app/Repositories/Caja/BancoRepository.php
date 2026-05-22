@@ -219,7 +219,7 @@ class BancoRepository implements BancoRepositoryInterface
 				'".$condicioniva_id."',
 				'0' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -241,7 +241,7 @@ class BancoRepository implements BancoRepositoryInterface
                 banm_cond_iva 	                = '".$condicioniva."' "
 					,
 				'whereArmado' => " WHERE banm_codigo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
@@ -249,7 +249,7 @@ class BancoRepository implements BancoRepositoryInterface
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita, 
 				'sistema' => 'che_ban',
 				'whereArmado' => " WHERE banm_codigo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	private function setCondicionIvaAnita($data, &$condicioniva)

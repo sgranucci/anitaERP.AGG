@@ -232,7 +232,7 @@ class Proveedor_ArchivoRepository implements Proveedor_ArchivoRepositoryInterfac
 				'".$fechahoy."',
 				'".$hora."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data, 'proma insert', 'proveedor.anita_bridge.fallo');
 	}
 
 	private function eliminarAnita($proveedor) {
@@ -240,6 +240,6 @@ class Proveedor_ArchivoRepository implements Proveedor_ArchivoRepositoryInterfac
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita, 
 				'sistema' => 'compras',
 				'whereArmado' => " WHERE proma_proveedor = '".str_pad($proveedor, 6, "0", STR_PAD_LEFT)."' ");
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data, 'proma delete', 'proveedor.anita_bridge.fallo');
 	}
 }

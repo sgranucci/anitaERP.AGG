@@ -60,7 +60,7 @@ final class AnitaUifArchivosSync
             'campos' => $campos,
             'whereArmado' => $whereArmado,
         ];
-        $json = $apiAnita->apiCall($payload);
+        $json = $apiAnita->apiCallEscritura($payload);
         $rows = json_decode($json);
         if (! is_array($rows)) {
             return [];

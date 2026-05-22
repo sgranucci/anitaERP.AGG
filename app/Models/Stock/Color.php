@@ -59,7 +59,7 @@ class Color extends Model
             'campos' => ' col_color, col_desc ',
             'valores' => " '".$request->codigo."', '".$request->nombre."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request) {
@@ -67,12 +67,12 @@ class Color extends Model
 		$data = array( 'acc' => 'update', 'tabla' => 'color', 
 				'valores' => " col_desc = '".$request->nombre."'",
 				'whereArmado' => " WHERE col_color = '".$request->codigo."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 'tabla' => 'color', 'whereArmado' => " WHERE col_color = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 }

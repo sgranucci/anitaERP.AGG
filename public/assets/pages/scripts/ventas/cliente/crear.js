@@ -23,22 +23,22 @@
 
             if (texto == "CUIT")
             {
-                $('#numerodocumento').attr('placeholder', 'XX-XXXXXXXX-X');
+                var $nro = $('#numerodocumento');
+                $nro.attr('placeholder', 'XX-XXXXXXXX-X');
 
-                // Siempre borra el dato si pasa a CUIT
-                $('#numerodocumento').val('');
+                if ($nro.val() && typeof formatarCUIT === 'function') {
+                    formatarCUIT($nro[0]);
+                }
 
-                $('#numerodocumento').on('input', function() {
-                    var valor = $(this).val();
-
+                $nro.off('input.cuitFormat').on('input.cuitFormat', function() {
                     formatarCUIT(this);
-                });            
+                });
             }
             else
             {
                 $('#numerodocumento').removeAttr('placeholder');
 
-                $('#numerodocumento').off('input');
+                $('#numerodocumento').off('input.cuitFormat');
             }
 
             $('#numerodocumento').focus();
@@ -82,6 +82,7 @@
             $(".form6").hide();
             $(".form7").hide();
             $(".form8").hide();
+            $(".form9").hide();
         });
 
         $("#botonform2").click(function(){
@@ -93,6 +94,7 @@
             $(".form6").hide();
             $(".form7").hide();
             $(".form8").hide();
+            $(".form9").hide();
 
 			$("#titulo").html("");
 			$("#titulo").html("<span class='fa fa-cash-register'></span> Datos facturac&oacute;n");
@@ -106,7 +108,8 @@
             $(".form5").hide();
             $(".form6").hide();
             $(".form7").hide();
-            $(".form8").hide();            
+            $(".form8").hide();
+            $(".form9").hide();            
 
 			activaEventoEntrega();
 
@@ -134,6 +137,7 @@
             $(".form6").hide();
             $(".form7").hide();
             $(".form8").hide();
+            $(".form9").hide();
 
 		 	// Hace foco en el campo de la leyenda
 			$("#leyenda").focus();
@@ -147,7 +151,8 @@
             $(".form5").show();
             $(".form6").hide();
             $(".form7").hide();
-            $(".form8").hide();            
+            $(".form8").hide();
+            $(".form9").hide();            
         });
 
         $("#botonform6").click(function(){
@@ -158,7 +163,8 @@
             $(".form5").hide();
             $(".form6").show();
             $(".form7").hide();
-            $(".form8").hide();     
+            $(".form8").hide();
+            $(".form9").hide();     
             
 		 	// Hace foco en el campo de la leyenda
 			$("#leyenda").focus();            
@@ -172,7 +178,8 @@
             $(".form5").hide();
             $(".form6").hide();
             $(".form7").show();
-            $(".form8").hide();      
+            $(".form8").hide();
+            $(".form9").hide();      
             
             $('#articulo-suspendido-table').find('tr').last().find('.codigoarticulo').focus();
         });
@@ -185,7 +192,8 @@
             $(".form5").hide();
             $(".form6").hide();
             $(".form7").hide();
-            $(".form8").show();   
+            $(".form8").show();
+            $(".form9").hide();   
             
             $('#cm05-table').find('tr').last().find('.codigoprovincia').focus();
         });

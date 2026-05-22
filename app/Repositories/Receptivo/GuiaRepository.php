@@ -465,7 +465,7 @@ class GuiaRepository implements GuiaRepositoryInterface
 										'".$request['observacion']."' "
 							);
 		}
-		$apiAnita->apiCall($data);
+		$apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -549,7 +549,7 @@ class GuiaRepository implements GuiaRepositoryInterface
 					'whereArmado' => " WHERE ".$this->keyFieldAnita[1]." = '".$request['codigo']."' " 
 					);			
 		}
-		$apiAnita->apiCall($data);
+		$apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id, $tipoGuia) {
@@ -558,7 +558,7 @@ class GuiaRepository implements GuiaRepositoryInterface
 			'sistema' => 'receptivo',
 			'tabla' => $tipoGuia != 'R' ? $this->tableAnita[0] : $this->tableAnita[1],
 			'whereArmado' => " WHERE ".($tipoGuia != 'R' ? $this->keyFieldAnita[0] : $this->keyFieldAnita[1])." = '".$id."' " );
-		$apiAnita->apiCall($data);
+		$apiAnita->apiCallEscritura($data);
 	}    
 
 		// Devuelve ultimo codigo de clientes + 1 para agregar nuevos en Anita

@@ -162,7 +162,7 @@ class TipoempresaRepository implements TipoempresaRepositoryInterface
 				'".$request['codigo']."', 
 				'".$request['nombre']."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -175,7 +175,7 @@ class TipoempresaRepository implements TipoempresaRepositoryInterface
                 tipoe_desc 	               		= '".$request['nombre']."' "
 					,
 				'whereArmado' => " WHERE tipoe_codigo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
@@ -183,7 +183,7 @@ class TipoempresaRepository implements TipoempresaRepositoryInterface
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita, 
                 'sistema' => 'compras',
 				'whereArmado' => " WHERE tipoe_codigo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	// Devuelve ultimo codigo de clientes + 1 para agregar nuevos en Anita

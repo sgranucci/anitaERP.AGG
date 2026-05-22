@@ -323,7 +323,7 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
                                 '".$request['ajustamonedaextranjera'].", 
                                 '".$cuentacontable_difcambio."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
         // Lee el concepto de gasto        
         $apiAnitaConc = new ApiAnita();
@@ -372,7 +372,7 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
                             ctam_cta_dif_cbio = '".$cuentacontable_difcambio."'",
 						'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$codigo.
                                             "' AND ctam_empresa='".$request['empresa_id']."' ");
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
         $apiAnitaConc = new ApiAnita();
 
@@ -385,14 +385,14 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
                             ctaco_concepto = '".$request['conceptogasto_id']."' ",
 						'whereArmado' => " WHERE ctaco_cuenta = '".$codigo.
                                             "' AND ctaco_empresa='".$request['empresa_id']."' ");
-        $apiAnitaConc->apiCall($data);
+        $apiAnitaConc->apiCallEscritura($data);
 
         // Borra centros de costo
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[2], 
 				'sistema' => 'contab',
 				'whereArmado' => " WHERE ccosv_empresa = '".$request['empresa_id'].
                                 "' AND ccosv_cuenta = '".$codigo."' ");
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
 		// Graba centros de costo
 		Self::grabaCentrocosto($codigo, $request);
@@ -427,7 +427,7 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
                                 '".$codigo."',
 								'".$centrocosto_ids[$i_ccosto]."' " 
 						);
-				$apiAnita->apiCall($data);
+				$apiAnita->apiCallEscritura($data);
 			}
 		}
 	}
@@ -438,21 +438,21 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
                     'sistema' => 'contab',
 					'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$id.
                     "' AND ctam_empresa = '".$empresa."'" );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 
         $apiAnitaConc = new ApiAnita();
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[1],
                     'sistema' => 'contab',
 					'whereArmado' => " WHERE ctaco_cuenta = '".$id.
                     "' AND ctaco_empresa = '".$empresa."'");
-        $apiAnitaConc->apiCall($data);
+        $apiAnitaConc->apiCallEscritura($data);
 
         $apiAnitaConc = new ApiAnita();
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[2],
                     'sistema' => 'contab',
 					'whereArmado' => " WHERE ccosv_cuenta = '".$id.
                     "' AND ccosv_empresa = '".$empresa."'");
-        $apiAnitaConc->apiCall($data);
+        $apiAnitaConc->apiCallEscritura($data);
 	}
 
 	public function cambia_para_grabar($request, &$codigo, &$tipocuenta, &$ajustable, 

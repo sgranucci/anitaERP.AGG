@@ -164,7 +164,7 @@ class MonedaRepository implements MonedaRepositoryInterface
 										'".$request['abreviatura']."',
 										'".$request['codigo']."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -177,7 +177,7 @@ class MonedaRepository implements MonedaRepositoryInterface
 							mon_abreviatura = '".$request['abreviatura']."',
                 			mon_codigo =	'".$request['codigo']."'",
 						'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
@@ -186,6 +186,6 @@ class MonedaRepository implements MonedaRepositoryInterface
                     'sistema' => 'shared',
 					'tabla' => $this->tableAnita,
 					'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 }

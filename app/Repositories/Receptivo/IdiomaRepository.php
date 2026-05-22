@@ -170,7 +170,7 @@ class IdiomaRepository implements IdiomaRepositoryInterface
 						'".$request['nombre']."',
 						'".$request['abreviatura']."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -188,7 +188,7 @@ class IdiomaRepository implements IdiomaRepositoryInterface
             	'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$request['codigo']."' " 
 				);
 
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
@@ -197,7 +197,7 @@ class IdiomaRepository implements IdiomaRepositoryInterface
 			'sistema' => 'receptivo',
 			'tabla' => $this->tableAnita,
             'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}    
 
 	// Devuelve ultimo codigo de retenciones de iva + 1 para agregar nuevos en Anita

@@ -68,12 +68,12 @@ $arr = shell_exec($_cmd);
 if ($data['acc'] == "list") {
 	if (! is_readable($_nombre_ret)) {
 		header('Content-Type: application/json; charset=utf-8');
-		echo json_encode([
+		echo json_encode(array(
 			'Error' => 'UNLOAD no generó el archivo CSV (revisar permisos, ruta o SQL Informix).',
 			'csv_esperado' => $_nombre_ret,
 			'sql_file' => $_nombre_file,
 			'informix_output' => trim((string) $arr),
-		]);
+		));
 		@unlink($_nombre_file);
 		exit;
 	}

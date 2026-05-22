@@ -69,7 +69,7 @@ class Numeracion extends Model
             'campos' => ' numer_numeracion, numer_desc, numer_desde_nro, numer_hasta_nro ',
             'valores' => " '".$id."', '".$request->nombre."', '".$request->desde_nro."', '".$request->hasta_nro."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -80,12 +80,12 @@ class Numeracion extends Model
 							 " numer_desde_nro = '".  $request->desde_nro."' ", 
 							 " numer_hasta_nro = '".  $request->hasta_nro."' ", 
 				'whereArmado' => " WHERE numer_numeracion = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 'tabla' => 'numeracion', 'whereArmado' => " WHERE numer_numeracion = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 }

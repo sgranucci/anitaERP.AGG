@@ -93,7 +93,7 @@ class PuntoventaAnitaSyncService
             $payload['sistema'] = $sistema;
         }
 
-        $raw = $api->apiCall($payload);
+        $raw = $api->apiCallEscritura($payload);
         $rows = json_decode((string) $raw);
         if (! is_array($rows)) {
             Log::warning('PuntoventaAnitaSync listar: JSON inválido o vacío', [
@@ -121,7 +121,7 @@ class PuntoventaAnitaSyncService
             $payload['sistema'] = $sistema;
         }
 
-        $raw = $api->apiCall($payload);
+        $raw = $api->apiCallEscritura($payload);
         $rows = json_decode((string) $raw);
         if (! is_array($rows) || count($rows) === 0) {
             return null;

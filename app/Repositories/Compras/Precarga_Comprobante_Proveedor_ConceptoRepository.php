@@ -116,7 +116,7 @@ class Precarga_Comprobante_Proveedor_ConceptoRepository implements Precarga_Comp
                 '".$codigoConcepto."', 
                 '".$request['monto']."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
     public function traeUltimoIdConcepto()
@@ -157,7 +157,7 @@ class Precarga_Comprobante_Proveedor_ConceptoRepository implements Precarga_Comp
                         precc_monto 	               	= '".$request['montoconcepto']."' "
 					,
 				'whereArmado' => " WHERE precc_id = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
@@ -165,7 +165,7 @@ class Precarga_Comprobante_Proveedor_ConceptoRepository implements Precarga_Comp
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita, 
                 'sistema' => 'compras',
 				'whereArmado' => " WHERE precc_id = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
     public function eliminarAnitaPorPrecargaComprobanteProveedor($id) {
@@ -173,6 +173,6 @@ class Precarga_Comprobante_Proveedor_ConceptoRepository implements Precarga_Comp
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita, 
                 'sistema' => 'compras',
 				'whereArmado' => " WHERE precc_precarga_id = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
     }
 }

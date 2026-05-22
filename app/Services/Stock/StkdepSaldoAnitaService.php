@@ -187,7 +187,7 @@ class StkdepSaldoAnitaService
             ];
 
             try {
-                $respuesta = $this->apiAnita->apiCall($payload);
+                $respuesta = $this->apiAnita->apiCallEscritura($payload);
             } catch (\Throwable $e) {
                 Log::warning('StkdepSaldoAnita: error ApiAnita', ['exception' => $e->getMessage()]);
 

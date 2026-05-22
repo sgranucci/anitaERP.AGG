@@ -205,7 +205,7 @@ class Avioart extends Model
 				'".$request->codigo."', 
 				'".$tipos."'"
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($articulo, $combinacion) {
@@ -213,6 +213,6 @@ class Avioart extends Model
         $data = array( 'acc' => 'delete', 
 						'tabla' => $this->tableAnita, 
 						'whereArmado' => " WHERE avioa_articulo = '".str_pad($articulo, 13, "0", STR_PAD_LEFT)."' AND avioa_combinacion = '".$combinacion."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 }

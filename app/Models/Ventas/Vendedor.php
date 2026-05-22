@@ -121,7 +121,7 @@ class Vendedor extends Model
                            '".$request->email."',
                            '".' '."' "
         );
-        return $apiAnita->apiCall($data);
+        return $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -147,7 +147,7 @@ class Vendedor extends Model
                                 vend_estado = '".$estado."',
                                 vend_email = '".$request->email."' ", 
 					'whereArmado' => " WHERE vend_codigo = '".$id."' " );
-        return $apiAnita->apiCall($data);
+        return $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
@@ -156,6 +156,6 @@ class Vendedor extends Model
                         'sistema' => 'ventas',
 						'tabla' => 'vendedor', 
 						'whereArmado' => " WHERE vend_codigo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 }

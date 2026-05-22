@@ -283,7 +283,8 @@ class ProveedorController extends Controller
             DB::commit();
         } catch (\Exception $e) {
             DB::rollback();
-            return ['errores' => $e->getMessage()];
+
+            return redirect()->back()->withInput()->withErrors(['errores' => $e->getMessage()]);
         }
 
         // Procesa envio del correo para aprobacion del proveedor provisorio
@@ -375,8 +376,7 @@ class ProveedorController extends Controller
         } catch (\Exception $e) {
             DB::rollback();
 
-            dd($e->getMessage());
-            return ['errores' => $e->getMessage()];
+            return redirect()->back()->withInput()->withErrors(['errores' => $e->getMessage()]);
         }
 
         return redirect('compras/proveedor')->with('mensaje', 'Proveedor actualizado con exito');

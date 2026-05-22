@@ -1,7 +1,9 @@
 <?php
 
 namespace App;
+
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 
 class ApiAnita {
     public function __construct()    {
@@ -213,6 +215,32 @@ class ApiAnita {
         }
 
         return null;
+    }
+
+    /**
+     * Ejecuta escritura en Informix vía bridge y falla si la respuesta indica error.
+     */
+    public function apiCallEscritura(array $payload, ?string $contexto = null, string $logEvento = 'anita_bridge.fallo'): string
+    {
+        if ($contexto === null || $contexto === '') {
+            $tabla = $payload['tabla'] ?? 'sql';
+            $acc = $payload['acc'] ?? '';
+            $contexto = trim($tabla.' '.$acc);
+        }
+
+        $raw = (string) $this->apiCall($payload);
+        $err = self::extraerMensajeError($raw === '' ? null : $raw);
+        if ($err !== null) {
+            Log::warning($logEvento, [
+                'contexto' => $contexto,
+                'tabla' => $payload['tabla'] ?? null,
+                'acc' => $payload['acc'] ?? null,
+                'mensaje' => $err,
+            ]);
+            throw new \RuntimeException('Error al grabar en Anita ('.$contexto.'): '.$err);
+        }
+
+        return $raw;
     }
 
     /**

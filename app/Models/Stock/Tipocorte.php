@@ -59,7 +59,7 @@ class Tipocorte extends Model
             'campos' => ' tipoc_codigo, tipoc_desc, tipoc_abrev ',
             'valores' => " '".$request->codigo."', '".$request->nombre."' , '".$request->abreviatura."'"
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -68,12 +68,12 @@ class Tipocorte extends Model
 				'valores' => " tipoc_desc = '".$request->nombre.
 					"' , tipoc_abrev = '".$request->abreviatura."'", 
 				'whereArmado' => " WHERE tipoc_codigo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($id) {
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 'tabla' => 'tipocorte', 'whereArmado' => " WHERE tipoc_codigo = '".$id."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 }

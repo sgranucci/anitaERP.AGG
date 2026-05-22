@@ -111,7 +111,7 @@ final class GastronomiaInsumoStkmovAnitaService
                 'pedido' => 0,
             ], $descuentoPie);
 
-            $respuesta = $this->apiAnita->apiCall($payload);
+            $respuesta = $this->apiAnita->apiCallEscritura($payload);
             $err = ApiAnita::extraerMensajeError($respuesta);
             if ($err !== null) {
                 Log::warning('gastronomia.insumo_stkmov_anita.fallo', [

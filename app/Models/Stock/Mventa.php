@@ -64,7 +64,7 @@ class Mventa extends Model
             'valores' => " '".str_pad($request->codigo, 8, "0", STR_PAD_LEFT)
                                 ."', '".$request->nombre."' "
         );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -73,7 +73,7 @@ class Mventa extends Model
         $codigo = str_pad($request->codigo, 8, "0", STR_PAD_LEFT);
 		$data = array( 'acc' => 'update', 'tabla' => 'marmae', 'valores' => " marm_desc = '".
 					$request->nombre."' ", 'whereArmado' => " WHERE marm_marca = '".$codigo."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function eliminarAnita($codigo) {
@@ -82,6 +82,6 @@ class Mventa extends Model
         $codigo = str_pad($request->codigo, 8, "0", STR_PAD_LEFT);
 
         $data = array( 'acc' => 'delete', 'tabla' => 'marmae', 'whereArmado' => " WHERE marm_marca = '".$codigo."' " );
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
 	}
 }

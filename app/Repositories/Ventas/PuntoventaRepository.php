@@ -109,7 +109,7 @@ class PuntoventaRepository implements PuntoventaRepositoryInterface
 				'".$request['patenteacoplado']."',
 				'".$request['horarioentrega']."' ",
         ];
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
     }
 
     public function actualizarAnita($request, $id)
@@ -133,7 +133,7 @@ class PuntoventaRepository implements PuntoventaRepositoryInterface
                 expr_pag_acoplado 	            = '".$request['patenteacoplado']."',
                 expr_hs_entrega	                = '".$request['horarioentrega']."' ",
             'whereArmado' => " WHERE expr_codigo = '".$id."' "];
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
     }
 
     public function eliminarAnita($id)
@@ -141,6 +141,6 @@ class PuntoventaRepository implements PuntoventaRepositoryInterface
         $apiAnita = new ApiAnita;
         $data = ['acc' => 'delete', 'tabla' => $this->tableAnita,
             'whereArmado' => " WHERE expr_codigo = '".$id."' "];
-        $apiAnita->apiCall($data);
+        $apiAnita->apiCallEscritura($data);
     }
 }
