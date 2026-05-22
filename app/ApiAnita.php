@@ -83,9 +83,12 @@ class ApiAnita {
 
         $bdd = (string) config('anita.bdd', 'ventas');
         $bddPath = rtrim((string) config('anita.bdd_path', ''), '/');
-        $data['DB_NAME'] = $bdd;
-        $data['IFX_DB_PATH'] = ($bddPath !== '' ? $bddPath.'/' : '').$bdd;
-        $data['sistema'] = $bdd;
+        $sistema = (isset($data['sistema']) && trim((string) $data['sistema']) !== '')
+            ? trim((string) $data['sistema'])
+            : $bdd;
+        $data['sistema'] = $sistema;
+        $data['DB_NAME'] = $sistema;
+        $data['IFX_DB_PATH'] = ($bddPath !== '' ? $bddPath.'/' : '').$sistema;
         if ($bddPath !== '') {
             $data['path_sistema'] = $bddPath;
         }
@@ -228,6 +231,10 @@ class ApiAnita {
         $trim = trim($respuesta);
         if ($trim === '' || $trim === '[]') {
             return [];
+        }
+
+        if (preg_match('/(\[[\s\S]*\])\s*$/', $trim, $m)) {
+            $trim = $m[1];
         }
 
         $decoded = json_decode($trim, false);

@@ -35,12 +35,14 @@ class OrdencompraService
 				penmp_nro=".$numeroOrdenCompra." and
 				penmp_proveedor=prom_proveedor"
         );
-        $dataAnita = json_decode($apiAnita->apiCall($leeAnita));
+        $raw = (string) $apiAnita->apiCall($leeAnita);
+        $filas = ApiAnita::decodificarListaFilas($raw);
 
-		if (count($dataAnita) > 0)
-			$ordenCompra = $dataAnita[0];
-		else
+		if (count($filas) > 0) {
+			$ordenCompra = $filas[0];
+		} else {
 			return 'OC inexistente';
+		}
 
 		$apiAnita = new ApiAnita();
         $leeAnita = array( 
@@ -60,9 +62,7 @@ class OrdencompraService
 				penvp_nro=".$numeroOrdenCompra." and
 				penvp_articulo=stkm_articulo"
         );
-        $dataAnita = json_decode($apiAnita->apiCall($leeAnita));
-
-		$itemOrdenCompra = $dataAnita;
+        $itemOrdenCompra = ApiAnita::decodificarListaFilas((string) $apiAnita->apiCall($leeAnita));
 
 		return ['ordencompra' => $ordenCompra, 'item' => $itemOrdenCompra];
 	}
