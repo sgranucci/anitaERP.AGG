@@ -19,6 +19,51 @@ return [
         'https://api.waitry.net/1/interface/interface/pushExternalOrder'
     ),
 
+    'sync_status_pos_url' => env(
+        'WAITRY_SYNC_STATUS_POS_URL',
+        'https://api.waitry.net/1/interface/interface/syncStatusPOS'
+    ),
+
+    /** Evento enviado al registrar cobro de una orden importada (enum Waitry). */
+    'sync_status_pos_event' => env('WAITRY_SYNC_STATUS_POS_EVENT', 'accepted'),
+
+    /**
+     * Mapeo opcional cuentacaja_id → cash | credit_card | debit_card (JSON).
+     * El efectivo de GASTRONOMIA_CUENTACAJA_EFECTIVO_POR_EMPRESA se resuelve como cash sin estar aquí.
+     *
+     * @var array<int, string>
+     */
+    'cuentacaja_tipo_pago' => (static function (): array {
+        $raw = env('WAITRY_CUENTACAJA_TIPO_PAGO');
+        if (! is_string($raw) || $raw === '') {
+            return [];
+        }
+        $decoded = json_decode($raw, true);
+        if (! is_array($decoded)) {
+            return [];
+        }
+        $map = [];
+        foreach ($decoded as $cuentacajaId => $tipo) {
+            $tipoNorm = mb_strtolower(trim((string) $tipo));
+            if (in_array($tipoNorm, ['cash', 'credit_card', 'debit_card'], true)) {
+                $map[(int) $cuentacajaId] = $tipoNorm;
+            }
+        }
+
+        return $map;
+    })(),
+
+    'get_orders_url' => env(
+        'WAITRY_GET_ORDERS_URL',
+        'https://api.waitry.net/1/analytics/analytics/getOrdersPOS'
+    ),
+
+    /**
+     * Ventana de consulta getOrdersPOS desde el facturador (parámetros from/to).
+     * Minutos hacia atrás desde ahora; 0 = sin filtro horario (no envía from/to).
+     */
+    'get_orders_minutos_atras' => max(0, (int) env('WAITRY_GET_ORDERS_MINUTOS_ATRAS', 20)),
+
     'client_id' => env('WAITRY_CLIENT_ID'),
     'client_secret' => env('WAITRY_CLIENT_SECRET'),
     'user' => env('WAITRY_USER'),

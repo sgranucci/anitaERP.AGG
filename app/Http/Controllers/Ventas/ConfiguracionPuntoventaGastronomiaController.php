@@ -51,6 +51,7 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
             $salida_query,
             $listaprecio_query,
             $tipotransaccion_query,
+            $tipotransaccion_nota_credito_query,
             $tipotransaccion_caja_query,
             $deposito_query,
             $empresaId
@@ -65,6 +66,7 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
             'salida_query',
             'listaprecio_query',
             'tipotransaccion_query',
+            'tipotransaccion_nota_credito_query',
             'tipotransaccion_caja_query',
             'deposito_query',
         ));
@@ -91,6 +93,7 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
             $salida_query,
             $listaprecio_query,
             $tipotransaccion_query,
+            $tipotransaccion_nota_credito_query,
             $tipotransaccion_caja_query,
             $deposito_query,
             (int) $data->empresa_id
@@ -105,6 +108,7 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
             'salida_query',
             'listaprecio_query',
             'tipotransaccion_query',
+            'tipotransaccion_nota_credito_query',
             'tipotransaccion_caja_query',
             'deposito_query',
         ));
@@ -186,6 +190,7 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
         &$salida_query,
         &$listaprecio_query,
         &$tipotransaccion_query,
+        &$tipotransaccion_nota_credito_query,
         &$tipotransaccion_caja_query,
         &$deposito_query,
         ?int $empresaId = null,
@@ -204,6 +209,7 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
         $salida_query = $this->salidaRepository->all()->sortBy('nombre')->values();
         $listaprecio_query = Listaprecio::query()->orderBy('nombre')->get();
         $tipotransaccion_query = $this->tipotransaccionRepository->all(['V', 'C'], ['A']);
+        $tipotransaccion_nota_credito_query = $this->tipotransaccionRepository->all(['C'], ['A']);
         $tipotransaccion_caja_query = Tipotransaccion_Caja::query()
             ->where('operacion', 'C')
             ->orderBy('nombre')

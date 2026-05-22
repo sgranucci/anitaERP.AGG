@@ -200,6 +200,76 @@ final class GastronomiaFormulaConsumoService
     /**
      * @param  array<int, float>  $aggregados
      */
+    /**
+     * Revierte en articulo_movimiento las salidas de la factura origen (mismo ítems/insumos, signo Resta en el tipo NC).
+     *
+     * @throws \Throwable
+     */
+    public function revertirMovimientosStockDesdeFactura(
+        Venta $ventaNc,
+        Venta $ventaOrigen,
+        ConfiguracionPuntoventaGastronomia $cfg,
+        int $tipotransaccionNcId,
+        string $conceptoTipoNombre,
+        string $fechaComprobante,
+        int $monedaId,
+        ?string $fechaJornada = null,
+    ): void {
+        $fechaJornada = $fechaJornada ?? $fechaComprobante;
+        $ventaNc->loadMissing(['venta_emisiones']);
+        $ventaOrigen->loadMissing(['venta_emisiones']);
+
+        $emisionNcPorItem = $ventaNc->venta_emisiones->keyBy('numeroitem');
+        $emisionOrigenPorId = $ventaOrigen->venta_emisiones->keyBy('id');
+
+        $movimientosOrigen = Articulo_Movimiento::query()
+            ->where('venta_id', $ventaOrigen->id)
+            ->orderBy('id')
+            ->get();
+
+        foreach ($movimientosOrigen as $movOrigen) {
+            $ventaEmisionOrigenId = (int) ($movOrigen->venta_emision_id ?? 0);
+            $numeroItem = 0;
+            if ($ventaEmisionOrigenId > 0 && isset($emisionOrigenPorId[$ventaEmisionOrigenId])) {
+                $numeroItem = (int) $emisionOrigenPorId[$ventaEmisionOrigenId]->numeroitem;
+            }
+
+            $ventaEmisionNc = $numeroItem > 0 ? ($emisionNcPorItem[$numeroItem] ?? null) : null;
+            $ventaEmisionNcId = $ventaEmisionNc?->id;
+
+            $depositoId = (int) ($movOrigen->deposito_id ?? 0);
+            if ($depositoId <= 0) {
+                $depositoId = str_contains((string) $movOrigen->concepto, GastronomiaVentaDetalleSupport::SUFIJO_CONCEPTO_INSUMO)
+                    ? GastronomiaDepositoConfigSupport::depositoInsumosId($cfg)
+                    : GastronomiaDepositoConfigSupport::depositoVentaId($cfg);
+            }
+
+            $dataMovimiento = GastronomiaMovimientoStockSupport::normalizarPayloadMovimiento([
+                'fecha' => $fechaComprobante,
+                'fechajornada' => $fechaJornada,
+                'tipotransaccion_id' => $tipotransaccionNcId,
+                'venta_id' => $ventaNc->id,
+                'venta_emision_id' => $ventaEmisionNcId,
+                'articulo_id' => (int) $movOrigen->articulo_id,
+                'concepto' => $conceptoTipoNombre.(
+                    str_contains((string) $movOrigen->concepto, GastronomiaVentaDetalleSupport::SUFIJO_CONCEPTO_INSUMO)
+                        ? GastronomiaVentaDetalleSupport::SUFIJO_CONCEPTO_INSUMO
+                        : ''
+                ),
+                'cantidad' => abs((float) $movOrigen->cantidad),
+                'precio' => (string) $movOrigen->precio,
+                'costo' => (float) ($movOrigen->costo ?? 0),
+                'moneda_id' => $monedaId,
+                'incluyeimpuesto' => $movOrigen->incluyeimpuesto ?? 1,
+                'deposito_id' => $depositoId,
+                'combinacion_id' => $movOrigen->combinacion_id,
+                'loteimportacion_id' => $movOrigen->loteimportacion_id,
+            ]);
+
+            $this->articuloMovimientoService->guardaArticuloMovimiento('create', $dataMovimiento, []);
+        }
+    }
+
     private function procesarHijo(Formula_Articulo_Hijo $hijo, float $multiplier, array &$aggregados, int $depth): void
     {
         $factorLinea = (float) $hijo->cantidad * FormulaArticuloFactorCosto::efectivo($hijo->factorcosto);

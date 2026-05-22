@@ -9,6 +9,8 @@ use App\Models\Ventas\Venta;
 use App\Services\Ventas\Gastronomia\GastronomiaCuentaService;
 use App\Services\Ventas\Gastronomia\GastronomiaFacturaTicketService;
 use App\Services\Ventas\Gastronomia\GastronomiaJornadaService;
+use App\Services\Ventas\Gastronomia\GastronomiaNotaCreditoService;
+use App\Services\Ventas\Gastronomia\GastronomiaTurnoOperativoService;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
 use App\Support\Ventas\GastronomiaDepositoConfigSupport;
 use App\Support\Ventas\GastronomiaVentaDetalleSupport;
@@ -23,6 +25,8 @@ class GastronomiaFacturasDiaController extends Controller
         private readonly GastronomiaFacturaTicketService $facturaTicketService,
         private readonly GastronomiaCuentaService $cuentaService,
         private readonly GastronomiaJornadaService $jornadaService,
+        private readonly GastronomiaNotaCreditoService $notaCreditoService,
+        private readonly GastronomiaTurnoOperativoService $turnoOperativoService,
     ) {}
 
     public function index(Request $request)
@@ -51,8 +55,25 @@ class GastronomiaFacturasDiaController extends Controller
             );
         }
 
+        $notasCreditoPorFactura = [];
+        if ($registros->isNotEmpty()) {
+            $notasCreditoPorFactura = VentaGastronomiaEmision::query()
+                ->whereIn('venta_factura_origen_id', $registros->pluck('venta_id'))
+                ->pluck('venta_id', 'venta_factura_origen_id')
+                ->all();
+        }
+
+        $requiereTurno = GastronomiaTurnoOperativoService::requiereHabilitacionTurno();
+        $turnoHabilitado = ! $requiereTurno;
+        $urlHabilitacionTurno = route('gastronomia_habilitacion_turno');
+        $cfgPv = $this->cuentaService->resolverConfiguracionPv($request);
+        if ($requiereTurno && $cfgPv !== null) {
+            $turnoHabilitado = $this->turnoOperativoService->turnoHabilitadoEnPc($pc) !== null;
+        }
+
         return view('ventas.gastronomia.facturas_dia.index', [
             'registros' => $registros,
+            'notas_credito_por_factura' => $notasCreditoPorFactura,
             'fecha' => $fecha,
             'busqueda' => $busqueda,
             'identificador_pc' => $pc,
@@ -61,6 +82,9 @@ class GastronomiaFacturasDiaController extends Controller
             'articulo_filtro' => $articuloFiltro,
             'insumos_por_venta' => $insumosPorVenta,
             'jornada' => $jornada,
+            'requiere_habilitacion_turno' => $requiereTurno,
+            'turno_habilitado' => $turnoHabilitado,
+            'url_habilitacion_turno' => $urlHabilitacionTurno,
         ]);
     }
 
@@ -114,6 +138,34 @@ class GastronomiaFacturasDiaController extends Controller
         }
 
         abort(404);
+    }
+
+    public function generarNotaCredito(Request $request, int $ventaId)
+    {
+        can('generar-nota-credito-gastronomia-facturas-dia');
+
+        $resultado = $this->notaCreditoService->generarDesdeFactura($ventaId, $request);
+
+        if ($request->expectsJson() || $request->ajax()) {
+            if (! empty($resultado['ok'])) {
+                return response()->json($resultado);
+            }
+
+            return response()->json([
+                'ok' => false,
+                'error' => $resultado['error'] ?? 'No se pudo generar la nota de crédito.',
+            ], 422);
+        }
+
+        if (! empty($resultado['ok'])) {
+            return redirect()
+                ->route('gastronomia_facturas_dia')
+                ->with('mensaje', $resultado['mensaje'] ?? 'Nota de crédito generada.');
+        }
+
+        return redirect()
+            ->back()
+            ->with('mensaje-error', $resultado['error'] ?? 'No se pudo generar la nota de crédito.');
     }
 
     public function reimprimirTicket(int $ventaId)

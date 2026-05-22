@@ -268,11 +268,20 @@
             cierreParcial: @json(url('ventas/gastronomia/api/cierre-parcial-turno')),
             cerrar: @json(url('ventas/gastronomia/api/cerrar-turno')),
         },
+        waitryHabilitado: @json(config('waitry.habilitado', false)),
+        waitryGetOrdersMinutosAtras: {{ max(0, (int) config('waitry.get_orders_minutos_atras', 20)) }},
+        rutasWaitry: {
+            ordenesPendientes: @json(url('ventas/gastronomia/api/waitry-ordenes-pendientes')),
+            importarOrden: @json(url('ventas/gastronomia/api/waitry-importar-orden')),
+        },
     };
 </script>
 @php
     $gastroCuentasLibresHabilitadas = $cuentas_libres_habilitadas ?? true;
-    $gastroModoCuentas = $gastroCuentasLibresHabilitadas && ($modo_seleccion_preferido ?? 'mesa') === 'cuenta';
+    $gastroWaitryHabilitado = (bool) config('waitry.habilitado', false);
+    $gastroModoPreferido = $modo_seleccion_preferido ?? 'mesa';
+    $gastroModoCuentas = $gastroCuentasLibresHabilitadas && $gastroModoPreferido === 'cuenta';
+    $gastroModoWaitry = $gastroWaitryHabilitado && $gastroModoPreferido === 'waitry';
 @endphp
 <script src="{{ asset('assets/pages/scripts/caja/cuentacaja/consulta.js') }}"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/cliente/consulta.js') }}"></script>
@@ -367,15 +376,30 @@
                     </span>
                 </span>
                 <div class="btn-group btn-group-sm">
-                    <button type="button" class="btn btn-outline-secondary{{ $gastroModoCuentas ? '' : ' active' }}" id="btn-modo-mesa">Mesas</button>
+                    <button type="button" class="btn btn-outline-secondary{{ ($gastroModoCuentas || $gastroModoWaitry) ? '' : ' active' }}" id="btn-modo-mesa">Mesas</button>
                     @if ($gastroCuentasLibresHabilitadas)
                     <button type="button" class="btn btn-outline-secondary{{ $gastroModoCuentas ? ' active' : '' }}" id="btn-modo-cuenta">Cuentas libres</button>
+                    @endif
+                    @if ($gastroWaitryHabilitado)
+                    <button type="button" class="btn btn-outline-secondary{{ $gastroModoWaitry ? ' active' : '' }}" id="btn-modo-waitry">Cuentas externas</button>
                     @endif
                 </div>
             </div>
             <div class="card-body py-2">
-                <div id="panel-mesas" class="row{{ $gastroModoCuentas ? ' d-none' : '' }}"></div>
+                <div id="panel-mesas" class="row{{ ($gastroModoCuentas || $gastroModoWaitry) ? ' d-none' : '' }}"></div>
                 <div id="panel-cuentas" class="row{{ $gastroModoCuentas ? '' : ' d-none' }}"></div>
+                @if ($gastroWaitryHabilitado)
+                <div id="panel-waitry" class="{{ $gastroModoWaitry ? '' : 'd-none' }}">
+                    <div class="d-flex align-items-center flex-wrap mb-2" style="gap: 0.5rem;">
+                        <span class="text-muted small" id="panel-waitry-filtro-leyenda">Órdenes Waitry sin pago (getOrdersPOS)</span>
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="btn-waitry-refrescar">
+                            <i class="fa fa-refresh"></i> Actualizar
+                        </button>
+                    </div>
+                    <div id="panel-waitry-lista" class="row"></div>
+                    <p id="panel-waitry-vacio" class="text-muted small mb-0 d-none">No hay cuentas externas pendientes de facturar.</p>
+                </div>
+                @endif
                 <div class="mt-2">
                     <button type="button" class="btn btn-sm btn-success{{ $gastroModoCuentas ? '' : ' d-none' }}" id="btn-nueva-cuenta-libre"><i class="fa fa-plus"></i> Nueva cuenta</button>
                     <button type="button" class="btn btn-sm btn-outline-danger d-none" id="btn-cerrar-cuenta"><i class="fa fa-times"></i> Cerrar cuenta</button>

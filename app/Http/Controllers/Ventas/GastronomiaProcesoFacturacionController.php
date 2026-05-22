@@ -20,6 +20,7 @@ use App\Services\Ventas\Gastronomia\GastronomiaJornadaService;
 use App\Services\Ventas\Gastronomia\GastronomiaTurnoOperativoService;
 use App\Services\Ventas\Gastronomia\GastronomiaPreflightEmisionService;
 use App\Services\Ventas\Gastronomia\GastronomiaFormulaOpcionalesService;
+use App\Services\Ventas\Gastronomia\Waitry\WaitryOrdenesExternasService;
 use App\Services\Stock\PrecioService;
 use App\Support\Stock\FormulaArticuloGastronomia;
 use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
@@ -38,6 +39,7 @@ class GastronomiaProcesoFacturacionController extends Controller
         private readonly GastronomiaFormulaOpcionalesService $opcionalesService,
         private readonly GastronomiaJornadaService $jornadaService,
         private readonly GastronomiaTurnoOperativoService $turnoOperativoService,
+        private readonly WaitryOrdenesExternasService $waitryOrdenesExternasService,
     ) {}
 
     public function index(Request $request)
@@ -135,6 +137,89 @@ class GastronomiaProcesoFacturacionController extends Controller
                 GastronomiaIdentificadorPc::resolver($request),
             ),
             'url_habilitacion_turno' => route('gastronomia_habilitacion_turno'),
+            'waitry_habilitado' => config('waitry.habilitado', false),
+            'waitry_get_orders_minutos_atras' => max(0, (int) config('waitry.get_orders_minutos_atras', 20)),
+        ]);
+    }
+
+    public function apiWaitryOrdenesPendientes(Request $request)
+    {
+        can('usar-proceso-facturacion-gastronomia');
+
+        $cfg = $this->requireCfgPv($request);
+        if ($cfg instanceof \Illuminate\Http\JsonResponse) {
+            return $cfg;
+        }
+
+        if (! config('waitry.habilitado', false)) {
+            return response()->json(['ok' => false, 'error' => 'Integración Waitry deshabilitada.'], 422);
+        }
+
+        $desde = $request->get('from');
+        $hasta = $request->get('to');
+        $resultado = $this->waitryOrdenesExternasService->listarOrdenesPendientes(
+            (int) $cfg->empresa_id,
+            is_string($desde) ? $desde : null,
+            is_string($hasta) ? $hasta : null,
+        );
+
+        if (! ($resultado['ok'] ?? false)) {
+            return response()->json([
+                'ok' => false,
+                'error' => $resultado['error'] ?? 'No se pudieron obtener las órdenes Waitry.',
+            ], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'ordenes' => $resultado['ordenes'] ?? [],
+            'filtro' => $resultado['filtro'] ?? null,
+        ]);
+    }
+
+    public function apiWaitryImportarOrden(Request $request)
+    {
+        can('usar-proceso-facturacion-gastronomia');
+
+        $request->validate([
+            'waitry_order_id' => 'required|integer|min:1',
+            'cuenta_id' => 'nullable|integer|min:1',
+            'cubiertos' => 'nullable|integer|min:0',
+            'mozo_gastronomia_id' => 'nullable|integer',
+        ]);
+
+        $cfg = $this->requireCfgPv($request);
+        if ($cfg instanceof \Illuminate\Http\JsonResponse) {
+            return $cfg;
+        }
+
+        if (! config('waitry.habilitado', false)) {
+            return response()->json(['ok' => false, 'error' => 'Integración Waitry deshabilitada.'], 422);
+        }
+
+        $resultado = $this->waitryOrdenesExternasService->importarOrdenEnCuenta(
+            $cfg,
+            (int) $request->get('waitry_order_id'),
+            $request->only(['cubiertos', 'mozo_gastronomia_id']),
+            $request->filled('cuenta_id') ? (int) $request->get('cuenta_id') : null,
+        );
+
+        if (! ($resultado['ok'] ?? false)) {
+            return response()->json([
+                'ok' => false,
+                'error' => $resultado['error'] ?? 'No se pudo importar la orden.',
+                'errores' => $resultado['errores'] ?? [],
+            ], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'cuenta_id' => $resultado['cuenta']->id,
+            'cuenta' => $resultado['cuenta'],
+            'errores' => $resultado['errores'] ?? [],
+            'warn' => ($resultado['errores'] ?? []) !== []
+                ? 'Importación parcial: algunos ítems no se cargaron (ver detalle).'
+                : null,
         ]);
     }
 
@@ -241,7 +326,11 @@ class GastronomiaProcesoFacturacionController extends Controller
         if ($modo === 'cuenta' && ! config('gastronomia.cuentas_libres_habilitadas', true)) {
             return response()->json(['ok' => false, 'message' => 'Las cuentas libres no están habilitadas.'], 422);
         }
-        if (! in_array($modo, ['mesa', 'cuenta'], true)) {
+        $modosValidos = ['mesa', 'cuenta'];
+        if (config('waitry.habilitado', false)) {
+            $modosValidos[] = 'waitry';
+        }
+        if (! in_array($modo, $modosValidos, true)) {
             return response()->json(['ok' => false, 'message' => 'Modo inválido.'], 422);
         }
 
@@ -879,7 +968,12 @@ class GastronomiaProcesoFacturacionController extends Controller
     {
         $modo = Cache::get(generaKey('gastronomia-modo-seleccion'));
 
-        return in_array($modo, ['mesa', 'cuenta'], true) ? $modo : null;
+        $modosValidos = ['mesa', 'cuenta'];
+        if (config('waitry.habilitado', false)) {
+            $modosValidos[] = 'waitry';
+        }
+
+        return in_array($modo, $modosValidos, true) ? $modo : null;
     }
 
     private function listaPrecioIdDesdeCfg(ConfiguracionPuntoventaGastronomia $cfg): int

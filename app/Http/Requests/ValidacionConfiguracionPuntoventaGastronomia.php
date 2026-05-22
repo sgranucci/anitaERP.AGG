@@ -59,6 +59,7 @@ class ValidacionConfiguracionPuntoventaGastronomia extends FormRequest
             'deposito_venta_id' => 'required|exists:depmae,id',
             'deposito_insumos_id' => 'required|exists:depmae,id',
             'tipotransaccion_id' => 'required|exists:tipotransaccion,id',
+            'tipotransaccion_nota_credito_id' => 'nullable|exists:tipotransaccion,id',
             'tipotransaccion_caja_id' => 'required|exists:tipotransaccion_caja,id',
         ];
     }
@@ -76,6 +77,7 @@ class ValidacionConfiguracionPuntoventaGastronomia extends FormRequest
             'deposito_venta_id' => 'depósito de artículos facturados',
             'deposito_insumos_id' => 'depósito de descuento de insumos',
             'tipotransaccion_id' => 'tipo de transacción (factura)',
+            'tipotransaccion_nota_credito_id' => 'tipo de transacción (nota de crédito)',
             'tipotransaccion_caja_id' => 'tipo de transacción de caja (cobranza)',
         ];
     }

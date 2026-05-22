@@ -124,6 +124,20 @@
     </div>
 </div>
 <div class="form-group row">
+    <label for="tipotransaccion_nota_credito_id" class="col-lg-3 col-form-label">Tipo de transacción (nota de crédito)</label>
+    <div class="col-lg-8">
+        <select name="tipotransaccion_nota_credito_id" id="tipotransaccion_nota_credito_id" class="form-control">
+            <option value="">— Usar respaldo .env —</option>
+            @foreach ($tipotransaccion_nota_credito_query as $tt)
+                <option value="{{ $tt->id }}" {{ (int) old('tipotransaccion_nota_credito_id', $data->tipotransaccion_nota_credito_id ?? config('gastronomia.tipotransaccion_nota_credito_id')) === (int) $tt->id ? 'selected' : '' }}>
+                    {{ $tt->abreviatura }} — {{ $tt->nombre }} ({{ $tt->codigo }})
+                </option>
+            @endforeach
+        </select>
+        <small class="form-text text-muted">Usado al generar NC desde Facturas del día (signo Resta). Mismo punto de venta que la factura origen.</small>
+    </div>
+</div>
+<div class="form-group row">
     <label for="tipotransaccion_caja_id" class="col-lg-3 col-form-label requerido">Tipo de transacción de caja (cobranza)</label>
     <div class="col-lg-8">
         <select name="tipotransaccion_caja_id" id="tipotransaccion_caja_id" class="form-control" required>

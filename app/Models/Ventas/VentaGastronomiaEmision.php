@@ -16,6 +16,7 @@ class VentaGastronomiaEmision extends Model
 
     protected $fillable = [
         'venta_id', 'cuenta_gastronomia_id', 'identificador_pc', 'configuracion_puntoventa_gastronomia_id',
+        'venta_factura_origen_id',
     ];
 
     public function venta()
@@ -31,5 +32,15 @@ class VentaGastronomiaEmision extends Model
     public function configuracionPuntoventa()
     {
         return $this->belongsTo(ConfiguracionPuntoventaGastronomia::class, 'configuracion_puntoventa_gastronomia_id');
+    }
+
+    public function ventaFacturaOrigen()
+    {
+        return $this->belongsTo(Venta::class, 'venta_factura_origen_id');
+    }
+
+    public function notaCreditoEmision()
+    {
+        return $this->hasOne(self::class, 'venta_factura_origen_id', 'venta_id');
     }
 }

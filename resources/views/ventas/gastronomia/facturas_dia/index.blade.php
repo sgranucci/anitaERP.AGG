@@ -11,6 +11,53 @@
     var csrfToken = document.querySelector('meta[name="csrf-token"]');
     var token = csrfToken ? csrfToken.getAttribute('content') : '';
 
+    document.querySelectorAll('.js-fd-generar-nc').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var ventaId = btn.getAttribute('data-venta-id');
+            var codigo = btn.getAttribute('data-codigo') || '';
+            if (!ventaId || btn.disabled) return;
+            var msg = '¿Generar nota de crédito para el comprobante ' + (codigo || ('#' + ventaId)) + '?\n\n'
+                + 'Se anulará fiscalmente la factura, revertirá stock/insumos y registrará el comprobante en el turno de esta terminal.';
+            if (!window.confirm(msg)) return;
+            btn.disabled = true;
+            fetch('{{ url('ventas/gastronomia/facturas-dia') }}/' + ventaId + '/generar-nota-credito', {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': token,
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+            })
+                .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+                .then(function (res) {
+                    if (res.ok && res.body.ok) {
+                        var txt = res.body.mensaje || 'Nota de crédito generada.';
+                        if (typeof toastr !== 'undefined') {
+                            if (res.body.warn) {
+                                toastr.warning(res.body.warn);
+                            }
+                            toastr.success(txt);
+                        } else {
+                            alert((res.body.warn ? res.body.warn + '\n\n' : '') + txt);
+                        }
+                        window.location.reload();
+                    } else {
+                        var err = (res.body && (res.body.error || res.body.mensaje)) || 'Error al generar la nota de crédito.';
+                        if (typeof toastr !== 'undefined') toastr.error(err);
+                        else alert(err);
+                    }
+                })
+                .catch(function () {
+                    if (typeof toastr !== 'undefined') toastr.error('Error de comunicación al generar la nota de crédito.');
+                    else alert('Error de comunicación al generar la nota de crédito.');
+                })
+                .finally(function () { btn.disabled = false; });
+        });
+    });
+
     document.querySelectorAll('.js-fd-reimprimir-ticket').forEach(function (btn) {
         btn.addEventListener('click', function (e) {
             e.preventDefault();
@@ -83,6 +130,13 @@
         @elseif ($jornada !== null)
             <div class="alert alert-secondary py-2 mb-2">
                 Sin jornada abierta para esta empresa. Mostrando fecha de jornada indicada o el día de hoy.
+            </div>
+        @endif
+        @if (($requiere_habilitacion_turno ?? false) && ! ($turno_habilitado ?? false))
+            <div class="alert alert-warning py-2 mb-2">
+                No hay turno habilitado en esta terminal (<strong>{{ $identificador_pc }}</strong>).
+                Debe <a href="{{ $url_habilitacion_turno ?? route('gastronomia_habilitacion_turno') }}">habilitar el turno</a>
+                antes de generar notas de crédito desde este listado.
             </div>
         @endif
         <div class="card card-info">
@@ -205,6 +259,12 @@
                                 if ($articulo_filtro ?? null) {
                                     $verParams['articulo_id'] = $articulo_filtro->id;
                                 }
+                                $ncVentaId = ($notas_credito_por_factura ?? [])[$r->venta_id] ?? null;
+                                $puedeNc = can('generar-nota-credito-gastronomia-facturas-dia', false)
+                                    && $v
+                                    && (float) ($v->total ?? 0) > 0.01
+                                    && $ncVentaId === null
+                                    && (! ($requiere_habilitacion_turno ?? false) || ($turno_habilitado ?? false));
                             @endphp
                             <tr>
                                 @if ($colInsumos)
@@ -269,6 +329,21 @@
                                     @if (can('editar-factura', false) && $v)
                                         <a href="{{ route('editar_factura', ['id' => $v->id, 'origen' => 'gastronomia_facturas_dia']) }}" class="btn-accion-tabla tooltipsC" title="Editar comprobante">
                                             <i class="fa fa-edit"></i>
+                                        </a>
+                                    @endif
+                                    @if ($puedeNc)
+                                        <button type="button"
+                                            class="btn-accion-tabla tooltipsC js-fd-generar-nc border-0 bg-transparent p-0"
+                                            data-venta-id="{{ $v->id }}"
+                                            data-codigo="{{ $v->codigo ?? '' }}"
+                                            title="Generar nota de crédito">
+                                            <i class="fas fa-undo text-warning"></i>
+                                        </button>
+                                    @elseif ($ncVentaId)
+                                        <a href="{{ route('gastronomia_facturas_dia_ver', ['ventaId' => $ncVentaId]) }}"
+                                           class="btn-accion-tabla tooltipsC"
+                                           title="Ver nota de crédito generada">
+                                            <i class="fas fa-undo text-muted"></i>
                                         </a>
                                     @endif
                                     @if ($v)

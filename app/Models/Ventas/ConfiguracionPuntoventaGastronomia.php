@@ -30,6 +30,7 @@ class ConfiguracionPuntoventaGastronomia extends Model implements Auditable
         'deposito_venta_id',
         'deposito_insumos_id',
         'tipotransaccion_id',
+        'tipotransaccion_nota_credito_id',
         'tipotransaccion_caja_id',
     ];
 
@@ -81,6 +82,11 @@ class ConfiguracionPuntoventaGastronomia extends Model implements Auditable
     public function tipotransaccion()
     {
         return $this->belongsTo(Tipotransaccion::class, 'tipotransaccion_id');
+    }
+
+    public function tipotransaccionNotaCredito()
+    {
+        return $this->belongsTo(Tipotransaccion::class, 'tipotransaccion_nota_credito_id');
     }
 
     public function tipotransaccionCaja()

@@ -1138,6 +1138,8 @@ Route::get('ventas/gastronomia/api/turno-estado', 'Ventas\GastronomiaProcesoFact
 Route::post('ventas/gastronomia/api/cierre-parcial-turno', 'Ventas\GastronomiaProcesoFacturacionController@apiCierreParcialTurno')->name('gastronomia_api_cierre_parcial_turno');
 Route::post('ventas/gastronomia/api/cerrar-turno', 'Ventas\GastronomiaProcesoFacturacionController@apiCerrarTurno')->name('gastronomia_api_cerrar_turno');
 Route::post('ventas/gastronomia/api/preferencia-modo-seleccion', 'Ventas\GastronomiaProcesoFacturacionController@apiGuardarPreferenciaModoSeleccion')->name('gastronomia_api_preferencia_modo_seleccion');
+Route::get('ventas/gastronomia/api/waitry-ordenes-pendientes', 'Ventas\GastronomiaProcesoFacturacionController@apiWaitryOrdenesPendientes')->name('gastronomia_api_waitry_ordenes_pendientes');
+Route::post('ventas/gastronomia/api/waitry-importar-orden', 'Ventas\GastronomiaProcesoFacturacionController@apiWaitryImportarOrden')->name('gastronomia_api_waitry_importar_orden');
 Route::get('ventas/gastronomia/api/mesas', 'Ventas\GastronomiaProcesoFacturacionController@apiMesas')->name('gastronomia_api_mesas');
 Route::get('ventas/gastronomia/api/cuentas-activas', 'Ventas\GastronomiaProcesoFacturacionController@apiCuentasActivas')->name('gastronomia_api_cuentas_activas');
 Route::get('ventas/gastronomia/api/cuenta/{id}', 'Ventas\GastronomiaProcesoFacturacionController@apiCuentaVer')->name('gastronomia_api_cuenta_ver');
@@ -1193,6 +1195,7 @@ Route::get('ventas/gastronomia/facturas-dia', 'Ventas\GastronomiaFacturasDiaCont
 Route::get('ventas/lista-gastronomia-facturas-dia/{formato}', 'Ventas\GastronomiaFacturasDiaController@exportar')->name('listar_gastronomia_facturas_dia');
 Route::get('ventas/gastronomia/facturas-dia/{ventaId}/ver', 'Ventas\GastronomiaFacturasDiaController@ver')->name('gastronomia_facturas_dia_ver');
 Route::post('ventas/gastronomia/facturas-dia/{ventaId}/reimprimir-ticket', 'Ventas\GastronomiaFacturasDiaController@reimprimirTicket')->name('gastronomia_facturas_dia_reimprimir_ticket');
+Route::post('ventas/gastronomia/facturas-dia/{ventaId}/generar-nota-credito', 'Ventas\GastronomiaFacturasDiaController@generarNotaCredito')->name('gastronomia_facturas_dia_generar_nota_credito');
 
 Route::get('ventas/arca-caea', 'Ventas\ArcaCaeaController@index')->name('arca_caea');
 Route::get('ventas/arca-caea/{id}', 'Ventas\ArcaCaeaController@show')->name('arca_caea_ver');

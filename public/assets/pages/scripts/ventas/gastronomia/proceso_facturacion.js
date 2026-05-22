@@ -11,7 +11,8 @@
     let cuentaActivaConLineas = null;
     let lastDescuentoGastronomiaMeta = null;
     const IMPORTE_MINIMO_FACTURA = 0.01;
-    let modoMesa = true;
+    /** @type {'mesa'|'cuenta'|'waitry'} */
+    let modoSeleccion = 'mesa';
     let pendingArticulo = null;
     let pendingOpcionalesCtx = null;
     let pendingAbrirCuentaResolver = null;
@@ -48,8 +49,41 @@
         if (btnModoCuenta) {
             btnModoCuenta.classList.toggle('d-none', !habilitadas);
         }
-        if (!habilitadas && !modoMesa) {
-            setModo(true, { silent: true });
+        if (!habilitadas && modoSeleccion === 'cuenta') {
+            setModo('mesa', { silent: true });
+        }
+    }
+
+    function waitryHabilitadoEnPos() {
+        return G.waitryHabilitado === true;
+    }
+
+    function waitryMinutosAtrasFiltro() {
+        const n = parseInt(String(G.waitryGetOrdersMinutosAtras ?? '20'), 10);
+        return Number.isFinite(n) && n >= 0 ? n : 20;
+    }
+
+    function actualizarLeyendaFiltroWaitry(filtroApi) {
+        const el = document.getElementById('panel-waitry-filtro-leyenda');
+        if (!el) return;
+        const min =
+            filtroApi && filtroApi.minutos_atras != null
+                ? parseInt(String(filtroApi.minutos_atras), 10)
+                : waitryMinutosAtrasFiltro();
+        if (min > 0) {
+            el.textContent = 'Órdenes Waitry sin pago — últimos ' + min + ' min';
+        } else {
+            el.textContent = 'Órdenes Waitry sin pago (sin filtro horario)';
+        }
+    }
+
+    function aplicarVisibilidadWaitry() {
+        const btn = document.getElementById('btn-modo-waitry');
+        if (btn) {
+            btn.classList.toggle('d-none', !waitryHabilitadoEnPos());
+        }
+        if (!waitryHabilitadoEnPos() && modoSeleccion === 'waitry') {
+            setModo('mesa', { silent: true });
         }
     }
 
@@ -1815,6 +1849,107 @@
         });
     }
 
+    async function cargarOrdenesWaitry() {
+        const panel = document.getElementById('panel-waitry-lista');
+        const vacio = document.getElementById('panel-waitry-vacio');
+        if (!panel || !waitryHabilitadoEnPos()) {
+            return;
+        }
+        panel.innerHTML = '<div class="col-12 text-muted small py-2">Consultando Waitry…</div>';
+        if (vacio) {
+            vacio.classList.add('d-none');
+        }
+        try {
+            const data = await api(
+                (G.rutasWaitry && G.rutasWaitry.ordenesPendientes) ||
+                    '/ventas/gastronomia/api/waitry-ordenes-pendientes',
+                { headers: hdrJson() },
+            );
+            actualizarLeyendaFiltroWaitry(data.filtro);
+            panel.innerHTML = '';
+            const ordenes = data.ordenes || [];
+            if (ordenes.length === 0) {
+                if (vacio) {
+                    vacio.classList.remove('d-none');
+                }
+                return;
+            }
+            ordenes.forEach((o) => {
+                const id = o.waitry_order_id;
+                const label =
+                    (o.display_id ? o.display_id + ' ' : '') +
+                    '#' +
+                    id +
+                    (o.cantidad_items ? ' · ' + o.cantidad_items + ' ítems' : '') +
+                    (o.total_estimado != null ? ' · $' + Number(o.total_estimado).toFixed(2) : '');
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className =
+                    'btn btn-sm m-1' +
+                    (cuentaId && cuentaActivaConLineas && cuentaActivaConLineas.waitry_order_id === id
+                        ? ' btn-primary'
+                        : ' btn-outline-info');
+                btn.title = (o.lineas_preview || [])
+                    .map((ln) => (ln.cantidad || 1) + '× ' + (ln.sku || '') + ' ' + (ln.titulo || ''))
+                    .join('\n');
+                btn.textContent = label;
+                btn.addEventListener('click', () => void importarOrdenWaitry(o));
+                panel.appendChild(btn);
+            });
+        } catch (e) {
+            panel.innerHTML = '';
+            toast(e.message || 'Error al cargar órdenes Waitry', 'error');
+        }
+    }
+
+    async function importarOrdenWaitry(orden) {
+        if (!orden || !orden.waitry_order_id) {
+            return;
+        }
+        let datosApertura = {};
+        if (requiereDatosAperturaAlAbrir()) {
+            try {
+                datosApertura = await resolverDatosAperturaNuevaCuenta(
+                    false,
+                    'Importar cuenta Waitry #' + orden.waitry_order_id,
+                );
+            } catch (_) {
+                return;
+            }
+        }
+        try {
+            const payload = {
+                waitry_order_id: orden.waitry_order_id,
+                cubiertos: datosApertura.cubiertos,
+                mozo_gastronomia_id: datosApertura.mozo_gastronomia_id,
+            };
+            if (cuentaId && cuentaActivaConLineas && !(cuentaActivaConLineas.lineas || []).length) {
+                payload.cuenta_id = cuentaId;
+            }
+            const data = await api(
+                (G.rutasWaitry && G.rutasWaitry.importarOrden) || '/ventas/gastronomia/api/waitry-importar-orden',
+                {
+                    method: 'POST',
+                    headers: hdrJson(),
+                    body: JSON.stringify(payload),
+                },
+            );
+            if (data.warn) {
+                toast(data.warn, 'warning');
+            }
+            if (data.errores && data.errores.length) {
+                toast(data.errores.join(' · '), 'warning');
+            }
+            await seleccionarCuenta(data.cuenta_id);
+            toast('Cuenta Waitry importada.', 'success');
+            void cargarOrdenesWaitry();
+            cargarCuentasActivas();
+        } catch (e) {
+            const det = e.payload && e.payload.errores ? e.payload.errores.join(' · ') : '';
+            toast((e.message || 'Error al importar') + (det ? ': ' + det : ''), 'error');
+        }
+    }
+
     async function cargarCuentasActivas() {
         const data = await api(`/ventas/gastronomia/api/cuentas-activas?empresa_id=${empresaId}`, { headers: hdrJson() });
         const panel = document.getElementById('panel-cuentas');
@@ -2646,6 +2781,9 @@
             }
             cargarMesas();
             cargarCuentasActivas();
+            if (modoSeleccion === 'waitry') {
+                void cargarOrdenesWaitry();
+            }
             limpiarEstadoCuentaActiva();
         } catch (e) {
             const detalleErr = (e.payload && e.payload.factura) ? 'Comprobante: ' + e.payload.factura : '';
@@ -2662,35 +2800,62 @@
         }
     }
 
-    function setModo(mesa, opciones) {
+    function setModo(modo, opciones) {
         const opts = opciones || {};
-        modoMesa = mesa;
-        document.getElementById('panel-mesas').classList.toggle('d-none', !mesa);
-        document.getElementById('panel-cuentas').classList.toggle('d-none', mesa);
-        document.getElementById('btn-modo-mesa').classList.toggle('active', mesa);
-        document.getElementById('btn-modo-cuenta').classList.toggle('active', !mesa);
+        if (modo === 'cuenta' && G.cuentasLibresHabilitadas === false) {
+            modo = 'mesa';
+        }
+        if (modo === 'waitry' && !waitryHabilitadoEnPos()) {
+            modo = 'mesa';
+        }
+        modoSeleccion = modo;
+        const esMesa = modo === 'mesa';
+        const esCuenta = modo === 'cuenta';
+        const esWaitry = modo === 'waitry';
+        document.getElementById('panel-mesas').classList.toggle('d-none', !esMesa);
+        document.getElementById('panel-cuentas').classList.toggle('d-none', !esCuenta);
+        const panelWaitry = document.getElementById('panel-waitry');
+        if (panelWaitry) {
+            panelWaitry.classList.toggle('d-none', !esWaitry);
+        }
+        document.getElementById('btn-modo-mesa').classList.toggle('active', esMesa);
+        const btnCuenta = document.getElementById('btn-modo-cuenta');
+        if (btnCuenta) {
+            btnCuenta.classList.toggle('active', esCuenta);
+        }
+        const btnWaitry = document.getElementById('btn-modo-waitry');
+        if (btnWaitry) {
+            btnWaitry.classList.toggle('active', esWaitry);
+        }
         const btnNueva = document.getElementById('btn-nueva-cuenta-libre');
         if (btnNueva) {
-            btnNueva.classList.toggle('d-none', mesa || G.cuentasLibresHabilitadas === false);
+            btnNueva.classList.toggle('d-none', !esCuenta || G.cuentasLibresHabilitadas === false);
+        }
+        if (esWaitry) {
+            void cargarOrdenesWaitry();
         }
         if (!opts.silent) {
-            void guardarPreferenciaModoSeleccion(mesa);
+            void guardarPreferenciaModoSeleccion(modo);
         }
     }
 
     function aplicarPreferenciaModoSeleccion(modo) {
-        setModo(modo !== 'cuenta', { silent: true });
+        const m = modo === 'cuenta' || modo === 'waitry' ? modo : 'mesa';
+        setModo(m, { silent: true });
     }
 
-    async function guardarPreferenciaModoSeleccion(mesa) {
-        if (!mesa && G.cuentasLibresHabilitadas === false) {
+    async function guardarPreferenciaModoSeleccion(modo) {
+        if (modo === 'cuenta' && G.cuentasLibresHabilitadas === false) {
+            return;
+        }
+        if (modo === 'waitry' && !waitryHabilitadoEnPos()) {
             return;
         }
         try {
             await api('/ventas/gastronomia/api/preferencia-modo-seleccion', {
                 method: 'POST',
                 headers: hdrJson(),
-                body: JSON.stringify({ modo: mesa ? 'mesa' : 'cuenta' }),
+                body: JSON.stringify({ modo: modo }),
             });
         } catch (_) {
             /* preferencia no crítica */
@@ -2816,7 +2981,7 @@
         wireCamposDescuentoTeclado();
 
         document.getElementById('btn-modo-mesa').addEventListener('click', () => {
-            setModo(true);
+            setModo('mesa');
         });
         const btnModoCuenta = document.getElementById('btn-modo-cuenta');
         if (btnModoCuenta) {
@@ -2824,8 +2989,16 @@
                 if (G.cuentasLibresHabilitadas === false) {
                     return toast('Las cuentas libres no están habilitadas.', 'warning');
                 }
-                setModo(false);
+                setModo('cuenta');
             });
+        }
+        const btnModoWaitry = document.getElementById('btn-modo-waitry');
+        if (btnModoWaitry) {
+            btnModoWaitry.addEventListener('click', () => setModo('waitry'));
+        }
+        const btnWaitryRefrescar = document.getElementById('btn-waitry-refrescar');
+        if (btnWaitryRefrescar) {
+            btnWaitryRefrescar.addEventListener('click', () => void cargarOrdenesWaitry());
         }
         document.getElementById('btn-nueva-cuenta-libre').addEventListener('click', () => {
             void nuevaCuentaLibre();
@@ -2969,7 +3142,7 @@
             function (e) {
                 if (
                     G.cuentasLibresHabilitadas !== false &&
-                    !modoMesa &&
+                    modoSeleccion === 'cuenta' &&
                     esAtajoNuevaCuentaLibre(e) &&
                     !debeIgnorarAtajoPos() &&
                     !esCampoTextoEditable(e.target)
@@ -3082,11 +3255,17 @@
         } else {
             G.cobranzaConfigError = null;
         }
+        if (data.waitry_habilitado != null) {
+            G.waitryHabilitado = !!data.waitry_habilitado;
+        }
+        if (data.waitry_get_orders_minutos_atras != null) {
+            G.waitryGetOrdersMinutosAtras = data.waitry_get_orders_minutos_atras;
+        }
+        aplicarVisibilidadWaitry();
+        actualizarLeyendaFiltroWaitry();
         if (data.modo_seleccion_preferido) {
             G.modoSeleccionPreferido = data.modo_seleccion_preferido;
-            if (G.cuentasLibresHabilitadas !== false) {
-                aplicarPreferenciaModoSeleccion(data.modo_seleccion_preferido);
-            }
+            aplicarPreferenciaModoSeleccion(data.modo_seleccion_preferido);
         }
         aplicarConfigAperturaDesdeApi(data);
         return data;
@@ -3095,11 +3274,9 @@
     document.addEventListener('DOMContentLoaded', async () => {
         registrarEventosUi();
         aplicarVisibilidadCuentasLibres();
-        if (G.cuentasLibresHabilitadas !== false) {
-            aplicarPreferenciaModoSeleccion(G.modoSeleccionPreferido || 'mesa');
-        } else {
-            setModo(true, { silent: true });
-        }
+        aplicarVisibilidadWaitry();
+        actualizarLeyendaFiltroWaitry();
+        aplicarPreferenciaModoSeleccion(G.modoSeleccionPreferido || 'mesa');
         wireConsultasSistema();
         envolverPintarDescuentoParaRecalculo();
         window.gastroOnClienteInternoDescuentoElegido = function (cli) {

@@ -1956,15 +1956,20 @@ class FacturacionService
 				// Arma asiento
 				if ($signo == -1 && isset($factura))
 				{
-					$asientoContable = [];
-					foreach ($factura->asientos[0]->asiento_movimientos as $movimiento)
-					{
-						$asientoContable[] = ['empresa_id' => $factura->asientos[0]->empresa_id,
-											'cuentacontable_id' => $movimiento->cuentacontable_id,
-											'monto' => $movimiento->monto*-1
-											];
+					$factura->loadMissing(['asientos.asiento_movimientos']);
+					if ($factura->asientos->isNotEmpty()) {
+						$asientoContable = [];
+						foreach ($factura->asientos[0]->asiento_movimientos as $movimiento)
+						{
+							$asientoContable[] = ['empresa_id' => $factura->asientos[0]->empresa_id,
+												'cuentacontable_id' => $movimiento->cuentacontable_id,
+												'monto' => $movimiento->monto*-1
+												];
 
-						$centrocosto_id = $movimiento->centrocosto_id;
+							$centrocosto_id = $movimiento->centrocosto_id;
+						}
+					} else {
+						$asientoContable = Self::armaContabilidad($dataFactura, $conceptosTotales, $empresa->id, $totalComprobante);
 					}
 				}
 				else

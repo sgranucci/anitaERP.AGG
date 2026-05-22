@@ -14,6 +14,7 @@ use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
 use App\Support\Ventas\GastronomiaMovimientoStockSupport;
 use App\Support\Ventas\GastronomiaPuntoventaEmisionLock;
 use App\Services\Ventas\Gastronomia\Waitry\WaitryComandaService;
+use App\Services\Ventas\Gastronomia\Waitry\WaitrySyncStatusPosService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
@@ -38,6 +39,7 @@ final class GastronomiaFacturaEmisionService
         private readonly GastronomiaFacturaTicketService $facturaTicketService,
         private readonly GastronomiaInsumoStkmovAnitaService $insumoStkmovAnitaService,
         private readonly WaitryComandaService $waitryComandaService,
+        private readonly WaitrySyncStatusPosService $waitrySyncStatusPosService,
     ) {
     }
 
@@ -544,10 +546,28 @@ final class GastronomiaFacturaEmisionService
             return $resultado;
         }
 
-        $facturaTxt = trim((string) ($resultado['factura'] ?? ''));
+        if (! config('waitry.habilitado', false)) {
+            return $resultado;
+        }
+
+        $cuenta->refresh();
+        $waitryOrderId = (int) ($cuenta->waitry_order_id ?? 0);
         $sinCobranza = ! empty($resultado['sin_cobranza']);
         $pagada = ! $sinCobranza && $mediosPago !== [];
 
+        if ($waitryOrderId > 0) {
+            if (isset($resultado['waitry_order_id']) === false) {
+                $resultado['waitry_order_id'] = $waitryOrderId;
+            }
+
+            if ($pagada) {
+                $resultado = $this->aplicarWaitrySyncPagoTrasEmision($resultado, $cuenta, $mediosPago);
+            }
+
+            return $resultado;
+        }
+
+        $facturaTxt = trim((string) ($resultado['factura'] ?? ''));
         try {
             $waitry = $this->waitryComandaService->enviarComandaTrasFactura(
                 $ventaId,
@@ -584,6 +604,52 @@ final class GastronomiaFacturaEmisionService
         $resultado['waitry_comanda_mensaje'] = $mensaje;
         $warnPrevio = trim((string) ($resultado['warn'] ?? ''));
         $aviso = 'Factura emitida; comanda Waitry: '.$mensaje;
+        $resultado['warn'] = $warnPrevio !== '' ? $warnPrevio."\n\n".$aviso : $aviso;
+
+        return $resultado;
+    }
+
+    /**
+     * Orden importada desde Waitry: notifica cobro vía syncStatusPOS (cash | credit_card | debit_card).
+     *
+     * @param  array<string, mixed>  $resultado
+     * @param  list<array{cuentacaja_id:int,moneda_id:int,monto:float,cotizacion?:float|null,observacion?:string|null}>  $mediosPago
+     * @return array<string, mixed>
+     */
+    private function aplicarWaitrySyncPagoTrasEmision(
+        array $resultado,
+        CuentaGastronomia $cuenta,
+        array $mediosPago,
+    ): array {
+        try {
+            $sync = $this->waitrySyncStatusPosService->sincronizarPagoTrasFactura($cuenta, $mediosPago);
+        } catch (Throwable $e) {
+            Log::error('gastronomia.waitry.sync_pago.excepcion', [
+                'cuenta_id' => $cuenta->id,
+                'waitry_order_id' => $cuenta->waitry_order_id,
+                'msg' => $e->getMessage(),
+            ]);
+            $sync = [
+                'ok' => false,
+                'mensaje' => 'Waitry: error inesperado al registrar el pago.',
+            ];
+        }
+
+        if (! empty($sync['omitida'])) {
+            return $resultado;
+        }
+
+        if (! empty($sync['ok'])) {
+            $resultado['waitry_pago'] = 'ok';
+
+            return $resultado;
+        }
+
+        $mensaje = trim((string) ($sync['mensaje'] ?? 'No se pudo registrar el pago en Waitry.'));
+        $resultado['waitry_pago'] = 'error';
+        $resultado['waitry_pago_mensaje'] = $mensaje;
+        $warnPrevio = trim((string) ($resultado['warn'] ?? ''));
+        $aviso = 'Factura emitida; pago Waitry: '.$mensaje;
         $resultado['warn'] = $warnPrevio !== '' ? $warnPrevio."\n\n".$aviso : $aviso;
 
         return $resultado;

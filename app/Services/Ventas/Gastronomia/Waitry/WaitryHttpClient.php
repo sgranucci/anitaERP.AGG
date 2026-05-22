@@ -17,6 +17,101 @@ final class WaitryHttpClient
     }
 
     /**
+     * @param  array<string, scalar|null>  $query
+     * @return array{ok:bool,http_code:int,data:array|null,error:string|null}
+     */
+    public function getJson(string $url, array $query, string $operacion): array
+    {
+        $reintentos = (int) config('waitry.http_reintentos', 2);
+        $timeout = (int) config('waitry.http_timeout_segundos', 30);
+
+        for ($intento = 1; $intento <= $reintentos; $intento++) {
+            if ($intento > 1) {
+                usleep(250_000 * ($intento - 1));
+            }
+
+            $ctx = $this->authService->contextoAutenticado();
+            if (! $ctx['ok']) {
+                return [
+                    'ok' => false,
+                    'http_code' => 0,
+                    'data' => null,
+                    'error' => $ctx['error'],
+                ];
+            }
+
+            try {
+                $response = Http::timeout($timeout)
+                    ->acceptJson()
+                    ->withToken($ctx['access_token'])
+                    ->get($url, $query);
+            } catch (Throwable $e) {
+                Log::warning("waitry.{$operacion}.conexion", [
+                    'intento' => $intento,
+                    'msg' => $e->getMessage(),
+                ]);
+
+                if ($intento >= $reintentos) {
+                    return [
+                        'ok' => false,
+                        'http_code' => 0,
+                        'data' => null,
+                        'error' => 'No se pudo conectar con Waitry: '.$e->getMessage(),
+                    ];
+                }
+
+                continue;
+            }
+
+            $httpCode = $response->status();
+            $data = $response->json();
+            if (! is_array($data)) {
+                if ($intento < $reintentos) {
+                    continue;
+                }
+
+                return [
+                    'ok' => false,
+                    'http_code' => $httpCode,
+                    'data' => null,
+                    'error' => 'Respuesta inválida de Waitry (HTTP '.$httpCode.').',
+                ];
+            }
+
+            if ($httpCode === 401 && $intento < $reintentos) {
+                Log::info("waitry.{$operacion}.401_renovar_token");
+                $this->authService->invalidarToken();
+                $this->authService->renovarTokenForzado();
+
+                continue;
+            }
+
+            if ($httpCode < 200 || $httpCode >= 300) {
+                return [
+                    'ok' => false,
+                    'http_code' => $httpCode,
+                    'data' => $data,
+                    'error' => $this->mensajeErrorHttp($data, $httpCode),
+                ];
+            }
+
+            return [
+                'ok' => true,
+                'http_code' => $httpCode,
+                'data' => $data,
+                'error' => null,
+            ];
+        }
+
+        return [
+            'ok' => false,
+            'http_code' => 0,
+            'data' => null,
+            'error' => 'Waitry: agotados los reintentos de comunicación.',
+        ];
+    }
+
+    /**
      * @param  array<string, mixed>  $payload
      * @return array{ok:bool,http_code:int,data:array|null,error:string|null}
      */

@@ -54,6 +54,11 @@ return [
      */
     'tipotransaccion_factura_id' => env('GASTRONOMIA_TIPO_TRANSACCION_FACTURA_ID'),
 
+    /**
+     * Respaldo si la configuración del punto de venta gastronomía no define tipotransaccion_nota_credito_id.
+     */
+    'tipotransaccion_nota_credito_id' => env('GASTRONOMIA_TIPO_TRANSACCION_NOTA_CREDITO_ID'),
+
     /** Prefijo SKU para catálogo rápido en el POS (ej. consumibles venta salón). */
     'sku_catalogo_prefijo' => env('GASTRONOMIA_SKU_CATALOGO_PREFIJO', 'V'),
 
