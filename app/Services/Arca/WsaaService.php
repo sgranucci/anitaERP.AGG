@@ -66,9 +66,10 @@ class WsaaService
     {
         $now = Carbon::now('America/Argentina/Buenos_Aires');
 
-        // Recomendación WSAA: generationTime unos minutos en el pasado
-        $gen = $now->copy()->subMinutes(1);
-        $exp = $now->copy()->addMinutes(10);
+        // WSAA exige generationTime en el pasado y expirationTime en el futuro respecto a *su* reloj.
+        // Ventana corta (+10 min) falla si el servidor local va desfasado (xml.expirationTime.expired).
+        $gen = $now->copy()->subMinutes(10);
+        $exp = $now->copy()->addHours(12);
 
         $xml = new \SimpleXMLElement(
             '<?xml version="1.0" encoding="UTF-8"?>'.
