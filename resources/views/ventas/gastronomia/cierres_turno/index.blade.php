@@ -17,6 +17,9 @@
 <script>
     window.CIERRES_TURNO_GASTRONOMIA = {
         urlApiComprobantes: @json(route('gastronomia_cierres_turno_api_comprobantes')),
+        urlApiCanjesPremio: @json(route('gastronomia_cierres_turno_api_canjes_premio')),
+        urlApiCanjesFidelidad: @json(route('gastronomia_cierres_turno_api_canjes_fidelidad')),
+        urlApiTicketsTarjeta: @json(route('gastronomia_cierres_turno_api_tickets_tarjeta')),
         urlFacturaVerBase: @json(($puede_ver_factura ?? false) ? url('ventas/gastronomia/facturas-dia') : null),
         puedeVerFactura: @json($puede_ver_factura ?? false),
     };
@@ -116,7 +119,10 @@
                                 <th>Turno</th>
                                 <th>Jornada</th>
                                 <th>Usuario</th>
-                                <th class="text-right">Total</th>
+                                <th class="text-right" title="Facturado bruto menos notas de crédito (devoluciones) del turno.">
+                                    Total final
+                                    <small class="text-muted d-block" style="font-weight:normal;">(NC restadas)</small>
+                                </th>
                                 <th class="width120" data-orderable="false">Acciones</th>
                             </tr>
                         </thead>
@@ -141,6 +147,30 @@
                                             title="Ver comprobantes facturados en este cierre">
                                         <i class="fas fa-list text-primary"></i>
                                         <span class="small">Comprobantes</span>
+                                    </button>
+                                    <button type="button"
+                                            class="btn-accion-tabla tooltipsC js-ver-canjes-premio-cierre mr-1"
+                                            data-tipo="{{ $f->tipo }}"
+                                            data-id="{{ $f->id }}"
+                                            data-referencia="{{ $f->referencia }}"
+                                            title="Canjes de premios Wigos en este cierre">
+                                        <i class="fa fa-gift text-warning"></i>
+                                    </button>
+                                    <button type="button"
+                                            class="btn-accion-tabla tooltipsC js-ver-canjes-fidelidad-cierre mr-1"
+                                            data-tipo="{{ $f->tipo }}"
+                                            data-id="{{ $f->id }}"
+                                            data-referencia="{{ $f->referencia }}"
+                                            title="Canjes de fidelidad (tarjeta Wigos) en este cierre">
+                                        <i class="fa fa-id-card text-warning"></i>
+                                    </button>
+                                    <button type="button"
+                                            class="btn-accion-tabla tooltipsC js-ver-tickets-tarjeta-cierre mr-1"
+                                            data-tipo="{{ $f->tipo }}"
+                                            data-id="{{ $f->id }}"
+                                            data-referencia="{{ $f->referencia }}"
+                                            title="Tickets tarjeta canjeados en este cierre">
+                                        <i class="fa fa-barcode text-info"></i>
                                     </button>
                                     @if ($puede_ver_comprobante ?? false)
                                         @if ($f->tipo === 'parcial')
@@ -203,6 +233,124 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modal-canjes-premio-cierre" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title" id="modal-canjes-premio-cierre-titulo">Canjes de premios</h6>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">&times;</button>
+            </div>
+            <div class="modal-body py-2">
+                <p class="text-muted small mb-2" id="modal-canjes-premio-cierre-subtitulo"></p>
+                <div id="ct-canjes-premio-error" class="alert alert-danger py-2 small d-none"></div>
+                <div class="d-flex flex-wrap justify-content-between align-items-center px-2 py-1 border-bottom bg-light small">
+                    <span id="ct-canjes-premio-info">—</span>
+                    <div id="ct-canjes-premio-paginacion" class="gastro-grilla-paginacion"></div>
+                </div>
+                <div class="table-responsive gastro-grilla-conciliacion-wrap">
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="thead-light">
+                            <tr>
+                                <th>Cupón</th>
+                                <th>Factura</th>
+                                <th>SKU</th>
+                                <th>Artículo</th>
+                                <th class="text-right">Cant.</th>
+                                <th class="text-right">Puntos</th>
+                                <th>Mozo</th>
+                                <th>Documento</th>
+                                <th>Fecha canje</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ct-canjes-premio-body"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modal-canjes-fidelidad-cierre" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title" id="modal-canjes-fidelidad-cierre-titulo">Canjes de fidelidad</h6>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">&times;</button>
+            </div>
+            <div class="modal-body py-2">
+                <p class="text-muted small mb-2" id="modal-canjes-fidelidad-cierre-subtitulo"></p>
+                <div id="ct-canjes-fidelidad-error" class="alert alert-danger py-2 small d-none"></div>
+                <div class="d-flex flex-wrap justify-content-between align-items-center px-2 py-1 border-bottom bg-light small">
+                    <span id="ct-canjes-fidelidad-info">—</span>
+                    <div id="ct-canjes-fidelidad-paginacion" class="gastro-grilla-paginacion"></div>
+                </div>
+                <div class="table-responsive gastro-grilla-conciliacion-wrap">
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="thead-light">
+                            <tr>
+                                <th>Nro. tarjeta</th>
+                                <th>Trackdata</th>
+                                <th>DNI</th>
+                                <th>Titular</th>
+                                <th>Categoría</th>
+                                <th>SKU</th>
+                                <th>Artículo canjeado</th>
+                                <th>Factura</th>
+                                <th>Fecha canje</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ct-canjes-fidelidad-body"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modal-tickets-tarjeta-cierre" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title" id="modal-tickets-tarjeta-cierre-titulo">Tickets tarjeta canjeados</h6>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">&times;</button>
+            </div>
+            <div class="modal-body py-2">
+                <p class="text-muted small mb-2" id="modal-tickets-tarjeta-cierre-subtitulo"></p>
+                <div id="ct-tickets-tarjeta-error" class="alert alert-danger py-2 small d-none"></div>
+                <div class="d-flex flex-wrap justify-content-between align-items-center px-2 py-1 border-bottom bg-light small">
+                    <span id="ct-tickets-tarjeta-info">—</span>
+                    <div id="ct-tickets-tarjeta-paginacion" class="gastro-grilla-paginacion"></div>
+                </div>
+                <div class="table-responsive gastro-grilla-conciliacion-wrap">
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="thead-light">
+                            <tr>
+                                <th>Movimiento</th>
+                                <th>Nº ticket</th>
+                                <th>Factura</th>
+                                <th>Documento</th>
+                                <th class="text-right">Importe</th>
+                                <th>Fecha emisión</th>
+                                <th>Canje ERP</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ct-tickets-tarjeta-body"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cerrar</button>
             </div>
         </div>
     </div>

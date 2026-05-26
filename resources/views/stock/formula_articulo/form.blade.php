@@ -1,5 +1,6 @@
 @php
     use App\Support\Stock\FormulaArticuloGastronomia;
+    use App\Support\Stock\FormulaArticuloNumero;
     $esEdicion = isset($data) && $data && ($data->id ?? null);
     if (old('articulo_ids') !== null && is_array(old('articulo_ids'))) {
         $filas = max(1, count(old('articulo_ids')));
@@ -151,7 +152,18 @@
                             $osku = old("articulo_skus.$i", $h->articulos->sku ?? '');
                             $odesc = old("articulo_descs.$i", $h->articulos->descripcion ?? '');
                             $fhid = old("formula_hija_ids.$i", $h->formula_hija_id ?? '');
-                            $fhlab = old("formula_hija_labels.$i", $h && $h->formula_hija_id ? (($h->formula_hija->articulos->sku ?? '').' F#'.$h->formula_hija_id) : '');
+                            $fhDefault = '';
+                            if ($h && $h->formula_hija_id) {
+                                $fhSubArt = optional($h->formula_hija)->articulos;
+                                $fhPartes = array_filter([
+                                    trim((string) ($fhSubArt->sku ?? '')),
+                                    trim((string) ($fhSubArt->descripcion ?? '')),
+                                    trim((string) (optional($h->formula_hija)->detalle ?? '')),
+                                ], fn ($v) => $v !== '');
+                                $fhNumero = FormulaArticuloNumero::paraFormula($h->formula_hija) ?: ('#'.$h->formula_hija_id);
+                                $fhDefault = trim('F '.$fhNumero.(count($fhPartes) ? ' - '.implode(' - ', $fhPartes) : ''));
+                            }
+                            $fhlab = old("formula_hija_labels.$i", $fhDefault);
                         @endphp
                         <tr class="fila-formula-hijo">
                             <td class="p-1 align-middle">
@@ -177,7 +189,7 @@
                             <td class="p-1 align-middle">
                                 <input type="hidden" name="formula_hija_ids[]" class="fh_formula_hija_id" value="{{ $fhid }}" />
                                 <div class="input-group input-group-sm">
-                                    <input type="text" readonly class="form-control fh_formula_hija_label" value="{{ $fhlab }}" placeholder="Opcional" />
+                                    <input type="text" readonly class="form-control fh_formula_hija_label" value="{{ $fhlab }}" placeholder="Opcional" title="{{ $fhlab }}" />
                                     <div class="input-group-append">
                                         <button type="button" class="btn btn-sm btn-outline-secondary js-consulta-formula-linea" data-exclude="{{ $data->id ?? 0 }}" title="Buscar subf&oacute;rmula"><i class="fa fa-flask"></i></button>
                                         <button type="button" class="btn btn-sm btn-outline-info js-ver-subformula-linea{{ $fhid ? '' : ' sin-subformula' }}" title="Consultar subf&oacute;rmula" data-formula-id="{{ $fhid }}"><i class="fa fa-eye"></i></button>

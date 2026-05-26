@@ -29,48 +29,85 @@
             ? 'Cuadra'
             : '$' + fmt(Math.abs(diff)) + (diff > 0 ? ' (sobra)' : ' (falta)');
         var badgeCls = ok ? 'badge-success' : 'badge-warning';
+        var ncTotal = Number(t.total_notas_credito || 0);
+        var ncCant = Number(t.cantidad_notas_credito || 0);
+        var hayNc = ncCant > 0 || Math.abs(ncTotal) >= 0.005;
+        var totalFacturasBruto = t.total_facturas != null
+            ? Number(t.total_facturas)
+            : (Number(t.total_ventas || 0) - ncTotal);
+        var cantidadFacturas = t.cantidad_facturas != null
+            ? Number(t.cantidad_facturas)
+            : Math.max(0, Number(t.cantidad_comprobantes || 0) - ncCant);
+        var totalFinal = Number(t.total_ventas || 0);
 
         var html = '<div class="' + CLS_PANEL + ' gastro-conciliacion border rounded p-3 mb-3 bg-white">';
         html += '<div class="d-flex flex-wrap justify-content-between align-items-center mb-2">';
         html += '<span class="font-weight-bold h6 mb-0">Comprobantes y cobranzas</span>';
         html += '<span class="badge ' + badgeCls + ' px-2 py-1">' + estado + '</span>';
         html += '</div>';
-        html += '<p class="text-muted mb-2 gastro-totales-leyenda">Las cobranzas se obtienen de cada factura emitida en el período.</p>';
-        html += '<div class="row text-center">';
-        html += '<div class="col-6 col-md-3 border-right mb-2 mb-md-0">';
-        html += '<span class="text-muted d-block">Facturado</span>';
-        html += '<span class="gastro-totales-monto font-weight-bold">$' + fmt(t.total_ventas) + '</span>';
-        html += '<span class="text-muted d-block">' + (t.cantidad_comprobantes || 0) + ' comp.</span>';
+        html += '<p class="text-muted mb-2 gastro-totales-leyenda">Facturado bruto − Notas de crédito = <strong>Facturado final</strong>, que debe coincidir con lo cobrado (descontando invitaciones).</p>';
+
+        html += '<div class="row text-center small">';
+        html += '<div class="col-6 col-md-3 border-right mb-3 mb-md-0">';
+        html += '<span class="text-muted d-block">Facturado <em>(sin NC)</em></span>';
+        html += '<span class="gastro-totales-monto font-weight-bold">$' + fmt(totalFacturasBruto) + '</span>';
+        html += '<span class="text-muted d-block">' + cantidadFacturas + ' facturas</span>';
         html += '</div>';
-        html += '<div class="col-6 col-md-3 border-right mb-2 mb-md-0">';
-        html += '<span class="text-muted d-block">Invit. $0,01</span>';
+        html += '<div class="col-6 col-md-3 border-right mb-3 mb-md-0">';
+        html += '<span class="text-muted d-block">Invitaciones $0,01</span>';
         html += '<span class="gastro-totales-monto font-weight-bold">$' + fmt(t.total_invitaciones) + '</span>';
         html += '<span class="text-muted d-block">' + (t.cantidad_invitaciones || 0) + ' comp.</span>';
         html += '</div>';
-        html += '<div class="col-6 col-md-3 border-right">';
-        html += '<span class="text-muted d-block">Esperado en caja</span>';
+        html += '<div class="col-6 col-md-3 border-right mb-3 mb-md-0" style="color:#922b21;">';
+        html += '<span class="text-muted d-block">Notas de crédito</span>';
+        html += '<span class="gastro-totales-monto font-weight-bold">$' + fmt(ncTotal) + '</span>';
+        html += '<span class="text-muted d-block">' + ncCant + ' comp.</span>';
+        html += '</div>';
+        html += '<div class="col-6 col-md-3 mb-md-0" style="background:#e8f4fc; border-radius:4px;">';
+        html += '<span class="text-muted d-block">Facturado final <em>(con NC restadas)</em></span>';
+        html += '<span class="gastro-totales-monto font-weight-bold">$' + fmt(totalFinal) + '</span>';
+        html += '<span class="text-muted d-block">debe cuadrar con cobrado</span>';
+        html += '</div>';
+        html += '</div>';
+
+        html += '<hr class="my-2">';
+        html += '<div class="row text-center small">';
+        html += '<div class="col-6 col-md-6 border-right">';
+        html += '<span class="text-muted d-block">Esperado en caja <em>(final − invitaciones)</em></span>';
         html += '<span class="gastro-totales-monto font-weight-bold">$' + fmt(t.total_ventas_cobrables) + '</span>';
         html += '</div>';
-        html += '<div class="col-6 col-md-3">';
-        html += '<span class="text-muted d-block">Cobrado (facturas)</span>';
+        html += '<div class="col-6 col-md-6">';
+        html += '<span class="text-muted d-block">Cobrado neto <em>(cobranzas − devoluciones NC)</em></span>';
         html += '<span class="gastro-totales-monto font-weight-bold">$' + fmt(t.total_cobrado) + '</span>';
         html += '</div>';
         html += '</div>';
+
         html += '</div>';
 
         return html;
     }
 
-    function renderMediosPagoTabla(medios, vacio, conTotalFinal, totalCobradoRef, opcionesConciliar) {
-        if (!medios || !medios.length) {
+    function renderMediosPagoTabla(medios, vacio, conTotalFinal, totalCobradoRef, opcionesConciliar, notasCredito, mozoCtx) {
+        var hayMedios = medios && medios.length;
+        var nc = notasCredito || null;
+        var ncCant = nc ? Number(nc.cantidad || 0) : 0;
+        var ncTotal = nc ? Number(nc.total || 0) : 0;
+        var hayNc = nc && (ncCant > 0 || Math.abs(ncTotal) >= 0.005);
+
+        if (!hayMedios && !hayNc) {
             return '<p class="text-muted mb-0 pl-2">' + esc(vacio || 'Sin cobranzas en comprobantes.') + '</p>';
         }
-        var suma = 0;
-        medios.forEach(function (p) {
-            suma += Number(p.total || 0);
-        });
-        var totalFinal = totalCobradoRef != null ? Number(totalCobradoRef) : suma;
         var conciliar = opcionesConciliar && opcionesConciliar.habilitar;
+        var totalFinal = totalCobradoRef != null ? Number(totalCobradoRef) : 0;
+        if (totalCobradoRef == null) {
+            (medios || []).forEach(function (p) { totalFinal += Number(p.total || 0); });
+            if (hayNc) {
+                totalFinal += ncTotal;
+            }
+        }
+
+        var mozoId = mozoCtx && mozoCtx.mozo_id != null ? mozoCtx.mozo_id : '';
+        var mozoNombre = mozoCtx && mozoCtx.mozo_nombre ? mozoCtx.mozo_nombre : '';
 
         var html = '<table class="table table-bordered mb-0 gastro-totales-tabla">';
         html += '<thead class="thead-light"><tr><th>Medio de pago</th><th class="text-right">Cobrado</th>';
@@ -78,7 +115,7 @@
             html += '<th class="text-center" style="width:110px;">Conciliar</th>';
         }
         html += '</tr></thead><tbody>';
-        medios.forEach(function (p) {
+        (medios || []).forEach(function (p) {
             var ccId = p.cuentacaja_id || 0;
             html += '<tr><td>' + esc(p.nombre || p.codigo || '—') + '</td>';
             html += '<td class="text-right font-weight-bold">$' + fmt(p.total) + '</td>';
@@ -92,6 +129,24 @@
             }
             html += '</tr>';
         });
+        if (hayNc) {
+            html += '<tr style="background:#fdecea;">';
+            html += '<td style="color:#922b21; font-weight:bold;">Notas de crédito (' + ncCant + ' comp.)</td>';
+            html += '<td class="text-right font-weight-bold" style="color:#922b21;">$' + fmt(ncTotal) + '</td>';
+            if (conciliar) {
+                html += '<td class="text-center">';
+                html += '<button type="button" class="btn btn-xs btn-outline-danger js-conciliar-nc"';
+                if (mozoId !== '') {
+                    html += ' data-mozo-id="' + esc(mozoId) + '"';
+                }
+                if (mozoNombre) {
+                    html += ' data-mozo-nombre="' + esc(mozoNombre) + '"';
+                }
+                html += ' title="Ver notas de crédito' + (mozoNombre ? ' de ' + esc(mozoNombre) : ' del turno') + '">';
+                html += '<i class="fa fa-search"></i> NC</button></td>';
+            }
+            html += '</tr>';
+        }
         html += '</tbody>';
         if (conTotalFinal) {
             html += '<tfoot class="thead-light"><tr>';
@@ -108,7 +163,12 @@
 
     function renderTotalMediosPagoFinalHtml(totales, opcionesConciliar) {
         var medios = totales.por_medio_pago || [];
-        if (!medios.length) {
+        var nc = {
+            total: Number(totales.total_notas_credito || 0),
+            cantidad: Number(totales.cantidad_notas_credito || 0),
+        };
+        var hayNc = nc.cantidad > 0 || Math.abs(nc.total) >= 0.005;
+        if (!medios.length && !hayNc) {
             return '';
         }
         var html = '<div class="mt-3 pt-3 border-top gastro-totales-medios-final">';
@@ -118,7 +178,8 @@
             'Sin cobranzas en comprobantes del turno.',
             true,
             totales.total_cobrado,
-            opcionesConciliar
+            opcionesConciliar,
+            hayNc ? nc : null
         );
         html += '</div>';
         return html;
@@ -131,19 +192,42 @@
         var html = '<div class="gastro-mozos-lista">';
         porMozo.forEach(function (m) {
             var medios = m.por_medio_pago || [];
+            var mnc = m.notas_credito || null;
+            var mncCant = mnc ? Number(mnc.cantidad || 0) : 0;
+            var mncTotal = mnc ? Number(mnc.total || 0) : 0;
+            var mozoHayNc = mnc && (mncCant > 0 || Math.abs(mncTotal) >= 0.005);
+            var mTotalFinal = Number(m.total != null ? m.total : 0);
+            var mTotalFacturas = m.total_facturas != null
+                ? Number(m.total_facturas)
+                : (mTotalFinal - mncTotal);
             html += '<div class="card mb-2 border">';
             html += '<div class="card-header py-2 bg-light">';
             html += '<div class="d-flex flex-wrap justify-content-between align-items-center">';
             html += '<strong class="gastro-mozo-nombre">' + esc(m.mozo_nombre || 'Sin mozo') + '</strong>';
-            html += '<span>';
-            html += (m.cantidad || 0) + ' comp. · Facturado <strong>$' + fmt(m.total) + '</strong>';
+            html += '<span class="small">';
+            html += (m.cantidad || 0) + ' comp.';
+            if (mozoHayNc) {
+                html += ' · Fact. bruto <strong>$' + fmt(mTotalFacturas) + '</strong>';
+                html += ' · NC <strong style="color:#922b21;">$' + fmt(mncTotal) + '</strong>';
+                html += ' · <span title="Facturado bruto − NC">Fact. final <strong>$' + fmt(mTotalFinal) + '</strong></span>';
+            } else {
+                html += ' · Facturado <strong>$' + fmt(mTotalFinal) + '</strong>';
+            }
             html += ' · Cobrado <strong>$' + fmt(m.total_cobrado != null ? m.total_cobrado : 0) + '</strong>';
             html += '</span>';
             html += '</div>';
             html += '</div>';
             html += '<div class="card-body py-2">';
             html += '<div class="font-weight-bold mb-2">Cobranzas por medio de pago</div>';
-            html += renderMediosPagoTabla(medios, 'Sin cobranzas en los comprobantes de este mozo.', false, null, opcionesConciliar);
+            html += renderMediosPagoTabla(
+                medios,
+                'Sin cobranzas en los comprobantes de este mozo.',
+                false,
+                null,
+                opcionesConciliar,
+                mozoHayNc ? mnc : null,
+                { mozo_id: m.mozo_id != null ? m.mozo_id : '', mozo_nombre: m.mozo_nombre || '' }
+            );
             html += '</div>';
             html += '</div>';
         });
@@ -247,6 +331,9 @@
                 var baseVer = (typeof window !== 'undefined' && window.GASTRONOMIA_FACTURA_VER_BASE) || '';
                 if (baseVer) {
                     var verUrl = baseVer.replace(/\/$/, '') + '/' + f.venta_id + '/ver';
+                    if (window.ModoConsulta) {
+                        verUrl = window.ModoConsulta.url(verUrl);
+                    }
                     html += '<a href="' + esc(verUrl) + '" class="btn btn-xs btn-outline-primary" target="_blank" rel="noopener" title="Ver factura">';
                     html += '<i class="fa fa-eye"></i> Ver</a>';
                 } else {
@@ -302,20 +389,42 @@
             html += 'Comprobantes y cobranzas del turno <strong>cuadran</strong>.</div>';
         }
         var cuentas = Number(estado.cuentas_sin_facturar || 0);
+        var urlSaneamiento = estado.url_saneamiento_turno || '';
+        if (window.ModoConsulta && urlSaneamiento) {
+            urlSaneamiento = window.ModoConsulta.url(urlSaneamiento);
+        }
         if (cuentas > 0) {
             if (estado.es_ultimo_turno_dia) {
                 html += '<div class="alert alert-danger py-2 mb-2">';
-                html += '<strong>' + cuentas + ' cuenta(s) o mesa(s)</strong> pendientes en esta terminal. ';
-                html += 'Al cerrar el <strong>último turno del día</strong> deben quedar todas facturadas o cerradas.</div>';
+                html += '<strong>' + cuentas + ' cuenta(s) o mesa(s) ABIERTA(S)</strong> sin facturar en esta terminal. ';
+                html += 'Al cerrar el <strong>último turno del día</strong> deben quedar facturadas o cerradas sin facturar. ';
+                if (urlSaneamiento) {
+                    html += 'Resuélvalas en <a href="' + esc(urlSaneamiento) + '" class="alert-link" target="_blank" rel="noopener">Saneamiento de turnos</a>.';
+                }
+                html += '</div>';
             } else {
                 html += '<div class="alert alert-info py-2 mb-2">';
-                html += '<strong>' + cuentas + ' cuenta(s)</strong> pendientes: pueden continuar en el próximo turno del día. ';
-                html += 'Solo el último turno exige dejarlas resueltas.</div>';
+                html += '<strong>' + cuentas + ' cuenta(s) abierta(s)</strong> sin facturar: pueden continuar en el próximo turno del día. ';
+                html += 'Solo el último turno del día exige dejarlas resueltas.</div>';
             }
         }
+        var cerradasSinFacturar = Number(estado.cuentas_cerradas_sin_facturar || 0);
+        if (cerradasSinFacturar > 0) {
+            html += '<div class="alert alert-secondary py-2 mb-2">';
+            html += '<strong>' + cerradasSinFacturar + ' cuenta(s) cerrada(s) sin facturar</strong> (estado terminal por saneamiento). ';
+            html += 'Quedan registradas para auditoría y no bloquean el cierre del turno ni de la jornada. ';
+            if (urlSaneamiento) {
+                html += '<a href="' + esc(urlSaneamiento) + '" class="alert-link" target="_blank" rel="noopener">Ver en Saneamiento de turnos</a>.';
+            }
+            html += '</div>';
+        }
         if (estado.url_facturas_dia) {
+            var urlFacturasDia = estado.url_facturas_dia;
+            if (window.ModoConsulta) {
+                urlFacturasDia = window.ModoConsulta.url(urlFacturasDia);
+            }
             html += '<div class="mb-2">';
-            html += '<a href="' + esc(estado.url_facturas_dia) + '" class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener">';
+            html += '<a href="' + esc(urlFacturasDia) + '" class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener">';
             html += '<i class="fa fa-list"></i> Facturas del día (esta empresa)</a>';
             html += '</div>';
         }
@@ -349,11 +458,14 @@
         if (!totales) {
             return '';
         }
-        var totalVentas = totales.total_ventas != null ? totales.total_ventas : totales.total_general;
+        var totalFinal = totales.total_ventas != null ? totales.total_ventas : totales.total_general;
+        var ncTotalHdr = Number(totales.total_notas_credito || 0);
+        var hayNcHdr = Number(totales.cantidad_notas_credito || 0) > 0 || Math.abs(ncTotalHdr) >= 0.005;
+        var labelFinal = hayNcHdr ? 'Facturado final (NC restadas)' : 'Total facturado';
         var html = '<div class="' + CLS_PANEL + ' gastro-totales-bloque border rounded p-3 mb-3 bg-white">';
         html += '<div class="d-flex flex-wrap justify-content-between align-items-center border-bottom pb-2 mb-3">';
         html += '<span class="h6 font-weight-bold mb-0">' + esc(titulo) + '</span>';
-        html += '<span>Total facturado: <strong class="gastro-totales-monto">$' + fmt(totalVentas) + '</strong></span>';
+        html += '<span>' + labelFinal + ': <strong class="gastro-totales-monto">$' + fmt(totalFinal) + '</strong></span>';
         html += '</div>';
         var optsConc = (opciones && opciones.conciliarMedios) ? { habilitar: true } : null;
         var compacto = opciones && opciones.soloMozo;

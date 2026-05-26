@@ -31,6 +31,13 @@ class CuentaGastronomia extends Model implements Auditable
         'factura_receptor_nombre', 'factura_receptor_documento', 'factura_receptor_domicilio',
         'factura_receptor_tipodocumento_id',
         'configuracion_puntoventa_gastronomia_id', 'venta_id', 'waitry_order_id',
+        'canje_premio_pendiente',
+        'canje_fidelidad_pendiente',
+    ];
+
+    protected $casts = [
+        'canje_premio_pendiente' => 'array',
+        'canje_fidelidad_pendiente' => 'array',
     ];
 
     public function empresa()

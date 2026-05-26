@@ -59,6 +59,13 @@ return [
      */
     'tipotransaccion_nota_credito_id' => env('GASTRONOMIA_TIPO_TRANSACCION_NOTA_CREDITO_ID'),
 
+    /**
+     * Tipo de transacción de caja para devolución de factura (nota de crédito) desde gastronomía.
+     * Debe estar configurado con signo Egreso para que los importes se graben en negativo
+     * y las consultas de saldos resten automáticamente.
+     */
+    'tipotransaccion_caja_devolucion_id' => (int) env('GASTRONOMIA_TIPO_TRANSACCION_CAJA_DEVOLUCION_ID', 3),
+
     /** Prefijo SKU para catálogo rápido en el POS (ej. consumibles venta salón). */
     'sku_catalogo_prefijo' => env('GASTRONOMIA_SKU_CATALOGO_PREFIJO', 'V'),
 
@@ -97,6 +104,28 @@ return [
      * Replica la venta en Informix legacy vía bridge HTTP al facturar desde gastronomía.
      */
     'sincronizar_anita_al_facturar' => filter_var(env('GASTRONOMIA_SINCRONIZAR_ANITA', true), FILTER_VALIDATE_BOOLEAN),
+
+    /**
+     * Gastronomía: en Anita venta + vengrav + stkmov (platos) + vencae; omite comprob, compaux, venibr, climov.
+     * Facturación normal desde Ventas no usa esta opción (grabaAnita completo).
+     * Los insumos por fórmula siguen en stkmov vía GastronomiaInsumoStkmovAnitaService.
+     */
+    'anita_modo_minimo' => filter_var(env('GASTRONOMIA_ANITA_MODO_MINIMO', true), FILTER_VALIDATE_BOOLEAN),
+
+    /**
+     * Waitry (comanda / sync pago) después de responder al POS; no bloquea emitir-factura.
+     */
+    'waitry_tras_respuesta' => filter_var(env('GASTRONOMIA_WAITRY_TRAS_RESPUESTA', true), FILTER_VALIDATE_BOOLEAN),
+
+    /**
+     * Registra tiempos por etapa en log (gastronomia.emision.profile) al emitir factura.
+     */
+    'emision_profile' => filter_var(env('GASTRONOMIA_EMISION_PROFILE', false), FILTER_VALIDATE_BOOLEAN),
+
+    /**
+     * Incluye el desglose de tiempos en la respuesta JSON de emitir-factura (requiere emision_profile).
+     */
+    'emision_profile_en_respuesta' => filter_var(env('GASTRONOMIA_EMISION_PROFILE_EN_RESPUESTA', false), FILTER_VALIDATE_BOOLEAN),
 
     /**
      * Cuenta de caja de efectivo por empresa para efectivizar (F5): cobro en efectivo + factura + impresión.
@@ -157,6 +186,37 @@ return [
         env('GASTRONOMIA_TICKET_GUARDAR_PREVIEW', env('APP_ENV', 'production') === 'local'),
         FILTER_VALIDATE_BOOLEAN
     ),
+
+    /**
+     * Días de validez del ticket tarjeta gastronomía desde la fecha de emisión (ifecha en Anita).
+     */
+    'ticket_tarjeta_vencimiento_dias' => max(1, (int) env('GASTRONOMIA_TICKET_TARJETA_VENCIMIENTO_DIAS', 30)),
+
+    /**
+     * Tolerancia ($) por la cual el importe del ticket puede superar el saldo pendiente de la factura.
+     * En ese caso la cobranza se registra por el saldo pendiente y el ticket se canjea igualmente.
+     */
+    'ticket_tarjeta_tolerancia_excedente_factura' => max(0., (float) env('GASTRONOMIA_TICKET_TARJETA_TOLERANCIA_EXCEDENTE', 5.)),
+
+    /** Código de cuenta de caja para canje ticket tarjeta (uso Gastronomía). */
+    'ticket_tarjeta_cuentacaja_codigo' => env('GASTRONOMIA_TICKET_TARJETA_CUENTACAJA_CODIGO', 'CTG'),
+
+    /** Base Informix donde está la tabla tickettarj (bridge Anita). */
+    'ticket_tarjeta_anita_sistema' => env('GASTRONOMIA_TICKET_TARJETA_ANITA_SISTEMA', 'base_admin'),
+
+    /** Código de descuento gastronomía para facturar canjes de premios Wigos ($0,01). */
+    'canje_premio_descuento_codigo' => env('GASTRONOMIA_CANJE_PREMIO_DESCUENTO_CODIGO', '10'),
+
+    /** Código de cliente para facturar canjes de premios Wigos. */
+    'canje_premio_cliente_codigo' => env('GASTRONOMIA_CANJE_PREMIO_CLIENTE_CODIGO', '500'),
+
+    /** Días de validez del ticket Wigos desde la fecha del premio (COMAND_pide_canje: 2 días). */
+    'canje_premio_vencimiento_dias' => max(1, (int) env('GASTRONOMIA_CANJE_PREMIO_VENCIMIENTO_DIAS', 2)),
+
+    /** Descuento y cliente para canje diario fidelidad por tarjeta (factura $0,01). */
+    'canje_fidelidad_descuento_codigo' => env('GASTRONOMIA_CANJE_FIDELIDAD_DESCUENTO_CODIGO', '10'),
+
+    'canje_fidelidad_cliente_codigo' => env('GASTRONOMIA_CANJE_FIDELIDAD_CLIENTE_CODIGO', '500'),
 
     'cuentacaja_efectivo_por_empresa' => (static function (): array {
         $raw = env('GASTRONOMIA_CUENTACAJA_EFECTIVO_POR_EMPRESA');

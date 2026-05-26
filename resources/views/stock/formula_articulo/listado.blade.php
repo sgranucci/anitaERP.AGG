@@ -1,6 +1,8 @@
 @php
     use App\Support\Configuracion\EmpresaLogoArchivo;
+    use App\Support\Stock\FormulaArticuloNumero;
     $logosCabecera = EmpresaLogoArchivo::logosCabeceraDesdeColeccion($formulas);
+    $listadoMostrarCodigo = FormulaArticuloNumero::mostrarCodigo();
 @endphp
 <!DOCTYPE html>
 <html lang="es">
@@ -52,8 +54,10 @@
 	<table class="data">
 		<thead>
 			<tr>
-				<th style="width:4%">ID</th>
+				<th style="width:4%">{{ $listadoMostrarCodigo ? 'Cód.' : 'ID' }}</th>
+				@unless ($listadoMostrarCodigo)
 				<th style="width:6%">Cód. fórmula</th>
+				@endunless
 				<th style="width:5%">Id art.</th>
 				<th style="width:8%">SKU</th>
 				<th style="width:14%">Artículo</th>
@@ -67,8 +71,10 @@
 		<tbody>
 			@foreach ($formulas as $row)
 				<tr>
-					<td>{{ $row->id }}</td>
+					<td>{{ $listadoMostrarCodigo ? FormulaArticuloNumero::paraFormula($row) : $row->id }}</td>
+					@unless ($listadoMostrarCodigo)
 					<td><small>@if(! empty($row->codigo)){{ $row->codigo }}@else<span class="text-muted">&mdash;</span>@endif</small></td>
+					@endunless
 					<td>@if (! empty($row->articulo_id))<a href="{{ route('editar_articulo', ['id' => $row->articulo_id]) }}">{{ $row->articulo_id }}</a>@else<span class="text-muted">—</span>@endif</td>
 					<td>{{ $row->articulo_sku ?? '' }}</td>
 					<td>{{ $row->articulo_descripcion ?? '' }}</td>

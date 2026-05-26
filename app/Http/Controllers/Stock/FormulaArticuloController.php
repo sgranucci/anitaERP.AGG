@@ -18,6 +18,7 @@ use App\Services\Stock\FormulaArticuloService;
 use App\Services\Stock\FormulaArticuloVinculoService;
 use App\Services\Stock\FormulaArticuloCostoTotalService;
 use App\Services\Stock\StkmaeUltimaCompraAnitaService;
+use App\Support\Stock\FormulaArticuloGastronomia;
 use Auth;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -40,18 +41,33 @@ class FormulaArticuloController extends Controller
         can('listar-formula-articulo');
 
         $busqueda = $request->busqueda;
+        $conOpcionales = $this->normalizarConOpcionales($request->input('con_opcionales'));
 
-        $formulas = $this->formulaArticuloQuery->leeFormulaArticulo($busqueda, true, true);
+        $formulas = $this->formulaArticuloQuery->leeFormulaArticulo($busqueda, true, true, $conOpcionales);
         $this->stkmaeUltimaCompraAnitaService->enriquecerFormulasPaginadasConCosto($formulas);
         $this->formulaArticuloCostoTotalService->enriquecerFormulasConCostoTotal($formulas);
+        if ($conOpcionales !== null && $busqueda) {
+            $formulas->appends(['busqueda' => $busqueda, 'con_opcionales' => $conOpcionales]);
+        } elseif ($conOpcionales !== null) {
+            $formulas->appends(['con_opcionales' => $conOpcionales]);
+        }
         $sinFormulasCargadas = Formula_Articulo::query()->count() === 0;
 
         return view('stock.formula_articulo.index', [
             'formulas' => $formulas,
             'busqueda' => $busqueda,
+            'conOpcionales' => $conOpcionales,
+            'opcionalesHabilitados' => FormulaArticuloGastronomia::opcionalesHabilitados(),
             'estado_enum' => Formula_Articulo_Estado::$enumEstado,
             'sinFormulasCargadas' => $sinFormulasCargadas,
         ]);
+    }
+
+    private function normalizarConOpcionales($valor): ?string
+    {
+        $valor = is_string($valor) ? strtolower(trim($valor)) : null;
+
+        return in_array($valor, ['si', 'no'], true) ? $valor : null;
     }
 
     /**
@@ -100,9 +116,14 @@ class FormulaArticuloController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
+        if (($busqueda === null || $busqueda === '') && $request->query('busqueda') !== null) {
+            $busqueda = (string) $request->query('busqueda');
+        }
+        $conOpcionales = $this->normalizarConOpcionales($request->query('con_opcionales'));
+
         switch ($formato) {
             case 'PDF':
-                $formulas = $this->formulaArticuloQuery->leeFormulaArticulo($busqueda, false, true);
+                $formulas = $this->formulaArticuloQuery->leeFormulaArticulo($busqueda, false, true, $conOpcionales);
                 $this->stkmaeUltimaCompraAnitaService->enriquecerFormulasPaginadasConCosto($formulas);
                 $this->formulaArticuloCostoTotalService->enriquecerFormulasConCostoTotal($formulas);
                 $view = \View::make('stock.formula_articulo.listado', compact('formulas'))->render();
@@ -119,22 +140,24 @@ class FormulaArticuloController extends Controller
 
             case 'EXCEL':
                 return (new FormulaArticuloExport($this->formulaArticuloQuery))
-                    ->parametros($busqueda)
+                    ->parametros($busqueda, $conOpcionales)
                     ->download('formula_articulo.xlsx');
 
             case 'CSV':
                 return (new FormulaArticuloExport($this->formulaArticuloQuery))
-                    ->parametros($busqueda)
+                    ->parametros($busqueda, $conOpcionales)
                     ->download('formula_articulo.csv', \Maatwebsite\Excel\Excel::CSV);
         }
 
-        $formulas = $this->formulaArticuloQuery->leeFormulaArticulo($busqueda, true, true);
+        $formulas = $this->formulaArticuloQuery->leeFormulaArticulo($busqueda, true, true, $conOpcionales);
         $this->stkmaeUltimaCompraAnitaService->enriquecerFormulasPaginadasConCosto($formulas);
         $this->formulaArticuloCostoTotalService->enriquecerFormulasConCostoTotal($formulas);
 
         return view('stock.formula_articulo.index', [
             'formulas' => $formulas,
             'busqueda' => $busqueda,
+            'conOpcionales' => $conOpcionales,
+            'opcionalesHabilitados' => FormulaArticuloGastronomia::opcionalesHabilitados(),
             'estado_enum' => Formula_Articulo_Estado::$enumEstado,
         ]);
     }
@@ -405,6 +428,7 @@ class FormulaArticuloController extends Controller
                 'codigo' => $r->codigo,
                 'sku' => $r->articulo_sku,
                 'descripcion' => $r->articulo_descripcion,
+                'detalle' => $r->detalle,
                 'estado' => $r->estado,
             ];
             if (count($out) >= 40) {

@@ -1,13 +1,17 @@
+@php
+    $modoConsulta = request()->input('vista') === 'consulta';
+@endphp
 <!DOCTYPE html>
 <html>
 
 <head>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <title>@yield('titulo', 'Anita ERP') | Anita ERP</title>
+    <title>{{ $modoConsulta ? '[Consulta] ' : '' }}@yield('titulo', 'Anita ERP') | Anita ERP</title>
     <!-- Tell the browser to be responsive to screen width -->
     <!-- Font Awesome -->
     <link rel="stylesheet" href="{{asset("assets/$theme/plugins/fontawesome-free/css/all.min.css")}}">
+    <link rel="stylesheet" href="{{asset("assets/$theme/plugins/fontawesome-free/css/v4-shims.min.css")}}">
   	<!-- DataTables -->
   	<link rel="stylesheet" href="{{asset("assets/$theme/plugins/datatables-bs4/css/dataTables.bootstrap4.min.css")}}">
   	<link rel="stylesheet" href="{{asset("assets/$theme/plugins/datatables-responsive/css/responsive.bootstrap4.min.css")}}">
@@ -39,15 +43,17 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,600,700,300italic,400italic,600italic">
 </head>
 
-<body class="hold-transition sidebar-mini">
+<body class="hold-transition sidebar-mini{{ $modoConsulta ? ' modo-consulta sidebar-collapse' : '' }}">
     <!-- Site wrapper -->
     <div class="wrapper">
         <!-- Inicio Header -->
         @include("theme/$theme/header")
         <!-- Fin Header -->
-        <!-- Inicio Aside -->
-        @include("theme/$theme/aside")
-        <!-- Fin Aside -->
+        @if (!$modoConsulta)
+            <!-- Inicio Aside -->
+            @include("theme/$theme/aside")
+            <!-- Fin Aside -->
+        @endif
         <div class="content-wrapper">
             <!-- Content Header (Page header) -->
             <section class="content-header">
@@ -147,6 +153,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
     <script src="{{asset("assets/js/scripts.js")}}"></script>
     <script src="{{asset("assets/js/funciones.js")}}"></script>
+    <script src="{{asset('assets/js/modo-consulta.js')}}"></script>
     @yield("scripts")
 </body>
 

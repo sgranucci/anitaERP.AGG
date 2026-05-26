@@ -330,7 +330,10 @@ class PrecioController extends Controller
             $fechaRef = Carbon::today()->format('Y-m-d');
         }
 
-        $data = $this->precioQuery->leeHistorialPreciosArticulo($articuloId, $fechaRef);
+        $listaprecioId = (int) $request->query('listaprecio_id', 0);
+        $listaprecioId = $listaprecioId > 0 ? $listaprecioId : null;
+
+        $data = $this->precioQuery->leeHistorialPreciosArticulo($articuloId, $fechaRef, $listaprecioId);
 
         $puedeEditar = can('editar-precios', false);
         foreach ($data['filas'] as &$fila) {

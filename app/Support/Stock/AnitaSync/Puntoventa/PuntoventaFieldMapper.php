@@ -3,6 +3,7 @@
 namespace App\Support\Stock\AnitaSync\Puntoventa;
 
 use App\Models\Configuracion\Empresa;
+use App\Models\Ventas\Puntoventa;
 
 /**
  * Mapeo sucursal (Anita) → puntoventa (ERP), alineado a la lógica histórica del repositorio de ventas
@@ -15,7 +16,7 @@ final class PuntoventaFieldMapper
     {
         $n = (int) ($row->suc_numero ?? 0);
 
-        return $n > 0 ? trim((string) $n) : null;
+        return $n > 0 ? Puntoventa::normalizarCodigoArca((string) $n) : null;
     }
 
     public static function mapNombre(object $row): string

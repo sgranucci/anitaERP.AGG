@@ -139,11 +139,21 @@ class PuntoventaAnitaSyncService
         $this->validarPayloadMinimo($payload, $codigoAnita);
 
         $empresaId = (int) $payload['empresa_id'];
-        $codigoNorm = trim((string) $codigoAnita);
+        $codigoNorm = Puntoventa::normalizarCodigoArca($codigoAnita);
+        if ($codigoNorm === null) {
+            throw new \InvalidArgumentException("código de sucursal inválido ({$codigoAnita}).");
+        }
+
+        $numeroPv = (int) preg_replace('/\D+/', '', $codigoAnita);
 
         $existente = Puntoventa::withTrashed()
             ->where('empresa_id', $empresaId)
-            ->whereRaw('TRIM(codigo) = ?', [$codigoNorm])
+            ->where(function ($q) use ($codigoNorm, $numeroPv) {
+                $q->where('codigo', $codigoNorm);
+                if ($numeroPv > 0) {
+                    $q->orWhereRaw('CAST(TRIM(codigo) AS UNSIGNED) = ?', [$numeroPv]);
+                }
+            })
             ->orderByRaw('CASE WHEN deleted_at IS NULL THEN 0 ELSE 1 END')
             ->orderBy('id')
             ->first();

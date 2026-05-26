@@ -38,7 +38,131 @@ var idioma=
                 }
             };
 
-var titulo = $('.card-title').val();
+function resolverTituloExportListado() {
+    if (typeof window.tituloExportListado === 'string' && window.tituloExportListado.trim() !== '') {
+        return window.tituloExportListado.trim();
+    }
+    var textoCard = $('.card-title').first().text();
+    if (textoCard && textoCard.trim() !== '') {
+        return textoCard.trim();
+    }
+    return 'Listado';
+}
+
+function resolverNombreArchivoExportListado(titulo) {
+    if (typeof window.nombreArchivoExportListado === 'string' && window.nombreArchivoExportListado.trim() !== '') {
+        return window.nombreArchivoExportListado.trim();
+    }
+    return titulo
+        .replace(/[/\\:*?"<>|]/g, '')
+        .replace(/\s+/g, '_')
+        .substring(0, 100) || 'listado';
+}
+
+function tituloExportAlMomento() {
+    return resolverTituloExportListado();
+}
+
+function nombreArchivoExportAlMomento() {
+    return resolverNombreArchivoExportListado(tituloExportAlMomento());
+}
+
+function configuracionBotonesExportDataTable() {
+    return {
+        dom: {
+            container: {
+                tag: 'div',
+                className: 'dataTables_filter'
+            },
+            buttonLiner: {
+                tag: null
+            }
+        },
+        buttons: [
+            {
+                extend: 'copyHtml5',
+                text: '<i class="fa fa-clipboard" style="color: white"></i><p style="color:white";>Copiar</p>',
+                title: tituloExportAlMomento,
+                titleAttr: 'Copiar',
+                className: 'btn btn-app export barras',
+                exportOptions: {
+                    columns: ':visible'
+                }
+            },
+            {
+                extend: 'pdfHtml5',
+                text: '<i class="fa fa-file-pdf" style="color: white;"></i><p style="color:white";>PDF</p>',
+                title: tituloExportAlMomento,
+                filename: nombreArchivoExportAlMomento,
+                titleAttr: 'PDF',
+                className: 'btn btn-app export pdf',
+                exportOptions: {
+                    columns: ':visible'
+                },
+                customize: function (doc) {
+                    var titulo = tituloExportAlMomento();
+                    if (doc.content && doc.content.length && doc.content[0].text !== undefined) {
+                        doc.content[0].text = titulo;
+                    }
+                    doc.styles.title = {
+                        color: '#4c8aa0',
+                        fontSize: '30',
+                        alignment: 'center'
+                    };
+                    doc.styles['td:nth-child(2)'] = {
+                        width: '100px',
+                        'max-width': '100px'
+                    };
+                    doc.styles.tableHeader = {
+                        fillColor: '#4c8aa0',
+                        color: 'white',
+                        alignment: 'center'
+                    };
+                    if (doc.content[1]) {
+                        doc.content[1].margin = [100, 0, 100, 0];
+                    }
+                }
+            },
+            {
+                extend: 'excelHtml5',
+                text: '<i class="fa fa-file-excel" style="color: white;"></i><p style="color:white";>Excel</p>',
+                title: tituloExportAlMomento,
+                filename: nombreArchivoExportAlMomento,
+                titleAttr: 'Excel',
+                className: 'btn btn-app export excel',
+                exportOptions: {
+                    columns: ':visible'
+                }
+            },
+            {
+                extend: 'csvHtml5',
+                text: '<i class="fa fa-file" style="color: white;"></i><p style="color:white";>CSV</p>',
+                title: tituloExportAlMomento,
+                filename: nombreArchivoExportAlMomento,
+                titleAttr: 'CSV',
+                className: 'btn btn-app export csv',
+                exportOptions: {
+                    columns: ':visible'
+                }
+            },
+            {
+                extend: 'print',
+                text: '<i class="fa fa-print" style="color: white;"></i><p style="color:white";>Imprimir</p>',
+                title: tituloExportAlMomento,
+                titleAttr: 'Imprimir',
+                className: 'btn btn-app export imprimir',
+                exportOptions: {
+                    columns: ':visible'
+                }
+            },
+            {
+                extend: 'pageLength',
+                titleAttr: 'Registros a mostrar',
+                className: 'selectTable'
+            }
+        ]
+    };
+}
 
 $(document).ready(function () {
     $("#tabla-data").on('submit', '.form-eliminar', function () {
@@ -113,6 +237,21 @@ $(document).ready(function () {
         });
     });
 
+    function mensajeErrorEliminacion(respuesta, xhr) {
+        if (respuesta && respuesta.error) {
+            return respuesta.error;
+        }
+        if (xhr && xhr.responseJSON) {
+            if (xhr.responseJSON.error) {
+                return xhr.responseJSON.error;
+            }
+            if (xhr.responseJSON.message) {
+                return xhr.responseJSON.message;
+            }
+        }
+        return 'El registro no pudo ser eliminado porque está en uso o ocurrió un error interno.';
+    }
+
     function ajaxRequest(form) {
         $.ajax({
             url: form.attr('action'),
@@ -123,483 +262,117 @@ $(document).ready(function () {
                     form.parents('tr').remove();
                     Biblioteca.notificaciones('El registro fue eliminado correctamente', 'anitaERP', 'success');
                 } else {
-                    Biblioteca.notificaciones('El registro no pudo ser eliminado, hay recursos usandolo', 'anitaERP', 'error');
+                    Biblioteca.notificaciones(mensajeErrorEliminacion(respuesta), 'anitaERP', 'error');
                 }
             },
-            error: function () {
-
+            error: function (xhr) {
+                Biblioteca.notificaciones(mensajeErrorEliminacion(null, xhr), 'anitaERP', 'error');
             }
         });
     }
 
-  var table = $("#tabla-data").DataTable({
-	"processing": true,
-    "paging": true,
-    "lengthChange": true,
-    "searching": true,
-    "ordering": true,
-    "info": true,
-    "autoWidth": true,
-	"language": idioma,
-    "lengthMenu": [[10,5,50, -1],[10,5,50,"Mostrar Todo"]],
-    dom: 'Bfrt<"col-md-6 inline"i> <"col-md-6 inline"p>',
-    
-    buttons: {
-          dom: {
-            container:{
-              tag:'div',
-              className:'dataTables_filter'
-            },
-            buttonLiner: {
-              tag: null
-            }
-          },
-          buttons: [
-                    {
-                        extend:    'copyHtml5',
-                        text:      '<i class="fa fa-clipboard" style="color: white"></i><p style="color:white";>Copiar</p>',
-                        title: 'Titulo de tabla copiada',
-                        titleAttr: 'Copiar',
-                        className: 'btn btn-app export barras',
-                        exportOptions: {
-                            columns: ':visible'
-                        }
-                    },
+    if ($("#tabla-data").length && !$.fn.DataTable.isDataTable("#tabla-data")) {
+        $("#tabla-data").DataTable({
+            "processing": true,
+            "paging": true,
+            "lengthChange": true,
+            "searching": true,
+            "ordering": true,
+            "info": true,
+            "autoWidth": true,
+            "language": idioma,
+            "lengthMenu": [[10, 5, 50, -1], [10, 5, 50, "Mostrar Todo"]],
+            dom: 'Bfrt<"col-md-6 inline"i> <"col-md-6 inline"p>',
+            buttons: configuracionBotonesExportDataTable()
+        });
+    }
 
-                    {
-                        extend:    'pdfHtml5',
-                        text:      '<i class="fa fa-file-pdf" style="color: white;"></i><p style="color:white";>PDF</p>',
-                        title:'Titulo de tabla en pdf',
-                        titleAttr: 'PDF',
-                        className: 'btn btn-app export pdf',
-                        exportOptions: {
-                            columns: ':visible'
-                        },
-                        customize:function(doc) {
-
-                            doc.styles.title = {
-                                color: '#4c8aa0',
-                                fontSize: '30',
-                                alignment: 'center'
-                            }
-                            doc.styles['td:nth-child(2)'] = { 
-                                width: '100px',
-                                'max-width': '100px'
-                            },
-                            doc.styles.tableHeader = {
-                                fillColor:'#4c8aa0',
-                                color:'white',
-                                alignment:'center'
-                            },
-                            doc.content[1].margin = [ 100, 0, 100, 0 ]
-
-                        }
-
-                    },
-                    {
-                        extend:    'excelHtml5',
-                        text:      '<i class="fa fa-file-excel" style="color: white;"></i><p style="color:white";>Excel</p>',
-                        title:'Titulo de tabla en excel',
-                        titleAttr: 'Excel',
-                        className: 'btn btn-app export excel',
-                        exportOptions: {
-                            columns: ':visible'
-                        },
-                    },
-                    {
-                        extend:    'csvHtml5',
-                        text:      '<i class="fa fa-file" style="color: white;"></i><p style="color:white";>CSV</p>',
-                        title:'Titulo de tabla en CSV',
-                        titleAttr: 'CSV',
-                        className: 'btn btn-app export csv',
-                        exportOptions: {
-                            columns: ':visible'
-                        }
-                    },
-                    {
-                        extend:    'print',
-                        text:      '<i class="fa fa-print" style="color: white;"></i><p style="color:white";>Imprimir</p>',
-                        title:'Titulo de tabla en impresion',
-                        titleAttr: 'Imprimir',
-                        className: 'btn btn-app export imprimir',
-                        exportOptions: {
-                            columns: ':visible'
-                        }
-                    },
-                    {
-                        extend:    'pageLength',
-                        titleAttr: 'Registros a mostrar',
-                        className: 'selectTable'
-                    }
-                ]
-          
-          
-        }
-    });
-
-  var table2 = $("#tabla-data-2").DataTable({
-    
-	"processing": true,
-    "paging": true,
-    "lengthChange": true,
-    "searching": true,
-    "ordering": true,
-    "order": [ 0, 'desc' ],
-    "info": true,
-    "autoWidth": true,
-	"language": idioma,
-    "lengthMenu": [[10,5,50, -1],[10,5,50,"Mostrar Todo"]],
-    dom: 'Bfrt<"col-md-6 inline"i> <"col-md-6 inline"p>',
-    
-    buttons: {
-          dom: {
-            container:{
-              tag:'div',
-              className:'dataTables_filter'
-            },
-            buttonLiner: {
-              tag: null
-            }
-          },
-          buttons: [
-                    {
-                        extend:    'copyHtml5',
-                        text:      '<i class="fa fa-clipboard" style="color: white"></i><p style="color:white";>Copiar</p>',
-                        title: 'Titulo de tabla copiada',
-                        titleAttr: 'Copiar',
-                        className: 'btn btn-app export barras',
-                        exportOptions: {
-                            columns: ':visible'
-                        }
-                    },
-
-                    {
-                        extend:    'pdfHtml5',
-                        text:      '<i class="fa fa-file-pdf" style="color: white;"></i><p style="color:white";>PDF</p>',
-                        title:'Titulo de tabla en pdf',
-                        titleAttr: 'PDF',
-                        className: 'btn btn-app export pdf',
-                        exportOptions: {
-                            columns: ':visible'
-                        },
-                        customize:function(doc) {
-
-                            doc.styles.title = {
-                                color: '#4c8aa0',
-                                fontSize: '30',
-                                alignment: 'center'
-                            }
-                            doc.styles['td:nth-child(2)'] = { 
-                                width: '100px',
-                                'max-width': '100px'
-                            },
-                            doc.styles.tableHeader = {
-                                fillColor:'#4c8aa0',
-                                color:'white',
-                                alignment:'center'
-                            },
-                            doc.content[1].margin = [ 100, 0, 100, 0 ]
-
-                        }
-
-                    },
-                    {
-                        extend:    'excelHtml5',
-                        text:      '<i class="fa fa-file-excel" style="color: white;"></i><p style="color:white";>Excel</p>',
-                        title:'Titulo de tabla en excel',
-                        titleAttr: 'Excel',
-                        className: 'btn btn-app export excel',
-                        exportOptions: {
-                            columns: ':visible'
-                        },
-                    },
-                    {
-                        extend:    'csvHtml5',
-                        text:      '<i class="fa fa-file" style="color: white;"></i><p style="color:white";>CSV</p>',
-                        title:'Titulo de tabla en CSV',
-                        titleAttr: 'CSV',
-                        className: 'btn btn-app export csv',
-                        exportOptions: {
-                            columns: ':visible'
-                        }
-                    },
-                    {
-                        extend:    'print',
-                        text:      '<i class="fa fa-print" style="color: white;"></i><p style="color:white";>Imprimir</p>',
-                        title:'Titulo de tabla en impresion',
-                        titleAttr: 'Imprimir',
-                        className: 'btn btn-app export imprimir',
-                        exportOptions: {
-                            columns: ':visible'
-                        }
-                    },
-                    {
-                        extend:    'pageLength',
-                        titleAttr: 'Registros a mostrar',
-                        className: 'selectTable'
-                    }
-                ]
-          
-          
-        }
-    });
+    if ($("#tabla-data-2").length && !$.fn.DataTable.isDataTable("#tabla-data-2")) {
+        $("#tabla-data-2").DataTable({
+            "processing": true,
+            "paging": true,
+            "lengthChange": true,
+            "searching": true,
+            "ordering": true,
+            "order": [0, 'desc'],
+            "info": true,
+            "autoWidth": true,
+            "language": idioma,
+            "lengthMenu": [[10, 5, 50, -1], [10, 5, 50, "Mostrar Todo"]],
+            dom: 'Bfrt<"col-md-6 inline"i> <"col-md-6 inline"p>',
+            buttons: configuracionBotonesExportDataTable()
+        });
+    }
 });
 
-var table3 = $("#tabla-data-3").DataTable({
-    
-	"processing": true,
-    "paging": true,
-    "lengthChange": true,
-    "searching": true,
-    "ordering": true,
-    "order": [ 0, 'desc' ],
-    "info": true,
-    "autoWidth": true,
-	"language": idioma,
-    "lengthMenu": [[-1,10,5,50],["Mostrar todo",10,5,50]],
-    dom: 'Bfrt<"col-md-6 inline"i> <"col-md-6 inline"p>',
-    
-    buttons: {
-          dom: {
-            container:{
-              tag:'div',
-              className:'dataTables_filter'
-            },
-            buttonLiner: {
-              tag: null
-            }
-          },
-          buttons: [
-                    {
-                        extend:    'copyHtml5',
-                        text:      '<i class="fa fa-clipboard" style="color: white"></i><p style="color:white";>Copiar</p>',
-                        title: 'Titulo de tabla copiada',
-                        titleAttr: 'Copiar',
-                        className: 'btn btn-app export barras',
-                        exportOptions: {
-                            columns: ':visible'
-                        }
-                    },
-
-                    {
-                        extend:    'pdfHtml5',
-                        text:      '<i class="fa fa-file-pdf" style="color: white;"></i><p style="color:white";>PDF</p>',
-                        title:'Titulo de tabla en pdf',
-                        titleAttr: 'PDF',
-                        className: 'btn btn-app export pdf',
-                        exportOptions: {
-                            columns: ':visible'
-                        },
-                        customize:function(doc) {
-
-                            doc.styles.title = {
-                                color: '#4c8aa0',
-                                fontSize: '30',
-                                alignment: 'center'
-                            }
-                            doc.styles['td:nth-child(2)'] = { 
-                                width: '100px',
-                                'max-width': '100px'
-                            },
-                            doc.styles.tableHeader = {
-                                fillColor:'#4c8aa0',
-                                color:'white',
-                                alignment:'center'
-                            },
-                            doc.content[1].margin = [ 100, 0, 100, 0 ]
-
-                        }
-
-                    },
-                    {
-                        extend:    'excelHtml5',
-                        text:      '<i class="fa fa-file-excel" style="color: white;"></i><p style="color:white";>Excel</p>',
-                        title:'Titulo de tabla en excel',
-                        titleAttr: 'Excel',
-                        className: 'btn btn-app export excel',
-                        exportOptions: {
-                            columns: ':visible'
-                        },
-                    },
-                    {
-                        extend:    'csvHtml5',
-                        text:      '<i class="fa fa-file" style="color: white;"></i><p style="color:white";>CSV</p>',
-                        title:'Titulo de tabla en CSV',
-                        titleAttr: 'CSV',
-                        className: 'btn btn-app export csv',
-                        exportOptions: {
-                            columns: ':visible'
-                        }
-                    },
-                    {
-                        extend:    'print',
-                        text:      '<i class="fa fa-print" style="color: white;"></i><p style="color:white";>Imprimir</p>',
-                        title:'Titulo de tabla en impresion',
-                        titleAttr: 'Imprimir',
-                        className: 'btn btn-app export imprimir',
-                        exportOptions: {
-                            columns: ':visible'
-                        }
-                    },
-                    {
-                        extend:    'pageLength',
-                        titleAttr: 'Registros a mostrar',
-                        className: 'selectTable'
-                    }
-                ]
-          
-          
-        }
+if ($("#tabla-data-3").length && !$.fn.DataTable.isDataTable("#tabla-data-3")) {
+    $("#tabla-data-3").DataTable({
+        "processing": true,
+        "paging": true,
+        "lengthChange": true,
+        "searching": true,
+        "ordering": true,
+        "order": [0, 'desc'],
+        "info": true,
+        "autoWidth": true,
+        "language": idioma,
+        "lengthMenu": [[-1, 10, 5, 50], ["Mostrar todo", 10, 5, 50]],
+        dom: 'Bfrt<"col-md-6 inline"i> <"col-md-6 inline"p>',
+        buttons: configuracionBotonesExportDataTable()
     });
+}
 
-var table3 = $("#tabla-data-sin-ordenar").DataTable({
-    
-	"processing": true,
-    "paging": true,
-    "lengthChange": true,
-    "searching": true,
-    "ordering": false,
-    "info": true,
-    "autoWidth": true,
-	"language": idioma,
-    "lengthMenu": [[-1,10,5,50],["Mostrar todo",10,5,50]],
-    dom: 'Bfrt<"col-md-6 inline"i> <"col-md-6 inline"p>',
-    
-    buttons: {
-          dom: {
-            container:{
-              tag:'div',
-              className:'dataTables_filter'
-            },
-            buttonLiner: {
-              tag: null
-            }
-          },
-          buttons: [
-                    {
-                        extend:    'copyHtml5',
-                        text:      '<i class="fa fa-clipboard" style="color: white"></i><p style="color:white";>Copiar</p>',
-                        title: 'Titulo de tabla copiada',
-                        titleAttr: 'Copiar',
-                        className: 'btn btn-app export barras',
-                        exportOptions: {
-                            columns: ':visible'
-                        }
-                    },
-
-                    {
-                        extend:    'pdfHtml5',
-                        text:      '<i class="fa fa-file-pdf" style="color: white;"></i><p style="color:white";>PDF</p>',
-                        title:'Titulo de tabla en pdf',
-                        titleAttr: 'PDF',
-                        className: 'btn btn-app export pdf',
-                        exportOptions: {
-                            columns: ':visible'
-                        },
-                        customize:function(doc) {
-
-                            doc.styles.title = {
-                                color: '#4c8aa0',
-                                fontSize: '30',
-                                alignment: 'center'
-                            }
-                            doc.styles['td:nth-child(2)'] = { 
-                                width: '100px',
-                                'max-width': '100px'
-                            },
-                            doc.styles.tableHeader = {
-                                fillColor:'#4c8aa0',
-                                color:'white',
-                                alignment:'center'
-                            },
-                            doc.content[1].margin = [ 100, 0, 100, 0 ]
-
-                        }
-
-                    },
-                    {
-                        extend:    'excelHtml5',
-                        text:      '<i class="fa fa-file-excel" style="color: white;"></i><p style="color:white";>Excel</p>',
-                        title:'Titulo de tabla en excel',
-                        titleAttr: 'Excel',
-                        className: 'btn btn-app export excel',
-                        exportOptions: {
-                            columns: ':visible'
-                        },
-                    },
-                    {
-                        extend:    'csvHtml5',
-                        text:      '<i class="fa fa-file" style="color: white;"></i><p style="color:white";>CSV</p>',
-                        title:'Titulo de tabla en CSV',
-                        titleAttr: 'CSV',
-                        className: 'btn btn-app export csv',
-                        exportOptions: {
-                            columns: ':visible'
-                        }
-                    },
-                    {
-                        extend:    'print',
-                        text:      '<i class="fa fa-print" style="color: white;"></i><p style="color:white";>Imprimir</p>',
-                        title:'Titulo de tabla en impresion',
-                        titleAttr: 'Imprimir',
-                        className: 'btn btn-app export imprimir',
-                        exportOptions: {
-                            columns: ':visible'
-                        }
-                    },
-                    {
-                        extend:    'pageLength',
-                        titleAttr: 'Registros a mostrar',
-                        className: 'selectTable'
-                    }
-                ]
-          
-          
-        }
+if ($("#tabla-data-sin-ordenar").length && !$.fn.DataTable.isDataTable("#tabla-data-sin-ordenar")) {
+    $("#tabla-data-sin-ordenar").DataTable({
+        "processing": true,
+        "paging": true,
+        "lengthChange": true,
+        "searching": true,
+        "ordering": false,
+        "info": true,
+        "autoWidth": true,
+        "language": idioma,
+        "lengthMenu": [[-1, 10, 5, 50], ["Mostrar todo", 10, 5, 50]],
+        dom: 'Bfrt<"col-md-6 inline"i> <"col-md-6 inline"p>',
+        buttons: configuracionBotonesExportDataTable()
     });
-
+}
 
 function downloadPDFWithBrowserPrint() {
     window.print();
 }
-document.querySelector('#browserPrint').addEventListener('click', downloadPDFWithBrowserPrint);
 
-let download_xls = document.querySelector("#download_xls")
-download_xls.addEventListener("click", ()=>{                     
-  ExcellentExport.excel(download_xls, 'tabla-paginada')
-})
+var browserPrint = document.querySelector('#browserPrint');
+if (browserPrint) {
+    browserPrint.addEventListener('click', downloadPDFWithBrowserPrint);
+}
 
-let download_csv = document.querySelector("#download_csv")
-download_csv.addEventListener("click", ()=>{                     
-  ExcellentExport.csv(download_csv, 'tabla-paginada');
-})
+var nombreArchivoExcellentExport = resolverNombreArchivoExportListado(resolverTituloExportListado());
 
-let download_xlsx = document.querySelector("#download_xlsx")
-download_xlsx.addEventListener("click", ()=>{                     
-  ExcellentExport.convert({ anchor: download_xlsx, filename: 'filename', format: 'xlsx'},[{name: 'Sheet Name Here 1', from: {table: 'tabla-paginada'}}])
-})
+var download_xls = document.querySelector("#download_xls");
+if (download_xls) {
+    download_xls.addEventListener("click", function () {
+        ExcellentExport.excel(download_xls, 'tabla-paginada');
+    });
+}
 
-//$(function () {
-		//$("#tabla-data").DataTable({
-		//dom: 'Bfrtip',
-		//language: {
-				//"url": "//cdn.datatables.net/plug-ins/1.10.15/i18n/Spanish.json"
-		//},
-      	//"responsive": true, 
-		//"lengthChange": false, 
-		//"autoWidth": false,
-		//"buttons": [
-            //'copyHtml5',
-            //'excelHtml5',
-            //'csvHtml5',
-            //'pdfHtml5'
-        //],
-		//"buttons": {
-        	//"pageLength": {
-            //_: "Mostrar %d Registros"
-        	//}
-		//},
-    //}).buttons().container().appendTo('#example1_wrapper .col-md-6:eq(0)');
-  //});
-//});
+var download_csv = document.querySelector("#download_csv");
+if (download_csv) {
+    download_csv.addEventListener("click", function () {
+        ExcellentExport.csv(download_csv, 'tabla-paginada');
+    });
+}
 
+var download_xlsx = document.querySelector("#download_xlsx");
+if (download_xlsx) {
+    download_xlsx.addEventListener("click", function () {
+        ExcellentExport.convert({
+            anchor: download_xlsx,
+            filename: nombreArchivoExcellentExport,
+            format: 'xlsx'
+        }, [{
+            name: resolverTituloExportListado(),
+            from: { table: 'tabla-paginada' }
+        }]);
+    });
+}

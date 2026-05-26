@@ -2,11 +2,12 @@
 
 namespace App\Http\Controllers\Configuracion;
 
-use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
-use App\Models\Configuracion\Pais;
-use Illuminate\Support\Facades\Storage;
 use App\Http\Requests\ValidacionPais;
+use App\Models\Configuracion\Pais;
+use App\Support\Http\EliminacionRegistroSupport;
+use Illuminate\Database\QueryException;
+use Illuminate\Http\Request;
 
 class PaisController extends Controller
 {
@@ -102,17 +103,34 @@ class PaisController extends Controller
     {
         can('borrar-paises');
 
-		$modeloPais = new Pais();
-        $modeloPais->eliminarAnita($id);
-
-        if ($request->ajax()) {
-            if (Pais::destroy($id)) {
-                return response()->json(['mensaje' => 'ok']);
-            } else {
-                return response()->json(['mensaje' => 'ng']);
-            }
-        } else {
+        if (! $request->ajax()) {
             abort(404);
+        }
+
+        try {
+            $pais = Pais::findOrFail($id);
+            $codigoAnita = $pais->codigoAnita() ?? (string) $id;
+
+            $bloqueo = EliminacionRegistroSupport::mensajeSiReferenciado('pais_id', (int) $id, null, 'el país');
+            if ($bloqueo !== null) {
+                return EliminacionRegistroSupport::respuestaJsonError($bloqueo);
+            }
+
+            if (! Pais::destroy($id)) {
+                return EliminacionRegistroSupport::respuestaJsonError('No se pudo eliminar el país.');
+            }
+
+            (new Pais())->eliminarAnita($codigoAnita);
+
+            return EliminacionRegistroSupport::respuestaJsonOk();
+        } catch (QueryException $e) {
+            return EliminacionRegistroSupport::respuestaJsonError(
+                EliminacionRegistroSupport::mensajeDesdeQueryException($e, 'el país')
+            );
+        } catch (\Throwable $e) {
+            return EliminacionRegistroSupport::respuestaJsonError(
+                EliminacionRegistroSupport::mensajeDesdeExcepcion($e, 'el país')
+            );
         }
     }
 }

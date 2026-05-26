@@ -3,7 +3,7 @@
     $articuloId = (int) ($articuloId ?? 0);
 @endphp
 @if ($skuTxt !== '' && $skuTxt !== '—' && $articuloId > 0 && can('editar-articulos', false))
-    <a href="{{ route('editar_articulo', ['id' => $articuloId, 'origen' => 'modal_consulta']) }}"
+    <a href="{{ route('editar_articulo', ['id' => $articuloId, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
        target="_blank"
        rel="noopener"
        class="text-primary"

@@ -194,6 +194,53 @@ class HabilitacionTurnoGastronomiaController extends Controller
         ]);
     }
 
+    public function apiConciliacionNotasCredito(Request $request)
+    {
+        if (! can('gestionar-habilitacion-turno-gastronomia', false)) {
+            return response()->json(['ok' => false, 'error' => 'Sin permiso para gestionar habilitación de turno.'], 403);
+        }
+
+        $cfg = $this->cuentaService->resolverConfiguracionPv($request);
+        if ($cfg === null) {
+            return response()->json(['ok' => false, 'error' => 'Sin configuración PV.'], 422);
+        }
+
+        $pc = GastronomiaIdentificadorPc::resolver($request);
+        $activo = $this->turnoOperativoService->turnoHabilitadoEnPc($pc);
+        if ($activo === null) {
+            return response()->json(['ok' => false, 'error' => 'No hay turno habilitado.'], 422);
+        }
+
+        $activo->loadMissing('jornada');
+        $fechaJornada = $activo->jornada?->fecha_jornada?->format('Y-m-d')
+            ?? Carbon::today()->format('Y-m-d');
+
+        $mozoIdInput = $request->input('mozo_id');
+        $mozoId = ($mozoIdInput !== null && $mozoIdInput !== '' && (int) $mozoIdInput > 0)
+            ? (int) $mozoIdInput
+            : null;
+
+        $notas = GastronomiaTurnoOperativoTotalesSupport::notasCreditoDelTurno(
+            $pc,
+            (int) $cfg->empresa_id,
+            $fechaJornada,
+            $activo->habilitacion_en,
+            $mozoId,
+        );
+
+        return response()->json([
+            'ok' => true,
+            'mozo_id' => $mozoId,
+            'notas_credito' => $notas,
+            'cantidad' => count($notas),
+            'total' => round(array_sum(array_map(
+                fn (array $n) => (float) ($n['monto_nota_credito'] ?? 0),
+                $notas
+            )), 2),
+            'url_factura_ver_base' => url('ventas/gastronomia/facturas-dia'),
+        ]);
+    }
+
     public function informeMozoPdf(Request $request)
     {
         can('cierre-parcial-turno-gastronomia');

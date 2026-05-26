@@ -258,6 +258,7 @@ final class GastronomiaFacturacionService
             'omitir_contabilidad' => ! config('gastronomia.genera_contabilidad_al_facturar', true),
             'omitir_cuenta_corriente' => true,
             'omitir_sincronizacion_anita' => ! config('gastronomia.sincronizar_anita_al_facturar', true),
+            'anita_modo_minimo' => (bool) config('gastronomia.anita_modo_minimo', true),
             // CAE al final del proceso gastronómico (misma transacción que cobranza e ingredientes).
             'omitir_solicitud_arca_cae' => true,
         ];

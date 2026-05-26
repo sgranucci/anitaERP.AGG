@@ -73,10 +73,10 @@ class UsuarioController extends Controller
         ]);
 
         $usuario = Usuario::create($request->all());
-        $usuario->roles()->sync($request->rol_id);
+        $usuario->auditSync('roles', $request->rol_id);
 
         // Actualiza las empresas
-        $usuario->usuario_empresas()->sync($request->empresa_ids);
+        $usuario->auditSync('usuario_empresas', $request->empresa_ids);
 
         return redirect('admin/usuario')->with('mensaje', 'Usuario creado con éxito');
     }
@@ -116,10 +116,10 @@ class UsuarioController extends Controller
             : null;
 
         $usuario->update($data);
-        $usuario->roles()->sync($request->rol_id);
+        $usuario->auditSync('roles', $request->rol_id);
 
         // Actualiza las empresas
-        $usuario->usuario_empresas()->sync($request->empresa_ids);
+        $usuario->auditSync('usuario_empresas', $request->empresa_ids);
 
         return redirect('admin/usuario')->with('mensaje', 'Usuario actualizado con exito');
     }
@@ -128,7 +128,7 @@ class UsuarioController extends Controller
     {
         if ($request->ajax()) {
             $usuario = Usuario::findOrFail($id);
-            $usuario->roles()->detach();
+            $usuario->auditDetach('roles');
             $usuario->delete();
             Storage::disk('public')->delete("imagenes/fotos_usuarios/$usuario->foto");
 
@@ -170,7 +170,7 @@ class UsuarioController extends Controller
             ];
 
             $usuario = Usuario::create($dataUsuario);
-            $usuario->roles()->sync($rolId);
+            $usuario->auditSync('roles', $rolId);
         }
     }
 

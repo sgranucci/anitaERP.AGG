@@ -89,6 +89,7 @@ use App;
 use Auth;
 use DB;
 use App\ApiAnita;
+use App\Support\Ventas\GastronomiaEmisionProfiler;
 use Exception;
 use PDF;
 
@@ -1633,6 +1634,15 @@ class FacturacionService
 		$impuestosIdsInput = $data['impuesto_ids'] ?? null;
 		$incluyePorLista = [];
 
+		// Selección de opcionales por índice de item (orden_opcional => articulo_id).
+		// Habilita el cálculo de impuesto interno cuando el insumo elegido es del tipo configurado.
+		$opcionalesPorItem = $data['opcionales_por_item'] ?? [];
+
+		// Renglones a los que NO debe escribírseles stkmov en Anita (p. ej. opcionales
+		// gastronomía $0: aparecen en compaux como detalle visual, pero el stock real
+		// se descuenta vía formula expansion en el depósito de insumos).
+		$omitirStkmovAnitaPorItem = $data['omitir_stkmov_anita_por_item'] ?? [];
+
 		for ($offItem = 0; $offItem < count($cantidades); $offItem++)
 		{
 			// Trae el articulo
@@ -1711,6 +1721,25 @@ class FacturacionService
 			else
 				$precioConDescuento = $precioUnitario;
 
+			// Calcula coeficiente de impuesto interno aplicable al renglón (cigarrillos):
+			// expande fórmula respetando los opcionales elegidos y suma los coeficientes de
+			// los insumos con tipoarticulo configurado (default: CIGARRILLO).
+			$impuestoInternoCoeficiente = 0.;
+			if ($articulo_id) {
+				$opcionalesItem = is_array($opcionalesPorItem) && isset($opcionalesPorItem[$offItem]) && is_array($opcionalesPorItem[$offItem])
+					? $opcionalesPorItem[$offItem]
+					: [];
+				$impuestoInternoCoeficiente = $this->impuestoService->coeficienteImpuestoInternoArticulo(
+					(int) $articulo_id,
+					$opcionalesItem,
+					(int) $empresa_id,
+					(string) $fechaFactura,
+				);
+			}
+
+			$omitirStkmovAnita = is_array($omitirStkmovAnitaPorItem)
+				&& ! empty($omitirStkmovAnitaPorItem[$offItem]);
+
 			$dataFactura[] = ["cantidad" => (float) str_replace(",","",$cantidad),
 				"preciosindescuento" => (float) str_replace(",","",$precioUnitario),
 				"precio" => (float) str_replace(",","",$precioConDescuento),
@@ -1728,6 +1757,8 @@ class FacturacionService
 				'moneda_id' => $moneda_id,
 				'listaprecio_id' => $listaprecio_id,
 				'cuentacontable_id' => $cuentaContable_id,
+				'impuesto_interno_coeficiente' => $impuestoInternoCoeficiente,
+				'omitir_stkmov_anita' => $omitirStkmovAnita,
 			];
 			$totCantidad += $cantidad;
 		}
@@ -1939,7 +1970,9 @@ class FacturacionService
 																$puntoventa);
 					break;
 				case 'A':
+					GastronomiaEmisionProfiler::activo()?->marcar('anita_ultimo_numero_inicio');
 					$numero = Self::buscaUltimoNumeroComprobante($tipoAnita, $letra, $puntoventa);
+					GastronomiaEmisionProfiler::activo()?->marcar('anita_ultimo_numero_fin');
 					
 					break;
 				case 'M':
@@ -2973,11 +3006,17 @@ class FacturacionService
 			{
 				if (! $omitirSincronizacionAnita) {
 					$replicacionAnitaIntentada = true;
+					$modoMinimoAnita = is_array($opcionesEmision)
+						&& ! empty($opcionesEmision['anita_modo_minimo']);
+					GastronomiaEmisionProfiler::activo()?->marcar('anita_graba_inicio');
 					// Graba anita
 					$anita = self::grabaAnita($puntoventa->codigo, $letra, 0, 0,
 								$venta, $dataCAE, $conceptosTotales, $cuentacorriente, $dataFactura, $signo,
 								$codigoTipoTransaccion, null,
-								true, $numeroOrdenventa, $codigoCentrocosto, $referenciaFactura);
+								true, $numeroOrdenventa, $codigoCentrocosto, $referenciaFactura,
+								null, null, $modoMinimoAnita);
+
+					GastronomiaEmisionProfiler::activo()?->marcar('anita_graba_fin');
 
 					if (isset($anita['error']))
 					{
@@ -3135,7 +3174,7 @@ class FacturacionService
 								$dataCAE, $conceptostotales, $cuentacorriente, $datatalle, $signo, 
 								$codigoTipoTransaccion, $pedido_id,
 								$flGrabaStock, $numeroOrdenventa, $codigoCentrocosto, $referenciaFactura, 
-								$servidor = null, $ifx_server = null)
+								$servidor = null, $ifx_server = null, bool $modoMinimoAnita = false)
 	{
 		if ($numeroOrdenventa > 0)
 			$detalle = $dataCAE['items'][0]['detalle'];
@@ -3172,6 +3211,7 @@ class FacturacionService
 		$totalIngBruto2 = $totalIngBruto1 = $totalPercepcionIva = 0;
 		$totalDescuento = $porcentajeDescuento = 0;
 		$totalAbasto = $totalLogistica = 0;
+		$totalImpuestoInterno = 0;
 		foreach ($conceptostotales as $concepto)
 		{
 			if (array_key_exists('jurisdiccion', $concepto) && $concepto['jurisdiccion'] != null)
@@ -3194,7 +3234,11 @@ class FacturacionService
 				$totalAbasto = $concepto['importe'];
 
 			if (strpos($concepto['concepto'], 'Logistica') !== false)
-				$totalLogistica = $concepto['importe'];			
+				$totalLogistica = $concepto['importe'];
+
+			// Impuesto interno (régimen transparencia fiscal): viaja a Anita en ven_imp_interno.
+			if (strpos($concepto['concepto'], 'Impuesto Interno') !== false)
+				$totalImpuestoInterno += $concepto['importe'];
 		}
 		// Lee comisiones
 		$vendedor = 1;
@@ -3270,7 +3314,7 @@ class FacturacionService
 							'".$dataCAE['gravado']."',
 							'".'0'."',
 							'".'0'."',
-							'".'0'."',
+							'".$totalImpuestoInterno."',
 							'".'0'."',
 							'".$totalIngBruto2."',
 							'".'0'."',
@@ -3347,7 +3391,7 @@ class FacturacionService
 							'".$dataCAE['gravado']."',
 							'".'0'."',
 							'".'0'."',
-							'".'0'."',
+							'".$totalImpuestoInterno."',
 							'".'0'."',
 							'".$totalIngBruto2."',
 							'".'0'."',
@@ -3398,6 +3442,44 @@ class FacturacionService
 		if ($errVta !== null) {
 			return $errVta;
 		}
+
+		// vengrav: gastronomía modo mínimo y facturación Ventas completa
+		foreach ($conceptostotales as $concepto) {
+			if (strpos($concepto['concepto'], 'Iva') === false) {
+				continue;
+			}
+
+			$apiAnitaVengrav = new ApiAnita();
+			$sobreTasa = 0;
+			$dataVengrav = [
+				'tabla' => 'vengrav',
+				'acc' => 'insert',
+				'campos' => '
+									veng_tipo, veng_letra, veng_sucursal, veng_nro,
+									veng_codigo_tasa, veng_gravado, veng_impuesto, veng_sobretasa, veng_tasa ',
+				'valores' => "
+									'".substr($venta['codigo'], 0, 3)."',
+									'".$letra."',
+									'".$puntoventa."',
+									'".$venta['numerocomprobante']."',
+									'".$concepto['codigo']."',
+									'".$concepto['baseimponible']."',
+									'".$concepto['importe']."',
+									'".$sobreTasa."',
+									'".$concepto['tasa']."'
+								",
+			];
+			if ($this->flGrabaComprobanteDividido) {
+				$dataVengrav['path_sistema'] = '/usr2/villafranca';
+			}
+
+			$errVengrav = $this->apiCallAnitaEscritura($apiAnitaVengrav, $dataVengrav, 'vengrav insert');
+			if ($errVengrav !== null) {
+				return $errVengrav;
+			}
+		}
+
+		if (! $modoMinimoAnita) {
 		// Graba venibr
 		foreach ($conceptostotales as $concepto)
 		{
@@ -3434,40 +3516,6 @@ class FacturacionService
 					if ($errVenibr !== null) {
 						return $errVenibr;
 					}
-				}
-			}
-			// Graba vengrav
-			if (strpos($concepto['concepto'], 'Iva') !== false)
-			{
-				// Graba venibr
-				$apiAnita = new ApiAnita();
-
-				$sobreTasa = 0;
-				$data = array( 	'tabla' => 'vengrav', 
-								'acc' => 'insert',
-								'campos' => ' 
-									veng_tipo, veng_letra, veng_sucursal, veng_nro, 
-									veng_codigo_tasa, veng_gravado, veng_impuesto, veng_sobretasa, veng_tasa ',
-								'valores' => "
-									'".substr($venta['codigo'], 0, 3)."',
-									'".$letra."',
-									'".$puntoventa."',
-									'".$venta['numerocomprobante']."',
-									'".$concepto['codigo']."',
-									'".$concepto['baseimponible']."',
-									'".$concepto['importe']."',
-									'".$sobreTasa."',
-									'".$concepto['tasa']."'
-								"
-						);
-				if ($this->flGrabaComprobanteDividido)
-				{
-					$data['path_sistema'] = '/usr2/villafranca';
-				}
-						
-				$errVengrav = $this->apiCallAnitaEscritura($apiAnita, $data, 'vengrav insert');
-				if ($errVengrav !== null) {
-					return $errVengrav;
 				}
 			}
 		}
@@ -3609,6 +3657,7 @@ class FacturacionService
 		if ($errComprob !== null) {
 			return $errComprob;
 		}
+		}
 
 		// Agrupa por medida / partida para anita
 		$flGrabaStock = false;
@@ -3689,11 +3738,15 @@ class FacturacionService
 							'descuento' => $item['descuento'],
 							'impuesto_id' => $item['impuesto_id'],
 							'incluyeimpuesto' => $item['incluyeimpuesto'],
-							'pedido' => $pedido_id,
+							// Sin pedido (gastronomía u otros flujos sin OV): se manda 0 para que stkv_pedido no quede null.
+							'pedido' => $pedido_id ?? 0,
 							'sku' => $item['sku'],
 							'descripcion' => $item['descripcion'],
 							'categoria' => $item['categoria'],
-							'medida' => ''
+							'medida' => '',
+							// Banderín para omitir stkmov en Anita (p. ej. opcionales gastronomía $0:
+							// se muestran en compaux pero el stock se descuenta vía formula → depo de insumos).
+							'omitir_stkmov_anita' => (bool) ($item['omitir_stkmov_anita'] ?? false),
 						];
 					}
 					else
@@ -3811,9 +3864,11 @@ class FacturacionService
 				$data['path_sistema'] = '/usr2/villafranca';
 			}
 
+			if (! $modoMinimoAnita) {
 			$errCompaux = $this->apiCallAnitaEscritura($apiAnita, $data, 'compaux insert');
 			if ($errCompaux !== null) {
 				return $errCompaux;
+			}
 			}
 				
 			// Graba stkmov
@@ -3845,7 +3900,10 @@ class FacturacionService
 			if ($ifx_server == 'IFX_SERVER_LOCAL')
 				$deposito = 10;
 
-			if ($flGrabaStock)
+			// Omitir stkmov para renglones marcados (p. ej. opcionales gastronomía $0:
+			// se preservan en compaux como detalle visible, pero el stock se descuenta
+			// vía formula expansion en deposito de insumos por separado).
+			if ($flGrabaStock && empty($medida['omitir_stkmov_anita']))
 			{
 				$data = array( 	'tabla' => 'stkmov', 
 							'acc' => 'insert',
@@ -3889,7 +3947,7 @@ class FacturacionService
 								'".($subzonavta_id == null ? '0' : $subzonavta_id)."',
 								'".'0'."',
 								'".($ifx_server == 'IFX_SERVER_LOCAL' ? $medida['medida'] : $medida['partida'])."',
-								'".substr($medida['pedido'],-8)."',
+								'".substr((string) ($medida['pedido'] ?? '0'),-8)."',
 								'".Auth::user()->nombre."',
 								'".'ERP'."',
 								'".date_format(Carbon::now(), 'Ymd')."',
@@ -3986,7 +4044,7 @@ class FacturacionService
 			}
 		}
 		// Graba leyenda de exportacion
-		if (config('app.empresa') == 'Calzados Ferli')
+		if (! $modoMinimoAnita && config('app.empresa') == 'Calzados Ferli')
 		{
 			if ($this->leyendaExportacion != '')
 			{
@@ -5112,6 +5170,7 @@ class FacturacionService
 
 		if ($puntoventa->modofacturacion != 'M')
 		{
+			GastronomiaEmisionProfiler::activo()?->marcar('anita_vencae_inicio');
 			// Graba cae en Anita
 			$vencae = Self::grabaVenCae($tipoAnita, $letra, $puntoventa->codigo, 
 						$numeroComprobante, $cae['cae'], 
@@ -5122,6 +5181,7 @@ class FacturacionService
 				if ($vencae['error'] == 'Error')
 					throw new Exception('No pudo grabar CAE en Anita '.$vencae['mensaje']);
 			}
+			GastronomiaEmisionProfiler::activo()?->marcar('anita_vencae_fin');
 		}	
 
 		return 'Success';

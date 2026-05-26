@@ -37,9 +37,10 @@ final class GastronomiaNotaCreditoService
     }
 
     /**
+     * @param  string  $leyendaUsuario  Leyenda manual ingresada en el modal; se graba como leyenda del comprobante NC.
      * @return array{ok:bool,venta_id?:int,factura?:string,mensaje?:string,error?:string}
      */
-    public function generarDesdeFactura(int $ventaFacturaId, ?Request $request = null): array
+    public function generarDesdeFactura(int $ventaFacturaId, ?Request $request = null, string $leyendaUsuario = ''): array
     {
         $emision = VentaGastronomiaEmision::query()
             ->where('venta_id', $ventaFacturaId)
@@ -68,7 +69,7 @@ final class GastronomiaNotaCreditoService
         }
 
         $ventaOrigen = $emision->venta;
-        if ((float) $ventaOrigen->total <= 0.01) {
+        if ((float) $ventaOrigen->total < 0.01) {
             return ['ok' => false, 'error' => 'El comprobante no es una factura con importe positivo.'];
         }
 
@@ -110,7 +111,7 @@ final class GastronomiaNotaCreditoService
             return ['ok' => false, 'error' => 'No se encontró la cuenta gastronómica asociada a la factura.'];
         }
 
-        $payload = $this->armarPayloadNotaCredito($ventaOrigen, $tipoNcId, $cfg);
+        $payload = $this->armarPayloadNotaCredito($ventaOrigen, $tipoNcId, $cfg, $leyendaUsuario);
         $mediosPago = $this->armarMediosCobranzaDevolucion($ventaOrigen);
 
         try {
@@ -143,6 +144,7 @@ final class GastronomiaNotaCreditoService
                         $ventaNc->fresh(),
                         $mediosPago,
                         $cfg,
+                        esDevolucion: true,
                     );
                 }
 
@@ -233,6 +235,7 @@ final class GastronomiaNotaCreditoService
         Venta $ventaOrigen,
         int $tipoNcId,
         ConfiguracionPuntoventaGastronomia $cfg,
+        string $leyendaUsuario = '',
     ): array {
         $ventaOrigen->loadMissing(['venta_emisiones']);
 
@@ -261,10 +264,19 @@ final class GastronomiaNotaCreditoService
         }
 
         $fechaHoy = now()->format('Y-m-d');
-        $leyenda = trim((string) ($ventaOrigen->leyenda ?? ''));
-        $leyendaNc = 'NC por comprobante '.($ventaOrigen->codigo ?? $ventaOrigen->id);
-        if ($leyenda !== '') {
-            $leyendaNc .= ' — '.$leyenda;
+        $leyendaManual = trim($leyendaUsuario);
+        $referenciaCompro = (string) ($ventaOrigen->codigo ?? $ventaOrigen->id);
+        if ($leyendaManual !== '') {
+            $leyendaNc = $leyendaManual.' (NC por comprobante '.$referenciaCompro.')';
+        } else {
+            $leyendaNc = 'NC por comprobante '.$referenciaCompro;
+            $leyendaOrigen = trim((string) ($ventaOrigen->leyenda ?? ''));
+            if ($leyendaOrigen !== '') {
+                $leyendaNc .= ' — '.$leyendaOrigen;
+            }
+        }
+        if (mb_strlen($leyendaNc) > 255) {
+            $leyendaNc = mb_substr($leyendaNc, 0, 255);
         }
 
         $payload = [

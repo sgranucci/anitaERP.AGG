@@ -7,6 +7,7 @@ use App\Models\Contable\Cuentacontable;
 use App\Models\Configuracion\Empresa;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Repositories\Caja\BancoRepositoryInterface;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\ApiAnita;
 use Auth;
 use DB;
@@ -21,6 +22,7 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
     protected $keyFieldAnita = 'tesm_cuenta';
 
 	private $bancoRepository;
+    private $empresaRepository;
 
     /**
      * PostRepository constructor.
@@ -28,20 +30,40 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
      * @param Post $post
      */
     public function __construct(Cuentacaja $cuentacaja,
-                                BancoRepositoryInterface $bancorepository)
+                                BancoRepositoryInterface $bancorepository,
+                                EmpresaRepositoryInterface $empresarepository)
     {
         $this->model = $cuentacaja;
         $this->bancoRepository = $bancorepository;
+        $this->empresaRepository = $empresarepository;
     }
 
     public function all()
     {
         $hay_cuentacaja = Cuentacaja::first();
 
-        if (!$hay_cuentacaja)
+        if (!$hay_cuentacaja) {
             self::sincronizarConAnita();
+        } elseif (self::usaTablaTesmcbu()) {
+            self::sincronizarCbuConAnita();
+        }
 
-        return $this->model->with('empresas')->with('cuentacontables')->with('bancos')->with('usocuentacajas')->get();
+        $query = $this->model->with('empresas')->with('cuentacontables')->with('bancos')->with('usocuentacajas');
+        $this->aplicarFiltroEmpresasAsignadas($query);
+
+        return $query->get();
+    }
+
+    private function aplicarFiltroEmpresasAsignadas($query): void
+    {
+        $empresasAsignadas = $this->empresaRepository->traeEmpresasAsignadas();
+
+        if (count($empresasAsignadas) > 1) {
+            $query->where(function ($q) use ($empresasAsignadas) {
+                $q->whereIn('empresa_id', $empresasAsignadas)
+                    ->orWhereNull('empresa_id');
+            });
+        }
     }
 
     public function create(array $data)
@@ -150,8 +172,42 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
         return $this->model->where('codigo', $codigo)->first();
     }
 
-    public function sincronizarConAnita(){
+    public function sincronizarConAnita(?string $codigo = null, bool $sincronizarCbu = true): array
+    {
 		ini_set('max_execution_time', '300');
+
+        $ret = [
+            'en_anita' => 0,
+            'importados' => 0,
+            'omitidos' => 0,
+            'errores' => [],
+        ];
+
+        if ($codigo !== null && $codigo !== '') {
+            $codigoNorm = ltrim($codigo, '0');
+            if ($this->model->where('codigo', $codigoNorm)->exists()) {
+                $ret['en_anita'] = 1;
+                $ret['omitidos'] = 1;
+
+                return $ret;
+            }
+
+            $ret['en_anita'] = 1;
+            try {
+                $estado = $this->traerRegistroDeAnita(
+                    str_pad($codigoNorm, 8, '0', STR_PAD_LEFT)
+                );
+                if ($estado === 'importado') {
+                    $ret['importados'] = 1;
+                } else {
+                    $ret['errores'][] = "Cuenta Anita {$codigoNorm}: {$estado}.";
+                }
+            } catch (\Throwable $e) {
+                $ret['errores'][] = "Cuenta Anita {$codigoNorm}: ".$e->getMessage();
+            }
+
+            return $ret;
+        }
 
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'list', 
@@ -160,25 +216,102 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
 						'tabla' => $this->tableAnita );
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
-        $datosLocal = Cuentacaja::all();
-        $datosLocalArray = [];
-        foreach ($datosLocal as $value) {
-            $datosLocalArray[] = $value->{$this->keyField};
+        if (! is_array($dataAnita)) {
+            $ret['errores'][] = 'Anita no devolvió un listado válido de tesmae.';
+
+            return $ret;
         }
+
+        $ret['en_anita'] = count($dataAnita);
+
+        $datosLocal = Cuentacaja::pluck($this->keyField)->all();
 
         foreach ($dataAnita as $value) {
-            if (!in_array(ltrim($value->{$this->keyField}, '0'), $datosLocalArray)) {
-                $this->traerRegistroDeAnita($value->{$this->keyFieldAnita});
+            $codigoLocal = ltrim($value->{$this->keyField}, '0');
+            if (in_array($codigoLocal, $datosLocal, true)) {
+                $ret['omitidos']++;
+                continue;
+            }
+
+            try {
+                $estado = $this->traerRegistroDeAnita($value->{$this->keyFieldAnita});
+                if ($estado === 'importado') {
+                    $ret['importados']++;
+                    $datosLocal[] = $codigoLocal;
+                } else {
+                    $ret['errores'][] = "Cuenta Anita {$codigoLocal}: {$estado}.";
+                }
+            } catch (\Throwable $e) {
+                $ret['errores'][] = "Cuenta Anita {$codigoLocal}: ".$e->getMessage();
             }
         }
+
+        if ($sincronizarCbu && self::usaTablaTesmcbu()) {
+            self::sincronizarCbuConAnita();
+        }
+
+        return $ret;
     }
 
-    public function traerRegistroDeAnita($key){
+    public function sincronizarCbuConAnita(?string $codigo = null): array
+    {
+        $ret = [
+            'en_anita' => 0,
+            'actualizados' => 0,
+            'sin_cuenta_local' => 0,
+            'sin_cambios' => 0,
+        ];
+
+        if (! self::usaTablaTesmcbu()) {
+            return $ret;
+        }
+
         $apiAnita = new ApiAnita();
-        $data = array( 
-            'acc' => 'list', 'tabla' => $this->tableAnita, 
-			'sistema' => 'che_ban',
-            'campos' => '
+        $data = [
+            'acc' => 'list',
+            'tabla' => 'tesmcbu',
+            'sistema' => 'che_ban',
+            'campos' => 'tesmc_cuenta, tesmc_nro_cbu',
+        ];
+        if ($codigo !== null && $codigo !== '') {
+            $data['whereArmado'] = " WHERE tesmc_cuenta = '".str_pad(ltrim($codigo, '0'), 8, '0', STR_PAD_LEFT)."' ";
+        }
+        $dataAnita = json_decode($apiAnita->apiCall($data));
+
+        if (! is_array($dataAnita)) {
+            return $ret;
+        }
+
+        $ret['en_anita'] = count($dataAnita);
+
+        foreach ($dataAnita as $row) {
+            $codigoCuenta = ltrim($row->tesmc_cuenta ?? '', '0');
+            if ($codigoCuenta === '') {
+                continue;
+            }
+
+            $cbu = trim($row->tesmc_nro_cbu ?? '');
+            $cuentacaja = $this->model->where('codigo', $codigoCuenta)->first();
+            if ($cuentacaja === null) {
+                $ret['sin_cuenta_local']++;
+                continue;
+            }
+            if ($cuentacaja->cbu === $cbu) {
+                $ret['sin_cambios']++;
+                continue;
+            }
+
+            $cuentacaja->update(['cbu' => $cbu]);
+            $ret['actualizados']++;
+        }
+
+        return $ret;
+    }
+
+    public function traerRegistroDeAnita($key): string
+    {
+        $apiAnita = new ApiAnita();
+        $camposTesmae = '
                     tesm_cuenta,
                     tesm_codigo_banco,
                     tesm_desc,
@@ -191,48 +324,43 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
                     tesm_cod_mon,
                     tesm_cta_destino,
                     tesm_fl_boleta_cl,
-                    tesm_empresa 
-			',
+                    tesm_empresa';
+        if (! self::usaTablaTesmcbu()) {
+            $camposTesmae .= ',
+                    tesm_nro_cbu';
+        }
+        $data = array( 
+            'acc' => 'list', 'tabla' => $this->tableAnita, 
+			'sistema' => 'che_ban',
+            'campos' => $camposTesmae,
             'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
         );
         $dataAnita = json_decode($apiAnita->apiCall($data));
-		$usuario_id = Auth::user()->id;
 
-        if (count($dataAnita) > 0) {
-            $data = $dataAnita[0];
-
-            Self::convierteDatosDeAnita($data, $cuentacontable_id, $banco_id, $empresa_id, $tipoCuenta);
-
-            $apiAnita = new ApiAnita();
-            $datac = array( 
-                'acc' => 'list', 'tabla' => 'tesmcbu', 
-                'sistema' => 'che_ban',
-                'campos' => '
-                        tesmc_cuenta,
-                        tesmc_nro_cbu
-                ',
-                'whereArmado' => " WHERE tesmc_cuenta = '".$data->tesm_cuenta."' " 
-            );            
-            $dataAnita = json_decode($apiAnita->apiCall($datac));
-
-            if (isset($dataAnita[0]))
-                $numeroCbu = $dataAnita[0]->tesmc_nro_cbu;
-            else
-                $numeroCbu = '';
-
-            $arr_campos = [
-                "nombre" => $data->tesm_desc,
-                "codigo" => ltrim($data->tesm_cuenta, '0'),
-                "tipocuenta" => $tipoCuenta,
-                "banco_id" => $banco_id,
-                "empresa_id" => $empresa_id,
-                "cuentacontable_id" => $cuentacontable_id,
-                "moneda_id" => $data->tesm_cod_mon,
-                "cbu" => $numeroCbu
-                ];
-
-            $this->model->create($arr_campos);
+        if (! is_array($dataAnita) || count($dataAnita) === 0) {
+            return 'no_encontrado';
         }
+
+        $data = $dataAnita[0];
+
+        Self::convierteDatosDeAnita($data, $cuentacontable_id, $banco_id, $empresa_id, $tipoCuenta);
+
+        $numeroCbu = self::leerCbuDesdeAnita($apiAnita, $data->tesm_cuenta, $data);
+
+        $arr_campos = [
+            "nombre" => $data->tesm_desc,
+            "codigo" => ltrim($data->tesm_cuenta, '0'),
+            "tipocuenta" => $tipoCuenta,
+            "banco_id" => $banco_id,
+            "empresa_id" => $empresa_id,
+            "cuentacontable_id" => $cuentacontable_id,
+            "moneda_id" => $data->tesm_cod_mon,
+            "cbu" => $numeroCbu
+            ];
+
+        $this->model->create($arr_campos);
+
+        return 'importado';
     }
 
 	public function guardarAnita($request) {
@@ -274,19 +402,11 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
         );
         $anita = $apiAnita->apiCallEscritura($data);
 
-        $data = array( 'tabla' => 'tesmcbu', 'acc' => 'insert',
-			'sistema' => 'che_ban',
-            'campos' => ' 
-                tesmc_cuenta,
-                tesmc_nro_cbu
-                ',
-            'valores' => "
-                '".str_pad($request['codigo'], 8, "0", STR_PAD_LEFT)."', 
-                '".$request['cbu']."' "
-        );
-        $anita2 = $apiAnita->apiCallEscritura($data);
+        if (self::usaTablaTesmcbu()) {
+            self::guardarTesmcbuAnita($apiAnita, $request);
+        }
 
-        return $anita && $anita2;
+        return (bool) $anita;
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -294,30 +414,29 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
 
         Self::convierteDatosParaAnita($request, $banco, $tipoCuenta, $fecha, $cuentaContable, $empresa, $moneda);
 
-		$data = array( 'acc' => 'update', 'tabla' => $this->tableAnita, 
-				'sistema' => 'che_ban',
-				'valores' => " 
+        $valoresTesmae = "
                         tesm_cuenta 	                = '".str_pad($request['codigo'], 8, "0", STR_PAD_LEFT)."' ,
                         tesm_codigo_banco               = '".$banco."' ,
                         tesm_desc    	                = '".$request['nombre']."' ,
                         tesm_cta_contable               = '".$cuentaContable."' ,
                         tesm_cod_mon                    = '".$moneda."' ,
-                        tesm_nro_cbu                    = '".$request['cbu']."' ,
-                        tesm_empresa 	                = '".$empresa."' "
-				,
+                        tesm_empresa 	                = '".$empresa."' ";
+        if (! self::usaTablaTesmcbu()) {
+            $valoresTesmae .= ",
+                        tesm_nro_cbu                    = '".($request['cbu'] ?? '')."' ";
+        }
+
+		$data = array( 'acc' => 'update', 'tabla' => $this->tableAnita, 
+				'sistema' => 'che_ban',
+				'valores' => $valoresTesmae,
 				'whereArmado' => " WHERE tesm_cuenta = '".str_pad($request['codigo'], 8, "0", STR_PAD_LEFT)."' " );
         $anita = $apiAnita->apiCallEscritura($data);
 
-        $data = array( 'tabla' => 'tesmcbu', 'acc' => 'update',
-			'sistema' => 'che_ban',
-            'valores' => "
-                tesmc_cuenta   = '".str_pad($request['codigo'], 8, "0", STR_PAD_LEFT)."' ,
-                tesmc_nro_cbu  = '".$request['cbu']."' "
-            ,
-            'whereArmado' => " WHERE tesmc_cuenta = '".str_pad($request['codigo'], 8, "0", STR_PAD_LEFT)."' " );
-        $anita2 = $apiAnita->apiCallEscritura($data);
+        if (self::usaTablaTesmcbu()) {
+            self::sincronizarTesmcbuAnita($apiAnita, $request);
+        }
 
-        return $anita && $anita2;
+        return (bool) $anita;
 	}
 
 	public function eliminarAnita($id) {
@@ -327,12 +446,16 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
 				'whereArmado' => " WHERE tesm_cuenta = '".str_pad($id, 8, "0", STR_PAD_LEFT)."' " );
         $anita = $apiAnita->apiCallEscritura($data);
 
-        $data = array( 'acc' => 'delete', 'tabla' => 'tesmcbu',
-				'sistema' => 'che_ban',
-				'whereArmado' => " WHERE tesmc_cuenta = '".str_pad($id, 8, "0", STR_PAD_LEFT)."' " );
-        $anita2 = $apiAnita->apiCallEscritura($data);        
-        
-        return $anita&&$anita2;
+        if (self::usaTablaTesmcbu()) {
+            $data = array( 'acc' => 'delete', 'tabla' => 'tesmcbu',
+                    'sistema' => 'che_ban',
+                    'whereArmado' => " WHERE tesmc_cuenta = '".str_pad($id, 8, "0", STR_PAD_LEFT)."' " );
+            $anita2 = $apiAnita->apiCallEscritura($data);
+
+            return $anita && $anita2;
+        }
+
+        return (bool) $anita;
 	}
 
     private function convierteDatosDeAnita($data, &$cuentacontable_id, &$banco_id, &$empresa_id, &$tipocuenta)
@@ -391,5 +514,85 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
         }
 
         $moneda = $data['moneda_id'];
+    }
+
+    private static function usaTablaTesmcbu(): bool
+    {
+        return config('app.empresa') === 'AGG';
+    }
+
+    private static function leerCbuDesdeAnita(ApiAnita $apiAnita, string $codigoCuenta, $dataTesmae = null): string
+    {
+        if (self::usaTablaTesmcbu()) {
+            $datac = [
+                'acc' => 'list',
+                'tabla' => 'tesmcbu',
+                'sistema' => 'che_ban',
+                'campos' => 'tesmc_cuenta, tesmc_nro_cbu',
+                'whereArmado' => " WHERE tesmc_cuenta = '".$codigoCuenta."' ",
+            ];
+            $dataAnita = json_decode($apiAnita->apiCall($datac));
+
+            if (isset($dataAnita[0])) {
+                return trim($dataAnita[0]->tesmc_nro_cbu ?? '');
+            }
+
+            return '';
+        }
+
+        return trim($dataTesmae->tesm_nro_cbu ?? '');
+    }
+
+    private static function guardarTesmcbuAnita(ApiAnita $apiAnita, array $request): void
+    {
+        $data = [
+            'tabla' => 'tesmcbu',
+            'acc' => 'insert',
+            'sistema' => 'che_ban',
+            'campos' => 'tesmc_cuenta, tesmc_nro_cbu',
+            'valores' => "
+                '".str_pad($request['codigo'], 8, '0', STR_PAD_LEFT)."',
+                '".($request['cbu'] ?? '')."' ",
+        ];
+        $apiAnita->apiCallEscritura($data);
+    }
+
+    private static function sincronizarTesmcbuAnita(ApiAnita $apiAnita, array $request): void
+    {
+        $codigo = str_pad($request['codigo'], 8, '0', STR_PAD_LEFT);
+        $cbu = $request['cbu'] ?? '';
+
+        $dataChk = [
+            'acc' => 'list',
+            'tabla' => 'tesmcbu',
+            'sistema' => 'che_ban',
+            'campos' => 'tesmc_cuenta',
+            'whereArmado' => " WHERE tesmc_cuenta = '".$codigo."' ",
+        ];
+        $existe = json_decode($apiAnita->apiCall($dataChk));
+
+        if (is_array($existe) && count($existe) > 0) {
+            $data = [
+                'tabla' => 'tesmcbu',
+                'acc' => 'update',
+                'sistema' => 'che_ban',
+                'valores' => "
+                    tesmc_cuenta   = '".$codigo."' ,
+                    tesmc_nro_cbu  = '".$cbu."' ",
+                'whereArmado' => " WHERE tesmc_cuenta = '".$codigo."' ",
+            ];
+        } else {
+            $data = [
+                'tabla' => 'tesmcbu',
+                'acc' => 'insert',
+                'sistema' => 'che_ban',
+                'campos' => 'tesmc_cuenta, tesmc_nro_cbu',
+                'valores' => "
+                    '".$codigo."',
+                    '".$cbu."' ",
+            ];
+        }
+
+        $apiAnita->apiCallEscritura($data);
     }
 }

@@ -12,6 +12,7 @@
     var apiCerrar = app.getAttribute('data-api-cerrar') || '';
     var apiConciliacionTurno = app.getAttribute('data-api-conciliacion-turno') || '';
     var apiConciliacionMedio = app.getAttribute('data-api-conciliacion-medio') || '';
+    var apiConciliacionNotasCredito = app.getAttribute('data-api-conciliacion-notas-credito') || '';
     var puedeHabilitar = app.getAttribute('data-puede-habilitar') === '1';
     var puedeCierreParcial = app.getAttribute('data-puede-cierre-parcial') === '1';
     var puedeCerrar = app.getAttribute('data-puede-cerrar') === '1';
@@ -120,7 +121,11 @@
         if (!base || !ventaId) {
             return '#';
         }
-        return base.replace(/\/$/, '') + '/' + ventaId + '/ver';
+        var url = base.replace(/\/$/, '') + '/' + ventaId + '/ver';
+        if (window.ModoConsulta) {
+            url = window.ModoConsulta.url(url);
+        }
+        return url;
     }
 
     function sincronizarUrlFacturaVerBase(extra) {
@@ -181,7 +186,11 @@
             html += '</span>';
             if (Number(estado.cuentas_sin_facturar || 0) > 0) {
                 var badgeCuentas = estado.es_ultimo_turno_dia ? 'badge-danger' : 'badge-info';
-                html += ' <span class="badge ' + badgeCuentas + '">' + estado.cuentas_sin_facturar + ' cuenta(s) pendientes</span>';
+                html += ' <span class="badge ' + badgeCuentas + '">' + estado.cuentas_sin_facturar + ' cuenta(s) abierta(s) sin facturar</span>';
+            }
+            if (Number(estado.cuentas_cerradas_sin_facturar || 0) > 0) {
+                html += ' <span class="badge badge-secondary" title="Estado terminal por saneamiento: no bloquean cierre">'
+                    + estado.cuentas_cerradas_sin_facturar + ' cerrada(s) sin facturar</span>';
             }
             html += '</div>';
         }
@@ -407,6 +416,20 @@
                 );
             });
         });
+        root.querySelectorAll('.js-conciliar-nc').forEach(function (btn) {
+            if (btn.dataset.boundConciliarNc) {
+                return;
+            }
+            btn.dataset.boundConciliarNc = '1';
+            btn.addEventListener('click', function () {
+                var rawMozoId = btn.getAttribute('data-mozo-id');
+                var mozoId = rawMozoId !== null && rawMozoId !== '' ? parseInt(rawMozoId, 10) : null;
+                abrirModalNotasCredito(
+                    isNaN(mozoId) ? null : mozoId,
+                    btn.getAttribute('data-mozo-nombre') || ''
+                );
+            });
+        });
         root.querySelectorAll('.js-ver-factura-detalle').forEach(function (lnk) {
             if (lnk.dataset.boundVer) {
                 return;
@@ -422,12 +445,53 @@
         });
     }
 
+    function setHeadersModalConciliacion(modo) {
+        var labels = modo === 'nc'
+            ? {
+                comprobante: 'Nota de crédito',
+                hora: 'Hora',
+                cliente: 'Cliente',
+                mozo: 'Mozo',
+                total: 'Total NC',
+                extra: 'Factura origen',
+                cobrado: 'Cobrado (devuelto)',
+                acciones: '',
+            }
+            : {
+                comprobante: 'Comprobante',
+                hora: 'Hora',
+                cliente: 'Cliente',
+                mozo: 'Mozo',
+                total: 'Facturado',
+                extra: 'Este medio',
+                cobrado: 'Cobrado total',
+                acciones: '',
+            };
+        var map = {
+            'modal-conc-th-comprobante': labels.comprobante,
+            'modal-conc-th-hora': labels.hora,
+            'modal-conc-th-cliente': labels.cliente,
+            'modal-conc-th-mozo': labels.mozo,
+            'modal-conc-th-total': labels.total,
+            'modal-conc-th-extra': labels.extra,
+            'modal-conc-th-cobrado': labels.cobrado,
+            'modal-conc-th-acciones': labels.acciones,
+        };
+        Object.keys(map).forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) {
+                el.textContent = map[id];
+            }
+        });
+    }
+
     function abrirModalMedio(cuentacajaId, medioNombre) {
         if (!cuentacajaId || !apiConciliacionMedio) {
             return;
         }
         var titulo = document.getElementById('modal-conciliacion-medio-titulo');
         var body = document.getElementById('modal-conciliacion-medio-body');
+        setHeadersModalConciliacion('facturas');
         if (titulo) {
             titulo.textContent = 'Facturas — ' + (medioNombre || 'Medio de pago');
         }
@@ -468,6 +532,81 @@
                     var verUrl = urlVerFactura(f.venta_id);
                     html += '<a href="' + verUrl + '" class="btn btn-sm btn-primary" target="_blank" rel="noopener" title="Ver factura">';
                     html += '<i class="fa fa-eye"></i> Ver</a>';
+                }
+                html += '</td></tr>';
+            });
+            body.innerHTML = html;
+        });
+    }
+
+    function abrirModalNotasCredito(mozoId, mozoNombre) {
+        if (!apiConciliacionNotasCredito) {
+            return;
+        }
+        var titulo = document.getElementById('modal-conciliacion-medio-titulo');
+        var body = document.getElementById('modal-conciliacion-medio-body');
+        setHeadersModalConciliacion('nc');
+        if (titulo) {
+            titulo.textContent = mozoNombre
+                ? 'Notas de crédito — ' + mozoNombre
+                : 'Notas de crédito del turno';
+        }
+        if (body) {
+            body.innerHTML = '<tr><td colspan="8" class="text-center text-muted p-3">Cargando…</td></tr>';
+        }
+        if (typeof $ !== 'undefined') {
+            $('#modal-conciliacion-medio').modal('show');
+        }
+
+        var url = apiConciliacionNotasCredito;
+        if (mozoId && mozoId > 0) {
+            url += '?mozo_id=' + encodeURIComponent(mozoId);
+        }
+
+        getJson(url).then(function (res) {
+            if (!body) {
+                return;
+            }
+            if (!res.data.ok) {
+                body.innerHTML = '<tr><td colspan="8" class="text-danger p-3">' + (res.data.error || 'Error') + '</td></tr>';
+                return;
+            }
+            var notas = res.data.notas_credito || [];
+            var baseVer = res.data.url_factura_ver_base || urlFacturaVerBase;
+            if (!notas.length) {
+                body.innerHTML = '<tr><td colspan="8" class="text-muted p-3">'
+                    + (mozoNombre ? 'Sin notas de crédito de ' + mozoNombre + ' en el turno.' : 'Sin notas de crédito en el turno.')
+                    + '</td></tr>';
+                return;
+            }
+            var html = '';
+            notas.forEach(function (n) {
+                html += '<tr>';
+                html += '<td><span class="badge badge-danger">NC</span> ' + (n.codigo || '—') + '</td>';
+                html += '<td>' + (n.hora || '') + '</td>';
+                html += '<td>' + (n.cliente || '') + '</td>';
+                html += '<td>' + (n.mozo_nombre || '') + '</td>';
+                html += '<td class="text-right font-weight-bold" style="color:#922b21;">$' + fmt(n.monto_nota_credito) + '</td>';
+                html += '<td class="text-right">';
+                if (n.factura_origen_id) {
+                    var origenUrl = urlVerFactura(n.factura_origen_id);
+                    if (origenUrl !== '#') {
+                        html += '<a href="' + origenUrl + '" target="_blank" rel="noopener" title="Ver factura origen">';
+                        html += (n.factura_origen_codigo || ('#' + n.factura_origen_id));
+                        html += '</a>';
+                    } else {
+                        html += (n.factura_origen_codigo || ('#' + n.factura_origen_id));
+                    }
+                } else {
+                    html += '—';
+                }
+                html += '</td>';
+                html += '<td class="text-right" style="color:#922b21;">$' + fmt(n.total_cobrado) + '</td>';
+                html += '<td class="text-nowrap">';
+                if (n.venta_id && (baseVer || urlVerFactura(n.venta_id) !== '#')) {
+                    var verUrl = urlVerFactura(n.venta_id);
+                    html += '<a href="' + verUrl + '" class="btn btn-sm btn-outline-danger" target="_blank" rel="noopener" title="Ver nota de crédito">';
+                    html += '<i class="fa fa-eye"></i> Ver NC</a>';
                 }
                 html += '</td></tr>';
             });
@@ -683,6 +822,194 @@
     }
 
     sincronizarUrlFacturaVerBase(urlFacturaVerBase);
+
+    var btnCanjesPremio = document.getElementById('btn-consultar-canjes-premio');
+    if (btnCanjesPremio && cfgGlobal.urlCanjesPremioTurno) {
+        btnCanjesPremio.addEventListener('click', function () {
+            var tbody = document.getElementById('ht-canjes-premio-body');
+            var errEl = document.getElementById('ht-canjes-premio-error');
+            if (!tbody) return;
+            tbody.innerHTML = '<tr><td colspan="9" class="text-muted small">Cargando…</td></tr>';
+            if (errEl) {
+                errEl.classList.add('d-none');
+                errEl.textContent = '';
+            }
+            if (typeof $ !== 'undefined') {
+                $('#modal-canjes-premio-turno').modal('show');
+            }
+            var url = cfgGlobal.urlCanjesPremioTurno;
+            var desde = '';
+            var hasta = '';
+            if (estadoActual && estadoActual.turno_habilitado && estadoActual.turno_habilitado.habilitado_en) {
+                desde = estadoActual.turno_habilitado.habilitado_en;
+            }
+            if (desde) {
+                url += (url.indexOf('?') >= 0 ? '&' : '?') + 'desde=' + encodeURIComponent(desde);
+            }
+            if (hasta) {
+                url += (url.indexOf('?') >= 0 ? '&' : '?') + 'hasta=' + encodeURIComponent(hasta);
+            }
+            fetch(url, {
+                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin',
+            })
+                .then(function (r) {
+                    return r.json().then(function (j) {
+                        return { ok: r.ok, body: j };
+                    });
+                })
+                .then(function (res) {
+                    if (!res.ok || !res.body.ok) {
+                        tbody.innerHTML = '';
+                        if (errEl) {
+                            errEl.textContent =
+                                (res.body && (res.body.error || res.body.mensaje)) ||
+                                'No se pudieron cargar los canjes.';
+                            errEl.classList.remove('d-none');
+                        }
+                        return;
+                    }
+                    var canjes = res.body.canjes || [];
+                    if (!canjes.length) {
+                        tbody.innerHTML =
+                            '<tr><td colspan="9" class="text-muted small">Sin canjes de premio en el turno.</td></tr>';
+                        return;
+                    }
+                    tbody.innerHTML = canjes
+                        .map(function (c) {
+                            return (
+                                '<tr>' +
+                                '<td>' +
+                                (c.numerocupon || '') +
+                                '</td>' +
+                                '<td>' +
+                                (c.venta_codigo || c.venta_id || '') +
+                                '</td>' +
+                                '<td>' +
+                                (c.sku || '') +
+                                '</td>' +
+                                '<td>' +
+                                (c.articulo || '—') +
+                                '</td>' +
+                                '<td class="text-right">' +
+                                (parseFloat(c.cantidad) || 0) +
+                                '</td>' +
+                                '<td class="text-right">' +
+                                (c.puntos || 0) +
+                                '</td>' +
+                                '<td>' +
+                                (c.mozo || '—') +
+                                '</td>' +
+                                '<td>' +
+                                (c.numerodocumento || '—') +
+                                '</td>' +
+                                '<td>' +
+                                (c.fechacanje || '—') +
+                                '</td>' +
+                                '</tr>'
+                            );
+                        })
+                        .join('');
+                })
+                .catch(function () {
+                    tbody.innerHTML = '';
+                    if (errEl) {
+                        errEl.textContent = 'Error de comunicación.';
+                        errEl.classList.remove('d-none');
+                    }
+                });
+        });
+    }
+
+    var btnTicketsTarjeta = document.getElementById('btn-consultar-tickets-tarjeta');
+    if (btnTicketsTarjeta && cfgGlobal.urlTicketsTarjetaTurno) {
+        btnTicketsTarjeta.addEventListener('click', function () {
+            var tbody = document.getElementById('ht-tickets-tarjeta-body');
+            var errEl = document.getElementById('ht-tickets-tarjeta-error');
+            if (!tbody) {
+                return;
+            }
+            tbody.innerHTML = '<tr><td colspan="7" class="text-muted small">Cargando…</td></tr>';
+            if (errEl) {
+                errEl.classList.add('d-none');
+                errEl.textContent = '';
+            }
+            if (typeof $ !== 'undefined') {
+                $('#modal-tickets-tarjeta-turno').modal('show');
+            }
+            var url = cfgGlobal.urlTicketsTarjetaTurno;
+            var desde = '';
+            if (estadoActual && estadoActual.turno_habilitado && estadoActual.turno_habilitado.habilitado_en) {
+                desde = estadoActual.turno_habilitado.habilitado_en;
+            }
+            if (desde) {
+                url += (url.indexOf('?') >= 0 ? '&' : '?') + 'desde=' + encodeURIComponent(desde);
+            }
+            fetch(url, {
+                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin',
+            })
+                .then(function (r) {
+                    return r.json().then(function (j) {
+                        return { ok: r.ok, body: j };
+                    });
+                })
+                .then(function (res) {
+                    if (!res.ok || !res.body.ok) {
+                        tbody.innerHTML = '';
+                        if (errEl) {
+                            errEl.textContent =
+                                (res.body && (res.body.error || res.body.mensaje)) ||
+                                'No se pudieron cargar los tickets.';
+                            errEl.classList.remove('d-none');
+                        }
+                        return;
+                    }
+                    var tickets = res.body.tickets || [];
+                    if (!tickets.length) {
+                        tbody.innerHTML =
+                            '<tr><td colspan="7" class="text-muted small">Sin tickets tarjeta en el turno.</td></tr>';
+                        return;
+                    }
+                    tbody.innerHTML = tickets
+                        .map(function (t) {
+                            return (
+                                '<tr>' +
+                                '<td>' +
+                                (t.ticket_id || '') +
+                                '</td>' +
+                                '<td>' +
+                                (t.numeroticket || '') +
+                                '</td>' +
+                                '<td>' +
+                                (t.venta_codigo || t.venta_id || '') +
+                                '</td>' +
+                                '<td>' +
+                                (t.numerodocumento || '—') +
+                                '</td>' +
+                                '<td class="text-right">' +
+                                (parseFloat(t.montoticket) || 0).toFixed(2) +
+                                '</td>' +
+                                '<td>' +
+                                (t.fecha_emision || '—') +
+                                '</td>' +
+                                '<td>' +
+                                (t.created_at || '—') +
+                                '</td>' +
+                                '</tr>'
+                            );
+                        })
+                        .join('');
+                })
+                .catch(function () {
+                    tbody.innerHTML = '';
+                    if (errEl) {
+                        errEl.textContent = 'Error de comunicación.';
+                        errEl.classList.remove('d-none');
+                    }
+                });
+        });
+    }
 
     cargarEstado();
 })();

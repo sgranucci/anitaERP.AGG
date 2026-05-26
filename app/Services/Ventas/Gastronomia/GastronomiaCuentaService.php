@@ -306,7 +306,71 @@ class GastronomiaCuentaService
             }
         }
 
+        $this->enriquecerLineasConOpcionales($cuenta);
+
         return $cuenta;
+    }
+
+    /**
+     * Adjunta a cada línea `opcionales_detalle` con SKU/descripción del artículo
+     * elegido por orden, para que el POS lo muestre debajo del consumo.
+     */
+    private function enriquecerLineasConOpcionales(CuentaGastronomia $cuenta): void
+    {
+        $lineas = $cuenta->lineas ?? null;
+        if ($lineas === null || (method_exists($lineas, 'isEmpty') && $lineas->isEmpty())) {
+            return;
+        }
+
+        $idsOpcionales = [];
+        foreach ($lineas as $linea) {
+            $map = $linea->opcionales_json;
+            if (!is_array($map)) {
+                continue;
+            }
+            foreach ($map as $articuloId) {
+                $articuloId = (int) $articuloId;
+                if ($articuloId > 0) {
+                    $idsOpcionales[$articuloId] = true;
+                }
+            }
+        }
+
+        $articulosOpcionales = [];
+        if (!empty($idsOpcionales)) {
+            $articulosOpcionales = Articulo::query()
+                ->whereIn('id', array_keys($idsOpcionales))
+                ->get(['id', 'sku', 'descripcion'])
+                ->keyBy('id');
+        }
+
+        foreach ($lineas as $linea) {
+            $map = $linea->opcionales_json;
+            if (!is_array($map) || empty($map)) {
+                $linea->setAttribute('opcionales_detalle', []);
+                continue;
+            }
+
+            $detalle = [];
+            foreach ($map as $orden => $articuloId) {
+                $articuloId = (int) $articuloId;
+                if ($articuloId <= 0) {
+                    continue;
+                }
+                $art = $articulosOpcionales[$articuloId] ?? null;
+                $detalle[] = [
+                    'orden' => (string) $orden,
+                    'articulo_id' => $articuloId,
+                    'sku' => $art->sku ?? null,
+                    'descripcion' => $art->descripcion ?? null,
+                ];
+            }
+            usort($detalle, fn ($a, $b) => strnatcmp($a['orden'], $b['orden']));
+            $linea->setAttribute('opcionales_detalle', $detalle);
+            if (method_exists($linea, 'syncOriginalAttribute')) {
+                $linea->syncOriginalAttribute('opcionales_detalle');
+            }
+        }
     }
 
     public function cuentaConLineasSinEnriquecer(int $id): CuentaGastronomia

@@ -11,6 +11,51 @@
     var csrfToken = document.querySelector('meta[name="csrf-token"]');
     var token = csrfToken ? csrfToken.getAttribute('content') : '';
 
+    function fdRefrescarCsrfToken() {
+        return fetch('{{ url('csrf-token') }}', {
+            method: 'GET',
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin',
+            cache: 'no-store',
+        }).then(function (r) {
+            if (!r.ok) throw new Error('refresh-csrf-status-' + r.status);
+            return r.json();
+        }).then(function (j) {
+            var nuevo = j && j.token ? String(j.token) : '';
+            if (nuevo) {
+                token = nuevo;
+                if (csrfToken) csrfToken.setAttribute('content', nuevo);
+            }
+            return nuevo;
+        });
+    }
+
+    function fdPostNotaCreditoBody(ventaId, tokenActual, payload) {
+        return fetch('{{ url('ventas/gastronomia/facturas-dia') }}/' + ventaId + '/generar-nota-credito', {
+            method: 'POST',
+            headers: {
+                'X-CSRF-TOKEN': tokenActual,
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify(payload || {}),
+        }).then(function (r) {
+            return r.text().then(function (txt) {
+                var body = null;
+                try { body = txt ? JSON.parse(txt) : null; } catch (e) { body = null; }
+                return { ok: r.ok, status: r.status, body: body, raw: txt };
+            });
+        });
+    }
+
+    var ncModalEl = document.getElementById('modal-fd-generar-nc');
+    var ncBtnConfirmar = document.getElementById('fd-nc-confirmar');
+    var ncInputLeyenda = document.getElementById('fd-nc-leyenda');
+    var ncTextoCompro = document.getElementById('fd-nc-compro');
+    var ncEstado = { ventaId: null, codigo: '', btn: null };
+
     document.querySelectorAll('.js-fd-generar-nc').forEach(function (btn) {
         btn.addEventListener('click', function (e) {
             e.preventDefault();
@@ -18,43 +63,266 @@
             var ventaId = btn.getAttribute('data-venta-id');
             var codigo = btn.getAttribute('data-codigo') || '';
             if (!ventaId || btn.disabled) return;
-            var msg = '¿Generar nota de crédito para el comprobante ' + (codigo || ('#' + ventaId)) + '?\n\n'
-                + 'Se anulará fiscalmente la factura, revertirá stock/insumos y registrará el comprobante en el turno de esta terminal.';
-            if (!window.confirm(msg)) return;
-            btn.disabled = true;
-            fetch('{{ url('ventas/gastronomia/facturas-dia') }}/' + ventaId + '/generar-nota-credito', {
-                method: 'POST',
-                headers: {
-                    'X-CSRF-TOKEN': token,
-                    'Accept': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
+            ncEstado.ventaId = ventaId;
+            ncEstado.codigo = codigo;
+            ncEstado.btn = btn;
+            if (ncTextoCompro) ncTextoCompro.textContent = codigo || ('#' + ventaId);
+            if (ncInputLeyenda) ncInputLeyenda.value = '';
+            if (typeof $ !== 'undefined' && ncModalEl) {
+                $('#modal-fd-generar-nc').modal('show');
+            } else {
+                ejecutarNotaCredito('');
+            }
+        });
+    });
+
+    function ejecutarNotaCredito(leyenda) {
+        var ventaId = ncEstado.ventaId;
+        var btn = ncEstado.btn;
+        if (!ventaId) return;
+        if (btn) btn.disabled = true;
+        if (ncBtnConfirmar) ncBtnConfirmar.disabled = true;
+        var payload = { leyenda: leyenda || '' };
+        fdPostNotaCreditoBody(ventaId, token, payload)
+            .then(function (res) {
+                if (res.status === 419) {
+                    return fdRefrescarCsrfToken().then(function (nuevo) {
+                        if (!nuevo) return res;
+                        return fdPostNotaCreditoBody(ventaId, nuevo, payload);
+                    });
+                }
+                return res;
+            })
+            .then(function (res) {
+                if (res.ok && res.body && res.body.ok) {
+                    if (typeof $ !== 'undefined' && ncModalEl) {
+                        $('#modal-fd-generar-nc').modal('hide');
+                    }
+                    var txt = res.body.mensaje || 'Nota de crédito generada.';
+                    if (typeof toastr !== 'undefined') {
+                        if (res.body.warn) {
+                            toastr.warning(res.body.warn);
+                        }
+                        toastr.success(txt);
+                    } else {
+                        alert((res.body.warn ? res.body.warn + '\n\n' : '') + txt);
+                    }
+                    window.location.reload();
+                } else {
+                    var err = '';
+                    if (res.body) {
+                        err = res.body.error || res.body.mensaje || res.body.message || '';
+                    }
+                    if (!err && res.raw) {
+                        err = String(res.raw).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 400);
+                    }
+                    if (!err) {
+                        err = 'Error al generar la nota de crédito.';
+                    }
+                    err = 'HTTP ' + res.status + ': ' + err;
+                    console.error('NC gastronomía falló', res);
+                    if (typeof toastr !== 'undefined') toastr.error(err, '', { timeOut: 12000, extendedTimeOut: 4000 });
+                    else alert(err);
+                }
+            })
+            .catch(function (e) {
+                console.error('NC gastronomía error de red', e);
+                var msg = 'Error de comunicación al generar la nota de crédito.' + (e && e.message ? ' (' + e.message + ')' : '');
+                if (typeof toastr !== 'undefined') toastr.error(msg);
+                else alert(msg);
+            })
+            .finally(function () {
+                if (btn) btn.disabled = false;
+                if (ncBtnConfirmar) ncBtnConfirmar.disabled = false;
+            });
+    }
+
+    if (ncBtnConfirmar) {
+        ncBtnConfirmar.addEventListener('click', function (e) {
+            e.preventDefault();
+            var leyenda = ncInputLeyenda ? String(ncInputLeyenda.value || '').trim() : '';
+            ejecutarNotaCredito(leyenda);
+        });
+    }
+
+    document.querySelectorAll('.js-fd-tickets-tarjeta').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var ventaId = btn.getAttribute('data-venta-id');
+            if (!ventaId || btn.disabled) return;
+            var modal = document.getElementById('modal-fd-tickets-tarjeta');
+            var tbody = document.getElementById('fd-tickets-tarjeta-body');
+            var errEl = document.getElementById('fd-tickets-tarjeta-error');
+            if (!modal || !tbody) return;
+            tbody.innerHTML = '<tr><td colspan="6" class="text-muted small">Cargando…</td></tr>';
+            if (errEl) {
+                errEl.classList.add('d-none');
+                errEl.textContent = '';
+            }
+            if (typeof $ !== 'undefined') {
+                $('#modal-fd-tickets-tarjeta').modal('show');
+            }
+            fetch('{{ url('ventas/gastronomia/facturas-dia') }}/' + ventaId + '/tickets-tarjeta', {
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                 credentials: 'same-origin',
             })
                 .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
                 .then(function (res) {
-                    if (res.ok && res.body.ok) {
-                        var txt = res.body.mensaje || 'Nota de crédito generada.';
-                        if (typeof toastr !== 'undefined') {
-                            if (res.body.warn) {
-                                toastr.warning(res.body.warn);
-                            }
-                            toastr.success(txt);
-                        } else {
-                            alert((res.body.warn ? res.body.warn + '\n\n' : '') + txt);
+                    if (!res.ok || !res.body.ok) {
+                        var msg = (res.body && (res.body.error || res.body.mensaje)) || 'No se pudieron cargar los tickets.';
+                        tbody.innerHTML = '';
+                        if (errEl) {
+                            errEl.textContent = msg;
+                            errEl.classList.remove('d-none');
                         }
-                        window.location.reload();
-                    } else {
-                        var err = (res.body && (res.body.error || res.body.mensaje)) || 'Error al generar la nota de crédito.';
-                        if (typeof toastr !== 'undefined') toastr.error(err);
-                        else alert(err);
+                        return;
                     }
+                    var tickets = res.body.tickets || [];
+                    if (!tickets.length) {
+                        tbody.innerHTML = '<tr><td colspan="6" class="text-muted small">Sin tickets tarjeta canjeados en esta factura.</td></tr>';
+                        return;
+                    }
+                    tbody.innerHTML = tickets.map(function (t) {
+                        return '<tr>'
+                            + '<td>' + (t.ticket_id || '') + '</td>'
+                            + '<td>' + (t.numeroticket || '') + '</td>'
+                            + '<td>' + (t.numerodocumento || '—') + '</td>'
+                            + '<td class="text-right">' + (parseFloat(t.montoticket) || 0).toFixed(2) + '</td>'
+                            + '<td>' + (t.fecha_emision || '—') + '</td>'
+                            + '<td>' + (t.created_at || '—') + '</td>'
+                            + '</tr>';
+                    }).join('');
                 })
                 .catch(function () {
-                    if (typeof toastr !== 'undefined') toastr.error('Error de comunicación al generar la nota de crédito.');
-                    else alert('Error de comunicación al generar la nota de crédito.');
+                    tbody.innerHTML = '';
+                    if (errEl) {
+                        errEl.textContent = 'Error de comunicación al consultar tickets.';
+                        errEl.classList.remove('d-none');
+                    }
+                });
+        });
+    });
+
+    document.querySelectorAll('.js-fd-canjes-fidelidad').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var ventaId = btn.getAttribute('data-venta-id');
+            if (!ventaId || btn.disabled) return;
+            var modal = document.getElementById('modal-fd-canjes-fidelidad');
+            var tbody = document.getElementById('fd-canjes-fidelidad-body');
+            var errEl = document.getElementById('fd-canjes-fidelidad-error');
+            if (!modal || !tbody) return;
+            tbody.innerHTML = '<tr><td colspan="8" class="text-muted small">Cargando…</td></tr>';
+            if (errEl) {
+                errEl.classList.add('d-none');
+                errEl.textContent = '';
+            }
+            if (typeof $ !== 'undefined') {
+                $('#modal-fd-canjes-fidelidad').modal('show');
+            }
+            fetch('{{ url('ventas/gastronomia/facturas-dia') }}/' + ventaId + '/canjes-fidelidad', {
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin',
+            })
+                .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+                .then(function (res) {
+                    if (!res.ok || !res.body.ok) {
+                        var msg = (res.body && (res.body.error || res.body.mensaje)) || 'No se pudieron cargar los canjes.';
+                        tbody.innerHTML = '';
+                        if (errEl) {
+                            errEl.textContent = msg;
+                            errEl.classList.remove('d-none');
+                        }
+                        return;
+                    }
+                    var canjes = res.body.canjes || [];
+                    if (!canjes.length) {
+                        tbody.innerHTML = '<tr><td colspan="8" class="text-muted small">Sin canjes de fidelidad en esta factura.</td></tr>';
+                        return;
+                    }
+                    tbody.innerHTML = canjes.map(function (c) {
+                        return '<tr>'
+                            + '<td>' + (c.tarjeta || '—') + '</td>'
+                            + '<td class="small">' + (c.trackdata || '—') + '</td>'
+                            + '<td>' + (c.documento || '—') + '</td>'
+                            + '<td>' + (c.titular || (c.apellido || '') + ' ' + (c.nombre || '')).trim() + '</td>'
+                            + '<td>' + (c.categoria_nombre || '') + (c.categoria_codigo ? ' [' + c.categoria_codigo + ']' : '') + '</td>'
+                            + '<td>' + (c.sku || '') + '</td>'
+                            + '<td>' + (c.articulo || '—') + '</td>'
+                            + '<td>' + (c.fechacanje || '—') + '</td>'
+                            + '</tr>';
+                    }).join('');
                 })
-                .finally(function () { btn.disabled = false; });
+                .catch(function () {
+                    tbody.innerHTML = '';
+                    if (errEl) {
+                        errEl.textContent = 'Error de comunicación al consultar canjes de fidelidad.';
+                        errEl.classList.remove('d-none');
+                    }
+                });
+        });
+    });
+
+    document.querySelectorAll('.js-fd-canjes-premio').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var ventaId = btn.getAttribute('data-venta-id');
+            if (!ventaId || btn.disabled) return;
+            var modal = document.getElementById('modal-fd-canjes-premio');
+            var tbody = document.getElementById('fd-canjes-premio-body');
+            var errEl = document.getElementById('fd-canjes-premio-error');
+            if (!modal || !tbody) return;
+            tbody.innerHTML = '<tr><td colspan="8" class="text-muted small">Cargando…</td></tr>';
+            if (errEl) {
+                errEl.classList.add('d-none');
+                errEl.textContent = '';
+            }
+            if (typeof $ !== 'undefined') {
+                $('#modal-fd-canjes-premio').modal('show');
+            }
+            fetch('{{ url('ventas/gastronomia/facturas-dia') }}/' + ventaId + '/canjes-premio', {
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin',
+            })
+                .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+                .then(function (res) {
+                    if (!res.ok || !res.body.ok) {
+                        var msg = (res.body && (res.body.error || res.body.mensaje)) || 'No se pudieron cargar los canjes.';
+                        tbody.innerHTML = '';
+                        if (errEl) {
+                            errEl.textContent = msg;
+                            errEl.classList.remove('d-none');
+                        }
+                        return;
+                    }
+                    var canjes = res.body.canjes || [];
+                    if (!canjes.length) {
+                        tbody.innerHTML = '<tr><td colspan="8" class="text-muted small">Sin canjes de premio en esta factura.</td></tr>';
+                        return;
+                    }
+                    tbody.innerHTML = canjes.map(function (c) {
+                        return '<tr>'
+                            + '<td>' + (c.numerocupon || '') + '</td>'
+                            + '<td>' + (c.sku || '') + '</td>'
+                            + '<td>' + (c.articulo || '—') + '</td>'
+                            + '<td class="text-right">' + (parseFloat(c.cantidad) || 0) + '</td>'
+                            + '<td class="text-right">' + (c.puntos || 0) + '</td>'
+                            + '<td>' + (c.apellido || '') + ' ' + (c.nombre || '') + '</td>'
+                            + '<td>' + (c.numerodocumento || '—') + '</td>'
+                            + '<td>' + (c.fechacanje || '—') + '</td>'
+                            + '</tr>';
+                    }).join('');
+                })
+                .catch(function () {
+                    tbody.innerHTML = '';
+                    if (errEl) {
+                        errEl.textContent = 'Error de comunicación al consultar canjes.';
+                        errEl.classList.remove('d-none');
+                    }
+                });
         });
     });
 
@@ -262,7 +530,7 @@
                                 $ncVentaId = ($notas_credito_por_factura ?? [])[$r->venta_id] ?? null;
                                 $puedeNc = can('generar-nota-credito-gastronomia-facturas-dia', false)
                                     && $v
-                                    && (float) ($v->total ?? 0) > 0.01
+                                    && (float) ($v->total ?? 0) >= 0.01
                                     && $ncVentaId === null
                                     && (! ($requiere_habilitacion_turno ?? false) || ($turno_habilitado ?? false));
                             @endphp
@@ -347,6 +615,30 @@
                                         </a>
                                     @endif
                                     @if ($v)
+                                        @if ($v->tiene_canje_premio ?? false)
+                                            <button type="button"
+                                                class="btn-accion-tabla tooltipsC js-fd-canjes-premio border-0 bg-transparent p-0"
+                                                data-venta-id="{{ $v->id }}"
+                                                title="Canjes de premios Wigos">
+                                                <i class="fa fa-gift text-warning"></i>
+                                            </button>
+                                        @endif
+                                        @if ($v->tiene_canje_fidelidad ?? false)
+                                            <button type="button"
+                                                class="btn-accion-tabla tooltipsC js-fd-canjes-fidelidad border-0 bg-transparent p-0"
+                                                data-venta-id="{{ $v->id }}"
+                                                title="Canje fidelidad (tarjeta Wigos)">
+                                                <i class="fa fa-id-card text-warning"></i>
+                                            </button>
+                                        @endif
+                                        @if ($v->tiene_ticket_tarjeta ?? false)
+                                            <button type="button"
+                                                class="btn-accion-tabla tooltipsC js-fd-tickets-tarjeta border-0 bg-transparent p-0"
+                                                data-venta-id="{{ $v->id }}"
+                                                title="Tickets tarjeta canjeados">
+                                                <i class="fa fa-barcode text-info"></i>
+                                            </button>
+                                        @endif
                                         <button type="button"
                                             class="btn-accion-tabla tooltipsC js-fd-reimprimir-ticket border-0 bg-transparent p-0"
                                             data-venta-id="{{ $v->id }}"
@@ -406,6 +698,152 @@
                         @endforelse
                     </tbody>
                 </table>
+                @if (method_exists($registros, 'hasPages') && $registros->hasPages())
+                    <div class="d-flex flex-wrap justify-content-between align-items-center px-3 py-2 border-top bg-light">
+                        <small class="text-muted mb-2 mb-md-0">
+                            Mostrando {{ $registros->firstItem() ?? 0 }}–{{ $registros->lastItem() ?? 0 }}
+                            de {{ $registros->total() }} factura(s)
+                        </small>
+                        <div>{{ $registros->onEachSide(1)->links() }}</div>
+                    </div>
+                @elseif (method_exists($registros, 'total'))
+                    <div class="px-3 py-2 border-top bg-light">
+                        <small class="text-muted">{{ $registros->total() }} factura(s) en la página.</small>
+                    </div>
+                @endif
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modal-fd-generar-nc" tabindex="-1" role="dialog" aria-labelledby="modal-fd-generar-nc-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title" id="modal-fd-generar-nc-title">Generar nota de crédito</h6>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">&times;</button>
+            </div>
+            <div class="modal-body py-3">
+                <p class="mb-2 small">
+                    Se va a <strong>revertir</strong> el comprobante <strong id="fd-nc-compro">—</strong> emitiendo una nota de crédito por el mismo importe.
+                </p>
+                <ul class="small mb-3 pl-3">
+                    <li>La factura original no se borra: queda compensada fiscalmente por la NC.</li>
+                    <li>Se reintegran los movimientos de stock e insumos de Anita.</li>
+                    <li>La NC se registra en el turno de esta terminal.</li>
+                </ul>
+                <div class="form-group mb-0">
+                    <label for="fd-nc-leyenda" class="small mb-1">Leyenda (motivo de la reversión)</label>
+                    <textarea id="fd-nc-leyenda" class="form-control form-control-sm" rows="3"
+                              maxlength="255" placeholder="Opcional. Ej.: Cliente devolvió pedido; error en cobranza; mesa equivocada…"></textarea>
+                    <small class="text-muted">Se guarda en la leyenda del comprobante de la nota de crédito.</small>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-sm btn-warning" id="fd-nc-confirmar">
+                    <i class="fas fa-undo"></i> Generar nota de crédito
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modal-fd-tickets-tarjeta" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title">Tickets tarjeta canjados</h6>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">&times;</button>
+            </div>
+            <div class="modal-body py-2">
+                <div id="fd-tickets-tarjeta-error" class="alert alert-danger py-2 small d-none" role="alert"></div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="thead-light">
+                            <tr>
+                                <th>Movimiento</th>
+                                <th>Nº ticket</th>
+                                <th>Documento</th>
+                                <th class="text-right">Importe</th>
+                                <th>Fecha emisión</th>
+                                <th>Canje ERP</th>
+                            </tr>
+                        </thead>
+                        <tbody id="fd-tickets-tarjeta-body"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modal-fd-canjes-fidelidad" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title">Canje fidelidad — tarjeta Wigos</h6>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">&times;</button>
+            </div>
+            <div class="modal-body py-2">
+                <div id="fd-canjes-fidelidad-error" class="alert alert-danger py-2 small d-none" role="alert"></div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="thead-light">
+                            <tr>
+                                <th>Nro. tarjeta</th>
+                                <th>Trackdata</th>
+                                <th>DNI</th>
+                                <th>Titular</th>
+                                <th>Categoría</th>
+                                <th>SKU</th>
+                                <th>Artículo canjeado</th>
+                                <th>Fecha canje</th>
+                            </tr>
+                        </thead>
+                        <tbody id="fd-canjes-fidelidad-body"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modal-fd-canjes-premio" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title">Canjes de premios Wigos</h6>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">&times;</button>
+            </div>
+            <div class="modal-body py-2">
+                <div id="fd-canjes-premio-error" class="alert alert-danger py-2 small d-none" role="alert"></div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="thead-light">
+                            <tr>
+                                <th>Cupón</th>
+                                <th>SKU</th>
+                                <th>Artículo</th>
+                                <th class="text-right">Cant.</th>
+                                <th class="text-right">Puntos</th>
+                                <th>Cliente Wigos</th>
+                                <th>Documento</th>
+                                <th>Fecha canje</th>
+                            </tr>
+                        </thead>
+                        <tbody id="fd-canjes-premio-body"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cerrar</button>
             </div>
         </div>
     </div>

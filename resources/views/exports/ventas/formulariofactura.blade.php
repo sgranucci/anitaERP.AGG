@@ -184,10 +184,13 @@
 						<th style="width: 15%;"></th>
 					</thead>
 					<tbody>
-						@php $iva = 0; @endphp
+						@php $iva = 0; $impuestoInterno = 0; @endphp
 						@foreach ($conceptosTotales as $itemTotal)
 							@if (strpos($itemTotal['concepto'], 'Iva') !== false)
 								@php $iva += $itemTotal['importe']; @endphp
+							@endif
+							@if ($itemTotal['concepto'] == 'Impuesto Interno')
+								@php $impuestoInterno += $itemTotal['importe']; @endphp
 							@endif
 							@if ($letra == 'A')
 								<tr>
@@ -234,9 +237,14 @@
 					<tr>
 						@if ($letra == 'B')
 							<th style="font-size: 10px; text-align: left">
-								Transparencia Fiscal (Ley 27.743) <br>
-								IVA Contenido {{ number_format($iva, 2) }} <br>
-								Otros Impuestos Nacionales Indirectos {{0}} <br>
+								RÉGIMEN DE TRANSPARENCIA FISCAL AL CONSUMIDOR (Ley 27.743) <br>
+								IVA Contenido {{ $venta->monedas->abreviatura ?? '' }} {{ number_format($iva, 2) }} <br>
+								Otros Tributos Nac. que inciden en el precio
+								@if ($impuestoInterno > 0)
+									<br>
+									&nbsp;&nbsp;&nbsp;Impuesto Interno {{ $venta->monedas->abreviatura ?? '' }} {{ number_format($impuestoInterno, 2) }}
+								@endif
+								<br>
 							</th>
 						@endif
 						@if (config('app.empresa') == 'EL BIERZO')

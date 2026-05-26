@@ -5,6 +5,15 @@
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
+@if(($empresasArca ?? collect())->isNotEmpty())
+<script>
+    window.PUNTOVENTA_ARCA_PRELOAD = {
+        url: @json(route('puntoventa_arca_puntos_venta')),
+        empresas: @json(($empresasArca ?? collect())->map(fn ($e) => ['id' => $e->id, 'nombre' => $e->nombre])->values())
+    };
+</script>
+<script src="{{asset("assets/pages/scripts/ventas/puntoventa/index-arca.js")}}" type="text/javascript"></script>
+@endif
 @endsection
 
 <?php use App\Helpers\biblioteca ?>

@@ -61,7 +61,7 @@ class CuentacajaController extends Controller
     {
         can('crear-cuentas-de-caja');
         $data = new Cuentacaja();
-        $empresa_query = $this->empresaRepository->all();
+        $empresa_query = $this->empresaRepository->allFiltrado();
         $moneda_query = $this->monedaRepository->all();
         $banco_query = $this->bancoRepository->all();
         $cuentacontable_query = $this->cuentacontableRepository->all();
@@ -102,7 +102,7 @@ class CuentacajaController extends Controller
         }
 
         $data = $this->repository->findOrFail($id);
-        $empresa_query = $this->empresaRepository->all();
+        $empresa_query = $this->empresaRepository->allFiltrado();
         $moneda_query = $this->monedaRepository->all();
         $banco_query = $this->bancoRepository->all();
         $cuentacontable_query = $this->cuentacontableRepository->all();

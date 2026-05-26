@@ -194,6 +194,299 @@
         font-size: 0.95rem;
         line-height: 1.45;
     }
+    #modal-opcionales .modal-body {
+        padding: 0;
+        background: #f7f9fc;
+    }
+    #modal-opcionales .gastro-opc-progreso {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.75rem 1rem;
+        background: #fff;
+        border-bottom: 1px solid #e3e6ea;
+    }
+    #modal-opcionales .gastro-opc-progreso-info {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+    }
+    #modal-opcionales .gastro-opc-progreso-titulo {
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+    }
+    #modal-opcionales .gastro-opc-progreso-subtitulo {
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: #1f2937;
+        line-height: 1.2;
+        margin-top: 0.1rem;
+    }
+    #modal-opcionales .gastro-opc-progreso-pasos {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+    #modal-opcionales .gastro-opc-paso {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        padding: 0.2rem 0.55rem 0.2rem 0.35rem;
+        background: #eef1f5;
+        color: #6c757d;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        border: 1px solid transparent;
+        cursor: pointer;
+        user-select: none;
+        transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+    }
+    #modal-opcionales .gastro-opc-paso .gastro-opc-paso-num {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.3rem;
+        height: 1.3rem;
+        border-radius: 50%;
+        background: #d6dbe2;
+        color: #495057;
+        font-size: 0.72rem;
+        font-weight: 700;
+    }
+    #modal-opcionales .gastro-opc-paso.completado {
+        background: #e6f4ea;
+        color: #1e7e34;
+        border-color: #c3e6cb;
+    }
+    #modal-opcionales .gastro-opc-paso.completado .gastro-opc-paso-num {
+        background: #28a745;
+        color: #fff;
+    }
+    #modal-opcionales .gastro-opc-paso.actual {
+        background: #007bff;
+        color: #fff;
+        border-color: #0069d9;
+        box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.18);
+    }
+    #modal-opcionales .gastro-opc-paso.actual .gastro-opc-paso-num {
+        background: #fff;
+        color: #0056b3;
+    }
+    #modal-opcionales .gastro-opc-paso.faltante {
+        animation: gastroOpcShake 0.45s linear;
+        background: #fdecea;
+        color: #b02a37;
+        border-color: #f5c6cb;
+    }
+    #modal-opcionales .gastro-opc-paso.faltante .gastro-opc-paso-num {
+        background: #dc3545;
+        color: #fff;
+    }
+    @keyframes gastroOpcShake {
+        0%,100% { transform: translateX(0); }
+        25% { transform: translateX(-3px); }
+        75% { transform: translateX(3px); }
+    }
+
+    #modal-opcionales .gastro-opc-pasos-wrap {
+        position: relative;
+        padding: 1rem 1rem 0.5rem;
+    }
+    #modal-opcionales .gastro-opc-grupo {
+        display: none;
+        animation: gastroOpcFadeIn 0.18s ease-out;
+    }
+    #modal-opcionales .gastro-opc-grupo.activo {
+        display: block;
+    }
+    @keyframes gastroOpcFadeIn {
+        from { opacity: 0; transform: translateY(4px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    #modal-opcionales .gastro-opc-grupo-titulo {
+        font-size: 1rem;
+        font-weight: 600;
+        color: #1f2937;
+        margin-bottom: 0.6rem;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+    #modal-opcionales .gastro-opc-grupo-titulo .gastro-opc-pill {
+        font-size: 0.7rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 0.15rem 0.5rem;
+        background: #007bff;
+        color: #fff;
+        border-radius: 999px;
+    }
+    #modal-opcionales .gastro-opc-grupo-titulo small {
+        font-size: 0.78rem;
+        font-weight: 500;
+        color: #6c757d;
+        text-transform: none;
+        letter-spacing: 0;
+    }
+    #modal-opcionales .gastro-opc-grilla {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+        gap: 0.6rem;
+    }
+    #modal-opcionales .gastro-opc-tarjeta {
+        position: relative;
+        border: 2px solid #dee2e6;
+        border-radius: 0.5rem;
+        background: #fff;
+        padding: 0.7rem 0.75rem 0.7rem 2.1rem;
+        cursor: pointer;
+        transition: border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease, transform 0.08s ease;
+        display: flex;
+        flex-direction: column;
+        min-height: 76px;
+        user-select: none;
+    }
+    #modal-opcionales .gastro-opc-tarjeta:focus {
+        outline: none;
+        border-color: #80bdff;
+        box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+    }
+    #modal-opcionales .gastro-opc-atajo {
+        position: absolute;
+        top: 6px;
+        left: 6px;
+        min-width: 1.4rem;
+        height: 1.4rem;
+        line-height: 1.4rem;
+        text-align: center;
+        font-size: 0.74rem;
+        font-weight: 700;
+        color: #495057;
+        background: #f1f3f5;
+        border: 1px solid #ced4da;
+        border-radius: 0.25rem;
+        padding: 0 0.3rem;
+    }
+    #modal-opcionales .gastro-opc-tarjeta.seleccionada .gastro-opc-atajo {
+        color: #fff;
+        background: #007bff;
+        border-color: #0069d9;
+    }
+    #modal-opcionales .gastro-opc-tarjeta:hover {
+        border-color: #80bdff;
+        background: #f6fbff;
+        transform: translateY(-1px);
+    }
+    #modal-opcionales .gastro-opc-tarjeta.seleccionada {
+        border-color: #007bff;
+        background: #e7f1ff;
+        box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+    }
+    #modal-opcionales .gastro-opc-tarjeta.seleccionada::after {
+        content: '\f00c';
+        font-family: FontAwesome, 'Font Awesome 5 Free', sans-serif;
+        font-weight: 900;
+        position: absolute;
+        top: 6px;
+        right: 8px;
+        color: #007bff;
+        font-size: 0.85rem;
+    }
+    #modal-opcionales .gastro-opc-sku {
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: #6c757d;
+        margin-bottom: 0.15rem;
+    }
+    #modal-opcionales .gastro-opc-tarjeta.seleccionada .gastro-opc-sku {
+        color: #0056b3;
+    }
+    #modal-opcionales .gastro-opc-descripcion {
+        font-size: 0.95rem;
+        color: #212529;
+        line-height: 1.25;
+        word-break: break-word;
+    }
+
+    #modal-opcionales .gastro-opc-resumen {
+        margin: 0.75rem 1rem 0;
+        background: #fff;
+        border: 1px solid #e3e6ea;
+        border-radius: 0.4rem;
+        padding: 0.5rem 0.75rem;
+    }
+    #modal-opcionales .gastro-opc-resumen-titulo {
+        font-size: 0.7rem;
+        font-weight: 700;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 0.35rem;
+    }
+    #modal-opcionales .gastro-opc-resumen-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+    }
+    #modal-opcionales .gastro-opc-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.2rem 0.6rem;
+        background: #f1f3f5;
+        color: #495057;
+        border-radius: 999px;
+        font-size: 0.78rem;
+        line-height: 1.2;
+    }
+    #modal-opcionales .gastro-opc-chip.completado {
+        background: #e6f4ea;
+        color: #1e7e34;
+    }
+    #modal-opcionales .gastro-opc-chip .gastro-opc-chip-num {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.05rem;
+        height: 1.05rem;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.08);
+        color: inherit;
+        font-size: 0.65rem;
+        font-weight: 700;
+    }
+    #modal-opcionales .gastro-opc-chip.completado .gastro-opc-chip-num {
+        background: #28a745;
+        color: #fff;
+    }
+
+    #modal-opcionales .gastro-opc-leyenda {
+        padding: 0.4rem 1rem 0.6rem;
+        font-size: 0.75rem;
+        color: #6c757d;
+        text-align: center;
+    }
+    #modal-opcionales .gastro-opc-leyenda kbd {
+        font-size: 0.7rem;
+        padding: 0.05rem 0.3rem;
+    }
+    #modal-opcionales .modal-footer {
+        background: #fff;
+    }
+    #modal-opcionales .gastro-opc-grupo.gastro-opc-faltante .gastro-opc-grilla {
+        outline: 2px dashed #dc3545;
+        outline-offset: 6px;
+        border-radius: 0.5rem;
+        animation: gastroOpcShake 0.45s linear;
+    }
     #modal-gastro-aviso .gastro-aviso-detalle {
         font-size: 0.9rem;
         color: #495057;
@@ -231,6 +524,11 @@
         font-size: 0.85rem;
         color: #6c757d;
         font-style: italic;
+    }
+    /* Consultas hijas por encima del modal F8 (consultacliente va antes en el DOM que modal-f8-descuento) */
+    body.modal-open #consultaclienteModal.show.gastro-modal-sobre-f8,
+    body.modal-open #consultadescuentoModal.show.gastro-modal-sobre-f8 {
+        z-index: 1070;
     }
 </style>
 @endsection
@@ -325,8 +623,8 @@
             @endif
             @if (! empty($jornada['jornada_abierta']))
                 —
-                Jornada <strong>{{ $jornada['fecha_jornada'] }}</strong> abierta
-                · facturas con fecha <strong>{{ $jornada['fecha_factura_hoy'] }}</strong>
+                Jornada <strong>{{ $jornada['fecha_jornada_fmt'] ?? $jornada['fecha_jornada'] }}</strong> abierta
+                · facturas con fecha <strong>{{ $jornada['fecha_factura_hoy_fmt'] ?? $jornada['fecha_factura_hoy'] }}</strong>
             @endif
         </div>
 
@@ -369,7 +667,7 @@
                     <span><i class="fa fa-cutlery"></i> Mesa / cuenta</span>
                     <span id="gastro-header-cuenta-chip" class="gastro-header-cuenta-chip d-none ml-2" aria-hidden="true"></span>
                     <span class="text-muted small ml-2">
-                        <kbd>F5</kbd> Efectivizar · <kbd>F8</kbd> Facturar con descuento (modal centrado; código + Enter; lupa opcional)
+                        <kbd>F5</kbd> Efectivizar · <kbd>F8</kbd> Facturar con descuento (obligatorio en canjes premio/fidelidad)
                         @if ($gastroCuentasLibresHabilitadas)
                             · <kbd>+</kbd> Nueva cuenta libre
                         @endif
@@ -553,6 +851,12 @@
                                 <button type="button" class="btn btn-outline-success" id="tool-facturar" title="Facturar"><i class="fa fa-file-invoice-dollar"></i></button>
                                 <button type="button" class="btn btn-outline-info" id="tool-asignar-cliente" title="Enfocar cliente para facturar"><i class="fa fa-user"></i></button>
                                 <button type="button" class="btn btn-outline-secondary" id="tool-descuento" title="Enfocar descuento"><i class="fa fa-percent"></i></button>
+                                <button type="button" class="btn btn-outline-warning" id="gastro-btn-canje-premio" title="Canje de premios Wigos (cupón)">
+                                    <i class="fa fa-gift"></i>
+                                </button>
+                                <button type="button" class="btn btn-outline-warning" id="gastro-btn-canje-fidelidad" title="Canje fidelidad por tarjeta Wigos">
+                                    <i class="fa fa-id-card"></i>
+                                </button>
                                 <a href="{{ route('gastronomia_facturas_dia') }}" class="btn btn-outline-primary" title="Facturas del día"><i class="fa fa-calendar-day"></i></a>
                                 @if ($requiere_habilitacion_turno ?? true)
                                 <a href="{{ route('gastronomia_habilitacion_turno', ['accion' => 'cierre_parcial']) }}" class="btn btn-outline-warning" title="Cierre parcial del turno"><i class="fa fa-list-alt"></i></a>
@@ -593,6 +897,9 @@
                             </div>
                             <div class="mt-1">
                                 <button type="button" class="btn btn-sm btn-danger" id="gastro-agrega-renglon-cuenta">+ Agregar renglón</button>
+                                <button type="button" class="btn btn-sm btn-outline-primary ml-1" id="gastro-btn-canje-ticket-tarjeta" title="Canjear ticket tarjeta gastronomía (CTG)">
+                                    <i class="fa fa-barcode" aria-hidden="true"></i> Canje tarjeta
+                                </button>
                                 <div id="gastro-totales-cobranza" class="gastro-totales-resumen"></div>
                             </div>
                         </div>
@@ -627,6 +934,8 @@
             <input type="number" step="0.01" class="form-control form-control-sm gastro-cc-monto monto" value="">
         </td>
         <td class="text-center">
+            <input type="hidden" class="ticket_id" value="">
+            <input type="hidden" class="numeroticket" value="">
             <button type="button" title="Eliminar línea" class="btn-accion-tabla gastro-eliminar-cuenta">
                 <i class="fa fa-times-circle text-danger"></i>
             </button>
@@ -636,14 +945,26 @@
 
 <!-- Modal opcionales -->
 <div class="modal fade" id="modal-opcionales" tabindex="-1">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <div class="modal-header py-2"><h6 class="modal-title">Opcionales del artículo</h6>
-                <button type="button" class="close" data-dismiss="modal">&times;</button></div>
-            <div class="modal-body py-2" id="modal-opcionales-body"></div>
-            <div class="modal-footer py-2">
+            <div class="modal-header py-2">
+                <h6 class="modal-title">
+                    Opcionales del artículo
+                    <small class="text-muted ml-2" id="modal-opcionales-articulo-info"></small>
+                </h6>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-opcionales-body"></div>
+            <div class="modal-footer py-2 d-flex justify-content-between">
                 <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-sm btn-primary" id="modal-opcionales-confirmar">Agregar</button>
+                <div class="d-flex" style="gap: 0.4rem;">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="modal-opcionales-atras" disabled>
+                        <i class="fa fa-arrow-left"></i> Atrás
+                    </button>
+                    <button type="button" class="btn btn-sm btn-primary" id="modal-opcionales-confirmar">
+                        Siguiente <i class="fa fa-arrow-right"></i>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -758,4 +1079,120 @@
 @if ($requiere_habilitacion_turno ?? true)
     @include('ventas.gastronomia.proceso_facturacion.partials.modales_turno_operativo')
 @endif
+
+<div class="modal fade" id="modal-gastro-canje-premio" tabindex="-1" role="dialog" aria-labelledby="modal-gastro-canje-premio-title" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title" id="modal-gastro-canje-premio-title">Canje de premios</h6>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">&times;</button>
+            </div>
+            <div class="modal-body py-2">
+                <p class="small text-muted mb-2">Escanee o ingrese el código de barras del cupón Wigos.</p>
+                <div class="form-group mb-2">
+                    <label for="gastro-canje-premio-codigo" class="small mb-1">Nro. de cupón</label>
+                    <input type="text" class="form-control form-control-sm" id="gastro-canje-premio-codigo" autocomplete="off">
+                </div>
+                <div id="gastro-canje-premio-error" class="alert alert-danger py-2 small d-none" role="alert"></div>
+                <div id="gastro-canje-premio-preview" class="d-none border rounded p-2 bg-light small">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div><strong>Nro. cupón:</strong> <span id="gastro-canje-premio-prev-cupon">—</span></div>
+                            <div><strong>Premio:</strong> <span id="gastro-canje-premio-prev-premio">—</span></div>
+                            <div><strong>Puntos unidad:</strong> <span id="gastro-canje-premio-prev-puntos">—</span></div>
+                            <div><strong>Cantidad:</strong> <span id="gastro-canje-premio-prev-cantidad">—</span></div>
+                            <div><strong>Pts. total:</strong> <span id="gastro-canje-premio-prev-puntos-total">—</span></div>
+                        </div>
+                        <div class="col-md-6">
+                            <div><strong>Fecha canje:</strong> <span id="gastro-canje-premio-prev-fecha">—</span></div>
+                            <div><strong>Cliente:</strong> <span id="gastro-canje-premio-prev-cliente-wigos">—</span></div>
+                            <div><strong>Apellido:</strong> <span id="gastro-canje-premio-prev-apellido">—</span></div>
+                            <div><strong>Nombre:</strong> <span id="gastro-canje-premio-prev-nombre">—</span></div>
+                            <div><strong>Nro. documento:</strong> <span id="gastro-canje-premio-prev-documento">—</span></div>
+                        </div>
+                    </div>
+                    <div id="gastro-canje-premio-items-wrap" class="mt-2 d-none">
+                        <strong>Artículos:</strong>
+                        <ul id="gastro-canje-premio-items" class="mb-0 pl-3"></ul>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-sm btn-primary" id="gastro-canje-premio-confirmar" disabled>Aplicar a cuenta</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modal-gastro-canje-fidelidad" tabindex="-1" role="dialog" aria-labelledby="modal-gastro-canje-fidelidad-title" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title" id="modal-gastro-canje-fidelidad-title">Canje fidelidad — tarjeta Wigos</h6>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">&times;</button>
+            </div>
+            <div class="modal-body py-2">
+                <p class="small text-muted mb-2">Pase la tarjeta por el lector. El sistema consulta Wigos y muestra la categoría y artículos disponibles (un canje por DNI por día).</p>
+                <div class="form-group mb-2">
+                    <label for="gastro-canje-fidelidad-trackdata" class="small mb-1">Tarjeta / trackdata</label>
+                    <input type="text" class="form-control form-control-sm" id="gastro-canje-fidelidad-trackdata" autocomplete="off">
+                </div>
+                <div id="gastro-canje-fidelidad-error" class="alert alert-danger py-2 small d-none" role="alert"></div>
+                <div id="gastro-canje-fidelidad-preview" class="d-none border rounded p-2 bg-light small">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div><strong>Titular:</strong> <span id="gastro-canje-fidelidad-prev-titular">—</span></div>
+                            <div><strong>DNI:</strong> <span id="gastro-canje-fidelidad-prev-documento">—</span></div>
+                            <div><strong>Nro. tarjeta:</strong> <span id="gastro-canje-fidelidad-prev-cuenta">—</span></div>
+                            <div><strong>Nivel Wigos:</strong> <span id="gastro-canje-fidelidad-prev-nivel">—</span></div>
+                        </div>
+                        <div class="col-md-6">
+                            <div><strong>Categoría ERP:</strong> <span id="gastro-canje-fidelidad-prev-categoria">—</span></div>
+                            <div><strong>E-mail:</strong> <span id="gastro-canje-fidelidad-prev-email">—</span></div>
+                        </div>
+                    </div>
+                    <div id="gastro-canje-fidelidad-articulos-wrap" class="mt-2 d-none">
+                        <strong>Artículo a canjear</strong>
+                        <div id="gastro-canje-fidelidad-articulos" class="mt-1"></div>
+                    </div>
+                    <p class="text-muted mb-0 mt-2 small">Al confirmar se carga el consumo, el descuento obligatorio y se abre el modal F8 para revisar antes de facturar ($0,01).</p>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-sm btn-primary" id="gastro-canje-fidelidad-confirmar" disabled>Aplicar y facturar con descuento</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modal-gastro-canje-ticket-tarjeta" tabindex="-1" role="dialog" aria-labelledby="modal-gastro-canje-ticket-tarjeta-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title" id="modal-gastro-canje-ticket-tarjeta-title">Canje ticket tarjeta gastronomía</h6>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">&times;</button>
+            </div>
+            <div class="modal-body py-2">
+                <p class="small text-muted mb-2">Escanee o ingrese el código de barras del ticket. Los primeros 6 dígitos identifican el movimiento y el resto el número de ticket.</p>
+                <div class="form-group mb-2">
+                    <label for="gastro-canje-codigo-barras" class="small mb-1">Código de barras</label>
+                    <input type="text" class="form-control form-control-sm" id="gastro-canje-codigo-barras" autocomplete="off" inputmode="numeric">
+                </div>
+                <div id="gastro-canje-ticket-error" class="alert alert-danger py-2 small d-none" role="alert"></div>
+                <div id="gastro-canje-ticket-preview" class="d-none border rounded p-2 bg-light small">
+                    <div><strong>Importe ticket:</strong> <span id="gastro-canje-preview-importe">—</span></div>
+                    <div><strong>Fecha emisión:</strong> <span id="gastro-canje-preview-fecha">—</span></div>
+                    <div><strong>Documento cliente:</strong> <span id="gastro-canje-preview-documento">—</span></div>
+                    <div><strong>Monto a aplicar:</strong> <span id="gastro-canje-preview-monto">—</span></div>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-sm btn-primary" id="gastro-canje-ticket-confirmar" disabled>Agregar a cobranza</button>
+            </div>
+        </div>
+    </div>
+</div>
 @endsection

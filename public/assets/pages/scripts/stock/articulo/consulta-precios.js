@@ -61,7 +61,7 @@ $(function () {
 		);
 	}
 
-	function abrirModalConsulta(articuloId, sku, desc, fechaRef) {
+	function abrirModalConsulta(articuloId, sku, desc, fechaRef, listaprecioId) {
 		articuloIdActivo = articuloId;
 		articuloSkuActivo = sku || '';
 		articuloDescActivo = desc || '';
@@ -70,6 +70,7 @@ $(function () {
 			'Precios — ' + articuloSkuActivo + (articuloDescActivo ? ' — ' + articuloDescActivo : '')
 		);
 		$('#consultaprecioarticuloFechaRef').val(fechaRef || hoyIso());
+		$('#consultaprecioarticuloListaId').val(listaprecioId ? String(listaprecioId) : '');
 		$('#consultaprecioarticuloBody').empty();
 		$('#consultaprecioarticuloError').addClass('d-none').text('');
 		$('#consultaprecioarticuloModal').modal('show');
@@ -86,15 +87,21 @@ $(function () {
 		var $err = $('#consultaprecioarticuloError');
 		var $load = $('#consultaprecioarticuloCargando');
 		var fechaRef = $('#consultaprecioarticuloFechaRef').val() || hoyIso();
+		var listaprecioId = $('#consultaprecioarticuloListaId').val() || '';
 
 		$err.addClass('d-none').text('');
 		$body.empty();
 		$load.removeClass('d-none');
 
-		$.getJSON(urlConsulta, {
+		var params = {
 			articulo_id: articuloIdActivo,
 			fecha_referencia: fechaRef,
-		})
+		};
+		if (listaprecioId !== '') {
+			params.listaprecio_id = listaprecioId;
+		}
+
+		$.getJSON(urlConsulta, params)
 			.done(function (data) {
 				$load.addClass('d-none');
 
@@ -114,8 +121,11 @@ $(function () {
 
 				var filas = data.filas || [];
 				if (!filas.length) {
+					var msgVacio = listaprecioId !== ''
+						? 'Este artículo no tiene precios cargados en la lista seleccionada.'
+						: 'Este artículo no tiene precios cargados en ninguna lista.';
 					$body.append(
-						'<tr><td colspan="8" class="text-center text-muted">Este artículo no tiene precios cargados en ninguna lista.</td></tr>'
+						'<tr><td colspan="8" class="text-center text-muted">' + esc(msgVacio) + '</td></tr>'
 					);
 					return;
 				}
@@ -220,10 +230,15 @@ $(function () {
 		cargarConsulta();
 	});
 
+	$(document).on('change', '#consultaprecioarticuloListaId', function () {
+		cargarConsulta();
+	});
+
 	$('#consultaprecioarticuloModal').on('hidden.bs.modal', function () {
 		articuloIdActivo = 0;
 		articuloSkuActivo = '';
 		articuloDescActivo = '';
+		$('#consultaprecioarticuloListaId').val('');
 	});
 
 	procesarRetornoConsultaPrecios();

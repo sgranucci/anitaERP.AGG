@@ -4,6 +4,7 @@ namespace App\Repositories\Ventas;
 
 use App\ApiAnita;
 use App\Models\Ventas\Puntoventa;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class PuntoventaRepository implements PuntoventaRepositoryInterface
@@ -17,20 +18,33 @@ class PuntoventaRepository implements PuntoventaRepositoryInterface
      *
      * @param  Post  $post
      */
-    public function __construct(Puntoventa $puntoventa)
-    {
+    public function __construct(
+        Puntoventa $puntoventa,
+        private EmpresaRepositoryInterface $empresaRepository,
+    ) {
         $this->model = $puntoventa;
     }
 
     public function all($estado = null)
     {
-        if ($estado == null) {
-            $puntoventa = $this->model->get();
-        } else {
-            $puntoventa = $this->model->where('estado', $estado)->get();
+        $query = $this->model->newQuery();
+
+        if ($estado != null) {
+            $query->where('estado', $estado);
         }
 
-        return $puntoventa;
+        $this->aplicarFiltroEmpresasAsignadas($query);
+
+        return $query->get();
+    }
+
+    private function aplicarFiltroEmpresasAsignadas($query): void
+    {
+        $empresasAsignadas = $this->empresaRepository->traeEmpresasAsignadas();
+
+        if (count($empresasAsignadas) > 1) {
+            $query->whereIn('empresa_id', $empresasAsignadas);
+        }
     }
 
     public function create(array $data)

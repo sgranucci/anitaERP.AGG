@@ -106,4 +106,14 @@ return [
         /** Bloquear si CUIT del cert ≠ empresa.nroinscripcion (desactivado por defecto; afip.php puede usar otro CUIT en el XML) */
         'validar_cuit_certificado' => filter_var(env('ARCA_TIPOS_CBTE_VALIDAR_CUIT', false), FILTER_VALIDATE_BOOLEAN),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Puntos de venta AFIP (ABM puntoventa)
+    |--------------------------------------------------------------------------
+    */
+    'ptos_venta' => [
+        /** Segundos de caché Laravel tras consulta ARCA exitosa (precarga index + formulario) */
+        'cache_ttl' => (int) env('ARCA_PTOS_VENTA_CACHE_TTL', 1800),
+    ],
 ];

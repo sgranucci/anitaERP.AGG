@@ -35,6 +35,8 @@
         puedeVerFactura: @json($puede_ver_factura ?? false),
         urlInformeMozoPdf: @json(route('gastronomia_habilitacion_turno_informe_mozo_pdf')),
         urlPdfParcialBase: @json(url('ventas/gastronomia/cierres-turno/parcial')),
+        urlCanjesPremioTurno: @json(route('gastronomia_api_canjes_premio_turno')),
+        urlTicketsTarjetaTurno: @json(route('gastronomia_api_tickets_tarjeta_turno')),
     };
 </script>
 <script src="{{ asset('assets/pages/scripts/admin/usuario/consulta.js') }}"></script>
@@ -50,6 +52,7 @@
      data-api-cerrar="{{ url('ventas/gastronomia/habilitacion-turno/api/cerrar') }}"
      data-api-conciliacion-turno="{{ url('ventas/gastronomia/habilitacion-turno/api/conciliacion-turno') }}"
      data-api-conciliacion-medio="{{ url('ventas/gastronomia/habilitacion-turno/api/conciliacion-medio') }}"
+     data-api-conciliacion-notas-credito="{{ url('ventas/gastronomia/habilitacion-turno/api/conciliacion-notas-credito') }}"
      data-csrf="{{ csrf_token() }}"
      data-puede-habilitar="{{ ($puede_habilitar ?? false) ? '1' : '0' }}"
      data-puede-cierre-parcial="{{ ($puede_cierre_parcial ?? false) ? '1' : '0' }}"
@@ -84,6 +87,12 @@
                         <a href="{{ route('gastronomia_cierres_turno') }}" class="btn btn-outline-info btn-sm">
                             <i class="fa fa-file-text-o"></i> Historial de cierres
                         </a>
+                        <button type="button" class="btn btn-outline-warning btn-sm" id="btn-consultar-canjes-premio" title="Canjes de premios Wigos del turno">
+                            <i class="fa fa-gift"></i> Canjes premio
+                        </button>
+                        <button type="button" class="btn btn-outline-info btn-sm" id="btn-consultar-tickets-tarjeta" title="Tickets tarjeta canjeados en el turno">
+                            <i class="fa fa-barcode"></i> Tickets tarjeta
+                        </button>
                     </div>
                 </div>
                 <div class="card-body">
@@ -308,14 +317,14 @@
                     <table class="table table-sm table-striped mb-0 gastro-totales-tabla">
                         <thead class="thead-light">
                             <tr>
-                                <th>Comprobante</th>
-                                <th>Hora</th>
-                                <th>Cliente</th>
-                                <th>Mozo</th>
-                                <th class="text-right">Facturado</th>
-                                <th class="text-right">Este medio</th>
-                                <th class="text-right">Cobrado total</th>
-                                <th></th>
+                                <th id="modal-conc-th-comprobante">Comprobante</th>
+                                <th id="modal-conc-th-hora">Hora</th>
+                                <th id="modal-conc-th-cliente">Cliente</th>
+                                <th id="modal-conc-th-mozo">Mozo</th>
+                                <th id="modal-conc-th-total" class="text-right">Facturado</th>
+                                <th id="modal-conc-th-extra" class="text-right">Este medio</th>
+                                <th id="modal-conc-th-cobrado" class="text-right">Cobrado total</th>
+                                <th id="modal-conc-th-acciones"></th>
                             </tr>
                         </thead>
                         <tbody id="modal-conciliacion-medio-body"></tbody>
@@ -324,6 +333,78 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modal-canjes-premio-turno" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title">Canjes de premios Wigos — turno / jornada</h6>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">&times;</button>
+            </div>
+            <div class="modal-body py-2">
+                <div id="ht-canjes-premio-error" class="alert alert-danger py-2 small d-none"></div>
+                <div class="table-responsive gastro-grilla-conciliacion-wrap">
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="thead-light">
+                            <tr>
+                                <th>Cupón</th>
+                                <th>Factura</th>
+                                <th>SKU</th>
+                                <th>Artículo</th>
+                                <th class="text-right">Cant.</th>
+                                <th class="text-right">Puntos</th>
+                                <th>Mozo</th>
+                                <th>Documento</th>
+                                <th>Fecha canje</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ht-canjes-premio-body">
+                            <tr><td colspan="9" class="text-muted small">Sin datos.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modal-tickets-tarjeta-turno" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title">Tickets tarjeta canjeados — turno / jornada</h6>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">&times;</button>
+            </div>
+            <div class="modal-body py-2">
+                <div id="ht-tickets-tarjeta-error" class="alert alert-danger py-2 small d-none"></div>
+                <div class="table-responsive gastro-grilla-conciliacion-wrap">
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="thead-light">
+                            <tr>
+                                <th>Movimiento</th>
+                                <th>Nº ticket</th>
+                                <th>Factura</th>
+                                <th>Documento</th>
+                                <th class="text-right">Importe</th>
+                                <th>Fecha emisión</th>
+                                <th>Canje ERP</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ht-tickets-tarjeta-body">
+                            <tr><td colspan="7" class="text-muted small">Sin datos.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cerrar</button>
             </div>
         </div>
     </div>

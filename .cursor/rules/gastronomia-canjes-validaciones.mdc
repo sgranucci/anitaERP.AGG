@@ -1,0 +1,293 @@
+---
+description: Gastronomía POS — validaciones de canjes Wigos/fidelidad y facturación F5 vs F8
+globs: resources/views/ventas/gastronomia/**,public/assets/pages/scripts/ventas/gastronomia/**,app/Services/Ventas/Gastronomia/**,app/Http/Controllers/Ventas/GastronomiaProcesoFacturacionController.php,config/gastronomia.php,config/wigos.php,app/Models/Ventas/CuentaGastronomia.php
+alwaysApply: false
+---
+
+# Validaciones — canjes gastronomía (por tema)
+
+Referencia de reglas de negocio en el proceso de facturación gastronomía. Al agregar un canje nuevo, replicar el patrón: **validar → aplicar a cuenta (JSON pendiente) → facturar solo F8 → persistir en emisión**.
+
+Relacionado: `gastronomia-cliente-factura-vs-invitacion.mdc` (cliente factura ≠ cliente interno del descuento).
+
+## Resumen de herramientas
+
+| Herramienta | UI | Integración externa | Pendiente en cuenta | Factura |
+|-------------|-----|-------------------|---------------------|---------|
+| Canje premio Wigos | Ícono regalo | SQL Server `spVoucherGiftData` | `canje_premio_pendiente` | Solo **F8**, cortesía $0,01 |
+| Canje fidelidad | Ícono tarjeta | HTTP `AccountInfoJSON` | `canje_fidelidad_pendiente` | Solo **F8**, cortesía $0,01 |
+| Canje ticket tarjeta | Cobranza CTG | Informix `tickettarj` (Anita) | En grilla cobranza | **F5** normal (cobranza) |
+
+Los dos primeros comparten bloqueo de **F5** y validación `facturacion_con_descuento` en API.
+
+---
+
+## 1. Facturación F5 vs F8 (transversal — premio y fidelidad)
+
+### Regla de negocio
+
+Si la cuenta tiene **`canje_premio_pendiente`** o **`canje_fidelidad_pendiente`** (JSON con datos no vacíos):
+
+- **Prohibido** facturar con F5, botón Facturar sin descuento, o API sin flag.
+- **Obligatorio** flujo F8 «Facturar con descuento».
+- **Obligatorio** descuento gastronomía configurado para ese tipo de canje (típ. 100 % → total $0,01, sin cobranza).
+
+### Detección de pendiente
+
+| Campo | Considerado pendiente si |
+|-------|--------------------------|
+| `canje_premio_pendiente` | Es array y `numerocupon` no vacío |
+| `canje_fidelidad_pendiente` | Es array y `trackdata` no vacío |
+
+### Frontend (`proceso_facturacion.js`)
+
+| Función / acción | Validación |
+|------------------|------------|
+| `cuentaTieneCanjePendienteRequiereF8(cuenta)` | Detecta pendiente premio o fidelidad |
+| `mensajeBloqueoFacturacionEfectivoPorCanje()` | Mensaje si hay pendiente |
+| **F5** `efectivizar()` | Bloquea antes de `emitirFactura` |
+| **Botón Facturar** `emitirFactura()` sin `exigirDescuento` | Bloquea |
+| **F8** `facturarConDescuento()` | Permite; `emitirFactura({ exigirDescuento: true })` |
+| `validarDescuentoEnPantalla(true)` | Exige descuento en pantalla + cliente interno si aplica |
+| `validarEmisionServidor` / `emitir-factura` | Envía `facturacion_con_descuento: true` solo con F8 |
+
+### Backend (`GastronomiaPreflightEmisionService::erroresCanjePendienteRequiereFacturacionConDescuento`)
+
+Se ejecuta en `erroresAntesDeEmitir` (validar-emision y emitir-factura).
+
+| Condición | Error |
+|-----------|-------|
+| Pendiente y `facturacion_con_descuento === false` | Use F8; no F5 ni facturación sin flujo descuento |
+| Pendiente y sin `descuento_gastronomia_id` | Aplicar descuento (F8) antes de emitir |
+| Pendiente premio y código descuento ≠ `gastronomia.canje_premio_descuento_codigo` | Descuento incorrecto para canje premio |
+| Pendiente fidelidad y código descuento ≠ `gastronomia.canje_fidelidad_descuento_codigo` | Descuento incorrecto para canje fidelidad |
+| Pendiente y preview sin `sin_cobranza` | Debe ser cortesía ($0,01) con 100 % descuento |
+
+**API:** `POST validar-emision` y `POST emitir-factura` aceptan `facturacion_con_descuento` (boolean).
+
+### Otras validaciones de emisión (todas las cuentas)
+
+En el mismo preflight (no exclusivas de canje):
+
+- Jornada abierta, turno habilitado, PV CAE/CAEA, lista precios, depósitos.
+- Cuenta abierta, con líneas.
+- Cliente interno del descuento si hay `descuento_gastronomia_id`.
+- Receptor factura, preview totales, cobranza vs total (si no es cortesía).
+
+---
+
+## 2. Canje premio Wigos (cupón)
+
+**Servicios:** `WigosCanjePremioService`, `GastronomiaTicketCanjePremioService`  
+**Persistencia:** `ticketcanje_gastronomia` (al emitir)  
+**Pendiente:** `cuenta_gastronomia.canje_premio_pendiente` (JSON)
+
+### Config (`.env` / `config/gastronomia.php`, `config/wigos.php`)
+
+| Clave | Uso |
+|-------|-----|
+| `WIGOS_HABILITADO` | SQL Wigos para cupones |
+| `GASTRONOMIA_CANJE_PREMIO_DESCUENTO_CODIGO` | Descuento obligatorio al aplicar (default `10`) |
+| `GASTRONOMIA_CANJE_PREMIO_CLIENTE_CODIGO` | Cliente factura (default `500`) |
+| `GASTRONOMIA_CANJE_PREMIO_VENCIMIENTO_DIAS` | Días desde fecha premio (default `2`) |
+
+### Frontend — modal premio
+
+| Momento | Validación |
+|---------|------------|
+| Abrir modal | `G.wigosHabilitado`; cuenta seleccionada |
+| Validar cupón | Cuenta abierta; integración Wigos |
+| Aplicar | Cupón validado previamente |
+
+### Backend — consulta Wigos (`WigosCanjePremioService`)
+
+| Validación | Mensaje / efecto |
+|------------|------------------|
+| `wigos.habilitado` false | Integración deshabilitada |
+| Cupón vacío | Debe indicar número de cupón |
+| Sin filas en Wigos | Ticket no encontrado o no pendiente |
+| `STATUS` ≠ `PENDING` | Ticket no disponible (muestra estado) |
+| Fallback servidor A/B | Si A falla, intenta B si está configurado |
+
+### Backend — validar / aplicar (`GastronomiaTicketCanjePremioService`)
+
+**`validarParaAplicar`:**
+
+| Validación | Detalle |
+|------------|---------|
+| Cupón normalizado | No vacío; quita `*` inicial si existe |
+| No canjeado en ERP | No existe en `ticketcanje_gastronomia` |
+| Ítems decodificados | Al menos un artículo; SKU con prefijo `V` en `GIFT_ID` |
+| Artículo en ERP | `articulo` por SKU y `empresa_id` |
+| Vencimiento | Fecha premio dentro de `canje_premio_vencimiento_dias` |
+| Descuento / cliente config | Existen en BD por código configurado |
+
+**`aplicarACuenta`:**
+
+| Validación | Detalle |
+|------------|---------|
+| Cuenta `abierta` | |
+| Sin `canje_premio_pendiente` previo | Un canje premio por cuenta |
+| Sin `canje_fidelidad_pendiente` | No mezclar canjes |
+| Re-valida cupón | Misma lógica que validar |
+| Transacción | Agrega líneas, descuento, cliente, guarda JSON pendiente |
+
+**`registrarTrasEmision`:**
+
+| Validación | Detalle |
+|------------|---------|
+| Usuario autenticado | |
+| JSON pendiente con `numerocupon` e ítems | |
+| Cupón no canjeado (re-check) | |
+| Mozo en cuenta | Obligatorio para registro |
+| Cada ítem con `articulo_id` válido | Crea filas `ticketcanje_gastronomia` |
+| Limpia pendiente | `canje_premio_pendiente = null` |
+
+### APIs
+
+- `POST ventas/gastronomia/api/validar-ticket-canje-premio` — body: `codigo_barras`
+- `POST ventas/gastronomia/api/aplicar-ticket-canje-premio` — body: `cuenta_id`, `codigo_barras`
+
+---
+
+## 3. Canje fidelidad (tarjeta Wigos)
+
+**Servicios:** `WigosAccountInfoService`, `GastronomiaCategoriafidelidadCanjeService`  
+**Tablas ERP:** `categoriafidelidad_gastronomia`, `categoriafidelidad_articulo_gastronomia`, `categoriafidelidad_entrega_gastronomia`  
+**Pendiente:** `cuenta_gastronomia.canje_fidelidad_pendiente` (JSON)
+
+### Config
+
+| Clave | Uso |
+|-------|-----|
+| `WIGOS_ACCOUNT_INFO_HABILITADO` | HTTP tarjeta |
+| `WIGOS_ACCOUNT_INFO_URL` | Plantilla con `%s` o `?trackdata=` |
+| `WIGOS_ACCOUNT_INFO_TIMEOUT` | Segundos (mín. 3) |
+| `GASTRONOMIA_CANJE_FIDELIDAD_DESCUENTO_CODIGO` | Descuento (default `10`) |
+| `GASTRONOMIA_CANJE_FIDELIDAD_CLIENTE_CODIGO` | Cliente factura (default `500`) |
+
+`levelCode` de Wigos = `categoriafidelidad_gastronomia.codigo`.
+
+### Frontend — modal fidelidad
+
+| Momento | Validación |
+|---------|------------|
+| Abrir modal | `G.wigosAccountInfoHabilitado`; cuenta seleccionada |
+| Pasar tarjeta (Enter) | Trackdata no vacío; cuenta; integración |
+| Confirmar aplicar | Validación previa OK; `articulo_id` elegido (radio si hay varios) |
+| Tras aplicar | Cierra modal; carga descuento; **abre F8** automáticamente |
+
+### Backend — consulta tarjeta (`WigosAccountInfoService`)
+
+| Validación | Detalle |
+|------------|---------|
+| `account_info_habilitado` | |
+| `account_info_url` configurada | |
+| HTTP OK y JSON válido | Timeout configurable |
+| `statusCode === 0` | Si no, error con `statusText` |
+| `levelCode > 0` | Categoría fidelidad |
+| `documentNumber` no vacío | DNI para control diario |
+
+### Backend — validar / aplicar (`GastronomiaCategoriafidelidadCanjeService`)
+
+**`validarTarjeta`:**
+
+| Validación | Detalle |
+|------------|---------|
+| Un canje por DNI por día | `CategoriafidelidadEntregaGastronomiaRepository::existeCanjeHoyPorDocumento` — `whereDate(fechacanje, today)` |
+| Categoría ERP | `findPorCodigo(levelCode)`; si no existe, error configuración |
+| Artículos canje | Al menos uno en categoría, empresa y lista precios del PV |
+| Artículo seleccionado | Si varios, `articulo_id` obligatorio en request |
+| Descuento / cliente config | Por código en config |
+
+**`aplicarACuenta`:**
+
+| Validación | Detalle |
+|------------|---------|
+| Cuenta `abierta` | |
+| Sin `canje_premio_pendiente` | |
+| Sin `canje_fidelidad_pendiente` previo | |
+| Re-valida tarjeta (incluye canje hoy) | |
+| Artículo pertenece a categoría | |
+| Transacción | 1 línea cantidad 1, descuento, clientes, JSON pendiente |
+
+**`registrarTrasEmision`:**
+
+| Validación | Detalle |
+|------------|---------|
+| Usuario autenticado | |
+| Pendiente con `trackdata`, categoría, artículo | |
+| Re-check canje hoy por documento | Evita doble entrega |
+| `descuento_gastronomia_id` en cuenta | |
+| Inserta `categoriafidelidad_entrega_gastronomia` | `venta_id`, DNI, tarjeta, apellido, nombre |
+| Limpia pendiente | |
+
+### APIs
+
+- `POST ventas/gastronomia/api/validar-canje-fidelidad` — `trackdata`, opcional `articulo_id`
+- `POST ventas/gastronomia/api/aplicar-canje-fidelidad` — `cuenta_id`, `trackdata`, `articulo_id`
+
+### Consulta en factura emitida (facturas del día)
+
+Igual que canje premio y ticket tarjeta:
+
+- Ruta: `GET ventas/gastronomia/facturas-dia/{ventaId}/canjes-fidelidad` (`gastronomia_facturas_dia_canjes_fidelidad`)
+- Servicio: `GastronomiaCategoriafidelidadCanjeService::listarPorVenta`
+- UI: botón ícono tarjeta (`js-fd-canjes-fidelidad`) en listado facturas del día → modal con tarjeta, DNI, titular, categoría, SKU, artículo, fecha canje
+- Permiso: `ver-factura-gastronomia`
+
+---
+
+## 4. Canje ticket tarjeta (CTG) — cobranza
+
+**Servicio:** `GastronomiaTicketTarjetaCanjeService`  
+**No usa** `canje_*_pendiente` ni F8 obligatorio. El ticket se agrega como **medio de cobranza** (cuenta caja CTG).
+
+Validaciones principales (referencia; no bloquean F5):
+
+- Código barras ≥ 7 dígitos; movimiento y número ticket ≠ 0.
+- Ticket no duplicado en grilla ni ya canjeado en ERP/Anita.
+- Vencimiento (`ticket_tarjeta_vencimiento_dias`), importe válido, tolerancia excedente vs total factura.
+- Cuenta caja CTG configurada por empresa (`GASTRONOMIA_TICKET_TARJETA_CUENTACAJA_CODIGO`).
+- Registro tras cobranza en misma transacción de emisión.
+
+---
+
+## 5. Exclusión mutua entre canjes en la misma cuenta
+
+| Estado cuenta | Canje premio | Canje fidelidad |
+|---------------|--------------|-----------------|
+| `canje_premio_pendiente` activo | — | Bloqueado al aplicar |
+| `canje_fidelidad_pendiente` activo | Bloqueado al aplicar | — |
+
+Solo un tipo de canje «con descuento obligatorio» por cuenta abierta a la vez.
+
+---
+
+## 6. Flujo correcto (premio / fidelidad)
+
+```text
+1. Abrir mesa/cuenta
+2. Herramienta canje (cupón o tarjeta) → validar → aplicar a cuenta
+   → cuenta queda con descuento + cliente + JSON pendiente
+3. F8 → confirmar descuento y cliente interno en modal
+4. Emitir → preflight (facturacion_con_descuento=true) → cortesía sin cobranza
+5. registrarTrasEmision → tabla histórica + limpiar JSON pendiente
+```
+
+**No hacer:** F5 con pendiente; quitar descuento antes de emitir; usar descuento distinto al configurado.
+
+---
+
+## 7. Archivos clave
+
+| Tema | Archivos |
+|------|----------|
+| F5/F8 + preflight canje | `GastronomiaPreflightEmisionService.php`, `proceso_facturacion.js` |
+| Premio cupón | `WigosCanjePremioService.php`, `GastronomiaTicketCanjePremioService.php` |
+| Fidelidad tarjeta | `WigosAccountInfoService.php`, `GastronomiaCategoriafidelidadCanjeService.php` |
+| Emisión | `GastronomiaFacturaEmisionService.php` (registra ambos canjes tras factura) |
+| Ticket tarjeta | `GastronomiaTicketTarjetaCanjeService.php` |
+| Modelo cuenta | `CuentaGastronomia.php` (`canje_premio_pendiente`, `canje_fidelidad_pendiente`) |
+
+Al modificar validaciones, actualizar **esta regla** y probar: validar → aplicar → bloqueo F5 → F8 emitir → persistencia.

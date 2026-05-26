@@ -192,20 +192,45 @@ function leeHistoriaFormulaArticulo() {
     });
 }
 
+function mostrarCodigoComoNumeroFormula() {
+    var cfg = window.formulaArticuloSubformulaConsulta || {};
+    return cfg.mostrarCodigoComoNumero === true;
+}
+
+function numeroFormulaParaUI(r) {
+    if (!r) {
+        return '';
+    }
+    var codigo = (r.codigo == null ? '' : String(r.codigo)).trim();
+    if (mostrarCodigoComoNumeroFormula()) {
+        return codigo !== '' ? codigo : '#' + r.id;
+    }
+    return r.id == null ? '' : String(r.id);
+}
+
 function renderTablaBusquedaFormula(rows) {
+    var mostrarCod = mostrarCodigoComoNumeroFormula();
+    var colspan = mostrarCod ? 6 : 7;
     var html = '';
     if (!rows || !rows.length) {
-        html = '<tr><td colspan="6" class="text-muted">Sin resultados</td></tr>';
+        html = '<tr><td colspan="' + colspan + '" class="text-muted">Sin resultados</td></tr>';
         $('#datos-formula-consulta').html(html);
         return;
     }
+    function esc(v) {
+        return $('<div>').text(v == null ? '' : String(v)).html();
+    }
     rows.forEach(function (r) {
-        html += '<tr>';
-        html += '<td class="fid">' + r.id + '</td>';
-        html += '<td class="text-monospace">' + (r.codigo || '') + '</td>';
-        html += '<td class="fsku">' + (r.sku || '') + '</td>';
-        html += '<td class="fdesc">' + (r.descripcion || '') + '</td>';
-        html += '<td>' + (r.estado || '') + '</td>';
+        var idReal = (r.id == null ? '' : String(r.id));
+        html += '<tr data-formula-id="' + esc(idReal) + '">';
+        html += '<td class="fid">' + esc(numeroFormulaParaUI(r)) + '</td>';
+        if (!mostrarCod) {
+            html += '<td class="text-monospace">' + esc(r.codigo || '') + '</td>';
+        }
+        html += '<td class="fsku">' + esc(r.sku || '') + '</td>';
+        html += '<td class="fdesc">' + esc(r.descripcion || '') + '</td>';
+        html += '<td class="fdetalle">' + esc(r.detalle || '') + '</td>';
+        html += '<td>' + esc(r.estado || '') + '</td>';
         html += '<td><button type="button" class="btn btn-sm btn-primary eligeconsultaformula">Elegir</button></td>';
         html += '</tr>';
     });
@@ -232,10 +257,29 @@ function formulaArticuloToggleOrdenOpcional($row) {
 function buscarFormulasAjax() {
     var q = ($('#consulta_formula').val() || '').trim();
     var exclude = ptrFormulaHijaRow ? ($(ptrFormulaHijaRow).find('.js-consulta-formula-linea').data('exclude') || 0) : 0;
-    $.get(carpetaBase + '/stock/formula-articulo/buscar', { consulta: q, exclude_id: exclude }, function (resp) {
-        renderTablaBusquedaFormula(resp.datos || []);
-    }).fail(function () {
-        $('#datos-formula-consulta').html('<tr><td colspan="6" class="text-danger">Error al buscar</td></tr>');
+    var url = urlFormulaArticuloBase() + '/buscar';
+    var colspanErr = mostrarCodigoComoNumeroFormula() ? 6 : 7;
+    $.ajax({
+        url: url,
+        method: 'GET',
+        dataType: 'json',
+        data: { consulta: q, exclude_id: exclude },
+        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
+    }).done(function (resp) {
+        renderTablaBusquedaFormula((resp && resp.datos) || []);
+    }).fail(function (xhr) {
+        var msg = 'Error al buscar';
+        if (xhr && xhr.status === 403) {
+            msg = 'Sin permisos para buscar fórmulas';
+        } else if (xhr && xhr.status === 419) {
+            msg = 'Sesión expirada — recargue la página';
+        } else if (xhr && xhr.status === 404) {
+            msg = 'Endpoint de búsqueda no encontrado';
+        }
+        if (window.console && console.error) {
+            console.error('formula-articulo/buscar fallo', xhr && xhr.status, xhr && xhr.responseText);
+        }
+        $('#datos-formula-consulta').html('<tr><td colspan="' + colspanErr + '" class="text-danger">' + msg + '</td></tr>');
     });
 }
 
@@ -392,8 +436,10 @@ $(document).ready(function () {
         e.preventDefault();
         ptrFormulaHijaRow = $(this).closest('tr');
         $('#consulta_formula').val('');
-        $('#datos-formula-consulta').html('<tr><td colspan="6" class="text-muted">Escriba para buscar</td></tr>');
+        var colspanIni = mostrarCodigoComoNumeroFormula() ? 6 : 7;
+        $('#datos-formula-consulta').html('<tr><td colspan="' + colspanIni + '" class="text-muted">Escriba para buscar</td></tr>');
         $('#consultaformulaModal').modal('show');
+        buscarFormulasAjax();
     });
 
     $(document).on('click', '.js-ver-subformula-linea', function (e) {
@@ -415,13 +461,25 @@ $(document).ready(function () {
 
     $(document).on('click', '.eligeconsultaformula', function () {
         var tr = $(this).closest('tr');
-        var id = tr.find('.fid').text().trim();
+        var idReal = String(tr.data('formula-id') || '').trim();
+        if (idReal === '') {
+            idReal = tr.find('.fid').text().trim();
+        }
+        var numeroVisible = tr.find('.fid').text().trim();
         var sku = tr.find('.fsku').text().trim();
+        var desc = tr.find('.fdesc').text().trim();
+        var detalle = tr.find('.fdetalle').text().trim();
         if (ptrFormulaHijaRow) {
             var $rowSel = $(ptrFormulaHijaRow);
-            $rowSel.find('.fh_formula_hija_id').val(id);
-            $rowSel.find('.fh_formula_hija_label').val(sku + ' F#' + id);
-            $rowSel.find('.js-ver-subformula-linea').data('formula-id', id);
+            var partes = [];
+            if (sku) { partes.push(sku); }
+            if (desc) { partes.push(desc); }
+            if (detalle) { partes.push(detalle); }
+            var sufijo = partes.length ? ' - ' + partes.join(' - ') : '';
+            var label = 'F ' + (numeroVisible || idReal) + sufijo;
+            $rowSel.find('.fh_formula_hija_id').val(idReal);
+            $rowSel.find('.fh_formula_hija_label').val(label).attr('title', label);
+            $rowSel.find('.js-ver-subformula-linea').data('formula-id', idReal);
             actualizaBotonVerSubformula($rowSel);
         }
         $('#consultaformulaModal').modal('hide');
@@ -434,6 +492,7 @@ $(document).ready(function () {
         $r.find('input.codigoarticulo').val('');
         $r.find('input[type=number]').not('.js-ordenopcional-formula').val('');
         $r.find('.js-costo-ultima-compra').val('');
+        $r.find('.fh_formula_hija_label').removeAttr('title');
         $r.find('select[name="esopcional[]"]').prop('selectedIndex', 0);
         $r.find('select[name="deposito_ids[]"]').prop('selectedIndex', 0);
         var $oo = $r.find('input.js-ordenopcional-formula');

@@ -6,9 +6,13 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 
 class ApiAnita {
-    public function __construct()    {
-        $this->fecha = date("YmdHisu")."_".random_int(0, 9999);
+    protected string $fecha;
 
+    protected string $servidorAnita;
+
+    public function __construct()
+    {
+        $this->fecha = date('YmdHisu').'_'.random_int(0, 9999);
         $this->servidorAnita = (string) config('anita.ip', '');
     }
 
@@ -129,6 +133,11 @@ class ApiAnita {
             }
 
             return json_encode(['Error' => 'Bridge HTTP Anita: respuesta vacía']);
+        }
+
+        // Quita warnings HTML del bridge y devuelve JSON limpio en consultas.
+        if (in_array($acc, ['list', 'customSql'], true)) {
+            return json_encode(self::decodificarListaFilas($trimResponse));
         }
 
         return $response;

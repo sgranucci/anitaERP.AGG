@@ -38,6 +38,9 @@
             </td>
         </tr>
     </table>
+    <p style="font-size:8px;color:#555;margin:0 0 6px 0;">
+        <strong>Total facturado final</strong>: facturado bruto menos notas de crédito (devoluciones) del turno.
+    </p>
     <table class="data">
         <thead>
             <tr>
@@ -49,7 +52,7 @@
                 <th>Turno</th>
                 <th>Jornada</th>
                 <th>Usuario</th>
-                <th class="num">Total</th>
+                <th class="num">Total facturado final<br><span style="font-weight:normal;font-size:7px;">(NC restadas)</span></th>
             </tr>
         </thead>
         <tbody>

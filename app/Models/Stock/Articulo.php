@@ -1189,6 +1189,42 @@ class Articulo extends Model implements Auditable
         }
     }
 
+    /**
+     * Traduce el FK local articulo.formula (id de formula_articulo) al código de fórmula que
+     * espera Anita en stkmae.stkm_formula (formula_articulo.codigo o, en su defecto,
+     * formula_articulo.anita_stkcm_formula). Antes se mandaba $request->formula tal cual y
+     * Anita terminaba guardando el id interno del ERP en lugar del código.
+     */
+    private function codigoFormulaAnita($request): string
+    {
+        $valor = is_object($request) ? ($request->formula ?? null) : ($request['formula'] ?? null);
+
+        if ($valor === null || $valor === '' || (int) $valor === 0) {
+            return '0';
+        }
+
+        $formula = Formula_Articulo::query()
+            ->select('codigo', 'anita_stkcm_formula')
+            ->where('id', (int) $valor)
+            ->first();
+
+        if (! $formula) {
+            return '0';
+        }
+
+        $codigo = trim((string) ($formula->codigo ?? ''));
+        if ($codigo !== '') {
+            return $codigo;
+        }
+
+        $anita = (int) ($formula->anita_stkcm_formula ?? 0);
+        if ($anita > 0) {
+            return (string) $anita;
+        }
+
+        return '0';
+    }
+
     public function guardarAnita($request)
     {
         $this->condicionentregaRepository = App::make(\App\Repositories\Compras\CondicionentregaRepositoryInterface::class);
@@ -1281,7 +1317,7 @@ class Articulo extends Model implements Auditable
 					'".Carbon::parse($request->fechaultimacompra)->format('Ymd')."',
 					'".$request->mventa_id."',
 					'".$request->nofactura."',
-					'".($request->formula == null ? 0 : $request->formula)."',
+					'".$this->codigoFormulaAnita($request)."',
 					'".($request->ppp == null ? 0 : $request->ppp)."',
 					'".$request->foto."',
 					'".$request->unidadmedida_id."',
@@ -1398,7 +1434,7 @@ class Articulo extends Model implements Auditable
 					'".Carbon::parse($request->fechaultimacompra)->format('Ymd')."',
 					'".$request->mventa_id."',
 					'".$request->nofactura."',
-					'".($request->formula == null ? 0 : $request->formula)."',
+					'".$this->codigoFormulaAnita($request)."',
 					'".($request->ppp == null ? 0 : $request->ppp)."',
 					'".$request->foto."',
 					'".$request->unidadmedida_id."',
@@ -1556,7 +1592,7 @@ class Articulo extends Model implements Auditable
 					'".Carbon::parse($request->fechaultimacompra)->format('Ymd')."',
 					'".'0'."',
 					'".$noFactura."',
-					'".($request->formula == null ? 0 : $request->formula)."',
+					'".$this->codigoFormulaAnita($request)."',
 					'".($request->ppp == null ? 0 : $request->ppp)."',
 					'".$request->foto."',
 					'".$request->unidadmedida_id."',
@@ -1724,7 +1760,7 @@ class Articulo extends Model implements Auditable
 					'".Carbon::parse($request->fechaultimacompra)->format('Ymd')."',
 					'".$request->mventa_id."',
 					'".$request->nofactura."',
-					'".($request->formula == null ? 0 : $request->formula)."',
+					'".$this->codigoFormulaAnita($request)."',
 					'".($request->ppp == null ? 0 : $request->ppp)."',
 					'".' '."'
 					'".$request->nivelstock."',
@@ -1951,7 +1987,7 @@ class Articulo extends Model implements Auditable
 						stkm_fe_ult_compra = '".Carbon::parse($request->fechaultimacompra)->format('Ymd')."',
 						stkm_o_compra =	'".$request->mventa_id."',
 						stkm_fl_no_factura = '".$request->nofactura."',
-						stkm_formula = '".$request->formula."',
+						stkm_formula = '".$this->codigoFormulaAnita($request)."',
 						stkm_ppp = '".$request->ppp."',
 						stkm_nombre_foto = '".$request->foto."',
 						stkm_cod_umd = '".$request->unidadmedida_id."',
@@ -2051,7 +2087,7 @@ class Articulo extends Model implements Auditable
 						stkm_fe_ult_compra = '".Carbon::parse($request->fechaultimacompra)->format('Ymd')."',
 						stkm_o_compra =	'".'0'."',
 						stkm_fl_no_factura = '".$noFactura."',
-						stkm_formula = '".$request->formula."',
+						stkm_formula = '".$this->codigoFormulaAnita($request)."',
 						stkm_ppp = '".$request->ppp."',
 						stkm_nombre_foto = '".$request->foto."',
 						stkm_cod_umd = '".$request->unidadmedida_id."',
@@ -2125,7 +2161,7 @@ class Articulo extends Model implements Auditable
 					stkm_fe_ult_compra = '".Carbon::parse($request->fechaultimacompra)->format('Ymd')."',
 					stkm_o_compra =	'".'0'."',
 					stkm_fl_no_factura = '".$noFactura."',
-					stkm_formula = '".$request->formula."',
+					stkm_formula = '".$this->codigoFormulaAnita($request)."',
 					stkm_ppp = '".$request->ppp."',		
 					stkm_codimpuesto   = '".' '."',
 					stkm_nivel_stk     = '".$request->nivelstock."',
@@ -2185,7 +2221,7 @@ class Articulo extends Model implements Auditable
 						stkm_fe_ult_compra = '".Carbon::parse($request->fechaultimacompra)->format('Ymd')."',
 						stkm_o_compra =	'".$request->mventa_id."',
 						stkm_fl_no_factura = '".$request->nofactura."',
-						stkm_formula = '".$request->formula."',
+						stkm_formula = '".$this->codigoFormulaAnita($request)."',
 						stkm_ppp = '".$request->ppp."',
 						stkm_nombre_foto = '".$request->foto."',
 						stkm_cod_umd = '".$request->unidadmedida_id."',
@@ -2256,8 +2292,8 @@ class Articulo extends Model implements Auditable
                 'tabla' => 'stkmgastro',
                 'sistema' => 'ventas',
                 'valores' => " 
-									stkmg_tiempo_entrega = '".$diasEntrega."' ,
-									stkmg_period_compra = '".$periodicidadCompra."' ,
+									stkmg_tiempo_entr = '".$diasEntrega."' ,
+									stkmg_period_comp = '".$periodicidadCompra."' ,
 									stkmg_cond_entrega = '".$codigoCondicionEntrega."' 
 								",
                 'whereArmado' => " WHERE stkmg_articulo='".str_pad($request->sku, 13, '0', STR_PAD_LEFT)."' ",

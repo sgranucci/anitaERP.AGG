@@ -1,12 +1,26 @@
 @php
     use App\Support\Stock\FormulaArticuloGastronomia;
+    use App\Support\Stock\FormulaArticuloNumero;
     $formulaGastronomiaOpcional = FormulaArticuloGastronomia::opcionalesHabilitados();
+    $modalMostrarCodigo = FormulaArticuloNumero::mostrarCodigo();
+    $modalNumeroFormula = FormulaArticuloNumero::paraFormula($data);
 @endphp
 <div class="table-responsive">
     <table class="table table-sm table-bordered">
         <tbody>
-            <tr><th style="width:18%">ID f&oacute;rmula</th><td><a href="{{ route('editar_formula_articulo', ['id' => $data->id, 'origen' => 'modal_consulta']) }}" target="_blank" rel="noopener">{{ $data->id }}</a></td></tr>
+            <tr>
+                <th style="width:18%">
+                    @if ($modalMostrarCodigo)
+                        C&oacute;d. f&oacute;rmula
+                    @else
+                        ID f&oacute;rmula
+                    @endif
+                </th>
+                <td><a href="{{ route('editar_formula_articulo', ['id' => $data->id, 'origen' => 'modal_consulta']) }}" target="_blank" rel="noopener">{{ $modalNumeroFormula !== '' ? $modalNumeroFormula : $data->id }}</a></td>
+            </tr>
+            @unless ($modalMostrarCodigo)
             <tr><th>C&oacute;digo f&oacute;rmula</th><td><span class="text-monospace">@if(! empty($data->codigo)){{ $data->codigo }}@else<span class="text-muted">&mdash;</span>@endif</span></td></tr>
+            @endunless
             <tr><th>Art&iacute;culo cabecera</th><td>
                 @if ($data->articulo_id)
                     <a href="{{ route('editar_articulo', ['id' => $data->articulo_id, 'origen' => 'modal_consulta']) }}" class="text-primary" target="_blank" rel="noopener">{{ optional($data->articulos)->sku ?? '' }}</a>
@@ -46,7 +60,10 @@
                         <a href="{{ route('editar_articulo', ['id' => $h->articulo_id, 'origen' => 'modal_consulta']) }}" class="text-primary" target="_blank" rel="noopener">{{ $h->articulos->sku ?? '' }}</a>
                         <small>{{ $h->articulos->descripcion ?? '' }}</small>
                     @elseif($h->formula_hija_id)
-                        <a href="{{ route('editar_formula_articulo', ['id' => $h->formula_hija_id, 'origen' => 'modal_consulta']) }}" target="_blank" rel="noopener">F&oacute;rmula #{{ $h->formula_hija_id }}</a>
+                        @php
+                            $modalSubNumero = FormulaArticuloNumero::paraFormula($h->formula_hija) ?: ('#'.$h->formula_hija_id);
+                        @endphp
+                        <a href="{{ route('editar_formula_articulo', ['id' => $h->formula_hija_id, 'origen' => 'modal_consulta']) }}" target="_blank" rel="noopener">F&oacute;rmula {{ $modalSubNumero }}</a>
                         @if(! empty($h->formula_hija->articulo_id))
                         <a href="{{ route('editar_articulo', ['id' => $h->formula_hija->articulo_id, 'origen' => 'modal_consulta']) }}" class="text-primary" target="_blank" rel="noopener"><small>{{ $h->formula_hija->articulos->sku ?? '' }}</small></a>
                         @elseif(optional($h->formula_hija->articulos)->sku)

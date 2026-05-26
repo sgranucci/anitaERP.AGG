@@ -1,10 +1,12 @@
 @php
 	use App\Support\Stock\FormulaArticuloGastronomia;
+	use App\Support\Stock\FormulaArticuloNumero;
 	use Illuminate\Support\Facades\Schema;
 	$sep = $separator ?? "\n";
 	$enlaces = $enlaces ?? false;
 	$gastOpc = FormulaArticuloGastronomia::opcionalesHabilitados();
 	$tieneRanura = config('app.empresa') === 'FRASLE' && Schema::hasColumn('formula_articulo_hijo', 'ranura');
+	$exportMostrarCodigo = FormulaArticuloNumero::mostrarCodigo();
 @endphp
 @foreach ($data->formula_articulo_hijos ?? [] as $h)
 	@php
@@ -38,10 +40,13 @@
 			| Ranura: {{ $ranVal }}
 		@endif
 	@elseif($subId)
+		@php
+			$exportSubNumero = FormulaArticuloNumero::paraFormula($fh) ?: ('#'.$subId);
+		@endphp
 		@if($enlaces)
-			<a href="{{ route('editar_formula_articulo', ['id' => $subId]) }}">Fórmula {{ $subId }}</a> (SKU {{ $subSku }})
+			<a href="{{ route('editar_formula_articulo', ['id' => $subId]) }}">Fórmula {{ $exportSubNumero }}</a> (SKU {{ $subSku }})
 		@else
-			Fórmula {{ $subId }} (SKU {{ $subSku }})
+			Fórmula {{ $exportSubNumero }} (SKU {{ $subSku }})
 		@endif
 		@if ($subDesc !== '')
 			— {{ $subDesc }}
@@ -53,7 +58,7 @@
 				| Ord.opc: {{ $h->ordenopcional }}
 			@endif
 		@endif
-		@if ($fh && trim((string) ($fh->codigo ?? '')) !== '')
+		@if (! $exportMostrarCodigo && $fh && trim((string) ($fh->codigo ?? '')) !== '')
 			| Cód.subf: {{ $fh->codigo }}
 		@endif
 		@if ($fh && trim((string) ($fh->detalle ?? '')) !== '')

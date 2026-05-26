@@ -32,6 +32,87 @@ function restaurarUltimaConsultaClienteEnModal() {
     $('#datoscliente').html(mensajeInicialConsultaCliente());
 }
 
+/** Gastronomía y otras pantallas sin fila tr: resuelve inputs destino desde el botón lupa. */
+function resolverPtrClienteDesdeBoton($btn) {
+    var $gastro = $btn.closest('.gastro-campo-consulta');
+    if ($gastro.length) {
+        return {
+            $id: $gastro.find('#cliente_id, .cliente_id').first(),
+            $nombre: $gastro.find('#nombrecliente, .nombrecliente').first(),
+            $codigo: $gastro.find('#codigocliente, .codigocliente').first(),
+        };
+    }
+    var $tr = $btn.closest('tr');
+    if ($tr.length) {
+        return {
+            $id: $tr.find('.cliente_id').first(),
+            $nombre: $tr.find('.nombrecliente').first(),
+            $codigo: $tr.find('.codigocliente').first(),
+        };
+    }
+    return {
+        $id: $('#cliente_id'),
+        $nombre: $('#nombrecliente'),
+        $codigo: $('#codigocliente'),
+    };
+}
+
+function leerFilaClienteConsulta($link) {
+    var $tr = $link.closest('tr');
+    return {
+        id: $.trim($tr.find('td.id').first().text()),
+        nombre: $.trim($tr.find('td.nombre').first().text()),
+        codigo: $.trim($tr.find('td.codigo').first().text()),
+    };
+}
+
+function esConsultaClienteInternoDescuento() {
+    if ($('#consultaclienteModal').data('gastroConsultaDestino') === 'interno') {
+        return true;
+    }
+    return !!(ptrcliente_id && ptrcliente_id.length && ptrcliente_id.attr('id') === 'cliente_descuento_id');
+}
+
+function aplicarSeleccionClienteInternoDescuento(fila) {
+    if (typeof aplicarClienteInternoDescuentoEnPantalla === 'function') {
+        aplicarClienteInternoDescuentoEnPantalla({
+            id: fila.id,
+            codigo: fila.codigo,
+            nombre: fila.nombre,
+        });
+        return;
+    }
+    $('#cliente_descuento_id').val(fila.id || '');
+    $('#codigocliente_descuento').val(fila.codigo || '');
+    $('#nombrecliente_descuento').val(fila.nombre || '');
+}
+
+function aplicarSeleccionClienteFactura(fila) {
+    if (ptrcliente_id && ptrcliente_id.length) {
+        ptrcliente_id.val(fila.id);
+    }
+    if (ptrnombrecliente && ptrnombrecliente.length) {
+        ptrnombrecliente.val(fila.nombre);
+    }
+    if (ptrcliente_id && ptrcliente_id.length) {
+        var $cod = ptrcliente_id.closest('.gastro-campo-consulta, tr').find('#codigocliente, .codigocliente').first();
+        if ($cod.length) {
+            $cod.val(fila.codigo);
+        }
+    } else {
+        $('#cliente_id').val(fila.id);
+        $('#nombrecliente').val(fila.nombre);
+        if ($('#codigocliente').length) {
+            $('#codigocliente').val(fila.codigo);
+        }
+    }
+    if (typeof window.gastroOnClienteFacturaElegido === 'function') {
+        window.gastroOnClienteFacturaElegido(fila);
+    } else if ($.isNumeric(fila.id)) {
+        leeUnCliente(fila.id, 0);
+    }
+}
+
 function buscar_datos_cliente(consulta) {
     var termino = (consulta != null && consulta !== undefined) ? String(consulta).trim() : '';
 
@@ -82,63 +163,52 @@ $(document).on('keyup', '#consultacliente', function () {
 
 function activa_eventos_consultacliente()
 {
-    $('.consultacliente').on('click', function (event) {
-        ptrcliente_id = $(this).parents("tr").find(".cliente_id");
-		ptrnombrecliente = $(this).parents("tr").find(".nombrecliente");
+    $('.consultacliente')
+        .off('click.consultaClienteAbrir')
+        .on('click.consultaClienteAbrir', function () {
+            var ctx = resolverPtrClienteDesdeBoton($(this));
+            ptrcliente_id = ctx.$id;
+            ptrnombrecliente = ctx.$nombre;
+            $('#consultaclienteModal').data('gastroConsultaDestino', 'factura');
+            $('#consultaclienteModal').modal('show');
+        });
 
-        // Abre modal de consulta
-        $("#consultaclienteModal").modal('show');
-    });
+    $('#consultaclienteModal')
+        .off('shown.bs.modal.consultaCliente')
+        .on('shown.bs.modal.consultaCliente', function () {
+            restaurarUltimaConsultaClienteEnModal();
+            $(this).find('[autofocus]').focus();
+        });
 
-    $('#consultaclienteModal').on('shown.bs.modal', function () {
-        restaurarUltimaConsultaClienteEnModal();
-        $(this).find('[autofocus]').focus();
-    })
-
-    $('#aceptaconsultaclienteModal').on('click', function () {
-        $('#consultaclienteModal').modal('hide');
-    });
-
-    $(document).on('click', '.eligeconsultacliente', function (event) {
-        event.preventDefault();
-        
-        let seleccion = $(this).parents("tr").children().html();
-        let nombre = $(this).parents("tr").find(".nombre").html();
-        let codigo = $(this).parents("tr").find(".codigo").html();
-
-        if (ptrcliente_id && ptrcliente_id.length) {
-            $(ptrcliente_id).val(seleccion);
-        }
-        if (ptrnombrecliente && ptrnombrecliente.length) {
-            $(ptrnombrecliente).val(nombre);
-        }
-
-        if (ptrcliente_id && ptrcliente_id.attr('id') === 'cliente_descuento_id') {
-            $('#codigocliente_descuento').val(codigo || '');
-            if (typeof aplicarClienteInternoDescuentoEnPantalla === 'function') {
-                aplicarClienteInternoDescuentoEnPantalla({
-                    id: seleccion,
-                    codigo: codigo,
-                    nombre: nombre,
-                });
-            }
+    $('#aceptaconsultaclienteModal')
+        .off('click.consultaCliente')
+        .on('click.consultaCliente', function () {
             $('#consultaclienteModal').modal('hide');
-            return;
-        }
+        });
 
-        leeUnCliente(seleccion, 0)
+    $(document)
+        .off('click.eligeConsultaCliente', '.eligeconsultacliente')
+        .on('click.eligeConsultaCliente', '.eligeconsultacliente', function (event) {
+            event.preventDefault();
 
-        $("#cliente_id").val(seleccion);
-        $("#nombrecliente").val(nombre);
+            var fila = leerFilaClienteConsulta($(this));
+            if (!fila.id) {
+                return;
+            }
 
-        if ($('#codigocliente').length > 0) 
-            $("#codigocliente").val(codigo);
+            if (esConsultaClienteInternoDescuento()) {
+                aplicarSeleccionClienteInternoDescuento(fila);
+                $('#consultaclienteModal').modal('hide');
+                return;
+            }
 
-        $('#consultaclienteModal').modal('hide');
-        
-        if ($('#codigotransporte').length > 0) 
-            $("#codigotransporte").focus();
-    });
+            aplicarSeleccionClienteFactura(fila);
+            $('#consultaclienteModal').modal('hide');
+
+            if ($('#codigotransporte').length > 0) {
+                $('#codigotransporte').focus();
+            }
+        });
 
     // Si cambia el filtro blanquea el modal
     $('#areadestino_id').on('change', function (event) {
@@ -227,7 +297,7 @@ function leeUnCliente(cliente_id, codigocliente)
         $.get(url_res).done(function(data){
             if (data)
             {
-                if (data.estado != '0')
+                if (String(data.estado) !== '0')
                 {
                     alert('Cliente '+data.nombre+' no activo');
                     $('#codigocliente').val('');

@@ -47,6 +47,11 @@ return [
     'anita_sync_mozo_gastronomia_index' => (bool) env('ANITA_SYNC_MOZO_GASTRONOMIA_INDEX', true),
 
     /*
+    | When true, the ventas "categorías fidelidad gastronomía" index shows the button to sync from Anita (ApiAnita).
+    */
+    'anita_sync_categoria_fidelidad_gastronomia_index' => (bool) env('ANITA_SYNC_CATEGORIA_FIDELIDAD_GASTRONOMIA_INDEX', true),
+
+    /*
     | When true, opening ventas/puntoventa with lista vacía dispara sync con Anita en la misma petición HTTP.
     */
     'anita_sync_puntoventa_index' => (bool) env('ANITA_SYNC_PUNTOVENTA_INDEX', false),

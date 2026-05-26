@@ -5,6 +5,7 @@ namespace App\Services\Arca;
 use App\Models\Configuracion\Actividad_Arca;
 use App\Models\Configuracion\Impuesto;
 use App\Models\Stock\Articulo;
+use App\Models\Ventas\Puntoventa;
 use App\Repositories\Configuracion\CondicionivaRepositoryInterface;
 use Carbon\Carbon;
 use Exception;
@@ -74,6 +75,71 @@ class ArcaMtxcaFacturaElectronicaService
         }
 
         usort($items, static fn (array $a, array $b): int => $a['id'] <=> $b['id']);
+
+        return $items;
+    }
+
+    /**
+     * Puntos de venta habilitados en WSMTXCA (CAE o CAEA según $caea).
+     *
+     * @return list<array{
+     *     codigo: string,
+     *     numero: int,
+     *     descripcion: string,
+     *     emision_tipo: string,
+     *     bloqueado: bool,
+     *     fecha_baja: ?string
+     * }>
+     */
+    public function consultarPuntosVenta(int $empresaId, bool $caea = false): array
+    {
+        $this->assertTransporteSoap();
+        $cuit = $this->cuitEmisor($empresaId);
+        $ctx = $this->resolveWsaaContext($empresaId);
+        $ts = $this->wsaa->getTokenSign((string) config('arca_mtxca.wsaa_service_id'), $ctx);
+        $client = $this->soapClient();
+
+        $operacion = $caea ? 'consultarPuntosVentaCAEA' : 'consultarPuntosVentaCAE';
+        $responseProp = $caea ? 'consultarPuntosVentaCAEAResponse' : 'consultarPuntosVentaCAEResponse';
+        $emisionTipo = $caea ? 'CAEA' : 'CAE';
+
+        try {
+            $raw = $client->{$operacion}([
+                'authRequest' => $this->authRequest($ts, $cuit),
+            ]);
+        } catch (SoapFault $e) {
+            throw new Exception($this->formatSoapFault($operacion, $e, $client));
+        }
+
+        $result = $this->unwrapSoapResponse($raw, $responseProp);
+        if ($result === null) {
+            throw new Exception("MTXCA: {$operacion} sin resultado.");
+        }
+
+        $errs = $this->normalizeCodigoDescripcionCollection($result->arrayErrores ?? null);
+        if ($errs !== []) {
+            throw new Exception('MTXCA — '.$operacion.': '.$this->formatCodigoDescripcionList($errs));
+        }
+
+        $items = [];
+        foreach ($this->normalizePuntosVentaMtxca($result->arrayPuntosVenta ?? null) as $row) {
+            $nro = (int) ($row['numero'] ?? 0);
+            if ($nro < 1) {
+                continue;
+            }
+            $bloqueado = $this->valorBloqueadoMtxca($row['bloqueado'] ?? null);
+            $fechaBaja = $this->normalizarFechaBajaMtxca($row['fecha_baja'] ?? null);
+            $items[] = [
+                'codigo' => Puntoventa::normalizarCodigoArca((string) $nro) ?? (string) $nro,
+                'numero' => $nro,
+                'descripcion' => $this->etiquetaPuntoVentaMtxca($nro, $emisionTipo, $bloqueado, $fechaBaja),
+                'emision_tipo' => $emisionTipo,
+                'bloqueado' => $bloqueado,
+                'fecha_baja' => $fechaBaja,
+            ];
+        }
+
+        usort($items, static fn (array $a, array $b): int => $a['numero'] <=> $b['numero']);
 
         return $items;
     }
@@ -1054,6 +1120,71 @@ class ArcaMtxcaFacturaElectronicaService
         }
 
         return Carbon::parse($fecha)->format('Ymd');
+    }
+
+    /**
+     * @return list<array{numero: int, bloqueado: mixed, fecha_baja: mixed}>
+     */
+    private function normalizePuntosVentaMtxca(mixed $arrayPuntosVenta): array
+    {
+        if ($arrayPuntosVenta === null) {
+            return [];
+        }
+
+        $nodes = $arrayPuntosVenta->puntoVenta ?? null;
+        if ($nodes === null && isset($arrayPuntosVenta->numeroPuntoVenta)) {
+            $nodes = $arrayPuntosVenta;
+        }
+        if ($nodes === null) {
+            return [];
+        }
+
+        $out = [];
+        $list = is_array($nodes) ? $nodes : [$nodes];
+        foreach ($list as $node) {
+            if (! is_object($node)) {
+                continue;
+            }
+            $out[] = [
+                'numero' => (int) ($node->numeroPuntoVenta ?? $node->NumeroPuntoVenta ?? 0),
+                'bloqueado' => $node->bloqueado ?? $node->Bloqueado ?? null,
+                'fecha_baja' => $node->fechaBaja ?? $node->FechaBaja ?? null,
+            ];
+        }
+
+        return $out;
+    }
+
+    private function valorBloqueadoMtxca(mixed $bloqueado): bool
+    {
+        return strtoupper(trim((string) $bloqueado)) === 'S';
+    }
+
+    private function normalizarFechaBajaMtxca(mixed $fecha): ?string
+    {
+        $fch = trim((string) ($fecha ?? ''));
+        if ($fch === '' || strtoupper($fch) === 'NULL') {
+            return null;
+        }
+        $soloDigitos = preg_replace('/\D+/', '', $fch);
+        if ($soloDigitos === '' || preg_match('/^0+$/', $soloDigitos)) {
+            return null;
+        }
+
+        return $fch;
+    }
+
+    private function etiquetaPuntoVentaMtxca(int $nro, string $emision, bool $bloqueado, ?string $fechaBaja): string
+    {
+        $partes = [str_pad((string) $nro, 5, '0', STR_PAD_LEFT), $emision];
+        if ($bloqueado) {
+            $partes[] = 'bloqueado';
+        }
+        if ($fechaBaja !== null) {
+            $partes[] = 'baja '.$fechaBaja;
+        }
+
+        return implode(' — ', $partes);
     }
 
     /**

@@ -41,6 +41,7 @@ use App\Repositories\Ventas\DescuentoventaRepositoryInterface;
 use App\Services\Stock\ArticuloAnitaSyncService;
 use App\Services\Stock\PrecioService;
 use App\Services\Stock\StkdepSaldoAnitaService;
+use App\Support\Stock\ArticuloUltimoCreatePrefill;
 use Auth;
 use Carbon\Carbon;
 use Exception;
@@ -440,8 +441,7 @@ class ArticuloController extends Controller
             ['id' => '1', 'nombre' => 'Lleva número de parte'],
         ];
 
-        // Inicializa todos los campos del form para que no den error
-        $producto = new Articulo;
+        $producto = ArticuloUltimoCreatePrefill::cargarProductoPrefill();
 
         return view('stock.articulo.crear', compact('producto', 'categoria', 'subcategoria', 'linea', 'marca', 'tipoimputacion_enum',
             'unidadmedida', 'usosArticulos', 'oficinacompra_query', 'referer', 'codimp',

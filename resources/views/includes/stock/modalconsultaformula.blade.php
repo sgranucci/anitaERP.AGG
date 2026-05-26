@@ -12,13 +12,17 @@
           <label for="consulta_formula" class="col-form-label">Buscar:</label>
           <input type="text" name="consulta_formula" id="consulta_formula" class="form-control" autocomplete="off" />
         </div>
+        @php $modalCfMostrarCodigo = \App\Support\Stock\FormulaArticuloNumero::mostrarCodigo(); @endphp
         <table class="table table-striped table-bordered table-hover">
           <thead>
             <tr>
-              <th>ID</th>
+              <th>{{ \App\Support\Stock\FormulaArticuloNumero::etiquetaColumnaPrimaria() }}</th>
+              @unless ($modalCfMostrarCodigo)
               <th>C&oacute;digo</th>
+              @endunless
               <th>SKU cabecera</th>
               <th>Descripci&oacute;n</th>
+              <th>Detalle</th>
               <th>Estado</th>
               <th></th>
             </tr>

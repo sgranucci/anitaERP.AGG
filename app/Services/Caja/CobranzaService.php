@@ -1526,7 +1526,8 @@ class CobranzaService
 	 *   totalfinalcobranza:float,
 	 *   monedafinalcobranza_id:int,
 	 *   cotizacion_cobranza:float,
-	 *   genera_contabilidad:bool
+	 *   genera_contabilidad:bool,
+	 *   detalle?:string
 	 * }  $payload
 	 * @return array{cobranza_id:int,caja_movimiento_id:int}
 	 */
@@ -1572,7 +1573,10 @@ class CobranzaService
 			$data['tipotransaccion_caja_id']
 		);
 		$data['usuario_id'] = Auth::id();
-		$data['detalle'] = 'Cobranza gastronomía — Factura '.$venta->codigo;
+		$detalleManual = trim((string) ($payload['detalle'] ?? ''));
+		$data['detalle'] = $detalleManual !== ''
+			? $detalleManual
+			: 'Cobranza gastronomía — '.$venta->codigo;
 		$data['estado'] = Cobranza_Estado::$enumEstado[0]['nombre'];
 		$data['fechas'] = [Carbon::now()];
 		$data['estados'] = [Cobranza_Estado::$enumEstado[0]['nombre']];

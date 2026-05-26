@@ -1,3 +1,7 @@
+@php
+    $listasPrecioConsulta = $listasPrecioConsulta
+        ?? \App\Models\Stock\Listaprecio::orderBy('codigo')->get(['id', 'codigo', 'nombre']);
+@endphp
 <div class="modal fade" id="consultaprecioarticuloModal" tabindex="-1" role="dialog" aria-labelledby="consultaprecioarticuloTitulo" aria-hidden="true">
   <div class="modal-dialog modal-xl" role="document" style="max-width: 96%;">
     <div class="modal-content">
@@ -12,6 +16,15 @@
         <div class="form-inline mb-2">
           <label class="mr-2 mb-0 small" for="consultaprecioarticuloFechaRef">Vigentes al</label>
           <input type="date" id="consultaprecioarticuloFechaRef" class="form-control form-control-sm mr-2">
+          <label class="mr-2 mb-0 small" for="consultaprecioarticuloListaId">Lista de precios</label>
+          <select id="consultaprecioarticuloListaId" class="form-control form-control-sm mr-2">
+            <option value="">Todas</option>
+            @foreach ($listasPrecioConsulta as $lp)
+              <option value="{{ $lp->id }}">
+                {{ $lp->codigo ? '['.$lp->codigo.'] ' : '' }}{{ $lp->nombre }}
+              </option>
+            @endforeach
+          </select>
           <button type="button" class="btn btn-primary btn-sm" id="consultaprecioarticuloRecargar">
             <i class="fa fa-refresh"></i> Actualizar
           </button>

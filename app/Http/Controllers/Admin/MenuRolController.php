@@ -104,12 +104,15 @@ class MenuRolController extends Controller
     public function guardar(Request $request)
     {
         if ($request->ajax()) {
-            $menus = new Menu();
+            $menu = Menu::find($request->input('menu_id'));
+            if (! $menu) {
+                abort(404);
+            }
             if ($request->input('estado') == 1) {
-                $menus->find($request->input('menu_id'))->roles()->attach($request->input('rol_id'));
+                $menu->auditAttach('roles', $request->input('rol_id'));
                 return response()->json(['respuesta' => 'El rol se asigno correctamente']);
             } else {
-                $menus->find($request->input('menu_id'))->roles()->detach($request->input('rol_id'));
+                $menu->auditDetach('roles', $request->input('rol_id'));
                 return response()->json(['respuesta' => 'El rol se elimino correctamente']);
             }
         } else {

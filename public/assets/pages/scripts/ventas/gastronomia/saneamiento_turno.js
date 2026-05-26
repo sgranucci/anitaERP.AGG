@@ -63,17 +63,29 @@
         if (!base || !ventaId) {
             return '#';
         }
-        return base.replace(/\/$/, '') + '/' + ventaId + '/ver';
+        var url = base.replace(/\/$/, '') + '/' + ventaId + '/ver';
+        if (window.ModoConsulta) {
+            url = window.ModoConsulta.url(url);
+        }
+        return url;
     }
 
     function renderCuentasPendientes(term) {
         if (!term.cuentas_pendientes_detalle || !term.cuentas_pendientes_detalle.length) {
             return '';
         }
-        var html = '<h6 class="text-warning mt-2">Cuentas pendientes (' + term.cuentas_pendientes + ')</h6>';
-        html += '<p class="small text-muted mb-2">';
-        html += 'Sin facturar en esta terminal. Las <strong>cerradas sin facturar</strong> no se muestran como mesa ocupada en el facturador.';
-        html += '</p>';
+        var abiertas = Number(term.cuentas_abiertas || 0);
+        var cerradas = Number(term.cuentas_cerradas_sin_facturar || 0);
+        var resumen = [];
+        if (abiertas > 0) {
+            resumen.push('<strong class="text-warning">' + abiertas + ' abierta(s)</strong> — bloquean el cierre del último turno.');
+        }
+        if (cerradas > 0) {
+            resumen.push('<span class="text-muted">' + cerradas + ' cerrada(s) sin facturar</span> — estado terminal del saneamiento; no bloquean el cierre.');
+        }
+        var html = '<h6 class="text-warning mt-2">Cuentas no facturadas en esta terminal (' + term.cuentas_pendientes + ')</h6>';
+        html += '<p class="small mb-2">' + resumen.join('<br>') + '</p>';
+        html += '<p class="small text-muted mb-2">Las cuentas <strong>cerradas sin facturar</strong> no se muestran como mesa ocupada en el facturador.</p>';
         html += '<div class="table-responsive"><table class="table table-sm table-bordered">';
         html += '<thead><tr><th>ID</th><th>Referencia</th><th>Apertura</th><th>Estado</th><th class="text-center">Ítems</th>';
         html += '<th>Mozo</th><th class="text-right">Subtotal est.</th><th>Facturador</th></tr></thead><tbody>';
@@ -113,8 +125,14 @@
         if (term.puede_habilitar_turno) {
             html += ' <span class="badge badge-info ml-1">Puede habilitar turno</span>';
         }
-        if (term.cuentas_pendientes > 0) {
-            html += ' <span class="badge badge-warning ml-1">' + term.cuentas_pendientes + ' cuenta(s) pend.</span>';
+        var abiertas = Number(term.cuentas_abiertas || 0);
+        var cerradasInactivas = Number(term.cuentas_cerradas_sin_facturar || 0);
+        if (abiertas > 0) {
+            html += ' <span class="badge badge-warning ml-1">' + abiertas + ' abierta(s) sin facturar</span>';
+        }
+        if (cerradasInactivas > 0) {
+            html += ' <span class="badge badge-secondary ml-1" title="Estado terminal: no bloquean cierre">'
+                + cerradasInactivas + ' cerrada(s) sin facturar</span>';
         }
         html += '</div><div class="card-body">';
 
@@ -166,7 +184,7 @@
                     html += ' <button type="button" class="btn btn-sm btn-outline-danger ml-2 js-cerrar-cuentas"';
                     html += ' data-turno-id="' + s.turno_operativo_id + '"';
                     html += ' data-confirmacion="' + esc(s.confirmacion || '') + '"';
-                    html += ' data-cantidad="' + esc(s.cantidad || 0) + '">Cerrar cuentas pendientes</button>';
+                    html += ' data-cantidad="' + esc(s.cantidad || 0) + '">Cerrar sin facturar cuentas abiertas</button>';
                 }
                 html += '</div>';
             });
@@ -206,7 +224,8 @@
 
     function cerrarCuentasConConfirmacion(turnoId, confirmacionEsperada, cantidad) {
         var msg = 'Se cerrarán sin facturar las cuentas ABIERTAS de la terminal.\n';
-        msg += 'Total pendientes: ' + cantidad + '.\n\n';
+        msg += 'Cuentas abiertas a cerrar: ' + cantidad + '.\n';
+        msg += '(Las cerradas sin facturar son estado terminal y no requieren acción.)\n\n';
         msg += 'Para confirmar escriba exactamente:\n' + confirmacionEsperada;
         var ingresado = prompt(msg, '');
         if (ingresado === null) {

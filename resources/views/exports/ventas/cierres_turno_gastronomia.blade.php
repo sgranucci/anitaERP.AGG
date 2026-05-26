@@ -18,7 +18,7 @@
         <th>Turno</th>
         <th>Jornada</th>
         <th>Usuario</th>
-        <th>Total</th>
+        <th>Total facturado final (NC restadas)</th>
         <th>Hab.</th>
     </tr>
     @foreach ($filas as $f)

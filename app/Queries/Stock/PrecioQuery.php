@@ -173,14 +173,14 @@ class PrecioQuery implements PrecioQueryInterface
         });
     }
 
-    public function leeHistorialPreciosArticulo(int $articuloId, ?string $fechaReferencia = null): array
+    public function leeHistorialPreciosArticulo(int $articuloId, ?string $fechaReferencia = null, ?int $listaprecioId = null): array
     {
         $fechaRef = $fechaReferencia;
         if (! is_string($fechaRef) || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaRef)) {
             $fechaRef = Carbon::today()->format('Y-m-d');
         }
 
-        $rows = $this->model->newQuery()
+        $q = $this->model->newQuery()
             ->select([
                 'precio.id',
                 'precio.listaprecio_id',
@@ -195,8 +195,13 @@ class PrecioQuery implements PrecioQueryInterface
             ->join('listaprecio', 'listaprecio.id', '=', 'precio.listaprecio_id')
             ->join('moneda', 'moneda.id', '=', 'precio.moneda_id')
             ->leftJoin('usuario', 'usuario.id', '=', 'precio.usuarioultcambio_id')
-            ->where('precio.articulo_id', $articuloId)
-            ->orderBy('listaprecio.codigo')
+            ->where('precio.articulo_id', $articuloId);
+
+        if ($listaprecioId !== null && $listaprecioId > 0) {
+            $q->where('precio.listaprecio_id', $listaprecioId);
+        }
+
+        $rows = $q->orderBy('listaprecio.codigo')
             ->orderByDesc('precio.fechavigencia')
             ->orderByDesc('precio.id')
             ->get();

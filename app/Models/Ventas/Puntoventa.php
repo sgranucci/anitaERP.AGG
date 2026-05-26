@@ -23,6 +23,19 @@ class Puntoventa extends Model
                             'division', 'numeropoliza', 'puntoventa_remito'];
     protected $table = 'puntoventa';
 
+    protected static function booted(): void
+    {
+        static::saving(function (Puntoventa $puntoventa): void {
+            if ($puntoventa->codigo === null || $puntoventa->codigo === '') {
+                return;
+            }
+            $normalizado = self::normalizarCodigoArca((string) $puntoventa->codigo);
+            if ($normalizado !== null) {
+                $puntoventa->codigo = $normalizado;
+            }
+        });
+    }
+
     public function localidades()
     {
         return $this->belongsTo(Localidad::class, 'localidad_id');

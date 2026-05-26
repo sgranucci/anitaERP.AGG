@@ -139,16 +139,6 @@ function limpiaFiltros(){
                                 </td>
                                 <td>{{ $articulo->estado }}</td>
                             <td>
-                       			@if (can('listar-precios', false) || can('listar-articulos', false))
-                                	<button type="button"
-                                	    class="btn-accion-tabla consultapreciosarticulo tooltipsC"
-                                	    title="Consultar precios en listas de venta"
-                                	    data-articulo-id="{{ $articulo->id }}"
-                                	    data-articulo-sku="{{ $articulo->codigoarticulo ?? $articulo->sku ?? '' }}"
-                                	    data-articulo-descripcion="{{ $articulo->descripcion ?? '' }}">
-                                        <i class="fas fa-dollar-sign text-success"></i>
-                                	</button>
-								@endif
                        			@if (can('editar-articulos', false))
                                 	<a href="{{route('editar_articulo', ['id' => $articulo->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                         <i class="fa fa-edit"></i>
@@ -158,6 +148,16 @@ function limpiaFiltros(){
           							<a href="{{route('listar_etiqueta_articulo', ['id' => $articulo->id])}}" class="btn-accion-tabla tooltipsC" title="Imprimir QR">
                                    		<i class="fa fa-qrcode"></i>
 									</a>
+								@endif
+                       			@if (can('listar-precios', false) || can('listar-articulos', false))
+                                	<button type="button"
+                                	    class="btn-accion-tabla consultapreciosarticulo tooltipsC"
+                                	    title="Consultar precios en listas de venta"
+                                	    data-articulo-id="{{ $articulo->id }}"
+                                	    data-articulo-sku="{{ $articulo->codigoarticulo ?? $articulo->sku ?? '' }}"
+                                	    data-articulo-descripcion="{{ $articulo->descripcion ?? '' }}">
+                                        <i class="fas fa-dollar-sign text-success"></i>
+                                	</button>
 								@endif
                        			@if (can('borrar-articulos', false))
                                 <form action="{{route('eliminar_articulo', ['id' => $articulo->id])}}" class="d-inline form-eliminar" method="POST">

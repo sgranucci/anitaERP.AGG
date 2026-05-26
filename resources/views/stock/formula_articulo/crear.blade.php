@@ -8,7 +8,8 @@ Nueva f&oacute;rmula de art&iacute;culo
 window.formulaArticuloSubformulaConsulta = {
     urlFormulaBase: @json(rtrim(config('app.app_carpeta'), '/') . '/stock/formula-articulo'),
     urlArticuloBase: @json(rtrim(config('app.app_carpeta'), '/') . '/stock/articulo'),
-    urlCostosUltimaCompra: @json(route('costos_ultima_compra_formula_articulo'))
+    urlCostosUltimaCompra: @json(route('costos_ultima_compra_formula_articulo')),
+    mostrarCodigoComoNumero: @json(\App\Support\Stock\FormulaArticuloNumero::mostrarCodigo())
 };
 </script>
 <script src="{{ asset('assets/pages/scripts/admin/crear.js') }}" type="text/javascript"></script>

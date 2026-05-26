@@ -8,7 +8,8 @@ Editar f&oacute;rmula de art&iacute;culo
 window.formulaArticuloSubformulaConsulta = {
     urlFormulaBase: @json(rtrim(config('app.app_carpeta'), '/') . '/stock/formula-articulo'),
     urlArticuloBase: @json(rtrim(config('app.app_carpeta'), '/') . '/stock/articulo'),
-    urlCostosUltimaCompra: @json(route('costos_ultima_compra_formula_articulo'))
+    urlCostosUltimaCompra: @json(route('costos_ultima_compra_formula_articulo')),
+    mostrarCodigoComoNumero: @json(\App\Support\Stock\FormulaArticuloNumero::mostrarCodigo())
 };
 </script>
 <script src="{{ asset('assets/pages/scripts/admin/crear.js') }}" type="text/javascript"></script>
@@ -23,7 +24,16 @@ window.formulaArticuloSubformulaConsulta = {
         @include('includes.mensaje')
         <div class="card card-danger">
             <div class="card-header">
-                <h3 class="card-title">Editar f&oacute;rmula Id: {{ $data->id }}</h3>
+                @php
+                    $numeroFormulaEditar = \App\Support\Stock\FormulaArticuloNumero::paraFormula($data);
+                    $etiquetaNumeroEditar = \App\Support\Stock\FormulaArticuloNumero::mostrarCodigo() ? 'Cód.' : 'Id:';
+                @endphp
+                <h3 class="card-title">
+                    Editar f&oacute;rmula
+                    @if ($numeroFormulaEditar !== '')
+                        {{ $etiquetaNumeroEditar }} {{ $numeroFormulaEditar }}
+                    @endif
+                </h3>
                 <div class="card-tools">
                     @if (empty($ocultarVolver ?? false))
                     @if (!empty($retornoArticulo))

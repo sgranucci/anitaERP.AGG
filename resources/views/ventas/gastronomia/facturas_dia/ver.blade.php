@@ -4,6 +4,83 @@
     Factura gastronomía — venta {{ $venta->id }}
 @endsection
 
+@section('styles')
+<style>
+    .gastro-resumen-insumos-scroll {
+        max-height: 180px;
+        overflow-y: scroll;
+        overflow-x: hidden;
+        scrollbar-gutter: stable;
+        padding-right: 18px;
+        box-sizing: border-box;
+    }
+    .gastro-resumen-insumos-scroll table {
+        width: 100%;
+        margin-bottom: 0;
+        table-layout: fixed;
+    }
+    .gastro-resumen-insumos-scroll thead th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background: #f8f9fa;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+    .gastro-resumen-insumos-scroll th:nth-child(1),
+    .gastro-resumen-insumos-scroll td:nth-child(1) {
+        width: 42%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .gastro-resumen-insumos-scroll th:nth-child(2),
+    .gastro-resumen-insumos-scroll td:nth-child(2) {
+        width: 13%;
+        white-space: nowrap;
+    }
+    .gastro-resumen-insumos-scroll th:nth-child(3),
+    .gastro-resumen-insumos-scroll td:nth-child(3) {
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .gastro-resumen-insumos-scroll .col-cant-insumo {
+        width: 7rem;
+        min-width: 7rem;
+        max-width: 7rem;
+        padding-left: 0.35rem;
+        padding-right: 0.35rem !important;
+        white-space: nowrap;
+        box-sizing: border-box;
+    }
+    .gastro-insumos-grid {
+        table-layout: fixed;
+        width: 100%;
+    }
+    .gastro-insumos-grid th:nth-child(1),
+    .gastro-insumos-grid td:nth-child(1) {
+        width: 42%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .gastro-insumos-grid th:nth-child(2),
+    .gastro-insumos-grid td:nth-child(2) {
+        width: 13%;
+        white-space: nowrap;
+    }
+    .gastro-insumos-grid th:nth-child(3),
+    .gastro-insumos-grid td:nth-child(3) {
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .gastro-insumos-grid th:nth-child(4),
+    .gastro-insumos-grid td:nth-child(4) {
+        width: 7rem;
+        min-width: 7rem;
+        max-width: 7rem;
+        white-space: nowrap;
+    }
+</style>
+@endsection
+
 @section('contenido')
 <div class="row">
     <div class="col-lg-12">
@@ -78,14 +155,14 @@
                         @if ($movimientosInsumos->isEmpty())
                             <p class="text-muted small mb-0">Sin movimientos de insumos.</p>
                         @else
-                            <div class="table-responsive" style="max-height: 180px;">
+                            <div class="gastro-resumen-insumos-scroll">
                                 <table class="table table-sm table-bordered mb-0">
                                     <thead class="thead-light">
                                         <tr>
                                             <th>SKU ítem</th>
                                             <th>SKU insumo</th>
                                             <th>Insumo</th>
-                                            <th class="text-right">Cant.</th>
+                                            <th class="text-right col-cant-insumo">Cant.</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -94,7 +171,7 @@
                                                 <td>@include('ventas.gastronomia.facturas_dia.partials.item_facturado_desde_movimiento', ['movimiento' => $mov])</td>
                                                 <td>@include('ventas.gastronomia.facturas_dia.partials.link_sku_articulo', ['sku' => $mov->articulos->sku ?? '—', 'articuloId' => $mov->articulo_id])</td>
                                                 <td>{{ $mov->articulos->descripcion ?? '—' }}</td>
-                                                <td class="text-right">{{ number_format((float) $mov->cantidad, 3, ',', '.') }}</td>
+                                                <td class="text-right col-cant-insumo">{{ number_format((float) $mov->cantidad, 3, ',', '.') }}</td>
                                             </tr>
                                         @endforeach
                                     </tbody>
@@ -262,7 +339,7 @@
                                     Depósito: {{ $grupo->deposito_codigo }} — {{ $grupo->deposito_nombre }}
                                     <span class="text-muted small">(id {{ $grupo->deposito_id }})</span>
                                 </h6>
-                                <table class="table table-sm table-bordered">
+                                <table class="table table-sm table-bordered gastro-insumos-grid">
                                     <thead class="thead-light">
                                         <tr>
                                             <th>SKU ítem facturado</th>

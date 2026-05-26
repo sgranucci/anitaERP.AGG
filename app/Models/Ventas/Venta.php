@@ -85,6 +85,26 @@ class Venta extends Model implements Auditable
         return $this->hasMany(Cobranza::class, 'venta_id');
     }
 
+    public function tickettarjetasGastronomia()
+    {
+        return $this->hasMany(TickettarjetaGastronomia::class, 'venta_id');
+    }
+
+    public function ticketcanjesGastronomia()
+    {
+        return $this->hasMany(TicketcanjeGastronomia::class, 'venta_id');
+    }
+
+    public function categoriafidelidadEntregasGastronomia()
+    {
+        return $this->hasMany(CategoriafidelidadEntregaGastronomia::class, 'venta_id');
+    }
+
+    public function gastronomiaEmision()
+    {
+        return $this->hasOne(VentaGastronomiaEmision::class, 'venta_id');
+    }
+
     public function actividad_arcas()
 	{
     	return $this->hasMany(Actividad_Arca::class, 'actividad_arca_id');

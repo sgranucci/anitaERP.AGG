@@ -65,30 +65,22 @@ class Menu extends Model implements Auditable
     {
         $menus = json_decode($menu);
         foreach ($menus as $var => $value) {
-            $this->where('id', $value->id)->update(['menu_id' => 0, 'orden' => $var + 1]);
+            $this->actualizarOrdenItem($value->id, 0, $var + 1);
             if (!empty($value->children)) {
                 foreach ($value->children as $key => $vchild) {
-                    $update_id = $vchild->id;
-                    $parent_id = $value->id;
-                    $this->where('id', $update_id)->update(['menu_id' => $parent_id, 'orden' => $key + 1]);
+                    $this->actualizarOrdenItem($vchild->id, $value->id, $key + 1);
 
                     if (!empty($vchild->children)) {
                         foreach ($vchild->children as $key => $vchild1) {
-                            $update_id = $vchild1->id;
-                            $parent_id = $vchild->id;
-                            $this->where('id', $update_id)->update(['menu_id' => $parent_id, 'orden' => $key + 1]);
+                            $this->actualizarOrdenItem($vchild1->id, $vchild->id, $key + 1);
 
                             if (!empty($vchild1->children)) {
                                 foreach ($vchild1->children as $key => $vchild2) {
-                                    $update_id = $vchild2->id;
-                                    $parent_id = $vchild1->id;
-                                    $this->where('id', $update_id)->update(['menu_id' => $parent_id, 'orden' => $key + 1]);
+                                    $this->actualizarOrdenItem($vchild2->id, $vchild1->id, $key + 1);
 
                                     if (!empty($vchild2->children)) {
                                         foreach ($vchild2->children as $key => $vchild3) {
-                                            $update_id = $vchild3->id;
-                                            $parent_id = $vchild2->id;
-                                            $this->where('id', $update_id)->update(['menu_id' => $parent_id, 'orden' => $key + 1]);
+                                            $this->actualizarOrdenItem($vchild3->id, $vchild2->id, $key + 1);
                                         }
                                     }
                                 }
@@ -97,6 +89,15 @@ class Menu extends Model implements Auditable
                     }
                 }
             }
+        }
+    }
+
+    // Actualiza un item via instancia Eloquent para que owen-it/laravel-auditing registre el cambio.
+    private function actualizarOrdenItem($id, $menuId, $orden): void
+    {
+        $registro = self::find($id);
+        if ($registro) {
+            $registro->update(['menu_id' => $menuId, 'orden' => $orden]);
         }
     }
 }

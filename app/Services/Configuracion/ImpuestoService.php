@@ -2,12 +2,17 @@
 namespace App\Services\Configuracion;
 
 use App\Models\Stock\Articulo;
+use App\Models\Stock\Formula_Articulo;
+use App\Models\Stock\Listaprecio;
+use App\Models\Stock\Precio;
+use App\Models\Stock\Tipoarticulo;
 use App\Models\Configuracion\Impuesto;
 use App\Services\Configuracion\IIBBService;
 use App\Repositories\Configuracion\CondicionivaRepositoryInterface;
 use App\Repositories\Ventas\Cliente_Cm05RepositoryInterface;
 use App\Repositories\Ventas\AbastoRepositoryInterface;
 use App\Services\Ventas\FacturacionService;
+use App\Support\Stock\FormulaArticuloFactorCosto;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
@@ -20,6 +25,19 @@ class ImpuestoService extends FacturacionService
 	protected $condicionivaRepository;
 	protected $cliente_cm05Repository;
 	protected $abastoRepository;
+
+	/** Cache local del id del tipoarticulo configurado para disparar impuesto interno (p. ej. CIGARRILLO). */
+	private ?int $tipoarticuloImpuestoInternoIdCache = null;
+	private bool $tipoarticuloImpuestoInternoIdResolved = false;
+
+	/** Cache local de listaprecio_id por empresa (clave = empresa_id, valor = listaprecio_id o null). */
+	private array $listaprecioImpuestoInternoPorEmpresa = [];
+
+	/** Cache local de coeficientes por (articulo_id, listaprecio_id, fecha). */
+	private array $coeficienteImpuestoInternoCache = [];
+
+	/** Cache local de fórmulas resueltas (id => Formula_Articulo con hijos). */
+	private array $formulaImpuestoInternoCache = [];
 
     public function __construct(
 								IIBBService $IIBBservice,
@@ -98,6 +116,14 @@ class ImpuestoService extends FacturacionService
 		$netos = [];
 		$subtotales = [];
 		$porcentajeDescuentoImportePie = 0;
+		$totalImpuestoInterno = 0.; // Acumula impuesto interno por renglón.
+
+		// Bruto con IVA incluido acumulado por tasa (items donde el precio ya trae el IVA dentro,
+		// es decir incluyeimpuesto distinto de 'N' y '2'). Se usa para "cerrar" el IVA con la
+		// fórmula bruto - bruto/(1+tasa/100), evitando el centavo de redondeo que aparece cuando
+		// se hace round(neto_redondeado * tasa/100, 2) sobre el neto ya redondeado hacia arriba.
+		$brutosIncluyenIvaPorTasa = [];
+		$tasasMixtas = [];
 
 		// Debe calcular el total de los items y sacar el descuento en porcentaje
 		$totalBrutoAuxiliar = 0;
@@ -202,9 +228,35 @@ class ImpuestoService extends FacturacionService
 					// Asigna total neto para calculos posteriores
 					$dataItem[$off-1]['totalcondescuento'] = $totalNeto;
 
+					// Acumula impuesto interno del renglón en el total del comprobante.
+					if (! empty($neto['impuestoInternoMonto'])) {
+						$totalImpuestoInterno += (float) $neto['impuestoInternoMonto'];
+						$dataItem[$off-1]['impuesto_interno_monto'] = (float) $neto['impuestoInternoMonto'];
+					}
+
 					// Acumula netos por tasa de impuesto
 					self::agregaItemTotales(($valorTasaImpuesto == 0. ? "Exento" : "Gravado al ".$valorTasaImpuesto."%"), $valorTasaImpuesto, 
 						$totalNeto, $impuesto_id, $impuesto_codigo, $impuesto_codigoarca, $netos);
+
+					// Acumula bruto con IVA incluido por tasa, para cerrar el IVA sin arrastrar redondeos.
+					// "Incluye IVA" sigue la misma convención que el resto del servicio: cualquier valor
+					// distinto de 'N' o '2' significa que el precio del item ya trae el IVA dentro.
+					if ($flConIva && $valorTasaImpuesto > 0)
+					{
+						$tasaKey = (string) $valorTasaImpuesto;
+						$incluyeIva = isset($item['incluyeimpuesto']) && $item['incluyeimpuesto'] != 'N' && $item['incluyeimpuesto'] != '2';
+						if ($incluyeIva)
+						{
+							$brutoConIvaItem = round((float) $neto['totalConDescuento'] * (1. + $valorTasaImpuesto / 100.), 2);
+							$brutosIncluyenIvaPorTasa[$tasaKey] = ($brutosIncluyenIvaPorTasa[$tasaKey] ?? 0.) + $brutoConIvaItem;
+						}
+						else
+						{
+							// Si hay items SIN IVA incluido en la misma tasa, no aplicamos el cierre por bruto
+							// para no romper casos legacy (mezclas raras).
+							$tasasMixtas[$tasaKey] = true;
+						}
+					}
 				}
 			}
 		}
@@ -254,8 +306,23 @@ class ImpuestoService extends FacturacionService
 				if($netos[$i]['tasa'] != 0.)
 				{
 					$detalle = "Iva ".$netos[$i]['tasa']."%";
-					$importe = round($netos[$i]['importe'] * $netos[$i]['tasa'] / 100., 2);
-	
+					$tasaKey = (string) $netos[$i]['tasa'];
+
+					// Si todos los items de esta tasa traían el IVA dentro del precio (incluyeimpuesto
+					// distinto de 'N' y '2'), cerramos el IVA desde el bruto acumulado para que
+					// neto + IVA = bruto exacto (sin el centavo arrastrado por el round del neto).
+					if (isset($brutosIncluyenIvaPorTasa[$tasaKey]) && empty($tasasMixtas[$tasaKey]))
+					{
+						$brutoTasa = round((float) $brutosIncluyenIvaPorTasa[$tasaKey], 2);
+						$importe = round($brutoTasa - $brutoTasa / (1. + $netos[$i]['tasa'] / 100.), 2);
+						// Ajusta el "Gravado al X%" para que cierre: neto = bruto - iva.
+						$netos[$i]['importe'] = round($brutoTasa - $importe, 2);
+					}
+					else
+					{
+						$importe = round($netos[$i]['importe'] * $netos[$i]['tasa'] / 100., 2);
+					}
+
 					$impuestos[] = ["concepto"=>$detalle,
 								"baseimponible" => $netos[$i]['importe'],
 								"tasa"=>$netos[$i]['tasa'],
@@ -319,8 +386,20 @@ class ImpuestoService extends FacturacionService
 								];				
 			}
 		}
-		$conceptosTotales = array_merge($subtotales, $netos, $impuestos, $percepcionesIIBB);
-		
+		// Agrega impuesto interno como concepto del comprobante (sumatoria por renglón).
+		$conceptosImpuestoInterno = [];
+		if ($totalImpuestoInterno != 0.) {
+			$totalImpuestoInternoRound = round($totalImpuestoInterno, 2);
+			$conceptosImpuestoInterno[] = [
+				"concepto" => "Impuesto Interno",
+				"baseimponible" => 0,
+				"tasa" => 0,
+				"importe" => $totalImpuestoInternoRound,
+			];
+		}
+
+		$conceptosTotales = array_merge($subtotales, $netos, $impuestos, $conceptosImpuestoInterno, $percepcionesIIBB);
+
 		// Agrega total final
 		for ($i = 0, $totalFinal = 0; $i < count($conceptosTotales); $i++)
 		{
@@ -373,6 +452,10 @@ class ImpuestoService extends FacturacionService
 		$tasaDetraccion = 0.;
 		$porcentajeDescuentoImportePie = 0.;
 		$subtotalBruto = 0.;
+		$totalImpuestoInterno = 0.;
+		// Ver comentario en calculaImpuestoVenta: cierre del IVA por bruto cuando el item trae el IVA dentro.
+		$brutosIncluyenIvaPorTasa = [];
+		$tasasMixtas = [];
 
 		foreach ($dataItem as $idx => $item) {
 			if (($item['cantidad'] ?? 0) == 0) {
@@ -391,6 +474,10 @@ class ImpuestoService extends FacturacionService
 			$valorTasaImpuesto = $impuesto->valor;
 			$totalNetoLinea = round((float) $neto['totalConDescuento'], 2);
 			$dataItem[$idx]['totalcondescuento'] = $totalNetoLinea;
+			if (! empty($neto['impuestoInternoMonto'])) {
+				$totalImpuestoInterno += (float) $neto['impuestoInternoMonto'];
+				$dataItem[$idx]['impuesto_interno_monto'] = (float) $neto['impuestoInternoMonto'];
+			}
 			self::agregaItemTotales(
 				($valorTasaImpuesto == 0. ? 'Exento' : 'Gravado al '.$valorTasaImpuesto.'%'),
 				$valorTasaImpuesto,
@@ -400,6 +487,17 @@ class ImpuestoService extends FacturacionService
 				$impuesto->codigoarca,
 				$netos
 			);
+
+			if ($flConIva && $valorTasaImpuesto > 0) {
+				$tasaKey = (string) $valorTasaImpuesto;
+				$incluyeIva = isset($item['incluyeimpuesto']) && $item['incluyeimpuesto'] != 'N' && $item['incluyeimpuesto'] != '2';
+				if ($incluyeIva) {
+					$brutoConIvaItem = round((float) $neto['totalConDescuento'] * (1. + $valorTasaImpuesto / 100.), 2);
+					$brutosIncluyenIvaPorTasa[$tasaKey] = ($brutosIncluyenIvaPorTasa[$tasaKey] ?? 0.) + $brutoConIvaItem;
+				} else {
+					$tasasMixtas[$tasaKey] = true;
+				}
+			}
 		}
 
 		if (($descuentoFinal + $porcentajeDescuentoImportePie) != 0.) {
@@ -411,7 +509,14 @@ class ImpuestoService extends FacturacionService
 		if ($flConIva) {
 			for ($i = 0; $i < count($netos); $i++) {
 				if ($netos[$i]['tasa'] != 0.) {
-					$importe = round($netos[$i]['importe'] * $netos[$i]['tasa'] / 100., 2);
+					$tasaKey = (string) $netos[$i]['tasa'];
+					if (isset($brutosIncluyenIvaPorTasa[$tasaKey]) && empty($tasasMixtas[$tasaKey])) {
+						$brutoTasa = round((float) $brutosIncluyenIvaPorTasa[$tasaKey], 2);
+						$importe = round($brutoTasa - $brutoTasa / (1. + $netos[$i]['tasa'] / 100.), 2);
+						$netos[$i]['importe'] = round($brutoTasa - $importe, 2);
+					} else {
+						$importe = round($netos[$i]['importe'] * $netos[$i]['tasa'] / 100., 2);
+					}
 					$impuestosArr[] = [
 						'concepto' => 'Iva '.$netos[$i]['tasa'].'%',
 						'baseimponible' => $netos[$i]['importe'],
@@ -425,7 +530,17 @@ class ImpuestoService extends FacturacionService
 			}
 		}
 
-		$conceptosTotales = array_merge($subtotales, $netos, $impuestosArr);
+		$conceptosImpuestoInterno = [];
+		if ($totalImpuestoInterno != 0.) {
+			$conceptosImpuestoInterno[] = [
+				'concepto' => 'Impuesto Interno',
+				'baseimponible' => 0,
+				'tasa' => 0,
+				'importe' => round($totalImpuestoInterno, 2),
+			];
+		}
+
+		$conceptosTotales = array_merge($subtotales, $netos, $impuestosArr, $conceptosImpuestoInterno);
 		$totalFinal = 0.;
 		for ($i = 0; $i < count($conceptosTotales); $i++) {
 			if ($conceptosTotales[$i]['concepto'] != 'Subtotal'
@@ -451,6 +566,7 @@ class ImpuestoService extends FacturacionService
 			'importe_descuento' => round($descuentoFinal, 4),
 			'neto_sin_iva' => round($netoSinIva, 4),
 			'iva_total' => round($ivaTotal, 4),
+			'impuesto_interno_total' => round($totalImpuestoInterno, 4),
 			'total' => round($totalFinal, 4),
 			'filas_iva' => $filasIva,
 		];
@@ -540,6 +656,15 @@ class ImpuestoService extends FacturacionService
 		$totalNeto = $totalDescuento = $porcentajeDescuento = 0.;
 		$totalDescuentoItem = 0.;
 
+		// Coeficiente de impuesto interno por unidad del item (0..1). El monto del impuesto
+		// interno se descuenta del precio bruto del renglón antes de calcular neto e IVA, para
+		// que IVA + neto + impuesto interno = bruto consumidor.
+		$coefImpuestoInterno = (float) ($item['impuesto_interno_coeficiente'] ?? 0);
+		if ($coefImpuestoInterno < 0) {
+			$coefImpuestoInterno = 0;
+		}
+		$factorImpuestoInterno = max(0., 1. - $coefImpuestoInterno);
+
 		if ($item['cantidad'] != 0)
 		{
 			// Lee tasa impuesto del item
@@ -576,31 +701,31 @@ class ImpuestoService extends FacturacionService
 				// Calcula importe del item
 				if (config('facturacion.NETEA_DESCUENTO_LINEA'))
 				{
-					$importeSinDto = $item['cantidad'] * 
-							($item['incluyeimpuesto'] == 'N' || $item['incluyeimpuesto'] == '2' ? 
-							$item['precio'] : ($item['precio'] / (1.+(($valorTasaImpuesto+$tasaDetraccion)/100))));
+					$importeSinDto = $item['cantidad'] *
+							($item['incluyeimpuesto'] == 'N' || $item['incluyeimpuesto'] == '2' ?
+							$item['precio'] * $factorImpuestoInterno : ($item['precio'] * $factorImpuestoInterno / (1.+(($valorTasaImpuesto+$tasaDetraccion)/100))));
 
-					$totalNeto = $importeSinDto;	
-					
+					$totalNeto = $importeSinDto;
+
 					$totalDescuentoItem = 0;
 				}
 				else
 				{
-					$importeSinDto = $item['cantidad'] * 
-							($item['incluyeimpuesto'] == 'N' || $item['incluyeimpuesto'] == '2' ? 
-							$item['preciosindescuento'] : ($item['preciosindescuento'] / (1.+(($valorTasaImpuesto+$tasaDetraccion)/100))));	
-							
+					$importeSinDto = $item['cantidad'] *
+							($item['incluyeimpuesto'] == 'N' || $item['incluyeimpuesto'] == '2' ?
+							$item['preciosindescuento'] * $factorImpuestoInterno : ($item['preciosindescuento'] * $factorImpuestoInterno / (1.+(($valorTasaImpuesto+$tasaDetraccion)/100))));
+
 					$totalBruto = $importeSinDto;
 
 					// Si es bierzo toma los kilos descontados directamente para el neto gravado
 					if (config('app.empresa') == 'EL BIERZO')
-						$importeConDto = $item['kilodescuento'] * 
-								($item['incluyeimpuesto'] == 'N' || $item['incluyeimpuesto'] == '2' ? 
-								$item['preciosindescuento'] : ($item['preciosindescuento'] / (1.+(($valorTasaImpuesto+$tasaDetraccion)/100))));					
+						$importeConDto = $item['kilodescuento'] *
+								($item['incluyeimpuesto'] == 'N' || $item['incluyeimpuesto'] == '2' ?
+								$item['preciosindescuento'] * $factorImpuestoInterno : ($item['preciosindescuento'] * $factorImpuestoInterno / (1.+(($valorTasaImpuesto+$tasaDetraccion)/100))));
 					else
-						$importeConDto = $item['cantidad'] * 
-								($item['incluyeimpuesto'] == 'N' || $item['incluyeimpuesto'] == '2' ? 
-								$item['precio'] : ($item['precio'] / (1.+(($valorTasaImpuesto+$tasaDetraccion)/100))));					
+						$importeConDto = $item['cantidad'] *
+								($item['incluyeimpuesto'] == 'N' || $item['incluyeimpuesto'] == '2' ?
+								$item['precio'] * $factorImpuestoInterno : ($item['precio'] * $factorImpuestoInterno / (1.+(($valorTasaImpuesto+$tasaDetraccion)/100))));
 
 					// Asigna total sin descuento porque el item ya viene neteado con el descuento de linea
 					$totalNeto = $importeConDto;
@@ -623,7 +748,247 @@ class ImpuestoService extends FacturacionService
 					$totalDescuento += $totalDescuentoItem;
 			}
 		}
-		return ['totalSinDescuento' => $importeSinDto, 'totalConDescuento' => $totalNeto, 'totalDescuento' => $totalDescuento, 'porcentajeDescuento' => $porcentajeDescuento];
+		// Monto de impuesto interno del renglón (cantidad * precio bruto unitario * coef).
+		// Se calcula sobre el precio con IVA incluido cuando aplica, según la convención del item.
+		$montoImpuestoInternoItem = 0.;
+		if ($coefImpuestoInterno > 0 && $item['cantidad'] != 0) {
+			$precioBrutoUnitario = (float) $item['precio'];
+			$montoImpuestoInternoItem = round(((float) $item['cantidad']) * $precioBrutoUnitario * $coefImpuestoInterno, 2);
+		}
+
+		return [
+			'totalSinDescuento' => $importeSinDto,
+			'totalConDescuento' => $totalNeto,
+			'totalDescuento' => $totalDescuento,
+			'porcentajeDescuento' => $porcentajeDescuento,
+			'impuestoInternoCoeficiente' => $coefImpuestoInterno,
+			'impuestoInternoMonto' => $montoImpuestoInternoItem,
+		];
+	}
+
+	/**
+	 * Devuelve el listaprecio_id (interno del ERP) donde se cargan los coeficientes de impuesto
+	 * interno para la empresa, o null si no está configurado. El mapa va por código de lista
+	 * (facturacion.IMPUESTO_INTERNO_LISTAPRECIO_POR_EMPRESA: empresa_id => código de lista).
+	 */
+	public function listaprecioImpuestoInternoPorEmpresa(int $empresaId): ?int
+	{
+		if (array_key_exists($empresaId, $this->listaprecioImpuestoInternoPorEmpresa)) {
+			return $this->listaprecioImpuestoInternoPorEmpresa[$empresaId];
+		}
+
+		$mapa = (array) config('facturacion.IMPUESTO_INTERNO_LISTAPRECIO_POR_EMPRESA', []);
+		$codigo = $mapa[$empresaId] ?? null;
+		if ($codigo === null || $codigo === '') {
+			return $this->listaprecioImpuestoInternoPorEmpresa[$empresaId] = null;
+		}
+
+		$listaprecio = Listaprecio::query()->where('codigo', (string) $codigo)->first(['id']);
+		if (! $listaprecio) {
+			return $this->listaprecioImpuestoInternoPorEmpresa[$empresaId] = null;
+		}
+
+		return $this->listaprecioImpuestoInternoPorEmpresa[$empresaId] = (int) $listaprecio->id;
+	}
+
+	/**
+	 * Coeficiente vigente para un artículo en la lista de impuesto interno indicada (fecha <= fechaFactura).
+	 * Devuelve 0 si no hay precio cargado.
+	 */
+	public function coeficienteImpuestoInterno(int $articuloId, int $listaprecioId, string $fechaFactura): float
+	{
+		if ($articuloId <= 0 || $listaprecioId <= 0) {
+			return 0.;
+		}
+
+		$cacheKey = $articuloId.'|'.$listaprecioId.'|'.$fechaFactura;
+		if (array_key_exists($cacheKey, $this->coeficienteImpuestoInternoCache)) {
+			return $this->coeficienteImpuestoInternoCache[$cacheKey];
+		}
+
+		try {
+			$fecha = Carbon::parse($fechaFactura)->toDateString();
+		} catch (\Throwable) {
+			$fecha = $fechaFactura;
+		}
+
+		$precio = Precio::query()
+			->where('articulo_id', $articuloId)
+			->where('listaprecio_id', $listaprecioId)
+			->where('fechavigencia', '<=', $fecha)
+			->orderBy('fechavigencia', 'desc')
+			->orderBy('id', 'desc')
+			->value('precio');
+
+		return $this->coeficienteImpuestoInternoCache[$cacheKey] = (float) ($precio ?? 0);
+	}
+
+	/**
+	 * Id del tipoarticulo configurado para impuesto interno (default nombre = CIGARRILLO).
+	 */
+	private function tipoarticuloImpuestoInternoId(): ?int
+	{
+		if ($this->tipoarticuloImpuestoInternoIdResolved) {
+			return $this->tipoarticuloImpuestoInternoIdCache;
+		}
+
+		$nombre = strtoupper((string) config('facturacion.IMPUESTO_INTERNO_TIPOARTICULO_NOMBRE', 'CIGARRILLO'));
+		if ($nombre === '') {
+			$this->tipoarticuloImpuestoInternoIdResolved = true;
+
+			return $this->tipoarticuloImpuestoInternoIdCache = null;
+		}
+
+		$id = Tipoarticulo::query()->whereRaw('UPPER(nombre) = ?', [$nombre])->value('id');
+		$this->tipoarticuloImpuestoInternoIdResolved = true;
+
+		return $this->tipoarticuloImpuestoInternoIdCache = $id !== null ? (int) $id : null;
+	}
+
+	/**
+	 * Calcula el coeficiente efectivo de impuesto interno aplicable al precio bruto del ítem
+	 * vendido. Expande la fórmula del artículo (si existe), respetando los opcionales elegidos
+	 * y los insumos no opcionales. Por cada insumo cuyo `tipoarticulo` coincide con el
+	 * configurado (default: CIGARRILLO) suma `cantidadEfectivaPorUnidadItem * coeficienteInsumo`.
+	 * Si el propio artículo es de ese tipoarticulo y no se llegó a expandir nada, usa su
+	 * propio coeficiente.
+	 *
+	 * @param  array<string|int, int|null>  $opcionalesSeleccion  (orden => articulo_id)
+	 */
+	public function coeficienteImpuestoInternoArticulo(
+		int $articuloId,
+		array $opcionalesSeleccion,
+		int $empresaId,
+		string $fechaFactura,
+	): float {
+		if ($articuloId <= 0) {
+			return 0.;
+		}
+
+		$listaprecioId = $this->listaprecioImpuestoInternoPorEmpresa($empresaId);
+		if ($listaprecioId === null) {
+			return 0.;
+		}
+
+		$tipoCigarrillo = $this->tipoarticuloImpuestoInternoId();
+		if ($tipoCigarrillo === null) {
+			return 0.;
+		}
+
+		$articulo = Articulo::query()->find($articuloId, ['id', 'formula', 'tipoarticulo_id']);
+		if (! $articulo) {
+			return 0.;
+		}
+
+		$total = 0.;
+
+		// Expande fórmula (no-opcionales + opcionales elegidos) y suma coeficientes de cigarrillos.
+		if ($articulo->formula) {
+			$opcMap = [];
+			foreach ($opcionalesSeleccion as $orden => $aid) {
+				$opcMap[(string) $orden] = $aid !== null && $aid !== '' ? (int) $aid : null;
+			}
+
+			$insumos = [];
+			$this->expandirFormulaImpuestoInterno((int) $articulo->formula, 1., $opcMap, $insumos, 0);
+
+			foreach ($insumos as $insumoArticuloId => $cantidadEfectiva) {
+				$insumoArticulo = Articulo::query()->find($insumoArticuloId, ['id', 'tipoarticulo_id']);
+				if (! $insumoArticulo || (int) $insumoArticulo->tipoarticulo_id !== $tipoCigarrillo) {
+					continue;
+				}
+				$coefInsumo = $this->coeficienteImpuestoInterno((int) $insumoArticulo->id, $listaprecioId, $fechaFactura);
+				if ($coefInsumo <= 0) {
+					continue;
+				}
+				$total += $cantidadEfectiva * $coefInsumo;
+			}
+		}
+
+		// Si el propio artículo es del tipo y no aportó nada vía fórmula, usar su coeficiente.
+		if ($total <= 0 && (int) $articulo->tipoarticulo_id === $tipoCigarrillo) {
+			$total += $this->coeficienteImpuestoInterno((int) $articulo->id, $listaprecioId, $fechaFactura);
+		}
+
+		return $total > 0 ? $total : 0.;
+	}
+
+	/**
+	 * Expansión similar a GastronomiaFormulaConsumoService::expandFormula pero pensada solo
+	 * para totalizar coeficiente de impuesto interno: respeta opcionales por orden y no
+	 * persiste movimientos.
+	 *
+	 * @param  array<string, int|null>  $opcionalesPorOrden
+	 * @param  array<int, float>  $aggregados  articulo_id => cantidadEfectivaPorUnidadItem
+	 */
+	private function expandirFormulaImpuestoInterno(
+		int $formulaArticuloId,
+		float $multiplier,
+		array $opcionalesPorOrden,
+		array &$aggregados,
+		int $depth,
+	): void {
+		if ($depth > 25) {
+			return; // Protege contra ciclos (consistente con GastronomiaFormulaConsumoService).
+		}
+
+		if (! array_key_exists($formulaArticuloId, $this->formulaImpuestoInternoCache)) {
+			$this->formulaImpuestoInternoCache[$formulaArticuloId] = Formula_Articulo::query()
+				->with(['formula_articulo_hijos' => fn ($q) => $q->orderBy('ordenopcional')->orderBy('id')])
+				->find($formulaArticuloId);
+		}
+
+		$formula = $this->formulaImpuestoInternoCache[$formulaArticuloId];
+		if (! $formula) {
+			return;
+		}
+
+		$hijos = $formula->formula_articulo_hijos;
+
+		// Insumos no opcionales (siempre presentes).
+		foreach ($hijos->where('esopcional', false) as $hijo) {
+			$this->procesarHijoImpuestoInterno($hijo, $multiplier, $opcionalesPorOrden, $aggregados, $depth);
+		}
+
+		// Opcionales: solo el elegido por cada orden contribuye.
+		$opcionales = $hijos->where('esopcional', true)->groupBy(fn ($h) => (string) ($h->ordenopcional ?? '0'));
+		foreach ($opcionales as $orden => $grupo) {
+			$chosen = $opcionalesPorOrden[(string) $orden] ?? null;
+			if ($chosen === null || $chosen === 0) {
+				continue;
+			}
+			$match = $grupo->firstWhere('articulo_id', $chosen);
+			if (! $match) {
+				continue;
+			}
+			$this->procesarHijoImpuestoInterno($match, $multiplier, $opcionalesPorOrden, $aggregados, $depth);
+		}
+	}
+
+	/**
+	 * @param  array<string, int|null>  $opcionalesPorOrden
+	 * @param  array<int, float>  $aggregados
+	 */
+	private function procesarHijoImpuestoInterno(
+		$hijo,
+		float $multiplier,
+		array $opcionalesPorOrden,
+		array &$aggregados,
+		int $depth,
+	): void {
+		$factorLinea = (float) $hijo->cantidad * FormulaArticuloFactorCosto::efectivo($hijo->factorcosto);
+		$mult = $multiplier * $factorLinea;
+
+		if ($hijo->formula_hija_id) {
+			$this->expandirFormulaImpuestoInterno((int) $hijo->formula_hija_id, $mult, $opcionalesPorOrden, $aggregados, $depth + 1);
+
+			return;
+		}
+
+		if ($hijo->articulo_id) {
+			$aid = (int) $hijo->articulo_id;
+			$aggregados[$aid] = ($aggregados[$aid] ?? 0) + $mult;
+		}
 	}
 }
 

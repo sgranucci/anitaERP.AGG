@@ -213,9 +213,14 @@ final class GastronomiaFacturaTicketService
 
         if ($letra === 'B') {
             $ivaContenido = $this->ivaContenido($venta);
+            $impuestoInterno = $this->impuestoInternoContenido($venta);
             $w->linea('REGIMEN DE TRANSPARENCIA FISCAL');
-            $w->linea('AL CONSUMIDOR');
+            $w->linea('AL CONSUMIDOR (LEY 27.743)');
             $w->lineaConImporte('IVA Contenido', number_format($ivaContenido, 2, '.', ''));
+            $w->linea('Otros Trib.Nac.Incid.Precio');
+            if ($impuestoInterno > 0) {
+                $w->lineaConImporte('  Imp. Interno', number_format($impuestoInterno, 2, '.', ''));
+            }
             $w->linea('LOS IMPUESTOS INFORMADOS SON SOLO');
             $w->linea('LOS QUE CORRESPONDEN A NIVEL NACIONAL');
             $w->separadorDoble();
@@ -437,6 +442,24 @@ final class GastronomiaFacturaTicketService
         }
 
         return round($iva, 2);
+    }
+
+    /**
+     * Suma de "Otros Tributos Nacionales que inciden en el precio" para Régimen de
+     * Transparencia Fiscal (Ley 27.743). Hoy se discriminan los impuestos internos
+     * (cigarrillos, etc.); el método queda extensible a otros tributos nacionales
+     * que se agreguen en el futuro al arreglo de conceptos del comprobante.
+     */
+    private function impuestoInternoContenido(Venta $venta): float
+    {
+        $total = 0.;
+        foreach ($venta->venta_impuestos as $imp) {
+            if (stripos((string) $imp->concepto, 'Impuesto Interno') !== false) {
+                $total += (float) $imp->importe;
+            }
+        }
+
+        return round($total, 2);
     }
 
     private function lineaMozo(?CuentaGastronomia $cuenta): string

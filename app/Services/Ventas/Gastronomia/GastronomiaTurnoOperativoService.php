@@ -136,16 +136,69 @@ final class GastronomiaTurnoOperativoService
                 ? $this->erroresAntesDeCerrar($activo)
                 : [],
             'cuentas_sin_facturar' => $activo !== null
-                ? $this->contarCuentasSinFacturarEnTerminal($activo)
+                ? $this->contarCuentasAbiertasEnTerminal($activo)
+                : 0,
+            'cuentas_cerradas_sin_facturar' => $activo !== null
+                ? $this->contarCuentasCerradasSinFacturarEnTerminal($activo)
                 : 0,
             'url_facturas_dia' => route('gastronomia_facturas_dia', ['empresa_id' => $empresaId]),
+            'url_saneamiento_turno' => route('gastronomia_saneamiento_turno', ['empresa_id' => $empresaId]),
         ];
     }
 
     /**
+     * Cuentas no facturadas asociadas a la terminal del turno.
+     * Incluye:
+     *   - 'abierta'  → bloquea el cierre del último turno; requiere acción (facturar o cerrar sin facturar).
+     *   - 'cerrada'  → cerrada sin facturar (estado terminal por saneamiento). Visible para auditoría;
+     *                  NO bloquea el cierre. Si necesitás contar solo bloqueantes usá
+     *                  {@see listarCuentasAbiertasEnTerminal} / {@see contarCuentasAbiertasEnTerminal}.
+     *
      * @return \Illuminate\Database\Eloquent\Collection<int, CuentaGastronomia>
      */
     public function listarCuentasSinFacturarEnTerminal(TurnoOperativoGastronomia $turno)
+    {
+        return $this->queryCuentasNoFacturadasEnTerminal($turno, [
+            CuentaGastronomia::ESTADO_ABIERTA,
+            CuentaGastronomia::ESTADO_CERRADA,
+        ])->get();
+    }
+
+    public function contarCuentasSinFacturarEnTerminal(TurnoOperativoGastronomia $turno): int
+    {
+        return $this->listarCuentasSinFacturarEnTerminal($turno)->count();
+    }
+
+    /**
+     * Solo las cuentas en estado 'abierta' (las que bloquean el cierre del último turno).
+     *
+     * @return \Illuminate\Database\Eloquent\Collection<int, CuentaGastronomia>
+     */
+    public function listarCuentasAbiertasEnTerminal(TurnoOperativoGastronomia $turno)
+    {
+        return $this->queryCuentasNoFacturadasEnTerminal($turno, [
+            CuentaGastronomia::ESTADO_ABIERTA,
+        ])->get();
+    }
+
+    public function contarCuentasAbiertasEnTerminal(TurnoOperativoGastronomia $turno): int
+    {
+        return $this->queryCuentasNoFacturadasEnTerminal($turno, [
+            CuentaGastronomia::ESTADO_ABIERTA,
+        ])->count();
+    }
+
+    public function contarCuentasCerradasSinFacturarEnTerminal(TurnoOperativoGastronomia $turno): int
+    {
+        return $this->queryCuentasNoFacturadasEnTerminal($turno, [
+            CuentaGastronomia::ESTADO_CERRADA,
+        ])->count();
+    }
+
+    /**
+     * @param  list<string>  $estados
+     */
+    private function queryCuentasNoFacturadasEnTerminal(TurnoOperativoGastronomia $turno, array $estados)
     {
         $cfgId = (int) $turno->configuracion_puntoventa_gastronomia_id;
         $pc = (string) $turno->identificador_pc;
@@ -153,21 +206,12 @@ final class GastronomiaTurnoOperativoService
         return CuentaGastronomia::query()
             ->with(['mesa', 'mozo', 'lineas'])
             ->where('empresa_id', (int) $turno->empresa_id)
-            ->whereIn('estado', [
-                CuentaGastronomia::ESTADO_ABIERTA,
-                CuentaGastronomia::ESTADO_CERRADA,
-            ])
+            ->whereIn('estado', $estados)
             ->where(function ($q) use ($cfgId, $pc) {
                 $q->where('configuracion_puntoventa_gastronomia_id', $cfgId)
                     ->orWhere('identificador_pc', $pc);
             })
-            ->orderBy('id')
-            ->get();
-    }
-
-    public function contarCuentasSinFacturarEnTerminal(TurnoOperativoGastronomia $turno): int
-    {
-        return $this->listarCuentasSinFacturarEnTerminal($turno)->count();
+            ->orderBy('id');
     }
 
     public function exigirTurnoHabilitadoSiConfigurado(string $identificadorPc, int $empresaId): void
@@ -371,23 +415,29 @@ final class GastronomiaTurnoOperativoService
     }
 
     /**
+     * Bloqueantes para cerrar el turno. Solo aplica el conteo de cuentas en el último
+     * turno del día.
+     *
+     * Las cuentas en estado 'cerrada sin facturar' (estado terminal por saneamiento) NO
+     * bloquean; quedan registradas en cuenta.estado y en la observación de cierre del
+     * turno en el que se sanearon.
+     *
      * @return list<string>
      */
     public function erroresAntesDeCerrar(TurnoOperativoGastronomia $turno): array
     {
         $errores = [];
-        $empresaId = (int) $turno->empresa_id;
-        $cfgId = (int) $turno->configuracion_puntoventa_gastronomia_id;
         $pc = (string) $turno->identificador_pc;
 
         $this->validarCierreNoPosteriorAJornadaSiguiente($turno, $errores);
 
         if ($this->esUltimoTurnoDelDia($turno)) {
-            $cuentasPc = $this->contarCuentasSinFacturarEnTerminal($turno);
+            $abiertas = $this->contarCuentasAbiertasEnTerminal($turno);
 
-            if ($cuentasPc > 0) {
-                $errores[] = 'Hay '.$cuentasPc.' cuenta(s) o mesa(s) sin facturar en esta terminal ('.$pc.'). '
-                    .'Al cerrar el último turno del día deben quedar todas facturadas o cerradas sin consumo.';
+            if ($abiertas > 0) {
+                $errores[] = 'Hay '.$abiertas.' cuenta(s) o mesa(s) ABIERTA(S) sin facturar en esta terminal ('.$pc.'). '
+                    .'Al cerrar el último turno del día deben quedar facturadas o cerradas sin facturar. '
+                    .'Vaya a Ventas → Gastronomía → Saneamiento de turnos para resolverlas.';
             }
         }
 

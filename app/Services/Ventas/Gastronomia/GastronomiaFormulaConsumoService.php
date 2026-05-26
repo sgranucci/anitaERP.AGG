@@ -5,6 +5,7 @@ namespace App\Services\Ventas\Gastronomia;
 use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
 use App\Models\Ventas\CuentaGastronomia;
 use App\Models\Ventas\CuentaGastronomiaLinea;
+use App\Models\Stock\Articulo_Movimiento;
 use App\Models\Stock\Formula_Articulo;
 use App\Models\Stock\Formula_Articulo_Hijo;
 use App\Models\Ventas\Venta;

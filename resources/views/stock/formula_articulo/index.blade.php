@@ -58,12 +58,7 @@ $(document).ready(function () {
         @include('includes.mensaje')
         @if (! empty($sinFormulasCargadas ?? false))
         <div class="alert alert-info">
-            @if (config('app.anita_sync_formula_articulo_index'))
-            No hay f&oacute;rmulas en el ERP. Para importar desde Anita use el bot&oacute;n <strong>Sincronizar desde Anita</strong> (puede tardar varios minutos) o, si el navegador devuelve tiempo de espera agotado (504), ejecute en el servidor:
-            <code>php artisan formula-articulo:sincronizar-anita</code>
-            @else
             No hay f&oacute;rmulas en el ERP. Cree registros con <strong>Nuevo registro</strong> o cargue los datos seg&uacute;n el procedimiento definido para esta instalaci&oacute;n.
-            @endif
         </div>
         @endif
         <div class="card card-info">
@@ -74,14 +69,6 @@ $(document).ready(function () {
                     <a href="{{ route('crear_formula_articulo') }}" class="btn btn-outline-secondary btn-sm">
                         <i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
                     </a>
-                    @endif
-                    @if (config('app.anita_sync_formula_articulo_index') && can('actualizar-formula-articulo', false))
-                    <form action="{{ route('sincronizar_formula_articulo_anita') }}" method="POST" class="d-inline" onsubmit="return confirm('La sincronizaci\u00f3n puede tardar muchos minutos. Si aparece error 504 (tiempo de espera), ejecute en el servidor:\nphp artisan formula-articulo:sincronizar-anita\n\n\u00bfContinuar?');">
-                        @csrf
-                        <button type="submit" class="btn btn-outline-primary btn-sm" title="Importar stkcmae y stkcmov desde Anita (ApiAnita)">
-                            <i class="fa fa-fw fa-refresh"></i> Sincronizar desde Anita
-                        </button>
-                    </form>
                     @endif
                     @if (can('actualizar-formula-articulo', false))
                     <form action="{{ route('vincular_formula_articulo_por_codigo') }}" method="POST" class="d-inline" onsubmit="return confirm('Vincular cada f\u00f3rmula con el art\u00edculo cuyo SKU coincide (c\u00f3digo Anita \u2192 V0000, ej. 365 \u2192 V0365) y actualizar articulo.formula.\n\n\u00bfContinuar?');">
@@ -95,6 +82,14 @@ $(document).ready(function () {
                 <div class="d-md-flex justify-content-md-end">
                     <form action="{{ route('consultar_formula_articulo') }}" method="GET">
                         <div class="btn-group">
+                            @if (! empty($opcionalesHabilitados))
+                                @php $opcSel = $conOpcionales ?? ''; @endphp
+                                <select name="con_opcionales" class="form-control" title="Filtrar por ítems opcionales">
+                                    <option value="" {{ $opcSel === '' ? 'selected' : '' }}>Todas (con/sin opcionales)</option>
+                                    <option value="si" {{ $opcSel === 'si' ? 'selected' : '' }}>Solo con opcionales</option>
+                                    <option value="no" {{ $opcSel === 'no' ? 'selected' : '' }}>Solo sin opcionales</option>
+                                </select>
+                            @endif
                             <input type="text" name="busqueda" class="form-control" placeholder="Búsqueda ..." value="{{ $busqueda ?? '' }}">
                             <button type="submit" class="btn btn-default">
                                 <span class="fa fa-search"></span>
@@ -104,17 +99,26 @@ $(document).ready(function () {
                 </div>
             </div>
             <div class="card-body table-responsive p-0">
-                @include('includes.exportar-tabla', ['ruta' => 'listar_formula_articulo', 'busqueda' => $busqueda ?? ''])
+                @include('includes.exportar-tabla-queryparams', [
+                    'ruta' => 'listar_formula_articulo',
+                    'queryparams' => [
+                        'busqueda' => $busqueda ?? '',
+                        'con_opcionales' => $conOpcionales ?? '',
+                    ],
+                ])
                 @php
-                    use App\Support\Stock\FormulaArticuloGastronomia;
+                    use App\Support\Stock\FormulaArticuloNumero;
                     $indexTieneRanura = config('app.empresa') === 'FRASLE' && \Illuminate\Support\Facades\Schema::hasColumn('formula_articulo_hijo', 'ranura');
-                    $indexGastOpc = FormulaArticuloGastronomia::opcionalesHabilitados();
+                    $indexGastOpc = ! empty($opcionalesHabilitados);
+                    $indexMostrarCodigo = FormulaArticuloNumero::mostrarCodigo();
                 @endphp
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead>
                         <tr>
-                            <th>ID</th>
+                            <th>{{ FormulaArticuloNumero::etiquetaColumnaPrimaria() }}</th>
+                            @unless ($indexMostrarCodigo)
                             <th>C&oacute;d. f&oacute;rmula</th>
+                            @endunless
                             <th>Art&iacute;culo</th>
                             <th class="text-right">Cant. unidad</th>
                             <th>Estado</th>
@@ -126,8 +130,17 @@ $(document).ready(function () {
                     <tbody>
                         @foreach ($formulas as $data)
                         <tr>
-                            <td>{{ $data->id }}</td>
+                            <td>
+                                @if ($indexMostrarCodigo)
+                                    <small class="text-monospace">{{ FormulaArticuloNumero::paraFormula($data) }}</small>
+                                    @include('stock.formula_articulo.partials.costo_total_index', ['formula' => $data])
+                                @else
+                                    {{ $data->id }}
+                                @endif
+                            </td>
+                            @unless ($indexMostrarCodigo)
                             <td><small class="text-monospace">@if(! empty($data->codigo)){{ $data->codigo }}@else<span class="text-muted">&mdash;</span>@endif</small>@include('stock.formula_articulo.partials.costo_total_index', ['formula' => $data])</td>
+                            @endunless
                             <td>
                                 <small>
                                     @if (! empty($data->articulo_id))

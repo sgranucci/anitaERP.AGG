@@ -18,6 +18,19 @@ class ValidacionPuntoventa extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        $codigo = $this->input('codigo');
+        if ($codigo === null || $codigo === '') {
+            return;
+        }
+
+        $numerico = (int) preg_replace('/\D+/', '', (string) $codigo);
+        if ($numerico > 0) {
+            $this->merge(['codigo' => Puntoventa::normalizarCodigoArca((string) $codigo)]);
+        }
+    }
+
     /**
      * Get the validation rules that apply to the request.
      *

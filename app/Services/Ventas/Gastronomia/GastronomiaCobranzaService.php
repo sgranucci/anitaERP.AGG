@@ -27,23 +27,37 @@ final class GastronomiaCobranzaService
 
     /**
      * @param  list<array{cuentacaja_id:int,moneda_id:int,monto:float,cotizacion?:float|null,observacion?:string|null}>  $mediosPago
+     * @param  bool  $esDevolucion  true cuando la venta es una NC: usa el tipotransaccion de devolución
+     *                              (signo Egreso) para grabar importes negativos en caja.
      * @return array{cobranza_id:int,caja_movimiento_id?:int}
      */
     public function registrarCobranzaPos(
         Venta $venta,
         array $mediosPago,
         ConfiguracionPuntoventaGastronomia $cfg,
+        bool $esDevolucion = false,
     ): array {
         if ($mediosPago === []) {
             throw new InvalidArgumentException('Indique al menos un medio de cobro en la grilla de cobranza.');
         }
 
-        $tipoCajaId = self::resolverTipotransaccionCajaId($cfg);
-        if ($tipoCajaId <= 0) {
-            throw new InvalidArgumentException(
-                'Configure el tipo de transacción de caja (cobranza) en Ventas → Configuración punto de venta gastronomía'
-                .' o defina GASTRONOMIA_TIPO_TRANSACCION_CAJA_ID en .env (ej. 1 = Cobranza).'
-            );
+        if ($esDevolucion) {
+            $tipoCajaId = self::resolverTipotransaccionCajaDevolucionId();
+            if ($tipoCajaId <= 0) {
+                throw new InvalidArgumentException(
+                    'Configure el tipo de transacción de caja de devolución en config/gastronomia.php'
+                    .' o defina GASTRONOMIA_TIPO_TRANSACCION_CAJA_DEVOLUCION_ID en .env (ej. 3 = Devolución de factura).'
+                );
+            }
+            self::asegurarTipotransaccionCajaEsEgreso($tipoCajaId);
+        } else {
+            $tipoCajaId = self::resolverTipotransaccionCajaId($cfg);
+            if ($tipoCajaId <= 0) {
+                throw new InvalidArgumentException(
+                    'Configure el tipo de transacción de caja (cobranza) en Ventas → Configuración punto de venta gastronomía'
+                    .' o defina GASTRONOMIA_TIPO_TRANSACCION_CAJA_ID en .env (ej. 1 = Cobranza).'
+                );
+            }
         }
 
         $lineas = [];
@@ -81,6 +95,11 @@ final class GastronomiaCobranzaService
             );
         }
 
+        $codigoVenta = trim((string) ($venta->codigo ?? ''));
+        $detalle = $esDevolucion
+            ? 'Devolución gastronomía'.($codigoVenta !== '' ? ' — '.$codigoVenta : '')
+            : 'Cobranza gastronomía'.($codigoVenta !== '' ? ' — '.$codigoVenta : '');
+
         return $this->cobranzaService->guardaCobranzaGastronomia([
             'venta' => $venta,
             'empresa_id' => (int) $cfg->empresa_id,
@@ -90,7 +109,35 @@ final class GastronomiaCobranzaService
             'monedafinalcobranza_id' => self::MONEDA_PESOS_ID,
             'cotizacion_cobranza' => 1.,
             'genera_contabilidad' => (bool) config('gastronomia.genera_contabilidad_al_cobrar', true),
+            'detalle' => $detalle,
         ]);
+    }
+
+    /**
+     * Tipo de transacción de caja para devolución de factura (NC) en gastronomía.
+     * Solo respaldo por config/env: no depende del PV porque la operación es transversal
+     * (todas las terminales de gastronomía usan la misma devolución).
+     */
+    public static function resolverTipotransaccionCajaDevolucionId(): int
+    {
+        return (int) config('gastronomia.tipotransaccion_caja_devolucion_id', 0);
+    }
+
+    private static function asegurarTipotransaccionCajaEsEgreso(int $tipoCajaId): void
+    {
+        $tipo = Tipotransaccion_Caja::query()->find($tipoCajaId);
+        if (! $tipo) {
+            throw new InvalidArgumentException(
+                'El tipo de transacción de caja de devolución (id '.$tipoCajaId.') no existe en tipotransaccion_caja.'
+            );
+        }
+
+        if ($tipo->signo !== 'E') {
+            throw new InvalidArgumentException(
+                'El tipo de transacción de caja para devolución debe tener signo Egreso para que los importes'
+                .' se graben en negativo. Revisar tipotransaccion_caja id '.$tipoCajaId.'.'
+            );
+        }
     }
 
     public static function resolverTipotransaccionCajaId(?ConfiguracionPuntoventaGastronomia $cfg = null): int

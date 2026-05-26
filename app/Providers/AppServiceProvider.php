@@ -4,13 +4,15 @@ namespace App\Providers;
 
 use App;
 use App\Models\Admin\Menu;
-use App\Support\AyudaManuales;
+use App\Models\Stock\Articulo_Movimiento;
 use App\Models\Ventas\Ordentrabajo_Tarea;
 use App\Models\Ventas\Pedido_Combinacion;
 use App\Models\Ventas\Pedido_Combinacion_Estado;
+use App\Observers\Stock\Articulo_MovimientoObserver;
 use App\Observers\Ventas\Ordentrabajo_TareaObserver;
 use App\Observers\Ventas\Pedido_Combinacion_EstadoObserver;
 use App\Observers\Ventas\Pedido_CombinacionObserver;
+use App\Support\AyudaManuales;
 use Carbon\Carbon;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\URL;
@@ -47,6 +49,7 @@ class AppServiceProvider extends ServiceProvider
         Pedido_Combinacion::observe(Pedido_CombinacionObserver::class);
         Ordentrabajo_Tarea::observe(Ordentrabajo_TareaObserver::class);
         Pedido_Combinacion_Estado::observe(Pedido_Combinacion_EstadoObserver::class);
+        Articulo_Movimiento::observe(Articulo_MovimientoObserver::class);
 
         $url = env('APP_URL');
         if (str_contains($url, 'https')) {
@@ -665,6 +668,21 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Ventas\CategoriafidelidadGastronomiaRepositoryInterface',
+            'App\Repositories\Ventas\CategoriafidelidadGastronomiaRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Ventas\CategoriafidelidadArticuloGastronomiaRepositoryInterface',
+            'App\Repositories\Ventas\CategoriafidelidadArticuloGastronomiaRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Ventas\CategoriafidelidadEntregaGastronomiaRepositoryInterface',
+            'App\Repositories\Ventas\CategoriafidelidadEntregaGastronomiaRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Ventas\JornadaGastronomiaRepositoryInterface',
             'App\Repositories\Ventas\JornadaGastronomiaRepository',
         );
@@ -827,6 +845,21 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             'App\Repositories\Stock\Articulo_Movimiento_TalleRepositoryInterface',
             'App\Repositories\Stock\Articulo_Movimiento_TalleRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Stock\Articulo_Saldo_DepositoRepositoryInterface',
+            'App\Repositories\Stock\Articulo_Saldo_DepositoRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Stock\Deposito_AdministradorRepositoryInterface',
+            'App\Repositories\Stock\Deposito_AdministradorRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Stock\PrestamoRepositoryInterface',
+            'App\Repositories\Stock\PrestamoRepository',
         );
 
         $this->app->bind(
@@ -1215,6 +1248,17 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             'App\Repositories\Configuracion\SalaRepositoryInterface',
             'App\Repositories\Configuracion\SalaRepository',
+        );
+
+        // Modulo de Sala
+        $this->app->bind(
+            'App\Repositories\Sala\ZonaSalaRepositoryInterface',
+            'App\Repositories\Sala\ZonaSalaRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Sala\PrioridadSalaRepositoryInterface',
+            'App\Repositories\Sala\PrioridadSalaRepository',
         );
 
         // Modulo UIF

@@ -3,6 +3,7 @@
 namespace App\Support\Ventas;
 
 use App\Models\Ventas\TurnoOperativoGastronomia;
+use App\Models\Ventas\Venta;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Services\Ventas\Gastronomia\GastronomiaFacturacionService;
 use Carbon\Carbon;
@@ -17,9 +18,21 @@ final class GastronomiaTurnoOperativoTotalesSupport
     private const TOLERANCIA_CONCILIACION = 0.02;
 
     /**
+     * Las notas de crédito gastronomía se discriminan como un bloque aparte de los medios
+     * de pago tradicionales: `por_medio_pago` contiene únicamente las cobranzas de
+     * facturas (importes brutos positivos) y la devolución por NC se acumula en
+     * `total_notas_credito` (global) y `notas_credito.{total,cantidad}` (por mozo).
+     *
+     * Convenciones de totales:
+     * - `total_facturas` (bruto): suma de venta.total de facturas (sin NC).
+     * - `total_notas_credito` (negativo): suma de venta.total de NC.
+     * - `total_ventas` (final): bruto − NC, es lo que debería cuadrar con `total_cobrado`
+     *   después de restar invitaciones.
+     *
      * @return array{
      *   total_general: float,
      *   total_ventas: float,
+     *   total_facturas: float,
      *   total_cobrado: float,
      *   total_invitaciones: float,
      *   cantidad_invitaciones: int,
@@ -27,21 +40,33 @@ final class GastronomiaTurnoOperativoTotalesSupport
      *   diferencia_cobranza: float,
      *   conciliacion_ok: bool,
      *   cantidad_comprobantes: int,
+     *   cantidad_facturas: int,
+     *   cantidad_notas_credito: int,
+     *   total_notas_credito: float,
      *   redondeo_invitaciones_sugerido: float,
      *   por_mozo: list<array{
      *     mozo_id:?int,
      *     mozo_codigo:?string,
      *     mozo_nombre:string,
      *     total:float,
+     *     total_facturas:float,
      *     total_cobrado:float,
      *     cantidad:int,
-     *     por_medio_pago: list<array{cuentacaja_id:int, codigo:string, nombre:string, total:float}>
+     *     por_medio_pago: list<array{cuentacaja_id:int, codigo:string, nombre:string, total:float}>,
+     *     notas_credito: array{total:float, cantidad:int}
      *   }>,
      *   por_medio_pago: list<array{cuentacaja_id:int, codigo:string, nombre:string, total:float}>
      * }
      */
     /**
-     * Comprobantes del día en esta PC que no caen dentro de ningún turno operativo cerrado de la jornada.
+     * Comprobantes de la jornada en esta PC que no caen dentro de la ventana de ningún
+     * turno operativo de la jornada: ni de un turno ya cerrado ([habilitacion_en, cierre_en])
+     * ni del turno actualmente habilitado ([habilitacion_en, ∞) hasta que se cierre).
+     *
+     * El turno habilitado se considera cobertura abierta hacia adelante: si una factura
+     * se emite después de su habilitacion_en, queda imputada a ese turno (encuadra al
+     * cerrarlo). Esto evita marcar como huérfanas las facturas de turnos noche que
+     * cruzan la medianoche y siguen abiertos.
      *
      * @return array{
      *   cantidad:int,
@@ -67,10 +92,12 @@ final class GastronomiaTurnoOperativoTotalesSupport
         $ventanas = TurnoOperativoGastronomia::query()
             ->where('identificador_pc', $identificadorPc)
             ->where('jornada_gastronomia_id', $jornadaGastronomiaId)
-            ->where('estado', TurnoOperativoGastronomia::ESTADO_CERRADO)
+            ->whereIn('estado', [
+                TurnoOperativoGastronomia::ESTADO_CERRADO,
+                TurnoOperativoGastronomia::ESTADO_HABILITADO,
+            ])
             ->whereNotNull('habilitacion_en')
-            ->whereNotNull('cierre_en')
-            ->get(['habilitacion_en', 'cierre_en']);
+            ->get(['habilitacion_en', 'cierre_en', 'estado']);
 
         $emisiones = self::emisionesEnAlcance($identificadorPc, $empresaId, $fechaJornada, null);
         $huerfanas = [];
@@ -84,7 +111,14 @@ final class GastronomiaTurnoOperativoTotalesSupport
             $ts = $venta->created_at;
             $cubierta = false;
             foreach ($ventanas as $ventana) {
-                if ($ts >= $ventana->habilitacion_en && $ts <= $ventana->cierre_en) {
+                if ($ts < $ventana->habilitacion_en) {
+                    continue;
+                }
+                if ($ventana->cierre_en === null) {
+                    $cubierta = true;
+                    break;
+                }
+                if ($ts <= $ventana->cierre_en) {
                     $cubierta = true;
                     break;
                 }
@@ -137,9 +171,13 @@ final class GastronomiaTurnoOperativoTotalesSupport
         $porMozo = [];
         $porMedioGlobal = [];
         $totalVentas = 0.0;
+        $totalFacturas = 0.0;
         $totalInvitaciones = 0.0;
         $cantidadInvitaciones = 0;
         $totalCobrado = 0.0;
+        $totalNotasCredito = 0.0;
+        $cantidadNotasCredito = 0;
+        $cantidadFacturas = 0;
 
         foreach ($emisiones as $em) {
             $venta = $em->venta;
@@ -151,12 +189,21 @@ final class GastronomiaTurnoOperativoTotalesSupport
             $cobranzas = GastronomiaVentaDetalleSupport::cobranzasDeVenta($venta);
             $medios = GastronomiaVentaDetalleSupport::mediosPagoPorCobranza($cobranzas);
             $totalCobradoVenta = self::sumarMontosMedios($medios);
+            $esNotaCredito = ($em->venta_factura_origen_id ?? null) !== null;
+
             $totalVentas += $montoVenta;
             $totalCobrado += $totalCobradoVenta;
 
-            if (self::esInvitacionSinCobranza($montoVenta, $totalCobradoVenta, $importeMinimo)) {
-                $totalInvitaciones += $montoVenta;
-                $cantidadInvitaciones++;
+            if ($esNotaCredito) {
+                $totalNotasCredito += $montoVenta;
+                $cantidadNotasCredito++;
+            } else {
+                $totalFacturas += $montoVenta;
+                $cantidadFacturas++;
+                if (self::esInvitacionSinCobranza($montoVenta, $totalCobradoVenta, $importeMinimo)) {
+                    $totalInvitaciones += $montoVenta;
+                    $cantidadInvitaciones++;
+                }
             }
 
             $mozoId = $em->cuenta?->mozo_gastronomia_id;
@@ -168,22 +215,35 @@ final class GastronomiaTurnoOperativoTotalesSupport
                     'mozo_codigo' => $mozo?->codigo,
                     'mozo_nombre' => $mozo?->nombre ?? 'Sin mozo',
                     'total' => 0.0,
+                    'total_facturas' => 0.0,
                     'total_cobrado' => 0.0,
                     'cantidad' => 0,
                     'por_medio_pago' => [],
+                    'notas_credito' => [
+                        'total' => 0.0,
+                        'cantidad' => 0,
+                    ],
                 ];
             }
             $porMozo[$key]['total'] += $montoVenta;
             $porMozo[$key]['total_cobrado'] += $totalCobradoVenta;
             $porMozo[$key]['cantidad']++;
 
-            self::acumularMediosPago($medios, $porMozo[$key]['por_medio_pago']);
-            self::acumularMediosPago($medios, $porMedioGlobal);
+            if ($esNotaCredito) {
+                $porMozo[$key]['notas_credito']['total'] += $montoVenta;
+                $porMozo[$key]['notas_credito']['cantidad']++;
+            } else {
+                $porMozo[$key]['total_facturas'] += $montoVenta;
+                self::acumularMediosPago($medios, $porMozo[$key]['por_medio_pago']);
+                self::acumularMediosPago($medios, $porMedioGlobal);
+            }
         }
 
         $totalVentas = round($totalVentas, 2);
+        $totalFacturas = round($totalFacturas, 2);
         $totalInvitaciones = round($totalInvitaciones, 2);
         $totalCobrado = round($totalCobrado, 2);
+        $totalNotasCredito = round($totalNotasCredito, 2);
         $totalVentasCobrables = round($totalVentas - $totalInvitaciones, 2);
         $diferencia = round($totalCobrado - $totalVentasCobrables, 2);
 
@@ -191,8 +251,10 @@ final class GastronomiaTurnoOperativoTotalesSupport
 
         foreach ($porMozo as &$row) {
             $row['total'] = round($row['total'], 2);
+            $row['total_facturas'] = round($row['total_facturas'], 2);
             $row['total_cobrado'] = round($row['total_cobrado'], 2);
             $row['por_medio_pago'] = self::normalizarMediosPago($row['por_medio_pago']);
+            $row['notas_credito']['total'] = round($row['notas_credito']['total'], 2);
         }
         unset($row);
 
@@ -201,6 +263,7 @@ final class GastronomiaTurnoOperativoTotalesSupport
         return [
             'total_general' => $totalVentas,
             'total_ventas' => $totalVentas,
+            'total_facturas' => $totalFacturas,
             'total_cobrado' => $totalCobrado,
             'total_invitaciones' => $totalInvitaciones,
             'cantidad_invitaciones' => $cantidadInvitaciones,
@@ -208,6 +271,9 @@ final class GastronomiaTurnoOperativoTotalesSupport
             'diferencia_cobranza' => $diferencia,
             'conciliacion_ok' => abs($diferencia) < self::TOLERANCIA_CONCILIACION,
             'cantidad_comprobantes' => $emisiones->count(),
+            'cantidad_facturas' => $cantidadFacturas,
+            'cantidad_notas_credito' => $cantidadNotasCredito,
+            'total_notas_credito' => $totalNotasCredito,
             'redondeo_invitaciones_sugerido' => $totalInvitaciones,
             'por_mozo' => array_values($porMozo),
             'por_medio_pago' => $porMedioGlobal,
@@ -522,7 +588,9 @@ final class GastronomiaTurnoOperativoTotalesSupport
             $cobranzas = GastronomiaVentaDetalleSupport::cobranzasDeVenta($venta);
             $medios = GastronomiaVentaDetalleSupport::mediosPagoPorCobranza($cobranzas);
             $totalCobradoVenta = self::sumarMontosMedios($medios);
-            $esInvitacion = self::esInvitacionSinCobranza($montoVenta, $totalCobradoVenta, $importeMinimo);
+            $esNotaCredito = ($em->venta_factura_origen_id ?? null) !== null;
+            $esInvitacion = ! $esNotaCredito
+                && self::esInvitacionSinCobranza($montoVenta, $totalCobradoVenta, $importeMinimo);
 
             $mediosFila = [];
             foreach ($medios as $lineas) {
@@ -540,6 +608,7 @@ final class GastronomiaTurnoOperativoTotalesSupport
                 'venta_id' => (int) $venta->id,
                 'codigo' => (string) ($venta->codigo ?? ''),
                 'cliente' => (string) ($venta->nombre ?? ''),
+                'mozo_id' => $em->cuenta?->mozo_gastronomia_id !== null ? (int) $em->cuenta->mozo_gastronomia_id : null,
                 'mozo_nombre' => $mozo?->nombre ?? 'Sin mozo',
                 'hora' => $venta->created_at?->format('H:i') ?? '',
                 'total_facturado' => $montoVenta,
@@ -547,6 +616,8 @@ final class GastronomiaTurnoOperativoTotalesSupport
                 'diferencia' => round($totalCobradoVenta - ($esInvitacion ? 0 : $montoVenta), 2),
                 'medios' => $mediosFila,
                 'es_invitacion' => $esInvitacion,
+                'es_nota_credito' => $esNotaCredito,
+                'venta_factura_origen_id' => $esNotaCredito ? (int) $em->venta_factura_origen_id : null,
             ];
         }
 
@@ -555,6 +626,7 @@ final class GastronomiaTurnoOperativoTotalesSupport
 
     /**
      * Facturas del turno que utilizaron un medio de pago (cuenta de caja).
+     * Excluye notas de crédito (devoluciones) — para esas usar notasCreditoDelTurno().
      *
      * @return list<array{
      *   venta_id:int,
@@ -584,6 +656,9 @@ final class GastronomiaTurnoOperativoTotalesSupport
         $out = [];
 
         foreach ($filas as $fila) {
+            if (! empty($fila['es_nota_credito'])) {
+                continue;
+            }
             $montoMedio = (float) ($fila['medios'][$cuentacajaId] ?? 0);
             if ($montoMedio < 0.001) {
                 continue;
@@ -598,6 +673,89 @@ final class GastronomiaTurnoOperativoTotalesSupport
                 'monto_medio' => $montoMedio,
                 'total_cobrado' => $fila['total_cobrado'],
                 'es_invitacion' => $fila['es_invitacion'],
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Notas de crédito del turno (opcionalmente filtradas por mozo).
+     * Mismo formato que facturasPorMedioPago() para reutilizar el render del modal.
+     * El campo `monto_medio` se reemplaza por:
+     *   - `monto_nota_credito` (= total NC, negativo)
+     *   - `factura_origen_codigo` (código del comprobante origen)
+     *   - `factura_origen_id`
+     *
+     * @return list<array{
+     *   venta_id:int,
+     *   codigo:string,
+     *   cliente:string,
+     *   mozo_nombre:string,
+     *   mozo_id:?int,
+     *   hora:string,
+     *   total_facturado:float,
+     *   monto_nota_credito:float,
+     *   total_cobrado:float,
+     *   factura_origen_id:?int,
+     *   factura_origen_codigo:string,
+     *   es_invitacion:bool
+     * }>
+     */
+    public static function notasCreditoDelTurno(
+        string $identificadorPc,
+        int $empresaId,
+        string $fechaJornada,
+        ?Carbon $desdeHabilitacion = null,
+        ?int $mozoId = null,
+        ?Carbon $hastaInclusive = null,
+    ): array {
+        $emisiones = self::emisionesEnAlcance($identificadorPc, $empresaId, $fechaJornada, $desdeHabilitacion, $hastaInclusive);
+        $filas = self::construirFilasConciliacion($emisiones);
+
+        $ncFilas = array_values(array_filter($filas, function (array $f) use ($mozoId) {
+            if (empty($f['es_nota_credito'])) {
+                return false;
+            }
+            if ($mozoId !== null && (int) ($f['mozo_id'] ?? 0) !== $mozoId) {
+                return false;
+            }
+
+            return true;
+        }));
+
+        if ($ncFilas === []) {
+            return [];
+        }
+
+        $origenIds = array_values(array_unique(array_filter(array_map(
+            fn (array $f) => $f['venta_factura_origen_id'] ?? null,
+            $ncFilas
+        ))));
+        $origenCodigos = [];
+        if ($origenIds !== []) {
+            $origenCodigos = Venta::query()
+                ->whereIn('id', $origenIds)
+                ->pluck('codigo', 'id')
+                ->all();
+        }
+
+        $out = [];
+        foreach ($ncFilas as $fila) {
+            $origenId = $fila['venta_factura_origen_id'] ?? null;
+            $out[] = [
+                'venta_id' => $fila['venta_id'],
+                'codigo' => $fila['codigo'],
+                'cliente' => $fila['cliente'],
+                'mozo_id' => $fila['mozo_id'] ?? null,
+                'mozo_nombre' => $fila['mozo_nombre'],
+                'hora' => $fila['hora'],
+                'total_facturado' => $fila['total_facturado'],
+                'monto_nota_credito' => $fila['total_facturado'],
+                'total_cobrado' => $fila['total_cobrado'],
+                'factura_origen_id' => $origenId !== null ? (int) $origenId : null,
+                'factura_origen_codigo' => $origenId !== null ? (string) ($origenCodigos[$origenId] ?? '') : '',
+                'es_invitacion' => (bool) ($fila['es_invitacion'] ?? false),
             ];
         }
 

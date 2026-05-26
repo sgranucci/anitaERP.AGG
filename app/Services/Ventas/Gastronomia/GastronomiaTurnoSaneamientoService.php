@@ -350,9 +350,12 @@ final class GastronomiaTurnoSaneamientoService
             throw new InvalidArgumentException('El turno operativo debe estar habilitado en la terminal.');
         }
 
-        $cuentas = $this->turnoOperativoService->listarCuentasSinFacturarEnTerminal($turno);
+        $cuentas = $this->turnoOperativoService->listarCuentasAbiertasEnTerminal($turno);
         if ($cuentas->isEmpty()) {
-            throw new InvalidArgumentException('No hay cuentas pendientes en esta terminal.');
+            throw new InvalidArgumentException(
+                'No hay cuentas ABIERTAS para cerrar en esta terminal. '
+                .'Las cuentas en estado "cerrada sin facturar" son estado terminal y no bloquean el cierre.'
+            );
         }
 
         $esperado = self::textoConfirmacionCierreCuentas($cuentas->count());
@@ -370,44 +373,39 @@ final class GastronomiaTurnoSaneamientoService
         $notaSaneamiento = '[Saneamiento '.now()->format('Y-m-d H:i').' user '.Auth::id().']'
             .($motivoTxt !== '' ? ' '.$motivoTxt : ' Cierre administrativo sin facturar.');
 
-        return DB::transaction(function () use ($cuentas, $notaSaneamiento) {
+        return DB::transaction(function () use ($cuentas, $notaSaneamiento, $turno) {
             $detalle = [];
             $cerradas = 0;
 
             foreach ($cuentas as $cuenta) {
-                $etiqueta = $this->etiquetaCuenta($cuenta);
-                if ($cuenta->estado === CuentaGastronomia::ESTADO_ABIERTA) {
-                    $this->cuentaService->cerrarSinFacturar($cuenta);
-                    $cerradas++;
-                    $detalle[] = [
-                        'id' => (int) $cuenta->id,
-                        'etiqueta' => $etiqueta,
-                        'estado' => 'cerrada',
-                        'accion' => 'Cerrada sin facturar',
-                    ];
-                } else {
-                    $detalle[] = [
-                        'id' => (int) $cuenta->id,
-                        'etiqueta' => $etiqueta,
-                        'estado' => $cuenta->estado,
-                        'accion' => 'Ya estaba cerrada; requiere facturación o gestión manual',
-                    ];
-                }
+                $this->cuentaService->cerrarSinFacturar($cuenta);
+                $cerradas++;
+                $detalle[] = [
+                    'id' => (int) $cuenta->id,
+                    'etiqueta' => $this->etiquetaCuenta($cuenta),
+                    'estado' => CuentaGastronomia::ESTADO_CERRADA,
+                    'accion' => 'Cerrada sin facturar',
+                ];
             }
 
-            $siguen = (int) CuentaGastronomia::query()
-                ->whereIn('id', $cuentas->pluck('id'))
-                ->where('estado', CuentaGastronomia::ESTADO_CERRADA)
-                ->count();
+            $cerradasHistoricas = $this->turnoOperativoService
+                ->contarCuentasCerradasSinFacturarEnTerminal($turno);
+
+            $mensaje = 'Se cerraron sin facturar '.$cerradas.' cuenta(s) abierta(s). '
+                .'No quedan cuentas abiertas en esta terminal: '
+                .'el cierre del turno y de la jornada ya no se bloquea por estas cuentas.';
+
+            if ($cerradasHistoricas > 0) {
+                $mensaje .= ' Quedan '.$cerradasHistoricas.' cuenta(s) en estado "cerrada sin facturar" '
+                    .'(estado terminal, no bloquean el cierre; visibles aquí para auditoría).';
+            }
+
+            $mensaje .= ' '.$notaSaneamiento;
 
             return [
-                'mensaje' => 'Se cerraron '.$cerradas.' cuenta(s) abierta(s). '
-                    .($siguen > 0
-                        ? 'Quedan '.$siguen.' en estado cerrada sin facturar (bloquean cierre del último turno).'
-                        : 'No quedan cuentas pendientes en esta terminal.')
-                    .' '.$notaSaneamiento,
+                'mensaje' => $mensaje,
                 'cerradas_abiertas' => $cerradas,
-                'siguen_cerradas_sin_facturar' => $siguen,
+                'siguen_cerradas_sin_facturar' => $cerradasHistoricas,
                 'detalle' => $detalle,
             ];
         });
@@ -460,13 +458,17 @@ final class GastronomiaTurnoSaneamientoService
 
         $cuentasDetalle = [];
         $cuentasPendientes = 0;
+        $cuentasAbiertas = 0;
+        $cuentasCerradasSinFacturar = 0;
         $confirmacionCierre = null;
         if ($activo !== null) {
             $cuentas = $this->turnoOperativoService->listarCuentasSinFacturarEnTerminal($activo);
             $cuentasPendientes = $cuentas->count();
+            $cuentasAbiertas = $cuentas->where('estado', CuentaGastronomia::ESTADO_ABIERTA)->count();
+            $cuentasCerradasSinFacturar = $cuentas->where('estado', CuentaGastronomia::ESTADO_CERRADA)->count();
             $cuentasDetalle = $cuentas->map(fn (CuentaGastronomia $c) => $this->mapearCuentaPendiente($c))->all();
-            if ($cuentasPendientes > 0) {
-                $confirmacionCierre = self::textoConfirmacionCierreCuentas($cuentasPendientes);
+            if ($cuentasAbiertas > 0) {
+                $confirmacionCierre = self::textoConfirmacionCierreCuentas($cuentasAbiertas);
             }
         }
 
@@ -491,17 +493,18 @@ final class GastronomiaTurnoSaneamientoService
             ];
         }
 
-        if ($activo !== null && $cuentasPendientes > 0) {
-            $abiertas = collect($cuentasDetalle)->where('estado', CuentaGastronomia::ESTADO_ABIERTA)->count();
+        if ($activo !== null && $cuentasAbiertas > 0) {
             $sugerencias[] = [
                 'accion' => 'cerrar_cuentas',
                 'turno_operativo_id' => (int) $activo->id,
-                'cantidad' => $cuentasPendientes,
-                'cantidad_abiertas' => $abiertas,
+                'cantidad' => $cuentasAbiertas,
+                'cantidad_abiertas' => $cuentasAbiertas,
+                'cantidad_cerradas_sin_facturar' => $cuentasCerradasSinFacturar,
                 'confirmacion' => $confirmacionCierre,
-                'detalle' => 'Cerrar sin facturar las cuentas abiertas de la terminal ('
-                    .$abiertas.' abierta(s), '
-                    .($cuentasPendientes - $abiertas).' ya cerrada(s) sin facturar).',
+                'detalle' => 'Cerrar sin facturar las '.$cuentasAbiertas.' cuenta(s) abierta(s) de la terminal.'
+                    .($cuentasCerradasSinFacturar > 0
+                        ? ' (Además hay '.$cuentasCerradasSinFacturar.' cerrada(s) sin facturar — estado terminal, no bloquean el cierre.)'
+                        : ''),
             ];
         }
 
@@ -512,6 +515,8 @@ final class GastronomiaTurnoSaneamientoService
             'facturas_huerfanas' => $huerfanas,
             'cantidad_huerfanas' => count($huerfanas),
             'cuentas_pendientes' => $cuentasPendientes,
+            'cuentas_abiertas' => $cuentasAbiertas,
+            'cuentas_cerradas_sin_facturar' => $cuentasCerradasSinFacturar,
             'cuentas_pendientes_detalle' => $cuentasDetalle,
             'confirmacion_cierre_cuentas' => $confirmacionCierre,
             'turnos' => $cerrados->map(fn (TurnoOperativoGastronomia $t) => [

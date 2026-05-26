@@ -9,8 +9,13 @@ use App\Models\Configuracion\Pais;
 use App\Models\Configuracion\Provincia;
 use App\Models\Ventas\Puntoventa;
 use App\Repositories\Configuracion\Actividad_ArcaRepositoryInterface;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Ventas\PuntoventaRepositoryInterface;
+use App\Services\Arca\ArcaPuntosVentaCatalogoService;
+use App\Services\Arca\ArcaTiposComprobanteCatalogoService;
 use App\Services\Ventas\PuntoventaAnitaSyncService;
+use Exception;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -21,9 +26,12 @@ class PuntoventaController extends Controller
 
     private $actividad_arcaRepository;
 
-    public function __construct(PuntoventaRepositoryInterface $repository,
+    public function __construct(
+        PuntoventaRepositoryInterface $repository,
         Actividad_ArcaRepositoryInterface $actividad_arcaRepository,
+        private EmpresaRepositoryInterface $empresaRepository,
         private PuntoventaAnitaSyncService $puntoventaAnitaSyncService,
+        private ArcaPuntosVentaCatalogoService $arcaPuntosVentaCatalogo,
     ) {
         $this->repository = $repository;
         $this->actividad_arcaRepository = $actividad_arcaRepository;
@@ -53,8 +61,16 @@ class PuntoventaController extends Controller
 
         $estadoEnum = Puntoventa::$enumEstado;
         $modofacturacionEnum = Puntoventa::$enumModoFacturacion;
+        $empresasArca = $this->empresasArcaQuery();
+        $this->precargarPuntosVentaArcaEnIndex($empresasArca);
 
-        return view('ventas.puntoventa.index', compact('datas', 'modofacturacionEnum', 'estadoEnum', 'sinPuntosCargados'));
+        return view('ventas.puntoventa.index', compact(
+            'datas',
+            'modofacturacionEnum',
+            'estadoEnum',
+            'sinPuntosCargados',
+            'empresasArca'
+        ));
     }
 
     /**
@@ -65,12 +81,8 @@ class PuntoventaController extends Controller
     public function crear()
     {
         can('crear-puntos-de-venta');
-        $this->armaTablasVista($pais_query, $provincia_query, $modofacturacionEnum,
-            $estadoEnum, $empresa_query, $actividad_arca_query, $webserviceEnum);
 
-        return view('ventas.puntoventa.crear', compact('pais_query', 'provincia_query',
-            'empresa_query', 'modofacturacionEnum',
-            'estadoEnum', 'actividad_arca_query', 'webserviceEnum'));
+        return view('ventas.puntoventa.crear', $this->datosFormulario());
     }
 
     /**
@@ -96,12 +108,11 @@ class PuntoventaController extends Controller
     {
         can('editar-tipos-transaccion');
         $data = $this->repository->findOrFail($id);
-        $this->armaTablasVista($pais_query, $provincia_query, $modofacturacionEnum,
-            $estadoEnum, $empresa_query, $actividad_arca_query, $webserviceEnum);
 
-        return view('ventas.puntoventa.editar', compact('data', 'pais_query', 'provincia_query',
-            'empresa_query', 'modofacturacionEnum',
-            'estadoEnum', 'actividad_arca_query', 'webserviceEnum'));
+        return view('ventas.puntoventa.editar', array_merge(
+            ['data' => $data],
+            $this->datosFormulario($data)
+        ));
     }
 
     /**
@@ -178,6 +189,73 @@ class PuntoventaController extends Controller
         }
     }
 
+    /**
+     * Puntos de venta habilitados en AFIP/ARCA para el ABM (precarga index y formulario).
+     */
+    public function puntosVentaArca(Request $request): JsonResponse
+    {
+        if (! can('listar-puntos-de-venta', false)
+            && ! can('crear-puntos-de-venta', false)
+            && ! can('editar-puntos-de-venta', false)) {
+            abort(403, 'No tiene permiso');
+        }
+
+        $request->validate([
+            'empresa_id' => ['required', 'integer', 'min:1'],
+            'refresh' => ['sometimes', 'boolean'],
+            'webservice' => ['sometimes', 'nullable', 'string'],
+            'modofacturacion' => ['sometimes', 'nullable', 'string', 'max:1'],
+        ]);
+
+        $empresaId = (int) $request->input('empresa_id');
+        $webservice = trim((string) $request->input('webservice', ''));
+        if ($webservice === '') {
+            $webservice = $this->arcaPuntosVentaCatalogo->webserviceParaEmpresa($empresaId);
+        }
+        $modofacturacion = trim((string) $request->input('modofacturacion', ''));
+        $modofacturacion = $modofacturacion !== '' ? $modofacturacion : null;
+        $diagnostico = $this->arcaPuntosVentaCatalogo->diagnosticoCertificado($empresaId, $webservice);
+
+        try {
+            $this->arcaPuntosVentaCatalogo->assertEmpresaConfigurada($empresaId, $webservice);
+        } catch (Exception $e) {
+            return response()->json([
+                'ok' => false,
+                'message' => $e->getMessage(),
+                'webservice' => $webservice,
+                'diagnostico' => $diagnostico,
+            ], 422);
+        }
+
+        $refresh = $request->boolean('refresh');
+
+        try {
+            $resultado = $this->arcaPuntosVentaCatalogo->obtenerPuntosVenta(
+                $empresaId,
+                $refresh,
+                $webservice,
+                $modofacturacion
+            );
+
+            return response()->json([
+                'ok' => true,
+                'empresa_id' => $empresaId,
+                'webservice' => $resultado['webservice'],
+                'webservice_etiqueta' => $this->arcaPuntosVentaCatalogo->etiquetaWebservice($resultado['webservice']),
+                'diagnostico' => $diagnostico,
+                'origen' => $resultado['origen'],
+                'puntos' => $resultado['puntos'],
+            ]);
+        } catch (Exception $e) {
+            return response()->json([
+                'ok' => false,
+                'message' => $this->mensajeErrorArcaPuntosVenta($e, $webservice, $diagnostico),
+                'webservice' => $webservice,
+                'diagnostico' => $diagnostico,
+            ], 500);
+        }
+    }
+
     // Chequea datos del punto de venta
     public function chequeapuntoventa($id)
     {
@@ -196,12 +274,148 @@ class PuntoventaController extends Controller
         return $this->repository->findOrFail($id);
     }
 
+    /**
+     * @return array<string, mixed>
+     */
+    private function datosFormulario(?Puntoventa $data = null): array
+    {
+        $data = $data ?? new Puntoventa();
+        $this->armaTablasVista($pais_query, $provincia_query, $modofacturacionEnum,
+            $estadoEnum, $empresa_query, $actividad_arca_query, $webserviceEnum);
+
+        $empresasArca = $this->empresasArcaQuery();
+        $empresaArcaId = (int) old('empresa_id', $data->empresa_id ?? $this->empresaArcaDefaultId($empresasArca));
+        $webserviceArca = $empresaArcaId > 0
+            ? $this->arcaPuntosVentaCatalogo->webserviceParaEmpresa($empresaArcaId)
+            : '';
+        $webserviceArcaEtiqueta = $webserviceArca !== ''
+            ? $this->arcaPuntosVentaCatalogo->etiquetaWebservice($webserviceArca)
+            : '';
+        $puntosArca = [];
+        $modofacturacionActual = old('modofacturacion', $data->modofacturacion ?? '');
+
+        if ($empresaArcaId > 0 && $empresasArca->contains('id', $empresaArcaId)) {
+            try {
+                $resultado = $this->arcaPuntosVentaCatalogo->obtenerPuntosVenta(
+                    $empresaArcaId,
+                    false,
+                    null,
+                    $modofacturacionActual !== '' ? $modofacturacionActual : null
+                );
+                $puntosArca = $resultado['puntos'];
+            } catch (Exception $e) {
+                Log::debug('Puntoventa datosFormulario ARCA: '.$e->getMessage());
+            }
+        }
+
+        return compact(
+            'data',
+            'pais_query',
+            'provincia_query',
+            'empresa_query',
+            'modofacturacionEnum',
+            'estadoEnum',
+            'actividad_arca_query',
+            'webserviceEnum',
+            'empresasArca',
+            'empresaArcaId',
+            'webserviceArca',
+            'webserviceArcaEtiqueta',
+            'puntosArca'
+        );
+    }
+
+    /**
+     * Calienta la caché Laravel de puntos ARCA al abrir el listado (crear/editar responden más rápido).
+     *
+     * @param  \Illuminate\Support\Collection<int, Empresa>  $empresasArca
+     */
+    private function precargarPuntosVentaArcaEnIndex($empresasArca): void
+    {
+        foreach ($empresasArca as $empresa) {
+            try {
+                $this->arcaPuntosVentaCatalogo->obtenerPuntosVenta((int) $empresa->id, false);
+            } catch (Exception $e) {
+                Log::debug('Puntoventa index precarga ARCA empresa '.$empresa->id.': '.$e->getMessage());
+            }
+        }
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, Empresa>
+     */
+    private function empresasArcaQuery()
+    {
+        $ids = $this->arcaPuntosVentaCatalogo->empresasConCertificadoArca();
+        if ($ids === []) {
+            return collect();
+        }
+
+        $query = Empresa::query()
+            ->whereIn('id', $ids)
+            ->orderBy('nombre');
+
+        $empresasAsignadas = $this->empresaRepository->traeEmpresasAsignadas();
+        if (count($empresasAsignadas) > 1) {
+            $query->whereIn('id', $empresasAsignadas);
+        }
+
+        return $query->get(['id', 'nombre']);
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, Empresa>  $empresasArca
+     */
+    private function empresaArcaDefaultId($empresasArca): int
+    {
+        if ($empresasArca->isEmpty()) {
+            return 0;
+        }
+
+        $preferido = (int) config('cliente.EMPRESA_DEFAULT_ID', 1);
+        if ($empresasArca->contains('id', $preferido)) {
+            return $preferido;
+        }
+
+        return (int) $empresasArca->first()->id;
+    }
+
+    /**
+     * @param  array<string, mixed>  $diagnostico
+     */
+    private function mensajeErrorArcaPuntosVenta(Exception $e, string $webservice, array $diagnostico = []): string
+    {
+        $msg = $e->getMessage();
+        $wsaa = (string) ($diagnostico['wsaa_service'] ?? '');
+        $certPath = (string) ($diagnostico['cert_path'] ?? '');
+
+        if (stripos($msg, 'Computador no autorizado') !== false) {
+            return $msg.' — Verifique el servicio WSAA «'.$wsaa.'» y los certificados en '.$certPath.'.';
+        }
+
+        if (
+            stripos($msg, 'Parsing WSDL') !== false
+            || stripos($msg, 'failed to load external entity') !== false
+        ) {
+            $env = (string) config('arca.env', 'homo');
+            $subdir = $webservice === ArcaTiposComprobanteCatalogoService::WS_MTXCA ? 'mtxca' : 'wsfe';
+            $archivo = $webservice === ArcaTiposComprobanteCatalogoService::WS_MTXCA
+                ? 'MTXCAService.wsdl'
+                : 'service.wsdl';
+            $local = storage_path("app/arca/{$subdir}/wsdl/{$env}/{$archivo}");
+
+            return $msg.' — Copie el WSDL en '.$local.' o defina ARCA_'.strtoupper($subdir).'_WSDL_LOCAL en .env.';
+        }
+
+        return $msg;
+    }
+
     private function armaTablasVista(&$pais_query, &$provincia_query, &$modofacturacion_enum,
         &$estado_enum, &$empresa_query, &$actividad_arca_query, &$webservice_enum)
     {
         $pais_query = Pais::orderBy('nombre')->get();
         $provincia_query = Provincia::orderBy('nombre')->get();
-        $empresa_query = Empresa::orderBy('nombre')->get();
+        $empresa_query = $this->empresaRepository->allFiltrado();
         $modofacturacion_enum = Puntoventa::$enumModoFacturacion;
         $estado_enum = Puntoventa::$enumEstado;
         $webservice_enum = Puntoventa::$enumWebservice;

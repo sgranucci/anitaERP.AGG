@@ -1,4 +1,5 @@
 @php
+    use App\Support\Stock\FormulaArticuloNumero;
     $idxDep = $h->depositos ?? null;
     $idxDepStr = $idxDep ? trim(($idxDep->codigo ?? '').' '.($idxDep->nombre ?? '')) : '';
     $idxExtras = [
@@ -30,13 +31,16 @@
             $subArt = optional($h->formula_hija)->articulos;
             $fhIdx = $h->formula_hija;
             $idxSubExtras = $idxExtras;
-            if ($fhIdx && trim((string) ($fhIdx->codigo ?? '')) !== '') {
+            if (! FormulaArticuloNumero::mostrarCodigo() && $fhIdx && trim((string) ($fhIdx->codigo ?? '')) !== '') {
                 array_unshift($idxSubExtras, 'Cód. subf. '.$fhIdx->codigo);
             }
             $idxSubExtrasStr = implode(' · ', $idxSubExtras);
+            $idxSubNumero = $fhIdx
+                ? (FormulaArticuloNumero::paraFormula($fhIdx) ?: ('#'.$h->formula_hija_id))
+                : ('#'.$h->formula_hija_id);
         @endphp
         <small>
-            <a href="{{ route('editar_formula_articulo', ['id' => $h->formula_hija_id]) }}" target="_blank" rel="noopener">F&oacute;rmula #{{ $h->formula_hija_id }}</a>
+            <a href="{{ route('editar_formula_articulo', ['id' => $h->formula_hija_id]) }}" target="_blank" rel="noopener">F&oacute;rmula {{ $idxSubNumero }}</a>
             @if($subArt)
                 <span class="text-muted"> —
                 @if(! empty($fhIdx->articulo_id))

@@ -6,6 +6,7 @@ use App\Queries\Stock\FormulaArticuloQueryInterface;
 use App\Services\Stock\FormulaArticuloCostoTotalService;
 use App\Services\Stock\StkmaeUltimaCompraAnitaService;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Stock\FormulaArticuloNumero;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
@@ -29,6 +30,8 @@ class FormulaArticuloExport implements FromView, ShouldAutoSize, WithColumnForma
 
     private $busqueda;
 
+    private ?string $conOpcionales = null;
+
     private bool $flDesdeIndex = false;
 
     private bool $hayFilaLogos = false;
@@ -42,7 +45,15 @@ class FormulaArticuloExport implements FromView, ShouldAutoSize, WithColumnForma
     /** @var list<string> */
     private array $rutasLogosExcel = [];
 
-    private const ULTIMA_COL = 'J';
+    private function ultimaColExcel(): string
+    {
+        return FormulaArticuloNumero::mostrarCodigo() ? 'I' : 'J';
+    }
+
+    private function columnaItemsExcel(): string
+    {
+        return $this->ultimaColExcel();
+    }
 
     public function __construct(FormulaArticuloQueryInterface $formulaQuery)
     {
@@ -56,7 +67,7 @@ class FormulaArticuloExport implements FromView, ShouldAutoSize, WithColumnForma
             if (is_string($busqueda)) {
                 $busqueda = trim($busqueda);
             }
-            $formulas = $this->formulaQuery->leeFormulaArticulo($busqueda, false, true);
+            $formulas = $this->formulaQuery->leeFormulaArticulo($busqueda, false, true, $this->conOpcionales);
             app(StkmaeUltimaCompraAnitaService::class)->enriquecerFormulasPaginadasConCosto($formulas);
             app(FormulaArticuloCostoTotalService::class)->enriquecerFormulasConCostoTotal($formulas);
 
@@ -88,7 +99,7 @@ class FormulaArticuloExport implements FromView, ShouldAutoSize, WithColumnForma
     {
         if ($this->flDesdeIndex) {
             $cols = [];
-            foreach (range('A', self::ULTIMA_COL) as $c) {
+            foreach (range('A', $this->ultimaColExcel()) as $c) {
                 $cols[$c] = NumberFormat::FORMAT_TEXT;
             }
 
@@ -122,22 +133,36 @@ class FormulaArticuloExport implements FromView, ShouldAutoSize, WithColumnForma
 
     public function columnWidths(): array
     {
-        if ($this->flDesdeIndex) {
+        if (! $this->flDesdeIndex) {
+            return [];
+        }
+
+        if (FormulaArticuloNumero::mostrarCodigo()) {
             return [
-                'A' => 8,
-                'B' => 14,
-                'C' => 10,
-                'D' => 14,
-                'E' => 28,
-                'F' => 12,
-                'G' => 14,
-                'H' => 36,
-                'I' => 20,
-                'J' => 48,
+                'A' => 14,
+                'B' => 10,
+                'C' => 14,
+                'D' => 28,
+                'E' => 12,
+                'F' => 14,
+                'G' => 36,
+                'H' => 20,
+                'I' => 48,
             ];
         }
 
-        return [];
+        return [
+            'A' => 8,
+            'B' => 14,
+            'C' => 10,
+            'D' => 14,
+            'E' => 28,
+            'F' => 12,
+            'G' => 14,
+            'H' => 36,
+            'I' => 20,
+            'J' => 48,
+        ];
     }
 
     public function registerEvents(): array
@@ -173,9 +198,10 @@ class FormulaArticuloExport implements FromView, ShouldAutoSize, WithColumnForma
                 }
 
                 $filaTit = $this->filaTituloExcel;
-                $sheet->mergeCells('A'.$filaTit.':'.self::ULTIMA_COL.$filaTit);
+                $ultimaCol = $this->ultimaColExcel();
+                $sheet->mergeCells('A'.$filaTit.':'.$ultimaCol.$filaTit);
                 $sheet->getRowDimension($filaTit)->setRowHeight(30);
-                $sheet->getStyle('A'.$filaTit.':'.self::ULTIMA_COL.$filaTit)->applyFromArray([
+                $sheet->getStyle('A'.$filaTit.':'.$ultimaCol.$filaTit)->applyFromArray([
                     'font' => [
                         'bold' => true,
                         'size' => 16,
@@ -191,7 +217,8 @@ class FormulaArticuloExport implements FromView, ShouldAutoSize, WithColumnForma
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
 
                 $primera = $this->filaPrimeraDatosExcel;
-                $sheet->getStyle('J'.$primera.':J'.$sheet->getHighestRow())
+                $colItems = $this->columnaItemsExcel();
+                $sheet->getStyle($colItems.$primera.':'.$colItems.$sheet->getHighestRow())
                     ->getAlignment()
                     ->setWrapText(true)
                     ->setVertical(Alignment::VERTICAL_TOP);
@@ -204,9 +231,10 @@ class FormulaArticuloExport implements FromView, ShouldAutoSize, WithColumnForma
         return 'Formulas articulo';
     }
 
-    public function parametros($busqueda)
+    public function parametros($busqueda, ?string $conOpcionales = null)
     {
         $this->busqueda = $busqueda;
+        $this->conOpcionales = in_array($conOpcionales, ['si', 'no'], true) ? $conOpcionales : null;
         $this->flDesdeIndex = true;
 
         return $this;

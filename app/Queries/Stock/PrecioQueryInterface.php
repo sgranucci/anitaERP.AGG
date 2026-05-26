@@ -37,5 +37,5 @@ interface PrecioQueryInterface
      *     filas: list<array<string, mixed>>
      * }
      */
-    public function leeHistorialPreciosArticulo(int $articuloId, ?string $fechaReferencia = null): array;
+    public function leeHistorialPreciosArticulo(int $articuloId, ?string $fechaReferencia = null, ?int $listaprecioId = null): array;
 }

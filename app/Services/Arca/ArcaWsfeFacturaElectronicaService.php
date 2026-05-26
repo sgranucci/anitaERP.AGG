@@ -2,6 +2,7 @@
 
 namespace App\Services\Arca;
 
+use App\Models\Ventas\Puntoventa;
 use App\Repositories\Configuracion\CondicionivaRepositoryInterface;
 use Exception;
 use SoapClient;
@@ -108,6 +109,72 @@ class ArcaWsfeFacturaElectronicaService
         }
 
         usort($items, static fn (array $a, array $b): int => $a['id'] <=> $b['id']);
+
+        return $items;
+    }
+
+    /**
+     * Puntos de venta registrados en AFIP (FEParamGetPtosVenta).
+     *
+     * @return list<array{
+     *     codigo: string,
+     *     numero: int,
+     *     descripcion: string,
+     *     emision_tipo: string,
+     *     bloqueado: bool,
+     *     fecha_baja: ?string
+     * }>
+     */
+    public function feParamGetPtosVenta(int $empresaId): array
+    {
+        $this->assertTransporteSoap();
+        $cuit = $this->cuitEmisor($empresaId);
+        $ctx = $this->resolveWsaaContext($empresaId);
+        $ts = $this->wsaa->getTokenSign((string) config('arca_wsfe.wsaa_service_id'), $ctx);
+        $client = $this->soapClient();
+
+        try {
+            $raw = $client->FEParamGetPtosVenta([
+                'Auth' => [
+                    'Token' => $ts['token'],
+                    'Sign' => $ts['sign'],
+                    'Cuit' => $cuit,
+                ],
+            ]);
+        } catch (SoapFault $e) {
+            throw new Exception($this->formatSoapFault('FEParamGetPtosVenta', $e, $client));
+        }
+
+        $result = $raw->FEParamGetPtosVentaResult ?? null;
+        if ($result === null) {
+            throw new Exception('WSFE: FEParamGetPtosVenta sin resultado.');
+        }
+
+        $errs = $this->normalizeErrCollection($result->Errors ?? null);
+        if ($errs !== []) {
+            throw new Exception('WSFE — FEParamGetPtosVenta: '.$this->formatErrList($errs));
+        }
+
+        $items = [];
+        foreach ($this->normalizePtoVentaCollection($result->ResultGet ?? null) as $row) {
+            $nro = (int) ($row['nro'] ?? 0);
+            if ($nro < 1) {
+                continue;
+            }
+            $emision = trim((string) ($row['emision_tipo'] ?? ''));
+            $bloqueado = $this->valorBloqueado($row['bloqueado'] ?? null);
+            $fechaBaja = $this->normalizarFechaBaja($row['fecha_baja'] ?? null);
+            $items[] = [
+                'codigo' => Puntoventa::normalizarCodigoArca((string) $nro) ?? (string) $nro,
+                'numero' => $nro,
+                'descripcion' => $this->etiquetaPuntoVentaWsfe($nro, $emision, $bloqueado, $fechaBaja),
+                'emision_tipo' => $emision,
+                'bloqueado' => $bloqueado,
+                'fecha_baja' => $fechaBaja,
+            ];
+        }
+
+        usort($items, static fn (array $a, array $b): int => $a['numero'] <=> $b['numero']);
 
         return $items;
     }
@@ -865,6 +932,72 @@ class ArcaWsfeFacturaElectronicaService
         }
 
         return $out;
+    }
+
+    /**
+     * @return list<array{nro: int, emision_tipo: string, bloqueado: mixed, fecha_baja: mixed}>
+     */
+    private function normalizePtoVentaCollection(mixed $resultGet): array
+    {
+        if ($resultGet === null) {
+            return [];
+        }
+
+        $nodes = $resultGet->PtoVenta ?? null;
+        if ($nodes === null) {
+            return [];
+        }
+
+        $out = [];
+        $list = is_array($nodes) ? $nodes : [$nodes];
+        foreach ($list as $node) {
+            if (! is_object($node)) {
+                continue;
+            }
+            $out[] = [
+                'nro' => (int) ($node->Nro ?? 0),
+                'emision_tipo' => trim((string) ($node->EmisionTipo ?? '')),
+                'bloqueado' => $node->Bloqueado ?? null,
+                'fecha_baja' => $node->FchBaja ?? null,
+            ];
+        }
+
+        return $out;
+    }
+
+    private function valorBloqueado(mixed $bloqueado): bool
+    {
+        return strtoupper(trim((string) $bloqueado)) === 'S';
+    }
+
+    private function normalizarFechaBaja(mixed $fecha): ?string
+    {
+        $fch = trim((string) ($fecha ?? ''));
+        if ($fch === '' || strtoupper($fch) === 'NULL') {
+            return null;
+        }
+        $soloDigitos = preg_replace('/\D+/', '', $fch);
+        if ($soloDigitos === '' || preg_match('/^0+$/', $soloDigitos)) {
+            return null;
+        }
+
+        return $fch;
+    }
+
+    private function etiquetaPuntoVentaWsfe(int $nro, string $emision, bool $bloqueado, ?string $fechaBaja): string
+    {
+        $partes = [str_pad((string) $nro, 5, '0', STR_PAD_LEFT)];
+        if ($emision !== '') {
+            $partes[] = $emision;
+        }
+        if ($bloqueado) {
+            $partes[] = 'bloqueado';
+        }
+        if ($fechaBaja !== null) {
+            $partes[] = 'baja '.$fechaBaja;
+        }
+
+        return implode(' — ', $partes);
     }
 
     private function unwrapFecaDetResponse(?object $feDet): object

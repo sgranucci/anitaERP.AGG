@@ -63,3 +63,25 @@ transition: background-color 0.5s;
 .red.active { background-color: red; }
 .yellow.active { background-color: yellow; }
 .green.active { background-color: green; }
+
+/* ============================================================
+   Modo consulta (solapas abiertas con ?vista=consulta)
+   - Sin sidebar, sin pushmenu, sin navegación entre módulos.
+   - El usuario solo trabaja con la consulta y sus anidadas.
+   ============================================================ */
+body.modo-consulta .main-sidebar,
+body.modo-consulta .control-sidebar {
+    display: none !important;
+}
+body.modo-consulta .content-wrapper,
+body.modo-consulta .main-footer,
+body.modo-consulta .main-header {
+    margin-left: 0 !important;
+}
+body.modo-consulta .main-header {
+    border-top: 3px solid #ffc107;
+    background-color: #fffdf5;
+}
+body.modo-consulta .navbar-text.text-warning {
+    font-size: 0.95rem;
+}

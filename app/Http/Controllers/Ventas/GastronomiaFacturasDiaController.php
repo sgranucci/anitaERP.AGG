@@ -11,6 +11,9 @@ use App\Services\Ventas\Gastronomia\GastronomiaFacturaTicketService;
 use App\Services\Ventas\Gastronomia\GastronomiaJornadaService;
 use App\Services\Ventas\Gastronomia\GastronomiaNotaCreditoService;
 use App\Services\Ventas\Gastronomia\GastronomiaTurnoOperativoService;
+use App\Services\Ventas\Gastronomia\GastronomiaTicketTarjetaCanjeService;
+use App\Services\Ventas\Gastronomia\GastronomiaCategoriafidelidadCanjeService;
+use App\Services\Ventas\Gastronomia\GastronomiaTicketCanjePremioService;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
 use App\Support\Ventas\GastronomiaDepositoConfigSupport;
 use App\Support\Ventas\GastronomiaVentaDetalleSupport;
@@ -27,6 +30,9 @@ class GastronomiaFacturasDiaController extends Controller
         private readonly GastronomiaJornadaService $jornadaService,
         private readonly GastronomiaNotaCreditoService $notaCreditoService,
         private readonly GastronomiaTurnoOperativoService $turnoOperativoService,
+        private readonly GastronomiaTicketTarjetaCanjeService $ticketTarjetaCanjeService,
+        private readonly GastronomiaTicketCanjePremioService $ticketCanjePremioService,
+        private readonly GastronomiaCategoriafidelidadCanjeService $categoriafidelidadCanjeService,
     ) {}
 
     public function index(Request $request)
@@ -45,20 +51,26 @@ class GastronomiaFacturasDiaController extends Controller
             $articuloSku,
         );
 
-        $registros = $this->registrosFacturasDiaQuery($request, $articuloFiltro)->get();
+        $perPage = (int) $request->input('per_page', 50);
+        $perPage = max(10, min(200, $perPage));
+        $registros = $this->registrosFacturasDiaQuery($request, $articuloFiltro)
+            ->paginate($perPage)
+            ->appends($request->except(['page']));
+
+        $ventaIdsPagina = $registros->getCollection()->pluck('venta_id');
 
         $insumosPorVenta = [];
-        if ($articuloFiltro !== null && $registros->isNotEmpty()) {
+        if ($articuloFiltro !== null && $ventaIdsPagina->isNotEmpty()) {
             $insumosPorVenta = GastronomiaVentaDetalleSupport::mapInsumosPorVentaYArticuloPadre(
-                $registros->pluck('venta_id'),
+                $ventaIdsPagina,
                 (int) $articuloFiltro->id,
             );
         }
 
         $notasCreditoPorFactura = [];
-        if ($registros->isNotEmpty()) {
+        if ($ventaIdsPagina->isNotEmpty()) {
             $notasCreditoPorFactura = VentaGastronomiaEmision::query()
-                ->whereIn('venta_factura_origen_id', $registros->pluck('venta_id'))
+                ->whereIn('venta_factura_origen_id', $ventaIdsPagina)
                 ->pluck('venta_id', 'venta_factura_origen_id')
                 ->all();
         }
@@ -144,7 +156,12 @@ class GastronomiaFacturasDiaController extends Controller
     {
         can('generar-nota-credito-gastronomia-facturas-dia');
 
-        $resultado = $this->notaCreditoService->generarDesdeFactura($ventaId, $request);
+        $leyenda = trim((string) $request->input('leyenda', ''));
+        if (mb_strlen($leyenda) > 255) {
+            $leyenda = mb_substr($leyenda, 0, 255);
+        }
+
+        $resultado = $this->notaCreditoService->generarDesdeFactura($ventaId, $request, $leyenda);
 
         if ($request->expectsJson() || $request->ajax()) {
             if (! empty($resultado['ok'])) {
@@ -186,6 +203,95 @@ class GastronomiaFacturasDiaController extends Controller
             'ok' => false,
             'error' => $resultado['mensaje'] ?? 'No se pudo reimprimir el ticket.',
         ], 422);
+    }
+
+    public function apiTicketsTarjeta(int $ventaId)
+    {
+        can('ver-factura-gastronomia');
+
+        if (! VentaGastronomiaEmision::query()->where('venta_id', $ventaId)->exists()) {
+            return response()->json(['ok' => false, 'error' => 'La venta no corresponde a una emisión gastronomía.'], 404);
+        }
+
+        $tickets = $this->ticketTarjetaCanjeService->listarPorVenta($ventaId);
+
+        return response()->json([
+            'ok' => true,
+            'venta_id' => $ventaId,
+            'tickets' => collect($tickets)->map(fn ($t) => [
+                'id' => $t->id,
+                'ticket_id' => $t->ticket_id,
+                'numeroticket' => $t->numeroticket,
+                'numerodocumento' => $t->numerodocumento,
+                'fecha_emision' => $t->fecha?->format('d/m/Y'),
+                'monto' => round((float) $t->monto, 2),
+                'montoticket' => round((float) $t->montoticket, 2),
+                'numerocupon' => $t->numerocupon,
+                'estado' => $t->estado,
+                'created_at' => $t->created_at?->format('d/m/Y H:i:s'),
+            ])->values(),
+        ]);
+    }
+
+    public function apiTicketsCanjePremio(int $ventaId)
+    {
+        can('ver-factura-gastronomia');
+
+        if (! VentaGastronomiaEmision::query()->where('venta_id', $ventaId)->exists()) {
+            return response()->json(['ok' => false, 'error' => 'La venta no corresponde a una emisión gastronomía.'], 404);
+        }
+
+        $tickets = $this->ticketCanjePremioService->listarPorVenta($ventaId);
+
+        return response()->json([
+            'ok' => true,
+            'venta_id' => $ventaId,
+            'canjes' => collect($tickets)->map(fn ($t) => [
+                'id' => $t->id,
+                'numerocupon' => $t->numerocupon,
+                'ticket_id' => $t->ticket_id,
+                'renglon' => $t->renglon,
+                'sku' => $t->articulo->sku ?? '',
+                'articulo' => $t->articulo->descripcion ?? '',
+                'cantidad' => round((float) $t->cantidad, 4),
+                'puntos' => (int) $t->puntos,
+                'apellido' => $t->apellido,
+                'nombre' => $t->nombre,
+                'numerodocumento' => $t->numerodocumento,
+                'mozo' => $t->mozo->nombre ?? '',
+                'fechacanje' => $t->fechacanje?->format('d/m/Y H:i:s'),
+            ])->values(),
+        ]);
+    }
+
+    public function apiCanjesFidelidad(int $ventaId)
+    {
+        can('ver-factura-gastronomia');
+
+        if (! VentaGastronomiaEmision::query()->where('venta_id', $ventaId)->exists()) {
+            return response()->json(['ok' => false, 'error' => 'La venta no corresponde a una emisión gastronomía.'], 404);
+        }
+
+        $entregas = $this->categoriafidelidadCanjeService->listarPorVenta($ventaId);
+
+        return response()->json([
+            'ok' => true,
+            'venta_id' => $ventaId,
+            'canjes' => collect($entregas)->map(fn ($e) => [
+                'id' => $e->id,
+                'documento' => $e->documento,
+                'tarjeta' => $e->tarjeta,
+                'trackdata' => $e->trackdata,
+                'apellido' => $e->apellido,
+                'nombre' => $e->nombre,
+                'titular' => trim($e->apellido.' '.$e->nombre),
+                'categoria_codigo' => $e->categoriafidelidad->codigo ?? '',
+                'categoria_nombre' => $e->categoriafidelidad->nombre ?? '',
+                'sku' => $e->articulo->sku ?? '',
+                'articulo' => $e->articulo->descripcion ?? '',
+                'fechacanje' => $e->fechacanje?->format('d/m/Y H:i:s'),
+            ])->values(),
+        ]);
     }
 
     public function ver(int $ventaId)
@@ -248,6 +354,11 @@ class GastronomiaFacturasDiaController extends Controller
 
         $q = VentaGastronomiaEmision::query()
             ->with([
+                'venta' => fn ($qq) => $qq->withExists([
+                    'ticketcanjesGastronomia as tiene_canje_premio',
+                    'categoriafidelidadEntregasGastronomia as tiene_canje_fidelidad',
+                    'tickettarjetasGastronomia as tiene_ticket_tarjeta',
+                ]),
                 'venta.clientes',
                 'venta.puntoventas.empresas',
                 'venta.cobranzasDirectas',

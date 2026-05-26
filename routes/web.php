@@ -26,6 +26,10 @@ Route::post('seguridad/login', 'Seguridad\LoginController@login')->name('login_p
 Route::get('seguridad/logout', 'Seguridad\LoginController@logout')->name('logout');
 Route::post('ajax-sesion', 'AjaxController@setSession')->name('ajax')->middleware('auth');
 
+Route::get('csrf-token', function () {
+    return response()->json(['token' => csrf_token()]);
+})->middleware('auth')->name('csrf_token_refresh');
+
 // ARCA - Padrón (Constancia de Inscripción)
 Route::post('arca/constancia-inscripcion', 'Arca\ConstanciaInscripcionController@consultar')
     ->name('arca_constancia_inscripcion')
@@ -818,8 +822,8 @@ Route::get('stock/articulo', 'Stock\ArticuloController@index')->name('articulo')
 Route::get('stock/articulo/crear', 'Stock\ArticuloController@crear')->name('crear_articulo');
 Route::post('stock/articulo/sincronizar-anita', 'Stock\ArticuloController@sincronizarDesdeAnita')->name('sincronizar_articulo_anita');
 Route::post('stock/articulo', 'Stock\ArticuloController@guardar')->name('guardar_articulo');
-Route::get('stock/articulo/{id}/editar', 'Stock\ArticuloController@editar')->name('editar_articulo');
-Route::put('stock/articulo/{id}', 'Stock\ArticuloController@actualizar')->name('actualizar_articulo');
+Route::get('stock/articulo/{id}/editar', 'Stock\ArticuloController@editar')->name('editar_articulo')->middleware('modo.consulta');
+Route::put('stock/articulo/{id}', 'Stock\ArticuloController@actualizar')->name('actualizar_articulo')->middleware('modo.consulta');
 Route::delete('stock/articulo/{id}', 'Stock\ArticuloController@eliminar')->name('eliminar_articulo');
 Route::get('stock/download_articulo/{sku}', 'Stock\ArticuloController@download')->name('download_articulo');
 Route::get('stock/listar_etiqueta_articulo/{id}', 'Stock\ArticuloController@download')->name('listar_etiqueta_articulo');
@@ -905,6 +909,48 @@ Route::get('stock/transferencia-mercaderia', 'Stock\TransferenciaMercaderiaContr
 Route::post('stock/transferencia-mercaderia/preferencias', 'Stock\TransferenciaMercaderiaController@preferencias')->name('transferencia_mercaderia_preferencias');
 Route::get('stock/transferencia-mercaderia/inventario', 'Stock\TransferenciaMercaderiaController@inventario')->name('transferencia_mercaderia_inventario');
 Route::post('stock/transferencia-mercaderia', 'Stock\TransferenciaMercaderiaController@guardar')->name('transferencia_mercaderia_guardar');
+
+/*
+ * Préstamos de materiales
+ */
+Route::get('stock/prestamo', 'Stock\PrestamoController@index')->name('prestamo');
+Route::get('stock/prestamo/crear', 'Stock\PrestamoController@crear')->name('crear_prestamo');
+Route::post('stock/prestamo', 'Stock\PrestamoController@guardar')->name('guardar_prestamo');
+Route::get('stock/prestamo/{id}/editar', 'Stock\PrestamoController@editar')->name('editar_prestamo');
+Route::put('stock/prestamo/{id}', 'Stock\PrestamoController@actualizar')->name('actualizar_prestamo');
+Route::delete('stock/prestamo/{id}', 'Stock\PrestamoController@eliminar')->name('eliminar_prestamo');
+Route::get('stock/prestamo/{id}/ver', 'Stock\PrestamoController@ver')->name('ver_prestamo');
+Route::post('stock/prestamo/{id}/confirmar-envio', 'Stock\PrestamoController@confirmarEnvio')->name('confirmar_envio_prestamo');
+Route::post('stock/prestamo/{id}/aprobar', 'Stock\PrestamoController@aprobar')->name('aprobar_prestamo');
+Route::post('stock/prestamo/{id}/rechazar', 'Stock\PrestamoController@rechazar')->name('rechazar_prestamo');
+Route::post('stock/prestamo/{id}/devolver', 'Stock\PrestamoController@devolver')->name('devolver_prestamo');
+Route::post('stock/prestamo/{id}/cancelar', 'Stock\PrestamoController@cancelar')->name('cancelar_prestamo');
+Route::post('stock/prestamo/{id}/reenviar-correo', 'Stock\PrestamoController@reenviarCorreo')->name('reenviar_correo_prestamo');
+Route::get('stock/prestamo/api/saldo-articulo', 'Stock\PrestamoController@saldoArticulo')->name('prestamo_saldo_articulo');
+
+/*
+ * Endpoints públicos por token (sin login) que reciben los administradores
+ * destinatarios del préstamo en su correo para aprobar / rechazar / ver.
+ */
+Route::get('stock/prestamo/publico/{token}/aprobar', 'Stock\PrestamoController@aprobarPublico')->name('prestamo_aprobar_publico');
+Route::match(['get', 'post'], 'stock/prestamo/publico/{token}/rechazar', 'Stock\PrestamoController@rechazarPublico')->name('prestamo_rechazar_publico');
+Route::get('stock/prestamo/publico/{token}/ver', 'Stock\PrestamoController@verPublico')->name('prestamo_ver_publico');
+
+/*
+ * Configuración de Préstamos
+ */
+Route::get('stock/configuracion-prestamo', 'Stock\ConfiguracionPrestamoController@index')->name('configuracion_prestamo');
+Route::put('stock/configuracion-prestamo', 'Stock\ConfiguracionPrestamoController@actualizar')->name('actualizar_configuracion_prestamo');
+
+/*
+ * Administradores de depósito
+ */
+Route::get('stock/deposito-administrador', 'Stock\DepositoAdministradorController@index')->name('deposito_administrador');
+Route::get('stock/deposito-administrador/crear', 'Stock\DepositoAdministradorController@crear')->name('crear_deposito_administrador');
+Route::post('stock/deposito-administrador', 'Stock\DepositoAdministradorController@guardar')->name('guardar_deposito_administrador');
+Route::get('stock/deposito-administrador/{id}/editar', 'Stock\DepositoAdministradorController@editar')->name('editar_deposito_administrador');
+Route::put('stock/deposito-administrador/{id}', 'Stock\DepositoAdministradorController@actualizar')->name('actualizar_deposito_administrador');
+Route::delete('stock/deposito-administrador/{id}', 'Stock\DepositoAdministradorController@eliminar')->name('eliminar_deposito_administrador');
 
 // Modulo de ventas
 // Reportes de ventas
@@ -1132,6 +1178,14 @@ Route::get('ventas/turno-gastronomia/{id}/editar', 'Ventas\TurnoGastronomiaContr
 Route::put('ventas/turno-gastronomia/{id}', 'Ventas\TurnoGastronomiaController@actualizar')->name('actualizar_turno_gastronomia');
 Route::delete('ventas/turno-gastronomia/{id}', 'Ventas\TurnoGastronomiaController@eliminar')->name('eliminar_turno_gastronomia');
 
+Route::get('ventas/categoria-fidelidad-gastronomia', 'Ventas\CategoriafidelidadGastronomiaController@index')->name('consultar_categoria_fidelidad_gastronomia');
+Route::get('ventas/categoria-fidelidad-gastronomia/crear', 'Ventas\CategoriafidelidadGastronomiaController@crear')->name('crear_categoria_fidelidad_gastronomia');
+Route::post('ventas/categoria-fidelidad-gastronomia', 'Ventas\CategoriafidelidadGastronomiaController@guardar')->name('guardar_categoria_fidelidad_gastronomia');
+Route::post('ventas/categoria-fidelidad-gastronomia/sincronizar-anita', 'Ventas\CategoriafidelidadGastronomiaController@sincronizarDesdeAnita')->name('sincronizar_categoria_fidelidad_gastronomia_anita');
+Route::get('ventas/categoria-fidelidad-gastronomia/{id}/editar', 'Ventas\CategoriafidelidadGastronomiaController@editar')->name('editar_categoria_fidelidad_gastronomia');
+Route::put('ventas/categoria-fidelidad-gastronomia/{id}', 'Ventas\CategoriafidelidadGastronomiaController@actualizar')->name('actualizar_categoria_fidelidad_gastronomia');
+Route::delete('ventas/categoria-fidelidad-gastronomia/{id}', 'Ventas\CategoriafidelidadGastronomiaController@eliminar')->name('eliminar_categoria_fidelidad_gastronomia');
+
 Route::get('ventas/gastronomia/proceso-facturacion', 'Ventas\GastronomiaProcesoFacturacionController@index')->name('gastronomia_proceso_facturacion');
 Route::get('ventas/gastronomia/api/config', 'Ventas\GastronomiaProcesoFacturacionController@apiConfig')->name('gastronomia_api_config');
 Route::get('ventas/gastronomia/api/turno-estado', 'Ventas\GastronomiaProcesoFacturacionController@apiTurnoEstado')->name('gastronomia_api_turno_estado');
@@ -1161,13 +1215,24 @@ Route::get('ventas/gastronomia/api/cuentas-caja', 'Ventas\GastronomiaProcesoFact
 Route::get('ventas/gastronomia/api/cuentacaja-por-codigo/{codigo}', 'Ventas\GastronomiaProcesoFacturacionController@apiCuentacajaPorCodigo')->name('gastronomia_api_cuentacaja_por_codigo');
 Route::get('ventas/gastronomia/api/cotizacion', 'Ventas\GastronomiaProcesoFacturacionController@apiCotizacion')->name('gastronomia_api_cotizacion');
 Route::post('ventas/gastronomia/api/validar-emision', 'Ventas\GastronomiaProcesoFacturacionController@apiValidarEmision')->name('gastronomia_api_validar_emision');
+Route::post('ventas/gastronomia/api/validar-ticket-tarjeta', 'Ventas\GastronomiaProcesoFacturacionController@apiValidarTicketTarjeta')->name('gastronomia_api_validar_ticket_tarjeta');
+Route::post('ventas/gastronomia/api/validar-ticket-canje-premio', 'Ventas\GastronomiaProcesoFacturacionController@apiValidarTicketCanjePremio')->name('gastronomia_api_validar_ticket_canje_premio');
+Route::post('ventas/gastronomia/api/aplicar-ticket-canje-premio', 'Ventas\GastronomiaProcesoFacturacionController@apiAplicarTicketCanjePremio')->name('gastronomia_api_aplicar_ticket_canje_premio');
+Route::post('ventas/gastronomia/api/validar-canje-fidelidad', 'Ventas\GastronomiaProcesoFacturacionController@apiValidarCanjeFidelidad')->name('gastronomia_api_validar_canje_fidelidad');
+Route::post('ventas/gastronomia/api/aplicar-canje-fidelidad', 'Ventas\GastronomiaProcesoFacturacionController@apiAplicarCanjeFidelidad')->name('gastronomia_api_aplicar_canje_fidelidad');
+Route::get('ventas/gastronomia/api/canjes-premio-turno', 'Ventas\GastronomiaProcesoFacturacionController@apiListarCanjesPremioTurno')->name('gastronomia_api_canjes_premio_turno');
+Route::get('ventas/gastronomia/api/tickets-tarjeta-turno', 'Ventas\GastronomiaProcesoFacturacionController@apiListarTicketsTarjetaTurno')->name('gastronomia_api_tickets_tarjeta_turno');
+Route::get('ventas/gastronomia/api/diagnostico-emision', 'Ventas\GastronomiaProcesoFacturacionController@apiDiagnosticoEmision')->name('gastronomia_api_diagnostico_emision');
 Route::post('ventas/gastronomia/api/emitir-factura', 'Ventas\GastronomiaProcesoFacturacionController@apiEmitirFactura')->name('gastronomia_api_emitir_factura');
 
-Route::get('ventas/gastronomia/cierres-turno', 'Ventas\CierreTurnoGastronomiaController@index')->name('gastronomia_cierres_turno');
+Route::get('ventas/gastronomia/cierres-turno', 'Ventas\CierreTurnoGastronomiaController@index')->name('gastronomia_cierres_turno')->middleware('modo.consulta');
 Route::get('ventas/lista-gastronomia-cierres-turno/{formato}', 'Ventas\CierreTurnoGastronomiaController@exportar')->name('listar_gastronomia_cierres_turno');
 Route::get('ventas/gastronomia/cierres-turno/parcial/{id}/comprobante', 'Ventas\CierreTurnoGastronomiaController@comprobanteParcial')->name('gastronomia_cierre_turno_comprobante_parcial');
 Route::get('ventas/gastronomia/cierres-turno/cierre/{id}/comprobante', 'Ventas\CierreTurnoGastronomiaController@comprobanteCierre')->name('gastronomia_cierre_turno_comprobante_cierre');
 Route::get('ventas/gastronomia/cierres-turno/api/comprobantes', 'Ventas\CierreTurnoGastronomiaController@apiComprobantes')->name('gastronomia_cierres_turno_api_comprobantes');
+Route::get('ventas/gastronomia/cierres-turno/api/canjes-premio', 'Ventas\CierreTurnoGastronomiaController@apiCanjesPremio')->name('gastronomia_cierres_turno_api_canjes_premio');
+Route::get('ventas/gastronomia/cierres-turno/api/canjes-fidelidad', 'Ventas\CierreTurnoGastronomiaController@apiCanjesFidelidad')->name('gastronomia_cierres_turno_api_canjes_fidelidad');
+Route::get('ventas/gastronomia/cierres-turno/api/tickets-tarjeta', 'Ventas\CierreTurnoGastronomiaController@apiTicketsTarjeta')->name('gastronomia_cierres_turno_api_tickets_tarjeta');
 
 Route::get('ventas/gastronomia/habilitacion-turno', 'Ventas\HabilitacionTurnoGastronomiaController@index')->name('gastronomia_habilitacion_turno');
 Route::get('ventas/gastronomia/habilitacion-turno/api/estado', 'Ventas\HabilitacionTurnoGastronomiaController@apiEstado')->name('gastronomia_habilitacion_turno_api_estado');
@@ -1176,6 +1241,7 @@ Route::post('ventas/gastronomia/habilitacion-turno/api/cierre-parcial', 'Ventas\
 Route::post('ventas/gastronomia/habilitacion-turno/api/cerrar', 'Ventas\HabilitacionTurnoGastronomiaController@apiCerrar')->name('gastronomia_habilitacion_turno_api_cerrar');
 Route::get('ventas/gastronomia/habilitacion-turno/api/conciliacion-turno', 'Ventas\HabilitacionTurnoGastronomiaController@apiConciliacionTurno')->name('gastronomia_habilitacion_turno_api_conciliacion_turno');
 Route::get('ventas/gastronomia/habilitacion-turno/api/conciliacion-medio', 'Ventas\HabilitacionTurnoGastronomiaController@apiConciliacionMedio')->name('gastronomia_habilitacion_turno_api_conciliacion_medio');
+Route::get('ventas/gastronomia/habilitacion-turno/api/conciliacion-notas-credito', 'Ventas\HabilitacionTurnoGastronomiaController@apiConciliacionNotasCredito')->name('gastronomia_habilitacion_turno_api_conciliacion_notas_credito');
 Route::get('ventas/gastronomia/habilitacion-turno/informe-mozo-pdf', 'Ventas\HabilitacionTurnoGastronomiaController@informeMozoPdf')->name('gastronomia_habilitacion_turno_informe_mozo_pdf');
 
 Route::get('ventas/gastronomia/jornada', 'Ventas\JornadaGastronomiaController@index')->name('gastronomia_jornada');
@@ -1191,9 +1257,12 @@ Route::post('ventas/gastronomia/saneamiento-turno/api/recalcular-totales', 'Vent
 Route::post('ventas/gastronomia/saneamiento-turno/api/cerrar-cuentas-pendientes', 'Ventas\GastronomiaSaneamientoTurnoController@apiCerrarCuentasPendientes')->name('gastronomia_saneamiento_turno_api_cerrar_cuentas');
 Route::get('ventas/gastronomia/saneamiento-turno/informe-pdf', 'Ventas\GastronomiaSaneamientoTurnoController@informePdf')->name('gastronomia_saneamiento_turno_informe_pdf');
 
-Route::get('ventas/gastronomia/facturas-dia', 'Ventas\GastronomiaFacturasDiaController@index')->name('gastronomia_facturas_dia');
+Route::get('ventas/gastronomia/facturas-dia', 'Ventas\GastronomiaFacturasDiaController@index')->name('gastronomia_facturas_dia')->middleware('modo.consulta');
 Route::get('ventas/lista-gastronomia-facturas-dia/{formato}', 'Ventas\GastronomiaFacturasDiaController@exportar')->name('listar_gastronomia_facturas_dia');
-Route::get('ventas/gastronomia/facturas-dia/{ventaId}/ver', 'Ventas\GastronomiaFacturasDiaController@ver')->name('gastronomia_facturas_dia_ver');
+Route::get('ventas/gastronomia/facturas-dia/{ventaId}/ver', 'Ventas\GastronomiaFacturasDiaController@ver')->name('gastronomia_facturas_dia_ver')->middleware('modo.consulta');
+Route::get('ventas/gastronomia/facturas-dia/{ventaId}/tickets-tarjeta', 'Ventas\GastronomiaFacturasDiaController@apiTicketsTarjeta')->name('gastronomia_facturas_dia_tickets_tarjeta');
+Route::get('ventas/gastronomia/facturas-dia/{ventaId}/canjes-premio', 'Ventas\GastronomiaFacturasDiaController@apiTicketsCanjePremio')->name('gastronomia_facturas_dia_canjes_premio');
+Route::get('ventas/gastronomia/facturas-dia/{ventaId}/canjes-fidelidad', 'Ventas\GastronomiaFacturasDiaController@apiCanjesFidelidad')->name('gastronomia_facturas_dia_canjes_fidelidad');
 Route::post('ventas/gastronomia/facturas-dia/{ventaId}/reimprimir-ticket', 'Ventas\GastronomiaFacturasDiaController@reimprimirTicket')->name('gastronomia_facturas_dia_reimprimir_ticket');
 Route::post('ventas/gastronomia/facturas-dia/{ventaId}/generar-nota-credito', 'Ventas\GastronomiaFacturasDiaController@generarNotaCredito')->name('gastronomia_facturas_dia_generar_nota_credito');
 
@@ -1203,6 +1272,7 @@ Route::post('ventas/arca-caea/solicitar', 'Ventas\ArcaCaeaController@solicitar')
 Route::post('ventas/arca-caea/{id}/reintentar', 'Ventas\ArcaCaeaController@reintentar')->name('arca_caea_reintentar');
 
 Route::get('ventas/puntoventa', 'Ventas\PuntoventaController@index')->name('puntoventa');
+Route::get('ventas/puntoventa/arca-puntos-venta', 'Ventas\PuntoventaController@puntosVentaArca')->name('puntoventa_arca_puntos_venta');
 Route::post('ventas/puntoventa/sincronizar-anita', 'Ventas\PuntoventaController@sincronizarDesdeAnita')->name('sincronizar_puntoventa_anita');
 Route::get('ventas/puntoventa/crear', 'Ventas\PuntoventaController@crear')->name('crear_puntoventa');
 Route::post('ventas/puntoventa', 'Ventas\PuntoventaController@guardar')->name('guardar_puntoventa');
@@ -1414,8 +1484,8 @@ Route::post('graficos/generaordenes', 'Graficos\GraficosController@generaOrdenes
 Route::get('caja/cuentacaja', 'Caja\CuentacajaController@index')->name('cuentacaja');
 Route::get('caja/cuentacaja/crear', 'Caja\CuentacajaController@crear')->name('crear_cuentacaja');
 Route::post('caja/cuentacaja', 'Caja\CuentacajaController@guardar')->name('guardar_cuentacaja');
-Route::get('caja/cuentacaja/{id}/editar', 'Caja\CuentacajaController@editar')->name('editar_cuentacaja');
-Route::put('caja/cuentacaja/{id}', 'Caja\CuentacajaController@actualizar')->name('actualizar_cuentacaja');
+Route::get('caja/cuentacaja/{id}/editar', 'Caja\CuentacajaController@editar')->name('editar_cuentacaja')->middleware('modo.consulta');
+Route::put('caja/cuentacaja/{id}', 'Caja\CuentacajaController@actualizar')->name('actualizar_cuentacaja')->middleware('modo.consulta');
 Route::delete('caja/cuentacaja/{id}', 'Caja\CuentacajaController@eliminar')->name('eliminar_cuentacaja');
 
 // Rutas de consulta de cuentas de caja
@@ -2177,6 +2247,23 @@ Route::post('configuracion/sala', 'Configuracion\SalaController@guardar')->name(
 Route::get('configuracion/sala/{id}/editar', 'Configuracion\SalaController@editar')->name('edita_sala');
 Route::put('configuracion/sala/{id}', 'Configuracion\SalaController@actualizar')->name('actualiza_sala');
 Route::delete('configuracion/sala/{id}', 'Configuracion\SalaController@eliminar')->name('elimina_sala');
+
+/*
+ * Modulo de Sala
+ */
+Route::get('sala/zona-sala', 'Sala\ZonaSalaController@index')->name('consultar_zona_sala');
+Route::get('sala/zona-sala/crear', 'Sala\ZonaSalaController@crear')->name('crear_zona_sala');
+Route::post('sala/zona-sala', 'Sala\ZonaSalaController@guardar')->name('guardar_zona_sala');
+Route::get('sala/zona-sala/{id}/editar', 'Sala\ZonaSalaController@editar')->name('editar_zona_sala');
+Route::put('sala/zona-sala/{id}', 'Sala\ZonaSalaController@actualizar')->name('actualizar_zona_sala');
+Route::delete('sala/zona-sala/{id}', 'Sala\ZonaSalaController@eliminar')->name('eliminar_zona_sala');
+
+Route::get('sala/prioridad-sala', 'Sala\PrioridadSalaController@index')->name('consultar_prioridad_sala');
+Route::get('sala/prioridad-sala/crear', 'Sala\PrioridadSalaController@crear')->name('crear_prioridad_sala');
+Route::post('sala/prioridad-sala', 'Sala\PrioridadSalaController@guardar')->name('guardar_prioridad_sala');
+Route::get('sala/prioridad-sala/{id}/editar', 'Sala\PrioridadSalaController@editar')->name('editar_prioridad_sala');
+Route::put('sala/prioridad-sala/{id}', 'Sala\PrioridadSalaController@actualizar')->name('actualizar_prioridad_sala');
+Route::delete('sala/prioridad-sala/{id}', 'Sala\PrioridadSalaController@eliminar')->name('eliminar_prioridad_sala');
 
 /* Modulo UIF */
 /*

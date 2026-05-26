@@ -1,20 +1,29 @@
+@php
+	use App\Support\Stock\FormulaArticuloNumero;
+	$excelMostrarCodigo = FormulaArticuloNumero::mostrarCodigo();
+	$excelColSpan = $excelMostrarCodigo ? 9 : 10;
+@endphp
 <table>
 	@if (!empty($reservarFilaLogoExcel))
 		<tbody>
 			<tr>
-				<td colspan="10" style="height: 52px;">&#160;</td>
+				<td colspan="{{ $excelColSpan }}" style="height: 52px;">&#160;</td>
 			</tr>
 		</tbody>
 	@endif
 	<tbody>
 		<tr>
-			<td colspan="10"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">F&oacute;rmulas de art&iacute;culos</h2></td>
+			<td colspan="{{ $excelColSpan }}"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">F&oacute;rmulas de art&iacute;culos</h2></td>
 		</tr>
 	</tbody>
 	<thead>
 		<tr>
-			<th>ID f&oacute;rmula</th>
-			<th>C&oacute;digo f&oacute;rmula</th>
+			@if ($excelMostrarCodigo)
+				<th>C&oacute;d. f&oacute;rmula</th>
+			@else
+				<th>ID f&oacute;rmula</th>
+				<th>C&oacute;digo f&oacute;rmula</th>
+			@endif
 			<th>ID art&iacute;culo</th>
 			<th>SKU art&iacute;culo</th>
 			<th>Descripci&oacute;n art&iacute;culo</th>
@@ -28,8 +37,12 @@
 	<tbody>
 		@foreach ($formulas as $data)
 			<tr>
-				<td>{{ $data->id }}</td>
-				<td>{{ $data->codigo }}</td>
+				@if ($excelMostrarCodigo)
+					<td>{{ FormulaArticuloNumero::paraFormula($data) }}</td>
+				@else
+					<td>{{ $data->id }}</td>
+					<td>{{ $data->codigo }}</td>
+				@endif
 				<td>{{ $data->articulo_id }}</td>
 				<td>{{ $data->articulo_sku ?? '' }}</td>
 				<td>{{ $data->articulo_descripcion ?? '' }}</td>

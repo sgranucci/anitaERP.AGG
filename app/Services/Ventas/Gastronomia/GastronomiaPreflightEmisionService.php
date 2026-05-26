@@ -4,6 +4,7 @@ namespace App\Services\Ventas\Gastronomia;
 
 use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
 use App\Models\Ventas\CuentaGastronomia;
+use App\Models\Ventas\Puntoventa;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
 use App\Support\Ventas\GastronomiaDepositoConfigSupport;
 use App\Support\Ventas\GastronomiaCuentacajaEfectivo;
@@ -33,6 +34,7 @@ final class GastronomiaPreflightEmisionService
         int $monedaId,
         array $mediosPago,
         array $payloadFactura,
+        bool $facturacionConDescuento = false,
     ): array {
         $errores = [];
 
@@ -82,7 +84,11 @@ final class GastronomiaPreflightEmisionService
             $errores[] = 'Configure punto de venta CAE y/o CAEA en la configuración gastronomía de esta terminal.';
         } else {
             try {
-                ArcaWsfeEmisionResiliencia::resolverPuntoventaEmision($pvCae, $pvCaea, false);
+                $resolucionPv = ArcaWsfeEmisionResiliencia::resolverPuntoventaEmision($pvCae, $pvCaea, false);
+                $errores = array_merge(
+                    $errores,
+                    self::erroresPuntoventaEmisionInexistente($resolucionPv, $pvCae, $pvCaea),
+                );
             } catch (InvalidArgumentException $e) {
                 $errores[] = $e->getMessage();
             }
@@ -109,6 +115,15 @@ final class GastronomiaPreflightEmisionService
         }
 
         $preview = $this->facturacionGastronomiaService->previewTotalesEmision($payloadFactura, $cuenta);
+
+        $errores = array_merge(
+            $errores,
+            $this->erroresCanjePendienteRequiereFacturacionConDescuento(
+                $cuenta,
+                $facturacionConDescuento,
+                $preview,
+            ),
+        );
         if (! empty($preview['error'])) {
             $errores[] = (string) $preview['error'];
         }
@@ -142,8 +157,16 @@ final class GastronomiaPreflightEmisionService
         int $monedaId,
         array $mediosPago,
         array $payloadFactura,
+        bool $facturacionConDescuento = false,
     ): void {
-        $errores = $this->erroresAntesDeEmitir($cuenta, $cfg, $monedaId, $mediosPago, $payloadFactura);
+        $errores = $this->erroresAntesDeEmitir(
+            $cuenta,
+            $cfg,
+            $monedaId,
+            $mediosPago,
+            $payloadFactura,
+            $facturacionConDescuento,
+        );
         if ($errores !== []) {
             throw new InvalidArgumentException(implode(' ', $errores));
         }
@@ -160,5 +183,113 @@ final class GastronomiaPreflightEmisionService
         $ccErr = GastronomiaCuentacajaEfectivo::mensajeErrorResolucion($empresaId);
 
         return $ccErr ? [$ccErr] : [];
+    }
+
+    /**
+     * Canjes premio Wigos (cupón) y fidelidad (tarjeta): solo F8, descuento configurado y factura de cortesía.
+     *
+     * @param  array{total?:float,sin_cobranza?:bool,factura_cortesia?:bool,error?:string}  $preview
+     * @return list<string>
+     */
+    private function erroresCanjePendienteRequiereFacturacionConDescuento(
+        CuentaGastronomia $cuenta,
+        bool $facturacionConDescuento,
+        array $preview,
+    ): array {
+        if (! $this->cuentaTieneCanjePendienteFacturacionConDescuento($cuenta)) {
+            return [];
+        }
+
+        if (! $facturacionConDescuento) {
+            return [
+                'Esta cuenta tiene un canje de premio o fidelidad pendiente: use F8 «Facturar con descuento». '
+                .'No puede facturar con F5 ni sin el flujo de descuento.',
+            ];
+        }
+
+        $errores = [];
+        $descuentoId = (int) ($cuenta->descuento_gastronomia_id ?? 0);
+        if ($descuentoId <= 0) {
+            $errores[] = 'Debe aplicar el descuento gastronomía del canje (F8) antes de emitir.';
+
+            return $errores;
+        }
+
+        $descuento = $cuenta->descuentoGastronomia;
+        if (! $descuento) {
+            $errores[] = 'Descuento gastronomía del canje no encontrado.';
+
+            return $errores;
+        }
+
+        $codigoDesc = trim((string) $descuento->codigo);
+        if ($this->tieneCanjePremioPendiente($cuenta)) {
+            $codigoEsperado = trim((string) config('gastronomia.canje_premio_descuento_codigo', '10'));
+            if ($codigoDesc !== $codigoEsperado) {
+                $errores[] = 'El descuento debe ser el configurado para canje de premios Wigos (código '.$codigoEsperado.').';
+            }
+        }
+        if ($this->tieneCanjeFidelidadPendiente($cuenta)) {
+            $codigoEsperado = trim((string) config('gastronomia.canje_fidelidad_descuento_codigo', '10'));
+            if ($codigoDesc !== $codigoEsperado) {
+                $errores[] = 'El descuento debe ser el configurado para canje de fidelidad (código '.$codigoEsperado.').';
+            }
+        }
+
+        if (empty($preview['sin_cobranza'])) {
+            $errores[] = 'Los canjes deben facturarse como cortesía ($0,01) con el descuento del 100 % aplicado.';
+        }
+
+        return $errores;
+    }
+
+    private function cuentaTieneCanjePendienteFacturacionConDescuento(CuentaGastronomia $cuenta): bool
+    {
+        return $this->tieneCanjePremioPendiente($cuenta) || $this->tieneCanjeFidelidadPendiente($cuenta);
+    }
+
+    private function tieneCanjePremioPendiente(CuentaGastronomia $cuenta): bool
+    {
+        $pendiente = $cuenta->canje_premio_pendiente;
+
+        return is_array($pendiente) && trim((string) ($pendiente['numerocupon'] ?? '')) !== '';
+    }
+
+    private function tieneCanjeFidelidadPendiente(CuentaGastronomia $cuenta): bool
+    {
+        $pendiente = $cuenta->canje_fidelidad_pendiente;
+
+        return is_array($pendiente) && trim((string) ($pendiente['trackdata'] ?? '')) !== '';
+    }
+
+    /**
+     * @param  array{puntoventa_id:int,usa_caea:bool}  $resolucionPv
+     * @return list<string>
+     */
+    private static function erroresPuntoventaEmisionInexistente(
+        array $resolucionPv,
+        int $pvCae,
+        int $pvCaea,
+    ): array {
+        $puntoventaId = (int) ($resolucionPv['puntoventa_id'] ?? 0);
+        if ($puntoventaId <= 0) {
+            return ['Configure un punto de venta CAE o CAEA válido en la configuración gastronomía de esta terminal.'];
+        }
+
+        if (Puntoventa::query()->whereKey($puntoventaId)->exists()) {
+            return [];
+        }
+
+        $usaCaea = ! empty($resolucionPv['usa_caea']);
+        $configId = $usaCaea ? $pvCaea : $pvCae;
+        $tipo = $usaCaea ? 'CAEA' : 'CAE';
+        $modo = $usaCaea && ArcaWsfeEmisionResiliencia::forzarModoCaea()
+            ? ' (modo CAEA forzado por ARCA_WSFE_FORZAR_MODO_CAEA)'
+            : '';
+
+        return [
+            'El punto de venta '.$tipo.' configurado (id '.$configId.') no existe o fue eliminado'.$modo
+            .'. Actualícelo en Ventas → Configuración punto de venta gastronomía.',
+        ];
     }
 }

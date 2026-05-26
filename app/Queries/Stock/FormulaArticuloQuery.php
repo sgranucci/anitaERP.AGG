@@ -17,12 +17,13 @@ class FormulaArticuloQuery implements FormulaArticuloQueryInterface
         return $this->model->query()->first();
     }
 
-    public function leeFormulaArticulo($busqueda, $flPaginando = null, $withHijos = false)
+    public function leeFormulaArticulo($busqueda, $flPaginando = null, $withHijos = false, ?string $conOpcionales = null)
     {
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
         $empresas = $this->empresaRepository->traeEmpresasAsignadas();
+        $conOpcionales = in_array($conOpcionales, ['si', 'no'], true) ? $conOpcionales : null;
 
         $q = $this->model->query()
             ->select([
@@ -65,6 +66,22 @@ class FormulaArticuloQuery implements FormulaArticuloQueryInterface
                 foreach ($columns as $col) {
                     $query->orWhere($col['columna'], 'LIKE', '%'.$busqueda.'%');
                 }
+            });
+        }
+
+        if ($conOpcionales === 'si') {
+            $q->whereExists(function ($sub) {
+                $sub->select(\DB::raw(1))
+                    ->from('formula_articulo_hijo')
+                    ->whereColumn('formula_articulo_hijo.formula_articulo_id', 'formula_articulo.id')
+                    ->where('formula_articulo_hijo.esopcional', 1);
+            });
+        } elseif ($conOpcionales === 'no') {
+            $q->whereNotExists(function ($sub) {
+                $sub->select(\DB::raw(1))
+                    ->from('formula_articulo_hijo')
+                    ->whereColumn('formula_articulo_hijo.formula_articulo_id', 'formula_articulo.id')
+                    ->where('formula_articulo_hijo.esopcional', 1);
             });
         }
 

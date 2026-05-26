@@ -86,7 +86,11 @@ final class GastronomiaJornadaService
             'jornada_abierta' => $abierta !== null,
             'jornada_id' => $abierta?->id,
             'fecha_jornada' => $abierta?->fecha_jornada?->format('Y-m-d'),
+            'fecha_jornada_fmt' => $abierta?->fecha_jornada
+                ? $this->formatearFechaEncabezado($abierta->fecha_jornada->format('Y-m-d'))
+                : null,
             'fecha_factura_hoy' => $hoy,
+            'fecha_factura_hoy_fmt' => $this->formatearFechaEncabezado($hoy),
             'apertura_en' => $abierta?->apertura_en?->format('Y-m-d H:i:s'),
             'usuario_apertura' => $abierta?->usuarioApertura?->nombre,
             'observacion_apertura' => $abierta?->observacion_apertura,
@@ -218,22 +222,26 @@ final class GastronomiaJornadaService
     }
 
     /**
+     * Bloqueantes para cerrar la jornada.
+     * Las cuentas en estado 'cerrada sin facturar' son estado terminal (las dejó así el
+     * saneamiento) y NO bloquean: el log queda en el saneamiento del turno y en
+     * cuenta.estado = 'cerrada'.
+     *
      * @return list<string>
      */
     public function erroresAntesDeCerrar(int $empresaId): array
     {
         $errores = [];
 
-        $cuentasPendientes = CuentaGastronomia::query()
+        $cuentasAbiertas = CuentaGastronomia::query()
             ->where('empresa_id', $empresaId)
-            ->whereIn('estado', [
-                CuentaGastronomia::ESTADO_ABIERTA,
-                CuentaGastronomia::ESTADO_CERRADA,
-            ])
+            ->where('estado', CuentaGastronomia::ESTADO_ABIERTA)
             ->count();
 
-        if ($cuentasPendientes > 0) {
-            $errores[] = 'Hay '.$cuentasPendientes.' cuenta(s) de mesa sin facturar (abiertas o cerradas).';
+        if ($cuentasAbiertas > 0) {
+            $errores[] = 'Hay '.$cuentasAbiertas.' cuenta(s) de mesa ABIERTA(S) sin facturar. '
+                .'Factúrelas o ciérrelas sin facturar desde Ventas → Gastronomía → '
+                .'Saneamiento de turnos antes de cerrar la jornada.';
         }
 
         $turnosSinCerrar = TurnoOperativoGastronomia::query()
@@ -242,7 +250,8 @@ final class GastronomiaJornadaService
             ->count();
 
         if ($turnosSinCerrar > 0 && config('gastronomia.requiere_habilitacion_turno', true)) {
-            $errores[] = 'Hay '.$turnosSinCerrar.' turno(s) habilitado(s) sin cerrar en alguna terminal.';
+            $errores[] = 'Hay '.$turnosSinCerrar.' turno(s) habilitado(s) sin cerrar en alguna terminal. '
+                .'Cierre cada turno (especialmente turno noche) antes de cerrar la jornada.';
         }
 
         return $errores;
@@ -310,6 +319,15 @@ final class GastronomiaJornadaService
     {
         try {
             return Carbon::parse($fechaYmd)->format('d/m/Y');
+        } catch (Throwable) {
+            return $fechaYmd;
+        }
+    }
+
+    private function formatearFechaEncabezado(string $fechaYmd): string
+    {
+        try {
+            return Carbon::parse($fechaYmd)->format('d-m-Y');
         } catch (Throwable) {
             return $fechaYmd;
         }

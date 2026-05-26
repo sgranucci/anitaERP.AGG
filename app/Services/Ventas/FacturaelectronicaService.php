@@ -654,6 +654,17 @@ class FacturaElectronicaService
 				];
 				$totalTributo += $concepto['importe'];
 			}
+			if ($concepto['concepto'] === 'Impuesto Interno' && (float) ($concepto['importe'] ?? 0) != 0.) {
+				// ARCA WSFE: Id=4 = "Impuestos Internos".
+				$tributos[] = [
+					'id' => 4,
+					'base_imp' => $concepto['baseimponible'] ?? 0,
+					'alicuota' => $concepto['tasa'] ?? 0,
+					'desc' => $concepto['concepto'],
+					'importe' => $concepto['importe'],
+				];
+				$totalTributo += $concepto['importe'];
+			}
 		}
 	}
 

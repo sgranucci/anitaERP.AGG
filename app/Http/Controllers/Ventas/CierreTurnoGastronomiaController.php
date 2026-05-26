@@ -7,7 +7,10 @@ use App\Http\Controllers\Controller;
 use App\Models\Ventas\CierreParcialTurnoGastronomia;
 use App\Models\Ventas\TurnoOperativoGastronomia;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Services\Ventas\Gastronomia\GastronomiaCategoriafidelidadCanjeService;
 use App\Services\Ventas\Gastronomia\GastronomiaCuentaService;
+use App\Services\Ventas\Gastronomia\GastronomiaTicketCanjePremioService;
+use App\Services\Ventas\Gastronomia\GastronomiaTicketTarjetaCanjeService;
 use App\Services\Ventas\Gastronomia\GastronomiaTurnoOperativoService;
 use App\Support\Ventas\GastronomiaCierreTurnoReporteSupport;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
@@ -25,6 +28,9 @@ class CierreTurnoGastronomiaController extends Controller
         private EmpresaRepositoryInterface $empresaRepository,
         private GastronomiaCuentaService $cuentaService,
         private GastronomiaTurnoOperativoService $turnoOperativoService,
+        private GastronomiaTicketCanjePremioService $ticketCanjePremioService,
+        private GastronomiaTicketTarjetaCanjeService $ticketTarjetaCanjeService,
+        private GastronomiaCategoriafidelidadCanjeService $categoriafidelidadCanjeService,
     ) {
     }
 
@@ -132,6 +138,129 @@ class CierreTurnoGastronomiaController extends Controller
         ]);
     }
 
+    public function apiCanjesPremio(Request $request)
+    {
+        can('listar-cierres-turno-gastronomia');
+
+        try {
+            $alcance = $this->resolverAlcanceCierre($request);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        }
+
+        $canjes = $this->ticketCanjePremioService->listarPorAlcanceTurno(
+            (int) $alcance['empresa_id'],
+            $alcance['fecha_jornada'],
+            $alcance['identificador_pc'],
+            $alcance['desde'],
+            $alcance['hasta'],
+        );
+
+        $pagina = $this->slicePaginado($this->mapCanjesPremioJson($canjes), $request);
+
+        return response()->json([
+            'ok' => true,
+            'alcance' => [
+                'titulo' => 'Canjes de premios — '.$alcance['titulo'],
+                'subtitulo' => $alcance['subtitulo'],
+            ],
+            'canjes' => $pagina['items'],
+            'paginacion' => $pagina['paginacion'],
+        ]);
+    }
+
+    public function apiTicketsTarjeta(Request $request)
+    {
+        can('listar-cierres-turno-gastronomia');
+
+        try {
+            $alcance = $this->resolverAlcanceCierre($request);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        }
+
+        $tickets = $this->ticketTarjetaCanjeService->listarPorAlcanceTurno(
+            (int) $alcance['empresa_id'],
+            $alcance['fecha_jornada'],
+            $alcance['identificador_pc'],
+            $alcance['desde'],
+            $alcance['hasta'],
+        );
+
+        $pagina = $this->slicePaginado($this->mapTicketsTarjetaJson($tickets), $request);
+
+        return response()->json([
+            'ok' => true,
+            'alcance' => [
+                'titulo' => 'Tickets tarjeta — '.$alcance['titulo'],
+                'subtitulo' => $alcance['subtitulo'],
+            ],
+            'tickets' => $pagina['items'],
+            'paginacion' => $pagina['paginacion'],
+        ]);
+    }
+
+    public function apiCanjesFidelidad(Request $request)
+    {
+        can('listar-cierres-turno-gastronomia');
+
+        try {
+            $alcance = $this->resolverAlcanceCierre($request);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        }
+
+        $canjes = $this->categoriafidelidadCanjeService->listarPorAlcanceTurno(
+            (int) $alcance['empresa_id'],
+            $alcance['fecha_jornada'],
+            $alcance['identificador_pc'],
+            $alcance['desde'],
+            $alcance['hasta'],
+        );
+
+        $pagina = $this->slicePaginado($this->mapCanjesFidelidadJson($canjes), $request);
+
+        return response()->json([
+            'ok' => true,
+            'alcance' => [
+                'titulo' => 'Canjes de fidelidad — '.$alcance['titulo'],
+                'subtitulo' => $alcance['subtitulo'],
+            ],
+            'canjes' => $pagina['items'],
+            'paginacion' => $pagina['paginacion'],
+        ]);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $items
+     * @return array{items: list<array<string, mixed>>, paginacion: array{page:int, per_page:int, total:int, total_pages:int}}
+     */
+    private function slicePaginado(array $items, Request $request): array
+    {
+        $page = max(1, (int) $request->input('page', 1));
+        $perPage = (int) $request->input('per_page', 40);
+        $perPage = max(10, min(200, $perPage));
+
+        $total = count($items);
+        $totalPages = $total > 0 ? (int) ceil($total / $perPage) : 0;
+        if ($totalPages > 0 && $page > $totalPages) {
+            $page = $totalPages;
+        }
+
+        $offset = max(0, ($page - 1) * $perPage);
+        $slice = array_slice($items, $offset, $perPage);
+
+        return [
+            'items' => array_values($slice),
+            'paginacion' => [
+                'page' => $page,
+                'per_page' => $perPage,
+                'total' => $total,
+                'total_pages' => $totalPages,
+            ],
+        ];
+    }
+
     public function exportar(Request $request, string $formato)
     {
         can('listar-cierres-turno-gastronomia');
@@ -202,6 +331,101 @@ class CierreTurnoGastronomiaController extends Controller
         if (count($asignadas) > 1 && ! in_array($empresaId, $asignadas, true)) {
             abort(403, 'Empresa no permitida para su usuario.');
         }
+    }
+
+    /**
+     * @return array{
+     *   identificador_pc: string,
+     *   empresa_id: int,
+     *   fecha_jornada: string,
+     *   desde: Carbon,
+     *   hasta: Carbon,
+     *   titulo: string,
+     *   subtitulo: string
+     * }
+     */
+    private function resolverAlcanceCierre(Request $request): array
+    {
+        $tipo = trim((string) $request->input('tipo', ''));
+        $id = (int) $request->input('id', 0);
+        if ($id <= 0 || ! in_array($tipo, ['parcial', 'cierre'], true)) {
+            throw new InvalidArgumentException('Registro de cierre inválido.');
+        }
+
+        $alcance = $this->reporteSupport->alcanceComprobantesRegistro($tipo, $id);
+        $this->assertAccesoEmpresa((int) $alcance['empresa_id']);
+
+        return $alcance;
+    }
+
+    /**
+     * @param  list<\App\Models\Ventas\TicketcanjeGastronomia>  $canjes
+     * @return list<array<string, mixed>>
+     */
+    private function mapCanjesPremioJson(array $canjes): array
+    {
+        return collect($canjes)->map(fn ($t) => [
+            'id' => $t->id,
+            'numerocupon' => $t->numerocupon,
+            'ticket_id' => $t->ticket_id,
+            'renglon' => $t->renglon,
+            'sku' => $t->articulo->sku ?? '',
+            'articulo' => $t->articulo->descripcion ?? '',
+            'cantidad' => round((float) $t->cantidad, 4),
+            'puntos' => (int) $t->puntos,
+            'venta_id' => $t->venta_id,
+            'venta_codigo' => $t->venta->codigo ?? '',
+            'mozo' => $t->mozo->nombre ?? '',
+            'apellido' => $t->apellido,
+            'nombre' => $t->nombre,
+            'numerodocumento' => $t->numerodocumento,
+            'fechacanje' => $t->fechacanje?->format('d/m/Y H:i:s'),
+        ])->values()->all();
+    }
+
+    /**
+     * @param  list<\App\Models\Ventas\TickettarjetaGastronomia>  $tickets
+     * @return list<array<string, mixed>>
+     */
+    private function mapTicketsTarjetaJson(array $tickets): array
+    {
+        return collect($tickets)->map(fn ($t) => [
+            'id' => $t->id,
+            'ticket_id' => $t->ticket_id,
+            'numeroticket' => $t->numeroticket,
+            'numerodocumento' => $t->numerodocumento,
+            'fecha_emision' => $t->fecha?->format('d/m/Y'),
+            'monto' => round((float) $t->monto, 2),
+            'montoticket' => round((float) $t->montoticket, 2),
+            'numerocupon' => $t->numerocupon,
+            'venta_id' => $t->venta_id,
+            'venta_codigo' => $t->venta->codigo ?? '',
+            'created_at' => $t->created_at?->format('d/m/Y H:i:s'),
+        ])->values()->all();
+    }
+
+    /**
+     * @param  list<\App\Models\Ventas\CategoriafidelidadEntregaGastronomia>  $entregas
+     * @return list<array<string, mixed>>
+     */
+    private function mapCanjesFidelidadJson(array $entregas): array
+    {
+        return collect($entregas)->map(fn ($e) => [
+            'id' => $e->id,
+            'venta_id' => $e->venta_id,
+            'venta_codigo' => $e->venta->codigo ?? '',
+            'tarjeta' => $e->tarjeta,
+            'trackdata' => $e->trackdata,
+            'documento' => $e->documento,
+            'apellido' => $e->apellido,
+            'nombre' => $e->nombre,
+            'titular' => trim((string) $e->apellido.' '.(string) $e->nombre),
+            'categoria_codigo' => $e->categoriafidelidad->codigo ?? '',
+            'categoria_nombre' => $e->categoriafidelidad->nombre ?? '',
+            'sku' => $e->articulo->sku ?? '',
+            'articulo' => $e->articulo->descripcion ?? '',
+            'fechacanje' => $e->fechacanje?->format('d/m/Y H:i:s'),
+        ])->values()->all();
     }
 
     /**

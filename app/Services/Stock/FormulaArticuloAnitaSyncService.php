@@ -9,7 +9,6 @@ use App\Models\Stock\Formula_Articulo;
 use App\Models\Stock\Formula_Articulo_Estado;
 use App\Models\Stock\Formula_Articulo_Hijo;
 use App\Repositories\Stock\Formula_Articulo_EstadoRepositoryInterface;
-use App\Support\Stock\FormulaArticuloGastronomia;
 use App\Support\Stock\FormulaArticuloSku;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -36,6 +35,54 @@ class FormulaArticuloAnitaSyncService
     ) {}
 
     /**
+     * Borra todas las fórmulas y dependencias en el ERP, y resetea articulo.formula.
+     *
+     * Se ejecuta antes de un re-sync masivo para evitar arrastrar opcionales/orden viejos
+     * cuando la lógica de mapeo cambió o cuando los datos en el ERP quedaron inconsistentes
+     * con stkcmae/stkcmov en Anita.
+     *
+     * @return array{formulas:int, hijos:int, estados:int, archivos:int, articulos_formula_reseteados:int}
+     */
+    public function purgarFormulas(): array
+    {
+        return DB::transaction(function (): array {
+            $hijos = (int) DB::table('formula_articulo_hijo')->count();
+            $estados = Schema::hasTable('formula_articulo_estado')
+                ? (int) DB::table('formula_articulo_estado')->count()
+                : 0;
+            $archivos = Schema::hasTable('formula_articulo_archivo')
+                ? (int) DB::table('formula_articulo_archivo')->count()
+                : 0;
+            $formulas = (int) DB::table('formula_articulo')->count();
+
+            DB::table('formula_articulo_hijo')->delete();
+            if (Schema::hasTable('formula_articulo_estado')) {
+                DB::table('formula_articulo_estado')->delete();
+            }
+            if (Schema::hasTable('formula_articulo_archivo')) {
+                DB::table('formula_articulo_archivo')->delete();
+            }
+            DB::table('formula_articulo')->delete();
+
+            $articulosReseteados = 0;
+            if (Schema::hasColumn('articulo', 'formula')) {
+                $articulosReseteados = (int) DB::table('articulo')
+                    ->whereNotNull('formula')
+                    ->where('formula', '<>', 0)
+                    ->update(['formula' => null]);
+            }
+
+            return [
+                'formulas' => $formulas,
+                'hijos' => $hijos,
+                'estados' => $estados,
+                'archivos' => $archivos,
+                'articulos_formula_reseteados' => $articulosReseteados,
+            ];
+        });
+    }
+
+    /**
      * @return array{formulas:int, lineas:int, advertencias:list<string>}
      */
     public function sincronizarDesdeArchivos(string $pathMae, string $pathMov, int $usuarioId): array
@@ -53,11 +100,10 @@ class FormulaArticuloAnitaSyncService
      */
     public function listarStkcmaeDesdeAnita(): array
     {
-        $camposMae = 'stkcm_formula, stkcm_articulo, stkcm_detalle, stkcm_coef_venta, stkcm_cod_impuesto, stkcm_cant_porcion';
         $payload = [
             'acc' => 'list',
             'tabla' => 'stkcmae',
-            'campos' => $camposMae,
+            'campos' => $this->camposStkcmae(),
             'orderBy' => 'stkcm_formula',
         ];
         return $this->normalizarFilasStkcmae($this->decodificarRespuestaList($this->apiAnita->apiCall($payload)));
@@ -68,14 +114,10 @@ class FormulaArticuloAnitaSyncService
      */
     public function listarStkcmovDesdeAnita(): array
     {
-        $camposMov = 'stkcv_formula, stkcv_linea, stkcv_art_hijo, stkcv_cantidad, stkcv_formula_hija, stkcv_factor_costo, stkcv_deposito, stkcv_opcional';
-        if (strtoupper((string) config('app.empresa')) === 'FRASLE') {
-            $camposMov .= ', stkcv_ranura';
-        }
         $payload = [
             'acc' => 'list',
             'tabla' => 'stkcmov',
-            'campos' => $camposMov,
+            'campos' => $this->camposStkcmov(),
             'orderBy' => 'stkcv_formula, stkcv_linea',
         ];
 
@@ -92,6 +134,177 @@ class FormulaArticuloAnitaSyncService
             $this->listarStkcmovDesdeAnita(),
             $usuarioId
         );
+    }
+
+    /**
+     * Lista cabecera de una sola fórmula Anita (stkcmae filtrado por stkcm_formula).
+     * Útil para reintento individual cuando el list masivo del bridge falla por timeout/tamaño.
+     *
+     * @return list<array{stkcm_formula:int, stkcm_formula_codigo:string, stkcm_articulo:string, stkcm_detalle:string, stkcm_cant_porcion:float}>
+     */
+    public function listarStkcmaeUnaDesdeAnita(int $anitaFormula): array
+    {
+        if ($anitaFormula <= 0) {
+            return [];
+        }
+        $payload = [
+            'acc' => 'list',
+            'tabla' => 'stkcmae',
+            'campos' => $this->camposStkcmae(),
+            'whereArmado' => " WHERE stkcm_formula = {$anitaFormula} ",
+        ];
+
+        return $this->normalizarFilasStkcmae($this->decodificarRespuestaList($this->apiAnita->apiCall($payload)));
+    }
+
+    /**
+     * Líneas de una sola fórmula Anita (stkcmov filtrado por stkcv_formula).
+     *
+     * @return list<array{stkcv_formula:int, stkcv_linea:int, stkcv_art_hijo:string, stkcv_cantidad:float, stkcv_formula_hija:int, stkcv_factor_costo:float, stkcv_deposito:int, stkcv_opcional:string, stkcv_ranura:?int}>
+     */
+    public function listarStkcmovUnaDesdeAnita(int $anitaFormula): array
+    {
+        if ($anitaFormula <= 0) {
+            return [];
+        }
+        $payload = [
+            'acc' => 'list',
+            'tabla' => 'stkcmov',
+            'campos' => $this->camposStkcmov(),
+            'whereArmado' => " WHERE stkcv_formula = {$anitaFormula} ",
+            'orderBy' => 'stkcv_linea',
+        ];
+
+        return $this->normalizarFilasStkcmov($this->decodificarRespuestaList($this->apiAnita->apiCall($payload)));
+    }
+
+    /**
+     * Sincroniza una sola fórmula Anita por su número stkcm_formula.
+     *
+     * @return array{formulas:int, lineas:int, advertencias:list<string>}
+     */
+    public function sincronizarUnaDesdeApi(int $anitaFormula, int $usuarioId, bool $ejecutarVinculoCodigoSku = true): array
+    {
+        if ($anitaFormula <= 0) {
+            return ['formulas' => 0, 'lineas' => 0, 'advertencias' => ['anita_stkcm_formula inválido.']];
+        }
+
+        return $this->sincronizarInterno(
+            $this->listarStkcmaeUnaDesdeAnita($anitaFormula),
+            $this->listarStkcmovUnaDesdeAnita($anitaFormula),
+            $usuarioId,
+            $ejecutarVinculoCodigoSku
+        );
+    }
+
+    /**
+     * Recorre todas las fórmulas ya cargadas en el ERP (anita_stkcm_formula > 0) y las
+     * re-sincroniza una por una contra Anita. No aborta ante errores individuales: los anota
+     * como advertencia y continúa. El vínculo SKU global corre una sola vez al final.
+     *
+     * @param  null|callable(int $anitaFormula, int $erpId, ?array{formulas:int,lineas:int,advertencias:list<string>} $resultado, ?string $error): void  $progreso
+     * @return array{formulas:int, lineas:int, advertencias:list<string>, procesadas:int, fallidas:int}
+     */
+    public function sincronizarTodasUnaPorUnaDesdeApi(int $usuarioId, ?callable $progreso = null): array
+    {
+        $totalFormulas = 0;
+        $totalLineas = 0;
+        $advertencias = [];
+        $procesadas = 0;
+        $fallidas = 0;
+
+        $items = Formula_Articulo::query()
+            ->whereNotNull('anita_stkcm_formula')
+            ->where('anita_stkcm_formula', '>', 0)
+            ->orderBy('anita_stkcm_formula')
+            ->get(['id', 'anita_stkcm_formula']);
+
+        foreach ($items as $f) {
+            $anitaF = (int) $f->anita_stkcm_formula;
+            $erpId = (int) $f->id;
+
+            try {
+                $ret = $this->sincronizarUnaDesdeApi($anitaF, $usuarioId, false);
+                $totalFormulas += (int) ($ret['formulas'] ?? 0);
+                $totalLineas += (int) ($ret['lineas'] ?? 0);
+                foreach ($ret['advertencias'] ?? [] as $w) {
+                    $advertencias[] = "Fórmula Anita {$anitaF}: {$w}";
+                }
+                $procesadas++;
+                if ($progreso !== null) {
+                    $progreso($anitaF, $erpId, $ret, null);
+                }
+            } catch (\Throwable $e) {
+                $msg = $e->getMessage();
+                $advertencias[] = "Fórmula Anita {$anitaF}: error sincronizando — {$msg}";
+                $fallidas++;
+                if ($progreso !== null) {
+                    $progreso($anitaF, $erpId, null, $msg);
+                }
+            }
+        }
+
+        $vinculo = $this->formulaArticuloVinculoService->vincularPorCodigoSku(false);
+        if (($vinculo['formulas_vinculadas'] ?? 0) > 0 || ($vinculo['articulos_corregidos'] ?? 0) > 0) {
+            $advertencias[] = 'Vínculo código→SKU: '.$vinculo['formulas_vinculadas'].' fórmula(s) actualizada(s), '
+                .$vinculo['articulos_corregidos'].' artículo(s) corregido(s).';
+        }
+        foreach (array_slice($vinculo['sin_articulo'] ?? [], 0, 20) as $msg) {
+            $advertencias[] = $msg;
+        }
+
+        return [
+            'formulas' => $totalFormulas,
+            'lineas' => $totalLineas,
+            'advertencias' => $advertencias,
+            'procesadas' => $procesadas,
+            'fallidas' => $fallidas,
+        ];
+    }
+
+    /**
+     * Lista de campos de stkcmae a pedir vía bridge. Distintas instalaciones de Anita tienen
+     * distinto layout: AGG (y otras gastronomía) NO tienen stkcm_articulo; FRASLE/Bierzo sí.
+     * Si pedimos columnas que no existen, el SELECT falla en Informix y UNLOAD nunca genera el CSV
+     * (el bridge responde [] con warnings PHP). Por eso se condiciona por empresa.
+     */
+    private function camposStkcmae(): string
+    {
+        $campos = [
+            'stkcm_formula', 'stkcm_detalle', 'stkcm_coef_venta',
+            'stkcm_cod_impuesto', 'stkcm_cant_porcion',
+        ];
+        if ($this->empresaTieneStkcmArticulo()) {
+            $campos = ['stkcm_formula', 'stkcm_articulo', 'stkcm_detalle',
+                'stkcm_coef_venta', 'stkcm_cod_impuesto', 'stkcm_cant_porcion'];
+        }
+
+        return implode(', ', $campos);
+    }
+
+    private function camposStkcmov(): string
+    {
+        $campos = [
+            'stkcv_formula', 'stkcv_linea', 'stkcv_art_hijo', 'stkcv_cantidad',
+            'stkcv_formula_hija', 'stkcv_factor_costo', 'stkcv_deposito', 'stkcv_opcional',
+        ];
+        if (strtoupper((string) config('app.empresa')) === 'FRASLE') {
+            $campos[] = 'stkcv_ranura';
+        }
+
+        return implode(', ', $campos);
+    }
+
+    /**
+     * stkcm_articulo (artículo cabecera de la fórmula en Anita) sólo existe en instalaciones
+     * heredadas tipo FRASLE/Bierzo. En gastronomía (AGG, CROWN, etc.) la cabecera se resuelve
+     * vía articulo.formula → stkcm_formula (y al final por código → SKU V####).
+     */
+    private function empresaTieneStkcmArticulo(): bool
+    {
+        $empresa = strtoupper((string) config('app.empresa'));
+
+        return in_array($empresa, ['FRASLE', 'BIERZO'], true);
     }
 
     /**
@@ -185,7 +398,7 @@ class FormulaArticuloAnitaSyncService
      * @param  list<array{stkcv_formula:int, stkcv_linea:int, stkcv_art_hijo:string, stkcv_cantidad:float, stkcv_formula_hija:int, stkcv_factor_costo:float, stkcv_deposito:int, stkcv_opcional:string, stkcv_ranura:?int}>  $mov
      * @return array{formulas:int, lineas:int, advertencias:list<string>}
      */
-    public function sincronizarInterno(array $mae, array $mov, int $usuarioId): array
+    public function sincronizarInterno(array $mae, array $mov, int $usuarioId, bool $ejecutarVinculoCodigoSku = true): array
     {
         $advertencias = [];
         if ($mae === []) {
@@ -330,16 +543,23 @@ class FormulaArticuloAnitaSyncService
                     if ($anitaHija > 0) {
                         $formulaHijaErp = $mapAnitaAErp[$anitaHija] ?? null;
                         if ($formulaHijaErp === null) {
-                            $advertencias[] = "Fórmula Anita {$anitaF} línea {$det['stkcv_linea']}: stkcv_formula_hija={$anitaHija} no resuelta en stkcmae.";
+                            // Fallback: la subfórmula puede ya existir en formula_articulo
+                            // aunque no esté en este lote de stkcmae (caso típico en --una / --modo=lote).
+                            $existeErp = Formula_Articulo::query()
+                                ->where('anita_stkcm_formula', $anitaHija)
+                                ->value('id');
+                            if ($existeErp !== null) {
+                                $formulaHijaErp = (int) $existeErp;
+                                $mapAnitaAErp[$anitaHija] = $formulaHijaErp;
+                            } else {
+                                $advertencias[] = "Fórmula Anita {$anitaF} línea {$det['stkcv_linea']}: stkcv_formula_hija={$anitaHija} no resuelta en stkcmae ni en formula_articulo.";
+                            }
                         }
                     }
 
-                    $gastronomia = FormulaArticuloGastronomia::opcionalesHabilitados();
-                    $esOpcional = $gastronomia && $this->anitaOpcionalEsSi($det['stkcv_opcional'] ?? '');
-                    $ordenOpcional = null;
-                    if ($gastronomia && $esOpcional && Schema::hasColumn('formula_articulo_hijo', 'ordenopcional')) {
-                        $ordenOpcional = (int) $det['stkcv_linea'];
-                    }
+                    $ordenAnita = $this->anitaOrdenOpcional((string) ($det['stkcv_opcional'] ?? ''));
+                    $esOpcional = $ordenAnita > 0;
+                    $ordenOpcional = $ordenAnita > 0 ? $ordenAnita : null;
 
                     $depositoId = $this->resolverDepositoId((int) $det['stkcv_deposito']);
 
@@ -379,13 +599,15 @@ class FormulaArticuloAnitaSyncService
             throw $e;
         }
 
-        $vinculo = $this->formulaArticuloVinculoService->vincularPorCodigoSku(false);
-        if ($vinculo['formulas_vinculadas'] > 0 || $vinculo['articulos_corregidos'] > 0) {
-            $advertencias[] = 'Vínculo código→SKU: '.$vinculo['formulas_vinculadas'].' fórmula(s) actualizada(s), '
-                .$vinculo['articulos_corregidos'].' artículo(s) corregido(s).';
-        }
-        foreach (array_slice($vinculo['sin_articulo'], 0, 20) as $msg) {
-            $advertencias[] = $msg;
+        if ($ejecutarVinculoCodigoSku) {
+            $vinculo = $this->formulaArticuloVinculoService->vincularPorCodigoSku(false);
+            if ($vinculo['formulas_vinculadas'] > 0 || $vinculo['articulos_corregidos'] > 0) {
+                $advertencias[] = 'Vínculo código→SKU: '.$vinculo['formulas_vinculadas'].' fórmula(s) actualizada(s), '
+                    .$vinculo['articulos_corregidos'].' artículo(s) corregido(s).';
+            }
+            foreach (array_slice($vinculo['sin_articulo'], 0, 20) as $msg) {
+                $advertencias[] = $msg;
+            }
         }
 
         return ['formulas' => $formulas, 'lineas' => $lineas, 'advertencias' => $advertencias];
@@ -492,11 +714,18 @@ class FormulaArticuloAnitaSyncService
         return 'ACTIVA';
     }
 
-    private function anitaOpcionalEsSi(string $flag): bool
+    /**
+     * En Anita stkcv_opcional es char: el ítem es opcional cuando stkcv_opcional > '0'
+     * y el dígito en sí indica el grupo (orden) del opcional. Devuelve 0 si no aplica.
+     */
+    private function anitaOrdenOpcional(string $flag): int
     {
-        $f = strtoupper(trim($flag));
+        $f = trim($flag);
+        if ($f === '' || strcmp($f, '0') <= 0) {
+            return 0;
+        }
 
-        return in_array($f, ['S', '1', 'Y', 'O', 'SI'], true);
+        return (int) $f;
     }
 
     /**
