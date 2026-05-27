@@ -24,6 +24,7 @@ use App\Models\Stock\Listaprecio;
 use App\Models\Stock\Mventa;
 use App\Models\Configuracion\Tipodocumento;
 use App\Models\Configuracion\Condicioniva;
+use App\Models\Seguridad\Usuario;
 use App\Repositories\Ventas\DescuentoventaRepositoryInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
@@ -222,7 +223,16 @@ class ClienteRepository implements ClienteRepositoryInterface
 						'sistema' => 'ventas',
 						'campos' => "$this->keyFieldAnita as $this->keyField, $this->keyFieldAnita", 
 						'tabla' => $this->tableAnita[0] );
-        $dataAnita = json_decode($apiAnita->apiCall($data));
+        $rawAnita = $apiAnita->apiCall($data);
+        $dataAnita = json_decode($rawAnita);
+        if (is_object($dataAnita) && isset($dataAnita->Error)) {
+            throw new \RuntimeException((string) $dataAnita->Error);
+        }
+        if (! is_array($dataAnita)) {
+            throw new \RuntimeException(
+                'Respuesta inválida de Anita al listar clientes (climae). Revise ANITA_IP / bridge HTTP.'
+            );
+        }
 
 		/*for ($ii = 994; $ii < count($dataAnita); $ii++)
 		{
@@ -374,9 +384,9 @@ class ClienteRepository implements ClienteRepositoryInterface
 			$dataarticulo_suspendidoAnita = json_decode($apiAnita->apiCall($data));
 		}
 
-		$usuario_id = Auth::user()->id;
+		$usuario_id = $this->usuarioIdParaSincronizacion();
 
-        if (count($dataAnita) > 0) {
+        if (is_array($dataAnita) && count($dataAnita) > 0) {
             $data = $dataAnita[0];
 
 			if (isset($data->clim_cod_localidad))
@@ -528,8 +538,9 @@ class ClienteRepository implements ClienteRepositoryInterface
 
 			// Lee las leyendas
 			$leyenda = "";
-			foreach ($dataleyAnita as $ley)
+			foreach (is_array($dataleyAnita) ? $dataleyAnita : [] as $ley) {
 				$leyenda .= $ley->clil_leyenda;
+			}
 
 			if (config('app.empresa') == 'EL BIERZO')
 			{
@@ -612,7 +623,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 					'descuentoventa_id' => null,
 					'tipodocumento_id' => 1,
 					'lugarentrega' => $data->clim_lugar_entrega,
-					'horarioantencion' => $horarioAtencion
+					'horarioatencion' => $horarioAtencion
 					];
 			}
 			else
@@ -648,54 +659,47 @@ class ClienteRepository implements ClienteRepositoryInterface
 					"leyenda" => $leyenda,
 					"modofacturacion" => $modoFacturacion,
 					"usuario_id" => $usuario_id,
-					'horarioantencion' => $horarioAtencion
+					'horarioatencion' => $horarioAtencion
 					];
 			}
 		
-			if ($fl_crea_registro)
+			if ($fl_crea_registro) {
             	$cliente = Cliente::create($arr_campos);
-			else
-            	$cliente = Cliente::where('codigo', ltrim($data->clim_cliente, '0'))->update($arr_campos);
+			} else {
+            	Cliente::where('codigo', ltrim($data->clim_cliente, '0'))->update($arr_campos);
+				$cliente = Cliente::where('codigo', ltrim($data->clim_cliente, '0'))->first();
+			}
         }
 
-		if (isset($dataseguimientoAnita))
-		{
-			if (count($dataseguimientoAnita) > 0 && isset($cliente->id)) 
-			{
-				foreach($dataseguimientoAnita as $data)
-				{
-					Cliente_Seguimiento::create(['cliente_id' => $cliente->id,
-												'fecha' => $data->movsc_fecha,
-												'observacion' => $data->movsc_observacion,
-												'leyenda' => '',
-												'creousuario_id' => 1]);
+		if (isset($cliente) && $cliente instanceof Cliente) {
+			if (isset($dataseguimientoAnita) && is_array($dataseguimientoAnita) && count($dataseguimientoAnita) > 0) {
+				foreach ($dataseguimientoAnita as $dataSeg) {
+					Cliente_Seguimiento::create([
+						'cliente_id' => $cliente->id,
+						'fecha' => $dataSeg->movsc_fecha,
+						'observacion' => $dataSeg->movsc_observacion,
+						'leyenda' => '',
+						'creousuario_id' => $usuario_id,
+					]);
 				}
 			}
-		}
 
-		if (isset($dataarticulo_suspendidoAnita))
-		{
-			if (count($dataarticulo_suspendidoAnita) > 0 && isset($cliente->id)) 
-			{
-				foreach($dataarticulo_suspendidoAnita as $data)
-				{
-					// Lee el producto
-					$articulo = Articulo::select('sku', 'id')->where('sku', ltrim($data->stksc_articulo,'0'))->first();
+			if (isset($dataarticulo_suspendidoAnita) && is_array($dataarticulo_suspendidoAnita) && count($dataarticulo_suspendidoAnita) > 0) {
+				foreach ($dataarticulo_suspendidoAnita as $dataArt) {
+					$articulo = Articulo::select('sku', 'id')->where('sku', ltrim($dataArt->stksc_articulo, '0'))->first();
 
-					if ($articulo)
-						Cliente_Articulo_Suspendido::create(['cliente_id' => $cliente->id,
-														'articulo_id' => $articulo->id,
-														'creousuario_id' => 1]);
+					if ($articulo) {
+						Cliente_Articulo_Suspendido::create([
+							'cliente_id' => $cliente->id,
+							'articulo_id' => $articulo->id,
+							'creousuario_id' => $usuario_id,
+						]);
+					}
 				}
 			}
-		}
 
-		if (config('app.empresa') === 'INTERFORMING') {
-			$clienteModel = $cliente instanceof Cliente
-				? $cliente
-				: Cliente::where('codigo', ltrim($data->clim_cliente, '0'))->first();
-			if ($clienteModel) {
-				$this->importarCm05DesdeAnita($apiAnita, trim((string) $data->clim_cuit), $clienteModel->id);
+			if (config('app.empresa') === 'INTERFORMING') {
+				$this->importarCm05DesdeAnita($apiAnita, trim((string) $data->clim_cuit), $cliente->id);
 			}
 		}
     }
@@ -1643,7 +1647,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 
 		Cliente_Cm05::where('cliente_id', $clienteId)->delete();
 
-		$usuarioId = Auth::id() ?? 1;
+		$usuarioId = $this->usuarioIdParaSincronizacion();
 
 		foreach ($filas as $fila) {
 			$provincia = Provincia::select('id')->where('codigo', $fila->clii_zonamult)->first();
@@ -1802,6 +1806,19 @@ class ClienteRepository implements ClienteRepositoryInterface
 		}
 
 		return json_encode($output, JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
+     * Usuario para altas desde sync Anita (consola sin sesión o HTTP sin auth).
+     */
+    private function usuarioIdParaSincronizacion(): int
+    {
+        $id = Auth::id();
+        if ($id) {
+            return (int) $id;
+        }
+
+        return (int) (Usuario::query()->orderBy('id')->value('id') ?? 1);
     }
 
 }
