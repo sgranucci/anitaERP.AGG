@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Ventas\CierreParcialTurnoGastronomia;
 use App\Models\Ventas\TurnoOperativoGastronomia;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Repositories\Ventas\ConfiguracionPuntoventaGastronomiaRepositoryInterface;
 use App\Services\Ventas\Gastronomia\GastronomiaCategoriafidelidadCanjeService;
 use App\Services\Ventas\Gastronomia\GastronomiaCuentaService;
 use App\Services\Ventas\Gastronomia\GastronomiaTicketCanjePremioService;
@@ -31,6 +32,7 @@ class CierreTurnoGastronomiaController extends Controller
         private GastronomiaTicketCanjePremioService $ticketCanjePremioService,
         private GastronomiaTicketTarjetaCanjeService $ticketTarjetaCanjeService,
         private GastronomiaCategoriafidelidadCanjeService $categoriafidelidadCanjeService,
+        private ConfiguracionPuntoventaGastronomiaRepositoryInterface $configuracionPuntoventaRepository,
     ) {
     }
 
@@ -44,6 +46,10 @@ class CierreTurnoGastronomiaController extends Controller
         if ($empresaId <= 0 && $empresaQuery->count() === 1) {
             $empresaId = (int) $empresaQuery->first()->id;
         }
+
+        $pcQuery = $this->configuracionPuntoventaRepository->all()
+            ->unique(fn ($cfg) => (string) $cfg->identificador_pc)
+            ->values();
 
         $cfg = $this->cuentaService->resolverConfiguracionPv($request);
         $turnoOperativo = null;
@@ -77,6 +83,7 @@ class CierreTurnoGastronomiaController extends Controller
             'filas' => $filas,
             'filtros' => $filtros,
             'empresa_query' => $empresaQuery,
+            'pc_query' => $pcQuery,
             'identificador_pc_default' => $identificadorPc,
             'turno_operativo' => $turnoOperativo,
             'requiere_habilitacion_turno' => GastronomiaTurnoOperativoService::requiereHabilitacionTurno(),
@@ -319,6 +326,28 @@ class CierreTurnoGastronomiaController extends Controller
         $nombre = 'cierre_turno_gastronomia_'.$turno->id.'.pdf';
 
         return $this->pdfComprobante($datos, $nombre, $request->boolean('inline'));
+    }
+
+    public function verCierre(Request $request, int $id)
+    {
+        can('listar-cierres-turno-gastronomia');
+
+        $turno = TurnoOperativoGastronomia::query()
+            ->where('estado', TurnoOperativoGastronomia::ESTADO_CERRADO)
+            ->findOrFail($id);
+
+        $this->assertAccesoEmpresa((int) $turno->empresa_id);
+
+        $datos = $this->reporteSupport->datosComprobanteCierreDefinitivo($turno);
+
+        return view('ventas.gastronomia.cierres_turno.ver', [
+            'turno' => $turno,
+            'datos' => $datos,
+            'referencia' => (string) ($datos['subtitulo'] ?? 'Op. #'.$turno->id),
+            'puede_ver_comprobante' => can('ver-comprobante-cierre-turno-gastronomia', false),
+            'puede_ver_factura' => can('ver-factura-gastronomia', false),
+            'desde_modal' => $request->query('origen') === 'modal_consulta',
+        ]);
     }
 
     private function assertAccesoEmpresa(int $empresaId): void

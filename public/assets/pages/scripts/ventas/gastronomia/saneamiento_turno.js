@@ -74,11 +74,15 @@
         if (!term.cuentas_pendientes_detalle || !term.cuentas_pendientes_detalle.length) {
             return '';
         }
-        var abiertas = Number(term.cuentas_abiertas || 0);
+        var abiertasConItems = Number(term.cuentas_abiertas_con_items || 0);
+        var abiertasVacias = Number(term.cuentas_abiertas_vacias || 0);
         var cerradas = Number(term.cuentas_cerradas_sin_facturar || 0);
         var resumen = [];
-        if (abiertas > 0) {
-            resumen.push('<strong class="text-warning">' + abiertas + ' abierta(s)</strong> — bloquean el cierre del último turno.');
+        if (abiertasConItems > 0) {
+            resumen.push('<strong class="text-warning">' + abiertasConItems + ' abierta(s) con consumos</strong> — bloquean el cierre del último turno.');
+        }
+        if (abiertasVacias > 0) {
+            resumen.push('<span class="text-info">' + abiertasVacias + ' abierta(s) sin ítems</span> — se descartan automáticamente al cerrar el último turno o la jornada.');
         }
         if (cerradas > 0) {
             resumen.push('<span class="text-muted">' + cerradas + ' cerrada(s) sin facturar</span> — estado terminal del saneamiento; no bloquean el cierre.');
@@ -114,21 +118,33 @@
     function renderTerminal(term) {
         var html = '<div class="card mb-3 border-secondary">';
         html += '<div class="card-header py-2"><strong>Terminal: ' + esc(term.identificador_pc) + '</strong>';
-        if (term.turno_habilitado) {
+        if (term.es_bucket_huerfano) {
+            html += ' <span class="badge badge-dark ml-2" title="Cuentas con identificador_pc que no coincide con ninguna PV configurada">Bucket sin PV</span>';
+        } else if (term.turno_habilitado) {
             html += ' <span class="badge badge-success ml-2">Turno habilitado #' + esc(term.turno_operativo_activo_id) + '</span>';
-        }
-        if (term.cantidad_huerfanas > 0) {
-            html += ' <span class="badge badge-danger ml-1">' + term.cantidad_huerfanas + ' huérfana(s)</span>';
         } else {
-            html += ' <span class="badge badge-success ml-1">Sin huérfanas</span>';
+            html += ' <span class="badge badge-secondary ml-2">Sin turno habilitado</span>';
+        }
+        if (!term.es_bucket_huerfano) {
+            if (term.cantidad_huerfanas > 0) {
+                html += ' <span class="badge badge-danger ml-1">' + term.cantidad_huerfanas + ' huérfana(s)</span>';
+            } else {
+                html += ' <span class="badge badge-success ml-1">Sin huérfanas</span>';
+            }
         }
         if (term.puede_habilitar_turno) {
             html += ' <span class="badge badge-info ml-1">Puede habilitar turno</span>';
         }
-        var abiertas = Number(term.cuentas_abiertas || 0);
+        var abiertasConItems = Number(term.cuentas_abiertas_con_items || 0);
+        var abiertasVacias = Number(term.cuentas_abiertas_vacias || 0);
         var cerradasInactivas = Number(term.cuentas_cerradas_sin_facturar || 0);
-        if (abiertas > 0) {
-            html += ' <span class="badge badge-warning ml-1">' + abiertas + ' abierta(s) sin facturar</span>';
+        if (abiertasConItems > 0) {
+            html += ' <span class="badge badge-warning ml-1" title="Bloquean cierre del último turno del día">'
+                + abiertasConItems + ' abierta(s) con consumos</span>';
+        }
+        if (abiertasVacias > 0) {
+            html += ' <span class="badge badge-info ml-1" title="Sin ítems: se auto-descartan al cerrar turno/jornada">'
+                + abiertasVacias + ' abierta(s) sin ítems (auto-descartan)</span>';
         }
         if (cerradasInactivas > 0) {
             html += ' <span class="badge badge-secondary ml-1" title="Estado terminal: no bloquean cierre">'
@@ -184,7 +200,16 @@
                     html += ' <button type="button" class="btn btn-sm btn-outline-danger ml-2 js-cerrar-cuentas"';
                     html += ' data-turno-id="' + s.turno_operativo_id + '"';
                     html += ' data-confirmacion="' + esc(s.confirmacion || '') + '"';
-                    html += ' data-cantidad="' + esc(s.cantidad || 0) + '">Cerrar sin facturar cuentas abiertas</button>';
+                    html += ' data-cantidad="' + esc(s.cantidad_abiertas_con_items || s.cantidad || 0) + '">Cerrar sin facturar cuentas con consumos</button>';
+                }
+                if (s.accion === 'cerrar_cuentas_sin_turno_activo') {
+                    var cuentaIds = Array.isArray(s.cuenta_ids) ? s.cuenta_ids.join(',') : '';
+                    html += ' <button type="button" class="btn btn-sm btn-outline-danger ml-2 js-cerrar-cuentas-sin-turno"';
+                    html += ' data-empresa-id="' + esc(s.empresa_id || '') + '"';
+                    html += ' data-pc="' + esc(s.identificador_pc || '') + '"';
+                    html += ' data-cuenta-ids="' + esc(cuentaIds) + '"';
+                    html += ' data-confirmacion="' + esc(s.confirmacion || '') + '"';
+                    html += ' data-cantidad="' + esc(s.cantidad_abiertas_con_items || s.cantidad || 0) + '">Cerrar sin facturar (sin turno activo)</button>';
                 }
                 html += '</div>';
             });
@@ -222,25 +247,62 @@
         enlazarAcciones(panel);
     }
 
-    function cerrarCuentasConConfirmacion(turnoId, confirmacionEsperada, cantidad) {
-        var msg = 'Se cerrarán sin facturar las cuentas ABIERTAS de la terminal.\n';
-        msg += 'Cuentas abiertas a cerrar: ' + cantidad + '.\n';
-        msg += '(Las cerradas sin facturar son estado terminal y no requieren acción.)\n\n';
-        msg += 'Para confirmar escriba exactamente:\n' + confirmacionEsperada;
+    function pedirConfirmacionYMotivo(confirmacionEsperada, cantidad, sufijoMensaje) {
+        var msg = 'Se cerrarán sin facturar las cuentas ABIERTAS con consumos de la terminal.\n';
+        msg += 'Cuentas con consumos a cerrar: ' + cantidad + '.\n';
+        msg += '(Las cuentas abiertas sin ítems se descartan automáticamente al cerrar turno/jornada.\n';
+        msg += ' Las cerradas sin facturar son estado terminal y no requieren acción.)\n';
+        if (sufijoMensaje) {
+            msg += sufijoMensaje + '\n';
+        }
+        msg += '\nPara confirmar escriba exactamente:\n' + confirmacionEsperada;
         var ingresado = prompt(msg, '');
         if (ingresado === null) {
-            return;
+            return null;
         }
         if (ingresado.trim() !== confirmacionEsperada) {
             alert('Confirmación incorrecta. Debe escribir: ' + confirmacionEsperada);
-            return;
+            return null;
         }
         var motivo = prompt('Motivo u observación (opcional):', '') || '';
+        return { confirmacion: ingresado.trim(), motivo: motivo };
+    }
+
+    function cerrarCuentasConConfirmacion(turnoId, confirmacionEsperada, cantidad) {
+        var datos = pedirConfirmacionYMotivo(confirmacionEsperada, cantidad, null);
+        if (!datos) {
+            return;
+        }
         postJson(apiCerrarCuentas, {
             turno_operativo_id: turnoId,
-            confirmacion: ingresado.trim(),
-            motivo: motivo,
+            confirmacion: datos.confirmacion,
+            motivo: datos.motivo,
         }).then(function (res) {
+            alert(res.data.mensaje || res.data.error || 'Listo');
+            cargarDiagnostico();
+        });
+    }
+
+    function cerrarCuentasSinTurnoConConfirmacion(empresaId, pc, cuentaIds, confirmacionEsperada, cantidad) {
+        var tieneIds = Array.isArray(cuentaIds) && cuentaIds.length > 0;
+        var sufijo = tieneIds
+            ? 'Sin terminal identificable; se cerrarán las cuentas por id (' + cuentaIds.length + ').'
+            : 'No hay turno habilitado en la terminal; el cierre se hará por (empresa, PC).';
+        var datos = pedirConfirmacionYMotivo(confirmacionEsperada, cantidad, sufijo);
+        if (!datos) {
+            return;
+        }
+        var payload = {
+            empresa_id: empresaId,
+            confirmacion: datos.confirmacion,
+            motivo: datos.motivo,
+        };
+        if (tieneIds) {
+            payload.cuenta_ids = cuentaIds;
+        } else {
+            payload.identificador_pc = pc;
+        }
+        postJson(apiCerrarCuentas, payload).then(function (res) {
             alert(res.data.mensaje || res.data.error || 'Listo');
             cargarDiagnostico();
         });
@@ -309,6 +371,23 @@
             btn.addEventListener('click', function () {
                 cerrarCuentasConConfirmacion(
                     btn.getAttribute('data-turno-id'),
+                    btn.getAttribute('data-confirmacion') || '',
+                    btn.getAttribute('data-cantidad') || '0',
+                );
+            });
+        });
+
+        root.querySelectorAll('.js-cerrar-cuentas-sin-turno').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var raw = btn.getAttribute('data-cuenta-ids') || '';
+                var ids = raw
+                    .split(',')
+                    .map(function (s) { return parseInt(s, 10); })
+                    .filter(function (n) { return Number.isFinite(n) && n > 0; });
+                cerrarCuentasSinTurnoConConfirmacion(
+                    btn.getAttribute('data-empresa-id') || '',
+                    btn.getAttribute('data-pc') || '',
+                    ids,
                     btn.getAttribute('data-confirmacion') || '',
                     btn.getAttribute('data-cantidad') || '0',
                 );

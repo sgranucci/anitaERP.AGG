@@ -30,6 +30,7 @@ use App\Support\Stock\FormulaArticuloGastronomia;
 use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
 use App\Support\Ventas\GastronomiaCuentacajaCanjeTarjeta;
 use App\Support\Ventas\GastronomiaCuentacajaEfectivo;
+use App\Support\Ventas\GastronomiaCuentacajaTotem;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -178,6 +179,8 @@ class GastronomiaProcesoFacturacionController extends Controller
             'cuentacaja_efectivo_error' => GastronomiaCuentacajaEfectivo::mensajeErrorResolucion((int) $cfg->empresa_id),
             'cuentacaja_canje_tarjeta' => GastronomiaCuentacajaCanjeTarjeta::cuentaParaEmpresa((int) $cfg->empresa_id),
             'cuentacaja_canje_tarjeta_error' => GastronomiaCuentacajaCanjeTarjeta::mensajeErrorResolucion((int) $cfg->empresa_id),
+            'cuentacaja_totem' => GastronomiaCuentacajaTotem::cuentaParaEmpresa((int) $cfg->empresa_id),
+            'cuentacaja_totem_error' => GastronomiaCuentacajaTotem::mensajeErrorResolucion((int) $cfg->empresa_id),
             'ticket_tarjeta_vencimiento_dias' => (int) config('gastronomia.ticket_tarjeta_vencimiento_dias', 30),
             'ticket_tarjeta_tolerancia_excedente' => (float) config('gastronomia.ticket_tarjeta_tolerancia_excedente_factura', 5.),
             'canje_premio_descuento_codigo' => (string) config('gastronomia.canje_premio_descuento_codigo', '10'),
@@ -247,10 +250,11 @@ class GastronomiaProcesoFacturacionController extends Controller
         can('usar-proceso-facturacion-gastronomia');
 
         $request->validate([
-            'waitry_order_id' => 'required|integer|min:1',
+            'waitry_order_id' => ['required', 'string', 'min:1', 'max:64', 'regex:/^[A-Za-z0-9_-]+$/'],
             'cuenta_id' => 'nullable|integer|min:1',
             'cubiertos' => 'nullable|integer|min:0',
             'mozo_gastronomia_id' => 'nullable|integer',
+            'incluir_orden_pagada' => 'nullable|boolean',
         ]);
 
         $cfg = $this->requireCfgPv($request);
@@ -262,11 +266,14 @@ class GastronomiaProcesoFacturacionController extends Controller
             return response()->json(['ok' => false, 'error' => 'Integración Waitry deshabilitada.'], 422);
         }
 
+        $identificadorPapelito = trim((string) $request->get('waitry_order_id'));
+
         $resultado = $this->waitryOrdenesExternasService->importarOrdenEnCuenta(
             $cfg,
-            (int) $request->get('waitry_order_id'),
+            $identificadorPapelito,
             $request->only(['cubiertos', 'mozo_gastronomia_id']),
             $request->filled('cuenta_id') ? (int) $request->get('cuenta_id') : null,
+            $request->boolean('incluir_orden_pagada'),
         );
 
         if (! ($resultado['ok'] ?? false)) {
@@ -282,6 +289,7 @@ class GastronomiaProcesoFacturacionController extends Controller
             'cuenta_id' => $resultado['cuenta']->id,
             'cuenta' => $resultado['cuenta'],
             'errores' => $resultado['errores'] ?? [],
+            'mensaje' => 'Cuenta Waitry «'.$identificadorPapelito.'» importada correctamente.',
             'warn' => ($resultado['errores'] ?? []) !== []
                 ? 'Importación parcial: algunos ítems no se cargaron (ver detalle).'
                 : null,

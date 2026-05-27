@@ -28,9 +28,18 @@ class ValidacionCuentacaja extends FormRequest
             'banco_id' => ['integer', 'nullable'],
             'cuentacontable_id' => 'required|integer',
             'empresa_id' => ['integer', 'nullable'],
+            'cbu' => 'nullable|max:50|required_with:banco_id',
             'cuenta_interbanking' => 'nullable|max:255',
             'usocuentacaja_ids' => 'nullable|array',
             'usocuentacaja_ids.*' => 'integer|exists:usocuentacaja,id',
+        ];
+    }
+
+    public function attributes()
+    {
+        return [
+            'cbu' => 'CBU',
+            'banco_id' => 'banco',
         ];
     }
 }

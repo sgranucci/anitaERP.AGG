@@ -2,6 +2,7 @@
 
 namespace App\Models\Stock;
 
+use App\Models\Ventas\AreaComandaGastronomia;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -12,6 +13,21 @@ class Subcategoria extends Model
     protected $fillable = ['nombre', 'codigo'];
     protected $table = 'subcategoria';
     protected $keyField = 'subc_id';
+
+    public function subcategoriaAreasComanda()
+    {
+        return $this->hasMany(SubcategoriaAreaComanda::class, 'subcategoria_id');
+    }
+
+    public function areasComanda()
+    {
+        return $this->belongsToMany(
+            AreaComandaGastronomia::class,
+            'subcategoria_area_comanda',
+            'subcategoria_id',
+            'area_comanda_gastronomia_id'
+        )->withTimestamps();
+    }
 
     public function sincronizarConAnita(){
         $apiAnita = new ApiAnita();

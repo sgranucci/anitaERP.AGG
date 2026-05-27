@@ -5,6 +5,7 @@ namespace App\Services\Arca;
 use App\Models\Configuracion\Empresa;
 use App\Models\Ventas\ArcaCaea;
 use App\Models\Ventas\Puntoventa;
+use App\Support\Ventas\ArcaCaeaSolicitudSupport;
 use App\Support\Ventas\CaeaQuincenaSupport;
 use Carbon\Carbon;
 use Exception;
@@ -100,27 +101,16 @@ class ArcaWsfeCaeaService
         $registro->save();
 
         try {
-            if ($forzarConsulta) {
-                $resp = $this->wsfe->feCaeaConsultar($empresaId, $periodo, $orden);
-            } else {
-                try {
-                    $resp = $this->wsfe->feCaeaSolicitar($empresaId, $periodo, $orden);
-                } catch (Exception $e) {
-                    if ($this->esCaeaYaOtorgado($e->getMessage())) {
-                        $resp = $this->wsfe->feCaeaConsultar($empresaId, $periodo, $orden);
-                    } else {
-                        throw $e;
-                    }
-                }
-            }
-
-            $this->aplicarRespuestaArca($registro, $resp);
+            $obtenido = $this->obtenerCaeaDesdeArca($empresaId, $periodo, $orden, $forzarConsulta);
+            $this->aplicarRespuestaArca($registro, $obtenido['resp']);
 
             return [
                 'ok' => $registro->estaAutorizado(),
                 'registro' => $registro->fresh(),
                 'mensaje' => $registro->estaAutorizado()
-                    ? 'CAEA obtenido correctamente.'
+                    ? ($obtenido['via_consulta']
+                        ? 'CAEA recuperado por consulta ARCA (ya otorgado previamente, p. ej. Anita).'
+                        : 'CAEA obtenido correctamente.')
                     : ($registro->mensaje_error ?? 'No se pudo autorizar el CAEA.'),
             ];
         } catch (Exception $e) {
@@ -217,11 +207,42 @@ class ArcaWsfeCaeaService
         $registro->save();
     }
 
-    private function esCaeaYaOtorgado(string $mensaje): bool
+    /**
+     * Solicita en ARCA; si no hay CAEA nuevo (ya pedido en Anita u otro), consulta y devuelve el vigente.
+     *
+     * @return array{resp: array<string, mixed>, via_consulta: bool}
+     */
+    private function obtenerCaeaDesdeArca(int $empresaId, int $periodo, int $orden, bool $soloConsultar): array
     {
-        return str_contains($mensaje, '[15008]')
-            || stripos($mensaje, 'ya otorgado') !== false
-            || stripos($mensaje, 'existir un CAEA') !== false;
+        if ($soloConsultar) {
+            return [
+                'resp' => $this->wsfe->feCaeaConsultar($empresaId, $periodo, $orden),
+                'via_consulta' => true,
+            ];
+        }
+
+        try {
+            return [
+                'resp' => $this->wsfe->feCaeaSolicitar($empresaId, $periodo, $orden),
+                'via_consulta' => false,
+            ];
+        } catch (Exception $e) {
+            if (! ArcaCaeaSolicitudSupport::debeConsultarTrasFalloSolicitud($e->getMessage(), 'wsfev1')) {
+                throw $e;
+            }
+
+            Log::info('CAEA WSFE: solicitud sin CAEA o ya otorgado; consultando en ARCA', [
+                'empresa_id' => $empresaId,
+                'periodo' => $periodo,
+                'orden' => $orden,
+                'error_solicitud' => $e->getMessage(),
+            ]);
+
+            return [
+                'resp' => $this->wsfe->feCaeaConsultar($empresaId, $periodo, $orden),
+                'via_consulta' => true,
+            ];
+        }
     }
 
     private function extraerCodigoError(string $mensaje): ?string

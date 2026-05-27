@@ -16,11 +16,25 @@
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Asignación de Cajas</h3>
-                <div class="card-tools">
-                    <a href="{{route('crea_cajaasignacion')}}" class="btn btn-outline-secondary btn-sm">
-                       	@if (can('crea-asignacion-caja', false))
-                        	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
-						@endif
+                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @if ($empresa_query->count() > 1)
+                        <form method="get" action="{{ route('consulta_cajaasignacion') }}" class="form-inline mr-2 mb-1 mb-sm-0">
+                            <label class="mr-1 mb-0 small text-white-50" for="empresa_id">Empresa</label>
+                            <select name="empresa_id" id="empresa_id" class="form-control form-control-sm mr-2" title="Empresa">
+                                <option value="">Todas</option>
+                                @foreach ($empresa_query as $emp)
+                                    <option value="{{ $emp->id }}" @selected((int) ($empresaId ?? 0) === (int) $emp->id)>{{ $emp->nombre }}</option>
+                                @endforeach
+                            </select>
+                            <button type="submit" class="btn btn-light btn-sm" title="Consultar">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </form>
+                    @endif
+                    <a href="{{ route('crea_cajaasignacion') }}" class="btn btn-outline-secondary btn-sm">
+                        @if (can('crea-asignacion-caja', false))
+                            <i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
+                        @endif
                     </a>
                 </div>
             </div>

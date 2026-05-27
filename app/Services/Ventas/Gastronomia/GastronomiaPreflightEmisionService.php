@@ -8,7 +8,9 @@ use App\Models\Ventas\Puntoventa;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
 use App\Support\Ventas\GastronomiaDepositoConfigSupport;
 use App\Support\Ventas\GastronomiaCuentacajaEfectivo;
+use App\Support\Ventas\GastronomiaCuentacajaTotem;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
+use App\Support\Ventas\Waitry\WaitryFacturacionDuplicadosSupport;
 use InvalidArgumentException;
 
 /**
@@ -102,6 +104,11 @@ final class GastronomiaPreflightEmisionService
             $errores[] = 'La cuenta no está abierta.';
         }
 
+        $waitryOrderId = (int) ($cuenta->waitry_order_id ?? 0);
+        if ($waitryOrderId > 0 && WaitryFacturacionDuplicadosSupport::waitryOrderIdYaFacturado($waitryOrderId, (int) $cuenta->id)) {
+            $errores[] = WaitryFacturacionDuplicadosSupport::mensajeOrdenYaFacturada($waitryOrderId);
+        }
+
         $cuenta->loadMissing('descuentoGastronomia');
         if ((int) ($cuenta->descuento_gastronomia_id ?? 0) > 0 && (int) ($cuenta->cliente_interno_descuento_id ?? 0) <= 0) {
             $errores[] = 'Indique el cliente interno del descuento (quien invita o centro de costos). '
@@ -143,6 +150,11 @@ final class GastronomiaPreflightEmisionService
             if ($errMedios) {
                 $errores[] = $errMedios;
             }
+
+            $errores = array_merge(
+                $errores,
+                $this->erroresCobranzaWaitryTotem($cuenta, $mediosPago, $cfg ? (int) $cfg->empresa_id : (int) $cuenta->empresa_id),
+            );
         }
 
         return $errores;
@@ -183,6 +195,40 @@ final class GastronomiaPreflightEmisionService
         $ccErr = GastronomiaCuentacajaEfectivo::mensajeErrorResolucion($empresaId);
 
         return $ccErr ? [$ccErr] : [];
+    }
+
+    /**
+     * Cuenta Waitry cobrada en tótem: un solo medio TOTEM, monto = total, sin modificar.
+     *
+     * @param  list<array{cuentacaja_id:int,moneda_id:int,monto:float,cotizacion?:float|null}>  $mediosPago
+     * @return list<string>
+     */
+    private function erroresCobranzaWaitryTotem(CuentaGastronomia $cuenta, array $mediosPago, int $empresaId): array
+    {
+        if (! $cuenta->waitry_cobro_totem) {
+            return [];
+        }
+
+        $ccErr = GastronomiaCuentacajaTotem::mensajeErrorResolucion($empresaId);
+        if ($ccErr) {
+            return [$ccErr];
+        }
+
+        $totem = GastronomiaCuentacajaTotem::cuentaParaEmpresa($empresaId);
+        if ($totem === null) {
+            return ['No se pudo resolver la cuenta de caja TOTEM para cobranza Waitry.'];
+        }
+
+        if (count($mediosPago) !== 1) {
+            return ['La cuenta Waitry del tótem debe cobrarse con un único medio TOTEM (sin agregar otros renglones).'];
+        }
+
+        $medio = $mediosPago[0];
+        if ((int) ($medio['cuentacaja_id'] ?? 0) !== (int) $totem['id']) {
+            return ['La cobranza de esta cuenta Waitry debe usar únicamente la cuenta de caja TOTEM.'];
+        }
+
+        return [];
     }
 
     /**

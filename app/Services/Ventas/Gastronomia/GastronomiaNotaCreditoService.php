@@ -9,7 +9,10 @@ use App\Models\Ventas\CuentaGastronomia;
 use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\VentaGastronomiaEmision;
+use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
+use App\Support\Ventas\GastronomiaEmisionProfiler;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
+use App\Support\Ventas\GastronomiaMovimientoStockSupport;
 use App\Support\Ventas\GastronomiaVentaDetalleSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -42,6 +45,8 @@ final class GastronomiaNotaCreditoService
      */
     public function generarDesdeFactura(int $ventaFacturaId, ?Request $request = null, string $leyendaUsuario = ''): array
     {
+        $profiler = GastronomiaEmisionProfiler::iniciarSiConfigurado();
+
         $emision = VentaGastronomiaEmision::query()
             ->where('venta_id', $ventaFacturaId)
             ->with([
@@ -114,7 +119,10 @@ final class GastronomiaNotaCreditoService
         $payload = $this->armarPayloadNotaCredito($ventaOrigen, $tipoNcId, $cfg, $leyendaUsuario);
         $mediosPago = $this->armarMediosCobranzaDevolucion($ventaOrigen);
 
+        $profiler?->marcar('preparacion_payload');
+
         try {
+            $profiler?->marcar('antes_transaccion');
             $resultadoTx = DB::transaction(function () use (
                 $ventaFacturaId,
                 $ventaOrigen,
@@ -124,10 +132,13 @@ final class GastronomiaNotaCreditoService
                 $tipoNc,
                 $payload,
                 $mediosPago,
+                $profiler,
             ) {
                 $ventaAnitaRevertir = null;
 
+                $profiler?->marcar('nc_emitir_comprobante_inicio');
                 $resultado = $this->facturacionGastronomiaService->emitirComprobante($payload, $cuenta);
+                $profiler?->marcar('nc_emitir_comprobante_fin');
 
                 if (! empty($resultado['error'])) {
                     throw new InvalidArgumentException((string) ($resultado['mensaje'] ?? $resultado['error']));
@@ -140,15 +151,18 @@ final class GastronomiaNotaCreditoService
 
                 $sinCobranza = ! empty($resultado['sin_cobranza']);
                 if (! $sinCobranza && $mediosPago !== []) {
+                    $profiler?->marcar('nc_cobranza_inicio');
                     $this->cobranzaGastronomiaService->registrarCobranzaPos(
                         $ventaNc->fresh(),
                         $mediosPago,
                         $cfg,
                         esDevolucion: true,
                     );
+                    $profiler?->marcar('nc_cobranza_fin');
                 }
 
                 $nombreTipo = (string) ($tipoNc->nombre ?? 'Nota de crédito');
+                $profiler?->marcar('nc_reverso_stock_inicio');
                 $this->consumoFormulaService->revertirMovimientosStockDesdeFactura(
                     $ventaNc,
                     $ventaOrigen,
@@ -159,15 +173,20 @@ final class GastronomiaNotaCreditoService
                     (int) $ventaOrigen->moneda_id,
                     (string) ($payload['fechajornada'] ?? $payload['fechafactura']),
                 );
+                $profiler?->marcar('nc_reverso_stock_fin');
 
+                $profiler?->marcar('nc_anita_insumos_inicio');
                 $this->insumoStkmovAnitaService->replicarMovimientosInsumos(
                     $ventaNc->fresh(),
                     $cfg,
                     (float) ($payload['descuentopie'] ?? 0),
                 );
+                $profiler?->marcar('nc_anita_insumos_fin');
 
                 if (! empty($resultado['cae_pendiente']) && is_array($resultado['cae_pendiente'])) {
+                    $profiler?->marcar('nc_cae_diferido_inicio');
                     $this->facturacionGastronomiaService->completarSolicitudCaePendiente($resultado['cae_pendiente']);
+                    $profiler?->marcar('nc_cae_diferido_fin');
                 }
 
                 VentaGastronomiaEmision::updateOrCreate(
@@ -191,15 +210,38 @@ final class GastronomiaNotaCreditoService
                     'mensaje' => 'Nota de crédito '.$facturaTxt.' generada correctamente.',
                 ];
             });
+            $profiler?->marcar('despues_transaccion');
 
-            return $this->aplicarImpresionTicketTrasNotaCredito($resultadoTx, $cfg, $cuenta);
+            $profiler?->marcar('nc_ticket_inicio');
+            $resultadoFinal = $this->aplicarImpresionTicketTrasNotaCredito($resultadoTx, $cfg, $cuenta);
+            $profiler?->marcar('nc_ticket_fin');
+
+            GastronomiaEmisionProfiler::finalizar($profiler, [
+                'flujo' => 'nota_credito',
+                'venta_factura_id' => $ventaFacturaId,
+                'venta_nc_id' => $resultadoTx['venta_id'] ?? null,
+            ]);
+
+            return $resultadoFinal;
         } catch (Throwable $e) {
+            $claseError = ArcaWsfeEmisionResiliencia::clasificarError($e->getMessage());
+            GastronomiaEmisionProfiler::finalizar($profiler, [
+                'flujo' => 'nota_credito',
+                'venta_factura_id' => $ventaFacturaId,
+                'clase_error' => $claseError,
+                'error' => $e->getMessage(),
+            ]);
             Log::error('gastronomia.nota_credito.fallo', [
                 'venta_factura_id' => $ventaFacturaId,
+                'clase_error' => $claseError,
                 'msg' => $e->getMessage(),
             ]);
 
-            return ['ok' => false, 'error' => $e->getMessage()];
+            return [
+                'ok' => false,
+                'error' => GastronomiaMovimientoStockSupport::mensajeErrorEmision($e),
+                'clase_error' => $claseError,
+            ];
         }
     }
 
@@ -389,6 +431,11 @@ final class GastronomiaNotaCreditoService
     }
 
     /**
+     * Imprime el ticket fiscal sincrónicamente tras emitir la NC, alineado con la
+     * emisión normal de factura (GastronomiaFacturaEmisionService). No usa
+     * defer()/imprimirTrasEmisionEncolado: el cliente espera que el ticket salga
+     * por la impresora térmica antes de cerrar el modal, igual que en F5/F8.
+     *
      * @param  array{ok:bool,venta_id?:int,factura?:string,mensaje?:string}  $resultado
      * @return array{ok:bool,venta_id?:int,factura?:string,mensaje?:string,warn?:string,impresion_ticket?:string,impresion_ticket_mensaje?:string}
      */

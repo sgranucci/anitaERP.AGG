@@ -1,0 +1,41 @@
+---
+description: Campo empresa en formularios según empresas asignadas al usuario
+globs: resources/views/**/*.blade.php
+alwaysApply: false
+---
+
+# Empresa asignada al usuario en formularios
+
+## Fuente de datos
+
+- Usar `EmpresaRepository::allFiltrado()` (empresas de `Session::get('usuario_empresas')`).
+- Pasar a la vista como `$empresa_query`.
+
+## Regla de UI
+
+| Empresas asignadas | Control |
+|---|---|
+| **1** | `input type="hidden"` con `name="empresa_id"` + `input readonly` con el nombre. No usar `<select>`. |
+| **2 o más** | `<select name="empresa_id">` con opción vacía y el listado filtrado. |
+| **Edición** (empresa fija del registro) | Misma lógica que una sola: hidden + texto readonly, salvo que el negocio permita cambiar empresa. |
+
+## Implementación
+
+- Preferir el partial `resources/views/includes/form-empresa-asignada.blade.php`:
+
+```blade
+@include('includes.form-empresa-asignada', [
+    'empresa_query' => $empresa_query,
+    'empresa_id' => $data->empresa_id ?? null,
+    'solo_lectura' => isset($data),
+])
+```
+
+- En JS que filtre por empresa (consultas modal, APIs), leer siempre `#empresa_id` (hidden o select).
+- No exigir “Seleccione empresa” si hay una sola: el hidden ya trae el valor.
+
+## APIs y consultas
+
+- Enviar `empresa_id` en POST/GET de búsquedas (cierres de turno, mozos, etc.).
+- URLs AJAX: prefijo `config('app.app_carpeta')` / variable global `carpetaBase`, no solo `route()` si la app corre en subcarpeta (`/anitaERP/public`).
+- CSRF: incluir `_token` del formulario en el body del POST (el layout no siempre define `meta csrf-token`).

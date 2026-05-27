@@ -5,6 +5,7 @@ namespace App\Services\Ventas\Gastronomia;
 use App\Models\Ventas\CuentaGastronomia;
 use App\Models\Ventas\DescuentoGastronomia;
 use App\Models\Ventas\Venta;
+use App\Models\Ventas\Venta_Impuesto;
 use App\Services\Ventas\FacturacionService;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -78,6 +79,7 @@ final class GastronomiaFacturacionService
         }
         if ($contextoDescuento['factura_cortesia_total']) {
             $resultado['factura_cortesia_total'] = true;
+            $this->normalizarTotalCortesia($resultado);
         }
 
         if (isset($resultado['venta_id'])) {
@@ -85,6 +87,65 @@ final class GastronomiaFacturacionService
         }
 
         return $resultado;
+    }
+
+    /**
+     * Normaliza el total de la factura de cortesía a exactamente $0,01 cuando el cálculo
+     * de impuestos arrastró centavos por redondeo de neto por línea (`ImpuestoService::calculaNetoItem`
+     * rounds 0.005 → 0.01 por ítem; con dos o más ítems suma $0,02+). Patcha la venta, el
+     * concepto Exento de venta_impuesto y el data_cae pendiente, manteniendo la consistencia
+     * con ARCA (ImpTotal = ImpOpEx + ImpNeto + ImpTotConc + ImpIVA + ImpTrib).
+     *
+     * @param  array<string, mixed>  $resultado  Devuelto por `generaComprobanteGeneral`. Mutado in-place.
+     */
+    private function normalizarTotalCortesia(array &$resultado): void
+    {
+        $ventaId = (int) ($resultado['venta_id'] ?? 0);
+        if ($ventaId <= 0) {
+            return;
+        }
+
+        $venta = Venta::query()->find($ventaId);
+        if (! $venta) {
+            return;
+        }
+
+        $totalActual = round((float) $venta->total, 2);
+        $exceso = round($totalActual - self::IMPORTE_MINIMO_FACTURA, 2);
+        if ($exceso <= 0.) {
+            return;
+        }
+
+        Log::warning('gastronomia.factura.cortesia_total_normalizado', [
+            'venta_id' => $ventaId,
+            'total_calculado' => $totalActual,
+            'total_normalizado' => self::IMPORTE_MINIMO_FACTURA,
+            'exceso_centavos' => $exceso,
+            'motivo' => 'Redondeo por línea en ImpuestoService::calculaNetoItem '
+                .'(0,005 → 0,01 por ítem con descuento de pie 100%).',
+        ]);
+
+        $venta->total = self::IMPORTE_MINIMO_FACTURA;
+        $venta->save();
+
+        $exento = Venta_Impuesto::query()
+            ->where('venta_id', $ventaId)
+            ->where('concepto', 'Exento')
+            ->first();
+        if ($exento instanceof Venta_Impuesto) {
+            $importeExento = round(max(0., (float) $exento->importe - $exceso), 2);
+            $exento->importe = $importeExento;
+            $exento->save();
+        }
+
+        if (isset($resultado['cae_pendiente']) && is_array($resultado['cae_pendiente'])) {
+            $dataCae = $resultado['cae_pendiente']['data_cae'] ?? null;
+            if (is_array($dataCae)) {
+                $dataCae['total'] = self::IMPORTE_MINIMO_FACTURA;
+                $dataCae['exento'] = round(max(0., (float) ($dataCae['exento'] ?? 0) - $exceso), 2);
+                $resultado['cae_pendiente']['data_cae'] = $dataCae;
+            }
+        }
     }
 
     /**
@@ -171,7 +232,7 @@ final class GastronomiaFacturacionService
 
         return [
             'total' => $contexto['factura_cortesia_total']
-                ? max(self::IMPORTE_MINIMO_FACTURA, round($total, 2))
+                ? self::IMPORTE_MINIMO_FACTURA
                 : $total,
             'sin_cobranza' => $contexto['factura_cortesia_total'],
             'factura_cortesia' => $contexto['factura_cortesia_total'],

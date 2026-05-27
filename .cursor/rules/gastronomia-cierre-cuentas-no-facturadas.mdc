@@ -1,0 +1,138 @@
+---
+description: Gastronomía — política de cuentas no facturadas al cerrar turno operativo y jornada
+globs: app/Services/Ventas/Gastronomia/GastronomiaJornadaService.php,app/Services/Ventas/Gastronomia/GastronomiaTurnoOperativoService.php,app/Services/Ventas/Gastronomia/GastronomiaTurnoSaneamientoService.php,resources/views/ventas/gastronomia/jornada/**,resources/views/ventas/gastronomia/habilitacion_turno/**,resources/views/ventas/gastronomia/saneamiento_turno/**,public/assets/pages/scripts/ventas/gastronomia/jornada.js,public/assets/pages/scripts/ventas/gastronomia/habilitacion_turno.js,public/assets/pages/scripts/ventas/gastronomia/saneamiento_turno.js,public/assets/pages/scripts/ventas/gastronomia/totales_turno_render.js
+alwaysApply: false
+---
+
+# Política de cuentas no facturadas (cierre turno / jornada)
+
+Las cuentas gastronómicas (`cuenta_gastronomia`) tienen tres estados:
+
+| Estado | Significado | Bloquea cierre turno final / jornada |
+|---|---|---|
+| `ESTADO_ABIERTA` **con ítems** (`lineas > 0`) | Cuenta con consumos cargados sin facturar | **SÍ** — debe facturarse o cerrarse sin facturar desde **Saneamiento de turnos** |
+| `ESTADO_ABIERTA` **sin ítems** (vacías) | Cuenta abierta sin consumos (mesa abierta y abandonada antes de cargar nada) | **NO** — se **auto-descartan** al cerrar el último turno del día o la jornada (pasan a `ESTADO_CERRADA`) |
+| `ESTADO_CERRADA` (cerrada sin facturar) | Estado terminal del saneamiento | **NO** — visible para auditoría, no requiere acción |
+| `ESTADO_FACTURADA` | Tiene venta asociada | **NO** |
+
+## Validación de cierre
+
+### `GastronomiaJornadaService::erroresAntesDeCerrar(int $empresaId)`
+
+Solo cuenta `contarCuentasAbiertasConItemsPorEmpresa()`. Mensaje:
+
+> Hay N cuenta(s) de mesa ABIERTA(S) con consumos sin facturar. Factúrelas o ciérrelas sin facturar desde Ventas → Gastronomía → Saneamiento de turnos antes de cerrar la jornada. Las cuentas abiertas sin ítems se descartan automáticamente al cerrar la jornada.
+
+### `GastronomiaTurnoOperativoService::erroresAntesDeCerrar(TurnoOperativoGastronomia $turno)`
+
+Aplica el conteo solo en el **último turno del día** (`esUltimoTurnoDelDia`). Usa `contarCuentasAbiertasConItemsEnTerminal()`. No bloquea por vacías ni cerradas sin facturar.
+
+## Auto-descarte al cerrar
+
+Cierre **validado** → recién entonces auto-descartar vacías:
+
+```php
+// JornadaService::cerrar
+$errores = $this->erroresAntesDeCerrar($empresaId);
+if ($errores !== []) { throw ... }
+$vaciasAutoDescartadas = $this->autoDescartarCuentasAbiertasVaciasPorEmpresa($empresaId);
+// componer observacion_cierre con nota '[Auto YYYY-MM-DD HH:mm] N cuenta(s) sin ítems descartada(s)…'
+```
+
+Mismo patrón en `TurnoOperativoService::cerrar`, pero solo si `esUltimoTurnoDelDia($turno)` y filtrado a la terminal (`autoDescartarCuentasAbiertasVaciasEnTerminal`).
+
+**No** auto-descartar antes de validar: si la validación falla (ej. otro turno habilitado abierto), se quedarían descartadas y no se cerró la jornada → daño silencioso.
+
+## Saneamiento de turnos (cuentas con consumos)
+
+`GastronomiaTurnoSaneamientoService` ofrece tres rutas de cierre administrativo:
+
+| Método | Cuándo se usa | Direccionamiento |
+|---|---|---|
+| `cerrarCuentasPendientesEnTerminal($turnoOperativoId, …)` | Hay un turno operativo HABILITADO en la terminal | `turno_operativo_id` |
+| `cerrarCuentasPendientesPorTerminal($empresaId, $pc, …)` | Todos los turnos del día están cerrados pero quedaron cuentas abiertas (típico bloqueo de jornada) | `(empresa_id, identificador_pc)` — si justo hubiera un turno habilitado, delega al método con turno |
+| `cerrarCuentasPendientesPorIds($empresaId, $cuentaIds[], …)` | Bucket huérfano con cuentas que no se pueden individualizar por `identificador_pc` (típico mesas abiertas vía `abrirMesa` cuya PV original ya no existe → `identificador_pc = NULL`) | `(empresa_id, cuenta_ids[])` |
+
+Las tres comparten `procesarCierreCuentas` y dividen en dos buckets:
+
+- **Con ítems** → la confirmación textual `CERRAR-{N}` se calcula sobre estas (`textoConfirmacionCierreCuentas`). Se cierran sin facturar.
+- **Sin ítems** → se cierran también pero etiquetadas como «Descartada (sin ítems)»; no exigen confirmación textual extra.
+
+El endpoint `POST gastronomia/saneamiento-turno/api/cerrar-cuentas-pendientes` acepta los tres esquemas en este orden de prioridad: `turno_operativo_id` → `cuenta_ids[]` → `(empresa_id + identificador_pc)`.
+
+Diagnóstico (`diagnosticoTerminal`) expone tres campos y lista las cuentas **siempre** (haya o no turno habilitado). Antes solo se cargaban si existía turno habilitado, ocultando cuentas abiertas cuando todos los turnos del día ya estaban cerrados → bloqueaba el cierre de jornada sin dejar al usuario saneamiento donde gestionarlas.
+
+| Campo | Uso |
+|---|---|
+| `cuentas_abiertas_con_items` | Las que bloquean cierre del último turno (badge naranja, sugerencia "cerrar_cuentas" / "cerrar_cuentas_sin_turno_activo") |
+| `cuentas_abiertas_vacias` | Informativo (badge celeste): se auto-descartan al cerrar |
+| `cuentas_cerradas_sin_facturar` | Estado terminal (badge gris): visibles para auditoría |
+
+### Sugerencias emitidas por `diagnosticoTerminal`
+
+| `accion` | Identifica por | Botón frontend |
+|---|---|---|
+| `cerrar_cuentas` | `turno_operativo_id` (turno HABILITADO) | `.js-cerrar-cuentas` |
+| `cerrar_cuentas_sin_turno_activo` | `empresa_id` + `identificador_pc` **o** `empresa_id` + `cuenta_ids[]` (sin turno HABILITADO; el JS prioriza `cuenta_ids` si vienen) | `.js-cerrar-cuentas-sin-turno` |
+
+### Bucket «sin PV configurada»
+
+`diagnosticoCuentasNoCubiertas($empresaId, $idsCubiertas)` agrega una "terminal" pseudo (`es_bucket_huerfano = true`, `identificador_pc = "— sin PV configurada —"`) con **toda** cuenta de la empresa (`estado IN [abierta, cerrada]`) cuyo id no haya sido capturado por ninguna iteración previa del loop por terminales configuradas. Esto incluye:
+
+- Cuentas con `configuracion_puntoventa_gastronomia_id IS NULL` y `identificador_pc` fuera de la lista de PVs configuradas.
+- Cuentas con `configuracion_puntoventa_gastronomia_id` apuntando a una PV borrada/deshabilitada (caso típico: mesa abierta vía `abrirMesa` quedó con `identificador_pc = NULL`).
+- Cuentas con `cfgId` y `identificador_pc` que no coinciden con ninguna PV configurada de la empresa (PV de otra empresa, datos legacy, etc.).
+
+Se agrupa por `identificador_pc` real:
+
+- Grupo con `identificador_pc` no vacío → sugerencia `cerrar_cuentas_sin_turno_activo` con `(empresa_id, identificador_pc)`.
+- Grupo con `identificador_pc` vacío/NULL → sugerencia `cerrar_cuentas_sin_turno_activo` con `(empresa_id, cuenta_ids[])` porque la PC no individualiza.
+
+El bucket solo se agrega si el diagnóstico **no** se filtró por una sola terminal. Invariante crítico: si jornada cuenta N cuentas bloqueantes (`contarCuentasAbiertasConItemsPorEmpresa`), saneamiento debe listar (entre todas las terminales + bucket) esas mismas N cuentas — el bucket «NO cubiertas» garantiza que ningún registro quede invisible.
+
+### Query helpers en `GastronomiaTurnoOperativoService`
+
+| Método | Requiere turno | Para usar desde |
+|---|---|---|
+| `listar/contar*EnTerminal(TurnoOperativoGastronomia $turno)` | Sí (HABILITADO o CERRADO) | Validaciones de cierre turno operativo |
+| `listar/contar*ParaPuntoventa(int $empresaId, int $cfgId, string $pc)` | No | Saneamiento sin turno activo |
+| `listarCuentasNoFacturadasNoCubiertas(int $empresaId, array $idsCubiertas)` | No | Bucket huérfano de saneamiento (todo lo que jornada cuenta pero el loop por terminales no levantó) |
+
+Las versiones `EnTerminal` ahora son thin wrappers sobre `ParaPuntoventa`. Si agregás un nuevo helper, exponé ambas firmas.
+
+## Estado para frontend
+
+### `GastronomiaJornadaService::estadoParaEmpresa`
+
+Devuelve `cuentas_abiertas_con_items` y `cuentas_abiertas_vacias`. La vista `ventas/gastronomia/jornada/index.blade.php` muestra una alerta informativa con el número de vacías que se descartarán.
+
+### `GastronomiaTurnoOperativoService::estadoParaTerminal`
+
+Campos:
+
+- `cuentas_sin_facturar` (alias de `cuentas_abiertas_con_items` para compatibilidad)
+- `cuentas_abiertas_con_items`
+- `cuentas_abiertas_vacias`
+- `cuentas_cerradas_sin_facturar`
+
+`totales_turno_render.js` y `habilitacion_turno.js` muestran badges separados:
+
+- **Naranja/rojo (último turno)**: abiertas con consumos (bloquean cierre)
+- **Celeste**: abiertas sin ítems (auto-descartan)
+- **Gris**: cerradas sin facturar (estado terminal)
+
+## Encabezado de jornada
+
+`ventas/gastronomia/jornada/index.blade.php`: usar `$estado['fecha_jornada_fmt']` y `$estado['fecha_factura_hoy_fmt']` (formato `DD-MM-YYYY`, `formatearFechaEncabezado` con `d-m-Y`). El resto del ERP usa `d/m/Y` (barras).
+
+## Al cambiar la política
+
+1. Actualizar **esta regla** primero.
+2. Mantener los campos `cuentas_abiertas_con_items` y `cuentas_abiertas_vacias` consistentes en `estadoParaTerminal` y `estadoParaEmpresa`.
+3. Conservar `cuentas_sin_facturar` como alias hacia adelante para no romper JS legacy.
+4. **Saneamiento debe poder operar sin turno habilitado**: el contador de jornada (`contarCuentasAbiertasConItemsPorEmpresa`) y el diagnóstico/cierre de saneamiento deben coincidir. Si la jornada dice «hay N cuentas» y saneamiento muestra vacío, es un bug — saneamiento debe listar cuentas y ofrecer acción aunque ningún turno esté HABILITADO.
+5. Probar el ciclo completo:
+   - Mesa abierta sin ítems → cerrar turno final → debe pasar a `cerrada`.
+   - Mesa abierta con ítems → debe bloquear y mandar a Saneamiento.
+   - Mesa cerrada sin facturar previa → debe ignorarse (no bloquea).
+   - Mesa abierta con ítems + todos los turnos del día cerrados (sin turno HABILITADO) → saneamiento debe listarla y permitir cerrarla via `cerrar_cuentas_sin_turno_activo` (endpoint con `empresa_id` + `identificador_pc`).

@@ -51,9 +51,9 @@
                             <div class="alert alert-success">
                                 <strong>Jornada abierta</strong>
                                 — Fecha jornada:
-                                <span id="lbl-fecha-jornada">{{ $estado['fecha_jornada'] }}</span>
+                                <span id="lbl-fecha-jornada">{{ $estado['fecha_jornada_fmt'] ?? $estado['fecha_jornada'] }}</span>
                                 · Facturas de hoy usan fecha
-                                <span id="lbl-fecha-factura">{{ $estado['fecha_factura_hoy'] }}</span>
+                                <span id="lbl-fecha-factura">{{ $estado['fecha_factura_hoy_fmt'] ?? $estado['fecha_factura_hoy'] }}</span>
                                 @if (! empty($estado['usuario_apertura']))
                                     <br>Abierta por {{ $estado['usuario_apertura'] }}
                                     @if (! empty($estado['apertura_en']))
@@ -106,11 +106,37 @@
                                     <div class="card-header">Cerrar jornada</div>
                                     <div class="card-body">
                                         @if (! empty($estado['errores_cierre']))
+                                            @php
+                                                $mostrarLinkSaneamiento = false;
+                                                foreach ($estado['errores_cierre'] as $err) {
+                                                    if (stripos($err, 'Saneamiento') !== false) {
+                                                        $mostrarLinkSaneamiento = true;
+                                                        break;
+                                                    }
+                                                }
+                                            @endphp
                                             <ul class="text-danger small" id="lista-errores-cierre">
                                                 @foreach ($estado['errores_cierre'] as $err)
                                                     <li>{{ $err }}</li>
                                                 @endforeach
                                             </ul>
+                                            @if ($mostrarLinkSaneamiento)
+                                                <div class="mb-2">
+                                                    <a href="{{ url('ventas/gastronomia/saneamiento-turno') }}"
+                                                       class="btn btn-warning btn-sm"
+                                                       target="_blank" rel="noopener">
+                                                        <i class="fa fa-external-link"></i>
+                                                        Ir a Saneamiento de turnos
+                                                    </a>
+                                                </div>
+                                            @endif
+                                        @endif
+                                        @if (! empty($estado['cuentas_abiertas_vacias']))
+                                            <div class="alert alert-info small py-2 mb-2">
+                                                {{ $estado['cuentas_abiertas_vacias'] }} cuenta(s) abierta(s) sin ítems se
+                                                <strong>descartarán automáticamente</strong> al cerrar la jornada
+                                                (no requieren saneamiento).
+                                            </div>
                                         @endif
                                         <div class="form-group">
                                             <label for="observacion_cerrar">Observación de cierre</label>

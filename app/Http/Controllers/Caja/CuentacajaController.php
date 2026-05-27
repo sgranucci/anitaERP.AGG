@@ -64,11 +64,10 @@ class CuentacajaController extends Controller
         $empresa_query = $this->empresaRepository->allFiltrado();
         $moneda_query = $this->monedaRepository->all();
         $banco_query = $this->bancoRepository->all();
-        $cuentacontable_query = $this->cuentacontableRepository->all();
         $usocuentacaja_query = $this->usocuentacajaRepository->all();
         $tipocuenta_enum = Cuentacaja::$enumTipocuenta;
 
-        return view('caja.cuentacaja.crear', compact('data', 'empresa_query', 'banco_query', 'cuentacontable_query',
+        return view('caja.cuentacaja.crear', compact('data', 'empresa_query', 'banco_query',
                                                     'tipocuenta_enum', 'moneda_query', 'usocuentacaja_query'));
     }
 
@@ -105,11 +104,10 @@ class CuentacajaController extends Controller
         $empresa_query = $this->empresaRepository->allFiltrado();
         $moneda_query = $this->monedaRepository->all();
         $banco_query = $this->bancoRepository->all();
-        $cuentacontable_query = $this->cuentacontableRepository->all();
         $usocuentacaja_query = $this->usocuentacajaRepository->all();
         $tipocuenta_enum = Cuentacaja::$enumTipocuenta;
 
-        return view('caja.cuentacaja.editar', compact('data', 'empresa_query', 'banco_query', 'cuentacontable_query',
+        return view('caja.cuentacaja.editar', compact('data', 'empresa_query', 'banco_query',
                                                     'tipocuenta_enum', 'moneda_query', 'usocuentacaja_query', 'soloConsulta'));
     }
 

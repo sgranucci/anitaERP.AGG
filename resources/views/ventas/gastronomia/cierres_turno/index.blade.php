@@ -77,7 +77,28 @@
                     </div>
                     <div class="form-group col-md-2">
                         <label class="small">PC</label>
-                        <input type="text" name="identificador_pc" class="form-control form-control-sm" value="{{ $filtros['identificador_pc'] ?? $identificador_pc_default }}" placeholder="Terminal"/>
+                        @php
+                            $pcSeleccionada = (string) ($filtros['identificador_pc'] ?? '');
+                            $pcsConfiguradas = collect($pc_query ?? [])->pluck('identificador_pc')->map(fn ($v) => (string) $v);
+                            $pcExtra = $pcSeleccionada !== '' && ! $pcsConfiguradas->contains($pcSeleccionada)
+                                ? $pcSeleccionada
+                                : null;
+                        @endphp
+                        <select name="identificador_pc" class="form-control form-control-sm">
+                            <option value="" @selected($pcSeleccionada === '')>Todas</option>
+                            @foreach ($pc_query ?? [] as $pc)
+                                @php
+                                    $etiquetaPc = (string) $pc->identificador_pc
+                                        .(! empty($pc->descripcion) ? ' — '.$pc->descripcion : '');
+                                @endphp
+                                <option value="{{ $pc->identificador_pc }}" @selected($pcSeleccionada === (string) $pc->identificador_pc)>
+                                    {{ $etiquetaPc }}
+                                </option>
+                            @endforeach
+                            @if ($pcExtra !== null)
+                                <option value="{{ $pcExtra }}" selected>{{ $pcExtra }} (sin configurar)</option>
+                            @endif
+                        </select>
                     </div>
                     <div class="form-group col-md-2">
                         <label class="small">Desde</label>

@@ -59,6 +59,20 @@ return [
     ),
 
     /**
+     * Fallback cuando getOrdersPOS responde ok:false (p. ej. «Interface not available»).
+     * POST analytics/getordersdetails — formato orderItems (doc. Waitry).
+     */
+    'get_orders_details_url' => env(
+        'WAITRY_GET_ORDERS_DETAILS_URL',
+        'https://api.waitry.net/1/analytics/analytics/getordersdetails'
+    ),
+
+    'get_orders_usar_detalles_fallback' => filter_var(
+        env('WAITRY_GET_ORDERS_USAR_DETALLES_FALLBACK', true),
+        FILTER_VALIDATE_BOOLEAN
+    ),
+
+    /**
      * Ventana de consulta getOrdersPOS desde el facturador (parámetros from/to).
      * Minutos hacia atrás desde ahora; 0 = sin filtro horario (no envía from/to).
      */

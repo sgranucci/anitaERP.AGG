@@ -581,4 +581,67 @@
             abrirModalTicketsTarjeta(tipo, id, btn.getAttribute('data-referencia') || '');
         });
     });
+
+    function initPaginaVerCierre(verCfg) {
+        var tipo = verCfg.tipo || 'cierre';
+        var id = parseInt(verCfg.id, 10) || 0;
+        var referencia = verCfg.referencia || '';
+        if (id <= 0) {
+            return;
+        }
+
+        modalContext.tipo = tipo;
+        modalContext.id = id;
+        canjesPremioCtx.tipo = tipo;
+        canjesPremioCtx.id = id;
+        canjesFidelidadCtx.tipo = tipo;
+        canjesFidelidadCtx.id = id;
+        ticketsTarjetaCtx.tipo = tipo;
+        ticketsTarjetaCtx.id = id;
+
+        var cargado = {
+            comprobantes: false,
+            canjesPremio: false,
+            canjesFidelidad: false,
+            ticketsTarjeta: false,
+        };
+
+        function alMostrarSolapa(hash) {
+            if (hash === '#tab-ver-comprobantes' && !cargado.comprobantes) {
+                cargado.comprobantes = true;
+                var cont = document.getElementById('grilla-comprobantes-cierre');
+                if (cont) {
+                    cont.innerHTML = '<p class="text-muted p-3 mb-0"><i class="fa fa-spinner fa-spin"></i> Cargando comprobantes…</p>';
+                }
+                cargarPagina(1);
+            }
+            if (hash === '#tab-ver-canjes-premio' && !cargado.canjesPremio) {
+                cargado.canjesPremio = true;
+                cargarCanjesPremioPagina(1);
+            }
+            if (hash === '#tab-ver-canjes-fidelidad' && !cargado.canjesFidelidad) {
+                cargado.canjesFidelidad = true;
+                cargarCanjesFidelidadPagina(1);
+            }
+            if (hash === '#tab-ver-tickets-tarjeta' && !cargado.ticketsTarjeta) {
+                cargado.ticketsTarjeta = true;
+                cargarTicketsTarjetaPagina(1);
+            }
+        }
+
+        if (typeof jQuery !== 'undefined') {
+            jQuery('#cierre-turno-ver-tabs a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
+                alMostrarSolapa(jQuery(e.target).attr('href') || '');
+            });
+        }
+
+        var subComp = document.getElementById('modal-comprobantes-cierre-subtitulo');
+        if (subComp && referencia) {
+            subComp.textContent = referencia;
+        }
+    }
+
+    if (window.CIERRE_TURNO_VER && parseInt(window.CIERRE_TURNO_VER.id, 10) > 0) {
+        initPaginaVerCierre(window.CIERRE_TURNO_VER);
+    }
 })();

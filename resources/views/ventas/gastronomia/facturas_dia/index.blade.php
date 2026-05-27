@@ -6,143 +6,49 @@
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
+@include('ventas.gastronomia.facturas_dia.partials.script_generar_nc')
 <script>
 (function () {
     var csrfToken = document.querySelector('meta[name="csrf-token"]');
     var token = csrfToken ? csrfToken.getAttribute('content') : '';
 
-    function fdRefrescarCsrfToken() {
-        return fetch('{{ url('csrf-token') }}', {
-            method: 'GET',
-            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+    function leerRespuesta(r) {
+        return r.text().then(function (txt) {
+            var body = null;
+            if (txt) {
+                try { body = JSON.parse(txt); } catch (e) {}
+            }
+            return { ok: r.ok, status: r.status, body: body };
+        });
+    }
+
+    function mensajeError(res, defecto) {
+        if (res && res.status === 419) {
+            return 'La sesión expiró por inactividad. Recargá la página (F5) y volvé a intentar.';
+        }
+        if (res && res.body) {
+            var b = res.body;
+            return b.error || b.mensaje || b.message || defecto;
+        }
+        return defecto;
+    }
+
+    function refrescarCsrfToken() {
+        return fetch('{{ route('csrf_token_refresh') }}', {
+            headers: { 'Accept': 'application/json' },
             credentials: 'same-origin',
             cache: 'no-store',
-        }).then(function (r) {
-            if (!r.ok) throw new Error('refresh-csrf-status-' + r.status);
-            return r.json();
-        }).then(function (j) {
-            var nuevo = j && j.token ? String(j.token) : '';
-            if (nuevo) {
-                token = nuevo;
-                if (csrfToken) csrfToken.setAttribute('content', nuevo);
-            }
-            return nuevo;
-        });
-    }
-
-    function fdPostNotaCreditoBody(ventaId, tokenActual, payload) {
-        return fetch('{{ url('ventas/gastronomia/facturas-dia') }}/' + ventaId + '/generar-nota-credito', {
-            method: 'POST',
-            headers: {
-                'X-CSRF-TOKEN': tokenActual,
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest',
-            },
-            credentials: 'same-origin',
-            body: JSON.stringify(payload || {}),
-        }).then(function (r) {
-            return r.text().then(function (txt) {
-                var body = null;
-                try { body = txt ? JSON.parse(txt) : null; } catch (e) { body = null; }
-                return { ok: r.ok, status: r.status, body: body, raw: txt };
-            });
-        });
-    }
-
-    var ncModalEl = document.getElementById('modal-fd-generar-nc');
-    var ncBtnConfirmar = document.getElementById('fd-nc-confirmar');
-    var ncInputLeyenda = document.getElementById('fd-nc-leyenda');
-    var ncTextoCompro = document.getElementById('fd-nc-compro');
-    var ncEstado = { ventaId: null, codigo: '', btn: null };
-
-    document.querySelectorAll('.js-fd-generar-nc').forEach(function (btn) {
-        btn.addEventListener('click', function (e) {
-            e.preventDefault();
-            e.stopPropagation();
-            var ventaId = btn.getAttribute('data-venta-id');
-            var codigo = btn.getAttribute('data-codigo') || '';
-            if (!ventaId || btn.disabled) return;
-            ncEstado.ventaId = ventaId;
-            ncEstado.codigo = codigo;
-            ncEstado.btn = btn;
-            if (ncTextoCompro) ncTextoCompro.textContent = codigo || ('#' + ventaId);
-            if (ncInputLeyenda) ncInputLeyenda.value = '';
-            if (typeof $ !== 'undefined' && ncModalEl) {
-                $('#modal-fd-generar-nc').modal('show');
-            } else {
-                ejecutarNotaCredito('');
-            }
-        });
-    });
-
-    function ejecutarNotaCredito(leyenda) {
-        var ventaId = ncEstado.ventaId;
-        var btn = ncEstado.btn;
-        if (!ventaId) return;
-        if (btn) btn.disabled = true;
-        if (ncBtnConfirmar) ncBtnConfirmar.disabled = true;
-        var payload = { leyenda: leyenda || '' };
-        fdPostNotaCreditoBody(ventaId, token, payload)
-            .then(function (res) {
-                if (res.status === 419) {
-                    return fdRefrescarCsrfToken().then(function (nuevo) {
-                        if (!nuevo) return res;
-                        return fdPostNotaCreditoBody(ventaId, nuevo, payload);
-                    });
+        })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (j) {
+                var nuevo = j && j.token ? j.token : null;
+                if (nuevo) {
+                    token = nuevo;
+                    if (csrfToken) csrfToken.setAttribute('content', nuevo);
                 }
-                return res;
+                return nuevo;
             })
-            .then(function (res) {
-                if (res.ok && res.body && res.body.ok) {
-                    if (typeof $ !== 'undefined' && ncModalEl) {
-                        $('#modal-fd-generar-nc').modal('hide');
-                    }
-                    var txt = res.body.mensaje || 'Nota de crédito generada.';
-                    if (typeof toastr !== 'undefined') {
-                        if (res.body.warn) {
-                            toastr.warning(res.body.warn);
-                        }
-                        toastr.success(txt);
-                    } else {
-                        alert((res.body.warn ? res.body.warn + '\n\n' : '') + txt);
-                    }
-                    window.location.reload();
-                } else {
-                    var err = '';
-                    if (res.body) {
-                        err = res.body.error || res.body.mensaje || res.body.message || '';
-                    }
-                    if (!err && res.raw) {
-                        err = String(res.raw).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 400);
-                    }
-                    if (!err) {
-                        err = 'Error al generar la nota de crédito.';
-                    }
-                    err = 'HTTP ' + res.status + ': ' + err;
-                    console.error('NC gastronomía falló', res);
-                    if (typeof toastr !== 'undefined') toastr.error(err, '', { timeOut: 12000, extendedTimeOut: 4000 });
-                    else alert(err);
-                }
-            })
-            .catch(function (e) {
-                console.error('NC gastronomía error de red', e);
-                var msg = 'Error de comunicación al generar la nota de crédito.' + (e && e.message ? ' (' + e.message + ')' : '');
-                if (typeof toastr !== 'undefined') toastr.error(msg);
-                else alert(msg);
-            })
-            .finally(function () {
-                if (btn) btn.disabled = false;
-                if (ncBtnConfirmar) ncBtnConfirmar.disabled = false;
-            });
-    }
-
-    if (ncBtnConfirmar) {
-        ncBtnConfirmar.addEventListener('click', function (e) {
-            e.preventDefault();
-            var leyenda = ncInputLeyenda ? String(ncInputLeyenda.value || '').trim() : '';
-            ejecutarNotaCredito(leyenda);
-        });
+            .catch(function () { return null; });
     }
 
     document.querySelectorAll('.js-fd-tickets-tarjeta').forEach(function (btn) {
@@ -167,10 +73,10 @@
                 headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                 credentials: 'same-origin',
             })
-                .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+                .then(leerRespuesta)
                 .then(function (res) {
-                    if (!res.ok || !res.body.ok) {
-                        var msg = (res.body && (res.body.error || res.body.mensaje)) || 'No se pudieron cargar los tickets.';
+                    if (!res.ok || !res.body || !res.body.ok) {
+                        var msg = mensajeError(res, 'No se pudieron cargar los tickets.');
                         tbody.innerHTML = '';
                         if (errEl) {
                             errEl.textContent = msg;
@@ -226,10 +132,10 @@
                 headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                 credentials: 'same-origin',
             })
-                .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+                .then(leerRespuesta)
                 .then(function (res) {
-                    if (!res.ok || !res.body.ok) {
-                        var msg = (res.body && (res.body.error || res.body.mensaje)) || 'No se pudieron cargar los canjes.';
+                    if (!res.ok || !res.body || !res.body.ok) {
+                        var msg = mensajeError(res, 'No se pudieron cargar los canjes.');
                         tbody.innerHTML = '';
                         if (errEl) {
                             errEl.textContent = msg;
@@ -287,10 +193,10 @@
                 headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                 credentials: 'same-origin',
             })
-                .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+                .then(leerRespuesta)
                 .then(function (res) {
-                    if (!res.ok || !res.body.ok) {
-                        var msg = (res.body && (res.body.error || res.body.mensaje)) || 'No se pudieron cargar los canjes.';
+                    if (!res.ok || !res.body || !res.body.ok) {
+                        var msg = mensajeError(res, 'No se pudieron cargar los canjes.');
                         tbody.innerHTML = '';
                         if (errEl) {
                             errEl.textContent = msg;
@@ -333,22 +239,32 @@
             var ventaId = btn.getAttribute('data-venta-id');
             if (!ventaId || btn.disabled) return;
             btn.disabled = true;
-            fetch('{{ url('ventas/gastronomia/facturas-dia') }}/' + ventaId + '/reimprimir-ticket', {
-                method: 'POST',
-                headers: {
-                    'X-CSRF-TOKEN': token,
-                    'Accept': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-                credentials: 'same-origin',
-            })
-                .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+            function enviarReimpresion() {
+                return fetch('{{ url('ventas/gastronomia/facturas-dia') }}/' + ventaId + '/reimprimir-ticket', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': token,
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    credentials: 'same-origin',
+                }).then(leerRespuesta);
+            }
+
+            enviarReimpresion()
                 .then(function (res) {
-                    if (res.ok && res.body.ok) {
-                        if (typeof toastr !== 'undefined') toastr.success(res.body.mensaje || 'Ticket enviado.');
-                        else alert(res.body.mensaje || 'Ticket enviado.');
+                    if (res.status !== 419) return res;
+                    return refrescarCsrfToken().then(function (nuevo) {
+                        return nuevo ? enviarReimpresion() : res;
+                    });
+                })
+                .then(function (res) {
+                    if (res.ok && res.body && res.body.ok) {
+                        var okMsg = (res.body.mensaje || res.body.message) || 'Ticket enviado.';
+                        if (typeof toastr !== 'undefined') toastr.success(okMsg);
+                        else alert(okMsg);
                     } else {
-                        var msg = (res.body && (res.body.error || res.body.mensaje)) || 'Error al reimprimir.';
+                        var msg = mensajeError(res, 'Error al reimprimir.');
                         if (typeof toastr !== 'undefined') toastr.error(msg);
                         else alert(msg);
                     }
@@ -716,38 +632,7 @@
     </div>
 </div>
 
-<div class="modal fade" id="modal-fd-generar-nc" tabindex="-1" role="dialog" aria-labelledby="modal-fd-generar-nc-title" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered" role="document">
-        <div class="modal-content">
-            <div class="modal-header py-2">
-                <h6 class="modal-title" id="modal-fd-generar-nc-title">Generar nota de crédito</h6>
-                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">&times;</button>
-            </div>
-            <div class="modal-body py-3">
-                <p class="mb-2 small">
-                    Se va a <strong>revertir</strong> el comprobante <strong id="fd-nc-compro">—</strong> emitiendo una nota de crédito por el mismo importe.
-                </p>
-                <ul class="small mb-3 pl-3">
-                    <li>La factura original no se borra: queda compensada fiscalmente por la NC.</li>
-                    <li>Se reintegran los movimientos de stock e insumos de Anita.</li>
-                    <li>La NC se registra en el turno de esta terminal.</li>
-                </ul>
-                <div class="form-group mb-0">
-                    <label for="fd-nc-leyenda" class="small mb-1">Leyenda (motivo de la reversión)</label>
-                    <textarea id="fd-nc-leyenda" class="form-control form-control-sm" rows="3"
-                              maxlength="255" placeholder="Opcional. Ej.: Cliente devolvió pedido; error en cobranza; mesa equivocada…"></textarea>
-                    <small class="text-muted">Se guarda en la leyenda del comprobante de la nota de crédito.</small>
-                </div>
-            </div>
-            <div class="modal-footer py-2">
-                <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-sm btn-warning" id="fd-nc-confirmar">
-                    <i class="fas fa-undo"></i> Generar nota de crédito
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
+@include('ventas.gastronomia.facturas_dia.partials.modal_generar_nc')
 
 <div class="modal fade" id="modal-fd-tickets-tarjeta" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered" role="document">

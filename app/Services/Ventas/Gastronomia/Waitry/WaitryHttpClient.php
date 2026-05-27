@@ -221,6 +221,12 @@ final class WaitryHttpClient
             $msg = json_encode($msg, JSON_UNESCAPED_UNICODE);
         }
 
-        return trim((string) $msg);
+        $msg = trim((string) $msg);
+        if ($httpCode >= 500) {
+            return 'Error en servidor Waitry (HTTP '.$httpCode.'): '.$msg
+                .' — es un fallo del lado Waitry; contacte a info@waitry.net.';
+        }
+
+        return $msg;
     }
 }

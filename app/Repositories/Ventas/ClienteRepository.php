@@ -819,7 +819,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 				'0',
 				'".$this->sqlLit($request['desc_provincia'] ?? '')."',
 				' ',
-				' ',
+				'0',
 				'0',
 				' ',
 				'0',

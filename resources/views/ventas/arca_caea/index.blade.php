@@ -3,7 +3,12 @@
     CAEA — ARCA / WSFE
 @endsection
 
+@section('scripts')
+@include('ventas.arca_caea.partials.detalle_script')
+@endsection
+
 @section('contenido')
+@include('ventas.arca_caea.partials.detalle_modal')
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
@@ -142,8 +147,17 @@
                                         @endif
                                     </td>
                                     <td>{{ $r->updated_at?->format('d/m/Y H:i') }}</td>
-                                    <td>
-                                        <a href="{{ route('arca_caea_ver', $r->id) }}" class="btn btn-xs btn-outline-info">Ver</a>
+                                    <td class="text-nowrap">
+                                        @if (can('ver-arca-caea', false))
+                                            <button type="button"
+                                                class="btn-accion-tabla tooltipsC js-arca-caea-ver"
+                                                title="Ver detalle"
+                                                data-id="{{ $r->id }}"
+                                                data-quincena="{{ $r->periodo }}/Q{{ $r->orden }}"
+                                                data-empresa="{{ $r->empresa->nombre ?? '' }}">
+                                                <i class="fa fa-eye text-info"></i>
+                                            </button>
+                                        @endif
                                     </td>
                                 </tr>
                             @empty

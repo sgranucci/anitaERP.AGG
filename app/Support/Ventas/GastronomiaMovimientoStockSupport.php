@@ -74,18 +74,33 @@ final class GastronomiaMovimientoStockSupport
         return $data;
     }
 
-    public static function mensajeErrorEmision(\Throwable $e): string
+    /**
+     * Mensaje legible para el operador del POS según la clase del error.
+     *
+     * - `InvalidArgumentException` (validaciones internas / preflight) se devuelven tal cual:
+     *   ya están redactadas para el operador ("Configure el tipo de transacción…", "No hay
+     *   configuración de PV…", "Receptor manual incompleto…", etc.).
+     * - El resto delega en `ArcaWsfeEmisionResiliencia::formatearMensajeOperador()` que arma
+     *   un texto con prefijo y sugerencia de acción según `transporte` / `datos` / `sistema` /
+     *   `sin_clasificar`.
+     *
+     * @param  array{intento_caea?:bool,reintento_caea_habilitado?:bool}|null  $contexto
+     */
+    public static function mensajeErrorEmision(\Throwable $e, ?array $contexto = null): string
     {
         $msg = trim($e->getMessage());
-        if ($msg === '') {
-            return 'No se pudo completar la facturación. Revise la configuración e intente nuevamente.';
-        }
 
         if ($e instanceof \InvalidArgumentException) {
-            return $msg;
+            return $msg !== ''
+                ? $msg
+                : 'No se pudo completar la facturación: validación interna falló sin detalle. Revise la configuración del PV gastronomía.';
         }
 
-        return 'No se pudo completar la facturación: '.$msg;
+        return \App\Support\Ventas\ArcaWsfeEmisionResiliencia::formatearMensajeOperador(
+            $msg,
+            null,
+            $contexto,
+        );
     }
 
     public static function nullableFkId(mixed $value): ?int

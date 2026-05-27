@@ -305,17 +305,15 @@ final class GastronomiaTicketCanjePremioService
                 continue;
             }
 
-            $sku = $this->normalizarSkuCanje($giftId);
-            $articulo = Articulo::query()
-                ->where('empresa_id', $empresaId)
-                ->where('sku', $sku)
-                ->first();
+            $articulo = $this->resolverArticuloPorGiftId($giftId, $empresaId);
 
             if (! $articulo) {
                 throw new InvalidArgumentException(
-                    'El artículo que quiere canjear no existe (SKU: '.$sku.').'
+                    'El artículo que quiere canjear no existe (SKU Wigos: '.$giftId.').'
                 );
             }
+
+            $sku = trim((string) $articulo->sku);
 
             [$fecha, $hora] = $this->parsearFechaWigos((string) ($fila->REQUESTED ?? ''));
             $fechaCarbon = Carbon::parse($fecha.' '.$hora);
@@ -360,6 +358,44 @@ final class GastronomiaTicketCanjePremioService
         return $items;
     }
 
+  /**
+   * Busca artículo por GIFT_ID de Wigos (ERP: sku corto ej. V0277; legacy: 13 chars con dígito en pos. 12).
+   * Catálogo compartido: empresa_id null/0 aplica a cualquier PV (igual que queryArticulosCatalogo).
+   */
+    private function resolverArticuloPorGiftId(string $giftId, int $empresaId): ?Articulo
+    {
+        $giftId = trim(str_replace(["\r", "\n"], '', $giftId));
+        if ($giftId === '') {
+            return null;
+        }
+
+        $candidatos = array_values(array_unique(array_filter([
+            $giftId,
+            $this->normalizarSkuCanje($giftId),
+        ], static fn (string $s) => $s !== '')));
+
+        foreach ($candidatos as $skuBusqueda) {
+            $skuUpper = mb_strtoupper(trim($skuBusqueda), 'UTF-8');
+            $articulo = Articulo::query()
+                ->where(function ($q) use ($empresaId) {
+                    $q->whereNull('empresa_id')
+                        ->orWhere('empresa_id', 0)
+                        ->orWhere('empresa_id', $empresaId);
+                })
+                ->whereRaw('UPPER(TRIM(sku)) = ?', [$skuUpper])
+                ->first();
+
+            if ($articulo) {
+                return $articulo;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Formato legacy COMAND_pide_canje (Informix): 13 caracteres, dígito verificador en posición 12.
+     */
     private function normalizarSkuCanje(string $sku): string
     {
         $xstr = substr(trim($sku), 0, 13);

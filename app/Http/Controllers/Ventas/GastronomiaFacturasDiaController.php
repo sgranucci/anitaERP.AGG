@@ -294,7 +294,7 @@ class GastronomiaFacturasDiaController extends Controller
         ]);
     }
 
-    public function ver(int $ventaId)
+    public function ver(int $ventaId, Request $request)
     {
         can('ver-factura-gastronomia');
 
@@ -313,6 +313,7 @@ class GastronomiaFacturasDiaController extends Controller
                 'cobranzasDirectas',
                 'puntoventas',
                 'monedas',
+                'tipotransacciones',
             ])
             ->findOrFail($ventaId);
 
@@ -327,6 +328,28 @@ class GastronomiaFacturasDiaController extends Controller
         $cobranzaMedios = GastronomiaVentaDetalleSupport::mediosPagoPorCobranza($cobranzas);
         $articuloFiltroId = (int) request()->get('articulo_id', 0);
 
+        $esComprobanteNc = $meta->venta_factura_origen_id !== null;
+        $ncVentaId = $esComprobanteNc
+            ? null
+            : GastronomiaNotaCreditoService::notaCreditoExistenteParaFactura($ventaId);
+
+        $tipoFactura = $venta->tipotransacciones;
+        $esFacturaVenta = ! $esComprobanteNc
+            && (! $tipoFactura || $tipoFactura->signo === 'S');
+
+        $pc = GastronomiaIdentificadorPc::resolver($request);
+        $requiereTurno = GastronomiaTurnoOperativoService::requiereHabilitacionTurno();
+        $turnoHabilitado = ! $requiereTurno;
+        if ($requiereTurno && $cfgPv !== null) {
+            $turnoHabilitado = $this->turnoOperativoService->turnoHabilitadoEnPc($pc) !== null;
+        }
+
+        $puedeNc = can('generar-nota-credito-gastronomia-facturas-dia', false)
+            && $esFacturaVenta
+            && (float) ($venta->total ?? 0) >= 0.01
+            && $ncVentaId === null
+            && (! $requiereTurno || $turnoHabilitado);
+
         return view('ventas.gastronomia.facturas_dia.ver', [
             'meta' => $meta,
             'venta' => $venta,
@@ -339,6 +362,13 @@ class GastronomiaFacturasDiaController extends Controller
             'itemsConInsumos' => $itemsConInsumos,
             'cobranzaMedios' => $cobranzaMedios,
             'articulo_filtro_id' => $articuloFiltroId,
+            'puede_nc' => $puedeNc,
+            'nc_venta_id' => $ncVentaId,
+            'es_comprobante_nc' => $esComprobanteNc,
+            'requiere_habilitacion_turno' => $requiereTurno,
+            'turno_habilitado' => $turnoHabilitado,
+            'url_habilitacion_turno' => route('gastronomia_habilitacion_turno'),
+            'identificador_pc' => $pc,
         ]);
     }
 

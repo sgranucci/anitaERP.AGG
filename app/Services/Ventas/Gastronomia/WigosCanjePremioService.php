@@ -2,10 +2,9 @@
 
 namespace App\Services\Ventas\Gastronomia;
 
-use Illuminate\Support\Facades\Config;
-use Illuminate\Support\Facades\DB;
+use App\Support\Wigos\WigosSqlServerProcess;
 use InvalidArgumentException;
-use PDO;
+use PDOException;
 use RuntimeException;
 use Throwable;
 
@@ -47,9 +46,28 @@ final class WigosCanjePremioService
         }
         $secundario = $primario === 'A' ? 'B' : 'A';
 
-        $filas = $this->ejecutarSp($primario, $codigo);
-        if ($filas === [] && $this->conexionConfigurada($secundario)) {
-            $filas = $this->ejecutarSp($secundario, $codigo);
+        $errores = [];
+
+        try {
+            $filas = $this->ejecutarSp($primario, $codigo);
+        } catch (RuntimeException $e) {
+            $errores[$primario] = $e->getMessage();
+            $filas = null;
+        }
+
+        if ($filas === null && $this->conexionConfigurada($secundario)) {
+            try {
+                $filas = $this->ejecutarSp($secundario, $codigo);
+            } catch (RuntimeException $e) {
+                $errores[$secundario] = $e->getMessage();
+                $filas = null;
+            }
+        }
+
+        if ($filas === null) {
+            throw new RuntimeException(
+                'No se pudo conectar a Wigos. '.implode(' | ', $errores)
+            );
         }
 
         if ($filas === []) {
@@ -80,32 +98,54 @@ final class WigosCanjePremioService
     private function ejecutarSp(string $alias, string $codigo): array
     {
         if (! $this->conexionConfigurada($alias)) {
-            return [];
+            throw new RuntimeException('Wigos '.$alias.': conexión no configurada (host vacío).');
         }
 
-        $connectionName = 'wigos_'.$alias;
-        $this->registrarConexion($alias, $connectionName);
-
         try {
-            $pdo = DB::connection($connectionName)->getPdo();
-            $stmt = $pdo->prepare('EXEC spVoucherGiftData @pBarcode = ?');
-            $stmt->execute([$codigo]);
-
-            $filas = [];
-            do {
-                while ($row = $stmt->fetch(PDO::FETCH_OBJ)) {
-                    $filas[] = $row;
-                }
-            } while ($stmt->nextRowset());
-
-            return $filas;
+            return WigosSqlServerProcess::ejecutarSpVoucherGiftData($alias, $codigo);
+        } catch (RuntimeException $e) {
+            throw new RuntimeException(
+                $this->normalizarMensajeError($alias, $e),
+                0,
+                $e
+            );
         } catch (Throwable $e) {
             throw new RuntimeException(
-                'Error al consultar Wigos ('.$alias.'): '.$e->getMessage(),
+                'Wigos '.$alias.': '.$e->getMessage(),
                 0,
                 $e
             );
         }
+    }
+
+    private function normalizarMensajeError(string $alias, RuntimeException $e): string
+    {
+        $msg = $e->getMessage();
+        if (str_starts_with($msg, 'Wigos '.$alias.':')) {
+            $msg = trim(substr($msg, strlen('Wigos '.$alias.':')));
+        }
+
+        $previous = $e->getPrevious();
+        if ($previous instanceof PDOException) {
+            $msg = $previous->getMessage();
+        }
+
+        if (stripos($msg, 'Login timeout') !== false) {
+            return 'Wigos '.$alias.': no responde (login timeout) — verificar red/firewall hacia '
+                .'el SQL Server, puerto y servicio activo.';
+        }
+
+        if (stripos($msg, '0x2746') !== false) {
+            return 'Wigos '.$alias.': TLS/OpenSSL incompatible con SQL Server 2012 — verificar '
+                .'config/openssl/wigos-mssql.cnf y subproceso Wigos.';
+        }
+
+        if (stripos($msg, 'TLS') !== false || stripos($msg, 'SSL') !== false || stripos($msg, 'encrypt') !== false) {
+            return 'Wigos '.$alias.': TLS/encriptación rechazada — revisar WIGOS_ENCRYPT '
+                .'(usar "no" si el server no tiene cert) y WIGOS_TRUST_SERVER_CERTIFICATE.';
+        }
+
+        return 'Wigos '.$alias.': '.$msg;
     }
 
     private function conexionConfigurada(string $alias): bool
@@ -114,22 +154,5 @@ final class WigosCanjePremioService
         $host = trim((string) ($cfg['host'] ?? ''));
 
         return $host !== '';
-    }
-
-    private function registrarConexion(string $alias, string $connectionName): void
-    {
-        $cfg = (array) config('wigos.connections.'.$alias, []);
-        Config::set('database.connections.'.$connectionName, [
-            'driver' => 'sqlsrv',
-            'host' => $cfg['host'] ?? '',
-            'port' => $cfg['port'] ?? '1433',
-            'database' => $cfg['database'] ?? 'wgdb_000',
-            'username' => $cfg['username'] ?? '',
-            'password' => $cfg['password'] ?? '',
-            'charset' => 'utf8',
-            'prefix' => '',
-            'prefix_indexes' => true,
-        ]);
-        DB::purge($connectionName);
     }
 }

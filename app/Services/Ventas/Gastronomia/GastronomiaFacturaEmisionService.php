@@ -318,6 +318,7 @@ final class GastronomiaFacturaEmisionService
                 ) {
                     $this->encolarWaitryTrasRespuesta($resultado, $cuenta, $mediosPago);
                     $profiler?->marcar('waitry_encolado');
+                    $resultado = $this->enriquecerRespuestaExitoEmision($resultado, $cuenta, true);
 
                     return $this->adjuntarProfileEmision($resultado, $profiler, $cuenta);
                 }
@@ -325,15 +326,28 @@ final class GastronomiaFacturaEmisionService
                 $profiler?->marcar('antes_waitry');
                 $resultado = $this->aplicarWaitryComandaTrasEmision($resultado, $cuenta, $mediosPago);
                 $profiler?->marcar('despues_waitry');
+                $resultado = $this->enriquecerRespuestaExitoEmision($resultado, $cuenta, false);
 
                 return $this->adjuntarProfileEmision($resultado, $profiler, $cuenta);
             } catch (Throwable $e) {
+                $claseError = ArcaWsfeEmisionResiliencia::clasificarError($e->getMessage());
+                $reintentoHabilitado = ArcaWsfeEmisionResiliencia::reintentarCaeaSiFallaComunicacion();
                 Log::error('gastronomia.emitir_factura.fallo', [
                     'cuenta_id' => $cuenta->id,
+                    'pv_intentado' => $puntoventaId,
+                    'usa_caea' => $usaCaea,
+                    'clase_error' => $claseError,
                     'msg' => $e->getMessage(),
                 ]);
 
                 if (! $forzarPvCaea && ArcaWsfeEmisionResiliencia::debeReintentarTransaccionConCaea($e->getMessage(), $usaCaea)) {
+                    Log::warning('gastronomia.emitir_factura.reintento_caea', [
+                        'cuenta_id' => $cuenta->id,
+                        'pv_cae_fallado' => $puntoventaId,
+                        'clase_error' => $claseError,
+                        'motivo' => 'error de '.ArcaWsfeEmisionResiliencia::etiquetaClaseError($claseError),
+                    ]);
+
                     return $this->emitirFacturaDesdeCuenta(
                         $cuenta,
                         $monedaId,
@@ -346,7 +360,13 @@ final class GastronomiaFacturaEmisionService
                 }
 
                 return $this->adjuntarProfileEmision(
-                    ['error' => GastronomiaMovimientoStockSupport::mensajeErrorEmision($e)],
+                    [
+                        'error' => GastronomiaMovimientoStockSupport::mensajeErrorEmision($e, [
+                            'intento_caea' => $forzarPvCaea || $usaCaea,
+                            'reintento_caea_habilitado' => $reintentoHabilitado,
+                        ]),
+                        'clase_error' => $claseError,
+                    ],
                     $profiler,
                     $cuenta,
                 );
@@ -468,10 +488,13 @@ final class GastronomiaFacturaEmisionService
                 $profiler?->marcar('tx_vencae_fin');
             }
 
+            $waitryOrderIdEmision = (int) ($cuenta->waitry_order_id ?? 0);
+
             VentaGastronomiaEmision::updateOrCreate(
                 ['venta_id' => $venta->id],
                 [
                     'cuenta_gastronomia_id' => $cuenta->id,
+                    'waitry_order_id' => $waitryOrderIdEmision > 0 ? $waitryOrderIdEmision : null,
                     'identificador_pc' => GastronomiaIdentificadorPc::resolver(),
                     'configuracion_puntoventa_gastronomia_id' => $cfg->id,
                 ],
@@ -627,6 +650,38 @@ final class GastronomiaFacturaEmisionService
     }
 
     /**
+     * Mensaje principal de éxito para el POS (mismo criterio que notas de crédito).
+     *
+     * @param  array<string, mixed>  $resultado
+     * @return array<string, mixed>
+     */
+    private function enriquecerRespuestaExitoEmision(
+        array $resultado,
+        CuentaGastronomia $cuenta,
+        bool $waitryEncolado,
+    ): array {
+        $facturaTxt = trim((string) ($resultado['factura'] ?? ''));
+        if ($facturaTxt === '') {
+            return $resultado;
+        }
+
+        $mensaje = 'Factura '.$facturaTxt.' emitida correctamente.';
+        $waitryOrderId = (int) ($cuenta->waitry_order_id ?? 0);
+
+        if ($waitryEncolado && $waitryOrderId > 0) {
+            $mensaje .= ' Waitry se actualizará en segundo plano.';
+        } elseif (($resultado['waitry_pago'] ?? '') === 'ok') {
+            $mensaje .= ' Pago registrado en Waitry.';
+        } elseif (($resultado['waitry_comanda'] ?? '') === 'ok') {
+            $mensaje .= ' Comanda enviada a Waitry.';
+        }
+
+        $resultado['mensaje'] = $mensaje;
+
+        return $resultado;
+    }
+
+    /**
      * @param  array<string, mixed>  $resultado
      * @return array<string, mixed>
      */
@@ -751,7 +806,7 @@ final class GastronomiaFacturaEmisionService
                 $resultado['waitry_order_id'] = $waitryOrderId;
             }
 
-            if ($pagada) {
+            if ($pagada && ! $cuenta->waitry_cobro_totem) {
                 $resultado = $this->aplicarWaitrySyncPagoTrasEmision($resultado, $cuenta, $mediosPago);
             }
 

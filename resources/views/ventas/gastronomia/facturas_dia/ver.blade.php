@@ -86,10 +86,34 @@
     <div class="col-lg-12">
         @include('includes.mensaje')
 
+        @if (($requiere_habilitacion_turno ?? false) && ! ($turno_habilitado ?? false) && ($puede_nc ?? false) === false && ($nc_venta_id ?? null) === null && ! ($es_comprobante_nc ?? false))
+            <div class="alert alert-warning py-2 mb-2">
+                No hay turno habilitado en esta terminal (<strong>{{ $identificador_pc ?? '' }}</strong>).
+                Debe <a href="{{ $url_habilitacion_turno ?? route('gastronomia_habilitacion_turno') }}">habilitar el turno</a>
+                antes de generar la nota de crédito desde este comprobante.
+            </div>
+        @endif
+        @if ($nc_venta_id ?? null)
+            <div class="alert alert-info py-2 mb-2 d-flex justify-content-between align-items-center flex-wrap">
+                <span>
+                    <i class="fas fa-undo text-muted mr-1"></i>
+                    Este comprobante ya fue revertido por una nota de crédito.
+                </span>
+                <a href="{{ route('gastronomia_facturas_dia_ver', ['ventaId' => $nc_venta_id]) }}" class="btn btn-sm btn-outline-info">
+                    Ver nota de crédito
+                </a>
+            </div>
+        @elseif ($es_comprobante_nc ?? false)
+            <div class="alert alert-secondary py-2 mb-2">
+                <i class="fas fa-undo text-muted mr-1"></i>
+                Este comprobante es una <strong>nota de crédito</strong>; no se puede generar otra NC sobre él.
+            </div>
+        @endif
+
         <div class="card card-outline card-primary mb-3">
             <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
                 <span>{{ $venta->codigo ?? '' }}</span>
-                <div class="btn-group btn-group-sm mt-1 mt-md-0">
+                <div class="btn-group btn-group-sm mt-1 mt-md-0 flex-wrap">
                     <a href="{{ route('gastronomia_facturas_dia') }}" class="btn btn-outline-secondary">Volver al listado</a>
                     @if (can('editar-factura', false))
                         <a href="{{ route('editar_factura', ['id' => $venta->id, 'origen' => 'gastronomia_facturas_dia']) }}" class="btn btn-outline-warning">Editar comprobante</a>
@@ -97,6 +121,15 @@
                     <button type="button" class="btn btn-outline-dark" id="btn-reimprimir-ticket" data-venta-id="{{ $venta->id }}">
                         <i class="fas fa-receipt"></i> Reimprimir ticket
                     </button>
+                    @if ($puede_nc ?? false)
+                        <button type="button"
+                                class="btn btn-outline-warning js-fd-generar-nc"
+                                data-venta-id="{{ $venta->id }}"
+                                data-codigo="{{ $venta->codigo ?? '' }}"
+                                title="Revertir este comprobante emitiendo una nota de crédito">
+                            <i class="fas fa-undo"></i> Generar nota de crédito
+                        </button>
+                    @endif
                     <a href="{{ url('ventas/listaunafactura/'.$venta->id) }}" target="_blank" class="btn btn-outline-primary">PDF / QR ARCA</a>
                 </div>
             </div>
@@ -448,9 +481,12 @@
         </div>
     </div>
 </div>
+
+@include('ventas.gastronomia.facturas_dia.partials.modal_generar_nc')
 @endsection
 
 @section('scripts')
+@include('ventas.gastronomia.facturas_dia.partials.script_generar_nc')
 <script>
 (function () {
     function activarTab(hash) {

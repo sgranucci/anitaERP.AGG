@@ -388,15 +388,16 @@
             html += '<div class="alert alert-success py-2 mb-2"><i class="fa fa-check"></i> ';
             html += 'Comprobantes y cobranzas del turno <strong>cuadran</strong>.</div>';
         }
-        var cuentas = Number(estado.cuentas_sin_facturar || 0);
+        var cuentasConItems = Number(estado.cuentas_abiertas_con_items || estado.cuentas_sin_facturar || 0);
+        var cuentasVacias = Number(estado.cuentas_abiertas_vacias || 0);
         var urlSaneamiento = estado.url_saneamiento_turno || '';
         if (window.ModoConsulta && urlSaneamiento) {
             urlSaneamiento = window.ModoConsulta.url(urlSaneamiento);
         }
-        if (cuentas > 0) {
+        if (cuentasConItems > 0) {
             if (estado.es_ultimo_turno_dia) {
                 html += '<div class="alert alert-danger py-2 mb-2">';
-                html += '<strong>' + cuentas + ' cuenta(s) o mesa(s) ABIERTA(S)</strong> sin facturar en esta terminal. ';
+                html += '<strong>' + cuentasConItems + ' cuenta(s) o mesa(s) ABIERTA(S) con consumos</strong> sin facturar en esta terminal. ';
                 html += 'Al cerrar el <strong>último turno del día</strong> deben quedar facturadas o cerradas sin facturar. ';
                 if (urlSaneamiento) {
                     html += 'Resuélvalas en <a href="' + esc(urlSaneamiento) + '" class="alert-link" target="_blank" rel="noopener">Saneamiento de turnos</a>.';
@@ -404,9 +405,15 @@
                 html += '</div>';
             } else {
                 html += '<div class="alert alert-info py-2 mb-2">';
-                html += '<strong>' + cuentas + ' cuenta(s) abierta(s)</strong> sin facturar: pueden continuar en el próximo turno del día. ';
+                html += '<strong>' + cuentasConItems + ' cuenta(s) abierta(s) con consumos</strong> sin facturar: pueden continuar en el próximo turno del día. ';
                 html += 'Solo el último turno del día exige dejarlas resueltas.</div>';
             }
+        }
+        if (cuentasVacias > 0) {
+            html += '<div class="alert alert-info py-2 mb-2">';
+            html += '<strong>' + cuentasVacias + ' cuenta(s) abierta(s) sin ítems</strong> en esta terminal. ';
+            html += 'Se <strong>descartan automáticamente</strong> al cerrar el último turno del día o la jornada (no requieren saneamiento).';
+            html += '</div>';
         }
         var cerradasSinFacturar = Number(estado.cuentas_cerradas_sin_facturar || 0);
         if (cerradasSinFacturar > 0) {

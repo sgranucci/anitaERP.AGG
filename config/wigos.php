@@ -23,6 +23,29 @@ return [
     /** A o B: servidor primario (fallback al otro si falla la conexión). */
     'curr_wigos' => strtoupper(trim((string) env('CURR_WIGOS', 'A'))),
 
+    /*
+     * Opciones de conexión SQL Server (ODBC Driver 18+).
+     * El track_wigos.php legacy usa FreeTDS sin TLS; replicamos ese
+     * comportamiento con Encrypt=no. Si el SQL Server tiene cert
+     * autofirmado, usar encrypt=yes + trust_server_certificate=yes.
+     */
+    'encrypt' => env('WIGOS_ENCRYPT', 'no'),
+
+    'trust_server_certificate' => env('WIGOS_TRUST_SERVER_CERTIFICATE', 'yes'),
+
+    'login_timeout' => max(1, (int) env('WIGOS_LOGIN_TIMEOUT', 5)),
+
+    'appname' => env('WIGOS_APPNAME', 'AnitaERP-Gastronomia-Wigos'),
+
+    /**
+     * OpenSSL local (putenv OPENSSL_CONF) solo al conectar por ODBC.
+     * Necesario con SQL Server 2012 + ODBC 18 + OpenSSL 3 (error 0x2746 sin esto).
+     */
+    'openssl_conf' => env('WIGOS_OPENSSL_CONF', base_path('config/openssl/wigos-mssql.cnf')),
+
+    /** Ruta al binario PHP CLI (obligatorio bajo php-fpm si PHP_BINARY está vacío). */
+    'php_binary' => env('WIGOS_PHP_BINARY'),
+
     'connections' => [
         'A' => [
             'host' => env('WIGOS_A_HOST', env('WIGOS_HOST')),

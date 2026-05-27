@@ -93,11 +93,21 @@ class Menu extends Model implements Auditable
     }
 
     // Actualiza un item via instancia Eloquent para que owen-it/laravel-auditing registre el cambio.
+    // Se asignan los atributos directamente (no via update()) porque menu_id y orden no están en
+    // $fillable, así que el mass-assignment los descartaría silenciosamente.
     private function actualizarOrdenItem($id, $menuId, $orden): void
     {
         $registro = self::find($id);
-        if ($registro) {
-            $registro->update(['menu_id' => $menuId, 'orden' => $orden]);
+        if (! $registro) {
+            return;
         }
+
+        if ((int) $registro->menu_id === (int) $menuId && (int) $registro->orden === (int) $orden) {
+            return;
+        }
+
+        $registro->menu_id = $menuId;
+        $registro->orden = $orden;
+        $registro->save();
     }
 }

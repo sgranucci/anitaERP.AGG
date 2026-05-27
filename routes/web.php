@@ -1161,6 +1161,13 @@ Route::get('ventas/descuento-gastronomia/{id}/editar', 'Ventas\DescuentoGastrono
 Route::put('ventas/descuento-gastronomia/{id}', 'Ventas\DescuentoGastronomiaController@actualizar')->name('actualizar_descuento_gastronomia');
 Route::delete('ventas/descuento-gastronomia/{id}', 'Ventas\DescuentoGastronomiaController@eliminar')->name('eliminar_descuento_gastronomia');
 
+Route::get('ventas/area-comanda-gastronomia', 'Ventas\AreaComandaGastronomiaController@index')->name('consultar_area_comanda_gastronomia');
+Route::get('ventas/area-comanda-gastronomia/crear', 'Ventas\AreaComandaGastronomiaController@crear')->name('crear_area_comanda_gastronomia');
+Route::post('ventas/area-comanda-gastronomia', 'Ventas\AreaComandaGastronomiaController@guardar')->name('guardar_area_comanda_gastronomia');
+Route::get('ventas/area-comanda-gastronomia/{id}/editar', 'Ventas\AreaComandaGastronomiaController@editar')->name('editar_area_comanda_gastronomia');
+Route::put('ventas/area-comanda-gastronomia/{id}', 'Ventas\AreaComandaGastronomiaController@actualizar')->name('actualizar_area_comanda_gastronomia');
+Route::delete('ventas/area-comanda-gastronomia/{id}', 'Ventas\AreaComandaGastronomiaController@eliminar')->name('eliminar_area_comanda_gastronomia');
+
 Route::get('ventas/mozo-gastronomia', 'Ventas\MozoGastronomiaController@index')->name('consultar_mozo_gastronomia');
 Route::get('ventas/mozo-gastronomia/crear', 'Ventas\MozoGastronomiaController@crear')->name('crear_mozo_gastronomia');
 Route::post('ventas/mozo-gastronomia', 'Ventas\MozoGastronomiaController@guardar')->name('guardar_mozo_gastronomia');
@@ -1229,6 +1236,7 @@ Route::get('ventas/gastronomia/cierres-turno', 'Ventas\CierreTurnoGastronomiaCon
 Route::get('ventas/lista-gastronomia-cierres-turno/{formato}', 'Ventas\CierreTurnoGastronomiaController@exportar')->name('listar_gastronomia_cierres_turno');
 Route::get('ventas/gastronomia/cierres-turno/parcial/{id}/comprobante', 'Ventas\CierreTurnoGastronomiaController@comprobanteParcial')->name('gastronomia_cierre_turno_comprobante_parcial');
 Route::get('ventas/gastronomia/cierres-turno/cierre/{id}/comprobante', 'Ventas\CierreTurnoGastronomiaController@comprobanteCierre')->name('gastronomia_cierre_turno_comprobante_cierre');
+Route::get('ventas/gastronomia/cierres-turno/cierre/{id}/ver', 'Ventas\CierreTurnoGastronomiaController@verCierre')->name('gastronomia_cierre_turno_ver')->middleware('modo.consulta');
 Route::get('ventas/gastronomia/cierres-turno/api/comprobantes', 'Ventas\CierreTurnoGastronomiaController@apiComprobantes')->name('gastronomia_cierres_turno_api_comprobantes');
 Route::get('ventas/gastronomia/cierres-turno/api/canjes-premio', 'Ventas\CierreTurnoGastronomiaController@apiCanjesPremio')->name('gastronomia_cierres_turno_api_canjes_premio');
 Route::get('ventas/gastronomia/cierres-turno/api/canjes-fidelidad', 'Ventas\CierreTurnoGastronomiaController@apiCanjesFidelidad')->name('gastronomia_cierres_turno_api_canjes_fidelidad');
@@ -1634,6 +1642,21 @@ Route::get('caja/listarendicionreceptivo/{formato?}/{busqueda?}', 'Caja\Rendicio
 
 Route::post('caja/rendicionreceptivo/leegastoanterior', 'Caja\RendicionreceptivoController@leeGastoAnterior')->name('leer_gasto_anterior');
 Route::post('caja/rendicionreceptivo/leevoucher', 'Caja\RendicionreceptivoController@leeVoucher')->name('leer_voucher');
+/*
+ * Rendición gastronomía caja
+ */
+Route::get('caja/rendiciongastronomia', 'Caja\RendicionGastronomiaController@index')->name('rendiciongastronomia');
+Route::get('caja/listarendiciongastronomia/{formato?}/{busqueda?}', 'Caja\RendicionGastronomiaController@listar')->name('listar_rendiciongastronomia');
+Route::get('caja/rendiciongastronomia/crear/{caja?}', 'Caja\RendicionGastronomiaController@crear')->name('crear_rendiciongastronomia');
+Route::post('caja/rendiciongastronomia', 'Caja\RendicionGastronomiaController@guardar')->name('guardar_rendiciongastronomia');
+Route::get('caja/rendiciongastronomia/{id}/imprimir', 'Caja\RendicionGastronomiaController@imprimir')->name('imprimir_rendicion_gastronomia');
+Route::get('caja/rendiciongastronomia/{id}/editar', 'Caja\RendicionGastronomiaController@editar')->name('editar_rendiciongastronomia');
+Route::put('caja/rendiciongastronomia/{id}', 'Caja\RendicionGastronomiaController@actualizar')->name('actualizar_rendiciongastronomia');
+Route::delete('caja/rendiciongastronomia/{id}', 'Caja\RendicionGastronomiaController@eliminar')->name('eliminar_rendiciongastronomia');
+Route::post('caja/rendiciongastronomia/api/datos-turno', 'Caja\RendicionGastronomiaController@apiDatosTurno')->name('api_rendicion_gastronomia_datos_turno');
+Route::get('caja/rendiciongastronomia/api/proponer-codigo', 'Caja\RendicionGastronomiaController@apiProponerCodigo')->name('api_rendicion_gastronomia_proponer_codigo');
+Route::post('caja/rendiciongastronomia/api/consulta-cierre', 'Caja\RendicionGastronomiaController@apiConsultaCierre')->name('api_rendicion_gastronomia_consulta_cierre');
+Route::get('caja/rendiciongastronomia/api/turno/{numero}', 'Caja\RendicionGastronomiaController@apiTurnoPorNumero')->name('api_rendicion_gastronomia_turno_numero');
 /*
  * Tipos de transacciones de caja
  */

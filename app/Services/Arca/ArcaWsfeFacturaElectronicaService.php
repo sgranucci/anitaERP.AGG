@@ -347,10 +347,8 @@ class ArcaWsfeFacturaElectronicaService
                     'Sign' => $ts['sign'],
                     'Cuit' => $cuit,
                 ],
-                'FeCAEAReq' => [
-                    'Periodo' => $periodo,
-                    'Orden' => $orden,
-                ],
+                'Periodo' => $periodo,
+                'Orden' => $orden,
             ]);
         } catch (SoapFault $e) {
             throw new Exception($this->formatSoapFault('FECAEASolicitar', $e, $client));
@@ -771,63 +769,77 @@ class ArcaWsfeFacturaElectronicaService
         ];
     }
 
+    /**
+     * Shape WSDL para tns:ArrayOfCbteAsoc (lista de structs CbteAsoc).
+     *
+     * El SoapClient nativo de PHP espera la forma canónica:
+     *   ['CbteAsoc' => [ {Tipo,PtoVta,Nro}, {Tipo,PtoVta,Nro}, ... ]]
+     * y NO la forma envuelta [['CbteAsoc' => {...}], ['CbteAsoc' => {...}]].
+     * La forma envuelta hace que el encoder trate cada entrada como tns:CbteAsoc
+     * directamente y aborte con "object has no 'Tipo' property".
+     */
     private function buildCbtesAsoc(array $lista): ?array
     {
-        $out = [];
+        $items = [];
         foreach ($lista as $row) {
             if (! is_array($row)) {
                 continue;
             }
-            $out[] = [
-                'CbteAsoc' => [
-                    'Tipo' => (int) ($row['tipo'] ?? 0),
-                    'PtoVta' => (int) ($row['ptovta'] ?? 0),
-                    'Nro' => (int) ($row['nro'] ?? 0),
-                ],
+            $items[] = [
+                'Tipo' => (int) ($row['tipo'] ?? 0),
+                'PtoVta' => (int) ($row['ptovta'] ?? 0),
+                'Nro' => (int) ($row['nro'] ?? 0),
             ];
         }
 
-        return $out === [] ? null : $out;
+        return $items === [] ? null : ['CbteAsoc' => $items];
     }
 
+    /**
+     * Shape WSDL para tns:ArrayOfTributo: ['Tributo' => [ ...items ]].
+     */
     private function buildTributos(array $lista): ?array
     {
-        $out = [];
+        $items = [];
         foreach ($lista as $t) {
             if (! is_array($t) || (float) ($t['importe'] ?? 0) == 0.0) {
                 continue;
             }
-            $out[] = [
-                'Tributo' => [
-                    'Id' => (int) ($t['id'] ?? 0),
-                    'Desc' => (string) ($t['desc'] ?? ''),
-                    'BaseImp' => $this->money($t['base_imp'] ?? 0),
-                    'Alic' => $this->money($t['alicuota'] ?? 0),
-                    'Importe' => $this->money($t['importe'] ?? 0),
-                ],
+            $items[] = [
+                'Id' => (int) ($t['id'] ?? 0),
+                'Desc' => (string) ($t['desc'] ?? ''),
+                'BaseImp' => $this->money($t['base_imp'] ?? 0),
+                'Alic' => $this->money($t['alicuota'] ?? 0),
+                'Importe' => $this->money($t['importe'] ?? 0),
             ];
         }
 
-        return $out === [] ? null : $out;
+        return $items === [] ? null : ['Tributo' => $items];
     }
 
+    /**
+     * Shape WSDL para tns:ArrayOfAlicIva: ['AlicIva' => [ ...items ]].
+     *
+     * El error histórico "FECAESolicitar: SOAP-ERROR: Encoding: object has no 'Id'
+     * property" venía de devolver [['AlicIva' => {...}], ['AlicIva' => {...}]]:
+     * PHP iteraba la lista externa y encodeaba cada entrada como tns:AlicIva,
+     * sin encontrar Id/BaseImp/Importe.
+     */
     private function buildIva(array $lista): ?array
     {
-        $out = [];
+        $items = [];
         foreach ($lista as $i) {
             if (! is_array($i) || (float) ($i['importe'] ?? 0) == 0.0) {
                 continue;
             }
-            $out[] = [
-                'AlicIva' => [
-                    'Id' => (int) ($i['id'] ?? 0),
-                    'BaseImp' => $this->money($i['base_imp'] ?? 0),
-                    'Importe' => $this->money($i['importe'] ?? 0),
-                ],
+            $items[] = [
+                'Id' => (int) ($i['id'] ?? 0),
+                'BaseImp' => $this->money($i['base_imp'] ?? 0),
+                'Importe' => $this->money($i['importe'] ?? 0),
             ];
         }
 
-        return $out === [] ? null : $out;
+        return $items === [] ? null : ['AlicIva' => $items];
     }
 
     private function verificarConConsulta(

@@ -55,19 +55,19 @@
 		</select>
 	</div>
 </div>
-<div class="form-group row">
-	<label for="cuentacontable_id" class="col-lg-3 col-form-label">Cuenta contable</label>
-	<div class="col-lg-8">
-		<select name="cuentacontable_id" id="cuentacontable_id" data-placeholder="Cuenta contable para imputaciones" class="form-control" data-fouc>
-			<option value="">-- Seleccionar Cta. Contable --</option>
-			@foreach($cuentacontable_query as $key => $value)
-				@if( (int) $value->id == (int) old('cuentacontable_id', $data->cuentacontable_id ?? ''))
-					<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>
-				@else
-					<option value="{{ $value->id }}">{{ $value->nombre }}</option>
-				@endif
-			@endforeach
-		</select>
+<div class="form-group row" id="cuenta">
+	<label for="cuentacontable_id" class="col-lg-3 col-form-label requerido">Cuenta contable</label>
+	<input type="hidden" class="cuentacontable_id" id="cuentacontable_id" name="cuentacontable_id" value="{{ old('cuentacontable_id', $data->cuentacontable_id ?? '') }}">
+	<div class="col-lg-2">
+		<input type="text" class="codigocuentacontable form-control" id="codigocuentacontable" name="codigocuentacontable" value="{{ old('codigocuentacontable', $data->cuentacontables->codigo ?? '') }}">
+	</div>
+	<div class="col-lg-1">
+		<button type="button" title="Consulta cuentas" class="btn-accion-tabla consultacuentacontable tooltipsC">
+			<i class="fa fa-search text-primary"></i>
+		</button>
+	</div>
+	<div class="col-lg-5">
+		<input type="text" class="nombrecuentacontable form-control" id="nombrecuentacontable" name="nombrecuentacontable" value="{{ old('nombrecuentacontable', $data->cuentacontables->nombre ?? '') }}">
 	</div>
 </div>
 <div class="form-group row">
@@ -86,7 +86,7 @@
 	</div>
 </div>
 <div class="form-group row">
-    <label for="cbu" class="col-lg-3 col-form-label">Nro. de CBU</label>
+    <label for="cbu" id="cbu_label" class="col-lg-3 col-form-label">Nro. de CBU</label>
     <div class="col-lg-8">
     <input type="text" name="cbu" id="cbu" class="form-control" value="{{old('cbu', $data->cbu ?? '')}}"/>
     </div>

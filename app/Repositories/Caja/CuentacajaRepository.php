@@ -73,6 +73,8 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
             : [];
         unset($data['usocuentacaja_ids']);
 
+        $data = $this->normalizarDatosCuentacaja($data);
+
         DB::beginTransaction();
         try 
         {
@@ -103,6 +105,8 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
             $usoIds = array_filter((array) ($data['usocuentacaja_ids'] ?? []));
             unset($data['usocuentacaja_ids']);
         }
+
+        $data = $this->normalizarDatosCuentacaja($data);
 
         DB::beginTransaction();
         try 
@@ -402,7 +406,7 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
         );
         $anita = $apiAnita->apiCallEscritura($data);
 
-        if (self::usaTablaTesmcbu()) {
+        if (self::usaTablaTesmcbu() && trim((string) ($request['cbu'] ?? '')) !== '') {
             self::guardarTesmcbuAnita($apiAnita, $request);
         }
 
@@ -432,7 +436,7 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
 				'whereArmado' => " WHERE tesm_cuenta = '".str_pad($request['codigo'], 8, "0", STR_PAD_LEFT)."' " );
         $anita = $apiAnita->apiCallEscritura($data);
 
-        if (self::usaTablaTesmcbu()) {
+        if (self::usaTablaTesmcbu() && trim((string) ($request['cbu'] ?? '')) !== '') {
             self::sincronizarTesmcbuAnita($apiAnita, $request);
         }
 
@@ -480,6 +484,21 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
             $tipocuenta = 'R';
         else    
             $tipocuenta = 'V';
+    }
+
+    private function normalizarDatosCuentacaja(array $data): array
+    {
+        $cbu = trim((string) ($data['cbu'] ?? ''));
+
+        if (empty($data['banco_id'])) {
+            $data['cbu'] = null;
+        } elseif ($cbu === '') {
+            $data['cbu'] = null;
+        } else {
+            $data['cbu'] = $cbu;
+        }
+
+        return $data;
     }
 
     private function convierteDatosParaAnita($data, &$banco, &$tipoCuenta, &$fecha, &$cuentaContable, &$empresa, &$moneda)

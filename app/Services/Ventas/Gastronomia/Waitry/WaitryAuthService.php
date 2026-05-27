@@ -35,7 +35,7 @@ final class WaitryAuthService
 
             return [
                 'ok' => false,
-                'error' => 'No se pudo obtener el token de Waitry.',
+                'error' => 'No se pudo obtener el token de Waitry: '.$e->getMessage(),
             ];
         }
 
@@ -136,12 +136,23 @@ final class WaitryAuthService
             ]);
 
         if (! $response->successful()) {
+            $body = substr((string) $response->body(), 0, 500);
             Log::warning('waitry.auth.http_error', [
                 'status' => $response->status(),
-                'body' => substr((string) $response->body(), 0, 500),
+                'body' => $body,
             ]);
 
-            throw new RuntimeException('Waitry login HTTP '.$response->status());
+            $json = $response->json();
+            $detalle = is_array($json)
+                ? trim((string) ($json['message'] ?? $json['msg'] ?? ''))
+                : '';
+            if ($detalle === '') {
+                $detalle = $body !== '' ? $body : 'sin detalle';
+            }
+
+            throw new RuntimeException(
+                'Waitry login HTTP '.$response->status().': '.$detalle
+            );
         }
 
         $json = $response->json();

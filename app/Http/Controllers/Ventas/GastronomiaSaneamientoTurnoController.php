@@ -144,16 +144,48 @@ class GastronomiaSaneamientoTurnoController extends Controller
         can('ejecutar-saneamiento-turno-gastronomia');
 
         $turnoId = (int) $request->input('turno_operativo_id', 0);
-        if ($turnoId <= 0) {
-            return response()->json(['ok' => false, 'error' => 'Turno operativo inválido.'], 422);
+        $empresaId = (int) $request->input('empresa_id', 0);
+        $pc = trim((string) $request->input('identificador_pc', ''));
+        $cuentaIds = $request->input('cuenta_ids', []);
+        if (! is_array($cuentaIds)) {
+            $cuentaIds = [];
+        }
+
+        if ($turnoId <= 0 && $cuentaIds === [] && ($empresaId <= 0 || $pc === '')) {
+            return response()->json([
+                'ok' => false,
+                'error' => 'Indique turno_operativo_id, (empresa_id + identificador_pc) o (empresa_id + cuenta_ids[]).',
+            ], 422);
         }
 
         try {
-            $resultado = $this->saneamientoService->cerrarCuentasPendientesEnTerminal(
-                $turnoId,
-                (string) $request->input('confirmacion', ''),
-                $request->input('motivo'),
-            );
+            if ($turnoId > 0) {
+                $resultado = $this->saneamientoService->cerrarCuentasPendientesEnTerminal(
+                    $turnoId,
+                    (string) $request->input('confirmacion', ''),
+                    $request->input('motivo'),
+                );
+            } elseif ($cuentaIds !== []) {
+                if ($empresaId <= 0) {
+                    return response()->json([
+                        'ok' => false,
+                        'error' => 'Indique empresa_id cuando use cuenta_ids[].',
+                    ], 422);
+                }
+                $resultado = $this->saneamientoService->cerrarCuentasPendientesPorIds(
+                    $empresaId,
+                    $cuentaIds,
+                    (string) $request->input('confirmacion', ''),
+                    $request->input('motivo'),
+                );
+            } else {
+                $resultado = $this->saneamientoService->cerrarCuentasPendientesPorTerminal(
+                    $empresaId,
+                    $pc,
+                    (string) $request->input('confirmacion', ''),
+                    $request->input('motivo'),
+                );
+            }
 
             return response()->json(['ok' => true, ...$resultado]);
         } catch (InvalidArgumentException $e) {

@@ -5,105 +5,84 @@ namespace App\Http\Controllers\Stock;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Models\Stock\Subcategoria;
-use Illuminate\Support\Facades\Storage;
+use App\Models\Ventas\AreaComandaGastronomia;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use Illuminate\Support\Facades\DB;
 use App\Http\Requests\ValidacionSubcategoria;
 
 class SubcategoriaController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     *
-     * @return \Illuminate\Http\Response
-     */
+    public function __construct(
+        private EmpresaRepositoryInterface $empresaRepository,
+    ) {
+    }
+
     public function index()
     {
         can('listar-subcategorias');
         $datas = Subcategoria::orderBy('id')->get();
 
-		//if ($datas->isEmpty())
-		//{
-		//	$Subcategoria = new Subcategoria();
-        //	$Subcategoria->sincronizarConAnita();
-	
-        //	$datas = Subcategoria::orderBy('id')->get();
-		//}
-
         return view('stock.subcategoria.index', compact('datas'));
     }
 
-    /**
-     * Show the form for creating a new resource.
-     *
-     * @return \Illuminate\Http\Response
-     */
     public function crear()
     {
         can('crear-subcategorias');
-        return view('stock.subcategoria.crear');
+
+        $data = new Subcategoria();
+        $empresa_query = $this->empresaRepository->allFiltrado();
+        $area_query = $this->cargarAreasPorEmpresa($empresa_query->pluck('id')->all());
+
+        return view('stock.subcategoria.crear', compact('data', 'empresa_query', 'area_query'));
     }
 
-    /**
-     * Store a newly created resource in storage.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
-     */
     public function guardar(ValidacionSubcategoria $request)
     {
-        $subcategoria = Subcategoria::create($request->all());
+        $subcategoria = DB::transaction(function () use ($request) {
+            $subcategoria = Subcategoria::create($request->all());
+            $this->sincronizarAreasComanda($subcategoria, $request->input('area_comanda_ids', []));
 
-		// Graba anita
-		$Subcategoria = new Subcategoria();
+            return $subcategoria;
+        });
+
+        $Subcategoria = new Subcategoria();
         $Subcategoria->guardarAnita($request, $subcategoria->id);
 
         return redirect('stock/subcategoria')->with('mensaje', 'Subcategoria creado con exito');
     }
 
-
-    /**
-     * Show the form for editing the specified resource.
-     *
-     * @param  int  $id
-     * @return \Illuminate\Http\Response
-     */
     public function editar($id)
     {
         can('editar-subcategorias');
-        $data = Subcategoria::findOrFail($id);
-        return view('stock.subcategoria.editar', compact('data'));
+        $data = Subcategoria::with(['subcategoriaAreasComanda.areaComanda.empresa'])->findOrFail($id);
+
+        $empresa_query = $this->empresaRepository->allFiltrado();
+        $area_query = $this->cargarAreasPorEmpresa($empresa_query->pluck('id')->all());
+
+        return view('stock.subcategoria.editar', compact('data', 'empresa_query', 'area_query'));
     }
 
-    /**
-     * Update the specified resource in storage.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @param  int  $id
-     * @return \Illuminate\Http\Response
-     */
     public function actualizar(ValidacionSubcategoria $request, $id)
     {
         can('actualizar-subcategorias');
-        Subcategoria::findOrFail($id)->update($request->all());
 
-		// Actualiza anita
-		$Subcategoria = new Subcategoria();
+        DB::transaction(function () use ($request, $id) {
+            $subcategoria = Subcategoria::findOrFail($id);
+            $subcategoria->update($request->all());
+            $this->sincronizarAreasComanda($subcategoria, $request->input('area_comanda_ids', []));
+        });
+
+        $Subcategoria = new Subcategoria();
         $Subcategoria->actualizarAnita($request, $id);
 
         return redirect('stock/subcategoria')->with('mensaje', 'Subcategoria actualizado con exito');
     }
 
-    /**
-     * Remove the specified resource from storage.
-     *
-     * @param  int  $id
-     * @return \Illuminate\Http\Response
-     */
     public function eliminar(Request $request, $id)
     {
         can('borrar-subcategorias');
 
-		// Elimina anita
-		$Subcategoria = new Subcategoria();
+        $Subcategoria = new Subcategoria();
         $Subcategoria->eliminarAnita($request->codigo);
 
         if ($request->ajax()) {
@@ -115,5 +94,38 @@ class SubcategoriaController extends Controller
         } else {
             abort(404);
         }
+    }
+
+    /**
+     * Sincroniza las áreas de comanda asignadas a la subcategoría.
+     * Evita duplicados y descarta valores vacíos o repetidos del request.
+     */
+    private function sincronizarAreasComanda(Subcategoria $subcategoria, $areaIds): void
+    {
+        $ids = collect((array) $areaIds)
+            ->map(fn ($v) => (int) $v)
+            ->filter(fn ($v) => $v > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        $subcategoria->areasComanda()->sync($ids);
+    }
+
+    /**
+     * Devuelve las áreas de comanda agrupadas por empresa_id, listas para usar en los selects.
+     */
+    private function cargarAreasPorEmpresa(array $empresaIds): array
+    {
+        $query = AreaComandaGastronomia::orderBy('empresa_id')->orderBy('nombre');
+
+        if (count($empresaIds) > 1) {
+            $query->whereIn('empresa_id', $empresaIds);
+        }
+
+        return $query->get()
+            ->groupBy('empresa_id')
+            ->map(fn ($coll) => $coll->values())
+            ->toArray();
     }
 }

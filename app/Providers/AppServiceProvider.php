@@ -663,6 +663,11 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Ventas\AreaComandaGastronomiaRepositoryInterface',
+            'App\Repositories\Ventas\AreaComandaGastronomiaRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Ventas\TurnoGastronomiaRepositoryInterface',
             'App\Repositories\Ventas\TurnoGastronomiaRepository',
         );

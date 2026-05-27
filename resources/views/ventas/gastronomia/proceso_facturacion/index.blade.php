@@ -567,6 +567,8 @@
             cerrar: @json(url('ventas/gastronomia/api/cerrar-turno')),
         },
         waitryHabilitado: @json(config('waitry.habilitado', false)),
+        waitryTrasRespuesta: @json(config('gastronomia.waitry_tras_respuesta', true)),
+        sincronizarAnitaAlFacturar: @json(config('gastronomia.sincronizar_anita_al_facturar', true)),
         waitryGetOrdersMinutosAtras: {{ max(0, (int) config('waitry.get_orders_minutos_atras', 20)) }},
         rutasWaitry: {
             ordenesPendientes: @json(url('ventas/gastronomia/api/waitry-ordenes-pendientes')),
@@ -680,6 +682,9 @@
                     @endif
                     @if ($gastroWaitryHabilitado)
                     <button type="button" class="btn btn-outline-secondary{{ $gastroModoWaitry ? ' active' : '' }}" id="btn-modo-waitry">Cuentas externas</button>
+                    <button type="button" class="btn btn-outline-secondary" id="btn-waitry-importar-por-id" title="Importar cuenta por ID del papelito del tótem Waitry">
+                        <i class="fa fa-barcode"></i> Por ID
+                    </button>
                     @endif
                 </div>
             </div>
@@ -879,6 +884,9 @@
                                 <strong>Cobranza</strong>
                                 <span class="text-muted" style="font-size:11px;">Se graba al facturar · total en $ · <kbd>Enter</kbd> en código y monto</span>
                             </div>
+                            <p id="gastro-waitry-totem-aviso" class="alert alert-info py-1 px-2 small mb-1 d-none" role="status">
+                                Cuenta Waitry cobrada en el tótem: cobranza fija con medio <strong>TOTEM</strong> (no editable).
+                            </p>
                             <div id="gastro-cobranza-cotiz-bar" class="d-none" role="status" aria-live="polite"></div>
                             <input type="hidden" id="gastro-cotizacion-extranjera" value="">
                             <input type="hidden" id="gastro-moneda-extranjera-id" value="">
@@ -993,6 +1001,20 @@
 
 <iframe id="gastro-iframe-impresion-factura" title="Impresión factura" aria-hidden="true"></iframe>
 
+{{-- Overlay de proceso (facturación / import Waitry): mismo patrón que notas de crédito en facturas del día --}}
+<div id="gastro-facturacion-procesando-overlay"
+     class="d-none"
+     role="status"
+     aria-live="assertive"
+     aria-hidden="true"
+     style="position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 2050; display: flex; align-items: center; justify-content: center; padding: 1rem;">
+    <div class="bg-white rounded shadow text-center px-4 py-3" style="max-width: 92vw; min-width: 18rem;">
+        <i class="fa fa-spinner fa-spin fa-2x text-warning mb-2" aria-hidden="true"></i>
+        <div><strong id="gastro-facturacion-procesando-titulo">Procesando…</strong></div>
+        <div class="small text-muted mt-1" id="gastro-facturacion-procesando-subtitulo">Por favor espere. No cierre ni recargue la página.</div>
+    </div>
+</div>
+
 <!-- Modal apertura cuenta (cubiertos / mozo) -->
 <div class="modal fade" id="modal-abrir-cuenta" tabindex="-1" data-backdrop="static">
     <div class="modal-dialog">
@@ -1055,6 +1077,27 @@
             <div class="modal-footer py-2">
                 <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cancelar</button>
                 <button type="button" class="btn btn-sm btn-primary" id="modal-f8-descuento-confirmar">Facturar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal importar cuenta Waitry por ID (papelito del tótem) -->
+<div class="modal fade" id="modal-waitry-importar-id" tabindex="-1" role="dialog" aria-labelledby="modal-waitry-importar-id-titulo">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title" id="modal-waitry-importar-id-titulo">Importar cuenta Waitry</h6>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">&times;</button>
+            </div>
+            <div class="modal-body py-2">
+                <label class="small mb-1" for="waitry-importar-id-input">ID del papelito</label>
+                <input type="text" class="form-control form-control-sm" id="waitry-importar-id-input" placeholder="Ej. A1B2C3" maxlength="64" autocomplete="off" inputmode="text">
+                <p class="text-muted small mb-0 mt-2">Código alfanumérico impreso en el papelito del tótem Waitry. Incluye órdenes ya cobradas en Waitry.</p>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-sm btn-primary" id="modal-waitry-importar-id-confirmar">Importar</button>
             </div>
         </div>
     </div>

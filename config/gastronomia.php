@@ -166,6 +166,14 @@ return [
      */
     'ticket_impresion_automatica' => filter_var(env('GASTRONOMIA_TICKET_IMPRESION_AUTOMATICA', true), FILTER_VALIDATE_BOOLEAN),
 
+    /**
+     * Imprimir el ticket térmico DESPUÉS de responder al POS (Laravel defer()): no bloquea
+     * la liberación de la terminal aunque la impresora esté lenta o el comando demore hasta
+     * el timeout. Si falla, se loguea en gastronomia.ticket_factura.defer.*.
+     * Desactivar (=false) restaura el comportamiento sincrónico previo.
+     */
+    'ticket_impresion_async' => filter_var(env('GASTRONOMIA_TICKET_IMPRESION_ASYNC', true), FILTER_VALIDATE_BOOLEAN),
+
     /** Ancho en caracteres del papel (80 mm ≈ 42). */
     'ticket_ancho_caracteres' => max(32, (int) env('GASTRONOMIA_TICKET_ANCHO', 42)),
 
@@ -200,6 +208,9 @@ return [
 
     /** Código de cuenta de caja para canje ticket tarjeta (uso Gastronomía). */
     'ticket_tarjeta_cuentacaja_codigo' => env('GASTRONOMIA_TICKET_TARJETA_CUENTACAJA_CODIGO', 'CTG'),
+
+    /** Cuenta de caja para órdenes Waitry ya cobradas en el tótem (cobranza automática bloqueada en POS). */
+    'cuentacaja_totem_codigo' => env('GASTRONOMIA_CUENTACAJA_TOTEM_CODIGO', 'TOTEM'),
 
     /** Base Informix donde está la tabla tickettarj (bridge Anita). */
     'ticket_tarjeta_anita_sistema' => env('GASTRONOMIA_TICKET_TARJETA_ANITA_SISTEMA', 'base_admin'),

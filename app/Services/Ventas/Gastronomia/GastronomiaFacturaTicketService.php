@@ -41,6 +41,66 @@ final class GastronomiaFacturaTicketService
     }
 
     /**
+     * Variante asincrónica de {@see imprimirTrasEmision()}: usa Laravel defer() para imprimir
+     * después de devolver la respuesta al POS. La terminal queda liberada en cuanto la
+     * transacción commitea; el ticket se imprime en segundo plano. Si la impresora está lenta
+     * o el comando excede el timeout, no afecta al usuario (queda log en
+     * gastronomia.ticket_factura.defer.*).
+     *
+     * Cuando gastronomia.ticket_impresion_async = false, se comporta exactamente como
+     * imprimirTrasEmision() (sincrónico).
+     *
+     * @return array{ok:bool,omitida?:bool,encolada?:bool,mensaje?:string}
+     */
+    public function imprimirTrasEmisionEncolado(
+        int $ventaId,
+        ConfiguracionPuntoventaGastronomia $cfg,
+        ?CuentaGastronomia $cuenta = null,
+    ): array {
+        if (! config('gastronomia.ticket_impresion_automatica', true)) {
+            return ['ok' => true, 'omitida' => true, 'mensaje' => 'Impresión automática de ticket deshabilitada.'];
+        }
+
+        if (! config('gastronomia.ticket_impresion_async', true)) {
+            return $this->imprimirTicketVenta($ventaId, $cfg, $cuenta);
+        }
+
+        $cfgId = (int) $cfg->id;
+        $cuentaId = $cuenta?->id !== null ? (int) $cuenta->id : null;
+
+        defer(function () use ($ventaId, $cfgId, $cuentaId): void {
+            try {
+                $cfgDefer = ConfiguracionPuntoventaGastronomia::query()->find($cfgId);
+                if ($cfgDefer === null) {
+                    Log::warning('gastronomia.ticket_factura.defer.cfg_inexistente', [
+                        'venta_id' => $ventaId,
+                        'cfg_id' => $cfgId,
+                    ]);
+
+                    return;
+                }
+
+                $cuentaDefer = $cuentaId !== null
+                    ? CuentaGastronomia::query()->find($cuentaId)
+                    : null;
+
+                $this->imprimirTicketVenta($ventaId, $cfgDefer, $cuentaDefer);
+            } catch (Throwable $e) {
+                Log::error('gastronomia.ticket_factura.defer.excepcion', [
+                    'venta_id' => $ventaId,
+                    'msg' => $e->getMessage(),
+                ]);
+            }
+        });
+
+        return [
+            'ok' => true,
+            'encolada' => true,
+            'mensaje' => 'Ticket en cola de impresión (defer post-respuesta).',
+        ];
+    }
+
+    /**
      * Reimpresión manual (Facturas del día u otro origen).
      *
      * @return array{ok:bool,omitida?:bool,mensaje?:string}
@@ -162,11 +222,12 @@ final class GastronomiaFacturaTicketService
 
         $w->separador();
 
-        $etiquetaFactura = 'FACTURA'.($letra !== '' ? ' '.$letra : '');
+        $esNotaCredito = $this->esNotaCredito($venta);
+        $etiquetaComprobante = $this->etiquetaComprobante($esNotaCredito, $letra);
         $w->alinearCentro();
         $w->negrita(true);
         $w->dobleTamano(true);
-        $w->linea($etiquetaFactura);
+        $w->linea($etiquetaComprobante);
         $w->dobleTamano(false);
         $w->negrita(false);
         $w->linea('ORIGINAL (Cod.'.str_pad((string) $codigoAfip, 3, '0', STR_PAD_LEFT).')');
@@ -178,7 +239,7 @@ final class GastronomiaFacturaTicketService
         $n = 0;
         foreach ($venta->venta_emisiones as $item) {
             $n++;
-            $cant = (float) $item->cantidad;
+            $cant = abs((float) $item->cantidad);
             $precio = (float) $item->precio;
             if ($item->descuento > 0) {
                 $precio *= (1 - ((float) $item->descuento / 100));
@@ -198,14 +259,21 @@ final class GastronomiaFacturaTicketService
             $w->lineaConImporte($cantTxt.' '.$desc, number_format($importeLinea, 2, '.', ''));
         }
 
+        // El total se persiste con signo según el tipo (negativo en NC). En el ticket
+        // siempre se imprime el importe en positivo, equivalente al ABS del total.
+        $totalAbs = round(abs((float) $venta->total), 2);
         $w->lineaConImporte('SUBTOT. SIN DESCUENTOS', number_format($subtotal, 2, '.', ''));
+        $descuentoTotal = round($subtotal - $totalAbs, 2);
+        if ($descuentoTotal > 0) {
+            $w->lineaConImporte('DESCUENTO', '-'.number_format($descuentoTotal, 2, '.', ''));
+        }
         $w->separadorDoble();
 
         $w->alinearCentro();
         $w->negrita(true);
         $w->dobleTamano(true);
         $w->linea('TOTAL');
-        $w->linea('$ '.number_format((float) $venta->total, 2, '.', ''));
+        $w->linea('$ '.number_format($totalAbs, 2, '.', ''));
         $w->dobleTamano(false);
         $w->negrita(false);
         $w->alinearIzquierda();
@@ -226,7 +294,7 @@ final class GastronomiaFacturaTicketService
             $w->separadorDoble();
         }
 
-        $w->linea('VENTA A CLIENTE CONTADO');
+        $w->linea($esNotaCredito ? 'DEVOLUCION A CLIENTE CONTADO' : 'VENTA A CLIENTE CONTADO');
         $w->linea($this->referenciaComprobanteCompacta($venta));
         $w->linea('Cliente: '.GastronomiaVentaDisplaySupport::nombreReceptorFactura($venta));
 
@@ -383,6 +451,25 @@ final class GastronomiaFacturaTicketService
         return strtoupper(substr($partes[1] ?? '', 0, 1));
     }
 
+    /**
+     * Una venta es nota de crédito cuando su tipo de transacción tiene signo distinto a 'S'
+     * (resta). Coincide con la convención de FacturacionService y la validación de
+     * GastronomiaNotaCreditoService.
+     */
+    private function esNotaCredito(Venta $venta): bool
+    {
+        $signo = (string) ($venta->tipotransacciones->signo ?? '');
+
+        return $signo !== '' && $signo !== 'S';
+    }
+
+    private function etiquetaComprobante(bool $esNotaCredito, string $letra): string
+    {
+        $base = $esNotaCredito ? 'NOTA DE CREDITO' : 'FACTURA';
+
+        return $base.($letra !== '' ? ' '.$letra : '');
+    }
+
     private function referenciaComprobanteCompacta(Venta $venta): string
     {
         $letra = $this->letraComprobante($venta);
@@ -437,7 +524,7 @@ final class GastronomiaFacturaTicketService
         $iva = 0.;
         foreach ($venta->venta_impuestos as $imp) {
             if (stripos((string) $imp->concepto, 'Iva') !== false) {
-                $iva += (float) $imp->importe;
+                $iva += abs((float) $imp->importe);
             }
         }
 
@@ -455,7 +542,7 @@ final class GastronomiaFacturaTicketService
         $total = 0.;
         foreach ($venta->venta_impuestos as $imp) {
             if (stripos((string) $imp->concepto, 'Impuesto Interno') !== false) {
-                $total += (float) $imp->importe;
+                $total += abs((float) $imp->importe);
             }
         }
 

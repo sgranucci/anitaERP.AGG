@@ -30,12 +30,13 @@ class CuentaGastronomia extends Model implements Auditable
         'estado', 'identificador_pc', 'cliente_id', 'descuento_gastronomia_id', 'cliente_interno_descuento_id',
         'factura_receptor_nombre', 'factura_receptor_documento', 'factura_receptor_domicilio',
         'factura_receptor_tipodocumento_id',
-        'configuracion_puntoventa_gastronomia_id', 'venta_id', 'waitry_order_id',
+        'configuracion_puntoventa_gastronomia_id', 'venta_id', 'waitry_order_id', 'waitry_cobro_totem',
         'canje_premio_pendiente',
         'canje_fidelidad_pendiente',
     ];
 
     protected $casts = [
+        'waitry_cobro_totem' => 'boolean',
         'canje_premio_pendiente' => 'array',
         'canje_fidelidad_pendiente' => 'array',
     ];

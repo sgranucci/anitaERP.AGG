@@ -61,14 +61,19 @@ class ArcaCaeaController extends Controller
         ));
     }
 
-    public function show(int $id)
+    public function show(Request $request, int $id)
     {
         can('ver-arca-caea');
 
         $registro = $this->resolverRegistroPermitido($id);
         $registro->load(['empresa', 'solicitadoPor']);
+        $puedeReintentar = can('solicitar-arca-caea', false) && ! $registro->estaAutorizado();
 
-        return view('ventas.arca_caea.show', compact('registro'));
+        if ($request->ajax()) {
+            return view('ventas.arca_caea.partials.detalle_contenido', compact('registro', 'puedeReintentar'));
+        }
+
+        return redirect()->route('arca_caea');
     }
 
     public function solicitar(Request $request)
@@ -123,12 +128,12 @@ class ArcaCaeaController extends Controller
 
         if ($resultado['ok']) {
             return redirect()
-                ->route('arca_caea_ver', $resultado['registro']?->id ?? $id)
+                ->route('arca_caea')
                 ->with('mensaje', $resultado['mensaje']);
         }
 
         return redirect()
-            ->route('arca_caea_ver', $id)
+            ->route('arca_caea')
             ->with('error', $resultado['mensaje']);
     }
 

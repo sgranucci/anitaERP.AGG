@@ -31,12 +31,19 @@ class CajaAsignacionController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function index()
+    public function index(Request $request)
     {
         can('listar-asignacion-caja');
-		$datas = $this->repository->all();
 
-        return view('caja.cajaasignacion.index', compact('datas'));
+        $empresa_query = $this->empresaRepository->allFiltrado();
+        $empresaId = (int) $request->input('empresa_id', 0);
+        if ($empresaId <= 0 && $empresa_query->count() === 1) {
+            $empresaId = (int) $empresa_query->first()->id;
+        }
+
+        $datas = $this->repository->all(null, $empresaId > 0 ? $empresaId : null);
+
+        return view('caja.cajaasignacion.index', compact('datas', 'empresa_query', 'empresaId'));
     }
 
     /**
@@ -50,7 +57,7 @@ class CajaAsignacionController extends Controller
 
         $usuario_query = Usuario::orderBy('nombre')->get();
         $caja_query = $this->cajaRepository->all();
-        $empresa_query = $this->empresaRepository->all();
+        $empresa_query = $this->empresaRepository->allFiltrado();
 
         return view('caja.cajaasignacion.crear', compact('usuario_query', 'caja_query', 'empresa_query'));
     }
@@ -80,7 +87,7 @@ class CajaAsignacionController extends Controller
         $data = $this->repository->findOrFail($id);
         $usuario_query = Usuario::orderBy('nombre')->get();
         $caja_query = $this->cajaRepository->all();
-        $empresa_query = $this->empresaRepository->all();
+        $empresa_query = $this->empresaRepository->allFiltrado();
 
         return view('caja.cajaasignacion.editar', compact('data', 'usuario_query', 'caja_query', 'empresa_query'));
     }

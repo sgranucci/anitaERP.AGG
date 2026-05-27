@@ -3,6 +3,7 @@
 namespace App\Repositories\Caja;
 
 use App\Models\Caja\Caja_Asignacion;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Auth;
 
@@ -15,20 +16,37 @@ class Caja_AsignacionRepository implements Caja_AsignacionRepositoryInterface
      *
      * @param Post $post
      */
-    public function __construct(Caja_Asignacion $caja
-                                )
-    {
+    public function __construct(
+        Caja_Asignacion $caja,
+        private EmpresaRepositoryInterface $empresaRepository,
+    ) {
         $this->model = $caja;
     }
 
-    public function all($estado = null)
+    public function all($estado = null, ?int $empresaId = null)
     {
-        $caja = $this->model;
+        $query = $this->model->with(['empresas', 'cajas', 'usuarios']);
 
-        if ($estado)
-            $caja = $caja->wherein('estado', $estado);
-        
-        return $caja->orderBy('id', 'desc')->get();
+        if ($estado) {
+            $query->whereIn('estado', $estado);
+        }
+
+        $this->aplicarFiltroEmpresasAsignadas($query);
+
+        if ($empresaId !== null && $empresaId > 0) {
+            $query->where('empresa_id', $empresaId);
+        }
+
+        return $query->orderBy('id', 'desc')->get();
+    }
+
+    private function aplicarFiltroEmpresasAsignadas($query): void
+    {
+        $empresasAsignadas = $this->empresaRepository->traeEmpresasAsignadas();
+
+        if (count($empresasAsignadas) > 1) {
+            $query->whereIn('empresa_id', $empresasAsignadas);
+        }
     }
 
     public function create(array $data)

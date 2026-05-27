@@ -81,6 +81,13 @@ final class GastronomiaJornadaService
         $abierta = $this->jornadaAbierta($empresaId);
         $hoy = Carbon::today()->format('Y-m-d');
 
+        $cuentasAbiertasConItems = $abierta !== null
+            ? $this->contarCuentasAbiertasConItemsPorEmpresa($empresaId)
+            : 0;
+        $cuentasAbiertasVacias = $abierta !== null
+            ? $this->contarCuentasAbiertasVaciasPorEmpresa($empresaId)
+            : 0;
+
         return [
             'empresa_id' => $empresaId,
             'jornada_abierta' => $abierta !== null,
@@ -102,6 +109,8 @@ final class GastronomiaJornadaService
             'errores_cierre' => $abierta !== null
                 ? $this->erroresAntesDeCerrar($empresaId)
                 : [],
+            'cuentas_abiertas_con_items' => $cuentasAbiertasConItems,
+            'cuentas_abiertas_vacias' => $cuentasAbiertasVacias,
         ];
     }
 
@@ -211,11 +220,15 @@ final class GastronomiaJornadaService
             throw new InvalidArgumentException(implode(' ', $errores));
         }
 
+        $vaciasAutoDescartadas = $this->autoDescartarCuentasAbiertasVaciasPorEmpresa($empresaId);
+
+        $observacionFinal = $this->componerObservacionCierreJornada($observacion, $vaciasAutoDescartadas);
+
         $this->jornadaRepository->update([
             'estado' => JornadaGastronomia::ESTADO_CERRADA,
             'usuario_cierre_id' => Auth::id(),
             'cierre_en' => now(),
-            'observacion_cierre' => $this->limpiarObservacion($observacion),
+            'observacion_cierre' => $observacionFinal,
         ], (int) $jornada->id);
 
         return $this->jornadaRepository->findOrFail((int) $jornada->id);
@@ -223,9 +236,11 @@ final class GastronomiaJornadaService
 
     /**
      * Bloqueantes para cerrar la jornada.
-     * Las cuentas en estado 'cerrada sin facturar' son estado terminal (las dejó así el
-     * saneamiento) y NO bloquean: el log queda en el saneamiento del turno y en
-     * cuenta.estado = 'cerrada'.
+     *
+     * Política (actualizada 2026-05):
+     *   - Cuentas ABIERTA con ítems  → bloquean: hay que facturarlas o cerrarlas sin facturar desde Saneamiento.
+     *   - Cuentas ABIERTA sin ítems  → NO bloquean: se auto-descartan al cerrar la jornada (se mueven a CERRADA).
+     *   - Cuentas CERRADA (sin facturar) → estado terminal, NO bloquean.
      *
      * @return list<string>
      */
@@ -233,15 +248,13 @@ final class GastronomiaJornadaService
     {
         $errores = [];
 
-        $cuentasAbiertas = CuentaGastronomia::query()
-            ->where('empresa_id', $empresaId)
-            ->where('estado', CuentaGastronomia::ESTADO_ABIERTA)
-            ->count();
+        $cuentasAbiertasConItems = $this->contarCuentasAbiertasConItemsPorEmpresa($empresaId);
 
-        if ($cuentasAbiertas > 0) {
-            $errores[] = 'Hay '.$cuentasAbiertas.' cuenta(s) de mesa ABIERTA(S) sin facturar. '
+        if ($cuentasAbiertasConItems > 0) {
+            $errores[] = 'Hay '.$cuentasAbiertasConItems.' cuenta(s) de mesa ABIERTA(S) con consumos sin facturar. '
                 .'Factúrelas o ciérrelas sin facturar desde Ventas → Gastronomía → '
-                .'Saneamiento de turnos antes de cerrar la jornada.';
+                .'Saneamiento de turnos antes de cerrar la jornada. '
+                .'Las cuentas abiertas sin ítems se descartan automáticamente al cerrar la jornada.';
         }
 
         $turnosSinCerrar = TurnoOperativoGastronomia::query()
@@ -255,6 +268,70 @@ final class GastronomiaJornadaService
         }
 
         return $errores;
+    }
+
+    /**
+     * Cuenta cuentas ABIERTA con al menos una línea de consumo (bloqueantes reales).
+     */
+    public function contarCuentasAbiertasConItemsPorEmpresa(int $empresaId): int
+    {
+        if ($empresaId <= 0) {
+            return 0;
+        }
+
+        return CuentaGastronomia::query()
+            ->where('empresa_id', $empresaId)
+            ->where('estado', CuentaGastronomia::ESTADO_ABIERTA)
+            ->whereHas('lineas')
+            ->count();
+    }
+
+    /**
+     * Cuenta cuentas ABIERTA sin líneas (vacías; candidatas a auto-descarte al cerrar).
+     */
+    public function contarCuentasAbiertasVaciasPorEmpresa(int $empresaId): int
+    {
+        if ($empresaId <= 0) {
+            return 0;
+        }
+
+        return CuentaGastronomia::query()
+            ->where('empresa_id', $empresaId)
+            ->where('estado', CuentaGastronomia::ESTADO_ABIERTA)
+            ->whereDoesntHave('lineas')
+            ->count();
+    }
+
+    /**
+     * Cierra sin facturar todas las cuentas ABIERTA sin ítems de la empresa.
+     * Devuelve cuántas se descartaron.
+     */
+    public function autoDescartarCuentasAbiertasVaciasPorEmpresa(int $empresaId): int
+    {
+        if ($empresaId <= 0) {
+            return 0;
+        }
+
+        return CuentaGastronomia::query()
+            ->where('empresa_id', $empresaId)
+            ->where('estado', CuentaGastronomia::ESTADO_ABIERTA)
+            ->whereDoesntHave('lineas')
+            ->update(['estado' => CuentaGastronomia::ESTADO_CERRADA]);
+    }
+
+    private function componerObservacionCierreJornada(?string $observacion, int $vaciasAutoDescartadas): ?string
+    {
+        $base = $this->limpiarObservacion($observacion);
+
+        if ($vaciasAutoDescartadas <= 0) {
+            return $base;
+        }
+
+        $nota = '[Auto '.now()->format('Y-m-d H:i').'] '.$vaciasAutoDescartadas
+            .' cuenta(s) abierta(s) sin ítems descartada(s) automáticamente al cerrar la jornada.';
+        $obs = $base === null ? $nota : $base."\n".$nota;
+
+        return mb_substr($obs, 0, 2000);
     }
 
     public function exigirJornadaSiConfigurada(int $empresaId): void

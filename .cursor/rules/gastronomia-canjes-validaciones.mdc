@@ -87,9 +87,24 @@ En el mismo preflight (no exclusivas de canje):
 | Clave | Uso |
 |-------|-----|
 | `WIGOS_HABILITADO` | SQL Wigos para cupones |
+| `CURR_WIGOS` | `A` primario, `B` fallback (= `track_wigos.php` legacy) |
+| `WIGOS_A_HOST/PORT/DATABASE/USERNAME/PASSWORD` | Conexión SQL Server primaria (default DB `wgdb_000`, user `reader_anita`) |
+| `WIGOS_B_HOST/PORT/DATABASE/USERNAME/PASSWORD` | Conexión SQL Server secundaria (opcional) |
+| `WIGOS_ENCRYPT` | `no` por default (replica FreeTDS plaintext del legacy). `yes` sólo si el SQL Server soporta TLS. |
+| `WIGOS_TRUST_SERVER_CERTIFICATE` | `yes` por default. `no` sólo con cert válido. |
+| `WIGOS_LOGIN_TIMEOUT` | Segundos antes de fallback A→B (default `5`). |
+| `WIGOS_APPNAME` | Nombre app en SQL Server (default `AnitaERP-Gastronomia-Wigos`). |
 | `GASTRONOMIA_CANJE_PREMIO_DESCUENTO_CODIGO` | Descuento obligatorio al aplicar (default `10`) |
 | `GASTRONOMIA_CANJE_PREMIO_CLIENTE_CODIGO` | Cliente factura (default `500`) |
 | `GASTRONOMIA_CANJE_PREMIO_VENCIMIENTO_DIAS` | Días desde fecha premio (default `2`) |
+
+**Driver requerido:** `pdo_sqlsrv` + ODBC Driver 18. Driver 18 exige `Encrypt=yes` por default; `WIGOS_ENCRYPT=no` replica el comportamiento de `track_wigos.php` (FreeTDS plaintext) — usar `yes` sólo si el SQL Server tiene TLS.
+
+**OpenSSL 3 + SQL Server 2012:** sin tocar `/etc/ssl/openssl.cnf` (afectaría SOAP ARCA), `WigosSqlServerProcess` lanza `scripts/wigos-sqlserver.php` con `OPENSSL_CONF` apuntando a `config/openssl/wigos-mssql.cnf` (`WIGOS_OPENSSL_CONF` opcional). `putenv` en el mismo worker PHP no alcanza al driver ODBC.
+
+**Fallback A↔B:** sólo si falla la **conexión** al primario (no si el SP devuelve filas vacías). Equivalente a `Connect() == false` del legacy.
+
+**Diagnóstico:** `php artisan wigos:probar-conexion [--cupon=...] [--trackdata=...]` valida la conexión SQL (A y B con `SELECT @@VERSION`), opcionalmente ejecuta `spVoucherGiftData` con un cupón real y prueba la URL HTTP `AccountInfoJSON`. Correr **desde el host de producción** (no desde desarrollo) ya que la red a Wigos suele estar segmentada.
 
 ### Frontend — modal premio
 

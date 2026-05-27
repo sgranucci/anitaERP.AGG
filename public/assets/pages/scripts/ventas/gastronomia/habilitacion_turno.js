@@ -184,9 +184,16 @@
             html += '<span class="badge ' + (ok ? 'badge-success' : 'badge-warning') + '">';
             html += ok ? 'Conciliación OK' : 'Conciliación con diferencia';
             html += '</span>';
-            if (Number(estado.cuentas_sin_facturar || 0) > 0) {
+            var nConItems = Number(estado.cuentas_abiertas_con_items || estado.cuentas_sin_facturar || 0);
+            if (nConItems > 0) {
                 var badgeCuentas = estado.es_ultimo_turno_dia ? 'badge-danger' : 'badge-info';
-                html += ' <span class="badge ' + badgeCuentas + '">' + estado.cuentas_sin_facturar + ' cuenta(s) abierta(s) sin facturar</span>';
+                html += ' <span class="badge ' + badgeCuentas + '" title="Abiertas con consumos: bloquean cierre del último turno del día">'
+                    + nConItems + ' abierta(s) con consumos</span>';
+            }
+            var nVacias = Number(estado.cuentas_abiertas_vacias || 0);
+            if (nVacias > 0) {
+                html += ' <span class="badge badge-info" title="Sin ítems: se descartan automáticamente al cerrar turno/jornada">'
+                    + nVacias + ' abierta(s) sin ítems (auto-descartan)</span>';
             }
             if (Number(estado.cuentas_cerradas_sin_facturar || 0) > 0) {
                 html += ' <span class="badge badge-secondary" title="Estado terminal por saneamiento: no bloquean cierre">'

@@ -5,6 +5,7 @@ namespace App\Services\Arca;
 use App\Models\Configuracion\Empresa;
 use App\Models\Ventas\ArcaCaea;
 use App\Models\Ventas\Puntoventa;
+use App\Support\Ventas\ArcaCaeaSolicitudSupport;
 use App\Support\Ventas\CaeaQuincenaSupport;
 use Carbon\Carbon;
 use Exception;
@@ -99,33 +100,16 @@ class ArcaMtxcaCaeaService
         $registro->save();
 
         try {
-            if ($forzarConsulta) {
-                $resp = $this->recuperarCaeaDesdeLocal($empresa, $periodo, $orden);
-                if ($resp === null) {
-                    throw new Exception('MTXCA: no hay CAEA en arca_caea para esta quincena (ejecute arca:solicitar-caea-quincenal).');
-                }
-            } else {
-                try {
-                    $resp = $this->mtxca->solicitarCaea($empresaId, $periodo, $orden);
-                } catch (Exception $e) {
-                    if ($this->esCaeaYaOtorgado($e->getMessage())) {
-                        $resp = $this->recuperarCaeaDesdeLocal($empresa, $periodo, $orden);
-                        if ($resp === null) {
-                            throw $e;
-                        }
-                    } else {
-                        throw $e;
-                    }
-                }
-            }
-
-            $this->aplicarRespuestaArca($registro, $resp);
+            $obtenido = $this->obtenerCaeaDesdeArca($empresaId, $periodo, $orden, $forzarConsulta);
+            $this->aplicarRespuestaArca($registro, $obtenido['resp']);
 
             return [
                 'ok' => $registro->estaAutorizado(),
                 'registro' => $registro->fresh(),
                 'mensaje' => $registro->estaAutorizado()
-                    ? 'CAEA obtenido correctamente (MTXCA).'
+                    ? ($obtenido['via_consulta']
+                        ? 'CAEA recuperado por consulta ARCA (MTXCA; ya otorgado previamente, p. ej. Anita).'
+                        : 'CAEA obtenido correctamente (MTXCA).')
                     : ($registro->mensaje_error ?? 'No se pudo autorizar el CAEA.'),
             ];
         } catch (Exception $e) {
@@ -206,66 +190,39 @@ class ArcaMtxcaCaeaService
     }
 
     /**
-     * MTXCA no consulta CAEA por periodo/orden como WSFE: solo arca_caea (pedido quincenal en anitaERP).
-     *
-     * @return array<string, mixed>|null
+     * @return array{resp: array<string, mixed>, via_consulta: bool}
      */
-    private function recuperarCaeaDesdeLocal(Empresa $empresa, int $periodo, int $orden): ?array
+    private function obtenerCaeaDesdeArca(int $empresaId, int $periodo, int $orden, bool $soloConsultar): array
     {
-        $local = ArcaCaea::query()
-            ->where('empresa_id', $empresa->id)
-            ->where('periodo', $periodo)
-            ->where('orden', $orden)
-            ->whereNotNull('nro_caea')
-            ->first();
-
-        if ($local !== null && $local->estaAutorizado()) {
-            return $this->respuestaDesdeRegistro($local);
+        if ($soloConsultar) {
+            return [
+                'resp' => $this->mtxca->consultarCaea($empresaId, $periodo, $orden),
+                'via_consulta' => true,
+            ];
         }
 
-        $fechas = CaeaQuincenaSupport::fechasQuincena($periodo, $orden);
-        $factura = $this->caeaLocal->buscarCaeaParaFactura((string) $empresa->nroinscripcion, $fechas['desde']);
-        if ($factura === null) {
-            return null;
+        try {
+            return [
+                'resp' => $this->mtxca->solicitarCaea($empresaId, $periodo, $orden),
+                'via_consulta' => false,
+            ];
+        } catch (Exception $e) {
+            if (! ArcaCaeaSolicitudSupport::debeConsultarTrasFalloSolicitud($e->getMessage(), 'wsmtxca')) {
+                throw $e;
+            }
+
+            Log::info('CAEA MTXCA: solicitud sin CAEA o ya otorgado; consultando en ARCA', [
+                'empresa_id' => $empresaId,
+                'periodo' => $periodo,
+                'orden' => $orden,
+                'error_solicitud' => $e->getMessage(),
+            ]);
+
+            return [
+                'resp' => $this->mtxca->consultarCaea($empresaId, $periodo, $orden),
+                'via_consulta' => true,
+            ];
         }
-
-        return [
-            'caea' => $factura['cae'],
-            'periodo' => $periodo,
-            'orden' => $orden,
-            'fch_vig_desde' => $fechas['desde']->format('Y-m-d'),
-            'fch_vig_hasta' => $fechas['hasta']->format('Y-m-d'),
-            'fch_tope_inf' => '',
-            'fch_proceso' => '',
-            'observaciones' => '',
-            'tiene_observaciones' => false,
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function respuestaDesdeRegistro(ArcaCaea $registro): array
-    {
-        return [
-            'caea' => (string) $registro->nro_caea,
-            'periodo' => (int) $registro->periodo,
-            'orden' => (int) $registro->orden,
-            'fch_vig_desde' => $registro->fecha_vigencia_desde?->format('Y-m-d') ?? '',
-            'fch_vig_hasta' => $registro->fecha_vigencia_hasta?->format('Y-m-d') ?? '',
-            'fch_tope_inf' => $registro->fecha_tope_informe?->format('Y-m-d') ?? '',
-            'fch_proceso' => $registro->fecha_proceso?->format('Y-m-d H:i:s') ?? '',
-            'observaciones' => is_array($registro->observaciones) ? (string) ($registro->observaciones['texto'] ?? '') : '',
-            'tiene_observaciones' => $registro->estado === ArcaCaea::ESTADO_OBSERVACION,
-        ];
-    }
-
-    private function esCaeaYaOtorgado(string $mensaje): bool
-    {
-        return str_contains($mensaje, '[604]')
-            || stripos($mensaje, 'ya otorgado') !== false
-            || stripos($mensaje, 'existir un CAEA') !== false
-            || stripos($mensaje, 'existir un caea') !== false;
     }
 
     private function extraerCodigoError(string $mensaje): ?string
