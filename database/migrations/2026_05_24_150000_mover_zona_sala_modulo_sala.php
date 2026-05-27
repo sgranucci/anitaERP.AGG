@@ -36,6 +36,9 @@ return new class extends Migration
         ]);
 
         $rolIdsZona = DB::table('menu_rol')->where('menu_id', $menuId)->pluck('rol_id')->unique()->all();
+        if ($rolIdsZona !== []) {
+            $rolIdsZona = DB::table('rol')->whereIn('id', $rolIdsZona)->pluck('id')->all();
+        }
         foreach ($rolIdsZona as $rolId) {
             $rid = (int) $rolId;
             if (! DB::table('menu_rol')->where('menu_id', $moduloSalaId)->where('rol_id', $rid)->exists()) {

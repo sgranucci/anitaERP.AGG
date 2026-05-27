@@ -81,6 +81,10 @@ return new class extends Migration
             $rolIds = array_values(array_unique(array_merge($rolIds, $rolIdsMenu)));
         }
 
+        if ($rolIds !== []) {
+            $rolIds = DB::table('rol')->whereIn('id', $rolIds)->pluck('id')->all();
+        }
+
         foreach ($rolIds as $rolId) {
             $rid = (int) $rolId;
             if (! DB::table('menu_rol')->where('menu_id', $menuId)->where('rol_id', $rid)->exists()) {

@@ -103,12 +103,34 @@ return new class extends Migration
         'VINOS' => [5, 7],
     ];
 
+    /**
+     * IDs de empresa definidos en el seed que existen en BD (tolerante a despliegues parciales).
+     *
+     * @return list<int>
+     */
+    private function empresaIdsExistentes(): array
+    {
+        $ids = array_keys($this->areasPorEmpresa);
+
+        return DB::table('empresa')
+            ->whereIn('id', $ids)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->values()
+            ->all();
+    }
+
     public function up(): void
     {
         $now = now();
         $areaIds = [];
+        $empresaIds = $this->empresaIdsExistentes();
 
         foreach ($this->areasPorEmpresa as $empresaId => $areas) {
+            if (! in_array((int) $empresaId, $empresaIds, true)) {
+                continue;
+            }
+
             foreach ($areas as $area) {
                 $existente = DB::table('area_comanda_gastronomia')
                     ->where('empresa_id', $empresaId)
@@ -185,7 +207,10 @@ return new class extends Migration
     public function down(): void
     {
         $codigosArea = ['kds_cocina', 'kds_tomasso', 'kds_pizzeria', 'kds_mostrador'];
-        $empresaIds = [1, 2, 3];
+        $empresaIds = $this->empresaIdsExistentes();
+        if ($empresaIds === []) {
+            return;
+        }
 
         $areaIds = DB::table('area_comanda_gastronomia')
             ->whereIn('empresa_id', $empresaIds)
