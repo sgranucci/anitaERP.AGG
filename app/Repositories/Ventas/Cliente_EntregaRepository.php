@@ -216,7 +216,16 @@ class Cliente_EntregaRepository implements Cliente_EntregaRepositoryInterface
 							entc_expreso
 								", 
 						'tabla' => $this->tableAnita );
-        $dataAnita = json_decode($apiAnita->apiCall($data));
+        $rawAnita = $apiAnita->apiCall($data);
+        $dataAnita = json_decode($rawAnita);
+        if (is_object($dataAnita) && isset($dataAnita->Error)) {
+            throw new \RuntimeException((string) $dataAnita->Error);
+        }
+        if (! is_array($dataAnita)) {
+            throw new \RuntimeException(
+                'Respuesta inválida de Anita al listar domicilios de entrega (entrcli). Revise ANITA_IP / bridge HTTP.'
+            );
+        }
 
         foreach ($dataAnita as $value) {
             $this->traerRegistroDeAnita($value->entc_cliente, $value->entc_linea, true);
@@ -242,49 +251,138 @@ class Cliente_EntregaRepository implements Cliente_EntregaRepositoryInterface
         );
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
-        if ($dataAnita) {
-            $data = $dataAnita[0];
-
-			$provincia_id = $data->entc_provincia;
-			$localidad_id = $data->entc_localidad;
-			if ($provincia_id == 0)
-			  	$provincia_id = 1;
-			if ($localidad_id == 0)
-			  	$localidad_id = 1;
-	
-       		$transporte = Transporte::select('id', 'codigo')->where('codigo' , $data->entc_expreso)->first();
-			if ($transporte)
-				$transporte_id = $transporte->id;
-			else
-				$transporte_id = 1;
-
-       		$Cliente = Cliente::where('codigo' , ltrim($cliente, '0'))->first();
-
-			$pais_id = 1;
-
-			if ($Cliente)
-			{
-				$arr_campos = [
-					"cliente_id" => $Cliente->id,
-					"nombre" => $data->entc_lugar,
-					"codigo" => $data->entc_linea,
-					"domicilio" => $data->entc_direccion,
-					"localidad_id" => $localidad_id,
-					"provincia_id" => $provincia_id,
-					"pais_id" => $pais_id,
-					"codigopostal" => $data->entc_cod_postal,
-					"zonavta_id" => $Cliente->zonavta_id,
-					"subzonavta_id" => $Cliente->subzonavta_id,
-					"vendedor_id" => $Cliente->vendedor_id,
-					"transporte_id" => $Cliente->transporte_id,
-            		];
-
-				if ($fl_crea_registro)
-            		$this->model->create($arr_campos);
-				else
-            		$this->model->where('cliente_id', $Cliente->id)->where('codigo', $data->entc_lugar)->update($arr_campos);
-			}
+        if (! is_array($dataAnita) || count($dataAnita) === 0) {
+            return;
         }
+
+        $data = $dataAnita[0];
+
+        $Cliente = Cliente::where('codigo', ltrim((string) $cliente, '0'))->first();
+        if (! $Cliente) {
+            return;
+        }
+
+        $provincia_id = $this->resolverProvinciaIdDesdeAnita($data->entc_provincia ?? null)
+            ?? $Cliente->provincia_id;
+        $localidad_id = $this->resolverLocalidadIdDesdeAnita(
+            $data->entc_localidad ?? null,
+            $data->entc_cod_postal ?? null,
+            $provincia_id
+        ) ?? $Cliente->localidad_id;
+
+        $pais_id = 1;
+        if ($provincia_id) {
+            $pais_id = (int) (Provincia::where('id', $provincia_id)->value('pais_id') ?? $Cliente->pais_id ?? 1);
+        } elseif ($Cliente->pais_id) {
+            $pais_id = (int) $Cliente->pais_id;
+        }
+
+        $transporte = Transporte::select('id', 'codigo')->where('codigo', $data->entc_expreso)->first();
+        $transporte_id = $transporte ? $transporte->id : ($Cliente->transporte_id ?: null);
+
+        $arr_campos = [
+            'cliente_id' => $Cliente->id,
+            'nombre' => $data->entc_lugar,
+            'codigo' => $data->entc_linea,
+            'domicilio' => $data->entc_direccion,
+            'localidad_id' => $localidad_id,
+            'provincia_id' => $provincia_id,
+            'pais_id' => $pais_id,
+            'codigopostal' => $data->entc_cod_postal,
+            'zonavta_id' => $Cliente->zonavta_id,
+            'subzonavta_id' => $Cliente->subzonavta_id,
+            'vendedor_id' => $Cliente->vendedor_id,
+            'transporte_id' => $transporte_id,
+        ];
+
+        $codigoLinea = (string) $data->entc_linea;
+        $existe = $this->model->where('cliente_id', $Cliente->id)->where('codigo', $codigoLinea)->exists();
+
+        if ($fl_crea_registro && ! $existe) {
+            $this->model->create($arr_campos);
+        } elseif ($existe) {
+            $this->model->where('cliente_id', $Cliente->id)->where('codigo', $codigoLinea)->update($arr_campos);
+        }
+    }
+
+    /**
+     * entc_provincia en Anita suele ser código (loc_provincia / 1007), no id MySQL.
+     */
+    private function resolverProvinciaIdDesdeAnita(mixed $valor): ?int
+    {
+        if ($valor === null || $valor === '' || $valor === 0 || $valor === '0') {
+            return null;
+        }
+
+        $v = trim((string) $valor);
+        if ($v === '') {
+            return null;
+        }
+
+        if (ctype_digit($v)) {
+            $id = (int) $v;
+            if (Provincia::where('id', $id)->exists()) {
+                return $id;
+            }
+        }
+
+        $porCodigo = Provincia::where('codigo', $v)->value('id');
+        if ($porCodigo) {
+            return (int) $porCodigo;
+        }
+
+        $porNombre = Provincia::where('nombre', $v)->value('id');
+        if ($porNombre) {
+            return (int) $porNombre;
+        }
+
+        return null;
+    }
+
+    /**
+     * entc_localidad en Anita suele ser loc_localidad (código), no id MySQL.
+     */
+    private function resolverLocalidadIdDesdeAnita(mixed $valor, ?string $codigoPostal = null, ?int $provinciaId = null): ?int
+    {
+        if ($valor === null || $valor === '' || $valor === 0 || $valor === '0') {
+            return null;
+        }
+
+        $v = trim((string) $valor);
+        if ($v === '') {
+            return null;
+        }
+
+        $query = Localidad::query();
+
+        if (ctype_digit($v)) {
+            $id = (int) $v;
+            if (Localidad::where('id', $id)->exists()) {
+                return $id;
+            }
+            $query->where(function ($q) use ($v, $id) {
+                $q->where('codigo', $v)->orWhere('id', $id);
+            });
+        } else {
+            $query->where('codigo', $v);
+        }
+
+        if ($provinciaId) {
+            $query->where('provincia_id', $provinciaId);
+        }
+
+        if ($codigoPostal !== null && trim((string) $codigoPostal) !== '') {
+            $query->where('codigopostal', trim((string) $codigoPostal));
+        }
+
+        $localidadId = $query->value('id');
+        if ($localidadId) {
+            return (int) $localidadId;
+        }
+
+        $localidadId = Localidad::where('codigo', $v)->value('id');
+
+        return $localidadId ? (int) $localidadId : null;
     }
 
 	private function guardarAnita($data, $linea) {
