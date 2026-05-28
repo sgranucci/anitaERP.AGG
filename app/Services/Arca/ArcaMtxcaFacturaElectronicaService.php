@@ -7,6 +7,7 @@ use App\Models\Configuracion\Impuesto;
 use App\Models\Stock\Articulo;
 use App\Models\Ventas\Puntoventa;
 use App\Repositories\Configuracion\CondicionivaRepositoryInterface;
+use App\Support\Ventas\CaeaQuincenaSupport;
 use Carbon\Carbon;
 use Exception;
 use SoapClient;
@@ -384,7 +385,38 @@ class ArcaMtxcaFacturaElectronicaService
             throw new Exception($this->formatSoapFault('solicitarCAEA', $e, $client));
         }
 
-        return $this->parseCaeaResult($raw->solicitarCAEAResponse ?? null, 'solicitarCAEA');
+        $result = $this->unwrapSoapResponse($raw, 'solicitarCAEAResponse');
+
+        return $this->parseCaeaResult($result, 'solicitarCAEA');
+    }
+
+    /**
+     * Recupera CAEA otorgado por periodo/orden (WSMTXCA consultarCAEAEntreFechas).
+     * consultarCAEA exige el número de CAEA; no aplica a pedido quincenal por periodo.
+     *
+     * @return array{
+     *     caea: string,
+     *     periodo: int,
+     *     orden: int,
+     *     fch_vig_desde: string,
+     *     fch_vig_hasta: string,
+     *     fch_tope_inf: string,
+     *     fch_proceso: string,
+     *     observaciones: string,
+     *     tiene_observaciones: bool
+     * }
+     */
+    public function consultarCaea(int $empresaId, int $periodo, int $orden): array
+    {
+        $fechas = CaeaQuincenaSupport::fechasQuincena($periodo, $orden);
+
+        return $this->consultarCaeaEntreFechas(
+            $empresaId,
+            $fechas['desde']->format('Y-m-d'),
+            $fechas['hasta']->format('Y-m-d'),
+            $periodo,
+            $orden,
+        );
     }
 
     /**
@@ -400,8 +432,13 @@ class ArcaMtxcaFacturaElectronicaService
      *     tiene_observaciones: bool
      * }
      */
-    public function consultarCaea(int $empresaId, int $periodo, int $orden): array
-    {
+    private function consultarCaeaEntreFechas(
+        int $empresaId,
+        string $fechaDesde,
+        string $fechaHasta,
+        int $periodo,
+        int $orden,
+    ): array {
         $this->assertTransporteSoap();
         $cuit = $this->cuitEmisor($empresaId);
         $ctx = $this->resolveWsaaContext($empresaId);
@@ -409,18 +446,18 @@ class ArcaMtxcaFacturaElectronicaService
         $client = $this->soapClient();
 
         try {
-            $raw = $client->consultarCAEA([
+            $raw = $client->consultarCAEAEntreFechas([
                 'authRequest' => $this->authRequest($ts, $cuit),
-                'consultaCAEA' => [
-                    'periodo' => $periodo,
-                    'orden' => $orden,
-                ],
+                'fechaDesde' => $fechaDesde,
+                'fechaHasta' => $fechaHasta,
             ]);
         } catch (SoapFault $e) {
-            throw new Exception($this->formatSoapFault('consultarCAEA', $e, $client));
+            throw new Exception($this->formatSoapFault('consultarCAEAEntreFechas', $e, $client));
         }
 
-        return $this->parseCaeaResult($raw->consultarCAEAResponse ?? null, 'consultarCAEA');
+        $result = $this->unwrapSoapResponse($raw, 'consultarCAEAEntreFechasResponse');
+
+        return $this->parseCaeaEntreFechasResult($result, 'consultarCAEAEntreFechas', $periodo, $orden);
     }
 
     public function dummy(int $empresaId): array
@@ -831,9 +868,82 @@ class ArcaMtxcaFacturaElectronicaService
             throw new Exception("MTXCA: {$operacion} sin CAEAResponse.");
         }
 
+        return $this->mapCaeaResponseObject($rg);
+    }
+
+    private function parseCaeaEntreFechasResult(?object $result, string $operacion, int $periodo, int $orden): array
+    {
+        if ($result === null) {
+            throw new Exception("MTXCA: {$operacion} sin resultado.");
+        }
+
+        $errs = $this->normalizeCodigoDescripcionCollection($result->arrayErrores ?? null);
+        if ($errs !== []) {
+            throw new Exception('MTXCA — '.$operacion.': '.$this->formatCodigoDescripcionList($errs));
+        }
+
+        $container = $result->arrayCAEAResponse ?? null;
+        if ($container === null) {
+            throw new Exception("MTXCA: {$operacion} sin arrayCAEAResponse.");
+        }
+
+        $rg = $this->resolveCaeaResponseForQuincena($container, $periodo, $orden);
+        if ($rg === null) {
+            throw new Exception("MTXCA — {$operacion} sin CAEA para periodo {$periodo} orden {$orden}.");
+        }
+
+        return $this->mapCaeaResponseObject($rg);
+    }
+
+    private function resolveCaeaResponseForQuincena(object $container, int $periodo, int $orden): ?object
+    {
+        $candidatos = $this->normalizeCaeaResponseCollection($container->CAEAResponse ?? null);
+        if ($candidatos === []) {
+            return null;
+        }
+
+        foreach ($candidatos as $rg) {
+            if ((int) ($rg->periodo ?? 0) === $periodo && (int) ($rg->orden ?? 0) === $orden) {
+                return $rg;
+            }
+        }
+
+        return count($candidatos) === 1 ? $candidatos[0] : null;
+    }
+
+    /**
+     * @return list<object>
+     */
+    private function normalizeCaeaResponseCollection(mixed $node): array
+    {
+        if ($node === null) {
+            return [];
+        }
+        if (is_array($node)) {
+            return array_values(array_filter($node, is_object(...)));
+        }
+
+        return is_object($node) ? [$node] : [];
+    }
+
+    /**
+     * @return array{
+     *     caea: string,
+     *     periodo: int,
+     *     orden: int,
+     *     fch_vig_desde: string,
+     *     fch_vig_hasta: string,
+     *     fch_tope_inf: string,
+     *     fch_proceso: string,
+     *     observaciones: string,
+     *     tiene_observaciones: bool
+     * }
+     */
+    private function mapCaeaResponseObject(object $rg): array
+    {
         $caea = trim((string) ($rg->CAEA ?? ''));
         if ($caea === '') {
-            throw new Exception("MTXCA — {$operacion} sin CAEA en la respuesta.");
+            throw new Exception('MTXCA — respuesta CAEA sin número en la respuesta.');
         }
 
         $obs = $this->normalizeCodigoDescripcionCollection($rg->arrayObservaciones ?? null);

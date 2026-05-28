@@ -15,6 +15,7 @@ final class ArcaCaeaSolicitudSupport
         $m = mb_strtolower($mensaje);
 
         $comunes = str_contains($m, 'ya otorgado')
+            || str_contains($m, 'ya existe un caea')
             || str_contains($m, 'existir un caea')
             || str_contains($m, 'sin caea en la respuesta')
             || str_contains($m, 'sin resultget');

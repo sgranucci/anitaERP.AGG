@@ -31,6 +31,14 @@ class ArcaCaeaSolicitudSupportTest extends TestCase
         ));
     }
 
+    public function test_mtxca_debe_consultar_si_ya_existe_caea_otorgado(): void
+    {
+        self::assertTrue(ArcaCaeaSolicitudSupport::debeConsultarTrasFalloSolicitud(
+            'MTXCA — solicitarCAEA: [604] Ya existe un CAEA otorgado para el período solicitado',
+            'wsmtxca',
+        ));
+    }
+
     public function test_no_consultar_error_generico(): void
     {
         self::assertFalse(ArcaCaeaSolicitudSupport::debeConsultarTrasFalloSolicitud(

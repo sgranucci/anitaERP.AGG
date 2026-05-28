@@ -116,4 +116,16 @@ return [
         /** Segundos de caché Laravel tras consulta ARCA exitosa (precarga index + formulario) */
         'cache_ttl' => (int) env('ARCA_PTOS_VENTA_CACHE_TTL', 1800),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | CAEA quincenal (arca:solicitar-caea-quincenal)
+    |--------------------------------------------------------------------------
+    |
+    | pedido_automatico: si false, el schedule de las 06:30 no corre (sigue disponible
+    | el comando manual y la pantalla Ventas → CAEA ARCA).
+    */
+    'caea' => [
+        'pedido_automatico' => filter_var(env('ARCA_CAEA_PEDIDO_AUTOMATICO', true), FILTER_VALIDATE_BOOLEAN),
+    ],
 ];
