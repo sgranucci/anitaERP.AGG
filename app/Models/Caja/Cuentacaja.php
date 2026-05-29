@@ -43,4 +43,43 @@ class Cuentacaja extends Model implements Auditable
     {
         return $this->belongsToMany(Usocuentacaja::class, 'cuentacaja_usocuentacaja', 'cuentacaja_id', 'usocuentacaja_id');
     }
+
+    /**
+     * Cuentas propias de la empresa o multiempresa (empresa_id null usable desde cualquier empresa).
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder<self>  $query
+     * @return \Illuminate\Database\Eloquent\Builder<self>
+     */
+    public function scopeParaEmpresa($query, int $empresaId)
+    {
+        if ($empresaId <= 0) {
+            return $query;
+        }
+
+        return $query->where(function ($q) use ($empresaId) {
+            $q->where('empresa_id', $empresaId)->orWhereNull('empresa_id');
+        });
+    }
+
+    public static function existeParaEmpresa(int $cuentacajaId, int $empresaId): bool
+    {
+        if ($cuentacajaId <= 0) {
+            return false;
+        }
+
+        $query = static::query()->whereKey($cuentacajaId);
+
+        return $empresaId > 0
+            ? $query->paraEmpresa($empresaId)->exists()
+            : $query->exists();
+    }
+
+    public function perteneceAEmpresa(int $empresaId): bool
+    {
+        if ($empresaId <= 0) {
+            return true;
+        }
+
+        return $this->empresa_id === null || (int) $this->empresa_id === $empresaId;
+    }
 }

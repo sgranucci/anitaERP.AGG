@@ -198,10 +198,7 @@ final class GastronomiaCobranzaService
                 $totalArs += $monto / max($cot, 0.0001);
             }
 
-            $existe = \App\Models\Caja\Cuentacaja::query()
-                ->whereKey($cuentacajaId)
-                ->where('empresa_id', $empresaId)
-                ->exists();
+            $existe = \App\Models\Caja\Cuentacaja::existeParaEmpresa($cuentacajaId, $empresaId);
             if (! $existe) {
                 return 'La cuenta de caja id '.$cuentacajaId.' no existe o no pertenece a la empresa '.$empresaId.'.';
             }

@@ -151,9 +151,11 @@ final class GastronomiaPreflightEmisionService
                 $errores[] = $errMedios;
             }
 
+            $empresaCobranzaId = $cfg ? (int) $cfg->empresa_id : (int) $cuenta->empresa_id;
             $errores = array_merge(
                 $errores,
-                $this->erroresCobranzaWaitryTotem($cuenta, $mediosPago, $cfg ? (int) $cfg->empresa_id : (int) $cuenta->empresa_id),
+                $this->erroresCobranzaWaitryTotem($cuenta, $mediosPago, $empresaCobranzaId),
+                $this->erroresCobranzaWaitryImpagaProhibeTotemManual($cuenta, $mediosPago, $empresaCobranzaId),
             );
         }
 
@@ -195,6 +197,39 @@ final class GastronomiaPreflightEmisionService
         $ccErr = GastronomiaCuentacajaEfectivo::mensajeErrorResolucion($empresaId);
 
         return $ccErr ? [$ccErr] : [];
+    }
+
+    /**
+     * Cuenta Waitry impaga: TOTEM solo automático al importar orden ya cobrada en el tótem.
+     *
+     * @param  list<array{cuentacaja_id:int,moneda_id:int,monto:float,cotizacion?:float|null}>  $mediosPago
+     * @return list<string>
+     */
+    private function erroresCobranzaWaitryImpagaProhibeTotemManual(
+        CuentaGastronomia $cuenta,
+        array $mediosPago,
+        int $empresaId,
+    ): array {
+        $waitryOrderId = (int) ($cuenta->waitry_order_id ?? 0);
+        if ($waitryOrderId <= 0 || $cuenta->waitry_cobro_totem) {
+            return [];
+        }
+
+        $totem = GastronomiaCuentacajaTotem::cuentaParaEmpresa($empresaId);
+        if ($totem === null) {
+            return [];
+        }
+
+        foreach ($mediosPago as $medio) {
+            if ((int) ($medio['cuentacaja_id'] ?? 0) === (int) $totem['id']) {
+                return [
+                    'Esta cuenta Waitry está impaga: no puede usar el medio TOTEM manualmente. '
+                    .'El TOTEM se asigna automáticamente solo si la orden ya fue cobrada en el tótem Waitry.',
+                ];
+            }
+        }
+
+        return [];
     }
 
     /**

@@ -145,6 +145,10 @@
                     <div class="col-md-6">
                         <strong>PV:</strong> {{ $venta->puntoventas->codigo ?? '—' }} — modo {{ $venta->puntoventas->modofacturacion ?? '—' }}<br>
                         <strong>Cuenta gastronomía:</strong> {{ $meta->cuenta_gastronomia_id ?? '—' }}<br>
+                        @php $waitryOrderId = \App\Support\Ventas\GastronomiaVentaDisplaySupport::waitryOrderId($venta); @endphp
+                        @if ($waitryOrderId !== null)
+                            <strong>Orden Waitry:</strong> {{ $waitryOrderId }}<br>
+                        @endif
                         <strong>PC emisión:</strong> {{ $meta->identificador_pc }}<br>
                         @if ($depositoVentaConfig)
                             <strong>Depósito artículos facturados:</strong>

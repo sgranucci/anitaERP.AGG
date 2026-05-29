@@ -1,0 +1,53 @@
+---
+description: Cuentas de caja por empresa — multiempresa (empresa_id null) vs estricto
+globs: app/Models/Caja/**/*.php,app/Repositories/Caja/**/*.php,app/Services/**/*.php,app/Support/**/*.php,app/Http/Controllers/**/*.php
+alwaysApply: false
+---
+
+# Cuenta de caja y empresa
+
+Regla de negocio al **listar, resolver o validar** `cuentacaja`:
+
+| `cuentacaja.empresa_id` | Uso desde empresa X del POS / operación |
+|---|---|
+| `null` | Permitido desde **cualquier** empresa (multiempresa) |
+| `N` (no null) | Solo si `N ===` empresa de la operación |
+
+Referencia: `App\Models\Caja\Cuentacaja` (`scopeParaEmpresa`, `existeParaEmpresa`, `perteneceAEmpresa`).
+
+## Obligatorio
+
+- **Consultas / listados:** `Cuentacaja::query()->paraEmpresa($empresaId)` (o `$query->paraEmpresa($empresaId)`).
+- **Validar un id concreto** (cobranza, F5, preflight, Waitry): `Cuentacaja::existeParaEmpresa($cuentacajaId, $empresaId)`.
+- **Instancia ya cargada:** `$cuenta->perteneceAEmpresa($empresaId)`.
+
+## Prohibido
+
+No filtrar ni validar con igualdad estricta sola:
+
+```php
+// ❌ Rechaza cuentas multiempresa (ej. TOTEM con empresa_id null)
+->where('empresa_id', $empresaId)
+Cuentacaja::query()->whereKey($id)->where('empresa_id', $empresaId)->exists();
+```
+
+## Correcto
+
+```php
+// ✅ Listar / buscar por código
+Cuentacaja::query()
+    ->paraEmpresa($empresaId)
+    ->whereIn('codigo', $variantes)
+    ->get();
+
+// ✅ Validar medio de cobro
+if (! Cuentacaja::existeParaEmpresa($cuentacajaId, $empresaId)) {
+    return 'La cuenta de caja id … no existe o no pertenece a la empresa …';
+}
+```
+
+## Al agregar código nuevo
+
+- Reutilizar el scope/métodos del modelo; no duplicar `orWhereNull('empresa_id')` en cada archivo salvo join con alias (`cuentacaja.empresa_id`).
+- Helpers gastronomía (`GastronomiaCuentacajaTotem`, `…Efectivo`, `…CanjeTarjeta`) deben apoyarse en `paraEmpresa` / `existeParaEmpresa`.
+- Tras cambios, comprobar: cuenta multiempresa usable en empresa 1; cuenta de otra empresa sigue rechazada.

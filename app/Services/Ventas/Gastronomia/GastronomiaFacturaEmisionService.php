@@ -740,7 +740,7 @@ final class GastronomiaFacturaEmisionService
     }
 
     /**
-     * Waitry fuera del request HTTP (defer Laravel): no retrasa emitir-factura ni la grabación en Anita.
+     * Waitry fuera del request HTTP (app terminating): no retrasa emitir-factura ni la grabación en Anita.
      *
      * @param  array<string, mixed>  $resultado
      * @param  list<array{cuentacaja_id:int,moneda_id:int,monto:float,cotizacion?:float|null,observacion?:string|null}>  $mediosPago
@@ -755,7 +755,7 @@ final class GastronomiaFacturaEmisionService
         $cuentaId = (int) $cuenta->id;
         $mediosPagoCopia = $mediosPago;
 
-        defer(function () use ($resultado, $cuentaId, $mediosPagoCopia): void {
+        app()->terminating(function () use ($resultado, $cuentaId, $mediosPagoCopia): void {
             $cuenta = CuentaGastronomia::query()->find($cuentaId);
             if ($cuenta === null) {
                 Log::warning('gastronomia.waitry.defer.cuenta_inexistente', ['cuenta_id' => $cuentaId]);

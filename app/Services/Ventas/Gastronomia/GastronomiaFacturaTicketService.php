@@ -265,7 +265,10 @@ final class GastronomiaFacturaTicketService
         $w->lineaConImporte('SUBTOT. SIN DESCUENTOS', number_format($subtotal, 2, '.', ''));
         $descuentoTotal = round($subtotal - $totalAbs, 2);
         if ($descuentoTotal > 0) {
-            $w->lineaConImporte('DESCUENTO', '-'.number_format($descuentoTotal, 2, '.', ''));
+            $pctCalculado = $subtotal > 0. ? round(100. * $descuentoTotal / $subtotal, 2) : null;
+            $etiquetaDescuento = GastronomiaVentaDisplaySupport::etiquetaLineaDescuento($venta, $pctCalculado)
+                ?? 'DESCUENTO';
+            $w->lineaConImporte($etiquetaDescuento, '-'.number_format($descuentoTotal, 2, '.', ''));
         }
         $w->separadorDoble();
 
@@ -296,7 +299,12 @@ final class GastronomiaFacturaTicketService
 
         $w->linea($esNotaCredito ? 'DEVOLUCION A CLIENTE CONTADO' : 'VENTA A CLIENTE CONTADO');
         $w->linea($this->referenciaComprobanteCompacta($venta));
-        $w->linea('Cliente: '.GastronomiaVentaDisplaySupport::nombreReceptorFactura($venta));
+        $w->linea('Cliente: '.GastronomiaVentaDisplaySupport::nombreClientePie($venta));
+
+        $lineaWaitry = GastronomiaVentaDisplaySupport::lineaOrdenWaitry($venta);
+        if ($lineaWaitry !== null) {
+            $w->linea($lineaWaitry);
+        }
 
         $mozoLinea = $this->lineaMozo($cuenta);
         if ($mozoLinea !== '') {

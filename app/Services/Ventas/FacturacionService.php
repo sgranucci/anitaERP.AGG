@@ -4926,7 +4926,10 @@ class FacturacionService
 						];
 
 		// Calcula impuestos
-		$conceptosTotales = $venta->venta_impuestos;
+		$conceptosTotales = \App\Support\Ventas\GastronomiaVentaDisplaySupport::aplicarEtiquetaDescuentoEnConceptosTotales(
+			$venta,
+			$venta->venta_impuestos,
+		);
 
 		if ($venta->moneda_id == 1)
 			$cotizacion = 1;

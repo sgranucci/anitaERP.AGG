@@ -19,6 +19,8 @@
     let pendingAbrirCuentaResolver = null;
     let pendingAbrirCuentaReject = null;
     let cobranzaWaitryTotemBloqueada = false;
+    /** Cuenta cuya grilla de cobranza refleja el estado actual (evita arrastrar TOTEM/efectivo al cambiar de cuenta). */
+    let cuentaIdCobranzaVinculada = null;
 
     function cubiertosDefaultApertura() {
         return Math.max(0, parseInt(String(G.cubiertosDefaultAlAbrir ?? '1'), 10) || 0);
@@ -1351,6 +1353,41 @@
         return !!(cuenta && cuenta.waitry_cobro_totem && cuenta.waitry_order_id);
     }
 
+    function cuentaWaitryImpaga(cuenta) {
+        return !!(cuenta && cuenta.waitry_order_id && !cuenta.waitry_cobro_totem);
+    }
+
+    function esCuentacajaTotem(cuentaCaja) {
+        if (!cuentaCaja || !cuentaCaja.id) {
+            return false;
+        }
+        const totem = G.cuentacajaTotem;
+        if (totem && parseInt(totem.id, 10) === parseInt(cuentaCaja.id, 10)) {
+            return true;
+        }
+        const cod = String(cuentaCaja.codigo || '')
+            .trim()
+            .toUpperCase();
+        const totemCod = String((totem && totem.codigo) || G.cuentacajaTotemCodigo || 'TOTEM')
+            .trim()
+            .toUpperCase();
+        return cod !== '' && cod === totemCod;
+    }
+
+    function rechazarTotemManualEnWaitryImpaga(cuentaCaja) {
+        if (!cuentaWaitryImpaga(cuentaActivaConLineas)) {
+            return false;
+        }
+        if (!esCuentacajaTotem(cuentaCaja)) {
+            return false;
+        }
+        toast(
+            'Esta cuenta Waitry está impaga: el medio TOTEM se asigna automáticamente solo si ya fue cobrada en el tótem.',
+            'warning',
+        );
+        return true;
+    }
+
     function actualizarAvisoCobranzaWaitryTotem(visible) {
         const el = document.getElementById('gastro-waitry-totem-aviso');
         if (el) {
@@ -1436,18 +1473,25 @@
     }
 
     async function aplicarCobranzaWaitryTotemSiCorresponde(cuenta) {
-        bloquearGrillaCobranzaWaitryTotem(false);
-        if (!cuentaEsWaitryCobroTotem(cuenta)) {
-            return;
-        }
+        const idCuenta = cuenta && cuenta.id != null ? Number(cuenta.id) : null;
+        const cambioCuenta = idCuenta !== cuentaIdCobranzaVinculada;
         const montoArs = subtotalEstimadoDesdeCuenta(cuenta);
-        if (!(montoArs > 0)) {
+
+        if (cuentaEsWaitryCobroTotem(cuenta) && montoArs > 0) {
+            try {
+                await prepararCobranzaTotem(montoArs);
+            } catch (e) {
+                toast(e.message || 'Error al preparar cobranza TOTEM', 'error');
+            }
+            cuentaIdCobranzaVinculada = idCuenta;
             return;
         }
-        try {
-            await prepararCobranzaTotem(montoArs);
-        } catch (e) {
-            toast(e.message || 'Error al preparar cobranza TOTEM', 'error');
+
+        if (cambioCuenta || cobranzaWaitryTotemBloqueada) {
+            bloquearGrillaCobranzaWaitryTotem(false);
+            limpiarCobranza();
+            setTotalFacturadoArs(montoArs);
+            cuentaIdCobranzaVinculada = idCuenta;
         }
     }
 
@@ -1742,6 +1786,7 @@
         if (fdom) fdom.value = '';
         actualizarPanelReceptorManual(0);
         bloquearGrillaCobranzaWaitryTotem(false);
+        cuentaIdCobranzaVinculada = null;
         limpiarCobranza();
         focusSkuConsumo();
     }
@@ -1968,6 +2013,9 @@
 
     function asignarCuentaCajaEnFila(tr, cuenta) {
         if (!tr || !cuenta || !cuenta.id) return;
+        if (rechazarTotemManualEnWaitryImpaga(cuenta)) {
+            return;
+        }
         const monIdNuevo = parseInt(String(cuenta.moneda_id || '0'), 10);
         if (
             monIdNuevo > MONEDA_PESOS_ID &&
@@ -2942,7 +2990,8 @@
         });
     }
 
-    async function cargarOrdenesWaitry() {
+    async function cargarOrdenesWaitry(opciones) {
+        opciones = opciones || {};
         const panel = document.getElementById('panel-waitry-lista');
         const vacio = document.getElementById('panel-waitry-vacio');
         if (!panel || !waitryHabilitadoEnPos()) {
@@ -2960,11 +3009,11 @@
             vacio.classList.add('d-none');
         }
         try {
-            const data = await api(
+            const urlBase =
                 (G.rutasWaitry && G.rutasWaitry.ordenesPendientes) ||
-                    '/ventas/gastronomia/api/waitry-ordenes-pendientes',
-                { headers: hdrJson() },
-            );
+                '/ventas/gastronomia/api/waitry-ordenes-pendientes';
+            const url = opciones.refresh ? urlBase + (urlBase.indexOf('?') >= 0 ? '&' : '?') + 'refresh=1' : urlBase;
+            const data = await api(url, { headers: hdrJson() });
             actualizarLeyendaFiltroWaitry(data.filtro);
             panel.innerHTML = '';
             const ordenes = data.ordenes || [];
@@ -2975,20 +3024,32 @@
                 return;
             }
             ordenes.forEach((o) => {
-                const id = o.waitry_order_id;
+                const idNum = o.waitry_order_id;
+                const displayId = o.display_id ? String(o.display_id).trim() : '';
                 const sinSku = !!o.requiere_mapeo_sku;
+                const unidades = o.cantidad_unidades != null ? o.cantidad_unidades : o.cantidad_items;
+                const unidadesLabel =
+                    unidades != null && Number(unidades) > 0
+                        ? ' · ' +
+                          (Number(unidades) === Math.floor(Number(unidades))
+                              ? String(Math.floor(Number(unidades)))
+                              : Number(unidades).toFixed(2)) +
+                          (Number(unidades) === 1 ? ' ud.' : ' uds.')
+                        : '';
                 const label =
-                    (o.display_id ? o.display_id + ' ' : '') +
+                    (displayId ? displayId + ' ' : '') +
                     '#' +
-                    id +
-                    (o.cantidad_items ? ' · ' + o.cantidad_items + ' ítems' : '') +
+                    idNum +
+                    unidadesLabel +
                     (o.total_estimado != null ? ' · $' + Number(o.total_estimado).toFixed(2) : '') +
                     (sinSku ? ' ⚠' : '');
                 const btn = document.createElement('button');
                 btn.type = 'button';
                 btn.className =
                     'btn btn-sm m-1' +
-                    (cuentaId && cuentaActivaConLineas && cuentaActivaConLineas.waitry_order_id === id
+                    (cuentaId &&
+                    cuentaActivaConLineas &&
+                    Number(cuentaActivaConLineas.waitry_order_id) === Number(idNum)
                         ? ' btn-primary'
                         : sinSku
                           ? ' btn-outline-warning'
@@ -3033,15 +3094,21 @@
             return;
         }
         $('#modal-waitry-importar-id').modal('hide');
-        await importarOrdenWaitry({ waitry_order_id: identificador }, { incluirOrdenPagada: true });
+        await importarOrdenWaitry({ waitry_order_id: identificador, display_id: identificador }, { importarPorId: true });
     }
 
     async function importarOrdenWaitry(orden, opciones) {
         opciones = opciones || {};
-        if (!orden || !orden.waitry_order_id) {
+        if (!orden || (orden.waitry_order_id == null && !orden.display_id)) {
             return;
         }
-        if (orden.requiere_mapeo_sku && !opciones.incluirOrdenPagada) {
+        const idNumerico = orden.waitry_order_id != null ? String(orden.waitry_order_id) : '';
+        const idDisplay = orden.display_id ? String(orden.display_id).trim() : '';
+        const identificadorImport = idDisplay || idNumerico;
+        if (!identificadorImport) {
+            return;
+        }
+        if (orden.requiere_mapeo_sku && !opciones.incluirOrdenPagada && !opciones.importarPorId) {
             toast(
                 'La orden Waitry no trae SKU (externalId) en los ítems. Sincronice el menú en Waitry o use «Por ID» si el tótem ya cobró.',
                 'warning',
@@ -3053,16 +3120,18 @@
             try {
                 datosApertura = await resolverDatosAperturaNuevaCuenta(
                     false,
-                    'Importar cuenta Waitry #' + orden.waitry_order_id,
+                    'Importar cuenta Waitry ' +
+                        (idDisplay ? idDisplay : '#' + (idNumerico || identificadorImport)),
                 );
             } catch (_) {
                 return;
             }
         }
         try {
-            iniciarRotacionMensajesProceso(mensajesProcesoImportWaitry(orden.waitry_order_id), 2400);
+            iniciarRotacionMensajesProceso(mensajesProcesoImportWaitry(identificadorImport), 2400);
             const payload = {
-                waitry_order_id: orden.waitry_order_id,
+                waitry_order_id: identificadorImport,
+                importar_por_id: opciones.importarPorId === true,
                 incluir_orden_pagada: opciones.incluirOrdenPagada === true,
                 cubiertos: datosApertura.cubiertos,
                 mozo_gastronomia_id: datosApertura.mozo_gastronomia_id,
@@ -3088,8 +3157,8 @@
                 }
             }
             await seleccionarCuenta(data.cuenta_id);
-            mostrarResultadoImportacionWaitry(data, orden.waitry_order_id);
-            void cargarOrdenesWaitry();
+            mostrarResultadoImportacionWaitry(data, identificadorImport);
+            void cargarOrdenesWaitry({ refresh: true });
             cargarCuentasActivas();
         } catch (e) {
             const det = e.payload && e.payload.errores ? e.payload.errores.join(' · ') : '';
@@ -4395,7 +4464,7 @@
             cargarMesas();
             cargarCuentasActivas();
             if (modoSeleccion === 'waitry') {
-                void cargarOrdenesWaitry();
+                void cargarOrdenesWaitry({ refresh: true });
             }
             limpiarEstadoCuentaActiva();
         } catch (e) {
@@ -4612,7 +4681,7 @@
         }
         const btnWaitryRefrescar = document.getElementById('btn-waitry-refrescar');
         if (btnWaitryRefrescar) {
-            btnWaitryRefrescar.addEventListener('click', () => void cargarOrdenesWaitry());
+            btnWaitryRefrescar.addEventListener('click', () => void cargarOrdenesWaitry({ refresh: true }));
         }
         const btnWaitryImportarPorId = document.getElementById('btn-waitry-importar-por-id');
         if (btnWaitryImportarPorId) {
@@ -4946,6 +5015,9 @@
             if (G.cuentacajaTotemError) {
                 console.warn('Gastronomía Waitry TOTEM:', G.cuentacajaTotemError);
             }
+        }
+        if (data.cuentacaja_totem_codigo) {
+            G.cuentacajaTotemCodigo = data.cuentacaja_totem_codigo;
         }
         G.cuentacajaEfectivoIdConfig = data.cuentacaja_efectivo_id || null;
         if (data.receptor_cf_nombre) {

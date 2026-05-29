@@ -2,6 +2,8 @@
 
 namespace App\Support\Ventas;
 
+use App\Models\Ventas\CuentaGastronomia;
+use App\Models\Ventas\DescuentoGastronomia;
 use App\Models\Ventas\Venta;
 
 /**
@@ -60,5 +62,189 @@ final class GastronomiaVentaDisplaySupport
         }
 
         return trim((string) ($venta->clientes->codigo ?? ''));
+    }
+
+    /**
+     * Cliente del pie del ticket/PDF: cliente interno del descuento si aplica; si no, receptor de factura.
+     */
+    public static function nombreClientePie(?Venta $venta): string
+    {
+        if (! $venta) {
+            return '—';
+        }
+
+        $cuenta = self::cuentaGastronomiaDesdeVenta($venta);
+        if ($cuenta !== null && (int) ($cuenta->descuento_gastronomia_id ?? 0) > 0) {
+            $nombreInterno = trim((string) ($cuenta->clienteInternoDescuento?->nombre ?? ''));
+            if ($nombreInterno !== '') {
+                return $nombreInterno;
+            }
+        }
+
+        return self::nombreReceptorFactura($venta);
+    }
+
+    /**
+     * Etiqueta de la línea de descuento (nombre del descuento gastronomía + porcentaje).
+     */
+    public static function etiquetaLineaDescuento(?Venta $venta, ?float $porcentajeCalculado = null): ?string
+    {
+        if (! $venta) {
+            return null;
+        }
+
+        $descuento = self::cuentaGastronomiaDesdeVenta($venta)?->descuentoGastronomia;
+        if (! $descuento instanceof DescuentoGastronomia) {
+            return null;
+        }
+
+        $nombre = trim((string) ($descuento->nombre ?? ''));
+        if ($nombre === '') {
+            $nombre = 'Descuento';
+        }
+
+        $porcentaje = self::porcentajeDescuentoGastronomia($descuento, $venta, $porcentajeCalculado);
+        if ($porcentaje === null) {
+            return $nombre;
+        }
+
+        return $nombre.' '.self::formatearPorcentaje($porcentaje).'%';
+    }
+
+    /**
+     * ID de orden Waitry asociada a la venta (emisión gastronomía o cuenta importada).
+     */
+    public static function waitryOrderId(?Venta $venta): ?int
+    {
+        if (! $venta) {
+            return null;
+        }
+
+        $venta->loadMissing('gastronomiaEmision.cuenta');
+
+        $emision = $venta->gastronomiaEmision;
+        if ($emision === null) {
+            return null;
+        }
+
+        $id = (int) ($emision->waitry_order_id ?? 0);
+        if ($id > 0) {
+            return $id;
+        }
+
+        $id = (int) ($emision->cuenta?->waitry_order_id ?? 0);
+
+        return $id > 0 ? $id : null;
+    }
+
+    /**
+     * Línea para ticket/PDF cuando la factura proviene de una cuenta Waitry.
+     */
+    public static function lineaOrdenWaitry(?Venta $venta): ?string
+    {
+        $id = self::waitryOrderId($venta);
+        if ($id === null) {
+            return null;
+        }
+
+        $venta->loadMissing('gastronomiaEmision.cuenta');
+        $displayId = trim((string) ($venta->gastronomiaEmision?->cuenta?->waitry_display_id ?? ''));
+        if ($displayId !== '' && $displayId !== (string) $id) {
+            return 'Orden Waitry: '.$displayId.' (#'.$id.')';
+        }
+
+        return 'Orden Waitry: '.$id;
+    }
+
+    /**
+     * Reemplaza "Descuento Gral." / "Descuento" en conceptos de pie del PDF por la etiqueta gastronomía.
+     *
+     * @param  iterable<int, mixed>  $conceptosTotales
+     * @return list<array<string, mixed>>
+     */
+    public static function aplicarEtiquetaDescuentoEnConceptosTotales(Venta $venta, iterable $conceptosTotales): array
+    {
+        $etiqueta = self::etiquetaLineaDescuento($venta);
+        if ($etiqueta === null) {
+            return self::normalizarConceptosTotales($conceptosTotales);
+        }
+
+        $resultado = [];
+        foreach ($conceptosTotales as $item) {
+            $fila = is_array($item) ? $item : (method_exists($item, 'toArray') ? $item->toArray() : (array) $item);
+            $concepto = (string) ($fila['concepto'] ?? '');
+            if (self::esConceptoDescuentoPie($concepto)) {
+                $fila['concepto'] = $etiqueta;
+            }
+            $resultado[] = $fila;
+        }
+
+        return $resultado;
+    }
+
+    private static function cuentaGastronomiaDesdeVenta(Venta $venta): ?CuentaGastronomia
+    {
+        $venta->loadMissing([
+            'gastronomiaEmision.cuenta.descuentoGastronomia',
+            'gastronomiaEmision.cuenta.clienteInternoDescuento',
+        ]);
+
+        $cuenta = $venta->gastronomiaEmision?->cuenta;
+        if ($cuenta instanceof CuentaGastronomia) {
+            $cuenta->loadMissing('descuentoGastronomia', 'clienteInternoDescuento');
+
+            return $cuenta;
+        }
+
+        return null;
+    }
+
+    private static function porcentajeDescuentoGastronomia(
+        DescuentoGastronomia $descuento,
+        Venta $venta,
+        ?float $porcentajeCalculado,
+    ): ?float {
+        if ($descuento->tipovalor === DescuentoGastronomia::TIPO_PORCENTAJE) {
+            return (float) $descuento->valor;
+        }
+
+        if ($porcentajeCalculado !== null && $porcentajeCalculado > 0.) {
+            return $porcentajeCalculado;
+        }
+
+        $descuentoVenta = (float) ($venta->descuento ?? 0);
+
+        return $descuentoVenta > 0. ? $descuentoVenta : null;
+    }
+
+    private static function formatearPorcentaje(float $porcentaje): string
+    {
+        $redondeado = round($porcentaje, 2);
+
+        return abs($redondeado - round($redondeado)) < 0.001
+            ? (string) (int) round($redondeado)
+            : number_format($redondeado, 2, '.', '');
+    }
+
+    private static function esConceptoDescuentoPie(string $concepto): bool
+    {
+        $normalizado = strtolower(trim($concepto));
+
+        return str_contains($normalizado, 'descuento gral')
+            || $normalizado === 'descuento';
+    }
+
+    /**
+     * @param  iterable<int, mixed>  $conceptosTotales
+     * @return list<array<string, mixed>>
+     */
+    private static function normalizarConceptosTotales(iterable $conceptosTotales): array
+    {
+        $resultado = [];
+        foreach ($conceptosTotales as $item) {
+            $resultado[] = is_array($item) ? $item : (method_exists($item, 'toArray') ? $item->toArray() : (array) $item);
+        }
+
+        return $resultado;
     }
 }

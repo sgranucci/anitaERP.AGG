@@ -10,12 +10,16 @@ use App\Services\Ventas\Gastronomia\GastronomiaCuentaService;
 use App\Support\Ventas\GastronomiaSkuCatalogoSupport;
 use App\Support\Ventas\Waitry\WaitryFacturacionDuplicadosSupport;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Cuentas externas Waitry — getOrdersPOS (doc. pág. 21) con fallback a getordersdetails.
+ * Cuentas externas Waitry — getOrdersPOS (doc. pág. 21).
  *
- * Lista órdenes sin pago en Waitry e importa ítems al POS gastronomía (sin correlación con facturas Anita).
+ * Lista órdenes impagas en Waitry e importa ítems al POS gastronomía (sin correlación con facturas Anita).
+ *
+ * Estado de pago (getOrdersPOS): impaga si `paid` es false/0 o si payment.total_fee.amount ≤ 0
+ * (p. ej. type=cash con monto 0). Cobrada en tótem si `paid` true/1 o monto > 0.
  */
 final class WaitryOrdenesExternasService
 {
@@ -34,8 +38,12 @@ final class WaitryOrdenesExternasService
      *     error?:string
      * }
      */
-    public function listarOrdenesPendientes(int $empresaId, ?string $desde = null, ?string $hasta = null): array
-    {
+    public function listarOrdenesPendientes(
+        int $empresaId,
+        ?string $desde = null,
+        ?string $hasta = null,
+        bool $omitirCache = false,
+    ): array {
         if (! config('waitry.habilitado', false)) {
             return ['ok' => false, 'error' => 'Integración Waitry deshabilitada.'];
         }
@@ -52,7 +60,7 @@ final class WaitryOrdenesExternasService
         $rango = $this->resolverRangoFechasConsulta($desde, $hasta);
         $desdeLimite = $rango['desde_limite'];
 
-        $consulta = $this->consultarOrdenesRaw((int) $placeId, $rango);
+        $consulta = $this->consultarOrdenesRaw((int) $placeId, $rango, $omitirCache);
         if (! ($consulta['ok'] ?? false)) {
             return ['ok' => false, 'error' => $consulta['error'] ?? 'Error al consultar órdenes Waitry.'];
         }
@@ -108,14 +116,13 @@ final class WaitryOrdenesExternasService
 
             $lineasMostrar = $lineas !== [] ? $lineas : $previewSinSku;
 
+            $displayId = $this->extraerDisplayIdOrden($orden);
+            $cantidadLineas = count($lineasMostrar);
+            $cantidadUnidades = $this->cantidadUnidadesLineas($lineasMostrar);
+
             $lista[] = [
                 'waitry_order_id' => $orderId,
-                'display_id' => trim((string) (
-                    $orden['display_id']
-                    ?? $orden['external_reference_id']
-                    ?? $orden['externalDeliveryId']
-                    ?? ''
-                )),
+                'display_id' => $displayId,
                 'external_reference_id' => trim((string) ($orden['external_reference_id'] ?? $orden['externalId'] ?? '')),
                 'current_state' => trim((string) ($orden['current_state'] ?? '')),
                 'type' => trim((string) ($orden['type'] ?? '')),
@@ -124,7 +131,9 @@ final class WaitryOrdenesExternasService
                     static fn (array $ln): float => (float) $ln['precio_unitario'] * (float) $ln['cantidad'],
                     $lineasMostrar
                 )), 2),
-                'cantidad_items' => count($lineasMostrar),
+                'cantidad_lineas' => $cantidadLineas,
+                'cantidad_unidades' => $cantidadUnidades,
+                'cantidad_items' => $cantidadUnidades,
                 'lineas_preview' => array_slice($lineasMostrar, 0, 8),
                 'requiere_mapeo_sku' => $lineas === [] && $previewSinSku !== [],
             ];
@@ -142,8 +151,24 @@ final class WaitryOrdenesExternasService
                 'from' => $rango['from'],
                 'to' => $rango['to'],
                 'fuente' => $consulta['fuente'] ?? null,
+                'from_cache' => (bool) ($consulta['from_cache'] ?? false),
             ],
         ];
+    }
+
+    public function invalidarCacheOrdenesPosEmpresa(int $empresaId): void
+    {
+        $placeId = $this->resolverPlaceId($empresaId);
+        if ($placeId === null) {
+            return;
+        }
+
+        $versionKey = $this->cacheVersionKeyOrdenesPos((int) $placeId);
+        if (Cache::has($versionKey)) {
+            Cache::increment($versionKey);
+        } else {
+            Cache::forever($versionKey, 1);
+        }
     }
 
     /**
@@ -155,9 +180,9 @@ final class WaitryOrdenesExternasService
      *     minutos_atras:int,
      *     desde_limite:?Carbon
      * }  $rango
-     * @return array{ok:bool,ordenes?:list<array<string,mixed>>,fuente?:string,error?:string}
+     * @return array{ok:bool,ordenes?:list<array<string,mixed>>,fuente?:string,from_cache?:bool,error?:string}
      */
-    private function consultarOrdenesRaw(int $placeId, array $rango): array
+    private function consultarOrdenesRaw(int $placeId, array $rango, bool $omitirCache = false): array
     {
         $query = ['placeId' => (string) $placeId];
         if ($rango['from'] !== null && $rango['from'] !== '') {
@@ -167,17 +192,22 @@ final class WaitryOrdenesExternasService
             $query['to'] = $rango['to'];
         }
 
+        $respuestaCache = $this->consultarOrdenesGetOrdersPos($placeId, $query, $omitirCache);
+        if ($respuestaCache !== null) {
+            return $respuestaCache;
+        }
+
         $urlPos = (string) config('waitry.get_orders_url');
         $resultadoPos = $this->httpClient->getJson($urlPos, $query, 'get_orders_pos');
 
         if ($resultadoPos['ok'] ?? false) {
             $dataPos = is_array($resultadoPos['data'] ?? null) ? $resultadoPos['data'] : [];
             if ($this->respuestaGetOrdersPosUtil($dataPos)) {
-                return [
-                    'ok' => true,
-                    'ordenes' => $this->extraerOrdenesDesdePayload($dataPos),
-                    'fuente' => 'getOrdersPOS',
-                ];
+                return $this->guardarYDevolverOrdenesPos(
+                    $placeId,
+                    $query,
+                    $this->extraerOrdenesDesdePayload($dataPos),
+                );
             }
 
             Log::info('waitry.get_orders_pos.sin_datos', [
@@ -185,67 +215,113 @@ final class WaitryOrdenesExternasService
                 'message' => $dataPos['message'] ?? null,
                 'errors' => $dataPos['errors'] ?? null,
             ]);
-        }
 
-        if (! config('waitry.get_orders_usar_detalles_fallback', true)) {
-            $errorPos = $resultadoPos['error'] ?? null;
-            if (is_string($errorPos) && $errorPos !== '') {
-                return ['ok' => false, 'error' => $errorPos];
+            // Waitry suele devolver «No results» con from/to aunque el listado sin filtro sí trae órdenes.
+            if (isset($query['from']) || isset($query['to'])) {
+                $querySinRango = ['placeId' => (string) $placeId];
+                $respuestaCacheSinRango = $this->consultarOrdenesGetOrdersPos($placeId, $querySinRango, $omitirCache);
+                if ($respuestaCacheSinRango !== null) {
+                    return $respuestaCacheSinRango;
+                }
+
+                $resultadoPosSinRango = $this->httpClient->getJson(
+                    $urlPos,
+                    $querySinRango,
+                    'get_orders_pos_sin_rango',
+                );
+                if ($resultadoPosSinRango['ok'] ?? false) {
+                    $dataPosSinRango = is_array($resultadoPosSinRango['data'] ?? null)
+                        ? $resultadoPosSinRango['data']
+                        : [];
+                    if ($this->respuestaGetOrdersPosUtil($dataPosSinRango)) {
+                        return $this->guardarYDevolverOrdenesPos(
+                            $placeId,
+                            $querySinRango,
+                            $this->extraerOrdenesDesdePayload($dataPosSinRango),
+                        );
+                    }
+                }
             }
-
-            $dataPos = is_array($resultadoPos['data'] ?? null) ? $resultadoPos['data'] : [];
-            $msg = $this->mensajeErrorPayloadWaitry($dataPos);
-
-            return ['ok' => false, 'error' => $msg !== '' ? $msg : 'Waitry getOrdersPOS no devolvió órdenes.'];
         }
 
-        $fromDate = $rango['from_date'] ?? null;
-        $toDate = $rango['to_date'] ?? null;
-        if ($fromDate === null || $toDate === null) {
-            $tz = (string) config('app.timezone', 'UTC');
-            $hoy = Carbon::now($tz)->format('Y-m-d');
-            $fromDate = $fromDate ?? $hoy;
-            $toDate = $toDate ?? $hoy;
+        $errorPos = $resultadoPos['error'] ?? null;
+        if (is_string($errorPos) && $errorPos !== '') {
+            return ['ok' => false, 'error' => $errorPos];
         }
 
-        $urlDetalles = (string) config('waitry.get_orders_details_url');
-        $resultadoDet = $this->httpClient->postJson($urlDetalles, [
-            'placeId' => $placeId,
-            'from' => $fromDate,
-            'to' => $toDate,
-        ], 'get_orders_details');
+        $dataPos = is_array($resultadoPos['data'] ?? null) ? $resultadoPos['data'] : [];
+        $msg = $this->mensajeErrorPayloadWaitry($dataPos);
 
-        if (! ($resultadoDet['ok'] ?? false)) {
-            return [
-                'ok' => false,
-                'error' => $this->combinarErroresConsultaOrdenes(
-                    $resultadoDet['error'] ?? 'Error al consultar órdenes Waitry (getordersdetails).',
-                    $resultadoPos['error'] ?? null,
-                ),
-            ];
+        return ['ok' => false, 'error' => $msg !== '' ? $msg : 'Waitry getOrdersPOS no devolvió órdenes.'];
+    }
+
+    /**
+     * @param  array<string, scalar|null>  $query
+     * @return array{ok:bool,ordenes:list<array<string,mixed>>,fuente:string,from_cache?:bool}|null
+     */
+    private function consultarOrdenesGetOrdersPos(int $placeId, array $query, bool $omitirCache): ?array
+    {
+        $cacheSeg = max(0, (int) config('waitry.get_orders_cache_segundos', 15));
+        if ($omitirCache || $cacheSeg <= 0) {
+            return null;
         }
 
-        $dataDet = is_array($resultadoDet['data'] ?? null) ? $resultadoDet['data'] : [];
-        if (($dataDet['ok'] ?? true) === false) {
-            return [
-                'ok' => false,
-                'error' => $this->mensajeErrorPayloadWaitry($dataDet) ?: 'Waitry getordersdetails rechazó la consulta.',
-            ];
+        $cached = Cache::get($this->cacheKeyOrdenesPos($placeId, $query));
+        if (! is_array($cached) || ! ($cached['ok'] ?? false)) {
+            return null;
         }
 
-        $ordenes = [];
-        foreach ($this->extraerOrdenesDesdePayload($dataDet) as $orden) {
-            if (! is_array($orden)) {
-                continue;
-            }
-            $ordenes[] = $this->normalizarOrdenAnalytics($orden);
-        }
+        return array_merge($cached, ['from_cache' => true]);
+    }
 
-        return [
+    /**
+     * @param  array<string, scalar|null>  $query
+     * @param  list<array<string, mixed>>  $ordenes
+     * @return array{ok:bool,ordenes:list<array<string,mixed>>,fuente:string}
+     */
+    private function guardarYDevolverOrdenesPos(int $placeId, array $query, array $ordenes): array
+    {
+        $respuesta = [
             'ok' => true,
             'ordenes' => $ordenes,
-            'fuente' => 'getordersdetails',
+            'fuente' => 'getOrdersPOS',
         ];
+
+        $cacheSeg = max(0, (int) config('waitry.get_orders_cache_segundos', 15));
+        if ($cacheSeg > 0) {
+            Cache::put($this->cacheKeyOrdenesPos($placeId, $query), $respuesta, $cacheSeg);
+        }
+
+        return $respuesta;
+    }
+
+    /**
+     * @param  array<string, scalar|null>  $query
+     */
+    private function cacheKeyOrdenesPos(int $placeId, array $query): string
+    {
+        $normalized = $query;
+        foreach (['from', 'to'] as $campo) {
+            if (! isset($normalized[$campo]) || ! is_scalar($normalized[$campo])) {
+                continue;
+            }
+            try {
+                $normalized[$campo] = Carbon::parse((string) $normalized[$campo])
+                    ->format('Y-m-d H:i');
+            } catch (\Throwable) {
+                // Mantener valor original si no parsea.
+            }
+        }
+
+        ksort($normalized);
+        $version = (int) Cache::get($this->cacheVersionKeyOrdenesPos($placeId), 0);
+
+        return 'waitry:orders_pos:'.$placeId.':v'.$version.':'.md5(json_encode($normalized) ?: '');
+    }
+
+    private function cacheVersionKeyOrdenesPos(int $placeId): string
+    {
+        return 'waitry:orders_pos:version:'.$placeId;
     }
 
     /**
@@ -291,56 +367,6 @@ final class WaitryOrdenesExternasService
         }
 
         return $lista;
-    }
-
-    /**
-     * Normaliza orden de analytics/getordersdetails al formato usado por extractores POS.
-     *
-     * @param  array<string, mixed>  $orden
-     * @return array<string, mixed>
-     */
-    private function normalizarOrdenAnalytics(array $orden): array
-    {
-        $orderId = (int) ($orden['orderId'] ?? $orden['id'] ?? 0);
-        $placedAt = $orden['placed_at'] ?? null;
-        if (($placedAt === null || $placedAt === '') && isset($orden['timestamp']['date'])) {
-            $placedAt = $orden['timestamp']['date'];
-        }
-
-        return array_merge($orden, [
-            'id' => $orderId,
-            'orderId' => $orderId,
-            'placed_at' => $placedAt,
-            'display_id' => $orden['display_id'] ?? $orden['externalDeliveryId'] ?? null,
-            'external_reference_id' => $orden['external_reference_id'] ?? $orden['externalId'] ?? null,
-        ]);
-    }
-
-    private function combinarErroresConsultaOrdenes(?string $errorDetalles, ?string $errorPos): string
-    {
-        $partes = [];
-        foreach ([$errorDetalles, $errorPos] as $error) {
-            if (! is_string($error)) {
-                continue;
-            }
-            $error = trim($error);
-            if ($error === '') {
-                continue;
-            }
-            if (! in_array($error, $partes, true)) {
-                $partes[] = $error;
-            }
-        }
-
-        if ($partes === []) {
-            return 'No se pudieron consultar órdenes en Waitry.';
-        }
-
-        if (count($partes) === 1) {
-            return $partes[0];
-        }
-
-        return $partes[0].' (getOrdersPOS: '.$partes[1].')';
     }
 
     /**
@@ -531,7 +557,7 @@ final class WaitryOrdenesExternasService
         string $identificadorPapelito,
         array $datosApertura = [],
         ?int $cuentaId = null,
-        bool $incluirOrdenPagada = false,
+        bool $permitirCualquierEstadoPago = false,
     ): array {
         if (! config('waitry.habilitado', false)) {
             return ['ok' => false, 'error' => 'Integración Waitry deshabilitada.'];
@@ -546,15 +572,13 @@ final class WaitryOrdenesExternasService
         $resolucion = $this->obtenerOrdenPorIdentificadorPapelito(
             $empresaId,
             $identificadorPapelito,
-            ! $incluirOrdenPagada,
+            ! $permitirCualquierEstadoPago,
         );
         if ($resolucion === null) {
-            $msg = 'Orden Waitry «'.$identificadorPapelito.'» no encontrada.';
-            if (! $incluirOrdenPagada) {
-                $msg .= ' Si ya fue cobrada en el tótem, use «Importar por ID».';
-            }
-
-            return ['ok' => false, 'error' => $msg];
+            return [
+                'ok' => false,
+                'error' => 'Orden Waitry «'.$identificadorPapelito.'» no encontrada.',
+            ];
         }
 
         [$orden, $waitryOrderId] = $resolucion;
@@ -566,7 +590,7 @@ final class WaitryOrdenesExternasService
             ];
         }
 
-        $cobroTotem = ! $this->ordenPendienteDePago($orden);
+        $cobroTotem = $this->ordenCobradaEnTotemWaitry($orden);
 
         $lineasWaitry = $this->extraerLineasDesdeOrden($orden);
         if ($lineasWaitry === []) {
@@ -619,6 +643,8 @@ final class WaitryOrdenesExternasService
         }
 
         $cuenta->waitry_order_id = $waitryOrderId;
+        $displayId = $this->extraerDisplayIdOrden($orden);
+        $cuenta->waitry_display_id = $displayId !== '' ? $displayId : null;
         $cuenta->waitry_cobro_totem = $cobroTotem;
         $cuenta->save();
 
@@ -641,6 +667,8 @@ final class WaitryOrdenesExternasService
                 'errores' => $errores,
             ]);
         }
+
+        $this->invalidarCacheOrdenesPosEmpresa($empresaId);
 
         return [
             'ok' => true,
@@ -710,7 +738,7 @@ final class WaitryOrdenesExternasService
             'to_date' => $hastaDt->format('Y-m-d'),
             'minutos_atras' => 0,
             'desde_limite' => null,
-        ]);
+        ], true);
 
         if (! ($consulta['ok'] ?? false)) {
             return null;
@@ -732,6 +760,34 @@ final class WaitryOrdenesExternasService
         }
 
         return null;
+    }
+
+    /**
+     * Código alfanumérico del papelito / tótem (display_id, external_reference, etc.).
+     *
+     * @param  array<string, mixed>  $orden
+     */
+    private function extraerDisplayIdOrden(array $orden): string
+    {
+        return trim((string) (
+            $orden['display_id']
+            ?? $orden['external_reference_id']
+            ?? $orden['externalDeliveryId']
+            ?? ''
+        ));
+    }
+
+    /**
+     * @param  list<array{cantidad?:float|int|string}>  $lineas
+     */
+    private function cantidadUnidadesLineas(array $lineas): float
+    {
+        $total = 0.;
+        foreach ($lineas as $ln) {
+            $total += (float) ($ln['cantidad'] ?? 0);
+        }
+
+        return round($total, 4);
     }
 
     /**
@@ -790,10 +846,6 @@ final class WaitryOrdenesExternasService
             }
         }
 
-        if (! config('waitry.get_orders_usar_detalles_fallback', true)) {
-            return null;
-        }
-
         $tz = (string) config('app.timezone', 'UTC');
         $hastaDt = Carbon::now($tz);
         $desdeDt = $hastaDt->copy()->subDays(2);
@@ -804,7 +856,7 @@ final class WaitryOrdenesExternasService
             'to_date' => $hastaDt->format('Y-m-d'),
             'minutos_atras' => 0,
             'desde_limite' => null,
-        ]);
+        ], true);
 
         if (! ($consulta['ok'] ?? false)) {
             return null;
@@ -885,14 +937,18 @@ final class WaitryOrdenesExternasService
     }
 
     /**
-     * Sin pago en Waitry: campo paid explícito (push) o sin cobro en payment (getOrders pág. 21).
+     * Impaga en Waitry (getOrdersPOS): `paid` false/0, sin cobro (total_fee.amount ≤ 0),
+     * o sin bloque payment. Cobrada si `paid` true/1 o monto > 0.
      */
     private function ordenPendienteDePago(array $orden): bool
     {
-        if (array_key_exists('paid', $orden)) {
-            $paid = $orden['paid'];
-
-            return in_array($paid, [0, '0', false], true);
+        if (array_key_exists('paid', $orden) && $orden['paid'] !== null) {
+            if (in_array($orden['paid'], [1, '1', true], true)) {
+                return false;
+            }
+            if (in_array($orden['paid'], [0, '0', false], true)) {
+                return true;
+            }
         }
 
         $estado = mb_strtolower(trim((string) ($orden['current_state'] ?? '')));
@@ -900,22 +956,40 @@ final class WaitryOrdenesExternasService
             return false;
         }
 
+        return $this->montoPagoWaitry($orden) <= 0.0001;
+    }
+
+    /**
+     * Cobrada en tótem Waitry: `paid` true/1 o monto de payment > 0.
+     */
+    private function ordenCobradaEnTotemWaitry(array $orden): bool
+    {
+        if (array_key_exists('paid', $orden)) {
+            return in_array($orden['paid'], [1, '1', true], true);
+        }
+
+        return $this->montoPagoWaitry($orden) > 0.0001;
+    }
+
+    /**
+     * @param  array<string, mixed>  $orden
+     */
+    private function montoPagoWaitry(array $orden): float
+    {
         $payment = $orden['payment'] ?? null;
         if (! is_array($payment)) {
-            return true;
+            return 0.0;
         }
 
         $totalFee = $payment['total_fee'] ?? null;
-        $monto = 0.0;
         if (is_array($totalFee) && isset($totalFee['amount'])) {
-            $monto = (float) $totalFee['amount'];
-        } elseif (is_numeric($totalFee)) {
-            $monto = (float) $totalFee;
+            return (float) $totalFee['amount'];
+        }
+        if (is_numeric($totalFee)) {
+            return (float) $totalFee;
         }
 
-        $tipo = mb_strtolower(trim((string) ($payment['type'] ?? '')));
-
-        return $monto <= 0.0001 && $tipo === '';
+        return 0.0;
     }
 
     /**

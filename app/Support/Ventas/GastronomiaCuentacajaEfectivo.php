@@ -52,10 +52,7 @@ final class GastronomiaCuentacajaEfectivo
                 .' (GASTRONOMIA_CUENTACAJA_EFECTIVO_POR_EMPRESA).';
         }
 
-        $existe = Cuentacaja::query()
-            ->whereKey($cuentacajaId)
-            ->where('empresa_id', $empresaId)
-            ->exists();
+        $existe = Cuentacaja::existeParaEmpresa($cuentacajaId, $empresaId);
 
         if (! $existe) {
             return 'La cuenta de caja id '.$cuentacajaId.' configurada para la empresa '.$empresaId
@@ -79,7 +76,7 @@ final class GastronomiaCuentacajaEfectivo
 
         $cuenta = Cuentacaja::query()
             ->whereKey($cuentacajaId)
-            ->where('empresa_id', $empresaId)
+            ->paraEmpresa($empresaId)
             ->with('monedas:id,abreviatura,nombre')
             ->first(['id', 'nombre', 'codigo', 'moneda_id']);
 

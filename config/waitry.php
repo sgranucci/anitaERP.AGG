@@ -67,8 +67,13 @@ return [
         'https://api.waitry.net/1/analytics/analytics/getordersdetails'
     ),
 
+    /**
+     * Fallback getordersdetails en cuentas externas POS (listado/importación).
+     * Deshabilitado por defecto: el POS usa solo getOrdersPOS (más rápido).
+     * Cierre de jornada (tesorería) sigue usando getordersdetails por su propio servicio.
+     */
     'get_orders_usar_detalles_fallback' => filter_var(
-        env('WAITRY_GET_ORDERS_USAR_DETALLES_FALLBACK', true),
+        env('WAITRY_GET_ORDERS_USAR_DETALLES_FALLBACK', false),
         FILTER_VALIDATE_BOOLEAN
     ),
 
@@ -77,6 +82,9 @@ return [
      * Minutos hacia atrás desde ahora; 0 = sin filtro horario (no envía from/to).
      */
     'get_orders_minutos_atras' => max(0, (int) env('WAITRY_GET_ORDERS_MINUTOS_ATRAS', 20)),
+
+    /** Cache del listado getOrdersPOS (segundos). 0 = sin cache. ?refresh=1 en API lo omite. */
+    'get_orders_cache_segundos' => max(0, (int) env('WAITRY_GET_ORDERS_CACHE_SEGUNDOS', 15)),
 
     'client_id' => env('WAITRY_CLIENT_ID'),
     'client_secret' => env('WAITRY_CLIENT_SECRET'),

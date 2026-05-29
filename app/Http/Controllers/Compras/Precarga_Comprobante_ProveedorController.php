@@ -10,9 +10,10 @@ use App\Repositories\Compras\Tipotransaccion_CompraRepositoryInterface;
 use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Services\Compras\PrecargaComprobanteAnitaSyncService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
-use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
+use RuntimeException;
 
 class Precarga_Comprobante_ProveedorController extends Controller
 {
@@ -21,12 +22,14 @@ class Precarga_Comprobante_ProveedorController extends Controller
     private $tipotransaccion_compraRepository;
     protected $concepto_ivacompraRepository;
     private $empresaRepository;
+    private PrecargaComprobanteAnitaSyncService $precargaAnitaSync;
 
 	public function __construct(Precarga_Comprobante_ProveedorRepositoryInterface $precarga_comprobante_proveedorRepository,
                                 Precarga_Comprobante_Proveedor_ConceptoRepositoryInterface $precarga_comprobante_proveedor_conceptoRepository,
                                 EmpresaRepositoryInterface $empresaRepository,
                                 Tipotransaccion_CompraRepositoryInterface $tipotransaccion_comprarepository,
-                                Concepto_IvacompraRepositoryInterface $concepto_ivacompraRepository
+                                Concepto_IvacompraRepositoryInterface $concepto_ivacompraRepository,
+                                PrecargaComprobanteAnitaSyncService $precargaAnitaSync,
                                 )
     {
         $this->precarga_comprobante_proveedorRepository = $precarga_comprobante_proveedorRepository;
@@ -34,6 +37,7 @@ class Precarga_Comprobante_ProveedorController extends Controller
         $this->empresaRepository = $empresaRepository;
         $this->tipotransaccion_compraRepository = $tipotransaccion_comprarepository;
         $this->concepto_ivacompraRepository = $concepto_ivacompraRepository;
+        $this->precargaAnitaSync = $precargaAnitaSync;
     }
 
     /**
@@ -120,36 +124,23 @@ class Precarga_Comprobante_ProveedorController extends Controller
      */
     public function guardar(ValidacionPrecarga_Comprobante_Proveedor $request)
     {
-        DB::beginTransaction();
-        try
-        {
-            $precarga_comprobante_proveedor = $this->precarga_comprobante_proveedorRepository->create($request->all());
+        try {
+            DB::transaction(function () use ($request) {
+                $payload = $this->precargaAnitaSync->enriquecerPayloadParaAnita($request->all());
+                $precarga = $this->precarga_comprobante_proveedorRepository->create($payload);
 
-            if ($precarga_comprobante_proveedor)
-            {
-                $concepto_ids = $request->input('concepto_ivacompra_ids', []);
-                $montos = $request->input('montos', []);
+                $this->guardarConceptosPrecarga($request, (int) $precarga->id);
+            });
+        } catch (\Throwable $e) {
+            return redirect()
+                ->back()
+                ->withInput()
+                ->with('errores', ['No se pudo guardar la precarga: '.$e->getMessage()]);
+        }
 
-                for ($i_concepto=0; $i_concepto < count($concepto_ids); $i_concepto++) {
-                    if ($concepto_ids[$i_concepto] > 0)
-                    {
-                        $concepto_ivacompra_condicioniva = $this->precarga_comprobante_proveedor_conceptoRepository->create([
-                                                            'precarga_comprobante_proveedor_id' => $precarga_comprobante_proveedor->id,
-                                                            'concepto_ivacompra_id' => $concepto_ids[$i_concepto], 
-                                                            'monto' => $montos[$i_concepto]
-                                                            ]);
-                    }
-                }
-            }
-            DB::commit();
-        } catch (\Exception $e) {
-            DB::rollback();
-
-            return ['errores' => $e->getMessage()];
-        }    
-
-    	return redirect('compras/precarga_comprobante_proveedor')->with('mensaje', 'Concepto iva compras creado con exito');
-	}
+        return redirect('compras/precarga_comprobante_proveedor')
+            ->with('mensaje', 'Precarga guardada y sincronizada con Anita.');
+    }
 
     /**
      * Show the form for editing the specified resource.
@@ -182,27 +173,49 @@ class Precarga_Comprobante_ProveedorController extends Controller
     {
         can('actualizar-precarga-proveedores');
 
-        $precarga_comprobante_proveedor = $this->precarga_comprobante_proveedorRepository->update($request->all(), $id);
+        try {
+            DB::transaction(function () use ($request, $id) {
+                $payload = $this->precargaAnitaSync->enriquecerPayloadParaAnita($request->all());
+                $this->precarga_comprobante_proveedorRepository->update($payload, $id);
 
-        $this->precarga_comprobante_proveedor_conceptoRepository->deletePorPrecargaComprobanteProveedor($id);
+                $this->precarga_comprobante_proveedor_conceptoRepository
+                    ->deletePorPrecargaComprobanteProveedor($id);
 
-		if ($precarga_comprobante_proveedor)
-		{
-            $concepto_ids = $request->input('concepto_ivacompra_ids', []);
-            $montos = $request->input('montos', []);
+                $this->guardarConceptosPrecarga($request, (int) $id);
+            });
+        } catch (\Throwable $e) {
+            return redirect()
+                ->back()
+                ->withInput()
+                ->with('errores', ['No se pudo actualizar la precarga en Anita: '.$e->getMessage()]);
+        }
 
-    		for ($i_concepto=0; $i_concepto < count($concepto_ids); $i_concepto++) {
-                if ($concepto_ids[$i_concepto] > 0)
-                {
-                    $concepto_ivacompra_condicioniva = $this->precarga_comprobante_proveedor_conceptoRepository->create([
-                                                        'precarga_comprobante_proveedor_id' => $id,
-                                                        'concepto_ivacompra_id' => $concepto_ids[$i_concepto], 
-                                                        'monto' => $montos[$i_concepto]
-                                                        ]);
-                }
-    		}
-		}
-		return redirect('compras/precarga_comprobante_proveedor')->with('mensaje', 'Concepto iva compras actualizado con exito');
+        return redirect('compras/precarga_comprobante_proveedor')
+            ->with('mensaje', 'Precarga actualizada y sincronizada con Anita.');
+    }
+
+    private function guardarConceptosPrecarga(Request $request, int $precargaId): void
+    {
+        $conceptoIds = $request->input('concepto_ivacompra_ids', []);
+        $montos = $request->input('montos', []);
+
+        for ($i = 0; $i < count($conceptoIds); $i++) {
+            if ((int) $conceptoIds[$i] <= 0) {
+                continue;
+            }
+
+            $concepto = $this->concepto_ivacompraRepository->find((int) $conceptoIds[$i]);
+            if (! $concepto) {
+                throw new RuntimeException('Concepto IVA compra id «'.$conceptoIds[$i].'» inexistente.');
+            }
+
+            $this->precarga_comprobante_proveedor_conceptoRepository->create([
+                'precarga_comprobante_proveedor_id' => $precargaId,
+                'concepto_ivacompra_id' => $concepto->id,
+                'codigo_concepto_anita' => $concepto->codigo,
+                'monto' => $montos[$i] ?? 0,
+            ]);
+        }
     }
 
     /**

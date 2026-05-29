@@ -6,9 +6,9 @@
                 <option value="">-- Seleccionar empresa --</option>
                 @foreach($empresa_query as $key => $value)
                     @if( (int) $value->id == (int) old('empresa_id', $data->empresa_id ?? session('empresa_id')))
-                        <option value="{{ $value->id }}" selected="select">{{ $value->id }} {{ $value->nombre }}</option>    
+                        <option value="{{ $value->id }}" data-codigo="{{ $value->codigo }}" selected="select">{{ $value->id }} {{ $value->nombre }}</option>    
                     @else
-                        <option value="{{ $value->id }}">{{ $value->id }} {{ $value->nombre }}</option>    
+                        <option value="{{ $value->id }}" data-codigo="{{ $value->codigo }}">{{ $value->id }} {{ $value->nombre }}</option>    
                     @endif
                 @endforeach
             </select>
@@ -20,9 +20,9 @@
                 <option value="">-- Seleccionar --</option>
                 @foreach($tipotransaccion_compra_query as $key => $value)
                     @if( (int) $value->id == (int) old('tipotransaccion_compra_id', $data->tipotransaccion_compra_id ?? session('tipotransaccioncobranza_compra_id')))
-                        <option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
+                        <option value="{{ $value->id }}" data-abreviatura="{{ $value->abreviatura }}" selected="select">{{ $value->nombre }}</option>    
                     @else
-                        <option value="{{ $value->id }}">{{ $value->nombre }}</option>    
+                        <option value="{{ $value->id }}" data-abreviatura="{{ $value->abreviatura }}">{{ $value->nombre }}</option>    
                     @endif
                 @endforeach
                 <input type="hidden" class="tipo" id="tipo" name="tipo" value="{{$data->tipotransaccion_compras->abreviatura ?? ''}}" readonly>
@@ -131,6 +131,7 @@
                             <option value="">-- Elija concepto de iva compra --</option>
                             @foreach ($concepto_ivacompra_query as $concepto)
                                 <option value="{{ $concepto->id }}"
+                                    data-codigo-anita="{{ $concepto->codigo }}"
                                     @if (old('concepto_ivacompra_ids', $precarga_concepto->concepto_ivacompra_id ?? '') == $concepto->id) selected @endif
                                     >{{ $concepto->nombre }}</option>
                             @endforeach

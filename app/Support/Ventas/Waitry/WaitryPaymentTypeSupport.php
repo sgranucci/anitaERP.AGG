@@ -46,7 +46,7 @@ final class WaitryPaymentTypeSupport
 
         $cuenta = Cuentacaja::query()
             ->whereKey($cuentacajaId)
-            ->where('empresa_id', $empresaId)
+            ->paraEmpresa($empresaId)
             ->first(['id', 'nombre', 'codigo']);
 
         if ($cuenta === null) {

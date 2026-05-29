@@ -21,12 +21,19 @@
 @endsection
 
 @section("scripts")
+@php
+    $urlComprobanteTransferenciaTpl = str_replace(
+        '999999999',
+        '__ID__',
+        route('interbanking_transferencia_comprobante', ['id' => 999999999])
+    );
+@endphp
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
 <script>
     var ptrRenglon;
     var urlMovimientosInterbanking = @json(route('interbanking_movimientos'));
     var urlTransferenciasInterbanking = @json(route('interbanking_transferencias'));
-    var urlComprobanteTransferenciaTpl = @json(str_replace('999999999', '__ID__', route('interbanking_transferencia_comprobante', ['id' => 999999999])));
+    var urlComprobanteTransferenciaTpl = @json($urlComprobanteTransferenciaTpl);
     var urlDetalleTransferenciaApi = @json(route('interbanking_transferencia_detalle_api'));
     var ptrRenglonTransferencias;
 

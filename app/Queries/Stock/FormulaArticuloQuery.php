@@ -46,6 +46,7 @@ class FormulaArticuloQuery implements FormulaArticuloQueryInterface
             ->join('usuario', 'usuario.id', '=', 'formula_articulo.creousuario_id')
             ->where(function ($w) use ($empresas) {
                 $w->whereNull('formula_articulo.articulo_id')
+                    ->orWhereNull('art_padre.empresa_id')
                     ->orWhereIn('art_padre.empresa_id', $empresas);
             });
 

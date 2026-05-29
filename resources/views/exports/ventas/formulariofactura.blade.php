@@ -81,7 +81,7 @@
 				<thead>
 					<tr>
 						<th style="width=150px; word-wrap: break-word; text-align: left;">
-							<strong>Cliente: {{ \App\Support\Ventas\GastronomiaVentaDisplaySupport::nombreReceptorFactura($venta) }}</strong><br>
+							<strong>Cliente: {{ \App\Support\Ventas\GastronomiaVentaDisplaySupport::nombreClientePie($venta) }}</strong><br>
 							<p style="font-size: 16px"> 
 								{{ \App\Support\Ventas\GastronomiaVentaDisplaySupport::domicilioReceptorFactura($venta) }}<br>
 								@if (! \App\Support\Ventas\GastronomiaVentaDisplaySupport::usaSnapshotReceptorEnVenta($venta))
@@ -93,6 +93,10 @@
 								@endif
 								@if (isset($venta->lugarentrega))
 									Lugar de entrega: {{ $venta->lugarentrega ?? ''}}<br>
+								@endif
+								@php $lineaWaitryPdf = \App\Support\Ventas\GastronomiaVentaDisplaySupport::lineaOrdenWaitry($venta); @endphp
+								@if ($lineaWaitryPdf !== null)
+									{{ $lineaWaitryPdf }}<br>
 								@endif
 							</p>
 						</th>
@@ -330,7 +334,7 @@
 				<thead>
 					<tr>
 						<th style="width=150px; word-wrap: break-word; text-align: left;">
-							<strong>Cliente: {{ \App\Support\Ventas\GastronomiaVentaDisplaySupport::nombreReceptorFactura($venta) }}</strong><br>
+							<strong>Cliente: {{ \App\Support\Ventas\GastronomiaVentaDisplaySupport::nombreClientePie($venta) }}</strong><br>
 							<p style="font-size: 16px"> 
 								{{ \App\Support\Ventas\GastronomiaVentaDisplaySupport::domicilioReceptorFactura($venta) }}<br>
 								@if (! \App\Support\Ventas\GastronomiaVentaDisplaySupport::usaSnapshotReceptorEnVenta($venta))
@@ -342,6 +346,10 @@
 								@endif
 								@if (isset($venta->lugarentrega))
 									Lugar de entrega: {{ $venta->lugarentrega ?? ''}}<br>
+								@endif
+								@php $lineaWaitryPdf = \App\Support\Ventas\GastronomiaVentaDisplaySupport::lineaOrdenWaitry($venta); @endphp
+								@if ($lineaWaitryPdf !== null)
+									{{ $lineaWaitryPdf }}<br>
 								@endif
 							</p>
 						</th>

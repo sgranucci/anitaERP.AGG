@@ -12,6 +12,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Services\Compras\OrdencompraService;
 use App\Services\Compras\ComprobanteService;
+use App\Services\Compras\PrecargaComprobanteAnitaSyncService;
 use DB;
 
 class ApiController extends Controller
@@ -25,6 +26,7 @@ class ApiController extends Controller
     private $concepto_ivacompraRepository;
     private $empresaRepository;
     private $monedaRepository;
+    private $precargaAnitaSync;
 
 	public function __construct(OrdencompraService $ordencompraService,
                                 CentrocostoRepositoryInterface $centrocostorepository,
@@ -34,7 +36,8 @@ class ApiController extends Controller
                                 ProveedorRepositoryInterface $proveedorRepository,
                                 Concepto_IvacompraRepositoryInterface $concepto_ivacompraRepository,
                                 EmpresaRepositoryInterface $empresaRepository,
-                                MonedaRepositoryInterface $monedaRepository)
+                                MonedaRepositoryInterface $monedaRepository,
+                                PrecargaComprobanteAnitaSyncService $precargaAnitaSync)
 	{
         $this->ordencompraService = $ordencompraService;
         $this->comprobanteService = $comprobanteService;
@@ -45,6 +48,7 @@ class ApiController extends Controller
         $this->concepto_ivacompraRepository = $concepto_ivacompraRepository;
         $this->monedaRepository = $monedaRepository;
         $this->proveedorRepository = $proveedorRepository;
+        $this->precargaAnitaSync = $precargaAnitaSync;
 	}
 
     public function listaConcepto($cuitProveedor, $numeroOc, $tipoComprobante)
@@ -193,10 +197,13 @@ class ApiController extends Controller
 
     public function recibeComprobante(Request $request)
     {
-        // Validar los datos recibidos
-        $validated = $request->validate([
+        $request->validate([
             'cuit_proveedor' => 'required|string|max:15',
             'cuit_empresa' => 'required|string|max:15',
+            'tipo' => 'required|string|max:10',
+            'conceptos' => 'required|array|min:1',
+            'conceptos.*.id_concepto' => 'required',
+            'conceptos.*.importe' => 'required|numeric',
         ]);
 
         // Busca proveedor por documento
@@ -271,14 +278,45 @@ class ApiController extends Controller
             }
         }        
 
-        // Busca tipo de transaccion por tipo de comprobante
+        // Busca tipo de transaccion por tipo de comprobante (abreviatura = prec_tipo en Anita)
         $comprobante = $this->comprobanteService->leeTipoTransaccionCompraPorAbreviatura($request->tipo);
 
-        $tipotransaccion_compra_id = null;
-        if ($comprobante)
-            $tipotransaccion_compra_id = $comprobante->id;
+        if (! $comprobante) {
+            return response()->json([
+                'message' => 'Tipo de comprobante no válido: '.$request->tipo,
+            ], 422);
+        }
 
-        $conceptos = $request->conceptos;
+        $tipotransaccion_compra_id = $comprobante->id;
+        $tipoAbreviatura = $comprobante->abreviatura ?? $request->tipo;
+
+        $lineasConcepto = [];
+        foreach ($request->conceptos as $concepto) {
+            try {
+                $this->precargaAnitaSync->resolverCodigoConceptoAnita(null, $concepto['id_concepto']);
+            } catch (\RuntimeException $e) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
+
+            $concepto_ivacompra = $this->concepto_ivacompraRepository->findPorCodigo($concepto['id_concepto']);
+            if (! $concepto_ivacompra) {
+                $normalizado = ltrim((string) $concepto['id_concepto'], '0');
+                if ($normalizado !== '') {
+                    $concepto_ivacompra = $this->concepto_ivacompraRepository->findPorCodigo($normalizado);
+                }
+            }
+            if (! $concepto_ivacompra) {
+                return response()->json([
+                    'message' => 'Concepto IVA compra con código Anita «'.$concepto['id_concepto'].'» no existe en el ERP.',
+                ], 422);
+            }
+
+            $lineasConcepto[] = [
+                'concepto_ivacompra_id' => $concepto_ivacompra->id,
+                'codigo_concepto_anita' => $concepto['id_concepto'],
+                'monto' => $concepto['importe'],
+            ];
+        }
 
         $moneda_id = 1;
         switch(strtoupper($request->moneda))
@@ -300,7 +338,7 @@ class ApiController extends Controller
 			'proveedor_id' => $proveedor_id,
             'codigoproveedor' => $codigoProveedor,
 			'tipotransaccion_compra_id' => $tipotransaccion_compra_id,
-            'tipo' => $request->tipo,
+            'tipo' => $tipoAbreviatura,
             'letra' => $request->letra,
             'sucursal' => $request->sucursal,
             'numerocomprobante' => $request->numero_factura,
@@ -319,36 +357,31 @@ class ApiController extends Controller
             'estado' => 'PENDIENTE'
         ];
 
-        // Realiza grabacion de precarga
         DB::beginTransaction();
-        try
-        {        
+        try {
             $precarga_comprobante_proveedor = $this->precarga_comprobante_proveedorRepository->create($data);
 
-            // Realiza grabacion de cada concepto
-            $conceptos = $request->conceptos;
-
-            foreach ($conceptos as $concepto)
-            {
-                // Busca el codigo de anita del concepto
-                $concepto_ivacompra = $this->concepto_ivacompraRepository->findPorCodigo($concepto['id_concepto']);
-
-                $concepto_ivacompra_id = null;
-                if ($concepto_ivacompra)
-                    $concepto_ivacompra_id = $concepto_ivacompra->id;
-
-                $data = [
+            foreach ($lineasConcepto as $linea) {
+                $this->precarga_comprobante_proveedor_conceptoRepository->create([
                     'precarga_comprobante_proveedor_id' => $precarga_comprobante_proveedor->id,
-                    'concepto_ivacompra_id' => $concepto_ivacompra_id,
-                    'monto' => $concepto['importe']
-                ];
-                $this->precarga_comprobante_proveedor_conceptoRepository->create($data);
+                    'concepto_ivacompra_id' => $linea['concepto_ivacompra_id'],
+                    'codigo_concepto_anita' => $linea['codigo_concepto_anita'],
+                    'monto' => $linea['monto'],
+                ]);
             }
-            DB::commit();
-        } catch (\Exception $e) {
-            DB::rollback();
 
-            return ['errores' => $e->getMessage()];
-        }        
+            DB::commit();
+
+            return response()->json([
+                'id' => $precarga_comprobante_proveedor->id,
+                'message' => 'Precarga registrada en ERP y sincronizada con Anita (compras).',
+            ], 201);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'errores' => $e->getMessage(),
+            ], 422);
+        }
     }
 }

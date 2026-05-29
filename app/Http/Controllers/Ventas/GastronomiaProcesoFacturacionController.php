@@ -181,6 +181,7 @@ class GastronomiaProcesoFacturacionController extends Controller
             'cuentacaja_canje_tarjeta_error' => GastronomiaCuentacajaCanjeTarjeta::mensajeErrorResolucion((int) $cfg->empresa_id),
             'cuentacaja_totem' => GastronomiaCuentacajaTotem::cuentaParaEmpresa((int) $cfg->empresa_id),
             'cuentacaja_totem_error' => GastronomiaCuentacajaTotem::mensajeErrorResolucion((int) $cfg->empresa_id),
+            'cuentacaja_totem_codigo' => GastronomiaCuentacajaTotem::codigo(),
             'ticket_tarjeta_vencimiento_dias' => (int) config('gastronomia.ticket_tarjeta_vencimiento_dias', 30),
             'ticket_tarjeta_tolerancia_excedente' => (float) config('gastronomia.ticket_tarjeta_tolerancia_excedente_factura', 5.),
             'canje_premio_descuento_codigo' => (string) config('gastronomia.canje_premio_descuento_codigo', '10'),
@@ -207,6 +208,7 @@ class GastronomiaProcesoFacturacionController extends Controller
             'url_habilitacion_turno' => route('gastronomia_habilitacion_turno'),
             'waitry_habilitado' => config('waitry.habilitado', false),
             'waitry_get_orders_minutos_atras' => max(0, (int) config('waitry.get_orders_minutos_atras', 20)),
+            'waitry_get_orders_cache_segundos' => max(0, (int) config('waitry.get_orders_cache_segundos', 15)),
         ]);
     }
 
@@ -229,6 +231,7 @@ class GastronomiaProcesoFacturacionController extends Controller
             (int) $cfg->empresa_id,
             is_string($desde) ? $desde : null,
             is_string($hasta) ? $hasta : null,
+            $request->boolean('refresh'),
         );
 
         if (! ($resultado['ok'] ?? false)) {
@@ -249,12 +252,18 @@ class GastronomiaProcesoFacturacionController extends Controller
     {
         can('usar-proceso-facturacion-gastronomia');
 
+        $rawWaitryId = $request->input('waitry_order_id');
+        if ($rawWaitryId !== null && $rawWaitryId !== '') {
+            $request->merge(['waitry_order_id' => trim((string) $rawWaitryId)]);
+        }
+
         $request->validate([
-            'waitry_order_id' => ['required', 'string', 'min:1', 'max:64', 'regex:/^[A-Za-z0-9_-]+$/'],
+            'waitry_order_id' => ['required', 'min:1', 'max:64', 'regex:/^[A-Za-z0-9_-]+$/'],
             'cuenta_id' => 'nullable|integer|min:1',
             'cubiertos' => 'nullable|integer|min:0',
             'mozo_gastronomia_id' => 'nullable|integer',
             'incluir_orden_pagada' => 'nullable|boolean',
+            'importar_por_id' => 'nullable|boolean',
         ]);
 
         $cfg = $this->requireCfgPv($request);
@@ -273,7 +282,7 @@ class GastronomiaProcesoFacturacionController extends Controller
             $identificadorPapelito,
             $request->only(['cubiertos', 'mozo_gastronomia_id']),
             $request->filled('cuenta_id') ? (int) $request->get('cuenta_id') : null,
-            $request->boolean('incluir_orden_pagada'),
+            $request->boolean('importar_por_id') || $request->boolean('incluir_orden_pagada'),
         );
 
         if (! ($resultado['ok'] ?? false)) {
@@ -807,7 +816,7 @@ class GastronomiaProcesoFacturacionController extends Controller
         }
 
         $cuentas = Cuentacaja::query()
-            ->where('empresa_id', $cfg->empresa_id)
+            ->paraEmpresa((int) $cfg->empresa_id)
             ->whereHas('usocuentacajas', fn ($r) => $r->whereKey($usoId))
             ->with('monedas:id,abreviatura,nombre')
             ->orderBy('nombre')
@@ -852,9 +861,7 @@ class GastronomiaProcesoFacturacionController extends Controller
 
         $empresaId = (int) $cfg->empresa_id;
         if ($empresaId > 0) {
-            $query->where(function ($q) use ($empresaId) {
-                $q->where('empresa_id', $empresaId)->orWhereNull('empresa_id');
-            });
+            $query->paraEmpresa($empresaId);
         }
 
         $cuentas = $query->get(['id', 'nombre', 'codigo', 'moneda_id', 'empresa_id']);

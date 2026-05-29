@@ -110,6 +110,9 @@
             if (inputLeyenda) inputLeyenda.value = '';
             setProcesando(false);
             if (typeof $ !== 'undefined' && modalEl) {
+                $('#modal-fd-generar-nc').one('shown.bs.modal', function () {
+                    if (inputLeyenda) inputLeyenda.focus();
+                });
                 $('#modal-fd-generar-nc').modal('show');
             } else {
                 ejecutarNotaCredito('');

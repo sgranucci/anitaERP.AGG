@@ -94,9 +94,7 @@ final class GastronomiaCuentacajaCanjeTarjeta
             ->with('monedas:id,abreviatura,nombre');
 
         if ($empresaId > 0) {
-            $query->where(function ($q) use ($empresaId) {
-                $q->where('empresa_id', $empresaId)->orWhereNull('empresa_id');
-            });
+            $query->paraEmpresa($empresaId);
         }
 
         $cuentas = $query->get(['id', 'nombre', 'codigo', 'moneda_id', 'empresa_id']);

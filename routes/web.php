@@ -1657,6 +1657,8 @@ Route::post('caja/rendiciongastronomia/api/datos-turno', 'Caja\RendicionGastrono
 Route::get('caja/rendiciongastronomia/api/proponer-codigo', 'Caja\RendicionGastronomiaController@apiProponerCodigo')->name('api_rendicion_gastronomia_proponer_codigo');
 Route::post('caja/rendiciongastronomia/api/consulta-cierre', 'Caja\RendicionGastronomiaController@apiConsultaCierre')->name('api_rendicion_gastronomia_consulta_cierre');
 Route::get('caja/rendiciongastronomia/api/turno/{numero}', 'Caja\RendicionGastronomiaController@apiTurnoPorNumero')->name('api_rendicion_gastronomia_turno_numero');
+Route::get('caja/waitry-cierre-jornada', 'Caja\WaitryCierreJornadaController@index')->name('waitry_cierre_jornada');
+Route::get('caja/listarwaitrycierrejornada/{formato?}', 'Caja\WaitryCierreJornadaController@listar')->name('listar_waitry_cierre_jornada');
 /*
  * Tipos de transacciones de caja
  */
@@ -2751,6 +2753,9 @@ Route::get('presupuesto/leercapexpartidamonto/{capex_partida_id}', 'Presupuesto\
 Route::post('presupuesto/consulta_capex', 'Presupuesto\CapexController@consultaCapex')->name('consulta_capex');
 Route::post('presupuesto/resolver-capex-codigo', 'Presupuesto\CapexController@resolverCapexPorCodigo')->name('resolver_capex_codigo');
 Route::get('presupuesto/leer_capex/{capex_id}', 'Presupuesto\CapexController@leerCapexPorId')->name('leer_capex');
+
+Route::get('presupuesto/capex-reporte', 'Presupuesto\CapexReporteController@index')->name('capex_reporte');
+Route::get('presupuesto/listar-capex-reporte/{formato?}', 'Presupuesto\CapexReporteController@listar')->name('listar_capex_reporte');
 
 /*
  * Partidas de gastos

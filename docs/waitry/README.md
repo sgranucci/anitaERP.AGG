@@ -2,24 +2,31 @@
 
 ## Cuentas externas (Get Orders, doc. pág. 21)
 
-El facturador puede listar órdenes sin pago desde:
+El facturador lista órdenes impagas solo con:
 
 `GET /analytics/analytics/getOrdersPOS?placeId=…`
 
-Si Waitry responde `ok: false` (p. ej. «Interface not available»), Anita usa automáticamente el fallback:
-
-`POST /analytics/analytics/getordersdetails` (`WAITRY_GET_ORDERS_DETAILS_URL`, `WAITRY_GET_ORDERS_USAR_DETALLES_FALLBACK=true`).
-
-- Respuesta getOrdersPOS: `orders[]` con `cart.items[]` (`external_id`, `quantity`, `price.total_price`).
-- Respuesta getordersdetails: `response[]` con `orderItems[]` (`item.externalId` / `externalCode`).
-- Sin pago: sin bloque `payment` con cobro, o `paid = 0` si viene en el JSON.
-- Rango horario: `from` / `to` en la consulta; por defecto últimos **N** minutos (`WAITRY_GET_ORDERS_MINUTOS_ATRAS`, default `20`). `0` = sin filtro.
-- Importación: crea cuenta libre, carga líneas por SKU (`external_id`) y guarda `waitry_order_id` en `cuenta_gastronomia`.
+- Respuesta: `orders[]` con `cart.items[]` (`external_id`, `quantity`, `price.total_price`) y `payment`.
+- **Impaga:** `paid` false/0, sin bloque `payment`, o `payment.total_fee.amount` ≤ 0 (p. ej. `type=cash` con monto 0).
+- **Cobrada en tótem:** `paid` true/1 o monto de payment > 0 (ajustar regla cuando aparezcan casos distintos en producción).
+- Rango horario: `from` / `to`; por defecto últimos **N** minutos (`WAITRY_GET_ORDERS_MINUTOS_ATRAS`, default `20`).
+- **Cache:** `WAITRY_GET_ORDERS_CACHE_SEGUNDOS` (default `15`). Botón refrescar o `?refresh=1` omite cache; importar invalida cache del placeId.
+- Importación: crea cuenta libre, carga líneas por SKU (`external_id`) y guarda `waitry_order_id` (numérico Waitry) y `waitry_display_id` (código alfanumérico del papelito/tótem) en `cuenta_gastronomia`.
 - **Por ID (papelito del tótem):** botón «Por ID» junto a «Cuentas externas»; consulta `getOrdersPOS?orderId=` (y listado amplio si hace falta) con el campo `id` del JSON. Acepta órdenes ya cobradas en Waitry (`incluir_orden_pagada`).
 - **Cobro en tótem:** si la orden ya está pagada en Waitry, la cuenta queda con `waitry_cobro_totem` y cobranza automática con cuenta de caja **TOTEM** (`GASTRONOMIA_CUENTACAJA_TOTEM_CODIGO`, default `TOTEM`), bloqueada en el POS. No se re-sincroniza el pago a Waitry.
 - **Sin doble factura:** `venta_gastronomia_emision.waitry_order_id` (índice único) y validación al importar/emitir. Órdenes impagas: se excluyen del listado si ya están facturadas; pendientes de pago siguen el flujo normal de cobranza en caja.
 
 Rutas POS: `ventas/gastronomia/api/waitry-ordenes-pendientes`, `waitry-importar-orden`.
+
+## Cierre de jornada (tesorería, getordersdetails)
+
+Proceso de **auditoría/conciliación** bajo **Caja → Rendiciones → Cierre jornada Waitry** (`caja/waitry-cierre-jornada`).
+
+- Consulta Waitry: `POST /analytics/analytics/getordersdetails` por **fecha de jornada** (`from` = `to` = `yyyy-mm-dd`).
+- Cruce Anita: ventas con `venta_gastronomia_emision.waitry_order_id` y `venta.fechajornada` = esa fecha, filtradas por empresa.
+- Estados: conciliada, Waitry sin factura, importada pendiente, diferencia de monto, solo Anita.
+- **No** usa `getOrdersPOS` (ese endpoint es solo para el POS en vivo, doc. pág. 21).
+- Permiso: `listar-waitry-cierre-jornada-caja`.
 
 ## Cobro en POS (syncStatusPOS)
 
