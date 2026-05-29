@@ -24,7 +24,8 @@ switch(config('app.empresa'))
             'ANTICIPO_DE_CLIENTES' => 112101000,
             'EMPRESA_DEFAULT_ID' => 1,
             'ENVIA_MAIL_ALTA_CLIENTE_DEFINITIVO' => 'NO',
-            'DESTINATARIO_ALTA_CLIENTE_DEFINITIVO' => ['fherber@interforming.com.ar']
+            'DESTINATARIO_ALTA_CLIENTE_DEFINITIVO' => ['fherber@interforming.com.ar'],
+            'SINCRONIZA_CLIMA_ANITA' => false,
             ];
         break;
 
@@ -50,7 +51,8 @@ switch(config('app.empresa'))
             'ANTICIPO_DE_CLIENTES' => 113100000,
             'EMPRESA_DEFAULT_ID' => 1,
             'ENVIA_MAIL_ALTA_CLIENTE_DEFINITIVO' => 'SI',
-            'DESTINATARIO_ALTA_CLIENTE_DEFINITIVO' => ['luisav@elbierzo.com.ar', 'claudiam@elbierzo.com.ar', 'carolinal@elbierzo.com.ar']
+            'DESTINATARIO_ALTA_CLIENTE_DEFINITIVO' => ['luisav@elbierzo.com.ar', 'claudiam@elbierzo.com.ar', 'carolinal@elbierzo.com.ar'],
+            'SINCRONIZA_CLIMA_ANITA' => true,
             ];
         break;
 
@@ -76,7 +78,8 @@ switch(config('app.empresa'))
             'DEUDORES_POR_VENTAS' => 114020008,
             'ANTICIPO_DE_CLIENTES' => 114020008,
             'ENVIA_MAIL_ALTA_CLIENTE_DEFINITIVO' => 'SI',
-            'DESTINATARIO_ALTA_CLIENTE_DEFINITIVO' => ['impuestosBSA@grupoagg.com']
+            'DESTINATARIO_ALTA_CLIENTE_DEFINITIVO' => ['impuestosBSA@grupoagg.com'],
+            'SINCRONIZA_CLIMA_ANITA' => true,
             ];        
     break;
 }

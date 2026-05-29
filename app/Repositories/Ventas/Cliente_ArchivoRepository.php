@@ -26,6 +26,11 @@ class Cliente_ArchivoRepository implements Cliente_ArchivoRepositoryInterface
         $this->model = $cliente_archivo;
     }
 
+    private function usaClimarchAnita(): bool
+    {
+        return (bool) config('cliente.SINCRONIZA_CLIMA_ANITA', true);
+    }
+
     public function create(ValidacionCliente $request, $id)
     {
 		return self::guardaCliente_Archivo($request, 'create', $id);
@@ -141,6 +146,10 @@ class Cliente_ArchivoRepository implements Cliente_ArchivoRepositoryInterface
 	}
 
     public function sincronizarConAnita(){
+        if (! $this->usaClimarchAnita()) {
+            return;
+        }
+
 		ini_set('max_execution_time', '300');
 	  	ini_set('memory_limit', '512M');
 
@@ -207,6 +216,10 @@ class Cliente_ArchivoRepository implements Cliente_ArchivoRepositoryInterface
     }
 
 	private function guardarAnita($data, $linea, $nombrearchivo) {
+        if (! $this->usaClimarchAnita()) {
+            return;
+        }
+
         $apiAnita = new ApiAnita();
 
 		$usuario = Auth::user()->nombre;
@@ -236,6 +249,10 @@ class Cliente_ArchivoRepository implements Cliente_ArchivoRepositoryInterface
 	}
 
 	private function eliminarAnita($cliente) {
+        if (! $this->usaClimarchAnita()) {
+            return;
+        }
+
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita, 
 				'sistema' => 'ventas',
