@@ -28,6 +28,9 @@ class ArticuloExport implements FromView, WithColumnFormatting, WithMapping, Sho
 	protected $dates = ['fecha'];
 	private $articuloRepository;
 
+	/** @var array<string, mixed>|string|null */
+	private $filtros;
+
 	public function __construct(
 								ArticuloRepositoryInterface $articuloRepository,
 								)
@@ -37,7 +40,7 @@ class ArticuloExport implements FromView, WithColumnFormatting, WithMapping, Sho
 
 	public function view(): View
 	{
-		$articulos = $this->articuloRepository->leeArticulo($this->busqueda, false);
+		$articulos = $this->articuloRepository->leeArticulo($this->filtros, false);
 
 		return view('exports.stock.articuloindex', ['articulos' => $articulos]);
 	}
@@ -110,9 +113,12 @@ class ArticuloExport implements FromView, WithColumnFormatting, WithMapping, Sho
         return 'Reporte de Artículos';
     }
 
-	public function parametros($busqueda)
+	/**
+	 * @param  array<string, mixed>|string|null  $filtros
+	 */
+	public function parametros($filtros)
 	{
-		$this->busqueda = $busqueda;
+		$this->filtros = $filtros;
 
 		return $this;
 	}

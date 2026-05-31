@@ -24,9 +24,10 @@ class ValidacionCaja_Asignacion  extends FormRequest
     public function rules()
     {
         return [
-            'usuario_id' => 'required|',
-            'caja_id' => 'required|',
-            'empresa_id' => 'required|',
+            'fecha' => 'required|date',
+            'usuario_id' => 'required|integer|exists:usuario,id',
+            'caja_id' => 'required|integer|exists:caja,id',
+            'empresa_id' => 'required|integer|exists:empresa,id',
         ];
     }
 }

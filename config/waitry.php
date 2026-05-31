@@ -28,29 +28,34 @@ return [
     'sync_status_pos_event' => env('WAITRY_SYNC_STATUS_POS_EVENT', 'accepted'),
 
     /**
-     * Mapeo opcional cuentacaja_id → cash | credit_card | debit_card (JSON).
-     * El efectivo de GASTRONOMIA_CUENTACAJA_EFECTIVO_POR_EMPRESA se resuelve como cash sin estar aquí.
+     * Medios Waitry (lecturas) → cuenta de caja Anita (multiempresa).
+     * mercadopago → 201, totalcoin → 226 por defecto.
      *
-     * @var array<int, string>
+     * @var array<string, int>
      */
-    'cuentacaja_tipo_pago' => (static function (): array {
-        $raw = env('WAITRY_CUENTACAJA_TIPO_PAGO');
-        if (! is_string($raw) || $raw === '') {
-            return [];
-        }
-        $decoded = json_decode($raw, true);
-        if (! is_array($decoded)) {
-            return [];
-        }
-        $map = [];
-        foreach ($decoded as $cuentacajaId => $tipo) {
-            $tipoNorm = mb_strtolower(trim((string) $tipo));
-            if (in_array($tipoNorm, ['cash', 'credit_card', 'debit_card'], true)) {
-                $map[(int) $cuentacajaId] = $tipoNorm;
+    'tipo_pago_cuentacaja' => (static function (): array {
+        $raw = env('WAITRY_TIPO_PAGO_CUENTACAJA');
+        if (is_string($raw) && $raw !== '') {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded)) {
+                $map = [];
+                foreach ($decoded as $tipo => $cuentacajaId) {
+                    $tipoNorm = mb_strtolower(trim(str_replace([' ', '-', '_'], '', (string) $tipo)));
+                    $id = (int) $cuentacajaId;
+                    if ($tipoNorm !== '' && $id > 0) {
+                        $map[$tipoNorm] = $id;
+                    }
+                }
+                if ($map !== []) {
+                    return $map;
+                }
             }
         }
 
-        return $map;
+        return [
+            'mercadopago' => 201,
+            'totalcoin' => 226,
+        ];
     })(),
 
     'get_orders_url' => env(
@@ -79,7 +84,8 @@ return [
 
     /**
      * Ventana de consulta getOrdersPOS desde el facturador (parámetros from/to).
-     * Minutos hacia atrás desde ahora; 0 = sin filtro horario (no envía from/to).
+     * Formato Waitry: YYYY-MM-DD HH:mm:ss (app.timezone). Minutos hacia atrás desde ahora;
+     * 0 = sin filtro horario (no envía from/to).
      */
     'get_orders_minutos_atras' => max(0, (int) env('WAITRY_GET_ORDERS_MINUTOS_ATRAS', 20)),
 

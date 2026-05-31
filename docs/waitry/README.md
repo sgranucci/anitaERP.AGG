@@ -9,7 +9,7 @@ El facturador lista órdenes impagas solo con:
 - Respuesta: `orders[]` con `cart.items[]` (`external_id`, `quantity`, `price.total_price`) y `payment`.
 - **Impaga:** `paid` false/0, sin bloque `payment`, o `payment.total_fee.amount` ≤ 0 (p. ej. `type=cash` con monto 0).
 - **Cobrada en tótem:** `paid` true/1 o monto de payment > 0 (ajustar regla cuando aparezcan casos distintos en producción).
-- Rango horario: `from` / `to`; por defecto últimos **N** minutos (`WAITRY_GET_ORDERS_MINUTOS_ATRAS`, default `20`).
+- Rango horario: `from` / `to` en formato **`YYYY-MM-DD HH:mm:ss`** (hora `app.timezone`, sin offset ISO); por defecto últimos **N** minutos (`WAITRY_GET_ORDERS_MINUTOS_ATRAS`, default `20`). Ej.: `"from": "2026-05-26 07:00:00", "to": "2026-05-27 07:00:00"`.
 - **Cache:** `WAITRY_GET_ORDERS_CACHE_SEGUNDOS` (default `15`). Botón refrescar o `?refresh=1` omite cache; importar invalida cache del placeId.
 - Importación: crea cuenta libre, carga líneas por SKU (`external_id`) y guarda `waitry_order_id` (numérico Waitry) y `waitry_display_id` (código alfanumérico del papelito/tótem) en `cuenta_gastronomia`.
 - **Por ID (papelito del tótem):** botón «Por ID» junto a «Cuentas externas»; consulta `getOrdersPOS?orderId=` (y listado amplio si hace falta) con el campo `id` del JSON. Acepta órdenes ya cobradas en Waitry (`incluir_orden_pagada`).
@@ -39,10 +39,10 @@ Al facturar una cuenta importada desde Waitry (`cuenta_gastronomia.waitry_order_
 | `order_id` | `waitry_order_id` de la cuenta |
 | `event` | `accepted` (`WAITRY_SYNC_STATUS_POS_EVENT`) |
 | `paid` | `true` |
-| `payment.type` | `cash` \| `credit_card` \| `debit_card` (enum Waitry) |
+| `payment.type` | `cash` \| `mercadopago` \| `totalcoin` |
 | `payment.total_fee` | monto y moneda del medio de cobro principal |
 
-**Tipo de pago:** la cuenta de efectivo de `GASTRONOMIA_CUENTACAJA_EFECTIVO_POR_EMPRESA` → `cash`. Tarjetas: inferencia por nombre/código de `cuentacaja` o mapeo explícito `WAITRY_CUENTACAJA_TIPO_PAGO` (JSON `{"43":"credit_card","44":"debit_card"}`).
+**Tipo de pago (Anita → Waitry):** solo las cuentas mapeadas en `WAITRY_TIPO_PAGO_CUENTACAJA` como **Mercado Pago** o **Totalcoin** conservan su tipo; **cualquier otro medio** (efectivo, tarjetas, FISERV, etc.) se envía como `cash`.
 
 Si falla la API, la factura **no** se revierte; el POS recibe aviso en `warn` (`waitry_pago` / `waitry_pago_mensaje`).
 
@@ -61,6 +61,7 @@ Ver [`push-external-order-request-ejemplo.json`](push-external-order-request-eje
 | `external_id` | **`venta.id`** (string) — correlación con la venta interna |
 | `orderItems` | Líneas de `venta_emision` (SKU → `item.externalId`) |
 | `paid` | `true` si hubo cobranza en el POS |
+| `payment` | Si hubo cobranza: `type` (`cash`, `credit_card`, `debit_card`, `mercadopago`, `totalcoin`, …) y `total_fee` (mismo formato que syncStatusPOS) |
 | `client_name` / `external_client_id` | Cliente de factura de la cuenta (si existe) |
 
 ## Response
@@ -84,3 +85,5 @@ WAITRY_PLACE_ID_POR_EMPRESA={"1":11782,"2":11783,"3":11784}
 ```
 
 Prueba: `php artisan waitry:probar-conexion --empresa=1 --renovar`
+
+Borrador mail a Waitry (push/KDS y push vs sync): [`consulta-endpoints-email.md`](consulta-endpoints-email.md).

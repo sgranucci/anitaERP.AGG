@@ -9,6 +9,8 @@ interface JornadaGastronomiaRepositoryInterface
 {
     public function jornadaAbiertaPorEmpresa(int $empresaId): ?JornadaGastronomia;
 
+    public function ultimaJornadaPorEmpresa(int $empresaId): ?JornadaGastronomia;
+
     /**
      * @return Collection<int, JornadaGastronomia>
      */
@@ -19,4 +21,6 @@ interface JornadaGastronomiaRepositoryInterface
     public function update(array $data, int $id): bool;
 
     public function findOrFail(int $id): JornadaGastronomia;
+
+    public function delete(int $id): bool;
 }

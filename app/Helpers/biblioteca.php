@@ -349,4 +349,25 @@ function convertirFecha($fechaString, $formatoEntrada) {
     return false; // Formato incorrecto
 }
 
+if (! function_exists('urlAppCarpeta')) {
+    /**
+     * URL bajo APP_CARPETA (ej. /anitaERP/public/compras/...).
+     */
+    function urlAppCarpeta(string $path = ''): string
+    {
+        $base = rtrim((string) config('app.app_carpeta', ''), '/');
+        $path = ltrim($path, '/');
+
+        return $path === '' ? $base : $base.'/'.$path;
+    }
+}
+
+if (! function_exists('puedeVerPrecargaFacturaPdf')) {
+    function puedeVerPrecargaFacturaPdf(): bool
+    {
+        return can('listar-precarga-proveedores', false)
+            || can('editar-precarga-proveedores', false);
+    }
+}
+
 

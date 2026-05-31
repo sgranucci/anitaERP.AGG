@@ -3,6 +3,8 @@
 namespace App\Repositories\Ventas;
 
 use App\ApiAnita;
+use App\Models\Configuracion\Localidad;
+use App\Models\Configuracion\Provincia;
 use App\Models\Ventas\Puntoventa;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -47,21 +49,43 @@ class PuntoventaRepository implements PuntoventaRepositoryInterface
         }
     }
 
-    public function create(array $data)
+    public function create(array $data, ?bool $syncAnita = null)
     {
-        return $this->model->create($data);
+        $puntoventa = $this->model->create($data);
+
+        if ($syncAnita ?? config('app.anita_sync_puntoventa_write')) {
+            $this->guardarAnita($this->prepararDatosAnita($data));
+        }
+
+        return $puntoventa;
     }
 
-    public function update(array $data, $id)
+    public function update(array $data, $id, ?bool $syncAnita = null)
     {
-        return $this->model->findOrFail($id)->update($data);
+        $puntoventa = $this->model->findOrFail($id);
+        $codigoAnterior = (string) $puntoventa->codigo;
+
+        $puntoventa->update($data);
+
+        if ($syncAnita ?? config('app.anita_sync_puntoventa_write')) {
+            $this->actualizarAnita(
+                $this->prepararDatosAnita($data, $puntoventa->fresh()),
+                $codigoAnterior
+            );
+        }
+
+        return $puntoventa;
     }
 
-    public function delete($id)
+    public function delete($id, ?bool $syncAnita = null)
     {
         $puntoventa = $this->model->find($id);
 
         if ($puntoventa) {
+            if ($syncAnita ?? config('app.anita_sync_puntoventa_write')) {
+                $this->eliminarAnita($puntoventa->codigo);
+            }
+
             $puntoventa = $this->model->destroy($id);
         }
 
@@ -156,5 +180,62 @@ class PuntoventaRepository implements PuntoventaRepositoryInterface
         $data = ['acc' => 'delete', 'tabla' => $this->tableAnita,
             'whereArmado' => " WHERE expr_codigo = '".$id."' "];
         $apiAnita->apiCallEscritura($data);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function prepararDatosAnita(array $data, ?Puntoventa $model = null): array
+    {
+        $prepared = $data;
+
+        if (empty($prepared['desc_localidad']) && ! empty($prepared['localidad_id'])) {
+            $prepared['desc_localidad'] = Localidad::query()
+                ->whereKey((int) $prepared['localidad_id'])
+                ->value('nombre') ?? '';
+        }
+
+        if (empty($prepared['desc_provincia']) && ! empty($prepared['provincia_id'])) {
+            $prepared['desc_provincia'] = Provincia::query()
+                ->whereKey((int) $prepared['provincia_id'])
+                ->value('nombre') ?? '';
+        }
+
+        if ($model !== null) {
+            $prepared['desc_localidad'] = $prepared['desc_localidad'] ?? $model->localidades?->nombre ?? '';
+            $prepared['desc_provincia'] = $prepared['desc_provincia'] ?? $model->provincias?->nombre ?? '';
+        }
+
+        foreach (['domicilio', 'codigopostal', 'telefono', 'desc_localidad', 'desc_provincia', 'nroinscripcion', 'patentevehiculo', 'patenteacoplado', 'horarioentrega'] as $campo) {
+            $prepared[$campo] = $prepared[$campo] ?? '';
+        }
+
+        $prepared['condicioniva_id'] = $prepared['condicioniva_id'] ?? '1';
+
+        return $prepared;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function setCondicionIvaAnita(array $data, &$condicioniva): void
+    {
+        $condicioniva = '0';
+
+        switch ($data['condicioniva_id'] ?? null) {
+            case '1':
+                $condicioniva = '0';
+                break;
+            case '2':
+                $condicioniva = '4';
+                break;
+            case '3':
+                $condicioniva = '3';
+                break;
+            case '4':
+                $condicioniva = '5';
+                break;
+        }
     }
 }

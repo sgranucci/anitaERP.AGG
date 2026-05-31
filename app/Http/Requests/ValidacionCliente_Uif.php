@@ -27,6 +27,12 @@ class ValidacionCliente_Uif extends FormRequest
     {
         return [
             'nombre' => 'required|max:255',
+            'localidad_uif_id' => 'required|integer|exists:localidad_uif,id',
+            'provincia_uif_id' => 'required|integer|exists:provincia_uif,id',
+            'pais_uif_id' => 'required|integer|exists:pais_uif,id',
+            'actividad_uif_id' => 'required|integer|exists:actividad_uif,id',
+            'pep_uif_id' => 'required|integer|exists:pep_uif,id',
+            'so_uif_id' => 'required|integer|exists:so_uif,id',
             'numerodocumento' => [
                 'required',
                 'max:50',
@@ -157,6 +163,10 @@ class ValidacionCliente_Uif extends FormRequest
     public function attributes()
     {
         return [
+            'localidad_uif_id' => 'localidad de residencia',
+            'provincia_uif_id' => 'provincia de residencia',
+            'pais_uif_id' => 'país de residencia',
+            'actividad_uif_id' => 'actividad',
             'numerodocumento' => 'número de documento',
             'fotodocumento' => 'foto del documento',
             'periodos.*' => 'período (riesgo)',

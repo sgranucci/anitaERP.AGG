@@ -94,8 +94,8 @@
      data-inicial='@json($datosInicialesJson)'>
 
     @if (($caja_id ?? 0) <= 0 && ! $esEdicion)
-    <div class="alert alert-warning">
-        No tiene caja asignada. Debe tener una caja activa para registrar rendiciones.
+    <div class="alert alert-danger">
+        No tiene caja asignada para hoy. Ingrese desde <strong>Movimientos de caja</strong> o solicite asignación de cajero antes de registrar la rendición.
     </div>
     @endif
 

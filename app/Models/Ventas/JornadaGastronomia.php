@@ -49,4 +49,9 @@ class JornadaGastronomia extends Model implements Auditable
     {
         return $this->belongsTo(Usuario::class, 'usuario_cierre_id');
     }
+
+    public function cierreTotem()
+    {
+        return $this->hasOne(CierreTotemJornadaGastronomia::class, 'jornada_gastronomia_id');
+    }
 }

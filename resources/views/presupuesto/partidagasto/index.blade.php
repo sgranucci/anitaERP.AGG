@@ -5,19 +5,12 @@
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
-
-<script>
-    function eliminarCapex(event) {
-        var opcion = confirm("Desea eliminar el Capex?");
-        if(!opcion) {
-            event.preventDefault();
-        }
-    }
-</script>
-
+<script src="{{asset("assets/pages/scripts/includes/listado-filtros.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/presupuesto/partidagasto/filtro.js")}}" type="text/javascript"></script>
 @endsection
 
-<?php use App\Helpers\biblioteca ?>
+<?php use App\Helpers\biblioteca;
+use App\Support\Presupuesto\PartidagastoListadoFiltros; ?>
 
 @section('contenido')
 <div class="row">
@@ -26,26 +19,31 @@
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Partidas de Gastos</h3>
-                <div class="card-tools">
-                    <a href="{{route('crear_partidagasto')}}" class="btn btn-outline-secondary btn-sm">
-                       	@if (can('crear-partida-gasto', false))
-                        	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
-						@endif
-                    </a>
-                </div>
-                <div class="d-md-flex justify-content-md-end">
-					<form action="{{ route('consultar_partidagasto') }}" method="GET">
-						<div class="btn-group">
-							<input type="text" name="busqueda" class="form-control" placeholder="Busqueda ..."> 
-							<button type="submit" class="btn btn-default">
-								<span class="fa fa-search"></span>
-							</button>
-						</div>
-					</form>
+                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @include('includes.listado.filtros_toolbar', [
+                        'formId' => 'form-filtros-partidagasto',
+                        'filtroValor' => $filtros['valor'] ?? '',
+                        'tieneCriterios' => PartidagastoListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
+                        'limpiarUrl' => route('consultar_partidagasto'),
+                        'placeholder' => 'Búsqueda rápida (tolera errores de tipeo)…',
+                        'toggleTarget' => '#panel-filtros-partidagasto',
+                        'toggleId' => 'btn-toggle-filtros-partidagasto',
+                        'inputId' => 'filtro_valor',
+                        'nuevoRegistroUrl' => route('crear_partidagasto'),
+                        'nuevoRegistroCan' => 'crear-partida-gasto',
+                    ])
                 </div>
             </div>
+            <form method="get" action="{{ route('consultar_partidagasto') }}" id="form-filtros-partidagasto" class="mb-0">
+                @include('presupuesto.partidagasto.partials.filtros_listado', [
+                    'limpiarUrl' => route('consultar_partidagasto'),
+                ])
+            </form>
             <div class="card-body table-responsive p-0">
-                @include('includes.exportar-tabla', ['ruta' => 'lista_partidagasto', 'busqueda' => $busqueda])
+                @include('includes.exportar-tabla-queryparams', [
+                    'ruta' => 'lista_partidagasto',
+                    'queryparams' => $filtrosQuery ?? [],
+                ])
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead>
                         <tr>
@@ -118,6 +116,5 @@
         </div>
     </div>
 </div>
-{{ $partidagasto->appends(['busqueda' => $busqueda])->links() }}
+{{ $partidagasto->appends($filtrosQuery ?? [])->links() }}
 @endsection
-

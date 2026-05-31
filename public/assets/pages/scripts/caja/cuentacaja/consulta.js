@@ -19,6 +19,7 @@ function buscar_datos_cuentacaja(consulta) {
             consulta: consulta,
             empresa_id: empresa_id,
             usocuentacaja_id: usocuentacaja_id,
+            excluir_cuentas_solo_automaticas: typeof window.GASTRONOMIA !== 'undefined' ? 1 : 0,
         },
     })
     .done (function(respuesta) {

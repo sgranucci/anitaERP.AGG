@@ -29,8 +29,14 @@ var Biblioteca = function () {
                         error.insertAfter(element); // default placement for everything else
                     }
                 },
-                invalidHandler: function (event, validator) { //display error alert on form submit
-                    
+                invalidHandler: function (event, validator) {
+                    if (!validator.errorList.length) {
+                        return;
+                    }
+                    var primer = validator.errorList[0].element;
+                    mostrarSolapaDelPrimerCampoInvalido(primer);
+                    notificarCamposObligatoriosPendientes(primer, validator.numberOfInvalids());
+                    enfocarCampoInvalido(primer);
                 },
                 submitHandler: function (form) {
                     return true;
@@ -101,44 +107,177 @@ function redondearDecimales(numero, decimales) {
     }
 }
 
-$('#form-general').on('submit', function (event) {
-    let primerCampoInvalido = null;
+/** Secciones de solapas usadas en CRUD multipágina (clientes, requisiciones, UIF, etc.). */
+var SECCIONES_SOLAPA_FORM = '.form1,.form2,.form3,.form4,.form5,.form6,.form7,.form8,.form9';
 
-    // Validar solo campos requeridos "reales" (no deshabilitados/ocultos)
-    const camposRequeridos = this.querySelectorAll('[required]');
+/** Contenedores ocultos por regla de negocio: no validar sus required mientras estén ocultos. */
+var CONTENEDORES_REQUERIDO_CONDICIONAL = '#div-actividadso,#div-cumplenormativaso';
 
-    camposRequeridos.forEach(campo => {
-        // No validar campos dentro de modales (p. ej. presupuesto en requisición): su propio flujo los valida
-        if (campo.closest && campo.closest('.modal')) {
+function valorCampoObligatorio(campo) {
+    if (campo.type === 'checkbox' || campo.type === 'radio') {
+        const grupo = document.querySelectorAll(
+            'input[name="' + String(campo.name).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"]:not(:disabled)'
+        );
+        return Array.from(grupo).some(function (el) {
+            return el.checked;
+        });
+    }
+    return (campo.value ?? '').toString().trim() !== '';
+}
+
+function campoObligatorioDebeValidarse(campo) {
+    if (campo.closest && campo.closest('.modal')) {
+        return false;
+    }
+    if (campo.disabled || $(campo).is(':disabled')) {
+        return false;
+    }
+    var $wrap = $(campo).closest(CONTENEDORES_REQUERIDO_CONDICIONAL);
+    if ($wrap.length && !$wrap.is(':visible')) {
+        return false;
+    }
+    return true;
+}
+
+function camposObligatoriosEnFormulario(form) {
+    var set = new Set();
+    form.querySelectorAll('[required]').forEach(function (el) {
+        set.add(el);
+    });
+    form.querySelectorAll('select.required, input.required, textarea.required').forEach(function (el) {
+        set.add(el);
+    });
+    return Array.from(set);
+}
+
+function numeroSolapaDesdeElemento(el) {
+    var $sec = $(el).closest(SECCIONES_SOLAPA_FORM);
+    if (!$sec.length) {
+        return null;
+    }
+    var cls = ($sec.attr('class') || '').split(/\s+/).filter(function (c) {
+        return /^form\d+$/.test(c);
+    })[0];
+    return cls ? cls.replace('form', '') : null;
+}
+
+function tituloSolapaFormulario(numeroSolapa) {
+    var $btn = $('#botonform' + numeroSolapa);
+    if ($btn.length) {
+        return $btn.text().replace(/\s+/g, ' ').trim();
+    }
+    return 'sección ' + numeroSolapa;
+}
+
+function activarSolapaFormulario(numeroSolapa) {
+    var $btn = $('#botonform' + numeroSolapa);
+    if ($btn.length) {
+        $btn.trigger('click');
+        return;
+    }
+    $(SECCIONES_SOLAPA_FORM).hide();
+    $('.form' + numeroSolapa).show();
+}
+
+function marcarCampoObligatorio(campo, invalido) {
+    campo.style.borderColor = invalido ? '#dc3545' : '';
+    $(campo).closest('.form-group').toggleClass('has-error', invalido);
+}
+
+function validarCamposObligatoriosFormulario(form) {
+    var primerInvalido = null;
+    var cantidadInvalidos = 0;
+
+    camposObligatoriosEnFormulario(form).forEach(function (campo) {
+        if (!campoObligatorioDebeValidarse(campo)) {
+            marcarCampoObligatorio(campo, false);
             return;
         }
-        // 2. Verificar si el campo está vacío
-        if (!campo.value.trim()) {
-            // Marcar campo inválido (opcional, ej: borde rojo)
-            campo.style.borderColor = 'red';
-
-            if (!primerCampoInvalido) {
-                primerCampoInvalido = campo;
+        var vacio = !valorCampoObligatorio(campo);
+        marcarCampoObligatorio(campo, vacio);
+        if (vacio) {
+            cantidadInvalidos++;
+            if (!primerInvalido) {
+                primerInvalido = campo;
             }
-        } else {
-            // Limpiar si ya se rellenó
-            campo.style.borderColor = '';
         }
     });
 
-    if (primerCampoInvalido) 
-    {
-        event.preventDefault();
-    
-        // Si el formulario usa secciones tipo .form1/.form3/... (como Requisición),
-        // mostrar la sección donde está el primer inválido antes de enfocar.
-        // Compatibilidad con pantallas que usan solapas .tab-content
-        const solapaContenedora = primerCampoInvalido.closest('.tab-content');
-        if (solapaContenedora) {
-            activarSolapa(solapaContenedora.id);
-            alert('Por favor, rellene todos los campos obligatorios.');
+    return {
+        valido: cantidadInvalidos === 0,
+        primerInvalido: primerInvalido,
+        cantidadInvalidos: cantidadInvalidos,
+    };
+}
+
+function mostrarSolapaDelPrimerCampoInvalido(campo) {
+    if (!campo) {
+        return;
+    }
+    var numeroSolapa = numeroSolapaDesdeElemento(campo);
+    if (numeroSolapa) {
+        activarSolapaFormulario(numeroSolapa);
+        return;
+    }
+    var solapaContenedora = campo.closest('.tab-content');
+    if (solapaContenedora && solapaContenedora.id) {
+        activarSolapa(solapaContenedora.id);
+    }
+}
+
+function notificarCamposObligatoriosPendientes(primerInvalido, cantidad) {
+    var mensaje = 'Complete los campos obligatorios';
+    if (cantidad > 1) {
+        mensaje += ' (' + cantidad + ' pendientes)';
+    }
+    var numeroSolapa = numeroSolapaDesdeElemento(primerInvalido);
+    if (numeroSolapa) {
+        mensaje += ' en: ' + tituloSolapaFormulario(numeroSolapa);
+    }
+    mensaje += '.';
+
+    if (typeof Biblioteca !== 'undefined' && typeof Biblioteca.notificaciones === 'function') {
+        Biblioteca.notificaciones(mensaje, 'Formulario incompleto', 'warning');
+    } else {
+        alert(mensaje);
+    }
+}
+
+function enfocarCampoInvalido(campo) {
+    if (!campo) {
+        return;
+    }
+    setTimeout(function () {
+        try {
+            campo.focus({ preventScroll: true });
+        } catch (e) {
+            campo.focus();
         }
-        primerCampoInvalido.focus();
+        if (typeof campo.scrollIntoView === 'function') {
+            campo.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }, 200);
+}
+
+$('#form-general').on('submit', function (event) {
+    var resultado = validarCamposObligatoriosFormulario(this);
+    if (resultado.valido) {
+        return;
+    }
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    mostrarSolapaDelPrimerCampoInvalido(resultado.primerInvalido);
+    notificarCamposObligatoriosPendientes(resultado.primerInvalido, resultado.cantidadInvalidos);
+    enfocarCampoInvalido(resultado.primerInvalido);
+});
+
+$(document).on('input change', '#form-general select, #form-general input, #form-general textarea', function () {
+    if (!this.hasAttribute('required') && !$(this).hasClass('required')) {
+        return;
+    }
+    if (valorCampoObligatorio(this)) {
+        marcarCampoObligatorio(this, false);
     }
 });
 

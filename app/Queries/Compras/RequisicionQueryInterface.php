@@ -6,7 +6,10 @@ use App\Models\Compras\Requisicion;
 
 interface RequisicionQueryInterface
 {
-    public function leeRequisicion($busqueda, $flPaginando = null, $withArticulos = false);
+    /**
+     * @param  array<string, mixed>|string|null  $filtros
+     */
+    public function leeRequisicion($filtros, $flPaginando = null, $withArticulos = false);
 
     /**
      * Indica si la requisición existe y el usuario actual puede verla en el listado (empresa, centro de costo;

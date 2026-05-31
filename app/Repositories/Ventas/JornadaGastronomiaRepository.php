@@ -22,10 +22,20 @@ class JornadaGastronomiaRepository implements JornadaGastronomiaRepositoryInterf
             ->first();
     }
 
+    public function ultimaJornadaPorEmpresa(int $empresaId): ?JornadaGastronomia
+    {
+        return $this->model->newQuery()
+            ->with(['usuarioApertura', 'empresa'])
+            ->where('empresa_id', $empresaId)
+            ->orderByDesc('fecha_jornada')
+            ->orderByDesc('id')
+            ->first();
+    }
+
     public function historialPorEmpresa(int $empresaId, int $limite = 30): Collection
     {
         return $this->model->newQuery()
-            ->with(['usuarioApertura', 'usuarioCierre'])
+            ->with(['usuarioApertura', 'usuarioCierre', 'cierreTotem'])
             ->where('empresa_id', $empresaId)
             ->orderByDesc('fecha_jornada')
             ->orderByDesc('id')
@@ -46,5 +56,10 @@ class JornadaGastronomiaRepository implements JornadaGastronomiaRepositoryInterf
     public function findOrFail(int $id): JornadaGastronomia
     {
         return $this->model->findOrFail($id);
+    }
+
+    public function delete(int $id): bool
+    {
+        return (bool) $this->model->findOrFail($id)->delete();
     }
 }

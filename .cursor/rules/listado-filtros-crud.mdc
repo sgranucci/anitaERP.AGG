@@ -1,0 +1,80 @@
+---
+description: Patrón obligatorio de filtros inteligentes en index CRUD (UX, Enter, coincidencia flexible, export)
+globs: resources/views/**/index.blade.php,app/Support/**/*ListadoFiltros.php,app/Support/Listado/*.php,app/Http/Controllers/**/*Controller.php,app/Repositories/**/*.php,app/Queries/**/*.php,app/Exports/**/*.php,public/assets/pages/scripts/includes/listado-filtros.js,public/assets/pages/scripts/**/filtro.js
+alwaysApply: true
+---
+
+# Filtros inteligentes en listados CRUD
+
+Patrón **obligatorio** para todo index con búsqueda. Referencias canónicas:
+
+| Módulo | Clase filtros | Index |
+|---|---|---|
+| Artículos | `ArticuloListadoFiltros` | `stock/articulo/index` |
+| Clientes Ventas | `ClienteListadoFiltros` | `ventas/cliente/index` |
+| Proveedores | `ProveedorListadoFiltros` | `compras/proveedor/index` |
+| Capex | `CapexListadoFiltros` | `presupuesto/capex/index` |
+| Presupuestos | `PresupuestoListadoFiltros` | `presupuesto/presupuesto/index` |
+| Partidas de gasto | `PartidagastoListadoFiltros` | `presupuesto/partidagasto/index` |
+
+## UX obligatoria
+
+| Elemento | Comportamiento |
+|---|---|
+| Toolbar | `@include('includes.listado.filtros_toolbar')` en `card-tools`; inputs con `form="{id}"` |
+| Botón panel | Toggle collapse; texto **Filtros** / **Ocultar filtros** vía `listado-filtros.js` |
+| Caja superior | Un solo `name="filtro_valor"` (`#filtro_valor`); vacío + Enter = sin filtro de texto |
+| Panel cerrado | Enter en caja superior o lupa → hidden `filtro_busqueda_rapida=1` (búsqueda en todos los campos) |
+| Panel abierto | Enter (cabecera o panel), lupa o **Aplicar filtros** → criterios del panel (sin búsqueda rápida) |
+| Espejo valor | `#filtro_valor_panel` sincronizado con `#filtro_valor`; sincronizar antes del submit según panel abierto/cerrado |
+| Filtros activos | Borde amarillo en input/botón toggle; icono filtro + **Limpiar filtros** (`filtros_aviso_activos`) solo si `tieneCriteriosAplicados()` |
+| Limpiar | Enlace GET a ruta index **sin query** |
+| Layout | Sin `<form>` en `card-header`; form GET solo envuelve el panel collapse |
+| Export | `exportar-tabla-queryparams` con `$filtrosQuery`; export recibe array `$filtros`, no `busqueda` legacy |
+| Paginación | `->appends($filtrosQuery)` |
+
+## Backend
+
+1. Clase `App\Support\{Modulo}\{Recurso}ListadoFiltros`:
+   - `CAMPOS`, `OPERADORES_TEXTO`, `OPERADORES_ENTERO`
+   - `resolverDesdeRequest()`, `aplicar($query, $filtros)`, `paraQueryString()`, `tieneCriteriosAplicados()`, `filtrosVacios()`, `operadoresParaCampo()`
+2. `FiltrosListadoRequest::valorBusqueda()` — si existe `filtro_valor` (aunque vacío), **no** usar `busqueda` legacy.
+3. Query/Repository: `lee*($filtros, $paginar)`; aplicar filtros **solo** si `tieneCriteriosAplicados()`; compatibilidad `is_string($filtros)` para exports viejos.
+4. Controller index: pasar `filtros`, `filtrosQuery`, `camposFiltro` a la vista.
+5. Controller listar: `resolverDesdeRequest($request, $busquedaRuta)`; export con `$filtros`.
+
+## Coincidencia flexible (tolera errores de tipeo)
+
+Usar `CoincidenciaFlexibleTexto::aplicar()` — **no duplicar lógica**.
+
+- Operador **`contiene`** en modo `todos` y modo `campo` (texto descriptivo).
+- Mantener `LIKE %valor%` **y** sumar coincidencia flexible (no reemplazar).
+- Lista blanca `COLUMNAS_COINCIDENCIA_FLEXIBLE`; excluir estados, IDs, abreviaturas cortas (moneda).
+- Longitud mínima: `LONGITUD_MINIMA_ARTICULO` (5) o `LONGITUD_MINIMA_DEFAULT` (6).
+
+## Archivos al replicar en un CRUD nuevo
+
+| Capa | Archivo / cambio |
+|---|---|
+| Support | `app/Support/{Modulo}/{Recurso}ListadoFiltros.php` |
+| Query/Repo | `lee*($filtros)` + joins necesarios para columnas de `CAMPOS` |
+| Controller | index + listar con `resolverDesdeRequest` |
+| Export | `parametros($filtros)` |
+| Vista | `index.blade.php` + `partials/filtros_listado.blade.php` |
+| JS | `public/assets/pages/scripts/{modulo}/{recurso}/filtro.js` |
+| Scripts index | `listado-filtros.js` + `filtro.js` del módulo |
+
+## Prohibido
+
+- Input `name="busqueda"` en toolbar (usar `filtro_valor`).
+- Aplicar `where LIKE '%%'` siempre (filtrar solo con criterios activos).
+- Omitir coincidencia flexible en operador `contiene`.
+- Export PDF/Excel sin propagar `$filtrosQuery`.
+
+## Comprobación rápida
+
+```bash
+rg "name=\"busqueda\"" resources/views/{modulo}/{recurso}/index.blade.php   # debe estar vacío
+rg "CoincidenciaFlexibleTexto" app/Support/{Modulo}/{Recurso}ListadoFiltros.php  # debe existir
+php artisan view:cache
+```

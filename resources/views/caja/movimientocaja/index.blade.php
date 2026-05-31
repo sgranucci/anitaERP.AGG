@@ -57,6 +57,11 @@
                         	<i class="fa fa-fw fa-plus-circle"></i> Rendiciones
 						@endif
                     </a>
+                    <a href="{{ route('crear_rendiciongastronomia', ['caja' => $caja_asignacion->caja_id ?? '']) }}" class="btn btn-outline-secondary btn-sm">
+                        @if (can('crear-rendicion-gastronomia-caja', false))
+                        <i class="fa fa-fw fa-plus-circle"></i> Rend. gastronomía
+                        @endif
+                    </a>
                 </div>
                 <div class="d-md-flex justify-content-md-end">
 					<form action="{{ route('ingresoegreso') }}" method="GET">

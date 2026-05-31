@@ -3,6 +3,7 @@
 namespace App\Repositories\Presupuesto;
 
 use App\Models\Presupuesto\Presupuesto;
+use App\Support\Presupuesto\PresupuestoListadoFiltros;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Repositories\Presupuesto\Presupuesto_EscenarioRepositoryInterface;
 use App\ApiAnita;
@@ -28,12 +29,47 @@ class PresupuestoRepository implements PresupuestoRepositoryInterface
 
     public function all()
     {
-        $hay_presupuesto = $this->model->first();
+        return $this->leePresupuesto(PresupuestoListadoFiltros::filtrosVacios(), false);
+    }
 
-        if (!$hay_presupuesto)
-			Self::sincronizarConAnita();
+    public function leePresupuesto($filtros, $flPaginando = null)
+    {
+        if (is_string($filtros)) {
+            $texto = trim($filtros);
+            $filtros = [
+                'modo' => PresupuestoListadoFiltros::MODO_TODOS,
+                'campo' => 'nombre',
+                'operador' => 'contiene',
+                'valor' => $texto,
+                'valor_hasta' => '',
+                'busqueda' => $texto,
+            ];
+        } elseif (! is_array($filtros)) {
+            $filtros = PresupuestoListadoFiltros::filtrosVacios();
+        }
 
-        return $this->model->with('creousuarios')->with('presupuesto_escenarios')->orderBy('id','desc')->get();
+        $hayPresupuesto = $this->model->first();
+        if (! $hayPresupuesto) {
+            self::sincronizarConAnita();
+        }
+
+        $query = $this->model->with('creousuarios')
+            ->with('presupuesto_escenarios')
+            ->orderBy('id', 'desc');
+
+        if (PresupuestoListadoFiltros::tieneCriteriosAplicados($filtros)) {
+            PresupuestoListadoFiltros::aplicar($query, $filtros);
+        }
+
+        if (isset($flPaginando)) {
+            if ($flPaginando) {
+                return $query->paginate(10);
+            }
+
+            return $query->get();
+        }
+
+        return $query->get();
     }
 
     public function create(array $data)

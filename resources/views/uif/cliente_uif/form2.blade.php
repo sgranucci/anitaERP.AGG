@@ -1,4 +1,8 @@
 <div class="form2" style="display: none">
+	<div id="uif-alertas-cumplimiento" class="alert alert-warning d-none mb-3" role="alert">
+		<strong><i class="fa fa-exclamation-triangle"></i> Pendientes de cumplimiento UIF</strong>
+		<ul id="uif-alertas-cumplimiento-lista" class="mb-0 mt-2 pl-3"></ul>
+	</div>
 	<div class="row">
 		<div class="col-sm-6">
 			<div class="form-group row">
@@ -106,29 +110,29 @@
 		<div class="col-sm-6">
 			<div class="form-group row" id="div-fechainformepep">
 				<label class="col-lg-4 col-form-label requerido">Fecha Informe PEP</label>
-				<input type="date" name="fechainformepep" id="fechainformepep" class="col-lg-3 form-control" value="{{old('fechainformepep', $data['fechainformepep'] ?? '')}}" class="col-lg-6 form-control" placeholder="Fecha Ultima Firma PEP">
+				<input type="date" name="fechainformepep" id="fechainformepep" class="col-lg-3 form-control" value="{{old('fechainformepep', $data['fechainformepep'] ?? '')}}" placeholder="Fecha Ultima Firma PEP" required>
 			</div>
 			<div class="form-group row" id='div-fechafirmapep'>
 				<label class="col-lg-4 col-form-label requerido">Fecha Ultima Firma PEP</label>
-				<input type="date" name="fechafirmapep" id="fechafirmapep" class="col-lg-3 form-control" value="{{old('fechafirmapep', $data['fechafirmapep'] ?? '')}}" class="col-lg-6 form-control" placeholder="Fecha Ultima Firma PEP">
+				<input type="date" name="fechafirmapep" id="fechafirmapep" class="col-lg-3 form-control" value="{{old('fechafirmapep', $data['fechafirmapep'] ?? '')}}" placeholder="Fecha Ultima Firma PEP" required>
 			</div>
 			<div class="form-group row" id='div-fechaconfirmapep'>
 				<label class="col-lg-4 col-form-label requerido">Fecha Validación Ultima Firma PEP</label>
-				<input type="date" name="fechaconfirmapep" id="fechaconfirmapep" class="col-lg-3 form-control" value="{{old('fechaconfirmapep', $data['fechaconfirmapep'] ?? '')}}" class="col-lg-6 form-control" placeholder="Fecha Confirmación Ultima Firma PEP">
+				<input type="date" name="fechaconfirmapep" id="fechaconfirmapep" class="col-lg-3 form-control" value="{{old('fechaconfirmapep', $data['fechaconfirmapep'] ?? '')}}" placeholder="Fecha Confirmación Ultima Firma PEP" required>
 			</div>
 		</div>
 		<div class="col-sm-6">
 			<div class="form-group row" id="div-fechainformenosis">
 				<label class="col-lg-4 col-form-label requerido">Fecha Informe NOSIS</label>
-				<input type="date" name="fechainformenosis" id="fechainformenosis" class="col-lg-3 form-control" value="{{old('fechainformenosis', $data['fechainformenosis'] ?? '')}}" class="col-lg-6 form-control" placeholder="Fecha Confirmación Ultima Firma PEP">
+				<input type="date" name="fechainformenosis" id="fechainformenosis" class="col-lg-3 form-control" value="{{old('fechainformenosis', $data['fechainformenosis'] ?? '')}}" placeholder="Fecha Informe NOSIS" required>
 			</div>
 			<div class="form-group row"  id='div-fechavencimientodni'>
 				<label class="col-lg-4 col-form-label requerido">Fecha Vto. DNI</label>
-				<input type="date" name="fechavencimientodni" id="fechavencimientodni" class="col-lg-3 form-control" value="{{old('fechavencimientodni', $data['fechavencimientodni'] ?? '')}}" class="col-lg-6 form-control" placeholder="Fecha Confirmación Ultima Firma PEP">
+				<input type="date" name="fechavencimientodni" id="fechavencimientodni" class="col-lg-3 form-control" value="{{old('fechavencimientodni', $data['fechavencimientodni'] ?? '')}}" placeholder="Fecha Vto. DNI" required>
 			</div>
 			<div class="form-group row" id='div-fechavencimientoactividad'>
 				<label class="col-lg-4 col-form-label requerido">Fecha Vto. Actividad Econ.</label>
-				<input type="date" name="fechavencimientoactividad" id="fechavencimientoactividad" class="col-lg-3 form-control" value="{{ old('fechavencimientoactividad', (isset($data) && !empty($data->fechavencimientoactividad)) ? \Carbon\Carbon::parse($data->fechavencimientoactividad)->format('Y-m-d') : '') }}" class="col-lg-6 form-control" placeholder="Fecha Confirmación Ultima Firma PEP">
+				<input type="date" name="fechavencimientoactividad" id="fechavencimientoactividad" class="col-lg-3 form-control" value="{{ old('fechavencimientoactividad', (isset($data) && !empty($data->fechavencimientoactividad)) ? \Carbon\Carbon::parse($data->fechavencimientoactividad)->format('Y-m-d') : '') }}" placeholder="Fecha Vto. Actividad Econ." required>
 			</div>		
 			<div class="form-group row" id="div-firmodeclaracionjurada">
 				<label for="firmodeclaracionjurada" class="col-lg-4 col-form-label requerido">Firmo Decl.Jur. Actividad Econ.</label>

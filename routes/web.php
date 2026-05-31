@@ -1168,6 +1168,14 @@ Route::get('ventas/area-comanda-gastronomia/{id}/editar', 'Ventas\AreaComandaGas
 Route::put('ventas/area-comanda-gastronomia/{id}', 'Ventas\AreaComandaGastronomiaController@actualizar')->name('actualizar_area_comanda_gastronomia');
 Route::delete('ventas/area-comanda-gastronomia/{id}', 'Ventas\AreaComandaGastronomiaController@eliminar')->name('eliminar_area_comanda_gastronomia');
 
+Route::get('ventas/totem-waitry-gastronomia', 'Ventas\TotemWaitryGastronomiaController@index')->name('consultar_totem_waitry_gastronomia');
+Route::get('ventas/totem-waitry-gastronomia/crear', 'Ventas\TotemWaitryGastronomiaController@crear')->name('crear_totem_waitry_gastronomia');
+Route::post('ventas/totem-waitry-gastronomia', 'Ventas\TotemWaitryGastronomiaController@guardar')->name('guardar_totem_waitry_gastronomia');
+Route::get('ventas/totem-waitry-gastronomia/api/ubicaciones-por-empresa/{empresaId}', 'Ventas\TotemWaitryGastronomiaController@ubicacionesPorEmpresa')->name('totem_waitry_gastronomia_ubicaciones_por_empresa');
+Route::get('ventas/totem-waitry-gastronomia/{id}/editar', 'Ventas\TotemWaitryGastronomiaController@editar')->name('editar_totem_waitry_gastronomia');
+Route::put('ventas/totem-waitry-gastronomia/{id}', 'Ventas\TotemWaitryGastronomiaController@actualizar')->name('actualizar_totem_waitry_gastronomia');
+Route::delete('ventas/totem-waitry-gastronomia/{id}', 'Ventas\TotemWaitryGastronomiaController@eliminar')->name('eliminar_totem_waitry_gastronomia');
+
 Route::get('ventas/mozo-gastronomia', 'Ventas\MozoGastronomiaController@index')->name('consultar_mozo_gastronomia');
 Route::get('ventas/mozo-gastronomia/crear', 'Ventas\MozoGastronomiaController@crear')->name('crear_mozo_gastronomia');
 Route::post('ventas/mozo-gastronomia', 'Ventas\MozoGastronomiaController@guardar')->name('guardar_mozo_gastronomia');
@@ -1256,11 +1264,16 @@ Route::get('ventas/gastronomia/jornada', 'Ventas\JornadaGastronomiaController@in
 Route::get('ventas/gastronomia/jornada/api/estado/{empresaId}', 'Ventas\JornadaGastronomiaController@apiEstado')->name('gastronomia_jornada_api_estado');
 Route::post('ventas/gastronomia/jornada/api/abrir', 'Ventas\JornadaGastronomiaController@apiAbrir')->name('gastronomia_jornada_api_abrir');
 Route::post('ventas/gastronomia/jornada/api/cerrar', 'Ventas\JornadaGastronomiaController@apiCerrar')->name('gastronomia_jornada_api_cerrar');
+Route::post('ventas/gastronomia/jornada/api/eliminar', 'Ventas\JornadaGastronomiaController@apiEliminar')->name('gastronomia_jornada_api_eliminar');
+Route::get('ventas/gastronomia/jornada/{jornadaId}/comprobante-cierre-totem', 'Ventas\JornadaGastronomiaController@comprobanteCierreTotem')->name('gastronomia_jornada_comprobante_cierre_totem');
+Route::get('ventas/gastronomia/jornada/api/informe-z/{jornadaId}', 'Ventas\JornadaGastronomiaController@apiInformeZDatos')->name('gastronomia_jornada_api_informe_z_datos');
+Route::post('ventas/gastronomia/jornada/api/informe-z', 'Ventas\JornadaGastronomiaController@apiInformeZGuardar')->name('gastronomia_jornada_api_informe_z_guardar');
 
 Route::get('ventas/gastronomia/saneamiento-turno', 'Ventas\GastronomiaSaneamientoTurnoController@index')->name('gastronomia_saneamiento_turno');
 Route::get('ventas/gastronomia/saneamiento-turno/api/diagnostico', 'Ventas\GastronomiaSaneamientoTurnoController@apiDiagnostico')->name('gastronomia_saneamiento_turno_api_diagnostico');
 Route::post('ventas/gastronomia/saneamiento-turno/api/extender-cierre', 'Ventas\GastronomiaSaneamientoTurnoController@apiExtenderCierre')->name('gastronomia_saneamiento_turno_api_extender_cierre');
 Route::post('ventas/gastronomia/saneamiento-turno/api/crear-retroactivo', 'Ventas\GastronomiaSaneamientoTurnoController@apiCrearRetroactivo')->name('gastronomia_saneamiento_turno_api_crear_retroactivo');
+Route::post('ventas/gastronomia/saneamiento-turno/api/cerrar-turno-remoto', 'Ventas\GastronomiaSaneamientoTurnoController@apiCerrarTurnoRemoto')->name('gastronomia_saneamiento_turno_api_cerrar_turno_remoto');
 Route::post('ventas/gastronomia/saneamiento-turno/api/recalcular-totales', 'Ventas\GastronomiaSaneamientoTurnoController@apiRecalcularTotales')->name('gastronomia_saneamiento_turno_api_recalcular_totales');
 Route::post('ventas/gastronomia/saneamiento-turno/api/cerrar-cuentas-pendientes', 'Ventas\GastronomiaSaneamientoTurnoController@apiCerrarCuentasPendientes')->name('gastronomia_saneamiento_turno_api_cerrar_cuentas');
 Route::get('ventas/gastronomia/saneamiento-turno/informe-pdf', 'Ventas\GastronomiaSaneamientoTurnoController@informePdf')->name('gastronomia_saneamiento_turno_informe_pdf');
@@ -1278,6 +1291,7 @@ Route::get('ventas/arca-caea', 'Ventas\ArcaCaeaController@index')->name('arca_ca
 Route::get('ventas/arca-caea/{id}', 'Ventas\ArcaCaeaController@show')->name('arca_caea_ver');
 Route::post('ventas/arca-caea/solicitar', 'Ventas\ArcaCaeaController@solicitar')->name('arca_caea_solicitar');
 Route::post('ventas/arca-caea/{id}/reintentar', 'Ventas\ArcaCaeaController@reintentar')->name('arca_caea_reintentar');
+Route::post('ventas/arca-caea/{id}/grabar-anita', 'Ventas\ArcaCaeaController@grabarAnita')->name('arca_caea_grabar_anita');
 
 Route::get('ventas/puntoventa', 'Ventas\PuntoventaController@index')->name('puntoventa');
 Route::get('ventas/puntoventa/arca-puntos-venta', 'Ventas\PuntoventaController@puntosVentaArca')->name('puntoventa_arca_puntos_venta');
@@ -1942,6 +1956,7 @@ Route::get('compras/proveedor/leercuentacorrienteaplicacion/{id}/{comprobante}/{
  */
 
 Route::get('compras/precarga_comprobante_proveedor', 'Compras\Precarga_Comprobante_ProveedorController@index')->name('precarga_comprobante_proveedor');
+Route::get('compras/precarga_comprobante_proveedor/{id}/factura-pdf', 'Compras\Precarga_Comprobante_ProveedorController@verFacturaPdf')->name('precarga_comprobante_proveedor_factura_pdf');
 Route::get('compras/precarga_comprobante_proveedor/crear', 'Compras\Precarga_Comprobante_ProveedorController@crear')->name('crear_precarga_comprobante_proveedor');
 Route::post('compras/precarga_comprobante_proveedor', 'Compras\Precarga_Comprobante_ProveedorController@guardar')->name('guardar_precarga_comprobante_proveedor');
 Route::get('compras/precarga_comprobante_proveedor/{id}/editar', 'Compras\Precarga_Comprobante_ProveedorController@editar')->name('editar_precarga_comprobante_proveedor');
@@ -2480,10 +2495,10 @@ Route::delete('uif/estadocivil_uif/{id}', 'Uif\Estadocivil_UifController@elimina
 Route::get('uif/cliente_uif', 'Uif\Cliente_UifController@index')->name('consulta_cliente_uif');
 Route::get('uif/cliente_uif/crear', 'Uif\Cliente_UifController@crear')->name('crea_cliente_uif');
 Route::post('uif/cliente_uif', 'Uif\Cliente_UifController@guardar')->name('guarda_cliente_uif');
-Route::get('uif/cliente_uif/{id}/editar', 'Uif\Cliente_UifController@editar')->name('edita_cliente_uif');
+Route::get('uif/cliente_uif/{id}/editar', 'Uif\Cliente_UifController@editar')->name('edita_cliente_uif')->middleware('modo.consulta');
 Route::get('uif/cliente_uif/{id}/fotodocumento', 'Uif\Cliente_UifController@mostrarFotodocumento')->name('cliente_uif_fotodocumento');
 Route::delete('uif/cliente_uif/{id}/fotodocumento', 'Uif\Cliente_UifController@eliminarFotodocumento')->name('elimina_fotodocumento_cliente_uif');
-Route::put('uif/cliente_uif/{id}', 'Uif\Cliente_UifController@actualizar')->name('actualiza_cliente_uif');
+Route::put('uif/cliente_uif/{id}', 'Uif\Cliente_UifController@actualizar')->name('actualiza_cliente_uif')->middleware('modo.consulta');
 Route::delete('uif/cliente_uif/{id}', 'Uif\Cliente_UifController@eliminar')->name('elimina_cliente_uif');
 
 Route::get('uif/listacliente_uif/{formato?}/{busqueda?}', 'Uif\Cliente_UifController@listar')->name('lista_cliente_uif');
@@ -2500,15 +2515,15 @@ Route::get('uif/exportaoperacion/{periodo}/{limiteinformeuif}', 'Uif\Cliente_Uif
  */
 
 Route::get('uif/premio_uif', 'Uif\Cliente_Premio_UifController@index')->name('consulta_cliente_premio_uif');
-Route::get('uif/premio_uif/crear/{id}', 'Uif\Cliente_Premio_UifController@crear')->name('crea_cliente_premio_uif');
-Route::post('uif/premio_uif', 'Uif\Cliente_Premio_UifController@guardar')->name('guarda_cliente_premio_uif');
-Route::get('uif/premio_uif/{id}/editar', 'Uif\Cliente_Premio_UifController@editar')->name('edita_cliente_premio_uif');
-Route::put('uif/premio_uif/{id}', 'Uif\Cliente_Premio_UifController@actualizar')->name('actualiza_cliente_premio_uif');
-Route::delete('uif/premio_uif/{id}', 'Uif\Cliente_Premio_UifController@eliminar')->name('elimina_cliente_premio_uif');
-Route::post('uif/elimina_premio_uif', 'Uif\Cliente_Premio_UifController@eliminarExterno')->name('elimina_externo_cliente_premio_uif');
+Route::get('uif/premio_uif/crear/{id}', 'Uif\Cliente_Premio_UifController@crear')->name('crea_cliente_premio_uif')->middleware('modo.consulta');
+Route::post('uif/premio_uif', 'Uif\Cliente_Premio_UifController@guardar')->name('guarda_cliente_premio_uif')->middleware('modo.consulta');
+Route::get('uif/premio_uif/{id}/editar', 'Uif\Cliente_Premio_UifController@editar')->name('edita_cliente_premio_uif')->middleware('modo.consulta');
+Route::put('uif/premio_uif/{id}', 'Uif\Cliente_Premio_UifController@actualizar')->name('actualiza_cliente_premio_uif')->middleware('modo.consulta');
+Route::delete('uif/premio_uif/{id}', 'Uif\Cliente_Premio_UifController@eliminar')->name('elimina_cliente_premio_uif')->middleware('modo.consulta');
+Route::post('uif/elimina_premio_uif', 'Uif\Cliente_Premio_UifController@eliminarExterno')->name('elimina_externo_cliente_premio_uif')->middleware('modo.consulta');
 
-Route::get('uif/premio_uif/lista_un_premio_uif/{id}', 'Uif\Cliente_Premio_UifController@listarUnPremio')->name('lista_un_cliente_premio_uif');
-Route::get('uif/premio_uif/mostrar_foto/{id}', 'Uif\Cliente_Premio_UifController@mostrarFoto')->name('muestra_foto_cliente_premio_uif');
+Route::get('uif/premio_uif/lista_un_premio_uif/{id}', 'Uif\Cliente_Premio_UifController@listarUnPremio')->name('lista_un_cliente_premio_uif')->middleware('modo.consulta');
+Route::get('uif/premio_uif/mostrar_foto/{id}', 'Uif\Cliente_Premio_UifController@mostrarFoto')->name('muestra_foto_cliente_premio_uif')->middleware('modo.consulta');
 Route::get('uif/premio_uif/{formato?}/{busqueda?}', 'Uif\Cliente_Premio_UifController@listar')->name('lista_cliente_premio_uif');
 
 /*

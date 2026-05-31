@@ -5,10 +5,16 @@ return [
 	"LIMITE_INFORME_UIF" => 4700000,
 
 	/**
-	 * Fotos de DNI tomadas en caja / escáner. Debe coincidir con el montaje donde el sistema
-	 * legacy guarda archivos `{numerodocumento}.{ext}` (sin copiar al migrar si /scan ya está montado).
+	 * Fotos de DNI (montaje legacy). Las altas/edición graban SIEMPRE aquí salvo
+	 * FOTOS_CLIENTES_PERMITIR_FALLBACK_ESCRITURA=true (solo emergencia / desarrollo).
 	 */
 	'FOTOS_CLIENTES_PATH' => env('UIF_FOTOS_CLIENTES_PATH', '/scan/tesoreria/fotos_clientes'),
+
+	/** Solo lectura de fotos guardadas en disco local durante pruebas; no se usa para grabar por defecto. */
+	'FOTOS_CLIENTES_PATH_FALLBACK' => env('UIF_FOTOS_CLIENTES_PATH_FALLBACK', storage_path('app/uif/fotos_clientes')),
+
+	/** false = obligatorio escribir en FOTOS_CLIENTES_PATH (/scan). true = si /scan falla, usa fallback local. */
+	'FOTOS_CLIENTES_PERMITIR_FALLBACK_ESCRITURA' => env('UIF_FOTOS_CLIENTES_PERMITIR_FALLBACK_ESCRITURA', false),
 
 	/*
 	 * Importación de adjuntos desde Anita al sincronizar clientes UIF.

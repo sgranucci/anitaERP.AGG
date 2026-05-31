@@ -5,9 +5,12 @@ Proveedores
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/includes/listado-filtros.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/compras/proveedor/filtro.js")}}" type="text/javascript"></script>
 @endsection
 
-<?php use App\Helpers\biblioteca ?>
+<?php use App\Helpers\biblioteca;
+use App\Support\Compras\ProveedorListadoFiltros; ?>
 
 @section('contenido')
 <div class="row">
@@ -16,27 +19,32 @@ Proveedores
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Proveedores</h3>
-                <div class="card-tools">
+                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
                     @include('includes.compras.boton-manual')
-                    <a href="{{route('crear_proveedor')}}" class="btn btn-outline-secondary btn-sm">
-                       	@if (can('crear-proveedor', false))
-                        	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
-						@endif
-                    </a>
+                    @include('includes.listado.filtros_toolbar', [
+                        'formId' => 'form-filtros-proveedor',
+                        'filtroValor' => $filtros['valor'] ?? '',
+                        'tieneCriterios' => ProveedorListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
+                        'limpiarUrl' => route('proveedor'),
+                        'placeholder' => 'Búsqueda rápida (tolera errores de tipeo)…',
+                        'toggleTarget' => '#panel-filtros-proveedor',
+                        'toggleId' => 'btn-toggle-filtros-proveedor',
+                        'inputId' => 'filtro_valor',
+                        'nuevoRegistroUrl' => route('crear_proveedor'),
+                        'nuevoRegistroCan' => 'crear-proveedor',
+                    ])
                 </div>
-                <div class="d-md-flex justify-content-md-end">
-					<form action="{{ route('proveedor') }}" method="GET">
-						<div class="btn-group">
-							<input type="text" name="busqueda" class="form-control" placeholder="Busqueda ..."> 
-							<button type="submit" class="btn btn-default">
-								<span class="fa fa-search"></span>
-							</button>
-						</div>
-					</form>
-                </div>                
             </div>
+            <form method="get" action="{{ route('proveedor') }}" id="form-filtros-proveedor" class="mb-0">
+                @include('compras.proveedor.partials.filtros_listado', [
+                    'limpiarUrl' => route('proveedor'),
+                ])
+            </form>
             <div class="card-body table-responsive p-0">
-                @include('includes.exportar-tabla', ['ruta' => 'lista_proveedor', 'busqueda' => $busqueda])
+                @include('includes.exportar-tabla-queryparams', [
+                    'ruta' => 'lista_proveedor',
+                    'queryparams' => $filtrosQuery ?? [],
+                ])
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead>
                         <tr>
@@ -96,5 +104,5 @@ Proveedores
         </div>
     </div>
 </div>
-{{ $proveedores->appends(['busqueda' => $busqueda])->links() }}
+{{ $proveedores->appends($filtrosQuery ?? [])->links() }}
 @endsection

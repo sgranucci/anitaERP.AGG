@@ -13,7 +13,107 @@ class ClienteUifFotoDocumento
 
     public static function basePath(): string
     {
-        return rtrim(config('uif.FOTOS_CLIENTES_PATH', '/scan/tesoreria/fotos_clientes'), DIRECTORY_SEPARATOR);
+        return rtrim((string) config('uif.FOTOS_CLIENTES_PATH', '/scan/tesoreria/fotos_clientes'), DIRECTORY_SEPARATOR);
+    }
+
+    public static function fallbackPath(): string
+    {
+        return rtrim((string) config('uif.FOTOS_CLIENTES_PATH_FALLBACK', storage_path('app/uif/fotos_clientes')), DIRECTORY_SEPARATOR);
+    }
+
+    /**
+     * Comprueba que el directorio admita crear y borrar un archivo (más fiable que is_writable en NFS/montajes).
+     */
+    public static function directoryAcceptsUploads(string $dir): bool
+    {
+        if ($dir === '' || ! is_dir($dir) || ! is_writable($dir)) {
+            return false;
+        }
+
+        $probe = $dir.DIRECTORY_SEPARATOR.'.uif_upload_probe_'.uniqid('', true);
+        if (@file_put_contents($probe, '1') === false) {
+            return false;
+        }
+
+        if (! @unlink($probe)) {
+            @unlink($probe);
+        }
+
+        return true;
+    }
+
+    public static function phpProcessUser(): string
+    {
+        if (! function_exists('posix_geteuid') || ! function_exists('posix_getpwuid')) {
+            return 'php';
+        }
+
+        $info = posix_getpwuid(posix_geteuid());
+
+        return is_array($info) ? (string) ($info['name'] ?? 'php') : 'php';
+    }
+
+    public static function ensurePrimaryWritePathReady(): string
+    {
+        $path = self::basePath();
+        if ($path === '') {
+            throw new \RuntimeException('UIF_FOTOS_CLIENTES_PATH no está configurado.');
+        }
+
+        if (! is_dir($path)) {
+            File::makeDirectory($path, 0777, true, true);
+        }
+
+        if (! self::directoryAcceptsUploads($path)) {
+            throw new \RuntimeException(
+                'No se puede escribir en '.$path.' (usuario PHP: '.self::phpProcessUser().'). '
+                .'El montaje /scan debe permitir escritura a www-data (chown, ACL o opciones NFS/Samba). '
+                .'No se guardan fotos en el disco del servidor web salvo UIF_FOTOS_CLIENTES_PERMITIR_FALLBACK_ESCRITURA=true.'
+            );
+        }
+
+        return $path;
+    }
+
+    public static function ensureFallbackReady(): string
+    {
+        $fallback = self::fallbackPath();
+        if ($fallback === '') {
+            throw new \RuntimeException('No está configurada UIF_FOTOS_CLIENTES_PATH_FALLBACK.');
+        }
+
+        if (! is_dir($fallback)) {
+            File::makeDirectory($fallback, 0755, true, true);
+        }
+
+        if (! self::directoryAcceptsUploads($fallback)) {
+            throw new \RuntimeException('No se puede escribir en el directorio de respaldo: '.$fallback);
+        }
+
+        return $fallback;
+    }
+
+    /**
+     * Directorio de grabación: siempre {@see basePath()} (/scan) salvo fallback explícito en config.
+     */
+    public static function writableBasePath(): string
+    {
+        return self::ensurePrimaryWritePathReady();
+    }
+
+    /**
+     * Rutas donde buscar fotos ya existentes (montaje + fallback + legacy).
+     *
+     * @return array<int, string>
+     */
+    public static function storagePathsForRead(): array
+    {
+        $paths = array_filter([
+            self::basePath(),
+            self::fallbackPath(),
+        ]);
+
+        return array_values(array_unique($paths));
     }
 
     /**
@@ -47,10 +147,71 @@ class ClienteUifFotoDocumento
 
     public static function ensureDirectoryExists(): void
     {
-        $path = self::basePath();
-        if ($path !== '' && ! is_dir($path)) {
-            File::makeDirectory($path, 0755, true);
+        self::writableBasePath();
+    }
+
+    public static function legacyPublicDir(): string
+    {
+        return public_path('storage'.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, self::LEGACY_PUBLIC_SUBDIR));
+    }
+
+    public static function legacyStoragePublicDir(): string
+    {
+        return storage_path('app/public'.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, self::LEGACY_PUBLIC_SUBDIR));
+    }
+
+    /**
+     * Prefijos de nombre usados al migrar desde Anita (ej. `1-171784` además de `171784`).
+     *
+     * @return array<int, string>
+     */
+    public static function legacyBasenameStems(?int $inroclienteid, string $numerodocumento): array
+    {
+        $stem = self::sanitizeNumeroDocumento($numerodocumento);
+        if ($stem === '') {
+            return [];
         }
+        $stems = [$stem];
+        if ($inroclienteid !== null && $inroclienteid > 0) {
+            $stems[] = $inroclienteid.'-'.$stem;
+        }
+
+        return array_values(array_unique($stems));
+    }
+
+    /**
+     * @param  array<int, string>  $stems
+     */
+    public static function findFirstFileByStemGlob(string $dir, array $stems): ?string
+    {
+        if ($dir === '' || ! is_dir($dir)) {
+            return null;
+        }
+        foreach ($stems as $stem) {
+            foreach (glob($dir.DIRECTORY_SEPARATOR.$stem.'.*', GLOB_NOSORT) ?: [] as $path) {
+                if (is_file($path)) {
+                    return $path;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Resuelve la ruta absoluta de la foto DNI usando el basename en BD y, si falla,
+     * el mismo criterio de búsqueda que la sincronización desde Anita.
+     */
+    public static function absolutePathForCliente(?string $fotodocumento, string $numerodocumento, ?int $inroclienteid = null): ?string
+    {
+        if ($fotodocumento !== null && $fotodocumento !== '') {
+            $path = self::absolutePathForBasename($fotodocumento);
+            if ($path !== null) {
+                return $path;
+            }
+        }
+
+        return self::findFirstMatchingPath($numerodocumento, $inroclienteid);
     }
 
     /**
@@ -59,14 +220,64 @@ class ClienteUifFotoDocumento
      */
     public static function storeUploadedFile(UploadedFile $file, string $numerodocumento, ?string $previousBasename = null): string
     {
-        self::ensureDirectoryExists();
         $basename = self::buildFilenameForUpload($file, $numerodocumento);
         if ($previousBasename !== null && $previousBasename !== '' && basename($previousBasename) !== $basename) {
             self::deleteStoredFile($previousBasename);
         }
-        $file->move(self::basePath(), $basename);
 
-        return $basename;
+        $primary = self::ensurePrimaryWritePathReady();
+        $saved = self::persistUploadToDirectory($file, $primary, $basename);
+        if ($saved) {
+            return $basename;
+        }
+
+        if (config('uif.FOTOS_CLIENTES_PERMITIR_FALLBACK_ESCRITURA')) {
+            $fallback = self::ensureFallbackReady();
+            if (self::persistUploadToDirectory($file, $fallback, $basename)) {
+                return $basename;
+            }
+        }
+
+        throw new \RuntimeException(
+            'No se pudo guardar la foto del DNI en '.$primary
+            .' (usuario PHP: '.self::phpProcessUser().'). '
+            .'Revise permisos de escritura en el montaje /scan para www-data.'
+        );
+    }
+
+    /**
+     * Guarda el upload en $dir usando move_uploaded_file (preferido) o copy.
+     */
+    public static function persistUploadToDirectory(UploadedFile $file, string $dir, string $basename): bool
+    {
+        $dest = $dir.DIRECTORY_SEPARATOR.$basename;
+        $tmp = $file->getPathname();
+
+        if ($tmp !== '' && is_uploaded_file($tmp) && @move_uploaded_file($tmp, $dest)) {
+            @chmod($dest, 0664);
+
+            return true;
+        }
+
+        $src = $file->getRealPath();
+        if ($src !== false && is_readable($src) && @copy($src, $dest)) {
+            @chmod($dest, 0664);
+
+            return true;
+        }
+
+        try {
+            $moved = $file->move($dir, $basename);
+            if ($moved->isFile()) {
+                @chmod($dest, 0664);
+
+                return true;
+            }
+        } catch (\Throwable $e) {
+            // Sin fallback silencioso: el llamador informa error sobre /scan
+        }
+
+        return false;
     }
 
     public static function absolutePathForBasename(?string $fotodocumento): ?string
@@ -75,9 +286,11 @@ class ClienteUifFotoDocumento
             return null;
         }
         $base = basename($fotodocumento);
-        $primary = self::basePath().DIRECTORY_SEPARATOR.$base;
-        if (is_file($primary)) {
-            return $primary;
+        foreach (self::storagePathsForRead() as $dir) {
+            $candidate = $dir.DIRECTORY_SEPARATOR.$base;
+            if (is_file($candidate)) {
+                return $candidate;
+            }
         }
         $legacy = public_path('storage'.DIRECTORY_SEPARATOR.self::LEGACY_PUBLIC_SUBDIR.DIRECTORY_SEPARATOR.$base);
         if (is_file($legacy)) {
@@ -112,13 +325,15 @@ class ClienteUifFotoDocumento
             return;
         }
         $base = basename($fotodocumento);
-        foreach ([
-            self::basePath().DIRECTORY_SEPARATOR.$base,
-            public_path('storage'.DIRECTORY_SEPARATOR.self::LEGACY_PUBLIC_SUBDIR.DIRECTORY_SEPARATOR.$base),
-        ] as $p) {
+        foreach (self::storagePathsForRead() as $dir) {
+            $p = $dir.DIRECTORY_SEPARATOR.$base;
             if (is_file($p)) {
                 @unlink($p);
             }
+        }
+        $legacy = public_path('storage'.DIRECTORY_SEPARATOR.self::LEGACY_PUBLIC_SUBDIR.DIRECTORY_SEPARATOR.$base);
+        if (is_file($legacy)) {
+            @unlink($legacy);
         }
     }
 
@@ -134,8 +349,10 @@ class ClienteUifFotoDocumento
             return null;
         }
 
-        $dir = self::basePath();
-        if ($dir !== '' && is_dir($dir)) {
+        foreach (self::storagePathsForRead() as $dir) {
+            if ($dir === '' || ! is_dir($dir)) {
+                continue;
+            }
             foreach (glob($dir.DIRECTORY_SEPARATOR.$stem.'.*') ?: [] as $path) {
                 if (is_file($path)) {
                     return $path;
@@ -151,6 +368,15 @@ class ClienteUifFotoDocumento
                 }
             }
         }
+
+        $legacyStems = self::legacyBasenameStems($inroclienteid, $numerodocumento);
+        foreach ([self::legacyPublicDir(), self::legacyStoragePublicDir()] as $legacyDir) {
+            $legacyPath = self::findFirstFileByStemGlob($legacyDir, $legacyStems);
+            if ($legacyPath !== null) {
+                return $legacyPath;
+            }
+        }
+
         if ($dniMount !== '' && $inroclienteid !== null && $inroclienteid > 0) {
             foreach (AnitaUifArchivosSync::directoriosCandidatosCliente($dniMount, $inroclienteid) as $sub) {
                 if (! is_dir($sub)) {
@@ -321,7 +547,7 @@ class ClienteUifFotoDocumento
 
         self::ensureDirectoryExists();
         $destName = $stem.'.'.$ext;
-        $destPath = self::basePath().DIRECTORY_SEPARATOR.$destName;
+        $destPath = self::writableBasePath().DIRECTORY_SEPARATOR.$destName;
         if (! @copy($pick['src'], $destPath)) {
             return null;
         }
@@ -376,7 +602,7 @@ class ClienteUifFotoDocumento
         }
         $ext = pathinfo($oldPath, PATHINFO_EXTENSION);
         $newName = $newStem.'.'.$ext;
-        $newPath = self::basePath().DIRECTORY_SEPARATOR.$newName;
+        $newPath = self::writableBasePath().DIRECTORY_SEPARATOR.$newName;
         if (is_file($newPath)) {
             return null;
         }

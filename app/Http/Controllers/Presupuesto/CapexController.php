@@ -15,6 +15,7 @@ use App\Services\Compras\OrdencompraService;
 use App\Models\Presupuesto\Capex_Estado;
 use App\Models\Presupuesto\Capex;
 use App\Queries\Presupuesto\CapexQueryInterface;
+use App\Support\Presupuesto\CapexListadoFiltros;
 use App\Exports\Presupuesto\CapexExport;
 use App\Exports\Presupuesto\CapexOrdenCompraExport;
 use Illuminate\Http\Request;
@@ -72,14 +73,19 @@ class CapexController extends Controller
         if (!$hay_capex)
 			$this->capexService->sincronizarConAnita();
 
-        $busqueda = $request->busqueda;
+        $filtros = CapexListadoFiltros::resolverDesdeRequest($request);
 
-        $capex = $this->capexQuery->leeCapex($busqueda, true);
+        $capex = $this->capexQuery->leeCapex($filtros, true);
         $estado_enum = Capex_Estado::$enumEstado;
-        $datas = ['capex' => $capex, 'busqueda' => $busqueda, 
-                    'estado_enum' => $estado_enum];
 
-        return view('presupuesto.capex.index', $datas);
+        return view('presupuesto.capex.index', [
+            'capex' => $capex,
+            'busqueda' => $filtros['busqueda'],
+            'filtros' => $filtros,
+            'filtrosQuery' => CapexListadoFiltros::paraQueryString($filtros),
+            'camposFiltro' => CapexListadoFiltros::CAMPOS,
+            'estado_enum' => $estado_enum,
+        ]);
     }
 
     public function listar(Request $request, $formato = null, $busqueda = null)
@@ -89,10 +95,12 @@ class CapexController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
+        $filtros = CapexListadoFiltros::resolverDesdeRequest($request, $busqueda);
+
         switch($formato)
         {
         case 'PDF':
-            $capex = $this->capexQuery->leeCapex($busqueda, false);
+            $capex = $this->capexQuery->leeCapex($filtros, false);
 
             $view =  \View::make('presupuesto.capex.listado', compact('capex'))
                         ->render();
@@ -108,20 +116,18 @@ class CapexController extends Controller
 
         case 'EXCEL':
             return (new CapexExport($this->capexQuery))
-                        ->parametros($busqueda)
+                        ->parametros($filtros)
                         ->download('capex.xlsx');
             break;
 
         case 'CSV':
             return (new CapexExport($this->capexQuery))
-                        ->parametros($busqueda)
+                        ->parametros($filtros)
                         ->download('capex.csv', \Maatwebsite\Excel\Excel::CSV);
             break;            
         }   
 
-        $datas = ['capex' => $capex, 'busqueda' => $busqueda];
-
-		return view('presupuesto.capex.index', $datas);       
+        return redirect()->route('consultar_capex', CapexListadoFiltros::paraQueryString($filtros));
     }
 
     /**

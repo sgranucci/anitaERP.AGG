@@ -119,7 +119,7 @@ final class GastronomiaTicketCanjePremioService
             $clienteInternoId = (int) $cliente->id;
         }
 
-        DB::transaction(function () use ($cuenta, $validacion, $descuento, $cliente, $clienteInternoId) {
+        DB::transaction(function () use ($cuenta, $validacion, $descuento, $clienteInternoId) {
             foreach ($validacion['items'] as $item) {
                 $this->cuentaService->agregarLinea(
                     $cuenta->fresh(['lineas']),
@@ -131,7 +131,6 @@ final class GastronomiaTicketCanjePremioService
 
             $this->cuentaService->actualizarCabecera($cuenta->fresh(), [
                 'descuento_gastronomia_id' => $descuento->id,
-                'cliente_id' => $cliente->id,
                 'cliente_interno_descuento_id' => $clienteInternoId,
             ]);
 

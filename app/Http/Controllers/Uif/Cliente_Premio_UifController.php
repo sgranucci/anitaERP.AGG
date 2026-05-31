@@ -359,7 +359,11 @@ class Cliente_Premio_UifController extends Controller
         }
 
         $fotodocumentoPath = ($cliente && ($cliente->fotodocumento ?? '') !== '')
-            ? ClienteUifFotoDocumento::absolutePathForBasename($cliente->fotodocumento)
+            ? ClienteUifFotoDocumento::absolutePathForCliente(
+                $cliente->fotodocumento,
+                (string) $cliente->numerodocumento,
+                $cliente->inroclienteid !== null ? (int) $cliente->inroclienteid : null
+            )
             : null;
 
         $path = storage_path('pdf/cliente_premio_uif');
@@ -423,7 +427,15 @@ class Cliente_Premio_UifController extends Controller
         if ($tabCliente !== null && $cliente_uif_id && is_numeric($tabCliente)) {
             $t = (int) $tabCliente;
             if ($t >= 1 && $t <= 5) {
-                return route('edita_cliente_uif', ['id' => $cliente_uif_id]).'?uif_tab='.$t;
+                $params = ['uif_tab' => $t];
+                if ($request->query('origen') === 'modal_consulta') {
+                    $params['origen'] = 'modal_consulta';
+                }
+                if ($request->input('vista') === 'consulta') {
+                    $params['vista'] = 'consulta';
+                }
+
+                return route('edita_cliente_uif', ['id' => $cliente_uif_id]).'?'.http_build_query($params);
             }
         }
 

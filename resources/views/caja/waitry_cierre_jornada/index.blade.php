@@ -107,9 +107,35 @@
                         <span class="badge badge-danger mr-1">Sin factura: {{ $resumen['sin_factura_anita'] ?? 0 }}</span>
                         <span class="badge badge-warning mr-1">Importadas pendientes: {{ $resumen['importadas_pendientes'] ?? 0 }}</span>
                         <span class="badge badge-info mr-1">Monto distinto: {{ $resumen['monto_distinto'] ?? 0 }}</span>
+                        <span class="badge badge-primary mr-1">Medio distinto: {{ $resumen['medio_distinto'] ?? 0 }}</span>
                         <span class="badge badge-secondary mr-1">Solo Anita: {{ $resumen['solo_anita'] ?? 0 }}</span>
                         <span class="badge badge-dark">Otra jornada Anita: {{ $resumen['jornada_distinta'] ?? 0 }}</span>
                     </div>
+
+                    @if (! empty($resumen['por_medio_waitry']))
+                        <div class="table-responsive mb-3">
+                            <table class="table table-sm table-bordered mb-0">
+                                <thead class="thead-light">
+                                    <tr>
+                                        <th>Medio Waitry</th>
+                                        <th>Cuenta caja esperada</th>
+                                        <th class="text-right">Cantidad</th>
+                                        <th class="text-right">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach ($resumen['por_medio_waitry'] as $medio)
+                                        <tr>
+                                            <td>{{ $medio['etiqueta'] ?? '—' }}</td>
+                                            <td>{{ $medio['cuentacaja_label'] ?? '—' }}</td>
+                                            <td class="text-right">{{ (int) ($medio['cantidad'] ?? 0) }}</td>
+                                            <td class="text-right">${{ number_format((float) ($medio['total'] ?? 0), 2, ',', '.') }}</td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @endif
 
                     @php
                         $exportQuery = http_build_query([
@@ -140,7 +166,9 @@
                                     <th>Pagada W.</th>
                                     <th>Venta Anita</th>
                                     <th class="text-right">Total Anita</th>
-                                    <th>TOTEM</th>
+                                    <th>Medio Waitry</th>
+                                    <th>Cta. caja esp.</th>
+                                    <th>Cta. caja Anita</th>
                                     <th class="text-right">Diferencia</th>
                                     <th>Estado</th>
                                 </tr>
@@ -151,6 +179,7 @@
                                         $estadoClass = match ($fila['estado']) {
                                             'conciliada' => 'success',
                                             'monto_distinto' => 'info',
+                                            'medio_distinto' => 'primary',
                                             'importada_pendiente' => 'warning',
                                             'sin_factura_anita' => 'danger',
                                             'jornada_distinta', 'jornada_distinta_monto' => 'dark',
@@ -192,12 +221,16 @@
                                             @endif
                                         </td>
                                         <td>
-                                            @if ($fila['anita_totem'])
+                                            @if (! empty($fila['waitry_medio_label']) && $fila['waitry_medio_label'] !== '—')
+                                                <span class="badge badge-light">{{ $fila['waitry_medio_label'] }}</span>
+                                            @elseif ($fila['anita_totem'])
                                                 <span class="badge badge-primary">TOTEM</span>
                                             @else
                                                 —
                                             @endif
                                         </td>
+                                        <td>{{ $fila['cuentacaja_esperada_label'] ?? '—' }}</td>
+                                        <td>{{ $fila['anita_cuentacaja_label'] ?? '—' }}</td>
                                         <td class="text-right">
                                             @if ($fila['diferencia'] !== null)
                                                 ${{ number_format((float) $fila['diferencia'], 2, ',', '.') }}
@@ -209,7 +242,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="10" class="text-center text-muted">Sin órdenes Waitry ni ventas Anita para esta jornada.</td>
+                                        <td colspan="12" class="text-center text-muted">Sin órdenes Waitry ni ventas Anita para esta jornada.</td>
                                     </tr>
                                 @endforelse
                             </tbody>

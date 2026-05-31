@@ -21,9 +21,9 @@
         					@endforeach
         				</select>
 						<span class="input-group-text">#</span>
-						<input type="text" name="numerodocumento" id="numerodocumento" class="col-lg-3 form-control" placeholder="Nro. de documento" aria-label="Número" value="{{ old('numerodocumento', $data->numerodocumento ?? '') }}">
+						<input type="text" name="numerodocumento" id="numerodocumento" class="col-lg-3 form-control" placeholder="Nro. de documento" aria-label="Número" maxlength="13" value="{{ old('numerodocumento', $data->numerodocumento ?? '') }}" required>
 						<span class="input-group-text">CUIT</span>
-						<input type="text" name="cuit" id="cuit" class="col-lg-3 form-control" placeholder="CUIT" aria-label="CUIT" value="{{$data->cuit??''}}">
+						<input type="text" name="cuit" id="cuit" class="col-lg-3 form-control" placeholder="XX-XXXXXXXX-X" aria-label="CUIT" maxlength="13" value="{{ old('cuit', $data->cuit ?? '') }}" oninput="typeof formatarCUIT === 'function' && formatarCUIT(this)">
 					</div>
 				</div>
 			</div>
@@ -78,8 +78,8 @@
 				</div>
 				<div class="col-md-6">
 					<div class="form-group row">
-						<label for="actividad_uif" class="col-lg-3 col-form-label">Actividad</label>
-						<input type="text" class="col-lg-1" id="actividad_uif_id" name="actividad_uif_id" value="{{$data->actividad_uif_id??''}}" >
+						<label for="actividad_uif" class="col-lg-3 col-form-label requerido">Actividad</label>
+						<input type="text" class="col-lg-1" id="actividad_uif_id" name="actividad_uif_id" value="{{$data->actividad_uif_id??''}}" required>
 						<button type="button" title="Consulta actividades" style="padding:1;" class="btn-accion-tabla consultaactividad_uif tooltipsC">
 								<i class="fa fa-search text-primary"></i>
 						</button>
@@ -163,8 +163,8 @@
         	<div class="row mt-0">
         		<div class="col-md-3">
         			<div class="form-group">
-        				<label class="requerido">País</label>
-        				<select name="pais_uif_id" id="pais_uif_id" data-placeholder="País" class="form-control required" data-fouc>
+        				<label class="requerido">País de residencia</label>
+        				<select name="pais_uif_id" id="pais_uif_id" data-placeholder="País de residencia" class="form-control required" data-fouc>
         					<option value="">-- Seleccionar --</option>
         					@foreach($pais_uif_query as $key => $value)
         						@if( (int) $value->id == (int) old('pais_uif_id', $data->pais_uif_id ?? ''))
@@ -178,8 +178,8 @@
         		</div>
         		<div class="col-md-3" id='prov'>
         			<div class="form-group">
-        				<label class="requerido">Provincia</label>
-        				<select name="provincia_uif_id" id="provincia_uif_id" data-placeholder="Provincia" class="form-control required" data-fouc>
+        				<label class="requerido">Provincia de residencia</label>
+        				<select name="provincia_uif_id" id="provincia_uif_id" data-placeholder="Provincia de residencia" class="form-control required" data-fouc>
         					<option value="">-- Seleccionar --</option>
         					@foreach($provincia_uif_query as $key => $value)
         						@if( (int) $value->id == (int) old('provincia_uif_id', $data->provincia_uif_id ?? ''))
@@ -194,8 +194,9 @@
         		</div>
         		<div class="col-md-3" id='loc'>
         			<div class="form-group">
-        				<label>Localidad</label>
-        				<select name="localidad_uif_id" id='localidad_uif_id' data-placeholder="Localidad" class="form-control" data-fouc>
+        				<label class="requerido">Localidad de residencia</label>
+        				<select name="localidad_uif_id" id='localidad_uif_id' data-placeholder="Localidad de residencia" class="form-control required" data-fouc>
+        					<option value="">-- Seleccionar --</option>
         					@if($data->localidad_uif_id ?? '')
 								@if($data->localidad_uif_id == "")
         							<option selected></option>

@@ -10,6 +10,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Ventas\ConfiguracionPuntoventaGastronomiaRepositoryInterface;
 use App\Services\Ventas\Gastronomia\GastronomiaCategoriafidelidadCanjeService;
 use App\Services\Ventas\Gastronomia\GastronomiaCuentaService;
+use App\Services\Ventas\Gastronomia\GastronomiaJornadaService;
 use App\Services\Ventas\Gastronomia\GastronomiaTicketCanjePremioService;
 use App\Services\Ventas\Gastronomia\GastronomiaTicketTarjetaCanjeService;
 use App\Services\Ventas\Gastronomia\GastronomiaTurnoOperativoService;
@@ -28,6 +29,7 @@ class CierreTurnoGastronomiaController extends Controller
         private GastronomiaCierreTurnoReporteSupport $reporteSupport,
         private EmpresaRepositoryInterface $empresaRepository,
         private GastronomiaCuentaService $cuentaService,
+        private GastronomiaJornadaService $jornadaService,
         private GastronomiaTurnoOperativoService $turnoOperativoService,
         private GastronomiaTicketCanjePremioService $ticketCanjePremioService,
         private GastronomiaTicketTarjetaCanjeService $ticketTarjetaCanjeService,
@@ -79,6 +81,13 @@ class CierreTurnoGastronomiaController extends Controller
         $request->merge($filtros);
         $filas = $this->reporteSupport->listadoDesdeRequest($request);
 
+        $empresaIdJornada = $empresaId > 0
+            ? $empresaId
+            : (int) ($cfg?->empresa_id ?? 0);
+        $jornada = $empresaIdJornada > 0
+            ? $this->jornadaService->estadoParaEmpresa($empresaIdJornada)
+            : null;
+
         return view('ventas.gastronomia.cierres_turno.index', [
             'filas' => $filas,
             'filtros' => $filtros,
@@ -86,6 +95,8 @@ class CierreTurnoGastronomiaController extends Controller
             'pc_query' => $pcQuery,
             'identificador_pc_default' => $identificadorPc,
             'turno_operativo' => $turnoOperativo,
+            'jornada' => $jornada,
+            'empresa_id_jornada' => $empresaIdJornada,
             'requiere_habilitacion_turno' => GastronomiaTurnoOperativoService::requiereHabilitacionTurno(),
             'puede_ver_comprobante' => can('ver-comprobante-cierre-turno-gastronomia', false),
             'puede_ver_factura' => can('ver-factura-gastronomia', false),

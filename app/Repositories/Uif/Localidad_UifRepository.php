@@ -2,6 +2,7 @@
 
 namespace App\Repositories\Uif;
 
+use App\Models\Uif\Cliente_Uif;
 use App\Models\Uif\Localidad_Uif;
 use App\Repositories\Uif\Localidad_UifRepositoryInterface;
 use App\Repositories\Uif\Provincia_UifRepositoryInterface;
@@ -96,24 +97,101 @@ class Localidad_UifRepository implements Localidad_UifRepositoryInterface
         return $cp[0]->codigopostal;
     }    
 
-    public function sincronizarConAnita(){
+    public function sincronizarConAnita()
+    {
         $apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'list', 
-                    'sistema' => 'base_admin',
-					'campos' => $this->keyFieldAnita, 
-					'orderBy' => $this->keyFieldAnita, 
-					'tabla' => $this->table );
+        $data = ['acc' => 'list',
+            'sistema' => 'base_admin',
+            'campos' => $this->keyFieldAnita,
+            'orderBy' => $this->keyFieldAnita,
+            'tabla' => $this->table];
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
+        if (! is_array($dataAnita)) {
+            return;
+        }
+
+        $codigosLocales = $this->model->newQuery()->pluck('codigo')->map(fn ($c) => (string) $c)->all();
+
         foreach ($dataAnita as $value) {
-            $this->traerRegistroDeAnita($value->{$this->keyFieldAnita});
+            $codigo = (string) $value->{$this->keyFieldAnita};
+            if (! in_array($codigo, $codigosLocales, true)) {
+                $this->traerRegistroDeAnita($codigo);
+            }
         }
     }
 
-    public function traerRegistroDeAnita($key){
+    /**
+     * @return array{insertados: int, actualizados: int, eliminados: int, omitidos_con_clientes: int}
+     */
+    public function resincronizarConAnita(): array
+    {
         $apiAnita = new ApiAnita();
-        $data = array( 
-            'acc' => 'list', 'tabla' => $this->table, 
+        $data = ['acc' => 'list',
+            'sistema' => 'base_admin',
+            'campos' => $this->keyFieldAnita,
+            'orderBy' => $this->keyFieldAnita,
+            'tabla' => $this->table];
+        $dataAnita = json_decode($apiAnita->apiCall($data));
+
+        $stats = [
+            'insertados' => 0,
+            'actualizados' => 0,
+            'eliminados' => 0,
+            'omitidos_con_clientes' => 0,
+        ];
+
+        if (! is_array($dataAnita)) {
+            return $stats;
+        }
+
+        $codigosAnita = [];
+        foreach ($dataAnita as $value) {
+            $codigo = (string) $value->{$this->keyFieldAnita};
+            $codigosAnita[] = $codigo;
+            $resultado = $this->traerRegistroDeAnita($codigo);
+            if ($resultado === 'insertado') {
+                $stats['insertados']++;
+            } elseif ($resultado === 'actualizado') {
+                $stats['actualizados']++;
+            }
+        }
+
+        $codigosAnita = array_flip($codigosAnita);
+        $obsoletas = $this->model->newQuery()->get(['id', 'codigo']);
+
+        foreach ($obsoletas as $localidad) {
+            $codigo = (string) $localidad->codigo;
+            if (isset($codigosAnita[$codigo])) {
+                continue;
+            }
+
+            $tieneClientes = Cliente_Uif::query()
+                ->where('localidad_uif_id', $localidad->id)
+                ->orWhere('localidadnacimiento_id', $localidad->id)
+                ->exists();
+
+            if ($tieneClientes) {
+                $stats['omitidos_con_clientes']++;
+
+                continue;
+            }
+
+            $this->model->newQuery()->whereKey($localidad->id)->delete();
+            $stats['eliminados']++;
+        }
+
+        return $stats;
+    }
+
+    /**
+     * @return 'insertado'|'actualizado'|null
+     */
+    public function traerRegistroDeAnita($key)
+    {
+        $apiAnita = new ApiAnita();
+        $data = [
+            'acc' => 'list', 'tabla' => $this->table,
             'sistema' => 'base_admin',
             'campos' => '
                 loc_localidad,
@@ -122,31 +200,42 @@ class Localidad_UifRepository implements Localidad_UifRepositoryInterface
 				loc_partido,
 				loc_provincia,
 				loc_cod_part
-            ' , 
-            'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
-        );
+            ',
+            'whereArmado' => ' WHERE '.$this->keyFieldAnita." = '".$key."' ",
+        ];
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
-        if (count($dataAnita) > 0)
-        {
+        if (count($dataAnita) > 0) {
             $data = $dataAnita[0];
 
-            // Lee la provincia */
-            if ($data->loc_provincia == 2)
+            if ($data->loc_provincia == 2) {
                 $provincia_uif_id = 2;
-            else
-                if ($data->loc_provincia == 1)
-                    $provincia_uif_id = 1;
-                else    
-                    $provincia_uif_id = NULL;
+            } elseif ($data->loc_provincia == 1) {
+                $provincia_uif_id = 1;
+            } else {
+                $provincia_uif_id = null;
+            }
 
-            $this->model->create([
-                "nombre" => $data->loc_desc,
-                "codigopostal" => $data->loc_cod_postal,
-                "codigo" => $data->loc_localidad,
-                "provincia_uif_id" => $provincia_uif_id
-            ]);
+            $payload = [
+                'nombre' => $data->loc_desc,
+                'codigopostal' => $data->loc_cod_postal,
+                'codigo' => (string) $data->loc_localidad,
+                'provincia_uif_id' => $provincia_uif_id,
+            ];
+
+            $existente = $this->model->newQuery()->where('codigo', $payload['codigo'])->first();
+            if ($existente !== null) {
+                $existente->update($payload);
+
+                return 'actualizado';
+            }
+
+            $this->model->create($payload);
+
+            return 'insertado';
         }
+
+        return null;
     }
 
     public function leeLocalidad_Uif($consulta, $localidad_uif_id = null)

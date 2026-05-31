@@ -158,6 +158,19 @@
                                                 <i class="fa fa-eye text-info"></i>
                                             </button>
                                         @endif
+                                        @if (($puedeGrabarAnita ?? false) && $r->estaAutorizado())
+                                            <form method="post"
+                                                action="{{ route('arca_caea_grabar_anita', $r->id) }}"
+                                                class="d-inline"
+                                                onsubmit="return confirm('¿Grabar este CAEA en Anita (Informix)?');">
+                                                @csrf
+                                                <button type="submit"
+                                                    class="btn-accion-tabla tooltipsC"
+                                                    title="Grabar en Anita">
+                                                    <i class="fa fa-database text-success"></i>
+                                                </button>
+                                            </form>
+                                        @endif
                                     </td>
                                 </tr>
                             @empty

@@ -5,6 +5,8 @@
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/includes/listado-filtros.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/presupuesto/capex/filtro.js")}}" type="text/javascript"></script>
 
 <script>
     function eliminarCapex(event) {
@@ -17,7 +19,8 @@
 
 @endsection
 
-<?php use App\Helpers\biblioteca ?>
+<?php use App\Helpers\biblioteca;
+use App\Support\Presupuesto\CapexListadoFiltros; ?>
 
 @section('contenido')
 <div class="row">
@@ -26,26 +29,31 @@
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Capex</h3>
-                <div class="card-tools">
-                    <a href="{{route('crear_capex')}}" class="btn btn-outline-secondary btn-sm">
-                       	@if (can('crear-capex', false))
-                        	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
-						@endif
-                    </a>
-                </div>
-                <div class="d-md-flex justify-content-md-end">
-					<form action="{{ route('consultar_capex') }}" method="GET">
-						<div class="btn-group">
-							<input type="text" name="busqueda" class="form-control" placeholder="Busqueda ..."> 
-							<button type="submit" class="btn btn-default">
-								<span class="fa fa-search"></span>
-							</button>
-						</div>
-					</form>
+                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @include('includes.listado.filtros_toolbar', [
+                        'formId' => 'form-filtros-capex',
+                        'filtroValor' => $filtros['valor'] ?? '',
+                        'tieneCriterios' => CapexListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
+                        'limpiarUrl' => route('consultar_capex'),
+                        'placeholder' => 'Búsqueda rápida (tolera errores de tipeo)…',
+                        'toggleTarget' => '#panel-filtros-capex',
+                        'toggleId' => 'btn-toggle-filtros-capex',
+                        'inputId' => 'filtro_valor',
+                        'nuevoRegistroUrl' => route('crear_capex'),
+                        'nuevoRegistroCan' => 'crear-capex',
+                    ])
                 </div>
             </div>
+            <form method="get" action="{{ route('consultar_capex') }}" id="form-filtros-capex" class="mb-0">
+                @include('presupuesto.capex.partials.filtros_listado', [
+                    'limpiarUrl' => route('consultar_capex'),
+                ])
+            </form>
             <div class="card-body table-responsive p-0">
-                @include('includes.exportar-tabla', ['ruta' => 'lista_capex', 'busqueda' => $busqueda])
+                @include('includes.exportar-tabla-queryparams', [
+                    'ruta' => 'lista_capex',
+                    'queryparams' => $filtrosQuery ?? [],
+                ])
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead>
                         <tr>
@@ -110,5 +118,5 @@
         </div>
     </div>
 </div>
-{{ $capex->appends(['busqueda' => $busqueda])->links() }}
+{{ $capex->appends($filtrosQuery ?? [])->links() }}
 @endsection

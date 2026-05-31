@@ -47,6 +47,7 @@ use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Mail\Compras\ProveedorProvisorio;
 use App\Exports\Compras\ProveedorExport;
+use App\Support\Compras\ProveedorListadoFiltros;
 use App\Exports\Compras\Proveedor_CuentacorrienteExport;
 use Carbon\Carbon;
 use Mail;
@@ -168,13 +169,17 @@ class ProveedorController extends Controller
 			$this->proveedor_archivoRepository->sincronizarConAnita();
 		}
 
-        $busqueda = $request->busqueda;
+        $filtros = ProveedorListadoFiltros::resolverDesdeRequest($request);
 
-        $proveedores = $this->proveedorRepository->leeProveedor($busqueda, true);
+        $proveedores = $this->proveedorRepository->leeProveedor($filtros, true);
 
-        $datas = ['proveedores' => $proveedores, 'busqueda' => $busqueda];
-
-        return view('compras.proveedor.index', $datas);
+        return view('compras.proveedor.index', [
+            'proveedores' => $proveedores,
+            'busqueda' => $filtros['busqueda'],
+            'filtros' => $filtros,
+            'filtrosQuery' => ProveedorListadoFiltros::paraQueryString($filtros),
+            'camposFiltro' => ProveedorListadoFiltros::CAMPOS,
+        ]);
     }
 
     public function listar(Request $request, $formato = null, $busqueda = null)
@@ -184,10 +189,12 @@ class ProveedorController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
+        $filtros = ProveedorListadoFiltros::resolverDesdeRequest($request, $busqueda);
+
         switch($formato)
         {
         case 'PDF':
-            $proveedores = $this->proveedorRepository->leeProveedor($busqueda, false);
+            $proveedores = $this->proveedorRepository->leeProveedor($filtros, false);
 
             $view =  \View::make('compras.proveedor.listado', compact('proveedores'))
                         ->render();
@@ -203,20 +210,18 @@ class ProveedorController extends Controller
 
         case 'EXCEL':
             return (new ProveedorExport($this->proveedorRepository))
-                        ->parametros($busqueda)
+                        ->parametros($filtros)
                         ->download('proveedor.xlsx');
             break;
 
         case 'CSV':
             return (new ProveedorExport($this->proveedorRepository))
-                        ->parametros($busqueda)
+                        ->parametros($filtros)
                         ->download('proveedor.csv', \Maatwebsite\Excel\Excel::CSV);
             break;            
         }   
 
-        $datas = ['proveedores' => $proveedor, 'busqueda' => $busqueda];
-
-		return view('compras.proveedor.index', $datas);       
+        return redirect()->route('proveedor', ProveedorListadoFiltros::paraQueryString($filtros));
     }
 
     /**

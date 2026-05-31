@@ -87,7 +87,85 @@ final class GastronomiaTurnoSaneamientoService
                 'fecha_jornada_fmt' => $jornada->fecha_jornada?->format('d/m/Y') ?? $fechaJornada,
             ],
             'requiere_habilitacion_turno' => GastronomiaTurnoOperativoService::requiereHabilitacionTurno(),
+            'turnos_habilitados_remoto' => $this->turnoOperativoService->listarTurnosHabilitadosParaCierreRemoto(
+                $empresaId,
+                $jornada,
+            ),
             'terminales' => $terminales,
+        ];
+    }
+
+    /**
+     * Cierra un turno habilitado en otra terminal (PC inoperativa, cierre de jornada, etc.).
+     *
+     * @return array{mensaje:string, turno_operativo_id:int, url_comprobante_pdf:string}
+     */
+    public function cerrarTurnoRemoto(
+        int $turnoOperativoId,
+        string $pcOperador,
+        ?string $observacion = null,
+        ?float $redondeoInvitaciones = null,
+        ?float $redondeoTurno = null,
+        ?float $sobranteFaltante = null,
+    ): array {
+        if (! GastronomiaTurnoOperativoService::requiereHabilitacionTurno()) {
+            throw new InvalidArgumentException('La habilitación de turno no está activa en configuración.');
+        }
+
+        $pcOperador = trim($pcOperador);
+        if ($pcOperador === '') {
+            throw new InvalidArgumentException('Indique la terminal desde la que opera el cierre remoto.');
+        }
+
+        $turno = TurnoOperativoGastronomia::query()
+            ->with(['jornada', 'turno'])
+            ->find($turnoOperativoId);
+
+        if ($turno === null) {
+            throw new InvalidArgumentException('Turno operativo no encontrado.');
+        }
+
+        if ($turno->estado !== TurnoOperativoGastronomia::ESTADO_HABILITADO) {
+            throw new InvalidArgumentException('Solo puede cerrar remotamente un turno en estado habilitado.');
+        }
+
+        $fechaJornada = $turno->jornada?->fecha_jornada?->format('Y-m-d')
+            ?? Carbon::today()->format('Y-m-d');
+
+        $totalesPreview = GastronomiaTurnoOperativoTotalesSupport::calcular(
+            (string) $turno->identificador_pc,
+            (int) $turno->empresa_id,
+            $fechaJornada,
+            $turno->habilitacion_en,
+        );
+
+        $datosCierre = [
+            'redondeo_invitaciones' => $redondeoInvitaciones ?? (float) $totalesPreview['redondeo_invitaciones_sugerido'],
+            'redondeo_turno' => $redondeoTurno ?? 0.,
+            'sobrante_faltante' => $sobranteFaltante ?? 0.,
+            'observacion_cierre' => $observacion,
+        ];
+
+        $cerrado = $this->turnoOperativoService->cerrar(
+            $turno,
+            (string) $turno->identificador_pc,
+            $datosCierre,
+            [
+                'cierre_remoto' => true,
+                'pc_operador' => $pcOperador,
+                'omitir_validacion_jornada_posterior' => true,
+            ],
+        );
+
+        return [
+            'mensaje' => 'Turno cerrado remotamente en terminal '.$turno->identificador_pc
+                .' (desde '.$pcOperador.').',
+            'turno_operativo_id' => (int) $cerrado->id,
+            'numero_cierre' => (int) ($cerrado->numero_cierre ?? 0),
+            'url_comprobante_pdf' => route('gastronomia_cierre_turno_comprobante_cierre', [
+                'id' => $cerrado->id,
+                'inline' => 1,
+            ]),
         ];
     }
 
@@ -705,6 +783,14 @@ final class GastronomiaTurnoSaneamientoService
             ];
             if ($activo !== null) {
                 $sugerencia['turno_operativo_id'] = (int) $activo->id;
+                $sugerencias[] = [
+                    'accion' => 'cerrar_turno_remoto',
+                    'turno_operativo_id' => (int) $activo->id,
+                    'identificador_pc' => $pc,
+                    'turno_nombre' => $activo->turno?->nombre ?? '',
+                    'detalle' => 'Cerrar el turno habilitado #'.$activo->id.' ('.($activo->turno?->nombre ?? '').') '
+                        .'desde otra terminal si esta PC no responde.',
+                ];
             } else {
                 $sugerencia['empresa_id'] = $empresaId;
                 $sugerencia['identificador_pc'] = $pc;

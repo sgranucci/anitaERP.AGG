@@ -476,6 +476,12 @@
 
         formEl.addEventListener('submit', function (ev) {
             normalizarDecimalesGrillaAntesDeEnviar();
+            var cajaId = parseInt(val('caja_id'), 10) || 0;
+            if (modo === 'crear' && cajaId <= 0) {
+                ev.preventDefault();
+                alert('No tiene caja asignada. Ingrese desde Movimientos de caja o solicite asignación de cajero.');
+                return;
+            }
             if (modo === 'crear' && inpTurnoId && !inpTurnoId.value) {
                 ev.preventDefault();
                 alert('Debe cargar un cierre de turno antes de guardar.');

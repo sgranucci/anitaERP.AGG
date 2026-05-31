@@ -15,6 +15,7 @@ use App\Services\Compras\OrdencompraService;
 use App\Models\Presupuesto\Partidagasto_Estado;
 use App\Models\Presupuesto\Partidagasto;
 use App\Queries\Presupuesto\PartidagastoQueryInterface;
+use App\Support\Presupuesto\PartidagastoListadoFiltros;
 use App\Exports\Presupuesto\PartidagastoExport;
 use App\Exports\Presupuesto\PartidagastoOrdenCompraExport;
 use App\Exports\Presupuesto\GeneraAsientoPartidagastoExport;
@@ -72,14 +73,19 @@ class PartidagastoController extends Controller
         if (!$hay_partidagasto)
 			$this->partidagastoService->sincronizarConAnita();
 
-        $busqueda = $request->busqueda;
+        $filtros = PartidagastoListadoFiltros::resolverDesdeRequest($request);
 
-        $partidagasto = $this->partidagastoQuery->leePartidagasto($busqueda, true);
+        $partidagasto = $this->partidagastoQuery->leePartidagasto($filtros, true);
         $estado_enum = Partidagasto_Estado::$enumEstado;
-        $datas = ['partidagasto' => $partidagasto, 'busqueda' => $busqueda, 
-                    'estado_enum' => $estado_enum];
 
-        return view('presupuesto.partidagasto.index', $datas);
+        return view('presupuesto.partidagasto.index', [
+            'partidagasto' => $partidagasto,
+            'busqueda' => $filtros['busqueda'],
+            'filtros' => $filtros,
+            'filtrosQuery' => PartidagastoListadoFiltros::paraQueryString($filtros),
+            'camposFiltro' => PartidagastoListadoFiltros::CAMPOS,
+            'estado_enum' => $estado_enum,
+        ]);
     }
 
     public function listar(Request $request, $formato = null, $busqueda = null)
@@ -89,10 +95,12 @@ class PartidagastoController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
+        $filtros = PartidagastoListadoFiltros::resolverDesdeRequest($request, $busqueda);
+
         switch($formato)
         {
         case 'PDF':
-            $partidagasto = $this->partidagastoQuery->leePartidagasto($busqueda, false);
+            $partidagasto = $this->partidagastoQuery->leePartidagasto($filtros, false);
 
             $view =  \View::make('presupuesto.partidagasto.listado', compact('partidagasto'))
                         ->render();
@@ -108,20 +116,18 @@ class PartidagastoController extends Controller
 
         case 'EXCEL':
             return (new PartidagastoExport($this->partidagastoQuery))
-                        ->parametros($busqueda)
+                        ->parametros($filtros)
                         ->download('partidagasto.xlsx');
             break;
 
         case 'CSV':
             return (new PartidagastoExport($this->partidagastoQuery))
-                        ->parametros($busqueda)
+                        ->parametros($filtros)
                         ->download('partidagasto.csv', \Maatwebsite\Excel\Excel::CSV);
             break;            
         }   
 
-        $datas = ['partidagasto' => $partidagasto, 'busqueda' => $busqueda];
-
-		return view('presupuesto.partidagasto.index', $datas);       
+        return redirect()->route('consultar_partidagasto', PartidagastoListadoFiltros::paraQueryString($filtros));
     }
 
     /**

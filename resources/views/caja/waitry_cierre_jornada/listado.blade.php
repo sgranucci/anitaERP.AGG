@@ -33,7 +33,9 @@
                 <th>Pagada W.</th>
                 <th>Venta Anita</th>
                 <th class="num">Total Anita</th>
-                <th>TOTEM</th>
+                <th>Medio Waitry</th>
+                <th>Cta. caja esp.</th>
+                <th>Cta. caja Anita</th>
                 <th class="num">Diferencia</th>
                 <th>Estado</th>
             </tr>
@@ -68,7 +70,9 @@
                         —
                     @endif
                 </td>
-                <td>{{ $fila['anita_totem'] ? 'TOTEM' : '—' }}</td>
+                <td>{{ $fila['waitry_medio_label'] ?? ($fila['anita_totem'] ? 'TOTEM' : '—') }}</td>
+                <td>{{ $fila['cuentacaja_esperada_label'] ?? '—' }}</td>
+                <td>{{ $fila['anita_cuentacaja_label'] ?? '—' }}</td>
                 <td class="num">
                     @if ($fila['diferencia'] !== null)
                         {{ number_format((float) $fila['diferencia'], 2, ',', '.') }}

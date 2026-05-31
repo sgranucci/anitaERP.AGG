@@ -6,6 +6,8 @@ use App\Models\Ventas\CuentaGastronomia;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\WaitryComandaEnvio;
 use App\Support\Ventas\Waitry\WaitryImpuestoLineaSupport;
+use App\Support\Ventas\Waitry\WaitryMediosPagoFromVentaSupport;
+use App\Support\Ventas\Waitry\WaitryPaymentPayloadSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
@@ -23,10 +25,13 @@ final class WaitryComandaService
         private readonly WaitryHttpClient $httpClient,
         private readonly WaitryAuthService $authService,
         private readonly WaitryComandaEnvioService $envioService,
+        private readonly WaitryPaymentPayloadSupport $paymentPayloadSupport,
+        private readonly WaitryMediosPagoFromVentaSupport $mediosPagoFromVentaSupport,
     ) {
     }
 
     /**
+     * @param  list<array{cuentacaja_id:int,moneda_id:int,monto:float,cotizacion?:float|null,observacion?:string|null}>  $mediosPago
      * @return array{ok:bool,omitida?:bool,mensaje?:string,waitry_order_id?:int|string|null}
      */
     public function enviarComandaTrasFactura(
@@ -34,6 +39,7 @@ final class WaitryComandaService
         CuentaGastronomia $cuenta,
         string $facturaTxt,
         bool $pagada,
+        array $mediosPago = [],
     ): array {
         if (! config('waitry.habilitado', false)) {
             return ['ok' => true, 'omitida' => true, 'mensaje' => 'Integración Waitry deshabilitada.'];
@@ -93,7 +99,7 @@ final class WaitryComandaService
             $pagada,
         );
 
-        return $this->ejecutarEnvio($envio, $cuenta, $facturaTxt, $pagada, $table, $placeId);
+        return $this->ejecutarEnvio($envio, $cuenta, $facturaTxt, $pagada, $table, $placeId, $mediosPago);
     }
 
     public function procesarEnvioRegistro(WaitryComandaEnvio $envio): void
@@ -122,6 +128,11 @@ final class WaitryComandaService
             return;
         }
 
+        $ventaId = (int) $envio->venta_id;
+        $mediosPago = (bool) $envio->pagada
+            ? $this->mediosPagoFromVentaSupport->desdeVentaId($ventaId)
+            : [];
+
         $this->ejecutarEnvio(
             $envio,
             $cuenta,
@@ -129,10 +140,12 @@ final class WaitryComandaService
             (bool) $envio->pagada,
             $table,
             $placeId,
+            $mediosPago,
         );
     }
 
     /**
+     * @param  list<array{cuentacaja_id:int,moneda_id:int,monto:float,cotizacion?:float|null,observacion?:string|null}>  $mediosPago
      * @return array{ok:bool,omitida?:bool,mensaje?:string,waitry_order_id?:int|string|null}
      */
     private function ejecutarEnvio(
@@ -142,6 +155,7 @@ final class WaitryComandaService
         bool $pagada,
         array $table,
         int $placeId,
+        array $mediosPago = [],
     ): array {
         $ventaId = (int) $envio->venta_id;
         $externalId = $this->externalIdDesdeVenta($ventaId);
@@ -165,6 +179,7 @@ final class WaitryComandaService
                 $externalId,
                 $pagada,
                 $facturaTxt,
+                $mediosPago,
             );
         } catch (InvalidArgumentException $e) {
             $this->envioService->registrarFallo($envio, $e->getMessage());
@@ -235,6 +250,7 @@ final class WaitryComandaService
             'external_id' => $externalId,
             'waitry_order_id' => $orderId,
             'place_id' => $placeId,
+            'payment_type' => $payload['payment']['type'] ?? null,
         ]);
 
         return [
@@ -271,6 +287,7 @@ final class WaitryComandaService
 
     /**
      * @param  array<string, mixed>  $table
+     * @param  list<array{cuentacaja_id:int,moneda_id:int,monto:float,cotizacion?:float|null,observacion?:string|null}>  $mediosPago
      * @return array<string, mixed>
      */
     private function armarPayloadOrden(
@@ -281,6 +298,7 @@ final class WaitryComandaService
         string $externalId,
         bool $pagada,
         string $facturaTxt,
+        array $mediosPago = [],
     ): array {
         $orderItems = $this->construirOrderItems($venta);
         if ($orderItems === []) {
@@ -305,6 +323,21 @@ final class WaitryComandaService
             'totalAmount' => $totalAmount,
             'orderItems' => $orderItems,
         ];
+
+        if ($pagada && $mediosPago !== []) {
+            try {
+                $payload['payment'] = $this->paymentPayloadSupport->armarBloquePayment(
+                    $mediosPago,
+                    (int) $cuenta->empresa_id,
+                );
+            } catch (InvalidArgumentException $e) {
+                Log::warning('waitry.comanda.payment_omitido', [
+                    'venta_id' => (int) $venta->id,
+                    'cuenta_id' => $cuenta->id,
+                    'msg' => $e->getMessage(),
+                ]);
+            }
+        }
 
         $notas = trim($facturaTxt);
         if ($notas !== '') {

@@ -37,8 +37,27 @@
         return app.getAttribute('data-csrf') || '';
     }
 
+    function empresaIdActiva() {
+        var el = document.getElementById('empresa_id');
+        return el ? String(el.value || '').trim() : '';
+    }
+
+    function urlConEmpresa(url) {
+        var eid = empresaIdActiva();
+        if (!eid || !url) {
+            return url;
+        }
+        var sep = url.indexOf('?') >= 0 ? '&' : '?';
+        return url + sep + 'empresa_id=' + encodeURIComponent(eid);
+    }
+
     function postJson(url, body) {
         var token = csrfToken();
+        var payload = Object.assign({}, body, { _token: token });
+        var eid = empresaIdActiva();
+        if (eid) {
+            payload.empresa_id = eid;
+        }
         return fetch(url, {
             method: 'POST',
             headers: {
@@ -48,7 +67,7 @@
                 'X-Requested-With': 'XMLHttpRequest',
             },
             credentials: 'same-origin',
-            body: JSON.stringify(Object.assign({}, body, { _token: token })),
+            body: JSON.stringify(payload),
         }).then(function (r) {
             return r.json().then(function (data) {
                 return { ok: r.ok, data: data };
@@ -81,7 +100,7 @@
     }
 
     function getJson(url) {
-        return fetch(url, {
+        return fetch(urlConEmpresa(url), {
             credentials: 'same-origin',
             headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
         }).then(function (r) {
@@ -621,6 +640,33 @@
         });
     }
 
+    function renderAlertaJornadaActiva(estado) {
+        var el = document.getElementById('alert-jornada-activa');
+        if (!el) {
+            return;
+        }
+        if (estado && estado.jornada_abierta) {
+            var fecha = estado.fecha_jornada_fmt || estado.fecha_jornada || '—';
+            var html = 'Jornada activa: <strong>' + fecha + '</strong>';
+            var usr = estado.jornada_usuario_apertura || '';
+            var cuando = estado.jornada_apertura_en || '';
+            if (usr) {
+                html += ' · Abierta por <strong>' + usr + '</strong>';
+                if (cuando) {
+                    html += ' (' + cuando + ')';
+                }
+            }
+            el.innerHTML = html;
+            el.classList.remove('d-none');
+        } else {
+            el.classList.add('d-none');
+        }
+        var inpJornada = document.getElementById('fecha_jornada_activa');
+        if (inpJornada && estado && estado.jornada_abierta) {
+            inpJornada.value = estado.fecha_jornada_fmt || estado.fecha_jornada || '';
+        }
+    }
+
     function actualizarSelectTurnos(cerradosIds) {
         var select = document.getElementById('turno_gastronomia_id');
         if (!select) {
@@ -654,6 +700,8 @@
             urlFacturaVerBase = estado.url_factura_ver_base;
         }
 
+        renderAlertaJornadaActiva(estado);
+
         var panel = document.getElementById('panel-estado-turno');
         var cardHab = document.getElementById('card-habilitar');
         var wrapSolapas = document.getElementById('wrap-solapas-cierre');
@@ -679,7 +727,7 @@
             });
         } else {
             grillaMetaPorContenedor = {};
-            var msg = '<div class="alert alert-warning">Sin turno habilitado en esta terminal.</div>';
+            var msg = '<div class="alert alert-warning mb-0">Sin turno habilitado en esta terminal.</div>';
             var errsHab = estado.errores_habilitacion || [];
             if (errsHab.length) {
                 msg += '<div class="alert alert-danger mt-2 mb-0">' + errsHab.join('<br>') + '</div>';
@@ -756,7 +804,7 @@
         var btnInformeMozo = document.getElementById('btn-informe-mozo-pdf');
         if (btnInformeMozo && urlInformeMozoPdf) {
             btnInformeMozo.addEventListener('click', function () {
-                window.open(urlInformeMozoPdf + '?inline=1', '_blank', 'noopener');
+                window.open(urlConEmpresa(urlInformeMozoPdf + '?inline=1'), '_blank', 'noopener');
             });
         }
     }
@@ -766,6 +814,22 @@
         if (formCerr) {
             formCerr.addEventListener('submit', function (e) {
                 e.preventDefault();
+                if (estadoActual && estadoActual.totales_turno && !estadoActual.totales_turno.conciliacion_ok) {
+                    var diffC = Number(estadoActual.totales_turno.diferencia_cobranza || 0);
+                    var sug = Number(estadoActual.totales_turno.redondeo_invitaciones_sugerido || 0);
+                    var inpInvVal = parseFloat(document.getElementById('redondeo_invitaciones').value) || 0;
+                    var inpSf = parseFloat(document.getElementById('sobrante_faltante').value) || 0;
+                    var inpRt = parseFloat(document.getElementById('redondeo_turno').value) || 0;
+                    var baseInv = Number(estadoActual.totales_turno.total_invitaciones || 0);
+                    var residual = diffC - (inpInvVal - baseInv) - inpRt - inpSf;
+                    if (Math.abs(residual) >= 0.02) {
+                        alert(
+                            'Hay diferencia de conciliación ($' + Math.abs(diffC).toFixed(2) + '). '
+                            + 'Use redondeo invitaciones sugerido ($' + sug.toFixed(2) + ') o sobrante/faltante hasta cuadrar.'
+                        );
+                        return;
+                    }
+                }
                 if (!confirm('¿Confirma el cierre definitivo del turno en esta terminal?')) {
                     return;
                 }
@@ -1017,6 +1081,15 @@
                 });
         });
     }
+
+    document.querySelectorAll('.js-auto-consultar-empresa').forEach(function (sel) {
+        sel.addEventListener('change', function () {
+            var form = sel.closest('form');
+            if (form) {
+                form.submit();
+            }
+        });
+    });
 
     cargarEstado();
 })();

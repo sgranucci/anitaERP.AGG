@@ -7,6 +7,10 @@
 <script>
     window.JORNADA_GASTRONOMIA = {
         csrf: @json(csrf_token()),
+        urlComprobanteTotemBase: @json(route('gastronomia_jornada_comprobante_cierre_totem', ['jornadaId' => '__JORNADA_ID__', 'inline' => 1])),
+        urlInformeZDatosBase: @json(url('ventas/gastronomia/jornada/api/informe-z/__JORNADA_ID__')),
+        urlInformeZGuardar: @json(route('gastronomia_jornada_api_informe_z_guardar')),
+        toleranciaInformeZ: @json((float) config('gastronomia.cierre_totem_informe_z_tolerancia', 0.02)),
     };
 </script>
 <script src="{{ asset('assets/pages/scripts/ventas/gastronomia/jornada.js') }}?v={{ filemtime(public_path('assets/pages/scripts/ventas/gastronomia/jornada.js')) }}" type="text/javascript"></script>
@@ -17,9 +21,12 @@
      data-api-estado="{{ url('ventas/gastronomia/jornada/api/estado') }}"
      data-api-abrir="{{ url('ventas/gastronomia/jornada/api/abrir') }}"
      data-api-cerrar="{{ url('ventas/gastronomia/jornada/api/cerrar') }}"
+     data-api-eliminar="{{ url('ventas/gastronomia/jornada/api/eliminar') }}"
+     data-cierre-totem-habilitado="{{ ! empty($cierre_totem_habilitado) ? '1' : '0' }}"
      data-csrf="{{ csrf_token() }}"
      data-puede-abrir="{{ $puede_abrir ? '1' : '0' }}"
-     data-puede-cerrar="{{ $puede_cerrar ? '1' : '0' }}">
+     data-puede-cerrar="{{ $puede_cerrar ? '1' : '0' }}"
+     data-puede-eliminar="{{ ($puede_eliminar ?? false) ? '1' : '0' }}">
     <div class="col-lg-12">
         @include('includes.mensaje')
         <div class="card card-info">
@@ -32,6 +39,23 @@
                     La <strong>fecha de jornada</strong> es la del turno abierto y se graba en <code>venta.fechajornada</code>
                     para todas las terminales de la empresa.
                 </p>
+                @if (! empty($cierre_totem_habilitado))
+                    <p class="text-muted small mb-3">
+                        Al <strong>cerrar la jornada</strong> se consultan órdenes Waitry desde la
+                        <strong>fecha y hora de apertura</strong> hasta la <strong>fecha y hora de cierre</strong>
+                        (ej. jornada 30/05 cerrada el 31/05: comandas del 30/05 18:00 al 31/05 07:00),
+                        se calculan <strong>totales por medio de pago por tótem</strong>.
+                        Luego cargá el <strong>Informe Z</strong> de cada tótem para comparar con el sistema.
+                        El detalle de auditoría lista <strong>solo discrepancias</strong>, si las hay.
+                        @if ((int) ($ultimo_waitry_order_id ?? 0) > 0)
+                            Último ID Waitry incluido en cierres anteriores:
+                            <strong>#{{ (int) $ultimo_waitry_order_id }}</strong>
+                            (el próximo cierre tomará órdenes con ID &gt; {{ (int) $ultimo_waitry_order_id }}).
+                        @else
+                            Aún no hay cierres Waitry registrados para esta empresa.
+                        @endif
+                    </p>
+                @endif
 
                 <form method="get" action="{{ url('ventas/gastronomia/jornada') }}" class="form-inline mb-4">
                     <label class="mr-2" for="empresa_id">Empresa</label>
@@ -84,7 +108,9 @@
                                         <div class="form-group">
                                             <label for="fecha_jornada_abrir">Fecha de jornada (turno)</label>
                                             <input type="date" class="form-control" id="fecha_jornada_abrir"
-                                                   value="{{ $fecha_hoy }}" @disabled($estado['jornada_abierta'])>
+                                                   value="{{ $fecha_hoy }}"
+                                                   @if (! empty($fecha_jornada_minima)) min="{{ $fecha_jornada_minima }}" @endif
+                                                   @disabled($estado['jornada_abierta'])>
                                         </div>
                                         <div class="form-group">
                                             <label for="observacion_abrir">Observación</label>
@@ -131,6 +157,26 @@
                                                 </div>
                                             @endif
                                         @endif
+                                        @if (! empty($estado['nota_politica_turnos']))
+                                            <p class="text-muted small mb-2">{{ $estado['nota_politica_turnos'] }}</p>
+                                        @endif
+                                        @if (! empty($estado['turnos_habilitados']))
+                                            <div class="small mb-2">
+                                                <strong>Turnos habilitados sin cerrar:</strong>
+                                                <ul class="mb-1 pl-3">
+                                                    @foreach ($estado['turnos_habilitados'] as $th)
+                                                        <li>
+                                                            {{ $th['identificador_pc'] }} — {{ $th['turno_nombre'] }}
+                                                            <span class="badge badge-danger">sin cerrar</span>
+                                                        </li>
+                                                    @endforeach
+                                                </ul>
+                                                <a href="{{ $url_saneamiento_turno ?? url('ventas/gastronomia/saneamiento-turno') }}?empresa_id={{ $empresa_id }}"
+                                                   class="btn btn-outline-warning btn-sm" target="_blank" rel="noopener">
+                                                    Cierre remoto de turnos
+                                                </a>
+                                            </div>
+                                        @endif
                                         @if (! empty($estado['cuentas_abiertas_vacias']))
                                             <div class="alert alert-info small py-2 mb-2">
                                                 {{ $estado['cuentas_abiertas_vacias'] }} cuenta(s) abierta(s) sin ítems se
@@ -154,7 +200,10 @@
                     </div>
                 @endif
 
-                <h5>Historial reciente</h5>
+                <h5>Historial de cierres de jornada</h5>
+                <p class="text-muted small mb-2">
+                    Reimprima el comprobante de ingresos tótem desde la columna <strong>Comprobante</strong> de cualquier jornada cerrada.
+                </p>
                 <div class="table-responsive">
                     <table class="table table-sm table-striped table-bordered">
                         <thead>
@@ -166,10 +215,20 @@
                                 <th>Cierre</th>
                                 <th>Usuario apertura</th>
                                 <th>Usuario cierre</th>
+                                @if (! empty($cierre_totem_habilitado))
+                                    <th>Órdenes Waitry</th>
+                                    <th>Comprobante</th>
+                                @endif
+                                @if ($puede_eliminar ?? false)
+                                    <th>Acciones</th>
+                                @endif
                             </tr>
                         </thead>
                         <tbody>
                             @forelse ($historial as $j)
+                                @php
+                                    $elim = $eliminacion_por_jornada[$j->id] ?? null;
+                                @endphp
                                 <tr>
                                     <td>{{ $j->id }}</td>
                                     <td>{{ $j->fecha_jornada->format('d/m/Y') }}</td>
@@ -178,10 +237,69 @@
                                     <td>{{ $j->cierre_en?->format('d/m/Y H:i') ?? '—' }}</td>
                                     <td>{{ $j->usuarioApertura->nombre ?? '—' }}</td>
                                     <td>{{ $j->usuarioCierre->nombre ?? '—' }}</td>
+                                    @if (! empty($cierre_totem_habilitado))
+                                        <td class="small">
+                                            @if ($j->cierreTotem)
+                                                @php $ct = $j->cierreTotem; @endphp
+                                                @if ($ct->waitry_order_id_desde)
+                                                    #{{ $ct->waitry_order_id_desde }}
+                                                    @if ($ct->waitry_order_id_hasta && $ct->waitry_order_id_hasta !== $ct->waitry_order_id_desde)
+                                                        — #{{ $ct->waitry_order_id_hasta }}
+                                                    @endif
+                                                    ({{ $ct->cantidad_lineas }} órdenes)
+                                                @else
+                                                    Sin órdenes nuevas (último ID #{{ $ct->waitry_order_id_hasta }})
+                                                @endif
+                                            @elseif ($j->estado === 'cerrada')
+                                                —
+                                            @else
+                                                —
+                                            @endif
+                                        </td>
+                                        <td class="text-nowrap">
+                                            @if ($j->cierreTotem)
+                                                <a href="{{ route('gastronomia_jornada_comprobante_cierre_totem', ['jornadaId' => $j->id, 'inline' => 1]) }}"
+                                                   class="btn btn-outline-secondary btn-xs js-ver-cierre-totem"
+                                                   target="_blank" rel="noopener" title="Ver PDF">
+                                                    <i class="fa fa-file-pdf-o"></i>
+                                                </a>
+                                                <button type="button"
+                                                        class="btn btn-outline-info btn-xs js-informe-z"
+                                                        data-jornada-id="{{ $j->id }}"
+                                                        title="Informe Z / conciliación">
+                                                    <i class="fa fa-balance-scale"></i>
+                                                </button>
+                                                <button type="button"
+                                                        class="btn btn-outline-primary btn-xs js-imprimir-cierre-totem"
+                                                        data-jornada-id="{{ $j->id }}"
+                                                        title="Reimprimir comprobante">
+                                                    <i class="fa fa-print"></i>
+                                                </button>
+                                            @else
+                                                —
+                                            @endif
+                                        </td>
+                                    @endif
+                                    @if ($puede_eliminar ?? false)
+                                        <td class="text-nowrap">
+                                            @if (! empty($elim['puede_eliminar']))
+                                                <button type="button"
+                                                        class="btn btn-outline-danger btn-xs js-eliminar-jornada"
+                                                        data-jornada-id="{{ $j->id }}"
+                                                        data-fecha-jornada="{{ $j->fecha_jornada->format('d/m/Y') }}"
+                                                        title="Eliminar jornada sin movimientos">
+                                                    <i class="fa fa-trash"></i>
+                                                </button>
+                                            @else
+                                                <span class="text-muted small"
+                                                      title="{{ $elim['motivo_no_eliminar'] ?? 'Tiene movimientos' }}">—</span>
+                                            @endif
+                                        </td>
+                                    @endif
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="7" class="text-center text-muted">Sin registros.</td>
+                                    <td colspan="{{ 7 + (! empty($cierre_totem_habilitado) ? 2 : 0) + (($puede_eliminar ?? false) ? 1 : 0) }}" class="text-center text-muted">Sin registros.</td>
                                 </tr>
                             @endforelse
                         </tbody>
@@ -191,4 +309,33 @@
         </div>
     </div>
 </div>
+
+@if (! empty($cierre_totem_habilitado))
+<div class="modal fade" id="modal-informe-z-totem" tabindex="-1" role="dialog" aria-labelledby="modal-informe-z-totem-label" aria-hidden="true">
+    <div class="modal-dialog modal-xl" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modal-informe-z-totem-label">Conciliación Informe Z — tótems Waitry</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small" id="informe-z-subtitulo"></p>
+                <div id="informe-z-resultado" class="d-none mb-3"></div>
+                <div id="informe-z-contenido" class="text-muted">Cargando…</div>
+            </div>
+            <div class="modal-footer flex-wrap">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-outline-secondary d-none" id="btn-informe-z-omitir-imprimir">
+                    Omitir e imprimir
+                </button>
+                <button type="button" class="btn btn-primary" id="btn-informe-z-guardar" disabled>
+                    Guardar Informe Z y conciliar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+@endif
 @endsection

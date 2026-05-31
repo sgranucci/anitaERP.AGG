@@ -207,7 +207,9 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
 
         $ubicacion_query = $this->ubicacionGastronomiaRepository->listarParaSelect($empresaId);
         $salida_query = $this->salidaRepository->all()->sortBy('nombre')->values();
-        $listaprecio_query = Listaprecio::query()->orderBy('nombre')->get();
+        $listaprecio_query = Listaprecio::query()
+            ->orderByRaw('CAST(codigo AS UNSIGNED) ASC')
+            ->get();
         $tipotransaccion_query = $this->tipotransaccionRepository->all(['V', 'C'], ['A']);
         $tipotransaccion_nota_credito_query = $this->tipotransaccionRepository->all(['C'], ['A']);
         $tipotransaccion_caja_query = Tipotransaccion_Caja::query()

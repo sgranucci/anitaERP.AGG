@@ -25,7 +25,7 @@ class ProveedorExport implements FromView, WithColumnFormatting, WithMapping, Sh
 {
 	use Exportable;
 	private $proveedorRepository;
-	private $busqueda;
+	private $filtros;
 
 	public function __construct(
 								ProveedorRepositoryInterface $proveedorRepository
@@ -36,7 +36,7 @@ class ProveedorExport implements FromView, WithColumnFormatting, WithMapping, Sh
 
 	public function view(): View
 	{
-		$datas = $this->proveedorRepository->leeProveedor($this->busqueda, false);
+		$datas = $this->proveedorRepository->leeProveedor($this->filtros, false);
 
 		return view('exports.compras.listadoproveedor', ['proveedores' => $datas]);
 	}
@@ -97,9 +97,9 @@ class ProveedorExport implements FromView, WithColumnFormatting, WithMapping, Sh
         return 'Reporte de Proveedores';
     }
 
-	public function parametros($busqueda)
+	public function parametros($filtros)
 	{
-		$this->busqueda = $busqueda;
+		$this->filtros = $filtros;
 
 		return $this;
 	}

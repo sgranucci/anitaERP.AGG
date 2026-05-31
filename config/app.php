@@ -57,6 +57,11 @@ return [
     'anita_sync_puntoventa_index' => (bool) env('ANITA_SYNC_PUNTOVENTA_INDEX', false),
 
     /*
+    | When true, create/update/delete in ventas/puntoventa replicates changes to Anita (tabla sucursal).
+    */
+    'anita_sync_puntoventa_write' => (bool) env('ANITA_SYNC_PUNTOVENTA_WRITE', false),
+
+    /*
     |--------------------------------------------------------------------------
     | Application Environment
     |--------------------------------------------------------------------------

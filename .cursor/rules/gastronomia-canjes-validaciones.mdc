@@ -43,6 +43,7 @@ Si la cuenta tiene **`canje_premio_pendiente`** o **`canje_fidelidad_pendiente`*
 
 | Función / acción | Validación |
 |------------------|------------|
+| `exigirJornadaTurnoParaOperar` / `api()` (mutaciones gastronomía) | Jornada abierta (si obligatoria) y turno habilitado en PC (si aplica). Toast y no procede; refresca estado turno antes de validar. |
 | `cuentaTieneCanjePendienteRequiereF8(cuenta)` | Detecta pendiente premio o fidelidad |
 | `mensajeBloqueoFacturacionEfectivoPorCanje()` | Mensaje si hay pendiente |
 | **F5** `efectivizar()` | Bloquea antes de `emitirFactura` |
@@ -110,9 +111,10 @@ En el mismo preflight (no exclusivas de canje):
 
 | Momento | Validación |
 |---------|------------|
-| Abrir modal | `G.wigosHabilitado`; cuenta seleccionada |
-| Validar cupón | Cuenta abierta; integración Wigos |
-| Aplicar | Cupón validado previamente |
+| Abrir modal | `G.wigosHabilitado` + `G.cuentasLibresHabilitadas` |
+| Validar cupón | Integración Wigos; cupón no vacío; validación automática ~120 ms tras lectura (lector) o Enter |
+| Continuar | Cupón validado → si no hay cuenta libre apta: modal apertura mozo → `api/abrir-cuenta` → `POST aplicar-ticket-canje-premio` |
+| Aplicar en cuenta actual | Solo si `cuenta.tipo === 'cuenta'`, `abierta`, sin canje pendiente |
 
 ### Backend — consulta Wigos (`WigosCanjePremioService`)
 
@@ -145,7 +147,7 @@ En el mismo preflight (no exclusivas de canje):
 | Sin `canje_premio_pendiente` previo | Un canje premio por cuenta |
 | Sin `canje_fidelidad_pendiente` | No mezclar canjes |
 | Re-valida cupón | Misma lógica que validar |
-| Transacción | Agrega líneas, descuento, cliente, guarda JSON pendiente |
+| Transacción | Agrega líneas, descuento, **cliente_interno_descuento_id** (no `cliente_id` de factura), guarda JSON pendiente |
 
 **`registrarTrasEmision`:**
 
@@ -187,9 +189,10 @@ En el mismo preflight (no exclusivas de canje):
 
 | Momento | Validación |
 |---------|------------|
-| Abrir modal | `G.wigosAccountInfoHabilitado`; cuenta seleccionada |
-| Pasar tarjeta (Enter) | Trackdata no vacío; cuenta; integración |
-| Confirmar aplicar | Validación previa OK; `articulo_id` elegido (radio si hay varios) |
+| Abrir modal | `G.wigosAccountInfoHabilitado` + `G.cuentasLibresHabilitadas` (sin cuenta abierta previa) |
+| Pasar tarjeta (Enter / lector) | Trackdata no vacío; integración; validación automática ~120 ms tras lectura |
+| Continuar | Tarjeta validada + artículo elegido → si no hay cuenta libre apta: modal apertura mozo → `api/abrir-cuenta` → `POST aplicar-canje-fidelidad` |
+| Aplicar en cuenta actual | Solo si `cuenta.tipo === 'cuenta'`, `abierta`, sin canje pendiente |
 | Tras aplicar | Cierra modal; carga descuento; **abre F8** automáticamente |
 
 ### Backend — consulta tarjeta (`WigosAccountInfoService`)
@@ -224,7 +227,7 @@ En el mismo preflight (no exclusivas de canje):
 | Sin `canje_fidelidad_pendiente` previo | |
 | Re-valida tarjeta (incluye canje hoy) | |
 | Artículo pertenece a categoría | |
-| Transacción | 1 línea cantidad 1, descuento, clientes, JSON pendiente |
+| Transacción | 1 línea cantidad 1, descuento, **cliente_interno_descuento_id** (no `cliente_id` factura), JSON pendiente |
 
 **`registrarTrasEmision`:**
 
@@ -282,8 +285,8 @@ Solo un tipo de canje «con descuento obligatorio» por cuenta abierta a la vez.
 ## 6. Flujo correcto (premio / fidelidad)
 
 ```text
-1. Abrir mesa/cuenta
-2. Herramienta canje (cupón o tarjeta) → validar → aplicar a cuenta
+1. Herramienta canje (cupón o tarjeta) → validar sin cuenta obligatoria
+2. Si hace falta: abrir cuenta libre (mozo/cubiertos) → aplicar a cuenta
    → cuenta queda con descuento + cliente + JSON pendiente
 3. F8 → confirmar descuento y cliente interno en modal
 4. Emitir → preflight (facturacion_con_descuento=true) → cortesía sin cobranza

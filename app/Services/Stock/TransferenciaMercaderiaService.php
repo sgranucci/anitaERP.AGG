@@ -31,7 +31,7 @@ class TransferenciaMercaderiaService
         return [
             'deposito_salida_id' => cache()->get(generaKey(self::CACHE_DEPOSITO_SALIDA)),
             'deposito_entrada_id' => cache()->get(generaKey(self::CACHE_DEPOSITO_ENTRADA)),
-            'tipotransaccion_stock_id' => $this->resolverTipoTransaccionStockIdCacheado(),
+            'tipotransaccion_stock_id' => $this->resolverTipoTransaccionStockIdDefault(),
         ];
     }
 
@@ -280,6 +280,16 @@ class TransferenciaMercaderiaService
         ];
     }
 
+    private function resolverTipoTransaccionStockIdDefault(): ?int
+    {
+        $cached = $this->resolverTipoTransaccionStockIdCacheado();
+        if ($cached !== null) {
+            return $cached;
+        }
+
+        return $this->resolverPrimeraTipotransaccionTransferencia();
+    }
+
     private function resolverTipoTransaccionStockIdCacheado(): ?int
     {
         $cached = (int) cache()->get(generaKey(self::CACHE_TIPO_TRANSACCION));
@@ -300,6 +310,17 @@ class TransferenciaMercaderiaService
             ->value('tipotransaccion_stock_id');
 
         return $mapped ? (int) $mapped : null;
+    }
+
+    private function resolverPrimeraTipotransaccionTransferencia(): ?int
+    {
+        $id = Tipotransaccion_Stock::query()
+            ->where('operacion', TransferenciaMercaderiaSignoSupport::OPERACION_TIPO)
+            ->where('estado', 'A')
+            ->orderBy('nombre')
+            ->value('id');
+
+        return $id ? (int) $id : null;
     }
 
 }

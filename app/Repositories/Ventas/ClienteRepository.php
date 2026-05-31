@@ -28,6 +28,7 @@ use App\Models\Seguridad\Usuario;
 use App\Repositories\Ventas\DescuentoventaRepositoryInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
+use App\Support\Ventas\ClienteListadoFiltros;
 use App\Traits\AnitaBridgeEscritura;
 use Carbon\Carbon;
 use Auth;
@@ -1684,10 +1685,27 @@ class ClienteRepository implements ClienteRepositoryInterface
 		return Carbon::createFromFormat('Ymd', (string) $fecha)->format('Y-m-d');
 	}
 
-	public function leeCliente($busqueda, $flPaginando = null)
+	/**
+	 * @param  array<string, mixed>|string|null  $filtros  Criterios del listado o texto legacy (modo todos).
+	 */
+	public function leeCliente($filtros, $flPaginando = null)
     {
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
+
+        if (is_string($filtros)) {
+            $texto = trim($filtros);
+            $filtros = [
+                'modo' => ClienteListadoFiltros::MODO_TODOS,
+                'campo' => 'nombre',
+                'operador' => 'contiene',
+                'valor' => $texto,
+                'valor_hasta' => '',
+                'busqueda' => $texto,
+            ];
+        } elseif (! is_array($filtros)) {
+            $filtros = ClienteListadoFiltros::filtrosVacios();
+        }
 
         $cliente = $this->model->select('cliente.id as id',
                                         'cliente.nombre as nombre',
@@ -1696,6 +1714,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 										'cliente.numerodocumento as numerodocumento',
                                         'cliente.domicilio as domicilio',
 										'cliente.codigo as codigo',
+                                        'cliente.estado as estado',
                                         'localidad.nombre as nombrelocalidad',
 										'provincia.nombre as nombreprovincia')
                                 ->leftjoin('localidad', 'localidad.id', 'cliente.localidad_id')
@@ -1707,19 +1726,11 @@ class ClienteRepository implements ClienteRepositoryInterface
 		if (count($vendedores) > 0)
 		{
 			$cliente = $cliente->whereIn('vendedor_id', $vendedores);
-		}								
+		}
 
-		$cliente = $cliente->where(function ($query) use ($busqueda) {
-                	$query->orWhere('cliente.id', $busqueda)
-							->orWhere('cliente.nombre', 'like', '%'.$busqueda.'%')
-							->orWhere('transporte.codigo', 'like', '%'.$busqueda.'%')
-							->orWhere('transporte.nombre', 'like', '%'.$busqueda.'%')
-							->orWhere('cliente.numerodocumento', 'like', '%'.$busqueda.'%')
-							->orWhere('cliente.domicilio', 'like', '%'.$busqueda.'%')
-							->orWhere('cliente.codigo', 'like', '%'.$busqueda.'%')
-							->orWhere('localidad.nombre', 'like', '%'.$busqueda.'%')
-							->orWhere('provincia.nombre', 'like', '%'.$busqueda.'%');
-					});
+        if (ClienteListadoFiltros::tieneCriteriosAplicados($filtros)) {
+            ClienteListadoFiltros::aplicar($cliente, $filtros);
+        }
 
 		$cliente = $cliente->orderby('id', 'DESC');
                                 

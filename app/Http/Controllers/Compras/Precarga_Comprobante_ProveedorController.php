@@ -11,9 +11,11 @@ use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Compras\PrecargaComprobanteAnitaSyncService;
+use App\Support\Compras\PrecargaFacturaScanPathResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class Precarga_Comprobante_ProveedorController extends Controller
 {
@@ -24,12 +26,15 @@ class Precarga_Comprobante_ProveedorController extends Controller
     private $empresaRepository;
     private PrecargaComprobanteAnitaSyncService $precargaAnitaSync;
 
+    private PrecargaFacturaScanPathResolver $facturaScanPathResolver;
+
 	public function __construct(Precarga_Comprobante_ProveedorRepositoryInterface $precarga_comprobante_proveedorRepository,
                                 Precarga_Comprobante_Proveedor_ConceptoRepositoryInterface $precarga_comprobante_proveedor_conceptoRepository,
                                 EmpresaRepositoryInterface $empresaRepository,
                                 Tipotransaccion_CompraRepositoryInterface $tipotransaccion_comprarepository,
                                 Concepto_IvacompraRepositoryInterface $concepto_ivacompraRepository,
                                 PrecargaComprobanteAnitaSyncService $precargaAnitaSync,
+                                PrecargaFacturaScanPathResolver $facturaScanPathResolver,
                                 )
     {
         $this->precarga_comprobante_proveedorRepository = $precarga_comprobante_proveedorRepository;
@@ -38,6 +43,7 @@ class Precarga_Comprobante_ProveedorController extends Controller
         $this->tipotransaccion_compraRepository = $tipotransaccion_comprarepository;
         $this->concepto_ivacompraRepository = $concepto_ivacompraRepository;
         $this->precargaAnitaSync = $precargaAnitaSync;
+        $this->facturaScanPathResolver = $facturaScanPathResolver;
     }
 
     /**
@@ -98,6 +104,31 @@ class Precarga_Comprobante_ProveedorController extends Controller
         $datas = ['datas' => $precarga, 'busqueda' => $busqueda];
 
 		return view('compras.precarga_comprobante_proveedor.index', $datas);       
+    }
+
+    public function verFacturaPdf(Request $request, int $id): BinaryFileResponse
+    {
+        if (! puedeVerPrecargaFacturaPdf()) {
+            abort(403, 'No tiene permiso para ver el PDF de la precarga.');
+        }
+
+        $precarga = $this->precarga_comprobante_proveedorRepository->find($id);
+        $path = $this->facturaScanPathResolver->resolve($precarga->rutaalmacenamiento);
+
+        if ($path === null) {
+            abort(404, 'No se encontró el PDF en /Facturas_scan/comprobantes para: '.$precarga->rutaalmacenamiento);
+        }
+
+        $nombre = basename($path);
+
+        if ($request->boolean('inline')) {
+            return response()->file($path, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'inline; filename="'.$nombre.'"',
+            ]);
+        }
+
+        return response()->download($path, $nombre);
     }
 
     /**

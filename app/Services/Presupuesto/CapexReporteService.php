@@ -5,7 +5,6 @@ namespace App\Services\Presupuesto;
 use App\ApiAnita;
 use App\Models\Presupuesto\Capex;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
-use App\Services\Compras\OrdencompraService;
 use Illuminate\Support\Collection;
 
 class CapexReporteService
@@ -13,8 +12,13 @@ class CapexReporteService
     /** Tipos de comprobante en aplicped que no son facturas (ej. COM = comprobante interno). */
     private const TIPOS_FACTURA_EXCLUIDOS = ['COM'];
 
+    private const CHUNK_CODIGOS_CAPEX = 50;
+
+    private const CHUNK_NUMEROS_OC = 80;
+
+    private const CHUNK_FACTURAS = 40;
+
     public function __construct(
-        private readonly OrdencompraService $ordencompraService,
         private readonly EmpresaRepositoryInterface $empresaRepository,
     ) {
     }
@@ -25,10 +29,61 @@ class CapexReporteService
     public function generar(array $filtros): array
     {
         $capexs = $this->consultarCapex($filtros);
+
+        if ($capexs->isEmpty()) {
+            return ['filas' => [], 'total' => 0];
+        }
+
+        $codigos = $capexs
+            ->pluck('codigo')
+            ->map(fn ($codigo) => (int) $codigo)
+            ->filter(fn (int $codigo) => $codigo > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        $ordenesPorCodigo = $this->precargarOrdenesCompraPorCodigos($codigos);
+
+        $numerosOc = [];
+        foreach ($ordenesPorCodigo as $ordenes) {
+            foreach ($ordenes as $orden) {
+                $numerosOc[(int) $orden['numero']] = true;
+            }
+        }
+
+        $facturasPorOc = $this->precargarFacturasPorOrdenes(array_keys($numerosOc));
+
+        $facturasUnicas = [];
+        foreach ($facturasPorOc as $facturas) {
+            foreach ($facturas as $factura) {
+                $clave = $this->claveComprobante(
+                    $factura['tipo'],
+                    $factura['letra'],
+                    $factura['sucursal'],
+                    $factura['numero'],
+                    $factura['proveedor']
+                );
+                $facturasUnicas[$clave] = $factura;
+            }
+        }
+
+        $montosPorFactura = $this->precargarMontosFacturas(array_values($facturasUnicas));
+        $pagosPorFactura = $this->precargarPagosFacturas(array_values($facturasUnicas));
+
         $filas = [];
 
         foreach ($capexs as $capex) {
-            $filas = array_merge($filas, $this->armarFilasCapex($capex));
+            $codigo = (int) $capex->codigo;
+            $filas = array_merge(
+                $filas,
+                $this->armarFilasCapex(
+                    $capex,
+                    $ordenesPorCodigo[$codigo] ?? [],
+                    $facturasPorOc,
+                    $montosPorFactura,
+                    $pagosPorFactura
+                )
+            );
         }
 
         return [
@@ -79,10 +134,299 @@ class CapexReporteService
     }
 
     /**
+     * @param  list<int>  $codigos
+     * @return array<int, list<array{tipo:string, letra:string, sucursal:int, numero:int, mes:string, moneda_id:string, total:float}>>
+     */
+    private function precargarOrdenesCompraPorCodigos(array $codigos): array
+    {
+        $porCodigo = [];
+
+        foreach (array_chunk($codigos, self::CHUNK_CODIGOS_CAPEX) as $chunk) {
+            $lista = implode(',', array_map('intval', $chunk));
+            $apiAnita = new ApiAnita();
+            $leeAnita = [
+                'acc' => 'list',
+                'sistema' => 'compras',
+                'tabla' => 'movpresup,pendmaep,promae,stkmae',
+                'campos' => '
+                    movp_proyecto,
+                    movp_fecha as fechaordencompra,
+                    movp_tipo,
+                    movp_nro,
+                    prom_nombre as nombreproveedor,
+                    penmp_cod_mon as moneda_id,
+                    movp_cotizacion as cotizacion,
+                    movp_importe as total,
+                    movp_mes as mes,
+                    movp_articulo as articulo,
+                    stkm_desc
+                ',
+                'whereArmado' => " WHERE
+                    movp_proyecto IN ({$lista}) and
+                    movp_tipo=penmp_tipo and
+                    movp_nro=penmp_nro and
+                    penmp_proveedor=prom_proveedor and
+                    movp_articulo=stkm_articulo",
+            ];
+
+            $dataAnita = json_decode($apiAnita->apiCall($leeAnita));
+
+            if (! is_array($dataAnita)) {
+                continue;
+            }
+
+            foreach ($dataAnita as $row) {
+                $codigo = (int) ($row->movp_proyecto ?? 0);
+                if ($codigo <= 0) {
+                    continue;
+                }
+
+                if (! isset($porCodigo[$codigo])) {
+                    $porCodigo[$codigo] = [];
+                }
+
+                $porCodigo[$codigo][] = $row;
+            }
+        }
+
+        foreach ($porCodigo as $codigo => $raw) {
+            $porCodigo[$codigo] = $this->agruparOrdenesCompra($raw);
+        }
+
+        return $porCodigo;
+    }
+
+    /**
+     * @param  list<int>  $numerosOc
+     * @return array<int, list<array{proveedor:string, tipo:string, letra:string, sucursal:int, numero:int}>>
+     */
+    private function precargarFacturasPorOrdenes(array $numerosOc): array
+    {
+        $porOc = [];
+        $numerosOc = array_values(array_unique(array_filter(array_map('intval', $numerosOc), fn (int $n) => $n > 0)));
+
+        foreach (array_chunk($numerosOc, self::CHUNK_NUMEROS_OC) as $chunk) {
+            $lista = implode(',', $chunk);
+            $apiAnita = new ApiAnita();
+            $leeAnita = [
+                'acc' => 'list',
+                'sistema' => 'compras',
+                'tabla' => 'aplicped',
+                'campos' => '
+                    aplp_ref_nro,
+                    aplp_proveedor,
+                    aplp_tipo,
+                    aplp_letra,
+                    aplp_sucursal,
+                    aplp_nro
+                ',
+                'whereArmado' => " WHERE
+                    aplp_ref_tipo='PEP' and
+                    aplp_ref_letra='X' and
+                    aplp_ref_sucursal=0 and
+                    aplp_ref_nro IN ({$lista}) and
+                    aplp_tipo<>'COM'",
+            ];
+
+            $dataAnita = json_decode($apiAnita->apiCall($leeAnita));
+
+            if (! is_array($dataAnita)) {
+                continue;
+            }
+
+            foreach ($dataAnita as $row) {
+                $numeroOc = (int) ($row->aplp_ref_nro ?? 0);
+                $proveedor = trim((string) ($row->aplp_proveedor ?? ''));
+                $tipo = trim((string) ($row->aplp_tipo ?? ''));
+                $letra = trim((string) ($row->aplp_letra ?? ''));
+                $sucursal = (int) ($row->aplp_sucursal ?? 0);
+                $numero = (int) ($row->aplp_nro ?? 0);
+
+                if ($numeroOc <= 0 || $proveedor === '' || $tipo === '' || $numero <= 0 || $this->esTipoFacturaExcluido($tipo)) {
+                    continue;
+                }
+
+                if (! isset($porOc[$numeroOc])) {
+                    $porOc[$numeroOc] = [];
+                }
+
+                $clave = $proveedor.'|'.$tipo.'|'.$letra.'|'.$sucursal.'|'.$numero;
+                $porOc[$numeroOc][$clave] = [
+                    'proveedor' => $proveedor,
+                    'tipo' => $tipo,
+                    'letra' => $letra,
+                    'sucursal' => $sucursal,
+                    'numero' => $numero,
+                ];
+            }
+        }
+
+        foreach ($porOc as $numeroOc => $facturas) {
+            $porOc[$numeroOc] = array_values($facturas);
+        }
+
+        return $porOc;
+    }
+
+    /**
+     * @param  list<array{proveedor:string, tipo:string, letra:string, sucursal:int, numero:int}>  $facturas
+     * @return array<string, float>
+     */
+    private function precargarMontosFacturas(array $facturas): array
+    {
+        $montos = [];
+
+        foreach (array_chunk($facturas, self::CHUNK_FACTURAS) as $chunk) {
+            $condiciones = [];
+
+            foreach ($chunk as $factura) {
+                $condiciones[] = '(
+                    prov_proveedor=\''.$this->proveedorAnita($factura['proveedor']).'\' and
+                    prov_tipo=\''.trim($factura['tipo']).'\' and
+                    prov_letra=\''.trim($factura['letra']).'\' and
+                    prov_sucursal='.(int) $factura['sucursal'].' and
+                    prov_nro='.(int) $factura['numero'].'
+                )';
+            }
+
+            if ($condiciones === []) {
+                continue;
+            }
+
+            $apiAnita = new ApiAnita();
+            $leeAnita = [
+                'acc' => 'list',
+                'sistema' => 'compras',
+                'tabla' => 'promov',
+                'campos' => '
+                    prov_proveedor,
+                    prov_tipo,
+                    prov_letra,
+                    prov_sucursal,
+                    prov_nro,
+                    prov_monto
+                ',
+                'whereArmado' => ' WHERE '.implode(' OR ', $condiciones),
+            ];
+
+            $dataAnita = json_decode($apiAnita->apiCall($leeAnita));
+
+            if (! is_array($dataAnita)) {
+                continue;
+            }
+
+            foreach ($dataAnita as $row) {
+                $clave = $this->claveComprobante(
+                    (string) ($row->prov_tipo ?? ''),
+                    (string) ($row->prov_letra ?? ''),
+                    (int) ($row->prov_sucursal ?? 0),
+                    (int) ($row->prov_nro ?? 0),
+                    trim((string) ($row->prov_proveedor ?? ''))
+                );
+
+                if (! isset($montos[$clave])) {
+                    $montos[$clave] = 0.0;
+                }
+
+                $montos[$clave] += (float) ($row->prov_monto ?? 0);
+            }
+        }
+
+        foreach ($montos as $clave => $total) {
+            $montos[$clave] = round($total, 2);
+        }
+
+        return $montos;
+    }
+
+    /**
+     * @param  list<array{proveedor:string, tipo:string, letra:string, sucursal:int, numero:int}>  $facturas
+     * @return array<string, list<object>>
+     */
+    private function precargarPagosFacturas(array $facturas): array
+    {
+        $pagos = [];
+
+        foreach (array_chunk($facturas, self::CHUNK_FACTURAS) as $chunk) {
+            $condiciones = [];
+
+            foreach ($chunk as $factura) {
+                $condiciones[] = '(
+                    aplvp_proveedor=\''.$this->proveedorAnita($factura['proveedor']).'\' and
+                    aplvp_tipo=\''.trim($factura['tipo']).'\' and
+                    aplvp_letra=\''.trim($factura['letra']).'\' and
+                    aplvp_sucursal='.(int) $factura['sucursal'].' and
+                    aplvp_nro='.(int) $factura['numero'].'
+                )';
+            }
+
+            if ($condiciones === []) {
+                continue;
+            }
+
+            $apiAnita = new ApiAnita();
+            $leeAnita = [
+                'acc' => 'list',
+                'sistema' => 'compras',
+                'tabla' => 'aplmovp',
+                'campos' => '
+                    aplvp_proveedor,
+                    aplvp_tipo,
+                    aplvp_letra,
+                    aplvp_sucursal,
+                    aplvp_nro,
+                    aplvp_fecha,
+                    aplvp_monto,
+                    aplvp_tipo_cob,
+                    aplvp_letra_cob,
+                    aplvp_sucursal_cob,
+                    aplvp_nro_cob
+                ',
+                'whereArmado' => ' WHERE '.implode(' OR ', $condiciones),
+            ];
+
+            $dataAnita = json_decode($apiAnita->apiCall($leeAnita));
+
+            if (! is_array($dataAnita)) {
+                continue;
+            }
+
+            foreach ($dataAnita as $row) {
+                $clave = $this->claveComprobante(
+                    (string) ($row->aplvp_tipo ?? ''),
+                    (string) ($row->aplvp_letra ?? ''),
+                    (int) ($row->aplvp_sucursal ?? 0),
+                    (int) ($row->aplvp_nro ?? 0),
+                    trim((string) ($row->aplvp_proveedor ?? ''))
+                );
+
+                if (! isset($pagos[$clave])) {
+                    $pagos[$clave] = [];
+                }
+
+                $pagos[$clave][] = $row;
+            }
+        }
+
+        return $pagos;
+    }
+
+    /**
+     * @param  list<array{tipo:string, letra:string, sucursal:int, numero:int, mes:string, moneda_id:string, total:float}>  $ordenes
+     * @param  array<int, list<array{proveedor:string, tipo:string, letra:string, sucursal:int, numero:int}>>  $facturasPorOc
+     * @param  array<string, float>  $montosPorFactura
+     * @param  array<string, list<object>>  $pagosPorFactura
      * @return list<array<string, mixed>>
      */
-    private function armarFilasCapex(Capex $capex): array
-    {
+    private function armarFilasCapex(
+        Capex $capex,
+        array $ordenes,
+        array $facturasPorOc,
+        array $montosPorFactura,
+        array $pagosPorFactura,
+    ): array {
+        $montoCapex = $this->calcularMontoCapex($capex);
+
         $base = [
             'id' => $capex->id,
             'nombreempresa' => $capex->nombreempresa ?? '',
@@ -98,78 +442,84 @@ class CapexReporteService
             'partidas' => $this->formatearPartidas($capex),
         ];
 
-        $ordenes = $this->agruparOrdenesCompra(
-            $this->ordencompraService->leeOrdenCompraPorCodigo($capex->codigo)
-        );
-
         if ($ordenes === []) {
-            return [array_merge($base, [
-                'mes' => '',
-                'moneda' => '',
-                'importe' => '',
-                'oc' => '',
-                'fc' => '',
-                'pago' => '',
+            return [$this->filaDetalle($base, [
+                'monto_capex' => $montoCapex,
             ])];
         }
 
         $filas = [];
+        $ocImporteAsignado = [];
+        $montoCapexAsignado = false;
 
         foreach ($ordenes as $orden) {
-            $facturas = $this->leeFacturasPorOrdenCompra((int) $orden['numero']);
+            $ocClave = $this->claveComprobante(
+                $orden['tipo'],
+                $orden['letra'],
+                $orden['sucursal'],
+                $orden['numero']
+            );
             $ocTexto = $this->formatearComprobante(
                 $orden['tipo'],
                 $orden['letra'],
                 $orden['sucursal'],
                 $orden['numero']
             );
+            $importeOc = round((float) ($orden['total'] ?? 0), 2);
+            $facturas = $facturasPorOc[(int) $orden['numero']] ?? [];
+            $fcImporteAsignado = [];
 
             if ($facturas === []) {
-                $filas[] = array_merge($base, [
+                $filas[] = $this->filaDetalle($base, [
                     'mes' => $orden['mes'] ?? '',
                     'moneda' => $this->nombreMoneda($orden['moneda_id'] ?? null),
-                    'importe' => $this->formatearImporte($orden['total'] ?? null),
+                    'monto_capex' => $this->asignarMontoCapex($montoCapexAsignado, $montoCapex),
+                    'importe_oc' => $this->asignarImporteUnico($ocImporteAsignado, $ocClave, $importeOc),
                     'oc' => $ocTexto,
-                    'fc' => '',
-                    'pago' => '',
                 ]);
 
                 continue;
             }
 
             foreach ($facturas as $factura) {
+                $fcClave = $this->claveComprobante(
+                    $factura['tipo'],
+                    $factura['letra'],
+                    $factura['sucursal'],
+                    $factura['numero'],
+                    $factura['proveedor']
+                );
                 $fcTexto = $this->formatearComprobante(
                     $factura['tipo'],
                     $factura['letra'],
                     $factura['sucursal'],
                     $factura['numero']
                 );
-                $pagos = $this->leePagosPorFactura(
-                    $factura['proveedor'],
-                    $factura['tipo'],
-                    $factura['letra'],
-                    $factura['sucursal'],
-                    $factura['numero']
-                );
+                $importeFc = $montosPorFactura[$fcClave] ?? null;
+                $pagos = $pagosPorFactura[$fcClave] ?? [];
 
                 if ($pagos === []) {
-                    $filas[] = array_merge($base, [
+                    $filas[] = $this->filaDetalle($base, [
                         'mes' => $orden['mes'] ?? '',
                         'moneda' => $this->nombreMoneda($orden['moneda_id'] ?? null),
-                        'importe' => $this->formatearImporte($orden['total'] ?? null),
+                        'monto_capex' => $this->asignarMontoCapex($montoCapexAsignado, $montoCapex),
+                        'importe_oc' => $this->asignarImporteUnico($ocImporteAsignado, $ocClave, $importeOc),
+                        'importe_fc' => $this->asignarImporteUnico($fcImporteAsignado, $fcClave, $importeFc),
                         'oc' => $ocTexto,
                         'fc' => $fcTexto,
-                        'pago' => '',
                     ]);
 
                     continue;
                 }
 
                 foreach ($pagos as $pago) {
-                    $filas[] = array_merge($base, [
+                    $filas[] = $this->filaDetalle($base, [
                         'mes' => $orden['mes'] ?? '',
                         'moneda' => $this->nombreMoneda($orden['moneda_id'] ?? null),
-                        'importe' => $this->formatearImporte($orden['total'] ?? null),
+                        'monto_capex' => $this->asignarMontoCapex($montoCapexAsignado, $montoCapex),
+                        'importe_oc' => $this->asignarImporteUnico($ocImporteAsignado, $ocClave, $importeOc),
+                        'importe_fc' => $this->asignarImporteUnico($fcImporteAsignado, $fcClave, $importeFc),
+                        'importe_pago' => round((float) ($pago->aplvp_monto ?? 0), 2),
                         'oc' => $ocTexto,
                         'fc' => $fcTexto,
                         'pago' => $this->formatearPago($pago),
@@ -182,8 +532,90 @@ class CapexReporteService
     }
 
     /**
+     * @param  array<string, mixed>  $base
+     * @param  array<string, mixed>  $detalle
+     * @return array<string, mixed>
+     */
+    private function filaDetalle(array $base, array $detalle = []): array
+    {
+        return array_merge($base, [
+            'mes' => '',
+            'moneda' => '',
+            'monto_capex' => null,
+            'importe_oc' => null,
+            'importe_fc' => null,
+            'importe_pago' => null,
+            'oc' => '',
+            'fc' => '',
+            'pago' => '',
+        ], $detalle);
+    }
+
+    private function asignarMontoCapex(bool &$asignado, ?float $monto): ?float
+    {
+        if ($asignado || $monto === null) {
+            return null;
+        }
+
+        $asignado = true;
+
+        return $monto;
+    }
+
+    /**
+     * @param  array<string, true>  $asignados
+     */
+    private function asignarImporteUnico(array &$asignados, string $clave, ?float $importe): ?float
+    {
+        if ($importe === null) {
+            return null;
+        }
+
+        if (isset($asignados[$clave])) {
+            return null;
+        }
+
+        $asignados[$clave] = true;
+
+        return $importe;
+    }
+
+    private function claveComprobante(
+        string $tipo,
+        string $letra,
+        int $sucursal,
+        int $numero,
+        string $proveedor = '',
+    ): string {
+        return trim($proveedor).'|'.trim($tipo).'|'.trim($letra).'|'.$sucursal.'|'.$numero;
+    }
+
+    private function proveedorAnita(string $proveedor): string
+    {
+        return str_pad(trim($proveedor), 6, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Total grabado en partidas (misma lógica que el listado CAPEX).
+     */
+    private function calcularMontoCapex(Capex $capex): ?float
+    {
+        $total = 0.0;
+        $tieneMontos = false;
+
+        foreach ($capex->capex_partidas as $partida) {
+            foreach ($partida->capex_partida_montos as $monto) {
+                $total += (float) $monto->monto;
+                $tieneMontos = true;
+            }
+        }
+
+        return $tieneMontos ? round($total, 2) : null;
+    }
+
+    /**
      * @param  mixed  $raw
-     * @return list<array{tipo:string, letra:string, sucursal:int, numero:int, mes:string, moneda_id:string, total:float, proveedor:string}>
+     * @return list<array{tipo:string, letra:string, sucursal:int, numero:int, mes:string, moneda_id:string, total:float}>
      */
     private function agruparOrdenesCompra($raw): array
     {
@@ -206,6 +638,8 @@ class CapexReporteService
             $clave = $tipo.'|'.$letra.'|'.$sucursal.'|'.$numero;
 
             if (isset($ordenes[$clave])) {
+                $ordenes[$clave]['total'] += (float) ($row->total ?? 0);
+
                 continue;
             }
 
@@ -228,60 +662,7 @@ class CapexReporteService
      */
     public function leeFacturasPorOrdenCompra(int $numeroOc, string $tipoRef = 'PEP', string $letraRef = 'X', int $sucursalRef = 0): array
     {
-        if ($numeroOc <= 0) {
-            return [];
-        }
-
-        $apiAnita = new ApiAnita();
-        $leeAnita = [
-            'acc' => 'list',
-            'sistema' => 'compras',
-            'tabla' => 'aplicped',
-            'campos' => '
-                aplp_proveedor,
-                aplp_tipo,
-                aplp_letra,
-                aplp_sucursal,
-                aplp_nro
-            ',
-            'whereArmado' => " WHERE
-                aplp_ref_tipo='".$tipoRef."' and
-                aplp_ref_letra='".$letraRef."' and
-                aplp_ref_sucursal=".$sucursalRef." and
-                aplp_ref_nro=".$numeroOc." and
-                aplp_tipo<>'COM'",
-        ];
-
-        $dataAnita = json_decode($apiAnita->apiCall($leeAnita));
-
-        if (! is_array($dataAnita)) {
-            return [];
-        }
-
-        $facturas = [];
-
-        foreach ($dataAnita as $row) {
-            $proveedor = trim((string) ($row->aplp_proveedor ?? ''));
-            $tipo = trim((string) ($row->aplp_tipo ?? ''));
-            $letra = trim((string) ($row->aplp_letra ?? ''));
-            $sucursal = (int) ($row->aplp_sucursal ?? 0);
-            $numero = (int) ($row->aplp_nro ?? 0);
-
-            if ($proveedor === '' || $tipo === '' || $numero <= 0 || $this->esTipoFacturaExcluido($tipo)) {
-                continue;
-            }
-
-            $clave = $proveedor.'|'.$tipo.'|'.$letra.'|'.$sucursal.'|'.$numero;
-            $facturas[$clave] = [
-                'proveedor' => $proveedor,
-                'tipo' => $tipo,
-                'letra' => $letra,
-                'sucursal' => $sucursal,
-                'numero' => $numero,
-            ];
-        }
-
-        return array_values($facturas);
+        return $this->precargarFacturasPorOrdenes([$numeroOc])[$numeroOc] ?? [];
     }
 
     /**
@@ -289,30 +670,28 @@ class CapexReporteService
      */
     public function leePagosPorFactura(string $proveedor, string $tipo, string $letra, int $sucursal, int $numero): array
     {
-        $apiAnita = new ApiAnita();
-        $leeAnita = [
-            'acc' => 'list',
-            'sistema' => 'compras',
-            'tabla' => 'aplmovp',
-            'campos' => '
-                aplvp_fecha,
-                aplvp_monto,
-                aplvp_tipo_cob,
-                aplvp_letra_cob,
-                aplvp_sucursal_cob,
-                aplvp_nro_cob
-            ',
-            'whereArmado' => " WHERE
-                aplvp_proveedor='".str_pad(trim($proveedor), 6, '0', STR_PAD_LEFT)."' and
-                aplvp_tipo='".trim($tipo)."' and
-                aplvp_letra='".trim($letra)."' and
-                aplvp_sucursal=".(int) $sucursal." and
-                aplvp_nro=".(int) $numero,
-        ];
+        $clave = $this->claveComprobante($tipo, $letra, $sucursal, $numero, $proveedor);
 
-        $dataAnita = json_decode($apiAnita->apiCall($leeAnita));
+        return $this->precargarPagosFacturas([[
+            'proveedor' => $proveedor,
+            'tipo' => $tipo,
+            'letra' => $letra,
+            'sucursal' => $sucursal,
+            'numero' => $numero,
+        ]])[$clave] ?? [];
+    }
 
-        return is_array($dataAnita) ? $dataAnita : [];
+    public function leeMontoFactura(string $proveedor, string $tipo, string $letra, int $sucursal, int $numero): ?float
+    {
+        $clave = $this->claveComprobante($tipo, $letra, $sucursal, $numero, $proveedor);
+
+        return $this->precargarMontosFacturas([[
+            'proveedor' => $proveedor,
+            'tipo' => $tipo,
+            'letra' => $letra,
+            'sucursal' => $sucursal,
+            'numero' => $numero,
+        ]])[$clave] ?? null;
     }
 
     private function formatearPartidas(Capex $capex): string
@@ -381,15 +760,6 @@ class CapexReporteService
             '3' => 'EUROS',
             default => '',
         };
-    }
-
-    private function formatearImporte($valor): string
-    {
-        if ($valor === null || $valor === '') {
-            return '';
-        }
-
-        return number_format((float) $valor, 2, '.', ',');
     }
 
     private function esTipoFacturaExcluido(string $tipo): bool

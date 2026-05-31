@@ -5,9 +5,12 @@ Clientes UIF
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/includes/listado-filtros.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/uif/cliente_uif/filtro.js")}}" type="text/javascript"></script>
 @endsection
 
-<?php use App\Helpers\biblioteca ?>
+<?php use App\Helpers\biblioteca;
+use App\Support\Uif\ClienteUifListadoFiltros; ?>
 
 @section('contenido')
 <div class="row">
@@ -16,26 +19,31 @@ Clientes UIF
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Clientes UIF</h3>
-                <div class="card-tools">
-                    <a href="{{route('crea_cliente_uif')}}" class="btn btn-outline-secondary btn-sm">
-                       	@if (can('crear-cliente-uif', false))
-                        	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
-						@endif
-                    </a>
-                </div>
-                <div class="d-md-flex justify-content-md-end">
-					<form action="{{ route('consulta_cliente_uif') }}" method="GET">
-						<div class="btn-group">
-							<input type="text" name="busqueda" class="form-control" placeholder="Busqueda ..."> 
-							<button type="submit" class="btn btn-default">
-								<span class="fa fa-search"></span>
-							</button>
-						</div>
-					</form>
+                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @include('includes.listado.filtros_toolbar', [
+                        'formId' => 'form-filtros-cliente-uif',
+                        'filtroValor' => $filtros['valor'] ?? '',
+                        'tieneCriterios' => ClienteUifListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
+                        'limpiarUrl' => route('consulta_cliente_uif'),
+                        'placeholder' => 'Búsqueda rápida…',
+                        'toggleTarget' => '#panel-filtros-cliente-uif',
+                        'toggleId' => 'btn-toggle-filtros-cliente-uif',
+                        'inputId' => 'filtro_valor',
+                        'nuevoRegistroUrl' => route('crea_cliente_uif'),
+                        'nuevoRegistroCan' => 'crear-cliente-uif',
+                    ])
                 </div>
             </div>
+            <form method="get" action="{{ route('consulta_cliente_uif') }}" id="form-filtros-cliente-uif" class="mb-0">
+                @include('uif.cliente_uif.partials.filtros_listado', [
+                    'limpiarUrl' => route('consulta_cliente_uif'),
+                ])
+            </form>
             <div class="card-body table-responsive p-0">
-                @include('includes.exportar-tabla', ['ruta' => 'lista_cliente_uif', 'busqueda' => $busqueda])
+                @include('includes.exportar-tabla-queryparams', [
+                    'ruta' => 'lista_cliente_uif',
+                    'queryparams' => $filtrosQuery ?? [],
+                ])
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead>
                         <tr>
@@ -49,6 +57,7 @@ Clientes UIF
                             <th>Pais</th>
                             <th class="width10">Teléfono</th>
                             <th class="width10">Email</th>
+                            <th data-orderable="false">Último premio</th>
                             <th class="width40" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -70,6 +79,15 @@ Clientes UIF
                             <td><small>{{$data->telefono}}</small></td>
                             <td><small>{{$data->email}}</small></td>
                             <td>
+                                @if (!empty($data->ultimo_premio_fecha))
+                                    <small>
+                                        {{\Carbon\Carbon::parse($data->ultimo_premio_fecha)->format('d/m/Y H:i')}}<br>
+                                        {{ number_format((float) ($data->ultimo_premio_monto ?? 0), 2, ',', '.') }}<br>
+                                        {{ $data->ultimo_premio_juego ?? '' }}
+                                    </small>
+                                @endif
+                            </td>
+                            <td>
                        			@if (can('editar-cliente-uif', false))
                                 	<a href="{{route('edita_cliente_uif', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                     <i class="fa fa-edit"></i>
@@ -79,6 +97,15 @@ Clientes UIF
                                     <i class="fa fa-eye"></i>
                                 	</a>
 								@endif
+                       			@if (!empty($data->ultimo_premio_fecha) && (can('editar-cliente-uif', false) || can('listar-cliente-uif', false)))
+                                <a href="{{ route('edita_cliente_uif', ['id' => $data->id, 'uif_tab' => 3, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
+                                   class="btn-accion-tabla tooltipsC"
+                                   title="{{ esSoloVisualizacionClienteUif() ? 'Ver premios del cliente' : 'Premios del cliente' }}"
+                                   target="_blank"
+                                   rel="noopener">
+                                    <i class="fa fa-trophy text-warning"></i>
+                                </a>
+                       			@endif
                        			@if (can('borrar-cliente-uif', false))
                                 <form action="{{route('elimina_cliente_uif', ['id' => $data->id])}}" class="d-inline form-eliminar" method="POST">
                                     @csrf @method("delete")
@@ -96,5 +123,5 @@ Clientes UIF
         </div>
     </div>
 </div>
-{{ $cliente_uifs->appends(['busqueda' => $busqueda])->links() }}
+{{ $cliente_uifs->appends($filtrosQuery ?? [])->links() }}
 @endsection

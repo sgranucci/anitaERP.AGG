@@ -56,12 +56,21 @@
                             <td>{{$data->total}}</td>
                             <td>{{$data->estado}}</td>
                             <td>
-                       			@if (can('editar-precarga-comprobante-proveedor', false))
+                                @if (filled($data->rutaalmacenamiento) && puedeVerPrecargaFacturaPdf())
+                                <a href="{{ urlAppCarpeta('compras/precarga_comprobante_proveedor/'.$data->id.'/factura-pdf?inline=1') }}"
+                                   class="btn-accion-tabla tooltipsC"
+                                   title="Ver PDF escaneado"
+                                   target="_blank"
+                                   rel="noopener noreferrer">
+                                    <i class="fa fa-file-pdf-o text-danger"></i>
+                                </a>
+                                @endif
+                       			@if (can('editar-precarga-proveedores', false))
                                 	<a href="{{route('editar_precarga_comprobante_proveedor', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                     <i class="fa fa-edit"></i>
                                 	</a>
 								@endif
-                       			@if (can('borrar-precarga-comprobante-proveedor', false))
+                       			@if (can('borrar-precarga-proveedores', false))
                                 <form action="{{route('eliminar_precarga_comprobante_proveedor', ['id' => $data->id])}}" class="d-inline form-eliminar" method="POST">
                                     @csrf @method("delete")
                                     <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">

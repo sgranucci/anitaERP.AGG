@@ -23,7 +23,7 @@ class ValidacionRendicionGastronomiaCaja extends FormRequest
             'empresa_id' => ['required', 'integer', 'exists:empresa,id'],
             'puntoventa_cae_id' => ['required', 'integer', 'exists:puntoventa,id'],
             'puntoventa_caea_id' => ['required', 'integer', 'exists:puntoventa,id'],
-            'caja_id' => ['required', 'integer', 'exists:caja,id'],
+            'caja_id' => ['required', 'integer', 'min:1', 'exists:caja,id'],
             'fecharendicion' => ['required', 'date'],
             'turno_operativo_gastronomia_id' => [
                 'required',
@@ -52,11 +52,20 @@ class ValidacionRendicionGastronomiaCaja extends FormRequest
     {
         return [
             'codigo' => 'ticket / código',
+            'caja_id' => 'caja',
             'turno_operativo_gastronomia_id' => 'cierre de turno',
             'iniciodelfondo' => 'inicio del fondo',
             'totalredondeo' => 'redondeo rendición',
             'totalredondeoinvitacion' => 'redondeo invitaciones',
             'sobrantefaltante' => 'sobrante / faltante',
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'caja_id.min' => 'Debe tener una caja asignada para registrar la rendición (ingrese desde Movimientos de caja).',
+            'caja_id.exists' => 'La caja indicada no existe o no está habilitada.',
         ];
     }
 }

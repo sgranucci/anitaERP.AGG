@@ -26,6 +26,7 @@ use App\Repositories\Presupuesto\PartidagastoRepositoryInterface;
 use App\Repositories\Ventas\FormapagoRepositoryInterface;
 use App\Services\Compras\RequisicionService;
 use App\Services\Configuracion\ArbolaprobacionService;
+use App\Support\Compras\RequisicionListadoFiltros;
 use App\Support\Compras\RequisicionTotalesCabecera;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -86,14 +87,17 @@ class RequisicionController extends Controller
             $this->requisicionService->sincronizarConAnita();
         }
 
-        $busqueda = $request->busqueda;
+        $filtros = RequisicionListadoFiltros::resolverDesdeRequest($request);
 
-        $requisicion = $this->requisicionQuery->leeRequisicion($busqueda, true, true);
+        $requisicion = $this->requisicionQuery->leeRequisicion($filtros, true, true);
 
         $estadoAprobada = Requisicion_Estado::$enumEstado[array_search('A', array_column(Requisicion_Estado::$enumEstado, 'valor'), true)]['nombre'];
         $datas = [
             'requisicion' => $requisicion,
-            'busqueda' => $busqueda,
+            'busqueda' => $filtros['busqueda'],
+            'filtros' => $filtros,
+            'filtrosQuery' => RequisicionListadoFiltros::paraQueryString($filtros),
+            'camposFiltro' => RequisicionListadoFiltros::CAMPOS,
             'estado_enum' => Requisicion_Estado::$enumEstado,
             'estado_en_compras' => Requisicion_Estado::$enumEstado[array_search('K', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'],
             'estado_aprobada_requisicion' => $estadoAprobada,
@@ -111,9 +115,11 @@ class RequisicionController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
+        $filtros = RequisicionListadoFiltros::resolverDesdeRequest($request, $busqueda);
+
         switch ($formato) {
             case 'PDF':
-                $requisicion = $this->requisicionQuery->leeRequisicion($busqueda, false, true);
+                $requisicion = $this->requisicionQuery->leeRequisicion($filtros, false, true);
 
                 $view = \View::make('compras.requisicion.listado', compact('requisicion'))
                     ->render();
@@ -128,28 +134,16 @@ class RequisicionController extends Controller
 
             case 'EXCEL':
                 return (new RequisicionExport($this->requisicionQuery))
-                    ->parametros($busqueda)
+                    ->parametros($filtros)
                     ->download('requisicion.xlsx');
 
             case 'CSV':
                 return (new RequisicionExport($this->requisicionQuery))
-                    ->parametros($busqueda)
+                    ->parametros($filtros)
                     ->download('requisicion.csv', \Maatwebsite\Excel\Excel::CSV);
         }
 
-        $requisicion = $this->requisicionQuery->leeRequisicion($busqueda, true, true);
-        $estadoAprobada = Requisicion_Estado::$enumEstado[array_search('A', array_column(Requisicion_Estado::$enumEstado, 'valor'), true)]['nombre'];
-        $datas = [
-            'requisicion' => $requisicion,
-            'busqueda' => $busqueda,
-            'estado_enum' => Requisicion_Estado::$enumEstado,
-            'estado_en_compras' => Requisicion_Estado::$enumEstado[array_search('K', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'],
-            'estado_aprobada_requisicion' => $estadoAprobada,
-            'tratamiento_enum' => Requisicion::$enumTratamiento,
-            'contratacionDirecta_enum' => Requisicion::$enumContratacionDirecta,
-        ];
-
-        return view('compras.requisicion.index', $datas);
+        return redirect()->route('consultar_requisicion', RequisicionListadoFiltros::paraQueryString($filtros));
     }
 
     public function crear()

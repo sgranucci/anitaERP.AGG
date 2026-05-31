@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Ventas;
 
 use App\Http\Controllers\Controller;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Ventas\TurnoGastronomiaRepositoryInterface;
 use App\Services\Ventas\Gastronomia\GastronomiaCuentaService;
 use App\Services\Ventas\Gastronomia\GastronomiaJornadaService;
@@ -23,6 +24,7 @@ class HabilitacionTurnoGastronomiaController extends Controller
         private readonly GastronomiaCuentaService $cuentaService,
         private readonly TurnoGastronomiaRepositoryInterface $turnoGastronomiaRepository,
         private readonly GastronomiaCierreTurnoReporteSupport $reporteSupport,
+        private readonly EmpresaRepositoryInterface $empresaRepository,
     ) {
     }
 
@@ -37,14 +39,28 @@ class HabilitacionTurnoGastronomiaController extends Controller
             ]);
         }
 
-        $cfg = $this->cuentaService->resolverConfiguracionPv($request);
+        $empresasAsignadas = $this->empresaRepository->allFiltrado();
         $pc = GastronomiaIdentificadorPc::resolver($request);
+        $empresasOperables = $this->cuentaService->empresasConPvEnTerminal($pc, $empresasAsignadas);
+        $empresasSinPv = $this->cuentaService->empresasSinPvEnTerminal($pc, $empresasAsignadas);
+
+        $empresaId = $this->resolverEmpresaId($request, $empresasOperables);
+        if ($empresaId > 0 && ! $empresasOperables->contains('id', $empresaId)) {
+            $empresaId = (int) ($empresasOperables->first()->id ?? 0);
+        }
+        $this->assertAccesoEmpresa($empresaId);
+
+        $cfg = $empresaId > 0
+            ? $this->resolverConfiguracionParaRequest($request, $empresaId)
+            : null;
         $estado = null;
         $turnos = collect();
 
         if ($cfg !== null) {
             $estado = $this->turnoOperativoService->estadoParaTerminal($cfg, $pc);
             $turnos = $this->turnoGastronomiaRepository->listarParaSelect((int) $cfg->empresa_id);
+        } elseif ($empresaId > 0) {
+            $turnos = $this->turnoGastronomiaRepository->listarParaSelect($empresaId);
         }
 
         $accion = (string) $request->query('accion', '');
@@ -54,11 +70,14 @@ class HabilitacionTurnoGastronomiaController extends Controller
 
         return view('ventas.gastronomia.habilitacion_turno.index', [
             'modo_caja_directo' => false,
+            'empresa_query' => $empresasOperables,
+            'empresas_sin_pv' => $empresasSinPv,
+            'empresa_id' => $empresaId,
             'cfg' => $cfg,
             'identificador_pc' => $pc,
             'estado' => $estado,
             'turnos' => $turnos,
-            'jornada' => $cfg ? $this->jornadaService->estadoParaEmpresa((int) $cfg->empresa_id) : null,
+            'jornada' => $empresaId > 0 ? $this->jornadaService->estadoParaEmpresa($empresaId) : null,
             'puede_habilitar' => can('habilitar-turno-gastronomia', false),
             'puede_cierre_parcial' => can('cierre-parcial-turno-gastronomia', false),
             'puede_cerrar' => can('cerrar-turno-operativo-gastronomia', false),
@@ -72,9 +91,11 @@ class HabilitacionTurnoGastronomiaController extends Controller
     {
         can('gestionar-habilitacion-turno-gastronomia');
 
-        $cfg = $this->cuentaService->resolverConfiguracionPv($request);
+        $empresaId = $this->empresaOperativaDesdeRequest($request);
+
+        $cfg = $this->resolverConfiguracionParaRequest($request, $empresaId);
         if ($cfg === null) {
-            return response()->json(['ok' => false, 'error' => 'Sin configuración PV para esta terminal.'], 422);
+            return response()->json(['ok' => false, 'error' => 'Sin configuración PV para esta terminal y empresa.'], 422);
         }
 
         $pc = GastronomiaIdentificadorPc::resolver($request);
@@ -93,7 +114,8 @@ class HabilitacionTurnoGastronomiaController extends Controller
             return response()->json(['ok' => false, 'error' => 'Sin permiso para gestionar habilitación de turno.'], 403);
         }
 
-        $cfg = $this->cuentaService->resolverConfiguracionPv($request);
+        $empresaId = $this->empresaOperativaDesdeRequest($request);
+        $cfg = $this->resolverConfiguracionParaRequest($request, $empresaId);
         if ($cfg === null) {
             return response()->json(['ok' => false, 'error' => 'Sin configuración PV.'], 422);
         }
@@ -142,7 +164,8 @@ class HabilitacionTurnoGastronomiaController extends Controller
             return response()->json(['ok' => false, 'error' => 'Sin permiso para gestionar habilitación de turno.'], 403);
         }
 
-        $cfg = $this->cuentaService->resolverConfiguracionPv($request);
+        $empresaId = $this->empresaOperativaDesdeRequest($request);
+        $cfg = $this->resolverConfiguracionParaRequest($request, $empresaId);
         if ($cfg === null) {
             return response()->json(['ok' => false, 'error' => 'Sin configuración PV.'], 422);
         }
@@ -200,7 +223,8 @@ class HabilitacionTurnoGastronomiaController extends Controller
             return response()->json(['ok' => false, 'error' => 'Sin permiso para gestionar habilitación de turno.'], 403);
         }
 
-        $cfg = $this->cuentaService->resolverConfiguracionPv($request);
+        $empresaId = $this->empresaOperativaDesdeRequest($request);
+        $cfg = $this->resolverConfiguracionParaRequest($request, $empresaId);
         if ($cfg === null) {
             return response()->json(['ok' => false, 'error' => 'Sin configuración PV.'], 422);
         }
@@ -245,9 +269,11 @@ class HabilitacionTurnoGastronomiaController extends Controller
     {
         can('cierre-parcial-turno-gastronomia');
 
-        $cfg = $this->cuentaService->resolverConfiguracionPv($request);
+        $empresaId = $this->empresaOperativaDesdeRequest($request);
+
+        $cfg = $this->resolverConfiguracionParaRequest($request, $empresaId);
         if ($cfg === null) {
-            abort(422, 'Sin configuración PV.');
+            abort(422, 'Sin configuración PV para esta terminal y empresa.');
         }
 
         $pc = GastronomiaIdentificadorPc::resolver($request);
@@ -266,9 +292,11 @@ class HabilitacionTurnoGastronomiaController extends Controller
     {
         can('habilitar-turno-gastronomia');
 
-        $cfg = $this->cuentaService->resolverConfiguracionPv($request);
+        $empresaId = $this->empresaOperativaDesdeRequest($request);
+
+        $cfg = $this->resolverConfiguracionParaRequest($request, $empresaId);
         if ($cfg === null) {
-            return response()->json(['ok' => false, 'error' => 'Sin configuración PV para esta terminal.'], 422);
+            return response()->json(['ok' => false, 'error' => 'Sin configuración PV para esta terminal y empresa.'], 422);
         }
 
         try {
@@ -297,9 +325,11 @@ class HabilitacionTurnoGastronomiaController extends Controller
     {
         can('cierre-parcial-turno-gastronomia');
 
-        $cfg = $this->cuentaService->resolverConfiguracionPv($request);
+        $empresaId = $this->empresaOperativaDesdeRequest($request);
+
+        $cfg = $this->resolverConfiguracionParaRequest($request, $empresaId);
         if ($cfg === null) {
-            return response()->json(['ok' => false, 'error' => 'Sin configuración PV para esta terminal.'], 422);
+            return response()->json(['ok' => false, 'error' => 'Sin configuración PV para esta terminal y empresa.'], 422);
         }
 
         $pc = GastronomiaIdentificadorPc::resolver($request);
@@ -334,9 +364,11 @@ class HabilitacionTurnoGastronomiaController extends Controller
     {
         can('cerrar-turno-operativo-gastronomia');
 
-        $cfg = $this->cuentaService->resolverConfiguracionPv($request);
+        $empresaId = $this->empresaOperativaDesdeRequest($request);
+
+        $cfg = $this->resolverConfiguracionParaRequest($request, $empresaId);
         if ($cfg === null) {
-            return response()->json(['ok' => false, 'error' => 'Sin configuración PV para esta terminal.'], 422);
+            return response()->json(['ok' => false, 'error' => 'Sin configuración PV para esta terminal y empresa.'], 422);
         }
 
         $pc = GastronomiaIdentificadorPc::resolver($request);
@@ -368,6 +400,86 @@ class HabilitacionTurnoGastronomiaController extends Controller
             ]);
         } catch (InvalidArgumentException $e) {
             return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        }
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, \App\Models\Configuracion\Empresa>  $empresas
+     */
+    private function resolverEmpresaId(Request $request, $empresas): int
+    {
+        $empresaId = (int) $request->input('empresa_id', 0);
+        if ($empresaId <= 0 && $empresas->count() >= 1) {
+            $empresaId = (int) $empresas->first()->id;
+        }
+
+        return $empresaId;
+    }
+
+    private function empresaIdDesdeRequest(Request $request): int
+    {
+        $empresaId = (int) $request->input('empresa_id', 0);
+        if ($empresaId <= 0) {
+            $pc = GastronomiaIdentificadorPc::resolver($request);
+            $operables = $this->cuentaService->empresasConPvEnTerminal(
+                $pc,
+                $this->empresaRepository->allFiltrado(),
+            );
+            if ($operables->count() >= 1) {
+                $empresaId = (int) $operables->first()->id;
+            }
+        }
+
+        return $empresaId;
+    }
+
+    private function assertEmpresaOperableEnTerminal(Request $request, int $empresaId): void
+    {
+        if ($empresaId <= 0) {
+            abort(422, 'Debe indicar una empresa con punto de venta configurado en esta terminal.');
+        }
+
+        $pc = GastronomiaIdentificadorPc::resolver($request);
+        $operables = $this->cuentaService->empresasConPvEnTerminal(
+            $pc,
+            $this->empresaRepository->allFiltrado(),
+        );
+
+        if (! $operables->contains('id', $empresaId)) {
+            abort(422, 'La empresa seleccionada no tiene punto de venta configurado para esta terminal.');
+        }
+    }
+
+    private function empresaOperativaDesdeRequest(Request $request): int
+    {
+        $empresaId = $this->empresaIdDesdeRequest($request);
+        $this->assertAccesoEmpresa($empresaId);
+        $this->assertEmpresaOperableEnTerminal($request, $empresaId);
+
+        return $empresaId;
+    }
+
+    private function assertAccesoEmpresa(int $empresaId): void
+    {
+        if ($empresaId <= 0) {
+            return;
+        }
+
+        $asignadas = $this->empresaRepository->traeEmpresasAsignadas();
+        if (count($asignadas) > 1 && ! in_array($empresaId, $asignadas, true)) {
+            abort(403, 'Empresa no permitida para su usuario.');
+        }
+    }
+
+    private function resolverConfiguracionParaRequest(Request $request, int $empresaId)
+    {
+        try {
+            return $this->cuentaService->resolverConfiguracionPv(
+                $request,
+                $empresaId > 0 ? $empresaId : null,
+            );
+        } catch (InvalidArgumentException $e) {
+            abort(422, $e->getMessage());
         }
     }
 

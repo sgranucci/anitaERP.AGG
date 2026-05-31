@@ -186,6 +186,51 @@
     #gastro-cuenta-table .gastro-cc-monto {
         width: 110px;
     }
+    #gastro-medios-rapidos {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        align-items: flex-start;
+    }
+    #gastro-medios-rapidos .gastro-medio-rapido {
+        display: inline-flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-width: 72px;
+        max-width: 110px;
+        padding: 0.35rem 0.4rem 0.25rem;
+        font-size: 0.68rem;
+        line-height: 1.15;
+        text-align: center;
+        white-space: normal;
+        word-break: break-word;
+    }
+    #gastro-medios-rapidos .gastro-medio-rapido i,
+    #gastro-medios-rapidos .gastro-medio-rapido .gastro-icon-mercadopago {
+        font-size: 1.15rem;
+        margin-bottom: 0.15rem;
+    }
+    .gastro-icon-mercadopago {
+        display: inline-block;
+        width: 1.15rem;
+        height: 1.15rem;
+        background: url('{{ asset('assets/pages/img/ventas/gastronomia/mercadopago.svg') }}') center/contain no-repeat;
+    }
+    #gastro-cuenta-table .consultacuentacaja i,
+    #gastro-cuenta-table .consultacuentacaja .gastro-icon-mercadopago {
+        font-size: 1rem;
+    }
+    #gastro-cuenta-table .consultacuentacaja .gastro-icon-mercadopago {
+        width: 1rem;
+        height: 1rem;
+    }
+    .gastro-cobranza-acciones {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: 0.35rem;
+    }
     #modal-gastro-aviso .modal-body {
         max-height: min(70vh, 520px);
         overflow-y: auto;
@@ -639,7 +684,11 @@
         @endif
 
         @if (($requiere_habilitacion_turno ?? true) && $tiene_cfg_pv)
-            <div class="alert py-2 mb-3 {{ empty($turno_operativo['turno_habilitado']) ? 'alert-danger' : 'alert-secondary' }}" id="gastro-alerta-turno">
+            @php
+                $gastroMostrarAlertaTurno = ! empty($jornada['jornada_abierta'])
+                    || ! empty($turno_operativo['turno_habilitado']);
+            @endphp
+            <div class="alert py-2 mb-3 {{ empty($turno_operativo['turno_habilitado']) ? 'alert-danger' : 'alert-secondary' }}{{ $gastroMostrarAlertaTurno ? '' : ' d-none' }}" id="gastro-alerta-turno">
                 @if (empty($turno_operativo['turno_habilitado']))
                     No hay <strong>turno habilitado</strong> en esta terminal.
                     <a href="{{ route('gastronomia_habilitacion_turno') }}">Habilitar turno</a>
@@ -885,7 +934,8 @@
                                 <span class="text-muted" style="font-size:11px;">Se graba al facturar · total en $ · <kbd>Enter</kbd> en código y monto</span>
                             </div>
                             <p id="gastro-waitry-totem-aviso" class="alert alert-info py-1 px-2 small mb-1 d-none" role="status">
-                                Cuenta Waitry cobrada en el tótem: cobranza fija con medio <strong>TOTEM</strong> (no editable).
+                                Cuenta Waitry cobrada en el tótem: cobranza fija con medio
+                                <strong id="gastro-waitry-medio-label">TOTEM</strong> (no editable).
                             </p>
                             <div id="gastro-cobranza-cotiz-bar" class="d-none" role="status" aria-live="polite"></div>
                             <input type="hidden" id="gastro-cotizacion-extranjera" value="">
@@ -903,12 +953,10 @@
                                     <tbody id="tbody-gastro-cuenta-table"></tbody>
                                 </table>
                             </div>
-                            <div class="mt-1">
+                            <div class="mt-1 gastro-cobranza-acciones">
                                 <button type="button" class="btn btn-sm btn-danger" id="gastro-agrega-renglon-cuenta">+ Agregar renglón</button>
-                                <button type="button" class="btn btn-sm btn-outline-primary ml-1" id="gastro-btn-canje-ticket-tarjeta" title="Canjear ticket tarjeta gastronomía (CTG)">
-                                    <i class="fa fa-barcode" aria-hidden="true"></i> Canje tarjeta
-                                </button>
-                                <div id="gastro-totales-cobranza" class="gastro-totales-resumen"></div>
+                                <div id="gastro-medios-rapidos" class="d-none" role="group" aria-label="Medios de pago rápidos"></div>
+                                <div id="gastro-totales-cobranza" class="gastro-totales-resumen ml-auto"></div>
                             </div>
                         </div>
                     </div>
@@ -1131,7 +1179,10 @@
                 <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">&times;</button>
             </div>
             <div class="modal-body py-2">
-                <p class="small text-muted mb-2">Escanee o ingrese el código de barras del cupón Wigos.</p>
+                <p class="small text-muted mb-2">
+                    Escanee el cupón Wigos (se valida automáticamente). Solo cuentas libres: al confirmar se abre una cuenta libre
+                    con mozo y se carga el premio con descuento.
+                </p>
                 <div class="form-group mb-2">
                     <label for="gastro-canje-premio-codigo" class="small mb-1">Nro. de cupón</label>
                     <input type="text" class="form-control form-control-sm" id="gastro-canje-premio-codigo" autocomplete="off">
@@ -1162,7 +1213,7 @@
             </div>
             <div class="modal-footer py-2">
                 <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-sm btn-primary" id="gastro-canje-premio-confirmar" disabled>Aplicar a cuenta</button>
+                <button type="button" class="btn btn-sm btn-primary" id="gastro-canje-premio-confirmar" disabled>Abrir cuenta libre y aplicar</button>
             </div>
         </div>
     </div>
@@ -1176,7 +1227,10 @@
                 <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">&times;</button>
             </div>
             <div class="modal-body py-2">
-                <p class="small text-muted mb-2">Pase la tarjeta por el lector. El sistema consulta Wigos y muestra la categoría y artículos disponibles (un canje por DNI por día).</p>
+                <p class="small text-muted mb-2">
+                    Pase la tarjeta por el lector (se valida con <kbd>Enter</kbd> o automáticamente). Solo cuentas libres: al confirmar se abre una cuenta libre
+                    con mozo, se aplica el canje y se abre el flujo F8 para facturar con descuento ($0,01).
+                </p>
                 <div class="form-group mb-2">
                     <label for="gastro-canje-fidelidad-trackdata" class="small mb-1">Tarjeta / trackdata</label>
                     <input type="text" class="form-control form-control-sm" id="gastro-canje-fidelidad-trackdata" autocomplete="off">
@@ -1204,7 +1258,7 @@
             </div>
             <div class="modal-footer py-2">
                 <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-sm btn-primary" id="gastro-canje-fidelidad-confirmar" disabled>Aplicar y facturar con descuento</button>
+                <button type="button" class="btn btn-sm btn-primary" id="gastro-canje-fidelidad-confirmar" disabled>Abrir cuenta libre y aplicar</button>
             </div>
         </div>
     </div>

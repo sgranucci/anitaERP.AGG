@@ -28,9 +28,9 @@
         <div class="card card-danger">
             <div class="card-header d-flex align-items-center flex-wrap">
                 <h3 class="card-title mb-0">Registrar rendición de gastronomía</h3>
-                @if (! empty($nombreCaja))
+                @if (($caja_id ?? 0) > 0)
                 <span class="badge badge-light border ml-2 mb-0 py-1 px-2" style="font-size:0.85rem;font-weight:600;">
-                    <i class="fa fa-inbox mr-1"></i>Caja: {{ $nombreCaja }}
+                    <i class="fa fa-inbox mr-1"></i>Caja {{ $caja_id }}@if (! empty($nombreCaja)) — {{ $nombreCaja }}@endif
                 </span>
                 @endif
                 <div class="card-tools ml-auto">

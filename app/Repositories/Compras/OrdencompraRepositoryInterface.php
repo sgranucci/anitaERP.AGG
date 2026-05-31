@@ -22,28 +22,28 @@ interface OrdencompraRepositoryInterface
     public function existeRegistro(): bool;
 
     /**
+     * @param  array<string, mixed>|string|null  $filtros
      * @return \Illuminate\Support\Collection<int, object>|\Illuminate\Contracts\Pagination\LengthAwarePaginator
      */
-    public function listadoIndex(?string $busqueda, ?int $sectorUsuarioId, bool $paginar = false);
+    public function listadoIndex($filtros, ?int $sectorUsuarioId, bool $paginar = false);
 
     /**
+     * @param  array<string, mixed>|string|null  $filtros
      * @return \Illuminate\Support\LazyCollection<int, object>
      */
-    public function listadoIndexCursor(?string $busqueda, ?int $sectorUsuarioId);
+    public function listadoIndexCursor($filtros, ?int $sectorUsuarioId);
 
     /**
-     * Listado completo para exportaciones PDF/Excel (columnas estándar + ítems).
-     *
+     * @param  array<string, mixed>|string|null  $filtros
      * @return \Illuminate\Support\Collection<int, \App\Models\Compras\Ordencompra>
      */
-    public function listadoExport(?string $busqueda, ?int $sectorUsuarioId);
+    public function listadoExport($filtros, ?int $sectorUsuarioId);
 
     /**
-     * Cursor del listado de exportación (PDF por lotes sin cargar todo en memoria).
-     *
+     * @param  array<string, mixed>|string|null  $filtros
      * @return \Illuminate\Support\LazyCollection<int, \App\Models\Compras\Ordencompra>
      */
-    public function listadoExportCursor(?string $busqueda, ?int $sectorUsuarioId);
+    public function listadoExportCursor($filtros, ?int $sectorUsuarioId);
 
     /**
      * Siguiente número de orden de compra (único global, sin filtrar por empresa).

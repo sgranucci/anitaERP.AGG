@@ -27,6 +27,7 @@ class CapexExport implements FromView, WithColumnFormatting, WithMapping, Should
 	private $origen;
 	protected $dates = ['fecha'];
 	private $capexQuery;
+	private $filtros;
 
 	public function __construct(
 								CapexQueryInterface $capexquery,
@@ -37,7 +38,7 @@ class CapexExport implements FromView, WithColumnFormatting, WithMapping, Should
 
 	public function view(): View
 	{
-		$capexs = $this->capexQuery->leeCapex($this->busqueda, false);
+		$capexs = $this->capexQuery->leeCapex($this->filtros, false);
 
 		return view('exports.presupuesto.capexindex', ['capex' => $capexs]);
 	}
@@ -98,9 +99,9 @@ class CapexExport implements FromView, WithColumnFormatting, WithMapping, Should
         return 'Reporte de Ordenes de Venta';
     }
 
-	public function parametros($busqueda)
+	public function parametros($filtros)
 	{
-		$this->busqueda = $busqueda;
+		$this->filtros = $filtros;
 
 		return $this;
 	}

@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Caja;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionRendicionGastronomiaCaja;
+use App\Models\Caja\Caja;
 use App\Queries\Caja\Caja_AsignacionQueryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Caja\RendicionGastronomiaCajaService;
+use App\Support\Caja\RendicionGastronomiaCajaPermiso;
 use Auth;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -25,10 +27,15 @@ class RendicionGastronomiaController extends Controller
     {
         can('listar-rendicion-gastronomia-caja');
 
-        $busqueda = $request->input('busqueda');
-        $rendiciones = $this->service->listar($busqueda, true);
+        $filtros = $this->filtrosListadoDesdeRequest($request);
+        $rendiciones = $this->service->listar(
+            $filtros['busqueda'],
+            true,
+            $filtros['fecha_desde'],
+            $filtros['fecha_hasta'],
+        );
 
-        return view('caja.rendiciongastronomia.index', compact('rendiciones', 'busqueda'));
+        return view('caja.rendiciongastronomia.index', compact('rendiciones', 'filtros'));
     }
 
     public function listar(Request $request, ?string $formato = null, ?string $busqueda = null)
@@ -38,8 +45,13 @@ class RendicionGastronomiaController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $busqueda = $busqueda ?? $request->input('busqueda');
-        $rendiciones = $this->service->listar($busqueda, false);
+        $filtros = $this->filtrosListadoDesdeRequest($request, $busqueda);
+        $rendiciones = $this->service->listar(
+            $filtros['busqueda'],
+            false,
+            $filtros['fecha_desde'],
+            $filtros['fecha_hasta'],
+        );
 
         switch ($formato) {
             case 'PDF':
@@ -67,7 +79,28 @@ class RendicionGastronomiaController extends Controller
                 );
         }
 
-        return view('caja.rendiciongastronomia.index', compact('rendiciones', 'busqueda'));
+        return view('caja.rendiciongastronomia.index', compact('rendiciones', 'filtros'));
+    }
+
+    /**
+     * @return array{busqueda: ?string, fecha_desde: ?string, fecha_hasta: ?string}
+     */
+    private function filtrosListadoDesdeRequest(Request $request, ?string $busquedaRuta = null): array
+    {
+        $busqueda = $busquedaRuta ?? $request->input('busqueda');
+        $busqueda = is_string($busqueda) ? trim($busqueda) : null;
+        if ($busqueda === '') {
+            $busqueda = null;
+        }
+
+        $fechaDesde = trim((string) $request->input('fecha_desde', ''));
+        $fechaHasta = trim((string) $request->input('fecha_hasta', ''));
+
+        return [
+            'busqueda' => $busqueda,
+            'fecha_desde' => $fechaDesde !== '' ? $fechaDesde : null,
+            'fecha_hasta' => $fechaHasta !== '' ? $fechaHasta : null,
+        ];
     }
 
     public function crear(?int $caja = null)
@@ -75,6 +108,12 @@ class RendicionGastronomiaController extends Controller
         can('crear-rendicion-gastronomia-caja');
 
         [$cajaId, $nombreCaja] = $this->resolverCaja($caja);
+        if ($cajaId <= 0) {
+            return redirect()
+                ->route('rendiciongastronomia')
+                ->with('mensaje', 'No tiene caja asignada para hoy. Debe ingresar desde Movimientos de caja o solicitar asignación de cajero.');
+        }
+
         $empresaQuery = $this->empresaRepository->allFiltrado();
         $empresaDefaultId = $this->resolverEmpresaDefaultId($empresaQuery);
         $codigoPropuesto = $empresaDefaultId > 0
@@ -156,6 +195,11 @@ class RendicionGastronomiaController extends Controller
         can('editar-rendicion-gastronomia-caja');
 
         $data = $this->service->findConDetalle($id);
+        if (! RendicionGastronomiaCajaPermiso::puedeActualizarPorFecha($data)) {
+            return redirect('caja/rendiciongastronomia')
+                ->with('mensaje', RendicionGastronomiaCajaPermiso::mensajeRestriccionFecha());
+        }
+
         $empresaQuery = $this->empresaRepository->allFiltrado();
         $nombreCaja = (string) ($data->caja?->nombre ?? '');
 
@@ -173,6 +217,12 @@ class RendicionGastronomiaController extends Controller
     public function actualizar(ValidacionRendicionGastronomiaCaja $request, int $id)
     {
         can('actualizar-rendicion-gastronomia-caja');
+
+        $rendicion = $this->service->findConDetalle($id);
+        if (! RendicionGastronomiaCajaPermiso::puedeActualizarPorFecha($rendicion)) {
+            return redirect('caja/rendiciongastronomia')
+                ->with('mensaje', RendicionGastronomiaCajaPermiso::mensajeRestriccionFecha());
+        }
 
         try {
             $cabecera = $this->service->cabeceraDesdeRequest($request->validated());
@@ -294,12 +344,21 @@ class RendicionGastronomiaController extends Controller
     private function resolverCaja(?int $cajaParam): array
     {
         if ($cajaParam !== null && $cajaParam > 0) {
-            return [$cajaParam, ''];
+            $caja = Caja::query()->find($cajaParam);
+            if ($caja !== null) {
+                return [(int) $caja->id, (string) $caja->nombre];
+            }
         }
 
         $asignacion = $this->cajaAsignacionQuery->leeAsignacionPorUsuario((int) Auth::id(), Carbon::now());
-        if ($asignacion && $asignacion->caja_id > 0) {
-            return [(int) $asignacion->caja_id, (string) ($asignacion->cajas->nombre ?? '')];
+        if ($asignacion && (int) $asignacion->caja_id > 0) {
+            $cajaId = (int) $asignacion->caja_id;
+            $nombre = (string) ($asignacion->cajas->nombre ?? '');
+            if ($nombre === '') {
+                $nombre = (string) (Caja::query()->whereKey($cajaId)->value('nombre') ?? '');
+            }
+
+            return [$cajaId, $nombre];
         }
 
         return [0, ''];

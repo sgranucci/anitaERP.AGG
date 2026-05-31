@@ -43,6 +43,26 @@
                 </div>
             </div>
             <div class="card-body">
+                @if (! empty($jornada['jornada_abierta']))
+                    <div class="alert alert-info py-2 mb-3" id="alert-jornada-activa">
+                        Jornada activa:
+                        <strong>{{ $turno_operativo['fecha_jornada_fmt'] ?? $jornada['fecha_jornada_fmt'] ?? $jornada['fecha_jornada'] }}</strong>
+                        @if (! empty($jornada['usuario_apertura']))
+                            · Abierta por <strong>{{ $jornada['usuario_apertura'] }}</strong>
+                            @if (! empty($jornada['apertura_en']))
+                                ({{ $jornada['apertura_en'] }})
+                            @endif
+                        @endif
+                    </div>
+                @elseif ($jornada !== null && ($empresa_id_jornada ?? 0) > 0)
+                    <div class="alert alert-secondary py-2 mb-3">
+                        Sin jornada abierta para esta empresa.
+                        @if (can('gestionar-jornada-gastronomia', false))
+                            <a href="{{ route('gastronomia_jornada', ['empresa_id' => $empresa_id_jornada]) }}" class="alert-link">Abrir jornada</a>
+                        @endif
+                    </div>
+                @endif
+
                 @if ($requiere_habilitacion_turno ?? true)
                     @if (! empty($turno_operativo['turno_habilitado']))
                         <div class="alert alert-success py-2 mb-3">

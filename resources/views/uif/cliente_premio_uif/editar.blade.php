@@ -5,6 +5,7 @@
 
 @section("styles")
 <link href="{{asset("assets/js/bootstrap-fileinput/css/fileinput.min.css")}}" rel="stylesheet" type="text/css"/>
+@include('uif.cliente_premio_uif.partials.foto_estilos')
 @endsection
 
 @section("scriptsPlugins")

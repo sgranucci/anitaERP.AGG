@@ -7,6 +7,6 @@ interface PartidagastoQueryInterface
     public function first();
     public function all();
     public function allQuery(array $campos);
-    public function leePartidagasto($busqueda, $flPaginando = null);
+    public function leePartidagasto($filtros, $flPaginando = null);
 }
 

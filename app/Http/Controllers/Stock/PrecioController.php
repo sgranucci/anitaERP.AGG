@@ -56,7 +56,7 @@ class PrecioController extends Controller
         }
 
         $f = $this->precioQuery->resolverFiltrosDesdeRequest($request);
-        $listasPrecio = Listaprecio::orderBy('nombre')->get();
+        $listasPrecio = $this->listasPrecioParaFiltro();
         $datas = $this->precioQuery->leePrecios(
             $f['fecha_vigencia'],
             $f['listaprecio_id'],
@@ -121,7 +121,7 @@ class PrecioController extends Controller
             (new Precio)->sincronizarConAnita();
         }
 
-        $listasPrecio = Listaprecio::orderBy('nombre')->get();
+        $listasPrecio = $this->listasPrecioParaFiltro();
         $datas = $this->precioQuery->leePrecios(
             $f['fecha_vigencia'],
             $f['listaprecio_id'],
@@ -138,6 +138,14 @@ class PrecioController extends Controller
             'filtrosParaVista' => $f['filtros'],
             'busqueda' => $f['busqueda'],
         ]);
+    }
+
+    private function listasPrecioParaFiltro()
+    {
+        return Listaprecio::query()
+            ->orderByRaw('CAST(codigo AS UNSIGNED) ASC')
+            ->orderBy('codigo')
+            ->get(['id', 'codigo', 'nombre']);
     }
 
     public function asignaPrecioPorTalle($articulo_id, $talle_id)

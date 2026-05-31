@@ -17,12 +17,33 @@
         return '';
     }
 
+    function jornadaAbiertaEnPos(estado) {
+        if (estado && estado.jornada_abierta === true) {
+            return true;
+        }
+        return !!(G.jornada && G.jornada.jornada_abierta);
+    }
+
     function actualizarAlertaTurno(estado) {
         var el = document.getElementById('gastro-alerta-turno');
-        if (!el || !estado) {
+        if (!estado) {
             return;
         }
         G.turnoOperativo = estado;
+        if (estado.jornada_abierta === true || estado.jornada_abierta === false) {
+            if (!G.jornada) {
+                G.jornada = {};
+            }
+            G.jornada.jornada_abierta = estado.jornada_abierta;
+        }
+        if (!el) {
+            return;
+        }
+        if (!jornadaAbiertaEnPos(estado) && !estado.turno_habilitado) {
+            el.classList.add('d-none');
+            return;
+        }
+        el.classList.remove('d-none');
         if (estado.turno_habilitado) {
             el.className = 'alert alert-secondary py-2 mb-3';
             el.innerHTML = 'Turno <strong>' + (estado.turno_nombre || '') + '</strong>'
@@ -152,6 +173,23 @@
     var btnConfirmCerrar = document.getElementById('modal-cerrar-turno-confirmar');
     if (btnConfirmCerrar) {
         btnConfirmCerrar.addEventListener('click', function () {
+            var estado = G.turnoOperativo;
+            if (estado && estado.totales_turno && !estado.totales_turno.conciliacion_ok) {
+                var diffC = Number(estado.totales_turno.diferencia_cobranza || 0);
+                var sug = Number(estado.totales_turno.redondeo_invitaciones_sugerido || 0);
+                var inpInvVal = parseFloat(document.getElementById('pos-redondeo-invitaciones').value) || 0;
+                var inpSf = parseFloat(document.getElementById('pos-sobrante-faltante').value) || 0;
+                var inpRt = parseFloat(document.getElementById('pos-redondeo-turno').value) || 0;
+                var baseInv = Number(estado.totales_turno.total_invitaciones || 0);
+                var residual = diffC - (inpInvVal - baseInv) - inpRt - inpSf;
+                if (Math.abs(residual) >= 0.02) {
+                    alert(
+                        'Hay diferencia de conciliación ($' + Math.abs(diffC).toFixed(2) + '). '
+                        + 'Use redondeo invitaciones sugerido ($' + sug.toFixed(2) + ') o sobrante/faltante hasta cuadrar.'
+                    );
+                    return;
+                }
+            }
             if (!confirm('¿Confirma el cierre definitivo del turno?')) {
                 return;
             }
@@ -176,4 +214,5 @@
     }
 
     window.gastroRefrescarEstadoTurno = refrescarEstadoTurno;
+    window.gastroActualizarAlertaTurno = actualizarAlertaTurno;
 })();

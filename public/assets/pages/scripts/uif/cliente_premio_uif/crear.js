@@ -18,15 +18,24 @@
 
         activa_eventos(true);
 
-        $('#foto').fileinput({
+        var $foto = $('#foto');
+        var previewUrl = ($foto.data('initial-preview') || '').toString().trim();
+        var tienePreviewReal = previewUrl !== ''
+            && previewUrl.indexOf('user2-160x160') === -1;
+
+        $foto.fileinput({
             language: 'es',
             allowedFileExtensions: ['jpg', 'jpeg', 'png'],
             maxFileSize: 2000,
             showUpload: false,
             showClose: false,
             initialPreviewAsData: true,
+            initialPreview: tienePreviewReal ? [previewUrl] : [],
+            previewSettings: { image: { 'max-height': '180px', 'max-width': '100%' } },
             dropZoneEnabled: false,
-            theme: "fa",
+            theme: 'fa',
+            browseClass: 'btn btn-outline-primary btn-sm',
+            removeClass: 'btn btn-outline-danger btn-sm',
         });        
     });
 	

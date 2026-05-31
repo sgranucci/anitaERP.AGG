@@ -94,3 +94,15 @@
         </button>
     </form>
 @endif
+
+@if ($puedeGrabarAnita ?? false)
+    <form method="post"
+        action="{{ route('arca_caea_grabar_anita', $registro->id) }}"
+        class="mt-2 mb-0"
+        onsubmit="return confirm('¿Grabar este CAEA en Anita (Informix)?');">
+        @csrf
+        <button type="submit" class="btn btn-success btn-sm">
+            <i class="fa fa-database"></i> Grabar en Anita
+        </button>
+    </form>
+@endif

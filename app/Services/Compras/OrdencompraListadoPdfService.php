@@ -23,7 +23,10 @@ class OrdencompraListadoPdfService
     /**
      * Genera el PDF del listado (por lotes si hay muchos registros) y devuelve la ruta del archivo.
      */
-    public function generar(?string $busqueda, ?int $sectorUsuarioId): string
+    /**
+     * @param  array<string, mixed>|string|null  $filtros
+     */
+    public function generar($filtros, ?int $sectorUsuarioId): string
     {
         $dir = storage_path('pdf/listados');
         if (! is_dir($dir)) {
@@ -35,7 +38,7 @@ class OrdencompraListadoPdfService
         $lote = [];
         $indice = 0;
 
-        foreach ($this->ordencompraRepository->listadoExportCursor($busqueda, $sectorUsuarioId) as $fila) {
+        foreach ($this->ordencompraRepository->listadoExportCursor($filtros, $sectorUsuarioId) as $fila) {
             $lote[] = $fila;
             if (count($lote) >= self::CHUNK_SIZE) {
                 $temporales[] = $this->generarLotePdf($lote, $dir, ++$indice, $indice === 1);

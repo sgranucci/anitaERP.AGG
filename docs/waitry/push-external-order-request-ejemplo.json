@@ -35,6 +35,14 @@
         }
     ],
     "paid": true,
+    "payment": {
+        "total_fee": {
+            "amount": 30.0,
+            "currency_code": "ARS",
+            "formatted_amount": "$30.00"
+        },
+        "type": "cash"
+    },
     "external_id": "12345",
     "client_name": "Juan",
     "external_client_id": "90165296"

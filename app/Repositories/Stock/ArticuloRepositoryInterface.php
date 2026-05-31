@@ -7,7 +7,10 @@ interface ArticuloRepositoryInterface
 
     public function all();
     public function create(array $data);
-    public function leeArticulo($busqueda, $flPaginando = null);
+    /**
+     * @param  array<string, mixed>|string|null  $filtros
+     */
+    public function leeArticulo($filtros, $flPaginando = null);
     public function findPorSku($sku);
     public function leeColores();
 

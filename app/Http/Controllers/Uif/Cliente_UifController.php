@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Uif;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionCliente_Uif;
 use App\Services\Uif\Cliente_UifService;
+use App\Services\Uif\ClienteUifSexoAprendizajeService;
 use App\Exports\Uif\Cliente_UifExport;
 use App\Models\Uif\Cliente_Uif;
 use App\Repositories\Uif\Cliente_UifRepositoryInterface;
@@ -23,6 +24,7 @@ use App\Repositories\Uif\Pais_UifRepositoryInterface;
 use App\Repositories\Uif\Pep_UifRepositoryInterface;
 use App\Repositories\Uif\So_UifRepositoryInterface;
 use App\Services\Uif\ClienteUifFotoDocumento;
+use App\Support\Uif\ClienteUifListadoFiltros;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Carbon\Carbon;
@@ -46,8 +48,10 @@ class Cliente_UifController extends Controller
     private $pep_uifRepository;
     private $so_uifRepository;
     private $tipodocumentoRepository;
+    private $clienteUifSexoAprendizajeService;
 
 	public function __construct(Cliente_UifService $cliente_uifservice,
+                                ClienteUifSexoAprendizajeService $clienteUifSexoAprendizajeService,
                                 Cliente_UifRepositoryInterface $cliente_uifrepository,
                                 Localidad_UifRepositoryInterface $localidad_uifrepository,
                                 Provincia_UifRepositoryInterface $provincia_uifrepository,
@@ -80,6 +84,7 @@ class Cliente_UifController extends Controller
         $this->pep_uifRepository = $pep_uifrepository;
         $this->so_uifRepository = $so_uifrepository;
         $this->tipodocumentoRepository = $tipodocumentorepository;
+        $this->clienteUifSexoAprendizajeService = $clienteUifSexoAprendizajeService;
     }
 
     /**
@@ -91,19 +96,23 @@ class Cliente_UifController extends Controller
     {
         can('listar-cliente-uif');
 
-        $busqueda = $request->busqueda;
+        $filtros = ClienteUifListadoFiltros::resolverDesdeRequest($request);
 
-		$cliente_uifs = $this->cliente_uifRepository->leeCliente_Uif($busqueda, true);
+		$cliente_uifs = $this->cliente_uifRepository->leeCliente_Uif($filtros, true);
 
         if (! $this->cliente_uifRepository->hayRegistrosClienteUifLocales()) {
             $this->cliente_uifRepository->sincronizarConAnita();
 
-            $cliente_uifs = $this->cliente_uifRepository->leeCliente_Uif($busqueda, true);
+            $cliente_uifs = $this->cliente_uifRepository->leeCliente_Uif($filtros, true);
         }
 
-        $datas = ['cliente_uifs' => $cliente_uifs, 'busqueda' => $busqueda];
-
-        return view('uif.cliente_uif.index', $datas);
+        return view('uif.cliente_uif.index', [
+            'cliente_uifs' => $cliente_uifs,
+            'busqueda' => $filtros['busqueda'],
+            'filtros' => $filtros,
+            'filtrosQuery' => ClienteUifListadoFiltros::paraQueryString($filtros),
+            'camposFiltro' => ClienteUifListadoFiltros::CAMPOS,
+        ]);
     }
 
     public function listar(Request $request, $formato = null, $busqueda = null)
@@ -113,10 +122,12 @@ class Cliente_UifController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
+        $filtros = ClienteUifListadoFiltros::resolverDesdeRequest($request, $busqueda);
+
         switch($formato)
         {
         case 'PDF':
-            $cliente_uifs = $this->cliente_uifRepository->leeCliente_Uif($busqueda, false);
+            $cliente_uifs = $this->cliente_uifRepository->leeCliente_Uif($filtros, false);
 
             $view =  \View::make('uif.cliente_uif.listado', compact('cliente_uifs'))
                         ->render();
@@ -132,18 +143,18 @@ class Cliente_UifController extends Controller
 
         case 'EXCEL':
             return (new Cliente_UifExport($this->cliente_uifRepository))
-                        ->parametros($busqueda)
+                        ->parametros($filtros)
                         ->download('cliente_uif.xlsx');
             break;
 
         case 'CSV':
             return (new Cliente_UifExport($this->cliente_uifRepository))
-                        ->parametros($busqueda)
+                        ->parametros($filtros)
                         ->download('cliente_uif.csv', \Maatwebsite\Excel\Excel::CSV);
             break;            
         }   
 
-        $datas = ['cliente_uifs' => $cliente_uifs, 'busqueda' => $busqueda];
+        $datas = ['cliente_uifs' => $cliente_uifs ?? collect(), 'busqueda' => $filtros['busqueda']];
 
 		return view('uif.cliente_uif.indexp', $datas);       
     }
@@ -180,6 +191,7 @@ class Cliente_UifController extends Controller
 
         $essupervisor = esSupervisorUif() ? 'S' : 'N';
         $uifPerfil = perfilClienteUif();
+        $sexo_aprendizaje_map = $this->clienteUifSexoAprendizajeService->mapaParaFrontend();
 
         return view('uif.cliente_uif.crear', compact('localidad_uif_query', 'provincia_uif_query', 'actividad_uif_query',
                                                             'empresa_query', 'estadocivil_uif_query', 'sala_query',
@@ -188,7 +200,7 @@ class Cliente_UifController extends Controller
                                                             'pais_uif_query', 'pep_uif_query', 'so_uif_query', 'tipodocumento_query',
                                                             'sexo_enum', 'resideparaisofiscal_enum', 'resideexterior_enum',
                                                             'cumplenormativaso_enum', 'firmodeclaracionjurada_enum',
-                                                            'riesgopep_enum', 'essupervisor', 'uifPerfil'));
+                                                            'riesgopep_enum', 'essupervisor', 'uifPerfil', 'sexo_aprendizaje_map'));
     }
 
     /**
@@ -201,7 +213,11 @@ class Cliente_UifController extends Controller
     {
         session(['empresa_id' => $request->empresa_id]);
 
-        $this->cliente_uifService->guardaCliente_Uif($request);
+        $result = $this->cliente_uifService->guardaCliente_Uif($request);
+
+        if (isset($result['errores'])) {
+            return redirect()->back()->withInput()->withErrors(['errores' => $result['errores']]);
+        }
 
         return redirect('uif/cliente_uif')->with('mensaje', 'Cliente creado con éxito');
 	}
@@ -212,7 +228,7 @@ class Cliente_UifController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function editar($id, $origen = null)
+    public function editar(Request $request, $id, $origen = null)
     {
         if (! can('editar-cliente-uif', false) && ! can('listar-cliente-uif', false)) {
             abort(403);
@@ -220,6 +236,9 @@ class Cliente_UifController extends Controller
 
         if (!isset($origen))
             $origen = 'cliente_uif';
+
+        $ocultarVolver = $request->query('origen') === 'modal_consulta';
+        $soloSolapaPremios = $ocultarVolver && $request->query('uif_tab') === '3';
 
 		$data = $this->cliente_uifRepository->find($id);
 
@@ -246,7 +265,8 @@ class Cliente_UifController extends Controller
 
         $essupervisor = esSupervisorUif() ? 'S' : 'N';
         $uifPerfil = perfilClienteUif();
-//dd($data);
+        $sexo_aprendizaje_map = $this->clienteUifSexoAprendizajeService->mapaParaFrontend();
+
         return view('uif.cliente_uif.editar', compact('data', 
                                                     'localidad_uif_query', 'provincia_uif_query', 'actividad_uif_query',
                                                     'empresa_query', 'estadocivil_uif_query', 'sala_query',
@@ -255,7 +275,8 @@ class Cliente_UifController extends Controller
                                                     'pais_uif_query', 'pep_uif_query', 'so_uif_query', 'tipodocumento_query',
                                                     'sexo_enum', 'resideparaisofiscal_enum', 'resideexterior_enum',
                                                     'cumplenormativaso_enum', 'firmodeclaracionjurada_enum', 'riesgopep_enum',
-                                                    'essupervisor', 'uifPerfil'));
+                                                    'essupervisor', 'uifPerfil', 'sexo_aprendizaje_map',
+                                                    'ocultarVolver', 'soloSolapaPremios'));
     }
 
     /**
@@ -270,8 +291,12 @@ class Cliente_UifController extends Controller
         can('actualizar-cliente-uif');
 
         session(['empresa_id' => $request->empresa_id]);
-        
-        $this->cliente_uifService->actualizaCliente_Uif($request, $id);
+
+        $result = $this->cliente_uifService->actualizaCliente_Uif($request, $id);
+
+        if (isset($result['errores'])) {
+            return redirect()->back()->withInput()->withErrors(['errores' => $result['errores']]);
+        }
 
         return redirect('uif/cliente_uif')->with('mensaje', 'Cliente actualizado con éxito');
     }
@@ -290,7 +315,11 @@ class Cliente_UifController extends Controller
             abort(404);
         }
 
-        $path = ClienteUifFotoDocumento::absolutePathForBasename($cliente_uif->fotodocumento);
+        $path = ClienteUifFotoDocumento::absolutePathForCliente(
+            $cliente_uif->fotodocumento,
+            (string) $cliente_uif->numerodocumento,
+            $cliente_uif->inroclienteid !== null ? (int) $cliente_uif->inroclienteid : null
+        );
         if ($path === null || ! is_file($path)) {
             abort(404);
         }

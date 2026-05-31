@@ -4,6 +4,7 @@ namespace App\Repositories\Compras;
 
 use App\Models\Compras\Ordencompra;
 use App\Queries\Configuracion\CotizacionQueryInterface;
+use App\Support\Compras\OrdencompraListadoFiltros;
 use App\Support\Compras\OrdencompraTotalesCabecera;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Collection;
@@ -78,21 +79,21 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
         return $this->model->query()->exists();
     }
 
-    public function listadoIndex(?string $busqueda, ?int $sectorUsuarioId, bool $paginar = false)
+    public function listadoIndex($filtros, ?int $sectorUsuarioId, bool $paginar = false)
     {
-        $q = $this->queryListadoIndex($busqueda, $sectorUsuarioId);
+        $q = $this->queryListadoIndex($filtros, $sectorUsuarioId);
 
         return $paginar ? $q->paginate(10) : $q->get();
     }
 
-    public function listadoIndexCursor(?string $busqueda, ?int $sectorUsuarioId)
+    public function listadoIndexCursor($filtros, ?int $sectorUsuarioId)
     {
-        return $this->queryListadoIndex($busqueda, $sectorUsuarioId)->cursor();
+        return $this->queryListadoIndex($filtros, $sectorUsuarioId)->cursor();
     }
 
-    public function listadoExport(?string $busqueda, ?int $sectorUsuarioId): Collection
+    public function listadoExport($filtros, ?int $sectorUsuarioId): Collection
     {
-        $collection = $this->queryListadoExport($busqueda, $sectorUsuarioId)
+        $collection = $this->queryListadoExport($filtros, $sectorUsuarioId)
             ->with([
                 'ordencompra_articulos.articulos',
                 'ordencompra_articulos.monedas',
@@ -109,13 +110,40 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
         return $collection;
     }
 
-    public function listadoExportCursor(?string $busqueda, ?int $sectorUsuarioId)
+    public function listadoExportCursor($filtros, ?int $sectorUsuarioId)
     {
-        return $this->queryListadoExport($busqueda, $sectorUsuarioId)->cursor();
+        return $this->queryListadoExport($filtros, $sectorUsuarioId)->cursor();
     }
 
-    private function queryListadoIndex(?string $busqueda, ?int $sectorUsuarioId)
+    /**
+     * @param  array<string, mixed>|string|null  $filtros
+     */
+    private function normalizarFiltros($filtros): array
     {
+        if (is_string($filtros)) {
+            $texto = trim($filtros);
+
+            return [
+                'modo' => OrdencompraListadoFiltros::MODO_TODOS,
+                'campo' => 'numeroordencompra',
+                'operador' => 'contiene',
+                'valor' => $texto,
+                'valor_hasta' => '',
+                'busqueda' => $texto,
+            ];
+        }
+
+        if (! is_array($filtros)) {
+            return OrdencompraListadoFiltros::filtrosVacios();
+        }
+
+        return $filtros;
+    }
+
+    private function queryListadoIndex($filtros, ?int $sectorUsuarioId)
+    {
+        $filtros = $this->normalizarFiltros($filtros);
+
         $q = $this->model->query()
             ->select([
                 'ordencompra.id',
@@ -137,16 +165,20 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
             ->leftJoin('proveedor', 'proveedor.id', '=', 'ordencompra.proveedor_id')
             ->leftJoin('usuario', 'usuario.id', '=', 'ordencompra.creousuario_id')
             ->leftJoin('sector_legajocompra', 'sector_legajocompra.id', '=', 'ordencompra.sector_legajocompra_id')
+            ->leftJoin('condicioncompra', 'condicioncompra.id', '=', 'ordencompra.condicioncompra_id')
+            ->leftJoin('requisicion', 'requisicion.id', '=', 'ordencompra.requisicion_id')
             ->orderByDesc('ordencompra.fecha')
             ->orderByDesc('ordencompra.id');
 
-        $this->aplicarFiltrosListado($q, $busqueda, $sectorUsuarioId);
+        $this->aplicarFiltrosListado($q, $filtros, $sectorUsuarioId);
 
         return $q;
     }
 
-    private function queryListadoExport(?string $busqueda, ?int $sectorUsuarioId)
+    private function queryListadoExport($filtros, ?int $sectorUsuarioId)
     {
+        $filtros = $this->normalizarFiltros($filtros);
+
         $select = [
             'ordencompra.id',
             'ordencompra.numeroordencompra',
@@ -186,47 +218,23 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
             ->orderByDesc('ordencompra.fecha')
             ->orderByDesc('ordencompra.id');
 
-        $this->aplicarFiltrosListado($q, $busqueda, $sectorUsuarioId, true);
+        $this->aplicarFiltrosListado($q, $filtros, $sectorUsuarioId);
 
         return $q;
     }
 
-    private function aplicarFiltrosListado($q, ?string $busqueda, ?int $sectorUsuarioId, bool $export = false): void
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    private function aplicarFiltrosListado($q, array $filtros, ?int $sectorUsuarioId): void
     {
         if ($sectorUsuarioId !== null && $sectorUsuarioId > 0) {
             $q->where('ordencompra.sector_legajocompra_id', $sectorUsuarioId);
         }
 
-        if ($busqueda === null || $busqueda === '') {
-            return;
+        if (OrdencompraListadoFiltros::tieneCriteriosAplicados($filtros)) {
+            OrdencompraListadoFiltros::aplicar($q, $filtros);
         }
-
-        $b = '%'.str_replace(['%', '_'], ['\\%', '\\_'], trim($busqueda)).'%';
-        $q->where(function ($w) use ($b, $export) {
-            $w->where('ordencompra.numeroordencompra', 'like', $b)
-                ->orWhere('ordencompra.comentario', 'like', $b)
-                ->orWhere('ordencompra.detalle', 'like', $b)
-                ->orWhere('ordencompra.estadoordencompra', 'like', $b)
-                ->orWhere('ordencompra.tratamiento', 'like', $b)
-                ->orWhere('proveedor.nombre', 'like', $b)
-                ->orWhere('proveedor.codigo', 'like', $b)
-                ->orWhere('empresa.nombre', 'like', $b)
-                ->orWhere('centrocosto.nombre', 'like', $b)
-                ->orWhere('centrocosto.codigo', 'like', $b)
-                ->orWhere('usuario.nombre', 'like', $b);
-
-            if ($export) {
-                $w->orWhere('sector_legajocompra.nombre', 'like', $b)
-                    ->orWhere('condicioncompra.nombre', 'like', $b)
-                    ->orWhere('requisicion.numerorequisicion', 'like', $b)
-                    ->orWhere('requisicion.motivotratamiento', 'like', $b)
-                    ->orWhere('requisicion.contrataciondirecta', 'like', $b);
-
-                if (Schema::hasColumn('requisicion', 'nroinscripcion')) {
-                    $w->orWhere('requisicion.nroinscripcion', 'like', $b);
-                }
-            }
-        });
     }
 
     public function proximoNumeroOrdencompra(): int

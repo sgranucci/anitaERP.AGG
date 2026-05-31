@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Ventas\TurnoGastronomiaRepositoryInterface;
 use App\Services\Ventas\Gastronomia\GastronomiaTurnoSaneamientoService;
+use App\Support\Ventas\GastronomiaIdentificadorPc;
 use App\Support\Ventas\GastronomiaSaneamientoTurnoReporteSupport;
 use Illuminate\Http\Request;
 use InvalidArgumentException;
@@ -108,6 +109,39 @@ class GastronomiaSaneamientoTurnoController extends Controller
                 (int) $request->input('turno_gastronomia_id', 0),
                 (float) $request->input('monto_habilitacion', 0),
                 $request->input('observacion'),
+            );
+
+            return response()->json(['ok' => true, ...$resultado]);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        } catch (Throwable $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        }
+    }
+
+    public function apiCerrarTurnoRemoto(Request $request)
+    {
+        can('ejecutar-saneamiento-turno-gastronomia');
+
+        $turnoId = (int) $request->input('turno_operativo_id', 0);
+        if ($turnoId <= 0) {
+            return response()->json(['ok' => false, 'error' => 'Turno operativo inválido.'], 422);
+        }
+
+        try {
+            $resultado = $this->saneamientoService->cerrarTurnoRemoto(
+                $turnoId,
+                GastronomiaIdentificadorPc::resolver($request),
+                $request->input('observacion'),
+                $request->has('redondeo_invitaciones')
+                    ? (float) $request->input('redondeo_invitaciones')
+                    : null,
+                $request->has('redondeo_turno')
+                    ? (float) $request->input('redondeo_turno')
+                    : null,
+                $request->has('sobrante_faltante')
+                    ? (float) $request->input('sobrante_faltante')
+                    : null,
             );
 
             return response()->json(['ok' => true, ...$resultado]);

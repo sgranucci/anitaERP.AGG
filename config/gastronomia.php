@@ -215,6 +215,29 @@ return [
     /** Base Informix donde está la tabla tickettarj (bridge Anita). */
     'ticket_tarjeta_anita_sistema' => env('GASTRONOMIA_TICKET_TARJETA_ANITA_SISTEMA', 'base_admin'),
 
+    /**
+     * Al cerrar jornada gastronomía: registrar rango de órdenes Waitry del tótem (waitry_order_id)
+     * vía getordersdetails + PDF. Requiere WAITRY_HABILITADO. Siguiente cierre: id &gt; último hasta guardado.
+     */
+    'cierre_totem_jornada_habilitado' => filter_var(env('GASTRONOMIA_CIERRE_TOTEM_JORNADA_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+
+    /** Máximo de órdenes Waitry nuevas por cierre (protección de memoria). */
+    'cierre_totem_jornada_max_ordenes' => max(100, (int) env('GASTRONOMIA_CIERRE_TOTEM_MAX_ORDENES', 15000)),
+
+    /** Máximo de líneas en el detalle JSON / PDF del comprobante. */
+    'cierre_totem_jornada_max_lineas_detalle' => max(100, (int) env('GASTRONOMIA_CIERRE_TOTEM_MAX_LINEAS_DETALLE', 3000)),
+
+    /** Máximo de IDs Waitry faltantes a recuperar por getOrdersPOS al cerrar jornada (huecos secuenciales). */
+    'cierre_totem_jornada_max_ids_gap_recuperar' => max(0, (int) env('GASTRONOMIA_CIERRE_TOTEM_MAX_IDS_GAP_RECUPERAR', 250)),
+
+    /**
+     * Si no hay cierre_en al armar el cierre, tope de madrugada del día siguiente (hora local) para ventana Waitry.
+     */
+    'cierre_totem_jornada_hora_corte_madrugada' => max(0, min(23, (int) env('GASTRONOMIA_CIERRE_TOTEM_HORA_CORTE_MADRUGADA', 7))),
+
+    /** Tolerancia $ al comparar Informe Z del tótem vs totales Waitry/ERP. */
+    'cierre_totem_informe_z_tolerancia' => max(0.0, (float) env('GASTRONOMIA_CIERRE_TOTEM_INFORME_Z_TOLERANCIA', 0.02)),
+
     /** Código de descuento gastronomía para facturar canjes de premios Wigos ($0,01). */
     'canje_premio_descuento_codigo' => env('GASTRONOMIA_CANJE_PREMIO_DESCUENTO_CODIGO', '10'),
 

@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Requests\ValidacionPresupuesto;
+use App\Support\Presupuesto\PresupuestoListadoFiltros;
 use App\Repositories\Presupuesto\PresupuestoRepositoryInterface;
 use App\Repositories\Presupuesto\Presupuesto_EscenarioRepositoryInterface;
 use App\Models\Presupuesto\Presupuesto;
@@ -30,13 +31,20 @@ class PresupuestoController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function index()
+    public function index(Request $request)
     {
         can('listar-presupuesto');
 
-        $datas = $this->presupuestoRepository->all();
+        $filtros = PresupuestoListadoFiltros::resolverDesdeRequest($request);
 
-        return view('presupuesto.presupuesto.index', compact('datas'));
+        $datas = $this->presupuestoRepository->leePresupuesto($filtros, true);
+
+        return view('presupuesto.presupuesto.index', [
+            'datas' => $datas,
+            'filtros' => $filtros,
+            'filtrosQuery' => PresupuestoListadoFiltros::paraQueryString($filtros),
+            'camposFiltro' => PresupuestoListadoFiltros::CAMPOS,
+        ]);
     }
 
     /**

@@ -127,5 +127,7 @@ return [
     */
     'caea' => [
         'pedido_automatico' => filter_var(env('ARCA_CAEA_PEDIDO_AUTOMATICO', true), FILTER_VALIDATE_BOOLEAN),
+        /** Réplica cada CAEA autorizado en Informix (tabla caea) vía bridge Anita */
+        'replicar_en_anita' => filter_var(env('ARCA_CAEA_REPLICAR_ANITA', true), FILTER_VALIDATE_BOOLEAN),
     ],
 ];

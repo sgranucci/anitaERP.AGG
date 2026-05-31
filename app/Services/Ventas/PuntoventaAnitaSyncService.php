@@ -168,13 +168,13 @@ class PuntoventaAnitaSyncService
                 if ($existente->trashed()) {
                     $existente->restore();
                 }
-                $this->puntoventaRepository->update($datos, $existente->id);
+                $this->puntoventaRepository->update($datos, $existente->id, false);
                 DB::commit();
 
                 return 'actualizado';
             }
 
-            $this->puntoventaRepository->create($datos);
+            $this->puntoventaRepository->create($datos, false);
             DB::commit();
 
             return 'importado';

@@ -18,7 +18,7 @@ Exportación de Clientes UIF
                 <h3 class="card-title">Exportación de Clientes UIF</h3>
                 <div class="card-tools">
                     <a href="{{route('exporta_cliente_uif', ['periodo' => $periodo, 'limiteinformeuif' => $limiteinformeuif])}}" class="btn btn-outline-secondary btn-sm">
-                       	@if (can('exportar-cliente-uif', false))
+                       	@if (can('exportar-operacion-uif', false))
                         	<i class="fa fa-fw fa-plus-circle"></i> Exporta clientes
 						@endif
                     </a>

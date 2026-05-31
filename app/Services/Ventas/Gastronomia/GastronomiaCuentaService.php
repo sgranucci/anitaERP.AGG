@@ -26,14 +26,19 @@ class GastronomiaCuentaService
      * Configuración PV de esta terminal (empresa, ubicación, listas, puntos de venta).
      * La empresa operativa sale de este registro, no del .env.
      */
-    public function resolverConfiguracionPv(?Request $request = null): ?ConfiguracionPuntoventaGastronomia
+    public function resolverConfiguracionPv(?Request $request = null, ?int $empresaId = null): ?ConfiguracionPuntoventaGastronomia
     {
         $pc = GastronomiaIdentificadorPc::resolver($request);
 
-        $configs = ConfiguracionPuntoventaGastronomia::query()
+        $query = ConfiguracionPuntoventaGastronomia::query()
             ->where('identificador_pc', $pc)
-            ->with(['ubicacion', 'puntoventaCae', 'puntoventaCaea', 'salidaFactura', 'listaprecio', 'depositoVenta', 'depositoInsumos', 'tipotransaccion', 'empresa'])
-            ->get();
+            ->with(['ubicacion', 'puntoventaCae', 'puntoventaCaea', 'salidaFactura', 'listaprecio', 'depositoVenta', 'depositoInsumos', 'tipotransaccion', 'empresa']);
+
+        if ($empresaId !== null && $empresaId > 0) {
+            $query->where('empresa_id', $empresaId);
+        }
+
+        $configs = $query->get();
 
         if ($configs->isEmpty()) {
             return null;
@@ -44,11 +49,49 @@ class GastronomiaCuentaService
 
             throw new InvalidArgumentException(
                 'Hay más de una configuración PV gastronomía para identificador_pc '.$pc
-                .' (empresas: '.$empresas.'). Debe existir una sola fila por terminal.'
+                .' (empresas: '.$empresas.'). Debe existir una sola fila por terminal'
+                .($empresaId !== null && $empresaId > 0 ? ' y empresa.' : '. Indique empresa si opera en varias.')
             );
         }
 
         return $configs->first();
+    }
+
+    /**
+     * Empresas del usuario que tienen configuración PV gastronomía en la terminal indicada.
+     *
+     * @param  \Illuminate\Support\Collection<int, \App\Models\Configuracion\Empresa>  $empresasAsignadas
+     * @return \Illuminate\Support\Collection<int, \App\Models\Configuracion\Empresa>
+     */
+    public function empresasConPvEnTerminal(string $pc, $empresasAsignadas)
+    {
+        if ($empresasAsignadas->isEmpty()) {
+            return collect();
+        }
+
+        $idsConPv = ConfiguracionPuntoventaGastronomia::query()
+            ->where('identificador_pc', $pc)
+            ->whereIn('empresa_id', $empresasAsignadas->pluck('id'))
+            ->pluck('empresa_id')
+            ->unique()
+            ->values();
+
+        return $empresasAsignadas
+            ->whereIn('id', $idsConPv)
+            ->values();
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, \App\Models\Configuracion\Empresa>  $empresasAsignadas
+     * @return \Illuminate\Support\Collection<int, \App\Models\Configuracion\Empresa>
+     */
+    public function empresasSinPvEnTerminal(string $pc, $empresasAsignadas)
+    {
+        $operables = $this->empresasConPvEnTerminal($pc, $empresasAsignadas);
+
+        return $empresasAsignadas
+            ->whereNotIn('id', $operables->pluck('id'))
+            ->values();
     }
 
     /**
@@ -416,15 +459,15 @@ class GastronomiaCuentaService
                 $patch[$campo] = ($valor === '' || $valor === null) ? null : $valor;
             }
         }
-        if (isset($patch['cliente_id']) && $patch['cliente_id']) {
-            try {
-                $internoId = app(GastronomiaReceptorFacturacionService::class)->resolverClienteContableInternoId();
-                if ((int) $patch['cliente_id'] === $internoId) {
-                    $patch['cliente_id'] = null;
-                }
-            } catch (InvalidArgumentException) {
-                // sin cliente interno configurado: se conserva el valor ingresado
-            }
+        if (array_key_exists('cliente_id', $patch) && $patch['cliente_id']) {
+            $receptorSvc = app(GastronomiaReceptorFacturacionService::class);
+            $internoDesc = array_key_exists('cliente_interno_descuento_id', $patch)
+                ? (int) ($patch['cliente_interno_descuento_id'] ?? 0)
+                : (int) ($cuenta->cliente_interno_descuento_id ?? 0);
+            $patch['cliente_id'] = $receptorSvc->normalizarClienteIdFacturacion(
+                (int) $patch['cliente_id'],
+                $internoDesc,
+            );
         }
         if (isset($datos['cubiertos'])) {
             $patch['cubiertos'] = (int) $datos['cubiertos'];

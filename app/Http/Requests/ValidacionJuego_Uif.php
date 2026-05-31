@@ -21,10 +21,20 @@ class ValidacionJuego_Uif  extends FormRequest
      *
      * @return array
      */
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'riesgo' => $this->filled('riesgo') ? $this->riesgo : null,
+            'puntaje' => $this->filled('puntaje') ? $this->puntaje : null,
+        ]);
+    }
+
     public function rules()
     {
         return [
             'nombre' => 'required|max:255|unique:juego_uif,nombre,' . $this->route('id'),
+            'riesgo' => 'nullable|max:50',
+            'puntaje' => 'nullable|integer|min:0',
         ];
     }
 }

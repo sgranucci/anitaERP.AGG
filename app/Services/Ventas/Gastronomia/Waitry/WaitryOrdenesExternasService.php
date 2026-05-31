@@ -9,6 +9,7 @@ use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Services\Ventas\Gastronomia\GastronomiaCuentaService;
 use App\Support\Ventas\GastronomiaSkuCatalogoSupport;
 use App\Support\Ventas\Waitry\WaitryFacturacionDuplicadosSupport;
+use App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -156,6 +157,20 @@ final class WaitryOrdenesExternasService
         ];
     }
 
+    /**
+     * Orden puntual por orderId (getOrdersPOS), sin filtrar impagas — cierre de jornada / huecos de ID.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function obtenerOrdenPorIdConciliacion(int $empresaId, int $orderId): ?array
+    {
+        if ($orderId <= 0) {
+            return null;
+        }
+
+        return $this->obtenerOrdenPorId($empresaId, $orderId, false);
+    }
+
     public function invalidarCacheOrdenesPosEmpresa(int $empresaId): void
     {
         $placeId = $this->resolverPlaceId($empresaId);
@@ -216,7 +231,7 @@ final class WaitryOrdenesExternasService
                 'errors' => $dataPos['errors'] ?? null,
             ]);
 
-            // Waitry suele devolver «No results» con from/to aunque el listado sin filtro sí trae órdenes.
+            // Reintento sin from/to si el filtro horario no devolvió órdenes (p. ej. formato o ventana vacía).
             if (isset($query['from']) || isset($query['to'])) {
                 $querySinRango = ['placeId' => (string) $placeId];
                 $respuestaCacheSinRango = $this->consultarOrdenesGetOrdersPos($placeId, $querySinRango, $omitirCache);
@@ -490,8 +505,8 @@ final class WaitryOrdenesExternasService
             }
 
             return [
-                'from' => $desde,
-                'to' => $hasta !== '' ? $hasta : null,
+                'from' => $this->formatoFromToGetOrdersPos($desdeDt),
+                'to' => $hasta !== '' ? $this->formatoFromToGetOrdersPos($hastaDt) : null,
                 'from_date' => $desdeDt->format('Y-m-d'),
                 'to_date' => $hastaDt->format('Y-m-d'),
                 'minutos_atras' => 0,
@@ -517,12 +532,46 @@ final class WaitryOrdenesExternasService
         $desdeDt = $hastaDt->copy()->subMinutes($minutos);
 
         return [
-            'from' => $desdeDt->toIso8601String(),
-            'to' => $hastaDt->toIso8601String(),
+            'from' => $this->formatoFromToGetOrdersPos($desdeDt),
+            'to' => $this->formatoFromToGetOrdersPos($hastaDt),
             'from_date' => $desdeDt->format('Y-m-d'),
             'to_date' => $hastaDt->format('Y-m-d'),
             'minutos_atras' => $minutos,
             'desde_limite' => $desdeDt,
+        ];
+    }
+
+    /**
+     * Formato Waitry getOrdersPOS para from/to: "YYYY-MM-DD HH:mm:ss" (sin timezone).
+     */
+    private function formatoFromToGetOrdersPos(Carbon $fecha): string
+    {
+        return $fecha->format('Y-m-d H:i:s');
+    }
+
+    /**
+     * @return array{
+     *     from:string,
+     *     to:string,
+     *     from_date:string,
+     *     to_date:string,
+     *     minutos_atras:int,
+     *     desde_limite:?Carbon
+     * }
+     */
+    private function rangoUltimosDiasGetOrdersPos(int $dias): array
+    {
+        $tz = (string) config('app.timezone', 'UTC');
+        $hastaDt = Carbon::now($tz);
+        $desdeDt = $hastaDt->copy()->subDays(max(1, $dias));
+
+        return [
+            'from' => $this->formatoFromToGetOrdersPos($desdeDt),
+            'to' => $this->formatoFromToGetOrdersPos($hastaDt),
+            'from_date' => $desdeDt->format('Y-m-d'),
+            'to_date' => $hastaDt->format('Y-m-d'),
+            'minutos_atras' => 0,
+            'desde_limite' => null,
         ];
     }
 
@@ -646,6 +695,9 @@ final class WaitryOrdenesExternasService
         $displayId = $this->extraerDisplayIdOrden($orden);
         $cuenta->waitry_display_id = $displayId !== '' ? $displayId : null;
         $cuenta->waitry_cobro_totem = $cobroTotem;
+        $cuenta->waitry_tipo_pago = $cobroTotem
+            ? WaitryMedioPagoCuentacajaSupport::extraerTipoPagoOrden($orden)
+            : null;
         $cuenta->save();
 
         $cuenta = $this->cuentaService->cuentaConLineas($cuenta->id);
@@ -728,17 +780,11 @@ final class WaitryOrdenesExternasService
             return null;
         }
 
-        $tz = (string) config('app.timezone', 'UTC');
-        $hastaDt = Carbon::now($tz);
-        $desdeDt = $hastaDt->copy()->subDays(2);
-        $consulta = $this->consultarOrdenesRaw((int) $placeId, [
-            'from' => $desdeDt->toIso8601String(),
-            'to' => $hastaDt->toIso8601String(),
-            'from_date' => $desdeDt->format('Y-m-d'),
-            'to_date' => $hastaDt->format('Y-m-d'),
-            'minutos_atras' => 0,
-            'desde_limite' => null,
-        ], true);
+        $consulta = $this->consultarOrdenesRaw(
+            (int) $placeId,
+            $this->rangoUltimosDiasGetOrdersPos(2),
+            true,
+        );
 
         if (! ($consulta['ok'] ?? false)) {
             return null;
@@ -846,17 +892,11 @@ final class WaitryOrdenesExternasService
             }
         }
 
-        $tz = (string) config('app.timezone', 'UTC');
-        $hastaDt = Carbon::now($tz);
-        $desdeDt = $hastaDt->copy()->subDays(2);
-        $consulta = $this->consultarOrdenesRaw((int) $placeId, [
-            'from' => $desdeDt->toIso8601String(),
-            'to' => $hastaDt->toIso8601String(),
-            'from_date' => $desdeDt->format('Y-m-d'),
-            'to_date' => $hastaDt->format('Y-m-d'),
-            'minutos_atras' => 0,
-            'desde_limite' => null,
-        ], true);
+        $consulta = $this->consultarOrdenesRaw(
+            (int) $placeId,
+            $this->rangoUltimosDiasGetOrdersPos(2),
+            true,
+        );
 
         if (! ($consulta['ok'] ?? false)) {
             return null;

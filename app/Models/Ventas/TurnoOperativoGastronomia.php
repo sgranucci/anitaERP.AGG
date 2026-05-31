@@ -31,6 +31,7 @@ class TurnoOperativoGastronomia extends Model implements Auditable
         'habilitacion_en',
         'usuario_cierre_id',
         'cierre_en',
+        'numero_cierre',
         'monto_facturacion_turno',
         'monto_facturacion_dia',
         'redondeo_invitaciones',
@@ -42,6 +43,7 @@ class TurnoOperativoGastronomia extends Model implements Auditable
     protected $casts = [
         'habilitacion_en' => 'datetime',
         'cierre_en' => 'datetime',
+        'numero_cierre' => 'integer',
         'monto_habilitacion' => 'float',
         'monto_facturacion_turno' => 'float',
         'monto_facturacion_dia' => 'float',

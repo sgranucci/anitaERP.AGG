@@ -154,6 +154,9 @@ class ConstanciaInscripcionService
             'tipoPersona' => $tipoPersona ? (string) $tipoPersona : null,
             'estadoClave' => isset($dg->estadoClave) ? (string) $dg->estadoClave : null,
             'nombre' => $nombreCompleto !== '' ? $nombreCompleto : null,
+            'apellido' => $apellido ? (string) $apellido : null,
+            'nombrePersona' => $nombre ? (string) $nombre : null,
+            'razonSocial' => $razonSocial ? (string) $razonSocial : null,
             'domicilioFiscal' => [
                 'direccion' => $direccion ? (string) $direccion : null,
                 'localidad' => $localidad ? (string) $localidad : null,

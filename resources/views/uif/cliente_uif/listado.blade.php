@@ -1,13 +1,7 @@
 @php
-    $logoAggPath = public_path('storage/imagenes/logos/AGG.png');
-    $logoAguasPath = public_path('storage/imagenes/logos/logoAguas.jpg');
-    $logoMime = 'jpeg';
-    $logoPath = $logoAguasPath;
-    if (config('app.empresa') == 'AGG' && is_file($logoAggPath)) {
-        $logoPath = $logoAggPath;
-        $logoMime = 'png';
-    }
-    $logoData = is_file($logoPath) ? base64_encode(file_get_contents($logoPath)) : null;
+    use App\Support\Configuracion\EmpresaLogoArchivo;
+    $logosCabecera = EmpresaLogoArchivo::logosCabeceraDesdeColeccion($cliente_uifs);
+    $totalFilas = is_countable($cliente_uifs) ? count($cliente_uifs) : 0;
 @endphp
 <!DOCTYPE html>
 <html lang="es">
@@ -16,52 +10,64 @@
 	<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
 	<title>Clientes UIF</title>
 	<style>
-		body { font-family: DejaVu Sans, Helvetica, Arial, sans-serif; font-size: 10px; }
-		table {
+		body { font-family: DejaVu Sans, Helvetica, Arial, sans-serif; font-size: 8px; color: #1a1a1a; }
+		table.data {
 			font-family: DejaVu Sans, Helvetica, Arial, sans-serif;
 			border-collapse: collapse;
 			width: 100%;
+			table-layout: fixed;
 		}
-		td, th {
-			border: 1px solid #dddddd;
+		table.data td, table.data th {
+			border: 1px solid #cccccc;
 			text-align: left;
-			padding: 6px;
+			padding: 4px;
+			vertical-align: top;
+			word-wrap: break-word;
 		}
-		tr:nth-child(even) {
-			background-color: #eeeeee;
+		table.data tr:nth-child(even) { background-color: #f5f5f5; }
+		table.data thead tr { background-color: #85C1E9; }
+		table.data th {
+			font-size: 7px;
+			font-weight: bold;
+			color: #17202A;
 		}
-		.listado-header { width: 100%; margin-bottom: 12px; border-bottom: 2px solid #444; padding-bottom: 8px; }
+		.listado-header { width: 100%; margin-bottom: 10px; border-bottom: 2px solid #333; padding-bottom: 6px; }
 		.listado-header td { vertical-align: middle; border: none; }
-		th { font-size: 9px; }
+		.meta { font-size: 8px; color: #444; margin-top: 4px; }
 	</style>
 </head>
 <body>
 	<table class="listado-header">
 		<tr>
 			<td style="width: 35%;">
-				@if ($logoData)
-					<img src="data:image/{{ $logoMime }};base64,{{ $logoData }}" alt="" style="max-width: 220px; max-height: 70px;">
-				@endif
+				@foreach ($logosCabecera as $logo)
+					<img src="{{ $logo['uri'] }}" alt="{{ $logo['nombre'] }}" style="max-height: 56px; max-width: 180px; margin-right: 10px; margin-bottom: 4px; vertical-align: middle;">
+				@endforeach
 			</td>
 			<td style="width: 40%; text-align: center;">
-				<h2 style="margin: 0;">Clientes UIF</h2>
+				<h2 style="margin: 0; font-size: 20px; font-weight: bold;">Listado de clientes UIF</h2>
+				<div class="meta">Generado {{ date('d/m/Y H:i') }}</div>
 			</td>
-			<td style="width: 25%;"></td>
+			<td style="width: 25%; text-align: right; font-size: 8px;">
+				@if ($totalFilas > 0)
+					Registros: {{ $totalFilas }}
+				@endif
+			</td>
 		</tr>
 	</table>
-	<table>
+	<table class="data">
 		<thead>
 			<tr>
-				<th>ID</th>
-				<th>Nombre</th>
-				<th>Tipo</th>
-				<th>Número de doc.</th>
-				<th>Domicilio</th>
-				<th>Localidad</th>
-				<th>Provincia</th>
-				<th>País</th>
-				<th>Teléfono</th>
-				<th>Email</th>
+				<th style="width: 5%;">ID</th>
+				<th style="width: 16%;">Nombre</th>
+				<th style="width: 6%;">Tipo</th>
+				<th style="width: 9%;">N&uacute;mero de doc.</th>
+				<th style="width: 16%;">Domicilio</th>
+				<th style="width: 12%;">Localidad</th>
+				<th style="width: 10%;">Provincia</th>
+				<th style="width: 8%;">Pa&iacute;s</th>
+				<th style="width: 8%;">Tel&eacute;fono</th>
+				<th style="width: 10%;">Email</th>
 			</tr>
 		</thead>
 		<tbody>

@@ -820,6 +820,7 @@ final class GastronomiaFacturaEmisionService
                 $cuenta,
                 $facturaTxt,
                 $pagada,
+                $mediosPago,
             );
         } catch (Throwable $e) {
             Log::error('gastronomia.waitry.excepcion', [

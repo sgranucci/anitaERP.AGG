@@ -53,6 +53,7 @@ class TransferenciaMercaderiaController extends Controller
             'deposito_salida_id',
             'deposito_entrada_id',
             'tipotransaccion_id',
+            'tipotransaccion_stock_id',
         ]));
 
         return response()->json(['ok' => true]);
@@ -92,7 +93,7 @@ class TransferenciaMercaderiaController extends Controller
         }
 
         $resultado = $this->transferenciaService->grabarTransferencia(
-            $request->only(['deposito_salida_id', 'deposito_entrada_id', 'tipotransaccion_id']),
+            $request->only(['deposito_salida_id', 'deposito_entrada_id', 'tipotransaccion_id', 'tipotransaccion_stock_id']),
             $lineas
         );
 

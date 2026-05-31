@@ -18,8 +18,12 @@ class RendicionGastronomiaCajaService
 {
     private const TOLERANCIA = 0.02;
 
-    public function listar(?string $busqueda, bool $paginar = true): LengthAwarePaginator|Collection
-    {
+    public function listar(
+        ?string $busqueda,
+        bool $paginar = true,
+        ?string $fechaDesde = null,
+        ?string $fechaHasta = null,
+    ): LengthAwarePaginator|Collection {
         $q = RendicionGastronomiaCaja::query()
             ->with([
                 'empresa:id,nombre',
@@ -42,7 +46,47 @@ class RendicionGastronomiaCajaService
             });
         }
 
+        [$desde, $hasta] = $this->normalizarRangoFechasListado($fechaDesde, $fechaHasta);
+        if ($desde !== '' || $hasta !== '') {
+            $q->where(function ($w) use ($desde, $hasta) {
+                $w->where(function ($r) use ($desde, $hasta) {
+                    if ($desde !== '') {
+                        $r->whereDate('fecharendicion', '>=', $desde);
+                    }
+                    if ($hasta !== '') {
+                        $r->whereDate('fecharendicion', '<=', $hasta);
+                    }
+                })->orWhereHas('turnoOperativo.jornada', function ($j) use ($desde, $hasta) {
+                    if ($desde !== '') {
+                        $j->whereDate('fecha_jornada', '>=', $desde);
+                    }
+                    if ($hasta !== '') {
+                        $j->whereDate('fecha_jornada', '<=', $hasta);
+                    }
+                });
+            });
+        }
+
         return $paginar ? $q->paginate(10) : $q->get();
+    }
+
+    /**
+     * Si solo se indica una fecha, filtra ese día (desde = hasta).
+     *
+     * @return array{0: string, 1: string}
+     */
+    private function normalizarRangoFechasListado(?string $fechaDesde, ?string $fechaHasta): array
+    {
+        $desde = trim((string) ($fechaDesde ?? ''));
+        $hasta = trim((string) ($fechaHasta ?? ''));
+
+        if ($desde !== '' && $hasta === '') {
+            $hasta = $desde;
+        } elseif ($hasta !== '' && $desde === '') {
+            $desde = $hasta;
+        }
+
+        return [$desde, $hasta];
     }
 
     /**
@@ -677,7 +721,10 @@ class RendicionGastronomiaCajaService
 
     private function etiquetaTurnoPendiente(TurnoOperativoGastronomia $turno): string
     {
-        return 'Op. #'.$turno->id
+        $n = (int) ($turno->numero_cierre ?? 0);
+        $ref = $n > 0 ? 'Cierre #'.$n : 'Op. #'.$turno->id;
+
+        return $ref
             .' — '.($turno->turno?->nombre ?? '')
             .' — '.($turno->identificador_pc ?? '')
             .' — cierre '.($turno->cierre_en?->format('d/m/Y H:i') ?? '');

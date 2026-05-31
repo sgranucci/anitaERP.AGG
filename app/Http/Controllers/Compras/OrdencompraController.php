@@ -31,6 +31,7 @@ use App\Services\Configuracion\ArbolaprobacionService;
 use App\Services\Configuracion\ImpuestoService;
 use App\Support\Compras\NotaOcPdfRecorteMargenIzquierdo;
 use App\Support\Compras\OrdencompraEstados;
+use App\Support\Compras\OrdencompraListadoFiltros;
 use App\Support\Compras\OrdencompraPdfContextoRequisicion;
 use App\Support\Compras\OrdencompraTotalesCabecera;
 use App\Support\Compras\OrdencompraTotalesResumen;
@@ -66,18 +67,27 @@ class OrdencompraController extends Controller
             $this->ordencompraAnitaSyncService->sincronizarConAnita((int) Auth::id());
         }
 
-        $busqueda = $request->busqueda;
+        $filtros = OrdencompraListadoFiltros::resolverDesdeRequest($request);
         $sectorUsuario = Auth::user()->sector_legajocompra_id ?? null;
+        $sectorId = $sectorUsuario ? (int) $sectorUsuario : null;
         $ordencompra = $this->ordencompraRepository->listadoIndex(
-            $busqueda,
-            $sectorUsuario ? (int) $sectorUsuario : null,
+            $filtros,
+            $sectorId,
             true,
         );
         $estados = OrdencompraEstados::todos();
         $sectores = Sector_Legajocompra::orderBy('nombre')->get();
-        $sectorUsuario = $sectorUsuario ? (int) $sectorUsuario : null;
 
-        return view('compras.ordencompra.index', compact('ordencompra', 'busqueda', 'estados', 'sectores', 'sectorUsuario'));
+        return view('compras.ordencompra.index', [
+            'ordencompra' => $ordencompra,
+            'busqueda' => $filtros['busqueda'],
+            'filtros' => $filtros,
+            'filtrosQuery' => OrdencompraListadoFiltros::paraQueryString($filtros),
+            'camposFiltro' => OrdencompraListadoFiltros::CAMPOS,
+            'estados' => $estados,
+            'sectores' => $sectores,
+            'sectorUsuario' => $sectorId,
+        ]);
     }
 
     public function crear()
@@ -140,6 +150,7 @@ class OrdencompraController extends Controller
 
         $sectorUsuario = Auth::user()->sector_legajocompra_id ?? null;
         $sectorId = $sectorUsuario ? (int) $sectorUsuario : null;
+        $filtros = OrdencompraListadoFiltros::resolverDesdeRequest($request, $busqueda);
 
         if (in_array($formato, ['PDF', 'EXCEL', 'CSV'], true)) {
             ini_set('memory_limit', '-1');
@@ -148,28 +159,22 @@ class OrdencompraController extends Controller
 
         switch ($formato) {
             case 'PDF':
-                $rutaPdf = $this->ordencompraListadoPdfService->generar($busqueda, $sectorId);
+                $rutaPdf = $this->ordencompraListadoPdfService->generar($filtros, $sectorId);
 
                 return response()->download($rutaPdf, 'listado_ordencompra.pdf')->deleteFileAfterSend(true);
 
             case 'EXCEL':
                 return (new OrdencompraExport($this->ordencompraRepository))
-                    ->parametros($busqueda, $sectorId)
+                    ->parametros($filtros, $sectorId)
                     ->download('ordencompra.xlsx');
 
             case 'CSV':
                 return (new OrdencompraExport($this->ordencompraRepository))
-                    ->parametros($busqueda, $sectorId)
+                    ->parametros($filtros, $sectorId)
                     ->download('ordencompra.csv', \Maatwebsite\Excel\Excel::CSV);
         }
 
-        $ordencompra = $this->ordencompraRepository->listadoIndex($busqueda, $sectorId, true);
-        $busqueda = $busqueda ?? '';
-        $estados = OrdencompraEstados::todos();
-        $sectores = Sector_Legajocompra::orderBy('nombre')->get();
-        $sectorUsuario = $sectorId;
-
-        return view('compras.ordencompra.index', compact('ordencompra', 'busqueda', 'estados', 'sectores', 'sectorUsuario'));
+        return redirect()->route('consultar_ordencompra', OrdencompraListadoFiltros::paraQueryString($filtros));
     }
 
     public function soloConsulta($id)

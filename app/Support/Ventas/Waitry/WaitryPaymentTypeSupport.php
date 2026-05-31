@@ -2,12 +2,12 @@
 
 namespace App\Support\Ventas\Waitry;
 
-use App\Models\Caja\Cuentacaja;
-use App\Support\Ventas\GastronomiaCuentacajaEfectivo;
 use InvalidArgumentException;
 
 /**
- * Mapea medios de cobro Anita (cuentacaja) al enum Waitry syncStatusPOS: cash | credit_card | debit_card.
+ * Mapea medios de cobro Anita (cuentacaja) al enum Waitry syncStatusPOS / pushExternalOrder.
+ *
+ * Solo Mercado Pago y Totalcoin conservan su tipo; cualquier otro medio se envía como cash.
  */
 final class WaitryPaymentTypeSupport
 {
@@ -17,11 +17,23 @@ final class WaitryPaymentTypeSupport
 
     public const TIPO_DEBIT_CARD = 'debit_card';
 
+    public const TIPO_MERCADOPAGO = 'mercadopago';
+
+    public const TIPO_TOTALCOIN = 'totalcoin';
+
     /** @var list<string> */
     public const TIPOS_VALIDOS = [
         self::TIPO_CASH,
         self::TIPO_CREDIT_CARD,
         self::TIPO_DEBIT_CARD,
+        self::TIPO_MERCADOPAGO,
+        self::TIPO_TOTALCOIN,
+    ];
+
+    /** @var list<string> */
+    private const TIPOS_WAITRY_ESPECIFICOS = [
+        self::TIPO_MERCADOPAGO,
+        self::TIPO_TOTALCOIN,
     ];
 
     /**
@@ -39,34 +51,7 @@ final class WaitryPaymentTypeSupport
             throw new InvalidArgumentException('Waitry: cuenta de caja inválida en el medio de pago.');
         }
 
-        $tipo = $this->resolverPorCuentacajaId($cuentacajaId, $empresaId);
-        if ($tipo !== null) {
-            return $tipo;
-        }
-
-        $cuenta = Cuentacaja::query()
-            ->whereKey($cuentacajaId)
-            ->paraEmpresa($empresaId)
-            ->first(['id', 'nombre', 'codigo']);
-
-        if ($cuenta === null) {
-            throw new InvalidArgumentException(
-                'Waitry: no se pudo determinar el tipo de pago para la cuenta de caja id '.$cuentacajaId.'.'
-            );
-        }
-
-        $tipo = $this->inferirDesdeTexto(
-            (string) $cuenta->codigo,
-            (string) $cuenta->nombre,
-        );
-        if ($tipo !== null) {
-            return $tipo;
-        }
-
-        throw new InvalidArgumentException(
-            'Waitry: configure el tipo de pago para la cuenta «'.trim($cuenta->codigo.' '.$cuenta->nombre)
-            .'» (WAITRY_CUENTACAJA_TIPO_PAGO o GASTRONOMIA_CUENTACAJA_EFECTIVO_POR_EMPRESA para efectivo).'
-        );
+        return $this->resolverPorCuentacajaId($cuentacajaId, $empresaId);
     }
 
     /**
@@ -115,64 +100,15 @@ final class WaitryPaymentTypeSupport
         return (int) ($medio['moneda_id'] ?? 0);
     }
 
-    public function resolverPorCuentacajaId(int $cuentacajaId, int $empresaId): ?string
+    public function resolverPorCuentacajaId(int $cuentacajaId, int $empresaId): string
     {
-        $efectivoId = GastronomiaCuentacajaEfectivo::idParaEmpresa($empresaId);
-        if ($efectivoId !== null && $cuentacajaId === $efectivoId) {
-            return self::TIPO_CASH;
-        }
-
-        $mapa = config('waitry.cuentacaja_tipo_pago', []);
-        if (! is_array($mapa)) {
-            return null;
-        }
-
-        $tipo = $mapa[$cuentacajaId] ?? $mapa[(string) $cuentacajaId] ?? null;
-        if ($tipo === null || $tipo === '') {
-            return null;
-        }
-
-        $tipo = mb_strtolower(trim((string) $tipo));
-        if (! in_array($tipo, self::TIPOS_VALIDOS, true)) {
-            return null;
-        }
-
-        return $tipo;
-    }
-
-    public function inferirDesdeTexto(string $codigo, string $nombre): ?string
-    {
-        $texto = mb_strtolower(trim($codigo.' '.$nombre), 'UTF-8');
-        if ($texto === '') {
-            return null;
-        }
-
-        if ($this->contieneAlguno($texto, ['debito', 'débito', 'debit', 'deb '])) {
-            return self::TIPO_DEBIT_CARD;
-        }
-
-        if ($this->contieneAlguno($texto, ['credito', 'crédito', 'credit', 'tarjeta', 'visa', 'master', 'amex', 'cabal'])) {
-            return self::TIPO_CREDIT_CARD;
-        }
-
-        if ($this->contieneAlguno($texto, ['efectivo', 'cash', 'caja chica', 'caja'])) {
-            return self::TIPO_CASH;
-        }
-
-        return null;
-    }
-
-    /**
-     * @param  list<string>  $palabras
-     */
-    private function contieneAlguno(string $texto, array $palabras): bool
-    {
-        foreach ($palabras as $palabra) {
-            if ($palabra !== '' && str_contains($texto, $palabra)) {
-                return true;
+        foreach (WaitryMedioPagoCuentacajaSupport::mapaTipoCuentacaja() as $tipoWaitry => $idCuenta) {
+            if ($cuentacajaId === (int) $idCuenta
+                && in_array($tipoWaitry, self::TIPOS_WAITRY_ESPECIFICOS, true)) {
+                return $tipoWaitry;
             }
         }
 
-        return false;
+        return self::TIPO_CASH;
     }
 }

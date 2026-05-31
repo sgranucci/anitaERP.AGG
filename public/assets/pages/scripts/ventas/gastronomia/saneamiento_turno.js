@@ -12,6 +12,7 @@
     var apiRetroactivo = app.getAttribute('data-api-retroactivo') || '';
     var apiRecalcular = app.getAttribute('data-api-recalcular') || '';
     var apiCerrarCuentas = app.getAttribute('data-api-cerrar-cuentas') || '';
+    var apiCerrarTurnoRemoto = app.getAttribute('data-api-cerrar-turno-remoto') || '';
     var urlInformePdf = app.getAttribute('data-url-informe-pdf') || '';
     var puedeEjecutar = app.getAttribute('data-puede-ejecutar') === '1' || cfg.puedeEjecutar;
 
@@ -196,6 +197,12 @@
                 if (s.accion === 'crear_retroactivo') {
                     html += ' <button type="button" class="btn btn-sm btn-danger ml-2 js-crear-retroactivo" data-pc="' + esc(term.identificador_pc) + '">Crear turno retroactivo</button>';
                 }
+                if (s.accion === 'cerrar_turno_remoto' && s.turno_operativo_id) {
+                    html += ' <button type="button" class="btn btn-sm btn-warning ml-2 js-cerrar-turno-remoto"';
+                    html += ' data-id="' + s.turno_operativo_id + '"';
+                    html += ' data-pc="' + esc(s.identificador_pc || term.identificador_pc) + '"';
+                    html += ' data-turno="' + esc(s.turno_nombre || '') + '">Cerrar turno remoto</button>';
+                }
                 if (s.accion === 'cerrar_cuentas' && s.turno_operativo_id) {
                     html += ' <button type="button" class="btn btn-sm btn-outline-danger ml-2 js-cerrar-cuentas"';
                     html += ' data-turno-id="' + s.turno_operativo_id + '"';
@@ -219,6 +226,61 @@
         return html;
     }
 
+    function cerrarTurnoRemoto(turnoId, pcTurno, turnoNombre) {
+        if (!apiCerrarTurnoRemoto) {
+            alert('API de cierre remoto no configurada.');
+            return;
+        }
+        var msg = 'Cerrar remotamente el turno #' + turnoId + ' (' + turnoNombre + ') en terminal ' + pcTurno + '?\n';
+        msg += 'Los totales se calculan sobre esa PC. Use esto si la terminal no responde.';
+        if (!confirm(msg)) {
+            return;
+        }
+        var obs = prompt('Observación de cierre (opcional):', 'Cierre remoto — PC inoperativa') || '';
+        postJson(apiCerrarTurnoRemoto, {
+            turno_operativo_id: turnoId,
+            observacion: obs,
+        }).then(function (res) {
+            if (res.ok && res.data.ok) {
+                alert(res.data.mensaje || 'Turno cerrado.');
+                if (res.data.url_comprobante_pdf) {
+                    window.open(res.data.url_comprobante_pdf, '_blank', 'noopener');
+                }
+                cargarDiagnostico();
+            } else {
+                alert(res.data.error || 'No se pudo cerrar el turno.');
+            }
+        });
+    }
+
+    function renderTurnosHabilitadosRemoto(lista) {
+        if (!lista || !lista.length || !puedeEjecutar) {
+            return '';
+        }
+        var html = '<div class="card border-warning mb-3">';
+        html += '<div class="card-header py-2 bg-warning"><strong>Cierre remoto de turnos (otra PC)</strong></div>';
+        html += '<div class="card-body py-2">';
+        html += '<p class="small text-muted mb-2">Turnos habilitados en la jornada. Puede cerrarlos desde esta terminal si la PC original no funciona.</p>';
+        html += '<div class="table-responsive"><table class="table table-sm table-bordered mb-0">';
+        html += '<thead><tr><th>PC turno</th><th>Turno</th><th>Habilitado</th><th>Actividad</th><th></th></tr></thead><tbody>';
+        lista.forEach(function (t) {
+            html += '<tr>';
+            html += '<td>' + esc(t.identificador_pc) + '</td>';
+            html += '<td>' + esc(t.turno_nombre) + ' <span class="text-muted">#' + esc(t.turno_operativo_id) + '</span></td>';
+            html += '<td>' + esc(t.habilitacion_en) + '</td>';
+            html += '<td>' + (t.con_actividad
+                ? '<span class="badge badge-danger">con comprobantes</span>'
+                : '<span class="badge badge-secondary">sin comprobantes</span>') + '</td>';
+            html += '<td><button type="button" class="btn btn-sm btn-warning js-cerrar-turno-remoto"';
+            html += ' data-id="' + esc(t.turno_operativo_id) + '"';
+            html += ' data-pc="' + esc(t.identificador_pc) + '"';
+            html += ' data-turno="' + esc(t.turno_nombre) + '">Cerrar remoto</button></td>';
+            html += '</tr>';
+        });
+        html += '</tbody></table></div></div></div>';
+        return html;
+    }
+
     function renderDiagnostico(data) {
         var panel = document.getElementById('panel-diagnostico');
         if (!panel) {
@@ -234,6 +296,8 @@
         html += 'Jornada #' + esc(j.id) + ' — ' + esc(j.fecha_jornada_fmt || j.fecha_jornada);
         html += j.abierta ? ' <span class="badge badge-success">Abierta</span>' : ' <span class="badge badge-secondary">Cerrada</span>';
         html += '</div>';
+
+        html += renderTurnosHabilitadosRemoto(data.turnos_habilitados_remoto);
 
         if (!data.terminales || !data.terminales.length) {
             html += '<p class="text-muted">No hay terminales configuradas para esta empresa.</p>';
@@ -373,6 +437,16 @@
                     btn.getAttribute('data-turno-id'),
                     btn.getAttribute('data-confirmacion') || '',
                     btn.getAttribute('data-cantidad') || '0',
+                );
+            });
+        });
+
+        root.querySelectorAll('.js-cerrar-turno-remoto').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                cerrarTurnoRemoto(
+                    btn.getAttribute('data-id'),
+                    btn.getAttribute('data-pc') || '',
+                    btn.getAttribute('data-turno') || '',
                 );
             });
         });

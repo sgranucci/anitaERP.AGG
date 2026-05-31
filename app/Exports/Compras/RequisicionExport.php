@@ -25,7 +25,7 @@ class RequisicionExport implements FromView, ShouldAutoSize, WithColumnFormattin
 
     private RequisicionQueryInterface $requisicionQuery;
 
-    private $busqueda;
+    private $filtros;
 
     private bool $flDesdeIndex = false;
 
@@ -49,11 +49,7 @@ class RequisicionExport implements FromView, ShouldAutoSize, WithColumnFormattin
     public function view(): View
     {
         if ($this->flDesdeIndex) {
-            $busqueda = $this->busqueda;
-            if (is_string($busqueda)) {
-                $busqueda = trim($busqueda);
-            }
-            $requisicion = $this->requisicionQuery->leeRequisicion($busqueda, false, true);
+            $requisicion = $this->requisicionQuery->leeRequisicion($this->filtros, false, true);
 
             $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($requisicion);
             $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
@@ -227,9 +223,9 @@ class RequisicionExport implements FromView, ShouldAutoSize, WithColumnFormattin
         return 'Requisiciones';
     }
 
-    public function parametros($busqueda)
+    public function parametros($filtros)
     {
-        $this->busqueda = $busqueda;
+        $this->filtros = $filtros;
         $this->flDesdeIndex = true;
 
         return $this;

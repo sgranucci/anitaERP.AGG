@@ -5,9 +5,12 @@ Presupuestos
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/includes/listado-filtros.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/presupuesto/presupuesto/filtro.js")}}" type="text/javascript"></script>
 @endsection
 
-<?php use App\Helpers\biblioteca ?>
+<?php use App\Helpers\biblioteca;
+use App\Support\Presupuesto\PresupuestoListadoFiltros; ?>
 
 @section('contenido')
 <div class="row">
@@ -16,14 +19,26 @@ Presupuestos
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Presupuestos</h3>
-                <div class="card-tools">
-                    <a href="{{route('crear_presupuesto')}}" class="btn btn-outline-secondary btn-sm">
-                       	@if (can('crear-presupuesto', false))
-                        	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
-						@endif
-                    </a>
+                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @include('includes.listado.filtros_toolbar', [
+                        'formId' => 'form-filtros-presupuesto',
+                        'filtroValor' => $filtros['valor'] ?? '',
+                        'tieneCriterios' => PresupuestoListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
+                        'limpiarUrl' => route('consultar_presupuesto'),
+                        'placeholder' => 'Búsqueda rápida (tolera errores de tipeo)…',
+                        'toggleTarget' => '#panel-filtros-presupuesto',
+                        'toggleId' => 'btn-toggle-filtros-presupuesto',
+                        'inputId' => 'filtro_valor',
+                        'nuevoRegistroUrl' => route('crear_presupuesto'),
+                        'nuevoRegistroCan' => 'crear-presupuesto',
+                    ])
                 </div>
             </div>
+            <form method="get" action="{{ route('consultar_presupuesto') }}" id="form-filtros-presupuesto" class="mb-0">
+                @include('presupuesto.presupuesto.partials.filtros_listado', [
+                    'limpiarUrl' => route('consultar_presupuesto'),
+                ])
+            </form>
             <div class="card-body table-responsive p-0">
                 <table class="table table-striped table-bordered table-hover" id="tabla-data-2">
                     <thead>
@@ -77,4 +92,5 @@ Presupuestos
         </div>
     </div>
 </div>
+{{ $datas->appends($filtrosQuery ?? [])->links() }}
 @endsection

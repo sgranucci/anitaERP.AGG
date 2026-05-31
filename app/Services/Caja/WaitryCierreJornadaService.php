@@ -6,6 +6,8 @@ use App\Models\Ventas\CuentaGastronomia;
 use App\Models\Ventas\JornadaGastronomia;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Services\Ventas\Gastronomia\Waitry\WaitryAnalyticsOrdenesService;
+use App\Support\Ventas\GastronomiaVentaDetalleSupport;
+use App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport;
 use Carbon\Carbon;
 use InvalidArgumentException;
 
@@ -70,7 +72,7 @@ final class WaitryCierreJornadaService
         }
 
         $emisionesJornada = VentaGastronomiaEmision::query()
-            ->with(['venta', 'cuenta'])
+            ->with(['venta.cobranzasDirectas', 'venta.caja_movimientos.cobranzas', 'cuenta'])
             ->whereNotNull('waitry_order_id')
             ->whereHas('venta', function ($q) use ($empresaId, $fechaJornada) {
                 $q->whereDate('fechajornada', $fechaJornada)
@@ -79,7 +81,7 @@ final class WaitryCierreJornadaService
             ->get();
 
         $emisionesPorWaitry = VentaGastronomiaEmision::query()
-            ->with(['venta', 'cuenta'])
+            ->with(['venta.cobranzasDirectas', 'venta.caja_movimientos.cobranzas', 'cuenta'])
             ->whereNotNull('waitry_order_id')
             ->whereHas('venta', fn ($q) => $q->whereHas('puntoventas', fn ($pv) => $pv->where('empresa_id', $empresaId)))
             ->get();
@@ -115,7 +117,7 @@ final class WaitryCierreJornadaService
             $idsProcesados[] = $orderId;
             $emision = $mapAnitaPorWaitry[$orderId] ?? null;
             $cuentaPend = $cuentasPendientes->get($orderId);
-            $filas[] = $this->armarFila($orderId, $orden, $emision, $cuentaPend, $fechaJornada);
+            $filas[] = $this->armarFila($orderId, $orden, $emision, $cuentaPend, $fechaJornada, $empresaId);
         }
 
         foreach ($mapAnitaJornada as $orderId => $emision) {
@@ -129,7 +131,7 @@ final class WaitryCierreJornadaService
             return ($b['waitry_order_id'] ?? 0) <=> ($a['waitry_order_id'] ?? 0);
         });
 
-        $resumen = $this->calcularResumen($filas, $mapWaitry, $emisionesJornada);
+        $resumen = $this->calcularResumen($filas, $mapWaitry, $emisionesJornada, $empresaId);
 
         return [
             'ok' => true,
@@ -152,6 +154,7 @@ final class WaitryCierreJornadaService
         ?VentaGastronomiaEmision $emision,
         ?CuentaGastronomia $cuentaPendiente,
         string $fechaJornadaConsulta,
+        int $empresaId,
     ): array {
         $waitryTotal = round((float) ($orden['totalAmount'] ?? 0), 2);
         $waitryPaid = $this->esPagadaWaitry($orden);
@@ -160,12 +163,23 @@ final class WaitryCierreJornadaService
         $anitaFechajornada = $this->fechaJornadaVenta($emision);
         $jornadaCoincide = $anitaFechajornada === null || $anitaFechajornada === $fechaJornadaConsulta;
 
+        $waitryTipoPago = WaitryMedioPagoCuentacajaSupport::extraerTipoPagoOrden($orden)
+            ?? $emision?->cuenta?->waitry_tipo_pago
+            ?? $cuentaPendiente?->waitry_tipo_pago;
+        $cuentaEsperada = WaitryMedioPagoCuentacajaSupport::cuentaParaTipoWaitry($waitryTipoPago, $empresaId);
+        $anitaMedio = $this->primerMedioCobranzaAnita($emision);
+
         $estado = 'sin_factura_anita';
         if ($emision !== null) {
             if (! $jornadaCoincide) {
                 $estado = abs((float) $diferencia) > self::TOLERANCIA_MONTO ? 'jornada_distinta_monto' : 'jornada_distinta';
             } else {
                 $estado = abs((float) $diferencia) > self::TOLERANCIA_MONTO ? 'monto_distinto' : 'conciliada';
+            }
+            if ($estado === 'conciliada' && $waitryPaid && $anitaMedio !== null && $cuentaEsperada !== null) {
+                if ((int) ($anitaMedio['cuentacaja_id'] ?? 0) !== (int) $cuentaEsperada['id']) {
+                    $estado = 'medio_distinto';
+                }
             }
         } elseif ($cuentaPendiente !== null) {
             $estado = 'importada_pendiente';
@@ -182,12 +196,20 @@ final class WaitryCierreJornadaService
             'hora_waitry' => $this->formatearHora($orden['placed_at'] ?? null),
             'waitry_paid' => $waitryPaid,
             'waitry_total' => $waitryTotal,
+            'waitry_tipo_pago' => $waitryTipoPago,
+            'waitry_medio_label' => WaitryMedioPagoCuentacajaSupport::etiquetaTipo($waitryTipoPago),
+            'cuentacaja_esperada_id' => $cuentaEsperada['id'] ?? null,
+            'cuentacaja_esperada_label' => isset($cuentaEsperada['codigo'], $cuentaEsperada['nombre'])
+                ? trim($cuentaEsperada['codigo'].' — '.$cuentaEsperada['nombre'])
+                : null,
             'anita_venta_id' => $emision?->venta_id,
             'anita_codigo' => $emision?->venta?->codigo,
             'anita_fechajornada' => $anitaFechajornada,
             'anita_fechajornada_fmt' => $anitaFechajornada ? $this->formatearFecha($anitaFechajornada) : null,
             'anita_total' => $anitaTotal,
             'anita_totem' => (bool) ($emision?->cuenta?->waitry_cobro_totem ?? $cuentaPendiente?->waitry_cobro_totem),
+            'anita_cuentacaja_id' => $anitaMedio['cuentacaja_id'] ?? null,
+            'anita_cuentacaja_label' => $anitaMedio['label'] ?? null,
             'cuenta_pendiente_id' => $cuentaPendiente?->id,
             'diferencia' => $diferencia,
             'estado' => $estado,
@@ -197,16 +219,24 @@ final class WaitryCierreJornadaService
 
     private function armarFilaSoloAnita(int $orderId, VentaGastronomiaEmision $emision): array
     {
+        $anitaMedio = $this->primerMedioCobranzaAnita($emision);
+
         return [
             'waitry_order_id' => $orderId,
             'referencia_waitry' => '',
             'hora_waitry' => '',
             'waitry_paid' => null,
             'waitry_total' => null,
+            'waitry_tipo_pago' => $emision->cuenta?->waitry_tipo_pago,
+            'waitry_medio_label' => WaitryMedioPagoCuentacajaSupport::etiquetaTipo($emision->cuenta?->waitry_tipo_pago),
+            'cuentacaja_esperada_id' => null,
+            'cuentacaja_esperada_label' => null,
             'anita_venta_id' => $emision->venta_id,
             'anita_codigo' => $emision->venta?->codigo,
             'anita_total' => round((float) ($emision->venta?->total ?? 0), 2),
             'anita_totem' => (bool) ($emision->cuenta?->waitry_cobro_totem),
+            'anita_cuentacaja_id' => $anitaMedio['cuentacaja_id'] ?? null,
+            'anita_cuentacaja_label' => $anitaMedio['label'] ?? null,
             'cuenta_pendiente_id' => null,
             'diferencia' => null,
             'estado' => 'solo_anita',
@@ -220,7 +250,7 @@ final class WaitryCierreJornadaService
      * @param  \Illuminate\Support\Collection<int, VentaGastronomiaEmision>  $emisiones
      * @return array<string, mixed>
      */
-    private function calcularResumen(array $filas, array $mapWaitry, $emisiones): array
+    private function calcularResumen(array $filas, array $mapWaitry, $emisiones, int $empresaId): array
     {
         $totalWaitry = 0.0;
         $totalWaitryPagado = 0.0;
@@ -229,9 +259,10 @@ final class WaitryCierreJornadaService
         $sinFactura = 0;
         $importadasPendientes = 0;
         $montoDistinto = 0;
+        $medioDistinto = 0;
         $soloAnita = 0;
-
         $jornadaDistinta = 0;
+        $porMedioWaitry = [];
 
         foreach ($filas as $f) {
             match ($f['estado']) {
@@ -239,6 +270,7 @@ final class WaitryCierreJornadaService
                 'sin_factura_anita' => $sinFactura++,
                 'importada_pendiente' => $importadasPendientes++,
                 'monto_distinto' => $montoDistinto++,
+                'medio_distinto' => $medioDistinto++,
                 'jornada_distinta', 'jornada_distinta_monto' => $jornadaDistinta++,
                 'solo_anita' => $soloAnita++,
                 default => null,
@@ -253,6 +285,22 @@ final class WaitryCierreJornadaService
             $totalWaitry += $monto;
             if ($this->esPagadaWaitry($orden)) {
                 $totalWaitryPagado += $monto;
+                $tipo = WaitryMedioPagoCuentacajaSupport::extraerTipoPagoOrden($orden) ?? 'totem';
+                if (! isset($porMedioWaitry[$tipo])) {
+                    $cuenta = WaitryMedioPagoCuentacajaSupport::cuentaParaTipoWaitry($tipo, $empresaId);
+                    $porMedioWaitry[$tipo] = [
+                        'tipo' => $tipo,
+                        'etiqueta' => WaitryMedioPagoCuentacajaSupport::etiquetaTipo($tipo),
+                        'cuentacaja_id' => $cuenta['id'] ?? null,
+                        'cuentacaja_label' => isset($cuenta['codigo'], $cuenta['nombre'])
+                            ? trim($cuenta['codigo'].' — '.$cuenta['nombre'])
+                            : null,
+                        'cantidad' => 0,
+                        'total' => 0.0,
+                    ];
+                }
+                $porMedioWaitry[$tipo]['cantidad']++;
+                $porMedioWaitry[$tipo]['total'] = round($porMedioWaitry[$tipo]['total'] + $monto, 2);
             }
         }
 
@@ -267,9 +315,53 @@ final class WaitryCierreJornadaService
             'sin_factura_anita' => $sinFactura,
             'importadas_pendientes' => $importadasPendientes,
             'monto_distinto' => $montoDistinto,
+            'medio_distinto' => $medioDistinto,
             'solo_anita' => $soloAnita,
             'jornada_distinta' => $jornadaDistinta,
-            'tiene_diferencias' => ($sinFactura + $importadasPendientes + $montoDistinto + $soloAnita + $jornadaDistinta) > 0,
+            'por_medio_waitry' => array_values($porMedioWaitry),
+            'tiene_diferencias' => ($sinFactura + $importadasPendientes + $montoDistinto + $medioDistinto + $soloAnita + $jornadaDistinta) > 0,
+        ];
+    }
+
+    /**
+     * @return array{cuentacaja_id:int,label:string}|null
+     */
+    private function primerMedioCobranzaAnita(?VentaGastronomiaEmision $emision): ?array
+    {
+        $venta = $emision?->venta;
+        if ($venta === null) {
+            return null;
+        }
+
+        $cobranzas = GastronomiaVentaDetalleSupport::cobranzasDeVenta($venta);
+        $medios = GastronomiaVentaDetalleSupport::mediosPagoPorCobranza($cobranzas);
+        $linea = null;
+        foreach ($medios as $lineas) {
+            foreach ($lineas as $medio) {
+                if ((int) ($medio->cuentacaja_id ?? 0) > 0) {
+                    $linea = $medio;
+                    break 2;
+                }
+            }
+        }
+        if ($linea === null) {
+            return null;
+        }
+
+        $ccId = (int) ($linea->cuentacaja_id ?? 0);
+        if ($ccId <= 0) {
+            return null;
+        }
+
+        $codigo = trim((string) ($linea->codigo ?? $linea->cuenta ?? ''));
+        $nombre = trim((string) ($linea->nombre ?? ''));
+        $label = $codigo !== '' && $nombre !== ''
+            ? $codigo.' — '.$nombre
+            : ($codigo !== '' ? $codigo : ($nombre !== '' ? $nombre : '#'.$ccId));
+
+        return [
+            'cuentacaja_id' => $ccId,
+            'label' => $label,
         ];
     }
 
@@ -306,6 +398,7 @@ final class WaitryCierreJornadaService
             'sin_factura_anita' => 'Waitry sin factura Anita',
             'importada_pendiente' => 'Importada, pendiente de facturar',
             'monto_distinto' => 'Diferencia de monto',
+            'medio_distinto' => 'Medio de pago distinto',
             'jornada_distinta' => 'Facturada Anita (otra jornada)',
             'jornada_distinta_monto' => 'Facturada Anita (otra jornada) + dif. monto',
             'solo_anita' => 'Facturada Anita, no en Waitry',

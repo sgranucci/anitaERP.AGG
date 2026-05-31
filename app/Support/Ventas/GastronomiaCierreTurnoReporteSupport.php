@@ -214,7 +214,7 @@ final class GastronomiaCierreTurnoReporteSupport
         return $this->armarDatosComprobante(
             tipo: 'cierre',
             titulo: 'Cierre de turno gastronomía',
-            subtitulo: 'Turno operativo #'.$turno->id,
+            subtitulo: self::subtituloTurnoOperativo($turno),
             turno: $turno,
             totalesTurno: $totalesTurno,
             totalesDia: $totalesDia,
@@ -334,7 +334,7 @@ final class GastronomiaCierreTurnoReporteSupport
             'tipo' => 'cierre',
             'tipo_etiqueta' => 'Cierre definitivo',
             'id' => (int) $t->id,
-            'referencia' => 'Op. #'.$t->id,
+            'referencia' => self::referenciaCierreDefinitivo($t),
             'fecha_hora' => $t->cierre_en?->format('d/m/Y H:i') ?? '',
             'fecha_hora_raw' => $t->cierre_en?->format('Y-m-d H:i:s') ?? '',
             'empresa_id' => (int) $t->empresa_id,
@@ -400,6 +400,28 @@ final class GastronomiaCierreTurnoReporteSupport
             'observacion_habilitacion' => $turno?->observacion_habilitacion,
             'observacion_cierre' => $observacionCierre,
             'cantidad_parciales' => $cantidadParciales,
+            'numero_cierre' => $turno?->numero_cierre,
+            'turno_operativo_id' => $turno?->id,
         ];
+    }
+
+    public static function referenciaCierreDefinitivo(TurnoOperativoGastronomia $turno): string
+    {
+        $n = (int) ($turno->numero_cierre ?? 0);
+        if ($n > 0) {
+            return 'Cierre #'.$n.' · PC '.$turno->identificador_pc;
+        }
+
+        return 'Op. #'.$turno->id.' · PC '.$turno->identificador_pc;
+    }
+
+    public static function subtituloTurnoOperativo(TurnoOperativoGastronomia $turno): string
+    {
+        $n = (int) ($turno->numero_cierre ?? 0);
+        $base = $n > 0
+            ? 'Cierre de turno #'.$n
+            : 'Turno operativo #'.$turno->id;
+
+        return $base.' · '.$turno->identificador_pc;
     }
 }

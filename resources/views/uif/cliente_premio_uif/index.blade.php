@@ -10,20 +10,7 @@ Premios UIF
 <?php use App\Helpers\biblioteca ?>
 
 @section('styles')
-<style>
-    .premio-foto-thumb-link { display: inline-block; line-height: 0; }
-    .premio-foto-thumb {
-        max-height: 48px;
-        max-width: 48px;
-        width: auto;
-        height: auto;
-        object-fit: cover;
-        border-radius: 4px;
-        border: 1px solid #ddd;
-        vertical-align: middle;
-    }
-    .premio-foto-thumb-link:hover .premio-foto-thumb { border-color: #3c8dbc; opacity: 0.92; }
-</style>
+    @include('uif.cliente_premio_uif.partials.foto_estilos')
 @endsection
 
 @section('contenido')
@@ -77,17 +64,10 @@ Premios UIF
                             <td>{{$data->numerotito ?? ''}}</td>
                             <td>{{$data->nombreformapago}}</td>
                             <td class="text-center align-middle premio-foto-preview">
-                                @if (! empty($data->foto ?? null))
-                                    @if (can('editar-cliente-premio-uif', false))
-                                        <a href="{{ route('muestra_foto_cliente_premio_uif', ['id' => $data->id]) }}" class="premio-foto-thumb-link tooltipsC" title="Ver foto del jugador">
-                                            <img src="{{ asset('storage/imagenes/fotos_uif/'.$data->foto) }}" alt="" class="premio-foto-thumb">
-                                        </a>
-                                    @else
-                                        <img src="{{ asset('storage/imagenes/fotos_uif/'.$data->foto) }}" alt="" class="premio-foto-thumb">
-                                    @endif
-                                @else
-                                    <span class="text-muted">—</span>
-                                @endif
+                                @include('uif.cliente_premio_uif.partials.foto_celda', [
+                                    'foto' => $data->foto ?? null,
+                                    'premioId' => $data->id,
+                                ])
                             </td>
                             <td>
                        			@if (can('editar-cliente-premio-uif', false))

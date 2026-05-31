@@ -5,6 +5,7 @@ namespace App\Queries\Compras;
 use App\Models\Compras\Requisicion;
 use App\Queries\Configuracion\CotizacionQueryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Compras\RequisicionListadoFiltros;
 use App\Support\Compras\RequisicionTotalesCabecera;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -79,10 +80,24 @@ class RequisicionQuery implements RequisicionQueryInterface
         return ($r->estado ?? '') === $aprobada;
     }
 
-    public function leeRequisicion($busqueda, $flPaginando = null, $withArticulos = false)
+    public function leeRequisicion($filtros, $flPaginando = null, $withArticulos = false)
     {
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
+
+        if (is_string($filtros)) {
+            $texto = trim($filtros);
+            $filtros = [
+                'modo' => RequisicionListadoFiltros::MODO_TODOS,
+                'campo' => 'numerorequisicion',
+                'operador' => 'contiene',
+                'valor' => $texto,
+                'valor_hasta' => '',
+                'busqueda' => $texto,
+            ];
+        } elseif (! is_array($filtros)) {
+            $filtros = RequisicionListadoFiltros::filtrosVacios();
+        }
 
         $empresas = $this->empresaRepository->traeEmpresasAsignadas();
         $oficina_compra_id = config('requisicion.filtro_oficina_compras_activo', false)
@@ -143,39 +158,11 @@ class RequisicionQuery implements RequisicionQueryInterface
             $q->where('requisicion.centrocosto_id', $centrocostoFiltro);
         }
 
-        $columns = [
-            ['columna' => 'requisicion.id', 'clausula' => 'LIKE'],
-            ['columna' => 'requisicion.numerorequisicion', 'clausula' => 'LIKE'],
-            ['columna' => 'empresa.nombre', 'clausula' => 'LIKE'],
-            ['columna' => 'requisicion.tratamiento', 'clausula' => 'LIKE'],
-            ['columna' => 'requisicion.motivotratamiento', 'clausula' => 'LIKE'],
-            ['columna' => 'requisicion.contrataciondirecta', 'clausula' => 'LIKE'],
-            ['columna' => 'centrocosto.nombre', 'clausula' => 'LIKE'],
-            ['columna' => 'centrocosto.codigo', 'clausula' => 'LIKE'],
-            ['columna' => 'requisicion.comentario', 'clausula' => 'LIKE'],
-            ['columna' => 'requisicion.detalle', 'clausula' => 'LIKE'],
-            ['columna' => 'requisicion.estado', 'clausula' => 'LIKE'],
-            ['columna' => 'usuario.nombre', 'clausula' => 'LIKE'],
-            ['columna' => 'usuario.usuario', 'clausula' => 'LIKE'],
-            ['columna' => 'proveedor.nombre', 'clausula' => 'LIKE'],
-            ['columna' => 'proveedor.codigo', 'clausula' => 'LIKE'],
-            ['columna' => 'oficinacompra.nombre', 'clausula' => 'LIKE'],
-            ['columna' => 'formapago.nombre', 'clausula' => 'LIKE'],
-        ];
-
-        if (Schema::hasColumn($this->model->getTable(), 'nroinscripcion')) {
-            $columns[] = ['columna' => 'requisicion.nroinscripcion', 'clausula' => 'LIKE'];
-        }
-
-        if ($busqueda) {
-            $q->where(function ($query) use ($busqueda, $columns) {
-                foreach ($columns as $col) {
-                    $query->orWhere($col['columna'], 'LIKE', '%'.$busqueda.'%');
-                }
-            });
-        }
-
         $q->whereIn('requisicion.empresa_id', $empresas);
+
+        if (RequisicionListadoFiltros::tieneCriteriosAplicados($filtros)) {
+            RequisicionListadoFiltros::aplicar($q, $filtros);
+        }
 
         $q->orderBy('requisicion.fecha', 'desc')->orderBy('requisicion.id', 'desc');
 

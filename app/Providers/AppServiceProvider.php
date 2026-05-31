@@ -668,6 +668,11 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Ventas\TotemWaitryGastronomiaRepositoryInterface',
+            'App\Repositories\Ventas\TotemWaitryGastronomiaRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Ventas\TurnoGastronomiaRepositoryInterface',
             'App\Repositories\Ventas\TurnoGastronomiaRepository',
         );

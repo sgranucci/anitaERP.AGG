@@ -22,6 +22,7 @@
      data-api-retroactivo="{{ route('gastronomia_saneamiento_turno_api_crear_retroactivo') }}"
      data-api-recalcular="{{ route('gastronomia_saneamiento_turno_api_recalcular_totales') }}"
      data-api-cerrar-cuentas="{{ route('gastronomia_saneamiento_turno_api_cerrar_cuentas') }}"
+     data-api-cerrar-turno-remoto="{{ route('gastronomia_saneamiento_turno_api_cerrar_turno_remoto') }}"
      data-url-informe-pdf="{{ route('gastronomia_saneamiento_turno_informe_pdf') }}"
      data-puede-ejecutar="{{ ($puede_ejecutar ?? false) ? '1' : '0' }}">
     <div class="col-lg-12">

@@ -179,63 +179,59 @@ final class GastronomiaTurnoOperativoTotalesSupport
         $cantidadNotasCredito = 0;
         $cantidadFacturas = 0;
 
+        $facturaVentaIdsEnPc = [];
+
         foreach ($emisiones as $em) {
             $venta = $em->venta;
             if (! $venta) {
                 continue;
             }
 
-            $montoVenta = round((float) $venta->total, 2);
-            $cobranzas = GastronomiaVentaDetalleSupport::cobranzasDeVenta($venta);
-            $medios = GastronomiaVentaDetalleSupport::mediosPagoPorCobranza($cobranzas);
-            $totalCobradoVenta = self::sumarMontosMedios($medios);
             $esNotaCredito = ($em->venta_factura_origen_id ?? null) !== null;
-
-            $totalVentas += $montoVenta;
-            $totalCobrado += $totalCobradoVenta;
-
-            if ($esNotaCredito) {
-                $totalNotasCredito += $montoVenta;
-                $cantidadNotasCredito++;
-            } else {
-                $totalFacturas += $montoVenta;
-                $cantidadFacturas++;
-                if (self::esInvitacionSinCobranza($montoVenta, $totalCobradoVenta, $importeMinimo)) {
-                    $totalInvitaciones += $montoVenta;
-                    $cantidadInvitaciones++;
-                }
+            if (! $esNotaCredito) {
+                $facturaVentaIdsEnPc[] = (int) $venta->id;
             }
 
-            $mozoId = $em->cuenta?->mozo_gastronomia_id;
-            $key = $mozoId !== null ? (string) $mozoId : '0';
-            if (! isset($porMozo[$key])) {
-                $mozo = $em->cuenta?->mozo;
-                $porMozo[$key] = [
-                    'mozo_id' => $mozoId ? (int) $mozoId : null,
-                    'mozo_codigo' => $mozo?->codigo,
-                    'mozo_nombre' => $mozo?->nombre ?? 'Sin mozo',
-                    'total' => 0.0,
-                    'total_facturas' => 0.0,
-                    'total_cobrado' => 0.0,
-                    'cantidad' => 0,
-                    'por_medio_pago' => [],
-                    'notas_credito' => [
-                        'total' => 0.0,
-                        'cantidad' => 0,
-                    ],
-                ];
-            }
-            $porMozo[$key]['total'] += $montoVenta;
-            $porMozo[$key]['total_cobrado'] += $totalCobradoVenta;
-            $porMozo[$key]['cantidad']++;
+            self::acumularEmisionEnTotales(
+                $em,
+                $importeMinimo,
+                $porMozo,
+                $porMedioGlobal,
+                $totalVentas,
+                $totalFacturas,
+                $totalInvitaciones,
+                $cantidadInvitaciones,
+                $totalCobrado,
+                $totalNotasCredito,
+                $cantidadNotasCredito,
+                $cantidadFacturas,
+            );
+        }
 
-            if ($esNotaCredito) {
-                $porMozo[$key]['notas_credito']['total'] += $montoVenta;
-                $porMozo[$key]['notas_credito']['cantidad']++;
-            } else {
-                $porMozo[$key]['total_facturas'] += $montoVenta;
-                self::acumularMediosPago($medios, $porMozo[$key]['por_medio_pago']);
-                self::acumularMediosPago($medios, $porMedioGlobal);
+        if ($facturaVentaIdsEnPc !== []) {
+            $ncExternas = self::emisionesNotasCreditoOtraPc(
+                $identificadorPc,
+                $empresaId,
+                $fechaJornada,
+                $desdeHabilitacion,
+                $hastaInclusive,
+                $facturaVentaIdsEnPc,
+            );
+            foreach ($ncExternas as $em) {
+                self::acumularEmisionEnTotales(
+                    $em,
+                    $importeMinimo,
+                    $porMozo,
+                    $porMedioGlobal,
+                    $totalVentas,
+                    $totalFacturas,
+                    $totalInvitaciones,
+                    $cantidadInvitaciones,
+                    $totalCobrado,
+                    $totalNotasCredito,
+                    $cantidadNotasCredito,
+                    $cantidadFacturas,
+                );
             }
         }
 
@@ -246,6 +242,7 @@ final class GastronomiaTurnoOperativoTotalesSupport
         $totalNotasCredito = round($totalNotasCredito, 2);
         $totalVentasCobrables = round($totalVentas - $totalInvitaciones, 2);
         $diferencia = round($totalCobrado - $totalVentasCobrables, 2);
+        $redondeoInvitacionesSugerido = self::redondeoInvitacionesSugerido($totalInvitaciones, $diferencia);
 
         $porMedioGlobal = self::normalizarMediosPago($porMedioGlobal);
 
@@ -274,10 +271,169 @@ final class GastronomiaTurnoOperativoTotalesSupport
             'cantidad_facturas' => $cantidadFacturas,
             'cantidad_notas_credito' => $cantidadNotasCredito,
             'total_notas_credito' => $totalNotasCredito,
-            'redondeo_invitaciones_sugerido' => $totalInvitaciones,
+            'redondeo_invitaciones_sugerido' => $redondeoInvitacionesSugerido,
             'por_mozo' => array_values($porMozo),
             'por_medio_pago' => $porMedioGlobal,
         ];
+    }
+
+    /**
+     * Invitaciones ($0,01) más el residual de conciliación dentro de tolerancia (p. ej. NC emitida en otra PC).
+     */
+    public static function redondeoInvitacionesSugerido(float $totalInvitaciones, float $diferenciaCobranza): float
+    {
+        $ajuste = 0.0;
+        if (abs($diferenciaCobranza) > 0.001 && abs($diferenciaCobranza) <= self::TOLERANCIA_CONCILIACION) {
+            $ajuste = $diferenciaCobranza;
+        }
+
+        return round($totalInvitaciones + $ajuste, 2);
+    }
+
+    /**
+     * Valida que redondeo / sobrante-faltante absorban la diferencia de conciliación del turno.
+     */
+    public static function cierreCuadraConAjustesManuales(
+        array $totalesTurno,
+        float $redondeoInvitaciones,
+        float $redondeoTurno,
+        float $sobranteFaltante,
+    ): bool {
+        if (! empty($totalesTurno['conciliacion_ok'])) {
+            return true;
+        }
+
+        $diferencia = round((float) ($totalesTurno['diferencia_cobranza'] ?? 0), 2);
+        $baseInvitaciones = round((float) ($totalesTurno['total_invitaciones'] ?? 0), 2);
+        $extraInvitaciones = round($redondeoInvitaciones - $baseInvitaciones, 2);
+        $residual = round(
+            $diferencia - $extraInvitaciones - round($redondeoTurno, 2) - round($sobranteFaltante, 2),
+            2,
+        );
+
+        return abs($residual) < self::TOLERANCIA_CONCILIACION;
+    }
+
+    /**
+     * NC emitidas en otra terminal sobre facturas de esta PC (misma jornada / ventana de turno).
+     *
+     * @param  list<int>  $ventaIdsFacturasEnPc
+     * @return Collection<int, VentaGastronomiaEmision>
+     */
+    private static function emisionesNotasCreditoOtraPc(
+        string $identificadorPc,
+        int $empresaId,
+        string $fechaJornada,
+        ?Carbon $desdeHabilitacion,
+        ?Carbon $hastaInclusive,
+        array $ventaIdsFacturasEnPc,
+    ): Collection {
+        $ventaIdsFacturasEnPc = array_values(array_unique(array_filter($ventaIdsFacturasEnPc)));
+        if ($ventaIdsFacturasEnPc === []) {
+            return collect();
+        }
+
+        return VentaGastronomiaEmision::query()
+            ->where('identificador_pc', '!=', $identificadorPc)
+            ->whereIn('venta_factura_origen_id', $ventaIdsFacturasEnPc)
+            ->whereHas('venta', function ($v) use ($empresaId, $fechaJornada, $desdeHabilitacion, $hastaInclusive) {
+                $v->where(function ($fecha) use ($fechaJornada) {
+                    $fecha->whereDate('fechajornada', $fechaJornada)
+                        ->orWhere(function ($legacy) use ($fechaJornada) {
+                            $legacy->whereNull('fechajornada')
+                                ->whereDate('fecha', $fechaJornada);
+                        });
+                })->whereHas('puntoventas', fn ($pv) => $pv->where('empresa_id', $empresaId));
+                if ($desdeHabilitacion !== null) {
+                    $v->where('created_at', '>=', $desdeHabilitacion);
+                }
+                if ($hastaInclusive !== null) {
+                    $v->where('created_at', '<=', $hastaInclusive);
+                }
+            })
+            ->with([
+                'venta.cobranzasDirectas',
+                'venta.caja_movimientos.cobranzas',
+                'cuenta.mozo',
+            ])
+            ->get();
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $porMozo
+     * @param  array<int, array{cuentacaja_id:int, codigo:string, nombre:string, total:float}>  $porMedioGlobal
+     */
+    private static function acumularEmisionEnTotales(
+        VentaGastronomiaEmision $em,
+        float $importeMinimo,
+        array &$porMozo,
+        array &$porMedioGlobal,
+        float &$totalVentas,
+        float &$totalFacturas,
+        float &$totalInvitaciones,
+        int &$cantidadInvitaciones,
+        float &$totalCobrado,
+        float &$totalNotasCredito,
+        int &$cantidadNotasCredito,
+        int &$cantidadFacturas,
+    ): void {
+        $venta = $em->venta;
+        if (! $venta) {
+            return;
+        }
+
+        $montoVenta = round((float) $venta->total, 2);
+        $cobranzas = GastronomiaVentaDetalleSupport::cobranzasDeVenta($venta);
+        $medios = GastronomiaVentaDetalleSupport::mediosPagoPorCobranza($cobranzas);
+        $totalCobradoVenta = self::sumarMontosMedios($medios);
+        $esNotaCredito = ($em->venta_factura_origen_id ?? null) !== null;
+
+        $totalVentas += $montoVenta;
+        $totalCobrado += $totalCobradoVenta;
+
+        if ($esNotaCredito) {
+            $totalNotasCredito += $montoVenta;
+            $cantidadNotasCredito++;
+        } else {
+            $totalFacturas += $montoVenta;
+            $cantidadFacturas++;
+            if (self::esInvitacionSinCobranza($montoVenta, $totalCobradoVenta, $importeMinimo)) {
+                $totalInvitaciones += $montoVenta;
+                $cantidadInvitaciones++;
+            }
+        }
+
+        $mozoId = $em->cuenta?->mozo_gastronomia_id;
+        $key = $mozoId !== null ? (string) $mozoId : '0';
+        if (! isset($porMozo[$key])) {
+            $mozo = $em->cuenta?->mozo;
+            $porMozo[$key] = [
+                'mozo_id' => $mozoId ? (int) $mozoId : null,
+                'mozo_codigo' => $mozo?->codigo,
+                'mozo_nombre' => $mozo?->nombre ?? 'Sin mozo',
+                'total' => 0.0,
+                'total_facturas' => 0.0,
+                'total_cobrado' => 0.0,
+                'cantidad' => 0,
+                'por_medio_pago' => [],
+                'notas_credito' => [
+                    'total' => 0.0,
+                    'cantidad' => 0,
+                ],
+            ];
+        }
+        $porMozo[$key]['total'] += $montoVenta;
+        $porMozo[$key]['total_cobrado'] += $totalCobradoVenta;
+        $porMozo[$key]['cantidad']++;
+
+        if ($esNotaCredito) {
+            $porMozo[$key]['notas_credito']['total'] += $montoVenta;
+            $porMozo[$key]['notas_credito']['cantidad']++;
+        } else {
+            $porMozo[$key]['total_facturas'] += $montoVenta;
+            self::acumularMediosPago($medios, $porMozo[$key]['por_medio_pago']);
+            self::acumularMediosPago($medios, $porMedioGlobal);
+        }
     }
 
     /**

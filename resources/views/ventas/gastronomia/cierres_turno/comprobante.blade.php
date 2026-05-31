@@ -68,8 +68,19 @@
         <tr>
             <td class="lbl">Turno</td>
             <td>{{ $d['turno_catalogo'] }} @if(($d['turno_horario'] ?? '—') !== '—') ({{ $d['turno_horario'] }}) @endif</td>
+            <td class="lbl">Nº cierre empresa</td>
+            <td>
+                @if (!empty($d['numero_cierre']))
+                    #{{ (int) $d['numero_cierre'] }}
+                    <span class="muted">(reg. interno {{ (int) ($d['turno_operativo_id'] ?? 0) }})</span>
+                @else
+                    —
+                @endif
+            </td>
+        </tr>
+        <tr>
             <td class="lbl">Fecha jornada</td>
-            <td>{{ $d['fecha_jornada'] }}</td>
+            <td colspan="3">{{ $d['fecha_jornada'] }}</td>
         </tr>
         <tr>
             <td class="lbl">Habilitación</td>

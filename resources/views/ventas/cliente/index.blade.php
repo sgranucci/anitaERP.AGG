@@ -5,9 +5,12 @@ Clientes
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/includes/listado-filtros.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/ventas/cliente/filtro.js")}}" type="text/javascript"></script>
 @endsection
 
-<?php use App\Helpers\biblioteca ?>
+<?php use App\Helpers\biblioteca;
+use App\Support\Ventas\ClienteListadoFiltros; ?>
 
 @section('contenido')
 <div class="row">
@@ -16,26 +19,29 @@ Clientes
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Clientes</h3>
-                <div class="card-tools">
-                    <a href="{{route('crear_cliente')}}" class="btn btn-outline-secondary btn-sm">
-                       	@if (can('crear-clientes', false))
-                        	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
-						@endif
-                    </a>
-                </div>
-                <div class="d-md-flex justify-content-md-end">
-					<form action="{{ route('cliente') }}" method="GET">
-						<div class="btn-group">
-							<input type="text" name="busqueda" class="form-control" placeholder="Busqueda ..."> 
-							<button type="submit" class="btn btn-default">
-								<span class="fa fa-search"></span>
-							</button>
-						</div>
-					</form>
+                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @include('includes.listado.filtros_toolbar', [
+                        'formId' => 'form-filtros-cliente',
+                        'filtroValor' => $filtros['valor'] ?? '',
+                        'tieneCriterios' => ClienteListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
+                        'limpiarUrl' => route('cliente'),
+                        'placeholder' => 'Búsqueda rápida (tolera errores de tipeo)…',
+                        'toggleTarget' => '#panel-filtros-cliente',
+                        'toggleId' => 'btn-toggle-filtros-cliente',
+                        'inputId' => 'filtro_valor',
+                        'nuevoRegistroUrl' => route('crear_cliente'),
+                        'nuevoRegistroCan' => 'crear-clientes',
+                    ])
                 </div>
             </div>
+            <form method="get" action="{{ route('cliente') }}" id="form-filtros-cliente" class="mb-0">
+                @include('ventas.cliente.partials.filtros_listado')
+            </form>
             <div class="card-body table-responsive p-0">
-                @include('includes.exportar-tabla', ['ruta' => 'lista_cliente', 'busqueda' => $busqueda])
+                @include('includes.exportar-tabla-queryparams', [
+                    'ruta' => 'lista_cliente',
+                    'queryparams' => $filtrosQuery ?? [],
+                ])
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead>
                         <tr>
@@ -97,5 +103,5 @@ Clientes
         </div>
     </div>
 </div>
-{{ $clientes->appends(['busqueda' => $busqueda])->links() }}
+{{ $clientes->appends($filtrosQuery ?? [])->links() }}
 @endsection

@@ -76,6 +76,16 @@
         $btn.text('Transferir (' + n + ')');
     }
 
+    function focarFiltroSku() {
+        var $filtro = $('#tm_filtro_desc');
+        if (!$filtro.length || !$filtro.is(':visible')) {
+            return;
+        }
+        setTimeout(function () {
+            $filtro.trigger('focus');
+        }, 0);
+    }
+
     function aplicarFiltro() {
         var q = ($('#tm_filtro_desc').val() || '').toLowerCase().trim();
         $('#tm_lista .tm-item').each(function () {
@@ -169,6 +179,7 @@
         });
 
         aplicarFiltro();
+        focarFiltroSku();
     }
 
     function cargarInventario() {

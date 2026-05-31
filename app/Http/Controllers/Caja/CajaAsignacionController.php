@@ -9,7 +9,6 @@ use App\Http\Requests\ValidacionCaja_Asignacion;
 use App\Repositories\Caja\Caja_AsignacionRepositoryInterface;
 use App\Repositories\Caja\CajaRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
-use App\Models\Seguridad\Usuario;
 
 class CajaAsignacionController extends Controller
 {
@@ -33,7 +32,7 @@ class CajaAsignacionController extends Controller
      */
     public function index(Request $request)
     {
-        can('listar-asignacion-caja');
+        can('lista-asignacion-caja');
 
         $empresa_query = $this->empresaRepository->allFiltrado();
         $empresaId = (int) $request->input('empresa_id', 0);
@@ -53,13 +52,12 @@ class CajaAsignacionController extends Controller
      */
     public function crear()
     {
-        can('crear-asignacion-caja');
+        can('crea-asignacion-caja');
 
-        $usuario_query = Usuario::orderBy('nombre')->get();
         $caja_query = $this->cajaRepository->all();
         $empresa_query = $this->empresaRepository->allFiltrado();
 
-        return view('caja.cajaasignacion.crear', compact('usuario_query', 'caja_query', 'empresa_query'));
+        return view('caja.cajaasignacion.crear', compact('caja_query', 'empresa_query'));
     }
 
     /**
@@ -70,7 +68,9 @@ class CajaAsignacionController extends Controller
      */
     public function guardar(ValidacionCaja_Asignacion $request)
     {
-		$this->repository->create($request->all());
+        can('crea-asignacion-caja');
+
+		$this->repository->create($request->only(['fecha', 'empresa_id', 'caja_id', 'usuario_id']));
 
         return redirect('caja/cajaasignacion')->with('mensaje', 'Asignacion de caja creada con éxito');
     }
@@ -83,13 +83,13 @@ class CajaAsignacionController extends Controller
      */
     public function editar($id)
     {
-        can('editar-asignacion-caja');
+        can('edita-asignacion-caja');
         $data = $this->repository->findOrFail($id);
-        $usuario_query = Usuario::orderBy('nombre')->get();
+        $data->loadMissing('usuarios');
         $caja_query = $this->cajaRepository->all();
         $empresa_query = $this->empresaRepository->allFiltrado();
 
-        return view('caja.cajaasignacion.editar', compact('data', 'usuario_query', 'caja_query', 'empresa_query'));
+        return view('caja.cajaasignacion.editar', compact('data', 'caja_query', 'empresa_query'));
     }
 
     /**
@@ -101,9 +101,9 @@ class CajaAsignacionController extends Controller
      */
     public function actualizar(ValidacionCaja_Asignacion $request, $id)
     {
-        can('actualizar-asignacion-caja');
+        can('actualiza-asignacion-caja');
 
-        $this->repository->update($request->all(), $id);
+        $this->repository->update($request->only(['fecha', 'empresa_id', 'caja_id', 'usuario_id']), $id);
 
         return redirect('caja/cajaasignacion')->with('mensaje', 'Asignacion de caja actualizada con éxito');
     }
@@ -116,7 +116,7 @@ class CajaAsignacionController extends Controller
      */
     public function eliminar(Request $request, $id)
     {
-        can('borrar-asignacion-caja');
+        can('borra-asignacion-caja');
 
         if ($request->ajax()) {
         	if ($this->repository->delete($id)) {

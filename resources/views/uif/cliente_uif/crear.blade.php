@@ -7,17 +7,20 @@
 @endsection
 
 @section("scripts")
+<meta name="csrf-token" content="{{ csrf_token() }}">
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/uif/cliente_uif/domicilio.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/uif/cliente_uif/domicilionacimiento.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/uif/actividad_uif/consulta.js")}}" type="text/javascript"></script>
+@include('uif.cliente_uif.partials.sexo_aprendizaje_script')
+<script src="{{asset("assets/pages/scripts/uif/cliente_uif/arca-padron.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/uif/cliente_uif/crear.js")}}" type="text/javascript"></script>
 <!-- Bootstrap Date-Picker Plugin -->
 <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.4.1/js/bootstrap-datepicker.min.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.4.1/css/bootstrap-datepicker3.css"/>
 <script>
 $( "#botonform0" ).click(function() {
-  $( "#form-general" )[0].submit();
+  $( "#form-general" ).trigger('submit');
 });
 </script>
 @endsection
@@ -56,9 +59,13 @@ $( "#botonform0" ).click(function() {
                         <button type="button" id="botonform5" class="btn btn-info btn-sm">
                             <span class="fa fa-copy"></span> Archivos asociados
                         </button>
+                        <button type="button" id="btn-consulta-arca-padron-crear" class="btn btn-outline-secondary btn-sm" title="Ingresá el CUIT y consultá el padrón ARCA">
+                            <i class="fa fa-search"></i> Consulta padrón ARCA
+                        </button>
                     </div>
                     <div class="flex-grow-1 d-flex justify-content-end align-items-center py-1" style="min-width: 0;"></div>
                 </div>
+                <div id="tab2" class="d-none" data-arca-constancia-url="{{ route('arca_constancia_inscripcion') }}" aria-hidden="true"></div>
                 <div class="card-body" style="padding-bottom: 0; padding-top: 5px;">
                     @include('uif.cliente_uif.form1')
                     @include('uif.cliente_uif.form2')
@@ -76,6 +83,8 @@ $( "#botonform0" ).click(function() {
             		</div>
             	</div>
             </form>
+            @include('compras.proveedor.arca-cuit-entry-modal')
+            @include('compras.proveedor.arca-padron-modals')
         </div>
     </div>
 </div>

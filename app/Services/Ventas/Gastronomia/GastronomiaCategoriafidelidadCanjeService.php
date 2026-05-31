@@ -151,7 +151,7 @@ final class GastronomiaCategoriafidelidadCanjeService
             throw new InvalidArgumentException('El artículo seleccionado no pertenece a la categoría de fidelidad.');
         }
 
-        DB::transaction(function () use ($cuenta, $validacion, $item, $descuento, $cliente, $clienteInternoId) {
+        DB::transaction(function () use ($cuenta, $validacion, $item, $descuento, $clienteInternoId) {
             $this->cuentaService->agregarLinea(
                 $cuenta->fresh(['lineas']),
                 (int) $item['articulo_id'],
@@ -161,7 +161,6 @@ final class GastronomiaCategoriafidelidadCanjeService
 
             $this->cuentaService->actualizarCabecera($cuenta->fresh(), [
                 'descuento_gastronomia_id' => $descuento->id,
-                'cliente_id' => $cliente->id,
                 'cliente_interno_descuento_id' => $clienteInternoId,
             ]);
 

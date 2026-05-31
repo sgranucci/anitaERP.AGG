@@ -91,6 +91,12 @@
 			<div class="col-lg-6">
 				<input type="text" name="rutaalmacenamiento" id="rutaalmacenamiento" class="form-control" value="{{$data->rutaalmacenamiento ?? ''}}" readonly>
 			</div>
+            <div class="col-lg-2 d-flex align-items-center">
+                @include('compras.precarga_comprobante_proveedor.partials.boton_ver_factura_pdf', [
+                    'precargaId' => $data->id ?? null,
+                    'rutaalmacenamiento' => $data->rutaalmacenamiento ?? null,
+                ])
+            </div>
 		</div>   
         <div class="form-group row">
 			<label for="pararevisar" class="col-lg-4 col-form-label requerido">Para Revisar</label>

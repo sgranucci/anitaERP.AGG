@@ -17,6 +17,7 @@ class ArcaWsfeCaeaService
 {
     public function __construct(
         private ArcaWsfeFacturaElectronicaService $wsfe,
+        private ArcaCaeaAnitaSyncService $anitaSync,
     ) {}
 
     /**
@@ -103,15 +104,22 @@ class ArcaWsfeCaeaService
         try {
             $obtenido = $this->obtenerCaeaDesdeArca($empresaId, $periodo, $orden, $forzarConsulta);
             $this->aplicarRespuestaArca($registro, $obtenido['resp']);
+            $registro = $registro->fresh();
+            $anitaAdvertencia = $this->anitaSync->intentarGrabarTrasSolicitud($registro);
+
+            $mensaje = $registro->estaAutorizado()
+                ? ($obtenido['via_consulta']
+                    ? 'CAEA recuperado por consulta ARCA (ya otorgado previamente, p. ej. Anita).'
+                    : 'CAEA obtenido correctamente.')
+                : ($registro->mensaje_error ?? 'No se pudo autorizar el CAEA.');
+            if ($anitaAdvertencia !== null) {
+                $mensaje .= ' '.$anitaAdvertencia;
+            }
 
             return [
                 'ok' => $registro->estaAutorizado(),
-                'registro' => $registro->fresh(),
-                'mensaje' => $registro->estaAutorizado()
-                    ? ($obtenido['via_consulta']
-                        ? 'CAEA recuperado por consulta ARCA (ya otorgado previamente, p. ej. Anita).'
-                        : 'CAEA obtenido correctamente.')
-                    : ($registro->mensaje_error ?? 'No se pudo autorizar el CAEA.'),
+                'registro' => $registro,
+                'mensaje' => $mensaje,
             ];
         } catch (Exception $e) {
             $registro->estado = ArcaCaea::ESTADO_ERROR;

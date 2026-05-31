@@ -7,8 +7,11 @@ use App\Models\Ventas\CuentaGastronomia;
 use App\Models\Ventas\Puntoventa;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
 use App\Support\Ventas\GastronomiaDepositoConfigSupport;
+use App\Support\Ventas\GastronomiaCuentacajaCanjeTarjeta;
 use App\Support\Ventas\GastronomiaCuentacajaEfectivo;
+use App\Support\Ventas\GastronomiaCuentacajaSoloAutomaticaSupport;
 use App\Support\Ventas\GastronomiaCuentacajaTotem;
+use App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
 use App\Support\Ventas\Waitry\WaitryFacturacionDuplicadosSupport;
 use InvalidArgumentException;
@@ -156,6 +159,7 @@ final class GastronomiaPreflightEmisionService
                 $errores,
                 $this->erroresCobranzaWaitryTotem($cuenta, $mediosPago, $empresaCobranzaId),
                 $this->erroresCobranzaWaitryImpagaProhibeTotemManual($cuenta, $mediosPago, $empresaCobranzaId),
+                $this->erroresCobranzaProhibeCuentacajaManual($cuenta, $mediosPago, $empresaCobranzaId),
             );
         }
 
@@ -200,7 +204,52 @@ final class GastronomiaPreflightEmisionService
     }
 
     /**
-     * Cuenta Waitry impaga: TOTEM solo automático al importar orden ya cobrada en el tótem.
+     * CTG sin ticket o cuenta TOTEM fuera del flujo automático Waitry correspondiente.
+     *
+     * @param  list<array{cuentacaja_id:int,moneda_id:int,monto:float,cotizacion?:float|null,ticket_id?:int,numeroticket?:int}>  $mediosPago
+     * @return list<string>
+     */
+    private function erroresCobranzaProhibeCuentacajaManual(
+        CuentaGastronomia $cuenta,
+        array $mediosPago,
+        int $empresaId,
+    ): array {
+        $ctg = GastronomiaCuentacajaCanjeTarjeta::cuentaParaEmpresa($empresaId);
+        $ctgId = (int) ($ctg['id'] ?? 0);
+
+        foreach ($mediosPago as $medio) {
+            $cuentacajaId = (int) ($medio['cuentacaja_id'] ?? 0);
+            if ($cuentacajaId <= 0) {
+                continue;
+            }
+
+            if ($ctgId > 0 && $cuentacajaId === $ctgId) {
+                $ticketId = (int) ($medio['ticket_id'] ?? 0);
+                $numeroTicket = (int) ($medio['numeroticket'] ?? 0);
+                if ($ticketId > 0 && $numeroTicket > 0) {
+                    continue;
+                }
+
+                return [GastronomiaCuentacajaSoloAutomaticaSupport::mensajeRechazoManual(GastronomiaCuentacajaCanjeTarjeta::codigo())];
+            }
+
+            if ($cuenta->waitry_cobro_totem) {
+                continue;
+            }
+
+            $totemId = $this->idCuentacajaTotem($empresaId);
+            if ($totemId > 0 && $cuentacajaId === $totemId) {
+                return [GastronomiaCuentacajaSoloAutomaticaSupport::mensajeRechazoManual(
+                    GastronomiaCuentacajaTotem::codigo(),
+                )];
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * Cuenta Waitry impaga: cuenta TOTEM solo al importar orden ya cobrada en tótem.
      *
      * @param  list<array{cuentacaja_id:int,moneda_id:int,monto:float,cotizacion?:float|null}>  $mediosPago
      * @return list<string>
@@ -215,16 +264,16 @@ final class GastronomiaPreflightEmisionService
             return [];
         }
 
-        $totem = GastronomiaCuentacajaTotem::cuentaParaEmpresa($empresaId);
-        if ($totem === null) {
+        $totemId = $this->idCuentacajaTotem($empresaId);
+        if ($totemId <= 0) {
             return [];
         }
 
         foreach ($mediosPago as $medio) {
-            if ((int) ($medio['cuentacaja_id'] ?? 0) === (int) $totem['id']) {
+            if ((int) ($medio['cuentacaja_id'] ?? 0) === $totemId) {
                 return [
-                    'Esta cuenta Waitry está impaga: no puede usar el medio TOTEM manualmente. '
-                    .'El TOTEM se asigna automáticamente solo si la orden ya fue cobrada en el tótem Waitry.',
+                    'Esta cuenta Waitry está impaga: no puede usar la cuenta TOTEM manualmente. '
+                    .'Se asigna automáticamente solo si la orden ya fue cobrada en el tótem Waitry.',
                 ];
             }
         }
@@ -233,7 +282,7 @@ final class GastronomiaPreflightEmisionService
     }
 
     /**
-     * Cuenta Waitry cobrada en tótem: un solo medio TOTEM, monto = total, sin modificar.
+     * Cuenta Waitry cobrada en tótem: un solo medio según payment.type (Mercado Pago, Totalcoin o TOTEM).
      *
      * @param  list<array{cuentacaja_id:int,moneda_id:int,monto:float,cotizacion?:float|null}>  $mediosPago
      * @return list<string>
@@ -244,26 +293,42 @@ final class GastronomiaPreflightEmisionService
             return [];
         }
 
-        $ccErr = GastronomiaCuentacajaTotem::mensajeErrorResolucion($empresaId);
+        $ccErr = WaitryMedioPagoCuentacajaSupport::mensajeErrorResolucion(
+            $cuenta->waitry_tipo_pago,
+            $empresaId,
+        );
         if ($ccErr) {
             return [$ccErr];
         }
 
-        $totem = GastronomiaCuentacajaTotem::cuentaParaEmpresa($empresaId);
-        if ($totem === null) {
-            return ['No se pudo resolver la cuenta de caja TOTEM para cobranza Waitry.'];
+        $esperada = WaitryMedioPagoCuentacajaSupport::cuentaParaTipoWaitry(
+            $cuenta->waitry_tipo_pago,
+            $empresaId,
+        );
+        if ($esperada === null) {
+            return ['No se pudo resolver la cuenta de caja para la cobranza Waitry del tótem.'];
         }
 
+        $etiqueta = WaitryMedioPagoCuentacajaSupport::etiquetaTipo($cuenta->waitry_tipo_pago);
+
         if (count($mediosPago) !== 1) {
-            return ['La cuenta Waitry del tótem debe cobrarse con un único medio TOTEM (sin agregar otros renglones).'];
+            return ['La cuenta Waitry del tótem debe cobrarse con un único medio «'.$etiqueta.'» (sin agregar otros renglones).'];
         }
 
         $medio = $mediosPago[0];
-        if ((int) ($medio['cuentacaja_id'] ?? 0) !== (int) $totem['id']) {
-            return ['La cobranza de esta cuenta Waitry debe usar únicamente la cuenta de caja TOTEM.'];
+        if ((int) ($medio['cuentacaja_id'] ?? 0) !== (int) $esperada['id']) {
+            return ['La cobranza de esta cuenta Waitry debe usar únicamente la cuenta «'
+                .$esperada['codigo'].' — '.$esperada['nombre'].'» ('.$etiqueta.').'];
         }
 
         return [];
+    }
+
+    private function idCuentacajaTotem(int $empresaId): int
+    {
+        $totem = GastronomiaCuentacajaTotem::cuentaParaEmpresa($empresaId);
+
+        return (int) ($totem['id'] ?? 0);
     }
 
     /**
@@ -326,21 +391,17 @@ final class GastronomiaPreflightEmisionService
 
     private function cuentaTieneCanjePendienteFacturacionConDescuento(CuentaGastronomia $cuenta): bool
     {
-        return $this->tieneCanjePremioPendiente($cuenta) || $this->tieneCanjeFidelidadPendiente($cuenta);
+        return $cuenta->tieneCanjePendienteRequiereFacturacionConDescuento();
     }
 
     private function tieneCanjePremioPendiente(CuentaGastronomia $cuenta): bool
     {
-        $pendiente = $cuenta->canje_premio_pendiente;
-
-        return is_array($pendiente) && trim((string) ($pendiente['numerocupon'] ?? '')) !== '';
+        return $cuenta->tieneCanjePremioPendiente();
     }
 
     private function tieneCanjeFidelidadPendiente(CuentaGastronomia $cuenta): bool
     {
-        $pendiente = $cuenta->canje_fidelidad_pendiente;
-
-        return is_array($pendiente) && trim((string) ($pendiente['trackdata'] ?? '')) !== '';
+        return $cuenta->tieneCanjeFidelidadPendiente();
     }
 
     /**

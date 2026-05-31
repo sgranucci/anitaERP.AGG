@@ -23,7 +23,7 @@ class OrdencompraExport implements FromView, ShouldAutoSize, WithColumnFormattin
 {
     use Exportable;
 
-    private ?string $busqueda = null;
+    private $filtros = null;
 
     private ?int $sectorUsuarioId = null;
 
@@ -48,11 +48,7 @@ class OrdencompraExport implements FromView, ShouldAutoSize, WithColumnFormattin
     public function view(): View
     {
         if ($this->flDesdeIndex) {
-            $busqueda = $this->busqueda;
-            if (is_string($busqueda)) {
-                $busqueda = trim($busqueda);
-            }
-            $ordencompra = $this->ordencompraRepository->listadoExport($busqueda, $this->sectorUsuarioId);
+            $ordencompra = $this->ordencompraRepository->listadoExport($this->filtros, $this->sectorUsuarioId);
 
             $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($ordencompra);
             $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
@@ -226,9 +222,9 @@ class OrdencompraExport implements FromView, ShouldAutoSize, WithColumnFormattin
         return 'Ordenes de compra';
     }
 
-    public function parametros(?string $busqueda, ?int $sectorUsuarioId): self
+    public function parametros($filtros, ?int $sectorUsuarioId): self
     {
-        $this->busqueda = $busqueda;
+        $this->filtros = $filtros;
         $this->sectorUsuarioId = $sectorUsuarioId;
         $this->flDesdeIndex = true;
 

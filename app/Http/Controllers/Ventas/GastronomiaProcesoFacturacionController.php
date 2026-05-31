@@ -30,7 +30,10 @@ use App\Support\Stock\FormulaArticuloGastronomia;
 use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
 use App\Support\Ventas\GastronomiaCuentacajaCanjeTarjeta;
 use App\Support\Ventas\GastronomiaCuentacajaEfectivo;
+use App\Support\Ventas\GastronomiaCuentacajaIconoSupport;
+use App\Support\Ventas\GastronomiaCuentacajaSoloAutomaticaSupport;
 use App\Support\Ventas\GastronomiaCuentacajaTotem;
+use App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -182,6 +185,7 @@ class GastronomiaProcesoFacturacionController extends Controller
             'cuentacaja_totem' => GastronomiaCuentacajaTotem::cuentaParaEmpresa((int) $cfg->empresa_id),
             'cuentacaja_totem_error' => GastronomiaCuentacajaTotem::mensajeErrorResolucion((int) $cfg->empresa_id),
             'cuentacaja_totem_codigo' => GastronomiaCuentacajaTotem::codigo(),
+            'waitry_tipo_pago_cuentacaja' => WaitryMedioPagoCuentacajaSupport::mediosConfiguradosParaEmpresa((int) $cfg->empresa_id),
             'ticket_tarjeta_vencimiento_dias' => (int) config('gastronomia.ticket_tarjeta_vencimiento_dias', 30),
             'ticket_tarjeta_tolerancia_excedente' => (float) config('gastronomia.ticket_tarjeta_tolerancia_excedente_factura', 5.),
             'canje_premio_descuento_codigo' => (string) config('gastronomia.canje_premio_descuento_codigo', '10'),
@@ -815,22 +819,33 @@ class GastronomiaProcesoFacturacionController extends Controller
             ], 422);
         }
 
+        $empresaId = (int) $cfg->empresa_id;
+        $excluidas = GastronomiaCuentacajaSoloAutomaticaSupport::idsParaEmpresa($empresaId);
+
         $cuentas = Cuentacaja::query()
-            ->paraEmpresa((int) $cfg->empresa_id)
+            ->paraEmpresa($empresaId)
             ->whereHas('usocuentacajas', fn ($r) => $r->whereKey($usoId))
+            ->when($excluidas !== [], fn ($q) => $q->whereNotIn('id', $excluidas))
             ->with('monedas:id,abreviatura,nombre')
             ->orderBy('nombre')
             ->get(['id', 'nombre', 'codigo', 'moneda_id']);
 
         return response()->json([
             'usocuentacaja_id' => $usoId,
-            'cuentas_caja' => $cuentas->map(fn ($c) => [
-                'id' => $c->id,
-                'nombre' => $c->nombre,
-                'codigo' => $c->codigo,
-                'moneda_id' => $c->moneda_id,
-                'moneda_abreviatura' => $c->monedas->abreviatura ?? null,
-            ])->values(),
+            'cuentas_caja' => $cuentas->map(function ($c) {
+                $presentacion = GastronomiaCuentacajaIconoSupport::presentacion((string) $c->nombre, (string) $c->codigo);
+
+                return [
+                    'id' => $c->id,
+                    'nombre' => $c->nombre,
+                    'codigo' => $c->codigo,
+                    'moneda_id' => $c->moneda_id,
+                    'moneda_abreviatura' => $c->monedas->abreviatura ?? null,
+                    'icono' => $presentacion['icono'],
+                    'icono_color' => $presentacion['color'],
+                    'etiqueta_boton' => $presentacion['etiqueta_boton'],
+                ];
+            })->values(),
         ]);
     }
 
@@ -875,12 +890,28 @@ class GastronomiaProcesoFacturacionController extends Controller
             ], 404);
         }
 
+        if (GastronomiaCuentacajaSoloAutomaticaSupport::esSoloAutomatica(
+            (int) $cuenta->id,
+            (string) $cuenta->codigo,
+            $empresaId,
+        )) {
+            return response()->json([
+                'id' => 0,
+                'error' => GastronomiaCuentacajaSoloAutomaticaSupport::mensajeRechazoManual($cuenta->codigo),
+            ], 422);
+        }
+
+        $presentacion = GastronomiaCuentacajaIconoSupport::presentacion((string) $cuenta->nombre, (string) $cuenta->codigo);
+
         return response()->json([
             'id' => $cuenta->id,
             'nombre' => $cuenta->nombre,
             'codigo' => $cuenta->codigo,
             'moneda_id' => $cuenta->moneda_id,
             'moneda_abreviatura' => $cuenta->monedas->abreviatura ?? null,
+            'icono' => $presentacion['icono'],
+            'icono_color' => $presentacion['color'],
+            'etiqueta_boton' => $presentacion['etiqueta_boton'],
         ]);
     }
 

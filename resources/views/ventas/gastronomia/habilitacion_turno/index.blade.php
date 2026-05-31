@@ -69,17 +69,39 @@
                 No se utiliza habilitación ni cierre de turno por terminal.
             </div>
         @elseif (! $cfg)
-            <div class="alert alert-warning">
-                No hay configuración de punto de venta para el identificador PC
-                <code>{{ $identificador_pc }}</code>.
-            </div>
+            @include('ventas.gastronomia.habilitacion_turno.partials.filtro_empresa', [
+                'empresa_query' => $empresa_query ?? collect(),
+                'empresas_sin_pv' => $empresas_sin_pv ?? collect(),
+                'empresa_id' => $empresa_id ?? 0,
+                'identificador_pc' => $identificador_pc,
+                'accion' => $accion ?? '',
+            ])
+
+            @if (($empresa_query ?? collect())->isNotEmpty())
+                @php
+                    $empresaNombreSeleccionada = ($empresa_query ?? collect())->firstWhere('id', (int) ($empresa_id ?? 0))?->nombre;
+                @endphp
+                <div class="alert alert-warning">
+                    No hay configuración de punto de venta para el identificador PC
+                    <code>{{ $identificador_pc }}</code>
+                    @if ((int) ($empresa_id ?? 0) > 0 && $empresaNombreSeleccionada)
+                        y la empresa <strong>{{ $empresaNombreSeleccionada }}</strong>.
+                    @else
+                        .
+                    @endif
+                </div>
+            @endif
         @else
+            @php
+                $empresaNombreSeleccionada = ($empresa_query ?? collect())->firstWhere('id', (int) ($empresa_id ?? 0))?->nombre
+                    ?? ($cfg->empresa->nombre ?? $cfg->empresa_id);
+            @endphp
             <div class="card card-info">
                 <div class="card-header">
                     <h3 class="card-title">Habilitación y cierres de turno</h3>
                     <div class="card-tools">
                         @if (can('gestionar-saneamiento-turno-gastronomia', false))
-                            <a href="{{ route('gastronomia_saneamiento_turno', ['empresa_id' => $cfg->empresa_id, 'identificador_pc' => $identificador_pc]) }}"
+                            <a href="{{ route('gastronomia_saneamiento_turno', ['empresa_id' => $empresa_id ?? $cfg->empresa_id, 'identificador_pc' => $identificador_pc]) }}"
                                class="btn btn-outline-warning btn-sm mr-1" title="Diagnóstico y corrección de facturas huérfanas / cuentas">
                                 <i class="fa fa-wrench"></i> Saneamiento turnos
                             </a>
@@ -96,14 +118,35 @@
                     </div>
                 </div>
                 <div class="card-body">
+                    @include('ventas.gastronomia.habilitacion_turno.partials.filtro_empresa', [
+                        'empresa_query' => $empresa_query ?? collect(),
+                        'empresas_sin_pv' => $empresas_sin_pv ?? collect(),
+                        'empresa_id' => $empresa_id ?? 0,
+                        'identificador_pc' => $identificador_pc,
+                        'accion' => $accion ?? '',
+                    ])
+
                     <p class="text-muted mb-3">
                         Terminal: <strong>{{ $identificador_pc }}</strong>
-                        · Empresa: <strong>{{ $cfg->empresa->nombre ?? $cfg->empresa_id }}</strong>
+                        · Empresa: <strong>{{ $empresaNombreSeleccionada }}</strong>
                     </p>
+
+                    @if (! empty($jornada['jornada_abierta']))
+                        <div class="alert alert-info py-2 mb-3" id="alert-jornada-activa">
+                            Jornada activa:
+                            <strong>{{ $estado['fecha_jornada_fmt'] ?? $jornada['fecha_jornada_fmt'] ?? $jornada['fecha_jornada'] }}</strong>
+                            @if (! empty($jornada['usuario_apertura']))
+                                · Abierta por <strong>{{ $jornada['usuario_apertura'] }}</strong>
+                                @if (! empty($jornada['apertura_en']))
+                                    ({{ $jornada['apertura_en'] }})
+                                @endif
+                            @endif
+                        </div>
+                    @endif
 
                     @if (empty($jornada['jornada_abierta']))
                         <div class="alert alert-danger">
-                            Debe abrir la <a href="{{ route('gastronomia_jornada', ['empresa_id' => $cfg->empresa_id]) }}">jornada</a> antes de habilitar un turno.
+                            Debe abrir la <a href="{{ route('gastronomia_jornada', ['empresa_id' => $empresa_id ?? $cfg->empresa_id]) }}">jornada</a> antes de habilitar un turno.
                         </div>
                     @endif
 
@@ -114,7 +157,13 @@
                             <div class="card-header">Habilitar turno</div>
                             <div class="card-body">
                                 <form id="form-habilitar-turno" autocomplete="off">
-                                    <input type="hidden" id="empresa_id" value="{{ $cfg->empresa_id }}"/>
+                                    @if (! empty($jornada['jornada_abierta']))
+                                        <div class="form-group">
+                                            <label>Jornada activa</label>
+                                            <input type="text" class="form-control" id="fecha_jornada_activa" readonly
+                                                   value="{{ $estado['fecha_jornada_fmt'] ?? $jornada['fecha_jornada_fmt'] ?? $jornada['fecha_jornada'] }}"/>
+                                        </div>
+                                    @endif
                                     <div class="form-group">
                                         <label for="turno_gastronomia_id" class="requerido">Turno</label>
                                         <select name="turno_gastronomia_id" id="turno_gastronomia_id" class="form-control" required>
@@ -269,6 +318,7 @@
                                                     <div class="form-group col-md-4">
                                                         <label for="redondeo_invitaciones">Redondeo invitaciones ($0,01)</label>
                                                         <input type="number" step="0.01" name="redondeo_invitaciones" id="redondeo_invitaciones" class="form-control"/>
+                                                        <small class="text-muted">Incluye invitaciones y ajuste de conciliación (hasta $0,02, p. ej. NC en otra PC).</small>
                                                     </div>
                                                     <div class="form-group col-md-4">
                                                         <label for="redondeo_turno">Redondeo turno</label>

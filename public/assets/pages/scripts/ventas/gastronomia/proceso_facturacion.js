@@ -133,7 +133,116 @@
         };
     }
 
+    function normalizarRutaApi(path) {
+        const p = String(path || '').split('?')[0];
+        return p.startsWith('/') ? p : '/' + p;
+    }
+
+    function metodoHttpApi(opts) {
+        return ((opts && opts.method) || 'GET').toUpperCase();
+    }
+
+    function jornadaAbiertaEnPos() {
+        if (G.turnoOperativo && G.turnoOperativo.jornada_abierta === true) {
+            return true;
+        }
+        return !!(G.jornada && G.jornada.jornada_abierta);
+    }
+
+    function turnoHabilitadoEnPos() {
+        if (G.requiereHabilitacionTurno === false) {
+            return true;
+        }
+        return !!(G.turnoOperativo && G.turnoOperativo.turno_habilitado);
+    }
+
+    function mensajeBloqueoJornadaTurno() {
+        const partes = [];
+        if (G.jornadaObligatoria !== false && !jornadaAbiertaEnPos()) {
+            const urlJ = G.urlJornada || '';
+            partes.push(
+                'No hay jornada abierta para esta empresa.' +
+                    (urlJ ? ' Abra la jornada en Ventas → Gastronomía → Jornada.' : ''),
+            );
+        }
+        if (G.requiereHabilitacionTurno !== false && !turnoHabilitadoEnPos()) {
+            const urlT = G.urlHabilitacionTurno || '';
+            partes.push(
+                'No hay turno habilitado en esta terminal.' +
+                    (urlT ? ' Habilite el turno en Ventas → Gastronomía → Habilitación de turno.' : ''),
+            );
+        }
+        return partes.join(' ');
+    }
+
+    function exigirJornadaTurnoParaOperar(opts) {
+        const msg = mensajeBloqueoJornadaTurno();
+        if (!msg) {
+            return true;
+        }
+        if (!opts || !opts.silencioso) {
+            toast(msg, 'warning');
+        }
+        return false;
+    }
+
+    function bloquearOperacionPosPorJornadaTurno() {
+        return !exigirJornadaTurnoParaOperar();
+    }
+
+    async function asegurarJornadaTurnoAntesDeOperar() {
+        if (typeof window.gastroRefrescarEstadoTurno === 'function') {
+            try {
+                await window.gastroRefrescarEstadoTurno();
+            } catch (e) {
+                /* estado turno opcional */
+            }
+        }
+        return exigirJornadaTurnoParaOperar({ silencioso: true });
+    }
+
+    function apiRequiereJornadaTurno(path, opts) {
+        const p = normalizarRutaApi(path);
+        if (!p.includes('/ventas/gastronomia/api/')) {
+            return false;
+        }
+        const method = metodoHttpApi(opts);
+        return method !== 'GET' && method !== 'HEAD';
+    }
+
+    function aplicarEstadoJornadaTurnoDesdeApi(data) {
+        if (!data) {
+            return;
+        }
+        if (data.jornada != null) {
+            G.jornada = data.jornada;
+        }
+        if (data.jornada_obligatoria != null) {
+            G.jornadaObligatoria = !!data.jornada_obligatoria;
+        }
+        if (data.requiere_habilitacion_turno != null) {
+            G.requiereHabilitacionTurno = !!data.requiere_habilitacion_turno;
+        }
+        if (data.turno_operativo != null) {
+            G.turnoOperativo = data.turno_operativo;
+            if (typeof window.gastroActualizarAlertaTurno === 'function') {
+                window.gastroActualizarAlertaTurno(data.turno_operativo);
+            }
+        }
+    }
+
+    G.exigirJornadaTurnoParaOperar = exigirJornadaTurnoParaOperar;
+    G.mensajeBloqueoJornadaTurno = mensajeBloqueoJornadaTurno;
+
     async function api(path, opts) {
+        if (apiRequiereJornadaTurno(path, opts)) {
+            const ok = await asegurarJornadaTurnoAntesDeOperar();
+            if (!ok) {
+                const err = new Error(mensajeBloqueoJornadaTurno());
+                err.codigo = 'jornada_turno_requerido';
+                throw err;
+            }
+        }
         const url = appPath(path);
         const sep = url.includes('?') ? '&' : '?';
         const res = await fetch(url + sep + '_=' + Date.now(), opts);
@@ -749,6 +858,10 @@
 
     function abrirModalF8Descuento() {
         return new Promise((resolve, reject) => {
+            if (bloquearOperacionPosPorJornadaTurno()) {
+                reject(new Error(mensajeBloqueoJornadaTurno()));
+                return;
+            }
             if (modalF8DescuentoEnCurso) {
                 reject(new Error('Ya hay un modal de descuento abierto.'));
                 return;
@@ -1332,6 +1445,9 @@
     }
 
     async function facturarConDescuento() {
+        if (bloquearOperacionPosPorJornadaTurno()) {
+            return;
+        }
         if (!cuentaId) {
             return toast('Seleccione una mesa o cuenta con consumos.', 'warning');
         }
@@ -1374,38 +1490,117 @@
         return cod !== '' && cod === totemCod;
     }
 
-    function rechazarTotemManualEnWaitryImpaga(cuentaCaja) {
-        if (!cuentaWaitryImpaga(cuentaActivaConLineas)) {
+    function normalizarTipoWaitry(tipo) {
+        return String(tipo || '')
+            .trim()
+            .toLowerCase()
+            .replace(/[\s_-]+/g, '');
+    }
+
+    function resolverCuentacajaWaitryTotem(cuenta) {
+        const tipo = normalizarTipoWaitry(cuenta && cuenta.waitry_tipo_pago);
+        const map = G.waitryTipoPagoCuentacaja || {};
+        if (tipo && map[tipo] && map[tipo].id) {
+            return map[tipo];
+        }
+        return G.cuentacajaTotem || null;
+    }
+
+    function etiquetaMedioWaitry(cuenta) {
+        const tipo = normalizarTipoWaitry(cuenta && cuenta.waitry_tipo_pago);
+        const map = G.waitryTipoPagoCuentacaja || {};
+        if (tipo && map[tipo] && map[tipo].etiqueta) {
+            return map[tipo].etiqueta;
+        }
+        if (tipo === 'mercadopago') {
+            return 'Mercado Pago';
+        }
+        if (tipo === 'totalcoin') {
+            return 'Totalcoin';
+        }
+        return String((G.cuentacajaTotem && G.cuentacajaTotem.codigo) || G.cuentacajaTotemCodigo || 'TOTEM');
+    }
+
+    function esCuentacajaWaitryAutomatica(cuentaCaja) {
+        if (!cuentaCaja || !cuentaCaja.id) {
             return false;
         }
-        if (!esCuentacajaTotem(cuentaCaja)) {
+        if (esCuentacajaTotem(cuentaCaja)) {
+            return true;
+        }
+        const id = parseInt(cuentaCaja.id, 10);
+        const map = G.waitryTipoPagoCuentacaja || {};
+        return Object.values(map).some((cc) => cc && parseInt(cc.id, 10) === id);
+    }
+
+    function esCuentacajaCanjeTarjeta(cuentaCaja) {
+        if (!cuentaCaja || !cuentaCaja.id) {
             return false;
         }
-        toast(
-            'Esta cuenta Waitry está impaga: el medio TOTEM se asigna automáticamente solo si ya fue cobrada en el tótem.',
-            'warning',
-        );
+        const ctg = G.cuentacajaCanjeTarjeta;
+        if (ctg && parseInt(ctg.id, 10) === parseInt(cuentaCaja.id, 10)) {
+            return true;
+        }
+        const cod = String(cuentaCaja.codigo || '')
+            .trim()
+            .toUpperCase();
+        const ctgCod = String((ctg && ctg.codigo) || G.cuentacajaCanjeTarjetaCodigo || 'CTG')
+            .trim()
+            .toUpperCase();
+        return cod !== '' && cod === ctgCod;
+    }
+
+    function esCuentacajaSoloAutomatica(cuentaCaja) {
+        if (!cuentaCaja || !cuentaCaja.id) {
+            return false;
+        }
+        if (esCuentacajaCanjeTarjeta(cuentaCaja)) {
+            return true;
+        }
+        return esCuentacajaTotem(cuentaCaja);
+    }
+
+    function rechazarCuentacajaSoloAutomaticaManual(cuentaCaja) {
+        if (!esCuentacajaSoloAutomatica(cuentaCaja)) {
+            return false;
+        }
+        let msg;
+        if (esCuentacajaCanjeTarjeta(cuentaCaja)) {
+            msg =
+                'La cuenta CTG solo puede usarse mediante canje de ticket tarjeta gastronomía (no manualmente).';
+        } else {
+            msg =
+                'La cuenta TOTEM se asigna automáticamente al importar una orden Waitry ya cobrada en el tótem.';
+        }
+        toast(msg, 'warning');
         return true;
     }
 
-    function actualizarAvisoCobranzaWaitryTotem(visible) {
+    function actualizarAvisoCobranzaWaitryTotem(visible, cuenta) {
         const el = document.getElementById('gastro-waitry-totem-aviso');
+        const lbl = document.getElementById('gastro-waitry-medio-label');
         if (el) {
             el.classList.toggle('d-none', !visible);
         }
+        if (lbl && visible) {
+            lbl.textContent = etiquetaMedioWaitry(cuenta || cuentaActivaConLineas);
+        }
         const btnAgregar = document.getElementById('gastro-agrega-renglon-cuenta');
-        const btnCanjeTj = document.getElementById('gastro-btn-canje-ticket-tarjeta');
+        const mediosRapidos = document.getElementById('gastro-medios-rapidos');
         if (btnAgregar) {
             btnAgregar.disabled = !!visible;
         }
-        if (btnCanjeTj) {
-            btnCanjeTj.disabled = !!visible;
+        if (mediosRapidos) {
+            mediosRapidos.classList.toggle('d-none', !!visible);
+            mediosRapidos.querySelectorAll('.gastro-medio-rapido').forEach((btn) => {
+                btn.disabled = !!visible;
+            });
         }
     }
 
-    function bloquearGrillaCobranzaWaitryTotem(bloquear) {
+    function bloquearGrillaCobranzaWaitryTotem(bloquear, cuenta) {
         cobranzaWaitryTotemBloqueada = !!bloquear;
-        actualizarAvisoCobranzaWaitryTotem(cobranzaWaitryTotemBloqueada);
+        actualizarAvisoCobranzaWaitryTotem(cobranzaWaitryTotemBloqueada, cuenta);
         document.querySelectorAll('#tbody-gastro-cuenta-table tr').forEach((tr) => {
             const codInp = tr.querySelector('.codigo');
             const montoInp = tr.querySelector('.monto');
@@ -1426,17 +1621,20 @@
         });
     }
 
-    async function prepararCobranzaTotem(montoArs) {
-        let cc = G.cuentacajaTotem;
+    async function prepararCobranzaWaitryTotem(cuenta, montoArs) {
+        let cc = resolverCuentacajaWaitryTotem(cuenta);
         if (!cc || !cc.id) {
             try {
                 const cfg = await api('/ventas/gastronomia/api/config', { headers: hdrJson() });
+                if (cfg.waitry_tipo_pago_cuentacaja) {
+                    G.waitryTipoPagoCuentacaja = cfg.waitry_tipo_pago_cuentacaja;
+                }
                 if (cfg.cuentacaja_totem && cfg.cuentacaja_totem.id) {
                     G.cuentacajaTotem = cfg.cuentacaja_totem;
-                    cc = G.cuentacajaTotem;
                 } else if (cfg.cuentacaja_totem_error) {
                     G.cuentacajaTotemError = cfg.cuentacaja_totem_error;
                 }
+                cc = resolverCuentacajaWaitryTotem(cuenta);
             } catch (_) {
                 /* usar mensaje genérico */
             }
@@ -1444,7 +1642,7 @@
         if (!cc || !cc.id) {
             throw new Error(
                 G.cuentacajaTotemError ||
-                    'Configure la cuenta de caja TOTEM (GASTRONOMIA_CUENTACAJA_TOTEM_CODIGO) para la empresa de esta terminal.',
+                    'Configure la cuenta de caja Waitry (TOTEM / Mercado Pago / Totalcoin) para la empresa de esta terminal.',
             );
         }
         if (G.cobranzaConfigError) {
@@ -1455,11 +1653,11 @@
         const tbody = document.getElementById('tbody-gastro-cuenta-table');
         const tr = filaCobranzaDesdeTemplate();
         if (!tr || !tbody) {
-            throw new Error('No se pudo preparar la cobranza TOTEM.');
+            throw new Error('No se pudo preparar la cobranza Waitry del tótem.');
         }
         tbody.appendChild(tr);
         wireEventosFilaCobranza(tr);
-        asignarCuentaCajaEnFila(tr, cc);
+        asignarCuentaCajaEnFila(tr, cc, { asignacionAutomatica: true });
         const montoInp = tr.querySelector('.monto');
         if (montoInp) {
             montoInp.value = Number(montoArs).toFixed(2);
@@ -1467,9 +1665,13 @@
         }
         sumarMontosCobranza();
         if (!recogerMediosPagoFromGrid().length) {
-            throw new Error('No se pudo preparar el medio de cobro TOTEM.');
+            throw new Error('No se pudo preparar el medio de cobro Waitry.');
         }
-        bloquearGrillaCobranzaWaitryTotem(true);
+        bloquearGrillaCobranzaWaitryTotem(true, cuenta);
+    }
+
+    async function prepararCobranzaTotem(montoArs) {
+        return prepararCobranzaWaitryTotem(cuentaActivaConLineas, montoArs);
     }
 
     async function aplicarCobranzaWaitryTotemSiCorresponde(cuenta) {
@@ -1479,9 +1681,9 @@
 
         if (cuentaEsWaitryCobroTotem(cuenta) && montoArs > 0) {
             try {
-                await prepararCobranzaTotem(montoArs);
+                await prepararCobranzaWaitryTotem(cuenta, montoArs);
             } catch (e) {
-                toast(e.message || 'Error al preparar cobranza TOTEM', 'error');
+                toast(e.message || 'Error al preparar cobranza Waitry', 'error');
             }
             cuentaIdCobranzaVinculada = idCuenta;
             return;
@@ -1562,6 +1764,9 @@
     }
 
     async function efectivizar() {
+        if (bloquearOperacionPosPorJornadaTurno()) {
+            return;
+        }
         if (!cuentaId) {
             return toast('Seleccione una mesa o cuenta con consumos.', 'warning');
         }
@@ -1989,6 +2194,151 @@
         }
     }
 
+    function resolverIconoCuentacaja(cuenta) {
+        if (!cuenta) {
+            return { icono: 'fa fa-search', color: 'text-primary' };
+        }
+        if (cuenta.icono) {
+            return {
+                icono: cuenta.icono,
+                color: cuenta.icono_color || cuenta.color || 'text-primary',
+            };
+        }
+        const mapa = G.cuentasCajaGastronomiaPorId || {};
+        const cfg = mapa[String(cuenta.id)] || mapa[parseInt(cuenta.id, 10)];
+        if (cfg && cfg.icono) {
+            return {
+                icono: cfg.icono,
+                color: cfg.icono_color || 'text-primary',
+            };
+        }
+        return { icono: 'fa fa-search', color: 'text-primary' };
+    }
+
+    function htmlIconoMedio(info) {
+        const icono = info && info.icono ? info.icono : 'fa fa-search';
+        const color = info && info.color ? info.color : 'text-primary';
+        if (icono.indexOf('gastro-icon-') === 0) {
+            return '<span class="' + icono + '" aria-hidden="true"></span>';
+        }
+        return '<i class="' + icono + ' ' + color + '" aria-hidden="true"></i>';
+    }
+
+    function actualizarIconoConsultaFila(tr, cuenta) {
+        if (!tr) return;
+        const btnConsulta = tr.querySelector('.consultacuentacaja');
+        if (!btnConsulta) return;
+        btnConsulta.querySelectorAll('i, .gastro-icon-mercadopago').forEach((el) => el.remove());
+        btnConsulta.insertAdjacentHTML('afterbegin', htmlIconoMedio(resolverIconoCuentacaja(cuenta)));
+    }
+
+    function etiquetaCortaMedioPago(cuenta) {
+        if (!cuenta) return '';
+        if (cuenta.etiqueta_boton) {
+            return String(cuenta.etiqueta_boton);
+        }
+        const codigo = String(cuenta.codigo || '').trim();
+        if (codigo) return codigo;
+        const nombre = String(cuenta.nombre || '').trim();
+        if (!nombre) return 'Medio';
+        const palabras = nombre.split(/\s+/).filter(Boolean);
+        if (palabras.length <= 2) return nombre;
+        return palabras.slice(0, 2).join(' ');
+    }
+
+    function construirListaMediosConCanje(cuentas) {
+        const lista = Array.isArray(cuentas) ? cuentas.slice() : [];
+        const ctg = G.cuentacajaCanjeTarjeta;
+        if (ctg && ctg.id && !lista.some((c) => Number(c.id) === Number(ctg.id))) {
+            lista.push({
+                ...ctg,
+                accion: 'canje-ticket',
+                etiqueta_boton: ctg.etiqueta_boton || 'Canje tarjeta',
+                icono: ctg.icono || 'fa fa-barcode',
+                icono_color: ctg.icono_color || 'text-primary',
+            });
+        }
+        return lista;
+    }
+
+    function renderMediosPagoRapidos(cuentas) {
+        const wrap = document.getElementById('gastro-medios-rapidos');
+        if (!wrap) return;
+        const lista = construirListaMediosConCanje(cuentas);
+        G.cuentasCajaGastronomia = lista;
+        G.cuentasCajaGastronomiaPorId = {};
+        lista.forEach((c) => {
+            if (c && c.id) {
+                G.cuentasCajaGastronomiaPorId[String(c.id)] = c;
+            }
+        });
+        wrap.innerHTML = '';
+        if (!lista.length) {
+            wrap.classList.add('d-none');
+            return;
+        }
+        lista.forEach((cuenta) => {
+            const info = resolverIconoCuentacaja(cuenta);
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'btn btn-sm btn-outline-secondary gastro-medio-rapido';
+            btn.title = (cuenta.codigo ? cuenta.codigo + ' — ' : '') + (cuenta.nombre || '');
+            btn.dataset.cuentacajaId = String(cuenta.id);
+            if (cuenta.accion === 'canje-ticket') {
+                btn.id = 'gastro-btn-canje-ticket-tarjeta';
+                btn.dataset.accion = 'canje-ticket';
+            }
+            btn.innerHTML = htmlIconoMedio(info) + '<span>' + etiquetaCortaMedioPago(cuenta) + '</span>';
+            if (cuenta.accion === 'canje-ticket') {
+                btn.addEventListener('click', () => abrirModalCanjeTicketTarjeta());
+            } else {
+                btn.addEventListener('click', () => {
+                    void seleccionarMedioPagoRapido(cuenta);
+                });
+            }
+            wrap.appendChild(btn);
+        });
+        wrap.classList.toggle('d-none', !!cobranzaWaitryTotemBloqueada);
+    }
+
+    async function cargarMediosPagoRapidos() {
+        if (!empresaId) return;
+        try {
+            const data = await api('/ventas/gastronomia/api/cuentas-caja', { headers: hdrJson() });
+            renderMediosPagoRapidos(data.cuentas_caja || []);
+        } catch (e) {
+            console.warn('Medios de pago gastronomía:', e.message || e);
+        }
+    }
+
+    async function seleccionarMedioPagoRapido(cuenta) {
+        if (bloquearOperacionPosPorJornadaTurno()) {
+            return;
+        }
+        if (cobranzaWaitryTotemBloqueada) {
+            toast('La cobranza TOTEM de esta cuenta Waitry no se puede modificar.', 'warning');
+            return;
+        }
+        if (!cuenta || !cuenta.id) {
+            return;
+        }
+        if (rechazarCuentacajaSoloAutomaticaManual(cuenta)) {
+            return;
+        }
+        const tbody = document.getElementById('tbody-gastro-cuenta-table');
+        if (!tbody) return;
+        let tr = Array.from(tbody.querySelectorAll('tr')).find((row) => {
+            const ccId = (row.querySelector('.cuentacaja_id')?.value || '').trim();
+            return !ccId;
+        });
+        if (!tr) {
+            agregarRenglonCobranza(false);
+            tr = tbody.querySelector('tr:last-child');
+        }
+        if (!tr) return;
+        asignarCuentaCajaEnFila(tr, cuenta);
+    }
+
     function filaCobranzaDesdeTemplate() {
         const tpl = document.getElementById('gastro-template-renglon-cuenta');
         if (!tpl || !tpl.content) return null;
@@ -1996,6 +2346,9 @@
     }
 
     function agregarRenglonCobranza(enfocarCodigo) {
+        if (bloquearOperacionPosPorJornadaTurno()) {
+            return;
+        }
         if (cobranzaWaitryTotemBloqueada) {
             toast('La cobranza TOTEM de esta cuenta Waitry no se puede modificar.', 'warning');
             return;
@@ -2011,9 +2364,10 @@
         sumarMontosCobranza();
     }
 
-    function asignarCuentaCajaEnFila(tr, cuenta) {
+    function asignarCuentaCajaEnFila(tr, cuenta, opts) {
         if (!tr || !cuenta || !cuenta.id) return;
-        if (rechazarTotemManualEnWaitryImpaga(cuenta)) {
+        const manual = !opts || opts.asignacionAutomatica !== true;
+        if (manual && rechazarCuentacajaSoloAutomaticaManual(cuenta)) {
             return;
         }
         const monIdNuevo = parseInt(String(cuenta.moneda_id || '0'), 10);
@@ -2046,6 +2400,7 @@
         }
         void revisarMonedaExtranjeraEnGrilla().then(() => {
             actualizarDatoSaldoMonto(tr);
+            actualizarIconoConsultaFila(tr, cuenta);
             const monto = tr.querySelector('.monto');
             if (monto) monto.focus();
             sumarMontosCobranza();
@@ -2062,6 +2417,7 @@
         if (nomInp) nomInp.value = '';
         if (monIdInp) monIdInp.value = '';
         if (monLbl) monLbl.textContent = '—';
+        actualizarIconoConsultaFila(tr, null);
         const ticketIdInp = tr.querySelector('.ticket_id');
         const numeroTicketInp = tr.querySelector('.numeroticket');
         if (ticketIdInp) ticketIdInp.value = '';
@@ -2287,9 +2643,22 @@
     }
 
     let canjePremioValidado = null;
+    /** Tras confirmar cupón: apertura de cuenta libre + aplicar automático al quedar abierta. */
+    let canjePremioEsperaApertura = false;
+    let canjePremioValidando = false;
+    let canjePremioInputTimer = null;
+    let canjePremioUltimoCodigoValidado = '';
 
-    function resetModalCanjePremio() {
-        canjePremioValidado = null;
+    function resetModalCanjePremio(limpiarValidacion) {
+        if (limpiarValidacion !== false) {
+            canjePremioValidado = null;
+            canjePremioEsperaApertura = false;
+            canjePremioUltimoCodigoValidado = '';
+        }
+        if (canjePremioInputTimer) {
+            clearTimeout(canjePremioInputTimer);
+            canjePremioInputTimer = null;
+        }
         const inp = document.getElementById('gastro-canje-premio-codigo');
         const err = document.getElementById('gastro-canje-premio-error');
         const prev = document.getElementById('gastro-canje-premio-preview');
@@ -2305,6 +2674,54 @@
         if (itemsWrap) itemsWrap.classList.add('d-none');
         if (itemsUl) itemsUl.innerHTML = '';
         if (btn) btn.disabled = true;
+        actualizarBtnConfirmarCanjePremio();
+    }
+
+    function cuentaGastronomiaEsLibre(cuenta) {
+        return cuenta && String(cuenta.tipo || '') === 'cuenta';
+    }
+
+    function cuentaLibreAptaParaCanjePremio(cuenta) {
+        if (!cuentaGastronomiaEsLibre(cuenta) || String(cuenta.estado || '') !== 'abierta') {
+            return false;
+        }
+        const premioPend = cuenta.canje_premio_pendiente;
+        if (premioPend && typeof premioPend === 'object' && String(premioPend.numerocupon || '').trim() !== '') {
+            return false;
+        }
+        const fidelidadPend = cuenta.canje_fidelidad_pendiente;
+        if (fidelidadPend && typeof fidelidadPend === 'object' && String(fidelidadPend.trackdata || '').trim() !== '') {
+            return false;
+        }
+        return true;
+    }
+
+    function puedeAplicarCanjePremioEnCuentaActual() {
+        return cuentaId > 0 && cuentaLibreAptaParaCanjePremio(cuentaActivaConLineas);
+    }
+
+    function actualizarBtnConfirmarCanjePremio() {
+        const btn = document.getElementById('gastro-canje-premio-confirmar');
+        if (!btn) return;
+        btn.textContent = puedeAplicarCanjePremioEnCuentaActual()
+            ? 'Aplicar a cuenta libre'
+            : 'Abrir cuenta libre y aplicar';
+    }
+
+    function programarValidacionCanjePremioTrasLectura() {
+        const inp = document.getElementById('gastro-canje-premio-codigo');
+        if (!inp) return;
+        if (canjePremioInputTimer) {
+            clearTimeout(canjePremioInputTimer);
+        }
+        const val = (inp.value || '').trim();
+        if (val.length < 3) {
+            return;
+        }
+        canjePremioInputTimer = setTimeout(() => {
+            canjePremioInputTimer = null;
+            void validarCodigoBarrasCanjePremio();
+        }, 120);
     }
 
     function mostrarErrorModalCanjePremio(msg) {
@@ -2312,6 +2729,7 @@
         const prev = document.getElementById('gastro-canje-premio-preview');
         const btn = document.getElementById('gastro-canje-premio-confirmar');
         canjePremioValidado = null;
+        canjePremioUltimoCodigoValidado = '';
         if (prev) prev.classList.add('d-none');
         if (btn) btn.disabled = true;
         if (err) {
@@ -2363,17 +2781,20 @@
 
         const prev = document.getElementById('gastro-canje-premio-preview');
         if (prev) prev.classList.remove('d-none');
+        actualizarBtnConfirmarCanjePremio();
     }
 
     async function validarCodigoBarrasCanjePremio() {
+        if (canjePremioValidando) {
+            return;
+        }
         const inp = document.getElementById('gastro-canje-premio-codigo');
         const codigo = (inp?.value || '').trim();
         if (!codigo) {
             mostrarErrorModalCanjePremio('Ingrese o escanee el número de cupón.');
             return;
         }
-        if (!cuentaId) {
-            mostrarErrorModalCanjePremio('Seleccione una mesa o cuenta antes de canjear.');
+        if (codigo === canjePremioUltimoCodigoValidado && canjePremioValidado) {
             return;
         }
         if (!G.wigosHabilitado) {
@@ -2384,6 +2805,7 @@
         const errBox = document.getElementById('gastro-canje-premio-error');
         if (errBox) errBox.classList.add('d-none');
 
+        canjePremioValidando = true;
         try {
             const data = await api('/ventas/gastronomia/api/validar-ticket-canje-premio', {
                 method: 'POST',
@@ -2391,27 +2813,71 @@
                 body: JSON.stringify({ codigo_barras: codigo }),
             });
             if (!data.ok) {
+                canjePremioUltimoCodigoValidado = '';
                 mostrarErrorModalCanjePremio(data.error || data.mensaje || 'Cupón no válido.');
                 return;
             }
+            canjePremioUltimoCodigoValidado = codigo;
             canjePremioValidado = data;
             pintarPreviewCanjePremio(data);
             const btn = document.getElementById('gastro-canje-premio-confirmar');
             if (btn) btn.disabled = false;
         } catch (e) {
+            canjePremioUltimoCodigoValidado = '';
             mostrarErrorModalCanjePremio(e.message || String(e));
+        } finally {
+            canjePremioValidando = false;
         }
     }
 
-    async function aplicarCanjePremioACuenta() {
-        if (!canjePremioValidado || !cuentaId) {
-            mostrarErrorModalCanjePremio('Valide el cupón antes de aplicarlo.');
-            return;
+    function pintarCuentaTrasCanjePremio(cuenta) {
+        if (!cuenta) return;
+        pintarLineas(cuenta);
+        if (cuenta.descuento_gastronomia && typeof pintarDescuentoEnPantalla === 'function') {
+            pintarDescuentoEnPantalla(cuenta.descuento_gastronomia);
+        }
+        // Cliente de canje/descuento → solo panel invitación; factura sin cliente asignado = CF.
+        if (cuenta.factura_consumidor_final || !cuenta.cliente_id) {
+            document.getElementById('cliente_id').value = '';
+            document.getElementById('codigocliente').value = '';
+            document.getElementById('nombrecliente').value =
+                cuenta.receptor_factura_nombre ||
+                (typeof G !== 'undefined' && G.receptorCfNombre) ||
+                'CONSUMIDOR FINAL';
+        } else if (cuenta.cliente) {
+            $('#cliente_id').val(cuenta.cliente.id || '');
+            $('#codigocliente').val(cuenta.cliente.codigo != null ? String(cuenta.cliente.codigo) : '');
+            $('#nombrecliente').val(cuenta.cliente.nombre || '');
+        }
+        if (cuenta.cliente_interno_descuento && typeof aplicarClienteInternoDescuentoEnPantalla === 'function') {
+            aplicarClienteInternoDescuentoEnPantalla(cuenta.cliente_interno_descuento);
+        }
+    }
+
+    async function aplicarCanjePremioACuenta(opciones) {
+        const opts = opciones || {};
+        if (!canjePremioValidado) {
+            if (!opts.silencioso) {
+                mostrarErrorModalCanjePremio('Valide el cupón antes de aplicarlo.');
+            }
+            return false;
+        }
+        if (!cuentaId) {
+            if (!opts.silencioso) {
+                mostrarErrorModalCanjePremio('Abra una cuenta libre para aplicar el canje.');
+            }
+            return false;
+        }
+        if (!cuentaLibreAptaParaCanjePremio(cuentaActivaConLineas)) {
+            if (!opts.silencioso) {
+                mostrarErrorModalCanjePremio('El canje de premio solo aplica a cuentas libres abiertas.');
+            }
+            return false;
         }
         const inp = document.getElementById('gastro-canje-premio-codigo');
         const codigo = (inp?.value || canjePremioValidado.numerocupon || '').trim();
         const btn = document.getElementById('gastro-canje-premio-confirmar');
-        if (btn) btn.disabled = true;
+        if (btn && !opts.silencioso) btn.disabled = true;
 
         try {
             const data = await api('/ventas/gastronomia/api/aplicar-ticket-canje-premio', {
@@ -2423,35 +2889,92 @@
                 }),
             });
             if (!data.ok) {
-                mostrarErrorModalCanjePremio(data.error || data.mensaje || 'No se pudo aplicar el canje.');
-                if (btn) btn.disabled = false;
-                return;
+                const msg = data.error || data.mensaje || 'No se pudo aplicar el canje.';
+                if (opts.silencioso) {
+                    toast(msg, 'error');
+                } else {
+                    mostrarErrorModalCanjePremio(msg);
+                }
+                if (btn && !opts.silencioso) btn.disabled = false;
+                return false;
             }
 
-            const cuenta = data.cuenta;
-            if (cuenta) {
-                pintarLineas(cuenta);
-                if (cuenta.descuento_gastronomia && typeof pintarDescuentoEnPantalla === 'function') {
-                    pintarDescuentoEnPantalla(cuenta.descuento_gastronomia);
-                }
-                if (cuenta.cliente) {
-                    $('#cliente_id').val(cuenta.cliente.id || '');
-                    $('#codigocliente').val(cuenta.cliente.codigo != null ? String(cuenta.cliente.codigo) : '');
-                    $('#nombrecliente').val(cuenta.cliente.nombre || '');
-                }
-                if (cuenta.cliente_interno_descuento && typeof aplicarClienteInternoDescuentoEnPantalla === 'function') {
-                    aplicarClienteInternoDescuentoEnPantalla(cuenta.cliente_interno_descuento);
-                }
-            }
+            pintarCuentaTrasCanjePremio(data.cuenta);
 
-            if (typeof $ !== 'undefined') {
+            if (typeof $ !== 'undefined' && !opts.silencioso) {
                 $('#modal-gastro-canje-premio').modal('hide');
             }
             toast('Canje aplicado. Facture con descuento ($0,01).', 'success');
-            resetModalCanjePremio();
+            resetModalCanjePremio(true);
+            return true;
         } catch (e) {
-            mostrarErrorModalCanjePremio(e.message || String(e));
-            if (btn) btn.disabled = false;
+            const msg = e.message || String(e);
+            if (opts.silencioso) {
+                toast(msg, 'error');
+            } else {
+                mostrarErrorModalCanjePremio(msg);
+            }
+            if (btn && !opts.silencioso) btn.disabled = false;
+            return false;
+        }
+    }
+
+    async function abrirCuentaLibreParaCanjePremio() {
+        if (G.cuentasLibresHabilitadas === false) {
+            toast('Las cuentas libres no están habilitadas.', 'warning');
+            return;
+        }
+        canjePremioEsperaApertura = true;
+        if (typeof $ !== 'undefined') {
+            $('#modal-gastro-canje-premio').modal('hide');
+        }
+        try {
+            const apertura = await resolverDatosAperturaNuevaCuenta(false, 'Cuenta libre — canje premio');
+            const r = await api('/ventas/gastronomia/api/abrir-cuenta', {
+                method: 'POST',
+                headers: hdrJson(),
+                body: JSON.stringify(Object.assign({ empresa_id: empresaId }, apertura)),
+            });
+            await seleccionarCuenta(r.cuenta_id);
+            cargarCuentasActivas();
+        } catch (e) {
+            canjePremioEsperaApertura = false;
+            if (e.message !== 'cancelado') {
+                toast(e.message, 'error');
+            }
+        }
+    }
+
+    async function confirmarCanjePremio() {
+        if (!canjePremioValidado) {
+            mostrarErrorModalCanjePremio('Valide el cupón antes de continuar.');
+            return;
+        }
+        if (G.cuentasLibresHabilitadas === false) {
+            toast('Las cuentas libres no están habilitadas.', 'warning');
+            return;
+        }
+        if (puedeAplicarCanjePremioEnCuentaActual()) {
+            await aplicarCanjePremioACuenta();
+            return;
+        }
+        await abrirCuentaLibreParaCanjePremio();
+    }
+
+    async function intentarAplicarCanjePremioPendiente(cuenta) {
+        if (!canjePremioEsperaApertura || !canjePremioValidado || !cuentaId) {
+            return;
+        }
+        const c = cuenta || cuentaActivaConLineas;
+        if (!cuentaLibreAptaParaCanjePremio(c)) {
+            canjePremioEsperaApertura = false;
+            resetModalCanjePremio(true);
+            toast('No se pudo aplicar el canje en la cuenta libre.', 'warning');
+            return;
+        }
+        const ok = await aplicarCanjePremioACuenta({ silencioso: true });
+        if (ok) {
+            canjePremioEsperaApertura = false;
         }
     }
 
@@ -2462,19 +2985,23 @@
 
         if (btnAbrir) {
             btnAbrir.addEventListener('click', () => {
+                if (bloquearOperacionPosPorJornadaTurno()) {
+                    return;
+                }
                 if (!G.wigosHabilitado) {
                     toast('Integración Wigos no habilitada.', 'warning');
                     return;
                 }
-                if (!cuentaId) {
-                    toast('Seleccione una mesa o cuenta.', 'warning');
+                if (G.cuentasLibresHabilitadas === false) {
+                    toast('Las cuentas libres no están habilitadas.', 'warning');
                     return;
                 }
-                resetModalCanjePremio();
+                resetModalCanjePremio(true);
                 if (typeof $ !== 'undefined') {
                     $('#modal-gastro-canje-premio').one('shown.bs.modal', function () {
                         const c = document.getElementById('gastro-canje-premio-codigo');
                         if (c) c.focus();
+                        actualizarBtnConfirmarCanjePremio();
                     });
                     $('#modal-gastro-canje-premio').modal('show');
                 }
@@ -2485,31 +3012,48 @@
             inp.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') {
                     e.preventDefault();
+                    if (canjePremioInputTimer) {
+                        clearTimeout(canjePremioInputTimer);
+                        canjePremioInputTimer = null;
+                    }
                     void validarCodigoBarrasCanjePremio();
                 }
             });
-            inp.addEventListener('change', () => {
-                if ((inp.value || '').trim().length >= 3) {
-                    void validarCodigoBarrasCanjePremio();
-                }
-            });
+            inp.addEventListener('input', () => programarValidacionCanjePremioTrasLectura());
         }
 
         if (btnConfirmar) {
-            btnConfirmar.addEventListener('click', () => void aplicarCanjePremioACuenta());
+            btnConfirmar.addEventListener('click', () => void confirmarCanjePremio());
         }
 
         if (typeof $ !== 'undefined') {
-            $('#modal-gastro-canje-premio').on('hidden.bs.modal', resetModalCanjePremio);
+            $('#modal-gastro-canje-premio').on('hidden.bs.modal', function () {
+                if (!canjePremioEsperaApertura) {
+                    resetModalCanjePremio(true);
+                }
+            });
         }
     }
 
     let canjeFidelidadValidado = null;
     let canjeFidelidadArticuloId = null;
+    /** Tras confirmar tarjeta: apertura de cuenta libre + aplicar automático al quedar abierta. */
+    let canjeFidelidadEsperaApertura = false;
+    let canjeFidelidadValidando = false;
+    let canjeFidelidadInputTimer = null;
+    let canjeFidelidadUltimoTrackdataValidado = '';
 
-    function resetModalCanjeFidelidad() {
-        canjeFidelidadValidado = null;
-        canjeFidelidadArticuloId = null;
+    function resetModalCanjeFidelidad(limpiarValidacion) {
+        if (limpiarValidacion !== false) {
+            canjeFidelidadValidado = null;
+            canjeFidelidadArticuloId = null;
+            canjeFidelidadEsperaApertura = false;
+            canjeFidelidadUltimoTrackdataValidado = '';
+        }
+        if (canjeFidelidadInputTimer) {
+            clearTimeout(canjeFidelidadInputTimer);
+            canjeFidelidadInputTimer = null;
+        }
         const inp = document.getElementById('gastro-canje-fidelidad-trackdata');
         const err = document.getElementById('gastro-canje-fidelidad-error');
         const prev = document.getElementById('gastro-canje-fidelidad-preview');
@@ -2525,6 +3069,11 @@
         if (artWrap) artWrap.classList.add('d-none');
         if (artBox) artBox.innerHTML = '';
         if (btn) btn.disabled = true;
+        actualizarBotonConfirmarCanjeFidelidad();
+    }
+
+    function puedeAplicarCanjeFidelidadEnCuentaActual() {
+        return cuentaId > 0 && cuentaLibreAptaParaCanjePremio(cuentaActivaConLineas);
     }
 
     function mostrarErrorModalCanjeFidelidad(msg) {
@@ -2533,6 +3082,7 @@
         const btn = document.getElementById('gastro-canje-fidelidad-confirmar');
         canjeFidelidadValidado = null;
         canjeFidelidadArticuloId = null;
+        canjeFidelidadUltimoTrackdataValidado = '';
         if (prev) prev.classList.add('d-none');
         if (btn) btn.disabled = true;
         if (err) {
@@ -2545,6 +3095,25 @@
         const btn = document.getElementById('gastro-canje-fidelidad-confirmar');
         if (!btn) return;
         btn.disabled = !canjeFidelidadValidado || !canjeFidelidadArticuloId;
+        btn.textContent = puedeAplicarCanjeFidelidadEnCuentaActual()
+            ? 'Aplicar y facturar con descuento'
+            : 'Abrir cuenta libre y aplicar';
+    }
+
+    function programarValidacionCanjeFidelidadTrasLectura() {
+        const inp = document.getElementById('gastro-canje-fidelidad-trackdata');
+        if (!inp) return;
+        if (canjeFidelidadInputTimer) {
+            clearTimeout(canjeFidelidadInputTimer);
+        }
+        const val = (inp.value || '').trim();
+        if (val.length < 4) {
+            return;
+        }
+        canjeFidelidadInputTimer = setTimeout(() => {
+            canjeFidelidadInputTimer = null;
+            void validarTarjetaCanjeFidelidad();
+        }, 120);
     }
 
     function pintarArticulosCanjeFidelidad(articulos, seleccionadoId) {
@@ -2647,14 +3216,16 @@
     }
 
     async function validarTarjetaCanjeFidelidad() {
+        if (canjeFidelidadValidando) {
+            return;
+        }
         const inp = document.getElementById('gastro-canje-fidelidad-trackdata');
         const trackdata = (inp?.value || '').trim();
         if (!trackdata) {
             mostrarErrorModalCanjeFidelidad('Pase la tarjeta o ingrese el identificador.');
             return;
         }
-        if (!cuentaId) {
-            mostrarErrorModalCanjeFidelidad('Seleccione una mesa o cuenta antes de canjear.');
+        if (trackdata === canjeFidelidadUltimoTrackdataValidado && canjeFidelidadValidado) {
             return;
         }
         if (!G.wigosAccountInfoHabilitado) {
@@ -2670,6 +3241,7 @@
             body.articulo_id = canjeFidelidadArticuloId;
         }
 
+        canjeFidelidadValidando = true;
         try {
             const data = await api('/ventas/gastronomia/api/validar-canje-fidelidad', {
                 method: 'POST',
@@ -2677,25 +3249,56 @@
                 body: JSON.stringify(body),
             });
             if (!data.ok) {
+                canjeFidelidadUltimoTrackdataValidado = '';
                 mostrarErrorModalCanjeFidelidad(data.error || data.mensaje || 'Tarjeta no válida.');
                 return;
             }
+            canjeFidelidadUltimoTrackdataValidado = trackdata;
             canjeFidelidadValidado = data;
             pintarPreviewCanjeFidelidad(data);
         } catch (e) {
+            canjeFidelidadUltimoTrackdataValidado = '';
             mostrarErrorModalCanjeFidelidad(e.message || String(e));
+        } finally {
+            canjeFidelidadValidando = false;
         }
     }
 
-    async function aplicarCanjeFidelidadACuenta() {
-        if (!canjeFidelidadValidado || !cuentaId || !canjeFidelidadArticuloId) {
-            mostrarErrorModalCanjeFidelidad('Valide la tarjeta y seleccione el artículo a canjear.');
-            return;
+    async function continuarFacturacionTrasCanjeFidelidad() {
+        try {
+            await abrirModalF8Descuento();
+            await emitirFactura({ exigirDescuento: true, prepararCobranzaSiFalta: true });
+        } catch (eF8) {
+            if (eF8 && eF8.message && eF8.message !== 'Operación cancelada.') {
+                toast(eF8.message, 'warning');
+            }
+        }
+    }
+
+    async function aplicarCanjeFidelidadACuenta(opciones) {
+        const opts = opciones || {};
+        if (!canjeFidelidadValidado || !canjeFidelidadArticuloId) {
+            if (!opts.silencioso) {
+                mostrarErrorModalCanjeFidelidad('Valide la tarjeta y seleccione el artículo a canjear.');
+            }
+            return false;
+        }
+        if (!cuentaId) {
+            if (!opts.silencioso) {
+                mostrarErrorModalCanjeFidelidad('Abra una cuenta libre para aplicar el canje.');
+            }
+            return false;
+        }
+        if (!cuentaLibreAptaParaCanjePremio(cuentaActivaConLineas)) {
+            if (!opts.silencioso) {
+                mostrarErrorModalCanjeFidelidad('El canje fidelidad solo aplica a cuentas libres abiertas.');
+            }
+            return false;
         }
         const inp = document.getElementById('gastro-canje-fidelidad-trackdata');
         const trackdata = (inp?.value || canjeFidelidadValidado.trackdata || '').trim();
         const btn = document.getElementById('gastro-canje-fidelidad-confirmar');
-        if (btn) btn.disabled = true;
+        if (btn && !opts.silencioso) btn.disabled = true;
 
         try {
             const data = await api('/ventas/gastronomia/api/aplicar-canje-fidelidad', {
@@ -2708,27 +3311,18 @@
                 }),
             });
             if (!data.ok) {
-                mostrarErrorModalCanjeFidelidad(data.error || data.mensaje || 'No se pudo aplicar el canje.');
-                if (btn) btn.disabled = false;
+                const msg = data.error || data.mensaje || 'No se pudo aplicar el canje.';
+                if (opts.silencioso) {
+                    toast(msg, 'error');
+                } else {
+                    mostrarErrorModalCanjeFidelidad(msg);
+                }
+                if (btn && !opts.silencioso) btn.disabled = false;
                 actualizarBotonConfirmarCanjeFidelidad();
-                return;
+                return false;
             }
 
-            const cuenta = data.cuenta;
-            if (cuenta) {
-                pintarLineas(cuenta);
-                if (cuenta.descuento_gastronomia && typeof pintarDescuentoEnPantalla === 'function') {
-                    pintarDescuentoEnPantalla(cuenta.descuento_gastronomia);
-                }
-                if (cuenta.cliente) {
-                    $('#cliente_id').val(cuenta.cliente.id || '');
-                    $('#codigocliente').val(cuenta.cliente.codigo != null ? String(cuenta.cliente.codigo) : '');
-                    $('#nombrecliente').val(cuenta.cliente.nombre || '');
-                }
-                if (cuenta.cliente_interno_descuento && typeof aplicarClienteInternoDescuentoEnPantalla === 'function') {
-                    aplicarClienteInternoDescuentoEnPantalla(cuenta.cliente_interno_descuento);
-                }
-            }
+            pintarCuentaTrasCanjePremio(data.cuenta);
 
             const codDesc =
                 (data.validacion && data.validacion.descuento && data.validacion.descuento.codigo) ||
@@ -2740,24 +3334,83 @@
                 toast(eDesc.message || String(eDesc), 'warning');
             }
 
-            if (typeof $ !== 'undefined') {
+            if (typeof $ !== 'undefined' && !opts.silencioso) {
                 $('#modal-gastro-canje-fidelidad').modal('hide');
             }
-            resetModalCanjeFidelidad();
+            resetModalCanjeFidelidad(true);
             toast('Canje fidelidad aplicado. Confirme descuento y cliente para facturar.', 'success');
 
-            try {
-                await abrirModalF8Descuento();
-                await emitirFactura({ exigirDescuento: true, prepararCobranzaSiFalta: true });
-            } catch (eF8) {
-                if (eF8 && eF8.message && eF8.message !== 'Operación cancelada.') {
-                    toast(eF8.message, 'warning');
-                }
-            }
+            await continuarFacturacionTrasCanjeFidelidad();
+            return true;
         } catch (e) {
-            mostrarErrorModalCanjeFidelidad(e.message || String(e));
-            if (btn) btn.disabled = false;
+            const msg = e.message || String(e);
+            if (opts.silencioso) {
+                toast(msg, 'error');
+            } else {
+                mostrarErrorModalCanjeFidelidad(msg);
+            }
+            if (btn && !opts.silencioso) btn.disabled = false;
             actualizarBotonConfirmarCanjeFidelidad();
+            return false;
+        }
+    }
+
+    async function abrirCuentaLibreParaCanjeFidelidad() {
+        if (G.cuentasLibresHabilitadas === false) {
+            toast('Las cuentas libres no están habilitadas.', 'warning');
+            return;
+        }
+        canjeFidelidadEsperaApertura = true;
+        if (typeof $ !== 'undefined') {
+            $('#modal-gastro-canje-fidelidad').modal('hide');
+        }
+        try {
+            const apertura = await resolverDatosAperturaNuevaCuenta(false, 'Cuenta libre — canje fidelidad');
+            const r = await api('/ventas/gastronomia/api/abrir-cuenta', {
+                method: 'POST',
+                headers: hdrJson(),
+                body: JSON.stringify(Object.assign({ empresa_id: empresaId }, apertura)),
+            });
+            await seleccionarCuenta(r.cuenta_id);
+            cargarCuentasActivas();
+        } catch (e) {
+            canjeFidelidadEsperaApertura = false;
+            if (e.message !== 'cancelado') {
+                toast(e.message, 'error');
+            }
+        }
+    }
+
+    async function confirmarCanjeFidelidad() {
+        if (!canjeFidelidadValidado || !canjeFidelidadArticuloId) {
+            mostrarErrorModalCanjeFidelidad('Valide la tarjeta y seleccione el artículo antes de continuar.');
+            return;
+        }
+        if (G.cuentasLibresHabilitadas === false) {
+            toast('Las cuentas libres no están habilitadas.', 'warning');
+            return;
+        }
+        if (puedeAplicarCanjeFidelidadEnCuentaActual()) {
+            await aplicarCanjeFidelidadACuenta();
+            return;
+        }
+        await abrirCuentaLibreParaCanjeFidelidad();
+    }
+
+    async function intentarAplicarCanjeFidelidadPendiente(cuenta) {
+        if (!canjeFidelidadEsperaApertura || !canjeFidelidadValidado || !cuentaId) {
+            return;
+        }
+        const c = cuenta || cuentaActivaConLineas;
+        if (!cuentaLibreAptaParaCanjePremio(c)) {
+            canjeFidelidadEsperaApertura = false;
+            resetModalCanjeFidelidad(true);
+            toast('No se pudo aplicar el canje fidelidad en la cuenta libre.', 'warning');
+            return;
+        }
+        const ok = await aplicarCanjeFidelidadACuenta({ silencioso: true });
+        if (ok) {
+            canjeFidelidadEsperaApertura = false;
         }
     }
 
@@ -2768,19 +3421,23 @@
 
         if (btnAbrir) {
             btnAbrir.addEventListener('click', () => {
+                if (bloquearOperacionPosPorJornadaTurno()) {
+                    return;
+                }
                 if (!G.wigosAccountInfoHabilitado) {
                     toast('Consulta de tarjeta Wigos no habilitada.', 'warning');
                     return;
                 }
-                if (!cuentaId) {
-                    toast('Seleccione una mesa o cuenta.', 'warning');
+                if (G.cuentasLibresHabilitadas === false) {
+                    toast('Las cuentas libres no están habilitadas.', 'warning');
                     return;
                 }
-                resetModalCanjeFidelidad();
+                resetModalCanjeFidelidad(true);
                 if (typeof $ !== 'undefined') {
                     $('#modal-gastro-canje-fidelidad').one('shown.bs.modal', function () {
                         const c = document.getElementById('gastro-canje-fidelidad-trackdata');
                         if (c) c.focus();
+                        actualizarBotonConfirmarCanjeFidelidad();
                     });
                     $('#modal-gastro-canje-fidelidad').modal('show');
                 }
@@ -2791,22 +3448,26 @@
             inp.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') {
                     e.preventDefault();
+                    if (canjeFidelidadInputTimer) {
+                        clearTimeout(canjeFidelidadInputTimer);
+                        canjeFidelidadInputTimer = null;
+                    }
                     void validarTarjetaCanjeFidelidad();
                 }
             });
-            inp.addEventListener('change', () => {
-                if ((inp.value || '').trim().length >= 4) {
-                    void validarTarjetaCanjeFidelidad();
-                }
-            });
+            inp.addEventListener('input', () => programarValidacionCanjeFidelidadTrasLectura());
         }
 
         if (btnConfirmar) {
-            btnConfirmar.addEventListener('click', () => void aplicarCanjeFidelidadACuenta());
+            btnConfirmar.addEventListener('click', () => void confirmarCanjeFidelidad());
         }
 
         if (typeof $ !== 'undefined') {
-            $('#modal-gastro-canje-fidelidad').on('hidden.bs.modal', resetModalCanjeFidelidad);
+            $('#modal-gastro-canje-fidelidad').on('hidden.bs.modal', function () {
+                if (!canjeFidelidadEsperaApertura) {
+                    resetModalCanjeFidelidad(true);
+                }
+            });
         }
     }
 
@@ -2900,6 +3561,9 @@
     }
 
     function agregarTicketCanjeACobranza() {
+        if (bloquearOperacionPosPorJornadaTurno()) {
+            return;
+        }
         if (!canjeTicketValidado || !canjeTicketValidado.cuentacaja) {
             mostrarErrorModalCanje('Valide el ticket antes de agregarlo.');
             return;
@@ -2908,7 +3572,7 @@
         if (!tr) return;
         document.getElementById('tbody-gastro-cuenta-table').appendChild(tr);
         wireEventosFilaCobranza(tr);
-        asignarCuentaCajaEnFila(tr, canjeTicketValidado.cuentacaja);
+        asignarCuentaCajaEnFila(tr, canjeTicketValidado.cuentacaja, { asignacionAutomatica: true });
         const ticketIdInp = tr.querySelector('.ticket_id');
         const numeroTicketInp = tr.querySelector('.numeroticket');
         const montoInp = tr.querySelector('.monto');
@@ -2928,28 +3592,27 @@
         toast('Ticket agregado a la cobranza.', 'success');
     }
 
+    function abrirModalCanjeTicketTarjeta() {
+        if (bloquearOperacionPosPorJornadaTurno()) {
+            return;
+        }
+        if (G.cuentacajaCanjeTarjetaError) {
+            toast(G.cuentacajaCanjeTarjetaError, 'warning');
+            return;
+        }
+        resetModalCanjeTicket();
+        if (typeof $ !== 'undefined') {
+            $('#modal-gastro-canje-ticket-tarjeta').one('shown.bs.modal', function () {
+                const c = document.getElementById('gastro-canje-codigo-barras');
+                if (c) c.focus();
+            });
+            $('#modal-gastro-canje-ticket-tarjeta').modal('show');
+        }
+    }
+
     function initCanjeTicketTarjeta() {
-        const btnAbrir = document.getElementById('gastro-btn-canje-ticket-tarjeta');
         const inp = document.getElementById('gastro-canje-codigo-barras');
         const btnConfirmar = document.getElementById('gastro-canje-ticket-confirmar');
-
-        if (btnAbrir) {
-            btnAbrir.addEventListener('click', () => {
-                if (G.cuentacajaCanjeTarjetaError) {
-                    toast(G.cuentacajaCanjeTarjetaError, 'warning');
-                    return;
-                }
-                resetModalCanjeTicket();
-                if (typeof $ !== 'undefined') {
-                    $('#modal-gastro-canje-ticket-tarjeta').one('shown.bs.modal', function () {
-                        const c = document.getElementById('gastro-canje-codigo-barras');
-                        if (c) c.focus();
-                    });
-                    $('#modal-gastro-canje-ticket-tarjeta').modal('show');
-                }
-            });
-        }
-
         if (inp) {
             inp.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') {
@@ -3072,6 +3735,9 @@
     }
 
     function abrirModalWaitryImportarPorId() {
+        if (bloquearOperacionPosPorJornadaTurno()) {
+            return;
+        }
         if (!waitryHabilitadoEnPos()) {
             toast('Integración Waitry no habilitada.', 'warning');
             return;
@@ -3098,6 +3764,9 @@
     }
 
     async function importarOrdenWaitry(orden, opciones) {
+        if (bloquearOperacionPosPorJornadaTurno()) {
+            return;
+        }
         opciones = opciones || {};
         if (!orden || (orden.waitry_order_id == null && !orden.display_id)) {
             return;
@@ -3361,6 +4030,12 @@
     }
 
     function cancelarModalAbrirCuenta() {
+        if (canjePremioEsperaApertura) {
+            canjePremioEsperaApertura = false;
+        }
+        if (canjeFidelidadEsperaApertura) {
+            canjeFidelidadEsperaApertura = false;
+        }
         cerrarPromesaAperturaCuenta(new Error('cancelado'));
     }
 
@@ -3378,6 +4053,9 @@
     }
 
     async function abrirMesa(mesaId, mesaOcupada) {
+        if (bloquearOperacionPosPorJornadaTurno()) {
+            return;
+        }
         try {
             let body = { mesa_id: mesaId, empresa_id: empresaId };
             if (!mesaOcupada) {
@@ -3400,6 +4078,9 @@
     }
 
     async function nuevaCuentaLibre() {
+        if (bloquearOperacionPosPorJornadaTurno()) {
+            return;
+        }
         if (G.cuentasLibresHabilitadas === false) {
             return toast('Las cuentas libres no están habilitadas.', 'warning');
         }
@@ -3500,6 +4181,9 @@
     }
 
     async function patchCantidadLinea(lineaId, nuevaCantidad) {
+        if (bloquearOperacionPosPorJornadaTurno()) {
+            return;
+        }
         if (!cuentaId) return;
         if (!(nuevaCantidad >= 0.0001)) {
             toast('La cantidad no puede ser menor al mínimo permitido.', 'warning');
@@ -3611,6 +4295,10 @@
             cargarMesas();
             cargarCuentasActivas();
             setTimeout(() => focusSkuConsumo(), 50);
+            await intentarAplicarCanjePremioPendiente(c);
+            await intentarAplicarCanjeFidelidadPendiente(c);
+            actualizarBtnConfirmarCanjePremio();
+            actualizarBotonConfirmarCanjeFidelidad();
         } catch (e) {
             toast(e.message, 'error');
         }
@@ -3724,6 +4412,9 @@
     }
 
     async function guardarCabecera(silencioso) {
+        if (!silencioso && bloquearOperacionPosPorJornadaTurno()) {
+            return null;
+        }
         if (!cuentaId) {
             if (!silencioso) toast('Seleccione mesa/cuenta', 'warning');
             return null;
@@ -4170,6 +4861,9 @@
      * 2) Si no tiene opcionales → modal-cantidad para que el usuario indique cuánto.
      */
     async function iniciarAltaLinea(articulo) {
+        if (bloquearOperacionPosPorJornadaTurno()) {
+            return;
+        }
         pendingArticulo = null;
         pendingOpcionalesSeleccion = null;
         pendingOpcionalesCtx = null;
@@ -4191,6 +4885,9 @@
      * Si hay opcionales → grilla y luego alta inmediata con cantidad=1.
      */
     async function procesarAltaConsumo(articulo, cantidad) {
+        if (bloquearOperacionPosPorJornadaTurno()) {
+            return;
+        }
         const grupos = await fetchGruposOpcionales(articulo.id);
 
         if (grupos.length) {
@@ -4271,6 +4968,9 @@
     }
 
     async function intentarAgregarConsumoDesdeTeclado() {
+        if (bloquearOperacionPosPorJornadaTurno()) {
+            return;
+        }
         const { ok, articulo } = await resolverSkuConsumoEnFila();
         if (!ok || !articulo) return;
         await procesarAltaConsumo(articulo, 1);
@@ -4316,6 +5016,9 @@
     }
 
     async function agregarLineaApi(articulo, cantidad, opcionales) {
+        if (bloquearOperacionPosPorJornadaTurno()) {
+            return;
+        }
         if (!cuentaId) return toast('Seleccione cuenta', 'warning');
         try {
             const payload = {
@@ -4344,6 +5047,9 @@
     }
 
     async function eliminarLinea(lineaId) {
+        if (bloquearOperacionPosPorJornadaTurno()) {
+            return;
+        }
         if (!cuentaId) return;
         try {
             const data = await api(`/ventas/gastronomia/api/cuenta/${cuentaId}/linea/${lineaId}`, {
@@ -4358,6 +5064,9 @@
     }
 
     async function cerrarCuenta() {
+        if (bloquearOperacionPosPorJornadaTurno()) {
+            return;
+        }
         if (!cuentaId) return;
         if (!confirm('¿Cerrar cuenta sin facturar?')) return;
         try {
@@ -4397,6 +5106,9 @@
     }
 
     async function emitirFactura(opciones) {
+        if (bloquearOperacionPosPorJornadaTurno()) {
+            return;
+        }
         const opts = opciones || {};
         const facturacionConDescuento = !!opts.exigirDescuento;
         const msgCanje = mensajeBloqueoFacturacionEfectivoPorCanje();
@@ -5019,6 +5731,9 @@
         if (data.cuentacaja_totem_codigo) {
             G.cuentacajaTotemCodigo = data.cuentacaja_totem_codigo;
         }
+        if (data.waitry_tipo_pago_cuentacaja) {
+            G.waitryTipoPagoCuentacaja = data.waitry_tipo_pago_cuentacaja;
+        }
         G.cuentacajaEfectivoIdConfig = data.cuentacaja_efectivo_id || null;
         if (data.receptor_cf_nombre) {
             G.receptorCfNombre = data.receptor_cf_nombre;
@@ -5052,6 +5767,7 @@
             aplicarPreferenciaModoSeleccion(data.modo_seleccion_preferido);
         }
         aplicarConfigAperturaDesdeApi(data);
+        aplicarEstadoJornadaTurnoDesdeApi(data);
         return data;
     }
 
@@ -5089,6 +5805,14 @@
             toast(e.message, 'warning');
         }
 
+        if (typeof window.gastroRefrescarEstadoTurno === 'function') {
+            try {
+                await window.gastroRefrescarEstadoTurno();
+            } catch (e) {
+                /* alerta turno opcional */
+            }
+        }
+
         try {
             await cargarMonedasFactura();
         } catch (e) {
@@ -5096,6 +5820,12 @@
         }
 
         initCobranzaGrid();
+
+        try {
+            await cargarMediosPagoRapidos();
+        } catch (e) {
+            console.warn('Medios de pago:', e.message || e);
+        }
 
         try {
             await cargarMesas();

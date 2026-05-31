@@ -15,6 +15,8 @@ use App\Repositories\Uif\Factorriesgo_UifRepositoryInterface;
 use App\Repositories\Uif\Frecuencia_UifRepositoryInterface;
 use App\Services\Configuracion\CotizacionService;
 use App\Services\Uif\ClienteUifFotoDocumento;
+use App\Services\Uif\ClienteUifSexoAprendizajeService;
+use App\Support\Uif\ClienteUifCamposPorDefecto;
 use App\Models\Uif\Cliente_Uif;
 use App\Models\Uif\Cliente_Premio_Uif;
 use Illuminate\Support\Facades\Storage;
@@ -38,6 +40,7 @@ class Cliente_UifService
 	private $factorriesgo_uifRepository;
 	private $frecuencia_uifRepository;
 	private $cotizacionService;
+	private $clienteUifSexoAprendizajeService;
 
     public function __construct(Cliente_UifRepositoryInterface $cliente_uifrepository,
                                 Cliente_Archivo_UifRepositoryInterface $cliente_archivo_uifrepository,
@@ -49,7 +52,8 @@ class Cliente_UifService
 								Puntaje_UifRepositoryInterface $puntaje_uifrepository,
 								Factorriesgo_UifRepositoryInterface $factorriesgo_uifrepository,
 								Frecuencia_UifRepositoryInterface $frecuencia_uifrepository,
-								CotizacionService $cotizacionservice
+								CotizacionService $cotizacionservice,
+								ClienteUifSexoAprendizajeService $clienteUifSexoAprendizajeService
 								)
     {
 		$this->cliente_uifRepository = $cliente_uifrepository;
@@ -63,6 +67,7 @@ class Cliente_UifService
 		$this->factorriesgo_uifRepository = $factorriesgo_uifrepository;
 		$this->frecuencia_uifRepository = $frecuencia_uifrepository;
 		$this->cotizacionService = $cotizacionservice;
+		$this->clienteUifSexoAprendizajeService = $clienteUifSexoAprendizajeService;
     }
 
 	public function guardaCliente_Uif($request, $origen = null)
@@ -81,6 +86,8 @@ class Cliente_UifService
 				);
 			}
 
+			$data = ClienteUifCamposPorDefecto::aplicarEnAlta($data);
+
 			$cliente_uif = $this->cliente_uifRepository->create($data);
 
 			if ($cliente_uif == 'Error')
@@ -89,6 +96,11 @@ class Cliente_UifService
 			// Guarda tablas asociadas
 			if ($cliente_uif)
 				Self::agrega($data, $cliente_uif, $request);
+
+			$this->clienteUifSexoAprendizajeService->registrarDesdeCliente(
+				trim((string) $request->input('nombre')),
+				trim((string) $request->input('sexo'))
+			);
 
 			DB::commit();
 		} catch (\Exception $e) {
@@ -136,9 +148,16 @@ class Cliente_UifService
 				}
 			}
 
+			$data = ClienteUifCamposPorDefecto::aplicarEnActualizacion($data);
+
 			$actualizarRiesgo = ! esCajeroUifSinSupervisor();
 
 			Self::actualiza($data, $id, $request, $actualizarRiesgo);
+
+			$this->clienteUifSexoAprendizajeService->registrarDesdeCliente(
+				trim((string) $request->input('nombre')),
+				trim((string) $request->input('sexo'))
+			);
 
 			DB::commit();
 		} catch (\Exception $e) {

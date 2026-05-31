@@ -62,7 +62,6 @@ class PuntoventaController extends Controller
         $estadoEnum = Puntoventa::$enumEstado;
         $modofacturacionEnum = Puntoventa::$enumModoFacturacion;
         $empresasArca = $this->empresasArcaQuery();
-        $this->precargarPuntosVentaArcaEnIndex($empresasArca);
 
         return view('ventas.puntoventa.index', compact(
             'datas',
@@ -291,22 +290,8 @@ class PuntoventaController extends Controller
         $webserviceArcaEtiqueta = $webserviceArca !== ''
             ? $this->arcaPuntosVentaCatalogo->etiquetaWebservice($webserviceArca)
             : '';
+        // Catálogo ARCA: se carga en background vía form.js (sessionStorage + endpoint JSON).
         $puntosArca = [];
-        $modofacturacionActual = old('modofacturacion', $data->modofacturacion ?? '');
-
-        if ($empresaArcaId > 0 && $empresasArca->contains('id', $empresaArcaId)) {
-            try {
-                $resultado = $this->arcaPuntosVentaCatalogo->obtenerPuntosVenta(
-                    $empresaArcaId,
-                    false,
-                    null,
-                    $modofacturacionActual !== '' ? $modofacturacionActual : null
-                );
-                $puntosArca = $resultado['puntos'];
-            } catch (Exception $e) {
-                Log::debug('Puntoventa datosFormulario ARCA: '.$e->getMessage());
-            }
-        }
 
         return compact(
             'data',
@@ -323,22 +308,6 @@ class PuntoventaController extends Controller
             'webserviceArcaEtiqueta',
             'puntosArca'
         );
-    }
-
-    /**
-     * Calienta la caché Laravel de puntos ARCA al abrir el listado (crear/editar responden más rápido).
-     *
-     * @param  \Illuminate\Support\Collection<int, Empresa>  $empresasArca
-     */
-    private function precargarPuntosVentaArcaEnIndex($empresasArca): void
-    {
-        foreach ($empresasArca as $empresa) {
-            try {
-                $this->arcaPuntosVentaCatalogo->obtenerPuntosVenta((int) $empresa->id, false);
-            } catch (Exception $e) {
-                Log::debug('Puntoventa index precarga ARCA empresa '.$empresa->id.': '.$e->getMessage());
-            }
-        }
     }
 
     /**

@@ -89,6 +89,7 @@ final class GastronomiaTurnoOperativoService
 
         return [
             'requiere_habilitacion_turno' => self::requiereHabilitacionTurno(),
+            'jornada_abierta' => $jornada !== null,
             'turno_habilitado' => $activo !== null,
             'turno_operativo_id' => $activo?->id,
             'turno_nombre' => $activo?->turno?->nombre,
@@ -99,6 +100,8 @@ final class GastronomiaTurnoOperativoService
             'jornada_id' => $activo?->jornada_gastronomia_id ?? $jornada?->id,
             'fecha_jornada' => $fechaJornada,
             'fecha_jornada_fmt' => $fechaJornadaFmt,
+            'jornada_usuario_apertura' => $jornada?->usuarioApertura?->nombre,
+            'jornada_apertura_en' => $jornada?->apertura_en?->format('d/m/Y H:i'),
             'cierres_parciales' => $activo
                 ? $activo->cierresParciales()->count()
                 : 0,
@@ -498,13 +501,26 @@ final class GastronomiaTurnoOperativoService
      *   sobrante_faltante?:float|null,
      *   observacion_cierre?:string|null
      * }  $datosCierre
+     * @param  array{
+     *   cierre_remoto?:bool,
+     *   pc_operador?:string,
+     *   omitir_validacion_jornada_posterior?:bool
+     * }  $opciones
      */
     public function cerrar(
         TurnoOperativoGastronomia $turno,
         string $identificadorPc,
         array $datosCierre = [],
+        array $opciones = [],
     ): TurnoOperativoGastronomia {
-        $this->exigirTurnoActivoEnPc($turno, $identificadorPc);
+        $cierreRemoto = ! empty($opciones['cierre_remoto']);
+        $pcTerminal = (string) $turno->identificador_pc;
+
+        if ($cierreRemoto) {
+            $identificadorPc = $pcTerminal;
+        } else {
+            $this->exigirTurnoActivoEnPc($turno, $identificadorPc);
+        }
 
         $errores = $this->erroresAntesDeCerrar($turno);
         if ($errores !== []) {
@@ -535,22 +551,70 @@ final class GastronomiaTurnoOperativoService
             null,
         );
 
-        $turno->update([
-            'estado' => TurnoOperativoGastronomia::ESTADO_CERRADO,
-            'usuario_cierre_id' => Auth::id(),
-            'cierre_en' => $cierreEn,
-            'monto_facturacion_turno' => $totalesTurno['total_general'],
-            'monto_facturacion_dia' => $totalesDia['total_general'],
-            'redondeo_invitaciones' => isset($datosCierre['redondeo_invitaciones'])
-                ? round((float) $datosCierre['redondeo_invitaciones'], 2)
-                : $totalesTurno['redondeo_invitaciones_sugerido'],
-            'redondeo_turno' => round((float) ($datosCierre['redondeo_turno'] ?? 0), 2),
-            'sobrante_faltante' => round((float) ($datosCierre['sobrante_faltante'] ?? 0), 2),
-            'observacion_cierre' => $this->componerObservacionCierreTurno(
-                $datosCierre['observacion_cierre'] ?? null,
-                $vaciasAutoDescartadas,
-            ),
-        ]);
+        $redondeoInvitaciones = isset($datosCierre['redondeo_invitaciones'])
+            ? round((float) $datosCierre['redondeo_invitaciones'], 2)
+            : (float) $totalesTurno['redondeo_invitaciones_sugerido'];
+        $redondeoTurno = round((float) ($datosCierre['redondeo_turno'] ?? 0), 2);
+        $sobranteFaltante = round((float) ($datosCierre['sobrante_faltante'] ?? 0), 2);
+
+        if (! GastronomiaTurnoOperativoTotalesSupport::cierreCuadraConAjustesManuales(
+            $totalesTurno,
+            $redondeoInvitaciones,
+            $redondeoTurno,
+            $sobranteFaltante,
+        )) {
+            $diff = round((float) ($totalesTurno['diferencia_cobranza'] ?? 0), 2);
+            throw new InvalidArgumentException(
+                'No puede cerrar el turno con diferencia de conciliación ($ '.number_format(abs($diff), 2, ',', '.').'). '
+                .'Revise comprobantes (incl. notas de crédito de otra terminal), cargue el redondeo invitaciones sugerido '
+                .'o registre sobrante/faltante hasta cuadrar.'
+            );
+        }
+
+        $pcOperadorRemoto = null;
+        if ($cierreRemoto) {
+            $pcOperador = trim((string) ($opciones['pc_operador'] ?? ''));
+            if ($pcOperador !== '') {
+                $pcOperadorRemoto = $pcOperador;
+            }
+        }
+
+        DB::transaction(function () use (
+            $turno,
+            $cierreEn,
+            $totalesTurno,
+            $totalesDia,
+            $redondeoInvitaciones,
+            $redondeoTurno,
+            $sobranteFaltante,
+            $datosCierre,
+            $vaciasAutoDescartadas,
+            $pcOperadorRemoto,
+        ) {
+            $max = (int) TurnoOperativoGastronomia::query()
+                ->where('empresa_id', (int) $turno->empresa_id)
+                ->where('estado', TurnoOperativoGastronomia::ESTADO_CERRADO)
+                ->whereNotNull('numero_cierre')
+                ->lockForUpdate()
+                ->max('numero_cierre');
+
+            $turno->update([
+                'estado' => TurnoOperativoGastronomia::ESTADO_CERRADO,
+                'usuario_cierre_id' => Auth::id(),
+                'cierre_en' => $cierreEn,
+                'numero_cierre' => $max + 1,
+                'monto_facturacion_turno' => $totalesTurno['total_general'],
+                'monto_facturacion_dia' => $totalesDia['total_general'],
+                'redondeo_invitaciones' => $redondeoInvitaciones,
+                'redondeo_turno' => $redondeoTurno,
+                'sobrante_faltante' => $sobranteFaltante,
+                'observacion_cierre' => $this->componerObservacionCierreTurno(
+                    $datosCierre['observacion_cierre'] ?? null,
+                    $vaciasAutoDescartadas,
+                    $pcOperadorRemoto,
+                ),
+            ]);
+        });
 
         return $turno->fresh([
             'turno',
@@ -577,7 +641,9 @@ final class GastronomiaTurnoOperativoService
         $errores = [];
         $pc = (string) $turno->identificador_pc;
 
-        $this->validarCierreNoPosteriorAJornadaSiguiente($turno, $errores);
+        if (empty($opciones['omitir_validacion_jornada_posterior'])) {
+            $this->validarCierreNoPosteriorAJornadaSiguiente($turno, $errores);
+        }
 
         if ($this->esUltimoTurnoDelDia($turno)) {
             $abiertasConItems = $this->contarCuentasAbiertasConItemsEnTerminal($turno);
@@ -732,7 +798,7 @@ final class GastronomiaTurnoOperativoService
             && (int) $jornadaAbierta->id !== (int) $turno->jornada_gastronomia_id) {
             $errores[] = 'Ya se abrió una jornada nueva ('
                 .($jornadaAbierta->fecha_jornada?->format('d/m/Y') ?? '')
-                .'). El turno noche debe cerrarse antes de abrir la jornada del día siguiente.';
+                .'). Cierre el turno habilitado antes de abrir la jornada del día siguiente.';
 
             return;
         }
@@ -766,18 +832,100 @@ final class GastronomiaTurnoOperativoService
         return $txt === '' ? null : mb_substr($txt, 0, 2000);
     }
 
-    private function componerObservacionCierreTurno(?string $observacion, int $vaciasAutoDescartadas): ?string
+    /**
+     * Terminal con al menos un comprobante gastronómico en la jornada del turno.
+     */
+    public function terminalTuvoActividadEnJornada(TurnoOperativoGastronomia $turno): bool
     {
-        $base = $this->limpiarObservacion($observacion);
+        $pc = trim((string) $turno->identificador_pc);
+        $empresaId = (int) $turno->empresa_id;
+        $fechaJornada = $turno->jornada?->fecha_jornada?->format('Y-m-d');
 
-        if ($vaciasAutoDescartadas <= 0) {
-            return $base;
+        if ($pc === '' || $empresaId <= 0 || $fechaJornada === null || $fechaJornada === '') {
+            return true;
         }
 
-        $nota = '[Auto '.now()->format('Y-m-d H:i').'] '.$vaciasAutoDescartadas
-            .' cuenta(s) abierta(s) sin ítems descartada(s) automáticamente al cerrar el turno.';
-        $obs = $base === null ? $nota : $base."\n".$nota;
+        return \App\Models\Ventas\VentaGastronomiaEmision::query()
+            ->where('identificador_pc', $pc)
+            ->whereHas('venta', function ($v) use ($empresaId, $fechaJornada) {
+                $v->where(function ($fecha) use ($fechaJornada) {
+                    $fecha->whereDate('fechajornada', $fechaJornada)
+                        ->orWhere(function ($legacy) use ($fechaJornada) {
+                            $legacy->whereNull('fechajornada')
+                                ->whereDate('fecha', $fechaJornada);
+                        });
+                })->whereHas('puntoventas', fn ($pv) => $pv->where('empresa_id', $empresaId));
+            })
+            ->exists();
+    }
 
-        return mb_substr($obs, 0, 2000);
+    /**
+     * @return list<array{
+     *   turno_operativo_id:int,
+     *   identificador_pc:string,
+     *   turno_nombre:string,
+     *   habilitacion_en:string,
+     *   con_actividad:bool,
+     *   es_ultimo_turno_dia:bool
+     * }>
+     */
+    public function listarTurnosHabilitadosParaCierreRemoto(int $empresaId, ?JornadaGastronomia $jornada = null): array
+    {
+        if ($empresaId <= 0) {
+            return [];
+        }
+
+        $jornada ??= $this->jornadaService->jornadaAbierta($empresaId);
+        if ($jornada === null) {
+            return [];
+        }
+
+        return TurnoOperativoGastronomia::query()
+            ->with('turno')
+            ->where('empresa_id', $empresaId)
+            ->where('jornada_gastronomia_id', (int) $jornada->id)
+            ->where('estado', TurnoOperativoGastronomia::ESTADO_HABILITADO)
+            ->orderBy('identificador_pc')
+            ->orderBy('habilitacion_en')
+            ->get()
+            ->map(fn (TurnoOperativoGastronomia $t) => [
+                'turno_operativo_id' => (int) $t->id,
+                'identificador_pc' => (string) $t->identificador_pc,
+                'turno_nombre' => (string) ($t->turno?->nombre ?? ''),
+                'habilitacion_en' => $t->habilitacion_en?->format('d/m/Y H:i') ?? '',
+                'con_actividad' => $this->terminalTuvoActividadEnJornada($t),
+                'es_ultimo_turno_dia' => $this->esUltimoTurnoDelDia($t),
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function componerObservacionCierreTurno(
+        ?string $observacion,
+        int $vaciasAutoDescartadas,
+        ?string $pcOperadorRemoto = null,
+    ): ?string {
+        $partes = [];
+        $base = $this->limpiarObservacion($observacion);
+        if ($base !== null) {
+            $partes[] = $base;
+        }
+
+        if ($pcOperadorRemoto !== null && trim($pcOperadorRemoto) !== '') {
+            $usuario = Auth::user()?->nombre ?? 'usuario';
+            $partes[] = '[Cierre remoto desde '.trim($pcOperadorRemoto).' por '.$usuario
+                .' el '.now()->format('Y-m-d H:i').']';
+        }
+
+        if ($vaciasAutoDescartadas > 0) {
+            $partes[] = '[Auto '.now()->format('Y-m-d H:i').'] '.$vaciasAutoDescartadas
+                .' cuenta(s) abierta(s) sin ítems descartada(s) automáticamente al cerrar el turno.';
+        }
+
+        if ($partes === []) {
+            return null;
+        }
+
+        return mb_substr(implode("\n", $partes), 0, 2000);
     }
 }

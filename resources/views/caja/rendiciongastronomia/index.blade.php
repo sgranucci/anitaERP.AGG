@@ -23,26 +23,45 @@
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Rendiciones gastronomía</h3>
-                <div class="card-tools">
-                    @if (can('crear-rendicion-gastronomia-caja', false))
-                    <a href="{{ route('crear_rendiciongastronomia') }}" class="btn btn-outline-secondary btn-sm">
-                        <i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
-                    </a>
-                    @endif
-                </div>
-                <div class="d-md-flex justify-content-md-end">
-                    <form action="{{ route('rendiciongastronomia') }}" method="GET">
-                        <div class="btn-group">
-                            <input type="text" name="busqueda" class="form-control" placeholder="Busqueda ..." value="{{ $busqueda ?? '' }}">
-                            <button type="submit" class="btn btn-default">
+                <div class="d-md-flex justify-content-md-end flex-wrap align-items-end">
+                    <form action="{{ route('rendiciongastronomia') }}" method="GET" class="d-flex flex-wrap align-items-end mb-2 mb-md-0">
+                        <div class="form-group mb-0 mr-2">
+                            <label for="fecha_desde_rg" class="small text-muted mb-0 d-block">Desde (rendición o jornada)</label>
+                            <input type="date" id="fecha_desde_rg" name="fecha_desde" class="form-control form-control-sm"
+                                   value="{{ $filtros['fecha_desde'] ?? '' }}">
+                        </div>
+                        <div class="form-group mb-0 mr-2">
+                            <label for="fecha_hasta_rg" class="small text-muted mb-0 d-block">Hasta (rendición o jornada)</label>
+                            <input type="date" id="fecha_hasta_rg" name="fecha_hasta" class="form-control form-control-sm"
+                                   value="{{ $filtros['fecha_hasta'] ?? '' }}">
+                        </div>
+                        <div class="form-group mb-0 mr-2">
+                            <label for="busqueda_rg" class="small text-muted mb-0 d-block">Búsqueda</label>
+                            <input type="text" id="busqueda_rg" name="busqueda" class="form-control form-control-sm"
+                                   placeholder="Ticket, ID, turno…" value="{{ $filtros['busqueda'] ?? '' }}" style="min-width:160px;">
+                        </div>
+                        <div class="form-group mb-0">
+                            <label class="small text-muted mb-0 d-block">&nbsp;</label>
+                            <button type="submit" class="btn btn-default btn-sm">
                                 <span class="fa fa-search"></span>
                             </button>
                         </div>
                     </form>
+                    @if (can('crear-rendicion-gastronomia-caja', false))
+                    <div class="form-group mb-0 ml-md-2 mb-2 mb-md-0">
+                        <label class="small text-muted mb-0 d-block">&nbsp;</label>
+                        <a href="{{ route('crear_rendiciongastronomia') }}" class="btn btn-outline-secondary btn-sm">
+                            <i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
+                        </a>
+                    </div>
+                    @endif
                 </div>
             </div>
             <div class="card-body table-responsive p-0">
-                @include('includes.exportar-tabla', ['ruta' => 'listar_rendiciongastronomia', 'busqueda' => $busqueda ?? ''])
+                @include('includes.exportar-tabla-queryparams', [
+                    'ruta' => 'listar_rendiciongastronomia',
+                    'queryparams' => $filtros ?? [],
+                ])
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead>
                         <tr>
@@ -74,7 +93,10 @@
                             <td>{{ $row->turnoOperativo?->jornada?->fecha_jornada?->format('d/m/Y') }}</td>
                             <td class="text-right">${{ number_format((float) $row->totalcobrado, 2, ',', '.') }}</td>
                             <td>
-                                @if (can('editar-rendicion-gastronomia-caja', false))
+                                @if (
+                                    can('editar-rendicion-gastronomia-caja', false)
+                                    && \App\Support\Caja\RendicionGastronomiaCajaPermiso::puedeActualizarPorFecha($row)
+                                )
                                 <a href="{{ route('editar_rendiciongastronomia', ['id' => $row->id]) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                     <i class="fa fa-edit"></i>
                                 </a>
@@ -106,7 +128,7 @@
             </div>
             @if (method_exists($rendiciones, 'links'))
             <div class="card-footer">
-                {{ $rendiciones->appends(['busqueda' => $busqueda ?? ''])->links() }}
+                {{ $rendiciones->appends(array_filter($filtros ?? [], fn ($v) => $v !== null && $v !== ''))->links() }}
             </div>
             @endif
         </div>

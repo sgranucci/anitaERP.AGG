@@ -30,7 +30,7 @@ class CuentaGastronomia extends Model implements Auditable
         'estado', 'identificador_pc', 'cliente_id', 'descuento_gastronomia_id', 'cliente_interno_descuento_id',
         'factura_receptor_nombre', 'factura_receptor_documento', 'factura_receptor_domicilio',
         'factura_receptor_tipodocumento_id',
-        'configuracion_puntoventa_gastronomia_id', 'venta_id', 'waitry_order_id', 'waitry_display_id', 'waitry_cobro_totem',
+        'configuracion_puntoventa_gastronomia_id', 'venta_id', 'waitry_order_id', 'waitry_display_id', 'waitry_cobro_totem', 'waitry_tipo_pago',
         'canje_premio_pendiente',
         'canje_fidelidad_pendiente',
     ];
@@ -85,5 +85,24 @@ class CuentaGastronomia extends Model implements Auditable
     public function lineas()
     {
         return $this->hasMany(CuentaGastronomiaLinea::class, 'cuenta_gastronomia_id')->orderBy('numero_linea');
+    }
+
+    public function tieneCanjePremioPendiente(): bool
+    {
+        $pendiente = $this->canje_premio_pendiente;
+
+        return is_array($pendiente) && trim((string) ($pendiente['numerocupon'] ?? '')) !== '';
+    }
+
+    public function tieneCanjeFidelidadPendiente(): bool
+    {
+        $pendiente = $this->canje_fidelidad_pendiente;
+
+        return is_array($pendiente) && trim((string) ($pendiente['trackdata'] ?? '')) !== '';
+    }
+
+    public function tieneCanjePendienteRequiereFacturacionConDescuento(): bool
+    {
+        return $this->tieneCanjePremioPendiente() || $this->tieneCanjeFidelidadPendiente();
     }
 }

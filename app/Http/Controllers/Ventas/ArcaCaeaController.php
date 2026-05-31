@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Ventas;
 
 use App\Http\Controllers\Controller;
 use App\Models\Ventas\ArcaCaea;
+use App\Services\Arca\ArcaCaeaAnitaSyncService;
 use App\Services\Arca\ArcaWsfeCaeaService;
 use App\Support\Ventas\CaeaQuincenaSupport;
 use Auth;
@@ -14,6 +15,7 @@ class ArcaCaeaController extends Controller
 {
     public function __construct(
         private ArcaWsfeCaeaService $caeaService,
+        private ArcaCaeaAnitaSyncService $anitaSync,
     ) {}
 
     public function index(Request $request)
@@ -49,6 +51,7 @@ class ArcaCaeaController extends Controller
         $empresas = $user->usuario_empresas->sortBy('nombre');
         $quincenasVentana = CaeaQuincenaSupport::quincenasEnVentanaSolicitud();
         $puedeSolicitar = can('solicitar-arca-caea', false);
+        $puedeGrabarAnita = $puedeSolicitar && $this->anitaSync->estaHabilitado();
 
         return view('ventas.arca_caea.index', compact(
             'registros',
@@ -58,6 +61,7 @@ class ArcaCaeaController extends Controller
             'estado',
             'quincenasVentana',
             'puedeSolicitar',
+            'puedeGrabarAnita',
         ));
     }
 
@@ -68,9 +72,16 @@ class ArcaCaeaController extends Controller
         $registro = $this->resolverRegistroPermitido($id);
         $registro->load(['empresa', 'solicitadoPor']);
         $puedeReintentar = can('solicitar-arca-caea', false) && ! $registro->estaAutorizado();
+        $puedeGrabarAnita = can('solicitar-arca-caea', false)
+            && $this->anitaSync->estaHabilitado()
+            && $registro->estaAutorizado();
 
         if ($request->ajax()) {
-            return view('ventas.arca_caea.partials.detalle_contenido', compact('registro', 'puedeReintentar'));
+            return view('ventas.arca_caea.partials.detalle_contenido', compact(
+                'registro',
+                'puedeReintentar',
+                'puedeGrabarAnita',
+            ));
         }
 
         return redirect()->route('arca_caea');
@@ -125,6 +136,31 @@ class ArcaCaeaController extends Controller
             (int) Auth::id(),
             false,
         );
+
+        if ($resultado['ok']) {
+            return redirect()
+                ->route('arca_caea')
+                ->with('mensaje', $resultado['mensaje']);
+        }
+
+        return redirect()
+            ->route('arca_caea')
+            ->with('error', $resultado['mensaje']);
+    }
+
+    public function grabarAnita(int $id)
+    {
+        can('solicitar-arca-caea');
+
+        $registro = $this->resolverRegistroPermitido($id);
+
+        try {
+            $resultado = $this->anitaSync->grabarEnAnita($registro);
+        } catch (\Throwable $e) {
+            return redirect()
+                ->route('arca_caea')
+                ->with('error', 'No se pudo grabar en Anita: '.$e->getMessage());
+        }
 
         if ($resultado['ok']) {
             return redirect()

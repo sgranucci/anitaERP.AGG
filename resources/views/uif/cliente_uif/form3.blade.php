@@ -1,21 +1,11 @@
 @php
     $detalleClienteUifRestringido = esSoloVisualizacionClienteUif();
+    $consultaPremiosCliente = request()->query('origen') === 'modal_consulta' && request()->query('uif_tab') === '3';
+    $suffixConsultaPremios = $consultaPremiosCliente ? '&origen=modal_consulta&vista=consulta' : '';
+    $mostrarForm3Directo = ! empty($soloSolapaPremios ?? false);
 @endphp
-<div class="form3" style="display: none">
-    <style>
-        .premio-foto-thumb-link { display: inline-block; line-height: 0; }
-        .premio-foto-thumb {
-            max-height: 48px;
-            max-width: 48px;
-            width: auto;
-            height: auto;
-            object-fit: cover;
-            border-radius: 4px;
-            border: 1px solid #ddd;
-            vertical-align: middle;
-        }
-        .premio-foto-thumb-link:hover .premio-foto-thumb { border-color: #3c8dbc; opacity: 0.92; }
-    </style>
+<div class="form3"@if (! $mostrarForm3Directo) style="display: none"@endif>
+    @include('uif.cliente_premio_uif.partials.foto_estilos')
     <div class="card-body">
     	<table class="table" id="premio-table">
     		<thead>
@@ -51,21 +41,14 @@
                 				<input type="text" name="montopremios[]" class="form-control montopremio" style="text-align: right;" value="{{ number_format((float) ($premio->monto ?? 0), 2, ',', '.') }}" />
                 			</td>
                             <td class="text-center align-middle premio-foto-preview">
-                                @if (! empty($premio->foto ?? null))
-                                    @if (can('editar-cliente-premio-uif', false))
-                                        <a href="{{ route('muestra_foto_cliente_premio_uif', ['id' => $premio->id]) }}" class="premio-foto-thumb-link tooltipsC" title="Ver foto del jugador">
-                                            <img src="{{ asset('storage/imagenes/fotos_uif/'.$premio->foto) }}" alt="" class="premio-foto-thumb">
-                                        </a>
-                                    @else
-                                        <img src="{{ asset('storage/imagenes/fotos_uif/'.$premio->foto) }}" alt="" class="premio-foto-thumb">
-                                    @endif
-                                @else
-                                    <span class="text-muted">—</span>
-                                @endif
+                                @include('uif.cliente_premio_uif.partials.foto_celda', [
+                                    'foto' => $premio->foto ?? null,
+                                    'premioId' => $premio->id ?? null,
+                                ])
                             </td>
 							<td>
 								@if (can('editar-cliente-premio-uif', false) && ! $detalleClienteUifRestringido)
-                                	<a href="{{ route('edita_cliente_premio_uif', ['id' => $premio->id]) }}?return_cliente_tab=3" class="btn-accion-tabla tooltipsC" title="Editar este registro">
+                                	<a href="{{ route('edita_cliente_premio_uif', ['id' => $premio->id]) }}?return_cliente_tab=3{{ $suffixConsultaPremios }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                     <i class="fa fa-edit"></i>
                                 	</a>
 								@endif

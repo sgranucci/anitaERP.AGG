@@ -2,9 +2,11 @@
 
 namespace App\Services\Ventas\Gastronomia;
 
+use App\Models\Ventas\CierreTotemJornadaGastronomia;
 use App\Models\Ventas\CuentaGastronomia;
 use App\Models\Ventas\JornadaGastronomia;
 use App\Models\Ventas\TurnoOperativoGastronomia;
+use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Repositories\Ventas\JornadaGastronomiaRepositoryInterface;
 use Carbon\Carbon;
 use Illuminate\Database\QueryException;
@@ -21,6 +23,7 @@ final class GastronomiaJornadaService
 {
     public function __construct(
         private readonly JornadaGastronomiaRepositoryInterface $jornadaRepository,
+        private readonly GastronomiaCierreTotemJornadaService $cierreTotemJornadaService,
     ) {
     }
 
@@ -88,6 +91,9 @@ final class GastronomiaJornadaService
             ? $this->contarCuentasAbiertasVaciasPorEmpresa($empresaId)
             : 0;
 
+        $ultimaJornada = $this->jornadaRepository->ultimaJornadaPorEmpresa($empresaId);
+        $fechasApertura = $this->fechasSugeridasApertura($ultimaJornada);
+
         return [
             'empresa_id' => $empresaId,
             'jornada_abierta' => $abierta !== null,
@@ -98,7 +104,9 @@ final class GastronomiaJornadaService
                 : null,
             'fecha_factura_hoy' => $hoy,
             'fecha_factura_hoy_fmt' => $this->formatearFechaEncabezado($hoy),
-            'apertura_en' => $abierta?->apertura_en?->format('Y-m-d H:i:s'),
+            'apertura_en' => $abierta?->apertura_en?->format('d/m/Y H:i'),
+            'fecha_jornada_minima_abrir' => $fechasApertura['minima'],
+            'fecha_jornada_sugerida_abrir' => $fechasApertura['sugerida'],
             'usuario_apertura' => $abierta?->usuarioApertura?->nombre,
             'observacion_apertura' => $abierta?->observacion_apertura,
             'puede_abrir' => $abierta === null,
@@ -109,6 +117,15 @@ final class GastronomiaJornadaService
             'errores_cierre' => $abierta !== null
                 ? $this->erroresAntesDeCerrar($empresaId)
                 : [],
+            'turnos_habilitados' => $abierta !== null
+                ? $this->detalleTurnosHabilitadosJornada($empresaId, $abierta)
+                : [],
+            'nota_politica_turnos' => config('gastronomia.requiere_habilitacion_turno', true)
+                ? 'Cada turno que se habilitó en la jornada debe cerrarse antes de cerrar la jornada '
+                    .'(en su terminal o con cierre remoto en Saneamiento). '
+                    .'No es obligatorio que todas las PCs de la red habiliten turno noche: '
+                    .'las terminales que operan solo uno o dos turnos del día no bloquean por no haber abierto noche.'
+                : null,
             'cuentas_abiertas_con_items' => $cuentasAbiertasConItems,
             'cuentas_abiertas_vacias' => $cuentasAbiertasVacias,
         ];
@@ -160,7 +177,23 @@ final class GastronomiaJornadaService
 
                 throw new InvalidArgumentException(
                     'No puede abrir una jornada nueva: hay turno(s) habilitado(s) sin cerrar en: '.$detalle
-                    .'. Cierre cada turno (especialmente turno noche) antes de abrir la jornada del día siguiente.'
+                    .'. Cierre cada turno que se habilitó antes de abrir la jornada del día siguiente.'
+                );
+            }
+        }
+
+        $ultima = $this->jornadaRepository->ultimaJornadaPorEmpresa($empresaId);
+        if ($ultima !== null) {
+            $ultimaFecha = $ultima->fecha_jornada->format('Y-m-d');
+            if ($fecha <= $ultimaFecha) {
+                $ultimaFmt = $this->formatearFechaHumana($ultimaFecha);
+                $estadoUltima = $ultima->estado === JornadaGastronomia::ESTADO_ABIERTA
+                    ? 'abierta'
+                    : 'cerrada';
+
+                throw new InvalidArgumentException(
+                    'No puede abrir la jornada del '.$fechaFmt.': la última jornada registrada es del '
+                    .$ultimaFmt.' ('.$estadoUltima.'). Solo puede abrir jornadas de fechas posteriores.'
                 );
             }
         }
@@ -231,7 +264,13 @@ final class GastronomiaJornadaService
             'observacion_cierre' => $observacionFinal,
         ], (int) $jornada->id);
 
-        return $this->jornadaRepository->findOrFail((int) $jornada->id);
+        $jornada = $this->jornadaRepository->findOrFail((int) $jornada->id);
+
+        if ($this->cierreTotemJornadaService->habilitado()) {
+            $this->cierreTotemJornadaService->registrarAlCerrarJornada($jornada);
+        }
+
+        return $jornada;
     }
 
     /**
@@ -241,6 +280,8 @@ final class GastronomiaJornadaService
      *   - Cuentas ABIERTA con ítems  → bloquean: hay que facturarlas o cerrarlas sin facturar desde Saneamiento.
      *   - Cuentas ABIERTA sin ítems  → NO bloquean: se auto-descartan al cerrar la jornada (se mueven a CERRADA).
      *   - Cuentas CERRADA (sin facturar) → estado terminal, NO bloquean.
+     *   - Turno operativo HABILITADO en la jornada → bloquea (cada habilitación debe cerrarse y rendirse).
+     *     No exige que todas las PCs habiliten turno noche: solo las que abrieron un turno deben cerrarlo.
      *
      * @return list<string>
      */
@@ -257,17 +298,57 @@ final class GastronomiaJornadaService
                 .'Las cuentas abiertas sin ítems se descartan automáticamente al cerrar la jornada.';
         }
 
-        $turnosSinCerrar = TurnoOperativoGastronomia::query()
-            ->where('empresa_id', $empresaId)
-            ->where('estado', TurnoOperativoGastronomia::ESTADO_HABILITADO)
-            ->count();
-
-        if ($turnosSinCerrar > 0 && config('gastronomia.requiere_habilitacion_turno', true)) {
-            $errores[] = 'Hay '.$turnosSinCerrar.' turno(s) habilitado(s) sin cerrar en alguna terminal. '
-                .'Cierre cada turno (especialmente turno noche) antes de cerrar la jornada.';
+        if (config('gastronomia.requiere_habilitacion_turno', true)) {
+            $habilitados = $this->detalleTurnosHabilitadosJornada($empresaId);
+            if ($habilitados !== []) {
+                $detalle = collect($habilitados)
+                    ->map(fn (array $t) => $t['identificador_pc'].' ('.$t['turno_nombre'].')')
+                    ->implode(', ');
+                $errores[] = 'Hay '.count($habilitados).' turno(s) habilitado(s) sin cerrar: '.$detalle.'. '
+                    .'Cada turno que se abrió debe cerrarse (en su terminal o cierre remoto en Saneamiento). '
+                    .'Las PCs que no habilitaron turno en esta jornada no bloquean el cierre.';
+            }
         }
 
         return $errores;
+    }
+
+    /**
+     * Turnos operativos aún habilitados en la jornada abierta (todos bloquean el cierre de jornada).
+     *
+     * @return list<array{
+     *   turno_operativo_id:int,
+     *   identificador_pc:string,
+     *   turno_nombre:string,
+     *   habilitacion_en:string,
+     *   con_actividad:bool
+     * }>
+     */
+    public function detalleTurnosHabilitadosJornada(int $empresaId, ?JornadaGastronomia $jornada = null): array
+    {
+        $jornada ??= $this->jornadaAbierta($empresaId);
+        if ($jornada === null) {
+            return [];
+        }
+
+        $turnoService = app(GastronomiaTurnoOperativoService::class);
+
+        return TurnoOperativoGastronomia::query()
+            ->with('turno')
+            ->where('empresa_id', $empresaId)
+            ->where('jornada_gastronomia_id', (int) $jornada->id)
+            ->where('estado', TurnoOperativoGastronomia::ESTADO_HABILITADO)
+            ->orderBy('identificador_pc')
+            ->get()
+            ->map(fn (TurnoOperativoGastronomia $t) => [
+                'turno_operativo_id' => (int) $t->id,
+                'identificador_pc' => (string) $t->identificador_pc,
+                'turno_nombre' => (string) ($t->turno?->nombre ?? ''),
+                'habilitacion_en' => $t->habilitacion_en?->format('d/m/Y H:i') ?? '',
+                'con_actividad' => $turnoService->terminalTuvoActividadEnJornada($t),
+            ])
+            ->values()
+            ->all();
     }
 
     /**
@@ -334,6 +415,70 @@ final class GastronomiaJornadaService
         return mb_substr($obs, 0, 2000);
     }
 
+    /**
+     * @return array{
+     *   puede_eliminar: bool,
+     *   motivo_no_eliminar: ?string,
+     *   turnos_operativos: int,
+     *   ventas_gastronomia: int
+     * }
+     */
+    public function resumenEliminacion(JornadaGastronomia $jornada): array
+    {
+        $turnos = $this->contarTurnosOperativosJornada($jornada);
+        $ventas = $this->contarVentasGastronomiaJornada($jornada);
+
+        if ($turnos > 0 || $ventas > 0) {
+            $partes = [];
+            if ($turnos > 0) {
+                $partes[] = $turnos.' turno(s) operativo(s)';
+            }
+            if ($ventas > 0) {
+                $partes[] = $ventas.' comprobante(s) gastronómicos';
+            }
+
+            return [
+                'puede_eliminar' => false,
+                'motivo_no_eliminar' => 'No se puede eliminar: la jornada tiene '.implode(' y ', $partes).'.',
+                'turnos_operativos' => $turnos,
+                'ventas_gastronomia' => $ventas,
+            ];
+        }
+
+        return [
+            'puede_eliminar' => true,
+            'motivo_no_eliminar' => null,
+            'turnos_operativos' => 0,
+            'ventas_gastronomia' => 0,
+        ];
+    }
+
+    public function eliminar(int $jornadaId): void
+    {
+        $jornada = $this->jornadaRepository->findOrFail($jornadaId);
+        $resumen = $this->resumenEliminacion($jornada);
+
+        if (! $resumen['puede_eliminar']) {
+            throw new InvalidArgumentException(
+                $resumen['motivo_no_eliminar'] ?? 'No se puede eliminar la jornada porque tiene movimientos.'
+            );
+        }
+
+        try {
+            DB::transaction(function () use ($jornada) {
+                CierreTotemJornadaGastronomia::query()
+                    ->where('jornada_gastronomia_id', (int) $jornada->id)
+                    ->delete();
+
+                $this->jornadaRepository->delete((int) $jornada->id);
+            });
+        } catch (InvalidArgumentException $e) {
+            throw $e;
+        } catch (Throwable $e) {
+            throw new InvalidArgumentException(self::mensajeDesdeExcepcion($e), 0, $e);
+        }
+    }
+
     public function exigirJornadaSiConfigurada(int $empresaId): void
     {
         if (! config('gastronomia.jornada_obligatoria', true)) {
@@ -375,6 +520,52 @@ final class GastronomiaJornadaService
         }
 
         return 'Error al abrir la jornada: '.$detalle;
+    }
+
+    private function fechasSugeridasApertura(?JornadaGastronomia $ultimaJornada): array
+    {
+        $hoy = Carbon::today()->format('Y-m-d');
+        $minima = null;
+
+        if ($ultimaJornada?->fecha_jornada !== null) {
+            $minima = $ultimaJornada->fecha_jornada->copy()->addDay()->format('Y-m-d');
+        }
+
+        $sugerida = $minima !== null && $minima > $hoy ? $minima : $hoy;
+
+        return [
+            'minima' => $minima,
+            'sugerida' => $sugerida,
+        ];
+    }
+
+    private function contarTurnosOperativosJornada(JornadaGastronomia $jornada): int
+    {
+        return (int) TurnoOperativoGastronomia::query()
+            ->where('jornada_gastronomia_id', (int) $jornada->id)
+            ->count();
+    }
+
+    private function contarVentasGastronomiaJornada(JornadaGastronomia $jornada): int
+    {
+        $empresaId = (int) $jornada->empresa_id;
+        $fechaJornada = $jornada->fecha_jornada?->format('Y-m-d');
+
+        if ($empresaId <= 0 || $fechaJornada === null || $fechaJornada === '') {
+            return 0;
+        }
+
+        return (int) VentaGastronomiaEmision::query()
+            ->whereHas('venta', function ($v) use ($empresaId, $fechaJornada) {
+                $v->where(function ($fecha) use ($fechaJornada) {
+                    $fecha->whereDate('fechajornada', $fechaJornada)
+                        ->orWhere(function ($legacy) use ($fechaJornada) {
+                            $legacy->whereNull('fechajornada')
+                                ->whereDate('fecha', $fechaJornada);
+                        });
+                })->whereHas('puntoventas', fn ($pv) => $pv->where('empresa_id', $empresaId));
+            })
+            ->count();
     }
 
     private function describirJornadaAbierta(JornadaGastronomia $jornada): string

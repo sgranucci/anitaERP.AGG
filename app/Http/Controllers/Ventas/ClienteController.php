@@ -49,6 +49,8 @@ use App\Support\SuitecrmPermiso;
 use App\Mail\Ventas\ClienteProvisorio;
 use App\Mail\Ventas\ClienteDefinitivo;
 use App\Exports\Ventas\ClienteExport;
+use App\Exports\Ventas\ClienteListadoExport;
+use App\Support\Ventas\ClienteListadoFiltros;
 use Carbon\Carbon;
 use Mail;
 use DB;
@@ -128,22 +130,26 @@ class ClienteController extends Controller
         // Por si se necesita traer un cliente que no esta en ERP
         //$this->clienteRepository->traerRegistroDeAnita("000105", true);
 
-        $busqueda = $request->busqueda;
+        $filtros = ClienteListadoFiltros::resolverDesdeRequest($request);
 
-        $clientes = $this->clienteRepository->leeCliente($busqueda, true);
+        $clientes = $this->clienteRepository->leeCliente($filtros, true);
 
-        if ($clientes->isEmpty())
+        if ($clientes->isEmpty() && ! ClienteListadoFiltros::tieneCriteriosAplicados($filtros))
 		{
         	$this->clienteRepository->sincronizarConAnita();
 			$this->cliente_entregaRepository->sincronizarConAnita();
 			$this->cliente_archivoRepository->sincronizarConAnita();
 	
-            $clientes = $this->clienteRepository->leeCliente($busqueda, true);
+            $clientes = $this->clienteRepository->leeCliente($filtros, true);
 		}
 
-        $datas = ['clientes' => $clientes, 'busqueda' => $busqueda];
-
-        return view('ventas.cliente.index', $datas);
+        return view('ventas.cliente.index', [
+            'clientes' => $clientes,
+            'busqueda' => $filtros['busqueda'],
+            'filtros' => $filtros,
+            'filtrosQuery' => ClienteListadoFiltros::paraQueryString($filtros),
+            'camposFiltro' => ClienteListadoFiltros::CAMPOS,
+        ]);
     }
 
     public function listar(Request $request, $formato = null, $busqueda = null)
@@ -153,12 +159,14 @@ class ClienteController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
+        $filtros = ClienteListadoFiltros::resolverDesdeRequest($request, $busqueda);
+
         switch($formato)
         {
         case 'PDF':
-            $cliente = $this->clienteRepository->leeCliente($busqueda, false);
+            $clientes = $this->clienteRepository->leeCliente($filtros, false);
 
-            $view =  \View::make('ventas.cliente.listado', compact('cliente'))
+            $view =  \View::make('ventas.cliente.listado', compact('clientes'))
                         ->render();
             $path = storage_path('pdf/listados');
             $nombre_pdf = 'listado_cliente';
@@ -171,21 +179,19 @@ class ClienteController extends Controller
             break;
 
         case 'EXCEL':
-            return (new ClienteExport($this->clienteRepository))
-                        ->parametros($busqueda)
+            return (new ClienteListadoExport($this->clienteRepository))
+                        ->parametros($filtros)
                         ->download('cliente.xlsx');
             break;
 
         case 'CSV':
-            return (new ClienteExport($this->clienteRepository))
-                        ->parametros($busqueda)
+            return (new ClienteListadoExport($this->clienteRepository))
+                        ->parametros($filtros)
                         ->download('cliente.csv', \Maatwebsite\Excel\Excel::CSV);
             break;            
-        }   
+        }
 
-        $datas = ['cliente' => $cliente, 'busqueda' => $busqueda];
-
-		return view('ventas.cliente.index', $datas);       
+        return redirect()->route('cliente', ClienteListadoFiltros::paraQueryString($filtros));
     }
 
 	public function leerCliente_Entrega($cliente_id)

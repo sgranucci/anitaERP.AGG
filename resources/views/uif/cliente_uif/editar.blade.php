@@ -9,6 +9,8 @@
 <script src="{{asset("assets/pages/scripts/uif/cliente_uif/domicilio.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/uif/cliente_uif/domicilionacimiento.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/uif/actividad_uif/consulta.js")}}" type="text/javascript"></script>
+@include('uif.cliente_uif.partials.sexo_aprendizaje_script')
+<script src="{{asset("assets/pages/scripts/uif/cliente_uif/arca-padron.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/uif/cliente_uif/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/imprimirHtml.js")}}" type="text/javascript"></script>
 
@@ -18,7 +20,7 @@
 <script>
     function sub()
 	{
-		$('#form-general')[0].submit();
+		$('#form-general').trigger('submit');
 	}
 </script>
 @endsection
@@ -30,21 +32,45 @@
         @include('includes.mensaje')
         <div class="card card-danger">
             <div class="card-header">
-                <h3 class="card-title">{{ esSoloVisualizacionClienteUif() ? 'Ver' : 'Editar' }} Cliente UIF </h3>&nbsp;ID:&nbsp;{{$data->id }}&nbsp;{{$data->nombre}}
+                <h3 class="card-title">
+                    @if (!empty($soloSolapaPremios))
+                        {{ esSoloVisualizacionClienteUif() ? 'Ver' : 'Gestionar' }} premios — ID {{ $data->id }} {{ $data->nombre }}
+                    @else
+                        {{ esSoloVisualizacionClienteUif() ? 'Ver' : 'Editar' }} Cliente UIF
+                    @endif
+                </h3>
+                @if (empty($soloSolapaPremios))
+                    &nbsp;ID:&nbsp;{{$data->id }}&nbsp;{{$data->nombre}}
+                @endif
                 <div class="card-tools">
+                    @if (can('crear-cliente-premio-uif', false) && ! esSoloVisualizacionClienteUif())
+                    <a id="barra-alta-premio-uif-cliente"
+                       href="{{ route('crea_cliente_premio_uif', ['id' => $data->id]) }}?return_cliente_tab=3{{ !empty($ocultarVolver) ? '&origen=modal_consulta&vista=consulta' : '' }}"
+                       class="btn btn-outline-secondary btn-sm"
+                       style="{{ !empty($soloSolapaPremios) ? '' : 'display: none;' }}">
+                        <i class="fa fa-fw fa-plus-circle"></i> Nuevo premio
+                    </a>
+                    @endif
+                    @if (empty($soloSolapaPremios))
 					<button type="button" id="botonestado" class="btn btn-info btn-sm">
                         <i class="fa fa-bell"></i> Estado {{ $data->descripcionestado }}
                     </button>
+                    @endif
+                    @if (empty($ocultarVolver ?? false))
                     <a href="{{route('consulta_cliente_uif')}}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
+                    @endif
                 </div>
             </div>
             <form action="{{route('actualiza_cliente_uif', ['id' => $data->id])}}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off">
                 @csrf @method("put")
+                @if (!empty($ocultarVolver))
+                    <input type="hidden" name="origen" value="modal_consulta">
+                @endif
                 <div class="d-flex align-items-center flex-wrap" style="margin: 5px;">
-                    <div class="flex-grow-1" style="min-width: 0;"></div>
-                    <div class="d-flex flex-wrap justify-content-center align-items-center py-1" style="gap: 0.45rem;">
+                    @if (empty($soloSolapaPremios))
+                    <div class="d-flex flex-wrap justify-content-center align-items-center py-1 w-100" style="gap: 0.45rem;">
                         <button type="button" id="botonform1" class="btn btn-primary btn-sm">
                             <i class="fa fa-user"></i> Datos principales
                         </button>
@@ -60,17 +86,13 @@
                         <button type="button" id="botonform5" class="btn btn-info btn-sm">
                             <span class="fa fa-copy"></span> Archivos asociados
                         </button>
+                        <button type="button" id="btn-consulta-arca-padron-crear" class="btn btn-outline-secondary btn-sm" title="Ingresá el CUIT y consultá el padrón ARCA">
+                            <i class="fa fa-search"></i> Consulta padrón ARCA
+                        </button>
                     </div>
-                    <div class="flex-grow-1 d-flex justify-content-end align-items-center py-1" style="min-width: 0;">
-                        @if (can('crear-cliente-premio-uif', false) && ! esSoloVisualizacionClienteUif())
-                        <span id="barra-alta-premio-uif-cliente" style="display: none;">
-                            <a href="{{ route('crea_cliente_premio_uif', ['id' => $data->id]) }}?return_cliente_tab=3" class="btn btn-info btn-sm">
-                                <i class="fa fa-plus-circle"></i> Dar de alta premio
-                            </a>
-                        </span>
-                        @endif
-                    </div>
+                    @endif
                 </div>
+                <div id="tab2" class="d-none" data-arca-constancia-url="{{ route('arca_constancia_inscripcion') }}" aria-hidden="true"></div>
                 <div class="card-body" style="padding-bottom: 0; padding-top: 5px;">
                     @include('uif.cliente_uif.form1')
                     @include('uif.cliente_uif.form2')
@@ -79,6 +101,7 @@
                     @include('uif.cliente_uif.form5')
                 </div>
                 <div class="card-footer" style="padding-top: 0">
+                	@if (empty($soloSolapaPremios))
                 	<div class="row">
                    		<div class="col-lg-4">
                         	@if (can('actualizar-cliente-uif', false))
@@ -88,8 +111,11 @@
                         	@endif
                     	</div>
             		</div>
+            		@endif
             	</div>
             </form>
+            @include('compras.proveedor.arca-cuit-entry-modal')
+            @include('compras.proveedor.arca-padron-modals')
         </div>
     </div>
 </div>

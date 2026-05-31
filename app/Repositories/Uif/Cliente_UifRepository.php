@@ -7,6 +7,8 @@ use App\Models\Uif\Cliente_Uif;
 use App\Repositories\Configuracion\TipodocumentoRepositoryInterface;
 use App\Services\Uif\ClientePremioUifFotoTesoreria;
 use App\Services\Uif\ClienteUifFotoDocumento;
+use App\Services\Uif\JuegoUifDesdeAnitaResolver;
+use App\Support\Uif\ClienteUifListadoFiltros;
 use Auth;
 use Exception;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -63,12 +65,36 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
         $this->actividad_uifRepository = $actividad_uifrepository;
     }
 
-    public function leeCliente_Uif($busqueda, $flPaginando = null)
+    /**
+     * @param  array<string, mixed>|string|null  $filtros  Criterios del listado o texto legacy (modo todos).
+     */
+    public function leeCliente_Uif($filtros, $flPaginando = null)
     {
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $busqueda = is_string($busqueda) ? trim($busqueda) : $busqueda;
+        if (is_string($filtros)) {
+            $texto = trim($filtros);
+            $filtros = [
+                'modo' => ClienteUifListadoFiltros::MODO_TODOS,
+                'campo' => 'nombre',
+                'operador' => 'contiene',
+                'valor' => $texto,
+                'valor_hasta' => '',
+                'con_premios' => ClienteUifListadoFiltros::esBusquedaSoloConPremios($texto),
+                'busqueda' => $texto,
+            ];
+        } elseif (! is_array($filtros)) {
+            $filtros = [
+                'modo' => ClienteUifListadoFiltros::MODO_TODOS,
+                'campo' => 'nombre',
+                'operador' => 'contiene',
+                'valor' => '',
+                'valor_hasta' => '',
+                'con_premios' => false,
+                'busqueda' => '',
+            ];
+        }
 
         $cliente_uifs = $this->model->select('cliente_uif.id as id',
             'cliente_uif.nombre as nombre',
@@ -80,6 +106,9 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
             'pais_uif.nombre as nombrepais',
             'cliente_uif.telefono as telefono',
             'cliente_uif.email as email')
+            ->selectRaw('(SELECT cp.fechaentrega FROM cliente_premio_uif cp WHERE cp.cliente_uif_id = cliente_uif.id AND cp.deleted_at IS NULL ORDER BY cp.fechaentrega DESC, cp.id DESC LIMIT 1) as ultimo_premio_fecha')
+            ->selectRaw('(SELECT cp.monto FROM cliente_premio_uif cp WHERE cp.cliente_uif_id = cliente_uif.id AND cp.deleted_at IS NULL ORDER BY cp.fechaentrega DESC, cp.id DESC LIMIT 1) as ultimo_premio_monto')
+            ->selectRaw('(SELECT j.nombre FROM cliente_premio_uif cp INNER JOIN juego_uif j ON j.id = cp.juego_uif_id WHERE cp.cliente_uif_id = cliente_uif.id AND cp.deleted_at IS NULL ORDER BY cp.fechaentrega DESC, cp.id DESC LIMIT 1) as ultimo_premio_juego')
             ->join('tipodocumento', 'tipodocumento.id', '=', 'cliente_uif.tipodocumento_id')
             ->join('localidad_uif', 'localidad_uif.id', '=', 'cliente_uif.localidad_uif_id')
             ->join('provincia_uif', 'provincia_uif.id', '=', 'cliente_uif.provincia_uif_id')
@@ -87,22 +116,8 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
             ->whereNull('cliente_uif.deleted_at')
             ->orderby('id', 'DESC');
 
-        // Si no hay búsqueda, no aplicar ORs con LIKE '%%' (causa full scan + count() caro en paginación).
-        if ($busqueda !== null && $busqueda !== '') {
-            $like = '%'.$busqueda.'%';
-            $cliente_uifs->where(function ($q) use ($busqueda, $like) {
-                $id = filter_var($busqueda, FILTER_VALIDATE_INT);
-                if ($id !== false) {
-                    $q->orWhere('cliente_uif.id', (int) $id);
-                }
-                $q->orWhere('cliente_uif.nombre', 'like', $like)
-                    ->orWhere('tipodocumento.abreviatura', 'like', $like)
-                    ->orWhere('cliente_uif.numerodocumento', 'like', $like)
-                    ->orWhere('cliente_uif.domicilio', 'like', $like)
-                    ->orWhere('localidad_uif.nombre', 'like', $like)
-                    ->orWhere('provincia_uif.nombre', 'like', $like)
-                    ->orWhere('pais_uif.nombre', 'like', $like);
-            });
+        if (ClienteUifListadoFiltros::tieneCriteriosAplicados($filtros)) {
+            ClienteUifListadoFiltros::aplicar($cliente_uifs, $filtros);
         }
 
         if (isset($flPaginando)) {
@@ -192,7 +207,10 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
         return $cliente_uif;
     }
 
-    public function sincronizarConAnita()
+    /**
+     * @param  int|null  $limite  Máximo de clientes a procesar; null o 0 = sin límite (sincronización total).
+     */
+    public function sincronizarConAnita(?int $limite = 200): void
     {
         $apiAnita = new ApiAnita;
         $data = ['acc' => 'list',
@@ -202,15 +220,19 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
             'tabla' => $this->tableAnita];
 
         $dataAnita = json_decode($apiAnita->apiCall($data));
+        if (! is_array($dataAnita)) {
+            return;
+        }
+
+        $sinLimite = $limite === null || $limite <= 0;
         $off = 0;
         foreach ($dataAnita as $value) {
             $off++;
 
-            if ($off > 200) {
+            if (! $sinLimite && $off > $limite) {
                 break;
             }
 
-            // if ($value->{$this->keyFieldAnita} == 4453)
             $this->traerRegistroDeAnita($value->{$this->keyFieldAnita});
         }
     }
@@ -603,7 +625,9 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
 
             if (is_array($dataAnita) && count($dataAnita) > 0) {
                 foreach ($dataAnita as $premioAnita) {
-                    $juego_id = 1;
+                    $juego_id = JuegoUifDesdeAnitaResolver::resolveJuegoUifId(
+                        isset($premioAnita->cdescpremio) ? (string) $premioAnita->cdescpremio : null
+                    );
 
                     $fechaEntrega = $this->fechaSqlDesdeAnitaYyyymmdd($premioAnita->ifechaentrega ?? 0);
                     $horaEntrega = $this->horaSqlDesdeAnita(isset($premioAnita->choraentrega) ? (string) $premioAnita->choraentrega : null);
@@ -657,15 +681,19 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
                 $inroclienteid
             );
 
-            // Foto DNI: referenciar archivo ya existente en el montaje (/scan u otros); sin copiar si ya está accesible.
-            if (($cliente_uif->fotodocumento ?? '') === '') {
-                $cid = (int) $cliente_uif->id;
+            // Foto DNI: referenciar archivo en montaje / legacy; reparar basename si en BD no coincide con disco.
+            $cid = (int) $cliente_uif->id;
+            $storedBasename = trim((string) ($cliente_uif->fotodocumento ?? ''));
+            $resolvedPath = $storedBasename !== ''
+                ? ClienteUifFotoDocumento::absolutePathForBasename($storedBasename)
+                : null;
+            if ($resolvedPath === null || ! is_file($resolvedPath)) {
                 $path = ClienteUifFotoDocumento::findFirstMatchingPath($nroDocumento, $inroclienteidParaGuardar);
                 $fotoBasename = ($path !== null && is_file($path)) ? basename($path) : null;
                 if ($fotoBasename === null) {
                     $fotoBasename = ClienteUifFotoDocumento::copyFirstClienteAdjuntoImageToFotodocumento($cid, $nroDocumento);
                 }
-                if ($fotoBasename !== null) {
+                if ($fotoBasename !== null && $fotoBasename !== $storedBasename) {
                     $cliente_uif->update(['fotodocumento' => $fotoBasename]);
                     $cliente_uif = $cliente_uif->fresh();
                 }

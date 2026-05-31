@@ -5,6 +5,8 @@
 
 @section('scripts')
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/ordencompra/filtro.js') }}" type="text/javascript"></script>
 <script>
 $(function () {
     $('.js-oc-index-abrir-estado').on('click', function () {
@@ -27,6 +29,8 @@ $(function () {
 });
 </script>
 @endsection
+
+<?php use App\Support\Compras\OrdencompraListadoFiltros; ?>
 
 @section('contenido')
 <div class="modal fade" id="modalIndexOcCambiarEstado" tabindex="-1" role="dialog" aria-hidden="true">
@@ -106,25 +110,33 @@ $(function () {
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Órdenes de compra</h3>
-                <div class="card-tools">
+                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
                     @include('includes.compras.boton-manual')
-                    @if (can('crear-ordencompra', false))
-                        <a href="{{ route('crear_ordencompra') }}" class="btn btn-outline-secondary btn-sm">
-                            <i class="fa fa-fw fa-plus-circle"></i> Nueva orden
-                        </a>
-                    @endif
-                </div>
-                <div class="d-md-flex justify-content-md-end">
-                    <form action="{{ route('consultar_ordencompra') }}" method="GET" class="d-flex">
-                        <div class="btn-group">
-                            <input type="text" name="busqueda" class="form-control" placeholder="Búsqueda…" value="{{ $busqueda ?? '' }}">
-                            <button type="submit" class="btn btn-default"><span class="fa fa-search"></span></button>
-                        </div>
-                    </form>
+                    @include('includes.listado.filtros_toolbar', [
+                        'formId' => 'form-filtros-ordencompra',
+                        'filtroValor' => $filtros['valor'] ?? '',
+                        'tieneCriterios' => OrdencompraListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
+                        'limpiarUrl' => route('consultar_ordencompra'),
+                        'placeholder' => 'Búsqueda rápida (tolera errores de tipeo)…',
+                        'toggleTarget' => '#panel-filtros-ordencompra',
+                        'toggleId' => 'btn-toggle-filtros-ordencompra',
+                        'inputId' => 'filtro_valor',
+                        'nuevoRegistroUrl' => route('crear_ordencompra'),
+                        'nuevoRegistroCan' => 'crear-ordencompra',
+                        'nuevoRegistroLabel' => 'Nueva orden',
+                    ])
                 </div>
             </div>
+            <form method="get" action="{{ route('consultar_ordencompra') }}" id="form-filtros-ordencompra" class="mb-0">
+                @include('compras.ordencompra.partials.filtros_listado', [
+                    'limpiarUrl' => route('consultar_ordencompra'),
+                ])
+            </form>
             <div class="card-body table-responsive p-0">
-                @include('includes.exportar-tabla', ['ruta' => 'listar_ordencompra', 'busqueda' => $busqueda ?? ''])
+                @include('includes.exportar-tabla-queryparams', [
+                    'ruta' => 'listar_ordencompra',
+                    'queryparams' => $filtrosQuery ?? [],
+                ])
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead>
                         <tr>
@@ -215,7 +227,7 @@ $(function () {
             </div>
             @if (method_exists($ordencompra, 'links'))
             <div class="card-footer">
-                {{ $ordencompra->appends(request()->query())->links() }}
+                {{ $ordencompra->appends($filtrosQuery ?? [])->links() }}
             </div>
             @endif
         </div>

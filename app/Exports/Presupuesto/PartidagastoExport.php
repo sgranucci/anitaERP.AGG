@@ -27,6 +27,7 @@ class PartidagastoExport implements FromView, WithColumnFormatting, WithMapping,
 	private $origen;
 	protected $dates = ['fecha'];
 	private $partidagastoQuery;
+	private $filtros;
 
 	public function __construct(
 								PartidagastoQueryInterface $partidagastoquery,
@@ -37,7 +38,7 @@ class PartidagastoExport implements FromView, WithColumnFormatting, WithMapping,
 
 	public function view(): View
 	{
-		$partidagastos = $this->partidagastoQuery->leePartidagasto($this->busqueda, false);
+		$partidagastos = $this->partidagastoQuery->leePartidagasto($this->filtros, false);
 
 		return view('exports.presupuesto.partidagastoindex', ['partidagasto' => $partidagastos]);
 	}
@@ -99,9 +100,9 @@ class PartidagastoExport implements FromView, WithColumnFormatting, WithMapping,
         return 'Reporte de Ordenes de Venta';
     }
 
-	public function parametros($busqueda)
+	public function parametros($filtros)
 	{
-		$this->busqueda = $busqueda;
+		$this->filtros = $filtros;
 
 		return $this;
 	}

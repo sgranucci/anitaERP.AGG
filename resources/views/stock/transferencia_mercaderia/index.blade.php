@@ -180,7 +180,7 @@
 
                 <div class="tm-filtro" id="tm_panel_filtro" style="display: none;">
                     <input type="search" id="tm_filtro_desc" class="form-control"
-                        placeholder="Buscar por descripción o SKU…" autocomplete="off">
+                        placeholder="SKU o descripción…" autocomplete="off">
                 </div>
 
                 <div id="tm_estado" class="text-muted small mb-2"></div>

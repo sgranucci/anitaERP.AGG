@@ -20,6 +20,7 @@ use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Configuracion\LocalidadRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
+use App\Support\Compras\ProveedorListadoFiltros;
 use App\Traits\AnitaBridgeEscritura;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
@@ -1518,10 +1519,24 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 		}		
 	}
 
-	public function leeProveedor($busqueda, $flPaginando = null)
+	public function leeProveedor($filtros, $flPaginando = null)
     {
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
+
+        if (is_string($filtros)) {
+            $texto = trim($filtros);
+            $filtros = [
+                'modo' => ProveedorListadoFiltros::MODO_TODOS,
+                'campo' => 'nombre',
+                'operador' => 'contiene',
+                'valor' => $texto,
+                'valor_hasta' => '',
+                'busqueda' => $texto,
+            ];
+        } elseif (! is_array($filtros)) {
+            $filtros = ProveedorListadoFiltros::filtrosVacios();
+        }
 
         $proveedor = $this->model->select('proveedor.id as id',
                                         'proveedor.nombre as nombre',
@@ -1534,31 +1549,22 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 										'proveedor.estado as estado')
                                 ->leftjoin('localidad', 'localidad.id', 'proveedor.localidad_id')
 								->leftjoin('provincia', 'provincia.id', 'proveedor.provincia_id');
-		
-		$proveedor = $proveedor->where(function ($query) use ($busqueda) {
-                	$query->orWhere('proveedor.id', $busqueda)
-							->orWhere('proveedor.nombre', 'like', '%'.$busqueda.'%')
-							->orWhere('proveedor.fantasia', 'like', '%'.$busqueda.'%')
-							->orWhere('proveedor.nroinscripcion', 'like', '%'.$busqueda.'%')
-							->orWhere('proveedor.domicilio', 'like', '%'.$busqueda.'%')
-							->orWhere('proveedor.codigo', 'like', '%'.$busqueda.'%')
-							->orWhere('proveedor.estado', 'like', '%'.$busqueda.'%')
-							->orWhere('localidad.nombre', 'like', '%'.$busqueda.'%')
-							->orWhere('provincia.nombre', 'like', '%'.$busqueda.'%');
-					});
+
+        if (ProveedorListadoFiltros::tieneCriteriosAplicados($filtros)) {
+            ProveedorListadoFiltros::aplicar($proveedor, $filtros);
+        }
 
 		$proveedor = $proveedor->orderby('id', 'DESC');
-                                
-		//dd($permisos['permisos']);
-        if (isset($flPaginando))
-        {
-            if ($flPaginando)
+
+        if (isset($flPaginando)) {
+            if ($flPaginando) {
                 $proveedor = $proveedor->paginate(10);
-            else
+            } else {
                 $proveedor = $proveedor->get();
-        }
-        else
+            }
+        } else {
             $proveedor = $proveedor->get();
+        }
 
         return $proveedor;
     }

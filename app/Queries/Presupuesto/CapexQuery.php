@@ -2,6 +2,7 @@
 
 namespace App\Queries\Presupuesto;
 
+use App\Support\Presupuesto\CapexListadoFiltros;
 use App\Models\Presupuesto\Capex;
 use App\Models\Presupuesto\Capex_Estado;
 use App\Models\Presupuesto\Capex_Partida;
@@ -42,13 +43,25 @@ class CapexQuery implements CapexQueryInterface
         return $this->capexModel->select($campos)->get();
     }
 
-    public function leeCapex($busqueda, $flPaginando = null)
+    public function leeCapex($filtros, $flPaginando = null)
     {
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        // lee usuario para setear filtros
-        $usuario_id = Auth::user()->id;
+        if (is_string($filtros)) {
+            $texto = trim($filtros);
+            $filtros = [
+                'modo' => CapexListadoFiltros::MODO_TODOS,
+                'campo' => 'nombre',
+                'operador' => 'contiene',
+                'valor' => $texto,
+                'valor_hasta' => '',
+                'busqueda' => $texto,
+            ];
+        } elseif (! is_array($filtros)) {
+            $filtros = CapexListadoFiltros::filtrosVacios();
+        }
+
         $empresas = $this->empresaRepository->traeEmpresasAsignadas();
 
         $select = [ 'capex.id as id',
@@ -68,56 +81,26 @@ class CapexQuery implements CapexQueryInterface
                                 ->join('empresa', 'empresa.id', '=', 'capex.empresa_id')
                                 ->join('centrocosto', 'centrocosto.id', '=', 'capex.centrocosto_id')
                                 ->join('presupuesto', 'presupuesto.id', '=', 'capex.presupuesto_id')
-                                ->join('usuario', 'usuario.id', '=', 'capex.creousuario_id')->with('capex_partidas');
-
-        $columns[] = ['columna' => 'capex.id', 
-                    'clausula' => 'LIKE'];                                
-        $columns[] = ['columna' => 'empresa.nombre', 
-                    'clausula' => 'LIKE'];
-        $columns[] = ['columna' => 'capex.codigoproyecto',
-                    'clausula' => 'LIKE'];
-        $columns[] = ['columna' => 'centrocosto.nombre',
-                    'clausula' => 'LIKE']; 
-        $columns[] = ['columna' => 'capex.nombre',
-                    'clausula' => 'LIKE']; 
-        $columns[] = ['columna' => 'capex.detalle',
-                    'clausula' => 'LIKE'];                     
-        $columns[] = ['columna' => 'usuario.nombre',
-                    'clausula' => 'LIKE'];            
-        $columns[] = ['columna' => 'capex.estado',
-                    'clausula' => 'LIKE'];                                                            
-        $columns[] = ['columna' => 'presupuesto.nombre',
-                    'clausula' => 'LIKE'];
-        $columns[] = ['columna' => 'capex.codigo',
-                    'clausula' => 'LIKE'];                    
-
-        $count = count($columns);
+                                ->join('usuario', 'usuario.id', '=', 'capex.creousuario_id')
+                                ->with('capex_partidas');
 
         $capexs->whereIn('empresa_id', $empresas);
 
-        $capexs->where(function ($query) use ($count, $busqueda, $columns, $usuario_id) {
+        if (CapexListadoFiltros::tieneCriteriosAplicados($filtros)) {
+            CapexListadoFiltros::aplicar($capexs, $filtros);
+        }
 
-                        			for ($i = 0; $i < $count; $i++)
-                                    {
-                                        if ($columns[$i]['clausula'] == 'LIKE')
-                            			    $query->orWhere($columns[$i]['columna'], "LIKE", '%'. $busqueda . '%');
-                                        else
-                                            $query->orWhere($columns[$i]['columna'], $columns[$i]['clausula'], $busqueda);
-                                    }
-                            });
-
-        // Ordena desc. por ID
         $capexs->orderBy('id', 'desc');
 
-        if (isset($flPaginando))
-        {
-            if ($flPaginando)
+        if (isset($flPaginando)) {
+            if ($flPaginando) {
                 $capexs = $capexs->paginate(10);
-            else
+            } else {
                 $capexs = $capexs->get();
-        }
-        else
+            }
+        } else {
             $capexs = $capexs->get();
+        }
 
         return $capexs;
     }

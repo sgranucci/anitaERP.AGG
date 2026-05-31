@@ -4,6 +4,7 @@ namespace App\Repositories\Stock;
 
 use App\Models\Stock\Articulo_Caja;
 use App\Models\Stock\Articulo;
+use App\Support\Stock\ArticuloListadoFiltros;
 use App\Models\Stock\Color;
 use App\Models\Stock\Tipoliquido;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -75,53 +76,60 @@ class ArticuloRepository implements ArticuloRepositoryInterface
         return $query->first();
     }
 
-	public function leeArticulo($busqueda, $flPaginando = null)
+	public function leeArticulo($filtros, $flPaginando = null)
     {
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
-        
+
+        if (is_string($filtros)) {
+            $texto = trim($filtros);
+            $filtros = [
+                'modo' => ArticuloListadoFiltros::MODO_TODOS,
+                'campo' => 'descripcion',
+                'operador' => 'contiene',
+                'valor' => $texto,
+                'valor_hasta' => '',
+                'busqueda' => $texto,
+            ];
+        } elseif (! is_array($filtros)) {
+            $filtros = ArticuloListadoFiltros::filtrosVacios();
+        }
+
         $articulo = $this->model->select(
-                                'articulo.id as id', 
+                                'articulo.id as id',
                                 'articulo.sku as codigoarticulo',
                                 'articulo.codigobarra as codigobarra',
-                                'articulo.descripcion as descripcion', 
-                                'unidadmedida.nombre as nombreunidadmedida', 
-                                'categoria.nombre as nombrecategoria', 
-                                'tipoarticulo.nombre as nombretipoarticulo', 
+                                'articulo.descripcion as descripcion',
+                                'unidadmedida.nombre as nombreunidadmedida',
+                                'categoria.nombre as nombrecategoria',
+                                'tipoarticulo.nombre as nombretipoarticulo',
                                 'usoarticulo.nombre as nombreusoarticulo',
                                 'articulo.numeroparte as numeroparte',
                                 'articulo.ubicacionparte as ubicacionparte',
                                 'articulo.depositoentrega_id as depositoentrega_id',
                                 'articulo.nofactura',
                                 'articulo.estado as estado')
-                                ->leftJoin('categoria','articulo.categoria_id','=','categoria.id')
-                                ->leftJoin('unidadmedida','articulo.unidadmedida_id','=','unidadmedida.id')
-                                ->leftJoin('tipoarticulo','articulo.tipoarticulo_id','=','tipoarticulo.id')
-                                ->leftJoin('usoarticulo','articulo.usoarticulo_id','=','usoarticulo.id')
-                                ->where('articulo.id', $busqueda)
-                                ->orWhere('articulo.sku', 'like', '%'.$busqueda.'%')
-                                ->orWhere('articulo.codigobarra', 'like', '%'.$busqueda.'%')
-                                ->orWhere('articulo.descripcion', 'like', '%'.$busqueda.'%')
-								->orWhere('unidadmedida.nombre', 'like', '%'.$busqueda.'%')
-                                ->orWhere('articulo.ubicacionparte', 'like', '%'.$busqueda.'%')
-                                ->orWhere('articulo.numeroparte', 'like', '%'.$busqueda.'%')
-								->orWhere('categoria.nombre', 'like', '%'.$busqueda.'%')
-								->orWhere('tipoarticulo.nombre', 'like', '%'.$busqueda.'%')
-                                ->orWhere('usoarticulo.nombre', 'like', '%'.$busqueda.'%')
-								->orWhere('articulo.nofactura', 'like', '%'.$busqueda.'%')
+                                ->leftJoin('categoria', 'articulo.categoria_id', '=', 'categoria.id')
+                                ->leftJoin('unidadmedida', 'articulo.unidadmedida_id', '=', 'unidadmedida.id')
+                                ->leftJoin('tipoarticulo', 'articulo.tipoarticulo_id', '=', 'tipoarticulo.id')
+                                ->leftJoin('usoarticulo', 'articulo.usoarticulo_id', '=', 'usoarticulo.id')
                                 ->orderby('articulo.sku', 'asc');
-                                
-        if (isset($flPaginando))
-        {
-            if ($flPaginando)
-                $articulo = $articulo->paginate(10);
-            else
-                $articulo = $articulo->get();
-        }
-        else
-            $articulo = $articulo->get();
 
-        return $articulo;       
+        if (ArticuloListadoFiltros::tieneCriteriosAplicados($filtros)) {
+            ArticuloListadoFiltros::aplicar($articulo, $filtros);
+        }
+
+        if (isset($flPaginando)) {
+            if ($flPaginando) {
+                $articulo = $articulo->paginate(10);
+            } else {
+                $articulo = $articulo->get();
+            }
+        } else {
+            $articulo = $articulo->get();
+        }
+
+        return $articulo;
     }
 
     public function leeColores()

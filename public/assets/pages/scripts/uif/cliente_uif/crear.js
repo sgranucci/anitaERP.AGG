@@ -159,6 +159,9 @@
 			$("#titulo").html("");
 			$("#titulo").html("<span class='fa fa-cash-register'></span> Datos facturac&oacute;n");
             sincronizarBarraAltaPremioUifCliente();
+            if (esEdicionClienteUif()) {
+                verificaAlertaUif();
+            }
         });
 
         $("#botonform3").click(function(){
@@ -247,7 +250,16 @@
         } else if (tabParam === '2') {
             $('#botonform2').trigger('click');
         } else if (tabParam === '3') {
-            $('#botonform3').trigger('click');
+            if ($('#botonform3').length) {
+                $('#botonform3').trigger('click');
+            } else {
+                $('.form1').hide();
+                $('.form2').hide();
+                $('.form3').show();
+                $('.form4').hide();
+                $('.form5').hide();
+                sincronizarBarraAltaPremioUifCliente();
+            }
         } else if (tabParam === '4') {
             $('#botonform4').trigger('click');
         } else if (tabParam === '5') {
@@ -284,11 +296,17 @@
 
         activa_eventos_consultaactividad_uif();
         chequeaSujetoObligado();
+        $(document).on('change', '#actividad_uif_id, #nombreactividad_uif', function () {
+            marcarCampoObligatorioSiExiste(document.getElementById('actividad_uif_id'), !$('#actividad_uif_id').val().trim());
+        });
 
-        // Pone en timeout para darle tiempo a refrescar las localidades
-        setTimeout(() => {
-            verificaAlertaUif();
-        }, 3000);
+        inicializarDocumentoYCuitUif();
+
+        if (esEdicionClienteUif()) {
+            setTimeout(function () {
+                verificaAlertaUif();
+            }, 1500);
+        }
 
         var inputArchivo = document.getElementById('fotodocumento');
         if (inputArchivo) {
@@ -331,6 +349,32 @@
      *        Solapas 1, 3 y 5 sin restricción en esta función.
      * Operador (solo visualización en edición): todo bloqueado salvo botones de solapa.
      */
+    /**
+     * Campos de form2 deshabilitados no se envían en el POST; el servidor completa con defectos.
+     * Estos hidden evitan validación HTML5 en selects required ocultos al enviar como cajero.
+     */
+    function asegurarHiddenCamposUifCajero() {
+        var defaults = {
+            nivelsocioeconomico_uif_id: '8',
+            riesgopep: 'BAJO',
+            firmodeclaracionjurada: 'N',
+            resideparaisofiscal: 'N',
+            resideexterior: 'N',
+            cumplenormativaso: 'N'
+        };
+        Object.keys(defaults).forEach(function (name) {
+            var $field = $('[name="' + name + '"]');
+            if (!$field.length) {
+                return;
+            }
+            var id = 'uif-cajero-hidden-' + name;
+            $('#' + id).remove();
+            if ($field.is(':disabled')) {
+                $('<input>', { type: 'hidden', id: id, name: name, value: defaults[name] }).appendTo('#form-general');
+            }
+        });
+    }
+
     function aplicarRestriccionPerfilClienteUif() {
         var perfil = $('#uif_perfil_cliente').val();
         var cid = ($('#cliente_uif_id').val() || '').trim();
@@ -349,6 +393,8 @@
             $('.form4').find('input:not([type=hidden]), select, textarea, button')
                 .prop('disabled', true)
                 .addClass('bg-light');
+
+            asegurarHiddenCamposUifCajero();
         }
 
         if (!esEdicion) {
@@ -538,6 +584,26 @@
         return { ts: ts, isoYmd: iso };
     }
 
+    function actualizaRequeridosSujetoObligado() {
+        var esSo = String($('#so_uif_id').val()) === '2';
+        $('#actividadso, #cumplenormativaso').prop('required', esSo);
+        if (!esSo) {
+            marcarCampoObligatorioSiExiste(document.getElementById('actividadso'), false);
+            marcarCampoObligatorioSiExiste(document.getElementById('cumplenormativaso'), false);
+        }
+    }
+
+    function marcarCampoObligatorioSiExiste(campo, invalido) {
+        if (!campo) {
+            return;
+        }
+        if (typeof marcarCampoObligatorio === 'function') {
+            marcarCampoObligatorio(campo, invalido);
+        } else {
+            campo.style.borderColor = invalido ? '#dc3545' : '';
+        }
+    }
+
     function chequeaSujetoObligado()
     {
         let so_uif_id = $("#so_uif_id").val();
@@ -552,93 +618,241 @@
             $("#div-actividadso").show();
             $("#div-cumplenormativaso").show();      
         }
+        actualizaRequeridosSujetoObligado();
     }
 
-    function verificaAlertaUif()
-    {
-        let fechaActual = new Date();
-        let fecha6Meses = new Date(fechaActual.setMonth(fechaActual.getMonth() - 6));
-        let umbral6MesesMs = fecha6Meses.getTime();
-        let firmodeclaracionjurada = $('#firmodeclaracionjurada').val();
-        let fechaConfirmaPep = $('#fechaconfirmapep').val();
-        let fechaVencimientoDni = $('#fechavencimientodni').val();
-        let fechaVencimientoActividad = $('#fechavencimientoactividad').val();
-        let fechaInformeNosis = $('#fechainformenosis').val();
-        let fechaInformePep = $('#fechainformepep').val();
-        let riesgoPep = $('#riesgopep').val();
-        let esSupervisor = $('#essupervisor').val();
+    function esEdicionClienteUif() {
+        var cid = parseInt(($('#cliente_uif_id').val() || '').trim(), 10);
+        return !isNaN(cid) && cid > 0;
+    }
 
-        var fechaConfTrim = String(fechaConfirmaPep || '').trim();
+    function digitoVerificadorCuitUif(base10) {
+        var mult = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
+        var s = String(base10).replace(/\D/g, '').padStart(10, '0').slice(-10);
+        var sum = 0;
+        for (var i = 0; i < 10; i++) {
+            sum += parseInt(s.charAt(i), 10) * mult[i];
+        }
+        var resto = 11 - (sum % 11);
+        if (resto === 11) return 0;
+        if (resto === 10) return 9;
+        return resto;
+    }
+
+    function precargarCuitDesdeDniYSexo() {
+        if ($('#cuit').val().trim()) {
+            return;
+        }
+        var dni = $('#numerodocumento').val().replace(/\D/g, '');
+        if (dni.length === 11) {
+            dni = dni.substring(2, 10);
+        }
+        if (dni.length < 7 || dni.length > 8) {
+            return;
+        }
+        dni = dni.padStart(8, '0');
+        var sexo = $('#sexo').val();
+        if (!sexo) {
+            return;
+        }
+        var tipo = (sexo === 'FEMENINO') ? '27' : '20';
+        var dv = digitoVerificadorCuitUif(tipo + dni);
+        var cuit11 = tipo + dni + String(dv);
+        $('#cuit').val(cuit11.substring(0, 2) + '-' + cuit11.substring(2, 10) + '-' + cuit11.substring(10));
+    }
+
+    function esTipoDocumentoCuitUif() {
+        var texto = ($('#tipodocumento_id option:selected').text() || '').replace(/\./g, '').trim().toUpperCase();
+        return texto === 'CUIT' || texto.indexOf('CUIT') !== -1;
+    }
+
+    function cuitCuilParaInferirSexoUif() {
+        var cuit = ($('#cuit').val() || '').replace(/\D/g, '');
+        if (cuit.length === 11) {
+            return $('#cuit').val();
+        }
+        if (esTipoDocumentoCuitUif()) {
+            var nro = ($('#numerodocumento').val() || '').replace(/\D/g, '');
+            if (nro.length === 11) {
+                return $('#numerodocumento').val();
+            }
+        }
+        return '';
+    }
+
+    function predefinirSexoDesdeNombreUif() {
+        if ($('#sexo').val()) {
+            return;
+        }
+        if (typeof window.inferirSexoUifDesdeNombre !== 'function') {
+            return;
+        }
+        var sexo = window.inferirSexoUifDesdeNombre($('#nombre').val(), {
+            cuit: cuitCuilParaInferirSexoUif(),
+        });
+        if (sexo) {
+            $('#sexo').val(sexo).trigger('change');
+        }
+    }
+
+    function inicializarDocumentoYCuitUif() {
+        $('#tipodocumento_id').on('change', function () {
+            var $nro = $('#numerodocumento');
+            if (esTipoDocumentoCuitUif()) {
+                $nro.attr('placeholder', 'XX-XXXXXXXX-X');
+                if ($nro.val() && typeof formatarCUIT === 'function') {
+                    formatarCUIT($nro[0]);
+                }
+                $nro.off('input.cuitFormat').on('input.cuitFormat', function () {
+                    formatarCUIT(this);
+                });
+            } else {
+                $nro.removeAttr('placeholder');
+                $nro.off('input.cuitFormat');
+            }
+        });
+
+        $('#numerodocumento').on('blur change', function () {
+            if (esTipoDocumentoCuitUif()) {
+                if (typeof formatarCUIT === 'function') {
+                    formatarCUIT(this);
+                }
+                var dig = $(this).val().replace(/\D/g, '');
+                if (dig.length === 11) {
+                    $('#cuit').val(
+                        dig.substring(0, 2) + '-' + dig.substring(2, 10) + '-' + dig.substring(10)
+                    );
+                }
+            } else {
+                precargarCuitDesdeDniYSexo();
+            }
+        });
+
+        $('#sexo').on('change', precargarCuitDesdeDniYSexo);
+
+        $('#cuit').on('blur', function () {
+            if (typeof formatarCUIT === 'function') {
+                formatarCUIT(this);
+            }
+            var dig = $(this).val().replace(/\D/g, '');
+            if (dig.length === 11 && !esTipoDocumentoCuitUif()) {
+                $('#numerodocumento').val(dig.substring(2, 10));
+            }
+            predefinirSexoDesdeNombreUif();
+        });
+
+        $('#nombre').on('blur', predefinirSexoDesdeNombreUif);
+
+        $('#tipodocumento_id').trigger('change');
+        if ($('#cuit').val()) {
+            var cEl = document.getElementById('cuit');
+            if (cEl && typeof formatarCUIT === 'function') {
+                formatarCUIT(cEl);
+            }
+        }
+    }
+
+    function marcarDivAlertaUif(selector, activo) {
+        $(selector).css('color', activo ? '#dc3545' : '');
+    }
+
+    function renderAlertasCumplimientoUif(items) {
+        var $box = $('#uif-alertas-cumplimiento');
+        var $lista = $('#uif-alertas-cumplimiento-lista');
+        if (!$box.length || !$lista.length) {
+            return;
+        }
+        $lista.empty();
+        if (!items.length) {
+            $box.addClass('d-none');
+            return;
+        }
+        items.forEach(function (txt) {
+            $lista.append($('<li/>').text(txt));
+        });
+        $box.removeClass('d-none');
+    }
+
+    function verificaAlertaUif() {
+        if (!esEdicionClienteUif()) {
+            renderAlertasCumplimientoUif([]);
+            return;
+        }
+
+        var avisos = [];
+        var fechaBase = new Date();
+        var fecha6Meses = new Date(fechaBase.getTime());
+        fecha6Meses.setMonth(fecha6Meses.getMonth() - 6);
+        var umbral6MesesMs = fecha6Meses.getTime();
+
+        var idsResaltar = [
+            '#div-fechafirmapep', '#div-fechaconfirmapep', '#div-fechavencimientodni',
+            '#div-fechavencimientoactividad', '#div-firmodeclaracionjurada', '#div-riesgopep',
+            '#div-fechainformenosis', '#div-fechainformepep'
+        ];
+        idsResaltar.forEach(function (sel) { marcarDivAlertaUif(sel, false); });
+
+        var fechaConfirmaPep = $('#fechaconfirmapep').val();
         var parsedConfPep = parseFechaCampoUif(fechaConfirmaPep);
         if (!parsedConfPep) {
-            alert('DEBE FIRMAR PEP\n' + (fechaConfTrim ? 'FECHA NO VÁLIDA.' : 'NO REGISTRA FECHA DE VALIDACIÓN DE ÚLTIMA FIRMA PEP.'));
-            $('#div-fechafirmapep').css("color", "red");
-            $('#div-fechaconfirmapep').css("color", "red");
+            avisos.push('PEP: falta fecha de validación de última firma' + (String(fechaConfirmaPep || '').trim() ? ' (fecha no válida).' : '.'));
+            marcarDivAlertaUif('#div-fechafirmapep', true);
+            marcarDivAlertaUif('#div-fechaconfirmapep', true);
         } else if (parsedConfPep.ts < umbral6MesesMs) {
-            alert('DEBE FIRMAR PEP\nULTIMA VALIDACION: '+ formateaFecha(parsedConfPep.isoYmd));
-            $('#div-fechafirmapep').css("color", "red");
-            $('#div-fechaconfirmapep').css("color", "red");
+            avisos.push('PEP: debe renovar firma (última validación: ' + formateaFecha(parsedConfPep.isoYmd) + ').');
+            marcarDivAlertaUif('#div-fechafirmapep', true);
+            marcarDivAlertaUif('#div-fechaconfirmapep', true);
         }
 
-        var fechaDniTrim = String(fechaVencimientoDni || '').trim();
-        var parsedDni = parseFechaCampoUif(fechaVencimientoDni);
+        var parsedDni = parseFechaCampoUif($('#fechavencimientodni').val());
         if (!parsedDni) {
-            alert('DEBE RENOVAR DNI\n' + (fechaDniTrim ? 'FECHA NO VÁLIDA.' : 'NO REGISTRA FECHA DE VENCIMIENTO DEL DNI.'));
-            $('#div-fechavencimientodni').css("color", "red");
+            avisos.push('DNI: falta o es inválida la fecha de vencimiento.');
+            marcarDivAlertaUif('#div-fechavencimientodni', true);
         } else if (parsedDni.ts < Date.now()) {
-            alert('DEBE RENOVAR DNI\nVENCIMIENTO: '+ formateaFecha(parsedDni.isoYmd));
-            $('#div-fechavencimientodni').css("color", "red");
+            avisos.push('DNI: vencido el ' + formateaFecha(parsedDni.isoYmd) + '.');
+            marcarDivAlertaUif('#div-fechavencimientodni', true);
         }
 
-        var fechaVtoActTrim = String(fechaVencimientoActividad || '').trim();
-        var parsedVtoActividad = parseFechaCampoUif(fechaVencimientoActividad);
-        if (!parsedVtoActividad) {
-            alert('DEBE RENOVAR ACTIVIDAD\n' + (fechaVtoActTrim ? 'FECHA NO VÁLIDA.' : 'NO REGISTRA FECHA DE VENCIMIENTO DE ACTIVIDAD ECONÓMICA.'));
-            $('#div-fechavencimientoactividad').css('color', 'red');
-        } else if (parsedVtoActividad.ts < umbral6MesesMs) {
-            alert('DEBE RENOVAR ACTIVIDAD\nVENCIMIENTO: ' + formateaFecha(parsedVtoActividad.isoYmd));
-            $('#div-fechavencimientoactividad').css('color', 'red');
+        var parsedVtoAct = parseFechaCampoUif($('#fechavencimientoactividad').val());
+        if (!parsedVtoAct) {
+            avisos.push('Actividad económica: falta o es inválida la fecha de vencimiento.');
+            marcarDivAlertaUif('#div-fechavencimientoactividad', true);
+        } else if (parsedVtoAct.ts < umbral6MesesMs) {
+            avisos.push('Actividad económica: vencimiento próximo o vencido (' + formateaFecha(parsedVtoAct.isoYmd) + ').');
+            marcarDivAlertaUif('#div-fechavencimientoactividad', true);
         }
 
-        if (firmodeclaracionjurada != 'S')
-        {
-            alert('DEBE FIRMAR DECLARACION JURADA DE ORIGEN DE INGRESOS Y/O FONDOS');
-
-            // Cambia estilo
-            $('#div-firmodeclaracionjurada').css("color", "red");
+        if ($('#firmodeclaracionjurada').val() !== 'S') {
+            avisos.push('Falta declaración jurada de origen de ingresos y/o fondos.');
+            marcarDivAlertaUif('#div-firmodeclaracionjurada', true);
         }
 
-        if (riesgoPep == 'ALTO')
-        {
-            alert('NIVEL DE RIESGO ALTO');
-
-            // Cambia estilo
-            $('#div-riesgopep').css("color", "red");            
+        if ($('#riesgopep').val() === 'ALTO') {
+            avisos.push('Nivel de riesgo PEP: ALTO.');
+            marcarDivAlertaUif('#div-riesgopep', true);
         }
 
-        // Alertas solo para supervisores
-        if (esSupervisor == 'S')
-        {
-            var fechaNosisTrim = String(fechaInformeNosis || '').trim();
-            var parsedNosis = parseFechaCampoUif(fechaInformeNosis);
+        if ($('#essupervisor').val() === 'S') {
+            var parsedNosis = parseFechaCampoUif($('#fechainformenosis').val());
             if (!parsedNosis) {
-                alert('DEBE FIRMAR INFORME NOSIS\n' + (fechaNosisTrim ? 'FECHA NO VÁLIDA.' : 'NO REGISTRA FECHA DEL INFORME NOSIS.'));
-                $('#div-fechainformenosis').css("color", "red");
+                avisos.push('Informe NOSIS: sin fecha o fecha inválida.');
+                marcarDivAlertaUif('#div-fechainformenosis', true);
             } else if (parsedNosis.ts < umbral6MesesMs) {
-                alert('DEBE FIRMAR INFORME NOSIS\nVENCIMIENTO: '+ formateaFecha(parsedNosis.isoYmd));
-                $('#div-fechainformenosis').css("color", "red");
+                avisos.push('Informe NOSIS: debe renovar (último: ' + formateaFecha(parsedNosis.isoYmd) + ').');
+                marcarDivAlertaUif('#div-fechainformenosis', true);
             }
 
-            var fechaInfPepTrim = String(fechaInformePep || '').trim();
-            var parsedInfPep = parseFechaCampoUif(fechaInformePep);
+            var parsedInfPep = parseFechaCampoUif($('#fechainformepep').val());
             if (!parsedInfPep) {
-                alert('DEBE FIRMAR INFORME PEP\n' + (fechaInfPepTrim ? 'FECHA NO VÁLIDA.' : 'NO REGISTRA FECHA DEL INFORME PEP.'));
-                $('#div-fechainformepep').css("color", "red");
+                avisos.push('Informe PEP: sin fecha o fecha inválida.');
+                marcarDivAlertaUif('#div-fechainformepep', true);
             } else if (parsedInfPep.ts < umbral6MesesMs) {
-                alert('DEBE FIRMAR INFORME PEP\nVENCIMIENTO: '+ formateaFecha(parsedInfPep.isoYmd));
-                $('#div-fechainformepep').css("color", "red");
+                avisos.push('Informe PEP: debe renovar (último: ' + formateaFecha(parsedInfPep.isoYmd) + ').');
+                marcarDivAlertaUif('#div-fechainformepep', true);
             }
         }
+
+        renderAlertasCumplimientoUif(avisos);
     }
 
     /**

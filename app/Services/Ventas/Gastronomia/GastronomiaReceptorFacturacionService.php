@@ -11,8 +11,11 @@ use InvalidArgumentException;
 /**
  * Resuelve receptor de factura gastronomía según tope RG4444 (manual ARCA WSFE).
  *
- * Bajo tope: DocTipo 99, DocNro 0, nombre CONSUMIDOR FINAL (sin maestro 000000).
- * Sobre tope: cliente del maestro (cliente_id) o datos manuales nombre + documento (+ domicilio opcional).
+ * Cliente de facturación: {@see CuentaGastronomia::$cliente_id} (panel «Cliente para facturar»).
+ * Cliente interno del descuento / canje: {@see CuentaGastronomia::$cliente_interno_descuento_id} — no se envía a ARCA.
+ *
+ * Sin cliente de facturación asignado: DocTipo 99, DocNro 0, nombre CONSUMIDOR FINAL; ERP usa cliente contable interno (p. ej. id 1).
+ * Sobre tope: cliente de facturación del maestro o datos manuales en la cuenta.
  */
 final class GastronomiaReceptorFacturacionService
 {
@@ -21,6 +24,9 @@ final class GastronomiaReceptorFacturacionService
     public const MODO_MAESTRO = 'maestro';
 
     public const MODO_MANUAL = 'manual';
+
+    /** @var list<int>|null */
+    private static ?array $idsClientesCanjeConfigCache = null;
 
     public function estimarSubtotalFactura(CuentaGastronomia $cuenta): float
     {
@@ -61,37 +67,58 @@ final class GastronomiaReceptorFacturacionService
     }
 
     /**
-     * @return array{
-     *   cliente_id:int,
-     *   modo:string,
-     *   arca_receptor?:array{tipodoc:int|string,numerodocumento:string,nombre:string,domicilio?:string},
-     *   venta_receptor?:array{nombre:string,numerodocumento:string,domicilio?:string}
-     * }
+     * Id del cliente elegido explícitamente para facturar (panel factura), o null si CF / sin asignar.
      */
-    /**
-     * Cliente del maestro elegido para facturar (no el de descuento interno ni el cliente contable CF).
-     */
-    public function clienteIdMaestroExplicito(CuentaGastronomia $cuenta): ?int
+    public function clienteIdFacturacionExplicito(CuentaGastronomia $cuenta): ?int
     {
         $id = (int) ($cuenta->cliente_id ?? 0);
         if ($id <= 0) {
             return null;
         }
 
-        try {
-            if ($id === $this->resolverClienteContableInternoId()) {
-                return null;
-            }
-        } catch (InvalidArgumentException) {
-            return $id;
-        }
+        $normalizado = $this->normalizarClienteIdFacturacion(
+            $id,
+            (int) ($cuenta->cliente_interno_descuento_id ?? 0),
+        );
 
-        return $id;
+        return $normalizado;
+    }
+
+    /**
+     * @deprecated Use {@see clienteIdFacturacionExplicito}
+     */
+    public function clienteIdMaestroExplicito(CuentaGastronomia $cuenta): ?int
+    {
+        return $this->clienteIdFacturacionExplicito($cuenta);
     }
 
     public function facturaComoConsumidorFinal(CuentaGastronomia $cuenta): bool
     {
-        return $this->clienteIdMaestroExplicito($cuenta) === null;
+        return $this->clienteIdFacturacionExplicito($cuenta) === null;
+    }
+
+    /**
+     * Limpia ids que no son cliente de facturación (contable CF, canje, interno descuento).
+     */
+    public function normalizarClienteIdFacturacion(int $clienteId, int $clienteInternoDescuentoId = 0): ?int
+    {
+        if ($clienteId <= 0) {
+            return null;
+        }
+
+        if ($this->esIdClienteSoloContableInterno($clienteId)) {
+            return null;
+        }
+
+        if ($clienteInternoDescuentoId > 0 && $clienteId === $clienteInternoDescuentoId) {
+            return null;
+        }
+
+        if ($this->esIdClienteConfiguradoCanje($clienteId)) {
+            return null;
+        }
+
+        return $clienteId;
     }
 
     public function nombreConsumidorFinalFactura(): string
@@ -151,9 +178,13 @@ final class GastronomiaReceptorFacturacionService
         $total = $subtotal ?? $this->estimarSubtotalFactura($cuenta);
         $tope = (float) config('arca_wsfe.receptor.consumidor_final_umbral_monto', 0);
 
-        $clienteMaestroId = $this->clienteIdMaestroExplicito($cuenta);
-        if ($clienteMaestroId) {
-            return $this->resolverModoMaestro($cuenta, $clienteMaestroId, $total, $tope);
+        if ($this->debeUsarReceptorConsumidorFinal($cuenta)) {
+            return $this->resolverModoConsumidorFinal($total, $tope);
+        }
+
+        $clienteFacturacionId = $this->clienteIdFacturacionExplicito($cuenta);
+        if ($clienteFacturacionId) {
+            return $this->resolverModoMaestro($cuenta, $clienteFacturacionId, $total, $tope);
         }
 
         if ($tope > 0 && $total >= $tope) {
@@ -164,7 +195,19 @@ final class GastronomiaReceptorFacturacionService
     }
 
     /**
-     * @return array{cliente_id:int,modo:string,arca_receptor:array,venta_receptor:array}
+     * ARCA receptor CF: sin cliente de facturación, canje pendiente o solo cliente interno/canje en cuenta.
+     */
+    public function debeUsarReceptorConsumidorFinal(CuentaGastronomia $cuenta): bool
+    {
+        if ($cuenta->tieneCanjePendienteRequiereFacturacionConDescuento()) {
+            return true;
+        }
+
+        return $this->clienteIdFacturacionExplicito($cuenta) === null;
+    }
+
+    /**
+     * @return array{cliente_id:int,modo:string,arca_receptor:array,venta_receptor:array,subtotal_estimado:float,tope_consumidor_final:float}
      */
     private function resolverModoConsumidorFinal(float $total, float $tope): array
     {
@@ -312,5 +355,46 @@ final class GastronomiaReceptorFacturacionService
         }
 
         return (int) $cliente->id;
+    }
+
+    private function esIdClienteSoloContableInterno(int $clienteId): bool
+    {
+        try {
+            return $clienteId === $this->resolverClienteContableInternoId();
+        } catch (InvalidArgumentException) {
+            return false;
+        }
+    }
+
+    private function esIdClienteConfiguradoCanje(int $clienteId): bool
+    {
+        return in_array($clienteId, $this->idsClientesConfiguradosCanje(), true);
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function idsClientesConfiguradosCanje(): array
+    {
+        if (self::$idsClientesCanjeConfigCache !== null) {
+            return self::$idsClientesCanjeConfigCache;
+        }
+
+        $codigos = array_unique(array_filter([
+            trim((string) config('gastronomia.canje_premio_cliente_codigo', '')),
+            trim((string) config('gastronomia.canje_fidelidad_cliente_codigo', '')),
+        ]));
+
+        $ids = [];
+        foreach ($codigos as $codigo) {
+            $id = (int) (Cliente::query()->where('codigo', $codigo)->value('id') ?? 0);
+            if ($id > 0) {
+                $ids[] = $id;
+            }
+        }
+
+        self::$idsClientesCanjeConfigCache = array_values(array_unique($ids));
+
+        return self::$idsClientesCanjeConfigCache;
     }
 }

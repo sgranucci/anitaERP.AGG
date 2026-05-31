@@ -41,6 +41,7 @@ use App\Repositories\Ventas\DescuentoventaRepositoryInterface;
 use App\Services\Stock\ArticuloAnitaSyncService;
 use App\Services\Stock\PrecioService;
 use App\Services\Stock\StkdepSaldoAnitaService;
+use App\Support\Stock\ArticuloListadoFiltros;
 use App\Support\Stock\ArticuloUltimoCreatePrefill;
 use Auth;
 use Carbon\Carbon;
@@ -162,18 +163,17 @@ class ArticuloController extends Controller
 
     public function index(Request $request)
     {
-
         can('listar-articulos');
 
-        $busqueda = $request->busqueda;
+        $filtros = ArticuloListadoFiltros::resolverDesdeRequest($request);
 
-        $articulos = $this->articuloRepository->leeArticulo($busqueda, true);
+        $articulos = $this->articuloRepository->leeArticulo($filtros, true);
 
         if ($articulos->isEmpty() && config('app.anita_sync_articulo_index')) {
             $Articulo = new Articulo;
             $Articulo->sincronizarConAnita();
 
-            $articulos = $this->articuloRepository->leeArticulo($busqueda, true);
+            $articulos = $this->articuloRepository->leeArticulo($filtros, true);
         }
 
         $saldosStkdep = [];
@@ -183,13 +183,14 @@ class ArticuloController extends Controller
             Log::warning('Articulo index: no se pudo consultar saldo stkdep', ['exception' => $e->getMessage()]);
         }
 
-        $datas = [
+        return view('stock.articulo.index', [
             'articulos' => $articulos,
-            'busqueda' => $busqueda,
+            'busqueda' => $filtros['busqueda'],
+            'filtros' => $filtros,
+            'filtrosQuery' => ArticuloListadoFiltros::paraQueryString($filtros),
+            'camposFiltro' => ArticuloListadoFiltros::CAMPOS,
             'saldosStkdep' => $saldosStkdep,
-        ];
-
-        return view('stock.articulo.index', $datas);
+        ]);
     }
 
     public function listar(Request $request, $formato = null, $busqueda = null)
@@ -199,9 +200,11 @@ class ArticuloController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
+        $filtros = ArticuloListadoFiltros::resolverDesdeRequest($request, $busqueda);
+
         switch ($formato) {
             case 'PDF':
-                $articulos = $this->articuloRepository->leeArticulo($busqueda, false);
+                $articulos = $this->articuloRepository->leeArticulo($filtros, false);
 
                 $view = \View::make('stock.articulo.listado', compact('articulos'))
                     ->render();
@@ -217,20 +220,18 @@ class ArticuloController extends Controller
 
             case 'EXCEL':
                 return (new ArticuloExport($this->articuloRepository))
-                    ->parametros($busqueda)
+                    ->parametros($filtros)
                     ->download('articulo.xlsx');
                 break;
 
             case 'CSV':
                 return (new ArticuloExport($this->articuloRepository))
-                    ->parametros($busqueda)
+                    ->parametros($filtros)
                     ->download('articulo.csv', \Maatwebsite\Excel\Excel::CSV);
                 break;
         }
 
-        $datas = ['articulo' => $articulo, 'busqueda' => $busqueda];
-
-        return view('stock.articulo.indexp', $datas);
+        return redirect()->route('articulo', ArticuloListadoFiltros::paraQueryString($filtros));
     }
 
     public function limpiafiltro(Request $request)

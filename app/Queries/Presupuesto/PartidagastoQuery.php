@@ -2,6 +2,7 @@
 
 namespace App\Queries\Presupuesto;
 
+use App\Support\Presupuesto\PartidagastoListadoFiltros;
 use App\Models\Presupuesto\Partidagasto;
 use App\Models\Presupuesto\Partidagasto_Estado;
 use App\Models\Presupuesto\Partidagasto_Partida;
@@ -42,13 +43,25 @@ class PartidagastoQuery implements PartidagastoQueryInterface
         return $this->partidagastoModel->select($campos)->get();
     }
 
-    public function leePartidagasto($busqueda, $flPaginando = null)
+    public function leePartidagasto($filtros, $flPaginando = null)
     {
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        // lee usuario para setear filtros
-        $usuario_id = Auth::user()->id;
+        if (is_string($filtros)) {
+            $texto = trim($filtros);
+            $filtros = [
+                'modo' => PartidagastoListadoFiltros::MODO_TODOS,
+                'campo' => 'detalle',
+                'operador' => 'contiene',
+                'valor' => $texto,
+                'valor_hasta' => '',
+                'busqueda' => $texto,
+            ];
+        } elseif (! is_array($filtros)) {
+            $filtros = PartidagastoListadoFiltros::filtrosVacios();
+        }
+
         $empresas = $this->empresaRepository->traeEmpresasAsignadas();
 
         $select = [ 'partidagasto.id as id',
@@ -78,59 +91,26 @@ class PartidagastoQuery implements PartidagastoQueryInterface
                                 ->leftjoin('proveedor', 'proveedor.id', '=', 'partidagasto.proveedor_id')
                                 ->leftjoin('articulo', 'articulo.id', '=', 'partidagasto.articulo_id')
                                 ->leftjoin('cuentacontable', 'cuentacontable.id', '=', 'partidagasto.cuentacontable_id')
-                                ->join('usuario', 'usuario.id', '=', 'partidagasto.creousuario_id')->with('partidagasto_montos');
-
-        $columns[] = ['columna' => 'partidagasto.id', 
-                    'clausula' => 'LIKE'];                                
-        $columns[] = ['columna' => 'empresa.nombre', 
-                    'clausula' => 'LIKE'];
-        $columns[] = ['columna' => 'centrocosto.nombre',
-                    'clausula' => 'LIKE']; 
-        $columns[] = ['columna' => 'partidagasto.codigo',
-                    'clausula' => 'LIKE'];                        
-        $columns[] = ['columna' => 'partidagasto.detalle',
-                    'clausula' => 'LIKE'];                     
-        $columns[] = ['columna' => 'usuario.nombre',
-                    'clausula' => 'LIKE'];            
-        $columns[] = ['columna' => 'partidagasto.estado',
-                    'clausula' => 'LIKE'];                                                            
-        $columns[] = ['columna' => 'presupuesto.nombre',
-                    'clausula' => 'LIKE'];
-        $columns[] = ['columna' => 'presupuesto_escenario.nombre',
-                    'clausula' => 'LIKE'];                    
-        $columns[] = ['columna' => 'proveedor.nombre',
-                    'clausula' => 'LIKE'];   
-        $columns[] = ['columna' => 'articulo.descripcion',
-                    'clausula' => 'LIKE'];       
-        $columns[] = ['columna' => 'moneda.abreviatura',
-                    'clausula' => 'LIKE'];                                       
-        $count = count($columns);
+                                ->join('usuario', 'usuario.id', '=', 'partidagasto.creousuario_id')
+                                ->with('partidagasto_montos');
 
         $partidagastos->whereIn('partidagasto.empresa_id', $empresas);
 
-        $partidagastos->where(function ($query) use ($count, $busqueda, $columns, $usuario_id) {
+        if (PartidagastoListadoFiltros::tieneCriteriosAplicados($filtros)) {
+            PartidagastoListadoFiltros::aplicar($partidagastos, $filtros);
+        }
 
-                        			for ($i = 0; $i < $count; $i++)
-                                    {
-                                        if ($columns[$i]['clausula'] == 'LIKE')
-                            			    $query->orWhere($columns[$i]['columna'], "LIKE", '%'. $busqueda . '%');
-                                        else
-                                            $query->orWhere($columns[$i]['columna'], $columns[$i]['clausula'], $busqueda);
-                                    }
-                            });
-
-        // Ordena desc. por ID
         $partidagastos->orderBy('partidagasto.id', 'desc');
 
-        if (isset($flPaginando))
-        {
-            if ($flPaginando)
+        if (isset($flPaginando)) {
+            if ($flPaginando) {
                 $partidagastos = $partidagastos->paginate(10);
-            else
+            } else {
                 $partidagastos = $partidagastos->get();
-        }
-        else
+            }
+        } else {
             $partidagastos = $partidagastos->get();
+        }
 
         return $partidagastos;
     }

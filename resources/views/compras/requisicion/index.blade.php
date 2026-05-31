@@ -5,8 +5,12 @@ Requisiciones
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/requisicion/filtro.js') }}" type="text/javascript"></script>
 @include('compras.requisicion.partials.comprobantes_asociados_script')
 @endsection
+
+<?php use App\Support\Compras\RequisicionListadoFiltros; ?>
 
 @section('contenido')
 @include('compras.requisicion.partials.comprobantes_asociados_modal')
@@ -16,27 +20,33 @@ Requisiciones
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Requisiciones</h3>
-                <div class="card-tools">
+                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
                     @include('includes.compras.boton-manual')
-                    @if (can('crear-requisicion', false))
-                    <a href="{{ route('crear_requisicion') }}" class="btn btn-outline-secondary btn-sm">
-                        <i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
-                    </a>
-                    @endif
+                    @include('includes.listado.filtros_toolbar', [
+                        'formId' => 'form-filtros-requisicion',
+                        'filtroValor' => $filtros['valor'] ?? '',
+                        'tieneCriterios' => RequisicionListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
+                        'limpiarUrl' => route('consultar_requisicion'),
+                        'placeholder' => 'Búsqueda rápida (tolera errores de tipeo)…',
+                        'toggleTarget' => '#panel-filtros-requisicion',
+                        'toggleId' => 'btn-toggle-filtros-requisicion',
+                        'inputId' => 'filtro_valor',
+                        'nuevoRegistroUrl' => route('crear_requisicion'),
+                        'nuevoRegistroCan' => 'crear-requisicion',
+                        'nuevoRegistroLabel' => 'Nuevo registro',
+                    ])
                 </div>
-                <div class="d-md-flex justify-content-md-end">
-					<form action="{{ route('consultar_requisicion') }}" method="GET">
-						<div class="btn-group">
-							<input type="text" name="busqueda" class="form-control" placeholder="Busqueda ..." value="{{ $busqueda ?? '' }}"> 
-							<button type="submit" class="btn btn-default">
-								<span class="fa fa-search"></span>
-							</button>
-						</div>
-					</form>
-                </div>                
             </div>
+            <form method="get" action="{{ route('consultar_requisicion') }}" id="form-filtros-requisicion" class="mb-0">
+                @include('compras.requisicion.partials.filtros_listado', [
+                    'limpiarUrl' => route('consultar_requisicion'),
+                ])
+            </form>
             <div class="card-body table-responsive p-0">
-                @include('includes.exportar-tabla', ['ruta' => 'listar_requisicion', 'busqueda' => $busqueda])
+                @include('includes.exportar-tabla-queryparams', [
+                    'ruta' => 'listar_requisicion',
+                    'queryparams' => $filtrosQuery ?? [],
+                ])
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead>
                         <tr>
@@ -115,7 +125,7 @@ Requisiciones
             </div>
             @if(method_exists($requisicion, 'links'))
             <div class="card-footer">
-                {{ $requisicion->appends(request()->query())->links() }}
+                {{ $requisicion->appends($filtrosQuery ?? [])->links() }}
             </div>
             @endif
         </div>

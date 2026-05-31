@@ -10,8 +10,8 @@ En el facturador de gastronomía existen **dos clientes distintos** que no deben
 
 | Rol | Campos UI | Persistencia (cuenta) |
 |-----|-----------|------------------------|
-| **Cliente para facturar** | `cliente_id`, `codigocliente`, `nombrecliente` (+ receptor manual CF si aplica) | `cliente_id` en cuenta |
-| **Cliente interno del descuento** (invita / centro de costo) | `cliente_descuento_id`, `codigocliente_descuento`, `nombrecliente_descuento` | `cliente_interno_descuento_id` |
+| **Cliente para facturar** | `cliente_id`, `codigocliente`, `nombrecliente` (+ receptor manual CF si aplica) | `cliente_id` en cuenta — vacío = CF en ARCA (99/0) y ERP cliente contable interno (p. ej. id 1) |
+| **Cliente interno del descuento** (invita / centro de costo / canje) | `cliente_descuento_id`, `codigocliente_descuento`, `nombrecliente_descuento` | `cliente_interno_descuento_id` — **nunca** define DocTipo/DocNro hacia AFIP |
 
 ## Reglas
 

@@ -2,6 +2,15 @@ var ptrusuario_id;
 var ptrusuario_codigo;
 var ptrnombreusuario;
 
+function contenedorUsuarioConsulta($el) {
+    var $tr = $el.closest('tr');
+    if ($tr.length) {
+        return $tr;
+    }
+
+    return $el.closest('.form-group');
+}
+
 function aplicarUsuarioResuelto($row, data) {
     if (!data || !data.ok) {
         alert((data && data.mensaje) ? data.mensaje : 'Usuario no encontrado');
@@ -76,22 +85,26 @@ $(document).on('keyup', '#consultausuario', function () {
     }
 });
 
+function limpiarCamposUsuarioConsulta($cont) {
+    $cont.find('.usuario_id_arbol').val('');
+    $cont.find('.usuario_id').not('.usuario_id_arbol').val('');
+    $cont.find('.nombreusuario').val('');
+}
+
 $(document).on('blur', '.usuario_codigo_arbol', function () {
-    var $row = $(this).closest('tr');
+    var $cont = contenedorUsuarioConsulta($(this));
     var valor = $.trim($(this).val());
     var empresa_id = $("#empresa_id").val();
 
     if (!valor) {
-        $row.find('.usuario_id_arbol').val('');
-        $row.find('.nombreusuario').val('');
+        limpiarCamposUsuarioConsulta($cont);
         return;
     }
 
     $.getJSON(carpetaBase + '/configuracion/resolverusuario', { valor: valor, empresa_id: empresa_id })
         .done(function (data) {
-            if (!aplicarUsuarioResuelto($row, data)) {
-                $row.find('.usuario_id_arbol').val('');
-                $row.find('.nombreusuario').val('');
+            if (!aplicarUsuarioResuelto($cont, data)) {
+                limpiarCamposUsuarioConsulta($cont);
             }
         });
 });
@@ -102,20 +115,20 @@ $(document).on('change', '.usuario_id', function (event) {
     if ($inp.hasClass('usuario_id_arbol')) {
         return;
     }
-    var $row = $inp.closest('tr');
+    var $cont = contenedorUsuarioConsulta($inp);
     var valor = $.trim($inp.val());
     var empresa_id = $("#empresa_id").val();
 
     if (!valor) {
-        $row.find('.nombreusuario').val('');
+        $cont.find('.nombreusuario').val('');
         return;
     }
 
     $.getJSON(carpetaBase + '/configuracion/resolverusuario', { valor: valor, empresa_id: empresa_id })
         .done(function (data) {
-            if (!aplicarUsuarioResuelto($row, data)) {
+            if (!aplicarUsuarioResuelto($cont, data)) {
                 $inp.val('');
-                $row.find('.nombreusuario').val('');
+                $cont.find('.nombreusuario').val('');
             }
         });
 });

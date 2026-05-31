@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Requests\ValidacionCuentacaja;
 use App\Models\Caja\Cuentacaja;
+use App\Support\Ventas\GastronomiaCuentacajaSoloAutomaticaSupport;
 use App\Repositories\Caja\CuentacajaRepositoryInterface;
 use App\Repositories\Caja\BancoRepositoryInterface;
 use App\Repositories\Caja\UsocuentacajaRepositoryInterface;
@@ -189,6 +190,14 @@ class CuentacajaController extends Controller
                     $q->orWhere($columns[$i], 'LIKE', '%'.$consulta.'%');
                 }
             });
+        }
+
+        $excluirSoloAutomaticas = filter_var(
+            $request->get('excluir_cuentas_solo_automaticas'),
+            FILTER_VALIDATE_BOOLEAN,
+        );
+        if ($excluirSoloAutomaticas && $empresaIdInt > 0) {
+            GastronomiaCuentacajaSoloAutomaticaSupport::aplicarExclusionEnQuery($query, $empresaIdInt);
         }
 
         $query = $query->orderBy('cuentacaja.nombre')->get();
