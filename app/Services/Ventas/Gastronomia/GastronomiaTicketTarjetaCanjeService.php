@@ -33,11 +33,9 @@ final class GastronomiaTicketTarjetaCanjeService
     float $montoCobranzaYaCargadoArs,
     array $ticketsYaSeleccionados,
   ): array {
-    [$ticketId, $numeroTicket] = $this->parseCodigoBarras($codigoBarras);
+    [$ticketId, $numeroTicket, $fila] = $this->resolverTicketDesdeCodigo($codigoBarras);
     $this->assertNoDuplicadoEnSeleccion($ticketId, $numeroTicket, $ticketsYaSeleccionados);
     $this->assertNoCanjeadoEnErp($ticketId, $numeroTicket);
-
-    $fila = $this->buscarTicketEnAnita($ticketId, $numeroTicket);
     $this->validarEstadoAnitaPendiente($fila);
     $this->validarVencimiento($fila);
 
@@ -189,18 +187,79 @@ final class GastronomiaTicketTarjetaCanjeService
    */
   public function parseCodigoBarras(string $codigoBarras): array
   {
-    $digits = preg_replace('/\D/', '', trim($codigoBarras));
-    if ($digits === null || strlen($digits) < 7) {
+    $candidatos = $this->candidatosParseoCodigo($codigoBarras);
+    if ($candidatos === []) {
       throw new InvalidArgumentException('Código de barras inválido: debe tener al menos 7 dígitos.');
     }
 
-    $ticketId = (int) substr($digits, 0, 6);
-    $numeroTicket = (int) substr($digits, 6);
-    if ($ticketId <= 0 || $numeroTicket <= 0) {
-      throw new InvalidArgumentException('Código de barras inválido: movimiento o número de ticket en cero.');
+    return $candidatos[0];
+  }
+
+  /**
+   * Variantes de parseo (la primera es la preferida).
+   *
+   * El ticket impreso suele ser MOVIMIENTO-NROTICKET (ej. 554101-52547), pero el código de barras
+   * EAN lleva el movimiento (6), el nroticket con cero adelante (6) y dígito verificador (1):
+   * 5541010525473. OCR o lectura del pie del código suele devolver 554101-0525473.
+   *
+   * @return list<array{0:int,1:int}>
+   */
+  public function candidatosParseoCodigo(string $codigoBarras): array
+  {
+    $raw = trim($codigoBarras);
+    if ($raw === '') {
+      return [];
     }
 
-    return [$ticketId, $numeroTicket];
+    $vistos = [];
+    $agregar = static function (array &$lista, array &$vistos, int $ticketId, int $numeroTicket): void {
+      if ($ticketId <= 0 || $numeroTicket <= 0) {
+        return;
+      }
+      $clave = $ticketId.'/'.$numeroTicket;
+      if (isset($vistos[$clave])) {
+        return;
+      }
+      $vistos[$clave] = true;
+      $lista[] = [$ticketId, $numeroTicket];
+    };
+
+    $lista = [];
+
+    if (preg_match('/^(\d{5,6})\s*[-–]\s*(\d{4,9})$/u', $raw, $partes)) {
+      $agregar($lista, $vistos, (int) $partes[1], self::normalizarNumeroTicketDesdeCola($partes[2]));
+    }
+
+    $digits = preg_replace('/\D/', '', $raw);
+    if ($digits === null || $digits === '' || strlen($digits) < 7) {
+      return $lista;
+    }
+
+    $ticketId = (int) substr($digits, 0, 6);
+    $cola = substr($digits, 6);
+    $agregar($lista, $vistos, $ticketId, self::normalizarNumeroTicketDesdeCola($cola));
+
+    // Compatibilidad con lecturas sin guión que ya traían solo movimiento + nroticket (ej. 55365952217).
+    $agregar($lista, $vistos, $ticketId, (int) $cola);
+
+    return $lista;
+  }
+
+  /**
+   * Quita relleno y dígito verificador del tramo posterior al movimiento (6 dígitos).
+   */
+  private static function normalizarNumeroTicketDesdeCola(string $cola): int
+  {
+    $cola = preg_replace('/\D/', '', $cola) ?? '';
+    if ($cola === '') {
+      return 0;
+    }
+
+    if (strlen($cola) >= 7) {
+      $cola = substr($cola, 0, -1);
+    }
+
+    return (int) $cola;
   }
 
   /**
@@ -226,6 +285,199 @@ final class GastronomiaTicketTarjetaCanjeService
         'El ticket '.$ticketId.'/'.$numeroTicket.' ya fue canjeado en otra factura.'
       );
     }
+  }
+
+  /**
+   * @return array{0:int,1:int,2:object}
+   */
+  private function resolverTicketDesdeCodigo(string $codigoBarras): array
+  {
+    $candidatos = $this->candidatosParseoCodigo($codigoBarras);
+    if ($candidatos === []) {
+      throw new InvalidArgumentException('Código de barras inválido: debe tener al menos 7 dígitos.');
+    }
+
+    $ultimoError = null;
+    foreach ($candidatos as [$ticketId, $numeroTicket]) {
+      try {
+        $fila = $this->buscarTicketEnAnita($ticketId, $numeroTicket);
+
+        return [$ticketId, $numeroTicket, $fila];
+      } catch (InvalidArgumentException $e) {
+        $ultimoError = $e;
+        if (! str_contains($e->getMessage(), 'No se encontró el ticket tarjeta')) {
+          throw $e;
+        }
+      }
+    }
+
+    $movimientoId = $this->extraerMovimientoId($codigoBarras);
+    if ($movimientoId > 0) {
+      $numerosLeidos = array_values(array_unique(array_map(
+        static fn (array $par): int => (int) ($par[1] ?? 0),
+        $candidatos
+      )));
+      $resuelto = $this->buscarTicketEnAnitaSoloPorMovimiento($movimientoId, $numerosLeidos);
+      if ($resuelto !== null) {
+        return $resuelto;
+      }
+    }
+
+    throw $ultimoError ?? new InvalidArgumentException('Código de barras inválido.');
+  }
+
+  private function extraerMovimientoId(string $codigoBarras): int
+  {
+    $raw = trim($codigoBarras);
+    if ($raw === '') {
+      return 0;
+    }
+
+    if (preg_match('/^(\d{5,6})\s*[-–]/u', $raw, $partes)) {
+      return (int) $partes[1];
+    }
+
+    $digits = preg_replace('/\D/', '', $raw);
+    if ($digits === null || strlen($digits) < 6) {
+      return 0;
+    }
+
+    return (int) substr($digits, 0, 6);
+  }
+
+  /**
+   * Último recurso: lista tickets pendientes del movimiento y elige el inroticket más parecido al leído.
+   *
+   * @param  list<int>  $numerosLeidos
+   * @return array{0:int,1:int,2:object}|null
+   */
+  private function buscarTicketEnAnitaSoloPorMovimiento(int $movimientoId, array $numerosLeidos): ?array
+  {
+    $filas = $this->listarTicketsPendientesPorMovimientoEnAnita($movimientoId);
+    if ($filas === []) {
+      return null;
+    }
+
+    $numerosLeidos = array_values(array_filter($numerosLeidos, static fn (int $n): bool => $n > 0));
+    $elegida = $this->elegirFilaPorSimilitudInroticket($filas, $numerosLeidos);
+    if ($elegida === null) {
+      return null;
+    }
+
+    $ticketId = (int) ($elegida->imovimientoid ?? $movimientoId);
+    $numeroTicket = (int) ($elegida->inroticket ?? 0);
+    if ($ticketId <= 0 || $numeroTicket <= 0) {
+      return null;
+    }
+
+    return [$ticketId, $numeroTicket, $elegida];
+  }
+
+  /**
+   * @return list<object>
+   */
+  private function listarTicketsPendientesPorMovimientoEnAnita(int $movimientoId): array
+  {
+    $payload = [
+      'acc' => 'list',
+      'tabla' => 'tickettarj',
+      'sistema' => (string) config('gastronomia.ticket_tarjeta_anita_sistema', 'base_admin'),
+      'campos' => implode(', ', [
+        'imovimientoid',
+        'cnrodocumento',
+        'ifecha',
+        'fmonto',
+        'cnrocupon',
+        'fmontoticket',
+        'inroticket',
+        'cestado',
+        'ifechacanje',
+      ]),
+      'whereArmado' => ' WHERE imovimientoid = '.$movimientoId
+        ." AND cestado = '".TickettarjetaGastronomia::ESTADO_PENDIENTE."' ",
+    ];
+
+    $filas = ApiAnita::decodificarListaFilas($this->apiAnita->apiCall($payload));
+    $hoy = Carbon::today();
+    $dias = max(1, (int) config('gastronomia.ticket_tarjeta_vencimiento_dias', 30));
+
+    return array_values(array_filter($filas, function (object $fila) use ($hoy, $dias): bool {
+      $numero = (int) ($fila->inroticket ?? 0);
+      if ($numero <= 0) {
+        return false;
+      }
+
+      try {
+        $fechaEmision = Carbon::parse($this->anitaIntToDate((int) ($fila->ifecha ?? 0)))->startOfDay();
+      } catch (\Throwable) {
+        return false;
+      }
+
+      return ! $hoy->gt($fechaEmision->copy()->addDays($dias));
+    }));
+  }
+
+  /**
+   * @param  list<object>  $filas
+   * @param  list<int>  $numerosLeidos
+   */
+  private function elegirFilaPorSimilitudInroticket(array $filas, array $numerosLeidos): ?object
+  {
+    if ($filas === []) {
+      return null;
+    }
+
+    if (count($filas) === 1) {
+      return $filas[0];
+    }
+
+    $mejorFila = null;
+    $mejorPuntaje = -1;
+
+    foreach ($filas as $fila) {
+      $enAnita = (int) ($fila->inroticket ?? 0);
+      if ($enAnita <= 0) {
+        continue;
+      }
+
+      $puntajeFila = 0;
+      foreach ($numerosLeidos as $leido) {
+        $puntajeFila = max($puntajeFila, $this->puntajeSimilitudInroticket($leido, $enAnita));
+      }
+
+      if ($puntajeFila > $mejorPuntaje) {
+        $mejorPuntaje = $puntajeFila;
+        $mejorFila = $fila;
+      }
+    }
+
+    $umbralMinimo = 120;
+
+    return ($mejorFila !== null && $mejorPuntaje >= $umbralMinimo) ? $mejorFila : null;
+  }
+
+  private function puntajeSimilitudInroticket(int $leido, int $enAnita): int
+  {
+    if ($leido <= 0 || $enAnita <= 0) {
+      return 0;
+    }
+
+    if ($leido === $enAnita) {
+      return 1000;
+    }
+
+    $sLeido = (string) $leido;
+    $sAnita = (string) $enAnita;
+
+    if (str_starts_with($sLeido, $sAnita) || str_starts_with($sAnita, $sLeido)) {
+      return 500 - abs(strlen($sLeido) - strlen($sAnita));
+    }
+
+    if (str_ends_with($sLeido, $sAnita) || str_ends_with($sAnita, $sLeido)) {
+      return 400 - abs($leido - $enAnita);
+    }
+
+    return max(0, 100 - abs($leido - $enAnita));
   }
 
   private function buscarTicketEnAnita(int $ticketId, int $numeroTicket): object

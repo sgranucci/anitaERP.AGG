@@ -14,6 +14,7 @@ use App\Services\Ventas\Gastronomia\GastronomiaJornadaService;
 use App\Services\Ventas\Gastronomia\GastronomiaTicketCanjePremioService;
 use App\Services\Ventas\Gastronomia\GastronomiaTicketTarjetaCanjeService;
 use App\Services\Ventas\Gastronomia\GastronomiaTurnoOperativoService;
+use App\Support\Ventas\GastronomiaCierresTurnoListadoFiltros;
 use App\Support\Ventas\GastronomiaCierreTurnoReporteSupport;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
 use App\Support\Ventas\GastronomiaTurnoOperativoTotalesSupport;
@@ -70,16 +71,23 @@ class CierreTurnoGastronomiaController extends Controller
             }
         }
 
-        $filtros = [
-            'empresa_id' => $empresaId,
-            'identificador_pc' => $request->input('identificador_pc', $identificadorPc),
-            'fecha_desde' => $request->input('fecha_desde', $fechaDesdeDefault),
-            'fecha_hasta' => $request->input('fecha_hasta', $fechaHastaDefault),
-            'tipo' => $request->input('tipo', ''),
-        ];
+        $filtros = GastronomiaCierresTurnoListadoFiltros::resolverDesdeRequest($request);
 
-        $request->merge($filtros);
-        $filas = $this->reporteSupport->listadoDesdeRequest($request);
+        if ($filtros['fecha_desde'] === '') {
+            $filtros['fecha_desde'] = $fechaDesdeDefault;
+        }
+        if ($filtros['fecha_hasta'] === '') {
+            $filtros['fecha_hasta'] = $fechaHastaDefault;
+        }
+
+        if ($filtros['identificador_pc'] === '') {
+            $filtros['identificador_pc'] = $identificadorPc;
+        }
+        if ($empresaId > 0 && (int) $filtros['empresa_id'] <= 0) {
+            $filtros['empresa_id'] = $empresaId;
+        }
+
+        $filas = $this->reporteSupport->listadoConFiltros($filtros);
 
         $empresaIdJornada = $empresaId > 0
             ? $empresaId
@@ -91,6 +99,8 @@ class CierreTurnoGastronomiaController extends Controller
         return view('ventas.gastronomia.cierres_turno.index', [
             'filas' => $filas,
             'filtros' => $filtros,
+            'filtrosQuery' => GastronomiaCierresTurnoListadoFiltros::paraQueryString($filtros),
+            'camposFiltro' => GastronomiaCierresTurnoListadoFiltros::CAMPOS,
             'empresa_query' => $empresaQuery,
             'pc_query' => $pcQuery,
             'identificador_pc_default' => $identificadorPc,
@@ -286,8 +296,8 @@ class CierreTurnoGastronomiaController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $filas = $this->reporteSupport->listadoDesdeRequest($request);
-        $filtros = $request->only(['empresa_id', 'identificador_pc', 'fecha_desde', 'fecha_hasta', 'tipo']);
+        $filtros = GastronomiaCierresTurnoListadoFiltros::resolverDesdeRequest($request);
+        $filas = $this->reporteSupport->listadoConFiltros($filtros);
 
         switch (strtoupper($formato)) {
             case 'PDF':

@@ -5,13 +5,19 @@ namespace App\Http\Controllers\Caja;
 use App\Http\Controllers\Controller;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Caja\WaitryCierreJornadaService;
+use App\Services\Ventas\Gastronomia\GastronomiaCierreJornadaProcesoService;
+use App\Services\Ventas\Gastronomia\GastronomiaJornadaService;
+use App\Support\Caja\RendicionGastronomiaPdfPermiso;
+use App\Support\Ventas\Gastronomia\CierreJornadaProcesoConfigSupport;
 use Illuminate\Http\Request;
 use InvalidArgumentException;
+use Throwable;
 
 class WaitryCierreJornadaController extends Controller
 {
     public function __construct(
         private readonly WaitryCierreJornadaService $cierreJornadaService,
+        private readonly GastronomiaCierreJornadaProcesoService $procesoService,
         private readonly EmpresaRepositoryInterface $empresaRepository,
     ) {
     }
@@ -48,7 +54,124 @@ class WaitryCierreJornadaController extends Controller
             'payload' => $payload,
             'error' => $error,
             'consultado' => $request->has('empresa_id') && $request->has('fecha_jornada'),
+            'proceso_habilitado' => $this->procesoService->habilitado(),
+            'puede_proceso_cierre' => can('proceso-cierre-jornada-waitry-caja', false),
+            'config_contable' => $empresaId > 0
+                ? CierreJornadaProcesoConfigSupport::paraEmpresa($empresaId)
+                : [],
         ]);
+    }
+
+    public function apiProcesoAnalizar(Request $request)
+    {
+        $this->canProcesoCierre();
+
+        $empresaId = (int) $request->input('empresa_id', 0);
+        $fechaJornada = (string) $request->input('fecha_jornada', '');
+
+        try {
+            @set_time_limit(180);
+
+            return response()->json(
+                $this->procesoService->analizarPorEmpresaYFecha($empresaId, $fechaJornada),
+            );
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        } catch (Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'error' => GastronomiaJornadaService::mensajeDesdeExcepcion($e),
+            ], 422);
+        }
+    }
+
+    public function apiProcesoRecalcular(Request $request)
+    {
+        $this->canProcesoCierre();
+
+        $request->validate([
+            'empresa_id' => 'required|integer|min:1',
+            'fecha_jornada' => 'required|date',
+            'porcentaje' => 'required|numeric|min:0|max:100',
+        ]);
+
+        try {
+            @set_time_limit(180);
+
+            return response()->json($this->procesoService->recalcularPorEmpresaYFecha(
+                (int) $request->input('empresa_id'),
+                (string) $request->input('fecha_jornada'),
+                (float) $request->input('porcentaje'),
+            ));
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        } catch (Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'error' => GastronomiaJornadaService::mensajeDesdeExcepcion($e),
+            ], 422);
+        }
+    }
+
+    public function apiProcesoMovimientosGrupo(Request $request, string $grupo)
+    {
+        $this->canProcesoCierre();
+
+        $empresaId = (int) $request->input('empresa_id', 0);
+        $fechaJornada = (string) $request->input('fecha_jornada', '');
+        $pagina = max(1, (int) $request->input('pagina', 1));
+        $porPagina = max(10, min(200, (int) $request->input('por_pagina', 50)));
+
+        try {
+            return response()->json($this->procesoService->movimientosGrupoPorEmpresaYFecha(
+                $empresaId,
+                $fechaJornada,
+                $grupo,
+                $pagina,
+                $porPagina,
+            ));
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        }
+    }
+
+    public function apiProcesoConfig(int $empresaId)
+    {
+        $this->canProcesoCierre();
+
+        if ($empresaId <= 0) {
+            return response()->json(['ok' => false, 'error' => 'Empresa inválida.'], 422);
+        }
+
+        $cfg = CierreJornadaProcesoConfigSupport::paraEmpresa($empresaId);
+
+        return response()->json([
+            'ok' => true,
+            'config' => $cfg,
+            'faltantes' => CierreJornadaProcesoConfigSupport::faltantes($cfg),
+        ]);
+    }
+
+    public function apiProcesoGuardarConfig(Request $request, int $empresaId)
+    {
+        $this->canProcesoCierre();
+
+        if ($empresaId <= 0) {
+            return response()->json(['ok' => false, 'error' => 'Empresa inválida.'], 422);
+        }
+
+        try {
+            return response()->json(
+                $this->procesoService->guardarConfig($empresaId, $request->all()),
+            );
+        } catch (InvalidArgumentException|\RuntimeException $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        }
+    }
+
+    private function canProcesoCierre(): void
+    {
+        can('proceso-cierre-jornada-waitry-caja');
     }
 
     public function listar(Request $request, ?string $formato = null)
@@ -89,6 +212,9 @@ class WaitryCierreJornadaController extends Controller
 
         switch ($formato) {
             case 'PDF':
+                if (! RendicionGastronomiaPdfPermiso::puedeVerPdfWaitry()) {
+                    abort(403, 'No tiene permiso para exportar el PDF de cierre Waitry.');
+                }
                 $view = \View::make('caja.waitry_cierre_jornada.listado', compact(
                     'filas',
                     'resumen',

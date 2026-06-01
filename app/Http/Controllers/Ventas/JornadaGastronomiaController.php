@@ -6,10 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Ventas\JornadaGastronomiaRepositoryInterface;
 use App\Models\Ventas\CierreTotemJornadaGastronomia;
+use App\Models\Ventas\JornadaGastronomia;
+use App\Models\Caja\Usocuentacaja;
 use App\Services\Ventas\Gastronomia\GastronomiaCierreTotemInformeZService;
 use App\Services\Ventas\Gastronomia\GastronomiaCierreTotemJornadaService;
 use App\Services\Ventas\Gastronomia\GastronomiaJornadaService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
 use Throwable;
 
@@ -37,9 +40,15 @@ class JornadaGastronomiaController extends Controller
             : collect();
 
         $eliminacionPorJornada = [];
+        $anulacionCierrePorJornada = [];
         foreach ($historial as $jornadaHistorial) {
             $eliminacionPorJornada[(int) $jornadaHistorial->id] = $this->jornadaService->resumenEliminacion($jornadaHistorial);
+            if ($jornadaHistorial->estado === JornadaGastronomia::ESTADO_CERRADA) {
+                $anulacionCierrePorJornada[(int) $jornadaHistorial->id] = $this->jornadaService->resumenAnulacionCierre($jornadaHistorial);
+            }
         }
+
+        $puedeAnularCierre = can('cerrar-jornada-gastronomia', false);
 
         return view('ventas.gastronomia.jornada.index', [
             'empresas' => $empresas,
@@ -47,6 +56,11 @@ class JornadaGastronomiaController extends Controller
             'estado' => $estado,
             'historial' => $historial,
             'eliminacion_por_jornada' => $eliminacionPorJornada,
+            'anulacion_cierre_por_jornada' => $anulacionCierrePorJornada,
+            'cierre_anulable' => $puedeAnularCierre && $empresaId > 0
+                ? $this->jornadaService->cierreAnulableParaEmpresa($empresaId)
+                : null,
+            'puede_anular_cierre' => $puedeAnularCierre,
             'fecha_hoy' => $estado['fecha_jornada_sugerida_abrir'] ?? now()->format('Y-m-d'),
             'fecha_jornada_minima' => $estado['fecha_jornada_minima_abrir'] ?? null,
             'puede_abrir' => can('abrir-jornada-gastronomia', false),
@@ -57,7 +71,24 @@ class JornadaGastronomiaController extends Controller
             'ultimo_waitry_order_id' => $empresaId > 0
                 ? $this->cierreTotemJornadaService->ultimoWaitryOrderIdHasta($empresaId)
                 : 0,
+            'usocuentacaja_gastronomia_id' => $this->usoCuentacajaGastronomiaId(),
         ]);
+    }
+
+    private function usoCuentacajaGastronomiaId(): ?int
+    {
+        $configured = config('gastronomia.usocuentacaja_id');
+        if ($configured !== null && $configured !== '') {
+            return (int) $configured;
+        }
+
+        if (! Schema::hasTable('usocuentacaja')) {
+            return null;
+        }
+
+        $id = Usocuentacaja::query()->where('nombre', 'Gastronomia')->value('id');
+
+        return $id ? (int) $id : null;
     }
 
     public function apiInformeZDatos(int $jornadaId)
@@ -102,14 +133,58 @@ class JornadaGastronomiaController extends Controller
         }
     }
 
-    public function comprobanteCierreTotem(Request $request, int $jornadaId)
+    public function apiInformeZBorradorGuardar(Request $request)
     {
         can('gestionar-jornada-gastronomia');
 
-        $cierre = CierreTotemJornadaGastronomia::query()
-            ->with(['jornada', 'empresa'])
-            ->where('jornada_gastronomia_id', $jornadaId)
-            ->firstOrFail();
+        $jornadaId = (int) $request->input('jornada_id', 0);
+        if ($jornadaId <= 0) {
+            return response()->json(['ok' => false, 'error' => 'Jornada inválida.'], 422);
+        }
+
+        try {
+            $jornada = $this->jornadaRepository->findOrFail($jornadaId);
+            $this->assertAccesoEmpresa((int) $jornada->empresa_id);
+
+            if ($jornada->estado !== JornadaGastronomia::ESTADO_ABIERTA) {
+                return response()->json([
+                    'ok' => false,
+                    'error' => 'La jornada ya está cerrada. Use el Informe Z del historial.',
+                ], 422);
+            }
+
+            $preview = $this->cierreTotemJornadaService->previewParaJornadaAbierta($jornada);
+            if ($preview === null) {
+                return response()->json(['ok' => false, 'error' => 'Cierre tótem Waitry no habilitado.'], 422);
+            }
+
+            $resumen = [
+                'por_totem' => $preview['por_totem'] ?? [],
+                'total_general' => $preview['total_general'] ?? [],
+            ];
+
+            $resultado = $this->informeZService->guardarBorradorJornadaAbierta(
+                $jornada,
+                $request->all(),
+                $resumen,
+            );
+
+            return response()->json($resultado);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        }
+    }
+
+    public function comprobanteCierreTotem(Request $request, int $jornadaId)
+    {
+        if (! \App\Support\Ventas\GastronomiaJornadaComprobantePermiso::puedeVerComprobanteCierreTotem()) {
+            abort(403, 'No tiene permiso para ver el comprobante de cierre tótem.');
+        }
+
+        $cierre = $this->resolverCierreTotemParaComprobante($request, $jornadaId);
+        if ($cierre === null) {
+            abort(404, 'No hay comprobante de cierre tótem registrado para esta jornada.');
+        }
 
         $this->assertAccesoEmpresa((int) $cierre->empresa_id);
 
@@ -124,6 +199,22 @@ class JornadaGastronomiaController extends Controller
         return $request->boolean('inline')
             ? $pdf->stream($nombre)
             : $pdf->download($nombre);
+    }
+
+    private function resolverCierreTotemParaComprobante(Request $request, int $jornadaId): ?CierreTotemJornadaGastronomia
+    {
+        $cierreTotemId = (int) $request->input('cierre_totem_id', 0);
+
+        $q = CierreTotemJornadaGastronomia::query()->with(['jornada', 'empresa']);
+
+        if ($cierreTotemId > 0) {
+            $porId = (clone $q)->find($cierreTotemId);
+            if ($porId !== null && (int) $porId->jornada_gastronomia_id === $jornadaId) {
+                return $porId;
+            }
+        }
+
+        return $q->where('jornada_gastronomia_id', $jornadaId)->first();
     }
 
     private function assertAccesoEmpresa(int $empresaId): void
@@ -150,6 +241,48 @@ class JornadaGastronomiaController extends Controller
             'ok' => true,
             ...$this->jornadaService->estadoParaEmpresa($empresaId),
         ]);
+    }
+
+    public function apiPreviewCierreTotem(int $empresaId)
+    {
+        can('gestionar-jornada-gastronomia');
+
+        if ($empresaId <= 0) {
+            return response()->json(['ok' => false, 'error' => 'Empresa inválida.'], 422);
+        }
+
+        $this->assertAccesoEmpresa($empresaId);
+
+        $jornada = $this->jornadaService->jornadaAbierta($empresaId);
+        if ($jornada === null) {
+            return response()->json([
+                'ok' => true,
+                'preview' => null,
+            ]);
+        }
+
+        if (! $this->cierreTotemJornadaService->habilitado()) {
+            return response()->json([
+                'ok' => true,
+                'preview' => null,
+            ]);
+        }
+
+        try {
+            @set_time_limit(120);
+
+            return response()->json([
+                'ok' => true,
+                'preview' => $this->cierreTotemJornadaService->previewParaJornadaAbierta($jornada),
+            ]);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        } catch (Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'error' => GastronomiaJornadaService::mensajeDesdeExcepcion($e),
+            ], 422);
+        }
     }
 
     public function apiAbrir(Request $request)
@@ -205,11 +338,14 @@ class JornadaGastronomiaController extends Controller
 
         $empresaId = (int) $request->input('empresa_id', 0);
         $observacion = $request->input('observacion');
+        $informeZTotems = $request->input('informe_z_totems');
+        $informeZTotemsArr = is_array($informeZTotems) ? $informeZTotems : null;
 
         try {
             $jornada = $this->jornadaService->cerrar(
                 $empresaId,
                 is_string($observacion) ? $observacion : null,
+                $informeZTotemsArr,
             );
 
             $jornada->load('cierreTotem');
@@ -235,12 +371,77 @@ class JornadaGastronomiaController extends Controller
                         'inline' => 1,
                     ]),
                 ];
+                $payloadJornada['informe_z_cargado'] = is_array($cierreTotem->informe_z_json)
+                    && isset($cierreTotem->informe_z_json['totems']);
             }
 
             return response()->json([
                 'ok' => true,
                 'mensaje' => 'Jornada cerrada correctamente.',
                 'jornada' => $payloadJornada,
+            ]);
+        } catch (InvalidArgumentException $e) {
+            return response()->json([
+                'ok' => false,
+                'error' => $e->getMessage(),
+                'motivo' => 'validacion',
+            ], 422);
+        } catch (Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'error' => GastronomiaJornadaService::mensajeDesdeExcepcion($e),
+                'motivo' => 'error',
+            ], 422);
+        }
+    }
+
+    public function apiAnularCierre(Request $request)
+    {
+        if (! can('cerrar-jornada-gastronomia', false)) {
+            return response()->json([
+                'ok' => false,
+                'error' => 'No tiene permiso para anular el cierre de jornada.',
+                'motivo' => 'permiso',
+            ], 403);
+        }
+
+        $jornadaId = (int) $request->input('jornada_id', 0);
+        $motivo = trim((string) $request->input('motivo', ''));
+        $confirmacion = trim((string) $request->input('confirmacion', ''));
+
+        if ($jornadaId <= 0) {
+            return response()->json([
+                'ok' => false,
+                'error' => 'Debe indicar la jornada.',
+                'motivo' => 'validacion',
+            ], 422);
+        }
+
+        if ($confirmacion !== 'ANULAR-JORNADA-'.$jornadaId) {
+            return response()->json([
+                'ok' => false,
+                'error' => 'Confirmación incorrecta. Escriba exactamente: ANULAR-JORNADA-'.$jornadaId,
+                'motivo' => 'validacion',
+            ], 422);
+        }
+
+        if ($motivo === '') {
+            return response()->json([
+                'ok' => false,
+                'error' => 'Debe indicar el motivo de la anulación.',
+                'motivo' => 'validacion',
+            ], 422);
+        }
+
+        try {
+            $jornada = $this->jornadaRepository->findOrFail($jornadaId);
+            $this->assertAccesoEmpresa((int) $jornada->empresa_id);
+
+            $this->jornadaService->anularCierre($jornadaId, $motivo);
+
+            return response()->json([
+                'ok' => true,
+                'mensaje' => 'Cierre de jornada anulado. La jornada quedó nuevamente abierta.',
             ]);
         } catch (InvalidArgumentException $e) {
             return response()->json([

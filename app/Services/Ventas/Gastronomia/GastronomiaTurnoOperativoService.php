@@ -2,16 +2,21 @@
 
 namespace App\Services\Ventas\Gastronomia;
 
+use App\Models\Caja\RendicionGastronomiaCaja;
 use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
 use App\Models\Ventas\CuentaGastronomia;
 use App\Models\Ventas\JornadaGastronomia;
 use App\Models\Ventas\TurnoGastronomia;
 use App\Models\Ventas\TurnoOperativoGastronomia;
 use App\Models\Ventas\CierreParcialTurnoGastronomia;
+use App\Support\Ventas\GastronomiaCuentacajaEfectivo;
+use App\Support\Ventas\GastronomiaTurnoNumeracionComprobanteSupport;
+use App\Support\Ventas\GastronomiaTurnoObservacionHabilitacionSupport;
 use App\Support\Ventas\GastronomiaTurnoOperativoTotalesSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 
 final class GastronomiaTurnoOperativoService
@@ -69,8 +74,13 @@ final class GastronomiaTurnoOperativoService
             $erroresHabilitacion = $this->erroresAntesDeHabilitar($cfg, $identificadorPc, $jornada);
         }
 
+        $turnosHabilitablesIds = ($activo === null && $jornada !== null)
+            ? $this->idsTurnosMaestroHabilitablesEnJornada($empresaId, (int) $jornada->id, $identificadorPc)
+            : [];
+
         $totalesTurno = null;
         $totalesDia = null;
+        $numeracionFiscal = ['filas' => []];
         if ($activo !== null) {
             $desde = $activo->habilitacion_en;
             $totalesTurno = GastronomiaTurnoOperativoTotalesSupport::calcular(
@@ -85,6 +95,7 @@ final class GastronomiaTurnoOperativoService
                 $fechaJornada,
                 null,
             );
+            $numeracionFiscal = GastronomiaTurnoNumeracionComprobanteSupport::paraTurno($activo);
         }
 
         return [
@@ -121,9 +132,15 @@ final class GastronomiaTurnoOperativoService
                 : [],
             'totales_turno' => $totalesTurno,
             'totales_dia' => $totalesDia,
+            'numeracion_fiscal' => $numeracionFiscal,
             'puede_habilitar' => $activo === null && $jornada !== null && $erroresHabilitacion === []
-                && $this->hayTurnoMaestroPendienteDeHabilitar($empresaId, (int) $jornada->id, $identificadorPc),
+                && $turnosHabilitablesIds !== [],
             'errores_habilitacion' => $erroresHabilitacion,
+            'turnos_gastronomia_habilitables_ids' => $turnosHabilitablesIds,
+            'sin_turnos_por_abrir' => $activo === null
+                && $jornada !== null
+                && $erroresHabilitacion === []
+                && $turnosHabilitablesIds === [],
             'turnos_gastronomia_cerrados_ids' => $jornada !== null
                 ? $this->idsTurnosMaestroCerradosEnJornada((int) $jornada->id, $identificadorPc)
                 : [],
@@ -152,6 +169,7 @@ final class GastronomiaTurnoOperativoService
                 : 0,
             'url_facturas_dia' => route('gastronomia_facturas_dia', ['empresa_id' => $empresaId]),
             'url_saneamiento_turno' => route('gastronomia_saneamiento_turno', ['empresa_id' => $empresaId]),
+            'cuentacaja_efectivo_id' => (int) (GastronomiaCuentacajaEfectivo::idParaEmpresa($empresaId) ?? 0),
         ];
     }
 
@@ -439,6 +457,25 @@ final class GastronomiaTurnoOperativoService
             );
         }
 
+        $habilitables = $this->idsTurnosMaestroHabilitablesEnJornada(
+            $empresaId,
+            (int) $jornada->id,
+            $identificadorPc,
+        );
+        if (! in_array((int) $turno->id, $habilitables, true)) {
+            $maxOrdenUsado = $this->maxOrdenTurnoUsadoEnJornadaTerminal((int) $jornada->id, $identificadorPc);
+            if ($maxOrdenUsado > 0 && (int) $turno->orden <= $maxOrdenUsado) {
+                throw new InvalidArgumentException(
+                    'No puede habilitar el turno "'.$turno->nombre.'" porque ya se utilizó un turno posterior '
+                    .'en esta terminal. No hay más turnos anteriores pendientes que puedan abrirse.'
+                );
+            }
+
+            throw new InvalidArgumentException(
+                'No hay más turnos por abrir en esta terminal para la jornada actual.'
+            );
+        }
+
         $erroresHabilitacion = $this->erroresAntesDeHabilitar($cfg, $identificadorPc, $jornada);
         if ($erroresHabilitacion !== []) {
             throw new InvalidArgumentException(implode(' ', $erroresHabilitacion));
@@ -522,7 +559,7 @@ final class GastronomiaTurnoOperativoService
             $this->exigirTurnoActivoEnPc($turno, $identificadorPc);
         }
 
-        $errores = $this->erroresAntesDeCerrar($turno);
+        $errores = $this->erroresAntesDeCerrar($turno, $opciones);
         if ($errores !== []) {
             throw new InvalidArgumentException(implode(' ', $errores));
         }
@@ -551,11 +588,28 @@ final class GastronomiaTurnoOperativoService
             null,
         );
 
-        $redondeoInvitaciones = isset($datosCierre['redondeo_invitaciones'])
-            ? round((float) $datosCierre['redondeo_invitaciones'], 2)
-            : (float) $totalesTurno['redondeo_invitaciones_sugerido'];
-        $redondeoTurno = round((float) ($datosCierre['redondeo_turno'] ?? 0), 2);
-        $sobranteFaltante = round((float) ($datosCierre['sobrante_faltante'] ?? 0), 2);
+        $sobranteFaltanteAutoRemoto = false;
+        if ($cierreRemoto) {
+            $ajustes = GastronomiaTurnoOperativoTotalesSupport::resolverAjustesCierreConSobranteFaltanteResidual(
+                $totalesTurno,
+                isset($datosCierre['redondeo_invitaciones'])
+                    ? round((float) $datosCierre['redondeo_invitaciones'], 2)
+                    : null,
+                isset($datosCierre['redondeo_turno'])
+                    ? round((float) $datosCierre['redondeo_turno'], 2)
+                    : null,
+            );
+            $redondeoInvitaciones = $ajustes['redondeo_invitaciones'];
+            $redondeoTurno = $ajustes['redondeo_turno'];
+            $sobranteFaltante = $ajustes['sobrante_faltante'];
+            $sobranteFaltanteAutoRemoto = $ajustes['sobrante_faltante_auto'];
+        } else {
+            $redondeoInvitaciones = isset($datosCierre['redondeo_invitaciones'])
+                ? round((float) $datosCierre['redondeo_invitaciones'], 2)
+                : (float) $totalesTurno['redondeo_invitaciones_sugerido'];
+            $redondeoTurno = round((float) ($datosCierre['redondeo_turno'] ?? 0), 2);
+            $sobranteFaltante = round((float) ($datosCierre['sobrante_faltante'] ?? 0), 2);
+        }
 
         if (! GastronomiaTurnoOperativoTotalesSupport::cierreCuadraConAjustesManuales(
             $totalesTurno,
@@ -590,6 +644,7 @@ final class GastronomiaTurnoOperativoService
             $datosCierre,
             $vaciasAutoDescartadas,
             $pcOperadorRemoto,
+            $sobranteFaltanteAutoRemoto,
         ) {
             $max = (int) TurnoOperativoGastronomia::query()
                 ->where('empresa_id', (int) $turno->empresa_id)
@@ -612,6 +667,8 @@ final class GastronomiaTurnoOperativoService
                     $datosCierre['observacion_cierre'] ?? null,
                     $vaciasAutoDescartadas,
                     $pcOperadorRemoto,
+                    $sobranteFaltanteAutoRemoto,
+                    $sobranteFaltante,
                 ),
             ]);
         });
@@ -634,9 +691,10 @@ final class GastronomiaTurnoOperativoService
      *   - Cuentas ABIERTA sin ítems  → NO bloquean: se auto-descartan al cerrar el turno (se mueven a CERRADA).
      *   - Cuentas CERRADA (sin facturar) → estado terminal, NO bloquean.
      *
+     * @param  array{omitir_validacion_jornada_posterior?:bool}  $opciones
      * @return list<string>
      */
-    public function erroresAntesDeCerrar(TurnoOperativoGastronomia $turno): array
+    public function erroresAntesDeCerrar(TurnoOperativoGastronomia $turno, array $opciones = []): array
     {
         $errores = [];
         $pc = (string) $turno->identificador_pc;
@@ -713,6 +771,271 @@ final class GastronomiaTurnoOperativoService
             ->all();
     }
 
+    public const PREFIJO_CONFIRMACION_ANULAR_CIERRE = 'ANULAR-';
+
+    /**
+     * Último cierre definitivo de la terminal en la jornada indicada (para evaluar anulación).
+     */
+    public function ultimoTurnoCerradoEnJornadaTerminal(
+        int $jornadaGastronomiaId,
+        string $identificadorPc,
+        int $empresaId,
+    ): ?TurnoOperativoGastronomia {
+        if ($identificadorPc === '' || $jornadaGastronomiaId <= 0) {
+            return null;
+        }
+
+        return TurnoOperativoGastronomia::query()
+            ->with(['turno', 'jornada', 'usuarioCierre', 'usuarioHabilitado'])
+            ->where('jornada_gastronomia_id', $jornadaGastronomiaId)
+            ->where('empresa_id', $empresaId)
+            ->where('identificador_pc', $identificadorPc)
+            ->where('estado', TurnoOperativoGastronomia::ESTADO_CERRADO)
+            ->whereNotNull('cierre_en')
+            ->orderByDesc('cierre_en')
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    public function describirCierreAnulable(int $empresaId, string $identificadorPc): ?array
+    {
+        $jornada = $this->jornadaService->jornadaAbierta($empresaId);
+        if ($jornada === null || $identificadorPc === '') {
+            return null;
+        }
+
+        if ($this->turnoHabilitadoEnPc($identificadorPc) !== null) {
+            return [
+                'puede_anular' => false,
+                'bloqueo_mensaje' => 'Hay un turno habilitado en esta terminal. Ciérrelo o continúe operando antes de anular un cierre anterior.',
+            ];
+        }
+
+        $turno = $this->ultimoTurnoCerradoEnJornadaTerminal(
+            (int) $jornada->id,
+            $identificadorPc,
+            $empresaId,
+        );
+
+        if ($turno === null) {
+            return null;
+        }
+
+        $eval = $this->evaluarAnulacionCierre($turno, $identificadorPc);
+
+        return array_merge($eval, [
+            'turno_operativo_id' => (int) $turno->id,
+            'turno_nombre' => (string) ($turno->turno?->nombre ?? ''),
+            'numero_cierre' => $turno->numero_cierre,
+            'cierre_en_fmt' => $turno->cierre_en?->format('d/m/Y H:i'),
+            'usuario_cierre' => $turno->usuarioCierre?->nombre,
+            'identificador_pc' => (string) $turno->identificador_pc,
+            'texto_confirmacion' => self::textoConfirmacionAnularCierre((int) $turno->id),
+        ]);
+    }
+
+    public static function textoConfirmacionAnularCierre(int $turnoOperativoId): string
+    {
+        return self::PREFIJO_CONFIRMACION_ANULAR_CIERRE.$turnoOperativoId;
+    }
+
+    /**
+     * @return array{puede_anular: bool, bloqueo_mensaje: string|null}
+     */
+    public function evaluarAnulacionCierre(TurnoOperativoGastronomia $turno, string $identificadorPc): array
+    {
+        $errores = $this->erroresAntesDeAnularCierre($turno, $identificadorPc);
+
+        return [
+            'puede_anular' => $errores === [],
+            'bloqueo_mensaje' => $errores !== [] ? implode(' ', $errores) : null,
+        ];
+    }
+
+    /**
+     * Revierte un cierre definitivo a turno habilitado (misma jornada activa, misma PC).
+     *
+     * @return array{turno: TurnoOperativoGastronomia, mensaje: string}
+     */
+    public function anularCierreDefinitivo(
+        int $turnoOperativoId,
+        string $identificadorPc,
+        string $confirmacion,
+        ?string $motivo = null,
+    ): array {
+        $turno = TurnoOperativoGastronomia::query()
+            ->with(['turno', 'jornada'])
+            ->findOrFail($turnoOperativoId);
+
+        $errores = $this->erroresAntesDeAnularCierre($turno, $identificadorPc);
+        if ($errores !== []) {
+            throw new InvalidArgumentException(implode(' ', $errores));
+        }
+
+        $textoEsperado = self::textoConfirmacionAnularCierre((int) $turno->id);
+        if (trim($confirmacion) !== $textoEsperado) {
+            throw new InvalidArgumentException(
+                'Confirmación incorrecta. Escriba exactamente: '.$textoEsperado
+            );
+        }
+
+        $usuario = Auth::user();
+        $usuarioId = (int) ($usuario?->id ?? 0);
+        $usuarioNombre = (string) ($usuario?->nombre ?? 'usuario');
+
+        $snapshotCierre = [
+            'estado' => $turno->estado,
+            'cierre_en' => $turno->cierre_en?->format('Y-m-d H:i:s'),
+            'numero_cierre' => $turno->numero_cierre,
+            'usuario_cierre_id' => $turno->usuario_cierre_id,
+            'monto_facturacion_turno' => $turno->monto_facturacion_turno,
+            'monto_facturacion_dia' => $turno->monto_facturacion_dia,
+            'redondeo_invitaciones' => $turno->redondeo_invitaciones,
+            'redondeo_turno' => $turno->redondeo_turno,
+            'sobrante_faltante' => $turno->sobrante_faltante,
+            'observacion_cierre' => $turno->observacion_cierre,
+        ];
+
+        $nota = GastronomiaTurnoObservacionHabilitacionSupport::notaAnulacionCierre(
+            $usuarioId,
+            $usuarioNombre,
+            $identificadorPc,
+            $turno->numero_cierre !== null ? (int) $turno->numero_cierre : null,
+            $turno->cierre_en,
+            $this->limpiarObservacion($motivo),
+        );
+
+        return DB::transaction(function () use ($turno, $nota, $identificadorPc, $usuarioId, $usuarioNombre, $snapshotCierre) {
+            $obsHab = trim((string) $turno->observacion_habilitacion);
+            $obsHab = $obsHab === '' ? $nota : $obsHab."\n".$nota;
+
+            $turno->update([
+                'estado' => TurnoOperativoGastronomia::ESTADO_HABILITADO,
+                'usuario_cierre_id' => null,
+                'cierre_en' => null,
+                'numero_cierre' => null,
+                'monto_facturacion_turno' => null,
+                'monto_facturacion_dia' => null,
+                'redondeo_invitaciones' => null,
+                'redondeo_turno' => null,
+                'sobrante_faltante' => null,
+                'observacion_cierre' => null,
+                'observacion_habilitacion' => mb_substr($obsHab, 0, 2000),
+            ]);
+
+            $turno = $turno->fresh(['turno', 'jornada', 'usuarioHabilitado', 'cierresParciales']);
+
+            Log::info('gastronomia.turno.anular_cierre', [
+                'turno_operativo_id' => (int) $turno->id,
+                'empresa_id' => (int) $turno->empresa_id,
+                'jornada_gastronomia_id' => (int) $turno->jornada_gastronomia_id,
+                'identificador_pc' => $identificadorPc,
+                'usuario_id' => $usuarioId,
+                'usuario_nombre' => $usuarioNombre,
+                'cierre_anulado' => $snapshotCierre,
+            ]);
+
+            return [
+                'turno' => $turno,
+                'mensaje' => 'Cierre del turno «'.($turno->turno?->nombre ?? '').'» anulado. El turno volvió a estado habilitado en '
+                    .$identificadorPc.'.',
+            ];
+        });
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function erroresAntesDeAnularCierre(TurnoOperativoGastronomia $turno, string $identificadorPc): array
+    {
+        $errores = [];
+        $pcTurno = (string) $turno->identificador_pc;
+        $pcReq = trim($identificadorPc);
+
+        if ($pcReq === '') {
+            $errores[] = 'Debe indicar la terminal (identificador PC).';
+
+            return $errores;
+        }
+
+        if ($pcTurno !== $pcReq) {
+            $errores[] = 'El cierre pertenece a la terminal '.$pcTurno
+                .'; no coincide con la PC de trabajo ('.$pcReq.').';
+        }
+
+        if ($turno->estado !== TurnoOperativoGastronomia::ESTADO_CERRADO) {
+            $errores[] = 'El turno operativo no está cerrado.';
+
+            return $errores;
+        }
+
+        if ($turno->cierre_en === null) {
+            $errores[] = 'El turno no tiene fecha de cierre registrada.';
+        }
+
+        $jornadaAbierta = $this->jornadaService->jornadaAbierta((int) $turno->empresa_id);
+        if ($jornadaAbierta === null) {
+            $errores[] = 'No hay jornada abierta para esta empresa. Solo puede anular cierres en la jornada activa.';
+
+            return $errores;
+        }
+
+        if ((int) $turno->jornada_gastronomia_id !== (int) $jornadaAbierta->id) {
+            $errores[] = 'El cierre pertenece a otra jornada. Solo puede anular dentro de la jornada abierta actual.';
+        }
+
+        if (RendicionGastronomiaCaja::query()
+            ->where('turno_operativo_gastronomia_id', (int) $turno->id)
+            ->exists()) {
+            $errores[] = 'El turno tiene una rendición de gastronomía en caja asociada. Elimine o corrija la rendición antes de anular el cierre.';
+        }
+
+        if (RendicionGastronomiaCaja::query()
+            ->where('tipo', RendicionGastronomiaCaja::TIPO_JORNADA)
+            ->where('jornada_gastronomia_id', (int) $turno->jornada_gastronomia_id)
+            ->exists()) {
+            $errores[] = 'La jornada de este turno ya fue presentada en caja (rendición de jornada). Elimine esa rendición antes de anular el cierre del turno.';
+        }
+
+        $habilitado = $this->turnoHabilitadoEnPc($pcReq);
+        if ($habilitado !== null && (int) $habilitado->id !== (int) $turno->id) {
+            $errores[] = 'Hay otro turno habilitado en esta terminal. No puede anular un cierre anterior mientras exista un turno activo.';
+        }
+
+        $ultimo = $this->ultimoTurnoCerradoEnJornadaTerminal(
+            (int) $turno->jornada_gastronomia_id,
+            $pcReq,
+            (int) $turno->empresa_id,
+        );
+        if ($ultimo !== null && (int) $ultimo->id !== (int) $turno->id) {
+            $errores[] = 'Solo puede anular el último cierre definitivo de esta terminal en la jornada activa '
+                .'(cierre más reciente: #'.$ultimo->id.').';
+        }
+
+        $turno->loadMissing('turno');
+        $ordenActual = (int) ($turno->turno?->orden ?? 0);
+
+        $haySiguienteTurno = TurnoOperativoGastronomia::query()
+            ->where('jornada_gastronomia_id', (int) $turno->jornada_gastronomia_id)
+            ->where('identificador_pc', $pcReq)
+            ->where('id', '!=', (int) $turno->id)
+            ->whereHas('turno', fn ($q) => $q->where('orden', '>', $ordenActual))
+            ->exists();
+
+        if ($haySiguienteTurno) {
+            $errores[] = 'Ya existe un turno posterior del día en esta terminal. No puede anular este cierre.';
+        }
+
+        if (Auth::id() === null) {
+            $errores[] = 'No hay usuario autenticado.';
+        }
+
+        return $errores;
+    }
+
     public function turnoMaestroYaCerradoEnJornada(
         int $jornadaGastronomiaId,
         string $identificadorPc,
@@ -735,20 +1058,82 @@ final class GastronomiaTurnoOperativoService
         int $jornadaGastronomiaId,
         string $identificadorPc,
     ): bool {
-        $cerrados = $this->idsTurnosMaestroCerradosEnJornada($jornadaGastronomiaId, $identificadorPc);
-        $activos = TurnoGastronomia::query()
-            ->where('empresa_id', $empresaId)
-            ->where('activo', true)
-            ->pluck('id')
-            ->map(fn ($id) => (int) $id);
+        return $this->idsTurnosMaestroHabilitablesEnJornada(
+            $empresaId,
+            $jornadaGastronomiaId,
+            $identificadorPc,
+        ) !== [];
+    }
 
-        foreach ($activos as $id) {
-            if (! in_array($id, $cerrados, true)) {
-                return true;
-            }
+    /**
+     * Mayor `orden` entre turnos ya habilitados o cerrados en la jornada y terminal.
+     * Si aún no se abrió ninguno, devuelve 0.
+     */
+    public function maxOrdenTurnoUsadoEnJornadaTerminal(
+        int $jornadaGastronomiaId,
+        string $identificadorPc,
+    ): int {
+        if ($identificadorPc === '' || $jornadaGastronomiaId <= 0) {
+            return 0;
         }
 
-        return false;
+        $maxOrden = TurnoOperativoGastronomia::query()
+            ->where('jornada_gastronomia_id', $jornadaGastronomiaId)
+            ->where('identificador_pc', $identificadorPc)
+            ->whereIn('estado', [
+                TurnoOperativoGastronomia::ESTADO_HABILITADO,
+                TurnoOperativoGastronomia::ESTADO_CERRADO,
+            ])
+            ->join(
+                'turno_gastronomia',
+                'turno_gastronomia.id',
+                '=',
+                'turno_operativo_gastronomia.turno_gastronomia_id',
+            )
+            ->max('turno_gastronomia.orden');
+
+        return max(0, (int) $maxOrden);
+    }
+
+    /**
+     * Turnos maestros que pueden habilitarse respetando orden y cierres previos en la terminal.
+     *
+     * Regla: solo turnos no cerrados cuyo `orden` sea mayor al máximo ya utilizado en la jornada.
+     * Permite saltar turnos intermedios hacia adelante, pero no volver atrás tras uno posterior.
+     *
+     * @return list<int>
+     */
+    public function idsTurnosMaestroHabilitablesEnJornada(
+        int $empresaId,
+        int $jornadaGastronomiaId,
+        string $identificadorPc,
+    ): array {
+        if ($identificadorPc === '' || $empresaId <= 0 || $jornadaGastronomiaId <= 0) {
+            return [];
+        }
+
+        $cerrados = $this->idsTurnosMaestroCerradosEnJornada($jornadaGastronomiaId, $identificadorPc);
+        $maxOrdenUsado = $this->maxOrdenTurnoUsadoEnJornadaTerminal($jornadaGastronomiaId, $identificadorPc);
+
+        return TurnoGastronomia::query()
+            ->where('empresa_id', $empresaId)
+            ->where('activo', true)
+            ->orderBy('orden')
+            ->orderBy('nombre')
+            ->get()
+            ->filter(function (TurnoGastronomia $turno) use ($cerrados, $maxOrdenUsado) {
+                if (in_array((int) $turno->id, $cerrados, true)) {
+                    return false;
+                }
+
+                $orden = (int) $turno->orden;
+
+                return $maxOrdenUsado === 0 || $orden > $maxOrdenUsado;
+            })
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->values()
+            ->all();
     }
 
     /**
@@ -904,6 +1289,8 @@ final class GastronomiaTurnoOperativoService
         ?string $observacion,
         int $vaciasAutoDescartadas,
         ?string $pcOperadorRemoto = null,
+        bool $sobranteFaltanteAutoRemoto = false,
+        float $sobranteFaltante = 0.0,
     ): ?string {
         $partes = [];
         $base = $this->limpiarObservacion($observacion);
@@ -915,6 +1302,13 @@ final class GastronomiaTurnoOperativoService
             $usuario = Auth::user()?->nombre ?? 'usuario';
             $partes[] = '[Cierre remoto desde '.trim($pcOperadorRemoto).' por '.$usuario
                 .' el '.now()->format('Y-m-d H:i').']';
+        }
+
+        if ($sobranteFaltanteAutoRemoto) {
+            $tipo = $sobranteFaltante >= 0 ? 'sobrante' : 'faltante';
+            $partes[] = '[Auto cierre remoto '.now()->format('Y-m-d H:i').'] Diferencia de conciliación imputada a '
+                .$tipo.' ($ '.number_format(abs($sobranteFaltante), 2, ',', '.').'). '
+                .'Rectificar con anulación de cierre cuando la terminal vuelva a operar.';
         }
 
         if ($vaciasAutoDescartadas > 0) {

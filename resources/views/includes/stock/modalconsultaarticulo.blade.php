@@ -1,5 +1,17 @@
 <!-- CSRF Token -->
 <meta name="csrf-token" content="{{ csrf_token() }}">
+@php
+    $consultaArticuloListaDefaultId = (int) config('precio.listaprecio_default_id', 1);
+    $consultaArticuloListaDefaultNombre = $consultaArticuloListaDefaultId > 0
+        ? \Illuminate\Support\Facades\DB::table('listaprecio')->where('id', $consultaArticuloListaDefaultId)->value('nombre')
+        : null;
+@endphp
+<script>
+    window.consultaArticuloListaprecioDefault = {
+        id: {{ $consultaArticuloListaDefaultId }},
+        nombre: @json($consultaArticuloListaDefaultNombre)
+    };
+</script>
 
 <div class="modal fade" id="consultaarticuloModal" role="dialog" aria-labelledby="exampleModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-xl" role="document">
@@ -25,6 +37,7 @@
               <th>Descripción</th>
               <th>UMD</th>
               <th>Categoría</th>
+              <th id="consultaarticulo-th-precio" class="text-right">Precio</th>
               <th></th>
           </thead>
           <tbody id="datos"></tbody>

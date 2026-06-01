@@ -44,33 +44,27 @@ final class WaitryInformeZConciliacionSupport
             $sistema = $porTotemSistema[$tid] ?? null;
             $mediosSistema = [];
             foreach ($sistema['por_medio_pago'] ?? [] as $m) {
-                $tipo = WaitryMedioPagoCuentacajaSupport::normalizarTipo($m['tipo'] ?? null) ?? 'totem';
+                $tipo = WaitryMedioPagoCuentacajaSupport::normalizarTipo($m['tipo'] ?? null);
+                if ($tipo === null || WaitryMedioPagoCuentacajaSupport::esTipoExcluidoInformeZ($tipo)) {
+                    continue;
+                }
                 $mediosSistema[$tipo] = $m;
             }
 
             $lineas = [];
             $tiposUsados = array_unique(array_merge(array_keys($mediosSistema), array_keys($tiposCatalogo)));
+            $tiposUsados = array_values(array_filter(
+                $tiposUsados,
+                fn (string $tipo) => ! WaitryMedioPagoCuentacajaSupport::esTipoExcluidoInformeZ($tipo),
+            ));
             sort($tiposUsados);
 
             foreach ($tiposUsados as $tipo) {
                 $mSis = $mediosSistema[$tipo] ?? null;
-                $lineas[] = [
-                    'tipo_waitry' => $tipo,
-                    'etiqueta' => (string) ($mSis['etiqueta'] ?? WaitryMedioPagoCuentacajaSupport::etiquetaTipo($tipo)),
-                    'monto_sistema' => round((float) ($mSis['total'] ?? 0), 2),
-                    'cantidad_sistema' => (int) ($mSis['cantidad'] ?? 0),
-                    'monto_informe_z' => null,
-                ];
-            }
-
-            if ($lineas === []) {
-                $lineas[] = [
-                    'tipo_waitry' => 'totem',
-                    'etiqueta' => WaitryMedioPagoCuentacajaSupport::etiquetaTipo('totem'),
-                    'monto_sistema' => 0.0,
-                    'cantidad_sistema' => 0,
-                    'monto_informe_z' => null,
-                ];
+                $linea = self::lineaPlantillaDesdeTipo($empresaId, $tipo, $mSis);
+                if (self::lineaInformeZValida($linea, $empresaId)) {
+                    $lineas[] = $linea;
+                }
             }
 
             $bloques[] = [
@@ -91,13 +85,17 @@ final class WaitryInformeZConciliacionSupport
                     'detalle' => $sistema['detalle'] ?? '',
                     'waitry_table_id' => $sistema['waitry_table_id'] ?? null,
                     'total_ingreso_sistema' => round((float) ($sistema['total_ingreso'] ?? 0), 2),
-                    'lineas' => array_map(fn (array $m) => [
-                        'tipo_waitry' => WaitryMedioPagoCuentacajaSupport::normalizarTipo($m['tipo'] ?? null) ?? 'totem',
-                        'etiqueta' => $m['etiqueta'] ?? '',
-                        'monto_sistema' => round((float) ($m['total'] ?? 0), 2),
-                        'cantidad_sistema' => (int) ($m['cantidad'] ?? 0),
-                        'monto_informe_z' => null,
-                    ], $sistema['por_medio_pago'] ?? []),
+                    'lineas' => array_values(array_filter(
+                        array_map(function (array $m) use ($empresaId) {
+                            $tipo = WaitryMedioPagoCuentacajaSupport::normalizarTipo($m['tipo'] ?? null);
+                            if ($tipo === null || WaitryMedioPagoCuentacajaSupport::esTipoExcluidoInformeZ($tipo)) {
+                                return null;
+                            }
+
+                            return self::lineaPlantillaDesdeTipo($empresaId, $tipo, $m);
+                        }, $sistema['por_medio_pago'] ?? []),
+                        fn (?array $linea) => $linea !== null && self::lineaInformeZValida($linea, $empresaId),
+                    )),
                 ];
             }
         }
@@ -186,26 +184,37 @@ final class WaitryInformeZConciliacionSupport
             return $plantilla;
         }
 
-        $mapZ = [];
+        $mapZPorCuenta = [];
+        $mapZPorTipo = [];
         foreach ($informeZ['totems'] ?? [] as $t) {
             $tid = (int) ($t['totem_id'] ?? 0);
             if ($tid <= 0) {
                 continue;
             }
-            $mapZ[$tid] = [];
+            $mapZPorCuenta[$tid] = [];
+            $mapZPorTipo[$tid] = [];
             foreach ($t['lineas'] ?? [] as $ln) {
+                $monto = round((float) ($ln['monto'] ?? $ln['monto_informe_z'] ?? 0), 2);
+                $ccId = (int) ($ln['cuentacaja_id'] ?? 0);
+                if ($ccId > 0) {
+                    $mapZPorCuenta[$tid][$ccId] = $monto;
+                }
                 $tipo = WaitryMedioPagoCuentacajaSupport::normalizarTipo($ln['tipo_waitry'] ?? null) ?? 'totem';
-                $mapZ[$tid][$tipo] = round((float) ($ln['monto'] ?? $ln['monto_informe_z'] ?? 0), 2);
+                $mapZPorTipo[$tid][$tipo] = $monto;
             }
         }
 
         foreach ($plantilla as &$bloque) {
             $tid = (int) ($bloque['totem_id'] ?? 0);
-            $zLineas = $mapZ[$tid] ?? [];
+            $zCuentas = $mapZPorCuenta[$tid] ?? [];
+            $zTipos = $mapZPorTipo[$tid] ?? [];
             foreach ($bloque['lineas'] as &$ln) {
+                $ccId = (int) ($ln['cuentacaja_id'] ?? 0);
                 $tipo = WaitryMedioPagoCuentacajaSupport::normalizarTipo($ln['tipo_waitry'] ?? null) ?? 'totem';
-                if (array_key_exists($tipo, $zLineas)) {
-                    $ln['monto_informe_z'] = $zLineas[$tipo];
+                if ($ccId > 0 && array_key_exists($ccId, $zCuentas)) {
+                    $ln['monto_informe_z'] = $zCuentas[$ccId];
+                } elseif (array_key_exists($tipo, $zTipos)) {
+                    $ln['monto_informe_z'] = $zTipos[$tipo];
                 }
             }
             unset($ln);
@@ -216,6 +225,49 @@ final class WaitryInformeZConciliacionSupport
     }
 
     /**
+     * @param  array<string, mixed>|null  $medioSistema
+     * @return array<string, mixed>
+     */
+    private static function lineaPlantillaDesdeTipo(int $empresaId, string $tipo, ?array $medioSistema): array
+    {
+        $cuenta = WaitryMedioPagoCuentacajaSupport::cuentaParaTipoInformeZ($tipo, $empresaId);
+        $etiquetaTipo = WaitryMedioPagoCuentacajaSupport::etiquetaTipo($tipo);
+        $etiquetaCuenta = $cuenta !== null
+            ? trim(($cuenta['codigo'] ?? '').' — '.($cuenta['nombre'] ?? ''))
+            : $etiquetaTipo;
+
+        return [
+            'tipo_waitry' => $tipo,
+            'etiqueta' => (string) ($medioSistema['etiqueta'] ?? $etiquetaCuenta),
+            'cuentacaja_id' => $cuenta['id'] ?? null,
+            'cuentacaja_codigo' => $cuenta['codigo'] ?? '',
+            'cuentacaja_nombre' => $cuenta['nombre'] ?? '',
+            'moneda_abreviatura' => $cuenta['moneda_abreviatura'] ?? 'ARS',
+            'monto_sistema' => round((float) ($medioSistema['total'] ?? 0), 2),
+            'cantidad_sistema' => (int) ($medioSistema['cantidad'] ?? 0),
+            'monto_informe_z' => null,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $linea
+     */
+    private static function lineaInformeZValida(array $linea, int $empresaId): bool
+    {
+        $ccId = (int) ($linea['cuentacaja_id'] ?? 0);
+        if ($ccId > 0 && WaitryMedioPagoCuentacajaSupport::esCuentacajaTotem($ccId, $empresaId)) {
+            return false;
+        }
+
+        $tipo = WaitryMedioPagoCuentacajaSupport::normalizarTipo($linea['tipo_waitry'] ?? null);
+
+        return $tipo !== null
+            && ! WaitryMedioPagoCuentacajaSupport::esTipoExcluidoInformeZ($tipo);
+    }
+
+    /**
+     * Solo medios predefinidos (config waitry.tipo_pago_cuentacaja).
+     *
      * @return array<string, string> tipo => etiqueta
      */
     private static function tiposMedioCatalogo(int $empresaId): array
@@ -224,8 +276,6 @@ final class WaitryInformeZConciliacionSupport
         foreach (WaitryMedioPagoCuentacajaSupport::mediosConfiguradosParaEmpresa($empresaId) as $tipo => $medio) {
             $out[$tipo] = $medio['etiqueta'];
         }
-        $out['totem'] = WaitryMedioPagoCuentacajaSupport::etiquetaTipo('totem');
-        $out['cash'] = WaitryMedioPagoCuentacajaSupport::etiquetaTipo('cash');
 
         return $out;
     }

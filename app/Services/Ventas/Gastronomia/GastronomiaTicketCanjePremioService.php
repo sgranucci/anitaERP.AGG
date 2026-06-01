@@ -10,6 +10,7 @@ use App\Models\Ventas\TicketcanjeGastronomia;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Services\Stock\PrecioService;
+use App\Support\Stock\FormulaArticuloGastronomia;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -25,6 +26,7 @@ final class GastronomiaTicketCanjePremioService
     public function __construct(
         private readonly WigosCanjePremioService $wigosService,
         private readonly GastronomiaCuentaService $cuentaService,
+        private readonly GastronomiaFormulaOpcionalesService $opcionalesService,
     ) {
     }
 
@@ -92,10 +94,16 @@ final class GastronomiaTicketCanjePremioService
     /**
      * Agrega ítems a la cuenta, aplica descuento/cliente y guarda datos pendientes para persistir al emitir.
      *
+     * @param  array<int|string, array<string|int, int|null>>  $opcionalesPorArticulo  articulo_id => [orden => articulo_opcional_id]
+     *
      * @return array{cuenta:CuentaGastronomia,validacion:array<string,mixed>}
      */
-    public function aplicarACuenta(CuentaGastronomia $cuenta, string $numerocupon, int $listaprecioId): array
-    {
+    public function aplicarACuenta(
+        CuentaGastronomia $cuenta,
+        string $numerocupon,
+        int $listaprecioId,
+        array $opcionalesPorArticulo = [],
+    ): array {
         if ($cuenta->estado !== CuentaGastronomia::ESTADO_ABIERTA) {
             throw new InvalidArgumentException('La cuenta no está abierta.');
         }
@@ -119,15 +127,31 @@ final class GastronomiaTicketCanjePremioService
             $clienteInternoId = (int) $cliente->id;
         }
 
-        DB::transaction(function () use ($cuenta, $validacion, $descuento, $clienteInternoId) {
-            foreach ($validacion['items'] as $item) {
+        $itemsConOpcionales = $validacion['items'];
+
+        DB::transaction(function () use (
+            $cuenta,
+            &$itemsConOpcionales,
+            &$validacion,
+            $descuento,
+            $clienteInternoId,
+            $opcionalesPorArticulo,
+        ) {
+            foreach ($itemsConOpcionales as $idx => $item) {
+                $articuloId = (int) $item['articulo_id'];
+                $opcionales = $this->resolverOpcionalesLineaCanje($articuloId, $opcionalesPorArticulo);
+                $itemsConOpcionales[$idx]['opcionales'] = $opcionales === [] ? null : $opcionales;
+
                 $this->cuentaService->agregarLinea(
                     $cuenta->fresh(['lineas']),
-                    (int) $item['articulo_id'],
+                    $articuloId,
                     (float) $item['cantidad'],
                     (float) $item['precio_unitario'],
+                    $opcionales,
                 );
             }
+
+            $validacion['items'] = $itemsConOpcionales;
 
             $this->cuentaService->actualizarCabecera($cuenta->fresh(), [
                 'descuento_gastronomia_id' => $descuento->id,
@@ -467,5 +491,46 @@ final class GastronomiaTicketCanjePremioService
         }
 
         return $cliente;
+    }
+
+    /**
+     * @param  array<int|string, array<string|int, int|null>>  $opcionalesPorArticulo
+     *
+     * @return array<string, int|null>
+     */
+    private function resolverOpcionalesLineaCanje(int $articuloId, array $opcionalesPorArticulo): array
+    {
+        $raw = $opcionalesPorArticulo[$articuloId]
+            ?? $opcionalesPorArticulo[(string) $articuloId]
+            ?? [];
+
+        $opcionales = [];
+        foreach ($raw as $k => $v) {
+            $opcionales[(string) $k] = $v !== null && $v !== '' ? (int) $v : null;
+        }
+
+        if (! FormulaArticuloGastronomia::opcionalesHabilitados()) {
+            return $opcionales;
+        }
+
+        $articulo = Articulo::query()->find($articuloId);
+        if (! $articulo) {
+            return $opcionales;
+        }
+
+        $grupos = $this->opcionalesService->gruposOpcionalesPorArticulo($articulo);
+        if ($grupos === []) {
+            return $opcionales;
+        }
+
+        if ($opcionales === []) {
+            throw new InvalidArgumentException(
+                'Debe seleccionar opcionales para el artículo '.trim((string) $articulo->sku).'.'
+            );
+        }
+
+        $this->opcionalesService->validarSeleccionOpcionales($articulo, $opcionales);
+
+        return $opcionales;
     }
 }

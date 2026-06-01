@@ -6,7 +6,8 @@ use App\Models\Ventas\TotemWaitryGastronomia;
 use Illuminate\Support\Collection;
 
 /**
- * Agrupa líneas de cierre de jornada Waitry por tótem y medio de pago (criterio cobro en tótem).
+ * Agrupa ingresos Waitry por tótem y medio real (MP, Totalcoin, etc.) para Informe Z.
+ * Excluye cash y movimientos que irían a la cuenta puente TOTEM (ajuste en cierre final).
  */
 final class WaitryTotemJornadaResumenSupport
 {
@@ -119,6 +120,10 @@ final class WaitryTotemJornadaResumenSupport
      */
     public static function lineaCuentaParaIngresoTotem(array $ln): bool
     {
+        if (WaitryMedioPagoCuentacajaSupport::esTipoExcluidoInformeZ($ln['waitry_tipo_pago'] ?? null)) {
+            return false;
+        }
+
         if (($ln['paid_waitry'] ?? null) === true) {
             return true;
         }

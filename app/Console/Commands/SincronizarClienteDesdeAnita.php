@@ -47,10 +47,12 @@ class SincronizarClienteDesdeAnita extends Command
 
         try {
             if ($codigo !== '') {
-                $this->info("Importando cliente Anita clim_cliente={$codigo}…");
+                $crear = ! $clienteRepository->existeClientePorCodigo($codigo);
+                $accion = $crear ? 'Importando' : 'Actualizando';
+                $this->info("{$accion} cliente Anita clim_cliente={$codigo}…");
                 /** @var ClienteRepository $clienteRepository */
-                $clienteRepository->traerRegistroDeAnita($codigo, true);
-                $this->info('Cliente procesado.');
+                $clienteRepository->traerRegistroDeAnita($codigo, $crear);
+                $this->info($crear ? 'Cliente importado.' : 'Cliente actualizado.');
 
                 return self::SUCCESS;
             }

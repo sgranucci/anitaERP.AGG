@@ -737,12 +737,30 @@
     }
 
     function esFacturaCortesia(montoArsOpt, cuentaOpt) {
+        const cuenta = cuentaOpt || cuentaActivaConLineas;
+        if (cuenta && cuenta.factura_cortesia) {
+            return true;
+        }
+        if (cuenta && cuenta.sin_cobranza) {
+            return true;
+        }
         const monto =
-            montoArsOpt != null && !Number.isNaN(Number(montoArsOpt)) ? Number(montoArsOpt) : leerTotalAFacturarArs();
+            montoArsOpt != null && !Number.isNaN(Number(montoArsOpt))
+                ? Number(montoArsOpt)
+                : totalFacturarDesdeCuenta(cuenta);
         if (monto > 0 && monto <= 0.02) {
             return true;
         }
-        return evaluarFacturaCortesiaDesdeCuenta(cuentaOpt || cuentaActivaConLineas).cortesia;
+        return evaluarFacturaCortesiaDesdeCuenta(cuenta).cortesia;
+    }
+
+    /** Total fiscal del comprobante (con IVA e impuestos); usar para cobranza y validación. */
+    function totalFacturarDesdeCuenta(cuenta) {
+        const c = cuenta || cuentaActivaConLineas;
+        if (c && c.total_facturar_ars != null && !Number.isNaN(Number(c.total_facturar_ars))) {
+            return Number(c.total_facturar_ars);
+        }
+        return subtotalEstimadoDesdeCuenta(c);
     }
 
     function leerTotalAFacturarArs() {
@@ -1444,6 +1462,23 @@
         window.pintarDescuentoEnPantalla = envuelto;
     }
 
+    function enfocarGrillaCobranza() {
+        const tbody = document.getElementById('tbody-gastro-cuenta-table');
+        const tr = tbody ? tbody.querySelector('tr') : null;
+        const inp = tr ? tr.querySelector('.codigocuentacaja, .monto') : null;
+        if (inp && typeof inp.focus === 'function') {
+            inp.focus();
+            if (typeof inp.select === 'function') {
+                inp.select();
+            }
+            return;
+        }
+        const panel = document.getElementById('panel-cobranza-compacta');
+        if (panel && typeof panel.scrollIntoView === 'function') {
+            panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
+
     async function facturarConDescuento() {
         if (bloquearOperacionPosPorJornadaTurno()) {
             return;
@@ -1457,7 +1492,23 @@
 
         try {
             await abrirModalF8Descuento();
-            await emitirFactura({ exigirDescuento: true, prepararCobranzaSiFalta: true });
+            const cuenta = await guardarCabecera(true);
+            const esCortesia = esFacturaCortesia(null, cuenta);
+            if (!esCortesia && !recogerMediosPagoFromGrid().length) {
+                const total = totalFacturarDesdeCuenta(cuenta);
+                setTotalFacturadoArs(total > 0 ? total : 0);
+                toast(
+                    'Descuento aplicado. Indique el medio de cobro en la grilla inferior y pulse F8 de nuevo (o Facturar).',
+                    'info',
+                );
+                enfocarGrillaCobranza();
+                return;
+            }
+            await emitirFactura({
+                exigirDescuento: true,
+                prepararCobranzaSiFalta: esCortesia ? false : false,
+                cuentaPrecargada: cuenta,
+            });
         } catch (e) {
             if (e && e.message && e.message !== 'Operación cancelada.') {
                 toast(e.message || String(e), 'error');
@@ -1498,11 +1549,6 @@
     }
 
     function resolverCuentacajaWaitryTotem(cuenta) {
-        const tipo = normalizarTipoWaitry(cuenta && cuenta.waitry_tipo_pago);
-        const map = G.waitryTipoPagoCuentacaja || {};
-        if (tipo && map[tipo] && map[tipo].id) {
-            return map[tipo];
-        }
         return G.cuentacajaTotem || null;
     }
 
@@ -1642,7 +1688,7 @@
         if (!cc || !cc.id) {
             throw new Error(
                 G.cuentacajaTotemError ||
-                    'Configure la cuenta de caja Waitry (TOTEM / Mercado Pago / Totalcoin) para la empresa de esta terminal.',
+                    'Configure la cuenta de caja TOTEM (puente Waitry) para la empresa de esta terminal.',
             );
         }
         if (G.cobranzaConfigError) {
@@ -2821,10 +2867,16 @@
             canjePremioValidado = data;
             pintarPreviewCanjePremio(data);
             const btn = document.getElementById('gastro-canje-premio-confirmar');
-            if (btn) btn.disabled = false;
+            if (btn) {
+                btn.disabled = false;
+                setTimeout(() => btn.focus(), 0);
+            }
+            actualizarBtnConfirmarCanjePremio();
         } catch (e) {
             canjePremioUltimoCodigoValidado = '';
-            mostrarErrorModalCanjePremio(e.message || String(e));
+            const detalle =
+                (e.payload && (e.payload.error || e.payload.mensaje)) || e.message || String(e);
+            mostrarErrorModalCanjePremio(detalle);
         } finally {
             canjePremioValidando = false;
         }
@@ -2854,6 +2906,68 @@
         }
     }
 
+    function articuloStubDesdeItemCanjePremio(item) {
+        return {
+            id: parseInt(item.articulo_id, 10),
+            sku: item.sku || '',
+            descripcion: item.descripcion || '',
+        };
+    }
+
+    function pedirOpcionalesCanjePremio(articulo, grupos) {
+        return new Promise((resolve) => {
+            pendingOpcionalesCtx = {
+                articulo,
+                cantidad: 1,
+                modo: 'canje-premio',
+                grupos,
+                onResolve: resolve,
+            };
+            pendingOpcionalesSeleccion = null;
+            renderGrillaOpcionales(grupos, articulo);
+            $('#modal-opcionales').modal('show');
+        });
+    }
+
+    /**
+     * Tras validar el cupón: si algún ítem del premio tiene opcionales de fórmula, abre el modal
+     * por cada artículo distinto antes de aplicar el canje.
+     *
+     * @returns {Promise<object|null>} mapa articulo_id → selección, o null si el usuario cancela
+     */
+    async function recolectarOpcionalesParaCanjePremio(items) {
+        const lista = Array.isArray(items) ? items : [];
+        const porArticulo = new Map();
+        lista.forEach((it) => {
+            const aid = parseInt(it.articulo_id, 10);
+            if (aid > 0 && !porArticulo.has(aid)) {
+                porArticulo.set(aid, it);
+            }
+        });
+
+        const necesitan = [];
+        for (const [aid, it] of porArticulo) {
+            const grupos = await fetchGruposOpcionales(aid);
+            if (grupos.length) {
+                necesitan.push({ articulo: articuloStubDesdeItemCanjePremio(it), grupos });
+            }
+        }
+
+        if (!necesitan.length) {
+            return {};
+        }
+
+        const resultado = {};
+        for (const { articulo, grupos } of necesitan) {
+            const map = await pedirOpcionalesCanjePremio(articulo, grupos);
+            if (map === null) {
+                return null;
+            }
+            resultado[String(articulo.id)] = map;
+        }
+        return resultado;
+    }
+
     async function aplicarCanjePremioACuenta(opciones) {
         const opts = opciones || {};
         if (!canjePremioValidado) {
@@ -2879,14 +2993,26 @@
         const btn = document.getElementById('gastro-canje-premio-confirmar');
         if (btn && !opts.silencioso) btn.disabled = true;
 
+        const opcionalesPorArticulo = await recolectarOpcionalesParaCanjePremio(
+            canjePremioValidado.items || [],
+        );
+        if (opcionalesPorArticulo === null) {
+            if (btn && !opts.silencioso) btn.disabled = false;
+            return false;
+        }
+
         try {
+            const payload = {
+                cuenta_id: cuentaId,
+                codigo_barras: codigo,
+            };
+            if (opcionalesPorArticulo && Object.keys(opcionalesPorArticulo).length) {
+                payload.opcionales_por_articulo = opcionalesPorArticulo;
+            }
             const data = await api('/ventas/gastronomia/api/aplicar-ticket-canje-premio', {
                 method: 'POST',
                 headers: hdrJson(),
-                body: JSON.stringify({
-                    cuenta_id: cuentaId,
-                    codigo_barras: codigo,
-                }),
+                body: JSON.stringify(payload),
             });
             if (!data.ok) {
                 const msg = data.error || data.mensaje || 'No se pudo aplicar el canje.';
@@ -2901,11 +3027,19 @@
 
             pintarCuentaTrasCanjePremio(data.cuenta);
 
-            if (typeof $ !== 'undefined' && !opts.silencioso) {
-                $('#modal-gastro-canje-premio').modal('hide');
+            const codDesc = codigoDescuentoDesdeValidacionCanje(
+                data.validacion,
+                G.canjePremioDescuentoCodigo,
+            );
+
+            if (!opts.silencioso) {
+                resetModalCanjePremio(true);
+                toast('Canje aplicado. Abriendo facturación con descuento 100%…', 'success');
+                await cerrarModalCanjeYFacturarConF8('modal-gastro-canje-premio', codDesc);
+            } else {
+                resetModalCanjePremio(true);
+                await continuarFacturacionTrasCanjeWigos(codDesc);
             }
-            toast('Canje aplicado. Facture con descuento ($0,01).', 'success');
-            resetModalCanjePremio(true);
             return true;
         } catch (e) {
             const msg = e.message || String(e);
@@ -2942,6 +3076,36 @@
             if (e.message !== 'cancelado') {
                 toast(e.message, 'error');
             }
+        }
+    }
+
+    function puedeConfirmarCanjePremioDesdeTeclado() {
+        const btn = document.getElementById('gastro-canje-premio-confirmar');
+        return !!(canjePremioValidado && btn && !btn.disabled && !canjePremioValidando);
+    }
+
+    function manejarEnterModalCanjePremio(e) {
+        if (!e || e.key !== 'Enter' || e.ctrlKey || e.metaKey || e.altKey) {
+            return;
+        }
+        const t = e.target;
+        if (puedeConfirmarCanjePremioDesdeTeclado()) {
+            e.preventDefault();
+            void confirmarCanjePremio();
+            return;
+        }
+        if (t && t.id === 'gastro-canje-premio-confirmar' && !t.disabled) {
+            e.preventDefault();
+            void confirmarCanjePremio();
+            return;
+        }
+        if (t && t.id === 'gastro-canje-premio-codigo') {
+            e.preventDefault();
+            if (canjePremioInputTimer) {
+                clearTimeout(canjePremioInputTimer);
+                canjePremioInputTimer = null;
+            }
+            void validarCodigoBarrasCanjePremio();
         }
     }
 
@@ -3009,24 +3173,17 @@
         }
 
         if (inp) {
-            inp.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    if (canjePremioInputTimer) {
-                        clearTimeout(canjePremioInputTimer);
-                        canjePremioInputTimer = null;
-                    }
-                    void validarCodigoBarrasCanjePremio();
-                }
-            });
             inp.addEventListener('input', () => programarValidacionCanjePremioTrasLectura());
+            inp.addEventListener('keydown', manejarEnterModalCanjePremio);
         }
 
         if (btnConfirmar) {
             btnConfirmar.addEventListener('click', () => void confirmarCanjePremio());
+            btnConfirmar.addEventListener('keydown', manejarEnterModalCanjePremio);
         }
 
         if (typeof $ !== 'undefined') {
+            $('#modal-gastro-canje-premio').on('keydown.gastroCanjePremio', manejarEnterModalCanjePremio);
             $('#modal-gastro-canje-premio').on('hidden.bs.modal', function () {
                 if (!canjePremioEsperaApertura) {
                     resetModalCanjePremio(true);
@@ -3042,6 +3199,21 @@
     let canjeFidelidadValidando = false;
     let canjeFidelidadInputTimer = null;
     let canjeFidelidadUltimoTrackdataValidado = '';
+
+    /** Quita sentinelas que agregan lectores magnéticos (; al inicio, ? al final, etc.). */
+    function normalizarTrackdataLector(raw) {
+        let t = String(raw || '').trim();
+        t = t.replace(/[\x00-\x1F\x7F]/g, '');
+        const prefijos = [';', '%', '*'];
+        const sufijos = ['?', ';', '%'];
+        while (t.length && prefijos.includes(t[0])) {
+            t = t.slice(1);
+        }
+        while (t.length && sufijos.includes(t[t.length - 1])) {
+            t = t.slice(0, -1);
+        }
+        return t.trim();
+    }
 
     function resetModalCanjeFidelidad(limpiarValidacion) {
         if (limpiarValidacion !== false) {
@@ -3183,6 +3355,12 @@
 
         wrap.classList.remove('d-none');
         actualizarBotonConfirmarCanjeFidelidad();
+        if (arts.length === 1 && puedeConfirmarCanjeFidelidadDesdeTeclado()) {
+            const btnConf = document.getElementById('gastro-canje-fidelidad-confirmar');
+            if (btnConf && typeof btnConf.focus === 'function') {
+                setTimeout(() => btnConf.focus(), 0);
+            }
+        }
     }
 
     function pintarPreviewCanjeFidelidad(data) {
@@ -3220,7 +3398,10 @@
             return;
         }
         const inp = document.getElementById('gastro-canje-fidelidad-trackdata');
-        const trackdata = (inp?.value || '').trim();
+        const trackdata = normalizarTrackdataLector(inp?.value || '');
+        if (inp && inp.value !== trackdata) {
+            inp.value = trackdata;
+        }
         if (!trackdata) {
             mostrarErrorModalCanjeFidelidad('Pase la tarjeta o ingrese el identificador.');
             return;
@@ -3256,16 +3437,52 @@
             canjeFidelidadUltimoTrackdataValidado = trackdata;
             canjeFidelidadValidado = data;
             pintarPreviewCanjeFidelidad(data);
+            actualizarBotonConfirmarCanjeFidelidad();
         } catch (e) {
             canjeFidelidadUltimoTrackdataValidado = '';
-            mostrarErrorModalCanjeFidelidad(e.message || String(e));
+            const detalle =
+                (e.payload && (e.payload.error || e.payload.mensaje)) || e.message || String(e);
+            mostrarErrorModalCanjeFidelidad(detalle);
         } finally {
             canjeFidelidadValidando = false;
         }
     }
 
-    async function continuarFacturacionTrasCanjeFidelidad() {
+    async function prepararDescuentoCanjeWigosEnPantalla(codigoDescuento) {
+        const cod = String(
+            codigoDescuento || G.canjeFidelidadDescuentoCodigo || G.canjePremioDescuentoCodigo || '10',
+        ).trim();
+        if (!cod) {
+            return;
+        }
+        if (!tieneDescuentoEnPantalla()) {
+            await cargarDescuentoPorCodigoApi(cod);
+        }
+    }
+
+    /** Tras aplicar canje Wigos: si descuento 100% y cliente interno ya están OK, confirma F8 sin otro clic. */
+    function registrarAutoConfirmacionF8TrasCanjeWigos() {
+        if (typeof $ === 'undefined') {
+            return;
+        }
+        $('#modal-f8-descuento')
+            .off('shown.bs.modal.gastroPostCanje')
+            .one('shown.bs.modal.gastroPostCanje', function () {
+                setTimeout(() => {
+                    if (!tieneDescuentoEnPantalla()) {
+                        return;
+                    }
+                    if (!validarClienteInternoDescuentoEnPantalla()) {
+                        void confirmarModalF8Descuento();
+                    }
+                }, 150);
+            });
+    }
+
+    async function continuarFacturacionTrasCanjeWigos(codigoDescuento) {
         try {
+            await prepararDescuentoCanjeWigosEnPantalla(codigoDescuento);
+            registrarAutoConfirmacionF8TrasCanjeWigos();
             await abrirModalF8Descuento();
             await emitirFactura({ exigirDescuento: true, prepararCobranzaSiFalta: true });
         } catch (eF8) {
@@ -3273,6 +3490,36 @@
                 toast(eF8.message, 'warning');
             }
         }
+    }
+
+    function codigoDescuentoDesdeValidacionCanje(validacion, fallbackCodigo) {
+        return (
+            (validacion && validacion.descuento && validacion.descuento.codigo) ||
+            fallbackCodigo ||
+            G.canjePremioDescuentoCodigo ||
+            '10'
+        );
+    }
+
+    async function cerrarModalCanjeYFacturarConF8(modalId, codigoDescuento) {
+        const ejecutar = () => continuarFacturacionTrasCanjeWigos(codigoDescuento);
+        if (typeof $ === 'undefined') {
+            await ejecutar();
+            return;
+        }
+        const $modal = $('#' + modalId);
+        if ($modal.length && $modal.hasClass('show')) {
+            await new Promise((resolve, reject) => {
+                $modal.one('hidden.bs.modal.gastroFacturarCanje', () => {
+                    setTimeout(() => {
+                        ejecutar().then(resolve).catch(reject);
+                    }, 120);
+                });
+                $modal.modal('hide');
+            });
+            return;
+        }
+        await ejecutar();
     }
 
     async function aplicarCanjeFidelidadACuenta(opciones) {
@@ -3296,7 +3543,12 @@
             return false;
         }
         const inp = document.getElementById('gastro-canje-fidelidad-trackdata');
-        const trackdata = (inp?.value || canjeFidelidadValidado.trackdata || '').trim();
+        const trackdata = normalizarTrackdataLector(
+            inp?.value || canjeFidelidadValidado.trackdata || '',
+        );
+        if (inp && inp.value !== trackdata) {
+            inp.value = trackdata;
+        }
         const btn = document.getElementById('gastro-canje-fidelidad-confirmar');
         if (btn && !opts.silencioso) btn.disabled = true;
 
@@ -3324,23 +3576,19 @@
 
             pintarCuentaTrasCanjePremio(data.cuenta);
 
-            const codDesc =
-                (data.validacion && data.validacion.descuento && data.validacion.descuento.codigo) ||
-                G.canjeFidelidadDescuentoCodigo ||
-                '10';
-            try {
-                await cargarDescuentoPorCodigoApi(codDesc);
-            } catch (eDesc) {
-                toast(eDesc.message || String(eDesc), 'warning');
-            }
+            const codDesc = codigoDescuentoDesdeValidacionCanje(
+                data.validacion,
+                G.canjeFidelidadDescuentoCodigo,
+            );
 
-            if (typeof $ !== 'undefined' && !opts.silencioso) {
-                $('#modal-gastro-canje-fidelidad').modal('hide');
+            if (!opts.silencioso) {
+                resetModalCanjeFidelidad(true);
+                toast('Canje fidelidad aplicado. Abriendo facturación con descuento 100%…', 'success');
+                await cerrarModalCanjeYFacturarConF8('modal-gastro-canje-fidelidad', codDesc);
+            } else {
+                resetModalCanjeFidelidad(true);
+                await continuarFacturacionTrasCanjeWigos(codDesc);
             }
-            resetModalCanjeFidelidad(true);
-            toast('Canje fidelidad aplicado. Confirme descuento y cliente para facturar.', 'success');
-
-            await continuarFacturacionTrasCanjeFidelidad();
             return true;
         } catch (e) {
             const msg = e.message || String(e);
@@ -3378,6 +3626,50 @@
             if (e.message !== 'cancelado') {
                 toast(e.message, 'error');
             }
+        }
+    }
+
+    function puedeConfirmarCanjeFidelidadDesdeTeclado() {
+        const btn = document.getElementById('gastro-canje-fidelidad-confirmar');
+        return !!(
+            canjeFidelidadValidado &&
+            canjeFidelidadArticuloId &&
+            btn &&
+            !btn.disabled &&
+            !canjeFidelidadValidando
+        );
+    }
+
+    function manejarEnterModalCanjeFidelidad(e) {
+        if (!e || e.key !== 'Enter' || e.ctrlKey || e.metaKey || e.altKey) {
+            return;
+        }
+        const t = e.target;
+        if (puedeConfirmarCanjeFidelidadDesdeTeclado()) {
+            e.preventDefault();
+            void confirmarCanjeFidelidad();
+            return;
+        }
+        if (t && t.id === 'gastro-canje-fidelidad-confirmar' && !t.disabled) {
+            e.preventDefault();
+            void confirmarCanjeFidelidad();
+            return;
+        }
+        if (
+            t &&
+            (t.id === 'gastro-canje-fidelidad-trackdata' ||
+                t.classList.contains('gastro-canje-fidelidad-art-radio'))
+        ) {
+            e.preventDefault();
+            if (canjeFidelidadInputTimer) {
+                clearTimeout(canjeFidelidadInputTimer);
+                canjeFidelidadInputTimer = null;
+            }
+            if (t.classList.contains('gastro-canje-fidelidad-art-radio') && t.checked) {
+                void confirmarCanjeFidelidad();
+                return;
+            }
+            void validarTarjetaCanjeFidelidad();
         }
     }
 
@@ -3445,24 +3737,17 @@
         }
 
         if (inp) {
-            inp.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    if (canjeFidelidadInputTimer) {
-                        clearTimeout(canjeFidelidadInputTimer);
-                        canjeFidelidadInputTimer = null;
-                    }
-                    void validarTarjetaCanjeFidelidad();
-                }
-            });
             inp.addEventListener('input', () => programarValidacionCanjeFidelidadTrasLectura());
+            inp.addEventListener('keydown', manejarEnterModalCanjeFidelidad);
         }
 
         if (btnConfirmar) {
             btnConfirmar.addEventListener('click', () => void confirmarCanjeFidelidad());
+            btnConfirmar.addEventListener('keydown', manejarEnterModalCanjeFidelidad);
         }
 
         if (typeof $ !== 'undefined') {
+            $('#modal-gastro-canje-fidelidad').on('keydown.gastroCanjeFid', manejarEnterModalCanjeFidelidad);
             $('#modal-gastro-canje-fidelidad').on('hidden.bs.modal', function () {
                 if (!canjeFidelidadEsperaApertura) {
                     resetModalCanjeFidelidad(true);
@@ -4305,6 +4590,9 @@
     }
 
     function subtotalEstimadoDesdeCuenta(cuenta) {
+        if (cuenta && cuenta.total_facturar_ars != null && !Number.isNaN(Number(cuenta.total_facturar_ars))) {
+            return Number(cuenta.total_facturar_ars);
+        }
         if (cuenta && cuenta.subtotal_estimado != null && !Number.isNaN(Number(cuenta.subtotal_estimado))) {
             return Number(cuenta.subtotal_estimado);
         }
@@ -4854,23 +5142,30 @@
     }
 
     /**
-     * Flujo no-directo (botón "Agregar consumo" / lupa):
-     * 1) Si el artículo tiene opcionales → abrir modal-opcionales y dar de alta con
-     *    cantidad=1 al confirmar (los opcionales se piden por separado; si hace
-     *    falta más de 1 unidad se ajusta luego desde la grilla con + / −).
+     * Flujo no-directo (botón "Agregar consumo" / lupa / atajo + en SKU):
+     * 1) Si el artículo tiene opcionales → modal-opcionales; luego alta con cantidad=1
+     *    (agregar-directo) o modal-cantidad (cantidad-despues) según opciones.
      * 2) Si no tiene opcionales → modal-cantidad para que el usuario indique cuánto.
+     *
+     * @param {{ pedirCantidad?: boolean }} [opciones] pedirCantidad=true → tras opcionales abre cantidad (atajo +).
      */
-    async function iniciarAltaLinea(articulo) {
+    async function iniciarAltaLinea(articulo, opciones) {
         if (bloquearOperacionPosPorJornadaTurno()) {
             return;
         }
+        const pedirCantidad = !!(opciones && opciones.pedirCantidad);
         pendingArticulo = null;
         pendingOpcionalesSeleccion = null;
         pendingOpcionalesCtx = null;
 
         const grupos = await fetchGruposOpcionales(articulo.id);
         if (grupos.length) {
-            pendingOpcionalesCtx = { articulo, cantidad: 1, modo: 'agregar-directo', grupos };
+            pendingOpcionalesCtx = {
+                articulo,
+                cantidad: 1,
+                modo: pedirCantidad ? 'cantidad-despues' : 'agregar-directo',
+                grupos,
+            };
             renderGrillaOpcionales(grupos, articulo);
             $('#modal-opcionales').modal('show');
             return;
@@ -4899,6 +5194,19 @@
         }
 
         await agregarLineaApi(articulo, cantidad, {});
+    }
+
+    function manejarEnterModalCantidad(e) {
+        if (!e || e.key !== 'Enter' || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) {
+            return;
+        }
+        const modal = document.getElementById('modal-cantidad');
+        if (!modal || !modal.classList.contains('show')) {
+            return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        void continuarDespuesCantidad();
     }
 
     async function continuarDespuesCantidad() {
@@ -4976,6 +5284,20 @@
         await procesarAltaConsumo(articulo, 1);
     }
 
+    /** Atajo + en campo SKU: igual que botón Agregar (modal cantidad; opcionales → cantidad). */
+    async function intentarAgregarConsumoConCantidadDesdeTeclado() {
+        if (bloquearOperacionPosPorJornadaTurno()) {
+            return;
+        }
+        const { ok, articulo } = await resolverSkuConsumoEnFila();
+        if (!ok || !articulo) return;
+        await iniciarAltaLinea(articulo, { pedirCantidad: true });
+    }
+
+    function esAtajoCantidadEnSkuConsumo(e) {
+        return e.key === '+' || e.code === 'NumpadAdd' || (e.key === '=' && e.shiftKey);
+    }
+
     async function resolverSkuPorTabYEnfocarAgregar() {
         const { ok } = await resolverSkuConsumoEnFila();
         if (!ok) return;
@@ -4993,6 +5315,16 @@
         const ctx = pendingOpcionalesCtx;
         if (!ctx) {
             $('#modal-opcionales').modal('hide');
+            return;
+        }
+
+        if (ctx.modo === 'canje-premio') {
+            pendingOpcionalesCtx = null;
+            pendingOpcionalesSeleccion = null;
+            $('#modal-opcionales').modal('hide');
+            if (typeof ctx.onResolve === 'function') {
+                ctx.onResolve(map);
+            }
             return;
         }
 
@@ -5103,6 +5435,7 @@
         if (data.errores && data.errores.length) {
             throw new Error(data.errores.join(' '));
         }
+        return data;
     }
 
     async function emitirFactura(opciones) {
@@ -5124,9 +5457,9 @@
         }
         try {
             setFacturacionLoading(true, 'Validando cuenta y cobranza…');
-            const cuenta = await guardarCabecera(true);
-            const montoArs = subtotalEstimadoDesdeCuenta(cuenta) || leerTotalAFacturarArs();
-            const esCortesia = esFacturaCortesia(montoArs, cuenta);
+            const cuenta = opts.cuentaPrecargada || (await guardarCabecera(true));
+            let montoArs = totalFacturarDesdeCuenta(cuenta) || leerTotalAFacturarArs();
+            let esCortesia = esFacturaCortesia(montoArs, cuenta);
             setTotalFacturadoArs(montoArs > 0 ? montoArs : esCortesia ? IMPORTE_MINIMO_FACTURA : 0);
 
             let mediosPago = Array.isArray(opts.mediosPago) ? opts.mediosPago.slice() : [];
@@ -5159,7 +5492,15 @@
                 mediosPago = [];
             }
 
-            await validarEmisionServidor(mediosPago, false, { facturacionConDescuento });
+            const valData = await validarEmisionServidor(mediosPago, false, { facturacionConDescuento });
+            if (valData && valData.total_facturar_ars != null && !Number.isNaN(Number(valData.total_facturar_ars))) {
+                montoArs = Number(valData.total_facturar_ars);
+                if (valData.factura_cortesia || valData.sin_cobranza) {
+                    esCortesia = true;
+                    mediosPago = [];
+                }
+                setTotalFacturadoArs(montoArs > 0 ? montoArs : IMPORTE_MINIMO_FACTURA);
+            }
             iniciarRotacionMensajesProceso(mensajesProcesoEmision(cuenta));
             const data = await api('/ventas/gastronomia/api/emitir-factura', {
                 method: 'POST',
@@ -5552,6 +5893,14 @@
             await iniciarAltaLinea(articuloParaModal);
         });
         document.getElementById('modal-cantidad-confirmar').addEventListener('click', continuarDespuesCantidad);
+        const fldCantidad = document.getElementById('fld-cantidad-linea');
+        if (fldCantidad) {
+            fldCantidad.addEventListener('keydown', manejarEnterModalCantidad);
+        }
+        const btnCantidadConfirmar = document.getElementById('modal-cantidad-confirmar');
+        if (btnCantidadConfirmar) {
+            btnCantidadConfirmar.addEventListener('keydown', manejarEnterModalCantidad);
+        }
         document.getElementById('modal-opcionales-confirmar').addEventListener('click', () => {
             void avanzarOConfirmarOpcionales();
         });
@@ -5615,10 +5964,19 @@
         document.addEventListener(
             'keydown',
             function (e) {
-                if (e.key !== 'Enter' && e.key !== 'Tab') return;
                 const t = e.target;
                 if (!t || !t.classList || !t.classList.contains('gastro-carga-sku')) return;
                 if (!t.closest('#tr-gastro-linea-articulo')) return;
+
+                if (esAtajoCantidadEnSkuConsumo(e)) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    void intentarAgregarConsumoConCantidadDesdeTeclado();
+                    return;
+                }
+
+                if (e.key !== 'Enter' && e.key !== 'Tab') return;
+
                 if (e.key === 'Enter') {
                     e.preventDefault();
                     e.stopPropagation();
@@ -5643,6 +6001,15 @@
 
         if (typeof $ !== 'undefined') {
             $('#modal-opcionales').on('hidden.bs.modal', function () {
+                if (pendingOpcionalesCtx && pendingOpcionalesCtx.modo === 'canje-premio') {
+                    const cb = pendingOpcionalesCtx.onResolve;
+                    pendingOpcionalesCtx = null;
+                    pendingOpcionalesSeleccion = null;
+                    if (typeof cb === 'function') {
+                        cb(null);
+                    }
+                    return;
+                }
                 if (pendingOpcionalesCtx) {
                     pendingOpcionalesCtx = null;
                     pendingOpcionalesSeleccion = null;
@@ -5661,6 +6028,7 @@
                     if (typeof el.select === 'function') el.select();
                 }
             });
+            $('#modal-cantidad').on('keydown.gastroCantidad', manejarEnterModalCantidad);
             $('#modal-cantidad').on('hidden.bs.modal', function () {
                 if (pendingArticulo || pendingOpcionalesSeleccion) {
                     pendingArticulo = null;
@@ -5759,6 +6127,12 @@
         G.canjeFidelidadClienteCodigo = data.canje_fidelidad_cliente_codigo || '500';
         if (data.waitry_get_orders_minutos_atras != null) {
             G.waitryGetOrdersMinutosAtras = data.waitry_get_orders_minutos_atras;
+        }
+        if (data.listaprecio_id != null) {
+            G.listaprecioId = parseInt(data.listaprecio_id, 10) || null;
+        }
+        if (data.listaprecio_nombre != null) {
+            G.listaprecioNombre = data.listaprecio_nombre;
         }
         aplicarVisibilidadWaitry();
         actualizarLeyendaFiltroWaitry();

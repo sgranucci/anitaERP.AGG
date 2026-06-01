@@ -3,6 +3,7 @@
 namespace App\Support\Caja;
 
 use App\Models\Caja\RendicionGastronomiaCaja;
+use App\Services\Caja\RendicionGastronomiaJornadaPresentacionService;
 use Carbon\Carbon;
 
 class RendicionGastronomiaCajaPermiso
@@ -31,5 +32,26 @@ class RendicionGastronomiaCajaPermiso
     {
         return 'Solo puede modificar rendiciones registradas en el día de hoy. '
             .'Para fechas anteriores solicite al encargado de tesorería.';
+    }
+
+    public static function puedeModificarRendicionTurno(RendicionGastronomiaCaja $rendicion): bool
+    {
+        if ($rendicion->esRendicionJornada()) {
+            return true;
+        }
+
+        $jornadaId = (int) ($rendicion->turnoOperativo?->jornada_gastronomia_id ?? 0);
+        if ($jornadaId <= 0) {
+            return true;
+        }
+
+        return ! app(RendicionGastronomiaJornadaPresentacionService::class)
+            ->jornadaPresentadaBloqueaRendicionesTurno($jornadaId);
+    }
+
+    public static function mensajeJornadaPresentadaBloqueoTurno(): string
+    {
+        return 'La jornada ya fue presentada en caja. Las rendiciones de turno no pueden modificarse. '
+            .'Edite o anule la presentación de jornada si necesita corregir.';
     }
 }

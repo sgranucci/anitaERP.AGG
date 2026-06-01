@@ -150,6 +150,86 @@ final class GastronomiaFacturaEmisionService
     }
 
     /**
+     * Total fiscal del comprobante (con impuestos y descuento de cabecera) para cobranza y UI del POS.
+     *
+     * @return array{total:float,sin_cobranza:bool,factura_cortesia:bool,error?:string}
+     */
+    public function previewTotalesParaCuenta(CuentaGastronomia $cuenta, int $monedaId = 1): array
+    {
+        $cuenta->loadMissing([
+            'lineas.articulo',
+            'cliente',
+            'descuentoGastronomia',
+            'mesa',
+            'configuracionPuntoventa',
+        ]);
+
+        if ($cuenta->lineas->isEmpty()) {
+            return ['total' => 0., 'sin_cobranza' => false, 'factura_cortesia' => false];
+        }
+
+        $cfg = $cuenta->configuracionPuntoventa ?? $this->cuentaService->resolverConfiguracionPv();
+        if (! $cfg) {
+            return [
+                'total' => 0.,
+                'sin_cobranza' => false,
+                'factura_cortesia' => false,
+            ];
+        }
+
+        [$articuloIds, $cantidades, $precios, $descripciones, $opcionalesPorItem, $omitirStkmovAnitaPorItem]
+            = $this->construirArraysFactura($cuenta);
+
+        $tipoFacturaId = (int) ($cfg->tipotransaccion_id ?? 0);
+        if ($tipoFacturaId <= 0) {
+            $tipoFacturaId = (int) config('gastronomia.tipotransaccion_factura_id', 0);
+        }
+        if ($tipoFacturaId <= 0) {
+            return ['total' => 0., 'sin_cobranza' => false, 'factura_cortesia' => false];
+        }
+
+        try {
+            $pvResolucion = ArcaWsfeEmisionResiliencia::resolverPuntoventaEmision(
+                (int) $cfg->puntoventa_cae_id,
+                (int) $cfg->puntoventa_caea_id,
+                false
+            );
+            $puntoventaId = $pvResolucion['puntoventa_id'];
+        } catch (InvalidArgumentException) {
+            return ['total' => 0., 'sin_cobranza' => false, 'factura_cortesia' => false];
+        }
+
+        try {
+            $receptor = $this->receptorFacturacionService->resolverParaFacturar($cuenta);
+        } catch (InvalidArgumentException $e) {
+            return [
+                'total' => 0.,
+                'sin_cobranza' => false,
+                'factura_cortesia' => false,
+                'error' => $e->getMessage(),
+            ];
+        }
+
+        $payload = $this->armarPayloadFacturaBase(
+            $cfg,
+            $tipoFacturaId,
+            $puntoventaId,
+            $this->leyendaCuenta($cuenta),
+            $receptor,
+            $monedaId,
+            $articuloIds,
+            $cantidades,
+            $precios,
+            $descripciones,
+            null,
+            $opcionalesPorItem,
+            $omitirStkmovAnitaPorItem,
+        );
+
+        return $this->facturacionGastronomiaService->previewTotalesEmision($payload, $cuenta);
+    }
+
+    /**
      * @param  list<array{cuentacaja_id:int,moneda_id:int,monto:float,cotizacion?:float|null,observacion?:string|null}>  $mediosPago
      * @return array{venta_id?:int,factura?:string,warn?:string,error?:string,sin_cobranza?:bool,cobranza_id?:int}
      */

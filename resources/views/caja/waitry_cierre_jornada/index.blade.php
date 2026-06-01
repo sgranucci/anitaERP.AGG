@@ -5,6 +5,21 @@
 
 @section("scripts")
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
+@if ($puede_proceso_cierre ?? false)
+<script>
+    window.WAITRY_CIERRE_JORNADA_PROCESO = {
+        csrf: @json(csrf_token()),
+        puedeProceso: true,
+        urlAnalizar: @json(route('waitry_cierre_jornada_api_proceso_analizar')),
+        urlRecalcular: @json(route('waitry_cierre_jornada_api_proceso_recalcular')),
+        urlMovimientosBase: @json(url('caja/waitry-cierre-jornada/api/proceso/movimientos')),
+        urlConfigBase: @json(url('caja/waitry-cierre-jornada/api/proceso/config/__EMPRESA_ID__')),
+        urlConfigGuardarBase: @json(url('caja/waitry-cierre-jornada/api/proceso/config/__EMPRESA_ID__')),
+        configInicial: @json($config_contable ?? []),
+    };
+</script>
+<script src="{{ asset('assets/pages/scripts/caja/waitry_cierre_jornada_proceso.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/waitry_cierre_jornada_proceso.js')) ?: time() }}" type="text/javascript"></script>
+@endif
 @endsection
 
 @section('contenido')
@@ -19,7 +34,7 @@
                 <p class="text-muted mb-3">
                     Concilia las órdenes de Waitry (<code>getordersdetails</code>) con las ventas facturadas en Anita
                     para la <strong>fecha de jornada</strong> (<code>venta.fechajornada</code>).
-                    Proceso de tesorería/auditoría; el POS en vivo usa <code>getOrdersPOS</code>.
+                    Proceso de tesorería/auditoría bajo <strong>Caja → Rendiciones</strong>; el POS en vivo usa <code>getOrdersPOS</code>.
                 </p>
 
                 <form method="get" action="{{ route('waitry_cierre_jornada') }}" class="form-inline mb-4">
@@ -144,9 +159,11 @@
                         ]);
                     @endphp
                     <div class="mb-2">
+                        @if (\App\Support\Caja\RendicionGastronomiaPdfPermiso::puedeVerPdfWaitry())
                         <a href="{{ route('listar_waitry_cierre_jornada', ['formato' => 'PDF']) }}?{{ $exportQuery }}" class="btn btn-app bg-danger">
                             <i class="fas fa-file-pdf"></i> Pdf
                         </a>
+                        @endif
                         <a href="{{ route('listar_waitry_cierre_jornada', ['formato' => 'EXCEL']) }}?{{ $exportQuery }}" class="btn btn-app bg-success">
                             <i class="fas fa-file-excel"></i> Excel
                         </a>
@@ -251,6 +268,8 @@
                 @elseif ($consultado && ! $error)
                     <div class="alert alert-info">No hay datos para mostrar.</div>
                 @endif
+
+                @include('caja.waitry_cierre_jornada.partials.proceso_cierre')
             </div>
         </div>
     </div>

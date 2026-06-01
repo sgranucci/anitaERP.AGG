@@ -1,0 +1,33 @@
+---
+description: Iconos estándar en botones de acción de tablas y listados (btn-accion-tabla)
+globs: resources/views/**/*.blade.php
+alwaysApply: false
+---
+
+# Iconos en acciones de listado
+
+En tablas con `btn-accion-tabla tooltipsC`, usar los mismos iconos que el ABM canónico del recurso. Referencia principal: `resources/views/stock/articulo/index.blade.php`.
+
+## Editar / consultar artículo
+
+| Acción | Icono | Clases enlace |
+|--------|-------|----------------|
+| Editar artículo (ABM) | `<i class="fa fa-edit"></i>` | `btn-accion-tabla tooltipsC` |
+| Consultar artículo (`origen=modal_consulta`, `vista=consulta`) | **Mismo** `fa fa-edit` | Igual; título «Consultar artículo» o «Editar este registro» según contexto |
+
+Ruta habitual: `route('editar_articulo', ['id' => $articuloId, ...])` con permiso `editar-articulos`.
+
+## Prohibido para artículo
+
+- `fa-box`, `fas fa-box`, `fa-boxes` como sustituto del lápiz de edición en columnas de acciones.
+- Mezclar `fas`/`fa` sin criterio en el mismo listado si el resto del módulo usa `fa fa-edit`.
+
+## Otros iconos frecuentes (no inventar variantes)
+
+| Acción | Icono |
+|--------|-------|
+| Ver comprobante / factura | `fas fa-file-invoice` (opcional `text-primary`) |
+| Imprimir QR artículo | `fa fa-qrcode` |
+| Consultar precios | `fas fa-dollar-sign text-success` |
+
+Al agregar una acción nueva en un listado, buscar primero el mismo patrón en el index del módulo hermano antes de elegir otro icono.

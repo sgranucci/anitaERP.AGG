@@ -1,9 +1,9 @@
 <table>
     @if ($reservarFilaLogoExcel ?? false)
-    <tr><td colspan="10"></td></tr>
+    <tr><td colspan="11"></td></tr>
     @endif
     <tr>
-        <td colspan="10" style="font-weight:bold;font-size:16px;">
+        <td colspan="11" style="font-weight:bold;font-size:16px;">
             Cierres de turno gastronomía
             @if (!empty($filtros['fecha_desde'])) — desde {{ $filtros['fecha_desde'] }} @endif
             @if (!empty($filtros['fecha_hasta'])) hasta {{ $filtros['fecha_hasta'] }} @endif
@@ -15,6 +15,7 @@
         <th>Referencia</th>
         <th>Empresa</th>
         <th>PC</th>
+        <th>Punto venta</th>
         <th>Turno</th>
         <th>Jornada</th>
         <th>Usuario</th>
@@ -28,6 +29,7 @@
         <td>{{ $f->referencia }}</td>
         <td>{{ $f->nombreempresa }}</td>
         <td>{{ $f->identificador_pc }}</td>
+        <td>{{ $f->puntoventa_etiqueta ?? '' }}</td>
         <td>{{ $f->turno_nombre }}</td>
         <td>{{ $f->fecha_jornada }}</td>
         <td>{{ $f->usuario }}</td>

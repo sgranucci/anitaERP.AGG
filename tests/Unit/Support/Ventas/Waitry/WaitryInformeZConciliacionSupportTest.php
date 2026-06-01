@@ -87,4 +87,40 @@ final class WaitryInformeZConciliacionSupportTest extends TestCase
 
         $this->assertSame(10.5, $fusionada[0]['lineas'][0]['monto_informe_z']);
     }
+
+    public function test_conciliar_no_duplica_lineas_totem_por_cash_y_fallback(): void
+    {
+        $plantilla = [
+            [
+                'totem_id' => 4,
+                'ubicacion_nombre' => 'Rebisco',
+                'lineas' => [
+                    [
+                        'tipo_waitry' => 'mercadopago',
+                        'etiqueta' => '201 — Mercado Pago',
+                        'cuentacaja_id' => 201,
+                        'monto_sistema' => 120.0,
+                        'cantidad_sistema' => 3,
+                        'monto_informe_z' => 120.0,
+                    ],
+                    [
+                        'tipo_waitry' => 'totalcoin',
+                        'etiqueta' => '226 — Totalcoin',
+                        'cuentacaja_id' => 226,
+                        'monto_sistema' => 45.0,
+                        'cantidad_sistema' => 1,
+                        'monto_informe_z' => 45.0,
+                    ],
+                ],
+            ],
+        ];
+
+        $resultado = WaitryInformeZConciliacionSupport::conciliar($plantilla);
+
+        $this->assertTrue($resultado['ok']);
+        $this->assertCount(2, $resultado['totems'][0]['lineas']);
+        $tipos = array_column($resultado['totems'][0]['lineas'], 'tipo_waitry');
+        $this->assertNotContains('cash', $tipos);
+        $this->assertNotContains('totem', $tipos);
+    }
 }

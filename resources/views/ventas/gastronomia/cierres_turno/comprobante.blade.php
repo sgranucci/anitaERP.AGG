@@ -23,7 +23,12 @@
         .lbl { background: #f0f0f0; font-weight: bold; width: 28%; }
         .num { text-align: right; white-space: nowrap; }
         .muted { color: #555; font-size: 8px; }
-        .bloque-obs { white-space: pre-wrap; min-height: 24px; }
+        .bloque-obs { white-space: pre-wrap; word-wrap: break-word; word-break: break-word; font-size: 8px; }
+        .celda-anulaciones { padding: 0 !important; }
+        .tabla-anulaciones { width: 100%; margin: 0; border-collapse: collapse; font-size: 7px; }
+        .tabla-anulaciones th { background: #f5f5f5; font-weight: bold; padding: 2px 4px; border: none; border-bottom: 1px solid #999; }
+        .tabla-anulaciones td { border: none; border-bottom: 1px dotted #ccc; padding: 2px 4px; vertical-align: top; }
+        .motivo-anulacion { word-wrap: break-word; word-break: break-word; }
         .total-grande { font-size: 12px; font-weight: bold; background: #e8f4fc; }
     </style>
 </head>
@@ -72,7 +77,10 @@
             <td>
                 @if (!empty($d['numero_cierre']))
                     #{{ (int) $d['numero_cierre'] }}
-                    <span class="muted">(reg. interno {{ (int) ($d['turno_operativo_id'] ?? 0) }})</span>
+                    <span class="muted">(registro interno #{{ (int) ($d['turno_operativo_id'] ?? 0) }})</span>
+                @elseif (($d['tipo'] ?? '') === 'parcial')
+                    Cierre pendiente
+                    <span class="muted">(registro interno #{{ (int) ($d['turno_operativo_id'] ?? 0) }})</span>
                 @else
                     —
                 @endif
@@ -101,13 +109,10 @@
             <td colspan="3">{{ $d['usuario_registro'] }}</td>
         </tr>
         @endif
-        @if (!empty($d['observacion_habilitacion']))
-        <tr>
-            <td class="lbl">Obs. habilitación</td>
-            <td colspan="3" class="bloque-obs">{{ $d['observacion_habilitacion'] }}</td>
-        </tr>
-        @endif
+        @include('ventas.gastronomia.cierres_turno.partials.observacion_habilitacion_comprobante', ['d' => $d])
     </table>
+
+    @include('ventas.gastronomia.cierres_turno.partials.numeracion_fiscal_turno', ['d' => $d])
 
     @php
         $totalFinalCabecera = (float) ($totalesTurno['total_ventas'] ?? $totalesTurno['total_general'] ?? 0);
@@ -180,12 +185,15 @@
         @php
             $mNcTotal = (float) ($m['notas_credito']['total'] ?? 0);
             $mNcCant = (int) ($m['notas_credito']['cantidad'] ?? 0);
+            $mInvTotal = (float) ($m['invitaciones']['total'] ?? 0);
+            $mInvCant = (int) ($m['invitaciones']['cantidad'] ?? 0);
             $mMedios = $m['por_medio_pago'] ?? [];
             $mTotalFinal = (float) ($m['total'] ?? 0);
             $mTotalFacturas = isset($m['total_facturas'])
                 ? (float) $m['total_facturas']
                 : ($mTotalFinal - $mNcTotal);
             $mHayNc = $mNcCant > 0 || abs($mNcTotal) >= 0.005;
+            $mHayInv = $mInvCant > 0 || abs($mInvTotal) >= 0.005;
         @endphp
     <table style="margin-bottom:10px;">
         <tr class="total-grande">
@@ -207,7 +215,7 @@
             <td class="num" colspan="3">${{ number_format((float) ($p['total'] ?? 0), 2, ',', '.') }}</td>
         </tr>
         @empty
-            @if (! $mHayNc)
+            @if (! $mHayNc && ! $mHayInv)
         <tr><td colspan="4" class="muted" style="padding-left:16px;">Sin cobranzas en comprobantes de este mozo.</td></tr>
             @endif
         @endforelse
@@ -215,6 +223,12 @@
         <tr style="background:#fdecea;">
             <td class="lbl" style="padding-left:16px; color:#922b21;">Notas de crédito ({{ $mNcCant }} comp.)</td>
             <td class="num" colspan="3" style="color:#922b21; font-weight:bold;">${{ number_format($mNcTotal, 2, ',', '.') }}</td>
+        </tr>
+        @endif
+        @if ($mHayInv)
+        <tr style="background:#fff8e1;">
+            <td class="lbl" style="padding-left:16px; color:#856404;">Invitaciones $0,01 ({{ $mInvCant }} comp.)</td>
+            <td class="num" colspan="3" style="color:#856404; font-weight:bold;">${{ number_format($mInvTotal, 2, ',', '.') }}</td>
         </tr>
         @endif
     </table>
@@ -225,7 +239,10 @@
     @php
         $ncTotalGlobal = (float) ($totalesTurno['total_notas_credito'] ?? 0);
         $ncCantGlobal = (int) ($totalesTurno['cantidad_notas_credito'] ?? 0);
+        $invTotalGlobal = (float) ($totalesTurno['total_invitaciones'] ?? 0);
+        $invCantGlobal = (int) ($totalesTurno['cantidad_invitaciones'] ?? 0);
         $hayNc = $ncCantGlobal > 0 || abs($ncTotalGlobal) >= 0.005;
+        $hayInv = $invCantGlobal > 0 || abs($invTotalGlobal) >= 0.005;
         $tieneMedios = ! empty($totalesTurno['por_medio_pago']);
     @endphp
 
@@ -282,7 +299,7 @@
         </tr>
     </table>
 
-    @if ($tieneMedios || $hayNc)
+    @if ($tieneMedios || $hayNc || $hayInv)
     <h2>Total general por medio de pago</h2>
     <table>
         <thead>
@@ -304,6 +321,12 @@
                 <td class="num" style="color:#922b21; font-weight:bold;">${{ number_format($ncTotalGlobal, 2, ',', '.') }}</td>
             </tr>
             @endif
+            @if ($hayInv)
+            <tr style="background:#fff8e1;">
+                <td style="color:#856404; font-weight:bold;">Invitaciones $0,01 ({{ $invCantGlobal }})</td>
+                <td class="num" style="color:#856404; font-weight:bold;">${{ number_format($invTotalGlobal, 2, ',', '.') }}</td>
+            </tr>
+            @endif
         </tbody>
         <tfoot>
             <tr class="total-grande">
@@ -315,7 +338,7 @@
     @endif
     @endif
 
-    @if (empty($d['solo_totales_mozo']) && ($tieneMedios || $hayNc))
+    @if (empty($d['solo_totales_mozo']) && ($tieneMedios || $hayNc || $hayInv))
     <h2>Total final por medio de pago</h2>
     <table>
         <thead>
@@ -335,6 +358,12 @@
             <tr style="background:#fdecea;">
                 <td style="color:#922b21; font-weight:bold;">Notas de crédito ({{ $ncCantGlobal }})</td>
                 <td class="num" style="color:#922b21; font-weight:bold;">${{ number_format($ncTotalGlobal, 2, ',', '.') }}</td>
+            </tr>
+            @endif
+            @if ($hayInv)
+            <tr style="background:#fff8e1;">
+                <td style="color:#856404; font-weight:bold;">Invitaciones $0,01 ({{ $invCantGlobal }})</td>
+                <td class="num" style="color:#856404; font-weight:bold;">${{ number_format($invTotalGlobal, 2, ',', '.') }}</td>
             </tr>
             @endif
         </tbody>
@@ -384,9 +413,7 @@
         </tr>
         <tr>
             <td class="lbl">Sobrante / faltante</td>
-            <td class="num">${{ number_format((float) ($d['sobrante_faltante'] ?? 0), 2, ',', '.') }}</td>
-            <td class="lbl">Sugerido invitaciones</td>
-            <td class="num">${{ number_format((float) ($totalesTurno['redondeo_invitaciones_sugerido'] ?? 0), 2, ',', '.') }}</td>
+            <td class="num" colspan="3">${{ number_format((float) ($d['sobrante_faltante'] ?? 0), 2, ',', '.') }}</td>
         </tr>
         @if (!empty($d['observacion_cierre']))
         <tr>

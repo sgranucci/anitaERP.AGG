@@ -1,0 +1,429 @@
+<?php
+
+namespace App\Services\Caja;
+
+use App\ApiAnita;
+use App\Models\Caja\RendicionGastronomiaCaja;
+use App\Models\Caja\RendicionGastronomiaSecuenciaEmpresa;
+use App\Support\Caja\AnitaSync\RendicionGastronomiaAnitaContextBuilder;
+use App\Support\Caja\AnitaSync\RendicionGastronomiaAnitaTotalZPorPcService;
+use App\Support\Caja\AnitaSync\RendicionGastronomiaCabeceraAnitaMapper;
+use App\Support\Caja\AnitaSync\RendicionGastronomiaValorAnitaMapper;
+use App\Support\Caja\RendicionGastronomiaSecuenciaSupport;
+use Illuminate\Support\Facades\Log;
+
+/**
+ * Numeración y réplica Informix rendgastro / rendvalor vía bridge Anita.
+ */
+class RendicionGastronomiaAnitaSyncService
+{
+    private const LOG_EVENTO = 'rendicion_gastronomia.anita_bridge.fallo';
+
+    public function sincronizacionHabilitada(): bool
+    {
+        return filter_var(config('rendicion_gastronomia_anita.sincronizar', true), FILTER_VALIDATE_BOOLEAN);
+    }
+
+    public function sincronizarDespuesDeGuardar(RendicionGastronomiaCaja $rendicion): void
+    {
+        if ($rendicion->esRendicionJornada()) {
+            return;
+        }
+
+        if (! $this->sincronizacionHabilitada()) {
+            return;
+        }
+
+        $rendicion->load(['movimientos.cuentacaja', 'puntoventaCae', 'puntoventaCaea', 'turnoOperativo.turno', 'turnoOperativo.jornada']);
+
+        if ($this->existsCabeceraEnAnita($rendicion)) {
+            $this->actualizarEnAnita($rendicion);
+        } else {
+            $this->insertarEnAnita($rendicion);
+        }
+
+        $rendicion->update(['anita_sincronizado_en' => now()]);
+    }
+
+    public function sincronizarDespuesDeEliminar(RendicionGastronomiaCaja $rendicion): void
+    {
+        if ($rendicion->esRendicionJornada()) {
+            return;
+        }
+
+        if (! $this->sincronizacionHabilitada()) {
+            return;
+        }
+
+        $nroOper = (int) ($rendicion->nro_oper_anita
+            ?? RendicionGastronomiaCabeceraAnitaMapper::nroOperDesdeCodigo($rendicion->codigo));
+        if ($nroOper <= 0) {
+            return;
+        }
+
+        $this->eliminarEnAnita($nroOper, $this->tipoOper());
+    }
+
+    public function insertarEnAnita(RendicionGastronomiaCaja $rendicion): void
+    {
+        $this->insertarEnAnitaConTotalZ($rendicion, null);
+    }
+
+    private function insertarEnAnitaConTotalZ(RendicionGastronomiaCaja $rendicion, ?float $totalZ): void
+    {
+        $ctx = RendicionGastronomiaAnitaContextBuilder::desdeRendicion($rendicion, $totalZ);
+        $api = new ApiAnita;
+        $nroOper = (int) ($ctx['nro_oper'] ?? 0);
+        $tipoOper = (string) ($ctx['tipo_oper'] ?? '');
+
+        try {
+            $api->apiCallEscritura([
+                'tabla' => $this->tablaCabecera(),
+                'acc' => 'insert',
+                'sistema' => $this->sistema(),
+                'campos' => RendicionGastronomiaCabeceraAnitaMapper::camposInsert(),
+                'valores' => RendicionGastronomiaCabeceraAnitaMapper::valoresInsert($ctx),
+            ], 'rendgastro insert', self::LOG_EVENTO);
+        } catch (\RuntimeException $e) {
+            if ($this->esErrorDuplicadoInformix($e)) {
+                $this->actualizarEnAnitaConTotalZ($rendicion, $totalZ);
+
+                return;
+            }
+
+            throw $e;
+        }
+
+        // Anita puede precargar filas rendvalor al insertar cabecera (p. ej. código 17).
+        if ($nroOper > 0 && $tipoOper !== '') {
+            $this->eliminarValores($api, $nroOper, $tipoOper);
+        }
+
+        $this->insertarValores($api, $ctx);
+    }
+
+    public function reaplicarTotalZPorPcEnJornada(int $jornadaId): void
+    {
+        app(RendicionGastronomiaAnitaTotalZPorPcService::class)->aplicarSiJornadaCerrada($jornadaId);
+    }
+
+    public function reaplicarTotalZDesdeRendicionTurno(RendicionGastronomiaCaja $rendicion): void
+    {
+        app(RendicionGastronomiaAnitaTotalZPorPcService::class)->aplicarDesdeRendicionTurno($rendicion);
+    }
+
+    public function resetTotalZPorPcEnJornada(int $jornadaId): void
+    {
+        app(RendicionGastronomiaAnitaTotalZPorPcService::class)->resetTotalZEnJornada($jornadaId);
+    }
+
+    /**
+     * Actualiza solo rendg_total_z en rendgastro (sin tocar rendvalor).
+     * Usado al recalcular Z por PC desde Caja cuando la jornada ya está cerrada.
+     */
+    public function actualizarSoloTotalZEnAnita(RendicionGastronomiaCaja $rendicion, float $totalZ): void
+    {
+        if ($rendicion->esRendicionJornada() || ! $this->sincronizacionHabilitada()) {
+            return;
+        }
+
+        $rendicion->load(['movimientos.cuentacaja', 'puntoventaCae', 'puntoventaCaea', 'turnoOperativo.turno', 'turnoOperativo.jornada']);
+
+        if (! $this->existsCabeceraEnAnita($rendicion)) {
+            $this->insertarEnAnitaConTotalZ($rendicion, $totalZ);
+
+            return;
+        }
+
+        $nroOper = (int) ($rendicion->nro_oper_anita
+            ?? RendicionGastronomiaCabeceraAnitaMapper::nroOperDesdeCodigo($rendicion->codigo));
+        if ($nroOper <= 0) {
+            return;
+        }
+
+        $api = new ApiAnita;
+        $api->apiCallEscritura([
+            'acc' => 'update',
+            'tabla' => $this->tablaCabecera(),
+            'sistema' => $this->sistema(),
+            'valores' => 'rendg_total_z = '.RendicionGastronomiaCabeceraAnitaMapper::decimal($totalZ),
+            'whereArmado' => RendicionGastronomiaCabeceraAnitaMapper::whereClave($nroOper, $this->tipoOper()),
+        ], 'rendgastro update total_z', self::LOG_EVENTO);
+    }
+
+    /** @deprecated Use actualizarSoloTotalZEnAnita() */
+    public function actualizarCabeceraTotalZEnAnita(RendicionGastronomiaCaja $rendicion, float $totalZ): void
+    {
+        $this->actualizarSoloTotalZEnAnita($rendicion, $totalZ);
+    }
+
+    public function actualizarEnAnita(RendicionGastronomiaCaja $rendicion): void
+    {
+        $this->actualizarEnAnitaConTotalZ($rendicion, null);
+    }
+
+    private function actualizarEnAnitaConTotalZ(RendicionGastronomiaCaja $rendicion, ?float $totalZ): void
+    {
+        $ctx = RendicionGastronomiaAnitaContextBuilder::desdeRendicion($rendicion, $totalZ);
+        $api = new ApiAnita;
+        $nroOper = (int) $ctx['nro_oper'];
+        $tipoOper = (string) $ctx['tipo_oper'];
+
+        $api->apiCallEscritura([
+            'acc' => 'update',
+            'tabla' => $this->tablaCabecera(),
+            'sistema' => $this->sistema(),
+            'valores' => RendicionGastronomiaCabeceraAnitaMapper::valoresUpdate($ctx),
+            'whereArmado' => RendicionGastronomiaCabeceraAnitaMapper::whereClave($nroOper, $tipoOper),
+        ], 'rendgastro update', self::LOG_EVENTO);
+
+        $this->eliminarValores($api, $nroOper, $tipoOper);
+        $this->insertarValores($api, $ctx);
+    }
+
+    public function eliminarEnAnita(int $nroOper, string $tipoOper): void
+    {
+        $api = new ApiAnita;
+        $this->eliminarValores($api, $nroOper, $tipoOper);
+
+        $api->apiCallEscritura([
+            'acc' => 'delete',
+            'tabla' => $this->tablaCabecera(),
+            'sistema' => $this->sistema(),
+            'whereArmado' => RendicionGastronomiaCabeceraAnitaMapper::whereClave($nroOper, $tipoOper),
+        ], 'rendgastro delete', self::LOG_EVENTO);
+    }
+
+    public function existsCabeceraEnAnita(RendicionGastronomiaCaja $rendicion): bool
+    {
+        $nroOper = (int) ($rendicion->nro_oper_anita
+            ?? RendicionGastronomiaCabeceraAnitaMapper::nroOperDesdeCodigo($rendicion->codigo));
+        if ($nroOper <= 0) {
+            return false;
+        }
+
+        $api = new ApiAnita;
+        $rows = ApiAnita::decodificarListaFilas($api->apiCall([
+            'acc' => 'list',
+            'sistema' => $this->sistema(),
+            'tabla' => $this->tablaCabecera(),
+            'campos' => 'rendg_nro_oper',
+            'whereArmado' => RendicionGastronomiaCabeceraAnitaMapper::whereClave($nroOper, $this->tipoOper()),
+        ]));
+
+        return count($rows) > 0;
+    }
+
+    /**
+     * @return array{
+     *   codigo: string,
+     *   nro_oper: int,
+     *   fuente: string,
+     *   ultimo_anita: int,
+     *   ultimo_erp: int,
+     *   consulta_anita_ok: bool
+     * }
+     */
+    public function proponerSiguienteNroOper(int $empresaId): array
+    {
+        if ($empresaId <= 0) {
+            throw new \InvalidArgumentException('Empresa inválida para numeración Anita.');
+        }
+
+        $ultimoErp = $this->ultimoNroOperEnErp($empresaId);
+        $ultimoAnita = null;
+        $consultaAnitaOk = false;
+
+        try {
+            $ultimoAnita = $this->ultimoNroOperEnAnita($empresaId);
+            $consultaAnitaOk = true;
+        } catch (\Throwable $e) {
+            Log::warning('RendicionGastronomiaAnita: no se pudo consultar último nro_oper en Anita', [
+                'empresa_id' => $empresaId,
+                'mensaje' => $e->getMessage(),
+            ]);
+        }
+
+        $calculo = RendicionGastronomiaSecuenciaSupport::calcularSiguiente($ultimoAnita, $ultimoErp);
+        if (! $consultaAnitaOk) {
+            $calculo['fuente'] = RendicionGastronomiaSecuenciaSupport::FUENTE_ERP_FALLBACK;
+        }
+
+        $this->persistirSecuenciaEmpresa($empresaId, $calculo, $consultaAnitaOk);
+
+        return [
+            'codigo' => (string) $calculo['siguiente'],
+            'nro_oper' => $calculo['siguiente'],
+            'fuente' => $calculo['fuente'],
+            'ultimo_anita' => $calculo['ultimo_anita'],
+            'ultimo_erp' => $calculo['ultimo_erp'],
+            'consulta_anita_ok' => $consultaAnitaOk,
+        ];
+    }
+
+    public function ultimoNroOperEnAnita(int $empresaId): int
+    {
+        $tipoOper = $this->tipoOper();
+        $where = " WHERE rendg_empresa = '".$empresaId."' AND rendg_tipo_oper = '".$tipoOper."' ";
+
+        $api = new ApiAnita;
+        $payload = [
+            'acc' => 'list',
+            'sistema' => $this->sistema(),
+            'tabla' => $this->tablaCabecera(),
+            'campos' => 'rendg_nro_oper',
+            'orderBy' => 'rendg_nro_oper desc',
+            'whereArmado' => $where,
+        ];
+
+        $rows = ApiAnita::decodificarListaFilas($api->apiCall($payload));
+        if ($rows === []) {
+            return 0;
+        }
+
+        return max(0, (int) ($rows[0]->rendg_nro_oper ?? 0));
+    }
+
+    public function ultimoNroOperEnErp(int $empresaId): int
+    {
+        $maxDesdeColumna = (int) (RendicionGastronomiaCaja::query()
+            ->where('empresa_id', $empresaId)
+            ->whereNotNull('nro_oper_anita')
+            ->max('nro_oper_anita') ?? 0);
+
+        $maxDesdeCodigo = 0;
+        $codigos = RendicionGastronomiaCaja::query()
+            ->where('empresa_id', $empresaId)
+            ->pluck('codigo');
+
+        foreach ($codigos as $codigo) {
+            $n = RendicionGastronomiaSecuenciaSupport::extraerNroOperDesdeCodigo((string) $codigo);
+            if ($n !== null && $n > $maxDesdeCodigo) {
+                $maxDesdeCodigo = $n;
+            }
+        }
+
+        return max($maxDesdeColumna, $maxDesdeCodigo);
+    }
+
+    /**
+     * @param  array<string, mixed>  $cabecera
+     * @return array<string, mixed>
+     */
+    public function enriquecerCabeceraConTracking(array $cabecera, ?string $fuente = null): array
+    {
+        $nro = RendicionGastronomiaSecuenciaSupport::extraerNroOperDesdeCodigo($cabecera['codigo'] ?? null);
+        if ($nro === null) {
+            return $cabecera;
+        }
+
+        $cabecera['nro_oper_anita'] = $nro;
+        if ($fuente !== null && trim($fuente) !== '') {
+            $cabecera['fuente_nro_oper'] = $fuente;
+        } elseif (empty($cabecera['fuente_nro_oper'])) {
+            $cabecera['fuente_nro_oper'] = RendicionGastronomiaSecuenciaSupport::FUENTE_ERP;
+        }
+
+        return $cabecera;
+    }
+
+    /**
+     * @param  array<string, mixed>  $ctx
+     */
+    private function insertarValores(ApiAnita $api, array $ctx): void
+    {
+        $lineas = RendicionGastronomiaValorAnitaMapper::lineasAgregadas(
+            (int) $ctx['empresa_id'],
+            $ctx['movimientos'] ?? [],
+        );
+
+        foreach ($lineas as $linea) {
+            try {
+                $api->apiCallEscritura([
+                    'tabla' => $this->tablaValor(),
+                    'acc' => 'insert',
+                    'sistema' => $this->sistema(),
+                    'campos' => RendicionGastronomiaValorAnitaMapper::camposInsert(),
+                    'valores' => RendicionGastronomiaValorAnitaMapper::valoresInsert($linea, $ctx),
+                ], 'rendvalor insert codigo '.$linea['codigo'], self::LOG_EVENTO);
+            } catch (\RuntimeException $e) {
+                if (! $this->esErrorDuplicadoInformix($e)) {
+                    throw $e;
+                }
+
+                $api->apiCallEscritura([
+                    'acc' => 'update',
+                    'tabla' => $this->tablaValor(),
+                    'sistema' => $this->sistema(),
+                    'valores' => RendicionGastronomiaValorAnitaMapper::valoresUpdate($linea, $ctx),
+                    'whereArmado' => RendicionGastronomiaValorAnitaMapper::wherePorOperacionYCodigo(
+                        (int) ($ctx['nro_oper'] ?? 0),
+                        (string) ($ctx['tipo_oper'] ?? ''),
+                        (int) ($linea['codigo'] ?? 0),
+                    ),
+                ], 'rendvalor update codigo '.$linea['codigo'], self::LOG_EVENTO);
+            }
+        }
+    }
+
+    private function esErrorDuplicadoInformix(\RuntimeException $e): bool
+    {
+        $msg = mb_strtolower($e->getMessage());
+
+        return str_contains($msg, 'duplicate')
+            || str_contains($msg, 'duplicado')
+            || str_contains($msg, 'unique key')
+            || str_contains($msg, 'unique index');
+    }
+
+    private function eliminarValores(ApiAnita $api, int $nroOper, string $tipoOper): void
+    {
+        $api->apiCallEscritura([
+            'acc' => 'delete',
+            'tabla' => $this->tablaValor(),
+            'sistema' => $this->sistema(),
+            'whereArmado' => RendicionGastronomiaValorAnitaMapper::wherePorOperacion($nroOper, $tipoOper),
+        ], 'rendvalor delete', self::LOG_EVENTO);
+    }
+
+    /**
+     * @param  array{siguiente:int,fuente:string,ultimo_anita:int,ultimo_erp:int}  $calculo
+     */
+    private function persistirSecuenciaEmpresa(int $empresaId, array $calculo, bool $consultaAnitaOk): void
+    {
+        $attrs = [
+            'ultimo_nro_anita' => $calculo['ultimo_anita'],
+            'ultimo_nro_erp' => $calculo['ultimo_erp'],
+            'proximo_nro' => $calculo['siguiente'],
+        ];
+
+        if ($consultaAnitaOk) {
+            $attrs['consultado_anita_en'] = now();
+        }
+
+        RendicionGastronomiaSecuenciaEmpresa::query()->updateOrCreate(
+            ['empresa_id' => $empresaId],
+            $attrs,
+        );
+    }
+
+    private function sistema(): string
+    {
+        return (string) config('rendicion_gastronomia_anita.sistema', 'caja');
+    }
+
+    private function tablaCabecera(): string
+    {
+        return (string) config('rendicion_gastronomia_anita.tabla_cabecera', 'rendgastro');
+    }
+
+    private function tablaValor(): string
+    {
+        return (string) config('rendicion_gastronomia_anita.tabla_valor', 'rendvalor');
+    }
+
+    private function tipoOper(): string
+    {
+        return substr((string) config('rendicion_gastronomia_anita.tipo_oper', 'F'), 0, 1);
+    }
+}

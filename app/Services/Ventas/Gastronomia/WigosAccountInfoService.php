@@ -2,6 +2,7 @@
 
 namespace App\Services\Ventas\Gastronomia;
 
+use App\Support\Wigos\WigosTrackdataNormalizer;
 use Illuminate\Support\Facades\Http;
 use InvalidArgumentException;
 use RuntimeException;
@@ -44,16 +45,15 @@ final class WigosAccountInfoService
                 ->get($url);
         } catch (Throwable $e) {
             throw new RuntimeException(
-                'No se pudo consultar la tarjeta en Wigos: '.$e->getMessage(),
+                'No se pudo conectar con el servidor de tarjetas Wigos. Verifique la red o avise a sistemas.'
+                .($e->getMessage() !== '' ? ' ('.$e->getMessage().')' : ''),
                 0,
                 $e
             );
         }
 
         if (! $response->successful()) {
-            throw new RuntimeException(
-                'Wigos respondió con error HTTP '.$response->status().' al consultar la tarjeta.'
-            );
+            throw new RuntimeException($this->mensajeErrorHttpWigos($response->status(), $response->json()));
         }
 
         $json = $response->json();
@@ -66,12 +66,28 @@ final class WigosAccountInfoService
 
     private function normalizarTrackdata(string $trackdata): string
     {
-        $track = trim($trackdata);
-        if ($track === '') {
-            throw new InvalidArgumentException('Debe pasar o escanear la tarjeta.');
+        return WigosTrackdataNormalizer::normalizar($trackdata);
+    }
+
+    /**
+     * @param  array<string,mixed>|null  $json
+     */
+    private function mensajeErrorHttpWigos(int $status, ?array $json): string
+    {
+        $detalleWigos = trim((string) ($json['Message'] ?? $json['message'] ?? $json['statusText'] ?? ''));
+
+        if ($status >= 500) {
+            return 'Wigos no pudo consultar la tarjeta (error del servidor, HTTP '.$status.'). '
+                .'Suele deberse a datos de lectura incorrectos (caracteres extra al inicio o al final) o al servicio caído.'
+                .($detalleWigos !== '' ? ' Detalle: '.$detalleWigos.'.' : '');
         }
 
-        return $track;
+        if ($status === 404) {
+            return 'No se encontró el servicio de consulta de tarjetas en Wigos (HTTP 404). Revise WIGOS_ACCOUNT_INFO_URL.';
+        }
+
+        return 'Wigos rechazó la consulta de tarjeta (HTTP '.$status.').'
+            .($detalleWigos !== '' ? ' '.$detalleWigos.'.' : '');
     }
 
     private function construirUrl(string $trackdata): string

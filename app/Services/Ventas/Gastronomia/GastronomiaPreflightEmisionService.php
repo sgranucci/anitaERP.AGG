@@ -282,7 +282,7 @@ final class GastronomiaPreflightEmisionService
     }
 
     /**
-     * Cuenta Waitry cobrada en tótem: un solo medio según payment.type (Mercado Pago, Totalcoin o TOTEM).
+     * Cuenta Waitry cobrada en tótem: cobranza Anita siempre en cuenta puente TOTEM (único renglón).
      *
      * @param  list<array{cuentacaja_id:int,moneda_id:int,monto:float,cotizacion?:float|null}>  $mediosPago
      * @return list<string>
@@ -293,32 +293,33 @@ final class GastronomiaPreflightEmisionService
             return [];
         }
 
-        $ccErr = WaitryMedioPagoCuentacajaSupport::mensajeErrorResolucion(
-            $cuenta->waitry_tipo_pago,
-            $empresaId,
-        );
-        if ($ccErr) {
-            return [$ccErr];
+        $totemErr = GastronomiaCuentacajaTotem::mensajeErrorResolucion($empresaId);
+        if ($totemErr !== null) {
+            return [$totemErr];
         }
 
-        $esperada = WaitryMedioPagoCuentacajaSupport::cuentaParaTipoWaitry(
-            $cuenta->waitry_tipo_pago,
+        $esperada = WaitryMedioPagoCuentacajaSupport::cuentaPuenteTotemFacturacion(
             $empresaId,
+            $cuenta->waitry_tipo_pago,
         );
         if ($esperada === null) {
-            return ['No se pudo resolver la cuenta de caja para la cobranza Waitry del tótem.'];
+            return ['No se pudo resolver la cuenta de caja TOTEM para la cobranza Waitry del tótem.'];
         }
 
-        $etiqueta = WaitryMedioPagoCuentacajaSupport::etiquetaTipo($cuenta->waitry_tipo_pago);
+        $medioWaitry = WaitryMedioPagoCuentacajaSupport::etiquetaTipo($cuenta->waitry_tipo_pago);
 
         if (count($mediosPago) !== 1) {
-            return ['La cuenta Waitry del tótem debe cobrarse con un único medio «'.$etiqueta.'» (sin agregar otros renglones).'];
+            return ['La cuenta Waitry del tótem debe cobrarse con un único medio TOTEM'
+                .($medioWaitry !== '—' ? ' (pagada en tótem con «'.$medioWaitry.'»)' : '')
+                .', sin agregar otros renglones.'];
         }
 
         $medio = $mediosPago[0];
         if ((int) ($medio['cuentacaja_id'] ?? 0) !== (int) $esperada['id']) {
-            return ['La cobranza de esta cuenta Waitry debe usar únicamente la cuenta «'
-                .$esperada['codigo'].' — '.$esperada['nombre'].'» ('.$etiqueta.').'];
+            return ['La cobranza de esta cuenta Waitry debe usar únicamente la cuenta puente «'
+                .$esperada['codigo'].' — '.$esperada['nombre'].'»'
+                .($medioWaitry !== '—' ? ' (pagada en tótem con «'.$medioWaitry.'»)' : '')
+                .'.'];
         }
 
         return [];

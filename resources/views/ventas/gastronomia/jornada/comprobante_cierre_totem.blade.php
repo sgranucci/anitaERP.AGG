@@ -236,27 +236,18 @@
         <div class="ok-box">Sin discrepancias detectadas en este cierre.</div>
     @else
         @php
-            $sinRecuperar = $auditoria['ids_gap_sin_recuperar'] ?? [];
-            $recuperados = $auditoria['ids_recuperados_gap'] ?? [];
+            $huecosSecuencia = $auditoria['ids_huecos_secuencia'] ?? $auditoria['ids_gap_sin_recuperar'] ?? [];
             $suplementados = $auditoria['ids_suplementados_erp'] ?? [];
         @endphp
-        @if ($sinRecuperar !== [] || $recuperados !== [] || $suplementados !== [])
+        @if ($huecosSecuencia !== [] || $suplementados !== [])
             <table>
-                @if ($sinRecuperar !== [])
+                @if ($huecosSecuencia !== [])
                     <tr>
-                        <td class="lbl">IDs sin recuperar</td>
+                        <td class="lbl">Huecos en secuencia Waitry</td>
                         <td colspan="3" style="color:#922b21;">
-                            {{ implode(', ', array_map(fn ($id) => '#'.$id, array_slice($sinRecuperar, 0, 60))) }}
-                            @if (count($sinRecuperar) > 60) … @endif
-                        </td>
-                    </tr>
-                @endif
-                @if ($recuperados !== [])
-                    <tr>
-                        <td class="lbl">IDs recuperados (hueco)</td>
-                        <td colspan="3" class="muted">
-                            {{ implode(', ', array_map(fn ($id) => '#'.$id, array_slice($recuperados, 0, 40))) }}
-                            @if (count($recuperados) > 40) … @endif
+                            {{ implode(', ', array_map(fn ($id) => '#'.$id, array_slice($huecosSecuencia, 0, 60))) }}
+                            @if (count($huecosSecuencia) > 60) … @endif
+                            <br><small class="muted">Pendiente de auditoría del día (no se consultó getOrdersPOS en el cierre).</small>
                         </td>
                     </tr>
                 @endif
@@ -273,7 +264,7 @@
         @endif
 
         @if ($lineas === [])
-            @if ($sinRecuperar === [])
+            @if ($huecosSecuencia === [])
                 <p class="muted">Hay alertas de sincronización; no hay filas de detalle adicionales.</p>
             @endif
         @else

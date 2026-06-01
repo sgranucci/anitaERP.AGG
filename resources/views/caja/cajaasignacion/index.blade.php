@@ -17,7 +17,7 @@
             <div class="card-header">
                 <h3 class="card-title">Asignación de Cajas</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
-                    @if ($empresa_query->count() > 1)
+                    @if ($mostrarFiltroEmpresa)
                         <form method="get" action="{{ route('consulta_cajaasignacion') }}" class="form-inline mr-2 mb-1 mb-sm-0">
                             <label class="mr-1 mb-0 small text-white-50" for="empresa_id">Empresa</label>
                             <select name="empresa_id" id="empresa_id" class="form-control form-control-sm mr-2" title="Empresa">

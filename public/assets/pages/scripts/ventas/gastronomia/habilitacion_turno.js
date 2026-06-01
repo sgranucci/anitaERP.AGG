@@ -10,12 +10,15 @@
     var apiHabilitar = app.getAttribute('data-api-habilitar') || '';
     var apiCierreParcial = app.getAttribute('data-api-cierre-parcial') || '';
     var apiCerrar = app.getAttribute('data-api-cerrar') || '';
+    var apiAnularCierre = app.getAttribute('data-api-anular-cierre') || '';
     var apiConciliacionTurno = app.getAttribute('data-api-conciliacion-turno') || '';
     var apiConciliacionMedio = app.getAttribute('data-api-conciliacion-medio') || '';
     var apiConciliacionNotasCredito = app.getAttribute('data-api-conciliacion-notas-credito') || '';
+    var apiConciliacionInvitaciones = app.getAttribute('data-api-conciliacion-invitaciones') || '';
     var puedeHabilitar = app.getAttribute('data-puede-habilitar') === '1';
     var puedeCierreParcial = app.getAttribute('data-puede-cierre-parcial') === '1';
     var puedeCerrar = app.getAttribute('data-puede-cerrar') === '1';
+    var puedeAnularCierre = app.getAttribute('data-puede-anular-cierre') === '1';
     var puedeVerFactura = app.getAttribute('data-puede-ver-factura') === '1';
     var accion = app.getAttribute('data-accion') || '';
     var cfgGlobal = window.HABILITACION_TURNO_GASTRONOMIA || {};
@@ -29,6 +32,14 @@
 
     var estadoActual = null;
     var grillaMetaPorContenedor = {};
+    var cierreSobranteBase = 0;
+    var cierreEfectivoContadoInicial = null;
+
+    function esc(s) {
+        var d = document.createElement('div');
+        d.textContent = s == null ? '' : String(s);
+        return d.innerHTML;
+    }
 
     function csrfToken() {
         if (cfgGlobal.csrf) {
@@ -232,6 +243,16 @@
         box.innerHTML = window.GastronomiaTotalesTurnoRender.renderAlertasControlHtml(estado);
     }
 
+    function renderNumeracionFiscal(estado) {
+        var el = document.getElementById('panel-numeracion-fiscal-turno');
+        if (!el || !window.GastronomiaTotalesTurnoRender) {
+            return;
+        }
+        var html = window.GastronomiaTotalesTurnoRender.renderNumeracionFiscalHtml(estado.numeracion_fiscal);
+        el.innerHTML = html;
+        el.classList.toggle('d-none', !html);
+    }
+
     function poblarTabParcial(estado) {
         renderAlertasControl('alertas-control-parcial', estado);
 
@@ -254,6 +275,76 @@
         mostrarPlaceholderGrilla('grilla-conciliacion-parcial');
     }
 
+    function parseDecimalCierre(str) {
+        if (str == null || str === '') {
+            return 0;
+        }
+        var t = String(str).trim().replace(/\s/g, '');
+        if (t.indexOf(',') >= 0) {
+            t = t.replace(/\./g, '').replace(',', '.');
+        }
+        var n = parseFloat(t);
+        return isNaN(n) ? 0 : Math.round(n * 100) / 100;
+    }
+
+    function destacarCampoAutoActualizado(el) {
+        if (!el) {
+            return;
+        }
+        el.classList.add('gastro-campo-auto-actualizado');
+        window.setTimeout(function () {
+            el.classList.remove('gastro-campo-auto-actualizado');
+        }, 1800);
+    }
+
+    function sincronizarSobranteCierrePorEfectivo(inpSf, inpEf) {
+        if (!inpSf || !inpEf) {
+            return;
+        }
+        var contado = parseDecimalCierre(inpEf.value);
+        var baseContado = cierreEfectivoContadoInicial != null ? cierreEfectivoContadoInicial : contado;
+        var nuevo = Math.round((cierreSobranteBase + baseContado - contado) * 100) / 100;
+        inpSf.setAttribute('data-syncing-sobrante', '1');
+        inpSf.value = String(nuevo);
+        inpSf.removeAttribute('data-syncing-sobrante');
+        destacarCampoAutoActualizado(inpSf);
+    }
+
+    function enlazarAutoSobranteCierreDefinitivo(root) {
+        var inpSf = document.getElementById('sobrante_faltante');
+        var inpEf = root ? root.querySelector('.js-efectivo-contado-cierre') : null;
+        if (!inpSf || !inpEf) {
+            return;
+        }
+
+        cierreSobranteBase = Math.round((parseFloat(inpSf.value) || 0) * 100) / 100;
+        cierreEfectivoContadoInicial = parseDecimalCierre(inpEf.value);
+
+        function onEfectivoChange() {
+            sincronizarSobranteCierrePorEfectivo(inpSf, inpEf);
+        }
+
+        if (inpEf.getAttribute('data-auto-sobrante-bound') !== '1') {
+            inpEf.setAttribute('data-auto-sobrante-bound', '1');
+            inpEf.addEventListener('input', onEfectivoChange);
+            inpEf.addEventListener('blur', onEfectivoChange);
+        }
+        onEfectivoChange();
+
+        if (inpSf.getAttribute('data-baseline-sobrante-bound') !== '1') {
+            inpSf.setAttribute('data-baseline-sobrante-bound', '1');
+            inpSf.addEventListener('input', function () {
+                if (inpSf.getAttribute('data-syncing-sobrante') === '1') {
+                    return;
+                }
+                var contado = parseDecimalCierre(inpEf.value);
+                var baseContado = cierreEfectivoContadoInicial != null ? cierreEfectivoContadoInicial : contado;
+                var actual = Math.round((parseFloat(inpSf.value) || 0) * 100) / 100;
+                cierreSobranteBase = Math.round((actual - (baseContado - contado)) * 100) / 100;
+            });
+        }
+    }
+
     function poblarTabDefinitivo(estado) {
         var el = document.getElementById('totales-tab-definitivo');
         if (!el) {
@@ -263,7 +354,11 @@
         var bloques = [];
         if (estado.totales_turno && window.GastronomiaTotalesTurnoRender) {
             bloques.push({
-                html: renderTotalesHtml(estado.totales_turno, 'Facturación del turno', { conciliarMedios: true }),
+                html: renderTotalesHtml(estado.totales_turno, 'Facturación del turno', {
+                    conciliarMedios: true,
+                    arqueoEfectivo: true,
+                    cuentacaja_efectivo_id: estado.cuentacaja_efectivo_id || 0,
+                }),
             });
         }
         if (estado.totales_dia && window.GastronomiaTotalesTurnoRender) {
@@ -274,6 +369,11 @@
         el.innerHTML = window.GastronomiaTotalesTurnoRender
             ? window.GastronomiaTotalesTurnoRender.renderTotalesResumenHtml(bloques)
             : '';
+
+        if (window.GastronomiaTotalesTurnoRender && window.GastronomiaTotalesTurnoRender.enlazarArqueoEfectivoCierre) {
+            window.GastronomiaTotalesTurnoRender.enlazarArqueoEfectivoCierre(el);
+        }
+        enlazarAutoSobranteCierreDefinitivo(el);
 
         var inpInv = document.getElementById('redondeo_invitaciones');
         if (inpInv && estado.totales_turno) {
@@ -456,6 +556,20 @@
                 );
             });
         });
+        root.querySelectorAll('.js-conciliar-invitaciones').forEach(function (btn) {
+            if (btn.dataset.boundConciliarInv) {
+                return;
+            }
+            btn.dataset.boundConciliarInv = '1';
+            btn.addEventListener('click', function () {
+                var rawMozoId = btn.getAttribute('data-mozo-id');
+                var mozoId = rawMozoId !== null && rawMozoId !== '' ? parseInt(rawMozoId, 10) : null;
+                abrirModalInvitaciones(
+                    isNaN(mozoId) ? null : mozoId,
+                    btn.getAttribute('data-mozo-nombre') || ''
+                );
+            });
+        });
         root.querySelectorAll('.js-ver-factura-detalle').forEach(function (lnk) {
             if (lnk.dataset.boundVer) {
                 return;
@@ -481,6 +595,17 @@
                 total: 'Total NC',
                 extra: 'Factura origen',
                 cobrado: 'Cobrado (devuelto)',
+                acciones: '',
+            }
+            : modo === 'invitaciones'
+            ? {
+                comprobante: 'Comprobante',
+                hora: 'Hora',
+                cliente: 'Cliente',
+                mozo: 'Mozo',
+                total: 'Total',
+                extra: 'Descuento',
+                cobrado: 'Cobrado',
                 acciones: '',
             }
             : {
@@ -640,6 +765,71 @@
         });
     }
 
+    function abrirModalInvitaciones(mozoId, mozoNombre) {
+        if (!apiConciliacionInvitaciones) {
+            return;
+        }
+        var titulo = document.getElementById('modal-conciliacion-medio-titulo');
+        var body = document.getElementById('modal-conciliacion-medio-body');
+        setHeadersModalConciliacion('invitaciones');
+        if (titulo) {
+            titulo.textContent = mozoNombre
+                ? 'Invitaciones $0,01 — ' + mozoNombre
+                : 'Invitaciones $0,01 del turno';
+        }
+        if (body) {
+            body.innerHTML = '<tr><td colspan="8" class="text-center text-muted p-3">Cargando…</td></tr>';
+        }
+        if (typeof $ !== 'undefined') {
+            $('#modal-conciliacion-medio').modal('show');
+        }
+
+        var url = apiConciliacionInvitaciones;
+        if (mozoId && mozoId > 0) {
+            url += '?mozo_id=' + encodeURIComponent(mozoId);
+        }
+
+        getJson(url).then(function (res) {
+            if (!body) {
+                return;
+            }
+            if (!res.data.ok) {
+                body.innerHTML = '<tr><td colspan="8" class="text-danger p-3">' + (res.data.error || 'Error') + '</td></tr>';
+                return;
+            }
+            var facturas = res.data.facturas || [];
+            if (!facturas.length) {
+                body.innerHTML = '<tr><td colspan="8" class="text-muted p-3">'
+                    + (mozoNombre ? 'Sin invitaciones $0,01 de ' + mozoNombre + ' en el turno.' : 'Sin invitaciones $0,01 en el turno.')
+                    + '</td></tr>';
+                return;
+            }
+            var html = '';
+            facturas.forEach(function (f) {
+                var descLabel = f.descuento_nombre || f.descuento_codigo || '—';
+                if (Number(f.descuento_pct) > 0) {
+                    descLabel += ' (' + f.descuento_pct + '%)';
+                }
+                html += '<tr>';
+                html += '<td>' + (f.codigo || '—') + ' <span class="badge badge-warning text-dark">Inv.</span></td>';
+                html += '<td>' + (f.hora || '') + '</td>';
+                html += '<td>' + (f.cliente || '') + '</td>';
+                html += '<td>' + (f.mozo_nombre || '') + '</td>';
+                html += '<td class="text-right font-weight-bold">$' + fmt(f.total_facturado) + '</td>';
+                html += '<td>' + descLabel + '</td>';
+                html += '<td class="text-right text-muted">—</td>';
+                html += '<td class="text-nowrap">';
+                if (f.venta_id && urlVerFactura(f.venta_id) !== '#') {
+                    var verUrl = urlVerFactura(f.venta_id);
+                    html += '<a href="' + verUrl + '" class="btn btn-sm btn-warning text-dark" target="_blank" rel="noopener" title="Ver factura">';
+                    html += '<i class="fa fa-eye"></i> Ver</a>';
+                }
+                html += '</td></tr>';
+            });
+            body.innerHTML = html;
+        });
+    }
+
     function renderAlertaJornadaActiva(estado) {
         var el = document.getElementById('alert-jornada-activa');
         if (!el) {
@@ -667,12 +857,12 @@
         }
     }
 
-    function actualizarSelectTurnos(cerradosIds) {
+    function actualizarSelectTurnos(habilitablesIds) {
         var select = document.getElementById('turno_gastronomia_id');
         if (!select) {
             return;
         }
-        var cerrados = (cerradosIds || []).map(function (id) {
+        var habilitables = (habilitablesIds || []).map(function (id) {
             return String(id);
         });
         var seleccionValida = false;
@@ -682,15 +872,80 @@
                 opt.hidden = false;
                 return;
             }
-            var yaCerrado = cerrados.indexOf(String(opt.value)) >= 0;
-            opt.disabled = yaCerrado;
-            opt.hidden = yaCerrado;
-            if (opt.value === select.value && !yaCerrado) {
+            var puedeAbrir = habilitables.indexOf(String(opt.value)) >= 0;
+            opt.disabled = !puedeAbrir;
+            opt.hidden = !puedeAbrir;
+            if (opt.value === select.value && puedeAbrir) {
                 seleccionValida = true;
             }
         });
         if (!seleccionValida) {
             select.value = '';
+        }
+    }
+
+    function renderAnularCierre(estado) {
+        var btn = document.getElementById('btn-abrir-anular-cierre');
+        if (!btn || !puedeAnularCierre) {
+            return;
+        }
+
+        var info = estado.cierre_anulable || null;
+        var visible = info
+            && info.puede_anular
+            && !estado.turno_habilitado
+            && estado.jornada_abierta;
+
+        if (visible) {
+            btn.classList.remove('d-none');
+        } else {
+            btn.classList.add('d-none');
+        }
+    }
+
+    function poblarModalAnularCierre() {
+        var info = estadoActual && estadoActual.cierre_anulable ? estadoActual.cierre_anulable : null;
+        var detalle = document.getElementById('anular-cierre-detalle');
+        var hint = document.getElementById('hint-confirmacion-anular-cierre');
+        var inputConf = document.getElementById('confirmacion_anular_cierre');
+        var motivo = document.getElementById('motivo_anular_cierre');
+
+        if (!info || !info.puede_anular) {
+            return false;
+        }
+
+        if (detalle) {
+            detalle.innerHTML =
+                '<ul class="mb-0 small">' +
+                '<li><strong>Turno:</strong> ' + esc(info.turno_nombre || '') + ' (op. #' + esc(info.turno_operativo_id) + ')</li>' +
+                '<li><strong>Cierre Nº:</strong> ' + esc(info.numero_cierre != null ? info.numero_cierre : '—') + '</li>' +
+                '<li><strong>Cerrado:</strong> ' + esc(info.cierre_en_fmt || '') +
+                (info.usuario_cierre ? ' — ' + esc(info.usuario_cierre) : '') + '</li>' +
+                '<li><strong>Terminal:</strong> <code>' + esc(info.identificador_pc || '') + '</code></li>' +
+                '</ul>';
+        }
+        if (motivo) {
+            motivo.value = '';
+        }
+        if (inputConf) {
+            inputConf.value = '';
+            inputConf.placeholder = info.texto_confirmacion || '';
+        }
+        if (hint && info.texto_confirmacion) {
+            hint.textContent = 'Escriba exactamente: ' + info.texto_confirmacion;
+        }
+
+        return true;
+    }
+
+    function abrirModalAnularCierre() {
+        if (!poblarModalAnularCierre()) {
+            alert('No hay un cierre anulable en esta terminal.');
+            return;
+        }
+        var modal = document.getElementById('modal-anular-cierre');
+        if (modal && typeof window.jQuery !== 'undefined') {
+            window.jQuery(modal).modal('show');
         }
     }
 
@@ -701,6 +956,7 @@
         }
 
         renderAlertaJornadaActiva(estado);
+        renderAnularCierre(estado);
 
         var panel = document.getElementById('panel-estado-turno');
         var cardHab = document.getElementById('card-habilitar');
@@ -720,6 +976,7 @@
                 cardHab.classList.add('d-none');
             }
             activarSolapaCierre(estado);
+            renderNumeracionFiscal(estado);
             grillaMetaPorContenedor = {};
             cargarMetaGrillas().then(function () {
                 poblarTabParcial(estado);
@@ -733,20 +990,21 @@
                 msg += '<div class="alert alert-danger mt-2 mb-0">' + errsHab.join('<br>') + '</div>';
             }
             panel.innerHTML = msg;
-            var cerradosIds = estado.turnos_gastronomia_cerrados_ids || [];
-            actualizarSelectTurnos(cerradosIds);
+            var habilitablesIds = estado.turnos_gastronomia_habilitables_ids || [];
+            actualizarSelectTurnos(habilitablesIds);
             if (cardHab && estado.puede_habilitar) {
                 cardHab.classList.remove('d-none');
             } else if (cardHab) {
                 cardHab.classList.add('d-none');
             }
-            if (!estado.puede_habilitar && cerradosIds.length && !errsHab.length) {
-                msg += '<div class="alert alert-info mt-2 mb-0">Todos los turnos del día ya fueron cerrados en esta terminal.</div>';
+            if (!estado.puede_habilitar && !errsHab.length && estado.jornada_abierta && estado.sin_turnos_por_abrir) {
+                msg += '<div class="alert alert-info mt-2 mb-0">No hay más turnos por abrir en esta terminal.</div>';
                 panel.innerHTML = msg;
             }
             if (wrapSolapas) {
                 wrapSolapas.classList.add('d-none');
             }
+            renderNumeracionFiscal({ numeracion_fiscal: { filas: [] } });
         }
     }
 
@@ -756,6 +1014,53 @@
                 actualizarUi(res.data);
             }
         });
+    }
+
+    if (puedeAnularCierre && apiAnularCierre) {
+        var btnAbrirAnular = document.getElementById('btn-abrir-anular-cierre');
+        if (btnAbrirAnular) {
+            btnAbrirAnular.addEventListener('click', abrirModalAnularCierre);
+        }
+
+        var formAnular = document.getElementById('form-anular-cierre');
+        if (formAnular) {
+            formAnular.addEventListener('submit', function (e) {
+                e.preventDefault();
+                var info = estadoActual && estadoActual.cierre_anulable ? estadoActual.cierre_anulable : null;
+                if (!info || !info.puede_anular || !info.turno_operativo_id) {
+                    alert('No hay un cierre anulable en esta terminal.');
+                    return;
+                }
+                var motivoVal = (document.getElementById('motivo_anular_cierre') || {}).value || '';
+                if (!String(motivoVal).trim()) {
+                    alert('Indique el motivo de la anulación.');
+                    return;
+                }
+                var conf = (document.getElementById('confirmacion_anular_cierre') || {}).value || '';
+                if (!confirm(
+                    '¿Anular el cierre del turno «' + (info.turno_nombre || '') + '» en esta terminal?\n'
+                    + 'El turno volverá a estado HABILITADO. Esta acción queda registrada en el log.'
+                )) {
+                    return;
+                }
+                postJson(apiAnularCierre, {
+                    turno_operativo_id: info.turno_operativo_id,
+                    confirmacion: conf,
+                    motivo: motivoVal,
+                }).then(function (res) {
+                    if (res.data.ok) {
+                        var modal = document.getElementById('modal-anular-cierre');
+                        if (modal && typeof window.jQuery !== 'undefined') {
+                            window.jQuery(modal).modal('hide');
+                        }
+                        alert(res.data.mensaje || 'Cierre anulado');
+                        cargarEstado();
+                    } else {
+                        alert(res.data.error || mensajeErrorRespuesta(res));
+                    }
+                });
+            });
+        }
     }
 
     if (puedeHabilitar) {
@@ -876,6 +1181,10 @@
     if (typeof $('a[data-toggle="tab"]').tab === 'function') {
         $('a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
             var href = e.target ? e.target.getAttribute('href') : '';
+            document.querySelectorAll('#tabs-cierre-turno .nav-link').forEach(function (link) {
+                var selected = link.getAttribute('href') === href;
+                link.setAttribute('aria-selected', selected ? 'true' : 'false');
+            });
             if (href === '#tab-cierre-definitivo') {
                 if (!grillaMetaPorContenedor['grilla-conciliacion-turno']) {
                     cargarMetaGrilla('grilla-conciliacion-turno');
@@ -911,8 +1220,11 @@
             var url = cfgGlobal.urlCanjesPremioTurno;
             var desde = '';
             var hasta = '';
-            if (estadoActual && estadoActual.turno_habilitado && estadoActual.turno_habilitado.habilitado_en) {
-                desde = estadoActual.turno_habilitado.habilitado_en;
+            if (estadoActual && estadoActual.turno_habilitado && estadoActual.habilitacion_en) {
+                desde = estadoActual.habilitacion_en;
+            }
+            if (estadoActual && estadoActual.fecha_jornada) {
+                url += (url.indexOf('?') >= 0 ? '&' : '?') + 'fecha_jornada=' + encodeURIComponent(estadoActual.fecha_jornada);
             }
             if (desde) {
                 url += (url.indexOf('?') >= 0 ? '&' : '?') + 'desde=' + encodeURIComponent(desde);
@@ -1010,8 +1322,11 @@
             }
             var url = cfgGlobal.urlTicketsTarjetaTurno;
             var desde = '';
-            if (estadoActual && estadoActual.turno_habilitado && estadoActual.turno_habilitado.habilitado_en) {
-                desde = estadoActual.turno_habilitado.habilitado_en;
+            if (estadoActual && estadoActual.turno_habilitado && estadoActual.habilitacion_en) {
+                desde = estadoActual.habilitacion_en;
+            }
+            if (estadoActual && estadoActual.fecha_jornada) {
+                url += (url.indexOf('?') >= 0 ? '&' : '?') + 'fecha_jornada=' + encodeURIComponent(estadoActual.fecha_jornada);
             }
             if (desde) {
                 url += (url.indexOf('?') >= 0 ? '&' : '?') + 'desde=' + encodeURIComponent(desde);
@@ -1079,6 +1394,17 @@
                         errEl.classList.remove('d-none');
                     }
                 });
+        });
+    }
+
+    var btnInvitaciones = document.getElementById('btn-consultar-invitaciones');
+    if (btnInvitaciones) {
+        btnInvitaciones.addEventListener('click', function () {
+            if (!estadoActual || !estadoActual.turno_habilitado) {
+                alert('No hay turno habilitado.');
+                return;
+            }
+            abrirModalInvitaciones(null, '');
         });
     }
 

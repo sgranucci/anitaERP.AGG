@@ -4,15 +4,32 @@
 @endsection
 
 @section("scripts")
+<style>
+    .jornada-informe-z-cuenta-wrap { display: flex; align-items: center; gap: 4px; min-width: 0; }
+    .jornada-informe-z-cuenta-wrap .codigo { max-width: 72px; flex: 0 0 72px; }
+    .jornada-informe-z-cuenta-wrap .nombre { min-width: 0; flex: 1 1 auto; }
+    .jornada-informe-z-monto { min-width: 120px; font-size: 1.05rem; font-weight: 600; text-align: right; }
+    .jornada-informe-z-sistema { font-size: 1rem; font-weight: 600; }
+</style>
 <script>
+    window.GASTRONOMIA = {
+        empresaId: @json((int) $empresa_id),
+        usocuentacajaGastronomiaId: @json((int) ($usocuentacaja_gastronomia_id ?? 0)),
+    };
     window.JORNADA_GASTRONOMIA = {
         csrf: @json(csrf_token()),
+        empresaId: @json((int) $empresa_id),
+        usocuentacajaGastronomiaId: @json((int) ($usocuentacaja_gastronomia_id ?? 0)),
+        urlCuentacajaPorCodigoBase: @json(url('ventas/gastronomia/api/cuentacaja-por-codigo')),
         urlComprobanteTotemBase: @json(route('gastronomia_jornada_comprobante_cierre_totem', ['jornadaId' => '__JORNADA_ID__', 'inline' => 1])),
         urlInformeZDatosBase: @json(url('ventas/gastronomia/jornada/api/informe-z/__JORNADA_ID__')),
         urlInformeZGuardar: @json(route('gastronomia_jornada_api_informe_z_guardar')),
+        urlInformeZBorradorGuardar: @json(route('gastronomia_jornada_api_informe_z_borrador_guardar')),
+        urlPreviewCierreTotemBase: @json(url('ventas/gastronomia/jornada/api/preview-cierre-totem/__EMPRESA_ID__')),
         toleranciaInformeZ: @json((float) config('gastronomia.cierre_totem_informe_z_tolerancia', 0.02)),
     };
 </script>
+<script src="{{ asset('assets/pages/scripts/caja/cuentacaja/consulta.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/cuentacaja/consulta.js')) }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/gastronomia/jornada.js') }}?v={{ filemtime(public_path('assets/pages/scripts/ventas/gastronomia/jornada.js')) }}" type="text/javascript"></script>
 @endsection
 
@@ -22,11 +39,15 @@
      data-api-abrir="{{ url('ventas/gastronomia/jornada/api/abrir') }}"
      data-api-cerrar="{{ url('ventas/gastronomia/jornada/api/cerrar') }}"
      data-api-eliminar="{{ url('ventas/gastronomia/jornada/api/eliminar') }}"
+     data-api-anular-cierre="{{ route('gastronomia_jornada_api_anular_cierre') }}"
      data-cierre-totem-habilitado="{{ ! empty($cierre_totem_habilitado) ? '1' : '0' }}"
      data-csrf="{{ csrf_token() }}"
      data-puede-abrir="{{ $puede_abrir ? '1' : '0' }}"
      data-puede-cerrar="{{ $puede_cerrar ? '1' : '0' }}"
-     data-puede-eliminar="{{ ($puede_eliminar ?? false) ? '1' : '0' }}">
+     data-puede-eliminar="{{ ($puede_eliminar ?? false) ? '1' : '0' }}"
+     data-puede-anular-cierre="{{ ($puede_anular_cierre ?? false) ? '1' : '0' }}"
+     data-cierre-anulable='@json($cierre_anulable ?? null)'
+     data-jornada-abierta="{{ ! empty($estado['jornada_abierta']) ? '1' : '0' }}">
     <div class="col-lg-12">
         @include('includes.mensaje')
         <div class="card card-info">
@@ -57,7 +78,7 @@
                     </p>
                 @endif
 
-                <form method="get" action="{{ url('ventas/gastronomia/jornada') }}" class="form-inline mb-4">
+                <form method="get" action="{{ url('ventas/gastronomia/jornada') }}" class="form-inline mb-4" id="form-empresa-jornada">
                     <label class="mr-2" for="empresa_id">Empresa</label>
                     <select name="empresa_id" id="empresa_id" class="form-control mr-2">
                         @foreach ($empresas as $emp)
@@ -66,7 +87,6 @@
                             </option>
                         @endforeach
                     </select>
-                    <button type="submit" class="btn btn-secondary btn-sm">Consultar</button>
                 </form>
 
                 @if ($estado)
@@ -184,6 +204,28 @@
                                                 (no requieren saneamiento).
                                             </div>
                                         @endif
+                                        @if (! empty($cierre_totem_habilitado) && $estado['jornada_abierta'])
+                                            <div id="preview-cierre-totem-waitry" class="mb-3 border rounded p-2 bg-light small">
+                                                <div class="text-muted mb-0">
+                                                    <i class="fa fa-spinner fa-spin"></i>
+                                                    Consultando totales Waitry del tótem…
+                                                </div>
+                                            </div>
+                                            <div id="preview-informe-z-acciones" class="mb-3 d-none">
+                                                <button type="button" class="btn btn-primary btn-sm" id="btn-guardar-informe-z-preview">
+                                                    Guardar Informe Z
+                                                </button>
+                                                <span class="text-muted small ml-2">Opcional: guarda borrador mientras la jornada sigue abierta. Si cierra sin guardar, los montos ingresados aquí se envían igual al cerrar.</span>
+                                            </div>
+                                        @endif
+                                        <div id="jornada-cierre-en-progreso"
+                                             class="alert alert-info py-2 mb-2 d-none"
+                                             role="status"
+                                             aria-live="polite">
+                                            <i class="fa fa-spinner fa-spin"></i>
+                                            <strong>Cerrando la jornada…</strong>
+                                            Consultando órdenes Waitry y registrando el cierre. Puede tardar hasta un minuto. Espere, por favor.
+                                        </div>
                                         <div class="form-group">
                                             <label for="observacion_cerrar">Observación de cierre</label>
                                             <textarea class="form-control" id="observacion_cerrar" rows="2"
@@ -200,9 +242,20 @@
                     </div>
                 @endif
 
-                <h5>Historial de cierres de jornada</h5>
+                <div class="d-flex flex-wrap justify-content-between align-items-center mb-2">
+                    <h5 class="mb-0">Historial de cierres de jornada</h5>
+                    @if (($puede_anular_cierre ?? false) && ! empty($cierre_anulable))
+                        <button type="button" class="btn btn-danger btn-sm" id="btn-abrir-anular-cierre-jornada"
+                                title="Reabrir la última jornada cerrada (sin rendición en caja)">
+                            <i class="fa fa-undo"></i> Anular último cierre de jornada
+                        </button>
+                    @endif
+                </div>
                 <p class="text-muted small mb-2">
                     Reimprima el comprobante de ingresos tótem desde la columna <strong>Comprobante</strong> de cualquier jornada cerrada.
+                    @if ($puede_anular_cierre ?? false)
+                        Si cerró por error y <strong>no</strong> presentó en caja, puede anular el cierre y dejar la jornada abierta de nuevo.
+                    @endif
                 </p>
                 <div class="table-responsive">
                     <table class="table table-sm table-striped table-bordered">
@@ -219,7 +272,7 @@
                                     <th>Órdenes Waitry</th>
                                     <th>Comprobante</th>
                                 @endif
-                                @if ($puede_eliminar ?? false)
+                                @if (($puede_eliminar ?? false) || ($puede_anular_cierre ?? false))
                                     <th>Acciones</th>
                                 @endif
                             </tr>
@@ -228,6 +281,7 @@
                             @forelse ($historial as $j)
                                 @php
                                     $elim = $eliminacion_por_jornada[$j->id] ?? null;
+                                    $anular = $anulacion_cierre_por_jornada[$j->id] ?? null;
                                 @endphp
                                 <tr>
                                     <td>{{ $j->id }}</td>
@@ -259,9 +313,10 @@
                                         <td class="text-nowrap">
                                             @if ($j->cierreTotem)
                                                 <a href="{{ route('gastronomia_jornada_comprobante_cierre_totem', ['jornadaId' => $j->id, 'inline' => 1]) }}"
-                                                   class="btn btn-outline-secondary btn-xs js-ver-cierre-totem"
-                                                   target="_blank" rel="noopener" title="Ver PDF">
-                                                    <i class="fa fa-file-pdf-o"></i>
+                                                   class="btn-accion-tabla tooltipsC"
+                                                   target="_blank" rel="noopener"
+                                                   title="Comprobante cierre tótem Waitry (PDF)">
+                                                    <i class="fas fa-file-pdf text-danger"></i>
                                                 </a>
                                                 <button type="button"
                                                         class="btn btn-outline-info btn-xs js-informe-z"
@@ -269,37 +324,45 @@
                                                         title="Informe Z / conciliación">
                                                     <i class="fa fa-balance-scale"></i>
                                                 </button>
-                                                <button type="button"
-                                                        class="btn btn-outline-primary btn-xs js-imprimir-cierre-totem"
-                                                        data-jornada-id="{{ $j->id }}"
-                                                        title="Reimprimir comprobante">
-                                                    <i class="fa fa-print"></i>
-                                                </button>
                                             @else
                                                 —
                                             @endif
                                         </td>
                                     @endif
-                                    @if ($puede_eliminar ?? false)
+                                    @if (($puede_eliminar ?? false) || ($puede_anular_cierre ?? false))
                                         <td class="text-nowrap">
-                                            @if (! empty($elim['puede_eliminar']))
+                                            @if (($puede_anular_cierre ?? false) && ! empty($anular['puede_anular']))
                                                 <button type="button"
-                                                        class="btn btn-outline-danger btn-xs js-eliminar-jornada"
+                                                        class="btn btn-outline-danger btn-xs js-anular-cierre-jornada mr-1"
                                                         data-jornada-id="{{ $j->id }}"
                                                         data-fecha-jornada="{{ $j->fecha_jornada->format('d/m/Y') }}"
-                                                        title="Eliminar jornada sin movimientos">
-                                                    <i class="fa fa-trash"></i>
+                                                        data-cierre-en="{{ $j->cierre_en?->format('d/m/Y H:i') ?? '' }}"
+                                                        data-usuario-cierre="{{ $j->usuarioCierre->nombre ?? '' }}"
+                                                        data-texto-confirmacion="{{ $anular['texto_confirmacion'] ?? '' }}"
+                                                        title="Anular cierre y reabrir jornada">
+                                                    <i class="fa fa-undo"></i>
                                                 </button>
-                                            @else
-                                                <span class="text-muted small"
-                                                      title="{{ $elim['motivo_no_eliminar'] ?? 'Tiene movimientos' }}">—</span>
+                                            @endif
+                                            @if ($puede_eliminar ?? false)
+                                                @if (! empty($elim['puede_eliminar']))
+                                                    <button type="button"
+                                                            class="btn btn-outline-secondary btn-xs js-eliminar-jornada"
+                                                            data-jornada-id="{{ $j->id }}"
+                                                            data-fecha-jornada="{{ $j->fecha_jornada->format('d/m/Y') }}"
+                                                            title="Eliminar jornada sin movimientos">
+                                                        <i class="fa fa-trash"></i>
+                                                    </button>
+                                                @elseif (empty($anular['puede_anular']))
+                                                    <span class="text-muted small"
+                                                          title="{{ $elim['motivo_no_eliminar'] ?? 'Tiene movimientos' }}">—</span>
+                                                @endif
                                             @endif
                                         </td>
                                     @endif
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="{{ 7 + (! empty($cierre_totem_habilitado) ? 2 : 0) + (($puede_eliminar ?? false) ? 1 : 0) }}" class="text-center text-muted">Sin registros.</td>
+                                    <td colspan="{{ 7 + (! empty($cierre_totem_habilitado) ? 2 : 0) + ((($puede_eliminar ?? false) || ($puede_anular_cierre ?? false)) ? 1 : 0) }}" class="text-center text-muted">Sin registros.</td>
                                 </tr>
                             @endforelse
                         </tbody>
@@ -334,6 +397,46 @@
                     Guardar Informe Z y conciliar
                 </button>
             </div>
+        </div>
+    </div>
+</div>
+@include('includes.caja.modalconsultacuentacaja')
+@endif
+
+@if ($puede_anular_cierre ?? false)
+<div class="modal fade" id="modal-anular-cierre-jornada" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header py-2 bg-danger text-white">
+                <h6 class="modal-title"><i class="fa fa-undo"></i> Anular cierre de jornada</h6>
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Cerrar">&times;</button>
+            </div>
+            <form id="form-anular-cierre-jornada" autocomplete="off">
+                <div class="modal-body py-3">
+                    <p class="text-muted small mb-2">
+                        La jornada volverá a estado <strong>abierta</strong>. Se elimina el registro de cierre Waitry/tótem de esa jornada.
+                        No borra turnos ni comprobantes. Queda registrado en el log del sistema.
+                    </p>
+                    <div id="anular-cierre-jornada-detalle" class="mb-3"></div>
+                    <div class="form-group mb-2">
+                        <label for="motivo_anular_cierre_jornada">Motivo (obligatorio)</label>
+                        <textarea id="motivo_anular_cierre_jornada" class="form-control" rows="2"
+                                  maxlength="500" required placeholder="Ej.: cierre por error antes de rendir turnos"></textarea>
+                    </div>
+                    <div class="form-group mb-0">
+                        <label for="confirmacion_anular_cierre_jornada" class="requerido">Confirmación</label>
+                        <input type="text" class="form-control" id="confirmacion_anular_cierre_jornada"
+                               autocomplete="off" required/>
+                        <small class="form-text text-muted" id="hint-confirmacion-anular-cierre-jornada"></small>
+                    </div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-sm btn-danger" id="btn-submit-anular-cierre-jornada">
+                        <i class="fa fa-undo"></i> Anular cierre y reabrir jornada
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>

@@ -1,0 +1,61 @@
+---
+description: Anulación de cierre definitivo de turno gastronomía (reapertura controlada)
+globs: app/Services/Ventas/Gastronomia/GastronomiaTurnoOperativoService.php,app/Http/Controllers/Ventas/HabilitacionTurnoGastronomiaController.php,resources/views/ventas/gastronomia/habilitacion_turno/**,public/assets/pages/scripts/ventas/gastronomia/habilitacion_turno.js,database/migrations/*anular*cierre*
+---
+
+# Anular cierre definitivo de turno gastronomía
+
+Operación **administrativa** para revertir un cierre definitivo erróneo y dejar el turno operativo nuevamente en `habilitado` en la **misma terminal (PC)** y **jornada abierta**.
+
+## Permiso
+
+| Slug | Roles (migración) | Pantalla |
+|------|-------------------|----------|
+| `anular-cierre-turno-gastronomia` | Enc-gastronomía, administrador | Habilitación de turno |
+
+No asignar a cajeros/mozos salvo decisión explícita de negocio.
+
+## Condiciones obligatorias (todas)
+
+1. Turno en `turno_operativo_gastronomia` con `estado = cerrado` y `cierre_en` no nulo.
+2. `identificador_pc` del request = `identificador_pc` del turno (misma PC de trabajo).
+3. Jornada **abierta** de la empresa y `jornada_gastronomia_id` del turno = jornada activa.
+4. **Sin** fila en `rendicion_gastronomia_caja` con ese `turno_operativo_gastronomia_id`.
+5. **Sin** otro turno habilitado en la PC (salvo reabrir el mismo registro).
+6. Debe ser el **último** cierre de esa PC en la jornada (`cierre_en` más reciente).
+7. **Sin** turno posterior del día en esa PC: ningún otro `turno_operativo_gastronomia` en la misma jornada+PC con `turno_gastronomia.orden` mayor.
+8. Confirmación textual exacta: `ANULAR-{turno_operativo_id}`.
+
+## Qué hace
+
+- Pone `estado = habilitado`.
+- Limpia campos de cierre: `cierre_en`, `numero_cierre`, montos, redondeos, `observacion_cierre`, `usuario_cierre_id`.
+- **No** borra `cierre_parcial_turno_gastronomia` (historial de parciales).
+- Append en `observacion_habilitacion` con nota compacta (fecha, usuario, cierre, motivo). El snapshot JSON del cierre anulado va solo en `Log::info`, no en el texto impreso.
+- `Log::info('gastronomia.turno.anular_cierre', …)` + auditoría OwenIt en el modelo.
+
+Al cerrar de nuevo se asigna un **nuevo** `numero_cierre` (max+1).
+
+## UI (habilitación de turno)
+
+- La pantalla principal no cambia: prioridad en habilitación / cierre habitual.
+- Si `cierre_anulable.puede_anular` y jornada abierta sin turno habilitado: solo el botón rojo **Anular último cierre** en `card-tools` (toolbar).
+- Al pulsar el botón → modal `#modal-anular-cierre` (detalle del cierre, motivo, confirmación `ANULAR-{id}`).
+
+## API
+
+- `POST ventas/gastronomia/habilitacion-turno/api/anular-cierre`
+- Body: `empresa_id`, `turno_operativo_id`, `confirmacion`, `motivo` (obligatorio en UI)
+
+Estado en `GET …/api/estado` → clave `cierre_anulable` (solo si el usuario tiene permiso).
+
+## Prohibido
+
+- Anular si ya hay rendición en caja.
+- Anular si ya se habilitó/cerró un turno maestro con orden posterior en la misma PC y jornada.
+- Anular cierres de jornadas ya cerradas.
+- Anular desde otra PC distinta a la del turno.
+
+## Cierre parcial
+
+Los parciales **no** se anulan con este flujo; el turno no se cierra con un parcial. Si hace falta anular parciales, definir requerimiento aparte.

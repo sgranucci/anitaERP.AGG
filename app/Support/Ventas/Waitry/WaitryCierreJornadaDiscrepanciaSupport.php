@@ -23,7 +23,7 @@ final class WaitryCierreJornadaDiscrepanciaSupport
     public static function motivoDiscrepancia(array $ln): ?string
     {
         if (! empty($ln['discrepancia_gap'])) {
-            return 'ID Waitry no recuperado en consulta';
+            return 'Hueco en secuencia Waitry (pendiente auditoría del día)';
         }
 
         if (($ln['fuente_listado'] ?? '') === 'erp') {
@@ -87,7 +87,7 @@ final class WaitryCierreJornadaDiscrepanciaSupport
             return true;
         }
 
-        if (count($auditoria['ids_gap_sin_recuperar'] ?? []) > 0) {
+        if (count($auditoria['ids_huecos_secuencia'] ?? $auditoria['ids_gap_sin_recuperar'] ?? []) > 0) {
             return true;
         }
 

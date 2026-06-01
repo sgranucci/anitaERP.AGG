@@ -327,6 +327,9 @@ class GastronomiaCuentaService
     /** Campos solo para JSON del POS; no existen en cuenta_gastronomia. */
     private const ATRIBUTOS_API_VIRTUALES = [
         'subtotal_estimado',
+        'total_facturar_ars',
+        'sin_cobranza',
+        'factura_cortesia',
         'factura_consumidor_final',
         'receptor_factura_nombre',
     ];
@@ -334,8 +337,12 @@ class GastronomiaCuentaService
     public function enriquecerCuentaParaApi(CuentaGastronomia $cuenta): CuentaGastronomia
     {
         $receptor = app(GastronomiaReceptorFacturacionService::class);
+        $preview = app(GastronomiaFacturaEmisionService::class)->previewTotalesParaCuenta($cuenta);
         $extras = [
             'subtotal_estimado' => $receptor->estimarSubtotalFactura($cuenta),
+            'total_facturar_ars' => (float) ($preview['total'] ?? 0),
+            'sin_cobranza' => ! empty($preview['sin_cobranza']),
+            'factura_cortesia' => ! empty($preview['factura_cortesia']),
             'factura_consumidor_final' => $receptor->facturaComoConsumidorFinal($cuenta),
         ];
         $extras['receptor_factura_nombre'] = $extras['factura_consumidor_final']

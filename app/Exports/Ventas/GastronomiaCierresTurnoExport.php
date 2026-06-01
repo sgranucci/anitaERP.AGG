@@ -32,7 +32,7 @@ class GastronomiaCierresTurnoExport implements FromView, ShouldAutoSize, WithCol
     /** @var list<string> */
     private array $rutasLogosExcel = [];
 
-    private const ULTIMA_COL = 'J';
+    private const ULTIMA_COL = 'K';
 
     /**
      * @param  array<string, mixed>  $filtros
@@ -74,7 +74,7 @@ class GastronomiaCierresTurnoExport implements FromView, ShouldAutoSize, WithCol
     {
         return [
             'A' => 14, 'B' => 16, 'C' => 14, 'D' => 22, 'E' => 14,
-            'F' => 14, 'G' => 12, 'H' => 18, 'I' => 14, 'J' => 12,
+            'F' => 22, 'G' => 14, 'H' => 12, 'I' => 18, 'J' => 14, 'K' => 12,
         ];
     }
 

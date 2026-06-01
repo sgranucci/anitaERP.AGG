@@ -27,8 +27,13 @@ final class WaitryOrdenesExternasService
     public function __construct(
         private readonly WaitryHttpClient $httpClient,
         private readonly WaitryAuthService $authService,
-        private readonly GastronomiaCuentaService $cuentaService,
     ) {
+    }
+
+    /** Resolución bajo demanda: evita ciclo CuentaService → Jornada → CierreTotem → Waitry → Cuenta. */
+    private function cuentaService(): GastronomiaCuentaService
+    {
+        return app(GastronomiaCuentaService::class);
     }
 
     /**
@@ -661,7 +666,7 @@ final class WaitryOrdenesExternasService
             }
         } else {
             try {
-                $cuenta = $this->cuentaService->abrirCuentaLibre($empresaId, $cfg, $datosApertura);
+                $cuenta = $this->cuentaService()->abrirCuentaLibre($empresaId, $cfg, $datosApertura);
             } catch (\Throwable $e) {
                 return ['ok' => false, 'error' => $e->getMessage()];
             }
@@ -678,7 +683,7 @@ final class WaitryOrdenesExternasService
             }
 
             try {
-                $this->cuentaService->agregarLinea(
+                $this->cuentaService()->agregarLinea(
                     $cuenta,
                     (int) $articulo->id,
                     (float) $ln['cantidad'],
@@ -700,7 +705,7 @@ final class WaitryOrdenesExternasService
             : null;
         $cuenta->save();
 
-        $cuenta = $this->cuentaService->cuentaConLineas($cuenta->id);
+        $cuenta = $this->cuentaService()->cuentaConLineas($cuenta->id);
 
         if ($cuenta->lineas->isEmpty()) {
             $cuenta->delete();
@@ -1178,7 +1183,7 @@ final class WaitryOrdenesExternasService
         ])));
 
         foreach ($candidatos as $sku) {
-            $articulo = $this->cuentaService->buscarArticuloCatalogoPorSku($cfg, $sku);
+            $articulo = $this->cuentaService()->buscarArticuloCatalogoPorSku($cfg, $sku);
             if ($articulo !== null) {
                 return $articulo;
             }

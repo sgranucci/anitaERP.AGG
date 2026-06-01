@@ -215,6 +215,58 @@ class ClienteRepository implements ClienteRepositoryInterface
 		$this->model->query()->update(['modofacturacion' => $modo]);
 	}
 
+	/**
+	 * Código ERP unificado para comparar con Anita (solo numéricos; alfanuméricos sin cambio).
+	 */
+	private function normalizarCodigoCliente(?string $codigo): string
+	{
+		$codigo = trim((string) $codigo);
+		if ($codigo === '') {
+			return '';
+		}
+		if (ctype_digit($codigo)) {
+			$sinCeros = ltrim($codigo, '0');
+
+			return $sinCeros !== '' ? $sinCeros : '0';
+		}
+
+		return $codigo;
+	}
+
+	/**
+	 * Variantes de código que pueden coexistir en BD (3016 vs 003016).
+	 *
+	 * @return list<string>
+	 */
+	private function variantesCodigoCliente(string $codigo): array
+	{
+		$codigo = trim($codigo);
+		if ($codigo === '') {
+			return [];
+		}
+		if (! ctype_digit($codigo)) {
+			return [$codigo];
+		}
+		$norm = $this->normalizarCodigoCliente($codigo);
+
+		return array_values(array_unique([$codigo, $norm, str_pad($norm, 6, '0', STR_PAD_LEFT)]));
+	}
+
+	private function queryClientePorCodigo(string $codigo)
+	{
+		$variantes = $this->variantesCodigoCliente($codigo);
+		if ($variantes === []) {
+			return $this->model->newQuery()->whereRaw('1 = 0');
+		}
+
+		return $this->model->newQuery()->whereIn('codigo', $variantes);
+	}
+
+	public function existeClientePorCodigo(string $codigo): bool
+	{
+		return $this->queryClientePorCodigo($codigo)->exists();
+	}
+
     public function sincronizarConAnita(){
 		ini_set('max_execution_time', '300');
 	  	ini_set('memory_limit', '512M');
@@ -243,12 +295,15 @@ class ClienteRepository implements ClienteRepositoryInterface
         $datosLocal = Cliente::all();
         $datosLocalArray = [];
         foreach ($datosLocal as $value) {
-            $datosLocalArray[] = $value->{$this->keyField};
+            $datosLocalArray[] = $this->normalizarCodigoCliente($value->{$this->keyField});
         }
+		$datosLocalArray = array_values(array_unique($datosLocalArray));
 
         foreach ($dataAnita as $value) {
-            if (!in_array(ltrim($value->{$this->keyField}, '0'), $datosLocalArray)) {
+			$codigoNorm = $this->normalizarCodigoCliente($value->{$this->keyField});
+            if (! in_array($codigoNorm, $datosLocalArray, true)) {
                 $this->traerRegistroDeAnita($value->{$this->keyFieldAnita}, true);
+				$datosLocalArray[] = $codigoNorm;
             }
 			else
 			{
@@ -578,11 +633,13 @@ class ClienteRepository implements ClienteRepositoryInterface
 			else
 				$horarioAtencion = $data->clim_hs_atencion;
 
+			$codigoCliente = $this->normalizarCodigoCliente($data->clim_cliente);
+
 			if (config("app.empresa") == 'EL BIERZO')
 			{
 				$arr_campos = [
 					"nombre" => $data->clim_nombre,
-					"codigo" => ltrim($data->clim_cliente, '0'),
+					"codigo" => $codigoCliente,
 					"contacto" => $data->clim_contacto,
 					"fantasia" => $data->clim_fantasia,
 					"email" => $email,
@@ -631,7 +688,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 			{
 				$arr_campos = [
 					"nombre" => $data->clim_nombre,
-					"codigo" => ltrim($data->clim_cliente, '0'),
+					"codigo" => $codigoCliente,
 					"contacto" => $data->clim_contacto,
 					"fantasia" => $data->clim_fantasia,
 					"email" => $email,
@@ -664,11 +721,13 @@ class ClienteRepository implements ClienteRepositoryInterface
 					];
 			}
 		
-			if ($fl_crea_registro) {
+			$clienteExistente = $this->queryClientePorCodigo((string) $data->clim_cliente)->first();
+
+			if ($clienteExistente !== null) {
+				$clienteExistente->update($arr_campos);
+				$cliente = $clienteExistente->fresh();
+			} elseif ($fl_crea_registro) {
             	$cliente = Cliente::create($arr_campos);
-			} else {
-            	Cliente::where('codigo', ltrim($data->clim_cliente, '0'))->update($arr_campos);
-				$cliente = Cliente::where('codigo', ltrim($data->clim_cliente, '0'))->first();
 			}
         }
 

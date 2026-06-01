@@ -3,9 +3,11 @@
 namespace App\Support\Ventas;
 
 use App\Models\Ventas\CierreParcialTurnoGastronomia;
+use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
 use App\Models\Ventas\TurnoOperativoGastronomia;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Ventas\GastronomiaTurnoObservacionHabilitacionSupport;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -57,8 +59,8 @@ final class GastronomiaCierreTurnoReporteSupport
                 'desde' => Carbon::parse($turno->habilitacion_en),
                 'hasta' => Carbon::parse($hasta),
                 'titulo' => 'Comprobantes del cierre parcial #'.$parcial->numero_parcial,
-                'subtitulo' => ($turno->turno?->nombre ?? 'Turno')
-                    .' · Op. #'.$turno->id
+                'subtitulo' => self::etiquetaTurnoConCierrePendiente($turno)
+                    .' · '.self::registroInternoTurno($turno)
                     .' · '.$turno->habilitacion_en->format('d/m/Y H:i')
                     .' — '.$hasta->format('d/m/Y H:i'),
             ];
@@ -113,6 +115,13 @@ final class GastronomiaCierreTurnoReporteSupport
 
         $soloMozo = ! empty($totales['solo_totales_mozo']);
 
+        $numeracionFiscal = $turno !== null
+            ? GastronomiaTurnoNumeracionComprobanteSupport::paraTurno(
+                $turno,
+                $parcial->created_at !== null ? Carbon::parse($parcial->created_at) : now(),
+            )
+            : ['filas' => []];
+
         return $this->armarDatosComprobante(
             tipo: 'parcial',
             titulo: $soloMozo
@@ -120,7 +129,7 @@ final class GastronomiaCierreTurnoReporteSupport
                 : 'Cierre parcial de turno gastronomía',
             subtitulo: $soloMozo
                 ? 'Solo totales por mozo — el turno permanece habilitado'
-                : 'Comprobante Nº '.$parcial->numero_parcial.' — Turno operativo #'.$parcial->turno_operativo_gastronomia_id,
+                : self::subtituloCierreParcial($parcial),
             turno: $turno,
             totalesTurno: $totales,
             totalesDia: null,
@@ -132,6 +141,7 @@ final class GastronomiaCierreTurnoReporteSupport
             sobranteFaltante: null,
             observacionCierre: null,
             soloTotalesMozo: $soloMozo,
+            numeracionFiscal: $numeracionFiscal,
         );
     }
 
@@ -176,6 +186,7 @@ final class GastronomiaCierreTurnoReporteSupport
             sobranteFaltante: null,
             observacionCierre: null,
             soloTotalesMozo: true,
+            numeracionFiscal: GastronomiaTurnoNumeracionComprobanteSupport::paraTurno($turno),
         );
     }
 
@@ -211,6 +222,11 @@ final class GastronomiaCierreTurnoReporteSupport
             null,
         );
 
+        $numeracionFiscal = GastronomiaTurnoNumeracionComprobanteSupport::paraTurno(
+            $turno,
+            $turno->cierre_en !== null ? Carbon::parse($turno->cierre_en) : null,
+        );
+
         return $this->armarDatosComprobante(
             tipo: 'cierre',
             titulo: 'Cierre de turno gastronomía',
@@ -226,6 +242,7 @@ final class GastronomiaCierreTurnoReporteSupport
             sobranteFaltante: $turno->sobrante_faltante !== null ? (float) $turno->sobrante_faltante : null,
             observacionCierre: $turno->observacion_cierre,
             cantidadParciales: $turno->cierresParciales->count(),
+            numeracionFiscal: $numeracionFiscal,
         );
     }
 
@@ -234,11 +251,25 @@ final class GastronomiaCierreTurnoReporteSupport
      */
     public function listadoDesdeRequest(Request $request): Collection
     {
-        $empresaId = (int) $request->input('empresa_id', 0);
-        $pc = trim((string) $request->input('identificador_pc', ''));
-        $fechaDesde = trim((string) $request->input('fecha_desde', ''));
-        $fechaHasta = trim((string) $request->input('fecha_hasta', ''));
-        $tipo = trim((string) $request->input('tipo', ''));
+        return $this->listadoConFiltros(GastronomiaCierresTurnoListadoFiltros::resolverDesdeRequest($request));
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public function listadoConFiltros(array $filtros): Collection
+    {
+        $empresaId = (int) ($filtros['empresa_id'] ?? 0);
+        $pc = trim((string) ($filtros['identificador_pc'] ?? ''));
+        [$fechaDesde, $fechaHasta] = GastronomiaCierresTurnoListadoFiltros::normalizarRangoFechas(
+            (string) ($filtros['fecha_desde'] ?? ''),
+            (string) ($filtros['fecha_hasta'] ?? ''),
+        );
+        $tipo = trim((string) ($filtros['tipo'] ?? ''));
+        $filtrarPvSql = ($filtros['modo'] ?? '') === GastronomiaCierresTurnoListadoFiltros::MODO_CAMPO
+            && ($filtros['campo'] ?? '') === 'puntoventa'
+            && trim((string) ($filtros['valor'] ?? '')) !== '';
+        $valorPv = trim((string) ($filtros['valor'] ?? ''));
 
         $empresasAsignadas = $this->empresaRepository->traeEmpresasAsignadas();
 
@@ -250,6 +281,8 @@ final class GastronomiaCierreTurnoReporteSupport
                     'turnoOperativo.turno',
                     'turnoOperativo.jornada',
                     'turnoOperativo.empresa',
+                    'turnoOperativo.configuracionPuntoventa.puntoventaCae',
+                    'turnoOperativo.configuracionPuntoventa.puntoventaCaea',
                     'usuario',
                 ]);
 
@@ -270,6 +303,10 @@ final class GastronomiaCierreTurnoReporteSupport
                 $qPar->whereDate('created_at', '<=', $fechaHasta);
             }
 
+            if ($filtrarPvSql) {
+                $qPar->whereHas('turnoOperativo.configuracionPuntoventa', fn ($cfg) => $this->aplicarWhereTextoPuntoventa($cfg, $valorPv));
+            }
+
             foreach ($qPar->orderByDesc('created_at')->limit(500)->get() as $p) {
                 $filas->push($this->filaListadoDesdeParcial($p));
             }
@@ -277,7 +314,15 @@ final class GastronomiaCierreTurnoReporteSupport
 
         if ($tipo === '' || $tipo === 'cierre') {
             $qCer = TurnoOperativoGastronomia::query()
-                ->with(['turno', 'jornada', 'empresa', 'usuarioCierre', 'usuarioHabilitado'])
+                ->with([
+                    'turno',
+                    'jornada',
+                    'empresa',
+                    'usuarioCierre',
+                    'usuarioHabilitado',
+                    'configuracionPuntoventa.puntoventaCae',
+                    'configuracionPuntoventa.puntoventaCaea',
+                ])
                 ->where('estado', TurnoOperativoGastronomia::ESTADO_CERRADO);
 
             if ($empresaId > 0) {
@@ -297,12 +342,73 @@ final class GastronomiaCierreTurnoReporteSupport
                 $qCer->whereDate('cierre_en', '<=', $fechaHasta);
             }
 
+            if ($filtrarPvSql) {
+                $qCer->whereHas('configuracionPuntoventa', fn ($cfg) => $this->aplicarWhereTextoPuntoventa($cfg, $valorPv));
+            }
+
             foreach ($qCer->orderByDesc('cierre_en')->limit(500)->get() as $t) {
                 $filas->push($this->filaListadoDesdeCierre($t));
             }
         }
 
-        return $filas->sortByDesc(fn ($r) => $r->fecha_hora_raw)->values();
+        $filas = $filas->sortByDesc(fn ($r) => $r->fecha_hora_raw)->values();
+
+        $aplicarFiltroFilas = trim((string) ($filtros['valor'] ?? '')) !== ''
+            || ($filtros['operador'] ?? '') === 'vacio';
+        $soloPvEnSql = $filtrarPvSql
+            && ($filtros['modo'] ?? '') === GastronomiaCierresTurnoListadoFiltros::MODO_CAMPO;
+
+        if ($aplicarFiltroFilas && ! $soloPvEnSql) {
+            $filas = GastronomiaCierresTurnoListadoFiltros::filtrarFilas($filas, $filtros);
+        }
+
+        return $filas;
+    }
+
+    public static function etiquetaPuntoventaDesdeConfiguracion(?ConfiguracionPuntoventaGastronomia $cfg): string
+    {
+        if ($cfg === null) {
+            return '';
+        }
+
+        $cae = $cfg->puntoventaCae;
+        $caea = $cfg->puntoventaCaea;
+        $partes = [];
+
+        if ($cae) {
+            $partes[] = self::etiquetaPuntoventa($cae->codigo ?? '', $cae->nombre ?? '');
+        }
+        if ($caea && (int) $caea->id !== (int) ($cae?->id ?? 0)) {
+            $partes[] = 'CAEA';
+        }
+
+        return implode(' / ', array_filter($partes));
+    }
+
+    private static function etiquetaPuntoventa(string $codigo, string $nombre): string
+    {
+        $codigo = trim($codigo);
+        $nombre = trim($nombre);
+        if ($codigo !== '' && $nombre !== '') {
+            return $codigo.' — '.$nombre;
+        }
+
+        return $codigo !== '' ? $codigo : $nombre;
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder<\App\Models\Ventas\ConfiguracionPuntoventaGastronomia>  $cfg
+     */
+    private function aplicarWhereTextoPuntoventa($cfg, string $valor): void
+    {
+        $like = '%'.addcslashes($valor, '%_\\').'%';
+        $cfg->where(function ($w) use ($like) {
+            $w->whereHas('puntoventaCae', function ($pv) use ($like) {
+                $pv->where('codigo', 'like', $like)->orWhere('nombre', 'like', $like);
+            })->orWhereHas('puntoventaCaea', function ($pv) use ($like) {
+                $pv->where('codigo', 'like', $like)->orWhere('nombre', 'like', $like);
+            });
+        });
     }
 
     private function filaListadoDesdeParcial(CierreParcialTurnoGastronomia $p): object
@@ -314,12 +420,13 @@ final class GastronomiaCierreTurnoReporteSupport
             'tipo' => 'parcial',
             'tipo_etiqueta' => 'Cierre parcial',
             'id' => (int) $p->id,
-            'referencia' => '#'.$p->numero_parcial.' / Op. '.$p->turno_operativo_gastronomia_id,
+            'referencia' => self::referenciaCierreParcial($p),
             'fecha_hora' => $p->created_at?->format('d/m/Y H:i') ?? '',
             'fecha_hora_raw' => $p->created_at?->format('Y-m-d H:i:s') ?? '',
             'empresa_id' => (int) ($turno?->empresa_id ?? 0),
             'nombreempresa' => $empresaNombre,
             'identificador_pc' => (string) $p->identificador_pc,
+            'puntoventa_etiqueta' => self::etiquetaPuntoventaDesdeConfiguracion($turno?->configuracionPuntoventa),
             'turno_nombre' => $turno?->turno?->nombre ?? '',
             'fecha_jornada' => $turno?->jornada?->fecha_jornada?->format('d/m/Y') ?? '',
             'usuario' => $p->usuario?->nombre ?? '',
@@ -340,6 +447,7 @@ final class GastronomiaCierreTurnoReporteSupport
             'empresa_id' => (int) $t->empresa_id,
             'nombreempresa' => $t->empresa?->nombre ?? '',
             'identificador_pc' => (string) $t->identificador_pc,
+            'puntoventa_etiqueta' => self::etiquetaPuntoventaDesdeConfiguracion($t->configuracionPuntoventa),
             'turno_nombre' => $t->turno?->nombre ?? '',
             'fecha_jornada' => $t->jornada?->fecha_jornada?->format('d/m/Y') ?? '',
             'usuario' => $t->usuarioCierre?->nombre ?? '',
@@ -370,9 +478,11 @@ final class GastronomiaCierreTurnoReporteSupport
         ?string $observacionCierre,
         int $cantidadParciales = 0,
         bool $soloTotalesMozo = false,
+        ?array $numeracionFiscal = null,
     ): array {
         $empresaNombre = $turno?->empresa?->nombre ?? '';
         $logo = EmpresaLogoArchivo::dataUriDesdeNombre($empresaNombre);
+        $obsHabilitacion = GastronomiaTurnoObservacionHabilitacionSupport::parse($turno?->observacion_habilitacion);
 
         return [
             'tipo' => $tipo,
@@ -397,11 +507,13 @@ final class GastronomiaCierreTurnoReporteSupport
             'redondeo_invitaciones' => $redondeoInvitaciones,
             'redondeo_turno' => $redondeoTurno,
             'sobrante_faltante' => $sobranteFaltante,
-            'observacion_habilitacion' => $turno?->observacion_habilitacion,
+            'observacion_habilitacion' => $obsHabilitacion['texto_habilitacion'],
+            'anulaciones_cierre' => $obsHabilitacion['anulaciones'],
             'observacion_cierre' => $observacionCierre,
             'cantidad_parciales' => $cantidadParciales,
             'numero_cierre' => $turno?->numero_cierre,
             'turno_operativo_id' => $turno?->id,
+            'numeracion_fiscal' => $numeracionFiscal ?? ['filas' => []],
         ];
     }
 
@@ -412,7 +524,7 @@ final class GastronomiaCierreTurnoReporteSupport
             return 'Cierre #'.$n.' · PC '.$turno->identificador_pc;
         }
 
-        return 'Op. #'.$turno->id.' · PC '.$turno->identificador_pc;
+        return self::registroInternoTurno($turno).' · PC '.$turno->identificador_pc;
     }
 
     public static function subtituloTurnoOperativo(TurnoOperativoGastronomia $turno): string
@@ -420,8 +532,48 @@ final class GastronomiaCierreTurnoReporteSupport
         $n = (int) ($turno->numero_cierre ?? 0);
         $base = $n > 0
             ? 'Cierre de turno #'.$n
-            : 'Turno operativo #'.$turno->id;
+            : self::etiquetaTurnoConCierrePendiente($turno).' · '.self::registroInternoTurno($turno);
 
         return $base.' · '.$turno->identificador_pc;
+    }
+
+    public static function etiquetaTurnoConCierrePendiente(TurnoOperativoGastronomia $turno): string
+    {
+        return ($turno->turno?->nombre ?? 'Turno').' · cierre pendiente';
+    }
+
+    public static function registroInternoTurno(TurnoOperativoGastronomia|int $turno): string
+    {
+        $id = $turno instanceof TurnoOperativoGastronomia ? (int) $turno->id : (int) $turno;
+
+        return 'registro interno #'.$id;
+    }
+
+    public static function subtituloCierreParcial(CierreParcialTurnoGastronomia $parcial): string
+    {
+        $turno = $parcial->turnoOperativo;
+        $partes = ['Comprobante Nº '.$parcial->numero_parcial];
+
+        if ($turno !== null) {
+            $partes[] = self::etiquetaTurnoConCierrePendiente($turno);
+            $partes[] = self::registroInternoTurno($turno);
+        } else {
+            $partes[] = self::registroInternoTurno((int) $parcial->turno_operativo_gastronomia_id);
+        }
+
+        return implode(' — ', $partes);
+    }
+
+    public static function referenciaCierreParcial(CierreParcialTurnoGastronomia $parcial): string
+    {
+        $turno = $parcial->turnoOperativo;
+        $base = 'Parcial #'.$parcial->numero_parcial;
+
+        if ($turno !== null) {
+            return $base.' · '.self::etiquetaTurnoConCierrePendiente($turno)
+                .' · '.self::registroInternoTurno($turno);
+        }
+
+        return $base.' · '.self::registroInternoTurno((int) $parcial->turno_operativo_gastronomia_id);
     }
 }

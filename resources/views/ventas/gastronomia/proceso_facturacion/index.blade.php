@@ -615,6 +615,8 @@
         waitryTrasRespuesta: @json(config('gastronomia.waitry_tras_respuesta', true)),
         sincronizarAnitaAlFacturar: @json(config('gastronomia.sincronizar_anita_al_facturar', true)),
         waitryGetOrdersMinutosAtras: {{ max(0, (int) config('waitry.get_orders_minutos_atras', 20)) }},
+        listaprecioId: {{ (int) ($listaprecio_id ?? config('precio.listaprecio_default_id', 1)) }},
+        listaprecioNombre: @json($listaprecio_nombre ?? null),
         rutasWaitry: {
             ordenesPendientes: @json(url('ventas/gastronomia/api/waitry-ordenes-pendientes')),
             importarOrden: @json(url('ventas/gastronomia/api/waitry-importar-orden')),
@@ -718,7 +720,8 @@
                     <span><i class="fa fa-cutlery"></i> Mesa / cuenta</span>
                     <span id="gastro-header-cuenta-chip" class="gastro-header-cuenta-chip d-none ml-2" aria-hidden="true"></span>
                     <span class="text-muted small ml-2">
-                        <kbd>F5</kbd> Efectivizar · <kbd>F8</kbd> Facturar con descuento (obligatorio en canjes premio/fidelidad)
+                        <kbd>F5</kbd> Facturar (efectiviza en efectivo si no hay medios de pago; si la cuenta está saldada, factura igual)
+                        · <kbd>F8</kbd> Facturar con descuento (canjes 100% o descuentos parciales con cobranza)
                         @if ($gastroCuentasLibresHabilitadas)
                             · <kbd>+</kbd> Nueva cuenta libre
                         @endif
@@ -852,9 +855,15 @@
                     <div class="card-body py-2">
                         <p class="small text-muted mb-2 mb-md-1">
                             @if ((int) $sku_catalogo_digitos_sufijo > 0)
-                                Ingrese solo los <strong>{{ (int) $sku_catalogo_digitos_sufijo }}</strong> dígitos del código; <kbd>Enter</kbd> agrega cantidad <strong>1</strong> a la cuenta. <kbd>Tab</kbd> busca el artículo y pasa al botón <strong>Agregar</strong> para cargar la cantidad.
+                                Ingrese solo los <strong>{{ (int) $sku_catalogo_digitos_sufijo }}</strong> dígitos del código;
+                                <kbd>Enter</kbd> agrega cantidad <strong>1</strong> a la cuenta;
+                                <kbd>+</kbd> abre el modal de cantidad antes de agregar.
+                                <kbd>Tab</kbd> busca el artículo y pasa al botón <strong>Agregar</strong> para cargar la cantidad.
                             @else
-                                Use la lupa o el SKU; <kbd>Enter</kbd> en el campo SKU agrega con cantidad <strong>1</strong>; <kbd>Tab</kbd> busca y enfoca <strong>Agregar</strong> para ingresar cantidad.
+                                Use la lupa o el SKU;
+                                <kbd>Enter</kbd> en el campo SKU agrega con cantidad <strong>1</strong>;
+                                <kbd>+</kbd> abre el modal de cantidad antes de agregar;
+                                <kbd>Tab</kbd> busca y enfoca <strong>Agregar</strong> para ingresar cantidad.
                             @endif
                         </p>
                         <table class="table table-sm table-borderless mb-0">
@@ -865,7 +874,7 @@
                                     <input type="hidden" class="categoria_id" value="">
                                     <input type="hidden" class="subcategoria_id" value="">
                                     <input type="hidden" class="unidadmedida_id" value="">
-                                    <button type="button" title="Consulta artículos (catálogo SKU {{ $prefijo_sku }})" class="btn-accion-tabla consultaarticulo tooltipsC" data-sku-prefijo-filtro="{{ $prefijo_sku }}" data-sku-digitos-filtro="{{ (int) $sku_catalogo_digitos_sufijo }}">
+                                    <button type="button" title="Consulta artículos (catálogo SKU {{ $prefijo_sku }})" class="btn-accion-tabla consultaarticulo tooltipsC" data-sku-prefijo-filtro="{{ $prefijo_sku }}" data-sku-digitos-filtro="{{ (int) $sku_catalogo_digitos_sufijo }}" data-listaprecio-id="{{ (int) ($listaprecio_id ?? config('precio.listaprecio_default_id', 1)) }}" data-listaprecio-nombre="{{ $listaprecio_nombre ?? '' }}">
                                         <i class="fa fa-search text-primary"></i>
                                     </button>
                                     @if ((int) $sku_catalogo_digitos_sufijo > 0)
@@ -889,7 +898,11 @@
                         </table>
                         @if ($wsfe_forzar_modo_caea)
                             <div class="gastro-aviso-caea alert alert-warning py-2" role="status">
-                                <strong>Modo CAEA forzado</strong> (<code>ARCA_WSFE_FORZAR_MODO_CAEA=true</code>): las facturas no consultan el web service ARCA en línea.
+                                @if (! empty($wsfe_failover_automatico))
+                                    <strong>Modo CAEA — contingencia ARCA</strong>: el monitor detectó problemas de comunicación con AFIP. Las facturas usan CAEA hasta recuperar el servicio.
+                                @else
+                                    <strong>Modo CAEA forzado</strong> (<code>ARCA_WSFE_FORZAR_MODO_CAEA=true</code>): las facturas no consultan el web service ARCA en línea.
+                                @endif
                             </div>
                         @endif
                     </div>
@@ -1118,7 +1131,7 @@
             </div>
             <div class="modal-body py-3">
                 <p class="small text-muted mb-3">
-                    Revise o cargue el descuento y el cliente interno si el descuento lo requiere. Si ya estaban cargados en la cuenta, aparecen aquí igual.
+                    Revise o cargue el descuento y el cliente interno si el descuento lo requiere. Si el descuento no es del 100%, al confirmar complete el medio de cobro en la grilla y pulse F8 de nuevo.
                 </p>
                 <div id="gastro-descuento-slot-modal"></div>
             </div>
@@ -1161,7 +1174,7 @@
                 <input type="number" step="any" min="0.0001" class="form-control" id="fld-cantidad-linea" value="1">
             </div>
             <div class="modal-footer py-2">
-                <button type="button" class="btn btn-sm btn-primary" id="modal-cantidad-confirmar">Continuar</button>
+                <button type="button" class="btn btn-sm btn-primary" id="modal-cantidad-confirmar">Continuar <small class="text-white-50">(Enter)</small></button>
             </div>
         </div>
     </div>
@@ -1180,8 +1193,8 @@
             </div>
             <div class="modal-body py-2">
                 <p class="small text-muted mb-2">
-                    Escanee el cupón Wigos (se valida automáticamente). Solo cuentas libres: al confirmar se abre una cuenta libre
-                    con mozo y se carga el premio con descuento.
+                    Escanee el cupón Wigos (se valida automáticamente). Tras la validación, <kbd>Enter</kbd> confirma igual que el botón.
+                    Solo cuentas libres: al confirmar se abre una cuenta libre con mozo y se carga el premio con descuento.
                 </p>
                 <div class="form-group mb-2">
                     <label for="gastro-canje-premio-codigo" class="small mb-1">Nro. de cupón</label>
@@ -1228,7 +1241,8 @@
             </div>
             <div class="modal-body py-2">
                 <p class="small text-muted mb-2">
-                    Pase la tarjeta por el lector (se valida con <kbd>Enter</kbd> o automáticamente). Solo cuentas libres: al confirmar se abre una cuenta libre
+                    Pase la tarjeta por el lector (se valida con <kbd>Enter</kbd> o automáticamente). Elija el artículo si hay varios;
+                    con el canje listo, <kbd>Enter</kbd> confirma igual que el botón. Solo cuentas libres: al confirmar se abre una cuenta libre
                     con mozo, se aplica el canje y se abre el flujo F8 para facturar con descuento ($0,01).
                 </p>
                 <div class="form-group mb-2">

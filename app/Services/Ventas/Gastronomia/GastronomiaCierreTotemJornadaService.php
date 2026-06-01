@@ -8,10 +8,10 @@ use App\Models\Ventas\JornadaGastronomia;
 use App\Models\Ventas\TotemWaitryGastronomia;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Services\Ventas\Gastronomia\Waitry\WaitryAnalyticsOrdenesService;
-use App\Services\Ventas\Gastronomia\Waitry\WaitryOrdenesExternasService;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Ventas\Waitry\WaitryCierreJornadaDiscrepanciaSupport;
 use App\Support\Ventas\Waitry\WaitryCierreJornadaVentanaSupport;
+use App\Support\Ventas\Waitry\WaitryInformeZConciliacionSupport;
 use App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport;
 use App\Support\Ventas\Waitry\WaitryOrdenCobroSupport;
 use App\Support\Ventas\Waitry\WaitryTotemJornadaResumenSupport;
@@ -23,12 +23,13 @@ use RuntimeException;
 /**
  * Cierre de jornada — órdenes Waitry del tótem (waitry_order_id).
  * Persiste el rango de IDs incluido; el día siguiente consulta órdenes con id &gt; último hasta guardado.
+ * Huecos de secuencia (IDs faltantes en getordersdetails) no se recuperan por API: quedan como discrepancia
+ * para auditoría del día (proceso posterior en caja).
  */
 final class GastronomiaCierreTotemJornadaService
 {
     public function __construct(
         private readonly WaitryAnalyticsOrdenesService $analyticsOrdenesService,
-        private readonly WaitryOrdenesExternasService $ordenesExternasService,
     ) {
     }
 
@@ -64,9 +65,171 @@ final class GastronomiaCierreTotemJornadaService
     }
 
     /**
-     * Registra el cierre de órdenes Waitry (tótem) al cerrar la jornada gastronómica.
+     * Órdenes Waitry del tramo de jornada (último cierre → cierre indicado) con estado ERP.
+     * Usado por el proceso de cierre de jornada (conciliación, redistribución, asientos).
+     *
+     * @return array{
+     *   lineas: list<array<string, mixed>>,
+     *   meta: array<string, mixed>
+     * }
      */
-    public function registrarAlCerrarJornada(JornadaGastronomia $jornada): ?CierreTotemJornadaGastronomia
+    public function movimientosParaJornada(JornadaGastronomia $jornada, ?Carbon $cierreHasta = null): array
+    {
+        if (! $this->habilitado()) {
+            throw new InvalidArgumentException('Cierre tótem Waitry no habilitado.');
+        }
+
+        $empresaId = (int) $jornada->empresa_id;
+        if ($empresaId <= 0) {
+            throw new InvalidArgumentException('Empresa inválida.');
+        }
+
+        $fechaJornada = $jornada->fecha_jornada?->format('Y-m-d') ?? Carbon::today()->format('Y-m-d');
+        $idAnterior = $this->ultimoWaitryOrderIdHasta($empresaId);
+        $hasta = $cierreHasta ?? $jornada->cierre_en ?? now();
+
+        $listado = $this->listarOrdenesWaitryNuevas(
+            $empresaId,
+            $fechaJornada,
+            $idAnterior,
+            $jornada->apertura_en,
+            $hasta,
+        );
+
+        $ventana = $listado['ventana'];
+        $lineasCompletas = $this->armarLineasConEstadoErp(
+            $empresaId,
+            $listado['ordenes'],
+            $ventana['desde'] ?? null,
+            $ventana['hasta'] ?? null,
+        );
+        $lineasCompletas = array_merge(
+            $lineasCompletas,
+            $this->armarLineasHuecosPendientesAuditoria($listado['auditoria']['ids_huecos_secuencia'] ?? []),
+        );
+
+        $ids = array_keys($listado['ordenes']);
+        sort($ids, SORT_NUMERIC);
+        $desde = $ids !== [] ? (int) min($ids) : null;
+        $hastaId = $ids !== [] ? (int) max($ids) : $idAnterior;
+
+        return [
+            'lineas' => $lineasCompletas,
+            'meta' => [
+                'jornada_id' => (int) $jornada->id,
+                'empresa_id' => $empresaId,
+                'fecha_jornada' => $jornada->fecha_jornada?->format('Y-m-d') ?? $fechaJornada,
+                'fecha_jornada_fmt' => $jornada->fecha_jornada?->format('d/m/Y') ?? '',
+                'ventana_operativa' => $ventana['etiqueta'] ?? '',
+                'waitry_order_id_anterior' => $idAnterior,
+                'waitry_order_id_desde' => $desde,
+                'waitry_order_id_hasta' => $hastaId,
+                'rango_etiqueta' => $this->etiquetaRango($idAnterior, $desde, $hastaId),
+                'cantidad_movimientos' => count($lineasCompletas),
+                'auditoria' => $listado['auditoria'],
+            ],
+        ];
+    }
+
+    /**
+     * Totales Waitry que se incluirían al cerrar la jornada abierta (sin persistir).
+     * Usa la fecha/hora actual como cierre hipotético.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function previewParaJornadaAbierta(JornadaGastronomia $jornada): ?array
+    {
+        if (! $this->habilitado()) {
+            return null;
+        }
+
+        $empresaId = (int) $jornada->empresa_id;
+        if ($empresaId <= 0) {
+            return null;
+        }
+
+        $fechaJornada = $jornada->fecha_jornada?->format('Y-m-d') ?? Carbon::today()->format('Y-m-d');
+        $idAnterior = $this->ultimoWaitryOrderIdHasta($empresaId);
+
+        $listado = $this->listarOrdenesWaitryNuevas(
+            $empresaId,
+            $fechaJornada,
+            $idAnterior,
+            $jornada->apertura_en,
+            now(),
+        );
+
+        $ventana = $listado['ventana'];
+        $lineasCompletas = $this->armarLineasConEstadoErp(
+            $empresaId,
+            $listado['ordenes'],
+            $ventana['desde'] ?? null,
+            $ventana['hasta'] ?? null,
+        );
+        $lineasCompletas = array_merge(
+            $lineasCompletas,
+            $this->armarLineasHuecosPendientesAuditoria($listado['auditoria']['ids_huecos_secuencia'] ?? []),
+        );
+        $lineasDiscrepancias = WaitryCierreJornadaDiscrepanciaSupport::filtrar($lineasCompletas);
+
+        $totems = TotemWaitryGastronomia::query()
+            ->with('ubicacion')
+            ->where('empresa_id', $empresaId)
+            ->orderBy('ubicacion_id')
+            ->get();
+        $resumenTotems = WaitryTotemJornadaResumenSupport::armar($totems, $lineasCompletas);
+
+        $ids = array_keys($listado['ordenes']);
+        sort($ids, SORT_NUMERIC);
+        $desde = $ids !== [] ? (int) min($ids) : null;
+        $hasta = $ids !== [] ? (int) max($ids) : $idAnterior;
+
+        $totalGeneral = $resumenTotems['total_general'] ?? [
+            'cantidad_ordenes' => 0,
+            'total_ingreso' => 0.0,
+            'por_medio_pago' => [],
+        ];
+
+        $plantilla = WaitryInformeZConciliacionSupport::plantillaCarga($empresaId, $resumenTotems);
+        $borrador = is_array($jornada->informe_z_borrador_json) ? $jornada->informe_z_borrador_json : null;
+        $plantilla = WaitryInformeZConciliacionSupport::fusionarInformeZEnPlantilla($plantilla, $borrador);
+        $conciliacion = $borrador !== null
+            ? WaitryInformeZConciliacionSupport::conciliar($plantilla)
+            : null;
+
+        return [
+            'jornada_id' => (int) $jornada->id,
+            'fecha_jornada' => $jornada->fecha_jornada?->format('d/m/Y') ?? '',
+            'ventana_operativa' => $ventana['etiqueta'] ?? '',
+            'consulta_waitry_rango' => $listado['auditoria']['consulta_waitry_rango'] ?? '',
+            'waitry_order_id_anterior' => $idAnterior,
+            'waitry_order_id_desde' => $desde,
+            'waitry_order_id_hasta' => $hasta,
+            'rango_etiqueta' => $this->etiquetaRango($idAnterior, $desde, $hasta),
+            'cantidad_ordenes' => count($lineasCompletas),
+            'cantidad_discrepancias' => count($lineasDiscrepancias),
+            'cantidad_huecos_secuencia' => count($listado['auditoria']['ids_huecos_secuencia'] ?? []),
+            'hay_discrepancias' => count($lineasDiscrepancias) > 0,
+            'por_totem' => $resumenTotems['por_totem'] ?? [],
+            'total_general' => $totalGeneral,
+            'total_ingreso_totem' => (float) ($totalGeneral['total_ingreso'] ?? 0),
+            'cantidad_ingreso_totem' => (int) ($totalGeneral['cantidad_ordenes'] ?? 0),
+            'totems' => $plantilla,
+            'conciliacion' => $conciliacion,
+            'informe_z_cargado' => $borrador !== null,
+            'informe_z_en' => $borrador['informe_z_en'] ?? null,
+            'usuario_informe_z' => $borrador['usuario_nombre'] ?? null,
+            'tolerancia' => WaitryInformeZConciliacionSupport::toleranciaMonto(),
+            'preview_en' => now()->format('d/m/Y H:i'),
+        ];
+    }
+
+    /**
+     * Registra el cierre de órdenes Waitry (tótem) al cerrar la jornada gastronómica.
+     *
+     * @param  array<string, mixed>|null  $informeZBorrador  Informe Z cargado antes del cierre (borrador o request).
+     */
+    public function registrarAlCerrarJornada(JornadaGastronomia $jornada, ?array $informeZBorrador = null): ?CierreTotemJornadaGastronomia
     {
         if (! $this->habilitado()) {
             return null;
@@ -103,6 +266,10 @@ final class GastronomiaCierreTotemJornadaService
             $ordenesPorId,
             $ventana['desde'] ?? null,
             $ventana['hasta'] ?? null,
+        );
+        $lineasCompletas = array_merge(
+            $lineasCompletas,
+            $this->armarLineasHuecosPendientesAuditoria($auditoria['ids_huecos_secuencia'] ?? []),
         );
         $lineasDiscrepancias = WaitryCierreJornadaDiscrepanciaSupport::filtrar($lineasCompletas);
         $auditoria['cantidad_discrepancias'] = count($lineasDiscrepancias);
@@ -146,6 +313,11 @@ final class GastronomiaCierreTotemJornadaService
             ? array_slice($lineasDiscrepancias, 0, $limiteDetalle)
             : $lineasDiscrepancias;
 
+        $informeZJson = null;
+        if ($informeZBorrador !== null && isset($informeZBorrador['totems'])) {
+            $informeZJson = $informeZBorrador;
+        }
+
         return CierreTotemJornadaGastronomia::query()->create([
             'jornada_gastronomia_id' => (int) $jornada->id,
             'empresa_id' => $empresaId,
@@ -162,6 +334,7 @@ final class GastronomiaCierreTotemJornadaService
                 'resumen_totems' => $resumenTotems,
                 'auditoria' => $auditoria,
             ],
+            'informe_z_json' => $informeZJson,
             'detalle_truncado' => $truncado,
             'usuario_id' => Auth::id(),
         ]);
@@ -351,7 +524,7 @@ final class GastronomiaCierreTotemJornadaService
             $ventana['hasta'] ?? null,
         );
 
-        $recuperacion = $this->recuperarHuecosSecuenciales($empresaId, $desdeExclusive, $porId);
+        $idsHuecos = $this->detectarHuecosSecuenciales($desdeExclusive, $porId);
 
         if (count($porId) > $limite) {
             throw new InvalidArgumentException(
@@ -376,65 +549,80 @@ final class GastronomiaCierreTotemJornadaService
                 'cantidad_descartadas_fuera_ventana' => $descartadasFueraVentana,
                 'cantidad_incluidas' => count($porId),
                 'ids_suplementados_erp' => $idsErpSuplemento,
-                'ids_recuperados_gap' => $recuperacion['recuperados'],
-                'ids_gap_sin_recuperar' => $recuperacion['sin_recuperar'],
+                'ids_huecos_secuencia' => $idsHuecos,
+                /** @deprecated Usar ids_huecos_secuencia; se mantiene por compatibilidad en JSON/PDF guardados */
+                'ids_gap_sin_recuperar' => $idsHuecos,
+                'ids_recuperados_gap' => [],
+                'huecos_pendientes_auditoria_dia' => $idsHuecos !== [],
             ],
         ];
     }
 
     /**
-     * Busca hacia atrás IDs faltantes en la secuencia (desde último cierre + 1 hasta máximo visto).
+     * IDs Waitry ausentes entre el último cierre y el máximo visto en getordersdetails.
+     * No consulta Waitry: quedan como discrepancia para auditoría del día (proceso posterior).
      *
      * @param  array<int, array<string, mixed>>  $porId
-     * @return array{recuperados: list<int>, sin_recuperar: list<int>}
+     * @return list<int>
      */
-    private function recuperarHuecosSecuenciales(int $empresaId, int $desdeExclusive, array &$porId): array
+    private function detectarHuecosSecuenciales(int $desdeExclusive, array $porId): array
     {
-        $maxLimiteGap = max(0, (int) config('gastronomia.cierre_totem_jornada_max_ids_gap_recuperar', 250));
-        if ($maxLimiteGap === 0 || $porId === []) {
-            return ['recuperados' => [], 'sin_recuperar' => []];
+        if ($porId === []) {
+            return [];
         }
 
         $ids = array_keys($porId);
         $maxId = (int) max($ids);
         $minId = (int) min($ids);
         $inicio = max($desdeExclusive + 1, $minId);
-        $faltantes = [];
+        $huecos = [];
         for ($id = $inicio; $id <= $maxId; $id++) {
             if (! isset($porId[$id])) {
-                $faltantes[] = $id;
+                $huecos[] = $id;
             }
         }
 
-        if ($faltantes === []) {
-            return ['recuperados' => [], 'sin_recuperar' => []];
-        }
+        return $huecos;
+    }
 
-        $recuperados = [];
-        $sinRecuperar = [];
-        $intentos = 0;
-
-        foreach ($faltantes as $orderId) {
-            if ($intentos >= $maxLimiteGap) {
-                $sinRecuperar = array_merge($sinRecuperar, array_slice($faltantes, $intentos));
-
-                break;
-            }
-            $intentos++;
-
-            $orden = $this->ordenesExternasService->obtenerOrdenPorIdConciliacion($empresaId, $orderId);
-            if ($orden === null) {
-                $sinRecuperar[] = $orderId;
-
+    /**
+     * Filas de discrepancia sintéticas por hueco de secuencia (sin detalle Waitry en el listado del día).
+     *
+     * @param  list<int>  $idsHuecos
+     * @return list<array<string, mixed>>
+     */
+    private function armarLineasHuecosPendientesAuditoria(array $idsHuecos): array
+    {
+        $lineas = [];
+        foreach ($idsHuecos as $orderId) {
+            $orderId = (int) $orderId;
+            if ($orderId <= 0) {
                 continue;
             }
-
-            $porId[$orderId] = $this->analyticsOrdenesService->normalizarOrden($orden);
-            $porId[$orderId]['fuente'] = 'getOrdersPOS_gap';
-            $recuperados[] = $orderId;
+            $lineas[] = [
+                'waitry_order_id' => $orderId,
+                'display_id' => '',
+                'placed_at_fmt' => '',
+                'total' => 0.0,
+                'monto_cobro_waitry' => null,
+                'waitry_table_id' => null,
+                'paid_waitry' => null,
+                'waitry_tipo_pago' => null,
+                'waitry_medio_label' => null,
+                'cuentacaja_esperada_id' => null,
+                'cuentacaja_esperada_label' => null,
+                'importada_erp' => false,
+                'facturada_erp' => false,
+                'cuenta_id' => null,
+                'cuenta_estado' => null,
+                'waitry_cobro_totem' => false,
+                'venta_codigo' => '',
+                'fuente_listado' => 'hueco_secuencia',
+                'discrepancia_gap' => true,
+            ];
         }
 
-        return ['recuperados' => $recuperados, 'sin_recuperar' => $sinRecuperar];
+        return $lineas;
     }
 
     /**
@@ -530,7 +718,7 @@ final class GastronomiaCierreTotemJornadaService
             ->with(['venta:id,codigo,total', 'cuenta:id,waitry_cobro_totem,waitry_tipo_pago'])
             ->whereIn('waitry_order_id', $ids)
             ->whereHas('venta', fn ($q) => $q->whereHas('puntoventas', fn ($pv) => $pv->where('empresa_id', $empresaId)))
-            ->orderByDesc('id')
+            ->orderByDesc('venta_id')
             ->get()
             ->unique('waitry_order_id')
             ->keyBy(fn (VentaGastronomiaEmision $e) => (int) $e->waitry_order_id);

@@ -28,6 +28,15 @@ Proceso de **auditoría/conciliación** bajo **Caja → Rendiciones → Cierre j
 - **No** usa `getOrdersPOS` (ese endpoint es solo para el POS en vivo, doc. pág. 21).
 - Permiso: `listar-waitry-cierre-jornada-caja`.
 
+### Proceso de cierre (redistribución QR/efectivo, asientos, facturación)
+
+En la misma pantalla (**Caja → Rendiciones → Cierre jornada Waitry**), sección inferior visible solo con permiso `proceso-cierre-jornada-waitry-caja` (roles: **administrador**, **Enc-tesorería**).
+
+- Tramo Waitry: desde último `waitry_order_id` del cierre anterior hasta cierre de jornada (`getordersdetails` + ventana operativa).
+- Grilla QR/MP/Efectivo; porcentaje sobre total facturado; redistribución exacta QR ↔ efectivo.
+- Preview de asientos contables antes de facturación masiva (ejecución pendiente de implementar).
+- Configuración de cuentas ventas / IVA / impuesto interno por empresa (`gastronomia_cierre_jornada_config`).
+
 ## Cobro en POS (syncStatusPOS)
 
 Al facturar una cuenta importada desde Waitry (`cuenta_gastronomia.waitry_order_id`), Anita notifica el pago:

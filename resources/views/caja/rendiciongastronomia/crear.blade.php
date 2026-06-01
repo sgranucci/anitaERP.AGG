@@ -10,7 +10,7 @@
 @section("scripts")
 <script>
     window.RENDICION_GASTRONOMIA = {
-        urlConsultaCierre: @json(rtrim((string) config('app.app_carpeta', ''), '/').'/caja/rendiciongastronomia/api/consulta-cierre'),
+        urlConsultaCierre: @json(route('api_rendicion_gastronomia_consulta_cierre')),
         rendicionId: '',
     };
 </script>
@@ -29,8 +29,14 @@
             <div class="card-header d-flex align-items-center flex-wrap">
                 <h3 class="card-title mb-0">Registrar rendición de gastronomía</h3>
                 @if (($caja_id ?? 0) > 0)
+                @php
+                    $etiquetaCajaActiva = trim((string) ($nombreCaja ?? ''));
+                    if ($etiquetaCajaActiva === '') {
+                        $etiquetaCajaActiva = 'Caja #'.(int) $caja_id;
+                    }
+                @endphp
                 <span class="badge badge-light border ml-2 mb-0 py-1 px-2" style="font-size:0.85rem;font-weight:600;">
-                    <i class="fa fa-inbox mr-1"></i>Caja {{ $caja_id }}@if (! empty($nombreCaja)) — {{ $nombreCaja }}@endif
+                    <i class="fa fa-inbox mr-1"></i>{{ $etiquetaCajaActiva }}
                 </span>
                 @endif
                 <div class="card-tools ml-auto">
@@ -48,6 +54,17 @@
                     <div class="row">
                         <div class="col-lg-3"></div>
                         <div class="col-lg-6">
+                            <div id="bloque-verificacion-footer" class="alert alert-warning border mb-3 py-2">
+                                <div class="custom-control custom-checkbox">
+                                    <input type="checkbox" class="custom-control-input" id="chk_verificacion_gastronomia" disabled>
+                                    <label class="custom-control-label font-weight-bold" for="chk_verificacion_gastronomia">
+                                        Verifiqué los datos del cierre de gastronomía con lo entregado por el operador
+                                    </label>
+                                </div>
+                                <small class="text-muted d-block mt-1" id="hint-verificacion-footer">
+                                    Primero cargue el cierre (Consultar o número + Enter). Luego marque esta casilla para habilitar Guardar.
+                                </small>
+                            </div>
                             @include('includes.boton-form-crear')
                         </div>
                     </div>

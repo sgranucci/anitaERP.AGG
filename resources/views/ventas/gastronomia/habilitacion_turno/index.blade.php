@@ -24,7 +24,67 @@
     .gastro-grilla-conciliacion-wrap table { margin-bottom: 0; font-size: 0.85rem; white-space: nowrap; }
     .gastro-grilla-conciliacion-wrap th { position: sticky; top: 0; background: #f8f9fa; z-index: 2; }
     .gastro-medio-conciliar { cursor: pointer; text-decoration: underline dotted; }
-    .gastro-tab-cierres .nav-link { font-weight: 600; }
+    .gastro-tab-cierres {
+        border-bottom: 2px solid #ced4da;
+        background: #eef1f5;
+        padding: 0.4rem 0.5rem 0;
+        border-radius: 0.35rem 0.35rem 0 0;
+        gap: 0.25rem;
+    }
+    .gastro-tab-cierres .nav-item { margin-bottom: -2px; }
+    .gastro-tab-cierres .nav-link {
+        font-weight: 600;
+        font-size: 0.95rem;
+        border: 2px solid transparent !important;
+        border-bottom: none !important;
+        border-radius: 0.35rem 0.35rem 0 0 !important;
+        padding: 0.7rem 1.2rem;
+        color: #6c757d;
+        background: rgba(255, 255, 255, 0.45);
+        transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .gastro-tab-cierres .nav-link:hover:not(.active) {
+        color: #343a40;
+        background: rgba(255, 255, 255, 0.85);
+    }
+    .gastro-tab-cierres .nav-link:not(.active) .fa { opacity: 0.55; }
+    .gastro-tab-cierres .nav-link .fa { margin-right: 0.45rem; }
+    .gastro-tab-cierres #tab-parcial-link.active {
+        color: #664d03;
+        background: #fff3cd;
+        border-color: #ffc107 !important;
+        border-bottom: 2px solid #fff3cd !important;
+        box-shadow: 0 -3px 0 0 #ffc107 inset, 0 2px 6px rgba(255, 193, 7, 0.35);
+    }
+    .gastro-tab-cierres #tab-parcial-link.active .fa {
+        color: #856404 !important;
+        opacity: 1;
+    }
+    .gastro-tab-cierres #tab-definitivo-link.active {
+        color: #58151c;
+        background: #f8d7da;
+        border-color: #dc3545 !important;
+        border-bottom: 2px solid #f8d7da !important;
+        box-shadow: 0 -3px 0 0 #dc3545 inset, 0 2px 6px rgba(220, 53, 69, 0.3);
+    }
+    .gastro-tab-cierres #tab-definitivo-link.active .fa {
+        color: #842029 !important;
+        opacity: 1;
+    }
+    #tabs-cierre-turno-content > .tab-pane.active.show {
+        border-top: 4px solid #adb5bd;
+        padding-top: 0.75rem;
+        margin-top: -1px;
+    }
+    #tab-cierre-parcial.tab-pane.active.show { border-top-color: #ffc107; }
+    #tab-cierre-definitivo.tab-pane.active.show { border-top-color: #dc3545; }
+    .gastro-cierre-fila-efectivo { background: #f0f9ff !important; }
+    .gastro-cierre-fila-efectivo td:first-child { border-left: 3px solid #17a2b8; }
+    .gastro-rendicion-esperado-efectivo { color: #0c5460; }
+    .gastro-campo-auto-actualizado {
+        background-color: #fff3cd !important;
+        transition: background-color 0.3s ease;
+    }
 </style>
 <script>
     window.HABILITACION_TURNO_GASTRONOMIA = {
@@ -50,13 +110,16 @@
      data-api-habilitar="{{ url('ventas/gastronomia/habilitacion-turno/api/habilitar') }}"
      data-api-cierre-parcial="{{ url('ventas/gastronomia/habilitacion-turno/api/cierre-parcial') }}"
      data-api-cerrar="{{ url('ventas/gastronomia/habilitacion-turno/api/cerrar') }}"
+     data-api-anular-cierre="{{ route('gastronomia_habilitacion_turno_api_anular_cierre') }}"
      data-api-conciliacion-turno="{{ url('ventas/gastronomia/habilitacion-turno/api/conciliacion-turno') }}"
      data-api-conciliacion-medio="{{ url('ventas/gastronomia/habilitacion-turno/api/conciliacion-medio') }}"
      data-api-conciliacion-notas-credito="{{ url('ventas/gastronomia/habilitacion-turno/api/conciliacion-notas-credito') }}"
+     data-api-conciliacion-invitaciones="{{ url('ventas/gastronomia/habilitacion-turno/api/conciliacion-invitaciones') }}"
      data-csrf="{{ csrf_token() }}"
      data-puede-habilitar="{{ ($puede_habilitar ?? false) ? '1' : '0' }}"
      data-puede-cierre-parcial="{{ ($puede_cierre_parcial ?? false) ? '1' : '0' }}"
      data-puede-cerrar="{{ ($puede_cerrar ?? false) ? '1' : '0' }}"
+     data-puede-anular-cierre="{{ ($puede_anular_cierre ?? false) ? '1' : '0' }}"
      data-puede-ver-factura="{{ ($puede_ver_factura ?? false) ? '1' : '0' }}"
      data-accion="{{ $accion ?? '' }}">
     <div class="col-lg-12">
@@ -99,22 +162,31 @@
             <div class="card card-info">
                 <div class="card-header">
                     <h3 class="card-title">Habilitación y cierres de turno</h3>
-                    <div class="card-tools">
+                    <div class="card-tools d-flex flex-wrap align-items-center" style="gap: 4px;">
                         @if (can('gestionar-saneamiento-turno-gastronomia', false))
                             <a href="{{ route('gastronomia_saneamiento_turno', ['empresa_id' => $empresa_id ?? $cfg->empresa_id, 'identificador_pc' => $identificador_pc]) }}"
-                               class="btn btn-outline-warning btn-sm mr-1" title="Diagnóstico y corrección de facturas huérfanas / cuentas">
+                               class="btn btn-light btn-sm border-dark text-dark" title="Diagnóstico y corrección de facturas huérfanas / cuentas">
                                 <i class="fa fa-wrench"></i> Saneamiento turnos
                             </a>
                         @endif
-                        <a href="{{ route('gastronomia_cierres_turno') }}" class="btn btn-outline-info btn-sm">
+                        <a href="{{ route('gastronomia_cierres_turno') }}" class="btn btn-light btn-sm border-dark text-dark">
                             <i class="fa fa-file-text-o"></i> Historial de cierres
                         </a>
-                        <button type="button" class="btn btn-outline-warning btn-sm" id="btn-consultar-canjes-premio" title="Canjes de premios Wigos del turno">
+                        <button type="button" class="btn btn-light btn-sm border-dark text-dark" id="btn-consultar-canjes-premio" title="Canjes de premios Wigos del turno">
                             <i class="fa fa-gift"></i> Canjes premio
                         </button>
-                        <button type="button" class="btn btn-outline-info btn-sm" id="btn-consultar-tickets-tarjeta" title="Tickets tarjeta canjeados en el turno">
+                        <button type="button" class="btn btn-dark btn-sm" id="btn-consultar-tickets-tarjeta" title="Tickets tarjeta canjeados en el turno">
                             <i class="fa fa-barcode"></i> Tickets tarjeta
                         </button>
+                        <button type="button" class="btn btn-warning btn-sm text-dark font-weight-bold" id="btn-consultar-invitaciones" title="Facturas de cortesía / invitación ($0,01 sin cobranza)">
+                            <i class="fa fa-tag"></i> Invitaciones ($0,01)
+                        </button>
+                        @if ($puede_anular_cierre ?? false)
+                            <button type="button" class="btn btn-danger btn-sm d-none" id="btn-abrir-anular-cierre"
+                                    title="Anular el último cierre definitivo de esta terminal en la jornada activa">
+                                <i class="fa fa-undo"></i> Anular último cierre
+                            </button>
+                        @endif
                     </div>
                 </div>
                 <div class="card-body">
@@ -178,14 +250,15 @@
                                         <input type="number" step="0.01" min="0" name="monto_habilitacion" id="monto_habilitacion" class="form-control" required value="0"/>
                                     </div>
                                     <div class="form-group">
-                                        <label class="requerido">Usuario habilitado</label>
-                                        <div class="gastro-campo-consulta d-flex">
-                                            <input type="hidden" name="usuario_habilitado_id" id="usuario_habilitado_id" value=""/>
-                                            <input type="text" class="form-control gastro-campo-nombre" id="nombre_usuario_habilitado" readonly placeholder="Buscar usuario…"/>
-                                            <button type="button" title="Consulta usuarios" class="btn-accion-tabla consultausuario tooltipsC"
-                                                data-ptrusuario_id="#usuario_habilitado_id" data-ptrnombre="#nombre_usuario_habilitado">
-                                                <i class="fa fa-search"></i>
+                                        <label for="usuario_habilitado_codigo" class="requerido">Usuario habilitado</label>
+                                        <div class="d-flex flex-nowrap align-items-center" style="gap: 4px;">
+                                            <input type="hidden" name="usuario_habilitado_id" id="usuario_habilitado_id" class="usuario_id" value=""/>
+                                            <input type="text" style="flex: 0 0 110px; width: 110px; height: 38px;" class="usuario_codigo_arbol form-control" id="usuario_habilitado_codigo" value="" placeholder="Código usuario" title="Código de login o ID numérico; Tab fuera para cargar el nombre" autocomplete="off"/>
+                                            <button type="button" title="Consulta usuarios" style="padding: 1px; flex: 0 0 auto;" class="btn-accion-tabla consultausuario tooltipsC"
+                                                data-ptrusuario_id="#usuario_habilitado_id" data-ptrnombre="#nombre_usuario_habilitado" data-ptrusuario_codigo="#usuario_habilitado_codigo">
+                                                <i class="fa fa-search text-primary"></i>
                                             </button>
+                                            <input type="text" style="flex: 1 1 auto; min-width: 0; height: 38px;" class="nombreusuario form-control" id="nombre_usuario_habilitado" value="" placeholder="Nombre usuario" readonly/>
                                         </div>
                                     </div>
                                     <div class="form-group">
@@ -199,76 +272,75 @@
                     @endif
 
                     <div id="wrap-solapas-cierre" class="d-none">
-                        <ul class="nav nav-tabs gastro-tab-cierres mb-3" id="tabs-cierre-turno" role="tablist">
+                        <ul class="nav nav-tabs gastro-tab-cierres mb-0" id="tabs-cierre-turno" role="tablist">
                             <li class="nav-item">
-                                <a class="nav-link active" id="tab-parcial-link" data-toggle="tab" href="#tab-cierre-parcial" role="tab">
-                                    <i class="fa fa-list-alt text-warning"></i> Cierres parciales
+                                <a class="nav-link active" id="tab-parcial-link" data-toggle="tab" href="#tab-cierre-parcial" role="tab"
+                                   aria-controls="tab-cierre-parcial" aria-selected="true">
+                                    <i class="fa fa-list-alt text-warning" aria-hidden="true"></i>
+                                    <span>Cierre parcial (provisorio)</span>
                                 </a>
                             </li>
                             <li class="nav-item">
-                                <a class="nav-link" id="tab-definitivo-link" data-toggle="tab" href="#tab-cierre-definitivo" role="tab">
-                                    <i class="fa fa-lock text-danger"></i> Cierre definitivo y conciliación
+                                <a class="nav-link" id="tab-definitivo-link" data-toggle="tab" href="#tab-cierre-definitivo" role="tab"
+                                   aria-controls="tab-cierre-definitivo" aria-selected="false">
+                                    <i class="fa fa-lock text-danger" aria-hidden="true"></i>
+                                    <span>Cierre definitivo</span>
                                 </a>
                             </li>
                         </ul>
 
-                        <div class="tab-content" id="tabs-cierre-turno-content">
+                        <div id="panel-numeracion-fiscal-turno" class="mb-3 d-none"></div>
+
+                        <div class="tab-content mb-3" id="tabs-cierre-turno-content">
                             <div class="tab-pane fade show active" id="tab-cierre-parcial" role="tabpanel">
                                 @if ($puede_cierre_parcial ?? false)
                                     <div class="alert alert-warning border-warning py-2 small mb-3">
                                         <strong>Cierre parcial</strong> — comprobante intermedio; el turno <strong>sigue habilitado</strong>.
                                         Use la solapa de cierre definitivo para cuadrar caja y cerrar el turno.
                                     </div>
-                                    <div class="card card-outline card-warning mb-3" id="card-cierre-parcial">
-                                        <div class="card-header bg-warning">
-                                            <i class="fa fa-list-alt"></i> Administrar cierres parciales
+                                    <div id="alertas-control-parcial" class="mb-3"></div>
+                                    <div id="totales-tab-parcial" class="mb-3"></div>
+
+                                    <div class="card card-outline card-primary mb-3" id="card-conciliacion-parcial">
+                                        <div class="card-header py-2">
+                                            <i class="fa fa-balance-scale"></i> Conciliación del turno
                                         </div>
-                                        <div class="card-body">
-                                            <div id="alertas-control-parcial" class="mb-3"></div>
-                                            <div id="totales-tab-parcial" class="mb-3"></div>
-
-                                            <div class="card card-outline card-primary mb-3" id="card-conciliacion-parcial">
-                                                <div class="card-header py-2">
-                                                    <i class="fa fa-balance-scale"></i> Conciliación del turno
-                                                </div>
-                                                <div class="card-body py-2">
-                                                    <p class="small text-muted mb-2">
-                                                        Listado <strong>bajo demanda</strong> (40 comprobantes por página): todas las facturas del turno,
-                                                        o solo las que tienen diferencia si marca el filtro.
-                                                        En cada medio de pago use <strong>Facturas</strong> para revisar un medio puntual.
-                                                    </p>
-                                                    <div class="d-flex flex-wrap align-items-center mb-2">
-                                                        <button type="button" class="btn btn-sm btn-outline-primary mr-2 js-refrescar-grilla-conciliacion" data-grilla-target="grilla-conciliacion-parcial">
-                                                            <i class="fa fa-table"></i> Ver comprobantes del turno
-                                                        </button>
-                                                        <label class="mb-0 small">
-                                                            <input type="checkbox" id="filtro-solo-diferencias-parcial" class="js-filtro-solo-diferencias" data-grilla-target="grilla-conciliacion-parcial"/>
-                                                            Solo comprobantes con diferencia
-                                                        </label>
-                                                    </div>
-                                                    <div id="grilla-conciliacion-parcial" class="gastro-grilla-conciliacion-wrap">
-                                                        <p class="text-muted p-3 mb-0 small"><i class="fa fa-spinner fa-spin"></i> Cargando resumen…</p>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div class="d-flex flex-wrap gap-2 mb-3">
-                                                <button type="button" class="btn btn-outline-secondary" id="btn-informe-mozo-pdf" title="PDF informativo sin registrar cierre">
-                                                    <i class="fa fa-file-pdf"></i> Informe por mozo (PDF, sin cerrar)
-                                                </button>
-                                                <button type="button" class="btn btn-warning" id="btn-submit-cierre-parcial">
-                                                    <i class="fa fa-list-alt"></i> Registrar cierre parcial completo
-                                                </button>
-                                            </div>
+                                        <div class="card-body py-2">
                                             <p class="small text-muted mb-2">
-                                                El <strong>informe por mozo</strong> muestra solo totales por mozo con leyenda
-                                                «NO CIERRA EL TURNO» en el PDF. El <strong>cierre parcial completo</strong> guarda el comprobante en el historial.
+                                                Listado <strong>bajo demanda</strong> (40 comprobantes por página): todas las facturas del turno,
+                                                o solo las que tienen diferencia si marca el filtro.
+                                                En cada medio de pago use <strong>Facturas</strong> para revisar un medio puntual.
                                             </p>
-                                            <h6 class="font-weight-bold">Cierres parciales emitidos en este turno</h6>
-                                            <div id="lista-cierres-parciales">
-                                                <p class="text-muted small mb-0">Sin cierres parciales registrados.</p>
+                                            <div class="d-flex flex-wrap align-items-center mb-2">
+                                                <button type="button" class="btn btn-sm btn-outline-primary mr-2 js-refrescar-grilla-conciliacion" data-grilla-target="grilla-conciliacion-parcial">
+                                                    <i class="fa fa-table"></i> Ver comprobantes del turno
+                                                </button>
+                                                <label class="mb-0 small">
+                                                    <input type="checkbox" id="filtro-solo-diferencias-parcial" class="js-filtro-solo-diferencias" data-grilla-target="grilla-conciliacion-parcial"/>
+                                                    Solo comprobantes con diferencia
+                                                </label>
+                                            </div>
+                                            <div id="grilla-conciliacion-parcial" class="gastro-grilla-conciliacion-wrap">
+                                                <p class="text-muted p-3 mb-0 small"><i class="fa fa-spinner fa-spin"></i> Cargando resumen…</p>
                                             </div>
                                         </div>
+                                    </div>
+
+                                    <div class="d-flex flex-wrap gap-2 mb-3">
+                                        <button type="button" class="btn btn-outline-secondary" id="btn-informe-mozo-pdf" title="PDF informativo sin registrar cierre">
+                                            <i class="fa fa-file-pdf"></i> Informe por mozo (PDF, sin cerrar)
+                                        </button>
+                                        <button type="button" class="btn btn-warning" id="btn-submit-cierre-parcial">
+                                            <i class="fa fa-list-alt"></i> Registrar cierre parcial completo
+                                        </button>
+                                    </div>
+                                    <p class="small text-muted mb-2">
+                                        El <strong>informe por mozo</strong> muestra solo totales por mozo con leyenda
+                                        «NO CIERRA EL TURNO» en el PDF. El <strong>cierre parcial completo</strong> guarda el comprobante en el historial.
+                                    </p>
+                                    <h6 class="font-weight-bold">Cierres parciales emitidos en este turno</h6>
+                                    <div id="lista-cierres-parciales">
+                                        <p class="text-muted small mb-0">Sin cierres parciales registrados.</p>
                                     </div>
                                 @endif
                             </div>
@@ -325,9 +397,9 @@
                                                         <input type="number" step="0.01" name="redondeo_turno" id="redondeo_turno" class="form-control" value="0"/>
                                                     </div>
                                                     <div class="form-group col-md-4">
-                                                        <label for="sobrante_faltante">Sobrante / faltante</label>
-                                                        <input type="number" step="0.01" name="sobrante_faltante" id="sobrante_faltante" class="form-control" value="0"/>
-                                                        <small class="text-muted">Positivo = sobrante, negativo = faltante</small>
+                        <label for="sobrante_faltante">Sobrante / faltante</label>
+                        <input type="number" step="0.01" name="sobrante_faltante" id="sobrante_faltante" class="form-control" value="0"/>
+                        <small class="text-muted">Positivo = sobrante, negativo = faltante. Se ajusta solo al modificar el efectivo contado arriba.</small>
                                                     </div>
                                                 </div>
                                                 <div class="form-group">
@@ -459,4 +531,43 @@
         </div>
     </div>
 </div>
+
+@if ($puede_anular_cierre ?? false)
+<div class="modal fade" id="modal-anular-cierre" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header py-2 bg-danger text-white">
+                <h6 class="modal-title"><i class="fa fa-undo"></i> Anular último cierre definitivo</h6>
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Cerrar">&times;</button>
+            </div>
+            <form id="form-anular-cierre" autocomplete="off">
+                <div class="modal-body py-3">
+                    <p class="text-muted small mb-2">
+                        Revierte el último cierre de <strong>{{ $identificador_pc }}</strong> en la jornada activa.
+                        El turno vuelve a <strong>habilitado</strong>. Queda registrado en el log del sistema.
+                    </p>
+                    <div id="anular-cierre-detalle" class="mb-3"></div>
+                    <div class="form-group mb-2">
+                        <label for="motivo_anular_cierre">Motivo (obligatorio)</label>
+                        <textarea name="motivo" id="motivo_anular_cierre" class="form-control" rows="2"
+                                  maxlength="500" required placeholder="Ej.: cierre por error de conciliación"></textarea>
+                    </div>
+                    <div class="form-group mb-0">
+                        <label for="confirmacion_anular_cierre" class="requerido">Confirmación</label>
+                        <input type="text" class="form-control" id="confirmacion_anular_cierre"
+                               name="confirmacion" required autocomplete="off"/>
+                        <small class="form-text text-muted" id="hint-confirmacion-anular-cierre"></small>
+                    </div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-sm btn-danger" id="btn-submit-anular-cierre">
+                        <i class="fa fa-undo"></i> Anular cierre y reabrir turno
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@endif
 @endsection

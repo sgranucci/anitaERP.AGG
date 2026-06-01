@@ -42,10 +42,11 @@ class Caja_AsignacionRepository implements Caja_AsignacionRepositoryInterface
 
     private function aplicarFiltroEmpresasAsignadas($query): void
     {
-        $empresasAsignadas = $this->empresaRepository->traeEmpresasAsignadas();
+        $empresaIds = $this->empresaRepository->allFiltrado()->pluck('id')->all();
+        $totalEmpresas = $this->empresaRepository->all()->count();
 
-        if (count($empresasAsignadas) > 1) {
-            $query->whereIn('empresa_id', $empresasAsignadas);
+        if ($totalEmpresas > 0 && count($empresaIds) > 0 && count($empresaIds) < $totalEmpresas) {
+            $query->whereIn('empresa_id', $empresaIds);
         }
     }
 

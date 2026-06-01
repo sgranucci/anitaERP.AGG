@@ -10,13 +10,14 @@
 @section("scripts")
 <script>
     window.RENDICION_GASTRONOMIA = {
-        urlConsultaCierre: @json(rtrim((string) config('app.app_carpeta', ''), '/').'/caja/rendiciongastronomia/api/consulta-cierre'),
+        urlConsultaCierre: @json(route('api_rendicion_gastronomia_consulta_cierre')),
         rendicionId: @json($data->id),
     };
 </script>
 <script src="{{ asset('assets/pages/scripts/admin/editar.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/gastronomia/totales_turno_render.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/gastronomia/totales_turno_render.js')) }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/caja/rendicion_gastronomia/form.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/rendicion_gastronomia/form.js')) }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/caja/rendicion_gastronomia/consulta_cierre.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/rendicion_gastronomia/consulta_cierre.js')) }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
@@ -33,7 +34,7 @@
                 </span>
                 @endif
                 <div class="card-tools ml-auto">
-                    @if (can('listar-rendicion-gastronomia-caja', false) || can('editar-rendicion-gastronomia-caja', false))
+                    @if (\App\Support\Caja\RendicionGastronomiaPdfPermiso::puedeVerPdfRendicion())
                     <a href="{{ route('imprimir_rendicion_gastronomia', ['id' => $data->id, 'inline' => 1]) }}" class="btn btn-primary btn-sm" target="_blank" rel="noopener" title="Ver PDF rendición">
                         <i class="fa fa-print"></i> Imprimir
                     </a>

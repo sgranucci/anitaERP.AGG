@@ -35,6 +35,7 @@ use App\Support\Ventas\GastronomiaCuentacajaSoloAutomaticaSupport;
 use App\Support\Ventas\GastronomiaCuentacajaTotem;
 use App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
+use App\Support\Ventas\GastronomiaTurnoOperativoTotalesSupport;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -108,16 +109,20 @@ class GastronomiaProcesoFacturacionController extends Controller
         $cfg = $this->cfgPv($request);
         $empresaId = $cfg ? (int) $cfg->empresa_id : null;
 
-        $cfg?->loadMissing('tipotransaccion');
+        $cfg?->loadMissing(['tipotransaccion', 'listaprecio']);
         $tt = $cfg?->tipotransaccion;
         $tipoFacturaId = (int) ($cfg?->tipotransaccion_id ?? 0) ?: (int) config('gastronomia.tipotransaccion_factura_id', 0);
         $cfgTipotransaccionNombre = $tt
             ? trim($tt->abreviatura.' — '.$tt->nombre)
             : ($tipoFacturaId > 0 ? 'ID '.$tipoFacturaId.' (solo env)' : null);
 
+        $listaprecioId = $cfg ? (int) ($cfg->listaprecio_id ?? config('precio.listaprecio_default_id', 1)) : (int) config('precio.listaprecio_default_id', 1);
+
         return view('ventas.gastronomia.proceso_facturacion.index', [
             'empresa_id' => $empresaId,
             'empresa_nombre' => $cfg?->empresa?->nombre,
+            'listaprecio_id' => $listaprecioId,
+            'listaprecio_nombre' => $cfg?->listaprecio?->nombre,
             'cfg_tipotransaccion_nombre' => $cfgTipotransaccionNombre,
             'prefijo_sku' => (string) config('gastronomia.sku_catalogo_prefijo', 'V'),
             'sku_catalogo_digitos_sufijo' => max(0, (int) config('gastronomia.sku_catalogo_digitos_sufijo', 0)),
@@ -127,7 +132,8 @@ class GastronomiaProcesoFacturacionController extends Controller
             'identificador_pc_actual' => GastronomiaIdentificadorPc::resolver($request),
             'usocuentacaja_gastronomia_id' => $this->usoCuentacajaGastronomiaId(),
             'wsfe_receptor_cf_umbral_monto' => (float) config('arca_wsfe.receptor.consumidor_final_umbral_monto', 0),
-            'wsfe_forzar_modo_caea' => filter_var(config('arca_wsfe.emision.forzar_modo_caea'), FILTER_VALIDATE_BOOLEAN),
+            'wsfe_forzar_modo_caea' => \App\Support\Ventas\ArcaWsfeEmisionResiliencia::forzarModoCaea(),
+            'wsfe_failover_automatico' => \App\Support\Ventas\ArcaWsfeEmisionResiliencia::failoverAutomaticoActivo(),
             'modo_seleccion_preferido' => $this->leerPreferenciaModoSeleccion() ?? 'mesa',
             'cuentas_libres_habilitadas' => (bool) config('gastronomia.cuentas_libres_habilitadas', true),
             'cubiertos_obligatorio_al_abrir' => (bool) config('gastronomia.cubiertos_obligatorio_al_abrir', true),
@@ -980,10 +986,15 @@ class GastronomiaProcesoFacturacionController extends Controller
             )));
         }
 
+        $preview = $this->facturaEmisionService->previewTotalesParaCuenta($cuenta, $monedaId);
+
         return response()->json([
             'ok' => $errores === [],
             'errores' => $errores,
             'error' => $errores === [] ? null : implode(' ', $errores),
+            'total_facturar_ars' => (float) ($preview['total'] ?? 0),
+            'sin_cobranza' => ! empty($preview['sin_cobranza']),
+            'factura_cortesia' => ! empty($preview['factura_cortesia']),
         ], $errores === [] ? 200 : 422);
     }
 
@@ -1061,6 +1072,7 @@ class GastronomiaProcesoFacturacionController extends Controller
         $request->validate([
             'cuenta_id' => 'required|integer|min:1',
             'codigo_barras' => 'required|string|min:1|max:64',
+            'opcionales_por_articulo' => 'nullable|array',
         ]);
 
         $cfg = $this->requireCfgPv($request);
@@ -1071,10 +1083,23 @@ class GastronomiaProcesoFacturacionController extends Controller
         $cuenta = $this->cuentaService->cuentaConLineas((int) $request->get('cuenta_id'));
 
         try {
+            $opcionalesPorArticulo = [];
+            foreach (($request->get('opcionales_por_articulo') ?? []) as $articuloId => $mapa) {
+                if (! is_array($mapa)) {
+                    continue;
+                }
+                $normalizado = [];
+                foreach ($mapa as $orden => $aid) {
+                    $normalizado[(string) $orden] = $aid !== null && $aid !== '' ? (int) $aid : null;
+                }
+                $opcionalesPorArticulo[(int) $articuloId] = $normalizado;
+            }
+
             $resultado = $this->ticketCanjePremioService->aplicarACuenta(
                 $cuenta,
                 (string) $request->get('codigo_barras'),
                 $this->listaPrecioIdDesdeCfg($cfg),
+                $opcionalesPorArticulo,
             );
         } catch (\InvalidArgumentException|\RuntimeException $e) {
             return response()->json([
@@ -1113,11 +1138,17 @@ class GastronomiaProcesoFacturacionController extends Controller
                 $request->filled('articulo_id') ? (int) $request->get('articulo_id') : null,
             );
         } catch (\InvalidArgumentException|\RuntimeException $e) {
-            return response()->json([
-                'ok' => false,
-                'error' => $e->getMessage(),
-                'mensaje' => $e->getMessage(),
-            ], 422);
+            return $this->respuestaErrorCanjeFidelidad($e);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return $this->respuestaErrorCanjeFidelidad(
+                new \RuntimeException(
+                    'No se pudo validar la tarjeta. Si el problema continúa, avise a sistemas.',
+                    0,
+                    $e
+                )
+            );
         }
 
         return response()->json(array_merge(['ok' => true], $resultado));
@@ -1148,11 +1179,17 @@ class GastronomiaProcesoFacturacionController extends Controller
                 $this->listaPrecioIdDesdeCfg($cfg),
             );
         } catch (\InvalidArgumentException|\RuntimeException $e) {
-            return response()->json([
-                'ok' => false,
-                'error' => $e->getMessage(),
-                'mensaje' => $e->getMessage(),
-            ], 422);
+            return $this->respuestaErrorCanjeFidelidad($e);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return $this->respuestaErrorCanjeFidelidad(
+                new \RuntimeException(
+                    'No se pudo aplicar el canje de fidelidad. Si el problema continúa, avise a sistemas.',
+                    0,
+                    $e
+                )
+            );
         }
 
         return response()->json([
@@ -1267,6 +1304,54 @@ class GastronomiaProcesoFacturacionController extends Controller
                 'venta_codigo' => $t->venta->codigo ?? '',
                 'created_at' => $t->created_at?->format('d/m/Y H:i:s'),
             ])->values(),
+        ]);
+    }
+
+    public function apiListarInvitacionesTurno(Request $request)
+    {
+        if (
+            ! can('usar-proceso-facturacion-gastronomia', false)
+            && ! can('gestionar-habilitacion-turno-gastronomia', false)
+            && ! can('listar-facturas-gastronomia-dia', false)
+            && ! can('listar-cierres-turno-gastronomia', false)
+        ) {
+            abort(403);
+        }
+
+        $cfg = $this->requireCfgPv($request);
+        if ($cfg instanceof \Illuminate\Http\JsonResponse) {
+            return $cfg;
+        }
+
+        $fechaJornada = trim((string) $request->get('fecha_jornada', ''));
+        if ($fechaJornada === '') {
+            $fechaJornada = Carbon::today()->format('Y-m-d');
+        }
+
+        $desde = $request->get('desde');
+        $hasta = $request->get('hasta');
+        $desdeCarbon = is_string($desde) && $desde !== '' ? Carbon::parse($desde) : null;
+        $hastaCarbon = is_string($hasta) && $hasta !== '' ? Carbon::parse($hasta) : null;
+
+        $facturas = GastronomiaTurnoOperativoTotalesSupport::invitacionesDelTurno(
+            GastronomiaIdentificadorPc::resolver($request),
+            (int) $cfg->empresa_id,
+            $fechaJornada,
+            $desdeCarbon,
+            $hastaCarbon,
+        );
+
+        return response()->json([
+            'ok' => true,
+            'facturas' => $facturas,
+            'cantidad' => count($facturas),
+            'total' => round(array_sum(array_map(
+                fn (array $f) => (float) ($f['total_facturado'] ?? 0),
+                $facturas
+            )), 2),
+            'url_factura_ver_base' => can('ver-factura-gastronomia', false)
+                ? url('ventas/gastronomia/facturas-dia')
+                : null,
         ]);
     }
 
@@ -1394,6 +1479,15 @@ class GastronomiaProcesoFacturacionController extends Controller
     private function listaPrecioIdDesdeCfg(ConfiguracionPuntoventaGastronomia $cfg): int
     {
         return (int) ($cfg->listaprecio_id ?? 1);
+    }
+
+    private function respuestaErrorCanjeFidelidad(\Throwable $e): \Illuminate\Http\JsonResponse
+    {
+        return response()->json([
+            'ok' => false,
+            'error' => $e->getMessage(),
+            'mensaje' => $e->getMessage(),
+        ], 422);
     }
 
     private function resolverPrecioLista(int $articuloId): float

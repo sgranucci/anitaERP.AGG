@@ -8,9 +8,11 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Exception;
 use App\ApiAnita;
+use App\Support\Caja\CobranzaNumeracionTransaccion;
 use Carbon\Carbon;
 use Auth;
 use DB;
+use Illuminate\Database\QueryException;
 
 class CobranzaRepository implements CobranzaRepositoryInterface
 {
@@ -37,13 +39,31 @@ class CobranzaRepository implements CobranzaRepositoryInterface
 		$data['monto'] = $data['totalfinalcobranza'];
 		$data['moneda_id'] = $data['monedafinalcobranza_id'];
 
-		$cobranza = $this->model->create($data);
+		$intentos = 0;
+		while (true) {
+			try {
+				$cobranza = $this->model->create($data);
+				self::guardarAnita($data);
 
-		// Graba anita
-		$anita = self::guardarAnita($data);
+				return $cobranza;
+			} catch (QueryException $e) {
+				if (
+					++$intentos > 2
+					|| ! CobranzaNumeracionTransaccion::esViolacionUnicidadNumeracion($e)
+					|| empty($data['empresa_id'])
+					|| empty($data['tipotransaccion_caja_id'])
+				) {
+					throw $e;
+				}
 
-
-		return $cobranza;
+				if (CobranzaNumeracionTransaccion::usaNumeracionSecuencial((int) $data['tipotransaccion_caja_id'])) {
+					$data['numerotransaccion'] = CobranzaNumeracionTransaccion::calcularSiguienteNumeroSecuencialBd(
+						(int) $data['empresa_id'],
+						(int) $data['tipotransaccion_caja_id'],
+					);
+				}
+			}
+		}
     }
 
     public function update(array $data, $id)
@@ -146,22 +166,10 @@ class CobranzaRepository implements CobranzaRepositoryInterface
 
 	public function ultimoNumeroTransaccion($empresa_id, $tipotransaccion_caja_id) 
 	{
-		$cobranza = $this->model->select('numerotransaccion')
-										->where('empresa_id', $empresa_id)
-										->where('tipotransaccion_caja_id', $tipotransaccion_caja_id)
-										->where('deleted_at', null)
-										->orderBy('id', 'desc')->first();
-		
-		$numerotransaccion = 0;
-        if ($cobranza) 
-		{
-			$numerotransaccion = $cobranza->numerotransaccion;
-			$numerotransaccion = $numerotransaccion + 1;
-		}
-		else	
-			$numerotransaccion = 1;
-
-		return $numerotransaccion;
+		return CobranzaNumeracionTransaccion::siguienteNumeroSecuencial(
+			(int) $empresa_id,
+			(int) $tipotransaccion_caja_id,
+		);
 	}
 
 }

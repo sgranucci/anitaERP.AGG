@@ -81,6 +81,7 @@ class HabilitacionTurnoGastronomiaController extends Controller
             'puede_habilitar' => can('habilitar-turno-gastronomia', false),
             'puede_cierre_parcial' => can('cierre-parcial-turno-gastronomia', false),
             'puede_cerrar' => can('cerrar-turno-operativo-gastronomia', false),
+            'puede_anular_cierre' => can('anular-cierre-turno-gastronomia', false),
             'puede_ver_factura' => can('ver-factura-gastronomia', false),
             'accion' => $accion,
             'url_factura_ver_base' => url('ventas/gastronomia/facturas-dia'),
@@ -101,11 +102,53 @@ class HabilitacionTurnoGastronomiaController extends Controller
         $pc = GastronomiaIdentificadorPc::resolver($request);
         $estado = $this->turnoOperativoService->estadoParaTerminal($cfg, $pc);
         $estado['url_factura_ver_base'] = url('ventas/gastronomia/facturas-dia');
+        if (can('anular-cierre-turno-gastronomia', false)) {
+            $estado['cierre_anulable'] = $this->turnoOperativoService->describirCierreAnulable(
+                (int) $cfg->empresa_id,
+                $pc,
+            );
+        }
 
         return response()->json([
             'ok' => true,
             ...$estado,
         ]);
+    }
+
+    public function apiAnularCierre(Request $request)
+    {
+        can('anular-cierre-turno-gastronomia');
+
+        $empresaId = $this->empresaOperativaDesdeRequest($request);
+        $cfg = $this->resolverConfiguracionParaRequest($request, $empresaId);
+        if ($cfg === null) {
+            return response()->json(['ok' => false, 'error' => 'Sin configuración PV para esta terminal y empresa.'], 422);
+        }
+
+        $pc = GastronomiaIdentificadorPc::resolver($request);
+        $turnoOperativoId = (int) $request->input('turno_operativo_id', 0);
+        if ($turnoOperativoId <= 0) {
+            return response()->json(['ok' => false, 'error' => 'Debe indicar el turno operativo a anular.'], 422);
+        }
+
+        try {
+            $resultado = $this->turnoOperativoService->anularCierreDefinitivo(
+                $turnoOperativoId,
+                $pc,
+                (string) $request->input('confirmacion', ''),
+                $request->input('motivo'),
+            );
+
+            return response()->json([
+                'ok' => true,
+                'mensaje' => $resultado['mensaje'],
+                'turno_operativo_id' => (int) $resultado['turno']->id,
+            ]);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        } catch (Throwable $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        }
     }
 
     public function apiConciliacionTurno(Request $request)
@@ -260,6 +303,55 @@ class HabilitacionTurnoGastronomiaController extends Controller
             'total' => round(array_sum(array_map(
                 fn (array $n) => (float) ($n['monto_nota_credito'] ?? 0),
                 $notas
+            )), 2),
+            'url_factura_ver_base' => url('ventas/gastronomia/facturas-dia'),
+        ]);
+    }
+
+    public function apiConciliacionInvitaciones(Request $request)
+    {
+        if (! can('gestionar-habilitacion-turno-gastronomia', false)) {
+            return response()->json(['ok' => false, 'error' => 'Sin permiso para gestionar habilitación de turno.'], 403);
+        }
+
+        $empresaId = $this->empresaOperativaDesdeRequest($request);
+        $cfg = $this->resolverConfiguracionParaRequest($request, $empresaId);
+        if ($cfg === null) {
+            return response()->json(['ok' => false, 'error' => 'Sin configuración PV.'], 422);
+        }
+
+        $pc = GastronomiaIdentificadorPc::resolver($request);
+        $activo = $this->turnoOperativoService->turnoHabilitadoEnPc($pc);
+        if ($activo === null) {
+            return response()->json(['ok' => false, 'error' => 'No hay turno habilitado.'], 422);
+        }
+
+        $activo->loadMissing('jornada');
+        $fechaJornada = $activo->jornada?->fecha_jornada?->format('Y-m-d')
+            ?? Carbon::today()->format('Y-m-d');
+
+        $mozoIdInput = $request->input('mozo_id');
+        $mozoId = ($mozoIdInput !== null && $mozoIdInput !== '' && (int) $mozoIdInput > 0)
+            ? (int) $mozoIdInput
+            : null;
+
+        $facturas = GastronomiaTurnoOperativoTotalesSupport::invitacionesDelTurno(
+            $pc,
+            (int) $cfg->empresa_id,
+            $fechaJornada,
+            $activo->habilitacion_en,
+            null,
+            $mozoId,
+        );
+
+        return response()->json([
+            'ok' => true,
+            'mozo_id' => $mozoId,
+            'facturas' => $facturas,
+            'cantidad' => count($facturas),
+            'total' => round(array_sum(array_map(
+                fn (array $f) => (float) ($f['total_facturado'] ?? 0),
+                $facturas
             )), 2),
             'url_factura_ver_base' => url('ventas/gastronomia/facturas-dia'),
         ]);

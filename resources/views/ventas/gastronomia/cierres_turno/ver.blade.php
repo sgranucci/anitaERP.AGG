@@ -178,6 +178,12 @@
                             </div>
                         </div>
 
+                        @include('ventas.gastronomia.cierres_turno.partials.numeracion_fiscal_turno', [
+                            'd' => $d,
+                            'numeracion' => $d['numeracion_fiscal'] ?? [],
+                            'modo_web' => true,
+                        ])
+
                         <div id="panel-resumen-cierre-ver" class="mb-3"></div>
 
                         <div class="card card-outline card-warning mb-0">

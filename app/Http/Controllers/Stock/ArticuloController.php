@@ -38,6 +38,7 @@ use App\Repositories\Stock\Articulo_CuentacontableRepositoryInterface;
 use App\Repositories\Stock\Articulo_EstadoRepositoryInterface;
 use App\Repositories\Stock\ArticuloRepositoryInterface;
 use App\Repositories\Ventas\DescuentoventaRepositoryInterface;
+use App\Support\Stock\PrecioListaVigenteSupport;
 use App\Services\Stock\ArticuloAnitaSyncService;
 use App\Services\Stock\PrecioService;
 use App\Services\Stock\StkdepSaldoAnitaService;
@@ -662,6 +663,11 @@ class ArticuloController extends Controller
         $columnsOut = ['articulo_id', 'sku', 'descripcion', 'unidadmedida', 'nombrecategoria', 'idunidadmedida', 'categoria_id', 'subcategoria_id'];
         $muestraColumnas = [true, true, true, true, true, false, false, false];
 
+        $listaPrecioReq = $request->input('listaprecio_id');
+        $listaPrecioReq = ($listaPrecioReq !== null && $listaPrecioReq !== '') ? (int) $listaPrecioReq : null;
+        $listaPrecio = PrecioListaVigenteSupport::resolverListaDesdeRequest($listaPrecioReq);
+        $colspanTabla = $listaPrecio['mostrar'] ? 7 : 6;
+
         $consultaRaw = $request->input('consulta');
         $consulta = is_string($consultaRaw) ? trim($consultaRaw) : '';
 
@@ -669,10 +675,15 @@ class ArticuloController extends Controller
         $minLen = \App\Support\Ventas\GastronomiaSkuCatalogoSupport::longitudMinimaBusqueda($consulta, $skuDigitosSufijo);
 
         if (mb_strlen($consulta) < $minLen) {
-            $mensaje = '<tr><td colspan="6" class="text-muted">Ingrese al menos '.$minLen
+            $mensaje = '<tr><td colspan="'.$colspanTabla.'" class="text-muted">Ingrese al menos '.$minLen
                 .($minLen === 1 ? ' dígito' : ' caracteres').' para buscar.</td></tr>';
 
-            return response()->json(['data' => $mensaje], 200, [], JSON_UNESCAPED_UNICODE);
+            return response()->json([
+                'data' => $mensaje,
+                'listaprecio_id' => $listaPrecio['id'],
+                'listaprecio_nombre' => $listaPrecio['nombre'],
+                'mostrar_precio_lista' => $listaPrecio['mostrar'],
+            ], 200, [], JSON_UNESCAPED_UNICODE);
         }
 
         $query = Articulo::select('articulo.id as articulo_id', 'sku', 'descripcion', 'unidadmedida.abreviatura as unidadmedida',
@@ -725,8 +736,20 @@ class ArticuloController extends Controller
 
         $query = $query->orderBy('articulo.descripcion')->limit(250)->get();
 
+        $preciosLista = [];
+        if ($listaPrecio['mostrar'] && count($query) > 0) {
+            $articuloIds = $query->pluck('articulo_id')->map(fn ($id) => (int) $id)->all();
+            $preciosLista = PrecioListaVigenteSupport::vigentesPorArticulos(
+                $articuloIds,
+                $listaPrecio['id'],
+            );
+        }
+
         $output = [];
         $output['data'] = '';
+        $output['listaprecio_id'] = $listaPrecio['id'];
+        $output['listaprecio_nombre'] = $listaPrecio['nombre'];
+        $output['mostrar_precio_lista'] = $listaPrecio['mostrar'];
         $puedeConsultarArticulo = can('editar-articulos', false);
         if (count($query) > 0) {
             foreach ($query as $row) {
@@ -738,6 +761,12 @@ class ArticuloController extends Controller
                         $output['data'] .= '<input type="hidden" class="'.$columnsOut[$i].'" value="'.$row[$columnsOut[$i]].'">';
                     }
                 }
+                if ($listaPrecio['mostrar']) {
+                    $precioFmt = PrecioListaVigenteSupport::formatearPrecioLista(
+                        $preciosLista[(int) $row['articulo_id']] ?? null,
+                    );
+                    $output['data'] .= '<td class="preciolista text-right">'.$precioFmt.'</td>';
+                }
                 $output['data'] .= '<td>'
                     .'<a class="btn btn-warning btn-sm eligeconsultaarticulo">Elegir</a>';
                 if ($puedeConsultarArticulo) {
@@ -748,7 +777,7 @@ class ArticuloController extends Controller
             }
         } else {
             $output['data'] .= '<tr>';
-            $output['data'] .= '<td colspan="6">Sin resultados</td>';
+            $output['data'] .= '<td colspan="'.$colspanTabla.'">Sin resultados</td>';
             $output['data'] .= '</tr>';
         }
 

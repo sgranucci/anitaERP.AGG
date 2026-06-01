@@ -26,8 +26,12 @@
 </script>
 <script src="{{ asset('assets/pages/scripts/ventas/gastronomia/totales_turno_render.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/gastronomia/totales_turno_render.js')) }}"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/gastronomia/cierres_turno.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/gastronomia/cierres_turno.js')) }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/gastronomia/cierres_turno_filtro.js') }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
 @endsection
+
+<?php use App\Support\Ventas\GastronomiaCierresTurnoListadoFiltros; ?>
 
 @section('contenido')
 <div class="row">
@@ -36,12 +40,25 @@
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Cierres de turno gastronomía</h3>
-                <div class="card-tools">
-                    <a href="{{ route('gastronomia_habilitacion_turno') }}" class="btn btn-outline-secondary btn-sm">
+                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @include('includes.listado.filtros_toolbar', [
+                        'formId' => 'form-filtros-cierres-turno',
+                        'filtroValor' => $filtros['valor'] ?? '',
+                        'tieneCriterios' => GastronomiaCierresTurnoListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
+                        'limpiarUrl' => route('gastronomia_cierres_turno'),
+                        'placeholder' => 'Búsqueda rápida (referencia, PV, turno…)',
+                        'toggleTarget' => '#panel-filtros-cierres-turno',
+                        'toggleId' => 'btn-toggle-filtros-cierres-turno',
+                        'inputId' => 'filtro_valor',
+                    ])
+                    <a href="{{ route('gastronomia_habilitacion_turno') }}" class="btn btn-outline-secondary btn-sm ml-1">
                         <i class="fa fa-key"></i> Habilitación de turno
                     </a>
                 </div>
             </div>
+            <form method="get" action="{{ route('gastronomia_cierres_turno') }}" id="form-filtros-cierres-turno" class="mb-0">
+                @include('ventas.gastronomia.cierres_turno.partials.filtros_listado')
+            </form>
             <div class="card-body">
                 @if (! empty($jornada['jornada_abierta']))
                     <div class="alert alert-info py-2 mb-3" id="alert-jornada-activa">
@@ -85,66 +102,10 @@
                     @endif
                 @endif
 
-                <form action="{{ route('gastronomia_cierres_turno') }}" method="GET" class="form-row align-items-end mb-3">
-                    <div class="form-group col-md-2">
-                        <label class="small">Empresa</label>
-                        <select name="empresa_id" class="form-control form-control-sm">
-                            <option value="">Todas</option>
-                            @foreach ($empresa_query as $emp)
-                                <option value="{{ $emp->id }}" @selected((int) ($filtros['empresa_id'] ?? 0) === (int) $emp->id)>{{ $emp->nombre }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-                    <div class="form-group col-md-2">
-                        <label class="small">PC</label>
-                        @php
-                            $pcSeleccionada = (string) ($filtros['identificador_pc'] ?? '');
-                            $pcsConfiguradas = collect($pc_query ?? [])->pluck('identificador_pc')->map(fn ($v) => (string) $v);
-                            $pcExtra = $pcSeleccionada !== '' && ! $pcsConfiguradas->contains($pcSeleccionada)
-                                ? $pcSeleccionada
-                                : null;
-                        @endphp
-                        <select name="identificador_pc" class="form-control form-control-sm">
-                            <option value="" @selected($pcSeleccionada === '')>Todas</option>
-                            @foreach ($pc_query ?? [] as $pc)
-                                @php
-                                    $etiquetaPc = (string) $pc->identificador_pc
-                                        .(! empty($pc->descripcion) ? ' — '.$pc->descripcion : '');
-                                @endphp
-                                <option value="{{ $pc->identificador_pc }}" @selected($pcSeleccionada === (string) $pc->identificador_pc)>
-                                    {{ $etiquetaPc }}
-                                </option>
-                            @endforeach
-                            @if ($pcExtra !== null)
-                                <option value="{{ $pcExtra }}" selected>{{ $pcExtra }} (sin configurar)</option>
-                            @endif
-                        </select>
-                    </div>
-                    <div class="form-group col-md-2">
-                        <label class="small">Desde</label>
-                        <input type="date" name="fecha_desde" class="form-control form-control-sm" value="{{ $filtros['fecha_desde'] ?? '' }}"/>
-                    </div>
-                    <div class="form-group col-md-2">
-                        <label class="small">Hasta</label>
-                        <input type="date" name="fecha_hasta" class="form-control form-control-sm" value="{{ $filtros['fecha_hasta'] ?? '' }}"/>
-                    </div>
-                    <div class="form-group col-md-2">
-                        <label class="small">Tipo</label>
-                        <select name="tipo" class="form-control form-control-sm">
-                            <option value="" @selected(($filtros['tipo'] ?? '') === '')>Todos</option>
-                            <option value="parcial" @selected(($filtros['tipo'] ?? '') === 'parcial')>Cierre parcial</option>
-                            <option value="cierre" @selected(($filtros['tipo'] ?? '') === 'cierre')>Cierre definitivo</option>
-                        </select>
-                    </div>
-                    <div class="form-group col-md-2">
-                        <button type="submit" class="btn btn-primary btn-sm"><i class="fa fa-search"></i> Buscar</button>
-                    </div>
-                </form>
-
-                <div class="mb-2">
+                <div class="mb-2 px-2 pt-2">
                     @include('includes.exportar-tabla-queryparams', [
                         'ruta' => 'listar_gastronomia_cierres_turno',
-                        'queryparams' => $filtros ?? [],
+                        'queryparams' => $filtrosQuery ?? [],
                     ])
                 </div>
 
@@ -157,6 +118,7 @@
                                 <th>Referencia</th>
                                 <th>Empresa</th>
                                 <th>PC</th>
+                                <th>Punto venta</th>
                                 <th>Turno</th>
                                 <th>Jornada</th>
                                 <th>Usuario</th>
@@ -175,6 +137,7 @@
                                 <td>{{ $f->referencia }}</td>
                                 <td>{{ $f->nombreempresa }}</td>
                                 <td>{{ $f->identificador_pc }}</td>
+                                <td><small>{{ $f->puntoventa_etiqueta !== '' ? $f->puntoventa_etiqueta : '—' }}</small></td>
                                 <td>{{ $f->turno_nombre }}</td>
                                 <td>{{ $f->fecha_jornada }}</td>
                                 <td>{{ $f->usuario }}</td>
@@ -238,7 +201,7 @@
                             </tr>
                             @empty
                             <tr>
-                                <td colspan="10" class="text-center text-muted py-4">
+                                <td colspan="11" class="text-center text-muted py-4">
                                     Sin cierres parciales ni definitivos para los filtros indicados.
                                 </td>
                             </tr>

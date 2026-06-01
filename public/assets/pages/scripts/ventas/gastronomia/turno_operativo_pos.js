@@ -10,9 +10,55 @@
         return Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
-    function renderTotalesHtml(totales, titulo) {
+    function parseDecimalCierrePos(str) {
+        if (str == null || str === '') {
+            return 0;
+        }
+        var t = String(str).trim().replace(/\s/g, '');
+        if (t.indexOf(',') >= 0) {
+            t = t.replace(/\./g, '').replace(',', '.');
+        }
+        var n = parseFloat(t);
+        return isNaN(n) ? 0 : Math.round(n * 100) / 100;
+    }
+
+    function enlazarAutoSobranteCierrePos(root) {
+        var inpSf = document.getElementById('pos-sobrante-faltante');
+        var inpEf = root ? root.querySelector('.js-efectivo-contado-cierre') : null;
+        if (!inpSf || !inpEf) {
+            return;
+        }
+        var sobranteBase = Math.round((parseFloat(inpSf.value) || 0) * 100) / 100;
+        var contadoInicial = parseDecimalCierrePos(inpEf.value);
+
+        function sync() {
+            var contado = parseDecimalCierrePos(inpEf.value);
+            var nuevo = Math.round((sobranteBase + contadoInicial - contado) * 100) / 100;
+            inpSf.setAttribute('data-syncing-sobrante', '1');
+            inpSf.value = String(nuevo);
+            inpSf.removeAttribute('data-syncing-sobrante');
+            inpSf.classList.add('gastro-campo-auto-actualizado');
+            window.setTimeout(function () { inpSf.classList.remove('gastro-campo-auto-actualizado'); }, 1800);
+        }
+
+        if (inpEf.getAttribute('data-auto-sobrante-bound') !== '1') {
+            inpEf.setAttribute('data-auto-sobrante-bound', '1');
+            inpEf.addEventListener('input', sync);
+            inpEf.addEventListener('blur', sync);
+        }
+        sync();
+    }
+
+    function renderTotalesHtml(totales, titulo, opciones) {
         if (window.GastronomiaTotalesTurnoRender) {
-            return window.GastronomiaTotalesTurnoRender.renderTotalesHtml(totales, titulo);
+            return window.GastronomiaTotalesTurnoRender.renderTotalesHtml(totales, titulo, opciones);
+        }
+        return '';
+    }
+
+    function renderNumeracionFiscalHtml(estado) {
+        if (window.GastronomiaTotalesTurnoRender && estado && estado.numeracion_fiscal) {
+            return window.GastronomiaTotalesTurnoRender.renderNumeracionFiscalHtml(estado.numeracion_fiscal);
         }
         return '';
     }
@@ -107,7 +153,8 @@
                 }
                 var box = document.getElementById('modal-cierre-parcial-totales');
                 if (box) {
-                    box.innerHTML = renderTotalesHtml(estado.totales_turno, 'Facturación del turno (actual)');
+                    box.innerHTML = renderTotalesHtml(estado.totales_turno, 'Facturación del turno (actual)')
+                        + renderNumeracionFiscalHtml(estado);
                 }
                 if (typeof jQuery !== 'undefined') {
                     jQuery('#modal-cierre-parcial-turno').modal('show');
@@ -145,8 +192,16 @@
             }
             var totBox = document.getElementById('modal-cerrar-turno-totales');
             if (totBox) {
-                totBox.innerHTML = renderTotalesHtml(estado.totales_turno, 'Facturación del turno')
-                    + renderTotalesHtml(estado.totales_dia, 'Acumulado del día (esta PC)');
+                totBox.innerHTML = renderTotalesHtml(estado.totales_turno, 'Facturación del turno', {
+                    arqueoEfectivo: true,
+                    cuentacaja_efectivo_id: estado.cuentacaja_efectivo_id || G.cuentacajaEfectivoIdConfig || 0,
+                })
+                    + renderTotalesHtml(estado.totales_dia, 'Acumulado del día (esta PC)')
+                    + renderNumeracionFiscalHtml(estado);
+                if (window.GastronomiaTotalesTurnoRender && window.GastronomiaTotalesTurnoRender.enlazarArqueoEfectivoCierre) {
+                    window.GastronomiaTotalesTurnoRender.enlazarArqueoEfectivoCierre(totBox);
+                }
+                enlazarAutoSobranteCierrePos(totBox);
             }
             var errBox = document.getElementById('modal-cerrar-turno-errores');
             var errs = estado.errores_cierre || [];

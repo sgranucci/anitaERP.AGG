@@ -1237,6 +1237,7 @@ Route::post('ventas/gastronomia/api/validar-canje-fidelidad', 'Ventas\Gastronomi
 Route::post('ventas/gastronomia/api/aplicar-canje-fidelidad', 'Ventas\GastronomiaProcesoFacturacionController@apiAplicarCanjeFidelidad')->name('gastronomia_api_aplicar_canje_fidelidad');
 Route::get('ventas/gastronomia/api/canjes-premio-turno', 'Ventas\GastronomiaProcesoFacturacionController@apiListarCanjesPremioTurno')->name('gastronomia_api_canjes_premio_turno');
 Route::get('ventas/gastronomia/api/tickets-tarjeta-turno', 'Ventas\GastronomiaProcesoFacturacionController@apiListarTicketsTarjetaTurno')->name('gastronomia_api_tickets_tarjeta_turno');
+Route::get('ventas/gastronomia/api/invitaciones-turno', 'Ventas\GastronomiaProcesoFacturacionController@apiListarInvitacionesTurno')->name('gastronomia_api_invitaciones_turno');
 Route::get('ventas/gastronomia/api/diagnostico-emision', 'Ventas\GastronomiaProcesoFacturacionController@apiDiagnosticoEmision')->name('gastronomia_api_diagnostico_emision');
 Route::post('ventas/gastronomia/api/emitir-factura', 'Ventas\GastronomiaProcesoFacturacionController@apiEmitirFactura')->name('gastronomia_api_emitir_factura');
 
@@ -1255,19 +1256,24 @@ Route::get('ventas/gastronomia/habilitacion-turno/api/estado', 'Ventas\Habilitac
 Route::post('ventas/gastronomia/habilitacion-turno/api/habilitar', 'Ventas\HabilitacionTurnoGastronomiaController@apiHabilitar')->name('gastronomia_habilitacion_turno_api_habilitar');
 Route::post('ventas/gastronomia/habilitacion-turno/api/cierre-parcial', 'Ventas\HabilitacionTurnoGastronomiaController@apiCierreParcial')->name('gastronomia_habilitacion_turno_api_cierre_parcial');
 Route::post('ventas/gastronomia/habilitacion-turno/api/cerrar', 'Ventas\HabilitacionTurnoGastronomiaController@apiCerrar')->name('gastronomia_habilitacion_turno_api_cerrar');
+Route::post('ventas/gastronomia/habilitacion-turno/api/anular-cierre', 'Ventas\HabilitacionTurnoGastronomiaController@apiAnularCierre')->name('gastronomia_habilitacion_turno_api_anular_cierre');
 Route::get('ventas/gastronomia/habilitacion-turno/api/conciliacion-turno', 'Ventas\HabilitacionTurnoGastronomiaController@apiConciliacionTurno')->name('gastronomia_habilitacion_turno_api_conciliacion_turno');
 Route::get('ventas/gastronomia/habilitacion-turno/api/conciliacion-medio', 'Ventas\HabilitacionTurnoGastronomiaController@apiConciliacionMedio')->name('gastronomia_habilitacion_turno_api_conciliacion_medio');
 Route::get('ventas/gastronomia/habilitacion-turno/api/conciliacion-notas-credito', 'Ventas\HabilitacionTurnoGastronomiaController@apiConciliacionNotasCredito')->name('gastronomia_habilitacion_turno_api_conciliacion_notas_credito');
+Route::get('ventas/gastronomia/habilitacion-turno/api/conciliacion-invitaciones', 'Ventas\HabilitacionTurnoGastronomiaController@apiConciliacionInvitaciones')->name('gastronomia_habilitacion_turno_api_conciliacion_invitaciones');
 Route::get('ventas/gastronomia/habilitacion-turno/informe-mozo-pdf', 'Ventas\HabilitacionTurnoGastronomiaController@informeMozoPdf')->name('gastronomia_habilitacion_turno_informe_mozo_pdf');
 
 Route::get('ventas/gastronomia/jornada', 'Ventas\JornadaGastronomiaController@index')->name('gastronomia_jornada');
 Route::get('ventas/gastronomia/jornada/api/estado/{empresaId}', 'Ventas\JornadaGastronomiaController@apiEstado')->name('gastronomia_jornada_api_estado');
+Route::get('ventas/gastronomia/jornada/api/preview-cierre-totem/{empresaId}', 'Ventas\JornadaGastronomiaController@apiPreviewCierreTotem')->name('gastronomia_jornada_api_preview_cierre_totem');
 Route::post('ventas/gastronomia/jornada/api/abrir', 'Ventas\JornadaGastronomiaController@apiAbrir')->name('gastronomia_jornada_api_abrir');
 Route::post('ventas/gastronomia/jornada/api/cerrar', 'Ventas\JornadaGastronomiaController@apiCerrar')->name('gastronomia_jornada_api_cerrar');
 Route::post('ventas/gastronomia/jornada/api/eliminar', 'Ventas\JornadaGastronomiaController@apiEliminar')->name('gastronomia_jornada_api_eliminar');
+Route::post('ventas/gastronomia/jornada/api/anular-cierre', 'Ventas\JornadaGastronomiaController@apiAnularCierre')->name('gastronomia_jornada_api_anular_cierre');
 Route::get('ventas/gastronomia/jornada/{jornadaId}/comprobante-cierre-totem', 'Ventas\JornadaGastronomiaController@comprobanteCierreTotem')->name('gastronomia_jornada_comprobante_cierre_totem');
 Route::get('ventas/gastronomia/jornada/api/informe-z/{jornadaId}', 'Ventas\JornadaGastronomiaController@apiInformeZDatos')->name('gastronomia_jornada_api_informe_z_datos');
 Route::post('ventas/gastronomia/jornada/api/informe-z', 'Ventas\JornadaGastronomiaController@apiInformeZGuardar')->name('gastronomia_jornada_api_informe_z_guardar');
+Route::post('ventas/gastronomia/jornada/api/informe-z-borrador', 'Ventas\JornadaGastronomiaController@apiInformeZBorradorGuardar')->name('gastronomia_jornada_api_informe_z_borrador_guardar');
 
 Route::get('ventas/gastronomia/saneamiento-turno', 'Ventas\GastronomiaSaneamientoTurnoController@index')->name('gastronomia_saneamiento_turno');
 Route::get('ventas/gastronomia/saneamiento-turno/api/diagnostico', 'Ventas\GastronomiaSaneamientoTurnoController@apiDiagnostico')->name('gastronomia_saneamiento_turno_api_diagnostico');
@@ -1286,6 +1292,13 @@ Route::get('ventas/gastronomia/facturas-dia/{ventaId}/canjes-premio', 'Ventas\Ga
 Route::get('ventas/gastronomia/facturas-dia/{ventaId}/canjes-fidelidad', 'Ventas\GastronomiaFacturasDiaController@apiCanjesFidelidad')->name('gastronomia_facturas_dia_canjes_fidelidad');
 Route::post('ventas/gastronomia/facturas-dia/{ventaId}/reimprimir-ticket', 'Ventas\GastronomiaFacturasDiaController@reimprimirTicket')->name('gastronomia_facturas_dia_reimprimir_ticket');
 Route::post('ventas/gastronomia/facturas-dia/{ventaId}/generar-nota-credito', 'Ventas\GastronomiaFacturasDiaController@generarNotaCredito')->name('gastronomia_facturas_dia_generar_nota_credito');
+Route::get('ventas/gastronomia/facturas-dia/{ventaId}/medios-pago', 'Ventas\GastronomiaFacturasDiaController@apiMediosPagoCambio')->name('gastronomia_facturas_dia_medios_pago');
+Route::get('ventas/gastronomia/facturas-dia/{ventaId}/cuentacaja-por-codigo/{codigo}', 'Ventas\GastronomiaFacturasDiaController@apiCuentacajaPorCodigo')->name('gastronomia_facturas_dia_cuentacaja_por_codigo');
+Route::put('ventas/gastronomia/facturas-dia/{ventaId}/medios-pago', 'Ventas\GastronomiaFacturasDiaController@actualizarMediosPago')->name('gastronomia_facturas_dia_actualizar_medios_pago');
+
+Route::get('ventas/gastronomia/articulos-vendidos', 'Ventas\GastronomiaArticulosVendidosController@index')->name('gastronomia_articulos_vendidos')->middleware('modo.consulta');
+Route::get('ventas/lista-gastronomia-articulos-vendidos/{formato}', 'Ventas\GastronomiaArticulosVendidosController@exportar')->name('listar_gastronomia_articulos_vendidos');
+Route::get('ventas/gastronomia/articulos-vendidos/api/{articuloId}/facturas', 'Ventas\GastronomiaArticulosVendidosController@apiFacturas')->name('gastronomia_articulos_vendidos_api_facturas');
 
 Route::get('ventas/arca-caea', 'Ventas\ArcaCaeaController@index')->name('arca_caea');
 Route::get('ventas/arca-caea/{id}', 'Ventas\ArcaCaeaController@show')->name('arca_caea_ver');
@@ -1668,11 +1681,18 @@ Route::get('caja/rendiciongastronomia/{id}/editar', 'Caja\RendicionGastronomiaCo
 Route::put('caja/rendiciongastronomia/{id}', 'Caja\RendicionGastronomiaController@actualizar')->name('actualizar_rendiciongastronomia');
 Route::delete('caja/rendiciongastronomia/{id}', 'Caja\RendicionGastronomiaController@eliminar')->name('eliminar_rendiciongastronomia');
 Route::post('caja/rendiciongastronomia/api/datos-turno', 'Caja\RendicionGastronomiaController@apiDatosTurno')->name('api_rendicion_gastronomia_datos_turno');
+Route::post('caja/rendiciongastronomia/api/datos-jornada', 'Caja\RendicionGastronomiaController@apiDatosJornada')->name('api_rendicion_gastronomia_datos_jornada');
+Route::get('caja/rendiciongastronomia/api/jornada/{numero}', 'Caja\RendicionGastronomiaController@apiJornadaPorNumero')->name('api_rendicion_gastronomia_jornada_numero');
 Route::get('caja/rendiciongastronomia/api/proponer-codigo', 'Caja\RendicionGastronomiaController@apiProponerCodigo')->name('api_rendicion_gastronomia_proponer_codigo');
 Route::post('caja/rendiciongastronomia/api/consulta-cierre', 'Caja\RendicionGastronomiaController@apiConsultaCierre')->name('api_rendicion_gastronomia_consulta_cierre');
 Route::get('caja/rendiciongastronomia/api/turno/{numero}', 'Caja\RendicionGastronomiaController@apiTurnoPorNumero')->name('api_rendicion_gastronomia_turno_numero');
 Route::get('caja/waitry-cierre-jornada', 'Caja\WaitryCierreJornadaController@index')->name('waitry_cierre_jornada');
 Route::get('caja/listarwaitrycierrejornada/{formato?}', 'Caja\WaitryCierreJornadaController@listar')->name('listar_waitry_cierre_jornada');
+Route::get('caja/waitry-cierre-jornada/api/proceso/analizar', 'Caja\WaitryCierreJornadaController@apiProcesoAnalizar')->name('waitry_cierre_jornada_api_proceso_analizar');
+Route::post('caja/waitry-cierre-jornada/api/proceso/recalcular', 'Caja\WaitryCierreJornadaController@apiProcesoRecalcular')->name('waitry_cierre_jornada_api_proceso_recalcular');
+Route::get('caja/waitry-cierre-jornada/api/proceso/movimientos/{grupo}', 'Caja\WaitryCierreJornadaController@apiProcesoMovimientosGrupo')->name('waitry_cierre_jornada_api_proceso_movimientos');
+Route::get('caja/waitry-cierre-jornada/api/proceso/config/{empresaId}', 'Caja\WaitryCierreJornadaController@apiProcesoConfig')->name('waitry_cierre_jornada_api_proceso_config');
+Route::post('caja/waitry-cierre-jornada/api/proceso/config/{empresaId}', 'Caja\WaitryCierreJornadaController@apiProcesoGuardarConfig')->name('waitry_cierre_jornada_api_proceso_config_guardar');
 /*
  * Tipos de transacciones de caja
  */

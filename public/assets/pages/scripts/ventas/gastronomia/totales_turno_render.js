@@ -87,17 +87,25 @@
         return html;
     }
 
-    function renderMediosPagoTabla(medios, vacio, conTotalFinal, totalCobradoRef, opcionesConciliar, notasCredito, mozoCtx) {
+    function renderMediosPagoTabla(medios, vacio, conTotalFinal, totalCobradoRef, opcionesConciliar, notasCredito, mozoCtx, invitaciones, opcionesArqueo) {
         var hayMedios = medios && medios.length;
         var nc = notasCredito || null;
         var ncCant = nc ? Number(nc.cantidad || 0) : 0;
         var ncTotal = nc ? Number(nc.total || 0) : 0;
         var hayNc = nc && (ncCant > 0 || Math.abs(ncTotal) >= 0.005);
+        var inv = invitaciones || null;
+        var invCant = inv ? Number(inv.cantidad || 0) : 0;
+        var invTotal = inv ? Number(inv.total || 0) : 0;
+        var hayInv = inv && (invCant > 0 || Math.abs(invTotal) >= 0.005);
 
-        if (!hayMedios && !hayNc) {
+        if (!hayMedios && !hayNc && !hayInv) {
             return '<p class="text-muted mb-0 pl-2">' + esc(vacio || 'Sin cobranzas en comprobantes.') + '</p>';
         }
         var conciliar = opcionesConciliar && opcionesConciliar.habilitar;
+        var ccEfectivoId = opcionesArqueo && opcionesArqueo.habilitar
+            ? (parseInt(opcionesArqueo.cuentacaja_efectivo_id, 10) || 0)
+            : 0;
+        var arqueoActivo = ccEfectivoId > 0;
         var totalFinal = totalCobradoRef != null ? Number(totalCobradoRef) : 0;
         if (totalCobradoRef == null) {
             (medios || []).forEach(function (p) { totalFinal += Number(p.total || 0); });
@@ -110,15 +118,47 @@
         var mozoNombre = mozoCtx && mozoCtx.mozo_nombre ? mozoCtx.mozo_nombre : '';
 
         var html = '<table class="table table-bordered mb-0 gastro-totales-tabla">';
-        html += '<thead class="thead-light"><tr><th>Medio de pago</th><th class="text-right">Cobrado</th>';
+        html += '<thead class="thead-light"><tr><th>Medio de pago</th>';
+        if (arqueoActivo) {
+            html += '<th class="text-right" style="width:130px;">Esperado sistema</th>';
+            html += '<th class="text-right" style="width:160px;">Cobrado / contado</th>';
+        } else {
+            html += '<th class="text-right">Cobrado</th>';
+        }
         if (conciliar) {
             html += '<th class="text-center" style="width:110px;">Conciliar</th>';
         }
         html += '</tr></thead><tbody>';
         (medios || []).forEach(function (p) {
-            var ccId = p.cuentacaja_id || 0;
-            html += '<tr><td>' + esc(p.nombre || p.codigo || '—') + '</td>';
-            html += '<td class="text-right font-weight-bold">$' + fmt(p.total) + '</td>';
+            var ccId = parseInt(p.cuentacaja_id, 10) || 0;
+            var monto = Number(p.total || 0);
+            var esEfectivo = arqueoActivo && ccId === ccEfectivoId;
+            var trClass = esEfectivo ? ' class="gastro-cierre-fila-efectivo"' : '';
+            html += '<tr' + trClass + '><td>' + esc(p.nombre || p.codigo || '—');
+            if (esEfectivo) {
+                html += ' <span class="badge badge-info badge-sm">Efectivo</span>';
+            }
+            html += '</td>';
+            if (arqueoActivo) {
+                html += '<td class="text-right">';
+                if (esEfectivo) {
+                    html += '<span class="gastro-rendicion-esperado-efectivo font-weight-bold">$' + fmt(monto) + '</span>';
+                } else {
+                    html += '<span class="text-muted">—</span>';
+                }
+                html += '</td>';
+                html += '<td class="text-right">';
+                if (esEfectivo) {
+                    html += '<input type="text" inputmode="decimal" class="form-control form-control-sm text-right js-efectivo-contado-cierre" ';
+                    html += 'value="' + esc(fmt(monto)) + '" data-esperado="' + esc(String(monto)) + '"/>';
+                    html += '<div class="js-hint-diff-efectivo-cierre"></div>';
+                } else {
+                    html += '<span class="font-weight-bold">$' + fmt(monto) + '</span>';
+                }
+                html += '</td>';
+            } else {
+                html += '<td class="text-right font-weight-bold">$' + fmt(monto) + '</td>';
+            }
             if (conciliar && ccId > 0) {
                 html += '<td class="text-center">';
                 html += '<button type="button" class="btn btn-xs btn-outline-info js-conciliar-medio" data-cuentacaja-id="' + ccId + '" ';
@@ -132,6 +172,9 @@
         if (hayNc) {
             html += '<tr style="background:#fdecea;">';
             html += '<td style="color:#922b21; font-weight:bold;">Notas de crédito (' + ncCant + ' comp.)</td>';
+            if (arqueoActivo) {
+                html += '<td class="text-muted text-right">—</td>';
+            }
             html += '<td class="text-right font-weight-bold" style="color:#922b21;">$' + fmt(ncTotal) + '</td>';
             if (conciliar) {
                 html += '<td class="text-center">';
@@ -147,10 +190,35 @@
             }
             html += '</tr>';
         }
+        if (hayInv) {
+            html += '<tr style="background:#fff8e1;">';
+            html += '<td style="color:#856404; font-weight:bold;">Invitaciones $0,01 (' + invCant + ' comp.)';
+            html += '<br><small class="font-weight-normal text-muted">Referencia fiscal — no integra el total cobrado</small></td>';
+            if (arqueoActivo) {
+                html += '<td class="text-right font-italic text-muted">—</td>';
+            }
+            html += '<td class="text-right font-italic text-muted">—<br><small>$' + fmt(invTotal) + ' fact.</small></td>';
+            if (conciliar) {
+                html += '<td class="text-center">';
+                html += '<button type="button" class="btn btn-xs btn-outline-warning js-conciliar-invitaciones"';
+                if (mozoId !== '') {
+                    html += ' data-mozo-id="' + esc(mozoId) + '"';
+                }
+                if (mozoNombre) {
+                    html += ' data-mozo-nombre="' + esc(mozoNombre) + '"';
+                }
+                html += ' title="Ver facturas $0,01' + (mozoNombre ? ' de ' + esc(mozoNombre) : ' del turno') + '">';
+                html += '<i class="fa fa-search"></i> Facturas</button></td>';
+            }
+            html += '</tr>';
+        }
         html += '</tbody>';
         if (conTotalFinal) {
             html += '<tfoot class="thead-light"><tr>';
-            html += '<th class="text-right">Total</th>';
+            html += '<th class="text-right">Total cobrado neto</th>';
+            if (arqueoActivo) {
+                html += '<th></th>';
+            }
             html += '<th class="text-right gastro-totales-monto font-weight-bold">$' + fmt(totalFinal) + '</th>';
             if (conciliar) {
                 html += '<th></th>';
@@ -158,18 +226,93 @@
             html += '</tr></tfoot>';
         }
         html += '</table>';
+        if (conTotalFinal && hayInv) {
+            html += '<p class="small text-muted mb-0 mt-1 pl-1">Las invitaciones ($0,01 sin cobranza) no suman al total cobrado.</p>';
+        }
+        if (arqueoActivo && conTotalFinal) {
+            html += '<p class="small text-muted mb-0 mt-1 pl-1">Compare el <strong>esperado sistema</strong> de efectivo con el monto contado. ';
+            html += 'La diferencia se compensa automáticamente en <strong>sobrante / faltante</strong> del formulario de cierre.</p>';
+        }
         return html;
     }
 
-    function renderTotalMediosPagoFinalHtml(totales, opcionesConciliar) {
+    function parseDecimalArqueo(str) {
+        if (str == null || str === '') {
+            return 0;
+        }
+        var t = String(str).trim().replace(/\s/g, '');
+        if (t.indexOf(',') >= 0) {
+            t = t.replace(/\./g, '').replace(',', '.');
+        }
+        var n = parseFloat(t);
+        return isNaN(n) ? 0 : Math.round(n * 100) / 100;
+    }
+
+    function actualizarHintDiffEfectivoCierre(inp) {
+        if (!inp) {
+            return;
+        }
+        var contenedor = inp.parentElement
+            ? inp.parentElement.querySelector('.js-hint-diff-efectivo-cierre')
+            : null;
+        if (!contenedor) {
+            return;
+        }
+        var esperado = parseFloat(inp.getAttribute('data-esperado')) || 0;
+        var contado = parseDecimalArqueo(inp.value);
+        var diff = Math.round((contado - esperado) * 100) / 100;
+        if (Math.abs(diff) <= 0.02) {
+            contenedor.innerHTML = '';
+            return;
+        }
+        var tipo = diff > 0 ? 'sobra' : 'falta';
+        contenedor.innerHTML = '<small class="d-block text-warning mt-1">Δ $' + fmt(Math.abs(diff))
+            + ' (' + tipo + ' vs sistema). '
+            + 'Se compensa en <strong>sobrante / faltante</strong> abajo.</small>';
+    }
+
+    function enlazarArqueoEfectivoCierre(root) {
+        if (!root) {
+            return;
+        }
+        root.querySelectorAll('.js-efectivo-contado-cierre').forEach(function (inp) {
+            if (inp.getAttribute('data-arqueo-bound') === '1') {
+                actualizarHintDiffEfectivoCierre(inp);
+                return;
+            }
+            inp.setAttribute('data-arqueo-bound', '1');
+            inp.addEventListener('input', function () {
+                actualizarHintDiffEfectivoCierre(inp);
+            });
+            inp.addEventListener('blur', function () {
+                inp.value = fmt(parseDecimalArqueo(inp.value));
+                actualizarHintDiffEfectivoCierre(inp);
+            });
+            actualizarHintDiffEfectivoCierre(inp);
+        });
+    }
+
+    function renderTotalMediosPagoFinalHtml(totales, opcionesConciliar, opcionesRender) {
         var medios = totales.por_medio_pago || [];
         var nc = {
             total: Number(totales.total_notas_credito || 0),
             cantidad: Number(totales.cantidad_notas_credito || 0),
         };
+        var inv = {
+            total: Number(totales.total_invitaciones || 0),
+            cantidad: Number(totales.cantidad_invitaciones || 0),
+        };
         var hayNc = nc.cantidad > 0 || Math.abs(nc.total) >= 0.005;
-        if (!medios.length && !hayNc) {
+        var hayInv = inv.cantidad > 0 || Math.abs(inv.total) >= 0.005;
+        if (!medios.length && !hayNc && !hayInv) {
             return '';
+        }
+        var arqueo = null;
+        if (opcionesRender && opcionesRender.arqueoEfectivo) {
+            arqueo = {
+                habilitar: true,
+                cuentacaja_efectivo_id: parseInt(opcionesRender.cuentacaja_efectivo_id, 10) || 0,
+            };
         }
         var html = '<div class="mt-3 pt-3 border-top gastro-totales-medios-final">';
         html += '<h6 class="font-weight-bold mb-2">Total final por medio de pago</h6>';
@@ -179,7 +322,10 @@
             true,
             totales.total_cobrado,
             opcionesConciliar,
-            hayNc ? nc : null
+            hayNc ? nc : null,
+            null,
+            hayInv ? inv : null,
+            arqueo
         );
         html += '</div>';
         return html;
@@ -196,10 +342,15 @@
             var mncCant = mnc ? Number(mnc.cantidad || 0) : 0;
             var mncTotal = mnc ? Number(mnc.total || 0) : 0;
             var mozoHayNc = mnc && (mncCant > 0 || Math.abs(mncTotal) >= 0.005);
+            var minv = m.invitaciones || null;
+            var minvCant = minv ? Number(minv.cantidad || 0) : 0;
+            var minvTotal = minv ? Number(minv.total || 0) : 0;
+            var mozoHayInv = minv && (minvCant > 0 || Math.abs(minvTotal) >= 0.005);
             var mTotalFinal = Number(m.total != null ? m.total : 0);
             var mTotalFacturas = m.total_facturas != null
                 ? Number(m.total_facturas)
                 : (mTotalFinal - mncTotal);
+            var cobradoNeto = Number(m.total_cobrado != null ? m.total_cobrado : 0);
             html += '<div class="card mb-2 border">';
             html += '<div class="card-header py-2 bg-light">';
             html += '<div class="d-flex flex-wrap justify-content-between align-items-center">';
@@ -213,7 +364,10 @@
             } else {
                 html += ' · Facturado <strong>$' + fmt(mTotalFinal) + '</strong>';
             }
-            html += ' · Cobrado <strong>$' + fmt(m.total_cobrado != null ? m.total_cobrado : 0) + '</strong>';
+            if (mozoHayInv) {
+                html += ' · Invitaciones <span class="text-muted">(' + minvCant + ' comp., $' + fmt(minvTotal) + ' fact., sin cobranza)</span>';
+            }
+            html += ' · Cobrado neto <strong>$' + fmt(cobradoNeto) + '</strong>';
             html += '</span>';
             html += '</div>';
             html += '</div>';
@@ -222,11 +376,12 @@
             html += renderMediosPagoTabla(
                 medios,
                 'Sin cobranzas en los comprobantes de este mozo.',
-                false,
-                null,
+                true,
+                cobradoNeto,
                 opcionesConciliar,
                 mozoHayNc ? mnc : null,
-                { mozo_id: m.mozo_id != null ? m.mozo_id : '', mozo_nombre: m.mozo_nombre || '' }
+                { mozo_id: m.mozo_id != null ? m.mozo_id : '', mozo_nombre: m.mozo_nombre || '' },
+                mozoHayInv ? minv : null
             );
             html += '</div>';
             html += '</div>';
@@ -486,10 +641,71 @@
             html += renderPorMozoHtml(totales.por_mozo, optsConc);
         }
         if (!compacto) {
-            html += renderTotalMediosPagoFinalHtml(totales, optsConc);
+            html += renderTotalMediosPagoFinalHtml(totales, optsConc, opciones);
         }
         html += '</div>';
 
+        return html;
+    }
+
+    function fmtEntero(n) {
+        return Number(n || 0).toLocaleString('es-AR', { maximumFractionDigits: 0 });
+    }
+
+    /**
+     * Bloque compacto (colapsado por defecto) con últimos números CAE/CAEA del turno.
+     * @param {{filas?:Array}} numeracion
+     */
+    function renderNumeracionFiscalHtml(numeracion) {
+        var filas = (numeracion && numeracion.filas) || [];
+        if (!filas.length) {
+            return '';
+        }
+
+        var resumen = filas.map(function (f) {
+            var partes = [f.rol_etiqueta || '', 'PV ' + (f.puntoventa_codigo || '—')];
+            if (f.ultimo_ticket) {
+                partes.push('ticket ' + fmtEntero(f.ultimo_ticket));
+            }
+            if (f.ultimo_nota_credito) {
+                partes.push('NC ' + fmtEntero(f.ultimo_nota_credito));
+            }
+            return partes.join(' · ');
+        }).join(' | ');
+
+        var html = '<div class="card card-outline card-secondary mb-0 gastro-numeracion-fiscal">';
+        html += '<div class="card-header py-1 px-2 d-flex align-items-center" role="button" data-toggle="collapse" data-target="#collapse-numeracion-fiscal-turno" aria-expanded="false" aria-controls="collapse-numeracion-fiscal-turno">';
+        html += '<i class="fa fa-hashtag text-muted mr-2"></i>';
+        html += '<span class="small font-weight-bold mr-2 text-nowrap">Numeración fiscal</span>';
+        html += '<span class="small text-muted text-truncate flex-grow-1" title="' + esc(resumen) + '">' + esc(resumen) + '</span>';
+        html += '<i class="fa fa-chevron-down small text-muted ml-2"></i>';
+        html += '</div>';
+        html += '<div id="collapse-numeracion-fiscal-turno" class="collapse">';
+        html += '<div class="card-body py-2 px-2">';
+        html += '<p class="text-muted small mb-2 mb-md-1">Últimos números emitidos en este turno en la PC (para rendición de caja).</p>';
+        html += '<div class="table-responsive"><table class="table table-sm table-bordered mb-0 gastro-totales-tabla">';
+        html += '<thead class="thead-light"><tr>';
+        html += '<th>Modo</th><th>Punto de venta</th>';
+        html += '<th class="text-right">Último ticket</th><th class="text-right">Tickets</th>';
+        html += '<th class="text-right">Última NC</th><th class="text-right">NC</th>';
+        html += '</tr></thead><tbody>';
+
+        filas.forEach(function (f) {
+            html += '<tr>';
+            html += '<td><strong>' + esc(f.rol_etiqueta || '') + '</strong></td>';
+            html += '<td>PV ' + esc(f.puntoventa_codigo || '—');
+            if (f.puntoventa_nombre) {
+                html += ' <span class="text-muted">— ' + esc(f.puntoventa_nombre) + '</span>';
+            }
+            html += '</td>';
+            html += '<td class="text-right">' + (f.ultimo_ticket ? fmtEntero(f.ultimo_ticket) : '—') + '</td>';
+            html += '<td class="text-right">' + Number(f.cantidad_tickets || 0) + '</td>';
+            html += '<td class="text-right">' + (f.ultimo_nota_credito ? fmtEntero(f.ultimo_nota_credito) : '—') + '</td>';
+            html += '<td class="text-right">' + Number(f.cantidad_notas_credito || 0) + '</td>';
+            html += '</tr>';
+        });
+
+        html += '</tbody></table></div></div></div></div>';
         return html;
     }
 
@@ -519,5 +735,7 @@
         renderPaginacionGrillaHtml: renderPaginacionGrillaHtml,
         renderListaParcialesHtml: renderListaParcialesHtml,
         renderAlertasControlHtml: renderAlertasControlHtml,
+        renderNumeracionFiscalHtml: renderNumeracionFiscalHtml,
+        enlazarArqueoEfectivoCierre: enlazarArqueoEfectivoCierre,
     };
 })();

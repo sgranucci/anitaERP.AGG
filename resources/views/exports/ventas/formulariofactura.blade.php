@@ -16,19 +16,57 @@
         .salto-pagina {
             page-break-before: always;
         }
-        //@media print {
-        //    body { -webkit-print-color-adjust: exact; }
-        //}
+        table.tabla-items-factura {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        table.tabla-items-factura tr.fila-totales-items td {
+            background-color: #e9ecef;
+            border: 1px solid #dee2e6;
+        }
+        table.tabla-totales-importes {
+            border-collapse: collapse;
+        }
+        table.tabla-totales-importes tr.fila-total-final td {
+            background-color: #e9ecef;
+            border: 1px solid #dee2e6;
+        }
+        .factura-letra-caja {
+            border: 1px solid #000;
+            width: 48px;
+            height: 48px;
+            text-align: center;
+            vertical-align: middle;
+            font-size: 26px;
+            font-weight: bold;
+            line-height: 48px;
+            margin: 0 auto 4px auto;
+        }
+        .factura-pie-fiscal td {
+            vertical-align: top;
+            padding: 4px 6px;
+        }
+        .factura-pie-qr {
+            width: 100px;
+            vertical-align: bottom;
+            padding-right: 8px;
+        }
 	</style>
 </head>
 <body>
+@php
+	// Misma plantilla para todas las empresas: columnas extra y 2.ª hoja solo en EL BIERZO (config por instalación).
+	$facturaPdfEsElBierzo = config('app.empresa') === 'EL BIERZO';
+	$facturaPdfCeldaTotales = 'background-color: #e9ecef; border: 1px solid #dee2e6;';
+	$facturaPdfPieCentroTieneTexto = ($letra === 'B') || $facturaPdfEsElBierzo;
+@endphp
 <div id="area-pdf">
 	<div class="page">
 		<div class="row" id="area-pdf" style="height: 300px; padding: 1px; margin: 0px; border: none;">
 			<table style="width=4500px;" class="table borderless">
 				<thead>
-				<tr style="height: 100px;">
-					<th style="width=150px; word-wrap: break-word;">
+				<tr style="height: 85px;">
+					<th style="width=150px; word-wrap: break-word; vertical-align: top;">
 						<img style="margin: 1px;" width="180" height="80" src="data:image/png;base64,{{ base64_encode(file_get_contents("/var/www/html/anitaERP/public/storage/imagenes/logos/".$venta->puntoventas->empresas->nombre.".png")) }}">
 						<div>
 							<strong style="font-size: 20px;">{{$venta->puntoventas->empresas->nombre}}</strong>
@@ -40,13 +78,9 @@
 							<p style="font-size: 16px; text-align: left;">IVA REPONSABLE INSCRIPTO</p>
 						</div>
 					</th>
-					<th style="width=100px;">
-						<div style="border: 1px solid black; height: 60px; position:relative; width: 50px; left:50px;">
-							<strong style="font-size: 26px; position:absolute; top: 50%; transform: translateY(-50%); left: 50%; transform: translate(-50%, -50%);">{{$letra}}</strong><br>
-						</div>
-						<div style="height: 40px; position:relative; width: 100px; left:20px;">
-							<strong style="font-size: 12px; position:absolute; top: 50%; transform: translateY(-50%); left: 50%; transform: translate(-50%, -50%);">Código {{$codigoTipoTransaccion}}</strong><br>
-						</div>				
+					<th style="width=90px; text-align: center; vertical-align: top; padding-top: 2px;">
+						<div class="factura-letra-caja">{{ $letra }}</div>
+						<div style="font-size: 12px; font-weight: bold; text-align: center;">Código {{ $codigoTipoTransaccion }}</div>
 					</th>
 					<th style="width=300px; text-align: right; font-size: 22px;">
 						<strong>{{$venta->tipotransacciones->nombre ?? ''}}</strong><br>
@@ -118,16 +152,16 @@
 								@endif
 							</p>
 						</th>
-					</tr=>
+					</tr>
 				</thead>
 			</table>
-			<table class="table table-sm table-bordered table-striped" style="font-size: 16px; margin: 5px 0;">
+			<table class="table table-sm table-bordered table-striped tabla-items-factura" style="font-size: 16px; margin: 5px 0;">
 				<thead>
 					<tr>
 						<th>Artículo</th>
 						<th>Descripción</th>
 						<th style="text-align: center;">Cantidad</th>
-						@if (config('app.empresa') == 'EL BIERZO')
+						@if ($facturaPdfEsElBierzo)
 							<th style="text-align: center;">Bonificación</th>
 						@endif
 						<th style="text-align: right;">Precio</th>
@@ -146,10 +180,10 @@
 								<td>{{ $item['detalle'] }}</td>
 							@endif
 							<td align="center">{{ number_format($item['cantidad'], config('facturacion.DECIMAL_CANTIDAD')) }}</td>
-							@if (config('app.empresa') == 'EL BIERZO')
+							@if ($facturaPdfEsElBierzo)
 								<td align="center">{{ number_format($item['kilodescuento'], config('facturacion.DECIMAL_CANTIDAD')) }}</td>
 							@endif
-							@if (config('app.empresa') == 'EL BIERZO')
+							@if ($facturaPdfEsElBierzo)
 								<td align="right">{{ number_format($item['preciosindescuento'], 2) }}</td>
 								<td align="right">{{ number_format($item['preciosindescuento']*$item['cantidad'], 2) }}</td>
 							@else
@@ -166,22 +200,20 @@
 						@endphp
 
 					@endforeach
-					<tr>
-						<td> </td>
-						<td>TOTALES</td>
-						<td align="center"><strong>{{number_format($totalCantidad, config('facturacion.DECIMAL_CANTIDAD'))}}</td>
-						@if (config('app.empresa') == 'EL BIERZO')
-							<td align="center"><strong>{{number_format($totalKiloDescuento, config('facturacion.DECIMAL_CANTIDAD'))}}</td>
+					<tr class="fila-totales-items">
+						<td style="{{ $facturaPdfCeldaTotales }}">&nbsp;</td>
+						<td style="{{ $facturaPdfCeldaTotales }}"><strong>TOTALES</strong></td>
+						<td align="center" style="{{ $facturaPdfCeldaTotales }}"><strong>{{number_format($totalCantidad, config('facturacion.DECIMAL_CANTIDAD'))}}</strong></td>
+						@if ($facturaPdfEsElBierzo)
+							<td align="center" style="{{ $facturaPdfCeldaTotales }}"><strong>{{number_format($totalKiloDescuento, config('facturacion.DECIMAL_CANTIDAD')) }}</strong></td>
 						@endif
-						<td> </td>
-						@if (config('app.empresa') == 'EL BIERZO')
-							<td> </td>
-						@endif
+						<td style="{{ $facturaPdfCeldaTotales }}">&nbsp;</td>
+						<td style="{{ $facturaPdfCeldaTotales }}">&nbsp;</td>
 					</tr>
 				</tbody>
 			</table>
 			<div class="col-sm-6">
-				<table style="font-size: 16px; position:relative; left:508px;" class="table table-sm table-bordered table-striped">
+				<table style="font-size: 16px; position:relative; left:508px; border-collapse: collapse;" cellpadding="0" cellspacing="0" class="table table-sm table-bordered table-striped tabla-totales-importes">
 					<thead>
 						<th style="width: 25%;"></th>
 						<th style="width: 10%;"></th>
@@ -197,20 +229,20 @@
 								@php $impuestoInterno += $itemTotal['importe']; @endphp
 							@endif
 							@if ($letra == 'A')
-								<tr>
-									<td>
+								<tr @if ($itemTotal['concepto'] == "Total") class="fila-total-final" @endif>
+									<td @if ($itemTotal['concepto'] == "Total") style="{{ $facturaPdfCeldaTotales }}" @endif>
 									@if ($itemTotal['concepto'] == "Total")
 										<strong>{{ $itemTotal['concepto'] }}</strong>
 									@else
 										{{ $itemTotal['concepto'] }}
 									@endif
 									</td>
-									<td>
+									<td @if ($itemTotal['concepto'] == "Total") style="{{ $facturaPdfCeldaTotales }}" @endif>
 									@if ($itemTotal['tasa'] != 0)
 										{{number_format($itemTotal['tasa'], 2)}}
 									@endif
 									</td>
-									<td align="right">
+									<td align="right" @if ($itemTotal['concepto'] == "Total") style="{{ $facturaPdfCeldaTotales }}" @endif>
 									@if ($itemTotal['concepto'] == "Total")
 										<strong>{{$venta->monedas->abreviatura}} {{ number_format($itemTotal['importe'], 2) }}</strong>
 									@else
@@ -220,13 +252,13 @@
 								</tr>
 							@else
 								@if ($itemTotal['concepto'] == "Total")
-								<tr>
-									<td>
+								<tr class="fila-total-final">
+									<td style="{{ $facturaPdfCeldaTotales }}">
 										<strong>{{ $itemTotal['concepto'] }}</strong>
 									</td>
-									<td>
+									<td style="{{ $facturaPdfCeldaTotales }}">
 									</td>
-									<td align="right">
+									<td align="right" style="{{ $facturaPdfCeldaTotales }}">
 										<strong>{{$venta->monedas->abreviatura}} {{ number_format($itemTotal['importe'], 2) }}</strong>
 									</td>
 								</tr>
@@ -236,54 +268,46 @@
 					</tbody>
 				</table>
 			</div>
-			<table class="table">
-				<thead>
-					<tr>
+			<table class="table borderless factura-pie-fiscal" style="width: 100%; margin-top: 6px;" cellpadding="0" cellspacing="0">
+				<tr>
+					<td class="factura-pie-qr" width="100" valign="bottom">
+						<img src="data:image/png;base64,{{ base64_encode(file_get_contents("/var/www/html/anitaERP/public/storage/".$output_file)) }}" width="90" height="90" alt="Codigo QR">
+					</td>
+					@if ($facturaPdfPieCentroTieneTexto)
+					<td style="font-size: 10px; text-align: left; vertical-align: top;">
 						@if ($letra == 'B')
-							<th style="font-size: 10px; text-align: left">
-								RÉGIMEN DE TRANSPARENCIA FISCAL AL CONSUMIDOR (Ley 27.743) <br>
-								IVA Contenido {{ $venta->monedas->abreviatura ?? '' }} {{ number_format($iva, 2) }} <br>
-								Otros Tributos Nac. que inciden en el precio
-								@if ($impuestoInterno > 0)
-									<br>
-									&nbsp;&nbsp;&nbsp;Impuesto Interno {{ $venta->monedas->abreviatura ?? '' }} {{ number_format($impuestoInterno, 2) }}
-								@endif
+							RÉGIMEN DE TRANSPARENCIA FISCAL AL CONSUMIDOR (Ley 27.743) <br>
+							IVA Contenido {{ $venta->monedas->abreviatura ?? '' }} {{ number_format($iva, 2) }} <br>
+							Otros Tributos Nac. que inciden en el precio
+							@if ($impuestoInterno > 0)
 								<br>
-							</th>
+								&nbsp;&nbsp;&nbsp;Impuesto Interno {{ $venta->monedas->abreviatura ?? '' }} {{ number_format($impuestoInterno, 2) }}
+							@endif
 						@endif
-						@if (config('app.empresa') == 'EL BIERZO')
-							<th style="font-size: 10px; text-align: right">
-								EMITIR LOS CHEQUES A LA ORDEN DE FRIGORIFICO EL BIERZO <br>
-								CONTROLE EL PESO DE LA MERCADERIA <br>
-								NO SE ACEPTAN RECLAMOS <br>
-								<p style="font-size: 14px; text-align: right">
-									CAE: {{ $venta->cae }}<br>
-									Fecha Vencimiento CAE: {{date("d/m/Y", strtotime($venta->fechavencimientocae ?? ''))}} 
-								</p>		
-							</th>
-						@else
-							<th style="font-size: 10px; text-align: right">
-								<p style="font-size: 14px; text-align: right">
-									CAE: {{ $venta->cae }}<br>
-									Fecha Vencimiento CAE: {{date("d/m/Y", strtotime($venta->fechavencimientocae ?? ''))}} 
-								</p>		
-							</th>				
+						@if ($facturaPdfEsElBierzo)
+							@if ($letra == 'B')
+								<br>
+							@endif
+							EMITIR LOS CHEQUES A LA ORDEN DE FRIGORIFICO EL BIERZO <br>
+							CONTROLE EL PESO DE LA MERCADERIA <br>
+							NO SE ACEPTAN RECLAMOS
 						@endif
-					</tr>
-				</thead>
+					</td>
+					@endif
+					<td style="font-size: 14px; text-align: right; white-space: nowrap; vertical-align: top;">
+						CAE: {{ $venta->cae }}<br>
+						Fecha Vencimiento CAE: {{date("d/m/Y", strtotime($venta->fechavencimientocae ?? ''))}}
+					</td>
+				</tr>
 			</table>
-			<div class="qr-container">
-			<!-- Asegúrate de que la imagen exista o se genere correctamente -->
-			<img src="data:image/png;base64,{{ base64_encode(file_get_contents("/var/www/html/anitaERP/public/storage/".$output_file)) }}" width="100" height="100" alt="Codigo QR">	
-		</div>
 	</div>
-	@if (config('app.empresa') == 'EL BIERZO')
+	@if ($facturaPdfEsElBierzo)
     <div class="page salto-pagina">
 		<div class="row" id="area-pdf" style="height: 300px; padding: 1px; margin: 0px; border: none;">
 			<table style="width=4500px;" class="table borderless">
 				<thead>
-				<tr style="height: 100px;">
-					<th style="width=150px; word-wrap: break-word;">
+				<tr style="height: 85px;">
+					<th style="width=150px; word-wrap: break-word; vertical-align: top;">
 						<img style="margin: 1px;" width="180" height="80" src="data:image/png;base64,{{ base64_encode(file_get_contents("/var/www/html/anitaERP/public/storage/imagenes/logos/".$venta->puntoventas->empresas->nombre.".png")) }}">
 						<div>
 							<strong style="font-size: 20px;">{{$venta->puntoventas->empresas->nombre}}</strong>
@@ -295,13 +319,9 @@
 							<p style="font-size: 16px; text-align: left;">IVA REPONSABLE INSCRIPTO</p>
 						</div>
 					</th>
-					<th style="width=100px;">
-						<div style="border: 1px solid black; height: 60px; position:relative; width: 50px; left:50px;">
-							<strong style="font-size: 26px; position:absolute; top: 50%; transform: translateY(-50%); left: 50%; transform: translate(-50%, -50%);">R</strong><br>
-						</div>
-						<div style="height: 40px; position:relative; width: 100px; left:20px;">
-							<strong style="font-size: 12px; position:absolute; top: 50%; transform: translateY(-50%); left: 50%; transform: translate(-50%, -50%);">Código 091</strong><br>
-						</div>				
+					<th style="width=90px; text-align: center; vertical-align: top; padding-top: 2px;">
+						<div class="factura-letra-caja">R</div>
+						<div style="font-size: 12px; font-weight: bold; text-align: center;">Código 091</div>
 					</th>
 					<th style="width=300px; text-align: right; font-size: 22px;">
 						<strong>REMITO</strong><br>
@@ -371,16 +391,16 @@
 								@endif
 							</p>
 						</th>
-					</tr=>
+					</tr>
 				</thead>
 			</table>
-			<table class="table table-sm table-bordered table-striped" style="font-size: 16px; margin: 5px 0;">
+			<table class="table table-sm table-bordered table-striped tabla-items-factura" style="font-size: 16px; margin: 5px 0;">
 				<thead>
 					<tr>
 						<th>Artículo</th>
 						<th>Descripción</th>
 						<th style="text-align: center;">Cantidad</th>
-						@if (config('app.empresa') == 'EL BIERZO')
+						@if ($facturaPdfEsElBierzo)
 							<th style="text-align: center;">Bonificación</th>
 						@endif
 					</tr>
@@ -397,7 +417,7 @@
 								<td>{{ $item['detalle'] }}</td>
 							@endif
 							<td align="center">{{ number_format($item['cantidad'], config('facturacion.DECIMAL_CANTIDAD')) }}</td>
-							@if (config('app.empresa') == 'EL BIERZO')
+							@if ($facturaPdfEsElBierzo)
 								<td align="center">{{ number_format($item['kilodescuento'], config('facturacion.DECIMAL_CANTIDAD')) }}</td>
 							@endif
 						</tr>
@@ -410,27 +430,23 @@
 						@endphp
 
 					@endforeach
-					<tr>
-						<td> </td>
-						<td>TOTALES</td>
-						<td align="center"><strong>{{number_format($totalCantidad, config('facturacion.DECIMAL_CANTIDAD'))}}</td>
-						@if (config('app.empresa') == 'EL BIERZO')
-							<td align="center"><strong>{{number_format($totalKiloDescuento, config('facturacion.DECIMAL_CANTIDAD'))}}</td>
+					<tr class="fila-totales-items">
+						<td style="{{ $facturaPdfCeldaTotales }}">&nbsp;</td>
+						<td style="{{ $facturaPdfCeldaTotales }}"><strong>TOTALES</strong></td>
+						<td align="center" style="{{ $facturaPdfCeldaTotales }}"><strong>{{number_format($totalCantidad, config('facturacion.DECIMAL_CANTIDAD'))}}</strong></td>
+						@if ($facturaPdfEsElBierzo)
+							<td align="center" style="{{ $facturaPdfCeldaTotales }}"><strong>{{number_format($totalKiloDescuento, config('facturacion.DECIMAL_CANTIDAD')) }}</strong></td>
 						@endif
 					</tr>
 				</tbody>
 			</table>
-			<table class="table">
-				<thead>
-					<tr>
-						<th style="font-size: 10px; text-align: right">
-							<p style="font-size: 14px; text-align: right">
-								CAE: {{ $venta->cae }}<br>
-								Fecha Vencimiento CAE: {{date("d/m/Y", strtotime($venta->fechavencimientocae ?? ''))}} 
-							</p>		
-						</th>				
-					</tr>
-				</thead>
+			<table class="table borderless factura-pie-fiscal" style="width: 100%; margin-top: 6px;">
+				<tr>
+					<td style="font-size: 14px; text-align: right; width: 100%;">
+						CAE: {{ $venta->cae }}<br>
+						Fecha Vencimiento CAE: {{date("d/m/Y", strtotime($venta->fechavencimientocae ?? ''))}}
+					</td>
+				</tr>
 			</table>
 		</div>
     </div>

@@ -1,0 +1,28 @@
+<style>
+    /* Tooltip no captura el mouse → evita parpadeo al pasar por encima del ícono */
+    body .tooltip {
+        pointer-events: none;
+    }
+
+    .facturas-dia-tabla-acciones .btn-accion-tabla,
+    .facturas-dia-tabla-acciones a.btn-accion-tabla,
+    .facturas-dia-tabla-acciones button.btn-accion-tabla {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 1.85rem;
+        min-height: 1.85rem;
+        padding: 0.25rem 0.35rem !important;
+        margin: 0 1px;
+        vertical-align: middle;
+        line-height: 1;
+        position: relative;
+        z-index: 1;
+    }
+
+    .facturas-dia-tabla-acciones .btn-accion-tabla i,
+    .facturas-dia-tabla-acciones .btn-accion-tabla .fas,
+    .facturas-dia-tabla-acciones .btn-accion-tabla .fa {
+        pointer-events: none;
+    }
+</style>

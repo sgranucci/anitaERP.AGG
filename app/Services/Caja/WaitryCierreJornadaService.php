@@ -287,7 +287,7 @@ final class WaitryCierreJornadaService
                 $totalWaitryPagado += $monto;
                 $tipo = WaitryMedioPagoCuentacajaSupport::extraerTipoPagoOrden($orden) ?? 'totem';
                 if (! isset($porMedioWaitry[$tipo])) {
-                    $cuenta = WaitryMedioPagoCuentacajaSupport::cuentaParaTipoWaitry($tipo, $empresaId);
+                    $cuenta = WaitryMedioPagoCuentacajaSupport::cuentaParaTipoInformeZ($tipo, $empresaId);
                     $porMedioWaitry[$tipo] = [
                         'tipo' => $tipo,
                         'etiqueta' => WaitryMedioPagoCuentacajaSupport::etiquetaTipo($tipo),

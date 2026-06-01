@@ -70,6 +70,15 @@ return [
     'sku_catalogo_prefijo' => env('GASTRONOMIA_SKU_CATALOGO_PREFIJO', 'V'),
 
     /**
+     * Sincronización puntual de precios Anita → ERP (stkpre) para SKU catálogo sin precio vigente.
+     * Comando: php artisan gastronomia:sincronizar-precios-lista-anita
+     */
+    'precio_lista_sync' => [
+        /** 0 = usar LISTAPRECIO_DEFAULT_ID (lista 1 por defecto). */
+        'listaprecio_id' => (int) env('GASTRONOMIA_PRECIOS_LISTA_ID', 0),
+    ],
+
+    /**
      * Cantidad de dígitos numéricos tras el prefijo en el catálogo gastronomía (ej. 5 → se ingresa solo "00123" y el sistema arma V00123).
      * 0 = campo SKU completo (sin prefijo visual fijo); solo dígitos si es > 0.
      */
@@ -227,8 +236,11 @@ return [
     /** Máximo de líneas en el detalle JSON / PDF del comprobante. */
     'cierre_totem_jornada_max_lineas_detalle' => max(100, (int) env('GASTRONOMIA_CIERRE_TOTEM_MAX_LINEAS_DETALLE', 3000)),
 
-    /** Máximo de IDs Waitry faltantes a recuperar por getOrdersPOS al cerrar jornada (huecos secuenciales). */
-    'cierre_totem_jornada_max_ids_gap_recuperar' => max(0, (int) env('GASTRONOMIA_CIERRE_TOTEM_MAX_IDS_GAP_RECUPERAR', 250)),
+    /**
+     * Obsoleto: ya no se recuperan huecos con getOrdersPOS al cerrar jornada (solo getordersdetails).
+     * Los huecos quedan en ids_huecos_secuencia para auditoría del día.
+     */
+    'cierre_totem_jornada_max_ids_gap_recuperar' => 0,
 
     /**
      * Si no hay cierre_en al armar el cierre, tope de madrugada del día siguiente (hora local) para ventana Waitry.
@@ -237,6 +249,14 @@ return [
 
     /** Tolerancia $ al comparar Informe Z del tótem vs totales Waitry/ERP. */
     'cierre_totem_informe_z_tolerancia' => max(0.0, (float) env('GASTRONOMIA_CIERRE_TOTEM_INFORME_Z_TOLERANCIA', 0.02)),
+
+    /**
+     * Cuentas contables por defecto del proceso de cierre de jornada (tabla gastronomia_cierre_jornada_config por empresa).
+     */
+    'cierre_jornada_cuenta_ventas_id' => env('GASTRONOMIA_CIERRE_JORNADA_CUENTA_VENTAS_ID'),
+    'cierre_jornada_cuenta_iva_id' => env('GASTRONOMIA_CIERRE_JORNADA_CUENTA_IVA_ID'),
+    'cierre_jornada_cuenta_impuesto_interno_id' => env('GASTRONOMIA_CIERRE_JORNADA_CUENTA_IMPUESTO_INTERNO_ID'),
+    'cierre_jornada_cuenta_fondo_fijo_maquinas_id' => env('GASTRONOMIA_CIERRE_JORNADA_CUENTA_FONDO_FIJO_MAQUINAS_ID'),
 
     /** Código de descuento gastronomía para facturar canjes de premios Wigos ($0,01). */
     'canje_premio_descuento_codigo' => env('GASTRONOMIA_CANJE_PREMIO_DESCUENTO_CODIGO', '10'),

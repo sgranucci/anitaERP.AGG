@@ -6,7 +6,12 @@ use App\Models\Caja\Cuentacaja;
 use App\Models\Caja\Usocuentacaja;
 
 /**
- * Cuenta de caja «TOTEM» (cobro Waitry ya realizado en el tótem) para el POS gastronomía.
+ * Cuenta de caja puente «TOTEM» — solo facturación gastronomía.
+ *
+ * Se usa cuando se importa/factura una comanda Waitry ya cobrada en el tótem físico,
+ * para registrar la venta en AnitaERP sin volver a cobrar al cliente.
+ * No es un medio de pago del Informe Z ni del cierre de jornada: el saldo puente
+ * se ajustará en el circuito de cierre de jornada final (pendiente).
  */
 final class GastronomiaCuentacajaTotem
 {

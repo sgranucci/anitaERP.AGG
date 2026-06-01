@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Caja;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Requests\ValidacionCaja_Asignacion;
 use App\Repositories\Caja\Caja_AsignacionRepositoryInterface;
@@ -36,13 +37,34 @@ class CajaAsignacionController extends Controller
 
         $empresa_query = $this->empresaRepository->allFiltrado();
         $empresaId = (int) $request->input('empresa_id', 0);
+
         if ($empresaId <= 0 && $empresa_query->count() === 1) {
             $empresaId = (int) $empresa_query->first()->id;
         }
 
+        $this->assertAccesoEmpresa($empresaId, $empresa_query);
+
         $datas = $this->repository->all(null, $empresaId > 0 ? $empresaId : null);
 
-        return view('caja.cajaasignacion.index', compact('datas', 'empresa_query', 'empresaId'));
+        $mostrarFiltroEmpresa = $empresa_query->count() > 1;
+
+        return view('caja.cajaasignacion.index', compact(
+            'datas',
+            'empresa_query',
+            'empresaId',
+            'mostrarFiltroEmpresa',
+        ));
+    }
+
+    private function assertAccesoEmpresa(int $empresaId, $empresaQuery): void
+    {
+        if ($empresaId <= 0) {
+            return;
+        }
+
+        if (! $empresaQuery->contains('id', $empresaId)) {
+            abort(403, 'Empresa no permitida para su usuario.');
+        }
     }
 
     /**
@@ -56,8 +78,9 @@ class CajaAsignacionController extends Controller
 
         $caja_query = $this->cajaRepository->all();
         $empresa_query = $this->empresaRepository->allFiltrado();
+        $usuario_default = Auth::user();
 
-        return view('caja.cajaasignacion.crear', compact('caja_query', 'empresa_query'));
+        return view('caja.cajaasignacion.crear', compact('caja_query', 'empresa_query', 'usuario_default'));
     }
 
     /**

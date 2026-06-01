@@ -49,6 +49,7 @@
                 <th>Referencia</th>
                 <th>Empresa</th>
                 <th>PC</th>
+                <th>Punto venta</th>
                 <th>Turno</th>
                 <th>Jornada</th>
                 <th>Usuario</th>
@@ -63,13 +64,14 @@
                 <td>{{ $f->referencia }}</td>
                 <td>{{ $f->nombreempresa }}</td>
                 <td>{{ $f->identificador_pc }}</td>
+                <td>{{ $f->puntoventa_etiqueta ?? '' }}</td>
                 <td>{{ $f->turno_nombre }}</td>
                 <td>{{ $f->fecha_jornada }}</td>
                 <td>{{ $f->usuario }}</td>
                 <td class="num">${{ number_format((float) $f->total, 2, ',', '.') }}</td>
             </tr>
             @empty
-            <tr><td colspan="9">Sin registros para los filtros indicados.</td></tr>
+            <tr><td colspan="10">Sin registros para los filtros indicados.</td></tr>
             @endforelse
         </tbody>
     </table>

@@ -1,4 +1,7 @@
 @php
+    use App\Support\Ventas\GastronomiaCuentacajaEfectivo;
+    use App\Support\Ventas\GastronomiaJornadaComprobantePermiso;
+
     $esEdicion = isset($data) && $data->id;
     $movimientosIniciales = [];
     if ($esEdicion) {
@@ -27,8 +30,12 @@
             ];
         }
     }
-    $turnoSel = old('turno_operativo_gastronomia_id', $esEdicion ? $data->turno_operativo_gastronomia_id : '');
+    $tipoSel = old('tipo', $esEdicion ? ($data->tipo ?? 'turno') : 'turno');
+    $esJornada = $tipoSel === 'jornada';
+    $turnoSel = old('turno_operativo_gastronomia_id', $esEdicion && ! $esJornada ? $data->turno_operativo_gastronomia_id : '');
+    $jornadaSel = old('jornada_gastronomia_id', $esEdicion && $esJornada ? $data->jornada_gastronomia_id : '');
     $empresaSel = old('empresa_id', $esEdicion ? $data->empresa_id : ($empresa_default_id ?? ''));
+    $cuentacajaEfectivoId = (int) (GastronomiaCuentacajaEfectivo::idParaEmpresa((int) $empresaSel) ?? 0);
 
     $pvCaeLabel = '';
     $pvCaeaLabel = '';
@@ -46,9 +53,12 @@
     $empresasDisponibles = collect($empresa_query ?? []);
     $empresaUnica = ! $esEdicion && $empresasDisponibles->count() === 1;
     $apiBase = rtrim((string) config('app.app_carpeta', ''), '/');
+    $auditoriaJornada = $auditoriaJornada ?? null;
 
     $datosInicialesJson = [
+        'tipo' => $tipoSel,
         'turno_operativo_gastronomia_id' => $turnoSel,
+        'jornada_gastronomia_id' => $jornadaSel,
         'turno_etiqueta' => $turnoEtiqueta,
         'codigo' => $codigoInicial,
         'empresa_id' => $empresaSel,
@@ -76,21 +86,81 @@
         'usuario_habilitado' => $esEdicion ? ($data->turnoOperativo?->usuarioHabilitado?->nombre ?? '') : '',
         'usuario_cierre' => $esEdicion ? ($data->turnoOperativo?->usuarioCierre?->nombre ?? '') : '',
         'monto_habilitacion' => $esEdicion ? round((float) ($data->turnoOperativo?->monto_habilitacion ?? 0), 2) : 0,
-        'url_comprobante_cierre' => $esEdicion
+        'url_comprobante_cierre' => ($esEdicion && ! $esJornada && can('ver-comprobante-cierre-turno-gastronomia', false))
             ? route('gastronomia_cierre_turno_comprobante_cierre', ['id' => $data->turno_operativo_gastronomia_id, 'inline' => 1])
             : '',
         'movimientos' => $movimientosIniciales,
+        'waitry_order_id_hasta' => $esEdicion && $esJornada ? (int) ($data->waitry_order_id_hasta ?? 0) : 0,
+        'numeracion_resumen' => $esEdicion && $esJornada && is_array($data->numeracion_comprobantes_json)
+            ? (string) ($data->numeracion_comprobantes_json['resumen_numeracion'] ?? '')
+            : '',
+        'cuentacaja_efectivo_id' => $cuentacajaEfectivoId,
+        'cierre_cargado' => $esEdicion,
     ];
+
+    if ($esEdicion && $esJornada) {
+        $datosInicialesJson['url_comprobante_cierre'] = (($data->cierreTotemJornada ?? $data->jornada?->cierreTotem) !== null
+            && GastronomiaJornadaComprobantePermiso::puedeVerComprobanteCierreTotem())
+            ? route('gastronomia_jornada_comprobante_cierre_totem', ['jornadaId' => $jornadaSel, 'inline' => 1])
+            : '';
+        if (is_array($auditoriaJornada ?? null)) {
+            foreach ([
+                'waitry_order_id_hasta',
+                'waitry_order_id_anterior',
+                'waitry_order_id_desde',
+                'waitry_rango_etiqueta',
+                'proximo_waitry_order_id',
+                'numeracion_resumen',
+                'numeracion_por_puntoventa',
+                'informe_z_cargado',
+                'informe_z_en',
+                'usuario_informe_z',
+                'conciliacion_informe_z',
+                'tolerancia_informe_z',
+                'cierre_totem_habilitado',
+            ] as $campoAuditoria) {
+                if (array_key_exists($campoAuditoria, $auditoriaJornada)) {
+                    $datosInicialesJson[$campoAuditoria] = $auditoriaJornada[$campoAuditoria];
+                }
+            }
+            if (! empty($auditoriaJornada['url_comprobante_cierre'])
+                && GastronomiaJornadaComprobantePermiso::puedeVerComprobanteCierreTotem()) {
+                $datosInicialesJson['url_comprobante_cierre'] = $auditoriaJornada['url_comprobante_cierre'];
+            }
+            if (! empty($auditoriaJornada['apertura_en'])) {
+                $datosInicialesJson['apertura_en'] = $auditoriaJornada['apertura_en'];
+            }
+            if (! empty($auditoriaJornada['cierre_en'])) {
+                $datosInicialesJson['cierre_en'] = $auditoriaJornada['cierre_en'];
+            }
+            if (! empty($auditoriaJornada['usuario_apertura'])) {
+                $datosInicialesJson['usuario_apertura'] = $auditoriaJornada['usuario_apertura'];
+            }
+            if (! empty($auditoriaJornada['usuario_cierre'])) {
+                $datosInicialesJson['usuario_cierre'] = $auditoriaJornada['usuario_cierre'];
+            }
+            if (empty($datosInicialesJson['numeracion_por_puntoventa'])
+                && is_array($auditoriaJornada['numeracion_comprobantes_json']['por_puntoventa'] ?? null)) {
+                $datosInicialesJson['numeracion_por_puntoventa'] = $auditoriaJornada['numeracion_comprobantes_json']['por_puntoventa'];
+            }
+        } elseif (is_array($data->numeracion_comprobantes_json['por_puntoventa'] ?? null)) {
+            $datosInicialesJson['numeracion_por_puntoventa'] = $data->numeracion_comprobantes_json['por_puntoventa'];
+        }
+    }
 @endphp
 
 <div id="rendicion-gastronomia-app"
-     data-api-turno="{{ $apiBase }}/caja/rendiciongastronomia/api/datos-turno"
-     data-api-turno-numero="{{ $apiBase }}/caja/rendiciongastronomia/api/turno"
-     data-api-proponer-codigo="{{ $apiBase }}/caja/rendiciongastronomia/api/proponer-codigo"
+     data-api-turno="{{ route('api_rendicion_gastronomia_datos_turno') }}"
+     data-api-jornada="{{ route('api_rendicion_gastronomia_datos_jornada') }}"
+     data-api-turno-numero="{{ url('caja/rendiciongastronomia/api/turno') }}"
+     data-api-jornada-numero="{{ url('caja/rendiciongastronomia/api/jornada') }}"
+     data-api-proponer-codigo="{{ route('api_rendicion_gastronomia_proponer_codigo') }}"
      data-empresa-unica="{{ $empresaUnica ? '1' : '0' }}"
      data-modo="{{ $esEdicion ? 'editar' : 'crear' }}"
      data-rendicion-id="{{ $esEdicion ? $data->id : '' }}"
      data-totales-turno='@json($totalesTurno ?? null)'
+     data-totales-dia='@json($totalesDia ?? null)'
+     data-tolerancia-informe-z="{{ (float) config('gastronomia.cierre_totem_informe_z_tolerancia', 0.02) }}"
      data-inicial='@json($datosInicialesJson)'>
 
     @if (($caja_id ?? 0) <= 0 && ! $esEdicion)
@@ -99,9 +169,33 @@
     </div>
     @endif
 
+    <input type="hidden" name="tipo" id="tipo_rendicion" value="{{ $tipoSel }}"/>
+
     <div class="card card-outline card-secondary mb-3">
         <div class="card-header py-2"><strong>Datos de la rendición</strong></div>
         <div class="card-body py-2">
+            @if (! $esEdicion)
+            <div class="form-group">
+                <label class="d-block requerido">Origen del cierre</label>
+                <div class="btn-group btn-group-toggle" data-toggle="buttons" id="grp-tipo-rendicion">
+                    <label class="btn btn-outline-primary {{ ! $esJornada ? 'active' : '' }}">
+                        <input type="radio" name="tipo_ui" value="turno" autocomplete="off" {{ ! $esJornada ? 'checked' : '' }}> Cierre de turno
+                    </label>
+                    <label class="btn btn-outline-primary {{ $esJornada ? 'active' : '' }}">
+                        <input type="radio" name="tipo_ui" value="jornada" autocomplete="off" {{ $esJornada ? 'checked' : '' }}> Cierre de jornada
+                    </label>
+                </div>
+                <small class="text-muted d-block mt-1">La rendición de jornada registra Waitry/Z por tótem y últimos comprobantes por PV; no replica en Anita.</small>
+            </div>
+            @else
+            <p class="mb-2">
+                <span class="text-muted">Tipo:</span>
+                <strong>{{ $esJornada ? 'Cierre de jornada (solo ERP)' : 'Cierre de turno' }}</strong>
+            </p>
+            @if ($esJornada)
+            <input type="hidden" name="jornada_gastronomia_id" value="{{ $jornadaSel }}"/>
+            @endif
+            @endif
             <div class="form-row">
                 <div class="form-group col-md-4">
                     <label for="empresa_id" class="requerido">Empresa</label>
@@ -122,17 +216,18 @@
                     @endif
                 </div>
                 <div class="form-group col-md-4">
-                    <label for="fecharendicion" class="requerido">Fecha rendición</label>
+                    <label for="fecharendicion" class="requerido">Fecha/hora registro en caja</label>
                     <input type="datetime-local" name="fecharendicion" id="fecharendicion" class="form-control" required
                            value="{{ old('fecharendicion', $esEdicion ? $data->fecharendicion?->format('Y-m-d\\TH:i') : now()->format('Y-m-d\\TH:i')) }}"/>
+                    <small class="text-muted">Momento real del registro. La fecha contable es la de jornada del cierre.</small>
                 </div>
                 <div class="form-group col-md-4">
-                    <label for="codigo">Ticket / código Anita</label>
-                    <input type="text" name="codigo" id="codigo" class="form-control" maxlength="50" readonly
+                    <label for="codigo" id="lbl-codigo">Ticket / código</label>
+                    <input type="text" name="codigo" id="codigo" class="form-control" maxlength="80" readonly
                            value="{{ $codigoInicial }}"
                            placeholder="Se asigna al guardar"/>
                     @if (! $esEdicion)
-                        <small class="text-muted">Se genera automáticamente al registrar (siguiente disponible).</small>
+                        <small class="text-muted" id="hint-codigo">Turno: código Anita. Jornada: código interno ERP.</small>
                     @endif
                 </div>
             </div>
@@ -140,18 +235,19 @@
         </div>
     </div>
 
-    <div class="card card-outline card-info mb-3">
+    <div class="card card-outline card-info mb-3" id="card-seleccion-cierre">
         <div class="card-header py-2 d-flex justify-content-between align-items-center">
-            <strong>Cierre de turno a rendir</strong>
-            <a href="#" id="link-comprobante-cierre" class="btn btn-outline-danger btn-sm d-none" target="_blank">
-                <i class="fa fa-file-pdf-o"></i> Comprobante cierre
+            <strong id="titulo-seleccion-cierre">{{ $esJornada ? 'Cierre de jornada a rendir' : 'Cierre de turno a rendir' }}</strong>
+            <a href="#" id="link-comprobante-cierre" class="btn btn-danger btn-sm d-none" target="_blank" rel="noopener">
+                <i class="fa fa-file-pdf-o"></i> Ver comprobante gastronomía
             </a>
         </div>
         <div class="card-body py-2">
-            @if ($esEdicion)
+            <div id="bloque-seleccion-turno" class="{{ $esJornada && ! $esEdicion ? 'd-none' : '' }}">
+            @if ($esEdicion && ! $esJornada)
                 <input type="hidden" name="turno_operativo_gastronomia_id" id="turno_operativo_gastronomia_id" value="{{ $turnoSel }}"/>
                 <p class="mb-0"><span class="text-muted">Turno operativo:</span> <strong id="lbl-turno-seleccionado">{{ $turnoEtiqueta }}</strong></p>
-            @else
+            @elseif (! $esEdicion)
                 <div class="form-row align-items-end">
                     <div class="form-group col-md-3 mb-md-0">
                         <label for="turno_operativo_numero" class="requerido">Nº cierre (op.)</label>
@@ -169,14 +265,89 @@
                         <p class="form-control-plaintext mb-0 font-weight-bold" id="lbl-turno-seleccionado">—</p>
                     </div>
                 </div>
-                <small class="text-muted">Seleccione la empresa y busque el cierre por número o desde la consulta.</small>
+                <small class="text-muted">Seleccione la empresa, cargue el cierre y verifique los datos de gastronomía antes de rendir en caja.</small>
             @endif
+            </div>
+            <div id="bloque-seleccion-jornada" class="{{ ! $esJornada && ! $esEdicion ? 'd-none' : '' }}">
+            @if ($esEdicion && $esJornada)
+                <p class="mb-0"><span class="text-muted">Jornada:</span> <strong id="lbl-jornada-seleccionada">#{{ $jornadaSel }} — {{ $data->jornada?->fecha_jornada?->format('d/m/Y') }}</strong></p>
+                @if ((int) ($data->waitry_order_id_hasta ?? 0) > 0)
+                <p class="mb-0 small text-info"><i class="fa fa-flag"></i> Último comprobante Waitry incluido: <strong>{{ $data->waitry_order_id_hasta }}</strong></p>
+                @endif
+            @elseif (! $esEdicion)
+                <div class="form-row align-items-end">
+                    <div class="form-group col-md-3 mb-md-0">
+                        <label for="jornada_gastronomia_numero" class="requerido">Nº jornada</label>
+                        <input type="number" min="1" step="1" id="jornada_gastronomia_numero" class="form-control"
+                               placeholder="Ej. 42" value="{{ old('jornada_gastronomia_numero', $jornadaSel) }}"/>
+                        <input type="hidden" name="jornada_gastronomia_id" id="jornada_gastronomia_id" value="{{ $jornadaSel }}"/>
+                    </div>
+                    <div class="form-group col-md-2 mb-md-0">
+                        <button type="button" class="btn btn-warning btn-block consultacierrejornada" title="Buscar jornada">
+                            <i class="fa fa-search"></i> Consultar
+                        </button>
+                    </div>
+                    <div class="form-group col-md-7 mb-0">
+                        <label class="text-muted small mb-0">Descripción</label>
+                        <p class="form-control-plaintext mb-0 font-weight-bold" id="lbl-jornada-seleccionada">—</p>
+                    </div>
+                </div>
+                <small class="text-muted">Jornadas cerradas pendientes de presentación en caja. Al cargar, revise Waitry, Informe Z y totales antes de rendir.</small>
+            @endif
+            </div>
         </div>
     </div>
 
+    @if (! $esEdicion)
+    <div id="aviso-sin-cierre-cargado" class="alert alert-warning mb-3">
+        <strong><i class="fa fa-info-circle"></i> Para ver medios de pago, totales, ticket Waitry e Informe Z:</strong>
+        seleccione la empresa, elija <em>Cierre de jornada</em> o <em>Cierre de turno</em>, ingrese el número y pulse
+        <strong>Consultar</strong> o salga del campo numérico (Tab/Enter). Los datos aparecen debajo de esta advertencia.
+    </div>
+    @endif
+
     <div id="panel-datos-turno" class="d-none">
+        <div id="panel-verificacion-gastronomia" class="card card-outline card-primary mb-3">
+            <div class="card-header py-2 bg-primary text-white">
+                <strong><i class="fa fa-check-square-o"></i> Verificación del cajero — datos de gastronomía</strong>
+            </div>
+            <div class="card-body py-2">
+                <p class="mb-2 small">
+                    Compare con el comprobante o resumen que entrega el operador de gastronomía:
+                    totales facturados y cobrados, medios de pago, redondeos y (en jornada) último Waitry, numeración por PV e Informe Z por tótem.
+                </p>
+                <ul class="small mb-0 pl-3" id="lista-verificacion-gastronomia">
+                    <li id="verif-item-comprobante" class="text-muted">Abrir el comprobante de cierre gastronomía (botón arriba).</li>
+                    <li id="verif-item-totales" class="text-muted">Revisar facturación y cobranzas del cierre.</li>
+                    <li id="verif-item-medios" class="text-muted">Contrastar medios rendidos en caja con lo físico recibido.</li>
+                    <li id="verif-item-jornada-waitry" class="text-muted d-none">Validar último ticket Waitry y numeración de comprobantes.</li>
+                    <li id="verif-item-jornada-z" class="text-muted d-none">Validar Informe Z vs totales del sistema por tótem.</li>
+                </ul>
+            </div>
+        </div>
+
+        <div id="panel-auditoria-jornada" class="d-none card card-outline card-warning mb-3">
+            <div class="card-header py-2"><strong>Marcadores de auditoría (jornada)</strong></div>
+            <div class="card-body py-2 small">
+                <div class="alert alert-info py-2 mb-2" id="bloque-waitry-destacado">
+                    <p class="mb-1"><i class="fa fa-flag"></i> <strong>Último ticket Waitry (order id):</strong> <span id="lbl-waitry-hasta" class="font-weight-bold">—</span></p>
+                    <p class="mb-1"><span class="text-muted">Rango del cierre:</span> <span id="lbl-waitry-rango">—</span></p>
+                    <p class="mb-0"><span class="text-muted">Próximo order id sugerido:</span> <strong id="lbl-waitry-proximo">—</strong></p>
+                </div>
+                <p class="mb-2"><span class="text-muted">Últimos comprobantes AnitaERP por punto de venta (todos los CAE y CAEA configurados):</span></p>
+                <div id="contenedor-numeracion-pv" class="table-responsive">
+                    <p class="text-muted mb-0" id="lbl-numeracion-pv">—</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="panel-informe-z-jornada" class="d-none card card-outline card-secondary mb-3">
+            <div class="card-header py-2"><strong>Conciliación Informe Z (tótems Waitry)</strong></div>
+            <div class="card-body py-2 small" id="contenido-informe-z-jornada"></div>
+        </div>
+
         <div class="card card-outline card-info mb-3">
-            <div class="card-header py-2"><strong>Datos del turno rendido</strong></div>
+            <div class="card-header py-2"><strong id="titulo-panel-datos">{{ $esJornada ? 'Datos de la jornada rendida' : 'Datos del turno rendido' }}</strong></div>
             <div class="card-body py-2 small">
                 <div class="row">
                     <div class="col-md-3">
@@ -226,30 +397,35 @@
         </div>
 
         <div class="card card-outline card-info mb-3">
-            <div class="card-header py-2"><strong>Facturación y cobranzas del turno</strong></div>
+            <div class="card-header py-2"><strong id="titulo-panel-facturacion">Facturación y cobranzas del turno</strong></div>
             <div class="card-body py-2">
                 <div id="panel-resumen-cierre"></div>
             </div>
         </div>
 
         <div class="card card-outline card-secondary mb-3">
-            <div class="card-header py-2"><strong>Medios rendidos en caja</strong></div>
+            <div class="card-header py-2">
+                <strong>Medios rendidos en caja</strong>
+                <small class="text-muted d-block font-weight-normal mt-1">Indique lo que ingresa físicamente a caja. Si el <strong>efectivo rendido</strong> difiere del esperado, el campo <strong>sobrante / faltante</strong> se ajusta automáticamente para mantener la rendición cuadrada.</small>
+            </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
                     <table class="table table-sm table-bordered mb-0" id="tabla-movimientos">
                         <thead class="thead-light gastro-totales-tabla">
                             <tr>
                                 <th>Medio de pago</th>
-                                <th class="text-right" style="width:160px">Monto rendido</th>
-                                <th class="text-right" style="width:100px">Cotiz.</th>
+                                <th class="gastro-col-esperado text-right">Esperado sistema</th>
+                                <th class="gastro-col-monto text-right">Monto rendido</th>
+                                <th class="gastro-col-cotiz text-right">Cotiz.</th>
                             </tr>
                         </thead>
                         <tbody id="tbody-movimientos">
-                            <tr><td colspan="3" class="text-muted text-center p-3">Seleccione un cierre de turno.</td></tr>
+                            <tr><td colspan="4" class="text-muted text-center p-3">Seleccione un cierre de turno.</td></tr>
                         </tbody>
                         <tfoot class="thead-light">
                             <tr class="font-weight-bold">
                                 <td>Total grilla</td>
+                                <td></td>
                                 <td class="text-right gastro-totales-monto" id="total-grilla">$0,00</td>
                                 <td></td>
                             </tr>
@@ -274,7 +450,7 @@
                     <div class="form-group col-md-4">
                         <label for="sobrantefaltante">Sobrante / faltante</label>
                         <input type="number" step="0.01" name="sobrantefaltante" id="sobrantefaltante" class="form-control js-recalcula" value="{{ old('sobrantefaltante', $esEdicion ? $data->sobrantefaltante : 0) }}"/>
-                        <small class="text-muted">Positivo = sobrante, negativo = faltante</small>
+                        <small class="text-muted">Positivo = sobrante, negativo = faltante. Se recalcula al modificar el efectivo rendido (compensa la diferencia con el sistema).</small>
                     </div>
                 </div>
                 <div id="alert-diferencias" class="alert mb-0 d-none"></div>

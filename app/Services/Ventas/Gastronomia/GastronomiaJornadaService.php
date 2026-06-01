@@ -2,6 +2,8 @@
 
 namespace App\Services\Ventas\Gastronomia;
 
+use App\Models\Caja\RendicionGastronomiaCaja;
+use App\Services\Caja\RendicionGastronomiaAnitaSyncService;
 use App\Models\Ventas\CierreTotemJornadaGastronomia;
 use App\Models\Ventas\CuentaGastronomia;
 use App\Models\Ventas\JornadaGastronomia;
@@ -24,6 +26,7 @@ final class GastronomiaJornadaService
     public function __construct(
         private readonly JornadaGastronomiaRepositoryInterface $jornadaRepository,
         private readonly GastronomiaCierreTotemJornadaService $cierreTotemJornadaService,
+        private readonly GastronomiaCierreTotemInformeZService $informeZService,
     ) {
     }
 
@@ -244,13 +247,33 @@ final class GastronomiaJornadaService
         }
     }
 
-    public function cerrar(int $empresaId, ?string $observacion = null): JornadaGastronomia
+    public function cerrar(int $empresaId, ?string $observacion = null, ?array $informeZTotems = null): JornadaGastronomia
     {
         $jornada = $this->exigirJornadaAbierta($empresaId);
 
         $errores = $this->erroresAntesDeCerrar($empresaId);
         if ($errores !== []) {
             throw new InvalidArgumentException(implode(' ', $errores));
+        }
+
+        $borradorInformeZ = is_array($jornada->informe_z_borrador_json)
+            ? $jornada->informe_z_borrador_json
+            : null;
+
+        $informeZFinal = $borradorInformeZ;
+        if (is_array($informeZTotems) && $informeZTotems !== [] && $this->cierreTotemJornadaService->habilitado()) {
+            $preview = $this->cierreTotemJornadaService->previewParaJornadaAbierta($jornada);
+            if ($preview !== null) {
+                $resumen = [
+                    'por_totem' => $preview['por_totem'] ?? [],
+                    'total_general' => $preview['total_general'] ?? [],
+                ];
+                $desdeRequest = $this->informeZService
+                    ->construirInformeZDesdePayload($empresaId, $resumen, $informeZTotems);
+                if ($desdeRequest !== null) {
+                    $informeZFinal = $desdeRequest;
+                }
+            }
         }
 
         $vaciasAutoDescartadas = $this->autoDescartarCuentasAbiertasVaciasPorEmpresa($empresaId);
@@ -262,13 +285,17 @@ final class GastronomiaJornadaService
             'usuario_cierre_id' => Auth::id(),
             'cierre_en' => now(),
             'observacion_cierre' => $observacionFinal,
+            'informe_z_borrador_json' => null,
         ], (int) $jornada->id);
 
         $jornada = $this->jornadaRepository->findOrFail((int) $jornada->id);
 
         if ($this->cierreTotemJornadaService->habilitado()) {
-            $this->cierreTotemJornadaService->registrarAlCerrarJornada($jornada);
+            $this->cierreTotemJornadaService->registrarAlCerrarJornada($jornada, $informeZFinal);
         }
+
+        // rendg_total_z en Anita: solo desde Caja (rendición turno/jornada), no aquí — las rendiciones
+        // pueden cargarse después del cierre gastronómico o en otro orden.
 
         return $jornada;
     }
@@ -427,6 +454,30 @@ final class GastronomiaJornadaService
     {
         $turnos = $this->contarTurnosOperativosJornada($jornada);
         $ventas = $this->contarVentasGastronomiaJornada($jornada);
+        $rendicionCaja = RendicionGastronomiaCaja::query()
+            ->where('tipo', RendicionGastronomiaCaja::TIPO_JORNADA)
+            ->where('jornada_gastronomia_id', (int) $jornada->id)
+            ->exists();
+
+        if ($rendicionCaja) {
+            return [
+                'puede_eliminar' => false,
+                'motivo_no_eliminar' => 'No se puede eliminar: la jornada fue presentada en caja (rendición de tesorería). Elimine primero la rendición en Caja → Rendiciones gastronomía.',
+                'turnos_operativos' => $turnos,
+                'ventas_gastronomia' => $ventas,
+                'tiene_rendicion_caja' => true,
+            ];
+        }
+
+        if ($this->existeJornadaPosterior((int) $jornada->empresa_id, $jornada)) {
+            return [
+                'puede_eliminar' => false,
+                'motivo_no_eliminar' => 'No se puede eliminar: ya existe una jornada posterior para esta empresa.',
+                'turnos_operativos' => $turnos,
+                'ventas_gastronomia' => $ventas,
+                'tiene_rendicion_caja' => false,
+            ];
+        }
 
         if ($turnos > 0 || $ventas > 0) {
             $partes = [];
@@ -442,6 +493,7 @@ final class GastronomiaJornadaService
                 'motivo_no_eliminar' => 'No se puede eliminar: la jornada tiene '.implode(' y ', $partes).'.',
                 'turnos_operativos' => $turnos,
                 'ventas_gastronomia' => $ventas,
+                'tiene_rendicion_caja' => false,
             ];
         }
 
@@ -450,7 +502,152 @@ final class GastronomiaJornadaService
             'motivo_no_eliminar' => null,
             'turnos_operativos' => 0,
             'ventas_gastronomia' => 0,
+            'tiene_rendicion_caja' => false,
         ];
+    }
+
+    /**
+     * @return array{
+     *   puede_anular: bool,
+     *   motivo_no_anular: ?string,
+     *   jornada_id: int,
+     *   texto_confirmacion: string,
+     *   fecha_jornada_fmt: string,
+     *   cierre_en_fmt: string,
+     *   usuario_cierre: string
+     * }
+     */
+    public function resumenAnulacionCierre(JornadaGastronomia $jornada): array
+    {
+        $jornada->loadMissing(['usuarioCierre']);
+        $errores = $this->erroresAntesDeAnularCierre($jornada);
+        $id = (int) $jornada->id;
+
+        return [
+            'puede_anular' => $errores === [],
+            'motivo_no_anular' => $errores !== [] ? implode(' ', $errores) : null,
+            'jornada_id' => $id,
+            'texto_confirmacion' => 'ANULAR-JORNADA-'.$id,
+            'fecha_jornada_fmt' => $jornada->fecha_jornada?->format('d/m/Y') ?? '',
+            'cierre_en_fmt' => $jornada->cierre_en?->format('d/m/Y H:i') ?? '',
+            'usuario_cierre' => (string) ($jornada->usuarioCierre?->nombre ?? ''),
+        ];
+    }
+
+    /**
+     * Última jornada cerrada de la empresa que puede anularse (sin jornada abierta).
+     *
+     * @return array<string, mixed>|null
+     */
+    public function cierreAnulableParaEmpresa(int $empresaId): ?array
+    {
+        if ($empresaId <= 0 || $this->jornadaAbierta($empresaId) !== null) {
+            return null;
+        }
+
+        $ultima = $this->jornadaRepository->ultimaJornadaPorEmpresa($empresaId);
+        if ($ultima === null || $ultima->estado !== JornadaGastronomia::ESTADO_CERRADA) {
+            return null;
+        }
+
+        $resumen = $this->resumenAnulacionCierre($ultima);
+
+        return $resumen['puede_anular'] ? $resumen : null;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function erroresAntesDeAnularCierre(JornadaGastronomia $jornada): array
+    {
+        $errores = [];
+
+        if ($jornada->estado !== JornadaGastronomia::ESTADO_CERRADA || $jornada->cierre_en === null) {
+            $errores[] = 'La jornada no está cerrada.';
+
+            return $errores;
+        }
+
+        if ($this->jornadaAbierta((int) $jornada->empresa_id) !== null) {
+            $errores[] = 'Hay una jornada abierta para esta empresa. No puede anular el cierre mientras exista otra jornada activa.';
+        }
+
+        if (RendicionGastronomiaCaja::query()
+            ->where('tipo', RendicionGastronomiaCaja::TIPO_JORNADA)
+            ->where('jornada_gastronomia_id', (int) $jornada->id)
+            ->exists()) {
+            $errores[] = 'La jornada tiene una rendición de tesorería en caja. Elimine la rendición antes de anular el cierre.';
+        }
+
+        if ($this->existeJornadaPosterior((int) $jornada->empresa_id, $jornada)) {
+            $errores[] = 'Ya existe una jornada posterior para esta empresa. No puede anular este cierre.';
+        }
+
+        $ultima = $this->jornadaRepository->ultimaJornadaPorEmpresa((int) $jornada->empresa_id);
+        if ($ultima !== null && (int) $ultima->id !== (int) $jornada->id) {
+            $errores[] = 'Solo puede anular el cierre de la última jornada cerrada de la empresa (más reciente: #'.$ultima->id.').';
+        }
+
+        return $errores;
+    }
+
+    /**
+     * Revierte el cierre de jornada (sin borrar turnos ni ventas). Elimina el cierre Waitry/tótem asociado.
+     */
+    public function anularCierre(int $jornadaId, string $motivo): JornadaGastronomia
+    {
+        $jornada = $this->jornadaRepository->findOrFail($jornadaId);
+        $errores = $this->erroresAntesDeAnularCierre($jornada);
+        if ($errores !== []) {
+            throw new InvalidArgumentException(implode(' ', $errores));
+        }
+
+        if (Auth::id() === null) {
+            throw new InvalidArgumentException('No hay usuario autenticado.');
+        }
+
+        $nota = '[Anulación cierre jornada '.now()->format('Y-m-d H:i')
+            .' user #'.Auth::id().'] Motivo: '.($this->limpiarObservacion($motivo) ?? '(sin detalle)');
+
+        return DB::transaction(function () use ($jornada, $nota) {
+            CierreTotemJornadaGastronomia::query()
+                ->where('jornada_gastronomia_id', (int) $jornada->id)
+                ->delete();
+
+            $obsApertura = trim((string) $jornada->observacion_apertura);
+            $obsApertura = $obsApertura === '' ? $nota : $obsApertura."\n".$nota;
+
+            $this->jornadaRepository->update([
+                'estado' => JornadaGastronomia::ESTADO_ABIERTA,
+                'usuario_cierre_id' => null,
+                'cierre_en' => null,
+                'observacion_cierre' => null,
+                'observacion_apertura' => mb_substr($obsApertura, 0, 2000),
+            ], (int) $jornada->id);
+
+            app(RendicionGastronomiaAnitaSyncService::class)->resetTotalZPorPcEnJornada((int) $jornada->id);
+
+            return $this->jornadaRepository->findOrFail((int) $jornada->id);
+        });
+    }
+
+    private function existeJornadaPosterior(int $empresaId, JornadaGastronomia $jornada): bool
+    {
+        if ($empresaId <= 0 || $jornada->fecha_jornada === null) {
+            return false;
+        }
+
+        return JornadaGastronomia::query()
+            ->where('empresa_id', $empresaId)
+            ->where('id', '!=', (int) $jornada->id)
+            ->where(function ($q) use ($jornada) {
+                $q->whereDate('fecha_jornada', '>', $jornada->fecha_jornada->format('Y-m-d'))
+                    ->orWhere(function ($w) use ($jornada) {
+                        $w->whereDate('fecha_jornada', $jornada->fecha_jornada->format('Y-m-d'))
+                            ->where('id', '>', (int) $jornada->id);
+                    });
+            })
+            ->exists();
     }
 
     public function eliminar(int $jornadaId): void

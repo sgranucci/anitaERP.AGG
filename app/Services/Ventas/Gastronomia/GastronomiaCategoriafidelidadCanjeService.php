@@ -13,6 +13,7 @@ use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Repositories\Ventas\CategoriafidelidadEntregaGastronomiaRepositoryInterface;
 use App\Repositories\Ventas\CategoriafidelidadGastronomiaRepositoryInterface;
 use App\Services\Stock\PrecioService;
+use App\Support\Wigos\WigosTrackdataNormalizer;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -364,12 +365,11 @@ final class GastronomiaCategoriafidelidadCanjeService
 
     private function normalizarTrackdata(string $trackdata): string
     {
-        $track = trim($trackdata);
-        if ($track === '') {
+        try {
+            return WigosTrackdataNormalizer::normalizar($trackdata);
+        } catch (InvalidArgumentException) {
             throw new InvalidArgumentException('Datos de tarjeta vacíos.');
         }
-
-        return $track;
     }
 
     private function resolverDescuentoConfigurado(): DescuentoGastronomia

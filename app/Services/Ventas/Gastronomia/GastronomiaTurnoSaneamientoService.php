@@ -139,10 +139,16 @@ final class GastronomiaTurnoSaneamientoService
             $turno->habilitacion_en,
         );
 
+        $ajustes = GastronomiaTurnoOperativoTotalesSupport::resolverAjustesCierreConSobranteFaltanteResidual(
+            $totalesPreview,
+            $redondeoInvitaciones,
+            $redondeoTurno,
+        );
+
         $datosCierre = [
-            'redondeo_invitaciones' => $redondeoInvitaciones ?? (float) $totalesPreview['redondeo_invitaciones_sugerido'],
-            'redondeo_turno' => $redondeoTurno ?? 0.,
-            'sobrante_faltante' => $sobranteFaltante ?? 0.,
+            'redondeo_invitaciones' => $ajustes['redondeo_invitaciones'],
+            'redondeo_turno' => $ajustes['redondeo_turno'],
+            'sobrante_faltante' => $ajustes['sobrante_faltante'],
             'observacion_cierre' => $observacion,
         ];
 
@@ -157,9 +163,17 @@ final class GastronomiaTurnoSaneamientoService
             ],
         );
 
+        $mensaje = 'Turno cerrado remotamente en terminal '.$turno->identificador_pc
+            .' (desde '.$pcOperador.').';
+        if ($ajustes['sobrante_faltante_auto']) {
+            $sf = (float) $ajustes['sobrante_faltante'];
+            $tipo = $sf >= 0 ? 'sobrante' : 'faltante';
+            $mensaje .= ' Diferencia de conciliación imputada a '.$tipo.' ($ '
+                .number_format(abs($sf), 2, ',', '.').'); puede corregirse anulando el cierre.';
+        }
+
         return [
-            'mensaje' => 'Turno cerrado remotamente en terminal '.$turno->identificador_pc
-                .' (desde '.$pcOperador.').',
+            'mensaje' => $mensaje,
             'turno_operativo_id' => (int) $cerrado->id,
             'numero_cierre' => (int) ($cerrado->numero_cierre ?? 0),
             'url_comprobante_pdf' => route('gastronomia_cierre_turno_comprobante_cierre', [

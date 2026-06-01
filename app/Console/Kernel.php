@@ -40,6 +40,11 @@ class Kernel extends ConsoleKernel
             ->dailyAt('06:30')
             ->when(fn () => config('arca.caea.pedido_automatico', true));
 
+        $schedule->command('arca:monitorear-conectividad')
+            ->everyFiveMinutes()
+            ->withoutOverlapping(8)
+            ->when(fn () => filter_var(config('arca.monitor_conectividad.habilitado', true), FILTER_VALIDATE_BOOLEAN));
+
         $schedule->command('prestamo:recordatorios')->dailyAt('07:30');
     }
 

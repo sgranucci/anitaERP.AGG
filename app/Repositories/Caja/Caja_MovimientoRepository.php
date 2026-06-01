@@ -3,8 +3,10 @@
 namespace App\Repositories\Caja;
 
 use App\Models\Caja\Caja_Movimiento;
+use App\Models\Caja\Cobranza;
 use App\Repositories\Caja\Caja_MovimientoRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Caja\CobranzaNumeracionTransaccion;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Exception;
 use App\ApiAnita;
@@ -34,22 +36,24 @@ class Caja_MovimientoRepository implements Caja_MovimientoRepositoryInterface
 
     public function create(array $data)
     {
-		if (!isset($data['cobranza_id']))
-		{
-			$data['numerotransaccion'] = self::ultimoNumeroTransaccion($data['empresa_id'], $data['tipotransaccion_caja_id']);
-			$data['usuario_id'] = Auth::user()->id;
-			
-			if (!isset($data['detalle']))
-				$data['detalle'] = "Movimiento de caja";
+		if (isset($data['cobranza_id'])) {
+			return $this->persistirCreate($this->resolverNumerotransaccionConCobranza($data));
 		}
 
-		$caja_movimiento = $this->model->create($data);
+		$empresaId = (int) $data['empresa_id'];
+		$tipoCajaId = (int) $data['tipotransaccion_caja_id'];
 
-		// Graba anita
-		$anita = self::guardarAnita($data);
+		if (! CobranzaNumeracionTransaccion::usaNumeracionSecuencial($tipoCajaId)) {
+			throw new \RuntimeException(
+				'Los movimientos de caja sin cobranza asociada requieren un tipo de transacción con numeración secuencial.'
+			);
+		}
 
-
-		return $caja_movimiento;
+		return CobranzaNumeracionTransaccion::conExclusividad(
+			$empresaId,
+			$tipoCajaId,
+			fn () => $this->persistirCreate($this->prepararDataNumeracionIndependiente($data)),
+		);
     }
 
     public function update(array $data, $id)
@@ -138,25 +142,58 @@ class Caja_MovimientoRepository implements Caja_MovimientoRepositoryInterface
 	{
 	}
 
-	// Devuelve ultimo codigo de caja_movimientos + 1 para agregar nuevos en Anita
-
-	private function ultimoNumeroTransaccion($empresa_id, $tipotransaccion_caja_id) 
+	/**
+	 * @param  array<string, mixed>  $data
+	 * @return array<string, mixed>
+	 */
+	private function prepararDataNumeracionIndependiente(array $data): array
 	{
-		$caja_movimiento = $this->model->select('numerotransaccion')
-										->where('empresa_id', $empresa_id)
-										->where('tipotransaccion_caja_id', $tipotransaccion_caja_id)
-										->orderBy('id', 'desc')->first();
-		
-		$numerotransaccion = 0;
-        if ($caja_movimiento) 
-		{
-			$numerotransaccion = $caja_movimiento->numerotransaccion;
-			$numerotransaccion = $numerotransaccion + 1;
+		if (empty($data['numerotransaccion'])) {
+			$data['numerotransaccion'] = CobranzaNumeracionTransaccion::calcularSiguienteNumeroSecuencialBd(
+				(int) $data['empresa_id'],
+				(int) $data['tipotransaccion_caja_id'],
+			);
 		}
-		else	
-			$numerotransaccion = 1;
 
-		return $numerotransaccion;
+		if (! isset($data['usuario_id'])) {
+			$data['usuario_id'] = Auth::user()->id;
+		}
+
+		if (! isset($data['detalle'])) {
+			$data['detalle'] = 'Movimiento de caja';
+		}
+
+		return $data;
+	}
+
+	/**
+	 * Movimiento hijo de cobranza: reutiliza el mismo numerotransaccion (Anita tesmov).
+	 *
+	 * @param  array<string, mixed>  $data
+	 * @return array<string, mixed>
+	 */
+	private function resolverNumerotransaccionConCobranza(array $data): array
+	{
+		if (empty($data['numerotransaccion'])) {
+			$cobranza = Cobranza::query()->find((int) $data['cobranza_id']);
+			if ($cobranza !== null) {
+				$data['numerotransaccion'] = $cobranza->numerotransaccion;
+			}
+		}
+
+		return $data;
+	}
+
+	/**
+	 * @param  array<string, mixed>  $data
+	 */
+	private function persistirCreate(array $data)
+	{
+		$caja_movimiento = $this->model->create($data);
+
+		self::guardarAnita($data);
+
+		return $caja_movimiento;
 	}
 
 	// Lee gastos anteriores por orden de servicio

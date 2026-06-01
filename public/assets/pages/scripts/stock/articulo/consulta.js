@@ -11,8 +11,60 @@ var consultaArticuloTimer = null;
 var CONSULTA_ARTICULO_DEBOUNCE_MS = 280;
 var CONSULTA_ARTICULO_MIN_LEN = 2;
 
+function consultaArticuloResolverListaprecio() {
+    var modal = $('#consultaarticuloModal');
+    var idModal = parseInt(modal.data('articuloListaprecioId'), 10);
+    if (idModal > 0) {
+        return {
+            id: idModal,
+            nombre: (modal.data('articuloListaprecioNombre') || '').toString(),
+        };
+    }
+    var def = window.consultaArticuloListaprecioDefault || {};
+    return {
+        id: parseInt(def.id, 10) || 1,
+        nombre: (def.nombre || '').toString(),
+    };
+}
+
+function consultaArticuloMostrarPrecioLista() {
+    return consultaArticuloResolverListaprecio().id > 0;
+}
+
+function consultaArticuloColspanTabla() {
+    return consultaArticuloMostrarPrecioLista() ? 7 : 6;
+}
+
+function actualizarEncabezadoPrecioListaConsulta(meta) {
+    var $th = $('#consultaarticulo-th-precio');
+    if (!$th.length) {
+        return;
+    }
+    var mostrar = meta && meta.mostrar_precio_lista !== false && consultaArticuloMostrarPrecioLista();
+    if (meta && meta.mostrar_precio_lista === false) {
+        mostrar = false;
+    }
+    if (!mostrar) {
+        $th.addClass('d-none');
+        return;
+    }
+    $th.removeClass('d-none');
+    var nombre = (meta && meta.listaprecio_nombre) ? String(meta.listaprecio_nombre).trim() : '';
+    var id = meta && meta.listaprecio_id ? parseInt(meta.listaprecio_id, 10) : consultaArticuloResolverListaprecio().id;
+    if (!nombre) {
+        nombre = consultaArticuloResolverListaprecio().nombre || '';
+    }
+    if (nombre) {
+        $th.text('Precio ' + nombre);
+    } else if (id > 0) {
+        $th.text('Precio lista ' + id);
+    } else {
+        $th.text('Precio');
+    }
+}
+
 function htmlTablaConsultaArticuloMensaje(texto) {
-    return '<tr><td colspan="6" class="text-muted">' + texto + '</td></tr>';
+    return '<tr><td colspan="' + consultaArticuloColspanTabla() + '" class="text-muted">' + texto + '</td></tr>';
 }
 
 function consultaArticuloMinLen(valor) {
@@ -32,14 +84,20 @@ function consultaArticuloMensajeMinLen(minLen) {
 
 function aplicarRespuestaConsultaArticulo(respuesta) {
     var html = '';
+    var meta = respuesta;
     if (respuesta && typeof respuesta.data === 'string') {
         html = respuesta.data;
     } else if (typeof respuesta === 'string') {
         try {
-            html = JSON.parse(respuesta).data || '';
+            meta = JSON.parse(respuesta);
+            html = meta.data || '';
         } catch (e) {
             html = respuesta.replace(/\\/g, '');
+            meta = null;
         }
+    }
+    if (meta) {
+        actualizarEncabezadoPrecioListaConsulta(meta);
     }
     $("#datos").html(html);
 }
@@ -56,6 +114,10 @@ function buscar_datos_articulo(consulta) {
     var digitosFiltro = $('#consultaarticuloModal').data('articuloSkuDigitosFiltro');
     if (digitosFiltro > 0) {
         postData.sku_digitos_sufijo = digitosFiltro;
+    }
+    var listaPrecio = consultaArticuloResolverListaprecio();
+    if (listaPrecio.id > 0) {
+        postData.listaprecio_id = listaPrecio.id;
     }
     consultaArticuloAjax = $.ajax({
         url: carpetaBase+'/stock/articulo/consultaarticulo',
@@ -105,6 +167,18 @@ function activa_eventos_consultaarticulo()
             $('#consultaarticuloModal').removeData('articuloSkuDigitosFiltro');
         }
 
+        var listaIdBtn = parseInt($(this).attr('data-listaprecio-id') || '0', 10);
+        if (listaIdBtn > 0) {
+            $('#consultaarticuloModal').data('articuloListaprecioId', listaIdBtn);
+            $('#consultaarticuloModal').data('articuloListaprecioNombre', ($(this).attr('data-listaprecio-nombre') || '').trim());
+        } else if (window.GASTRONOMIA && parseInt(window.GASTRONOMIA.listaprecioId, 10) > 0) {
+            $('#consultaarticuloModal').data('articuloListaprecioId', parseInt(window.GASTRONOMIA.listaprecioId, 10));
+            $('#consultaarticuloModal').data('articuloListaprecioNombre', (window.GASTRONOMIA.listaprecioNombre || '').toString());
+        } else {
+            $('#consultaarticuloModal').removeData('articuloListaprecioId');
+            $('#consultaarticuloModal').removeData('articuloListaprecioNombre');
+        }
+
         //if ($(this).parents("tr").find(".articulo_id").length > 0) {
             ptrarticulo_id = $(this).closest("tr").find(".articulo_id");
             ptrcodigoarticulo = $(this).closest("tr").find(".codigoarticulo");
@@ -118,6 +192,11 @@ function activa_eventos_consultaarticulo()
     });
 
     $('#consultaarticuloModal').off('show.bs.modal.consultaArt').on('show.bs.modal.consultaArt', function () {
+        actualizarEncabezadoPrecioListaConsulta({
+            listaprecio_id: consultaArticuloResolverListaprecio().id,
+            listaprecio_nombre: consultaArticuloResolverListaprecio().nombre,
+            mostrar_precio_lista: consultaArticuloMostrarPrecioLista(),
+        });
         var prefijo = $('#consultaarticuloModal').data('articuloSkuPrefijoFiltro');
         var valorInicial = '';
         if (prefijo) {
@@ -142,6 +221,8 @@ function activa_eventos_consultaarticulo()
     $('#consultaarticuloModal').off('hidden.bs.modal.consultaArtPrefijo').on('hidden.bs.modal.consultaArtPrefijo', function () {
         $('#consultaarticuloModal').removeData('articuloSkuPrefijoFiltro');
         $('#consultaarticuloModal').removeData('articuloSkuDigitosFiltro');
+        $('#consultaarticuloModal').removeData('articuloListaprecioId');
+        $('#consultaarticuloModal').removeData('articuloListaprecioNombre');
     });
 
     $('#consultaarticuloModal').off('shown.bs.modal.consultaArt').on('shown.bs.modal.consultaArt', function () {

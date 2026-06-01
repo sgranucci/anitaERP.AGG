@@ -55,6 +55,34 @@
         $('#consultacierre-tab-pdf').tab('show');
     }
 
+    function alcanceConsulta() {
+        if (typeof RENDICION_GASTRONOMIA !== 'undefined' && RENDICION_GASTRONOMIA.alcanceConsulta) {
+            return RENDICION_GASTRONOMIA.alcanceConsulta;
+        }
+        var inp = document.getElementById('tipo_rendicion');
+        if (inp && inp.value === 'jornada') {
+            return 'jornada';
+        }
+        return 'turno';
+    }
+
+    function actualizarTituloModal() {
+        var esJornada = alcanceConsulta() === 'jornada';
+        $('#consultacierreModalLabel').text(
+            esJornada ? 'Jornadas cerradas pendientes de rendir' : 'Cierres de turno pendientes de rendir'
+        );
+        var $thead = $('#tabla-data-cierre thead tr');
+        if (esJornada) {
+            $thead.html(
+                '<th>Nº jorn.</th><th>Fecha jornada</th><th>Cierre</th><th>Waitry hasta</th><th>Usuario cierre</th><th class="width120">Acciones</th>'
+            );
+        } else {
+            $thead.html(
+                '<th>Nº op.</th><th>Turno</th><th>Terminal</th><th>Cierre</th><th>Jornada</th><th class="width120">Acciones</th>'
+            );
+        }
+    }
+
     function buscarCierres(consulta) {
         var empresaId = empresaIdConsulta();
         if (!empresaId) {
@@ -74,6 +102,7 @@
                 consulta: consulta || '',
                 empresa_id: empresaId,
                 excepto_rendicion_id: exceptoRendicionId(),
+                alcance: alcanceConsulta(),
                 _token: csrfToken(),
             },
         })
@@ -108,10 +137,29 @@
             .off('click.consultaCierre', '.consultacierre')
             .on('click.consultaCierre', '.consultacierre', function (e) {
                 e.preventDefault();
+                if (typeof RENDICION_GASTRONOMIA !== 'undefined') {
+                    RENDICION_GASTRONOMIA.alcanceConsulta = 'turno';
+                }
                 if (!empresaIdConsulta()) {
                     alert('Seleccione una empresa antes de consultar cierres.');
                     return;
                 }
+                actualizarTituloModal();
+                $('#consultacierre').val('');
+                resetSolapaComprobante();
+                $('#consultacierre-tab-busqueda').tab('show');
+                $('#consultacierreModal').modal('show');
+            })
+            .on('click.consultaCierre', '.consultacierrejornada', function (e) {
+                e.preventDefault();
+                if (typeof RENDICION_GASTRONOMIA !== 'undefined') {
+                    RENDICION_GASTRONOMIA.alcanceConsulta = 'jornada';
+                }
+                if (!empresaIdConsulta()) {
+                    alert('Seleccione una empresa antes de consultar jornadas.');
+                    return;
+                }
+                actualizarTituloModal();
                 $('#consultacierre').val('');
                 resetSolapaComprobante();
                 $('#consultacierre-tab-busqueda').tab('show');
@@ -189,10 +237,40 @@
 
                 $('#consultacierreModal').modal('hide');
 
+                if (typeof window.rendicionGastronomiaFijarTipo === 'function') {
+                    window.rendicionGastronomiaFijarTipo('turno');
+                }
+                $('#tipo_rendicion').val('turno');
+
                 if (typeof window.rendicionGastronomiaCargarTurno === 'function') {
                     window.rendicionGastronomiaCargarTurno(id);
                 } else {
                     alert('No se pudo cargar el cierre. Recargue la página.');
+                }
+            })
+            .on('click.consultaCierre', '.eligeconsultacierrejornada', function (e) {
+                e.preventDefault();
+                var $tr = $(this).closest('tr');
+                var id = $tr.find('.id').text().trim();
+                var etiqueta = 'Jornada #' + id
+                    + ' — ' + $tr.find('.fecha_jornada').text().trim()
+                    + ' — cierre ' + $tr.find('.cierre_en').text().trim();
+
+                $('#jornada_gastronomia_id').val(id);
+                $('#jornada_gastronomia_numero').val(id);
+                $('#lbl-jornada-seleccionada').text(etiqueta);
+
+                $('#consultacierreModal').modal('hide');
+
+                if (typeof window.rendicionGastronomiaFijarTipo === 'function') {
+                    window.rendicionGastronomiaFijarTipo('jornada');
+                }
+                $('#tipo_rendicion').val('jornada');
+
+                if (typeof window.rendicionGastronomiaCargarJornada === 'function') {
+                    window.rendicionGastronomiaCargarJornada(id);
+                } else {
+                    alert('No se pudo cargar la jornada. Recargue la página.');
                 }
             });
     }

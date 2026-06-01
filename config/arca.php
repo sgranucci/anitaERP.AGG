@@ -130,4 +130,25 @@ return [
         /** Réplica cada CAEA autorizado en Informix (tabla caea) vía bridge Anita */
         'replicar_en_anita' => filter_var(env('ARCA_CAEA_REPLICAR_ANITA', true), FILTER_VALIDATE_BOOLEAN),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Monitor conectividad ARCA (arca:monitorear-conectividad, cada 5 min)
+    |--------------------------------------------------------------------------
+    |
+    | Activa failover CAEA en runtime (storage + cache) sin tocar .env.
+    | Probe: FECompUltimoAutorizado (WSFE) o consultarUltimoComprobanteAutorizado (MTXCA).
+    |
+    | Recomendado en producción: ARCA_MONITOR_EMPRESA_ID, ARCA_MONITOR_PUNTOVENTA_ID
+    | (PV CAE de referencia) y ARCA_MONITOR_TIPOTRANSACCION_ID o ARCA_MONITOR_CBTE_TIPO.
+    */
+    'monitor_conectividad' => [
+        'habilitado' => filter_var(env('ARCA_MONITOR_CONECTIVIDAD', true), FILTER_VALIDATE_BOOLEAN),
+        'empresa_id' => ($v = (int) env('ARCA_MONITOR_EMPRESA_ID', 0)) > 0 ? $v : null,
+        'puntoventa_id' => ($v = (int) env('ARCA_MONITOR_PUNTOVENTA_ID', 0)) > 0 ? $v : null,
+        'cbte_tipo' => ($v = (int) env('ARCA_MONITOR_CBTE_TIPO', 0)) > 0 ? $v : null,
+        'tipotransaccion_id' => ($v = (int) env('ARCA_MONITOR_TIPOTRANSACCION_ID', 0)) > 0 ? $v : null,
+        'fallos_para_activar' => max(1, (int) env('ARCA_MONITOR_FALLOS_PARA_ACTIVAR', 2)),
+        'ok_para_desactivar' => max(1, (int) env('ARCA_MONITOR_OK_PARA_DESACTIVAR', 2)),
+    ],
 ];

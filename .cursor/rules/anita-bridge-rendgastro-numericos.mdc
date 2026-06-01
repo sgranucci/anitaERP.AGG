@@ -1,0 +1,34 @@
+---
+description: Bridge rendgastro — INSERT ceros según DDL; UPDATE solo mapeo + config opt-in
+globs: app/Support/Caja/AnitaSync/**/*.php,app/Services/Caja/RendicionGastronomiaAnitaSyncService.php,config/rendicion_gastronomia_anita.php,docs/rendgastro.sql
+alwaysApply: false
+---
+
+# Bridge Anita — rendgastro: INSERT vs UPDATE
+
+Anita (C) falla con numéricos en **NULL** en el alta. DDL de referencia: `docs/rendgastro.sql` (Informix `rendgastro`, 65 columnas).
+
+## INSERT (alta)
+
+- Orden de columnas = **DDL** (`RendicionGastronomiaCabeceraAnitaMapper::columnasInsert()`).
+- Tras `rendg_nro_fac_caea`, antes de `rendg_host`, van **todas** las numéricas sin mapeo ERP en **0** (lista canónica en `RendicionGastronomiaRendgastroEsquema::COLUMNAS_NUMERICAS_SIN_MAPEO`):
+  - `rendg_ccig1` … `rendg_ccig6`
+  - `rendg_ccig1_caea` … `rendg_ccig6_caea`
+  - `rendg_ccignc1` … `rendg_ccignc6`
+  - `rendg_ccignc1_caea` … `rendg_ccignc6_caea`
+- Luego `rendg_host` (texto, mapeado) y `rendg_otros_cred` (0).
+- Otros numéricos fijos sin ERP en el bloque anterior del mapper: `rendg_ab_pago`, `rendg_iva_*`, `rendg_fallo_mozo`, factura vacía, etc.
+- `decimal()` / `entero()`; nunca omitir columnas del INSERT (el bridge usa lista explícita de campos).
+
+## UPDATE (edición / resync)
+
+- Solo columnas con **`ctx`** + `cabecera_campos_numericos_cero_en_update` (opt-in).
+- **No** poner en el SET las ccig / ccignc salvo opt-in explícito (Anita puede cargarlas solo en C).
+
+## Config cache
+
+Tras cambiar config: `php artisan config:clear` o `config:cache`. El esquema en código no depende solo del cache.
+
+## Registros viejos con NULL en ccig
+
+Borrar y crear de nuevo, o opt-in temporal en `cabecera_campos_numericos_cero_en_update`.

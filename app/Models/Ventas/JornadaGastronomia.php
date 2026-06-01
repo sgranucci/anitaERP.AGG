@@ -27,12 +27,14 @@ class JornadaGastronomia extends Model implements Auditable
         'cierre_en',
         'observacion_apertura',
         'observacion_cierre',
+        'informe_z_borrador_json',
     ];
 
     protected $casts = [
         'fecha_jornada' => 'date',
         'apertura_en' => 'datetime',
         'cierre_en' => 'datetime',
+        'informe_z_borrador_json' => 'array',
     ];
 
     public function empresa()

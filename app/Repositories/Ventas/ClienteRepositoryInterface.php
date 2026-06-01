@@ -6,6 +6,7 @@ interface ClienteRepositoryInterface extends RepositoryInterface
 {
 
     public function sincronizarConAnita();
+    public function existeClientePorCodigo(string $codigo): bool;
     public function replicarClienteEnAnitaPorCodigo(string $codigo): string;
 
     public function sincronizarAnitaDespuesDeGrabado(int $clienteId): void;

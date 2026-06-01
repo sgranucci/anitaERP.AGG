@@ -5,6 +5,7 @@
 @endsection
 
 @section('styles')
+@include('ventas.gastronomia.facturas_dia.partials.estilos_acciones_tabla')
 <style>
     .gastro-resumen-insumos-scroll {
         max-height: 180px;
@@ -115,8 +116,13 @@
                 <span>{{ $venta->codigo ?? '' }}</span>
                 <div class="btn-group btn-group-sm mt-1 mt-md-0 flex-wrap">
                     <a href="{{ route('gastronomia_facturas_dia') }}" class="btn btn-outline-secondary">Volver al listado</a>
-                    @if (can('editar-factura', false))
-                        <a href="{{ route('editar_factura', ['id' => $venta->id, 'origen' => 'gastronomia_facturas_dia']) }}" class="btn btn-outline-warning">Editar comprobante</a>
+                    @if ($puede_cambiar_medio_pago ?? false)
+                        <button type="button"
+                                class="btn btn-outline-warning js-fd-cambiar-medio-pago"
+                                data-venta-id="{{ $venta->id }}"
+                                title="Cambiar cuenta de caja del cobro (sin modificar montos)">
+                            <i class="fa fa-exchange-alt"></i> Cambiar medio de pago
+                        </button>
                     @endif
                     <button type="button" class="btn btn-outline-dark" id="btn-reimprimir-ticket" data-venta-id="{{ $venta->id }}">
                         <i class="fas fa-receipt"></i> Reimprimir ticket
@@ -265,6 +271,9 @@
                                 <th>Detalle</th>
                                 <th class="text-right">Cant.</th>
                                 <th class="text-right">Precio</th>
+                                @if ($puede_ver_formula ?? false)
+                                    <th class="text-nowrap" style="width:2rem;"></th>
+                                @endif
                             </tr>
                         </thead>
                         <tbody>
@@ -291,11 +300,16 @@
                                     </td>
                                     <td class="text-right">{{ number_format($item->cantidad, 3, ',', '.') }}</td>
                                     <td class="text-right">{{ number_format($item->precio, 2, ',', '.') }}</td>
+                                    @if ($puede_ver_formula ?? false)
+                                        <td class="text-nowrap text-center align-middle facturas-dia-tabla-acciones">
+                                            @include('includes.btn_formula_articulo', ['articuloId' => $item->articulo_id])
+                                        </td>
+                                    @endif
                                 </tr>
                                 @if ($tieneInsumos)
                                     <tr id="insumos-item-{{ $item->venta_emision_id }}" class="{{ $expandirItem ? '' : 'd-none' }} bg-light">
                                         <td></td>
-                                        <td colspan="4" class="py-2">
+                                        <td colspan="{{ ($puede_ver_formula ?? false) ? 5 : 4 }}" class="py-2">
                                             <p class="small mb-2">
                                                 <strong>Ítem facturado:</strong>
                                                 @include('ventas.gastronomia.facturas_dia.partials.item_facturado_insumos', [
@@ -326,7 +340,7 @@
                                     </tr>
                                 @endif
                             @empty
-                                <tr><td colspan="5" class="text-muted">Sin ítems de emisión.</td></tr>
+                                <tr><td colspan="{{ ($puede_ver_formula ?? false) ? 6 : 5 }}" class="text-muted">Sin ítems de emisión.</td></tr>
                             @endforelse
                         </tbody>
                     </table>
@@ -443,11 +457,20 @@
                                             @endif
                                         </td>
                                         <td><small>{{ $cob->detalle ?? '' }}</small></td>
-                                        <td>
+                                        <td class="facturas-dia-tabla-acciones text-nowrap">
                                             @if (can('listar-cobranza', false))
                                                 <a href="{{ route('listar_una_cobranza', ['id' => $cob->id]) }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary" title="Ver comprobante de cobranza (PDF)">
                                                     <i class="fa fa-print"></i> Ver
                                                 </a>
+                                            @endif
+                                            @if ($puede_cambiar_medio_pago ?? false)
+                                                <button type="button"
+                                                        class="btn-accion-tabla tooltipsC js-fd-cambiar-medio-pago"
+                                                        data-venta-id="{{ $venta->id }}"
+                                                        data-placement="left"
+                                                        title="Cambiar medio de pago (monto fijo)">
+                                                    <i class="fa fa-exchange-alt text-warning"></i>
+                                                </button>
                                             @endif
                                         </td>
                                     </tr>
@@ -487,10 +510,27 @@
 </div>
 
 @include('ventas.gastronomia.facturas_dia.partials.modal_generar_nc')
+@if ($puede_cambiar_medio_pago ?? false)
+    @include('ventas.gastronomia.facturas_dia.partials.modal_cambiar_medio_pago')
+    @include('includes.caja.modalconsultacuentacaja')
+@endif
 @endsection
 
 @section('scripts')
 @include('ventas.gastronomia.facturas_dia.partials.script_generar_nc')
+@if ($puede_ver_formula ?? false)
+<script>
+    window.FORMULA_ARTICULO_ACCION = {
+        urlResolverFormulaBase: @json(url('stock/formula-articulo/resolver-por-articulo')),
+        urlFormulaBase: @json(url('stock/formula-articulo')),
+        puedeVerFormula: true,
+    };
+</script>
+<script src="{{ asset('assets/pages/scripts/includes/formula_articulo_accion.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/includes/formula_articulo_accion.js')) ?: time() }}" type="text/javascript"></script>
+@endif
+@if ($puede_cambiar_medio_pago ?? false)
+    @include('ventas.gastronomia.facturas_dia.partials.script_cambiar_medio_pago')
+@endif
 <script>
 (function () {
     function activarTab(hash) {

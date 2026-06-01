@@ -7,6 +7,9 @@
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
 @include('ventas.gastronomia.facturas_dia.partials.script_generar_nc')
+@if (can('cambiar-medio-pago-gastronomia-facturas-dia', false))
+    @include('ventas.gastronomia.facturas_dia.partials.script_cambiar_medio_pago')
+@endif
 <script>
 (function () {
     var csrfToken = document.querySelector('meta[name="csrf-token"]');
@@ -298,24 +301,39 @@
 @endsection
 
 @section('contenido')
+@include('ventas.gastronomia.facturas_dia.partials.estilos_acciones_tabla')
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
-        @if (! empty($jornada['jornada_abierta']))
-            <div class="alert alert-info py-2 mb-2">
-                Jornada <strong>{{ $jornada['fecha_jornada'] }}</strong> abierta
+        <div class="alert alert-info py-2 mb-2">
+            Fecha jornada <strong>{{ $fecha }}</strong>
+            · Fecha calendario <strong>{{ $fecha_calendario ?? \Illuminate\Support\Carbon::today()->format('Y-m-d') }}</strong>
+            @if (! empty($jornada['jornada_abierta']))
+                · jornada abierta
                 @if (! request()->filled('fecha'))
-                    · filtro por defecto: fecha de jornada
+                    (filtro por defecto)
                 @endif
-                @if (! empty($jornada['fecha_factura_hoy']) && ($jornada['fecha_factura_hoy'] ?? '') !== ($jornada['fecha_jornada'] ?? ''))
-                    · comprobantes con fecha calendario <strong>{{ $jornada['fecha_factura_hoy'] }}</strong>
+            @elseif ($jornada !== null)
+                · sin jornada abierta para esta empresa
+            @endif
+            @if (($requiere_habilitacion_turno ?? false) && ($turno_filtro_val ?? '0') !== '0' && ($turno_filtro ?? null))
+                · filtrando turno
+                <strong>{{ $turno_filtro->turno?->nombre ?? 'Turno' }}</strong>
+                @if (($turno_filtro_val ?? '') === 'activo')
+                    (activo)
+                @else
+                    (cerrado)
                 @endif
-            </div>
-        @elseif ($jornada !== null)
-            <div class="alert alert-secondary py-2 mb-2">
-                Sin jornada abierta para esta empresa. Mostrando fecha de jornada indicada o el día de hoy.
-            </div>
-        @endif
+                · {{ $turno_filtro->habilitacion_en?->format('Y-m-d H:i') ?? '—' }}
+                @if ($turno_filtro->cierre_en)
+                    → {{ $turno_filtro->cierre_en->format('Y-m-d H:i') }}
+                @else
+                    → activo
+                @endif
+            @elseif (($requiere_habilitacion_turno ?? false) && ($turno_filtro_val ?? '0') === '0')
+                · mostrando todas las facturas del día en la terminal
+            @endif
+        </div>
         @if (($requiere_habilitacion_turno ?? false) && ! ($turno_habilitado ?? false))
             <div class="alert alert-warning py-2 mb-2">
                 No hay turno habilitado en esta terminal (<strong>{{ $identificador_pc }}</strong>).
@@ -351,6 +369,28 @@
                                 <label class="custom-control-label small" for="todas_pc" title="Incluye facturas emitidas desde otras PCs del mismo día">Todas las terminales</label>
                             </div>
                         </div>
+                        @if ($requiere_habilitacion_turno ?? false)
+                            <div class="form-group mb-0 mr-2">
+                                <label for="turno_filtro" class="small text-muted mb-0 d-block">Turno</label>
+                                <select name="turno_filtro" id="turno_filtro" class="form-control form-control-sm" style="min-width:220px;"
+                                        title="Todo el día, turno activo o un turno cerrado de esta terminal">
+                                    <option value="0" @selected(($turno_filtro_val ?? '0') === '0')>Todo el día</option>
+                                    @if ($turno_activo ?? null)
+                                        <option value="activo" @selected(($turno_filtro_val ?? '') === 'activo')>
+                                            Turno activo — {{ $turno_activo->turno?->nombre ?? 'Turno' }}
+                                            ({{ $turno_activo->habilitacion_en?->format('Y-m-d H:i') ?? '—' }})
+                                        </option>
+                                    @endif
+                                    @foreach ($turnos_selector ?? [] as $op)
+                                        @if (! ($op['es_activo'] ?? false))
+                                            <option value="{{ $op['id'] }}" @selected((string) ($turno_filtro_val ?? '') === (string) $op['id'])>
+                                                {{ $op['label'] }}
+                                            </option>
+                                        @endif
+                                    @endforeach
+                                </select>
+                            </div>
+                        @endif
                         <div class="btn-group mr-2">
                             <input type="text" name="busqueda" class="form-control form-control-sm" placeholder="Nº venta, cliente…" value="{{ $busqueda ?? '' }}">
                             <button type="submit" class="btn btn-default btn-sm" title="Buscar">
@@ -358,7 +398,11 @@
                             </button>
                         </div>
                         @if (($articulo_filtro ?? null) || ($busqueda ?? '') !== '')
-                            <a href="{{ route('gastronomia_facturas_dia', ['fecha' => $fecha, 'todas_pc' => ($todas_pc ?? false) ? '1' : null]) }}"
+                            <a href="{{ route('gastronomia_facturas_dia', array_filter([
+                                'fecha' => $fecha,
+                                'todas_pc' => ($todas_pc ?? false) ? '1' : null,
+                                'turno_filtro' => ($turno_filtro_val ?? '0') !== '0' ? ($turno_filtro_val ?? '0') : null,
+                            ])) }}"
                                class="btn btn-outline-secondary btn-sm ml-1 mb-0" title="Quitar filtros de texto">Limpiar</a>
                         @endif
                     </form>
@@ -381,17 +425,42 @@
                     <span class="text-warning small">No se encontró artículo para «{{ $articulo_sku }}». Revise el SKU o use búsqueda parcial.</span>
                 </div>
             @endif
-            <div class="card-body table-responsive p-0">
-                @include('includes.exportar-tabla-queryparams', [
-                    'ruta' => 'listar_gastronomia_facturas_dia',
-                    'queryparams' => array_filter([
-                        'fecha' => $fecha,
-                        'busqueda' => $busqueda ?? '',
-                        'todas_pc' => ($todas_pc ?? false) ? '1' : null,
-                        'articulo_sku' => $articulo_sku ?? '',
-                        'articulo_id' => ($articulo_filtro ?? null) ? $articulo_filtro->id : null,
-                    ], fn ($v) => $v !== null && $v !== ''),
-                ])
+            <div class="card-body p-0">
+                @php
+                    $tot = $totales_facturacion ?? [];
+                @endphp
+                <div class="d-flex flex-wrap align-items-center justify-content-between px-3 py-2 border-bottom bg-light">
+                    <div class="mb-1 mb-md-0">
+                        @include('includes.exportar-tabla-queryparams', [
+                            'ruta' => 'listar_gastronomia_facturas_dia',
+                            'queryparams' => array_filter([
+                                'fecha' => $fecha,
+                                'busqueda' => $busqueda ?? '',
+                                'todas_pc' => ($todas_pc ?? false) ? '1' : null,
+                                'turno_filtro' => ($requiere_habilitacion_turno ?? false) && ($turno_filtro_val ?? '0') !== '0'
+                                    ? ($turno_filtro_val ?? '0')
+                                    : null,
+                                'articulo_sku' => $articulo_sku ?? '',
+                                'articulo_id' => ($articulo_filtro ?? null) ? $articulo_filtro->id : null,
+                            ], fn ($v) => $v !== null && $v !== ''),
+                        ])
+                    </div>
+                    <div class="small mb-1 mb-md-0 text-md-right" title="Totales de todos los comprobantes que coinciden con los filtros aplicados">
+                        <span class="text-muted">Totales filtro:</span>
+                        <strong>{{ (int) ($tot['cantidad_comprobantes'] ?? 0) }}</strong> comprob.
+                        · Facturas
+                        <strong>${{ number_format((float) ($tot['total_facturas'] ?? 0), 2, ',', '.') }}</strong>
+                        <span class="text-muted">({{ (int) ($tot['cantidad_facturas'] ?? 0) }})</span>
+                        @if (($tot['cantidad_notas_credito'] ?? 0) > 0)
+                            · NC
+                            <strong>${{ number_format((float) ($tot['total_notas_credito'] ?? 0), 2, ',', '.') }}</strong>
+                            <span class="text-muted">({{ (int) ($tot['cantidad_notas_credito'] ?? 0) }})</span>
+                        @endif
+                        · Neto
+                        <strong class="text-primary">${{ number_format((float) ($tot['total_neto'] ?? 0), 2, ',', '.') }}</strong>
+                    </div>
+                </div>
+                <div class="table-responsive">
                 @php
                     $colInsumos = ($articulo_filtro ?? null) !== null;
                     $colSpanEmpty = 10 + (($todas_pc ?? false) ? 1 : 0) + ($colInsumos ? 3 : 0);
@@ -501,7 +570,7 @@
                                     @endif
                                 </td>
                                 <td><small>{{ $r->cuenta_gastronomia_id ?? '—' }}</small></td>
-                                <td>
+                                <td class="facturas-dia-tabla-acciones text-nowrap">
                                     @if (can('ver-factura-gastronomia', false))
                                         <a href="{{ route('gastronomia_facturas_dia_ver', $verParams) }}" class="btn-accion-tabla tooltipsC" title="Ver detalle">
                                             <i class="fas fa-eye"></i>
@@ -510,16 +579,21 @@
                                             <i class="fas fa-boxes text-info"></i>
                                         </a>
                                     @endif
-                                    @if (can('editar-factura', false) && $v)
-                                        <a href="{{ route('editar_factura', ['id' => $v->id, 'origen' => 'gastronomia_facturas_dia']) }}" class="btn-accion-tabla tooltipsC" title="Editar comprobante">
-                                            <i class="fa fa-edit"></i>
-                                        </a>
+                                    @if (can('cambiar-medio-pago-gastronomia-facturas-dia', false) && $v && $cobDirecta)
+                                        <button type="button"
+                                            class="btn-accion-tabla tooltipsC js-fd-cambiar-medio-pago"
+                                            data-venta-id="{{ $v->id }}"
+                                            data-placement="left"
+                                            title="Cambiar medio de pago (sin modificar el monto)">
+                                            <i class="fa fa-exchange-alt text-warning"></i>
+                                        </button>
                                     @endif
                                     @if ($puedeNc)
                                         <button type="button"
-                                            class="btn-accion-tabla tooltipsC js-fd-generar-nc border-0 bg-transparent p-0"
+                                            class="btn-accion-tabla tooltipsC js-fd-generar-nc"
                                             data-venta-id="{{ $v->id }}"
                                             data-codigo="{{ $v->codigo ?? '' }}"
+                                            data-placement="left"
                                             title="Generar nota de crédito">
                                             <i class="fas fa-undo text-warning"></i>
                                         </button>
@@ -533,31 +607,35 @@
                                     @if ($v)
                                         @if ($v->tiene_canje_premio ?? false)
                                             <button type="button"
-                                                class="btn-accion-tabla tooltipsC js-fd-canjes-premio border-0 bg-transparent p-0"
+                                                class="btn-accion-tabla tooltipsC js-fd-canjes-premio"
                                                 data-venta-id="{{ $v->id }}"
+                                                data-placement="left"
                                                 title="Canjes de premios Wigos">
                                                 <i class="fa fa-gift text-warning"></i>
                                             </button>
                                         @endif
                                         @if ($v->tiene_canje_fidelidad ?? false)
                                             <button type="button"
-                                                class="btn-accion-tabla tooltipsC js-fd-canjes-fidelidad border-0 bg-transparent p-0"
+                                                class="btn-accion-tabla tooltipsC js-fd-canjes-fidelidad"
                                                 data-venta-id="{{ $v->id }}"
+                                                data-placement="left"
                                                 title="Canje fidelidad (tarjeta Wigos)">
                                                 <i class="fa fa-id-card text-warning"></i>
                                             </button>
                                         @endif
                                         @if ($v->tiene_ticket_tarjeta ?? false)
                                             <button type="button"
-                                                class="btn-accion-tabla tooltipsC js-fd-tickets-tarjeta border-0 bg-transparent p-0"
+                                                class="btn-accion-tabla tooltipsC js-fd-tickets-tarjeta"
                                                 data-venta-id="{{ $v->id }}"
+                                                data-placement="left"
                                                 title="Tickets tarjeta canjeados">
                                                 <i class="fa fa-barcode text-info"></i>
                                             </button>
                                         @endif
                                         <button type="button"
-                                            class="btn-accion-tabla tooltipsC js-fd-reimprimir-ticket border-0 bg-transparent p-0"
+                                            class="btn-accion-tabla tooltipsC js-fd-reimprimir-ticket"
                                             data-venta-id="{{ $v->id }}"
+                                            data-placement="left"
                                             title="Reimprimir ticket térmico">
                                             <i class="fas fa-receipt text-secondary"></i>
                                         </button>
@@ -627,12 +705,17 @@
                         <small class="text-muted">{{ $registros->total() }} factura(s) en la página.</small>
                     </div>
                 @endif
+                </div>
             </div>
         </div>
     </div>
 </div>
 
 @include('ventas.gastronomia.facturas_dia.partials.modal_generar_nc')
+@if (can('cambiar-medio-pago-gastronomia-facturas-dia', false))
+    @include('ventas.gastronomia.facturas_dia.partials.modal_cambiar_medio_pago')
+    @include('includes.caja.modalconsultacuentacaja')
+@endif
 
 <div class="modal fade" id="modal-fd-tickets-tarjeta" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered" role="document">

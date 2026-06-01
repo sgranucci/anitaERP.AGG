@@ -885,13 +885,6 @@ class FacturacionService
 						'cantidadbulto' => $this->cantidadBulto,
 						'pedido_id' => $pedido->id
 					];	
-					// Verifica si ya existe en anita
-					$ventaAnita = Self::buscaVentaAnita(substr($venta['codigo'], 0, 3), $letra, $puntoventa->codigo, $venta['numerocomprobante']);
-					// Si existe retorna con error
-					if ($ventaAnita == $venta['numerocomprobante'])
-					{
-						throw new Exception('La factura '.substr($venta['codigo'], 0, 3).' '.$letra.' '.$puntoventa->codigo.'-'.$venta['numerocomprobante'].' ya existe en ANITA');
-					}
 
 					// Graba venta
 					$vta = $this->ventaRepository->create($venta);
@@ -1005,10 +998,10 @@ class FacturacionService
 					if ($puntoventa->modofacturacion != 'M' || $this->flGrabaComprobanteDividido)
 					{
 						// Graba anita por pedido
-						$anita = self::grabaAnita($puntoventa->codigo, $letra, $puntoventaremito->codigo, $numeroremito,
+						$anita = $this->grabaAnitaConReintentoPorDuplicado($puntoventa->codigo, $letra, $puntoventaremito->codigo, $numeroremito,
 									$venta, $dataCAE, $conceptosTotales, $cuentaCorriente, $dataFactura, $signo,
 									$codigoTipoTransaccion, $pedido_id,
-									true, 0, 0, $referenciaFactura);
+									true, 0, 0, $referenciaFactura, $empresa->codigo);
 
 						if (isset($anita['error']))
 						{
@@ -1397,13 +1390,6 @@ class FacturacionService
 						'ordenventa_id' => $ordenventa_id,
 						'empresa_id' => 1
 					];	
-					// Verifica si ya existe en anita
-					$ventaAnita = Self::buscaVentaAnita(substr($venta['codigo'], 0, 3), $letra, $puntoventa->codigo, $venta['numerocomprobante']);
-					// Si existe retorna con error
-					if ($ventaAnita == $venta['numerocomprobante'])
-					{
-						throw new Exception('El comprobante '.$venta['numerocomprobante'].' ya existe en ANITA');
-					}
 
 					// Graba venta
 					$vta = $this->ventaRepository->create($venta);
@@ -1504,10 +1490,10 @@ class FacturacionService
 					if ($puntoventa->modofacturacion != 'M')
 					{
 						// Graba anita factura por orden de venta
-						$anita = self::grabaAnita($puntoventa->codigo, $letra, 0, 0,
+						$anita = $this->grabaAnitaConReintentoPorDuplicado($puntoventa->codigo, $letra, 0, 0,
 									$venta, $dataCAE, $conceptosTotales, $cuentacorriente, $dataFactura, $signo,
 									$codigoTipoTransaccion, null,
-									true, $numeroOrdenventa, $codigoCentrocosto, '');
+									true, $numeroOrdenventa, $codigoCentrocosto, '', $empresa->codigo);
 
 						if (isset($anita['error']))
 						{
@@ -2540,13 +2526,6 @@ class FacturacionService
             			'numeroremito' => $numeroremito,
 						'cantidadbulto' => $this->cantidadBulto
 					];	
-					// Verifica si ya existe en anita
-					$ventaAnita = Self::buscaVentaAnita(substr($venta['codigo'], 0, 3), $letra, $puntoventa->codigo, $venta['numerocomprobante']);
-					// Si existe retorna con error
-					if ($ventaAnita == $venta['numerocomprobante'])
-					{
-						throw new Exception('La factura '.$venta['numerocomprobante'].' ya existe en ANITA');
-					}
 
 					// Graba venta
 					$vta = $this->ventaRepository->create($venta);
@@ -2707,10 +2686,10 @@ class FacturacionService
 					if ($puntoventa->modofacturacion != 'M')
 					{
 						// Graba anita
-						$anita = self::grabaAnita($puntoventa->codigo, $letra, $puntoventaremito->codigo, $numeroremito,
+						$anita = $this->grabaAnitaConReintentoPorDuplicado($puntoventa->codigo, $letra, $puntoventaremito->codigo, $numeroremito,
 									$venta, $dataCAE, $conceptosTotales, $cuentacorriente, $dataFactura, $signo,
 									$codigoTipoTransaccion, null,
-									true, 0, 0, '');
+									true, 0, 0, '', $empresa->codigo);
 
 						if (isset($anita['error']))
 						{
@@ -2817,16 +2796,6 @@ class FacturacionService
 				'cantidadbulto' => 1,
 				'ordenventa_id' => $ordenventa_id
 			];	
-
-			if (! $omitirSincronizacionAnita) {
-				// Verifica si ya existe en anita
-				$ventaAnita = Self::buscaVentaAnita(substr($venta['codigo'], 0, 3), $letra, $puntoventa->codigo, $venta['numerocomprobante']);
-				// Si existe retorna con error
-				if ($ventaAnita == $venta['numerocomprobante'])
-				{
-					throw new Exception('El comprobante '.$venta['numerocomprobante'].' ya existe en Anita');
-				}
-			}
 
 			// Graba venta
 			$vta = $this->ventaRepository->create($venta);
@@ -3010,11 +2979,11 @@ class FacturacionService
 						&& ! empty($opcionesEmision['anita_modo_minimo']);
 					GastronomiaEmisionProfiler::activo()?->marcar('anita_graba_inicio');
 					// Graba anita
-					$anita = self::grabaAnita($puntoventa->codigo, $letra, 0, 0,
+					$anita = $this->grabaAnitaConReintentoPorDuplicado($puntoventa->codigo, $letra, 0, 0,
 								$venta, $dataCAE, $conceptosTotales, $cuentacorriente, $dataFactura, $signo,
 								$codigoTipoTransaccion, null,
 								true, $numeroOrdenventa, $codigoCentrocosto, $referenciaFactura,
-								null, null, $modoMinimoAnita);
+								$empresa->codigo, null, null, $modoMinimoAnita);
 
 					GastronomiaEmisionProfiler::activo()?->marcar('anita_graba_fin');
 
@@ -4158,6 +4127,144 @@ class FacturacionService
 		return 0;
 	}
 
+	private function esErrorDuplicadoComprobanteEnAnita(?string $mensaje): bool
+	{
+		if ($mensaje === null || $mensaje === '') {
+			return false;
+		}
+
+		$m = mb_strtolower($mensaje);
+
+		return str_contains($m, 'ya existe')
+			|| str_contains($m, 'duplicad')
+			|| str_contains($m, 'unique')
+			|| str_contains($m, 'duplicate');
+	}
+
+	/**
+	 * @param  array{error: string, mensaje?: string}|string  $resultado
+	 */
+	private function esResultadoGrabaAnitaDuplicado($resultado): bool
+	{
+		if (! is_array($resultado) || ! isset($resultado['error'])) {
+			return false;
+		}
+
+		return $this->esErrorDuplicadoComprobanteEnAnita(
+			(string) ($resultado['mensaje'] ?? $resultado['error'] ?? ''),
+		);
+	}
+
+	/**
+	 * Tras fallo de grabaAnita: liberar solo si el comprobante quedó en Informix sin cerrar el flujo (huérfano).
+	 *
+	 * @param  array{error: string, mensaje?: string}|string  $resultadoGrabaAnita
+	 */
+	private function debeLiberarComprobanteHuerfanoEnAnita($resultadoGrabaAnita, array $venta, string $letra, $puntoventa): bool
+	{
+		if (! is_array($resultadoGrabaAnita) || ! isset($resultadoGrabaAnita['error'])) {
+			return false;
+		}
+
+		if ($resultadoGrabaAnita['error'] === 'Errvend') {
+			return false;
+		}
+
+		$tipo = substr((string) ($venta['codigo'] ?? ''), 0, 3);
+		$numero = $venta['numerocomprobante'] ?? null;
+		if ($tipo === '' || $numero === null) {
+			return false;
+		}
+
+		if ($this->esResultadoGrabaAnitaDuplicado($resultadoGrabaAnita)) {
+			return true;
+		}
+
+		return (int) self::buscaVentaAnita($tipo, $letra, $puntoventa, $numero) === (int) $numero;
+	}
+
+	/**
+	 * Graba en Anita; si el número ya existe (huérfano tras rollback), lo borra y reintenta una vez.
+	 * No consulta Anita antes de grabar (evita latencia en cada factura).
+	 *
+	 * @return array{error: string, mensaje?: string}|string
+	 */
+	private function grabaAnitaConReintentoPorDuplicado(
+		$puntoventa,
+		string $letra,
+		$puntoventaremito,
+		$numeroremito,
+		array $venta,
+		$dataCAE,
+		$conceptostotales,
+		$cuentacorriente,
+		$datatalle,
+		$signo,
+		$codigoTipoTransaccion,
+		$pedido_id,
+		$flGrabaStock,
+		$numeroOrdenventa,
+		$codigoCentrocosto,
+		$referenciaFactura,
+		$empresaCodigo,
+		$servidor = null,
+		$ifx_server = null,
+		bool $modoMinimoAnita = false,
+	) {
+		$anita = self::grabaAnita(
+			$puntoventa,
+			$letra,
+			$puntoventaremito,
+			$numeroremito,
+			$venta,
+			$dataCAE,
+			$conceptostotales,
+			$cuentacorriente,
+			$datatalle,
+			$signo,
+			$codigoTipoTransaccion,
+			$pedido_id,
+			$flGrabaStock,
+			$numeroOrdenventa,
+			$codigoCentrocosto,
+			$referenciaFactura,
+			$servidor,
+			$ifx_server,
+			$modoMinimoAnita,
+		);
+
+		if (! $this->debeLiberarComprobanteHuerfanoEnAnita($anita, $venta, $letra, $puntoventa)) {
+			return $anita;
+		}
+
+		$tipo = substr((string) ($venta['codigo'] ?? ''), 0, 3);
+		$numero = $venta['numerocomprobante'];
+
+		self::borraAnita($tipo, $letra, $puntoventa, $numero, $empresaCodigo);
+
+		return self::grabaAnita(
+			$puntoventa,
+			$letra,
+			$puntoventaremito,
+			$numeroremito,
+			$venta,
+			$dataCAE,
+			$conceptostotales,
+			$cuentacorriente,
+			$datatalle,
+			$signo,
+			$codigoTipoTransaccion,
+			$pedido_id,
+			$flGrabaStock,
+			$numeroOrdenventa,
+			$codigoCentrocosto,
+			$referenciaFactura,
+			$servidor,
+			$ifx_server,
+			$modoMinimoAnita,
+		);
+	}
+
 	// Busca si existe la factura
 	private function buscaVentaAnita($tipo, $letra, $puntoventa, $numero)
 	{
@@ -4346,20 +4453,23 @@ class FacturacionService
 		}						
         $apiAnita->apiCallEscritura($data, 'compaux delete', 'facturacion.anita_bridge.fallo');
 
-		$apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'delete', 
-						'tabla' => 'compley', 
-						'sistema' => 'ventas',
-						'whereArmado' => " WHERE compl_tipo = '".$tipo."' AND
-												compl_letra = '".$letra."' AND
-												compl_sucursal = '".$puntoventa."' AND
-												compl_nro = '".$numero."'
-						" );
-		if ($this->flGrabaComprobanteDividido)
+		if (config('app.empresa') == 'Calzados Ferli')
 		{
-			$data['path_sistema'] = '/usr2/villafranca';
-		}						
-        $apiAnita->apiCallEscritura($data, 'compley delete', 'facturacion.anita_bridge.fallo');
+			$apiAnita = new ApiAnita();
+			$data = array( 'acc' => 'delete', 
+							'tabla' => 'compley', 
+							'sistema' => 'ventas',
+							'whereArmado' => " WHERE compl_tipo = '".$tipo."' AND
+													compl_letra = '".$letra."' AND
+													compl_sucursal = '".$puntoventa."' AND
+													compl_nro = '".$numero."'
+							" );
+			if ($this->flGrabaComprobanteDividido)
+			{
+				$data['path_sistema'] = '/usr2/villafranca';
+			}						
+			$apiAnita->apiCallEscritura($data, 'compley delete', 'facturacion.anita_bridge.fallo');
+		}
 
 		$apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 

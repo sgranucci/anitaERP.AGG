@@ -15,10 +15,37 @@
         <td style="width: 65%; text-align: right;">
             <h1>{{ $d['titulo'] }}</h1>
             <div class="subtitulo">{{ $d['subtitulo'] }}</div>
-            <div class="muted">Emitido: {{ $d['fecha_emision_comprobante'] }}</div>
+            <div class="muted">PDF generado: {{ $d['fecha_emision_comprobante'] }}</div>
         </td>
     </tr>
 </table>
+
+<table class="bloque-fechas">
+    <thead>
+        <tr>
+            <th style="width:50%;">
+                Fecha de jornada
+                <span class="fecha-leyenda">Turno contable · imputación en Anita</span>
+            </th>
+            <th style="width:50%;">
+                Registro en caja
+                <span class="fecha-leyenda">Momento real del ingreso en tesorería</span>
+            </th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="fecha-valor fecha-jornada-valor">{{ $d['fecha_jornada'] ?: '—' }}</td>
+            <td class="fecha-valor fecha-registro-valor">{{ $d['fecha_registro_caja'] ?: '—' }}</td>
+        </tr>
+    </tbody>
+</table>
+
+@if (empty($d['fechas_mismo_dia']) && ! empty($d['fecha_jornada']) && ! empty($d['fecha_registro_caja']))
+<p class="aviso-fechas-distintas">
+    La rendición se registró en caja en una fecha distinta a la jornada contable del cierre.
+</p>
+@endif
 
 <h2>Datos de la rendición</h2>
 <table>
@@ -31,14 +58,12 @@
     <tr>
         <td class="lbl">Empresa</td>
         <td>{{ $d['empresa_nombre'] }}</td>
-        <td class="lbl">Fecha rendición</td>
-        <td>{{ $d['fecha_rendicion'] }}</td>
-    </tr>
-    <tr>
         <td class="lbl">Caja</td>
         <td>{{ $d['caja_nombre'] ?: '—' }}</td>
+    </tr>
+    <tr>
         <td class="lbl">Registró</td>
-        <td>{{ $d['usuario_registro'] ?: '—' }}</td>
+        <td colspan="3">{{ $d['usuario_registro'] ?: '—' }}</td>
     </tr>
     <tr>
         <td class="lbl">PV CAE</td>
@@ -52,7 +77,13 @@
     </tr>
 </table>
 
-<h2>Datos del turno rendido</h2>
+<h2>
+    @if (($d['tipo_rendicion'] ?? '') === 'jornada')
+        Datos del cierre de jornada rendido
+    @else
+        Datos del turno rendido
+    @endif
+</h2>
 <table>
     <tr>
         <td class="lbl">Empresa</td>
@@ -61,10 +92,14 @@
         <td>{{ $d['identificador_pc'] }}</td>
     </tr>
     <tr>
-        <td class="lbl">Turno</td>
+        <td class="lbl">{{ ($d['tipo_rendicion'] ?? '') === 'jornada' ? 'Jornada' : 'Turno' }}</td>
         <td>{{ $d['turno_catalogo'] }} @if(($d['turno_horario'] ?? '—') !== '—') ({{ $d['turno_horario'] }}) @endif</td>
-        <td class="lbl">Fecha jornada</td>
-        <td>{{ $d['fecha_jornada'] }}</td>
+        <td class="lbl">Jornada contable</td>
+        <td>{{ $d['fecha_jornada'] ?: '—' }}</td>
+    </tr>
+    <tr>
+        <td class="lbl">Registro en caja</td>
+        <td colspan="3">{{ $d['fecha_registro_caja'] ?: '—' }}</td>
     </tr>
     <tr>
         <td class="lbl">Habilitación</td>
@@ -78,12 +113,7 @@
         <td class="lbl">Turno operativo</td>
         <td>#{{ $d['turno_operativo_id'] ?? '—' }}</td>
     </tr>
-    @if (!empty($d['observacion_habilitacion']))
-    <tr>
-        <td class="lbl">Obs. habilitación</td>
-        <td colspan="3" class="bloque-obs">{{ $d['observacion_habilitacion'] }}</td>
-    </tr>
-    @endif
+    @include('ventas.gastronomia.cierres_turno.partials.observacion_habilitacion_comprobante', ['d' => $d])
 </table>
 
 @php

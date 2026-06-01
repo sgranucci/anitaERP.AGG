@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Support\Ventas;
 
+use App\Support\Arca\ArcaFailoverStore;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia as R;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
@@ -157,6 +158,21 @@ class ArcaWsfeEmisionResilienciaTest extends TestCase
         config()->set('arca_wsfe.emision.forzar_modo_caea', true);
         config()->set('arca_wsfe.emision.reintentar_caea_si_falla_comunicacion', true);
         self::assertFalse(R::debeReintentarTransaccionConCaea('Connection timed out', yaUsaCaea: false));
+    }
+
+    public function test_forzar_modo_caea_por_failover_automatico(): void
+    {
+        config()->set('arca_wsfe.emision.forzar_modo_caea', false);
+        config()->set('arca.monitor_conectividad.fallos_para_activar', 1);
+
+        try {
+            ArcaFailoverStore::registrarChequeo(ArcaFailoverStore::WS_WSFE, false, 'timeout');
+            self::assertTrue(R::forzarModoCaea());
+            self::assertTrue(R::failoverAutomaticoActivo());
+            self::assertStringContainsString('monitor de conectividad', (string) R::mensajeAvisoModoCaeaForzado());
+        } finally {
+            ArcaFailoverStore::reset(ArcaFailoverStore::WS_WSFE);
+        }
     }
 
     public function test_es_falla_comunicacion_sin_respuesta_clara_descarta_bugs(): void

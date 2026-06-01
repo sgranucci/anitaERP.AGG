@@ -24,9 +24,9 @@
     </div>
 </div>
 @php
-    $usuarioIdVal = old('usuario_id', $data->usuario_id ?? '');
-    $usuarioCodigoVal = old('usuario_codigo', optional($data ?? null)->usuarios?->usuario ?? '');
-    $usuarioNombreVal = old('nombreusuario', optional($data ?? null)->usuarios?->nombre ?? '');
+    $usuarioIdVal = old('usuario_id', optional($data ?? null)->usuario_id ?? (isset($usuario_default) ? $usuario_default->id : ''));
+    $usuarioCodigoVal = old('usuario_codigo', optional($data ?? null)->usuarios?->usuario ?? (isset($usuario_default) ? $usuario_default->usuario : ''));
+    $usuarioNombreVal = old('nombreusuario', optional($data ?? null)->usuarios?->nombre ?? (isset($usuario_default) ? $usuario_default->nombre : ''));
 @endphp
 <div class="form-group row">
     <label for="usuario_codigo" class="col-lg-3 col-form-label requerido">Usuario</label>

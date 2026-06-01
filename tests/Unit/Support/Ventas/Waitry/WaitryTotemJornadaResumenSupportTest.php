@@ -4,6 +4,7 @@ namespace Tests\Unit\Support\Ventas\Waitry;
 
 use App\Models\Ventas\TotemWaitryGastronomia;
 use App\Models\Ventas\UbicacionGastronomia;
+use App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport;
 use App\Support\Ventas\Waitry\WaitryTotemJornadaResumenSupport;
 use Illuminate\Support\Collection;
 use PHPUnit\Framework\TestCase;
@@ -59,5 +60,53 @@ final class WaitryTotemJornadaResumenSupportTest extends TestCase
         $this->assertCount(2, $resumen['por_totem'][0]['por_medio_pago']);
         $this->assertSame(2, $resumen['total_general']['cantidad_ordenes']);
         $this->assertSame(150.0, $resumen['total_general']['total_ingreso']);
+    }
+
+    public function test_excluye_cash_cobrado_en_totem_del_resumen(): void
+    {
+        $ubicacion = new UbicacionGastronomia(['nombre' => 'Rebisco']);
+        $ubicacion->id = 10;
+
+        $totem = new TotemWaitryGastronomia([
+            'empresa_id' => 2,
+            'ubicacion_id' => 10,
+            'waitry_table_id' => 101067,
+            'detalle' => 'Tótem',
+        ]);
+        $totem->id = 7;
+        $totem->setRelation('ubicacion', $ubicacion);
+
+        $lineas = [
+            [
+                'paid_waitry' => true,
+                'waitry_tipo_pago' => 'mercadopago',
+                'monto_cobro_waitry' => 80.0,
+                'total' => 80.0,
+                'waitry_table_id' => 101067,
+            ],
+            [
+                'paid_waitry' => true,
+                'waitry_tipo_pago' => 'cash',
+                'monto_cobro_waitry' => 40.0,
+                'total' => 40.0,
+                'waitry_table_id' => 101067,
+            ],
+            [
+                'paid_waitry' => true,
+                'waitry_tipo_pago' => null,
+                'monto_cobro_waitry' => 25.0,
+                'total' => 25.0,
+                'waitry_table_id' => 101067,
+            ],
+        ];
+
+        $resumen = WaitryTotemJornadaResumenSupport::armar(Collection::make([$totem]), $lineas);
+
+        $this->assertSame(1, $resumen['por_totem'][0]['cantidad_ordenes']);
+        $this->assertSame(80.0, $resumen['por_totem'][0]['total_ingreso']);
+        $this->assertCount(1, $resumen['por_totem'][0]['por_medio_pago']);
+        $this->assertSame('mercadopago', WaitryMedioPagoCuentacajaSupport::normalizarTipo(
+            $resumen['por_totem'][0]['por_medio_pago'][0]['tipo'] ?? null,
+        ));
     }
 }

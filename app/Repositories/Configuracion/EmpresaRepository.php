@@ -46,10 +46,11 @@ class EmpresaRepository implements EmpresaRepositoryInterface
         // Extrae las empresas asignadas
         $empresas = collect(Session::get('usuario_empresas'))->pluck('id')->toArray();
 
-        if (count($empresas) > 1)
+        if (count($empresas) >= 1) {
             $empresa = $this->model->whereIn('id', $empresas)->orderBy('id', 'ASC')->get();
-        else
+        } else {
             $empresa = $this->model->orderBy('id', 'ASC')->get();
+        }
 
         return $empresa;
     }

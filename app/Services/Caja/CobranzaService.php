@@ -29,6 +29,7 @@ use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
 use App\Repositories\Configuracion\Retencion_CobranzaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Caja\CobranzaNumeracionTransaccion;
 use App\Services\Ordenventa\OrdenventaService;
 use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Localidad;
@@ -157,63 +158,81 @@ class CobranzaService
 		}
 		$data['usuario_ids'][] = Auth::user()->id;
 
-		$data['numerotransaccion'] = $this->cobranzaRepository->ultimoNumeroTransaccion($data['empresa_id'], $data['tipotransaccion_caja_id']);
-		$data['usuario_id'] = Auth::user()->id;
+		return CobranzaNumeracionTransaccion::conExclusividad(
+			(int) $data['empresa_id'],
+			(int) $data['tipotransaccion_caja_id'],
+			function () use ($data, $request, $origen) {
+				$data['numerotransaccion'] = CobranzaNumeracionTransaccion::calcularSiguienteNumeroSecuencialBd(
+					(int) $data['empresa_id'],
+					(int) $data['tipotransaccion_caja_id'],
+				);
+				$data['usuario_id'] = Auth::user()->id;
 
-		if (!isset($data['detalle']))
-			$data['detalle'] = "Cobranza Nro. ".$data['numerotransaccion'];
+				if (! isset($data['detalle'])) {
+					$data['detalle'] = 'Cobranza Nro. '.$data['numerotransaccion'];
+				}
 
-		if (isset($data['ordenventa_id']))
-		{
-			if ($data['ordenventa_id'] > 0)
-			{
-				$ordenventa = $this->ordenventaService->leeOrdenVenta($data['ordenventa_id']);
+				if (isset($data['ordenventa_id']) && $data['ordenventa_id'] > 0) {
+					$ordenventa = $this->ordenventaService->leeOrdenVenta($data['ordenventa_id']);
 
-				if ($ordenventa)
-					$data['detalle'] .= " Orden de Venta Nro. ".$ordenventa->numeroordenventa;
-			}
-		}
-		if ($origen)
-		{
-			$cobranza = $this->cobranzaRepository->create($data);
+					if ($ordenventa) {
+						$data['detalle'] .= ' Orden de Venta Nro. '.$ordenventa->numeroordenventa;
+					}
+				}
 
-			if (!$cobranza)
-				throw new Exception('Error en grabacion');
+				if ($origen) {
+					$cobranza = $this->cobranzaRepository->create($data);
 
-			Self::agrega($data, $cobranza, $request);
-		}
-		else
-		{
-			DB::beginTransaction();
-			try
-			{
-				$cobranza = $this->cobranzaRepository->create($data);
+					if (! $cobranza) {
+						throw new Exception('Error en grabacion');
+					}
 
-				if ($cobranza == 'Error')
-					throw new Exception('Error en grabacion');
-
-				// Guarda tablas asociadas
-				if ($cobranza)
 					Self::agrega($data, $cobranza, $request);
+				} else {
+					DB::beginTransaction();
+					try {
+						$cobranza = $this->cobranzaRepository->create($data);
 
-				// Graba anita por cobranza
-				$anita = self::grabaAnita($data['fecha'], 'COB', 'X', 0, $data['numerotransaccion'], $data['totalfinalcobranza'], $data['cotizacion_cobranza'],
-								$data['detalle'], $data['empresa_id'], $data);
+						if ($cobranza == 'Error') {
+							throw new Exception('Error en grabacion');
+						}
 
-				if (isset($anita['error']))
-					throw new Exception('Error en grabacion anita. '.$anita['mensaje']);
+						if ($cobranza) {
+							Self::agrega($data, $cobranza, $request);
+						}
 
-				if ($data['ordenventa_id'] > 0)
-					$ordenventa = $this->ordenventaService->marcaOrdenVentaCobrada($data['ordenventa_id']);
+						$anita = self::grabaAnita(
+							$data['fecha'],
+							'COB',
+							'X',
+							0,
+							$data['numerotransaccion'],
+							$data['totalfinalcobranza'],
+							$data['cotizacion_cobranza'],
+							$data['detalle'],
+							$data['empresa_id'],
+							$data,
+						);
 
-				DB::commit();
-			} catch (\Exception $e) {
-				DB::rollback();
+						if (isset($anita['error'])) {
+							throw new Exception('Error en grabacion anita. '.$anita['mensaje']);
+						}
 
-				return ['errores' => $e->getMessage()];
-			}
-		}
-        return ['mensaje' => 'ok'];
+						if ($data['ordenventa_id'] > 0) {
+							$this->ordenventaService->marcaOrdenVentaCobrada($data['ordenventa_id']);
+						}
+
+						DB::commit();
+					} catch (\Exception $e) {
+						DB::rollback();
+
+						return ['errores' => $e->getMessage()];
+					}
+				}
+
+				return ['mensaje' => 'ok'];
+			},
+		);
 	}
 
 	private function agrega($data, $cobranza, $request)
@@ -1568,10 +1587,6 @@ class CobranzaService
 			$data['observaciones'][] = $linea['observacion'];
 		}
 
-		$data['numerotransaccion'] = $this->cobranzaRepository->ultimoNumeroTransaccion(
-			$data['empresa_id'],
-			$data['tipotransaccion_caja_id']
-		);
 		$data['usuario_id'] = Auth::id();
 		$detalleManual = trim((string) ($payload['detalle'] ?? ''));
 		$data['detalle'] = $detalleManual !== ''
@@ -1586,6 +1601,10 @@ class CobranzaService
 		if ($payload['genera_contabilidad']) {
 			$this->aplicarAsientoContableGastronomia($data, $montoAplicado, (int) $venta->moneda_id, (float) ($venta->cotizacion ?: 1.));
 		}
+
+		$data['numerotransaccion'] = CobranzaNumeracionTransaccion::numerotransaccionDesdeCodigoVenta(
+			(string) ($venta->codigo ?? ''),
+		);
 
 		DB::beginTransaction();
 		try {

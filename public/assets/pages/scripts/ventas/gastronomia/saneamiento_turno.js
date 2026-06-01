@@ -232,7 +232,9 @@
             return;
         }
         var msg = 'Cerrar remotamente el turno #' + turnoId + ' (' + turnoNombre + ') en terminal ' + pcTurno + '?\n';
-        msg += 'Los totales se calculan sobre esa PC. Use esto si la terminal no responde.';
+        msg += 'Los totales se calculan sobre esa PC. Use esto si la terminal no responde.\n';
+        msg += 'Si hay diferencia de conciliación, se imputará automáticamente a sobrante/faltante; '
+            + 'luego puede corregirse anulando el cierre cuando la PC vuelva a operar.';
         if (!confirm(msg)) {
             return;
         }

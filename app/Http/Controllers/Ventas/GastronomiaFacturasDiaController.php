@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Ventas;
 
 use App\Exports\Ventas\GastronomiaFacturasDiaExport;
 use App\Http\Controllers\Controller;
+use App\Models\Ventas\TurnoOperativoGastronomia;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Models\Ventas\Venta;
 use App\Services\Ventas\Gastronomia\GastronomiaCuentaService;
@@ -13,6 +14,7 @@ use App\Services\Ventas\Gastronomia\GastronomiaNotaCreditoService;
 use App\Services\Ventas\Gastronomia\GastronomiaTurnoOperativoService;
 use App\Services\Ventas\Gastronomia\GastronomiaTicketTarjetaCanjeService;
 use App\Services\Ventas\Gastronomia\GastronomiaCategoriafidelidadCanjeService;
+use App\Services\Ventas\Gastronomia\GastronomiaFacturaMedioPagoService;
 use App\Services\Ventas\Gastronomia\GastronomiaTicketCanjePremioService;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
 use App\Support\Ventas\GastronomiaDepositoConfigSupport;
@@ -33,6 +35,7 @@ class GastronomiaFacturasDiaController extends Controller
         private readonly GastronomiaTicketTarjetaCanjeService $ticketTarjetaCanjeService,
         private readonly GastronomiaTicketCanjePremioService $ticketCanjePremioService,
         private readonly GastronomiaCategoriafidelidadCanjeService $categoriafidelidadCanjeService,
+        private readonly GastronomiaFacturaMedioPagoService $facturaMedioPagoService,
     ) {}
 
     public function index(Request $request)
@@ -42,7 +45,17 @@ class GastronomiaFacturasDiaController extends Controller
         $pc = GastronomiaIdentificadorPc::resolver($request);
         $fecha = $this->resolverFechaFiltro($request);
         $jornada = $this->estadoJornadaParaRequest($request);
+        $fechaCalendario = $jornada['fecha_factura_hoy'] ?? Carbon::today()->format('Y-m-d');
         $busqueda = trim((string) $request->get('busqueda', ''));
+
+        $requiereTurno = GastronomiaTurnoOperativoService::requiereHabilitacionTurno();
+        $turnoActivo = $requiereTurno ? $this->turnoOperativoService->turnoHabilitadoEnPc($pc) : null;
+        $cfgPv = $this->cuentaService->resolverConfiguracionPv($request);
+        $empresaId = (int) ($cfgPv?->empresa_id ?? 0);
+        $filtroTurno = $this->resolverFiltroTurno($request, $turnoActivo, $pc, $empresaId, $fecha);
+        $turnosSelector = $requiereTurno && $empresaId > 0
+            ? $this->listarTurnosParaSelector($pc, $empresaId, $fecha)
+            : [];
 
         $todasPc = $request->boolean('todas_pc');
         $articuloSku = trim((string) $request->get('articulo_sku', ''));
@@ -75,18 +88,15 @@ class GastronomiaFacturasDiaController extends Controller
                 ->all();
         }
 
-        $requiereTurno = GastronomiaTurnoOperativoService::requiereHabilitacionTurno();
-        $turnoHabilitado = ! $requiereTurno;
+        $turnoHabilitado = ! $requiereTurno || $turnoActivo !== null;
         $urlHabilitacionTurno = route('gastronomia_habilitacion_turno');
-        $cfgPv = $this->cuentaService->resolverConfiguracionPv($request);
-        if ($requiereTurno && $cfgPv !== null) {
-            $turnoHabilitado = $this->turnoOperativoService->turnoHabilitadoEnPc($pc) !== null;
-        }
+        $totalesFacturacion = $this->calcularTotalesFacturasDia($request, $articuloFiltro);
 
         return view('ventas.gastronomia.facturas_dia.index', [
             'registros' => $registros,
             'notas_credito_por_factura' => $notasCreditoPorFactura,
             'fecha' => $fecha,
+            'fecha_calendario' => $fechaCalendario,
             'busqueda' => $busqueda,
             'identificador_pc' => $pc,
             'todas_pc' => $todasPc,
@@ -96,6 +106,11 @@ class GastronomiaFacturasDiaController extends Controller
             'jornada' => $jornada,
             'requiere_habilitacion_turno' => $requiereTurno,
             'turno_habilitado' => $turnoHabilitado,
+            'turno_activo' => $turnoActivo,
+            'turno_filtro_val' => $filtroTurno['valor'],
+            'turno_filtro' => $filtroTurno['turno'],
+            'turnos_selector' => $turnosSelector,
+            'totales_facturacion' => $totalesFacturacion,
             'url_habilitacion_turno' => $urlHabilitacionTurno,
         ]);
     }
@@ -350,6 +365,10 @@ class GastronomiaFacturasDiaController extends Controller
             && $ncVentaId === null
             && (! $requiereTurno || $turnoHabilitado);
 
+        $puedeCambiarMedioPago = can('cambiar-medio-pago-gastronomia-facturas-dia', false)
+            && $cobranzas->isNotEmpty()
+            && ! ($esComprobanteNc ?? false);
+
         return view('ventas.gastronomia.facturas_dia.ver', [
             'meta' => $meta,
             'venta' => $venta,
@@ -369,7 +388,63 @@ class GastronomiaFacturasDiaController extends Controller
             'turno_habilitado' => $turnoHabilitado,
             'url_habilitacion_turno' => route('gastronomia_habilitacion_turno'),
             'identificador_pc' => $pc,
+            'puede_cambiar_medio_pago' => $puedeCambiarMedioPago,
+            'puede_ver_formula' => can('listar-formula-articulo', false) || can('listar-articulos', false),
         ]);
+    }
+
+    public function apiMediosPagoCambio(int $ventaId)
+    {
+        can('cambiar-medio-pago-gastronomia-facturas-dia');
+
+        $resultado = $this->facturaMedioPagoService->datosParaCambio($ventaId);
+
+        if (! ($resultado['ok'] ?? false)) {
+            return response()->json($resultado, 422);
+        }
+
+        return response()->json($resultado);
+    }
+
+    public function apiCuentacajaPorCodigo(int $ventaId, string $codigo)
+    {
+        can('cambiar-medio-pago-gastronomia-facturas-dia');
+
+        $resultado = $this->facturaMedioPagoService->cuentaPorCodigo($ventaId, $codigo);
+        if ((int) ($resultado['id'] ?? 0) <= 0) {
+            return response()->json($resultado, 422);
+        }
+
+        return response()->json($resultado);
+    }
+
+    public function actualizarMediosPago(Request $request, int $ventaId)
+    {
+        can('cambiar-medio-pago-gastronomia-facturas-dia');
+
+        $request->validate([
+            'cambios' => 'required|array|min:1',
+            'cambios.*.caja_movimiento_cuentacaja_id' => 'required|integer|min:1',
+            'cambios.*.cuentacaja_id' => 'required|integer|min:1',
+            'cambios.*.monto' => 'nullable|numeric',
+        ]);
+
+        $resultado = $this->facturaMedioPagoService->aplicarCambio(
+            $ventaId,
+            array_values($request->input('cambios', [])),
+        );
+
+        if (! ($resultado['ok'] ?? false)) {
+            return response()->json($resultado, 422);
+        }
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json($resultado);
+        }
+
+        return redirect()
+            ->route('gastronomia_facturas_dia_ver', ['ventaId' => $ventaId])
+            ->with('mensaje', $resultado['mensaje'] ?? 'Medio de pago actualizado.');
     }
 
     /**
@@ -381,6 +456,13 @@ class GastronomiaFacturasDiaController extends Controller
         $fecha = $this->resolverFechaFiltro($request);
         $busqueda = trim((string) $request->get('busqueda', ''));
         $todasPc = $request->boolean('todas_pc');
+        $requiereTurno = GastronomiaTurnoOperativoService::requiereHabilitacionTurno();
+        $turnoActivo = $requiereTurno ? $this->turnoOperativoService->turnoHabilitadoEnPc($pc) : null;
+        $cfgPv = $this->cuentaService->resolverConfiguracionPv($request);
+        $empresaId = (int) ($cfgPv?->empresa_id ?? 0);
+        $filtroTurno = $this->resolverFiltroTurno($request, $turnoActivo, $pc, $empresaId, $fecha);
+        $desdeHabilitacion = $filtroTurno['desde'];
+        $hastaTurno = $filtroTurno['hasta'];
 
         $q = VentaGastronomiaEmision::query()
             ->with([
@@ -396,15 +478,23 @@ class GastronomiaFacturasDiaController extends Controller
                 'cuenta',
             ]);
 
-        // Búsqueda numérica: venta / cuenta / cobranza sin filtrar PC ni fecha.
+        // Búsqueda numérica: id venta/cuenta/cobranza o número de comprobante (sin filtrar PC ni fecha).
         if ($busqueda !== '' && ctype_digit($busqueda)) {
             $id = (int) $busqueda;
+            $digitosComprobante = (int) config('facturacion.DIGITOS_COMPROBANTE', 8);
+            $numeroComprobantePadded = str_pad((string) $id, max(1, $digitosComprobante), '0', STR_PAD_LEFT);
 
-            return $q->where(function ($w) use ($id) {
+            return $q->where(function ($w) use ($id, $busqueda, $numeroComprobantePadded) {
                 $w->where('venta_id', $id)
                     ->orWhere('cuenta_gastronomia_id', $id)
                     ->orWhereHas('venta.cobranzasDirectas', fn ($c) => $c->where('id', $id))
-                    ->orWhereHas('venta.caja_movimientos.cobranzas', fn ($c) => $c->where('id', $id));
+                    ->orWhereHas('venta.caja_movimientos.cobranzas', fn ($c) => $c->where('id', $id))
+                    ->orWhereHas('venta', function ($vq) use ($id, $busqueda, $numeroComprobantePadded) {
+                        $vq->where('numerocomprobante', $id)
+                            ->orWhere('codigo', 'like', '%'.$busqueda.'%')
+                            ->orWhere('codigo', 'like', '%-'.$numeroComprobantePadded)
+                            ->orWhere('codigo', 'like', '%'.$numeroComprobantePadded);
+                    });
             })->orderByDesc('venta_id');
         }
 
@@ -412,7 +502,15 @@ class GastronomiaFacturasDiaController extends Controller
             $q->where('identificador_pc', $pc);
         }
 
-        $q->whereHas('venta', fn ($qq) => $qq->whereDate('fechajornada', $fecha));
+        $q->whereHas('venta', function ($vq) use ($fecha, $desdeHabilitacion, $hastaTurno) {
+            $vq->whereDate('fechajornada', $fecha);
+            if ($desdeHabilitacion !== null) {
+                $vq->where('created_at', '>=', $desdeHabilitacion);
+            }
+            if ($hastaTurno !== null) {
+                $vq->where('created_at', '<=', $hastaTurno);
+            }
+        });
 
         if ($articuloFiltro !== null) {
             $articuloId = (int) $articuloFiltro->id;
@@ -435,6 +533,220 @@ class GastronomiaFacturasDiaController extends Controller
         }
 
         return $q->orderByDesc('venta_id');
+    }
+
+    /**
+     * Totales del listado filtrado (todos los registros, no solo la página visible).
+     *
+     * @param  object{id:int,sku:string,descripcion:string}|null  $articuloFiltro
+     * @return array{
+     *   cantidad_comprobantes:int,
+     *   cantidad_facturas:int,
+     *   cantidad_notas_credito:int,
+     *   total_facturas:float,
+     *   total_notas_credito:float,
+     *   total_neto:float
+     * }
+     */
+    private function calcularTotalesFacturasDia(Request $request, ?object $articuloFiltro = null): array
+    {
+        $vacios = [
+            'cantidad_comprobantes' => 0,
+            'cantidad_facturas' => 0,
+            'cantidad_notas_credito' => 0,
+            'total_facturas' => 0.0,
+            'total_notas_credito' => 0.0,
+            'total_neto' => 0.0,
+        ];
+
+        $emisionTable = (new VentaGastronomiaEmision)->getTable();
+
+        $row = $this->registrosFacturasDiaQuery($request, $articuloFiltro)
+            ->reorder()
+            ->join('venta', 'venta.id', '=', $emisionTable.'.venta_id')
+            ->selectRaw('COUNT(*) as cantidad_comprobantes')
+            ->selectRaw('SUM(CASE WHEN '.$emisionTable.'.venta_factura_origen_id IS NULL THEN 1 ELSE 0 END) as cantidad_facturas')
+            ->selectRaw('SUM(CASE WHEN '.$emisionTable.'.venta_factura_origen_id IS NOT NULL THEN 1 ELSE 0 END) as cantidad_notas_credito')
+            ->selectRaw('SUM(CASE WHEN '.$emisionTable.'.venta_factura_origen_id IS NULL THEN venta.total ELSE 0 END) as total_facturas')
+            ->selectRaw('SUM(CASE WHEN '.$emisionTable.'.venta_factura_origen_id IS NOT NULL THEN venta.total ELSE 0 END) as total_notas_credito')
+            ->selectRaw('SUM(venta.total) as total_neto')
+            ->first();
+
+        if ($row === null) {
+            return $vacios;
+        }
+
+        return [
+            'cantidad_comprobantes' => (int) ($row->cantidad_comprobantes ?? 0),
+            'cantidad_facturas' => (int) ($row->cantidad_facturas ?? 0),
+            'cantidad_notas_credito' => (int) ($row->cantidad_notas_credito ?? 0),
+            'total_facturas' => round((float) ($row->total_facturas ?? 0), 2),
+            'total_notas_credito' => round((float) ($row->total_notas_credito ?? 0), 2),
+            'total_neto' => round((float) ($row->total_neto ?? 0), 2),
+        ];
+    }
+
+    /**
+     * @return array{
+     *   valor: string,
+     *   turno: ?TurnoOperativoGastronomia,
+     *   desde: ?Carbon,
+     *   hasta: ?Carbon,
+     *   todo_el_dia: bool
+     * }
+     */
+    private function resolverFiltroTurno(
+        Request $request,
+        ?TurnoOperativoGastronomia $turnoActivo,
+        string $pc,
+        int $empresaId,
+        string $fechaJornada,
+    ): array {
+        $todoElDia = [
+            'valor' => '0',
+            'turno' => null,
+            'desde' => null,
+            'hasta' => null,
+            'todo_el_dia' => true,
+        ];
+
+        if (! GastronomiaTurnoOperativoService::requiereHabilitacionTurno()) {
+            return $todoElDia;
+        }
+
+        $valor = $this->resolverValorTurnoFiltro($request, $turnoActivo);
+
+        if ($valor === '0' || $valor === '') {
+            return $todoElDia;
+        }
+
+        if ($valor === 'activo') {
+            if ($turnoActivo === null || $turnoActivo->habilitacion_en === null) {
+                return $todoElDia;
+            }
+
+            return [
+                'valor' => 'activo',
+                'turno' => $turnoActivo,
+                'desde' => $turnoActivo->habilitacion_en,
+                'hasta' => null,
+                'todo_el_dia' => false,
+            ];
+        }
+
+        $turnoId = (int) $valor;
+        if ($turnoId <= 0 || $empresaId <= 0 || $pc === '') {
+            return $this->filtroTurnoPorDefecto($turnoActivo);
+        }
+
+        $turno = TurnoOperativoGastronomia::query()
+            ->with('turno')
+            ->whereKey($turnoId)
+            ->where('identificador_pc', $pc)
+            ->where('empresa_id', $empresaId)
+            ->whereHas('jornada', fn ($j) => $j->whereDate('fecha_jornada', $fechaJornada))
+            ->first();
+
+        if ($turno === null || $turno->habilitacion_en === null) {
+            return $this->filtroTurnoPorDefecto($turnoActivo);
+        }
+
+        return [
+            'valor' => (string) $turnoId,
+            'turno' => $turno,
+            'desde' => $turno->habilitacion_en,
+            'hasta' => $turno->estado === TurnoOperativoGastronomia::ESTADO_CERRADO
+                ? $turno->cierre_en
+                : null,
+            'todo_el_dia' => false,
+        ];
+    }
+
+    /**
+     * @return array{valor: string, turno: ?TurnoOperativoGastronomia, desde: ?Carbon, hasta: ?Carbon, todo_el_dia: bool}
+     */
+    private function filtroTurnoPorDefecto(?TurnoOperativoGastronomia $turnoActivo): array
+    {
+        if ($turnoActivo !== null && $turnoActivo->habilitacion_en !== null) {
+            return [
+                'valor' => 'activo',
+                'turno' => $turnoActivo,
+                'desde' => $turnoActivo->habilitacion_en,
+                'hasta' => null,
+                'todo_el_dia' => false,
+            ];
+        }
+
+        return [
+            'valor' => '0',
+            'turno' => null,
+            'desde' => null,
+            'hasta' => null,
+            'todo_el_dia' => true,
+        ];
+    }
+
+    private function resolverValorTurnoFiltro(Request $request, ?TurnoOperativoGastronomia $turnoActivo): string
+    {
+        if ($request->has('turno_filtro')) {
+            return trim((string) $request->input('turno_filtro', '0'));
+        }
+
+        if ($request->has('solo_turno_activo')) {
+            return $request->boolean('solo_turno_activo') ? 'activo' : '0';
+        }
+
+        return $turnoActivo !== null ? 'activo' : '0';
+    }
+
+    /**
+     * @return list<array{
+     *   id:int,
+     *   nombre:string,
+     *   estado:string,
+     *   habilitacion_en:string,
+     *   cierre_en:?string,
+     *   label:string,
+     *   es_activo:bool
+     * }>
+     */
+    private function listarTurnosParaSelector(string $pc, int $empresaId, string $fechaJornada): array
+    {
+        if ($pc === '' || $empresaId <= 0) {
+            return [];
+        }
+
+        return TurnoOperativoGastronomia::query()
+            ->with('turno')
+            ->where('identificador_pc', $pc)
+            ->where('empresa_id', $empresaId)
+            ->whereHas('jornada', fn ($j) => $j->whereDate('fecha_jornada', $fechaJornada))
+            ->whereNotNull('habilitacion_en')
+            ->orderBy('habilitacion_en')
+            ->get()
+            ->map(fn (TurnoOperativoGastronomia $t) => [
+                'id' => (int) $t->id,
+                'nombre' => (string) ($t->turno?->nombre ?? 'Turno'),
+                'estado' => (string) $t->estado,
+                'habilitacion_en' => $t->habilitacion_en?->format('Y-m-d H:i') ?? '',
+                'cierre_en' => $t->cierre_en?->format('Y-m-d H:i'),
+                'label' => $this->etiquetaTurnoSelector($t),
+                'es_activo' => $t->estado === TurnoOperativoGastronomia::ESTADO_HABILITADO,
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function etiquetaTurnoSelector(TurnoOperativoGastronomia $turno): string
+    {
+        $nombre = $turno->turno?->nombre ?? 'Turno';
+        $desde = $turno->habilitacion_en?->format('Y-m-d H:i') ?? '?';
+
+        if ($turno->estado === TurnoOperativoGastronomia::ESTADO_CERRADO && $turno->cierre_en !== null) {
+            return $nombre.' — '.$desde.' → '.$turno->cierre_en->format('Y-m-d H:i');
+        }
+
+        return $nombre.' — '.$desde.' → activo';
     }
 
     /**

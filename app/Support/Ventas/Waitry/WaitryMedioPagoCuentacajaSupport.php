@@ -8,8 +8,9 @@ use App\Support\Ventas\GastronomiaCuentacajaTotem;
 /**
  * Medios de pago Waitry (lecturas getOrdersPOS / getordersdetails) → cuenta de caja Anita.
  *
- * mercadopago → cuentacaja 201, totalcoin → cuentacaja 226 (multiempresa, todas las sucursales).
- * Otros cobros en tótem sin tipo mapeado → cuenta TOTEM (GASTRONOMIA_CUENTACAJA_TOTEM_CODIGO).
+ * - Facturación (comanda ya pagada en tótem): siempre cuenta puente TOTEM en Anita, sin importar
+ *   si Waitry cobró con Mercado Pago, Totalcoin u otro (`waitry_tipo_pago` queda solo como referencia).
+ * - Informe Z / cierre jornada: {@see cuentaParaTipoInformeZ()} usa los medios reales mapeados en config.
  */
 final class WaitryMedioPagoCuentacajaSupport
 {
@@ -21,6 +22,16 @@ final class WaitryMedioPagoCuentacajaSupport
     public const TIPOS_CON_CUENTACAJA = [
         self::TIPO_MERCADOPAGO,
         self::TIPO_TOTALCOIN,
+    ];
+
+    /**
+     * No son medios conciliables en Informe Z: cash (efectivo en tótem) y totem (cuenta puente).
+     *
+     * @var list<string>
+     */
+    private const TIPOS_EXCLUIDOS_INFORME_Z = [
+        'cash',
+        'totem',
     ];
 
     /**
@@ -59,6 +70,60 @@ final class WaitryMedioPagoCuentacajaSupport
         $tipo = str_replace([' ', '-', '_'], '', $tipo);
 
         return $tipo !== '' ? $tipo : null;
+    }
+
+    /**
+     * Medios mapeados en config (p. ej. mercadopago, totalcoin).
+     */
+    public static function esTipoPredefinido(?string $tipo): bool
+    {
+        $tipoNorm = self::normalizarTipo($tipo);
+
+        return $tipoNorm !== null && array_key_exists($tipoNorm, self::mapaTipoCuentacaja());
+    }
+
+    /**
+     * Efectivo en tótem y fallback TOTEM no se concilian en el Informe Z.
+     */
+    public static function esTipoExcluidoInformeZ(?string $tipo): bool
+    {
+        $tipoNorm = self::normalizarTipo($tipo);
+
+        if ($tipoNorm === null) {
+            return true;
+        }
+
+        return in_array($tipoNorm, self::TIPOS_EXCLUIDOS_INFORME_Z, true);
+    }
+
+    public static function esCuentacajaTotem(int $cuentacajaId, int $empresaId): bool
+    {
+        if ($cuentacajaId <= 0 || $empresaId <= 0) {
+            return false;
+        }
+
+        $totem = GastronomiaCuentacajaTotem::cuentaParaEmpresa($empresaId);
+
+        return $totem !== null && (int) $totem['id'] === $cuentacajaId;
+    }
+
+    /**
+     * Cuenta de caja para Informe Z: solo tipos predefinidos; sin fallback TOTEM.
+     *
+     * @return array{id:int,nombre:string,codigo:string,moneda_id:int,moneda_abreviatura:?string}|null
+     */
+    public static function cuentaParaTipoInformeZ(?string $tipo, int $empresaId): ?array
+    {
+        if ($empresaId <= 0 || self::esTipoExcluidoInformeZ($tipo)) {
+            return null;
+        }
+
+        $cuentacajaId = self::cuentacajaIdPorTipo($tipo, $empresaId);
+        if ($cuentacajaId === null) {
+            return null;
+        }
+
+        return self::cuentaDesdeId($cuentacajaId, $empresaId);
     }
 
     /**
@@ -103,37 +168,14 @@ final class WaitryMedioPagoCuentacajaSupport
     }
 
     /**
-     * Cuenta de cobranza automática para orden Waitry ya pagada en tótem.
+     * Cuenta puente TOTEM para facturar en Anita una comanda Waitry ya cobrada en el tótem físico.
      *
-     * @param  array<string, mixed>  $orden
      * @return array{id:int,nombre:string,codigo:string,moneda_id:int,moneda_abreviatura:?string,waitry_tipo_pago:?string}|null
      */
-    public static function cuentaParaOrdenWaitryCobrada(array $orden, int $empresaId): ?array
-    {
-        $tipo = self::extraerTipoPagoOrden($orden);
-
-        return self::cuentaParaTipoWaitry($tipo, $empresaId);
-    }
-
-    /**
-     * @return array{id:int,nombre:string,codigo:string,moneda_id:int,moneda_abreviatura:?string,waitry_tipo_pago:?string}|null
-     */
-    public static function cuentaParaTipoWaitry(?string $tipo, int $empresaId): ?array
+    public static function cuentaPuenteTotemFacturacion(int $empresaId, ?string $waitryTipoPago = null): ?array
     {
         if ($empresaId <= 0) {
             return null;
-        }
-
-        $tipoNorm = self::normalizarTipo($tipo);
-        $cuentacajaId = self::cuentacajaIdPorTipo($tipoNorm, $empresaId);
-
-        if ($cuentacajaId !== null) {
-            $cuenta = self::cuentaDesdeId($cuentacajaId, $empresaId);
-            if ($cuenta !== null) {
-                $cuenta['waitry_tipo_pago'] = $tipoNorm;
-
-                return $cuenta;
-            }
         }
 
         $totem = GastronomiaCuentacajaTotem::cuentaParaEmpresa($empresaId);
@@ -141,9 +183,33 @@ final class WaitryMedioPagoCuentacajaSupport
             return null;
         }
 
-        $totem['waitry_tipo_pago'] = $tipoNorm;
+        $totem['waitry_tipo_pago'] = self::normalizarTipo($waitryTipoPago);
 
         return $totem;
+    }
+
+    /**
+     * Cuenta de cobranza automática para orden Waitry ya pagada en tótem.
+     *
+     * @param  array<string, mixed>  $orden
+     * @return array{id:int,nombre:string,codigo:string,moneda_id:int,moneda_abreviatura:?string,waitry_tipo_pago:?string}|null
+     */
+    public static function cuentaParaOrdenWaitryCobrada(array $orden, int $empresaId): ?array
+    {
+        return self::cuentaPuenteTotemFacturacion(
+            $empresaId,
+            self::extraerTipoPagoOrden($orden),
+        );
+    }
+
+    /**
+     * Alias de {@see cuentaPuenteTotemFacturacion()} — la cobranza Anita es siempre TOTEM.
+     *
+     * @return array{id:int,nombre:string,codigo:string,moneda_id:int,moneda_abreviatura:?string,waitry_tipo_pago:?string}|null
+     */
+    public static function cuentaParaTipoWaitry(?string $tipo, int $empresaId): ?array
+    {
+        return self::cuentaPuenteTotemFacturacion($empresaId, $tipo);
     }
 
     public static function etiquetaTipo(?string $tipo): string

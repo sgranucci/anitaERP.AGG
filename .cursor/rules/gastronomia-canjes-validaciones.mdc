@@ -264,6 +264,8 @@ Igual que canje premio y ticket tarjeta:
 Validaciones principales (referencia; no bloquean F5):
 
 - Código barras ≥ 7 dígitos; movimiento y número ticket ≠ 0.
+- Parseo EAN/OCR: normaliza relleno `0` y dígito verificador del pie del código (ej. `5541010525473` → `554101`/`52547`).
+- Si no existe en Anita con movimiento+nroticket: reintenta variantes de parseo; **último recurso** busca solo por `imovimientoid` (6 primeros dígitos) entre tickets **pendientes** no vencidos y elige el `inroticket` más parecido al leído (umbral de similitud; si hay uno solo, lo toma).
 - Ticket no duplicado en grilla ni ya canjeado en ERP/Anita.
 - Vencimiento (`ticket_tarjeta_vencimiento_dias`), importe válido, tolerancia excedente vs total factura.
 - Cuenta caja CTG configurada por empresa (`GASTRONOMIA_TICKET_TARJETA_CUENTACAJA_CODIGO`).

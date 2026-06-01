@@ -41,7 +41,12 @@ $(function () {
         activa_eventos_consultausuario();
     }
 
+    var empresaInicial = String($('#empresa_id').val() || '');
     $('#empresa_id').on('change', function () {
+        var actual = String($(this).val() || '');
+        if (actual === empresaInicial) {
+            return;
+        }
         $('#usuario_id').val('');
         $('#usuario_codigo').val('');
         $('#nombreusuario').val('');

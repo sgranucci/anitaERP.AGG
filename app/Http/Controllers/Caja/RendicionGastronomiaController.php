@@ -8,7 +8,11 @@ use App\Models\Caja\Caja;
 use App\Queries\Caja\Caja_AsignacionQueryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Caja\RendicionGastronomiaCajaService;
+use App\Support\Caja\RendicionGastronomiaCajaListadoFiltros;
 use App\Support\Caja\RendicionGastronomiaCajaPermiso;
+use App\Support\Caja\RendicionGastronomiaPdfPermiso;
+use App\Support\Listado\FiltrosListadoRequest;
+use App\Support\Ventas\GastronomiaJornadaComprobantePermiso;
 use Auth;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -27,15 +31,16 @@ class RendicionGastronomiaController extends Controller
     {
         can('listar-rendicion-gastronomia-caja');
 
-        $filtros = $this->filtrosListadoDesdeRequest($request);
-        $rendiciones = $this->service->listar(
-            $filtros['busqueda'],
-            true,
-            $filtros['fecha_desde'],
-            $filtros['fecha_hasta'],
-        );
+        $filtros = $this->resolverFiltrosListado($request);
+        $rendiciones = $this->service->listar($filtros, true);
 
-        return view('caja.rendiciongastronomia.index', compact('rendiciones', 'filtros'));
+        return view('caja.rendiciongastronomia.index', [
+            'rendiciones' => $rendiciones,
+            'filtros' => $filtros,
+            'filtrosQuery' => RendicionGastronomiaCajaListadoFiltros::paraQueryString($filtros),
+            'camposFiltro' => RendicionGastronomiaCajaListadoFiltros::CAMPOS,
+            'empresa_query' => $this->empresaRepository->allFiltrado(),
+        ]);
     }
 
     public function listar(Request $request, ?string $formato = null, ?string $busqueda = null)
@@ -45,13 +50,8 @@ class RendicionGastronomiaController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $filtros = $this->filtrosListadoDesdeRequest($request, $busqueda);
-        $rendiciones = $this->service->listar(
-            $filtros['busqueda'],
-            false,
-            $filtros['fecha_desde'],
-            $filtros['fecha_hasta'],
-        );
+        $filtros = $this->resolverFiltrosListado($request, $busqueda);
+        $rendiciones = $this->service->listar($filtros, false);
 
         switch ($formato) {
             case 'PDF':
@@ -79,28 +79,39 @@ class RendicionGastronomiaController extends Controller
                 );
         }
 
-        return view('caja.rendiciongastronomia.index', compact('rendiciones', 'filtros'));
+        return view('caja.rendiciongastronomia.index', [
+            'rendiciones' => $rendiciones,
+            'filtros' => $filtros,
+            'filtrosQuery' => RendicionGastronomiaCajaListadoFiltros::paraQueryString($filtros),
+            'camposFiltro' => RendicionGastronomiaCajaListadoFiltros::CAMPOS,
+            'empresa_query' => $this->empresaRepository->allFiltrado(),
+        ]);
     }
 
     /**
-     * @return array{busqueda: ?string, fecha_desde: ?string, fecha_hasta: ?string}
+     * @return array<string, mixed>
      */
-    private function filtrosListadoDesdeRequest(Request $request, ?string $busquedaRuta = null): array
+    private function resolverFiltrosListado(Request $request, ?string $busquedaRuta = null): array
     {
-        $busqueda = $busquedaRuta ?? $request->input('busqueda');
-        $busqueda = is_string($busqueda) ? trim($busqueda) : null;
-        if ($busqueda === '') {
-            $busqueda = null;
+        $filtros = RendicionGastronomiaCajaListadoFiltros::resolverDesdeRequest($request, $busquedaRuta);
+        $asignadas = $this->empresaRepository->traeEmpresasAsignadas();
+        $filtros['empresas_asignadas'] = $asignadas;
+
+        if (FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
+            return $filtros;
         }
 
-        $fechaDesde = trim((string) $request->input('fecha_desde', ''));
-        $fechaHasta = trim((string) $request->input('fecha_hasta', ''));
+        $empresaQuery = $this->empresaRepository->allFiltrado();
+        $empresaId = (int) ($filtros['empresa_id'] ?? 0);
 
-        return [
-            'busqueda' => $busqueda,
-            'fecha_desde' => $fechaDesde !== '' ? $fechaDesde : null,
-            'fecha_hasta' => $fechaHasta !== '' ? $fechaHasta : null,
-        ];
+        // Solo preseleccionar empresa cuando el usuario tiene una única empresa asignada.
+        if ($empresaId <= 0 && count($asignadas) === 1 && ! $request->has('empresa_id')) {
+            $filtros['empresa_id'] = $this->resolverEmpresaDefaultId($empresaQuery);
+        } elseif ($empresaId > 0 && count($asignadas) >= 1 && ! in_array($empresaId, $asignadas, true)) {
+            $filtros['empresa_id'] = $this->resolverEmpresaDefaultId($empresaQuery);
+        }
+
+        return $filtros;
     }
 
     public function crear(?int $caja = null)
@@ -138,7 +149,7 @@ class RendicionGastronomiaController extends Controller
             $cabecera = $this->service->cabeceraDesdeRequest($request->validated());
             $movimientos = $this->service->normalizarMovimientosRequest($request->input('movimientos', []));
             $this->service->guardar($cabecera, $movimientos);
-        } catch (InvalidArgumentException $e) {
+        } catch (InvalidArgumentException|\RuntimeException $e) {
             return redirect()->back()->withInput()->with('mensaje', $e->getMessage());
         }
 
@@ -147,8 +158,8 @@ class RendicionGastronomiaController extends Controller
 
     public function imprimir(Request $request, int $id)
     {
-        if (! can('listar-rendicion-gastronomia-caja', false) && ! can('editar-rendicion-gastronomia-caja', false)) {
-            abort(403);
+        if (! RendicionGastronomiaPdfPermiso::puedeVerPdfRendicion()) {
+            abort(403, 'No tiene permiso para ver el PDF de la rendición.');
         }
 
         $payload = $this->service->datosParaImpresion($id);
@@ -199,19 +210,42 @@ class RendicionGastronomiaController extends Controller
             return redirect('caja/rendiciongastronomia')
                 ->with('mensaje', RendicionGastronomiaCajaPermiso::mensajeRestriccionFecha());
         }
+        if (! RendicionGastronomiaCajaPermiso::puedeModificarRendicionTurno($data)) {
+            return redirect('caja/rendiciongastronomia')
+                ->with('mensaje', RendicionGastronomiaCajaPermiso::mensajeJornadaPresentadaBloqueoTurno());
+        }
 
         $empresaQuery = $this->empresaRepository->allFiltrado();
         $nombreCaja = (string) ($data->caja?->nombre ?? '');
 
         $totalesTurno = null;
-        try {
-            $datosTurno = $this->service->datosDesdeTurno((int) $data->turno_operativo_gastronomia_id, $id);
-            $totalesTurno = $datosTurno['totales_turno'] ?? null;
-        } catch (InvalidArgumentException) {
-            // Turno ya no disponible para recálculo; se muestran totales persistidos.
+        $totalesDia = null;
+        $auditoriaJornada = null;
+        if ($data->esRendicionJornada()) {
+            try {
+                $datosJornada = $this->service->datosDesdeJornada((int) $data->jornada_gastronomia_id, $id);
+                $totalesDia = $datosJornada['totales_dia'] ?? null;
+                $auditoriaJornada = $datosJornada;
+            } catch (InvalidArgumentException) {
+                // Jornada ya no recalculable.
+            }
+        } else {
+            try {
+                $datosTurno = $this->service->datosDesdeTurno((int) $data->turno_operativo_gastronomia_id, $id);
+                $totalesTurno = $datosTurno['totales_turno'] ?? null;
+            } catch (InvalidArgumentException) {
+                // Turno ya no disponible para recálculo; se muestran totales persistidos.
+            }
         }
 
-        return view('caja.rendiciongastronomia.editar', compact('data', 'empresaQuery', 'nombreCaja', 'totalesTurno'));
+        return view('caja.rendiciongastronomia.editar', compact(
+            'data',
+            'empresaQuery',
+            'nombreCaja',
+            'totalesTurno',
+            'totalesDia',
+            'auditoriaJornada',
+        ));
     }
 
     public function actualizar(ValidacionRendicionGastronomiaCaja $request, int $id)
@@ -223,12 +257,16 @@ class RendicionGastronomiaController extends Controller
             return redirect('caja/rendiciongastronomia')
                 ->with('mensaje', RendicionGastronomiaCajaPermiso::mensajeRestriccionFecha());
         }
+        if (! RendicionGastronomiaCajaPermiso::puedeModificarRendicionTurno($rendicion)) {
+            return redirect('caja/rendiciongastronomia')
+                ->with('mensaje', RendicionGastronomiaCajaPermiso::mensajeJornadaPresentadaBloqueoTurno());
+        }
 
         try {
             $cabecera = $this->service->cabeceraDesdeRequest($request->validated());
             $movimientos = $this->service->normalizarMovimientosRequest($request->input('movimientos', []));
             $this->service->actualizar($id, $cabecera, $movimientos);
-        } catch (InvalidArgumentException $e) {
+        } catch (InvalidArgumentException|\RuntimeException $e) {
             return redirect()->back()->withInput()->with('mensaje', $e->getMessage());
         }
 
@@ -244,16 +282,16 @@ class RendicionGastronomiaController extends Controller
                 $this->service->eliminar($id);
 
                 return response()->json(['mensaje' => 'ok']);
-            } catch (\Throwable) {
-                return response()->json(['mensaje' => 'ng']);
+            } catch (\Throwable $e) {
+                return response()->json(['mensaje' => $e->getMessage() ?: 'ng']);
             }
         }
 
         try {
             $this->service->eliminar($id);
             $mensaje = 'Rendición de gastronomía eliminada con éxito';
-        } catch (\Throwable) {
-            $mensaje = 'No se pudo eliminar la rendición';
+        } catch (\Throwable $e) {
+            $mensaje = $e->getMessage() ?: 'No se pudo eliminar la rendición';
         }
 
         return redirect('caja/rendiciongastronomia')->with('mensaje', $mensaje);
@@ -270,9 +308,16 @@ class RendicionGastronomiaController extends Controller
             return response()->json(['ok' => false, 'mensaje' => 'Empresa inválida.'], 422);
         }
 
+        $numeracion = $this->service->proponerNumeracionAnita($empresaId);
+
         return response()->json([
             'ok' => true,
-            'codigo' => $this->service->proponerCodigoAnita($empresaId),
+            'codigo' => $numeracion['codigo'],
+            'nro_oper_anita' => $numeracion['nro_oper'],
+            'fuente' => $numeracion['fuente'],
+            'ultimo_en_anita' => $numeracion['ultimo_anita'],
+            'ultimo_en_erp' => $numeracion['ultimo_erp'],
+            'consulta_anita_ok' => $numeracion['consulta_anita_ok'],
         ]);
     }
 
@@ -284,6 +329,16 @@ class RendicionGastronomiaController extends Controller
 
         $empresaId = (int) $request->input('empresa_id', 0);
         $excepto = (int) $request->input('excepto_rendicion_id', 0);
+        $alcance = (string) $request->input('alcance', 'turno');
+
+        if ($alcance === 'jornada') {
+            return response()->json($this->service->consultaCierresJornada(
+                (string) ($request->input('consulta') ?? ''),
+                $empresaId,
+                $excepto > 0 ? $excepto : null,
+                GastronomiaJornadaComprobantePermiso::puedeVerComprobanteCierreTotem(),
+            ));
+        }
 
         return response()->json($this->service->consultaCierresTurno(
             (string) ($request->input('consulta') ?? ''),
@@ -311,6 +366,50 @@ class RendicionGastronomiaController extends Controller
             $turno = $this->service->findTurnoPendientePorNumero($numero, $empresaId, $excepto > 0 ? $excepto : null);
 
             return response()->json(['ok' => true, 'turno' => $turno]);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        }
+    }
+
+    public function apiJornadaPorNumero(Request $request, int $numero)
+    {
+        if (! can('crear-rendicion-gastronomia-caja', false) && ! can('editar-rendicion-gastronomia-caja', false)) {
+            abort(403);
+        }
+
+        $empresaId = (int) $request->input('empresa_id', 0);
+        $excepto = (int) $request->input('excepto_rendicion_id', 0);
+
+        if ($empresaId <= 0) {
+            return response()->json(['ok' => false, 'mensaje' => 'Debe seleccionar una empresa.'], 422);
+        }
+
+        try {
+            $jornada = $this->service->findJornadaPendientePorNumero($numero, $empresaId, $excepto > 0 ? $excepto : null);
+
+            return response()->json(['ok' => true, 'jornada' => $jornada]);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        }
+    }
+
+    public function apiDatosJornada(Request $request)
+    {
+        if (! can('crear-rendicion-gastronomia-caja', false) && ! can('editar-rendicion-gastronomia-caja', false)) {
+            abort(403);
+        }
+
+        $jornadaId = (int) $request->input('jornada_gastronomia_id', 0);
+        $excepto = (int) $request->input('excepto_rendicion_id', 0);
+
+        if ($jornadaId <= 0) {
+            return response()->json(['ok' => false, 'mensaje' => 'Debe seleccionar una jornada cerrada.'], 422);
+        }
+
+        try {
+            $datos = $this->service->datosDesdeJornada($jornadaId, $excepto > 0 ? $excepto : null);
+
+            return response()->json(['ok' => true, 'datos' => $datos]);
         } catch (InvalidArgumentException $e) {
             return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
         }

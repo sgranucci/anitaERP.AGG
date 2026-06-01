@@ -2,6 +2,8 @@
 
 namespace App\Support\Ventas;
 
+use App\Support\Arca\ArcaFailoverStore;
+
 /**
  * Resiliencia de emisión ARCA (CAE en línea vs CAEA) para WSFEv1 y WSMTXCA.
  *
@@ -48,7 +50,29 @@ final class ArcaWsfeEmisionResiliencia
      */
     public static function forzarModoCaea(?string $webservice = null): bool
     {
-        return filter_var(config(self::configKey($webservice).'.emision.forzar_modo_caea'), FILTER_VALIDATE_BOOLEAN);
+        if (filter_var(config(self::configKey($webservice).'.emision.forzar_modo_caea'), FILTER_VALIDATE_BOOLEAN)) {
+            return true;
+        }
+
+        $failoverKey = self::esWsMtxca($webservice)
+            ? ArcaFailoverStore::WS_MTXCA
+            : ArcaFailoverStore::WS_WSFE;
+
+        return ArcaFailoverStore::estaActivo($failoverKey);
+    }
+
+    /** true si el modo CAEA viene del monitor automático (no del .env manual). */
+    public static function failoverAutomaticoActivo(?string $webservice = null): bool
+    {
+        if (filter_var(config(self::configKey($webservice).'.emision.forzar_modo_caea'), FILTER_VALIDATE_BOOLEAN)) {
+            return false;
+        }
+
+        $failoverKey = self::esWsMtxca($webservice)
+            ? ArcaFailoverStore::WS_MTXCA
+            : ArcaFailoverStore::WS_WSFE;
+
+        return ArcaFailoverStore::estaActivo($failoverKey);
     }
 
     /**
@@ -341,6 +365,10 @@ final class ArcaWsfeEmisionResiliencia
     {
         if (! self::forzarModoCaea($webservice)) {
             return null;
+        }
+
+        if (self::failoverAutomaticoActivo($webservice)) {
+            return 'Modo CAEA activo por contingencia ARCA (monitor de conectividad): no se consulta el web service en línea hasta recuperar comunicación.';
         }
 
         $env = self::esWsMtxca($webservice) ? 'ARCA_MTXCA_FORZAR_MODO_CAEA' : 'ARCA_WSFE_FORZAR_MODO_CAEA';

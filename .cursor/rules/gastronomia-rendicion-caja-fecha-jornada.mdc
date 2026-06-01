@@ -1,0 +1,55 @@
+# Rendiciones gastronomía en caja — fecha de jornada vs fecha real
+
+## Dos fechas distintas
+
+| Concepto | Campo / origen | Uso |
+|---|---|---|
+| **Fecha de jornada** | `jornada_gastronomia.fecha_jornada` (vía turno o jornada directa) | Agrupación contable, totales, filtros de listado, bridge Anita (`rendg_fecha`, `rendv_fecha`, `rendg_fecha_alfa`) |
+| **Fecha real de registro** | `rendicion_gastronomia_caja.fecharendicion` | Momento en que caja grabó la rendición; hora en Anita (`rendg_hora`); permisos de edición del día |
+
+No confundir con `venta.fecha` (emisión real del comprobante) ni con `venta.fechajornada` (jornada de la venta).
+
+## Bridge Anita (turno → rendgastro / rendvalor)
+
+Referencia: `RendicionGastronomiaAnitaContextBuilder`, mappers en `app/Support/Caja/AnitaSync/`.
+
+**Bridge numéricos:** ver `anita-bridge-rendgastro-numericos.mdc` (INSERT: no mapeados en 0; UPDATE: solo mapeo + config opt-in).
+
+- `fecha_entera` / `fecha_alfa` → **fecha de jornada** del turno operativo.
+- `hora` → hora de `fecharendicion` (registro real en caja).
+- `fecha_carga` / `hora_carga` → timestamp de sincronización (`now()`).
+- `rendg_total_x` / `rendg_total_z` → facturación **sin notas de crédito** (`GastronomiaTurnoOperativoTotalesSupport::total_facturas` / `totalFacturasSinNotasCredito`). X = ventana del turno; Z = día completo por PC. Anita resta `rendg_tot_nc` al consolidar; no duplicar NC en X/Z.
+- `rendg_tot_nc` → `rendicion.totalnotacredito` (valor absoluto de NC del turno).
+- `rendg_total_z` → **0** al crear/actualizar rendición **de turno** en Anita. El Z del día (bruto por PC, sin NC) se asigna **solo al presentar la jornada en caja** (`tipo = jornada`), cuando ya están todas las rendiciones de turno (`erroresAntesDeRendir`). `RendicionGastronomiaAnitaTotalZPorPcService` deja Z solo en la **última rendición de esa PC** (por `fecharendicion`). Bridge: `UPDATE rendg_total_z` únicamente.
+- Disparadores Z: **presentar** o **editar** rendición jornada en caja; **eliminar** presentación jornada → Z=0 en todas las rendiciones de turno. **No** al rendir/editar turno ni al cerrar jornada en Gastronomía. **Anular cierre** de jornada en Ventas → `resetTotalZPorPcEnJornada`.
+- Tras presentar la jornada: **prohibido** crear, editar o eliminar rendiciones de turno (`exigirRendicionTurnoModificable` + `RendicionGastronomiaCajaPermiso::puedeModificarRendicionTurno`). Correcciones solo vía presentación jornada.
+- Totales CAEA y ventas del turno: filtrar por `venta.fechajornada` (fallback legacy `venta.fecha`).
+
+Las rendiciones **tipo jornada** no replican a Anita (`RendicionGastronomiaAnitaSyncService::sincronizarDespuesDeGuardar` retorna temprano).
+
+## Orden operativo en caja (solo módulo Caja)
+
+Antes de **presentar la jornada** (`tipo = jornada`):
+
+1. Jornada cerrada en Ventas → Gastronomía.
+2. Sin turnos habilitados ni sin cierre definitivo en la jornada (`RendicionGastronomiaJornadaPresentacionService::erroresAntesDeRendir`).
+3. **Todos los cierres de turno de esa jornada ya rendidos en caja** (`turnosCerradosSinRendirEnJornada` vacío). La consulta de jornadas pendientes no lista jornadas con turnos sin rendir; al elegir número o cargar datos API se rechaza con mensaje detallado.
+
+Rendición de turno no exige jornada cerrada (puede rendir turnos con jornada aún abierta).
+
+## Listado y filtros
+
+- Filtro por rango de fechas en index/export: solo `fecha_jornada` (relación directa `jornada` o `turnoOperativo.jornada`).
+- Columna **Jornada** en tabla = fecha contable; columna **Fecha rendición** = `fecharendicion`.
+
+## Formulario
+
+- Mostrar fecha de jornada del cierre seleccionado (solo lectura).
+- Campo editable `fecharendicion` = fecha/hora real del registro en caja, no sustituye la jornada.
+- **Verificación del cajero (obligatoria al crear):** no guardar sin cargar el cierre (API `datos-turno` / `datos-jornada`). Mostrar comprobante PDF, totales, medios; en jornada también Waitry, numeración PV e Informe Z. Checkbox `#chk_verificacion_gastronomia` requerido en JS antes del submit.
+
+## Prohibido
+
+- Enviar `fecharendicion` como `rendg_fecha` / `rendv_fecha` al bridge.
+- Filtrar listados de rendición por `fecharendicion` cuando el criterio de negocio es jornada.
+- Usar `Carbon::today()` para totales o conciliación cuando existe jornada/turno con `fecha_jornada` definida.
