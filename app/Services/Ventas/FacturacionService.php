@@ -2983,7 +2983,7 @@ class FacturacionService
 								$venta, $dataCAE, $conceptosTotales, $cuentacorriente, $dataFactura, $signo,
 								$codigoTipoTransaccion, null,
 								true, $numeroOrdenventa, $codigoCentrocosto, $referenciaFactura,
-								$empresa->codigo, null, null, $modoMinimoAnita);
+								$empresa->codigo, null, null, $modoMinimoAnita, $omitirCuentaCorriente);
 
 					GastronomiaEmisionProfiler::activo()?->marcar('anita_graba_fin');
 
@@ -3138,12 +3138,37 @@ class FacturacionService
 		}
 	}
 
+	/**
+	 * Código ven_cond_iva_cli / clim_cond_iva en Informix (mismo criterio que ClienteRepository::setCamposAnita).
+	 */
+	private function codigoCondicionIvaAnitaDesdeErpId(?int $condicionivaId, string $letra = ''): string
+	{
+		switch ((string) ($condicionivaId ?? '')) {
+			case '1':
+				return '0';
+			case '3':
+				return '3';
+			case '2':
+			case '5':
+				return '4';
+			case '4':
+				return '5';
+			case '6':
+				return '6';
+			case '7':
+				return '8';
+			default:
+				return $letra === 'A' ? '0' : '3';
+		}
+	}
+
 	// Graba factura en Anita
 	public function grabaAnita($puntoventa, $letra, $puntoventaremito, $numeroremito, $venta, 
 								$dataCAE, $conceptostotales, $cuentacorriente, $datatalle, $signo, 
 								$codigoTipoTransaccion, $pedido_id,
 								$flGrabaStock, $numeroOrdenventa, $codigoCentrocosto, $referenciaFactura, 
-								$servidor = null, $ifx_server = null, bool $modoMinimoAnita = false)
+								$servidor = null, $ifx_server = null, bool $modoMinimoAnita = false,
+								bool $sinCuentaCorrienteAnita = false)
 	{
 		if ($numeroOrdenventa > 0)
 			$detalle = $dataCAE['items'][0]['detalle'];
@@ -3257,6 +3282,15 @@ class FacturacionService
 		if (isset($cliente->abastos->codigo))
 			$codigoAbasto = $cliente->abastos->codigo;
 
+		$condicionivaId = null;
+		if (! empty($venta['condicioniva_id'])) {
+			$condicionivaId = (int) $venta['condicioniva_id'];
+		} elseif ($cliente && isset($cliente->condicioniva_id)) {
+			$condicionivaId = (int) $cliente->condicioniva_id;
+		}
+		$venCondIvaCli = $this->codigoCondicionIvaAnitaDesdeErpId($condicionivaId, $letra);
+		$venCtaCte = $sinCuentaCorrienteAnita ? 'N' : 'S';
+
 		if (strtoupper(config('app.empresa') == 'EL BIERZO'))
 			$data = array( 	'tabla' => 'venta', 
 						'acc' => 'insert',
@@ -3312,8 +3346,8 @@ class FacturacionService
 							'".$nombreProvincia."',
 							'".$codigopostal."',
 							'".$numerodocumento."',
-							'".($letra == 'A' ? '1' : '4')."',
-							'".'S'."',
+							'".$venCondIvaCli."',
+							'".$venCtaCte."',
 							'".Auth::user()->nombre."',
 							'".'ERP'."',
 							'".date_format(Carbon::now(), 'Ymd')."',
@@ -3389,8 +3423,8 @@ class FacturacionService
 							'".$nombreProvincia."',
 							'".$codigopostal."',
 							'".$numerodocumento."',
-							'".($letra == 'A' ? '1' : '4')."',
-							'".'S'."',
+							'".$venCondIvaCli."',
+							'".$venCtaCte."',
 							'".Auth::user()->nombre."',
 							'".'ERP'."',
 							'".date_format(Carbon::now(), 'Ymd')."',
@@ -4210,6 +4244,7 @@ class FacturacionService
 		$servidor = null,
 		$ifx_server = null,
 		bool $modoMinimoAnita = false,
+		bool $sinCuentaCorrienteAnita = false,
 	) {
 		$anita = self::grabaAnita(
 			$puntoventa,
@@ -4231,6 +4266,7 @@ class FacturacionService
 			$servidor,
 			$ifx_server,
 			$modoMinimoAnita,
+			$sinCuentaCorrienteAnita,
 		);
 
 		if (! $this->debeLiberarComprobanteHuerfanoEnAnita($anita, $venta, $letra, $puntoventa)) {
@@ -4262,6 +4298,7 @@ class FacturacionService
 			$servidor,
 			$ifx_server,
 			$modoMinimoAnita,
+			$sinCuentaCorrienteAnita,
 		);
 	}
 

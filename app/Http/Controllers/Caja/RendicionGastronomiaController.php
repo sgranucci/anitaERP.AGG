@@ -122,7 +122,7 @@ class RendicionGastronomiaController extends Controller
         if ($cajaId <= 0) {
             return redirect()
                 ->route('rendiciongastronomia')
-                ->with('mensaje', 'No tiene caja asignada para hoy. Debe ingresar desde Movimientos de caja o solicitar asignación de cajero.');
+                ->with('errores', ['No tiene caja asignada para hoy. Debe ingresar desde Movimientos de caja o solicitar asignación de cajero.']);
         }
 
         $empresaQuery = $this->empresaRepository->allFiltrado();
@@ -150,7 +150,7 @@ class RendicionGastronomiaController extends Controller
             $movimientos = $this->service->normalizarMovimientosRequest($request->input('movimientos', []));
             $this->service->guardar($cabecera, $movimientos);
         } catch (InvalidArgumentException|\RuntimeException $e) {
-            return redirect()->back()->withInput()->with('mensaje', $e->getMessage());
+            return redirect()->back()->withInput()->with('errores', [$e->getMessage()]);
         }
 
         return redirect('caja/rendiciongastronomia')->with('mensaje', 'Rendición de gastronomía registrada con éxito');
@@ -208,11 +208,11 @@ class RendicionGastronomiaController extends Controller
         $data = $this->service->findConDetalle($id);
         if (! RendicionGastronomiaCajaPermiso::puedeActualizarPorFecha($data)) {
             return redirect('caja/rendiciongastronomia')
-                ->with('mensaje', RendicionGastronomiaCajaPermiso::mensajeRestriccionFecha());
+                ->with('errores', [RendicionGastronomiaCajaPermiso::mensajeRestriccionFecha()]);
         }
         if (! RendicionGastronomiaCajaPermiso::puedeModificarRendicionTurno($data)) {
             return redirect('caja/rendiciongastronomia')
-                ->with('mensaje', RendicionGastronomiaCajaPermiso::mensajeJornadaPresentadaBloqueoTurno());
+                ->with('errores', [RendicionGastronomiaCajaPermiso::mensajeJornadaPresentadaBloqueoTurno()]);
         }
 
         $empresaQuery = $this->empresaRepository->allFiltrado();
@@ -255,11 +255,11 @@ class RendicionGastronomiaController extends Controller
         $rendicion = $this->service->findConDetalle($id);
         if (! RendicionGastronomiaCajaPermiso::puedeActualizarPorFecha($rendicion)) {
             return redirect('caja/rendiciongastronomia')
-                ->with('mensaje', RendicionGastronomiaCajaPermiso::mensajeRestriccionFecha());
+                ->with('errores', [RendicionGastronomiaCajaPermiso::mensajeRestriccionFecha()]);
         }
         if (! RendicionGastronomiaCajaPermiso::puedeModificarRendicionTurno($rendicion)) {
             return redirect('caja/rendiciongastronomia')
-                ->with('mensaje', RendicionGastronomiaCajaPermiso::mensajeJornadaPresentadaBloqueoTurno());
+                ->with('errores', [RendicionGastronomiaCajaPermiso::mensajeJornadaPresentadaBloqueoTurno()]);
         }
 
         try {
@@ -267,7 +267,7 @@ class RendicionGastronomiaController extends Controller
             $movimientos = $this->service->normalizarMovimientosRequest($request->input('movimientos', []));
             $this->service->actualizar($id, $cabecera, $movimientos);
         } catch (InvalidArgumentException|\RuntimeException $e) {
-            return redirect()->back()->withInput()->with('mensaje', $e->getMessage());
+            return redirect()->back()->withInput()->with('errores', [$e->getMessage()]);
         }
 
         return redirect('caja/rendiciongastronomia')->with('mensaje', 'Rendición de gastronomía actualizada con éxito');
@@ -289,12 +289,13 @@ class RendicionGastronomiaController extends Controller
 
         try {
             $this->service->eliminar($id);
-            $mensaje = 'Rendición de gastronomía eliminada con éxito';
-        } catch (\Throwable $e) {
-            $mensaje = $e->getMessage() ?: 'No se pudo eliminar la rendición';
-        }
 
-        return redirect('caja/rendiciongastronomia')->with('mensaje', $mensaje);
+            return redirect('caja/rendiciongastronomia')
+                ->with('mensaje', 'Rendición de gastronomía eliminada con éxito');
+        } catch (\Throwable $e) {
+            return redirect('caja/rendiciongastronomia')
+                ->with('errores', [$e->getMessage() ?: 'No se pudo eliminar la rendición']);
+        }
     }
 
     public function apiProponerCodigo(Request $request)

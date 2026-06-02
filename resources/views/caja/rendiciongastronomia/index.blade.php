@@ -25,7 +25,7 @@ use App\Support\Ventas\GastronomiaJornadaComprobantePermiso;
 @section('contenido')
 <div class="row">
     <div class="col-lg-12">
-        @include('includes.mensaje')
+        @include('caja.rendiciongastronomia.partials.flash_mensajes')
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Rendiciones gastronomía</h3>

@@ -107,6 +107,8 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 
     public function create(array $data)
     {
+		$data = \App\Support\Compras\ProveedorImpuestosRetencionRules::normalizar($data);
+
 		$codigo = '';
 		self::ultimoCodigo($codigo);
 		$data['codigo'] = $codigo;
@@ -133,6 +135,8 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 
     public function update(array $data, $id)
     {
+		$data = \App\Support\Compras\ProveedorImpuestosRetencionRules::normalizar($data);
+
         $proveedor = $this->model->findOrFail($id)
             ->update($data);
 		//

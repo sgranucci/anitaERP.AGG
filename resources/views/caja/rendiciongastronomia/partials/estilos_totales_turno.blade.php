@@ -39,6 +39,7 @@
         font-variant-numeric: tabular-nums;
     }
     #rendicion-gastronomia-app .gastro-rendicion-esperado-efectivo { font-weight: 600; color: #0c5460; }
+    #rendicion-gastronomia-app .gastro-rendicion-esperado-medio { color: #495057; }
     #rendicion-gastronomia-app .gastro-campo-auto-actualizado {
         background-color: #fff3cd !important;
         transition: background-color 0.3s ease;
@@ -52,4 +53,8 @@
     #rendicion-gastronomia-app .rendicion-numeracion-pv td { padding: 0.35rem 0.5rem; vertical-align: middle; }
     #form-rendicion-gastronomia #bloque-verificacion-footer { font-size: 0.95rem; }
     #form-rendicion-gastronomia button[type="submit"]:disabled { cursor: not-allowed; opacity: 0.65; }
+    #alert-errores-rendicion-gastronomia,
+    #alerta-flash-errores-rendicion { font-size: 0.95rem; }
+    #alert-errores-rendicion-gastronomia .js-contenido-errores-rendicion,
+    #alerta-flash-errores-rendicion ul { white-space: pre-wrap; word-break: break-word; }
 </style>

@@ -169,6 +169,14 @@
     </div>
     @endif
 
+    <div id="alert-errores-rendicion-gastronomia" class="alert alert-danger d-none" role="alert">
+        <button type="button" class="close js-cerrar-error-rendicion" aria-label="Cerrar">
+            <span aria-hidden="true">&times;</span>
+        </button>
+        <h4 class="alert-heading mb-2"><i class="fa fa-exclamation-triangle"></i> Atención</h4>
+        <div class="js-contenido-errores-rendicion mb-0"></div>
+    </div>
+
     <input type="hidden" name="tipo" id="tipo_rendicion" value="{{ $tipoSel }}"/>
 
     <div class="card card-outline card-secondary mb-3">
@@ -406,7 +414,7 @@
         <div class="card card-outline card-secondary mb-3">
             <div class="card-header py-2">
                 <strong>Medios rendidos en caja</strong>
-                <small class="text-muted d-block font-weight-normal mt-1">Indique lo que ingresa físicamente a caja. Si el <strong>efectivo rendido</strong> difiere del esperado, el campo <strong>sobrante / faltante</strong> se ajusta automáticamente para mantener la rendición cuadrada.</small>
+                <small class="text-muted d-block font-weight-normal mt-1">Indique lo que ingresa físicamente a caja por cada medio. Si algún monto rendido difiere del <strong>esperado sistema</strong>, el campo <strong>sobrante / faltante</strong> se ajusta automáticamente para mantener la rendición cuadrada.</small>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
@@ -450,7 +458,7 @@
                     <div class="form-group col-md-4">
                         <label for="sobrantefaltante">Sobrante / faltante</label>
                         <input type="number" step="0.01" name="sobrantefaltante" id="sobrantefaltante" class="form-control js-recalcula" value="{{ old('sobrantefaltante', $esEdicion ? $data->sobrantefaltante : 0) }}"/>
-                        <small class="text-muted">Positivo = sobrante, negativo = faltante. Se recalcula al modificar el efectivo rendido (compensa la diferencia con el sistema).</small>
+                        <small class="text-muted">Positivo = sobrante, negativo = faltante. Se recalcula al modificar cualquier medio rendido (compensa la diferencia con el sistema).</small>
                     </div>
                 </div>
                 <div id="alert-diferencias" class="alert mb-0 d-none"></div>

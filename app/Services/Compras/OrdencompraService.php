@@ -16,6 +16,8 @@ class OrdencompraService
 
 	public function leeOrdenCompra($numeroOrdenCompra)
 	{
+		$claveOc = $this->resolverClaveOrdenCompra($numeroOrdenCompra);
+
 		$apiAnita = new ApiAnita();
         $leeAnita = array( 
             'acc' => 'list', 
@@ -31,8 +33,8 @@ class OrdencompraService
 			'whereArmado' => " WHERE
 				penmp_tipo='PEP' and
 				penmp_letra='X' and
-				penmp_sucursal=0 and
-				penmp_nro=".$numeroOrdenCompra." and
+				penmp_sucursal={$claveOc['sucursal']} and
+				penmp_nro={$claveOc['nro']} and
 				penmp_proveedor=prom_proveedor"
         );
         $raw = (string) $apiAnita->apiCallEscritura($leeAnita);
@@ -58,13 +60,35 @@ class OrdencompraService
 			'whereArmado' => " WHERE
 				penvp_tipo='PEP' and
 				penvp_letra='X' and
-				penvp_sucursal=0 and
-				penvp_nro=".$numeroOrdenCompra." and
+				penvp_sucursal={$claveOc['sucursal']} and
+				penvp_nro={$claveOc['nro']} and
 				penvp_articulo=stkm_articulo"
         );
         $itemOrdenCompra = ApiAnita::decodificarListaFilas((string) $apiAnita->apiCall($leeAnita));
 
 		return ['ordencompra' => $ordenCompra, 'item' => $itemOrdenCompra];
+	}
+
+	/**
+	 * Acepta número simple (214482) o formato sucursal-número (0000-00214482).
+	 *
+	 * @return array{sucursal: int, nro: int}
+	 */
+	private function resolverClaveOrdenCompra($numeroOrdenCompra): array
+	{
+		$numeroOrdenCompra = trim((string) $numeroOrdenCompra);
+
+		if (preg_match('/^(\d+)-(\d+)$/', $numeroOrdenCompra, $matches)) {
+			return [
+				'sucursal' => (int) $matches[1],
+				'nro' => (int) $matches[2],
+			];
+		}
+
+		return [
+			'sucursal' => 0,
+			'nro' => (int) $numeroOrdenCompra,
+		];
 	}
 
 	public function leeOrdenCompraPorCodigo($codigocapex)

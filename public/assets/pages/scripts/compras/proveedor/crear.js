@@ -1,3 +1,125 @@
+    var RETENCIONES_LETRA_C = {
+        retieneiva: 'N',
+        retieneganancia: 'N',
+        condicionganancia: 'N',
+    };
+
+    var CAMPOS_REGLAS_RETENCION = [
+        'retieneiva',
+        'condicionganancia',
+        'retieneganancia',
+        'retencionganancia_id',
+        'retencioniva_id',
+        'retienesuss',
+        'retencionsuss_id',
+    ];
+
+    function $selectRetencionProveedor(nombre) {
+        var $porId = $('#' + nombre);
+        if ($porId.length && $porId.is('select')) {
+            return $porId;
+        }
+        return $('select[name="' + nombre + '"]');
+    }
+
+    function idsRetencionSinCodigo() {
+        var raw = $('#tab2').attr('data-retencion-sin-codigo');
+        if (!raw) {
+            return {};
+        }
+        try {
+            return JSON.parse(raw);
+        } catch (e) {
+            return {};
+        }
+    }
+
+    function esLetraFacturaC() {
+        return (($('#letra').val() || '').toString().trim().toUpperCase() === 'C');
+    }
+
+    function estadoCampoRetencionImpuestos(campo) {
+        var esLetraC = esLetraFacturaC();
+        var condicionGanancia = ($selectRetencionProveedor('condicionganancia').val() || '').toString();
+        var retieneIva = ($selectRetencionProveedor('retieneiva').val() || '').toString();
+        var retieneSuss = ($selectRetencionProveedor('retienesuss').val() || '').toString();
+        var sinCodigo = idsRetencionSinCodigo();
+
+        switch (campo) {
+            case 'retieneiva':
+                return esLetraC ? { bloqueado: true, valor: 'N' } : { bloqueado: false };
+            case 'condicionganancia':
+                return esLetraC ? { bloqueado: true, valor: 'N' } : { bloqueado: false };
+            case 'retieneganancia':
+                if (esLetraC || condicionGanancia === 'N') {
+                    return { bloqueado: true, valor: 'N' };
+                }
+                return { bloqueado: false };
+            case 'retencionganancia_id':
+                if (esLetraC || condicionGanancia === 'N') {
+                    return { bloqueado: true, valor: sinCodigo.retencionganancia_id || '' };
+                }
+                return { bloqueado: false };
+            case 'retencioniva_id':
+                if (retieneIva === 'N') {
+                    return { bloqueado: true, valor: sinCodigo.retencioniva_id || '' };
+                }
+                return { bloqueado: false };
+            case 'retienesuss':
+                return { bloqueado: false };
+            case 'retencionsuss_id':
+                if (retieneSuss === 'N') {
+                    return { bloqueado: true, valor: sinCodigo.retencionsuss_id || '' };
+                }
+                return { bloqueado: false };
+            default:
+                return { bloqueado: false };
+        }
+    }
+
+    function bloquearSelectRetencionImpuestos($select, valor) {
+        if (valor !== undefined && valor !== null) {
+            $select.val(String(valor));
+            if ($select.hasClass('select2-hidden-accessible')) {
+                $select.trigger('change.select2');
+            }
+        }
+        var nombre = $select.attr('name') || $select.attr('id');
+        var $hidden = $select.next('input[data-proveedor-retencion-bloqueado="' + nombre + '"]');
+        if (!$hidden.length) {
+            $hidden = $('<input type="hidden">')
+                .attr('data-proveedor-retencion-bloqueado', nombre)
+                .attr('name', nombre);
+            $select.after($hidden);
+        }
+        $hidden.val($select.val());
+        $select.prop('disabled', true);
+    }
+
+    function desbloquearSelectRetencionImpuestos($select) {
+        var nombre = $select.attr('name') || $select.attr('id');
+        $select.prop('disabled', false);
+        $select.next('input[data-proveedor-retencion-bloqueado="' + nombre + '"]').remove();
+    }
+
+    function aplicarReglasRetencionesImpuestos() {
+        CAMPOS_REGLAS_RETENCION.forEach(function (campo) {
+            var $select = $selectRetencionProveedor(campo);
+            if (!$select.length) {
+                return;
+            }
+            var estado = estadoCampoRetencionImpuestos(campo);
+            if (estado.bloqueado) {
+                bloquearSelectRetencionImpuestos($select, estado.valor);
+            } else {
+                desbloquearSelectRetencionImpuestos($select);
+            }
+        });
+    }
+
+    function aplicarRetencionesPorLetra() {
+        aplicarReglasRetencionesImpuestos();
+    }
 
     function completarLetra(condicioniva_id){
 		var condiva = $("#condicioniva_query").val();
@@ -9,13 +131,20 @@
 			if (value['id'] == condicioniva_id)
 				$("#letra").val(value['letra']);
   		});
+        aplicarRetencionesPorLetra();
 	}
 
     $(function () {
+        $('#form-general').on('submit', function () {
+            aplicarReglasRetencionesImpuestos();
+        });
+
         $("#condicioniva_id").change(function(){
             var  condicioniva_id = $(this).val();
             completarLetra(condicioniva_id);
         });
+
+        $('#condicionganancia, #retieneiva, #retienesuss').on('change', aplicarReglasRetencionesImpuestos);
 
         // Pone en readonly estado para el alta
         let tipoempresa_id = $("#tipoempresa_id").val();
@@ -183,6 +312,7 @@
 
 		var condicioniva_id = $("#condicioniva_id").val();
         completarLetra(condicioniva_id);
+        aplicarReglasRetencionesImpuestos();
 
         // Muestra tipo de suspension
         muestraTipoSuspension();

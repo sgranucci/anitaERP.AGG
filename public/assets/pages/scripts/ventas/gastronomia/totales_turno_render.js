@@ -141,20 +141,15 @@
             html += '</td>';
             if (arqueoActivo) {
                 html += '<td class="text-right">';
-                if (esEfectivo) {
-                    html += '<span class="gastro-rendicion-esperado-efectivo font-weight-bold">$' + fmt(monto) + '</span>';
-                } else {
-                    html += '<span class="text-muted">—</span>';
-                }
+                var clsEsperado = esEfectivo
+                    ? 'gastro-rendicion-esperado-efectivo font-weight-bold'
+                    : 'font-weight-bold';
+                html += '<span class="' + clsEsperado + '">$' + fmt(monto) + '</span>';
                 html += '</td>';
                 html += '<td class="text-right">';
-                if (esEfectivo) {
-                    html += '<input type="text" inputmode="decimal" class="form-control form-control-sm text-right js-efectivo-contado-cierre" ';
-                    html += 'value="' + esc(fmt(monto)) + '" data-esperado="' + esc(String(monto)) + '"/>';
-                    html += '<div class="js-hint-diff-efectivo-cierre"></div>';
-                } else {
-                    html += '<span class="font-weight-bold">$' + fmt(monto) + '</span>';
-                }
+                html += '<input type="text" inputmode="decimal" class="form-control form-control-sm text-right js-medio-contado-cierre" ';
+                html += 'value="' + esc(fmt(monto)) + '" data-esperado="' + esc(String(monto)) + '" data-cuentacaja-id="' + ccId + '"/>';
+                html += '<div class="js-hint-diff-medio-cierre"></div>';
                 html += '</td>';
             } else {
                 html += '<td class="text-right font-weight-bold">$' + fmt(monto) + '</td>';
@@ -230,8 +225,8 @@
             html += '<p class="small text-muted mb-0 mt-1 pl-1">Las invitaciones ($0,01 sin cobranza) no suman al total cobrado.</p>';
         }
         if (arqueoActivo && conTotalFinal) {
-            html += '<p class="small text-muted mb-0 mt-1 pl-1">Compare el <strong>esperado sistema</strong> de efectivo con el monto contado. ';
-            html += 'La diferencia se compensa automáticamente en <strong>sobrante / faltante</strong> del formulario de cierre.</p>';
+            html += '<p class="small text-muted mb-0 mt-1 pl-1">Compare el <strong>esperado sistema</strong> de cada medio con el monto contado. ';
+            html += 'Las diferencias se compensan automáticamente en <strong>sobrante / faltante</strong> del formulario de cierre.</p>';
         }
         return html;
     }
@@ -248,12 +243,12 @@
         return isNaN(n) ? 0 : Math.round(n * 100) / 100;
     }
 
-    function actualizarHintDiffEfectivoCierre(inp) {
+    function actualizarHintDiffMedioCierre(inp) {
         if (!inp) {
             return;
         }
         var contenedor = inp.parentElement
-            ? inp.parentElement.querySelector('.js-hint-diff-efectivo-cierre')
+            ? inp.parentElement.querySelector('.js-hint-diff-medio-cierre')
             : null;
         if (!contenedor) {
             return;
@@ -271,25 +266,29 @@
             + 'Se compensa en <strong>sobrante / faltante</strong> abajo.</small>';
     }
 
-    function enlazarArqueoEfectivoCierre(root) {
+    function enlazarArqueoMediosCierre(root) {
         if (!root) {
             return;
         }
-        root.querySelectorAll('.js-efectivo-contado-cierre').forEach(function (inp) {
+        root.querySelectorAll('.js-medio-contado-cierre').forEach(function (inp) {
             if (inp.getAttribute('data-arqueo-bound') === '1') {
-                actualizarHintDiffEfectivoCierre(inp);
+                actualizarHintDiffMedioCierre(inp);
                 return;
             }
             inp.setAttribute('data-arqueo-bound', '1');
             inp.addEventListener('input', function () {
-                actualizarHintDiffEfectivoCierre(inp);
+                actualizarHintDiffMedioCierre(inp);
             });
             inp.addEventListener('blur', function () {
                 inp.value = fmt(parseDecimalArqueo(inp.value));
-                actualizarHintDiffEfectivoCierre(inp);
+                actualizarHintDiffMedioCierre(inp);
             });
-            actualizarHintDiffEfectivoCierre(inp);
+            actualizarHintDiffMedioCierre(inp);
         });
+    }
+
+    function enlazarArqueoEfectivoCierre(root) {
+        enlazarArqueoMediosCierre(root);
     }
 
     function renderTotalMediosPagoFinalHtml(totales, opcionesConciliar, opcionesRender) {
@@ -736,6 +735,7 @@
         renderListaParcialesHtml: renderListaParcialesHtml,
         renderAlertasControlHtml: renderAlertasControlHtml,
         renderNumeracionFiscalHtml: renderNumeracionFiscalHtml,
+        enlazarArqueoMediosCierre: enlazarArqueoMediosCierre,
         enlazarArqueoEfectivoCierre: enlazarArqueoEfectivoCierre,
     };
 })();

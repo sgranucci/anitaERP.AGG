@@ -15,8 +15,7 @@ class ValidacionRendicionGastronomiaCaja extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        $tipo = (string) $this->input('tipo', RendicionGastronomiaCaja::TIPO_TURNO);
-        if ($tipo === RendicionGastronomiaCaja::TIPO_JORNADA && ! $this->has('movimientos')) {
+        if (! $this->has('movimientos') || ! is_array($this->input('movimientos'))) {
             $this->merge(['movimientos' => []]);
         }
     }
@@ -71,9 +70,7 @@ class ValidacionRendicionGastronomiaCaja extends FormRequest
             'totalredondeoinvitacion' => ['required', 'numeric'],
             'sobrantefaltante' => ['required', 'numeric'],
             'observacion' => ['nullable', 'string', 'max:65535'],
-            'movimientos' => $esJornada
-                ? ['nullable', 'array']
-                : ['required', 'array', 'min:1'],
+            'movimientos' => ['present', 'array'],
             'movimientos.*.cuentacaja_id' => ['required', 'integer', 'exists:cuentacaja,id'],
             'movimientos.*.monto' => ['required', 'numeric'],
             'movimientos.*.cotizacion' => ['nullable', 'numeric', 'min:0.0001'],
@@ -92,6 +89,7 @@ class ValidacionRendicionGastronomiaCaja extends FormRequest
             'totalredondeo' => 'redondeo rendición',
             'totalredondeoinvitacion' => 'redondeo invitaciones',
             'sobrantefaltante' => 'sobrante / faltante',
+            'movimientos' => 'medios de pago rendidos',
         ];
     }
 
@@ -99,6 +97,7 @@ class ValidacionRendicionGastronomiaCaja extends FormRequest
     {
         return [
             'caja_id.min' => 'Debe tener una caja asignada para registrar la rendición (ingrese desde Movimientos de caja).',
+            'movimientos.present' => 'Debe cargar el cierre de gastronomía (Consultar) antes de guardar la rendición.',
             'caja_id.exists' => 'La caja indicada no existe o no está habilitada.',
             'jornada_gastronomia_id.unique' => 'Esta jornada ya fue presentada en caja.',
             'turno_operativo_gastronomia_id.unique' => 'Este cierre de turno ya fue rendido en caja.',

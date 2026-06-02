@@ -47,11 +47,13 @@
     var formEl = document.getElementById('form-rendicion-gastronomia');
     var btnGuardarRendicion = formEl ? formEl.querySelector('button[type="submit"]') : null;
     var avisoSinCierreCargado = document.getElementById('aviso-sin-cierre-cargado');
+    var alertErroresEl = document.getElementById('alert-errores-rendicion-gastronomia');
 
     var cuentacajaEfectivoId = parseInt(inicial.cuentacaja_efectivo_id, 10) || 0;
     var esperadosSistema = {};
     var sobranteFaltanteBase = 0;
-    var efectivoRendidoAlCargar = null;
+    /** Montos rendidos al cargar el cierre, por cuentacaja_id (baseline para sobrante/faltante). */
+    var montosRendidosAlCargar = {};
     var sincronizandoSobrante = false;
 
     var R = window.GastronomiaTotalesTurnoRender || {};
@@ -67,32 +69,100 @@
             .replace(/"/g, '&quot;');
     }
 
-    function leerEfectivoRendido() {
-        var inp = tbody.querySelector('tr.gastro-rendicion-fila-efectivo .js-monto-medio');
-        return inp ? parseDecimal(inp.value) : 0;
+    function scrollToAlertaErrores(el) {
+        if (!el) {
+            return;
+        }
+        window.setTimeout(function () {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 80);
     }
 
-    /** Baseline al cargar turno: sobrante del cierre + efectivo rendido inicial en grilla. */
+    function mostrarErrorRendicion(mensaje) {
+        var textos = Array.isArray(mensaje) ? mensaje : [String(mensaje || 'Ocurrió un error.')];
+        var items = '';
+        textos.forEach(function (t) {
+            var linea = String(t || '').trim();
+            if (linea !== '') {
+                items += '<li>' + esc(linea) + '</li>';
+            }
+        });
+        if (!items) {
+            items = '<li>Ocurrió un error.</li>';
+        }
+
+        if (alertErroresEl) {
+            var cont = alertErroresEl.querySelector('.js-contenido-errores-rendicion');
+            if (cont) {
+                cont.innerHTML = '<ul class="mb-0 pl-3">' + items + '</ul>';
+            }
+            alertErroresEl.classList.remove('d-none');
+            scrollToAlertaErrores(alertErroresEl);
+            return;
+        }
+
+        alert(textos.join('\n'));
+    }
+
+    function ocultarErrorRendicion() {
+        if (!alertErroresEl) {
+            return;
+        }
+        alertErroresEl.classList.add('d-none');
+        var cont = alertErroresEl.querySelector('.js-contenido-errores-rendicion');
+        if (cont) {
+            cont.innerHTML = '';
+        }
+    }
+
+    window.rendicionGastronomiaMostrarError = mostrarErrorRendicion;
+    window.rendicionGastronomiaOcultarError = ocultarErrorRendicion;
+
+    function cuentacajaIdDesdeFila(tr) {
+        if (!tr) {
+            return 0;
+        }
+        var hid = tr.querySelector('input[name*="[cuentacaja_id]"]');
+        return hid ? (parseInt(hid.value, 10) || 0) : 0;
+    }
+
+    /** Baseline al cargar turno: sobrante del cierre + montos rendidos iniciales en grilla. */
     function capturarBaselineAjustes() {
         sobranteFaltanteBase = Math.round((parseFloat(val('sobrantefaltante')) || 0) * 100) / 100;
-        efectivoRendidoAlCargar = leerEfectivoRendido();
+        montosRendidosAlCargar = {};
+        tbody.querySelectorAll('.js-monto-medio-rendicion').forEach(function (inp) {
+            var ccId = cuentacajaIdDesdeFila(inp.closest('tr'));
+            if (ccId > 0) {
+                montosRendidosAlCargar[ccId] = parseDecimal(inp.value);
+            }
+        });
     }
 
     /**
-     * Compensa en sobrante/faltante la diferencia entre efectivo rendido y el valor al cargar,
+     * Compensa en sobrante/faltante las diferencias entre montos rendidos y los valores al cargar,
      * para que total grilla + ajustes siga cuadrando con el cobrado del sistema.
-     * Fórmula: sobrante = base + (efectivo_inicial − efectivo_rendido).
+     * Fórmula: sobrante = base + Σ(monto_inicial_medio − monto_rendido_medio).
      */
-    function sincronizarSobrantePorEfectivo() {
-        if (sincronizandoSobrante || cuentacajaEfectivoId <= 0) {
+    function sincronizarSobrantePorMedios() {
+        if (sincronizandoSobrante) {
             return;
         }
-        if (!tbody.querySelector('tr.gastro-rendicion-fila-efectivo .js-monto-medio')) {
+        if (!tbody.querySelector('.js-monto-medio-rendicion')) {
             return;
         }
-        var rendido = leerEfectivoRendido();
-        var baseRendido = efectivoRendidoAlCargar != null ? efectivoRendidoAlCargar : rendido;
-        var nuevo = Math.round((sobranteFaltanteBase + baseRendido - rendido) * 100) / 100;
+        var sumaCompensacion = 0;
+        tbody.querySelectorAll('.js-monto-medio-rendicion').forEach(function (inp) {
+            var ccId = cuentacajaIdDesdeFila(inp.closest('tr'));
+            if (ccId <= 0) {
+                return;
+            }
+            var rendido = parseDecimal(inp.value);
+            var baseRendido = Object.prototype.hasOwnProperty.call(montosRendidosAlCargar, ccId)
+                ? montosRendidosAlCargar[ccId]
+                : rendido;
+            sumaCompensacion += baseRendido - rendido;
+        });
+        var nuevo = Math.round((sobranteFaltanteBase + sumaCompensacion) * 100) / 100;
         var elSf = document.getElementById('sobrantefaltante');
         if (!elSf) {
             return;
@@ -113,8 +183,8 @@
         }, 1800);
     }
 
-    function recalcularDesdeEfectivo() {
-        sincronizarSobrantePorEfectivo();
+    function recalcularDesdeMedios() {
+        sincronizarSobrantePorMedios();
         recalcularDiferencias();
     }
 
@@ -164,21 +234,26 @@
     }
 
     function htmlCeldaEsperadoSistema(cuentacajaId) {
-        if (!esFilaEfectivo(cuentacajaId)) {
+        var ccId = parseInt(cuentacajaId, 10) || 0;
+        if (ccId <= 0) {
             return '<span class="text-muted">—</span>';
         }
-        var esperado = esperadosSistema[cuentacajaEfectivoId];
+        var esperado = esperadosSistema[ccId];
         if (esperado == null || Math.abs(esperado) < 0.001) {
             return '<span class="text-muted">$' + fmt(0) + '</span>';
         }
-        return '<span class="gastro-rendicion-esperado-efectivo d-inline-block py-1">$' + esc(fmt(esperado)) + '</span>';
+        var cls = esFilaEfectivo(ccId)
+            ? 'gastro-rendicion-esperado-efectivo'
+            : 'gastro-rendicion-esperado-medio font-weight-bold';
+        return '<span class="' + cls + ' d-inline-block py-1">$' + esc(fmt(esperado)) + '</span>';
     }
 
-    function htmlHintDiffEfectivo(cuentacajaId, montoRendido) {
-        if (!esFilaEfectivo(cuentacajaId)) {
+    function htmlHintDiffMedio(cuentacajaId, montoRendido) {
+        var ccId = parseInt(cuentacajaId, 10) || 0;
+        if (ccId <= 0) {
             return '';
         }
-        var esperado = esperadosSistema[cuentacajaEfectivoId];
+        var esperado = esperadosSistema[ccId];
         if (esperado == null) {
             return '';
         }
@@ -188,19 +263,19 @@
             return '';
         }
         var tipo = diff > 0 ? 'sobra' : 'falta';
-        return '<small class="d-block text-warning js-hint-diff-efectivo mt-1">Δ $' + esc(fmt(Math.abs(diff)))
+        return '<small class="d-block text-warning js-hint-diff-medio mt-1">Δ $' + esc(fmt(Math.abs(diff)))
             + ' (' + tipo + ' vs sistema). '
             + 'Se compensa en <strong>sobrante / faltante</strong> abajo.</small>';
     }
 
-    function actualizarHintsDiffEfectivo() {
-        tbody.querySelectorAll('tr.gastro-rendicion-fila-efectivo').forEach(function (tr) {
-            var inp = tr.querySelector('.js-monto-medio');
-            var cont = tr.querySelector('.js-contenedor-hint-efectivo');
-            if (!inp || !cont) {
+    function actualizarHintsDiffMedios() {
+        tbody.querySelectorAll('.js-monto-medio-rendicion').forEach(function (inp) {
+            var tr = inp.closest('tr');
+            var cont = tr ? tr.querySelector('.js-contenedor-hint-medio') : null;
+            if (!cont) {
                 return;
             }
-            cont.innerHTML = htmlHintDiffEfectivo(cuentacajaEfectivoId, inp.value);
+            cont.innerHTML = htmlHintDiffMedio(cuentacajaIdDesdeFila(tr), inp.value);
         });
     }
 
@@ -465,7 +540,7 @@
         cuentacajaEfectivoId = 0;
         esperadosSistema = {};
         sobranteFaltanteBase = 0;
-        efectivoRendidoAlCargar = null;
+        montosRendidosAlCargar = {};
         deshabilitarVerificacionCajero();
     }
 
@@ -496,7 +571,7 @@
             return;
         }
 
-        actualizarHintsDiffEfectivo();
+        actualizarHintsDiffMedios();
 
         alertDiff.classList.remove('d-none', 'alert-success', 'alert-warning', 'alert-danger');
         if (cuadra) {
@@ -551,13 +626,10 @@
             if (esNc) {
                 html += '<input type="hidden" class="js-monto-nc-valor" value="' + esc(String(parseFloat(m.monto) || 0)) + '"/>';
                 html += '<span class="d-inline-block py-1">$' + esc(montoFmt) + '</span>';
-            } else if (esEfectivo) {
-                html += '<input type="text" inputmode="decimal" class="form-control form-control-sm text-right js-monto-medio js-monto-efectivo-rendicion js-monto-decimal" ';
-                html += 'name="movimientos[' + idxPersistido + '][monto]" value="' + esc(montoFmt) + '"/>';
-                html += '<div class="js-contenedor-hint-efectivo">' + htmlHintDiffEfectivo(ccId, montoFmt) + '</div>';
             } else {
-                html += '<input type="text" inputmode="decimal" class="form-control form-control-sm text-right js-monto-medio js-monto-decimal js-recalcula" ';
+                html += '<input type="text" inputmode="decimal" class="form-control form-control-sm text-right js-monto-medio js-monto-medio-rendicion js-monto-decimal js-recalcula" ';
                 html += 'name="movimientos[' + idxPersistido + '][monto]" value="' + esc(montoFmt) + '"/>';
+                html += '<div class="js-contenedor-hint-medio">' + htmlHintDiffMedio(ccId, montoFmt) + '</div>';
             }
             html += '</div></td>';
             html += '<td class="gastro-col-cotiz text-right"' + tdStyle + '><div class="gastro-celda-numero">';
@@ -912,14 +984,14 @@
         fetchConTimeout(apiTurno, { method: 'POST', body: body, credentials: 'same-origin' }, 120000)
             .then(function (json) {
                 if (!json.ok) {
-                    alert(json.mensaje || 'No se pudo cargar el turno.');
+                    mostrarErrorRendicion(json.mensaje || 'No se pudo cargar el turno.');
                     limpiarTurnoSeleccionado();
                     return;
                 }
                 aplicarDatosTurno(json.datos);
             })
             .catch(function (e) {
-                alert(e && e.message ? e.message : 'Error de comunicación al cargar el cierre de turno.');
+                mostrarErrorRendicion(e && e.message ? e.message : 'Error de comunicación al cargar el cierre de turno.');
                 limpiarTurnoSeleccionado();
             });
     }
@@ -987,7 +1059,7 @@
                 aplicarDatosJornada(json.datos);
             })
             .catch(function (e) {
-                alert(e && e.message ? e.message : 'Error de comunicación al cargar la jornada.');
+                mostrarErrorRendicion(e && e.message ? e.message : 'Error de comunicación al cargar la jornada.');
                 limpiarSeleccion();
             });
     }
@@ -1011,7 +1083,7 @@
 
         var empresaId = empresaIdActual();
         if (!empresaId) {
-            alert('Seleccione una empresa.');
+            mostrarErrorRendicion('Seleccione una empresa.');
             inpJornadaNumero.value = '';
             return;
         }
@@ -1034,7 +1106,7 @@
             })
             .then(function (res) {
                 if (!res.json || !res.json.ok) {
-                    alert((res.json && res.json.mensaje) ? res.json.mensaje : 'Jornada no encontrada.');
+                    mostrarErrorRendicion((res.json && res.json.mensaje) ? res.json.mensaje : 'Jornada no encontrada.');
                     limpiarSeleccion();
                     return;
                 }
@@ -1050,7 +1122,7 @@
                 cargarJornada(String(res.json.jornada.id));
             })
             .catch(function () {
-                alert('Error al buscar la jornada por número.');
+                mostrarErrorRendicion('Error al buscar la jornada por número.');
             })
             .finally(function () {
                 buscandoJornadaPorNumero = false;
@@ -1078,7 +1150,7 @@
 
         var empresaId = empresaIdActual();
         if (!empresaId) {
-            alert('Seleccione una empresa.');
+            mostrarErrorRendicion('Seleccione una empresa.');
             inpTurnoNumero.value = '';
             return;
         }
@@ -1101,7 +1173,7 @@
             })
             .then(function (res) {
                 if (!res.json || !res.json.ok) {
-                    alert((res.json && res.json.mensaje) ? res.json.mensaje : 'Cierre no encontrado.');
+                    mostrarErrorRendicion((res.json && res.json.mensaje) ? res.json.mensaje : 'Cierre no encontrado.');
                     limpiarTurnoSeleccionado();
                     return;
                 }
@@ -1109,7 +1181,7 @@
                 cargarTurno(String(res.json.turno.id));
             })
             .catch(function () {
-                alert('Error al buscar el cierre por número.');
+                mostrarErrorRendicion('Error al buscar el cierre por número.');
             })
             .finally(function () {
                 buscandoTurnoPorNumero = false;
@@ -1130,9 +1202,9 @@
             el.removeEventListener('input', recalcularDiferencias);
             el.addEventListener('input', recalcularDiferencias);
         });
-        tbody.querySelectorAll('.js-monto-efectivo-rendicion').forEach(function (el) {
-            el.removeEventListener('input', recalcularDesdeEfectivo);
-            el.addEventListener('input', recalcularDesdeEfectivo);
+        tbody.querySelectorAll('.js-monto-medio-rendicion').forEach(function (el) {
+            el.removeEventListener('input', recalcularDesdeMedios);
+            el.addEventListener('input', recalcularDesdeMedios);
         });
         document.querySelectorAll('.js-monto-decimal, .js-cotizacion-decimal').forEach(function (el) {
             el.removeEventListener('blur', onBlurDecimal);
@@ -1142,8 +1214,8 @@
 
     function onBlurDecimal(ev) {
         formatearDecimalInput(ev.target);
-        if (ev.target.classList.contains('js-monto-efectivo-rendicion')) {
-            recalcularDesdeEfectivo();
+        if (ev.target.classList.contains('js-monto-medio-rendicion')) {
+            recalcularDesdeMedios();
         } else if (ev.target.classList.contains('js-monto-medio')) {
             recalcularDiferencias();
         }
@@ -1296,12 +1368,12 @@
             var cajaId = parseInt(val('caja_id'), 10) || 0;
             if (modo === 'crear' && cajaId <= 0) {
                 ev.preventDefault();
-                alert('No tiene caja asignada. Ingrese desde Movimientos de caja o solicite asignación de cajero.');
+                mostrarErrorRendicion('No tiene caja asignada. Ingrese desde Movimientos de caja o solicite asignación de cajero.');
                 return;
             }
             if (modo === 'crear' && esJornada() && inpJornadaId && !inpJornadaId.value) {
                 ev.preventDefault();
-                alert('Debe cargar una jornada cerrada antes de guardar.');
+                mostrarErrorRendicion('Debe cargar una jornada cerrada antes de guardar.');
                 if (inpJornadaNumero) {
                     inpJornadaNumero.focus();
                 }
@@ -1309,7 +1381,7 @@
             }
             if (modo === 'crear' && !esJornada() && inpTurnoId && !inpTurnoId.value) {
                 ev.preventDefault();
-                alert('Debe cargar un cierre de turno antes de guardar.');
+                mostrarErrorRendicion('Debe cargar un cierre de turno antes de guardar.');
                 if (inpTurnoNumero) {
                     inpTurnoNumero.focus();
                 }
@@ -1317,7 +1389,7 @@
             }
             if (modo === 'crear' && !cierreGastronomiaCargado) {
                 ev.preventDefault();
-                alert('Debe cargar y revisar el cierre de gastronomía antes de registrar la rendición.');
+                mostrarErrorRendicion('Debe cargar y revisar el cierre de gastronomía antes de registrar la rendición.');
                 return;
             }
             if (modo === 'crear' && chkVerificacionGastronomia && !chkVerificacionGastronomia.checked) {
@@ -1342,10 +1414,20 @@
         if (sincronizandoSobrante) {
             return;
         }
-        var rendido = leerEfectivoRendido();
-        var baseRendido = efectivoRendidoAlCargar != null ? efectivoRendidoAlCargar : rendido;
+        var sumaCompensacion = 0;
+        tbody.querySelectorAll('.js-monto-medio-rendicion').forEach(function (inp) {
+            var ccId = cuentacajaIdDesdeFila(inp.closest('tr'));
+            if (ccId <= 0) {
+                return;
+            }
+            var rendido = parseDecimal(inp.value);
+            var baseRendido = Object.prototype.hasOwnProperty.call(montosRendidosAlCargar, ccId)
+                ? montosRendidosAlCargar[ccId]
+                : rendido;
+            sumaCompensacion += baseRendido - rendido;
+        });
         var actual = Math.round((parseFloat(val('sobrantefaltante')) || 0) * 100) / 100;
-        sobranteFaltanteBase = Math.round((actual - (baseRendido - rendido)) * 100) / 100;
+        sobranteFaltanteBase = Math.round((actual - sumaCompensacion) * 100) / 100;
     }
 
     function bindSobranteManualBaseline() {
@@ -1357,6 +1439,17 @@
         inpSf.addEventListener('input', function () {
             actualizarBaselineSobranteManual();
         });
+    }
+
+    document.querySelectorAll('.js-cerrar-error-rendicion').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            ocultarErrorRendicion();
+        });
+    });
+
+    var flashErr = document.getElementById('alerta-flash-errores-rendicion');
+    if (flashErr) {
+        scrollToAlertaErrores(flashErr);
     }
 
     bindRecalcula();

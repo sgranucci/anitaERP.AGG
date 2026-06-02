@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Ventas;
 
 use App\Exports\Ventas\GastronomiaFacturasDiaExport;
 use App\Http\Controllers\Controller;
+use App\Models\Ventas\MozoGastronomia;
 use App\Models\Ventas\TurnoOperativoGastronomia;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Models\Ventas\Venta;
@@ -63,6 +64,10 @@ class GastronomiaFacturasDiaController extends Controller
             (int) $request->get('articulo_id', 0),
             $articuloSku,
         );
+        $mozoFiltroId = (int) $request->input('mozo_gastronomia_id', 0);
+        $mozosSelector = $empresaId > 0
+            ? $this->listarMozosParaSelector($empresaId)
+            : [];
 
         $perPage = (int) $request->input('per_page', 50);
         $perPage = max(10, min(200, $perPage));
@@ -102,6 +107,8 @@ class GastronomiaFacturasDiaController extends Controller
             'todas_pc' => $todasPc,
             'articulo_sku' => $articuloSku,
             'articulo_filtro' => $articuloFiltro,
+            'mozo_gastronomia_id' => $mozoFiltroId > 0 ? $mozoFiltroId : null,
+            'mozos_selector' => $mozosSelector,
             'insumos_por_venta' => $insumosPorVenta,
             'jornada' => $jornada,
             'requiere_habilitacion_turno' => $requiereTurno,
@@ -463,6 +470,7 @@ class GastronomiaFacturasDiaController extends Controller
         $filtroTurno = $this->resolverFiltroTurno($request, $turnoActivo, $pc, $empresaId, $fecha);
         $desdeHabilitacion = $filtroTurno['desde'];
         $hastaTurno = $filtroTurno['hasta'];
+        $mozoFiltroId = (int) $request->input('mozo_gastronomia_id', 0);
 
         $q = VentaGastronomiaEmision::query()
             ->with([
@@ -475,7 +483,7 @@ class GastronomiaFacturasDiaController extends Controller
                 'venta.puntoventas.empresas',
                 'venta.cobranzasDirectas',
                 'venta.caja_movimientos.cobranzas',
-                'cuenta',
+                'cuenta.mozo',
             ]);
 
         // Búsqueda numérica: id venta/cuenta/cobranza o número de comprobante (sin filtrar PC ni fecha).
@@ -520,6 +528,10 @@ class GastronomiaFacturasDiaController extends Controller
             });
         }
 
+        if ($mozoFiltroId > 0) {
+            $q->whereHas('cuenta', fn ($c) => $c->where('mozo_gastronomia_id', $mozoFiltroId));
+        }
+
         if ($busqueda !== '') {
             $like = '%'.addcslashes($busqueda, '%_\\').'%';
             $q->where(function ($w) use ($like) {
@@ -528,6 +540,9 @@ class GastronomiaFacturasDiaController extends Controller
                         ->orWhere('nombre', 'like', $like)
                         ->orWhereHas('clientes', fn ($c) => $c->where('nombre', 'like', $like))
                         ->orWhereHas('puntoventas', fn ($p) => $p->where('nombre', 'like', $like)->orWhere('codigo', 'like', $like));
+                })->orWhereHas('cuenta.mozo', function ($mq) use ($like) {
+                    $mq->where('nombre', 'like', $like)
+                        ->orWhere('codigo', 'like', $like);
                 });
             });
         }
@@ -777,5 +792,27 @@ class GastronomiaFacturasDiaController extends Controller
         }
 
         return $this->jornadaService->estadoParaEmpresa((int) $cfg->empresa_id);
+    }
+
+    /**
+     * @return list<array{id:int, nombre:string, codigo:string}>
+     */
+    private function listarMozosParaSelector(int $empresaId): array
+    {
+        if ($empresaId <= 0) {
+            return [];
+        }
+
+        return MozoGastronomia::query()
+            ->where('empresa_id', $empresaId)
+            ->orderBy('nombre')
+            ->get(['id', 'nombre', 'codigo'])
+            ->map(fn (MozoGastronomia $m) => [
+                'id' => (int) $m->id,
+                'nombre' => (string) $m->nombre,
+                'codigo' => (string) ($m->codigo ?? ''),
+            ])
+            ->values()
+            ->all();
     }
 }

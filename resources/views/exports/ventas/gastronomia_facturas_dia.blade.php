@@ -2,13 +2,13 @@
     @if (! empty($reservarFilaLogoExcel))
         <tbody>
             <tr>
-                <td colspan="8" style="height: 52px;">&#160;</td>
+                <td colspan="9" style="height: 52px;">&#160;</td>
             </tr>
         </tbody>
     @endif
     <tbody>
         <tr>
-            <td colspan="8"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Facturas gastronomía del día</h2></td>
+            <td colspan="9"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Facturas gastronomía del día</h2></td>
         </tr>
     </tbody>
     <thead>
@@ -17,6 +17,7 @@
             <th>Fecha</th>
             <th>Comprobante</th>
             <th>Cliente</th>
+            <th>Mozo</th>
             <th>Punto de venta</th>
             <th>Total</th>
             <th>Cuenta gastro.</th>
@@ -43,6 +44,7 @@
                 </td>
                 <td>{{ $v?->codigo ?? '—' }}</td>
                 <td>{{ $v ? \App\Support\Ventas\GastronomiaVentaDisplaySupport::nombreReceptorFactura($v) : '—' }}</td>
+                <td>{{ $r->cuenta?->mozo?->nombre ?? '—' }}</td>
                 <td>{{ $pvTxt !== '' ? $pvTxt : '—' }}</td>
                 <td>{{ number_format((float) ($v?->total ?? 0), 2, ',', '.') }}</td>
                 <td>{{ $r->cuenta_gastronomia_id ?? '—' }}</td>

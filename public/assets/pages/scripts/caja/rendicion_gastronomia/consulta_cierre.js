@@ -36,6 +36,14 @@
             : '';
     }
 
+    function notificarError(msg) {
+        if (typeof window.rendicionGastronomiaMostrarError === 'function') {
+            window.rendicionGastronomiaMostrarError(msg);
+            return;
+        }
+        alert(msg);
+    }
+
     function resetSolapaComprobante() {
         var $iframe = $('#consultacierre-pdf-iframe');
         $iframe.attr('src', 'about:blank');
@@ -141,7 +149,7 @@
                     RENDICION_GASTRONOMIA.alcanceConsulta = 'turno';
                 }
                 if (!empresaIdConsulta()) {
-                    alert('Seleccione una empresa antes de consultar cierres.');
+                    notificarError('Seleccione una empresa antes de consultar cierres.');
                     return;
                 }
                 actualizarTituloModal();
@@ -156,7 +164,7 @@
                     RENDICION_GASTRONOMIA.alcanceConsulta = 'jornada';
                 }
                 if (!empresaIdConsulta()) {
-                    alert('Seleccione una empresa antes de consultar jornadas.');
+                    notificarError('Seleccione una empresa antes de consultar jornadas.');
                     return;
                 }
                 actualizarTituloModal();
@@ -245,7 +253,7 @@
                 if (typeof window.rendicionGastronomiaCargarTurno === 'function') {
                     window.rendicionGastronomiaCargarTurno(id);
                 } else {
-                    alert('No se pudo cargar el cierre. Recargue la página.');
+                    notificarError('No se pudo cargar el cierre. Recargue la página.');
                 }
             })
             .on('click.consultaCierre', '.eligeconsultacierrejornada', function (e) {
@@ -270,7 +278,7 @@
                 if (typeof window.rendicionGastronomiaCargarJornada === 'function') {
                     window.rendicionGastronomiaCargarJornada(id);
                 } else {
-                    alert('No se pudo cargar la jornada. Recargue la página.');
+                    notificarError('No se pudo cargar la jornada. Recargue la página.');
                 }
             });
     }

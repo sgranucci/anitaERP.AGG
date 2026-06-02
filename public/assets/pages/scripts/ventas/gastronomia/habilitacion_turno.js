@@ -33,7 +33,7 @@
     var estadoActual = null;
     var grillaMetaPorContenedor = {};
     var cierreSobranteBase = 0;
-    var cierreEfectivoContadoInicial = null;
+    var cierreMediosContadoInicial = {};
 
     function esc(s) {
         var d = document.createElement('div');
@@ -297,13 +297,36 @@
         }, 1800);
     }
 
-    function sincronizarSobranteCierrePorEfectivo(inpSf, inpEf) {
-        if (!inpSf || !inpEf) {
+    function capturarBaselineContadoCierre(root) {
+        cierreMediosContadoInicial = {};
+        if (!root) {
             return;
         }
-        var contado = parseDecimalCierre(inpEf.value);
-        var baseContado = cierreEfectivoContadoInicial != null ? cierreEfectivoContadoInicial : contado;
-        var nuevo = Math.round((cierreSobranteBase + baseContado - contado) * 100) / 100;
+        root.querySelectorAll('.js-medio-contado-cierre').forEach(function (inp) {
+            var ccId = parseInt(inp.getAttribute('data-cuentacaja-id'), 10) || 0;
+            if (ccId > 0) {
+                cierreMediosContadoInicial[ccId] = parseDecimalCierre(inp.value);
+            }
+        });
+    }
+
+    function sincronizarSobranteCierrePorMedios(inpSf, root) {
+        if (!inpSf || !root) {
+            return;
+        }
+        var sumaCompensacion = 0;
+        root.querySelectorAll('.js-medio-contado-cierre').forEach(function (inp) {
+            var ccId = parseInt(inp.getAttribute('data-cuentacaja-id'), 10) || 0;
+            if (ccId <= 0) {
+                return;
+            }
+            var contado = parseDecimalCierre(inp.value);
+            var baseContado = Object.prototype.hasOwnProperty.call(cierreMediosContadoInicial, ccId)
+                ? cierreMediosContadoInicial[ccId]
+                : contado;
+            sumaCompensacion += baseContado - contado;
+        });
+        var nuevo = Math.round((cierreSobranteBase + sumaCompensacion) * 100) / 100;
         inpSf.setAttribute('data-syncing-sobrante', '1');
         inpSf.value = String(nuevo);
         inpSf.removeAttribute('data-syncing-sobrante');
@@ -312,24 +335,26 @@
 
     function enlazarAutoSobranteCierreDefinitivo(root) {
         var inpSf = document.getElementById('sobrante_faltante');
-        var inpEf = root ? root.querySelector('.js-efectivo-contado-cierre') : null;
-        if (!inpSf || !inpEf) {
+        if (!inpSf || !root || !root.querySelector('.js-medio-contado-cierre')) {
             return;
         }
 
         cierreSobranteBase = Math.round((parseFloat(inpSf.value) || 0) * 100) / 100;
-        cierreEfectivoContadoInicial = parseDecimalCierre(inpEf.value);
+        capturarBaselineContadoCierre(root);
 
-        function onEfectivoChange() {
-            sincronizarSobranteCierrePorEfectivo(inpSf, inpEf);
+        function onMedioChange() {
+            sincronizarSobranteCierrePorMedios(inpSf, root);
         }
 
-        if (inpEf.getAttribute('data-auto-sobrante-bound') !== '1') {
-            inpEf.setAttribute('data-auto-sobrante-bound', '1');
-            inpEf.addEventListener('input', onEfectivoChange);
-            inpEf.addEventListener('blur', onEfectivoChange);
-        }
-        onEfectivoChange();
+        root.querySelectorAll('.js-medio-contado-cierre').forEach(function (inp) {
+            if (inp.getAttribute('data-auto-sobrante-bound') === '1') {
+                return;
+            }
+            inp.setAttribute('data-auto-sobrante-bound', '1');
+            inp.addEventListener('input', onMedioChange);
+            inp.addEventListener('blur', onMedioChange);
+        });
+        onMedioChange();
 
         if (inpSf.getAttribute('data-baseline-sobrante-bound') !== '1') {
             inpSf.setAttribute('data-baseline-sobrante-bound', '1');
@@ -337,10 +362,20 @@
                 if (inpSf.getAttribute('data-syncing-sobrante') === '1') {
                     return;
                 }
-                var contado = parseDecimalCierre(inpEf.value);
-                var baseContado = cierreEfectivoContadoInicial != null ? cierreEfectivoContadoInicial : contado;
+                var sumaCompensacion = 0;
+                root.querySelectorAll('.js-medio-contado-cierre').forEach(function (inp) {
+                    var ccId = parseInt(inp.getAttribute('data-cuentacaja-id'), 10) || 0;
+                    if (ccId <= 0) {
+                        return;
+                    }
+                    var contado = parseDecimalCierre(inp.value);
+                    var baseContado = Object.prototype.hasOwnProperty.call(cierreMediosContadoInicial, ccId)
+                        ? cierreMediosContadoInicial[ccId]
+                        : contado;
+                    sumaCompensacion += baseContado - contado;
+                });
                 var actual = Math.round((parseFloat(inpSf.value) || 0) * 100) / 100;
-                cierreSobranteBase = Math.round((actual - (baseContado - contado)) * 100) / 100;
+                cierreSobranteBase = Math.round((actual - sumaCompensacion) * 100) / 100;
             });
         }
     }

@@ -34,7 +34,7 @@ class GastronomiaFacturasDiaExport implements FromView, ShouldAutoSize, WithColu
     /** @var list<string> */
     private array $rutasLogosExcel = [];
 
-    private const ULTIMA_COL = 'H';
+    private const ULTIMA_COL = 'I';
 
     public function __construct(
         private Collection $registros
@@ -62,9 +62,10 @@ class GastronomiaFacturasDiaExport implements FromView, ShouldAutoSize, WithColu
             'C' => NumberFormat::FORMAT_TEXT,
             'D' => NumberFormat::FORMAT_TEXT,
             'E' => NumberFormat::FORMAT_TEXT,
-            'F' => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED2,
-            'G' => NumberFormat::FORMAT_NUMBER,
-            'H' => NumberFormat::FORMAT_TEXT,
+            'F' => NumberFormat::FORMAT_TEXT,
+            'G' => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED2,
+            'H' => NumberFormat::FORMAT_NUMBER,
+            'I' => NumberFormat::FORMAT_TEXT,
         ];
     }
 
@@ -92,11 +93,12 @@ class GastronomiaFacturasDiaExport implements FromView, ShouldAutoSize, WithColu
             'A' => 10,
             'B' => 14,
             'C' => 18,
-            'D' => 28,
-            'E' => 22,
-            'F' => 14,
-            'G' => 12,
-            'H' => 28,
+            'D' => 24,
+            'E' => 16,
+            'F' => 20,
+            'G' => 14,
+            'H' => 12,
+            'I' => 28,
         ];
     }
 

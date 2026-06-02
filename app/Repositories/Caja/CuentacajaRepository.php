@@ -475,11 +475,13 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
             $banco_id = $banco->id;
         else    
             $banco_id = null;
-        $empresa = Empresa::select('id', 'codigo')->where('codigo' , $data->tesm_empresa)->first();
-        if ($empresa)
-            $empresa_id = $empresa->id;
-        else
-            $empresa_id = NULL;
+        $codigoEmpresaAnita = trim((string) ($data->tesm_empresa ?? ''));
+        if ($codigoEmpresaAnita === '' || $codigoEmpresaAnita === '0') {
+            $empresa_id = null;
+        } else {
+            $empresa = Empresa::select('id', 'codigo')->where('codigo', $codigoEmpresaAnita)->first();
+            $empresa_id = $empresa ? $empresa->id : null;
+        }
         if (substr($data->tesm_desc, 0, 1) == 'R')
             $tipocuenta = 'R';
         else    
@@ -522,14 +524,13 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
             $cuentaContable = $cuenta->codigo;
         else
             $cuentaContable = '000000-000';
-        // Busca la empresa
-        if (isset($data['empresa_id']))
-        {
-            $empresa = Empresa::select('id', 'codigo')->where('id' , $data['empresa_id'])->first();
-            if ($empresa)
-                $empresa = $empresa->codigo;
-            else
-                $empresa = '0';
+        // Todas las empresas en ERP (empresa_id null) → 0 en Informix (no NULL)
+        $empresa = '0';
+        if (! empty($data['empresa_id'])) {
+            $empresaModel = Empresa::select('id', 'codigo')->where('id', $data['empresa_id'])->first();
+            if ($empresaModel) {
+                $empresa = $empresaModel->codigo;
+            }
         }
 
         $moneda = $data['moneda_id'];

@@ -1,4 +1,4 @@
-<div id="tab2" class="form2 tab-content" style="display: none" data-arca-constancia-url="{{ route('arca_constancia_inscripcion') }}">
+<div id="tab2" class="form2 tab-content" style="display: none" data-arca-constancia-url="{{ route('arca_constancia_inscripcion') }}" data-retencion-sin-codigo='@json(\App\Support\Compras\ProveedorImpuestosRetencionRules::idsSinCodigo())'>
 	<h3>Datos de impuestos</h3>
 	<div class="row">
 		<div class="col-sm-6">
@@ -62,7 +62,7 @@
 					<label for="retieneiva" class="col-lg-4 col-form-label">Retiene iva</label>
 				@endif
 				<div class="col-lg-8">
-					<select name="retieneiva" class="col-lg-3 form-control" required>
+					<select name="retieneiva" id="retieneiva" class="col-lg-5 form-control" required>
 						<option value="">-- Elija retiene iva --</option>
 						@foreach ($retieneiva_enum as $value => $retieneiva)
 							<option value="{{ $value }}"
@@ -112,7 +112,7 @@
 				@else
 					<label for="retieneganancia" class="col-lg-4 col-form-label">Retiene Ganancias</label>
 				@endif
-				<select name="retieneganancia" class="col-lg-3 form-control" @if ($tipoalta != 'P') required @endif>
+				<select name="retieneganancia" id="retieneganancia" class="col-lg-3 form-control" @if ($tipoalta != 'P') required @endif>
 					<option value="">-- Elija retiene iva --</option>
 					@foreach ($retieneganancia_enum as $value => $retieneganancia)
 						<option value="{{ $value }}"
@@ -127,7 +127,7 @@
 				@else
 					<label for="condicionganancia" class="col-lg-4 col-form-label">Condición de Ganancias</label>
 				@endif
-				<select name="condicionganancia" class="col-lg-3 form-control" @if ($tipoalta != 'P') required @endif>
+				<select name="condicionganancia" id="condicionganancia" class="col-lg-3 form-control" @if ($tipoalta != 'P') required @endif>
 					<option value="">-- Elija condicion de ganancias --</option>
 					@foreach ($condicionganancia_enum as $value => $condicionganancia)
 						<option value="{{ $value }}"
@@ -155,7 +155,7 @@
 				@else
 					<label for="retienesuss" class="col-lg-4 col-form-label">Retiene SUSS</label>
 				@endif
-				<select name="retienesuss" class="col-lg-3 form-control" @if ($tipoalta != 'P') required @endif>
+				<select name="retienesuss" id="retienesuss" class="col-lg-3 form-control" @if ($tipoalta != 'P') required @endif>
 					<option value="">-- Elija retiene suss --</option>
 					@foreach ($retienesuss_enum as $value => $retienesuss)
 						<option value="{{ $value }}"

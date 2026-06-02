@@ -11,7 +11,9 @@ use App\Models\Caja\Usocuentacaja;
 use App\Services\Ventas\Gastronomia\GastronomiaCierreTotemInformeZService;
 use App\Services\Ventas\Gastronomia\GastronomiaCierreTotemJornadaService;
 use App\Services\Ventas\Gastronomia\GastronomiaJornadaService;
+use App\Support\Configuracion\EmpresaLogoArchivo;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
 use Throwable;
@@ -188,10 +190,119 @@ class JornadaGastronomiaController extends Controller
 
         $this->assertAccesoEmpresa((int) $cierre->empresa_id);
 
-        $datos = $this->cierreTotemJornadaService->datosComprobantePdf($cierre);
-        $nombre = 'cierre_totem_jornada_'.$jornadaId.'.pdf';
+        // PDF liviano: solo Informe Z cargado por pantalla (sin detalle Waitry/discrepancias).
+        $informeZ = is_array($cierre->informe_z_json) ? $cierre->informe_z_json : null;
+        $empresaId = (int) $cierre->empresa_id;
+        $fechaJornadaYmd = $cierre->jornada?->fecha_jornada?->format('Y-m-d') ?? null;
 
-        $html = view('ventas.gastronomia.jornada.comprobante_cierre_totem', compact('datos'))->render();
+        $facturasCantidad = 0;
+        $facturasTotal = 0.0;
+        if ($fechaJornadaYmd !== null) {
+            $row = DB::table('venta_gastronomia_emision as vge')
+                ->join('venta as v', 'vge.venta_id', '=', 'v.id')
+                ->join('puntoventa as pv', 'v.puntoventa_id', '=', 'pv.id')
+                ->where('pv.empresa_id', $empresaId)
+                ->whereNull('v.deleted_at')
+                ->whereNull('pv.deleted_at')
+                ->where(function ($q) use ($fechaJornadaYmd) {
+                    $q->whereDate('v.fechajornada', $fechaJornadaYmd)
+                        ->orWhere(function ($legacy) use ($fechaJornadaYmd) {
+                            $legacy->whereNull('v.fechajornada')
+                                ->whereDate('v.fecha', $fechaJornadaYmd);
+                        });
+                })
+                ->selectRaw('COUNT(DISTINCT v.id) as cantidad, COALESCE(SUM(v.total), 0) as total')
+                ->first();
+
+            $facturasCantidad = (int) ($row->cantidad ?? 0);
+            $facturasTotal = (float) ($row->total ?? 0);
+        }
+
+        $rangoWaitry = $this->cierreTotemJornadaService->etiquetaRango(
+            (int) ($cierre->waitry_order_id_anterior ?? 0),
+            $cierre->waitry_order_id_desde !== null ? (int) $cierre->waitry_order_id_desde : null,
+            $cierre->waitry_order_id_hasta !== null ? (int) $cierre->waitry_order_id_hasta : null,
+        );
+        $totems = \App\Models\Ventas\TotemWaitryGastronomia::query()
+            ->with('ubicacion')
+            ->where('empresa_id', $empresaId)
+            ->orderBy('ubicacion_id')
+            ->get()
+            ->keyBy(fn ($t) => (int) $t->id);
+
+        $totemsPdf = [];
+        foreach (($informeZ['totems'] ?? []) as $t) {
+            if (! is_array($t)) {
+                continue;
+            }
+            $totemId = (int) ($t['totem_id'] ?? 0);
+            $modelo = $totems->get($totemId);
+            $lineas = is_array($t['lineas'] ?? null) ? $t['lineas'] : [];
+            $outLineas = [];
+            $total = 0.0;
+            foreach ($lineas as $ln) {
+                if (! is_array($ln)) {
+                    continue;
+                }
+                $monto = round((float) ($ln['monto'] ?? 0), 2);
+                $total = round($total + $monto, 2);
+                $outLineas[] = [
+                    'etiqueta' => \App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport::etiquetaTipo($ln['tipo_waitry'] ?? null),
+                    'monto' => $monto,
+                ];
+            }
+            $totalSistema = 0.0;
+            $diferencia = 0.0;
+            if (is_array($informeZ['conciliacion']['totems'] ?? null)) {
+                foreach ($informeZ['conciliacion']['totems'] as $ct) {
+                    if (is_array($ct) && (int) ($ct['totem_id'] ?? 0) === $totemId) {
+                        $totalSistema = (float) ($ct['total_sistema'] ?? 0);
+                        $diferencia = (float) ($ct['diferencia'] ?? ((float) $total - $totalSistema));
+                        break;
+                    }
+                }
+            }
+
+            $totemsPdf[] = [
+                'totem_id' => $totemId,
+                'ubicacion_nombre' => (string) ($modelo?->ubicacion?->nombre ?? 'Tótem'),
+                'detalle' => (string) ($modelo?->detalle ?? ''),
+                'waitry_table_id' => (int) ($modelo?->waitry_table_id ?? 0),
+                'lineas' => $outLineas,
+                'total' => $total,
+                'total_sistema' => $totalSistema,
+                'diferencia' => $diferencia,
+            ];
+        }
+
+        $empresaNombre = (string) ($cierre->empresa?->nombre ?? '');
+        $fechaJornadaFmt = $cierre->jornada?->fecha_jornada?->format('d/m/Y') ?? '';
+        $jornadaIdComprobante = (int) $cierre->jornada_gastronomia_id;
+
+        $datos = [
+            'titulo' => 'Cierre de jornada — '.$fechaJornadaFmt,
+            'subtitulo' => $empresaNombre.' · Jornada #'.$jornadaIdComprobante.' · Informe Z tótem Waitry',
+            'logo' => EmpresaLogoArchivo::dataUriDesdeNombre($empresaNombre),
+            'empresa_nombre' => $empresaNombre,
+            'jornada_id' => $jornadaIdComprobante,
+            'fecha_jornada' => $fechaJornadaFmt,
+            'apertura_jornada_en' => $cierre->jornada?->apertura_en?->format('d/m/Y H:i') ?? '',
+            'cierre_jornada_en' => $cierre->jornada?->cierre_en?->format('d/m/Y H:i') ?? '',
+            'rango_waitry' => $rangoWaitry,
+            'waitry_order_id_anterior' => (int) ($cierre->waitry_order_id_anterior ?? 0),
+            'waitry_order_id_desde' => $cierre->waitry_order_id_desde !== null ? (int) $cierre->waitry_order_id_desde : null,
+            'waitry_order_id_hasta' => $cierre->waitry_order_id_hasta !== null ? (int) $cierre->waitry_order_id_hasta : null,
+            'facturas_cantidad' => $facturasCantidad,
+            'facturas_total' => $facturasTotal,
+            'fecha_emision_comprobante' => now()->format('d/m/Y H:i'),
+            'informe_z' => $informeZ,
+            'conciliacion' => is_array($informeZ['conciliacion'] ?? null) ? $informeZ['conciliacion'] : null,
+            'totems' => $totemsPdf,
+        ];
+
+        $nombre = 'cierre_jornada_'.($fechaJornadaYmd ?? 'sin_fecha').'_'.$jornadaId.'.pdf';
+
+        $html = view('ventas.gastronomia.jornada.comprobante_informe_z_totem', compact('datos'))->render();
         $pdf = \App::make('dompdf.wrapper');
         $pdf->setPaper('a4', 'landscape');
         $pdf->loadHTML($html, 'UTF-8');

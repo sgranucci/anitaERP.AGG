@@ -50,12 +50,13 @@
     <table class="data">
         <colgroup>
             <col style="width: 7%;">
+            <col style="width: 9%;">
+            <col style="width: 11%;">
+            <col style="width: 16%;">
             <col style="width: 10%;">
             <col style="width: 12%;">
-            <col style="width: 20%;">
-            <col style="width: 14%;">
-            <col style="width: 9%;">
             <col style="width: 8%;">
+            <col style="width: 7%;">
             <col style="width: 20%;">
         </colgroup>
         <thead>
@@ -64,6 +65,7 @@
                 <th>Fecha</th>
                 <th>Comprobante</th>
                 <th>Cliente</th>
+                <th>Mozo</th>
                 <th>Punto de venta</th>
                 <th class="num">Total</th>
                 <th>Cuenta gastro.</th>
@@ -90,6 +92,7 @@
                     </td>
                     <td>{{ $v?->codigo ?? '—' }}</td>
                     <td>{{ $v ? \App\Support\Ventas\GastronomiaVentaDisplaySupport::nombreReceptorFactura($v) : '—' }}</td>
+                    <td>{{ $r->cuenta?->mozo?->nombre ?? '—' }}</td>
                     <td>{{ $pvTxt !== '' ? $pvTxt : '—' }}</td>
                     <td class="num">{{ number_format((float) ($v?->total ?? 0), 2, ',', '.') }}</td>
                     <td>{{ $r->cuenta_gastronomia_id ?? '—' }}</td>

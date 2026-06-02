@@ -369,6 +369,19 @@
                                 <label class="custom-control-label small" for="todas_pc" title="Incluye facturas emitidas desde otras PCs del mismo día">Todas las terminales</label>
                             </div>
                         </div>
+                        @if (count($mozos_selector ?? []) > 0)
+                            <div class="form-group mb-0 mr-2">
+                                <label for="mozo_gastronomia_id" class="small text-muted mb-0 d-block">Mozo</label>
+                                <select name="mozo_gastronomia_id" id="mozo_gastronomia_id" class="form-control form-control-sm" style="min-width:160px;">
+                                    <option value="">Todos</option>
+                                    @foreach ($mozos_selector as $mozoOp)
+                                        <option value="{{ $mozoOp['id'] }}" @selected((int) ($mozo_gastronomia_id ?? 0) === (int) $mozoOp['id'])>
+                                            {{ $mozoOp['nombre'] }}@if (! empty($mozoOp['codigo'])) ({{ $mozoOp['codigo'] }})@endif
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        @endif
                         @if ($requiere_habilitacion_turno ?? false)
                             <div class="form-group mb-0 mr-2">
                                 <label for="turno_filtro" class="small text-muted mb-0 d-block">Turno</label>
@@ -397,7 +410,7 @@
                                 <span class="fa fa-search"></span>
                             </button>
                         </div>
-                        @if (($articulo_filtro ?? null) || ($busqueda ?? '') !== '')
+                        @if (($articulo_filtro ?? null) || ($busqueda ?? '') !== '' || ($mozo_gastronomia_id ?? null))
                             <a href="{{ route('gastronomia_facturas_dia', array_filter([
                                 'fecha' => $fecha,
                                 'todas_pc' => ($todas_pc ?? false) ? '1' : null,
@@ -442,6 +455,7 @@
                                     : null,
                                 'articulo_sku' => $articulo_sku ?? '',
                                 'articulo_id' => ($articulo_filtro ?? null) ? $articulo_filtro->id : null,
+                                'mozo_gastronomia_id' => $mozo_gastronomia_id ?? null,
                             ], fn ($v) => $v !== null && $v !== ''),
                         ])
                     </div>
@@ -463,7 +477,7 @@
                 <div class="table-responsive">
                 @php
                     $colInsumos = ($articulo_filtro ?? null) !== null;
-                    $colSpanEmpty = 10 + (($todas_pc ?? false) ? 1 : 0) + ($colInsumos ? 3 : 0);
+                    $colSpanEmpty = 11 + (($todas_pc ?? false) ? 1 : 0) + ($colInsumos ? 3 : 0);
                 @endphp
                 <table class="table table-striped table-bordered table-hover mb-0" id="tabla-paginada">
                     <thead>
@@ -479,6 +493,7 @@
                             <th>Fecha comprob.</th>
                             <th>Comprobante</th>
                             <th>Cliente</th>
+                            <th>Mozo</th>
                             <th>Punto de venta</th>
                             <th class="text-right">Total</th>
                             @if ($colInsumos)
@@ -550,6 +565,7 @@
                                 </small></td>
                                 <td><small>{{ $v?->codigo ?? '—' }}</small></td>
                                 <td><small>{{ $v ? \App\Support\Ventas\GastronomiaVentaDisplaySupport::nombreReceptorFactura($v) : '—' }}</small></td>
+                                <td><small>{{ $r->cuenta?->mozo?->nombre ?? '—' }}</small></td>
                                 <td><small>{{ $pvTxt !== '' ? $pvTxt : '—' }}</small></td>
                                 <td class="text-right"><small>{{ number_format((float) ($v?->total ?? 0), 2, ',', '.') }}</small></td>
                                 @if ($colInsumos)

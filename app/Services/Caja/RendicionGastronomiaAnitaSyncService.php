@@ -6,6 +6,7 @@ use App\ApiAnita;
 use App\Models\Caja\RendicionGastronomiaCaja;
 use App\Models\Caja\RendicionGastronomiaSecuenciaEmpresa;
 use App\Support\Caja\AnitaSync\RendicionGastronomiaAnitaContextBuilder;
+use App\Support\Caja\AnitaSync\RendicionGastronomiaAnitaIdempotenciaSupport;
 use App\Support\Caja\AnitaSync\RendicionGastronomiaAnitaTotalZPorPcService;
 use App\Support\Caja\AnitaSync\RendicionGastronomiaCabeceraAnitaMapper;
 use App\Support\Caja\AnitaSync\RendicionGastronomiaValorAnitaMapper;
@@ -24,6 +25,85 @@ class RendicionGastronomiaAnitaSyncService
         return filter_var(config('rendicion_gastronomia_anita.sincronizar', true), FILTER_VALIDATE_BOOLEAN);
     }
 
+    /**
+     * Limpia rendgastro/rendvalor duplicados del turno en Anita y opcionalmente re-sincroniza la rendición ERP.
+     * Uso operativo (artisan) cuando la jornada ya fue presentada y no se puede editar desde Caja.
+     *
+     * @return array{
+     *   turno_operativo_id: int,
+     *   nro_oper_antes: list<int>,
+     *   nro_oper_despues: list<int>,
+     *   nro_oper_canonico: int,
+     *   eliminados: list<int>,
+     *   resincronizado: bool
+     * }
+     */
+    public function limpiarHuerfanosYResincronizar(RendicionGastronomiaCaja $rendicion, bool $resincronizar = true): array
+    {
+        if ($rendicion->esRendicionJornada()) {
+            throw new \InvalidArgumentException('La rendición tipo jornada no replica cabecera a Anita.');
+        }
+
+        if (! $this->sincronizacionHabilitada()) {
+            throw new \RuntimeException('RENDICION_GASTRONOMIA_SINCRONIZAR_ANITA está deshabilitado.');
+        }
+
+        $rendicion->load(['movimientos.cuentacaja', 'puntoventaCae', 'puntoventaCaea', 'turnoOperativo.turno', 'turnoOperativo.jornada']);
+
+        $turnoId = (int) ($rendicion->turno_operativo_gastronomia_id ?? 0);
+        $empresaId = (int) ($rendicion->empresa_id ?? 0);
+        $api = new ApiAnita;
+        $tipoOper = $this->tipoOper();
+
+        $antes = RendicionGastronomiaAnitaIdempotenciaSupport::listarNroOperPorTurno(
+            $api,
+            $turnoId,
+            $empresaId,
+            $tipoOper,
+            $this->tablaCabecera(),
+            $this->sistema(),
+        );
+
+        $canonico = RendicionGastronomiaAnitaIdempotenciaSupport::resolverYAlinearNroOper(
+            $api,
+            $rendicion,
+            $tipoOper,
+            $this->tablaCabecera(),
+            $this->sistema(),
+            $this->tablaValor(),
+            self::LOG_EVENTO,
+        );
+
+        $despues = RendicionGastronomiaAnitaIdempotenciaSupport::listarNroOperPorTurno(
+            $api,
+            $turnoId,
+            $empresaId,
+            $tipoOper,
+            $this->tablaCabecera(),
+            $this->sistema(),
+        );
+
+        $eliminados = array_values(array_diff($antes, $despues));
+
+        if ($resincronizar) {
+            if ($this->existsCabeceraEnAnita($rendicion)) {
+                $this->actualizarEnAnita($rendicion);
+            } else {
+                $this->insertarEnAnita($rendicion);
+            }
+            $rendicion->update(['anita_sincronizado_en' => now()]);
+        }
+
+        return [
+            'turno_operativo_id' => $turnoId,
+            'nro_oper_antes' => $antes,
+            'nro_oper_despues' => $despues,
+            'nro_oper_canonico' => $canonico,
+            'eliminados' => $eliminados,
+            'resincronizado' => $resincronizar,
+        ];
+    }
+
     public function sincronizarDespuesDeGuardar(RendicionGastronomiaCaja $rendicion): void
     {
         if ($rendicion->esRendicionJornada()) {
@@ -35,6 +115,8 @@ class RendicionGastronomiaAnitaSyncService
         }
 
         $rendicion->load(['movimientos.cuentacaja', 'puntoventaCae', 'puntoventaCaea', 'turnoOperativo.turno', 'turnoOperativo.jornada']);
+
+        $this->prepararIdempotenciaPorTurno($rendicion);
 
         if ($this->existsCabeceraEnAnita($rendicion)) {
             $this->actualizarEnAnita($rendicion);
@@ -75,31 +157,56 @@ class RendicionGastronomiaAnitaSyncService
         $api = new ApiAnita;
         $nroOper = (int) ($ctx['nro_oper'] ?? 0);
         $tipoOper = (string) ($ctx['tipo_oper'] ?? '');
+        $cabeceraPreexistente = $nroOper > 0 && $this->existsCabeceraEnAnita($rendicion);
+        $cabeceraInsertadaEnEsteIntento = false;
 
         try {
-            $api->apiCallEscritura([
-                'tabla' => $this->tablaCabecera(),
-                'acc' => 'insert',
-                'sistema' => $this->sistema(),
-                'campos' => RendicionGastronomiaCabeceraAnitaMapper::camposInsert(),
-                'valores' => RendicionGastronomiaCabeceraAnitaMapper::valoresInsert($ctx),
-            ], 'rendgastro insert', self::LOG_EVENTO);
-        } catch (\RuntimeException $e) {
-            if ($this->esErrorDuplicadoInformix($e)) {
+            if ($cabeceraPreexistente) {
                 $this->actualizarEnAnitaConTotalZ($rendicion, $totalZ);
 
                 return;
             }
 
+            try {
+                $api->apiCallEscritura([
+                    'tabla' => $this->tablaCabecera(),
+                    'acc' => 'insert',
+                    'sistema' => $this->sistema(),
+                    'campos' => RendicionGastronomiaCabeceraAnitaMapper::camposInsert(),
+                    'valores' => RendicionGastronomiaCabeceraAnitaMapper::valoresInsert($ctx),
+                ], 'rendgastro insert', self::LOG_EVENTO);
+                $cabeceraInsertadaEnEsteIntento = true;
+            } catch (\RuntimeException $e) {
+                if ($this->esErrorDuplicadoInformix($e)) {
+                    $this->actualizarEnAnitaConTotalZ($rendicion, $totalZ);
+
+                    return;
+                }
+
+                throw $e;
+            }
+
+            // Anita puede precargar filas rendvalor al insertar cabecera (p. ej. código 17).
+            if ($nroOper > 0 && $tipoOper !== '') {
+                $this->eliminarValores($api, $nroOper, $tipoOper);
+            }
+
+            $this->insertarValores($api, $ctx);
+        } catch (\Throwable $e) {
+            if ($cabeceraInsertadaEnEsteIntento && $nroOper > 0 && $tipoOper !== '') {
+                try {
+                    $this->eliminarEnAnita($nroOper, $tipoOper);
+                } catch (\Throwable $rollbackErr) {
+                    Log::warning(self::LOG_EVENTO.'.compensacion_fallo', [
+                        'nro_oper' => $nroOper,
+                        'turno_operativo_id' => $rendicion->turno_operativo_gastronomia_id,
+                        'mensaje' => $rollbackErr->getMessage(),
+                    ]);
+                }
+            }
+
             throw $e;
         }
-
-        // Anita puede precargar filas rendvalor al insertar cabecera (p. ej. código 17).
-        if ($nroOper > 0 && $tipoOper !== '') {
-            $this->eliminarValores($api, $nroOper, $tipoOper);
-        }
-
-        $this->insertarValores($api, $ctx);
     }
 
     public function reaplicarTotalZPorPcEnJornada(int $jornadaId): void
@@ -374,6 +481,20 @@ class RendicionGastronomiaAnitaSyncService
             || str_contains($msg, 'duplicado')
             || str_contains($msg, 'unique key')
             || str_contains($msg, 'unique index');
+    }
+
+    private function prepararIdempotenciaPorTurno(RendicionGastronomiaCaja $rendicion): void
+    {
+        $api = new ApiAnita;
+        RendicionGastronomiaAnitaIdempotenciaSupport::resolverYAlinearNroOper(
+            $api,
+            $rendicion,
+            $this->tipoOper(),
+            $this->tablaCabecera(),
+            $this->sistema(),
+            $this->tablaValor(),
+            self::LOG_EVENTO,
+        );
     }
 
     private function eliminarValores(ApiAnita $api, int $nroOper, string $tipoOper): void

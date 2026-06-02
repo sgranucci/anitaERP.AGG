@@ -159,10 +159,20 @@
                         ]);
                     @endphp
                     <div class="mb-2">
-                        @if (\App\Support\Caja\RendicionGastronomiaPdfPermiso::puedeVerPdfWaitry())
-                        <a href="{{ route('listar_waitry_cierre_jornada', ['formato' => 'PDF']) }}?{{ $exportQuery }}" class="btn btn-app bg-danger">
-                            <i class="fas fa-file-pdf"></i> Pdf
-                        </a>
+                        @php
+                            $puedePdfWaitry = \App\Support\Caja\RendicionGastronomiaPdfPermiso::puedeVerPdfWaitry();
+                        @endphp
+                        @if ($puedePdfWaitry)
+                            <a href="{{ route('listar_waitry_cierre_jornada', ['formato' => 'PDF']) }}?{{ $exportQuery }}" class="btn btn-app bg-danger">
+                                <i class="fas fa-file-pdf"></i> Pdf
+                            </a>
+                        @else
+                            <a href="javascript:void(0)" class="btn btn-app bg-danger disabled" aria-disabled="true" title="Sin permiso para exportar PDF (ver-pdf-waitry-gastronomia-caja)">
+                                <i class="fas fa-file-pdf"></i> Pdf
+                            </a>
+                            <small class="text-muted d-block">
+                                Sin permiso para exportar PDF de cierre Waitry. Use Excel/CSV o solicite el permiso <code>ver-pdf-waitry-gastronomia-caja</code>.
+                            </small>
                         @endif
                         <a href="{{ route('listar_waitry_cierre_jornada', ['formato' => 'EXCEL']) }}?{{ $exportQuery }}" class="btn btn-app bg-success">
                             <i class="fas fa-file-excel"></i> Excel

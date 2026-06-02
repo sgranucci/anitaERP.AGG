@@ -24,16 +24,32 @@
 
     function enlazarAutoSobranteCierrePos(root) {
         var inpSf = document.getElementById('pos-sobrante-faltante');
-        var inpEf = root ? root.querySelector('.js-efectivo-contado-cierre') : null;
-        if (!inpSf || !inpEf) {
+        if (!inpSf || !root || !root.querySelector('.js-medio-contado-cierre')) {
             return;
         }
         var sobranteBase = Math.round((parseFloat(inpSf.value) || 0) * 100) / 100;
-        var contadoInicial = parseDecimalCierrePos(inpEf.value);
+        var contadoInicialPorMedio = {};
+        root.querySelectorAll('.js-medio-contado-cierre').forEach(function (inp) {
+            var ccId = parseInt(inp.getAttribute('data-cuentacaja-id'), 10) || 0;
+            if (ccId > 0) {
+                contadoInicialPorMedio[ccId] = parseDecimalCierrePos(inp.value);
+            }
+        });
 
         function sync() {
-            var contado = parseDecimalCierrePos(inpEf.value);
-            var nuevo = Math.round((sobranteBase + contadoInicial - contado) * 100) / 100;
+            var sumaCompensacion = 0;
+            root.querySelectorAll('.js-medio-contado-cierre').forEach(function (inp) {
+                var ccId = parseInt(inp.getAttribute('data-cuentacaja-id'), 10) || 0;
+                if (ccId <= 0) {
+                    return;
+                }
+                var contado = parseDecimalCierrePos(inp.value);
+                var base = Object.prototype.hasOwnProperty.call(contadoInicialPorMedio, ccId)
+                    ? contadoInicialPorMedio[ccId]
+                    : contado;
+                sumaCompensacion += base - contado;
+            });
+            var nuevo = Math.round((sobranteBase + sumaCompensacion) * 100) / 100;
             inpSf.setAttribute('data-syncing-sobrante', '1');
             inpSf.value = String(nuevo);
             inpSf.removeAttribute('data-syncing-sobrante');
@@ -41,11 +57,14 @@
             window.setTimeout(function () { inpSf.classList.remove('gastro-campo-auto-actualizado'); }, 1800);
         }
 
-        if (inpEf.getAttribute('data-auto-sobrante-bound') !== '1') {
-            inpEf.setAttribute('data-auto-sobrante-bound', '1');
-            inpEf.addEventListener('input', sync);
-            inpEf.addEventListener('blur', sync);
-        }
+        root.querySelectorAll('.js-medio-contado-cierre').forEach(function (inp) {
+            if (inp.getAttribute('data-auto-sobrante-bound') === '1') {
+                return;
+            }
+            inp.setAttribute('data-auto-sobrante-bound', '1');
+            inp.addEventListener('input', sync);
+            inp.addEventListener('blur', sync);
+        });
         sync();
     }
 

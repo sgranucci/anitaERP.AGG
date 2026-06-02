@@ -114,12 +114,7 @@ class RendicionGastronomiaCajaService
             ->whereNotIn('id', $rendidas)
             ->orderByDesc('cierre_en')
             ->limit(200)
-            ->get()
-            ->filter(fn (JornadaGastronomia $j) => $this->jornadaPresentacionService->jornadaListaParaRendirEnCaja(
-                (int) $j->id,
-                $exceptoRendicionId,
-            ))
-            ->values();
+            ->get();
     }
 
     /**
@@ -187,6 +182,8 @@ class RendicionGastronomiaCajaService
     {
         $html = '';
         foreach ($jornadas as $j) {
+            $errores = $this->jornadaPresentacionService->erroresAntesDeRendir($j, null);
+            $bloqueada = $errores !== [];
             $waitryHasta = (int) ($j->cierreTotem?->waitry_order_id_hasta ?? 0);
             $html .= '<tr>';
             $html .= '<td class="id">'.e((string) $j->id).'</td>';
@@ -202,7 +199,15 @@ class RendicionGastronomiaCajaService
                 $html .= 'data-url="'.e($urlPdf).'" data-titulo="'.e($tituloPdf).'" title="Comprobante cierre tótem">';
                 $html .= '<i class="fa fa-file-pdf-o"></i></button>';
             }
-            $html .= '<a class="btn btn-warning btn-sm eligeconsultacierrejornada">Elegir</a>';
+            if (! $bloqueada) {
+                $html .= '<a class="btn btn-warning btn-sm eligeconsultacierrejornada">Elegir</a>';
+            } else {
+                $titulo = e(implode(' ', $errores));
+                $html .= '<span class="btn btn-secondary btn-sm disabled" title="'.$titulo.'">Bloqueada</span>';
+                $html .= '<div class="small text-danger mt-1" style="max-width: 280px; white-space: normal;">'
+                    .e($errores[0] ?? 'No disponible para rendir.')
+                    .'</div>';
+            }
             $html .= '</td>';
             $html .= '</tr>';
         }
@@ -607,6 +612,9 @@ class RendicionGastronomiaCajaService
             'observacion_turno' => (string) ($turno->observacion_cierre ?? ''),
             'totales_turno' => $totales,
             'movimientos' => $movimientos,
+            'turno_sin_actividad' => $movimientos === []
+                && round((float) ($totales['total_cobrado'] ?? 0), 2) <= self::TOLERANCIA
+                && round((float) ($totales['total_ventas'] ?? 0), 2) <= self::TOLERANCIA,
             'url_comprobante_cierre' => can('ver-comprobante-cierre-turno-gastronomia', false)
                 ? route('gastronomia_cierre_turno_comprobante_cierre', ['id' => $turno->id, 'inline' => 1])
                 : '',
@@ -874,6 +882,8 @@ class RendicionGastronomiaCajaService
                 throw new InvalidArgumentException('El turno operativo #'.$turnoId.' ya fue rendido.');
             }
 
+            $this->exigirMovimientosSiHayCobranzasEnTurno($cabecera, $movimientos);
+
             $this->exigirRendicionTurnoModificablePorTurnoId($turnoId);
 
             $empresaId = (int) $cabecera['empresa_id'];
@@ -892,9 +902,9 @@ class RendicionGastronomiaCajaService
             $rendicion = RendicionGastronomiaCaja::create($cabecera);
             $this->persistirMovimientos($rendicion, $movimientos);
             $rendicion = $rendicion->fresh(['movimientos.cuentacaja']);
-            $this->anitaSyncService->sincronizarDespuesDeGuardar($rendicion);
+            $this->encolarSincronizacionAnitaTrasCommit($rendicion->id);
 
-            return $rendicion->fresh(['movimientos.cuentacaja']);
+            return $rendicion;
         });
     }
 
@@ -940,7 +950,9 @@ class RendicionGastronomiaCajaService
         $rendicion = RendicionGastronomiaCaja::create($cabecera);
         $this->persistirMovimientos($rendicion, $movimientos);
 
-        $this->anitaSyncService->reaplicarTotalZPorPcEnJornada($jornadaId);
+        DB::afterCommit(function () use ($jornadaId) {
+            $this->anitaSyncService->reaplicarTotalZPorPcEnJornada($jornadaId);
+        });
 
         return $rendicion->fresh(['movimientos.cuentacaja', 'jornada', 'cierreTotemJornada']);
     }
@@ -984,6 +996,8 @@ class RendicionGastronomiaCajaService
                     throw new InvalidArgumentException('Otra rendición ya utiliza el turno operativo #'.$turnoId.'.');
                 }
 
+                $this->exigirMovimientosSiHayCobranzasEnTurno($cabecera, $movimientos);
+
                 $this->exigirRendicionTurnoModificablePorTurnoId($turnoId);
             }
 
@@ -993,14 +1007,17 @@ class RendicionGastronomiaCajaService
                 ->delete();
             $this->persistirMovimientos($rendicion, $movimientos);
             $rendicion = $rendicion->fresh(['movimientos.cuentacaja']);
-            $this->anitaSyncService->sincronizarDespuesDeGuardar($rendicion);
+
             if ($tipo === RendicionGastronomiaCaja::TIPO_JORNADA) {
-                $this->anitaSyncService->reaplicarTotalZPorPcEnJornada(
-                    (int) ($cabecera['jornada_gastronomia_id'] ?? $rendicion->jornada_gastronomia_id ?? 0),
-                );
+                $jornadaId = (int) ($cabecera['jornada_gastronomia_id'] ?? $rendicion->jornada_gastronomia_id ?? 0);
+                DB::afterCommit(function () use ($jornadaId) {
+                    $this->anitaSyncService->reaplicarTotalZPorPcEnJornada($jornadaId);
+                });
+            } else {
+                $this->encolarSincronizacionAnitaTrasCommit($rendicion->id);
             }
 
-            return $rendicion->fresh(['movimientos.cuentacaja']);
+            return $rendicion;
         });
     }
 
@@ -1038,6 +1055,31 @@ class RendicionGastronomiaCajaService
             if ($esPresentacionJornada) {
                 $this->anitaSyncService->resetTotalZPorPcEnJornada($jornadaId);
             }
+        });
+    }
+
+    /**
+     * Sincroniza con Informix solo después del commit MySQL para no dejar rendgastro/rendvalor
+     * huérfanos si la transacción ERP revierte tras un fallo del bridge.
+     */
+    private function encolarSincronizacionAnitaTrasCommit(int $rendicionId): void
+    {
+        DB::afterCommit(function () use ($rendicionId) {
+            $rendicion = RendicionGastronomiaCaja::query()
+                ->with([
+                    'movimientos.cuentacaja',
+                    'puntoventaCae',
+                    'puntoventaCaea',
+                    'turnoOperativo.turno',
+                    'turnoOperativo.jornada',
+                ])
+                ->find($rendicionId);
+
+            if ($rendicion === null) {
+                return;
+            }
+
+            $this->anitaSyncService->sincronizarDespuesDeGuardar($rendicion);
         });
     }
 
@@ -1248,6 +1290,32 @@ class RendicionGastronomiaCajaService
                 'monto' => $row['monto'],
                 'cotizacion' => $row['cotizacion'],
             ]);
+        }
+    }
+
+    /**
+     * Turnos sin facturación ni cobranzas (p. ej. habilitación sin ventas) pueden rendirse sin filas de medio.
+     *
+     * @param  array<string, mixed>  $cabecera
+     * @param  list<array{cuentacaja_id:int, monto:float, cotizacion:float}>  $movimientos
+     */
+    private function exigirMovimientosSiHayCobranzasEnTurno(array $cabecera, array $movimientos): void
+    {
+        if ($movimientos !== []) {
+            return;
+        }
+
+        $totalCobrado = round((float) ($cabecera['totalcobrado'] ?? 0), 2);
+        $totalFactura = round((float) ($cabecera['totalfactura'] ?? 0), 2);
+        $totalNc = round((float) ($cabecera['totalnotacredito'] ?? 0), 2);
+
+        if ($totalCobrado > self::TOLERANCIA
+            || $totalFactura > self::TOLERANCIA
+            || $totalNc > self::TOLERANCIA) {
+            throw new InvalidArgumentException(
+                'El cierre de turno tiene totales distintos de cero pero no hay medios de pago en la rendición. '
+                .'Vuelva a cargar el cierre (Consultar) o revise los importes.'
+            );
         }
     }
 }
