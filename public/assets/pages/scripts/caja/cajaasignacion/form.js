@@ -1,12 +1,37 @@
+function normalizarUsuarioPrecargado() {
+    var id = $.trim($('#usuario_id').val());
+    if (!id || !$.isNumeric(id)) {
+        return;
+    }
+
+    if ($.trim($('#usuario_codigo').val()) === '') {
+        $('#usuario_codigo').val(id);
+    }
+
+    if ($.trim($('#nombreusuario').val()) !== '') {
+        return;
+    }
+
+    $.get(carpetaBase + '/configuracion/leerunusuario/' + id, function (data) {
+        if (!data) {
+            return;
+        }
+
+        $('#usuario_id').val(data.id);
+        $('#usuario_codigo').val(data.id);
+        $('#nombreusuario').val(data.nombre);
+    });
+}
+
 function asegurarUsuarioAntesDeGuardar($form, event) {
     if ($('#usuario_id').val()) {
         return true;
     }
 
-    var codigo = $.trim($('#usuario_codigo').val());
-    if (!codigo) {
+    var idVisible = $.trim($('#usuario_codigo').val());
+    if (!idVisible || !$.isNumeric(idVisible)) {
         event.preventDefault();
-        alert('Debe seleccionar un usuario (código o consulta).');
+        alert('Debe seleccionar un usuario (ID o consulta).');
         $('#usuario_codigo').focus();
         return false;
     }
@@ -16,12 +41,18 @@ function asegurarUsuarioAntesDeGuardar($form, event) {
 
     $.ajax({
         url: carpetaBase + '/configuracion/resolverusuario',
-        data: { valor: codigo, empresa_id: empresa_id },
+        data: { valor: idVisible, empresa_id: empresa_id },
         dataType: 'json',
         async: false,
         success: function (data) {
             var $cont = contenedorUsuarioConsulta($('#usuario_codigo'));
-            if (typeof aplicarUsuarioResuelto === 'function' && aplicarUsuarioResuelto($cont, data) && $('#usuario_id').val()) {
+            if (typeof aplicarUsuarioResuelto === 'function') {
+                aplicarUsuarioResuelto($cont, data);
+                if ($('#usuario_id').val()) {
+                    $('#usuario_codigo').val($('#usuario_id').val());
+                }
+            }
+            if ($('#usuario_id').val()) {
                 $form.off('submit.cajaasignacion').submit();
                 return;
             }
@@ -41,17 +72,6 @@ $(function () {
         activa_eventos_consultausuario();
     }
 
-    var empresaInicial = String($('#empresa_id').val() || '');
-    $('#empresa_id').on('change', function () {
-        var actual = String($(this).val() || '');
-        if (actual === empresaInicial) {
-            return;
-        }
-        $('#usuario_id').val('');
-        $('#usuario_codigo').val('');
-        $('#nombreusuario').val('');
-    });
-
     $('#form-general').on('submit.cajaasignacion', function (event) {
         return asegurarUsuarioAntesDeGuardar($(this), event);
     });
@@ -60,4 +80,22 @@ $(function () {
         event.preventDefault();
         $('#form-general').trigger('submit');
     });
+
+    $(document).on('blur', '#usuario_codigo', function () {
+        setTimeout(function () {
+            var id = $.trim($('#usuario_id').val());
+            if (id && $.isNumeric(id)) {
+                $('#usuario_codigo').val(id);
+            }
+        }, 350);
+    });
+
+    $(document).on('click', '.eligeconsultausuario', function () {
+        var id = $.trim($('#usuario_id').val());
+        if (id) {
+            $('#usuario_codigo').val(id);
+        }
+    });
+
+    normalizarUsuarioPrecargado();
 });

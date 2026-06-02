@@ -41,14 +41,14 @@ return [
             'mercadopago' => 6,
             'fiserv' => 26,
             'totalcoin' => 22,
-            'canje_tarjeta' => 17,
+            'canje_tarjeta' => 15,
         ],
         2 => [
             'efectivo' => 51,
             'mercadopago' => 86,
             'fiserv' => 75,
             'totalcoin' => 74,
-            'canje_tarjeta' => 17,
+            'canje_tarjeta' => 67,
         ],
         3 => [
             'efectivo' => 81,

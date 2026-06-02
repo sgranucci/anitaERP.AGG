@@ -170,6 +170,9 @@ $('#usuario_id').on('change', function (event) {
             if (data)
             {
                 $("#usuario_id").val(data.id);
+                if (data.usuario && $("#usuario_codigo").length) {
+                    $("#usuario_codigo").val(data.usuario);
+                }
                 $("#nombreusuario").val(data.nombre);
             }
         });
