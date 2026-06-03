@@ -105,7 +105,12 @@ class CuentacontableController extends Controller
      */
     public function editar($id)
     {
-        can('editar-cuentas-contables');
+        $soloConsulta = request()->query('origen') === 'modal_consulta';
+        if ($soloConsulta) {
+            can('listar-cuentas-contables');
+        } else {
+            can('editar-cuentas-contables');
+        }
 
         $data = $this->cuentacontableRepository->findOrFail($id);
 		$rubrocontable_query = Rubrocontable::all();
@@ -117,7 +122,7 @@ class CuentacontableController extends Controller
 
         return view('contable.cuentacontable.editar', compact('data', 'rubrocontable_query', 
                                                 'empresa_query', 'conceptogasto_query', 'cuentacontable_query',
-                                                'centrocosto_query', 'ajustamonedaextranjera_enum'));
+                                                'centrocosto_query', 'ajustamonedaextranjera_enum', 'soloConsulta'));
     }
 
     /**
@@ -129,6 +134,10 @@ class CuentacontableController extends Controller
      */
     public function actualizar(ValidacionCuentacontable $request, $id)
     {
+        if ($request->input('origen') === 'modal_consulta') {
+            abort(403);
+        }
+
         can('actualizar-cuentas-contables');
 
         DB::beginTransaction();
@@ -195,6 +204,7 @@ class CuentacontableController extends Controller
         $output = [];
 		$output['data'] = '';	
         $flSinDatos = true;
+        $puedeConsultar = can('listar-cuentas-contables', false) || can('editar-cuentas-contables', false);
 		if (count($query) > 0)
 		{
 			foreach ($query as $row)
@@ -209,7 +219,16 @@ class CuentacontableController extends Controller
                     $output['data'] .= '<tr>';
                     for ($i = 0; $i < $count; $i++)
                         $output['data'] .= '<td class="'.$columnsOut[$i].'">' . $row[$columnsOut[$i]] . '</td>';	
-                    $output['data'] .= '<td><a class="btn btn-warning btn-sm eligeconsultacuentacontable">Elegir</a></td>';
+                    $output['data'] .= '<td><a class="btn btn-warning btn-sm eligeconsultacuentacontable">Elegir</a>';
+                    if ($puedeConsultar) {
+                        $urlConsulta = route('editar_cuentacontable', [
+                            'id' => $row['cuentacontable_id'],
+                            'origen' => 'modal_consulta',
+                            'vista' => 'consulta',
+                        ]);
+                        $output['data'] .= ' <a class="btn btn-info btn-sm" href="'.e($urlConsulta).'" target="_blank" rel="noopener">Consultar</a>';
+                    }
+                    $output['data'] .= '</td>';
                     $output['data'] .= '</tr>';
                 }
 			}
@@ -218,7 +237,7 @@ class CuentacontableController extends Controller
         if ($flSinDatos)
 		{
 			$output['data'] .= '<tr>';
-			$output['data'] .= '<td>Sin resultados</td>';
+			$output['data'] .= '<td colspan="4">Sin resultados</td>';
 			$output['data'] .= '</tr>';
 		}
 		return(json_encode($output, JSON_UNESCAPED_UNICODE));

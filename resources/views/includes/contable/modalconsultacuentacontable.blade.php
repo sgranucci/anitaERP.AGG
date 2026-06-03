@@ -20,11 +20,12 @@
 			      </div>
         </form>
         
-        <table class="table table-striped table-bordered table-hover" id="tabla-data">
+        <table class="table table-striped table-bordered table-hover" id="tabla-consulta-cuentacontable">
           <thead>
               <th>ID</th>
               <th>Código</th>
               <th>Nombre</th>
+              <th>Acciones</th>
           </thead>
           <tbody id="datoscuentas"></tbody>
         </table>

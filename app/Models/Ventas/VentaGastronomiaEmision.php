@@ -43,4 +43,9 @@ class VentaGastronomiaEmision extends Model
     {
         return $this->hasOne(self::class, 'venta_factura_origen_id', 'venta_id');
     }
+
+    public function waitryComandaEnvio()
+    {
+        return $this->hasOne(WaitryComandaEnvio::class, 'venta_id', 'venta_id');
+    }
 }

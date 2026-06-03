@@ -41,9 +41,11 @@
     function estadoCampoRetencionImpuestos(campo) {
         var esLetraC = esLetraFacturaC();
         var condicionGanancia = ($selectRetencionProveedor('condicionganancia').val() || '').toString();
+        var retieneGanancia = ($selectRetencionProveedor('retieneganancia').val() || '').toString();
         var retieneIva = ($selectRetencionProveedor('retieneiva').val() || '').toString();
         var retieneSuss = ($selectRetencionProveedor('retienesuss').val() || '').toString();
         var sinCodigo = idsRetencionSinCodigo();
+        var noRetieneGanancia = condicionGanancia === 'N' || retieneGanancia === 'N';
 
         switch (campo) {
             case 'retieneiva':
@@ -56,7 +58,7 @@
                 }
                 return { bloqueado: false };
             case 'retencionganancia_id':
-                if (esLetraC || condicionGanancia === 'N') {
+                if (esLetraC || noRetieneGanancia) {
                     return { bloqueado: true, valor: sinCodigo.retencionganancia_id || '' };
                 }
                 return { bloqueado: false };
@@ -94,12 +96,18 @@
         }
         $hidden.val($select.val());
         $select.prop('disabled', true);
+        if ($select.hasClass('select2-hidden-accessible')) {
+            $select.trigger('change.select2');
+        }
     }
 
     function desbloquearSelectRetencionImpuestos($select) {
         var nombre = $select.attr('name') || $select.attr('id');
         $select.prop('disabled', false);
         $select.next('input[data-proveedor-retencion-bloqueado="' + nombre + '"]').remove();
+        if ($select.hasClass('select2-hidden-accessible')) {
+            $select.trigger('change.select2');
+        }
     }
 
     function aplicarReglasRetencionesImpuestos() {
@@ -144,7 +152,7 @@
             completarLetra(condicioniva_id);
         });
 
-        $('#condicionganancia, #retieneiva, #retienesuss').on('change', aplicarReglasRetencionesImpuestos);
+        $('#condicionganancia, #retieneganancia, #retieneiva, #retienesuss').on('change', aplicarReglasRetencionesImpuestos);
 
         // Pone en readonly estado para el alta
         let tipoempresa_id = $("#tipoempresa_id").val();

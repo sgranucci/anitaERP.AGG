@@ -17,9 +17,17 @@ function buscar_datos(consulta) {
         },
     })
     .done (function(respuesta) {
-		const resp = respuesta.replace(/\\/g, '');
+        var html = '';
+        try {
+            var parsed = typeof respuesta === 'string'
+                ? JSON.parse(respuesta.replace(/\\/g, ''))
+                : respuesta;
+            html = parsed.data || '';
+        } catch (e) {
+            html = respuesta;
+        }
         $("#datoscuentas").html("");
-        $("#datoscuentas").html(resp);
+        $("#datoscuentas").html(html);
     })
     .fail (function() {
         console.log("error");

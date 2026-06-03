@@ -13,6 +13,7 @@ use App\Observers\Ventas\Ordentrabajo_TareaObserver;
 use App\Observers\Ventas\Pedido_Combinacion_EstadoObserver;
 use App\Observers\Ventas\Pedido_CombinacionObserver;
 use App\Support\AyudaManuales;
+use App\Support\Console\ProteccionComandosDestructivosProduccion;
 use Carbon\Carbon;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\URL;
@@ -28,6 +29,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot()
     {
+        ProteccionComandosDestructivosProduccion::registrar();
+
         Paginator::useBootstrap();
 
         View::composer('theme.lte.aside', function ($view) {

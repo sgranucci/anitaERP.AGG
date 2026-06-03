@@ -35,6 +35,28 @@ class ProveedorImpuestosRetencionRulesTest extends TestCase
         $this->assertSame($ids['retencionsuss_id'], (int) $data['retencionsuss_id']);
     }
 
+    public function test_normalizar_no_retiene_ganancias_sin_no_inscripto(): void
+    {
+        if (! DB::getSchemaBuilder()->hasTable('retencionganancia')) {
+            $this->markTestSkipped('Tablas de retención no disponibles.');
+        }
+
+        $ids = ProveedorImpuestosRetencionRules::idsSinCodigo();
+        if ($ids['retencionganancia_id'] === null) {
+            $this->markTestSkipped('Catálogo sin código de retención no cargado (ejecutar migración 2026_06_02_120000).');
+        }
+
+        $data = ProveedorImpuestosRetencionRules::normalizar([
+            'condicionganancia' => 'I',
+            'retieneganancia' => 'N',
+            'retencionganancia_id' => 1,
+        ]);
+
+        $this->assertSame('I', $data['condicionganancia']);
+        $this->assertSame('N', $data['retieneganancia']);
+        $this->assertSame($ids['retencionganancia_id'], (int) $data['retencionganancia_id']);
+    }
+
     public function test_catalogo_sin_codigo_usa_codigo_cero(): void
     {
         if (! DB::getSchemaBuilder()->hasTable('retencionganancia')) {

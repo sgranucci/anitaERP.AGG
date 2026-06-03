@@ -6,7 +6,8 @@ namespace App\Support\Ventas\Gastronomia;
  * Redistribución QR ↔ Efectivo según porcentaje sobre total facturado.
  *
  * 1) Cuentas Waitry sin facturar (QR): pasan a efectivo hasta alcanzar el importe objetivo.
- * 2) Facturas Anita en efectivo: pasan a QR hasta el mismo importe.
+ * 2) Facturas Anita TOTEM con medio real Waitry QR: parte a efectivo (mismo cupo; puente TOTEM).
+ * 3) Facturas Anita en efectivo (medio real): pasan a QR hasta el mismo importe objetivo.
  */
 final class CierreJornadaProcesoRedistribucionSupport
 {
@@ -80,6 +81,60 @@ final class CierreJornadaProcesoRedistribucionSupport
                 $ajustes[] = self::ajuste(
                     $mov,
                     'sin_facturar_qr_mixto',
+                    CierreJornadaProcesoMedioSupport::CLAVE_QR,
+                    'mixto',
+                    $total,
+                    $mov['medios_pago_planificados'],
+                );
+            }
+            $out[$idx] = $mov;
+        }
+        unset($mov);
+
+        foreach ($out as $idx => &$mov) {
+            if ($restanteSinFacturar <= 0.0001) {
+                break;
+            }
+            $grupo = (string) ($mov['grupo'] ?? '');
+            if ($grupo !== CierreJornadaProcesoClasificacionSupport::GRUPO_FACTURADO_TOTEM) {
+                continue;
+            }
+            if ((string) ($mov['medio_waitry_clave'] ?? '') !== CierreJornadaProcesoMedioSupport::CLAVE_QR) {
+                continue;
+            }
+
+            $total = round((float) ($mov['total'] ?? 0), 2);
+            if ($total <= 0.0001) {
+                continue;
+            }
+
+            if ($total <= $restanteSinFacturar + 0.0001) {
+                $mov['medio_pago_planificado'] = CierreJornadaProcesoMedioSupport::CLAVE_EFECTIVO;
+                $mov['medios_pago_planificados'] = [
+                    ['clave' => CierreJornadaProcesoMedioSupport::CLAVE_EFECTIVO, 'monto' => $total],
+                ];
+                $asignadoSinFacturar += $total;
+                $restanteSinFacturar = round($restanteSinFacturar - $total, 2);
+                $ajustes[] = self::ajuste(
+                    $mov,
+                    'facturado_totem_qr_a_efectivo',
+                    CierreJornadaProcesoMedioSupport::CLAVE_QR,
+                    CierreJornadaProcesoMedioSupport::CLAVE_EFECTIVO,
+                    $total,
+                );
+            } else {
+                $montoEfectivo = round($restanteSinFacturar, 2);
+                $montoQr = round($total - $montoEfectivo, 2);
+                $mov['medio_pago_planificado'] = 'mixto';
+                $mov['medios_pago_planificados'] = [
+                    ['clave' => CierreJornadaProcesoMedioSupport::CLAVE_EFECTIVO, 'monto' => $montoEfectivo],
+                    ['clave' => CierreJornadaProcesoMedioSupport::CLAVE_QR, 'monto' => $montoQr],
+                ];
+                $asignadoSinFacturar += $montoEfectivo;
+                $restanteSinFacturar = 0.;
+                $ajustes[] = self::ajuste(
+                    $mov,
+                    'facturado_totem_qr_mixto',
                     CierreJornadaProcesoMedioSupport::CLAVE_QR,
                     'mixto',
                     $total,

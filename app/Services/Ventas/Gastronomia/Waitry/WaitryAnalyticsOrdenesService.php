@@ -2,6 +2,8 @@
 
 namespace App\Services\Ventas\Gastronomia\Waitry;
 
+use App\Support\Ventas\Waitry\WaitryOrdenCobroSupport;
+
 /**
  * Órdenes Waitry vía analytics/getordersdetails (reporte por fecha).
  * Usado en cierre de jornada tesorería; el POS en vivo usa getOrdersPOS (pág. 21).
@@ -86,6 +88,14 @@ final class WaitryAnalyticsOrdenesService
         $total = isset($orden['totalAmount']) && is_numeric($orden['totalAmount'])
             ? round((float) $orden['totalAmount'], 2)
             : 0.0;
+        if ($total <= 0.0001) {
+            $total = WaitryOrdenCobroSupport::montoCobro($orden);
+        }
+
+        $paid = $orden['paid'] ?? null;
+        if ($paid === null) {
+            $paid = WaitryOrdenCobroSupport::cobradaEnTotem($orden);
+        }
 
         return array_merge($orden, [
             'id' => $orderId,
@@ -94,7 +104,7 @@ final class WaitryAnalyticsOrdenesService
             'display_id' => $orden['display_id'] ?? $orden['externalDeliveryId'] ?? null,
             'external_reference_id' => $orden['external_reference_id'] ?? $orden['externalId'] ?? null,
             'totalAmount' => $total,
-            'paid' => $orden['paid'] ?? null,
+            'paid' => $paid,
         ]);
     }
 

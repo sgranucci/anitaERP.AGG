@@ -306,6 +306,15 @@
     <div class="col-lg-12">
         @include('includes.mensaje')
         <div class="alert alert-info py-2 mb-2">
+            @if ($tiene_cfg_pv ?? false)
+                Terminal: <strong>{{ $identificador_pc }}</strong>
+                · Empresa: <strong>{{ $empresa_nombre }}</strong>
+                ·
+            @else
+                Terminal: <strong>{{ $identificador_pc }}</strong>
+                · <span class="text-warning">Sin configuración PV gastronomía para esta terminal</span>
+                ·
+            @endif
             Fecha jornada <strong>{{ $fecha }}</strong>
             · Fecha calendario <strong>{{ $fecha_calendario ?? \Illuminate\Support\Carbon::today()->format('Y-m-d') }}</strong>
             @if (! empty($jornada['jornada_abierta']))
@@ -330,8 +339,13 @@
                 @else
                     → activo
                 @endif
+            @elseif ($todas_pc ?? false)
+                · mostrando todas las terminales
+                @if ($empresa_nombre ?? null)
+                    de <strong>{{ $empresa_nombre }}</strong>
+                @endif
             @elseif (($requiere_habilitacion_turno ?? false) && ($turno_filtro_val ?? '0') === '0')
-                · mostrando todas las facturas del día en la terminal
+                · mostrando facturas del día en esta terminal
             @endif
         </div>
         @if (($requiere_habilitacion_turno ?? false) && ! ($turno_habilitado ?? false))
@@ -345,7 +359,14 @@
             <div class="card-header">
                 <h3 class="card-title">Facturas gastronomía del día</h3>
                 <div class="card-tools">
-                    <small class="text-muted">Esta terminal: <strong>{{ $identificador_pc }}</strong></small>
+                    @if ($tiene_cfg_pv ?? false)
+                        <small class="text-muted">
+                            Empresa: <strong>{{ $empresa_nombre }}</strong>
+                            · Terminal: <strong>{{ $identificador_pc }}</strong>
+                        </small>
+                    @else
+                        <small class="text-muted">Terminal: <strong>{{ $identificador_pc }}</strong></small>
+                    @endif
                 </div>
                 <div class="d-md-flex justify-content-md-end align-items-md-end flex-wrap">
                     <form action="{{ route('gastronomia_facturas_dia') }}" method="GET" class="d-flex flex-wrap align-items-end mb-2 mb-md-0">
@@ -366,7 +387,7 @@
                             <label class="small text-muted mb-0 d-block">&nbsp;</label>
                             <div class="custom-control custom-checkbox">
                                 <input type="checkbox" class="custom-control-input" id="todas_pc" name="todas_pc" value="1" @checked($todas_pc ?? false)>
-                                <label class="custom-control-label small" for="todas_pc" title="Incluye facturas emitidas desde otras PCs del mismo día">Todas las terminales</label>
+                                <label class="custom-control-label small" for="todas_pc" title="Incluye facturas emitidas desde otras PCs de la misma empresa en el día">Todas las terminales</label>
                             </div>
                         </div>
                         @if (count($mozos_selector ?? []) > 0)
@@ -699,7 +720,7 @@
                             <tr><td colspan="{{ $colSpanEmpty }}" class="text-center text-muted py-4">
                                 Sin registros para la fecha y filtros indicados.
                                 @if (! ($todas_pc ?? false))
-                                    <br><span class="small">Si la facturó otra terminal, active <strong>Todas las terminales</strong> o busque por <strong>nº de venta</strong>.</span>
+                                    <br><span class="small">Si la facturó otra terminal de esta empresa, active <strong>Todas las terminales</strong> o busque por <strong>nº de venta</strong>.</span>
                                 @endif
                                 @if ($articulo_filtro ?? null)
                                     <br><span class="small">Ninguna factura del día incluye el ítem <strong>{{ $articulo_filtro->sku }}</strong>.</span>

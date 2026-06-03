@@ -155,20 +155,34 @@ class JornadaGastronomiaController extends Controller
                 ], 422);
             }
 
-            $preview = $this->cierreTotemJornadaService->previewParaJornadaAbierta($jornada);
-            if ($preview === null) {
-                return response()->json(['ok' => false, 'error' => 'Cierre tótem Waitry no habilitado.'], 422);
-            }
+            $snapshotRequest = $request->input('snapshot_cierre');
+            $snapshot = is_array($snapshotRequest) && is_array($snapshotRequest['resumen_totems'] ?? null)
+                ? $snapshotRequest
+                : null;
 
-            $resumen = [
-                'por_totem' => $preview['por_totem'] ?? [],
-                'total_general' => $preview['total_general'] ?? [],
-            ];
+            if ($snapshot === null) {
+                $preview = $this->cierreTotemJornadaService->previewParaJornadaAbierta($jornada);
+                if ($preview === null) {
+                    return response()->json(['ok' => false, 'error' => 'Cierre tótem Waitry no habilitado.'], 422);
+                }
+                $snapshot = is_array($preview['snapshot_cierre'] ?? null) ? $preview['snapshot_cierre'] : null;
+                $resumen = [
+                    'por_totem' => $preview['por_totem'] ?? [],
+                    'total_general' => $preview['total_general'] ?? [],
+                ];
+            } else {
+                $resumenTotems = $snapshot['resumen_totems'];
+                $resumen = [
+                    'por_totem' => $resumenTotems['por_totem'] ?? [],
+                    'total_general' => $resumenTotems['total_general'] ?? [],
+                ];
+            }
 
             $resultado = $this->informeZService->guardarBorradorJornadaAbierta(
                 $jornada,
                 $request->all(),
                 $resumen,
+                $snapshot,
             );
 
             return response()->json($resultado);
@@ -451,12 +465,15 @@ class JornadaGastronomiaController extends Controller
         $observacion = $request->input('observacion');
         $informeZTotems = $request->input('informe_z_totems');
         $informeZTotemsArr = is_array($informeZTotems) ? $informeZTotems : null;
+        $snapshotRequest = $request->input('cierre_totem_snapshot');
+        $cierreTotemSnapshot = is_array($snapshotRequest) ? $snapshotRequest : null;
 
         try {
             $jornada = $this->jornadaService->cerrar(
                 $empresaId,
                 is_string($observacion) ? $observacion : null,
                 $informeZTotemsArr,
+                $cierreTotemSnapshot,
             );
 
             $jornada->load('cierreTotem');

@@ -69,6 +69,7 @@
     var estadoPreviewInformeZ = {
         jornadaId: 0,
         totems: [],
+        snapshot: null,
     };
 
     function parseMontoInformeZ(str) {
@@ -530,6 +531,7 @@
 
         estadoPreviewInformeZ.jornadaId = parseInt(preview.jornada_id, 10) || 0;
         estadoPreviewInformeZ.totems = preview.totems || [];
+        estadoPreviewInformeZ.snapshot = preview.snapshot_cierre || null;
 
         var html = '';
         html += '<div class="d-flex flex-wrap justify-content-between align-items-start mb-2">';
@@ -582,7 +584,7 @@
         html += '<div id="preview-informe-z-tablas">';
         html += construirHtmlTablasInformeZ(preview.totems || [], 'preview');
         html += '</div>';
-        html += '<p class="text-muted mb-0 mt-2 small">Vista previa rápida; al cerrar la jornada se valida el detalle completo de órdenes Waitry.</p>';
+        html += '<p class="text-muted mb-0 mt-2 small">Los totales Waitry se consultan una sola vez aquí. Al cerrar la jornada solo se guardan el Informe Z y el último ticket Waitry (sin volver a consultar Waitry).</p>';
 
         contenedor.innerHTML = html;
 
@@ -674,11 +676,15 @@
                     return;
                 }
                 btnGuardarPreview.disabled = true;
-                postJson(urlGuardar, recolectarPayloadInformeZDesdeContenedor(
+                var payloadGuardar = recolectarPayloadInformeZDesdeContenedor(
                     tablasEl,
                     estadoPreviewInformeZ.totems,
                     jid,
-                )).then(function (res) {
+                );
+                if (estadoPreviewInformeZ.snapshot) {
+                    payloadGuardar.snapshot_cierre = estadoPreviewInformeZ.snapshot;
+                }
+                postJson(urlGuardar, payloadGuardar).then(function (res) {
                     if (res.ok && res.data.ok) {
                         alertar(res.data.mensaje || 'Informe Z guardado.', false);
                         if (res.data.conciliacion) {
@@ -943,6 +949,9 @@
             var informeZTotems = recolectarInformeZPreviewParaCierre();
             if (informeZTotems) {
                 bodyCerrar.informe_z_totems = informeZTotems;
+            }
+            if (estadoPreviewInformeZ.snapshot) {
+                bodyCerrar.cierre_totem_snapshot = estadoPreviewInformeZ.snapshot;
             }
 
             postJson(apiCerrar, bodyCerrar).then(function (res) {

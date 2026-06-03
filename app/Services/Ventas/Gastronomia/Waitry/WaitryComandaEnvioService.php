@@ -5,6 +5,7 @@ namespace App\Services\Ventas\Gastronomia\Waitry;
 use App\Jobs\EnviarWaitryComandaJob;
 use App\Models\Ventas\CuentaGastronomia;
 use App\Models\Ventas\WaitryComandaEnvio;
+use App\Support\Ventas\Gastronomia\VentaGastronomiaEmisionWaitrySupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 
@@ -65,6 +66,7 @@ final class WaitryComandaEnvioService
         $envio->save();
 
         $this->persistirOrderIdEnCuenta($envio->cuenta_gastronomia_id, $orderId);
+        VentaGastronomiaEmisionWaitrySupport::persistirOrderIdEnEmision((int) $envio->venta_id, $orderId);
     }
 
     public function persistirOrderIdEnCuenta(?int $cuentaGastronomiaId, int|string|null $orderId): void

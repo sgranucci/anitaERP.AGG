@@ -2,6 +2,7 @@
 
 namespace App\Support\Ventas\Gastronomia;
 
+use App\Models\Contable\Cuentacontable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -11,6 +12,14 @@ use Illuminate\Support\Facades\Schema;
 final class CierreJornadaProcesoConfigSupport
 {
     private const TABLA = 'gastronomia_cierre_jornada_config';
+
+    /** @var list<string> */
+    private const CAMPOS_CUENTA = [
+        'cuenta_ventas_id',
+        'cuenta_iva_id',
+        'cuenta_impuesto_interno_id',
+        'cuenta_fondo_fijo_maquinas_id',
+    ];
 
     /**
      * @return array{
@@ -52,6 +61,16 @@ final class CierreJornadaProcesoConfigSupport
     }
 
     /**
+     * Configuración con código y nombre de cada cuenta (para UI).
+     *
+     * @return array<string, mixed>
+     */
+    public static function paraEmpresaConDetalle(int $empresaId): array
+    {
+        return self::enriquecerConCuentas(self::paraEmpresa($empresaId), $empresaId);
+    }
+
+    /**
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
@@ -74,6 +93,8 @@ final class CierreJornadaProcesoConfigSupport
             'updated_at' => now(),
         ];
 
+        self::validarCuentasEmpresa($empresaId, $payload);
+
         $existe = DB::table(self::TABLA)->where('empresa_id', $empresaId)->exists();
         if ($existe) {
             DB::table(self::TABLA)->where('empresa_id', $empresaId)->update($payload);
@@ -82,7 +103,7 @@ final class CierreJornadaProcesoConfigSupport
             DB::table(self::TABLA)->insert($payload);
         }
 
-        return self::paraEmpresa($empresaId);
+        return self::paraEmpresaConDetalle($empresaId);
     }
 
     /**
@@ -134,5 +155,66 @@ final class CierreJornadaProcesoConfigSupport
         $id = (int) $v;
 
         return $id > 0 ? $id : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $cfg
+     * @return array<string, mixed>
+     */
+    private static function enriquecerConCuentas(array $cfg, int $empresaId): array
+    {
+        foreach (self::CAMPOS_CUENTA as $campoId) {
+            $base = preg_replace('/_id$/', '', $campoId);
+            $cfg[$base.'_codigo'] = '';
+            $cfg[$base.'_nombre'] = '';
+
+            $id = self::intOrNull($cfg[$campoId] ?? null);
+            if ($id === null || $empresaId <= 0) {
+                continue;
+            }
+
+            $cuenta = Cuentacontable::query()
+                ->where('id', $id)
+                ->where('empresa_id', $empresaId)
+                ->first(['id', 'codigo', 'nombre']);
+
+            if ($cuenta !== null) {
+                $cfg[$base.'_codigo'] = (string) $cuenta->codigo;
+                $cfg[$base.'_nombre'] = (string) $cuenta->nombre;
+            }
+        }
+
+        return $cfg;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private static function validarCuentasEmpresa(int $empresaId, array $payload): void
+    {
+        $etiquetas = [
+            'cuenta_ventas_id' => 'Cuenta de ventas',
+            'cuenta_iva_id' => 'Cuenta de IVA',
+            'cuenta_impuesto_interno_id' => 'Cuenta de impuesto interno',
+            'cuenta_fondo_fijo_maquinas_id' => 'Cuenta de fondo fijo máquinas',
+        ];
+
+        foreach (self::CAMPOS_CUENTA as $campoId) {
+            $id = self::intOrNull($payload[$campoId] ?? null);
+            if ($id === null) {
+                continue;
+            }
+
+            $existe = Cuentacontable::query()
+                ->where('id', $id)
+                ->where('empresa_id', $empresaId)
+                ->exists();
+
+            if (! $existe) {
+                throw new \InvalidArgumentException(
+                    ($etiquetas[$campoId] ?? $campoId).' no existe o no pertenece a la empresa seleccionada.',
+                );
+            }
+        }
     }
 }

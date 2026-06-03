@@ -87,12 +87,44 @@
         return d.innerHTML;
     }
 
-    function renderGrilla(grilla, totalFacturacion) {
-        el('celda-qr-sin').textContent = fmtMoney(grilla.qr_sin_facturar);
-        el('celda-qr-fact').textContent = fmtMoney(grilla.qr_facturado_anita);
-        el('celda-mp-fact').textContent = fmtMoney(grilla.mp_facturado_anita);
-        el('celda-efe-fact').textContent = fmtMoney(grilla.efectivo_facturado_anita);
-        el('celda-total-fact').textContent = fmtMoney(totalFacturacion);
+    function renderCuadro(data) {
+        data = data || {};
+        var filas = data.cuadro_filas || [];
+        var tbody = el('tbody-cuadro-cierre');
+        if (!tbody) {
+            return;
+        }
+        tbody.innerHTML = '';
+        var totales = { qr: 0, mp: 0, efectivo: 0, otros: 0, total: 0 };
+        filas.forEach(function (fila) {
+            var tr = document.createElement('tr');
+            if (fila.tipo === 'waitry_impago') {
+                tr.className = 'table-secondary';
+            } else if (fila.tipo === 'waitry_cash') {
+                tr.className = 'table-warning';
+            } else if (fila.tipo === 'waitry_pago') {
+                tr.className = 'table-info';
+            }
+            var cols = ['qr', 'mp', 'efectivo', 'otros', 'total'];
+            tr.innerHTML = '<td>' + escapeHtml(fila.etiqueta || '') + '</td>'
+                + cols.map(function (c) {
+                    return '<td class="text-right">' + fmtMoney(fila[c]) + '</td>';
+                }).join('');
+            tbody.appendChild(tr);
+            if (fila.tipo !== 'waitry_impago') {
+                cols.forEach(function (c) {
+                    totales[c] += parseFloat(fila[c]) || 0;
+                });
+            }
+        });
+        el('cuadro-total-qr').textContent = fmtMoney(totales.qr);
+        el('cuadro-total-mp').textContent = fmtMoney(totales.mp);
+        el('cuadro-total-efectivo').textContent = fmtMoney(totales.efectivo);
+        el('cuadro-total-otros').textContent = fmtMoney(totales.otros);
+        el('cuadro-total-general').textContent = fmtMoney(data.total_cuadro || totales.total);
+        el('label-total-facturacion').textContent = fmtMoney(data.total_facturacion || 0);
+        el('label-pendiente-facturar').textContent = fmtMoney(data.total_pendiente_facturar || 0);
+        el('label-impago-waitry').textContent = fmtMoney(data.total_impago_waitry || 0);
     }
 
     function renderNotas(notas) {
@@ -109,22 +141,36 @@
         mostrar('panel-proceso-notas', (notas || []).length > 0);
     }
 
+    function urlGrupoMovimientos(grupo) {
+        var base = String(CFG.urlMovimientosBase || '').replace(/\/$/, '');
+        return base + '/' + encodeURIComponent(grupo);
+    }
+
     function cargarPaginaGrupo(container, grupo, pagina, params) {
         container.innerHTML = '<p class="text-muted small"><i class="fa fa-spinner fa-spin"></i> Cargando…</p>';
-        var url = (CFG.urlMovimientosBase || '') + encodeURIComponent(grupo)
+        var url = urlGrupoMovimientos(grupo)
             + '?empresa_id=' + params.empresa_id
             + '&fecha_jornada=' + encodeURIComponent(params.fecha_jornada)
             + '&pagina=' + pagina + '&por_pagina=50';
 
         apiGet(url).then(function (data) {
             container.dataset.cargado = '1';
+            var items = data.items || [];
+            if (items.length === 0) {
+                container.innerHTML = '<p class="text-muted small mb-0">Sin registros en este grupo.</p>';
+                return;
+            }
             var html = '<table class="table table-sm table-striped mb-1"><thead><tr>'
                 + '<th>#W</th><th>Ref.</th><th>Total</th><th>Factura</th><th>Medio</th></tr></thead><tbody>';
-            (data.items || []).forEach(function (it) {
+            items.forEach(function (it) {
+                var facturaTxt = it.venta_codigo || '—';
+                if (it.es_nota_credito) {
+                    facturaTxt += ' (NC)';
+                }
                 html += '<tr><td>' + (it.waitry_order_id || '') + '</td>'
-                    + '<td>' + escapeHtml(it.display_id) + '</td>'
+                    + '<td>' + escapeHtml(it.display_id || '') + '</td>'
                     + '<td class="text-right">' + fmtMoney(it.total) + '</td>'
-                    + '<td>' + escapeHtml(it.venta_codigo || '—') + '</td>'
+                    + '<td>' + escapeHtml(facturaTxt) + '</td>'
                     + '<td>' + escapeHtml(it.waitry_medio_label || '') + '</td></tr>';
             });
             html += '</tbody></table><div class="small text-muted">Pág. ' + data.pagina + '/' + data.total_paginas
@@ -154,7 +200,9 @@
             return;
         }
         cont.innerHTML = '';
-        (resumen || []).forEach(function (g, idx) {
+        (resumen || []).filter(function (g) {
+            return (g.cantidad || 0) > 0;
+        }).forEach(function (g, idx) {
             var bodyId = 'grp-body-' + idx;
             var card = document.createElement('div');
             card.className = 'card mb-1';
@@ -220,11 +268,16 @@
     function aplicarAnalisis(data, params) {
         setError('');
         var meta = data.meta || {};
-        el('meta-ventana').textContent = meta.ventana_operativa || '';
-        el('meta-rango').textContent = meta.rango_etiqueta || '';
+        el('meta-ventana').textContent = meta.ventana_operativa || '—';
+        el('meta-rango').textContent = meta.rango_calendario_waitry || '—';
+        var cantidad = meta.cantidad_movimientos;
+        el('meta-cantidad').textContent = (cantidad !== undefined && cantidad !== null)
+            ? String(cantidad)
+            : '—';
+        el('meta-ids').textContent = meta.rango_etiqueta || '—';
         mostrar('panel-proceso-meta', true);
         renderNotas(data.notas);
-        renderGrilla(data.grilla || {}, data.total_facturacion || 0);
+        renderCuadro(data);
         mostrar('panel-proceso-grilla', true);
         renderGrupos(data.grupos_resumen || [], params);
         mostrar('panel-proceso-grupos', true);
@@ -266,6 +319,9 @@
             el('label-objetivo-importe').textContent = 'Objetivo: ' + fmtMoney(data.objetivo_importe)
                 + ' (' + data.porcentaje + '%)';
             renderAsientos(data.preview_asientos);
+            if (data.cuadro_filas || data.grilla) {
+                renderCuadro(data);
+            }
         }).catch(function (e) {
             setError(e.message);
         }).finally(function () {
@@ -273,15 +329,116 @@
         });
     }
 
+    function campoBaseDesdeId(campoId) {
+        return (campoId || '').replace(/_id$/, '');
+    }
+
+    function empresaIdFormulario() {
+        var empresa = el('empresa_id');
+        return empresa ? parseInt(empresa.value, 10) || 0 : 0;
+    }
+
+    function limpiarCampoCuenta($campo) {
+        $campo.find('.cuentacontable_id').val('');
+        $campo.find('.codigocuentacontable').val('');
+        $campo.find('.nombrecuentacontable').val('');
+    }
+
+    function cargarCampoCuenta($campo, cfg) {
+        var campoId = $campo.data('campo-id');
+        var base = campoBaseDesdeId(campoId);
+        var codigo = cfg[base + '_codigo'] || '';
+        $campo.find('.cuentacontable_id').val(cfg[campoId] || '');
+        $campo.find('.codigocuentacontable').val(codigo);
+        $campo.find('.codigo_previo').val(codigo);
+        $campo.find('.nombrecuentacontable').val(cfg[base + '_nombre'] || '');
+    }
+
+    function syncEmpresaEnFilasConfig() {
+        if (typeof window.jQuery === 'undefined') {
+            return;
+        }
+        var emp = empresaIdFormulario();
+        window.jQuery('.cfg-cuenta-campo .empresa').val(emp > 0 ? String(emp) : '');
+    }
+
     function cargarConfigEnModal(cfg) {
         cfg = cfg || {};
-        el('cfg_cuenta_ventas_id').value = cfg.cuenta_ventas_id || '';
-        el('cfg_cuenta_iva_id').value = cfg.cuenta_iva_id || '';
-        el('cfg_cuenta_impuesto_interno_id').value = cfg.cuenta_impuesto_interno_id || '';
-        el('cfg_cuenta_fondo_fijo_maquinas_id').value = cfg.cuenta_fondo_fijo_maquinas_id || '';
+        if (typeof window.jQuery === 'undefined') {
+            return;
+        }
+        syncEmpresaEnFilasConfig();
+        window.jQuery('.cfg-cuenta-campo').each(function () {
+            cargarCampoCuenta(window.jQuery(this), cfg);
+        });
+    }
+
+    function initConsultaCuentasConfig() {
+        if (typeof window.jQuery === 'undefined' || typeof activa_eventos_consulta_cuentacontable !== 'function') {
+            return;
+        }
+        var $ = window.jQuery;
+
+        syncEmpresaEnFilasConfig();
+        activa_eventos_consulta_cuentacontable();
+
+        // Filas fijas de config: no borrar el <tr> ni invocar leeCentroCosto (patrón artículo es dinámico).
+        $('.cfg-cuenta-campo .codigocuentacontable').off('change').on('change', function (event) {
+            event.preventDefault();
+            var $campo = $(this).closest('.cfg-cuenta-campo');
+            var codigo = ($(this).val() || '').trim();
+            var empresaId = empresaIdFormulario();
+            $campo.find('.empresa').val(empresaId > 0 ? String(empresaId) : '');
+
+            if (!codigo) {
+                limpiarCampoCuenta($campo);
+                return;
+            }
+            if (empresaId <= 0) {
+                alert('Seleccione empresa.');
+                limpiarCampoCuenta($campo);
+                return;
+            }
+            $.get(
+                carpetaBase + '/contable/cuentacontable/leercuentacontableporcodigo/' + empresaId + '/' + encodeURIComponent(codigo),
+                function (data) {
+                    if (data && data.id > 0) {
+                        $campo.find('.cuentacontable_id').val(data.id);
+                        $campo.find('.cuentacontable_id_previa').val(data.id);
+                        $campo.find('.nombrecuentacontable').val(data.nombre || '');
+                        $campo.find('.codigo_previo').val(codigo);
+                    } else {
+                        alert('No existe la cuenta para la empresa seleccionada.');
+                        limpiarCampoCuenta($campo);
+                    }
+                },
+            );
+        });
+
+        $('#modal-config-contable').on('shown.bs.modal', syncEmpresaEnFilasConfig);
+
+        $('#empresa_id').on('change', function () {
+            syncEmpresaEnFilasConfig();
+            $('.cfg-cuenta-campo').each(function () {
+                limpiarCampoCuenta($(this));
+            });
+        });
+    }
+
+    function leerConfigDesdeModal() {
+        var payload = {};
+        if (typeof window.jQuery === 'undefined') {
+            return payload;
+        }
+        window.jQuery('.cfg-cuenta-campo').each(function () {
+            var campoId = window.jQuery(this).data('campo-id');
+            payload[campoId] = window.jQuery(this).find('.cuentacontable_id').val() || '';
+        });
+        return payload;
     }
 
     function initConfig() {
+        initConsultaCuentasConfig();
         cargarConfigEnModal(CFG.configInicial);
         var btnCfg = el('btn-config-contable');
         if (btnCfg) {
@@ -295,7 +452,7 @@
                         alert(e.message);
                     });
                 } else {
-                    $('#modal-config-contable').modal('show');
+                    alert('Seleccione empresa.');
                 }
             });
         }
@@ -308,12 +465,12 @@
                     alert('Seleccione empresa.');
                     return;
                 }
-                apiPost((CFG.urlConfigGuardarBase || '').replace('__EMPRESA_ID__', p.empresa_id), {
-                    cuenta_ventas_id: el('cfg_cuenta_ventas_id').value,
-                    cuenta_iva_id: el('cfg_cuenta_iva_id').value,
-                    cuenta_impuesto_interno_id: el('cfg_cuenta_impuesto_interno_id').value,
-                    cuenta_fondo_fijo_maquinas_id: el('cfg_cuenta_fondo_fijo_maquinas_id').value,
-                }).then(function () {
+                var payload = leerConfigDesdeModal();
+                apiPost((CFG.urlConfigGuardarBase || '').replace('__EMPRESA_ID__', p.empresa_id), payload).then(function (r) {
+                    if (r && r.config) {
+                        CFG.configInicial = r.config;
+                        cargarConfigEnModal(r.config);
+                    }
                     $('#modal-config-contable').modal('hide');
                 }).catch(function (e) {
                     alert(e.message);

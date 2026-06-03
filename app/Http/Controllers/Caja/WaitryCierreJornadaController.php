@@ -57,8 +57,13 @@ class WaitryCierreJornadaController extends Controller
             'proceso_habilitado' => $this->procesoService->habilitado(),
             'puede_proceso_cierre' => can('proceso-cierre-jornada-waitry-caja', false),
             'config_contable' => $empresaId > 0
-                ? CierreJornadaProcesoConfigSupport::paraEmpresa($empresaId)
+                ? CierreJornadaProcesoConfigSupport::paraEmpresaConDetalle($empresaId)
                 : [],
+            'url_movimientos_proceso_base' => str_replace(
+                '__GRUPO__',
+                '',
+                route('waitry_cierre_jornada_api_proceso_movimientos', ['grupo' => '__GRUPO__']),
+            ),
         ]);
     }
 
@@ -143,7 +148,7 @@ class WaitryCierreJornadaController extends Controller
             return response()->json(['ok' => false, 'error' => 'Empresa inválida.'], 422);
         }
 
-        $cfg = CierreJornadaProcesoConfigSupport::paraEmpresa($empresaId);
+        $cfg = CierreJornadaProcesoConfigSupport::paraEmpresaConDetalle($empresaId);
 
         return response()->json([
             'ok' => true,

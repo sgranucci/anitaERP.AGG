@@ -93,6 +93,7 @@ final class GastronomiaCierreTotemInformeZService
         JornadaGastronomia $jornada,
         array $payload,
         array $resumenSistema,
+        ?array $snapshotCierre = null,
     ): array {
         if ($jornada->estado !== JornadaGastronomia::ESTADO_ABIERTA) {
             throw new InvalidArgumentException(
@@ -111,6 +112,9 @@ final class GastronomiaCierreTotemInformeZService
         $plantilla = $this->aplicarPayloadEnPlantilla($plantilla, $totemsPayload);
         $conciliacion = WaitryInformeZConciliacionSupport::conciliar($plantilla);
         $informeZ = $this->armarInformeZDesdePlantilla($plantilla, $conciliacion);
+        if (is_array($snapshotCierre) && is_array($snapshotCierre['resumen_totems'] ?? null)) {
+            $informeZ['snapshot_cierre'] = $snapshotCierre;
+        }
 
         $jornada->informe_z_borrador_json = $informeZ;
         $jornada->save();

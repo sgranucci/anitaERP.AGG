@@ -122,6 +122,21 @@ return [
     'anita_modo_minimo' => filter_var(env('GASTRONOMIA_ANITA_MODO_MINIMO', true), FILTER_VALIDATE_BOOLEAN),
 
     /**
+     * Auditoría diaria ERP ↔ Anita (gastronomía): comando gastronomia:auditoria-anita-diaria @ 01:00.
+     * Usa venta.fecha (calendario), no fechajornada. Replica faltantes vía bridge y alerta por mail.
+     */
+    'auditoria_anita_diaria' => [
+        'habilitada' => filter_var(env('GASTRONOMIA_AUDITORIA_ANITA_DIARIA', true), FILTER_VALIDATE_BOOLEAN),
+        'hora' => env('GASTRONOMIA_AUDITORIA_ANITA_HORA', '01:00'),
+        'empresa_id' => (int) env('GASTRONOMIA_AUDITORIA_ANITA_EMPRESA_ID', 1),
+        'usuario_id' => (int) env('GASTRONOMIA_AUDITORIA_ANITA_USUARIO_ID', 1),
+        'email' => env('GASTRONOMIA_AUDITORIA_ANITA_EMAIL', 'sergiogranucci@gmail.com'),
+        'tolerancia' => (float) env('GASTRONOMIA_AUDITORIA_ANITA_TOLERANCIA', 0.02),
+        'replicar_insumos' => filter_var(env('GASTRONOMIA_AUDITORIA_ANITA_REPLICAR_INSUMOS', true), FILTER_VALIDATE_BOOLEAN),
+        'email_si_ok' => filter_var(env('GASTRONOMIA_AUDITORIA_ANITA_EMAIL_SI_OK', false), FILTER_VALIDATE_BOOLEAN),
+    ],
+
+    /**
      * Waitry (comanda / sync pago) después de responder al POS; no bloquea emitir-factura.
      */
     'waitry_tras_respuesta' => filter_var(env('GASTRONOMIA_WAITRY_TRAS_RESPUESTA', true), FILTER_VALIDATE_BOOLEAN),

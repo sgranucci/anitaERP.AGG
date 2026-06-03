@@ -46,9 +46,13 @@ class ProveedorImpuestosRetencionRules
 
         if (($data['condicionganancia'] ?? '') === 'N') {
             $data['retieneganancia'] = 'N';
-            if ($ids['retencionganancia_id'] !== null) {
-                $data['retencionganancia_id'] = $ids['retencionganancia_id'];
-            }
+        }
+
+        if (
+            (($data['condicionganancia'] ?? '') === 'N' || ($data['retieneganancia'] ?? '') === 'N')
+            && $ids['retencionganancia_id'] !== null
+        ) {
+            $data['retencionganancia_id'] = $ids['retencionganancia_id'];
         }
 
         if (($data['retieneiva'] ?? '') === 'N' && $ids['retencioniva_id'] !== null) {

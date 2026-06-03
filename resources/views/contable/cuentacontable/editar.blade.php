@@ -14,23 +14,32 @@
         @include('includes.mensaje')
         <div class="card card-danger">
             <div class="card-header">
-                <h3 class="card-title">Editar Cuenta contable</h3>
+                <h3 class="card-title">{{ ! empty($soloConsulta) ? 'Consultar' : 'Editar' }} Cuenta contable</h3>
                 <div class="card-tools">
+                    @if (empty($soloConsulta))
                     <a href="{{route('cuentacontable')}}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
+                    @endif
                 </div>
             </div>
-            <form action="{{route('actualizar_cuentacontable', ['id' => $data->id])}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
+            <form action="{{route('actualizar_cuentacontable', ['id' => $data->id])}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off" @if(!empty($soloConsulta)) onsubmit="return false;" @endif>
                 @csrf @method("put")
-                <div class="card-body">
+                @if (! empty($soloConsulta))
+                    <input type="hidden" name="origen" value="modal_consulta">
+                @endif
+                <div class="card-body @if(!empty($soloConsulta)) pe-none @endif" @if(!empty($soloConsulta)) style="opacity:.92" @endif>
                     @include('contable.cuentacontable.form')
                 </div>
                 <div class="card-footer">
                     <div class="row">
                         <div class="col-lg-3"></div>
                         <div class="col-lg-6">
-                            @include('includes.boton-form-editar')
+                            @if (empty($soloConsulta))
+                                @include('includes.boton-form-editar')
+                            @else
+                                <button type="button" class="btn btn-secondary" onclick="window.close()">Cerrar</button>
+                            @endif
                         </div>
                     </div>
                 </div>

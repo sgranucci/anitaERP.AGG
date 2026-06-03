@@ -30,8 +30,12 @@
         <div id="proceso-error" class="alert alert-danger d-none py-2"></div>
 
         <div id="panel-proceso-meta" class="d-none mb-2">
-            <p class="mb-1 small"><strong>Ventana:</strong> <span id="meta-ventana"></span></p>
-            <p class="mb-0 small"><strong>Rango Waitry:</strong> <span id="meta-rango"></span></p>
+            <div class="alert alert-secondary py-2 mb-0">
+                <p class="mb-1 small"><strong>Ventana operativa:</strong> <span id="meta-ventana"></span></p>
+                <p class="mb-1 small"><strong>Rango calendario Waitry (API):</strong> <span id="meta-rango"></span></p>
+                <p class="mb-1 small"><strong>Órdenes incluidas:</strong> <span id="meta-cantidad"></span></p>
+                <p class="mb-0 small"><strong>Tramo IDs Waitry:</strong> <span id="meta-ids"></span></p>
+            </div>
         </div>
 
         <div id="panel-proceso-notas" class="d-none">
@@ -40,27 +44,36 @@
 
         <div id="panel-proceso-grilla" class="d-none">
             <div class="table-responsive mb-2">
-                <table class="table table-bordered table-sm mb-0">
+                <table class="table table-bordered table-sm mb-0" id="tabla-cuadro-cierre">
                     <thead class="thead-light">
                         <tr>
-                            <th>QR sin facturar</th>
-                            <th>QR fact. Anita</th>
-                            <th>MP fact. Anita</th>
-                            <th>Efectivo fact. Anita</th>
-                            <th>Total facturación (base %)</th>
+                            <th>Concepto</th>
+                            <th class="text-right">QR</th>
+                            <th class="text-right">MP</th>
+                            <th class="text-right">Efectivo</th>
+                            <th class="text-right">Otros</th>
+                            <th class="text-right">Total</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="tbody-cuadro-cierre"></tbody>
+                    <tfoot class="font-weight-bold">
                         <tr>
-                            <td class="text-right" id="celda-qr-sin"></td>
-                            <td class="text-right" id="celda-qr-fact"></td>
-                            <td class="text-right" id="celda-mp-fact"></td>
-                            <td class="text-right" id="celda-efe-fact"></td>
-                            <td class="text-right font-weight-bold" id="celda-total-fact"></td>
+                            <td>Total cuadro (Anita + Waitry pend./impago)</td>
+                            <td class="text-right" id="cuadro-total-qr"></td>
+                            <td class="text-right" id="cuadro-total-mp"></td>
+                            <td class="text-right" id="cuadro-total-efectivo"></td>
+                            <td class="text-right" id="cuadro-total-otros"></td>
+                            <td class="text-right" id="cuadro-total-general"></td>
                         </tr>
-                    </tbody>
+                    </tfoot>
                 </table>
             </div>
+            <p class="small text-muted mb-2">
+                Base del <strong>%</strong>: total neto facturado Anita (facturas − NC, fechajornada)
+                (<span id="label-total-facturacion"></span>).
+                Pendiente a facturar: <span id="label-pendiente-facturar"></span>.
+                Impago Waitry (ref.): <span id="label-impago-waitry"></span>.
+            </p>
             <div class="form-inline mb-2">
                 <label for="input-porcentaje" class="mr-2 small">Porcentaje</label>
                 <input type="number" id="input-porcentaje" class="form-control form-control-sm" style="width:90px"
@@ -101,24 +114,35 @@
                 </div>
                 <form id="form-config-contable">
                     <div class="modal-body">
-                        <div class="form-group">
-                            <label for="cfg_cuenta_ventas_id">Cuenta ventas</label>
-                            <input type="number" class="form-control" id="cfg_cuenta_ventas_id" name="cuenta_ventas_id" min="1">
-                        </div>
-                        <div class="form-group">
-                            <label for="cfg_cuenta_iva_id">Cuenta IVA (débito fiscal)</label>
-                            <input type="number" class="form-control" id="cfg_cuenta_iva_id" name="cuenta_iva_id" min="1">
-                        </div>
-                        <div class="form-group">
-                            <label for="cfg_cuenta_impuesto_interno_id">Cuenta impuesto interno</label>
-                            <input type="number" class="form-control" id="cfg_cuenta_impuesto_interno_id"
-                                   name="cuenta_impuesto_interno_id" min="1">
-                        </div>
-                        <div class="form-group mb-0">
-                            <label for="cfg_cuenta_fondo_fijo_id">Fondo fijo máquinas (ref.)</label>
-                            <input type="number" class="form-control" id="cfg_cuenta_fondo_fijo_maquinas_id"
-                                   name="cuenta_fondo_fijo_maquinas_id" min="1">
-                        </div>
+                        <p class="text-muted small mb-2">
+                            Las cuentas se consultan filtradas por la empresa del formulario principal.
+                        </p>
+                        <table class="table table-sm table-bordered mb-0" id="tabla-config-cuentas">
+                            <thead class="thead-light">
+                                <tr>
+                                    <th style="width:35%">Concepto</th>
+                                    <th>Cuenta contable</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-config-cuentas">
+                                @include('caja.waitry_cierre_jornada.partials.campo_cuentacontable_config', [
+                                    'campoId' => 'cuenta_ventas_id',
+                                    'label' => 'Cuenta ventas',
+                                ])
+                                @include('caja.waitry_cierre_jornada.partials.campo_cuentacontable_config', [
+                                    'campoId' => 'cuenta_iva_id',
+                                    'label' => 'Cuenta IVA (débito fiscal)',
+                                ])
+                                @include('caja.waitry_cierre_jornada.partials.campo_cuentacontable_config', [
+                                    'campoId' => 'cuenta_impuesto_interno_id',
+                                    'label' => 'Cuenta impuesto interno',
+                                ])
+                                @include('caja.waitry_cierre_jornada.partials.campo_cuentacontable_config', [
+                                    'campoId' => 'cuenta_fondo_fijo_maquinas_id',
+                                    'label' => 'Fondo fijo máquinas (ref.)',
+                                ])
+                            </tbody>
+                        </table>
                     </div>
                     <div class="modal-footer py-2">
                         <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cancelar</button>
@@ -128,4 +152,5 @@
             </div>
         </div>
     </div>
+    @include('includes.contable.modalconsultacuentacontable')
 @endif

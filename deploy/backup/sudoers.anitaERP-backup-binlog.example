@@ -1,0 +1,4 @@
+# Instalar en /etc/sudoers.d/anitaERP-backup-binlog (chmod 440, visudo -c)
+# Permite copiar binlogs cerrados sin password, solo este script:
+#
+# sergio ALL=(root) NOPASSWD: /var/www/html/anitaERP/deploy/backup/backup-binlog-copy-root.sh

@@ -3123,6 +3123,62 @@ class FacturacionService
 	}
 
 	/**
+	 * Replica en Informix un comprobante gastronomía ya grabado en el ERP (backfill / reparación).
+	 *
+	 * @param  array<string, mixed>  $ventaArray
+	 * @param  array<string, mixed>  $dataCAE
+	 * @param  list<array<string, mixed>>  $conceptosTotales
+	 * @param  list<array<string, mixed>>  $dataFactura
+	 * @return array{error: string, mensaje?: string}|string
+	 */
+	public function replicarVentaGastronomiaEnAnita(
+		array $ventaArray,
+		array $dataCAE,
+		array $conceptosTotales,
+		array $dataFactura,
+		$puntoventa,
+		$empresa,
+		string $letra,
+		string $codigoTipoTransaccion,
+		float $signo,
+		float $descuentoPie = 0.,
+		bool $modoMinimoAnita = true,
+		bool $sinCuentaCorrienteAnita = true,
+	) {
+		$this->descuentoPie = $descuentoPie;
+
+		$fechaVencimiento = $ventaArray['fecha'] ?? date('Y-m-d');
+		$cuentacorriente = [[
+			'fechavencimiento' => $fechaVencimiento,
+			'total' => abs((float) ($ventaArray['total'] ?? 0)),
+		]];
+
+		return $this->grabaAnitaConReintentoPorDuplicado(
+			$puntoventa->codigo,
+			$letra,
+			0,
+			0,
+			$ventaArray,
+			$dataCAE,
+			$conceptosTotales,
+			$cuentacorriente,
+			$dataFactura,
+			$signo,
+			$codigoTipoTransaccion,
+			null,
+			true,
+			0,
+			0,
+			'',
+			$empresa->codigo,
+			null,
+			null,
+			$modoMinimoAnita,
+			$sinCuentaCorrienteAnita,
+		);
+	}
+
+	/**
 	 * Escritura Anita con validación de respuesta; devuelve array de error o null si OK.
 	 *
 	 * @return array{error: string, mensaje: string}|null

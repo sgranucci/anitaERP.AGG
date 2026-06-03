@@ -8,6 +8,7 @@ use App\Models\Ventas\CuentaGastronomia;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Services\Ventas\Gastronomia\GastronomiaCuentaService;
 use App\Support\Ventas\GastronomiaSkuCatalogoSupport;
+use App\Support\Ventas\Waitry\WaitryCierreJornadaVentanaSupport;
 use App\Support\Ventas\Waitry\WaitryFacturacionDuplicadosSupport;
 use App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport;
 use Carbon\Carbon;
@@ -174,6 +175,64 @@ final class WaitryOrdenesExternasService
         }
 
         return $this->obtenerOrdenPorId($empresaId, $orderId, false);
+    }
+
+    /**
+     * Órdenes Waitry faltantes en getordersdetails — solo pantalla Caja → Cierre jornada Waitry.
+     * Una consulta getOrdersPOS acotada a la ventana operativa de jornada (misma lógica que el cierre tótem).
+     * No usa el cierre gastronómico ni consultas por orderId.
+     *
+     * @param  list<int>  $orderIds
+     * @return array<int, array<string, mixed>>
+     */
+    public function mapOrdenesPorIdsConciliacion(
+        int $empresaId,
+        array $orderIds,
+        string $fechaJornada,
+        mixed $aperturaEn = null,
+        mixed $cierreEn = null,
+    ): array {
+        $orderIds = array_values(array_unique(array_filter(
+            array_map(static fn ($id) => (int) $id, $orderIds),
+            static fn (int $id) => $id > 0,
+        )));
+        if ($orderIds === []) {
+            return [];
+        }
+
+        $placeId = $this->resolverPlaceId($empresaId);
+        if ($placeId === null) {
+            return [];
+        }
+
+        $fechaJornada = trim($fechaJornada);
+        if ($fechaJornada === '') {
+            return [];
+        }
+
+        $consulta = $this->consultarOrdenesRaw(
+            (int) $placeId,
+            $this->rangoJornadaConciliacionGetOrdersPos($fechaJornada, $aperturaEn, $cierreEn),
+            false,
+        );
+
+        if (! ($consulta['ok'] ?? false)) {
+            return [];
+        }
+
+        $buscados = array_fill_keys($orderIds, true);
+        $map = [];
+        foreach ($consulta['ordenes'] ?? [] as $orden) {
+            if (! is_array($orden)) {
+                continue;
+            }
+            $id = (int) ($orden['id'] ?? $orden['orderId'] ?? 0);
+            if ($id > 0 && isset($buscados[$id])) {
+                $map[$id] = $orden;
+            }
+        }
+
+        return $map;
     }
 
     public function invalidarCacheOrdenesPosEmpresa(int $empresaId): void
@@ -552,6 +611,39 @@ final class WaitryOrdenesExternasService
     private function formatoFromToGetOrdersPos(Carbon $fecha): string
     {
         return $fecha->format('Y-m-d H:i:s');
+    }
+
+    /**
+     * Ventana getOrdersPOS para conciliación tesorería: alineada con {@see WaitryCierreJornadaVentanaSupport}.
+     *
+     * @return array{
+     *     from:string,
+     *     to:string,
+     *     from_date:string,
+     *     to_date:string,
+     *     minutos_atras:int,
+     *     desde_limite:?Carbon
+     * }
+     */
+    private function rangoJornadaConciliacionGetOrdersPos(
+        string $fechaJornada,
+        mixed $aperturaEn = null,
+        mixed $cierreEn = null,
+    ): array {
+        $ventana = WaitryCierreJornadaVentanaSupport::resolverParaCierreJornada(
+            $fechaJornada,
+            $aperturaEn,
+            $cierreEn,
+        )['ventana'];
+
+        return [
+            'from' => $this->formatoFromToGetOrdersPos($ventana['desde']),
+            'to' => $this->formatoFromToGetOrdersPos($ventana['hasta']),
+            'from_date' => $ventana['desde']->format('Y-m-d'),
+            'to_date' => $ventana['hasta']->format('Y-m-d'),
+            'minutos_atras' => 0,
+            'desde_limite' => null,
+        ];
     }
 
     /**

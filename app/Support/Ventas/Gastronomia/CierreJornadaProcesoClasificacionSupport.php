@@ -2,6 +2,7 @@
 
 namespace App\Support\Ventas\Gastronomia;
 
+use App\Support\Ventas\Gastronomia\CierreJornadaProcesoGrillaSupport;
 use App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport;
 
 /**
@@ -23,15 +24,20 @@ final class CierreJornadaProcesoClasificacionSupport
 
     /**
      * @param  list<array<string, mixed>>  $movimientos
+     * @param  array{qr:float,mp:float,efectivo:float,otros:float,total:float}|null  $anitaJornadaPorMedio
      * @return array{
      *   movimientos: list<array<string, mixed>>,
      *   grupos: array<string, list<array<string, mixed>>>,
      *   conteos: array<string, int>,
      *   grilla: array<string, float>,
-     *   total_facturacion: float
+     *   cuadro_filas: list<array<string, mixed>>,
+     *   total_facturacion: float,
+     *   total_pendiente_facturar: float,
+     *   total_impago_waitry: float,
+     *   total_cuadro: float
      * }
      */
-    public static function clasificar(array $movimientos, int $empresaId): array
+    public static function clasificar(array $movimientos, int $empresaId, ?array $anitaJornadaPorMedio = null): array
     {
         $grupos = [
             self::GRUPO_FACTURADO_MEDIO_REAL => [],
@@ -42,14 +48,6 @@ final class CierreJornadaProcesoClasificacionSupport
             self::GRUPO_HUECO_AUDITORIA => [],
         ];
 
-        $grilla = [
-            'qr_sin_facturar' => 0.0,
-            'qr_facturado_anita' => 0.0,
-            'mp_facturado_anita' => 0.0,
-            'efectivo_facturado_anita' => 0.0,
-        ];
-        $totalFacturacion = 0.0;
-
         $enriquecidos = [];
         foreach ($movimientos as $mov) {
             $m = self::enriquecerMovimiento($mov, $empresaId);
@@ -59,26 +57,19 @@ final class CierreJornadaProcesoClasificacionSupport
             }
             $grupos[$grupo][] = $m;
             $enriquecidos[] = $m;
-
-            $total = (float) ($m['total'] ?? 0);
-            if (! empty($m['facturada_erp'])) {
-                $totalFacturacion += $total;
-                $claveMedio = (string) ($m['medio_anita_clave'] ?? '');
-                if ($claveMedio === CierreJornadaProcesoMedioSupport::CLAVE_QR) {
-                    $grilla['qr_facturado_anita'] += $total;
-                } elseif ($claveMedio === CierreJornadaProcesoMedioSupport::CLAVE_MP) {
-                    $grilla['mp_facturado_anita'] += $total;
-                } elseif ($claveMedio === CierreJornadaProcesoMedioSupport::CLAVE_EFECTIVO) {
-                    $grilla['efectivo_facturado_anita'] += $total;
-                }
-            } elseif ($grupo === self::GRUPO_SIN_FACTURAR_QR) {
-                $grilla['qr_sin_facturar'] += $total;
-            }
         }
 
-        foreach ($grilla as $k => $v) {
-            $grilla[$k] = round($v, 2);
-        }
+        $anitaJornada = $anitaJornadaPorMedio ?? [
+            'qr' => 0.0,
+            'mp' => 0.0,
+            'efectivo' => 0.0,
+            'otros' => 0.0,
+            'total' => 0.0,
+            'etiqueta' => 'Facturado Anita (jornada)',
+            'tipo' => 'anita_jornada',
+        ];
+
+        $cuadro = CierreJornadaProcesoGrillaSupport::armar($enriquecidos, $anitaJornada);
 
         $conteos = [];
         foreach ($grupos as $clave => $items) {
@@ -89,8 +80,12 @@ final class CierreJornadaProcesoClasificacionSupport
             'movimientos' => $enriquecidos,
             'grupos' => $grupos,
             'conteos' => $conteos,
-            'grilla' => $grilla,
-            'total_facturacion' => round($totalFacturacion, 2),
+            'grilla' => $cuadro['grilla'],
+            'cuadro_filas' => $cuadro['filas'],
+            'total_facturacion' => $cuadro['total_facturacion'],
+            'total_pendiente_facturar' => $cuadro['total_pendiente_facturar'],
+            'total_impago_waitry' => $cuadro['total_impago_waitry'],
+            'total_cuadro' => $cuadro['total_cuadro'],
         ];
     }
 

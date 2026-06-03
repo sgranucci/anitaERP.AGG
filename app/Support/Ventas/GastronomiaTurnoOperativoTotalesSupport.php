@@ -299,6 +299,47 @@ final class GastronomiaTurnoOperativoTotalesSupport
     }
 
     /**
+     * Totales del día contable por punto de venta CAE (fecha de jornada, sin ventana de turno).
+     *
+     * @return array<string, mixed>
+     */
+    public static function totalesDiaPorPuntoventa(
+        int $puntoventaId,
+        int $empresaId,
+        string $fechaJornada,
+    ): array {
+        $emisiones = self::emisionesDiaPorPuntoventa($puntoventaId, $empresaId, $fechaJornada);
+
+        return self::calcularDesdeColeccionEmisiones($emisiones);
+    }
+
+    /**
+     * Facturación bruta del día por PV CAE (sin NC), para rendg_total_z.
+     */
+    public static function totalFacturasSinNotasCreditoPorPuntoventa(
+        int $puntoventaId,
+        int $empresaId,
+        string $fechaJornada,
+    ): float {
+        $totales = self::totalesDiaPorPuntoventa($puntoventaId, $empresaId, $fechaJornada);
+
+        return round((float) ($totales['total_facturas'] ?? 0), 2);
+    }
+
+    /**
+     * Notas de crédito del día por PV (valor positivo para rendg_tot_nc).
+     */
+    public static function totalNotasCreditoPorPuntoventa(
+        int $puntoventaId,
+        int $empresaId,
+        string $fechaJornada,
+    ): float {
+        $totales = self::totalesDiaPorPuntoventa($puntoventaId, $empresaId, $fechaJornada);
+
+        return round(abs((float) ($totales['total_notas_credito'] ?? 0)), 2);
+    }
+
+    /**
      * Totales de toda la empresa en la ventana de una jornada cerrada (presentación a caja).
      *
      * @return array<string, mixed>
@@ -647,6 +688,38 @@ final class GastronomiaTurnoOperativoTotalesSupport
             self::acumularMediosPago($medios, $porMozo[$key]['por_medio_pago']);
             self::acumularMediosPago($medios, $porMedioGlobal);
         }
+    }
+
+    /**
+     * @return Collection<int, VentaGastronomiaEmision>
+     */
+    private static function emisionesDiaPorPuntoventa(
+        int $puntoventaId,
+        int $empresaId,
+        string $fechaJornada,
+    ): Collection {
+        if ($puntoventaId <= 0) {
+            return collect();
+        }
+
+        return VentaGastronomiaEmision::query()
+            ->whereHas('venta', function ($v) use ($empresaId, $fechaJornada, $puntoventaId) {
+                $v->where('puntoventa_id', $puntoventaId)
+                    ->where(function ($fecha) use ($fechaJornada) {
+                        $fecha->whereDate('fechajornada', $fechaJornada)
+                            ->orWhere(function ($legacy) use ($fechaJornada) {
+                                $legacy->whereNull('fechajornada')
+                                    ->whereDate('fecha', $fechaJornada);
+                            });
+                    })
+                    ->whereHas('puntoventas', fn ($pv) => $pv->where('empresa_id', $empresaId));
+            })
+            ->with([
+                'venta.cobranzasDirectas',
+                'venta.caja_movimientos.cobranzas',
+                'cuenta.mozo',
+            ])
+            ->get();
     }
 
     /**

@@ -5,7 +5,7 @@ namespace App\Services\Ventas\Gastronomia\Waitry;
 use App\Models\Ventas\CuentaGastronomia;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\WaitryComandaEnvio;
-use App\Support\Ventas\Waitry\WaitryImpuestoLineaSupport;
+use App\Support\Ventas\Waitry\WaitryComandaOrderItemsSupport;
 use App\Support\Ventas\Waitry\WaitryMediosPagoFromVentaSupport;
 use App\Support\Ventas\Waitry\WaitryPaymentPayloadSupport;
 use Carbon\Carbon;
@@ -300,15 +300,22 @@ final class WaitryComandaService
         string $facturaTxt,
         array $mediosPago = [],
     ): array {
-        $orderItems = $this->construirOrderItems($venta);
-        if ($orderItems === []) {
-            throw new InvalidArgumentException('Waitry: la venta no tiene ítems para enviar a cocina.');
+        $cortesia = WaitryComandaOrderItemsSupport::esFacturaCortesiaWaitry($venta);
+        $sinCobranza = $cortesia;
+
+        if ($cortesia) {
+            $pagada = false;
         }
 
-        $totalAmount = round(array_sum(array_map(
-            static fn (array $item): float => (float) $item['price'] * (int) $item['count'],
-            $orderItems
-        )), 2);
+        $orderItems = WaitryComandaOrderItemsSupport::construirDesdeVenta($venta, $sinCobranza);
+
+        $totalAmount = round((float) ($venta->total ?? 0), 2);
+        if ($totalAmount <= 0.) {
+            $totalAmount = round(array_sum(array_map(
+                static fn (array $item): float => (float) $item['price'] * (int) $item['count'],
+                $orderItems
+            )), 2);
+        }
 
         $payload = [
             'timestamp' => [
@@ -358,68 +365,6 @@ final class WaitryComandaService
         }
 
         return $payload;
-    }
-
-    /**
-     * @return list<array<string, mixed>>
-     */
-    private function construirOrderItems(Venta $venta): array
-    {
-        $items = [];
-        $tsItem = [
-            'date' => Carbon::now('UTC')->format('Y-m-d\TH:i:sP'),
-            'timezone_type' => 0,
-            'timezone' => '+00:00',
-        ];
-
-        foreach ($venta->venta_emisiones as $emision) {
-            $cantidad = (float) $emision->cantidad;
-            if ($cantidad <= 0.) {
-                continue;
-            }
-
-            $precio = round((float) $emision->precio, 4);
-            if ($precio < 0.) {
-                continue;
-            }
-
-            $articulo = $emision->articulos;
-            $sku = trim((string) ($articulo->sku ?? ''));
-            if ($sku === '') {
-                $sku = 'ART-'.(int) $emision->articulo_id;
-            }
-
-            $tax = WaitryImpuestoLineaSupport::impuestoSobrePrecioFinal(
-                $precio,
-                (int) $emision->impuesto_id,
-                (string) ($emision->incluyeimpuesto ?? 'N'),
-            );
-
-            $nombre = trim((string) ($articulo->descripcion ?? $emision->detalle ?? $sku));
-            $count = (int) max(1, round($cantidad));
-            $subtotal = round($precio * $count, 2);
-
-            $items[] = [
-                'timestamp' => $tsItem,
-                'count' => $count,
-                'notes' => null,
-                'price' => $precio,
-                'tax' => $tax,
-                'discount' => 0.0,
-                'discountPrice' => null,
-                'subtotal' => $subtotal,
-                'paid' => false,
-                'item' => [
-                    'name' => $nombre,
-                    'price' => $precio,
-                    'externalId' => $sku,
-                    'externalCode' => $sku,
-                ],
-                'orderItemVariations' => [],
-            ];
-        }
-
-        return $items;
     }
 
     private function resolverPlaceId(int $empresaId): ?int

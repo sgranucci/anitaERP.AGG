@@ -42,7 +42,12 @@
             </td>
             <td style="width: 40%; text-align: center;">
                 <h2 style="margin: 0; font-size: 18px; font-weight: bold;">Facturas gastronomía del día</h2>
-                <div class="meta">Fecha jornada: {{ \Illuminate\Support\Carbon::parse($fecha)->format('d-m-Y') }} · PC: {{ $identificador_pc }} · Generado {{ date('d-m-Y H:i') }}</div>
+                <div class="meta">
+                    @if (! empty($empresa_nombre))
+                        Empresa: {{ $empresa_nombre }} ·
+                    @endif
+                    Fecha jornada: {{ \Illuminate\Support\Carbon::parse($fecha)->format('d-m-Y') }} · PC: {{ $identificador_pc }} · Generado {{ date('d-m-Y H:i') }}
+                </div>
             </td>
             <td style="width: 25%;"></td>
         </tr>

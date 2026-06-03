@@ -1,0 +1,48 @@
+---
+description: Variables de entorno — siempre en .env y .env.example al implementar cambios
+alwaysApply: true
+---
+
+# Variables de entorno (.env)
+
+Al introducir o modificar configuración vía `env()`:
+
+## Obligatorio en cada cambio
+
+1. **`.env`** — valor activo del entorno (fuente de verdad para operar). El operador no debe ir a `.env.example` para saber qué está corriendo.
+2. **`.env.example`** — misma variable documentada (comentario breve + valor de ejemplo/default) para nuevos entornos y referencia histórica.
+3. **`config/*.php`** — solo `env('NOMBRE', default)`; el default documenta el fallback si falta la clave en `.env`.
+
+## Convenciones
+
+| Acción | Dónde |
+|--------|--------|
+| Nueva variable | Agregar en `.env` **y** `.env.example` en el mismo PR/cambio |
+| Cambiar default de negocio | Actualizar `.env` del proyecto **y** comentario en `.env.example` |
+| Variable obsoleta | Comentar en ambos archivos con nota de reemplazo; no dejar solo en config |
+| Agrupación | Bloque `# comentario` alineado con la sección del `config/` correspondiente |
+
+## Formato en `.env`
+
+```dotenv
+# Una línea: qué hace / comando relacionado si aplica
+NOMBRE_VARIABLE=valor
+```
+
+- Valores reales en `.env` (no placeholders genéricos salvo secretos no versionados).
+- En `.env.example`, secretos como `password` o tokens: valor ficticio o vacío con comentario.
+
+## Prohibido
+
+- Dejar variables **solo** en `config/` con default y sin entrada en `.env`.
+- Documentar **solo** en `.env.example` sin reflejar el valor operativo en `.env`.
+- Asumir que el usuario “ya tiene” la variable: si el código la lee, debe estar en `.env`.
+
+## Comprobación rápida
+
+Tras agregar `env('NUEVA_VAR')` en config:
+
+```bash
+rg "NUEVA_VAR" .env .env.example config/
+# Debe aparecer en los tres (o al menos .env + .env.example + config)
+```

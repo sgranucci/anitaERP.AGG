@@ -28,7 +28,7 @@
             <tr>
                 <th>Orden Waitry</th>
                 <th>Ref.</th>
-                <th>Hora</th>
+                <th>Fecha/hora Waitry</th>
                 <th class="num">Total Waitry</th>
                 <th>Pagada W.</th>
                 <th>Venta Anita</th>
@@ -45,7 +45,7 @@
             <tr>
                 <td>{{ $fila['waitry_order_id'] }}</td>
                 <td>{{ $fila['referencia_waitry'] ?: '—' }}</td>
-                <td>{{ $fila['hora_waitry'] ?: '—' }}</td>
+                <td>{{ $fila['fecha_hora_waitry'] ?: ($fila['hora_waitry'] ?: '—') }}</td>
                 <td class="num">
                     @if ($fila['waitry_total'] !== null)
                         {{ number_format((float) $fila['waitry_total'], 2, ',', '.') }}

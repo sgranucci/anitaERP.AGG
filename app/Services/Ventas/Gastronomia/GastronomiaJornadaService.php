@@ -247,7 +247,12 @@ final class GastronomiaJornadaService
         }
     }
 
-    public function cerrar(int $empresaId, ?string $observacion = null, ?array $informeZTotems = null): JornadaGastronomia
+    public function cerrar(
+        int $empresaId,
+        ?string $observacion = null,
+        ?array $informeZTotems = null,
+        ?array $cierreTotemSnapshot = null,
+    ): JornadaGastronomia
     {
         $jornada = $this->exigirJornadaAbierta($empresaId);
 
@@ -261,15 +266,15 @@ final class GastronomiaJornadaService
             : null;
 
         $informeZFinal = $borradorInformeZ;
+        $snapshotResumen = $this->resumenDesdeSnapshotCierre($borradorInformeZ, $cierreTotemSnapshot);
+
         if (is_array($informeZTotems) && $informeZTotems !== [] && $this->cierreTotemJornadaService->habilitado()) {
-            $preview = $this->cierreTotemJornadaService->previewParaJornadaAbierta($jornada);
-            if ($preview !== null) {
-                $resumen = [
-                    'por_totem' => $preview['por_totem'] ?? [],
-                    'total_general' => $preview['total_general'] ?? [],
-                ];
-                $desdeRequest = $this->informeZService
-                    ->construirInformeZDesdePayload($empresaId, $resumen, $informeZTotems);
+            if ($snapshotResumen !== null) {
+                $desdeRequest = $this->informeZService->construirInformeZDesdePayload(
+                    $empresaId,
+                    $snapshotResumen,
+                    $informeZTotems,
+                );
                 if ($desdeRequest !== null) {
                     $informeZFinal = $desdeRequest;
                 }
@@ -291,7 +296,7 @@ final class GastronomiaJornadaService
         $jornada = $this->jornadaRepository->findOrFail((int) $jornada->id);
 
         if ($this->cierreTotemJornadaService->habilitado()) {
-            $this->cierreTotemJornadaService->registrarAlCerrarJornada($jornada, $informeZFinal);
+            $this->cierreTotemJornadaService->registrarAlCerrarJornada($jornada, $informeZFinal, $cierreTotemSnapshot);
         }
 
         // rendg_total_z en Anita: solo desde Caja (rendición turno/jornada), no aquí — las rendiciones
@@ -425,6 +430,37 @@ final class GastronomiaJornadaService
             ->where('estado', CuentaGastronomia::ESTADO_ABIERTA)
             ->whereDoesntHave('lineas')
             ->update(['estado' => CuentaGastronomia::ESTADO_CERRADA]);
+    }
+
+    /**
+     * Resumen por tótem desde snapshot de vista previa (sin reconsultar Waitry al cerrar).
+     *
+     * @param  array<string, mixed>|null  $borradorInformeZ
+     * @param  array<string, mixed>|null  $snapshotRequest
+     * @return array{por_totem:list<array<string,mixed>>,total_general:array<string,mixed>}|null
+     */
+    private function resumenDesdeSnapshotCierre(?array $borradorInformeZ, ?array $snapshotRequest): ?array
+    {
+        $snapshot = null;
+        if (is_array($snapshotRequest) && is_array($snapshotRequest['resumen_totems'] ?? null)) {
+            $snapshot = $snapshotRequest;
+        } elseif (is_array($borradorInformeZ['snapshot_cierre'] ?? null)) {
+            $snapshot = $borradorInformeZ['snapshot_cierre'];
+        }
+
+        if (! is_array($snapshot)) {
+            return null;
+        }
+
+        $resumen = $snapshot['resumen_totems'] ?? null;
+        if (! is_array($resumen)) {
+            return null;
+        }
+
+        return [
+            'por_totem' => is_array($resumen['por_totem'] ?? null) ? $resumen['por_totem'] : [],
+            'total_general' => is_array($resumen['total_general'] ?? null) ? $resumen['total_general'] : [],
+        ];
     }
 
     private function componerObservacionCierreJornada(?string $observacion, int $vaciasAutoDescartadas): ?string

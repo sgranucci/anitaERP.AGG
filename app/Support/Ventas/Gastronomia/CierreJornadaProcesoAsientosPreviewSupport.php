@@ -70,7 +70,6 @@ final class CierreJornadaProcesoAsientosPreviewSupport
                     $impuestoInterno,
                 );
             } elseif ($grupo === CierreJornadaProcesoClasificacionSupport::GRUPO_FACTURADO_TOTEM) {
-                $claveReal = (string) ($mov['medio_waitry_clave'] ?? CierreJornadaProcesoMedioSupport::CLAVE_OTRO);
                 $n++;
                 $asientos[] = self::asientoTotemPrincipal(
                     $n,
@@ -87,7 +86,6 @@ final class CierreJornadaProcesoAsientosPreviewSupport
                     $n,
                     $mov,
                     $total,
-                    $claveReal,
                     $empresaId,
                 );
             } elseif ($grupo === CierreJornadaProcesoClasificacionSupport::GRUPO_SIN_FACTURAR_QR) {
@@ -332,29 +330,48 @@ final class CierreJornadaProcesoAsientosPreviewSupport
         return self::armarAsiento($numero, 'Facturado — asiento TOTEM → ventas/IVA', $mov, $lineas);
     }
 
-  /**
+    /**
+     * Puente TOTEM → medio real (QR/efectivo según redistribución). Haber TOTEM cancela el puente duplicado.
+     *
      * @return array<string, mixed>
      */
     private static function asientoTotemPuente(
         int $numero,
         array $mov,
         float $total,
-        string $claveReal,
         int $empresaId,
     ): array {
         $totem = GastronomiaCuentacajaTotem::cuentaParaEmpresa($empresaId);
-        $real = self::cuentacajaPorClave($claveReal, $empresaId);
-        $lineas = [
-            self::lineaDebe('Medio Waitry real — '.$real['label'], (int) $real['id'], $total),
-            self::lineaHaber('Contra TOTEM', (int) ($totem['id'] ?? 0), $total),
-        ];
+        $medios = self::mediosPuenteTotem($mov, $total, $empresaId);
+        $lineas = [];
+        foreach ($medios as $m) {
+            $lineas[] = self::lineaDebe('Medio real vs TOTEM — '.$m['label'], (int) $m['cuentacaja_id'], $m['monto']);
+        }
+        $lineas[] = self::lineaHaber('Contra TOTEM (puente)', (int) ($totem['id'] ?? 0), $total);
 
         return self::armarAsiento(
             $numero,
-            'Facturado — medio Waitry vs TOTEM',
+            'Facturado TOTEM — medio real vs puente TOTEM',
             $mov,
             $lineas,
         );
+    }
+
+    /**
+     * Medios del puente TOTEM: redistribución planificada o medio Waitry real (QR por defecto).
+     *
+     * @return list<array{clave:string,cuentacaja_id:int,label:string,monto:float}>
+     */
+    private static function mediosPuenteTotem(array $mov, float $total, int $empresaId): array
+    {
+        $plan = $mov['medios_pago_planificados'] ?? null;
+        if (is_array($plan) && $plan !== []) {
+            return self::resolverMediosDesdePlan($plan, $empresaId);
+        }
+
+        $claveReal = (string) ($mov['medio_waitry_clave'] ?? CierreJornadaProcesoMedioSupport::CLAVE_QR);
+
+        return self::unMedio($claveReal, $total, $empresaId);
     }
 
     /**

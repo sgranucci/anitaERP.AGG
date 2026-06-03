@@ -104,6 +104,9 @@ class GastronomiaFacturasDiaController extends Controller
             'fecha_calendario' => $fechaCalendario,
             'busqueda' => $busqueda,
             'identificador_pc' => $pc,
+            'tiene_cfg_pv' => $cfgPv !== null,
+            'empresa_id' => $empresaId > 0 ? $empresaId : null,
+            'empresa_nombre' => $cfgPv?->empresa?->nombre,
             'todas_pc' => $todasPc,
             'articulo_sku' => $articuloSku,
             'articulo_filtro' => $articuloFiltro,
@@ -142,13 +145,15 @@ class GastronomiaFacturasDiaController extends Controller
 
         $fecha = $this->resolverFechaFiltro($request);
         $identificador_pc = GastronomiaIdentificadorPc::resolver($request);
+        $cfgPv = $this->cuentaService->resolverConfiguracionPv($request);
+        $empresa_nombre = $cfgPv?->empresa?->nombre;
 
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
         switch ($formato) {
             case 'PDF':
-                $view = \View::make('ventas.gastronomia.facturas_dia.listado', compact('registros', 'fecha', 'identificador_pc'))
+                $view = \View::make('ventas.gastronomia.facturas_dia.listado', compact('registros', 'fecha', 'identificador_pc', 'empresa_nombre'))
                     ->render();
                 $path = storage_path('pdf/listados');
                 if (! is_dir($path)) {
@@ -508,6 +513,13 @@ class GastronomiaFacturasDiaController extends Controller
 
         if (! $todasPc) {
             $q->where('identificador_pc', $pc);
+        }
+
+        if ($empresaId > 0) {
+            $q->where(function ($w) use ($empresaId) {
+                $w->whereHas('configuracionPuntoventa', fn ($c) => $c->where('empresa_id', $empresaId))
+                    ->orWhereHas('venta.puntoventas', fn ($p) => $p->where('empresa_id', $empresaId));
+            });
         }
 
         $q->whereHas('venta', function ($vq) use ($fecha, $desdeHabilitacion, $hastaTurno) {

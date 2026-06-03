@@ -10,6 +10,7 @@ use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Services\Ventas\Gastronomia\Waitry\WaitryAnalyticsOrdenesService;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Ventas\Waitry\WaitryCierreJornadaDiscrepanciaSupport;
+use App\Support\Ventas\Gastronomia\VentaGastronomiaEmisionWaitrySupport;
 use App\Support\Ventas\Waitry\WaitryCierreJornadaVentanaSupport;
 use App\Support\Ventas\Waitry\WaitryInformeZConciliacionSupport;
 use App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport;
@@ -121,6 +122,7 @@ final class GastronomiaCierreTotemJornadaService
                 'fecha_jornada' => $jornada->fecha_jornada?->format('Y-m-d') ?? $fechaJornada,
                 'fecha_jornada_fmt' => $jornada->fecha_jornada?->format('d/m/Y') ?? '',
                 'ventana_operativa' => $ventana['etiqueta'] ?? '',
+                'rango_calendario_waitry' => $listado['auditoria']['consulta_waitry_rango'] ?? '',
                 'waitry_order_id_anterior' => $idAnterior,
                 'waitry_order_id_desde' => $desde,
                 'waitry_order_id_hasta' => $hastaId,
@@ -197,6 +199,15 @@ final class GastronomiaCierreTotemJornadaService
             ? WaitryInformeZConciliacionSupport::conciliar($plantilla)
             : null;
 
+        $snapshotCierre = $this->armarSnapshotCierre(
+            $idAnterior,
+            $desde,
+            $hasta,
+            $resumenTotems,
+            $listado['auditoria'],
+            (string) ($ventana['etiqueta'] ?? ''),
+        );
+
         return [
             'jornada_id' => (int) $jornada->id,
             'fecha_jornada' => $jornada->fecha_jornada?->format('d/m/Y') ?? '',
@@ -221,6 +232,7 @@ final class GastronomiaCierreTotemJornadaService
             'usuario_informe_z' => $borrador['usuario_nombre'] ?? null,
             'tolerancia' => WaitryInformeZConciliacionSupport::toleranciaMonto(),
             'preview_en' => now()->format('d/m/Y H:i'),
+            'snapshot_cierre' => $snapshotCierre,
         ];
     }
 
@@ -228,9 +240,13 @@ final class GastronomiaCierreTotemJornadaService
      * Registra el cierre de órdenes Waitry (tótem) al cerrar la jornada gastronómica.
      *
      * @param  array<string, mixed>|null  $informeZBorrador  Informe Z cargado antes del cierre (borrador o request).
+     * @param  array<string, mixed>|null  $snapshotCierre  Totales Waitry ya consultados en vista previa (evita 2.ª llamada API).
      */
-    public function registrarAlCerrarJornada(JornadaGastronomia $jornada, ?array $informeZBorrador = null): ?CierreTotemJornadaGastronomia
-    {
+    public function registrarAlCerrarJornada(
+        JornadaGastronomia $jornada,
+        ?array $informeZBorrador = null,
+        ?array $snapshotCierre = null,
+    ): ?CierreTotemJornadaGastronomia {
         if (! $this->habilitado()) {
             return null;
         }
@@ -245,6 +261,11 @@ final class GastronomiaCierreTotemJornadaService
             ->first();
         if ($existente !== null) {
             return $existente;
+        }
+
+        $snapshot = $this->resolverSnapshotCierre($informeZBorrador, $snapshotCierre);
+        if ($snapshot !== null) {
+            return $this->registrarAlCerrarJornadaDesdeSnapshot($jornada, $snapshot, $informeZBorrador);
         }
 
         $fechaJornada = $jornada->fecha_jornada?->format('Y-m-d') ?? Carbon::today()->format('Y-m-d');
@@ -313,29 +334,169 @@ final class GastronomiaCierreTotemJornadaService
             ? array_slice($lineasDiscrepancias, 0, $limiteDetalle)
             : $lineasDiscrepancias;
 
-        $informeZJson = null;
-        if ($informeZBorrador !== null && isset($informeZBorrador['totems'])) {
-            $informeZJson = $informeZBorrador;
+        $informeZJson = $this->informeZJsonParaPersistir($informeZBorrador);
+
+        return $this->persistirRegistroCierreTotem(
+            $jornada,
+            $empresaId,
+            $idAnterior,
+            $desde,
+            $hasta,
+            count($lineasCompletas),
+            $totalMonto,
+            $impagas,
+            $pagadas,
+            $facturadas,
+            [
+                'lineas' => $lineasPdf,
+                'resumen_totems' => $resumenTotems,
+                'auditoria' => $auditoria,
+            ],
+            $informeZJson,
+            $truncado,
+        );
+    }
+
+    /**
+     * Persiste cierre usando snapshot de la vista previa (sin reconsultar Waitry).
+     *
+     * @param  array<string, mixed>  $snapshot
+     */
+    private function registrarAlCerrarJornadaDesdeSnapshot(
+        JornadaGastronomia $jornada,
+        array $snapshot,
+        ?array $informeZBorrador,
+    ): CierreTotemJornadaGastronomia {
+        $empresaId = (int) $jornada->empresa_id;
+        $resumenTotems = is_array($snapshot['resumen_totems'] ?? null) ? $snapshot['resumen_totems'] : [];
+        $totalGeneral = is_array($resumenTotems['total_general'] ?? null) ? $resumenTotems['total_general'] : [];
+        $idAnterior = (int) ($snapshot['waitry_order_id_anterior'] ?? $this->ultimoWaitryOrderIdHasta($empresaId));
+        $desde = isset($snapshot['waitry_order_id_desde']) ? (int) $snapshot['waitry_order_id_desde'] : null;
+        $hasta = (int) ($snapshot['waitry_order_id_hasta'] ?? $idAnterior);
+        $auditoria = is_array($snapshot['auditoria'] ?? null) ? $snapshot['auditoria'] : [];
+        $auditoria['registro_desde_snapshot'] = true;
+        $auditoria['ventana_operativa'] = $snapshot['ventana_operativa'] ?? ($auditoria['ventana_operativa'] ?? '');
+        $auditoria['snapshot_preview_en'] = $snapshot['preview_en'] ?? null;
+
+        $informeZJson = $this->informeZJsonParaPersistir($informeZBorrador);
+
+        return $this->persistirRegistroCierreTotem(
+            $jornada,
+            $empresaId,
+            $idAnterior,
+            $desde,
+            $hasta,
+            (int) ($totalGeneral['cantidad_ordenes'] ?? 0),
+            round((float) ($totalGeneral['total_ingreso'] ?? 0), 2),
+            0,
+            0,
+            0,
+            [
+                'lineas' => [],
+                'resumen_totems' => $resumenTotems,
+                'auditoria' => $auditoria,
+            ],
+            $informeZJson,
+            false,
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $informeZBorrador
+     * @param  array<string, mixed>|null  $snapshotRequest
+     * @return array<string, mixed>|null
+     */
+    private function resolverSnapshotCierre(?array $informeZBorrador, ?array $snapshotRequest): ?array
+    {
+        $candidatos = [
+            $snapshotRequest,
+            is_array($informeZBorrador['snapshot_cierre'] ?? null) ? $informeZBorrador['snapshot_cierre'] : null,
+        ];
+
+        foreach ($candidatos as $snapshot) {
+            if (! is_array($snapshot)) {
+                continue;
+            }
+            $resumen = $snapshot['resumen_totems'] ?? null;
+            if (is_array($resumen) && is_array($resumen['por_totem'] ?? null)) {
+                return $snapshot;
+            }
         }
 
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $resumenTotems
+     * @param  array<string, mixed>  $auditoria
+     * @return array<string, mixed>
+     */
+    private function armarSnapshotCierre(
+        int $idAnterior,
+        ?int $desde,
+        int $hasta,
+        array $resumenTotems,
+        array $auditoria,
+        string $ventanaOperativa,
+    ): array {
+        return [
+            'waitry_order_id_anterior' => $idAnterior,
+            'waitry_order_id_desde' => $desde,
+            'waitry_order_id_hasta' => $hasta,
+            'resumen_totems' => $resumenTotems,
+            'auditoria' => $auditoria,
+            'ventana_operativa' => $ventanaOperativa,
+            'preview_en' => now()->format('Y-m-d H:i:s'),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $informeZBorrador
+     * @return array<string, mixed>|null
+     */
+    private function informeZJsonParaPersistir(?array $informeZBorrador): ?array
+    {
+        if ($informeZBorrador === null || ! isset($informeZBorrador['totems'])) {
+            return null;
+        }
+
+        unset($informeZBorrador['snapshot_cierre']);
+
+        return $informeZBorrador;
+    }
+
+    /**
+     * @param  array<string, mixed>  $detalleJson
+     */
+    private function persistirRegistroCierreTotem(
+        JornadaGastronomia $jornada,
+        int $empresaId,
+        int $idAnterior,
+        ?int $desde,
+        int $hasta,
+        int $cantidadLineas,
+        float $totalMonto,
+        int $impagas,
+        int $pagadas,
+        int $facturadas,
+        array $detalleJson,
+        ?array $informeZJson,
+        bool $detalleTruncado,
+    ): CierreTotemJornadaGastronomia {
         return CierreTotemJornadaGastronomia::query()->create([
             'jornada_gastronomia_id' => (int) $jornada->id,
             'empresa_id' => $empresaId,
             'waitry_order_id_anterior' => $idAnterior,
             'waitry_order_id_desde' => $desde,
             'waitry_order_id_hasta' => $hasta,
-            'cantidad_lineas' => count($lineasCompletas),
+            'cantidad_lineas' => $cantidadLineas,
             'total_monto' => $totalMonto,
             'cantidad_impagas_waitry' => $impagas,
             'cantidad_pagadas_waitry' => $pagadas,
             'cantidad_facturadas_erp' => $facturadas,
-            'detalle_json' => [
-                'lineas' => $lineasPdf,
-                'resumen_totems' => $resumenTotems,
-                'auditoria' => $auditoria,
-            ],
+            'detalle_json' => $detalleJson,
             'informe_z_json' => $informeZJson,
-            'detalle_truncado' => $truncado,
+            'detalle_truncado' => $detalleTruncado,
             'usuario_id' => Auth::id(),
         ]);
     }
@@ -715,13 +876,18 @@ final class GastronomiaCierreTotemJornadaService
             ->keyBy(fn (CuentaGastronomia $c) => (int) $c->waitry_order_id);
 
         $emisionesPorWaitry = VentaGastronomiaEmision::query()
-            ->with(['venta:id,codigo,total', 'cuenta:id,waitry_cobro_totem,waitry_tipo_pago'])
-            ->whereIn('waitry_order_id', $ids)
+            ->with(['venta:id,codigo,total', 'cuenta:id,waitry_cobro_totem,waitry_tipo_pago,waitry_order_id', 'waitryComandaEnvio'])
             ->whereHas('venta', fn ($q) => $q->whereHas('puntoventas', fn ($pv) => $pv->where('empresa_id', $empresaId)))
             ->orderByDesc('venta_id')
-            ->get()
-            ->unique('waitry_order_id')
-            ->keyBy(fn (VentaGastronomiaEmision $e) => (int) $e->waitry_order_id);
+            ->get();
+
+        $mapEmisionPorWaitryId = [];
+        foreach ($emisionesPorWaitry as $emision) {
+            $wid = VentaGastronomiaEmisionWaitrySupport::resolverOrderId($emision);
+            if ($wid > 0 && in_array($wid, $ids, true) && ! isset($mapEmisionPorWaitryId[$wid])) {
+                $mapEmisionPorWaitryId[$wid] = $emision;
+            }
+        }
 
         $lineas = [];
         foreach ($ordenesPorId as $orderId => $orden) {
@@ -730,7 +896,7 @@ final class GastronomiaCierreTotemJornadaService
             }
 
             $cuenta = $cuentasPorWaitry->get($orderId);
-            $emision = $emisionesPorWaitry->get($orderId);
+            $emision = $mapEmisionPorWaitryId[$orderId] ?? null;
 
             $total = round((float) ($orden['totalAmount'] ?? 0), 2);
             if ($total <= 0. && $emision?->venta) {

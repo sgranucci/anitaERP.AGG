@@ -48,3 +48,6 @@ A
 A
 /storage
 composer.lock
+/backups
+/binlog.*
+binlog.*

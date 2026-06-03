@@ -258,6 +258,32 @@ class RendicionGastronomiaAnitaSyncService
         ], 'rendgastro update total_z', self::LOG_EVENTO);
     }
 
+    /**
+     * Actualiza rendg_total_z y rendg_tot_nc por clave nro_oper (reparación por PV/fecha).
+     */
+    public function actualizarTotalZYNcPorNroOper(int $nroOper, float $totalZ, float $totNc): void
+    {
+        if (! $this->sincronizacionHabilitada()) {
+            throw new \RuntimeException('RENDICION_GASTRONOMIA_SINCRONIZAR_ANITA está deshabilitado.');
+        }
+
+        if ($nroOper <= 0) {
+            throw new \InvalidArgumentException('nro_oper inválido para actualizar Anita.');
+        }
+
+        $api = new ApiAnita;
+        $valores = 'rendg_total_z = '.RendicionGastronomiaCabeceraAnitaMapper::decimal($totalZ)
+            .', rendg_tot_nc = '.RendicionGastronomiaCabeceraAnitaMapper::decimal($totNc);
+
+        $api->apiCallEscritura([
+            'acc' => 'update',
+            'tabla' => $this->tablaCabecera(),
+            'sistema' => $this->sistema(),
+            'valores' => $valores,
+            'whereArmado' => RendicionGastronomiaCabeceraAnitaMapper::whereClave($nroOper, $this->tipoOper()),
+        ], 'rendgastro update total_z+nc', self::LOG_EVENTO);
+    }
+
     /** @deprecated Use actualizarSoloTotalZEnAnita() */
     public function actualizarCabeceraTotalZEnAnita(RendicionGastronomiaCaja $rendicion, float $totalZ): void
     {

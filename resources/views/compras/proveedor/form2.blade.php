@@ -113,7 +113,7 @@
 					<label for="retieneganancia" class="col-lg-4 col-form-label">Retiene Ganancias</label>
 				@endif
 				<select name="retieneganancia" id="retieneganancia" class="col-lg-3 form-control" @if ($tipoalta != 'P') required @endif>
-					<option value="">-- Elija retiene iva --</option>
+					<option value="">-- Elija retiene ganancias --</option>
 					@foreach ($retieneganancia_enum as $value => $retieneganancia)
 						<option value="{{ $value }}"
 							@if (old('retieneganancia', $data->retieneganancia ?? '') == $value) selected @endif
