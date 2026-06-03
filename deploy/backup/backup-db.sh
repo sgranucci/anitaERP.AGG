@@ -1,6 +1,6 @@
 #!/bin/bash
-# Backup anitaERP: mysqldump + gzip, validación, snapshot binlog, sync a réplica .211.
-# Cron sugerido: 0 6,18 * * * (cada 12 h)
+# Backup anitaERP: mysqldump + gzip, validación, snapshot binlog, sync remoto opcional.
+# Cron sugerido (usuario sergio): 0 6,18 * * * /var/www/html/anitaERP/deploy/backup/backup-db.sh
 
 set -euo pipefail
 
@@ -16,9 +16,12 @@ FAILED=0
 
 mkdir -p "${BACKUP_DIR}" "${BINLOG_DIR}"
 mkdir -p "$(dirname "${LOG_FILE}")"
+touch "${LOG_FILE}" 2>/dev/null || true
 
 log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
+    local msg="[$(date '+%Y-%m-%d %H:%M:%S')] $*"
+    echo "${msg}"
+    echo "${msg}" >> "${LOG_FILE}" 2>/dev/null || echo "${msg}" >> "${BACKUP_DIR}/backup-db.log"
 }
 
 log_error() {
@@ -32,10 +35,11 @@ log_warn() {
 
 if [[ ! -f "${HOME}/.my.cnf" ]]; then
     log_error "no existe ${HOME}/.my.cnf (chmod 600)"
+    log_error "Ejecutar: ${SCRIPT_DIR}/setup-mycnf.sh  (lee DB_* del .env del proyecto)"
     exit 1
 fi
 
-log "Inicio backup ${DB_NAME} -> ${OUTPUT}"
+log "Inicio backup ${DB_NAME} -> ${OUTPUT} (host $(hostname))"
 
 if ! mysqldump \
     --single-transaction \
@@ -86,8 +90,8 @@ while IFS= read -r -d '' old; do
 done < <(find "${BACKUP_DIR}" -maxdepth 1 -name "${DB_NAME}_*.sql.gz" -mtime +"${RETENTION_DAYS}" -print0 2>/dev/null || true)
 log "Retención dumps: ${DELETED} eliminado(s) (> ${RETENTION_DAYS} días)"
 
-# Sync a réplica .211
-if [[ "${REMOTE_SYNC_ENABLED}" == "1" ]]; then
+# Sync remoto (solo si REMOTE_SYNC_ENABLED=1 y REMOTE_HOST definido — típ. AGG .210)
+if [[ "${REMOTE_SYNC_ENABLED}" == "1" && -n "${REMOTE_HOST}" ]]; then
     SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=15)
     [[ -f "${REMOTE_SSH_KEY}" ]] && SSH_OPTS+=(-i "${REMOTE_SSH_KEY}")
     RSYNC_SSH="ssh ${SSH_OPTS[*]}"

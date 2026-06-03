@@ -1,0 +1,22 @@
+# Credenciales MySQL para backup-db.sh (mysqldump / mysql CLI).
+# Copiar al home del usuario que corre el cron (típ. sergio en .210):
+#
+#   cp deploy/backup/my.cnf.example ~/.my.cnf
+#   chmod 600 ~/.my.cnf
+#   # Editar user y password
+#
+# O generar desde .env del proyecto:
+#   ./deploy/backup/setup-mycnf.sh
+
+[client]
+user=anitaERP
+password=CAMBIAR
+host=127.0.0.1
+port=3306
+
+[mysqldump]
+single-transaction
+quick
+routines
+triggers
+events

@@ -1,0 +1,15 @@
+# Copiar a backup.local.conf y ajustar por servidor (no versionar backup.local.conf).
+#
+# --- AGG producción (.210 → réplica .211) ---
+# REMOTE_SYNC_ENABLED=1
+# REMOTE_HOST="10.20.30.211"
+# REMOTE_USER="sergio"
+# REMOTE_DIR="/var/www/html/anitaERP/backups"
+# REMOTE_SSH_KEY="/home/sergio/.ssh/id_rsa"
+# MIN_BACKUP_BYTES=50000000
+# LOG_FILE="/var/www/html/anitaERP/storage/logs/backup-db.log"
+#
+# --- INTERFORMING (server9 u otro) ---
+# REMOTE_SYNC_ENABLED=0
+# MIN_BACKUP_BYTES=500000
+# LOG_FILE="/var/www/html/anitaERP/backups/backup-db.log"

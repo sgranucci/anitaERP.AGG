@@ -51,3 +51,4 @@ composer.lock
 /backups
 /binlog.*
 binlog.*
+deploy/backup/backup.local.conf

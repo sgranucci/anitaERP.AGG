@@ -11,8 +11,11 @@ return new class extends Migration
     /** @var list<string> */
     private const ROLES_DIA = ['Op-tesoreria', 'op-Tesoreria Operativa'];
 
-    /** @var list<int> */
-    private const ROLES_SIN_RESTRICCION_IDS = [7, 42];
+    /** Encargados: pueden actualizar rendiciones de cualquier fecha. */
+    private const ROLES_SIN_RESTRICCION = [
+        'Enc-tesorería',
+        'enc-Tesoreria Operativa',
+    ];
 
     public function up(): void
     {
@@ -36,11 +39,12 @@ return new class extends Migration
 
         foreach ($permisos as $row) {
             $permisoId = $this->upsertPermiso($row['nombre'], $row['slug'], $menuId);
-            if ($row['slug'] === 'actualizar-rendicion-gastronomia-caja-encargado') {
-                $this->asignarARolesPorId($permisoId, self::ROLES_SIN_RESTRICCION_IDS);
-            } else {
-                $this->asignarARoles($permisoId, $row['roles']);
-            }
+            $this->asignarARoles(
+                $permisoId,
+                $row['slug'] === 'actualizar-rendicion-gastronomia-caja-encargado'
+                    ? self::ROLES_SIN_RESTRICCION
+                    : $row['roles'],
+            );
         }
 
         SuitecrmPermiso::flushCachePermisos();
@@ -67,25 +71,6 @@ return new class extends Migration
         ]);
 
         return $permisoId;
-    }
-
-    /**
-     * @param  list<int>  $rolIds
-     */
-    private function asignarARolesPorId(int $permisoId, array $rolIds): void
-    {
-        foreach ($rolIds as $rolId) {
-            $rolId = (int) $rolId;
-            if ($rolId <= 0) {
-                continue;
-            }
-            if (! DB::table('permiso_rol')->where('permiso_id', $permisoId)->where('rol_id', $rolId)->exists()) {
-                DB::table('permiso_rol')->insert([
-                    'permiso_id' => $permisoId,
-                    'rol_id' => $rolId,
-                ]);
-            }
-        }
     }
 
     /**

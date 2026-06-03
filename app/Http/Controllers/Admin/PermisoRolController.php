@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Admin\Permiso;
 use App\Models\Admin\Rol;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
+use App\Support\SuitecrmPermiso;
 
 class PermisoRolController extends Controller
 {
@@ -73,11 +74,17 @@ class PermisoRolController extends Controller
             }
             if ($request->input('estado') == 1) {
                 $permiso->auditAttach('roles', $request->input('rol_id'));
-                return response()->json(['respuesta' => 'El rol se asigno correctamente']);
             } else {
                 $permiso->auditDetach('roles', $request->input('rol_id'));
-                return response()->json(['respuesta' => 'El rol se elimino correctamente']);
             }
+
+            SuitecrmPermiso::flushCachePermisos();
+
+            return response()->json([
+                'respuesta' => $request->input('estado') == 1
+                    ? 'El rol se asigno correctamente'
+                    : 'El rol se elimino correctamente',
+            ]);
         } else {
             abort(404);
         }

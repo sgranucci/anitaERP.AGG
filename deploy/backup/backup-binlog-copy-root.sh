@@ -13,6 +13,13 @@ MYSQL_DATADIR="${MYSQL_DATADIR:-/var/lib/mysql}"
 BINLOG_DIR="${BACKUP_DIR}/binlog"
 mkdir -p "${BINLOG_DIR}"
 
+# Directorio real de binlogs (p. ej. /var/log/mysql si log_bin=/var/log/mysql/mariadb-bin)
+BINLOG_BASE="$(mysql -N -e "SHOW VARIABLES LIKE 'log_bin_basename'" | awk '{print $2}')"
+if [[ -z "${BINLOG_BASE}" ]]; then
+    exit 0
+fi
+BINLOG_SRC_DIR="$(dirname "${BINLOG_BASE}")"
+
 mapfile -t ALL_LOGS < <(mysql -N -e "SHOW BINARY LOGS" | awk '{print $1}')
 if [[ ${#ALL_LOGS[@]} -lt 2 ]]; then
     exit 0
@@ -21,7 +28,7 @@ fi
 # Todos excepto el último (activo)
 for ((i = 0; i < ${#ALL_LOGS[@]} - 1; i++)); do
     logfile="${ALL_LOGS[$i]}"
-    src="${MYSQL_DATADIR}/${logfile}"
+    src="${BINLOG_SRC_DIR}/${logfile}"
     dest="${BINLOG_DIR}/${logfile}"
     if [[ -f "${dest}" ]]; then
         continue

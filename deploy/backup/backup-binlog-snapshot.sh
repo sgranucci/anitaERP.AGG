@@ -1,6 +1,6 @@
 #!/bin/bash
 # Guarda posición y listado de binlogs (referencia PITR). No copia archivos binlog
-# (requieren lectura de /var/lib/mysql → ver backup-binlog-copy-root.sh + sudoers).
+# (requieren lectura del directorio de log_bin → ver backup-binlog-copy-root.sh + sudoers).
 
 set -euo pipefail
 
@@ -20,8 +20,8 @@ mkdir -p "${BINLOG_DIR}"
     echo "# Servidor: $(hostname)"
     date -Iseconds
     echo ""
-    echo "=== SHOW BINARY LOG STATUS ==="
-    mysql -e "SHOW BINARY LOG STATUS;"
+    echo "=== SHOW MASTER STATUS (MariaDB / MySQL) ==="
+    mysql -e "SHOW MASTER STATUS;" 2>/dev/null || mysql -e "SHOW BINARY LOG STATUS;" 2>/dev/null || echo "(sin privilegio BINLOG MONITOR — ejecutar grant-binlog-monitor.sql)"
     echo ""
     echo "=== SHOW BINARY LOGS ==="
     mysql -e "SHOW BINARY LOGS;"

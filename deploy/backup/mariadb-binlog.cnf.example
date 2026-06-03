@@ -1,0 +1,25 @@
+# MariaDB / MySQL — habilitar binary log para backups PITR (anitaERP)
+# Instalar en el servidor:
+#   sudo cp deploy/backup/mariadb-binlog.cnf.example /etc/mysql/mariadb.conf.d/99-anitaERP-binlog.cnf
+#   sudo mkdir -p /var/log/mysql && sudo chown mysql:mysql /var/log/mysql
+#   sudo systemctl restart mariadb
+#   mysql -e "SHOW VARIABLES LIKE 'log_bin'; SHOW MASTER STATUS;"
+
+[mariadbd]
+# Obligatorio si log_bin está activo (ya suele ser 1 por defecto)
+server-id = 1
+
+# Activa el binary log. Prefijo de archivos: /var/log/mysql/mariadb-bin.000001, ...
+log_bin = /var/log/mysql/mariadb-bin
+
+# MIXED es el default en MariaDB; adecuado para ERP mixto lectura/escritura
+binlog_format = MIXED
+
+# Retención alineada con deploy/backup/backup.conf (7 días)
+binlog_expire_logs_seconds = 604800
+
+# Rotar cada 100 MB
+max_binlog_size = 100M
+
+# 1 = fsync en cada commit (más seguro ante caída; algo más lento en escritura intensa)
+sync_binlog = 1
