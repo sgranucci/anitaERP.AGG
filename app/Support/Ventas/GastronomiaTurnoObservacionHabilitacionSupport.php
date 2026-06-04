@@ -53,6 +53,30 @@ final class GastronomiaTurnoObservacionHabilitacionSupport
     }
 
     /**
+     * Nota compacta al corregir el monto de habilitación con turno aún abierto.
+     */
+    public static function notaModificacionMonto(
+        int $usuarioId,
+        string $usuarioNombre,
+        string $identificadorPc,
+        float $montoAnterior,
+        float $montoNuevo,
+        ?string $motivo,
+    ): string {
+        $motivoLimpio = trim((string) $motivo);
+        $linea = '[Corrección monto hab. '.now()->format('Y-m-d H:i')
+            .' user #'.$usuarioId.' '.$usuarioNombre
+            .' PC '.$identificadorPc
+            .'] $'.number_format($montoAnterior, 2, '.', '')
+            .' → $'.number_format($montoNuevo, 2, '.', '');
+        if ($motivoLimpio !== '') {
+            $linea .= '. Motivo: '.$motivoLimpio;
+        }
+
+        return $linea;
+    }
+
+    /**
      * Nota compacta para append al anular (sin JSON; el snapshot queda en Log).
      */
     public static function notaAnulacionCierre(

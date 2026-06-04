@@ -267,12 +267,22 @@
             if (!confirm('¿Confirma el cierre definitivo del turno?')) {
                 return;
             }
-            postJson(G.rutasTurno.cerrar, {
+            var payloadCierre = {
                 redondeo_invitaciones: document.getElementById('pos-redondeo-invitaciones').value,
                 redondeo_turno: document.getElementById('pos-redondeo-turno').value,
                 sobrante_faltante: document.getElementById('pos-sobrante-faltante').value,
                 observacion_cierre: document.getElementById('pos-observacion-cierre').value,
-            }).then(function (data) {
+            };
+            var totBoxCierre = document.getElementById('modal-cerrar-turno-totales');
+            if (totBoxCierre && window.GastronomiaTotalesTurnoRender
+                && window.GastronomiaTotalesTurnoRender.recolectarMediosContadoCierreDesdeRoot) {
+                var mediosContadoPos = window.GastronomiaTotalesTurnoRender
+                    .recolectarMediosContadoCierreDesdeRoot(totBoxCierre);
+                if (mediosContadoPos.length) {
+                    payloadCierre.medios_contado = mediosContadoPos;
+                }
+            }
+            postJson(G.rutasTurno.cerrar, payloadCierre).then(function (data) {
                 if (data.ok) {
                     alert(data.mensaje || 'Turno cerrado');
                     abrirComprobantePdf(data.url_comprobante_pdf);

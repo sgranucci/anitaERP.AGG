@@ -131,6 +131,35 @@ final class EscPosTicketWriter
         return $this;
     }
 
+    /**
+     * Código alfanumérico del papelito Waitry — visible para el cliente en el monitor.
+     */
+    public function bloquePapelitoMonitor(string $codigo): self
+    {
+        $codigo = trim($codigo);
+        if ($codigo === '') {
+            return $this;
+        }
+
+        $this->separador();
+        $this->alinearCentro();
+        $this->negrita(true);
+        $this->linea('SU PEDIDO EN EL MONITOR');
+        $this->negrita(false);
+        $this->feed(1);
+        $this->negrita(true);
+        $this->dobleTamano(true);
+        $this->linea($this->truncar($codigo, (int) floor($this->ancho / 2)));
+        $this->dobleTamano(false);
+        $this->negrita(false);
+        $this->feed(1);
+        $this->linea('Presente este codigo');
+        $this->alinearIzquierda();
+        $this->separador();
+
+        return $this;
+    }
+
     public function lineaConImporte(string $izquierda, string $importe): self
     {
         $der = $this->truncar($importe, 14);

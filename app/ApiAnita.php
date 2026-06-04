@@ -259,15 +259,23 @@ class ApiAnita {
      *
      * @return list<object>
      */
-    public static function decodificarListaFilas(?string $respuesta): array
+    /**
+     * @return array{filas: list<object>, error_lectura: ?string}
+     */
+    public static function parsearRespuestaLista(?string $respuesta): array
     {
         if ($respuesta === null) {
-            return [];
+            return ['filas' => [], 'error_lectura' => 'Sin respuesta del bridge Anita'];
         }
 
         $trim = trim($respuesta);
         if ($trim === '' || $trim === '[]') {
-            return [];
+            return ['filas' => [], 'error_lectura' => null];
+        }
+
+        $err = self::extraerMensajeError($trim);
+        if ($err !== null) {
+            return ['filas' => [], 'error_lectura' => $err];
         }
 
         if (preg_match('/(\[[\s\S]*\])\s*$/', $trim, $m)) {
@@ -276,22 +284,29 @@ class ApiAnita {
 
         $decoded = json_decode($trim, false);
         if ($decoded === null) {
-            return [];
+            return ['filas' => [], 'error_lectura' => 'Respuesta Anita no parseable como JSON'];
         }
 
         if (is_array($decoded)) {
-            return array_values($decoded);
+            return ['filas' => array_values($decoded), 'error_lectura' => null];
         }
 
         if (is_object($decoded)) {
             if (isset($decoded->Error) || isset($decoded->error)) {
-                return [];
+                $msg = trim((string) ($decoded->Error ?? $decoded->error ?? 'Error Anita'));
+
+                return ['filas' => [], 'error_lectura' => $msg !== '' ? $msg : 'Error Anita'];
             }
 
-            return [$decoded];
+            return ['filas' => [$decoded], 'error_lectura' => null];
         }
 
-        return [];
+        return ['filas' => [], 'error_lectura' => 'Formato de respuesta Anita no reconocido'];
+    }
+
+    public static function decodificarListaFilas(?string $respuesta): array
+    {
+        return self::parsearRespuestaLista($respuesta)['filas'];
     }
 
     /**

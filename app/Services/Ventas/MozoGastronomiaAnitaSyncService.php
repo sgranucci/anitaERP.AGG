@@ -129,7 +129,10 @@ class MozoGastronomiaAnitaSyncService
             'empresa_id' => $payload['empresa_id'],
         ];
 
-        $existente = MozoGastronomia::query()->where('codigo', $codigoAnita)->first();
+        $existente = MozoGastronomia::query()
+            ->where('empresa_id', $datos['empresa_id'])
+            ->where('codigo', $codigoAnita)
+            ->first();
 
         DB::beginTransaction();
         try {

@@ -122,12 +122,12 @@ return [
     'anita_modo_minimo' => filter_var(env('GASTRONOMIA_ANITA_MODO_MINIMO', true), FILTER_VALIDATE_BOOLEAN),
 
     /**
-     * Auditoría diaria ERP ↔ Anita (gastronomía): comando gastronomia:auditoria-anita-diaria @ 01:00.
+     * Auditoría diaria ERP ↔ Anita (gastronomía): comando gastronomia:auditoria-anita-diaria @ 06:30.
      * Usa venta.fecha (calendario), no fechajornada. Replica faltantes vía bridge y alerta por mail.
      */
     'auditoria_anita_diaria' => [
         'habilitada' => filter_var(env('GASTRONOMIA_AUDITORIA_ANITA_DIARIA', true), FILTER_VALIDATE_BOOLEAN),
-        'hora' => env('GASTRONOMIA_AUDITORIA_ANITA_HORA', '01:00'),
+        'hora' => env('GASTRONOMIA_AUDITORIA_ANITA_HORA', '06:30'),
         'empresa_id' => (int) env('GASTRONOMIA_AUDITORIA_ANITA_EMPRESA_ID', 1),
         'usuario_id' => (int) env('GASTRONOMIA_AUDITORIA_ANITA_USUARIO_ID', 1),
         'email' => env('GASTRONOMIA_AUDITORIA_ANITA_EMAIL', 'sergiogranucci@gmail.com'),
@@ -257,6 +257,12 @@ return [
      */
     'cierre_totem_jornada_max_ids_gap_recuperar' => 0,
 
+    /** Consultas getOrdersPOS por orderId si getordersdetails no trae payment.type (0 = solo bulk, recomendado). */
+    'cierre_totem_enriquecer_payment_individual_max' => max(
+        0,
+        (int) env('GASTRONOMIA_CIERRE_TOTEM_ENRIQUECER_PAYMENT_INDIVIDUAL_MAX', 0),
+    ),
+
     /**
      * Si no hay cierre_en al armar el cierre, tope de madrugada del día siguiente (hora local) para ventana Waitry.
      */
@@ -273,6 +279,33 @@ return [
     'cierre_jornada_cuenta_impuesto_interno_id' => env('GASTRONOMIA_CIERRE_JORNADA_CUENTA_IMPUESTO_INTERNO_ID'),
     'cierre_jornada_cuenta_fondo_fijo_maquinas_id' => env('GASTRONOMIA_CIERRE_JORNADA_CUENTA_FONDO_FIJO_MAQUINAS_ID'),
 
+    /**
+     * Punto de venta fijo para facturación del proceso de cierre Waitry (una factura por permiso).
+     * Clave = empresa_id, valor = código PV (ej. BSA empresa 1 → 00003).
+     * Prioridad: gastronomia_cierre_jornada_config.puntoventa_id → este mapa.
+     *
+     * @var array<int, string>
+     */
+    'cierre_jornada_puntoventa_codigo_por_empresa' => (static function (): array {
+        $raw = env('GASTRONOMIA_CIERRE_JORNADA_PUNTOVENTA_CODIGO_POR_EMPRESA');
+        if ($raw === null || $raw === '') {
+            return [];
+        }
+        $decoded = is_array($raw) ? $raw : json_decode((string) $raw, true);
+        if (! is_array($decoded)) {
+            return [];
+        }
+        $map = [];
+        foreach ($decoded as $empresaId => $codigo) {
+            $cod = trim((string) $codigo);
+            if ($cod !== '') {
+                $map[(int) $empresaId] = $cod;
+            }
+        }
+
+        return $map;
+    })(),
+
     /** Código de descuento gastronomía para facturar canjes de premios Wigos ($0,01). */
     'canje_premio_descuento_codigo' => env('GASTRONOMIA_CANJE_PREMIO_DESCUENTO_CODIGO', '10'),
 
@@ -286,6 +319,17 @@ return [
     'canje_fidelidad_descuento_codigo' => env('GASTRONOMIA_CANJE_FIDELIDAD_DESCUENTO_CODIGO', '10'),
 
     'canje_fidelidad_cliente_codigo' => env('GASTRONOMIA_CANJE_FIDELIDAD_CLIENTE_CODIGO', '500'),
+
+    /**
+     * Base Informix para recepciones (recepmae / recepmov) en informe gerente.
+     */
+    'recepciones_anita_sistema' => env('GASTRONOMIA_RECEPCIONES_ANITA_SISTEMA', 'compras'),
+
+    /**
+     * Centro de costo (recv_ccosto en recepmov) para filtrar recepciones del informe gerente.
+     * Vacío = sin filtro por CC.
+     */
+    'recepciones_centro_costo_codigo' => env('GASTRONOMIA_RECEPCIONES_CENTRO_COSTO_CODIGO', '85'),
 
     'cuentacaja_efectivo_por_empresa' => (static function (): array {
         $raw = env('GASTRONOMIA_CUENTACAJA_EFECTIVO_POR_EMPRESA');

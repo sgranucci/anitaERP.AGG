@@ -247,6 +247,8 @@ final class GastronomiaReplicarVentasAnitaErpService
         }
 
         $letra = $this->resolverLetra($venta);
+        $this->liberarCabeceraAnitaSiExiste($venta, $letra);
+
         $signo = ($tipotransaccion->signo ?? 'S') === 'S' ? 1. : -1.;
         $conceptosTotales = $this->armarConceptosTotales($venta);
         $dataFactura = $this->armarDataFactura($venta);
@@ -293,6 +295,32 @@ final class GastronomiaReplicarVentasAnitaErpService
             'venta_id' => $venta->id,
             'codigo' => $venta->codigo,
         ]);
+    }
+
+    /**
+     * Si la cabecera ya existe en Informix, borra el comprobante completo (venta + stkmov + …)
+     * antes de re-grabar desde el ERP. Evita duplicate key en stkmov al backfillear ventas
+     * parcialmente sincronizadas o falsamente detectadas como faltantes.
+     */
+    private function liberarCabeceraAnitaSiExiste(Venta $venta, string $letra): void
+    {
+        $consulta = $this->chequeoService->consultarCabeceraAnitaDesdeVenta($venta, $letra);
+        if ($consulta['error_lectura'] !== null) {
+            throw new \RuntimeException(
+                'No se pudo verificar cabecera en Anita antes de replicar: '.$consulta['error_lectura']
+            );
+        }
+
+        if ($consulta['cabecera'] === null) {
+            return;
+        }
+
+        Log::info('gastronomia.replicar_ventas_anita.rollback_previo', [
+            'venta_id' => $venta->id,
+            'codigo' => $venta->codigo,
+        ]);
+
+        $this->facturacionService->borraAnitaDesdeVenta($venta);
     }
 
     private function cargarVentaCompleta(int $ventaId): Venta

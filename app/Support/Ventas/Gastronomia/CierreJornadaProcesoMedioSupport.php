@@ -65,8 +65,11 @@ final class CierreJornadaProcesoMedioSupport
     {
         $tipo = WaitryMedioPagoCuentacajaSupport::normalizarTipo($waitryTipo);
 
+        if (WaitryMedioPagoCuentacajaSupport::esTipoQrWaitry($waitryTipo)) {
+            return self::CLAVE_QR;
+        }
+
         return match ($tipo) {
-            WaitryMedioPagoCuentacajaSupport::TIPO_TOTALCOIN => self::CLAVE_QR,
             WaitryMedioPagoCuentacajaSupport::TIPO_MERCADOPAGO => self::CLAVE_MP,
             'cash' => self::CLAVE_EFECTIVO,
             'totem' => self::CLAVE_TOTEM,
@@ -92,7 +95,6 @@ final class CierreJornadaProcesoMedioSupport
 
     public static function esWaitryQr(?string $waitryTipo): bool
     {
-        return WaitryMedioPagoCuentacajaSupport::normalizarTipo($waitryTipo)
-            === WaitryMedioPagoCuentacajaSupport::TIPO_TOTALCOIN;
+        return WaitryMedioPagoCuentacajaSupport::esTipoQrWaitry($waitryTipo);
     }
 }

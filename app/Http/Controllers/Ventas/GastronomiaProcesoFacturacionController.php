@@ -393,6 +393,7 @@ class GastronomiaProcesoFacturacionController extends Controller
                 'redondeo_turno' => $request->input('redondeo_turno'),
                 'sobrante_faltante' => $request->input('sobrante_faltante'),
                 'observacion_cierre' => $request->input('observacion_cierre'),
+                'medios_contado' => $request->input('medios_contado'),
             ]);
 
             return response()->json([

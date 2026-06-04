@@ -196,7 +196,8 @@
         totales.por_medio_pago.forEach(function (p) {
             var ccId = parseInt(p.cuentacaja_id, 10) || 0;
             if (ccId > 0) {
-                map[ccId] = Math.round((parseFloat(p.total) || 0) * 100) / 100;
+                var esperado = p.esperado != null ? p.esperado : p.total;
+                map[ccId] = Math.round((parseFloat(esperado) || 0) * 100) / 100;
             }
         });
         return map;
@@ -210,7 +211,8 @@
             }
             var ccId = parseInt(m.cuentacaja_id, 10) || 0;
             if (ccId > 0) {
-                map[ccId] = Math.round((parseFloat(m.monto) || 0) * 100) / 100;
+                var esperado = m.esperado != null ? m.esperado : m.monto;
+                map[ccId] = Math.round((parseFloat(esperado) || 0) * 100) / 100;
             }
         });
         return map;
@@ -298,6 +300,26 @@
         }
     }
 
+    function opcionesResumenTotales(totalesTurno) {
+        var opts = {};
+        if (totalesTurno && totalesTurno.arqueo_medios_cierre) {
+            opts.arqueoMediosCierre = true;
+            opts.arqueoSoloLectura = true;
+            opts.cuentacaja_efectivo_id = cuentacajaEfectivoId > 0 ? cuentacajaEfectivoId : 1;
+        }
+        return opts;
+    }
+
+    function actualizarEncabezadoMediosRendidos(desdeContadoCierre) {
+        var thMonto = document.querySelector('#tabla-movimientos thead .gastro-col-monto');
+        if (!thMonto) {
+            return;
+        }
+        thMonto.textContent = desdeContadoCierre
+            ? 'Monto rendido (desde cierre)'
+            : 'Monto rendido';
+    }
+
     function renderResumenTurnoHtml(totalesTurno) {
         if (!panelResumen || !totalesTurno) {
             if (panelResumen) {
@@ -309,7 +331,7 @@
             panelResumen.innerHTML = R.renderTotalesHtml(
                 totalesTurno,
                 'Totales del turno a rendir',
-                {}
+                opcionesResumenTotales(totalesTurno)
             );
             return;
         }
@@ -616,6 +638,9 @@
             html += '<td' + tdStyle + '>' + esc(m.nombre || m.codigo || (esNc ? 'Notas de crédito' : 'Medio #' + m.cuentacaja_id));
             if (esEfectivo) {
                 html += ' <span class="badge badge-info badge-sm">Efectivo</span>';
+            }
+            if (!esNc && m.desde_contado_cierre) {
+                html += ' <span class="badge badge-success badge-sm" title="Precargado del arqueo del cierre de turno">Cierre</span>';
             }
             if (!esNc) {
                 html += '<input type="hidden" name="movimientos[' + idxPersistido + '][cuentacaja_id]" value="' + esc(m.cuentacaja_id) + '"/>';
@@ -948,6 +973,7 @@
         }
 
         aplicarConfigMedios(d);
+        actualizarEncabezadoMediosRendidos(!!d.movimientos_desde_contado_cierre);
         renderMovimientos(d.movimientos || []);
         habilitarVerificacionCajero(false);
     }
@@ -1251,6 +1277,7 @@
             esperadosSistema = mapaEsperadosDesdeMovimientos(inicial.movimientos);
         }
 
+        actualizarEncabezadoMediosRendidos(!!inicial.movimientos_desde_contado_cierre);
         renderMovimientos(inicial.movimientos || []);
         recalcularDiferencias();
         habilitarVerificacionCajero(false);

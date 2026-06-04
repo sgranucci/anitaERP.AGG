@@ -82,6 +82,7 @@ class HabilitacionTurnoGastronomiaController extends Controller
             'puede_cierre_parcial' => can('cierre-parcial-turno-gastronomia', false),
             'puede_cerrar' => can('cerrar-turno-operativo-gastronomia', false),
             'puede_anular_cierre' => can('anular-cierre-turno-gastronomia', false),
+            'puede_modificar_monto_habilitacion' => can('modificar-monto-habilitacion-turno-gastronomia', false),
             'puede_ver_factura' => can('ver-factura-gastronomia', false),
             'accion' => $accion,
             'url_factura_ver_base' => url('ventas/gastronomia/facturas-dia'),
@@ -413,6 +414,44 @@ class HabilitacionTurnoGastronomiaController extends Controller
         }
     }
 
+    public function apiActualizarMontoHabilitacion(Request $request)
+    {
+        can('modificar-monto-habilitacion-turno-gastronomia');
+
+        $empresaId = $this->empresaOperativaDesdeRequest($request);
+
+        $cfg = $this->resolverConfiguracionParaRequest($request, $empresaId);
+        if ($cfg === null) {
+            return response()->json(['ok' => false, 'error' => 'Sin configuración PV para esta terminal y empresa.'], 422);
+        }
+
+        $pc = GastronomiaIdentificadorPc::resolver($request);
+        $turnoOperativoId = (int) $request->input('turno_operativo_id', 0);
+        if ($turnoOperativoId <= 0) {
+            return response()->json(['ok' => false, 'error' => 'Debe indicar el turno operativo.'], 422);
+        }
+
+        try {
+            $turno = $this->turnoOperativoService->actualizarMontoHabilitacion(
+                $turnoOperativoId,
+                $pc,
+                (float) $request->input('monto_habilitacion', 0),
+                $request->input('motivo'),
+            );
+
+            return response()->json([
+                'ok' => true,
+                'mensaje' => 'Monto de habilitación actualizado a $'
+                    .number_format((float) $turno->monto_habilitacion, 2, ',', '.').'.',
+                'monto_habilitacion' => (float) $turno->monto_habilitacion,
+            ]);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        } catch (Throwable $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        }
+    }
+
     public function apiCierreParcial(Request $request)
     {
         can('cierre-parcial-turno-gastronomia');
@@ -475,6 +514,7 @@ class HabilitacionTurnoGastronomiaController extends Controller
                 'redondeo_turno' => $request->input('redondeo_turno'),
                 'sobrante_faltante' => $request->input('sobrante_faltante'),
                 'observacion_cierre' => $request->input('observacion_cierre'),
+                'medios_contado' => $request->input('medios_contado'),
             ]);
 
             return response()->json([

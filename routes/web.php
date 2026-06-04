@@ -1074,6 +1074,17 @@ Route::put('ventas/motivocierrepedido/{id}', 'Ventas\MotivocierrepedidoControlle
 Route::delete('ventas/motivocierrepedido/{id}', 'Ventas\MotivocierrepedidoController@eliminar')->name('eliminar_motivocierrepedido');
 
 /*
+ * Tipos de empresa (clientes / ventas)
+ */
+
+Route::get('ventas/tipoempresa-cliente', 'Ventas\TipoempresaClienteController@index')->name('tipoempresa_cliente');
+Route::get('ventas/tipoempresa-cliente/crear', 'Ventas\TipoempresaClienteController@crear')->name('tipoempresa_cliente_crear');
+Route::post('ventas/tipoempresa-cliente', 'Ventas\TipoempresaClienteController@guardar')->name('tipoempresa_cliente_guardar');
+Route::get('ventas/tipoempresa-cliente/{id}/editar', 'Ventas\TipoempresaClienteController@editar')->name('tipoempresa_cliente_editar');
+Route::put('ventas/tipoempresa-cliente/{id}', 'Ventas\TipoempresaClienteController@actualizar')->name('tipoempresa_cliente_actualizar');
+Route::delete('ventas/tipoempresa-cliente/{id}', 'Ventas\TipoempresaClienteController@eliminar')->name('tipoempresa_cliente_eliminar');
+
+/*
  * Tipos suspension de clientes
  */
 
@@ -1254,6 +1265,7 @@ Route::get('ventas/gastronomia/cierres-turno/api/tickets-tarjeta', 'Ventas\Cierr
 Route::get('ventas/gastronomia/habilitacion-turno', 'Ventas\HabilitacionTurnoGastronomiaController@index')->name('gastronomia_habilitacion_turno');
 Route::get('ventas/gastronomia/habilitacion-turno/api/estado', 'Ventas\HabilitacionTurnoGastronomiaController@apiEstado')->name('gastronomia_habilitacion_turno_api_estado');
 Route::post('ventas/gastronomia/habilitacion-turno/api/habilitar', 'Ventas\HabilitacionTurnoGastronomiaController@apiHabilitar')->name('gastronomia_habilitacion_turno_api_habilitar');
+Route::post('ventas/gastronomia/habilitacion-turno/api/actualizar-monto-habilitacion', 'Ventas\HabilitacionTurnoGastronomiaController@apiActualizarMontoHabilitacion')->name('gastronomia_habilitacion_turno_api_actualizar_monto_habilitacion');
 Route::post('ventas/gastronomia/habilitacion-turno/api/cierre-parcial', 'Ventas\HabilitacionTurnoGastronomiaController@apiCierreParcial')->name('gastronomia_habilitacion_turno_api_cierre_parcial');
 Route::post('ventas/gastronomia/habilitacion-turno/api/cerrar', 'Ventas\HabilitacionTurnoGastronomiaController@apiCerrar')->name('gastronomia_habilitacion_turno_api_cerrar');
 Route::post('ventas/gastronomia/habilitacion-turno/api/anular-cierre', 'Ventas\HabilitacionTurnoGastronomiaController@apiAnularCierre')->name('gastronomia_habilitacion_turno_api_anular_cierre');
@@ -1296,6 +1308,7 @@ Route::get('ventas/gastronomia/facturas-dia/{ventaId}/medios-pago', 'Ventas\Gast
 Route::get('ventas/gastronomia/facturas-dia/{ventaId}/cuentacaja-por-codigo/{codigo}', 'Ventas\GastronomiaFacturasDiaController@apiCuentacajaPorCodigo')->name('gastronomia_facturas_dia_cuentacaja_por_codigo');
 Route::put('ventas/gastronomia/facturas-dia/{ventaId}/medios-pago', 'Ventas\GastronomiaFacturasDiaController@actualizarMediosPago')->name('gastronomia_facturas_dia_actualizar_medios_pago');
 
+Route::get('ventas/gastronomia/informe-gerente', 'Ventas\GastronomiaInformeGerenteController@index')->name('gastronomia_informe_gerente')->middleware('modo.consulta');
 Route::get('ventas/gastronomia/articulos-vendidos', 'Ventas\GastronomiaArticulosVendidosController@index')->name('gastronomia_articulos_vendidos')->middleware('modo.consulta');
 Route::get('ventas/lista-gastronomia-articulos-vendidos/{formato}', 'Ventas\GastronomiaArticulosVendidosController@exportar')->name('listar_gastronomia_articulos_vendidos');
 Route::get('ventas/gastronomia/articulos-vendidos/api/{articuloId}/facturas', 'Ventas\GastronomiaArticulosVendidosController@apiFacturas')->name('gastronomia_articulos_vendidos_api_facturas');
@@ -1690,7 +1703,9 @@ Route::get('caja/waitry-cierre-jornada', 'Caja\WaitryCierreJornadaController@ind
 Route::get('caja/listarwaitrycierrejornada/{formato?}', 'Caja\WaitryCierreJornadaController@listar')->name('listar_waitry_cierre_jornada');
 Route::get('caja/waitry-cierre-jornada/api/proceso/analizar', 'Caja\WaitryCierreJornadaController@apiProcesoAnalizar')->name('waitry_cierre_jornada_api_proceso_analizar');
 Route::post('caja/waitry-cierre-jornada/api/proceso/recalcular', 'Caja\WaitryCierreJornadaController@apiProcesoRecalcular')->name('waitry_cierre_jornada_api_proceso_recalcular');
+Route::get('caja/waitry-cierre-jornada/api/proceso/preview-factura', 'Caja\WaitryCierreJornadaController@apiProcesoPreviewFactura')->name('waitry_cierre_jornada_api_proceso_preview_factura');
 Route::get('caja/waitry-cierre-jornada/api/proceso/movimientos/{grupo}', 'Caja\WaitryCierreJornadaController@apiProcesoMovimientosGrupo')->name('waitry_cierre_jornada_api_proceso_movimientos');
+Route::get('caja/waitry-cierre-jornada/api/proceso/cuadro-detalle/{fila}/{medio}', 'Caja\WaitryCierreJornadaController@apiProcesoCuadroDetalle')->name('waitry_cierre_jornada_api_proceso_cuadro_detalle');
 Route::get('caja/waitry-cierre-jornada/api/proceso/config/{empresaId}', 'Caja\WaitryCierreJornadaController@apiProcesoConfig')->name('waitry_cierre_jornada_api_proceso_config');
 Route::post('caja/waitry-cierre-jornada/api/proceso/config/{empresaId}', 'Caja\WaitryCierreJornadaController@apiProcesoGuardarConfig')->name('waitry_cierre_jornada_api_proceso_config_guardar');
 /*

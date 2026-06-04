@@ -10,6 +10,7 @@ use App\Models\Ventas\TurnoGastronomia;
 use App\Models\Ventas\TurnoOperativoGastronomia;
 use App\Models\Ventas\CierreParcialTurnoGastronomia;
 use App\Support\Ventas\GastronomiaCuentacajaEfectivo;
+use App\Support\Ventas\GastronomiaTurnoMediosContadoCierreSupport;
 use App\Support\Ventas\GastronomiaTurnoNumeracionComprobanteSupport;
 use App\Support\Ventas\GastronomiaTurnoObservacionHabilitacionSupport;
 use App\Support\Ventas\GastronomiaTurnoOperativoTotalesSupport;
@@ -496,6 +497,85 @@ final class GastronomiaTurnoOperativoService
         ]);
     }
 
+    /**
+     * Corrige el monto de habilitación de un turno aún abierto (misma PC, jornada activa).
+     */
+    public function actualizarMontoHabilitacion(
+        int $turnoOperativoId,
+        string $identificadorPc,
+        float $nuevoMonto,
+        ?string $motivo = null,
+    ): TurnoOperativoGastronomia {
+        if (! self::requiereHabilitacionTurno()) {
+            throw new InvalidArgumentException(
+                'El modo de operación es caja directo; la habilitación de turno no está activa.'
+            );
+        }
+
+        if (Auth::id() === null) {
+            throw new InvalidArgumentException('No hay usuario autenticado.');
+        }
+
+        $turno = TurnoOperativoGastronomia::query()->findOrFail($turnoOperativoId);
+        $this->exigirTurnoActivoEnPc($turno, $identificadorPc);
+
+        $jornada = $this->jornadaService->jornadaAbierta((int) $turno->empresa_id);
+        if ($jornada === null) {
+            throw new InvalidArgumentException('No hay jornada abierta para esta empresa.');
+        }
+        if ((int) $turno->jornada_gastronomia_id !== (int) $jornada->id) {
+            throw new InvalidArgumentException(
+                'El turno pertenece a una jornada que ya no está abierta.'
+            );
+        }
+
+        if ($nuevoMonto < 0) {
+            throw new InvalidArgumentException('El monto de habilitación no puede ser negativo.');
+        }
+
+        $nuevoMonto = round($nuevoMonto, 2);
+        $montoAnterior = round((float) $turno->monto_habilitacion, 2);
+        if ($nuevoMonto === $montoAnterior) {
+            throw new InvalidArgumentException('El monto indicado es igual al actual.');
+        }
+
+        $usuario = Auth::user();
+        $usuarioId = (int) ($usuario?->id ?? 0);
+        $usuarioNombre = (string) ($usuario?->nombre ?? 'usuario');
+
+        $nota = GastronomiaTurnoObservacionHabilitacionSupport::notaModificacionMonto(
+            $usuarioId,
+            $usuarioNombre,
+            $identificadorPc,
+            $montoAnterior,
+            $nuevoMonto,
+            $this->limpiarObservacion($motivo),
+        );
+
+        return DB::transaction(function () use ($turno, $nota, $nuevoMonto, $montoAnterior, $identificadorPc, $usuarioId, $usuarioNombre) {
+            $obsHab = trim((string) $turno->observacion_habilitacion);
+            $obsHab = $obsHab === '' ? $nota : $obsHab."\n".$nota;
+
+            $turno->update([
+                'monto_habilitacion' => $nuevoMonto,
+                'observacion_habilitacion' => mb_substr($obsHab, 0, 2000),
+            ]);
+
+            Log::info('gastronomia.turno.modificar_monto_habilitacion', [
+                'turno_operativo_id' => (int) $turno->id,
+                'empresa_id' => (int) $turno->empresa_id,
+                'jornada_gastronomia_id' => (int) $turno->jornada_gastronomia_id,
+                'identificador_pc' => $identificadorPc,
+                'usuario_id' => $usuarioId,
+                'usuario_nombre' => $usuarioNombre,
+                'monto_anterior' => $montoAnterior,
+                'monto_nuevo' => $nuevoMonto,
+            ]);
+
+            return $turno->fresh(['turno', 'jornada', 'usuarioHabilitado', 'cierresParciales']);
+        });
+    }
+
     public function registrarCierreParcial(
         TurnoOperativoGastronomia $turno,
         string $identificadorPc,
@@ -611,6 +691,17 @@ final class GastronomiaTurnoOperativoService
             $sobranteFaltante = round((float) ($datosCierre['sobrante_faltante'] ?? 0), 2);
         }
 
+        $mediosContadoCierre = null;
+        try {
+            $mediosContadoCierre = GastronomiaTurnoMediosContadoCierreSupport::normalizarParaGuardar(
+                $datosCierre['medios_contado'] ?? null,
+                $totalesTurno,
+                (int) $turno->empresa_id,
+            );
+        } catch (InvalidArgumentException $e) {
+            throw $e;
+        }
+
         if (! GastronomiaTurnoOperativoTotalesSupport::cierreCuadraConAjustesManuales(
             $totalesTurno,
             $redondeoInvitaciones,
@@ -645,6 +736,7 @@ final class GastronomiaTurnoOperativoService
             $vaciasAutoDescartadas,
             $pcOperadorRemoto,
             $sobranteFaltanteAutoRemoto,
+            $mediosContadoCierre,
         ) {
             $max = (int) TurnoOperativoGastronomia::query()
                 ->where('empresa_id', (int) $turno->empresa_id)
@@ -663,6 +755,7 @@ final class GastronomiaTurnoOperativoService
                 'redondeo_invitaciones' => $redondeoInvitaciones,
                 'redondeo_turno' => $redondeoTurno,
                 'sobrante_faltante' => $sobranteFaltante,
+                'medios_contado_cierre_json' => $mediosContadoCierre,
                 'observacion_cierre' => $this->componerObservacionCierreTurno(
                     $datosCierre['observacion_cierre'] ?? null,
                     $vaciasAutoDescartadas,
@@ -896,6 +989,7 @@ final class GastronomiaTurnoOperativoService
             'redondeo_invitaciones' => $turno->redondeo_invitaciones,
             'redondeo_turno' => $turno->redondeo_turno,
             'sobrante_faltante' => $turno->sobrante_faltante,
+            'medios_contado_cierre_json' => $turno->medios_contado_cierre_json,
             'observacion_cierre' => $turno->observacion_cierre,
         ];
 
@@ -922,6 +1016,7 @@ final class GastronomiaTurnoOperativoService
                 'redondeo_invitaciones' => null,
                 'redondeo_turno' => null,
                 'sobrante_faltante' => null,
+                'medios_contado_cierre_json' => null,
                 'observacion_cierre' => null,
                 'observacion_habilitacion' => mb_substr($obsHab, 0, 2000),
             ]);

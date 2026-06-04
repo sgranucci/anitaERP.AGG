@@ -50,7 +50,7 @@ switch ($data['acc']){
 		$sql = "DELETE FROM ".$data['tabla']." ".$data['whereArmado'];
 	break;
     case 'customSql':
-	    $sql = $data['customSql'];
+	    $sql = "UNLOAD TO '".$_nombre_ret."' DELIMITER '|' ".$data['customSql'];
 		break;
 }
 
@@ -65,7 +65,7 @@ $_cmd = $_cmdd."sql ".$sistema." ".$_nombre_file." 2>&1";
 
 $arr = shell_exec($_cmd);
 
-if ($data['acc'] == "list") {
+if ($data['acc'] == "list" || $data['acc'] == "customSql") {
 	if (! is_readable($_nombre_ret)) {
 		header('Content-Type: application/json; charset=utf-8');
 		echo json_encode(array(
@@ -79,7 +79,7 @@ if ($data['acc'] == "list") {
 	}
     $dataArr = array();
 	$archivo = fopen($_nombre_ret, 'r');
-	$camposArr = explode(",", $data['campos']);
+	$camposArr = explode(',', (string) ($data['campos'] ?? ''));
 	while ($linea = fgets($archivo)) {
 		$linea = preg_replace('/[\x00-\x1F\x7F-\xFF]/', '#', $linea);
 		$registroAssoc = array();

@@ -7,6 +7,7 @@ use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
 use App\Models\Ventas\TurnoOperativoGastronomia;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Ventas\GastronomiaCuentacajaEfectivo;
 use App\Support\Ventas\GastronomiaTurnoObservacionHabilitacionSupport;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -215,6 +216,14 @@ final class GastronomiaCierreTurnoReporteSupport
             $turno->habilitacion_en,
         );
 
+        $mediosContado = GastronomiaTurnoMediosContadoCierreSupport::desdeAlmacenado(
+            $turno->medios_contado_cierre_json,
+        );
+        $totalesTurno = GastronomiaTurnoMediosContadoCierreSupport::enriquecerTotalesConContado(
+            $totalesTurno,
+            $mediosContado,
+        );
+
         $totalesDia = GastronomiaTurnoOperativoTotalesSupport::calcular(
             (string) $turno->identificador_pc,
             (int) $turno->empresa_id,
@@ -243,6 +252,7 @@ final class GastronomiaCierreTurnoReporteSupport
             observacionCierre: $turno->observacion_cierre,
             cantidadParciales: $turno->cierresParciales->count(),
             numeracionFiscal: $numeracionFiscal,
+            mediosContadoCierre: $mediosContado,
         );
     }
 
@@ -479,10 +489,14 @@ final class GastronomiaCierreTurnoReporteSupport
         int $cantidadParciales = 0,
         bool $soloTotalesMozo = false,
         ?array $numeracionFiscal = null,
+        ?array $mediosContadoCierre = null,
     ): array {
         $empresaNombre = $turno?->empresa?->nombre ?? '';
         $logo = EmpresaLogoArchivo::dataUriDesdeNombre($empresaNombre);
         $obsHabilitacion = GastronomiaTurnoObservacionHabilitacionSupport::parse($turno?->observacion_habilitacion);
+        $cuentacajaEfectivoId = $turno !== null
+            ? (int) (GastronomiaCuentacajaEfectivo::idParaEmpresa((int) $turno->empresa_id) ?? 0)
+            : 0;
 
         return [
             'tipo' => $tipo,
@@ -514,6 +528,8 @@ final class GastronomiaCierreTurnoReporteSupport
             'numero_cierre' => $turno?->numero_cierre,
             'turno_operativo_id' => $turno?->id,
             'numeracion_fiscal' => $numeracionFiscal ?? ['filas' => []],
+            'medios_contado_cierre' => $mediosContadoCierre,
+            'cuentacaja_efectivo_id' => $cuentacajaEfectivoId,
         ];
     }
 

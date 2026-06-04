@@ -33,9 +33,62 @@ Proceso de **auditoría/conciliación** bajo **Caja → Rendiciones → Cierre j
 En la misma pantalla (**Caja → Rendiciones → Cierre jornada Waitry**), sección inferior visible solo con permiso `proceso-cierre-jornada-waitry-caja` (roles: **administrador**, **Enc-tesorería**).
 
 - Tramo Waitry: desde último `waitry_order_id` del cierre anterior hasta cierre de jornada (`getordersdetails` + ventana operativa).
-- Grilla QR/MP/Efectivo; porcentaje sobre total facturado; redistribución exacta QR ↔ efectivo.
-- Preview de asientos contables antes de facturación masiva (ejecución pendiente de implementar).
-- Configuración de cuentas ventas / IVA / impuesto interno por empresa (`gastronomia_cierre_jornada_config`).
+- Grilla QR/MP/Efectivo; porcentaje sobre total facturado Anita; redistribución exacta QR ↔ efectivo.
+- Preview de asientos contables **sin grabar** (tras **Recalcular**).
+- Configuración por empresa: cuentas contables + punto de venta (`gastronomia_cierre_jornada_config`).
+
+#### Medios Waitry → columnas
+
+| Tipo Waitry | Columna |
+|---|---|
+| `mercadopago`, `totalcoin`, `credit_card` | QR (tótem / MP) |
+| `cash` | Efectivo (no se factura en el proceso) |
+| Otros | Otros |
+
+`credit_card` en Waitry = cobro en tótem (QR), no tarjeta presencial Anita.
+
+#### Órdenes canceladas
+
+Waitry puede marcar órdenes `canceled=true` (a veces entregadas con descuento 100 % y sin pago). **No** entran en cuadro, totales ni candidatos a facturar; se muestran en meta/badge para auditoría. Ver `WaitryOrdenEstadoSupport`.
+
+#### Cuadro y diagnóstico
+
+- Filas: facturado Anita, TOTEM puente, Waitry sin facturar, impagos (referencia), cash no facturar.
+- Clic en importe del cuadro → modal con comandas/fechas (`CierreJornadaCuadroDetalleSupport`).
+- Consola: `php artisan gastronomia:diagnostico-cuadro-cierre {empresa} {fecha} {fila} {medio} [--csv=ruta]`
+- NC Waitry: `php artisan gastronomia:diagnostico-nota-credito {empresa} {waitry_order_id}`
+
+#### Pasos implementados vs pendientes
+
+| Paso | Estado |
+|---|---|
+| Analizar tramo + cuadro + grupos | OK |
+| % sobre facturado Anita + Recalcular | OK |
+| Preview asientos (sin persistir) | OK |
+| Grabado asientos | Pendiente |
+| Facturación (masiva o una a una) | Pendiente — **una factura por permiso** alivia carga en servidor |
+
+#### Punto de venta del proceso (por empresa)
+
+Antes de emitir facturas del proceso (cuando se implemente), validar PV con `CierreJornadaProcesoPuntoventaSupport::resolverOError($empresaId)`.
+
+Prioridad:
+
+1. `gastronomia_cierre_jornada_config.puntoventa_id`
+2. Mapa en `.env`: `GASTRONOMIA_CIERRE_JORNADA_PUNTOVENTA_CODIGO_POR_EMPRESA` (JSON `empresa_id` → código PV)
+
+Reglas: PV de la misma empresa; `modofacturacion` ≠ manual (`M`).
+
+**BSA (`empresa_id = 1`):** código `00003`.
+
+```env
+GASTRONOMIA_CIERRE_JORNADA_PUNTOVENTA_CODIGO_POR_EMPRESA={"1":"00003"}
+```
+
+#### Performance
+
+- `GASTRONOMIA_CIERRE_TOTEM_ENRIQUECER_PAYMENT_INDIVIDUAL_MAX=0` desactiva consultas `getOrdersPOS` por orden (recomendado en producción).
+- Regla Cursor: `.cursor/rules/cierre-jornada-waitry-proceso.mdc`
 
 ## Cobro en POS (syncStatusPOS)
 
@@ -81,8 +134,11 @@ Ver [`push-external-order-response-ejemplo.json`](push-external-order-response-e
 |--------------|-------------------|
 | `externalId` | Debe coincidir con `venta.id` enviado en `external_id` |
 | `orderId` | `cuenta_gastronomia.waitry_order_id` y `waitry_comanda_envio.waitry_order_id` |
+| `display_id` (respuesta o getOrdersPOS) | `cuenta_gastronomia.waitry_display_id` — código alfanumérico del papelito |
 
-Si `externalId` de la respuesta no coincide con el `venta_id` enviado, el envío se trata como error (no se graba `orderId`).
+Si `display_id` no viene en la respuesta del push, Anita lo consulta con getOrdersPOS por `orderId`.
+
+El ticket fiscal y el PDF de factura incluyen **Papelito Waitry: …** cuando hay `waitry_display_id` o `waitry_order_id`. Si la comanda se envía a Waitry al facturar (cuenta sin orden previa), la impresión del ticket se difiere hasta recibir el papelito.
 
 ## Configuración (.env)
 

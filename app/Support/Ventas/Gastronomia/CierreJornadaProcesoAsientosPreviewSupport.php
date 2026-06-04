@@ -26,9 +26,9 @@ final class CierreJornadaProcesoAsientosPreviewSupport
     public static function generar(array $movimientos, int $empresaId, array $configContable): array
     {
         $advertencias = [];
-        $faltantes = CierreJornadaProcesoConfigSupport::faltantes($configContable);
+        $faltantes = CierreJornadaProcesoConfigSupport::faltantes($configContable, $empresaId);
         if ($faltantes !== []) {
-            $advertencias[] = 'Faltan cuentas contables: '.implode(', ', $faltantes).'.';
+            $advertencias[] = 'Faltan datos de configuración: '.implode(', ', $faltantes).'.';
         }
 
         $cuentaVentas = (int) ($configContable['cuenta_ventas_id'] ?? 0);
@@ -122,6 +122,130 @@ final class CierreJornadaProcesoAsientosPreviewSupport
             'advertencias' => $advertencias,
             'resumen_debe' => round($debe, 2),
             'resumen_haber' => round($haber, 2),
+        ];
+    }
+
+    /**
+     * Movimientos Waitry que entrarían en la única factura del proceso (QR tras redistribución).
+     *
+     * @param  list<array<string, mixed>>  $movimientos
+     * @return list<array<string, mixed>>
+     */
+    public static function movimientosFacturaProceso(array $movimientos): array
+    {
+        return array_values(array_filter(
+            $movimientos,
+            fn (array $mov) => ($mov['grupo'] ?? '') === CierreJornadaProcesoClasificacionSupport::GRUPO_SIN_FACTURAR_QR
+                && self::debeFacturarSinFacturar($mov),
+        ));
+    }
+
+    /**
+     * Preview consolidado de la factura única del proceso (asiento + totales, sin persistir).
+     *
+     * @param  list<array<string, mixed>>  $movimientos
+     * @param  array<string, mixed>  $configContable
+     * @return array{
+     *   cantidad_comandas:int,
+     *   total:float,
+     *   asiento:?array<string,mixed>,
+     *   resumen_debe:float,
+     *   resumen_haber:float,
+     *   advertencias:list<string>
+     * }
+     */
+    public static function generarPreviewFacturaProceso(
+        array $movimientos,
+        int $empresaId,
+        array $configContable,
+    ): array {
+        $advertencias = [];
+        $faltantes = CierreJornadaProcesoConfigSupport::faltantes($configContable, $empresaId);
+        if ($faltantes !== []) {
+            $advertencias[] = 'Faltan datos de configuración: '.implode(', ', $faltantes).'.';
+        }
+
+        $incluidos = self::movimientosFacturaProceso($movimientos);
+        if ($incluidos === []) {
+            return [
+                'cantidad_comandas' => 0,
+                'total' => 0.,
+                'asiento' => null,
+                'resumen_debe' => 0.,
+                'resumen_haber' => 0.,
+                'advertencias' => array_merge($advertencias, [
+                    'No hay comandas Waitry pendientes de facturación con medio QR tras aplicar el porcentaje.',
+                ]),
+            ];
+        }
+
+        $cuentaVentas = (int) ($configContable['cuenta_ventas_id'] ?? 0);
+        $cuentaIva = (int) ($configContable['cuenta_iva_id'] ?? 0);
+        $cuentaImpInt = (int) ($configContable['cuenta_impuesto_interno_id'] ?? 0);
+
+        $totalFactura = 0.;
+        $impuestoInternoTotal = 0.;
+        /** @var array<int, array{concepto:string,cuenta_id:int,debe:float}> */
+        $debePorCuenta = [];
+
+        foreach ($incluidos as $mov) {
+            $totalMov = round((float) ($mov['total'] ?? 0), 2);
+            $totalFactura += $totalMov;
+            $impuestoInternoTotal += round((float) ($mov['impuesto_interno'] ?? 0), 2);
+
+            foreach (self::mediosPlanificadosSinFacturar($mov, $empresaId) as $medio) {
+                $cuentaId = (int) ($medio['cuentacaja_id'] ?? 0);
+                $monto = round((float) ($medio['monto'] ?? 0), 2);
+                if ($monto <= 0.0001) {
+                    continue;
+                }
+                if (! isset($debePorCuenta[$cuentaId])) {
+                    $debePorCuenta[$cuentaId] = [
+                        'concepto' => 'Medio de cobro — '.$medio['label'],
+                        'cuenta_id' => $cuentaId,
+                        'debe' => 0.,
+                    ];
+                }
+                $debePorCuenta[$cuentaId]['debe'] += $monto;
+            }
+        }
+
+        $totalFactura = round($totalFactura, 2);
+        $impuestoInternoTotal = round($impuestoInternoTotal, 2);
+        $base = self::desglosarBaseIva($totalFactura, $impuestoInternoTotal);
+
+        $lineas = [];
+        foreach ($debePorCuenta as $ln) {
+            $lineas[] = self::lineaDebe($ln['concepto'], $ln['cuenta_id'], $ln['debe']);
+        }
+        $lineas = array_merge(
+            $lineas,
+            self::lineasHaberVentas($base, $cuentaVentas, $cuentaIva, $cuentaImpInt, $impuestoInternoTotal),
+        );
+
+        $debe = 0.;
+        $haber = 0.;
+        foreach ($lineas as $ln) {
+            $debe += (float) ($ln['debe'] ?? 0);
+            $haber += (float) ($ln['haber'] ?? 0);
+        }
+
+        $asiento = [
+            'numero' => 1,
+            'titulo' => 'Factura cierre Waitry (preview)',
+            'pendiente_ejecucion' => true,
+            'cantidad_comandas' => count($incluidos),
+            'total' => $totalFactura,
+            'lineas' => $lineas,
+        ];
+
+        return [
+            'cantidad_comandas' => count($incluidos),
+            'total' => $totalFactura,
+            'asiento' => $asiento,
+            'resumen_debe' => round($debe, 2),
+            'resumen_haber' => round($haber, 2),
+            'advertencias' => $advertencias,
         ];
     }
 

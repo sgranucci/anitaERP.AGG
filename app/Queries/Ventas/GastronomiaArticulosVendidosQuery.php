@@ -44,6 +44,60 @@ class GastronomiaArticulosVendidosQuery
     }
 
     /**
+     * Top N artículos vendidos en una jornada (líneas facturadas en venta_emision).
+     * No incluye insumos de fórmula (articulo_movimiento con sufijo « — Ing.»).
+     *
+     * @return list<array{articulo_id:int,sku:string,descripcion:string,cantidad:float,importe:float}>
+     */
+    public function topPorJornada(
+        int $empresaId,
+        string $fechaJornada,
+        string $orden = 'cantidad',
+        int $limit = 10,
+    ): array {
+        if ($empresaId <= 0) {
+            return [];
+        }
+
+        $orderCol = $orden === 'importe' ? 'importe_total' : 'cantidad_total';
+
+        $rows = DB::table('venta_emision as ve')
+            ->join('venta as v', 'v.id', '=', 've.venta_id')
+            ->join('venta_gastronomia_emision as vge', 'vge.venta_id', '=', 'v.id')
+            ->join('articulo as a', 'a.id', '=', 've.articulo_id')
+            ->join('tipotransaccion as tt', 'tt.id', '=', 'v.tipotransaccion_id')
+            ->join('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
+            ->whereNull('v.deleted_at')
+            ->where('pv.empresa_id', $empresaId)
+            ->whereDate('v.fechajornada', $fechaJornada)
+            ->select([
+                've.articulo_id',
+                'a.sku',
+                'a.descripcion',
+            ])
+            ->selectRaw('SUM('.self::CANTIDAD_EXPR.') as cantidad_total')
+            ->selectRaw('SUM('.self::IMPORTE_EXPR.') as importe_total')
+            ->groupBy('ve.articulo_id', 'a.sku', 'a.descripcion')
+            ->orderByDesc($orderCol)
+            ->orderBy('a.sku')
+            ->limit(max(1, min(50, $limit)))
+            ->get();
+
+        $out = [];
+        foreach ($rows as $row) {
+            $out[] = [
+                'articulo_id' => (int) $row->articulo_id,
+                'sku' => trim((string) $row->sku),
+                'descripcion' => trim((string) $row->descripcion),
+                'cantidad' => round((float) $row->cantidad_total, 4),
+                'importe' => round((float) $row->importe_total, 2),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
      * Totales del listado filtrado.
      *
      * @return array{cantidad_articulos:int,cantidad_total:float,importe_total:float,cantidad_comprobantes:int}

@@ -229,10 +229,6 @@
             filtraCaracteresEspeciales(this);
         });
 
-        $('#domicilio').on('input', function() {
-            filtraCaracteresEspeciales(this);
-        });
-
         // Controla apertura modal de anulacion
         $('#suspensionModal').on('show.bs.modal', function (event) {
             var modal = $(this);

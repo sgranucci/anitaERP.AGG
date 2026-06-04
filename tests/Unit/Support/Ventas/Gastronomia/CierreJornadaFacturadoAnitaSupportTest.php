@@ -40,6 +40,8 @@ class CierreJornadaFacturadoAnitaSupportTest extends TestCase
         $this->assertSame(-200.0, $totales['total_notas_credito']);
         $this->assertSame(1, $totales['cantidad_facturas']);
         $this->assertSame(1, $totales['cantidad_notas_credito']);
+        $this->assertSame(1000.0, $totales['anita_jornada']['otros']);
+        $this->assertSame(1000.0, $totales['anita_jornada']['total']);
     }
 
     public function test_grilla_preserva_total_neto_con_nc(): void
@@ -54,10 +56,24 @@ class CierreJornadaFacturadoAnitaSupportTest extends TestCase
             'tipo' => 'anita_jornada',
         ];
 
-        $cuadro = CierreJornadaProcesoGrillaSupport::armar([], $anita);
+        $totalesAnita = [
+            'anita_jornada' => $anita,
+            'anita_totem' => [
+                'qr' => 0.0,
+                'mp' => 0.0,
+                'efectivo' => 0.0,
+                'otros' => 0.0,
+                'total' => 0.0,
+                'etiqueta' => 'Facturado Anita — cobro TOTEM (medio real Waitry)',
+                'tipo' => 'anita_totem',
+            ],
+            'total' => 800.0,
+        ];
+
+        $cuadro = CierreJornadaProcesoGrillaSupport::armar([], $totalesAnita);
 
         $this->assertSame(800.0, $cuadro['total_facturacion']);
-        $this->assertSame(800.0, $cuadro['filas'][0]['total']);
+        $this->assertSame(1000.0, $cuadro['filas'][0]['total']);
         $this->assertSame(1000.0, $cuadro['filas'][0]['qr']);
     }
 }

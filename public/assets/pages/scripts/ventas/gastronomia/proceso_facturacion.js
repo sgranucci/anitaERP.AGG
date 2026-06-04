@@ -526,9 +526,13 @@
     /** Éxito de emisión — mismo criterio que notas de crédito (mensaje + warn aparte). */
     function mostrarResultadoEmisionFactura(data) {
         const factura = (data && data.factura) || '';
-        const txt =
+        let txt =
             (data && String(data.mensaje || '').trim()) ||
             (factura ? 'Factura ' + factura + ' emitida correctamente.' : 'Factura emitida correctamente.');
+        const papelito = data && data.waitry_display_id ? String(data.waitry_display_id).trim() : '';
+        if (papelito && txt.indexOf(papelito) < 0) {
+            txt += ' Papelito monitor: ' + papelito + '.';
+        }
         const warn = data && String(data.warn || '').trim();
         if (warn) {
             if (debeUsarAvisoPersistente(warn, 'warning')) {
@@ -1561,8 +1565,8 @@
         if (tipo === 'mercadopago') {
             return 'Mercado Pago';
         }
-        if (tipo === 'totalcoin') {
-            return 'Totalcoin';
+        if (tipo === 'totalcoin' || tipo === 'creditcard') {
+            return 'QR (Totalcoin / tótem)';
         }
         return String((G.cuentacajaTotem && G.cuentacajaTotem.codigo) || G.cuentacajaTotemCodigo || 'TOTEM');
     }

@@ -47,12 +47,22 @@
             if (!cont || typeof window.GastronomiaTotalesTurnoRender === 'undefined') {
                 return;
             }
+            function opcionesRenderTotales(totales) {
+                var opts = { conciliarMedios: true };
+                if (totales && totales.arqueo_medios_cierre) {
+                    opts.arqueoMediosCierre = true;
+                    opts.arqueoSoloLectura = true;
+                    opts.cuentacaja_efectivo_id = datos.cuentacaja_efectivo_id || 1;
+                }
+                return opts;
+            }
+
             var html = '';
             if (datos.totales_turno) {
                 html += window.GastronomiaTotalesTurnoRender.renderTotalesHtml(
                     datos.totales_turno,
                     'Totales del turno',
-                    { conciliarMedios: true }
+                    opcionesRenderTotales(datos.totales_turno)
                 );
             }
             if (datos.totales_dia) {
@@ -185,6 +195,29 @@
                         ])
 
                         <div id="panel-resumen-cierre-ver" class="mb-3"></div>
+
+                        @if (! empty($d['medios_contado_cierre']))
+                        <div class="card card-outline card-success mb-3">
+                            <div class="card-header py-2">
+                                <strong>Arqueo por medio de pago (cierre definitivo)</strong>
+                            </div>
+                            <div class="card-body py-2">
+                                @include('ventas.gastronomia.cierres_turno.partials.comprobante_medios_pago_cierre', [
+                                    'totalesTurno' => $d['totales_turno'] ?? [],
+                                    'hayNc' => ((int) ($d['totales_turno']['cantidad_notas_credito'] ?? 0)) > 0
+                                        || abs((float) ($d['totales_turno']['total_notas_credito'] ?? 0)) >= 0.005,
+                                    'hayInv' => ((int) ($d['totales_turno']['cantidad_invitaciones'] ?? 0)) > 0
+                                        || abs((float) ($d['totales_turno']['total_invitaciones'] ?? 0)) >= 0.005,
+                                    'ncTotalGlobal' => (float) ($d['totales_turno']['total_notas_credito'] ?? 0),
+                                    'ncCantGlobal' => (int) ($d['totales_turno']['cantidad_notas_credito'] ?? 0),
+                                    'invTotalGlobal' => (float) ($d['totales_turno']['total_invitaciones'] ?? 0),
+                                    'invCantGlobal' => (int) ($d['totales_turno']['cantidad_invitaciones'] ?? 0),
+                                    'tituloMedios' => 'Montos contados por el cajero',
+                                    'etiquetaTotal' => 'Total cobrado neto',
+                                ])
+                            </div>
+                        </div>
+                        @endif
 
                         <div class="card card-outline card-warning mb-0">
                             <div class="card-header py-2"><strong>Ajustes al cierre</strong></div>

@@ -21,12 +21,15 @@ final class CierreJornadaProcesoConfigSupport
         'cuenta_fondo_fijo_maquinas_id',
     ];
 
+    private const CAMPO_PUNTOVENTA = 'puntoventa_id';
+
     /**
      * @return array{
      *   cuenta_ventas_id:?int,
      *   cuenta_iva_id:?int,
      *   cuenta_impuesto_interno_id:?int,
      *   cuenta_fondo_fijo_maquinas_id:?int,
+     *   puntoventa_id:?int,
      *   completo:bool
      * }
      */
@@ -57,6 +60,7 @@ final class CierreJornadaProcesoConfigSupport
             'cuenta_iva_id' => $row->cuenta_iva_id ?? $defaults['cuenta_iva_id'],
             'cuenta_impuesto_interno_id' => $row->cuenta_impuesto_interno_id ?? $defaults['cuenta_impuesto_interno_id'],
             'cuenta_fondo_fijo_maquinas_id' => $row->cuenta_fondo_fijo_maquinas_id ?? $defaults['cuenta_fondo_fijo_maquinas_id'],
+            'puntoventa_id' => $row->puntoventa_id ?? null,
         ]);
     }
 
@@ -86,6 +90,7 @@ final class CierreJornadaProcesoConfigSupport
 
         $payload = [
             'empresa_id' => $empresaId,
+            'puntoventa_id' => self::intOrNull($data['puntoventa_id'] ?? null),
             'cuenta_ventas_id' => self::intOrNull($data['cuenta_ventas_id'] ?? null),
             'cuenta_iva_id' => self::intOrNull($data['cuenta_iva_id'] ?? null),
             'cuenta_impuesto_interno_id' => self::intOrNull($data['cuenta_impuesto_interno_id'] ?? null),
@@ -94,6 +99,7 @@ final class CierreJornadaProcesoConfigSupport
         ];
 
         self::validarCuentasEmpresa($empresaId, $payload);
+        self::validarPuntoventaEmpresa($empresaId, $payload);
 
         $existe = DB::table(self::TABLA)->where('empresa_id', $empresaId)->exists();
         if ($existe) {
@@ -109,7 +115,7 @@ final class CierreJornadaProcesoConfigSupport
     /**
      * @param  array<string, mixed>  $cfg
      */
-    public static function faltantes(array $cfg): array
+    public static function faltantes(array $cfg, int $empresaId): array
     {
         $falt = [];
         if (empty($cfg['cuenta_ventas_id'])) {
@@ -117,6 +123,9 @@ final class CierreJornadaProcesoConfigSupport
         }
         if (empty($cfg['cuenta_iva_id'])) {
             $falt[] = 'Cuenta de IVA (débito fiscal)';
+        }
+        if (CierreJornadaProcesoPuntoventaSupport::resolverParaEmpresa($empresaId) === null) {
+            $falt[] = 'Punto de venta del proceso (config o BD)';
         }
 
         return $falt;
@@ -133,6 +142,7 @@ final class CierreJornadaProcesoConfigSupport
             'cuenta_iva_id' => self::intOrNull($raw['cuenta_iva_id'] ?? null),
             'cuenta_impuesto_interno_id' => self::intOrNull($raw['cuenta_impuesto_interno_id'] ?? null),
             'cuenta_fondo_fijo_maquinas_id' => self::intOrNull($raw['cuenta_fondo_fijo_maquinas_id'] ?? null),
+            'puntoventa_id' => self::intOrNull($raw['puntoventa_id'] ?? null),
         ];
         $cfg['completo'] = $cfg['cuenta_ventas_id'] > 0 && $cfg['cuenta_iva_id'] > 0;
 
@@ -184,6 +194,12 @@ final class CierreJornadaProcesoConfigSupport
             }
         }
 
+        $pv = CierreJornadaProcesoPuntoventaSupport::resolverParaEmpresa($empresaId);
+        $cfg['puntoventa_proceso'] = $pv;
+        $cfg['puntoventa_proceso_codigo'] = $pv['codigo'] ?? '';
+        $cfg['puntoventa_proceso_nombre'] = $pv['nombre'] ?? '';
+        $cfg['puntoventa_proceso_origen'] = $pv['origen'] ?? '';
+
         return $cfg;
     }
 
@@ -215,6 +231,34 @@ final class CierreJornadaProcesoConfigSupport
                     ($etiquetas[$campoId] ?? $campoId).' no existe o no pertenece a la empresa seleccionada.',
                 );
             }
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private static function validarPuntoventaEmpresa(int $empresaId, array $payload): void
+    {
+        $id = self::intOrNull($payload[self::CAMPO_PUNTOVENTA] ?? null);
+        if ($id === null) {
+            return;
+        }
+
+        $pv = \App\Models\Ventas\Puntoventa::query()
+            ->whereKey($id)
+            ->where('empresa_id', $empresaId)
+            ->first(['id', 'modofacturacion']);
+
+        if ($pv === null) {
+            throw new \InvalidArgumentException(
+                'El punto de venta seleccionado no existe o no pertenece a la empresa.',
+            );
+        }
+
+        if (($pv->modofacturacion ?? '') === 'M') {
+            throw new \InvalidArgumentException(
+                'El punto de venta del proceso no puede ser manual (modofacturacion M).',
+            );
         }
     }
 }

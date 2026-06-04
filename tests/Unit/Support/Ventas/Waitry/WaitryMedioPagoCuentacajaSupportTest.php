@@ -25,4 +25,18 @@ final class WaitryMedioPagoCuentacajaSupportTest extends TestCase
         $this->assertFalse(WaitryMedioPagoCuentacajaSupport::esTipoExcluidoInformeZ('mercadopago'));
         $this->assertFalse(WaitryMedioPagoCuentacajaSupport::esTipoExcluidoInformeZ('debit_card'));
     }
+
+    public function test_es_tipo_qr_waitry_totalcoin_y_credit_card(): void
+    {
+        $this->assertTrue(WaitryMedioPagoCuentacajaSupport::esTipoQrWaitry('totalcoin'));
+        $this->assertTrue(WaitryMedioPagoCuentacajaSupport::esTipoQrWaitry('credit_card'));
+        $this->assertTrue(WaitryMedioPagoCuentacajaSupport::esTipoQrWaitry('CREDIT-CARD'));
+        $this->assertFalse(WaitryMedioPagoCuentacajaSupport::esTipoQrWaitry('mercadopago'));
+        $this->assertFalse(WaitryMedioPagoCuentacajaSupport::esTipoQrWaitry('cash'));
+    }
+
+    public function test_etiqueta_tipo_qr_para_credit_card(): void
+    {
+        $this->assertSame('QR (Totalcoin / tótem)', WaitryMedioPagoCuentacajaSupport::etiquetaTipo('credit_card'));
+    }
 }

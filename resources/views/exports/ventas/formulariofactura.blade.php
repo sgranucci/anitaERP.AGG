@@ -128,10 +128,7 @@
 								@if (isset($venta->lugarentrega))
 									Lugar de entrega: {{ $venta->lugarentrega ?? ''}}<br>
 								@endif
-								@php $lineaWaitryPdf = \App\Support\Ventas\GastronomiaVentaDisplaySupport::lineaOrdenWaitry($venta); @endphp
-								@if ($lineaWaitryPdf !== null)
-									{{ $lineaWaitryPdf }}<br>
-								@endif
+								@include('exports.ventas.partials.papelito_waitry_factura', ['venta' => $venta])
 							</p>
 						</th>
 						<th style="width=150px; word-wrap: break-word; text-align: right;">
@@ -367,10 +364,7 @@
 								@if (isset($venta->lugarentrega))
 									Lugar de entrega: {{ $venta->lugarentrega ?? ''}}<br>
 								@endif
-								@php $lineaWaitryPdf = \App\Support\Ventas\GastronomiaVentaDisplaySupport::lineaOrdenWaitry($venta); @endphp
-								@if ($lineaWaitryPdf !== null)
-									{{ $lineaWaitryPdf }}<br>
-								@endif
+								@include('exports.ventas.partials.papelito_waitry_factura', ['venta' => $venta])
 							</p>
 						</th>
 						<th style="width=150px; word-wrap: break-word; text-align: right;">

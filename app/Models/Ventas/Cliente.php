@@ -33,7 +33,7 @@ class Cliente extends Model implements Auditable
 
     protected $fillable = ['nombre','codigo','contacto','fantasia','email','telefono','urlweb','domicilio','localidad_id',
 							'provincia_id','pais_id','zonavta_id','subzonavta_id','vendedor_id','numerodocumento','condicioniva_id',
-							'retieneiva','nroiibb','condicioniibb_id','condicionventa_id','listaprecio_id','cuentacontable_id','vaweb',
+							'retieneiva','nroiibb','condicioniibb_id','tipoempresa_cliente_id','condicionventa_id','listaprecio_id','cuentacontable_id','vaweb',
 							'estado','usuario_id','codigopostal','transporte_id','descuento','leyenda','tiposuspension_id',
                             'tipoalta','modofacturacion', 'cajaespecial',
                             // El Bierzo
@@ -161,6 +161,11 @@ class Cliente extends Model implements Auditable
     public function condicioniibbs()
     {
         return $this->belongsTo(CondicionIIBB::class, 'condicioniibb_id');
+    }
+
+    public function tipoempresaClientes()
+    {
+        return $this->belongsTo(TipoempresaCliente::class, 'tipoempresa_cliente_id');
     }
     public function usuarios()
     {

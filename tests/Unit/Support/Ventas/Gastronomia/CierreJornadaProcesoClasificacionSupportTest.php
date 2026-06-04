@@ -18,12 +18,32 @@ class CierreJornadaProcesoClasificacionSupportTest extends TestCase
             'etiqueta' => 'Facturado Anita (jornada)',
             'tipo' => 'anita_jornada',
         ];
+        $totalesAnita = [
+            'anita_jornada' => $anitaJornada,
+            'anita_totem' => [
+                'qr' => 0.0,
+                'mp' => 0.0,
+                'efectivo' => 0.0,
+                'otros' => 0.0,
+                'total' => 0.0,
+                'etiqueta' => 'Facturado Anita — cobro TOTEM (medio real Waitry)',
+                'tipo' => 'anita_totem',
+            ],
+            'total' => 200.0,
+        ];
 
         $movimientos = [
             [
                 'waitry_order_id' => 1,
                 'total' => 100.0,
                 'waitry_tipo_pago' => 'totalcoin',
+                'paid_waitry' => true,
+                'facturada_erp' => false,
+            ],
+            [
+                'waitry_order_id' => 10,
+                'total' => 50.0,
+                'waitry_tipo_pago' => 'credit_card',
                 'paid_waitry' => true,
                 'facturada_erp' => false,
             ],
@@ -45,15 +65,16 @@ class CierreJornadaProcesoClasificacionSupportTest extends TestCase
             ],
         ];
 
-        $resultado = CierreJornadaProcesoClasificacionSupport::clasificar($movimientos, 1, $anitaJornada);
+        $resultado = CierreJornadaProcesoClasificacionSupport::clasificar($movimientos, 1, $totalesAnita);
 
-        $this->assertSame(100.0, $resultado['grilla']['qr_sin_facturar']);
-        $this->assertSame(100.0, $resultado['grilla']['cobrado_waitry_sin_facturar']);
+        $this->assertSame(150.0, $resultado['grilla']['qr_sin_facturar']);
+        $this->assertSame(150.0, $resultado['grilla']['cobrado_waitry_sin_facturar']);
         $this->assertSame(50.0, $resultado['grilla']['efectivo_waitry']);
         $this->assertSame(200.0, $resultado['total_facturacion']);
-        $this->assertSame(100.0, $resultado['total_pendiente_facturar']);
-        $this->assertCount(4, $resultado['cuadro_filas']);
+        $this->assertSame(150.0, $resultado['total_pendiente_facturar']);
+        $this->assertCount(5, $resultado['cuadro_filas']);
         $this->assertSame('anita_jornada', $resultado['cuadro_filas'][0]['tipo']);
+        $this->assertSame('anita_totem', $resultado['cuadro_filas'][1]['tipo']);
         $this->assertSame(200.0, $resultado['cuadro_filas'][0]['total']);
     }
 }

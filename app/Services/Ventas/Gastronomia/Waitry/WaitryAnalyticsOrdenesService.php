@@ -3,6 +3,7 @@
 namespace App\Services\Ventas\Gastronomia\Waitry;
 
 use App\Support\Ventas\Waitry\WaitryOrdenCobroSupport;
+use App\Support\Ventas\Waitry\WaitryOrdenEstadoSupport;
 
 /**
  * Órdenes Waitry vía analytics/getordersdetails (reporte por fecha).
@@ -105,6 +106,7 @@ final class WaitryAnalyticsOrdenesService
             'external_reference_id' => $orden['external_reference_id'] ?? $orden['externalId'] ?? null,
             'totalAmount' => $total,
             'paid' => $paid,
+            'waitry_cancelada' => WaitryOrdenEstadoSupport::esCancelada($orden),
         ]);
     }
 

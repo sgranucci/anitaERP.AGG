@@ -11,6 +11,7 @@ use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Support\Ventas\ArcaFacturaQrSupport;
 use App\Support\Ventas\EscPosTicketWriter;
 use App\Support\Ventas\GastronomiaVentaDisplaySupport;
+use App\Services\Ventas\Gastronomia\Waitry\WaitryOrdenesExternasService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
@@ -145,11 +146,20 @@ final class GastronomiaFacturaTicketService
             $venta = $this->cargarVenta($ventaId);
             if ($cuenta !== null) {
                 $cuenta->loadMissing('mozo');
+                $this->completarWaitryDisplayIdSiFalta($cuenta);
             } else {
                 $cuenta = CuentaGastronomia::query()
                     ->where('venta_id', $ventaId)
                     ->with('mozo')
                     ->first();
+                if ($cuenta !== null) {
+                    $this->completarWaitryDisplayIdSiFalta($cuenta);
+                }
+            }
+
+            $venta->loadMissing('gastronomiaEmision');
+            if ($venta->gastronomiaEmision !== null && $cuenta !== null) {
+                $venta->gastronomiaEmision->setRelation('cuenta', $cuenta);
             }
 
             $bytes = $this->generarBytesTicket($venta, $cuenta);
@@ -171,6 +181,16 @@ final class GastronomiaFacturaTicketService
 
             return ['ok' => false, 'mensaje' => 'No se pudo imprimir el ticket: '.$e->getMessage()];
         }
+    }
+
+    private function completarWaitryDisplayIdSiFalta(CuentaGastronomia $cuenta): void
+    {
+        if ((int) ($cuenta->waitry_order_id ?? 0) <= 0) {
+            return;
+        }
+
+        app(WaitryOrdenesExternasService::class)->completarDisplayIdEnCuenta($cuenta);
+        $cuenta->refresh();
     }
 
     private function resolverConfiguracionDesdeEmision(int $ventaId): ?ConfiguracionPuntoventaGastronomia
@@ -280,6 +300,12 @@ final class GastronomiaFacturaTicketService
         $w->dobleTamano(false);
         $w->negrita(false);
         $w->alinearIzquierda();
+
+        $codigoPapelito = GastronomiaVentaDisplaySupport::waitryDisplayId($venta);
+        if ($codigoPapelito !== null) {
+            $w->bloquePapelitoMonitor($codigoPapelito);
+        }
+
         $w->separadorDoble();
 
         if ($letra === 'B') {
@@ -300,11 +326,6 @@ final class GastronomiaFacturaTicketService
         $w->linea($esNotaCredito ? 'DEVOLUCION A CLIENTE CONTADO' : 'VENTA A CLIENTE CONTADO');
         $w->linea($this->referenciaComprobanteCompacta($venta));
         $w->linea('Cliente: '.GastronomiaVentaDisplaySupport::nombreClientePie($venta));
-
-        $lineaWaitry = GastronomiaVentaDisplaySupport::lineaOrdenWaitry($venta);
-        if ($lineaWaitry !== null) {
-            $w->linea($lineaWaitry);
-        }
 
         $mozoLinea = $this->lineaMozo($cuenta);
         if ($mozoLinea !== '') {

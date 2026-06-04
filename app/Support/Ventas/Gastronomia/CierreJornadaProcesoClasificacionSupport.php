@@ -24,7 +24,7 @@ final class CierreJornadaProcesoClasificacionSupport
 
     /**
      * @param  list<array<string, mixed>>  $movimientos
-     * @param  array{qr:float,mp:float,efectivo:float,otros:float,total:float}|null  $anitaJornadaPorMedio
+     * @param  array<string, mixed>|null  $totalesAnita
      * @return array{
      *   movimientos: list<array<string, mixed>>,
      *   grupos: array<string, list<array<string, mixed>>>,
@@ -37,7 +37,7 @@ final class CierreJornadaProcesoClasificacionSupport
      *   total_cuadro: float
      * }
      */
-    public static function clasificar(array $movimientos, int $empresaId, ?array $anitaJornadaPorMedio = null): array
+    public static function clasificar(array $movimientos, int $empresaId, ?array $totalesAnita = null): array
     {
         $grupos = [
             self::GRUPO_FACTURADO_MEDIO_REAL => [],
@@ -59,17 +59,26 @@ final class CierreJornadaProcesoClasificacionSupport
             $enriquecidos[] = $m;
         }
 
-        $anitaJornada = $anitaJornadaPorMedio ?? [
-            'qr' => 0.0,
-            'mp' => 0.0,
-            'efectivo' => 0.0,
-            'otros' => 0.0,
-            'total' => 0.0,
-            'etiqueta' => 'Facturado Anita (jornada)',
-            'tipo' => 'anita_jornada',
-        ];
+        if ($totalesAnita === null) {
+            $totalesAnita = [
+                'anita_jornada' => [
+                    'qr' => 0.0,
+                    'mp' => 0.0,
+                    'efectivo' => 0.0,
+                    'otros' => 0.0,
+                    'total' => 0.0,
+                    'etiqueta' => 'Facturado Anita (jornada)',
+                    'tipo' => 'anita_jornada',
+                ],
+                'anita_totem' => CierreJornadaProcesoGrillaSupport::filaVacia(
+                    'Facturado Anita — cobro TOTEM (medio real Waitry)',
+                    'anita_totem',
+                ),
+                'total' => 0.0,
+            ];
+        }
 
-        $cuadro = CierreJornadaProcesoGrillaSupport::armar($enriquecidos, $anitaJornada);
+        $cuadro = CierreJornadaProcesoGrillaSupport::armar($enriquecidos, $totalesAnita);
 
         $conteos = [];
         foreach ($grupos as $clave => $items) {

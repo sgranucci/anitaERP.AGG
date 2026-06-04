@@ -43,8 +43,8 @@
         <td align="right">{{ (int) ($rep['replicadas'] ?? 0) }}</td>
     </tr>
     <tr>
-        <td>Errores al replicar</td>
-        <td align="right">{{ count($rep['errores'] ?? []) }}</td>
+        <td>Errores al replicar / lectura Anita</td>
+        <td align="right">{{ count($rep['errores'] ?? []) + (int) ($post['conteo']['error'] ?? 0) }}</td>
     </tr>
 </table>
 

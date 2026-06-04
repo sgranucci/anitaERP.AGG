@@ -18,6 +18,14 @@ final class WaitryMedioPagoCuentacajaSupport
 
     public const TIPO_TOTALCOIN = 'totalcoin';
 
+    public const TIPO_CREDIT_CARD = 'credit_card';
+
+    /** @var list<string> tipos normalizados = QR en cierre / facturación gastronomía */
+    public const TIPOS_QR_WAITRY_NORMALIZADOS = [
+        'totalcoin',
+        'creditcard',
+    ];
+
     /** @var list<string> */
     public const TIPOS_CON_CUENTACAJA = [
         self::TIPO_MERCADOPAGO,
@@ -83,6 +91,17 @@ final class WaitryMedioPagoCuentacajaSupport
     }
 
     /**
+     * QR en tótem Waitry: Totalcoin o credit_card (Waitry no distingue QR físico de tarjeta en POS).
+     */
+    public static function esTipoQrWaitry(?string $tipo): bool
+    {
+        $tipoNorm = self::normalizarTipo($tipo);
+
+        return $tipoNorm !== null
+            && in_array($tipoNorm, self::TIPOS_QR_WAITRY_NORMALIZADOS, true);
+    }
+
+    /**
      * Efectivo en tótem y fallback TOTEM no se concilian en el Informe Z.
      */
     public static function esTipoExcluidoInformeZ(?string $tipo): bool
@@ -132,13 +151,20 @@ final class WaitryMedioPagoCuentacajaSupport
     public static function extraerTipoPagoOrden(array $orden): ?string
     {
         $payment = $orden['payment'] ?? null;
-        if (! is_array($payment)) {
-            return null;
+        if (is_array($payment)) {
+            foreach (['type', 'paymentType', 'payment_type'] as $clave) {
+                if (! empty($payment[$clave]) && is_string($payment[$clave])) {
+                    $norm = self::normalizarTipo($payment[$clave]);
+                    if ($norm !== null) {
+                        return $norm;
+                    }
+                }
+            }
         }
 
-        foreach (['type', 'paymentType', 'payment_type'] as $clave) {
-            if (! empty($payment[$clave]) && is_string($payment[$clave])) {
-                $norm = self::normalizarTipo($payment[$clave]);
+        foreach (['paymentType', 'payment_type', 'paymentMethod', 'tipoPago', 'tipo_pago'] as $clave) {
+            if (! empty($orden[$clave]) && is_string($orden[$clave])) {
+                $norm = self::normalizarTipo($orden[$clave]);
                 if ($norm !== null) {
                     return $norm;
                 }
@@ -156,6 +182,9 @@ final class WaitryMedioPagoCuentacajaSupport
         }
 
         $id = (int) (self::mapaTipoCuentacaja()[$tipo] ?? 0);
+        if ($id <= 0 && self::esTipoQrWaitry($tipo)) {
+            $id = (int) (self::mapaTipoCuentacaja()[self::TIPO_TOTALCOIN] ?? 0);
+        }
         if ($id <= 0) {
             return null;
         }
@@ -214,12 +243,15 @@ final class WaitryMedioPagoCuentacajaSupport
 
     public static function etiquetaTipo(?string $tipo): string
     {
+        if (self::esTipoQrWaitry($tipo)) {
+            return 'QR (Totalcoin / tótem)';
+        }
+
         return match (self::normalizarTipo($tipo)) {
             self::TIPO_MERCADOPAGO => 'Mercado Pago',
             self::TIPO_TOTALCOIN => 'Totalcoin',
             'cash' => 'Efectivo',
-            'credit_card' => 'Tarjeta crédito',
-            'debit_card' => 'Tarjeta débito',
+            'debitcard' => 'Tarjeta débito',
             default => $tipo !== null && trim($tipo) !== '' ? trim($tipo) : '—',
         };
     }
@@ -269,6 +301,15 @@ final class WaitryMedioPagoCuentacajaSupport
                 ...$cuenta,
                 'waitry_tipo_pago' => $tipo,
                 'etiqueta' => self::etiquetaTipo($tipo),
+            ];
+        }
+
+        $totalcoin = $out[self::TIPO_TOTALCOIN] ?? null;
+        if ($totalcoin !== null && ! isset($out[self::TIPO_CREDIT_CARD])) {
+            $out[self::TIPO_CREDIT_CARD] = [
+                ...$totalcoin,
+                'waitry_tipo_pago' => self::TIPO_CREDIT_CARD,
+                'etiqueta' => self::etiquetaTipo(self::TIPO_CREDIT_CARD),
             ];
         }
 

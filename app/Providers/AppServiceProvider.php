@@ -291,6 +291,11 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Ventas\TipoempresaClienteRepositoryInterface',
+            'App\Repositories\Ventas\TipoempresaClienteRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Ventas\TiposuspensionclienteRepositoryInterface',
             'App\Repositories\Ventas\TiposuspensionclienteRepository',
         );

@@ -17,6 +17,7 @@ use App\Services\Ventas\Gastronomia\GastronomiaTicketTarjetaCanjeService;
 use App\Services\Ventas\Gastronomia\GastronomiaCategoriafidelidadCanjeService;
 use App\Services\Ventas\Gastronomia\GastronomiaFacturaMedioPagoService;
 use App\Services\Ventas\Gastronomia\GastronomiaTicketCanjePremioService;
+use App\Services\Ventas\Gastronomia\Waitry\WaitryOrdenesExternasService;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
 use App\Support\Ventas\GastronomiaDepositoConfigSupport;
 use App\Support\Ventas\GastronomiaVentaDetalleSupport;
@@ -37,6 +38,7 @@ class GastronomiaFacturasDiaController extends Controller
         private readonly GastronomiaTicketCanjePremioService $ticketCanjePremioService,
         private readonly GastronomiaCategoriafidelidadCanjeService $categoriafidelidadCanjeService,
         private readonly GastronomiaFacturaMedioPagoService $facturaMedioPagoService,
+        private readonly WaitryOrdenesExternasService $waitryOrdenesExternasService,
     ) {}
 
     public function index(Request $request)
@@ -343,6 +345,12 @@ class GastronomiaFacturasDiaController extends Controller
                 'tipotransacciones',
             ])
             ->findOrFail($ventaId);
+
+        if ($meta->cuenta !== null && (int) ($meta->cuenta->waitry_order_id ?? 0) > 0) {
+            $this->waitryOrdenesExternasService->completarDisplayIdEnCuenta($meta->cuenta);
+            $meta->load('cuenta');
+        }
+        $venta->setRelation('gastronomiaEmision', $meta);
 
         $cobranzas = GastronomiaVentaDetalleSupport::cobranzasDeVenta($venta);
         $movimientosInsumos = GastronomiaVentaDetalleSupport::movimientosInsumos($ventaId);

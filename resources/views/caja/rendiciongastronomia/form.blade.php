@@ -96,6 +96,9 @@
             : '',
         'cuentacaja_efectivo_id' => $cuentacajaEfectivoId,
         'cierre_cargado' => $esEdicion,
+        'totales_turno' => $totalesTurno ?? null,
+        'movimientos_desde_contado_cierre' => is_array($totalesTurno ?? null)
+            && ! empty($totalesTurno['arqueo_medios_cierre']),
     ];
 
     if ($esEdicion && $esJornada) {
@@ -414,7 +417,7 @@
         <div class="card card-outline card-secondary mb-3">
             <div class="card-header py-2">
                 <strong>Medios rendidos en caja</strong>
-                <small class="text-muted d-block font-weight-normal mt-1">Indique lo que ingresa físicamente a caja por cada medio. Si algún monto rendido difiere del <strong>esperado sistema</strong>, el campo <strong>sobrante / faltante</strong> se ajusta automáticamente para mantener la rendición cuadrada.</small>
+                <small class="text-muted d-block font-weight-normal mt-1">Indique lo que ingresa físicamente a caja por cada medio. Si el turno tiene arqueo en el cierre, los montos se precargan con lo <strong>contado por el cajero</strong> (eso es lo que se graba en Anita como rendvalor). Si algún monto rendido difiere del <strong>esperado sistema</strong>, el campo <strong>sobrante / faltante</strong> se ajusta automáticamente para mantener la rendición cuadrada.</small>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">

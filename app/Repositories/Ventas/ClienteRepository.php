@@ -19,6 +19,7 @@ use App\Models\Ventas\Cliente_Articulo_Suspendido;
 use App\Models\Ventas\Cliente_Seguimiento;
 use App\Models\Ventas\Cliente_Cm05;
 use App\Models\Ventas\Distribuidor;
+use App\Models\Ventas\TipoempresaCliente;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Listaprecio;
 use App\Models\Stock\Mventa;
@@ -512,11 +513,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 			else
 				$listaprecio_id = NULL;
 
-       		$transporte = Transporte::select('id', 'codigo')->where('codigo' , $data->clim_expreso)->first();
-			if ($transporte)
-				$transporte_id = $transporte->id;
-			else
-				$transporte_id = NULL;
+       		$transporte_id = $this->resolverTransporteIdDesdeClimExpreso($data->clim_expreso ?? null);
 
 			if (config('app.empresa') == 'EL BIERZO')
 			{
@@ -592,6 +589,18 @@ class ClienteRepository implements ClienteRepositoryInterface
 				break;
 			}
 
+			$tipoempresa_cliente_id = null;
+			$codigoTipoEmp = trim((string) ($data->clim_tipo_empresa ?? ''));
+			if ($codigoTipoEmp !== '' && $codigoTipoEmp !== '0') {
+				$tipoemp = TipoempresaCliente::select('id')
+					->where('codigo', $codigoTipoEmp)
+					->orWhere('codigo', ltrim($codigoTipoEmp, '0'))
+					->first();
+				if ($tipoemp) {
+					$tipoempresa_cliente_id = $tipoemp->id;
+				}
+			}
+
 			// Lee las leyendas
 			$leyenda = "";
 			foreach (is_array($dataleyAnita) ? $dataleyAnita : [] as $ley) {
@@ -659,6 +668,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 					"retieneiva" => $data->clim_retiene_iva,
 					"nroiibb" => $data->clim_nro_ing_bruto,
 					"condicioniibb_id" => $condicioniibb_id,
+					"tipoempresa_cliente_id" => $tipoempresa_cliente_id,
 					"condicionventa_id" => $condicionventa_id,
 					"listaprecio_id" => $listaprecio_id,
 					"descuento" => $data->clim_descuento,
@@ -708,6 +718,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 					"retieneiva" => $data->clim_retiene_iva,
 					"nroiibb" => $data->clim_nro_ing_br,
 					"condicioniibb_id" => $condicioniibb_id,
+					"tipoempresa_cliente_id" => $tipoempresa_cliente_id,
 					"condicionventa_id" => $condicionventa_id,
 					"listaprecio_id" => $listaprecio_id,
 					"descuento" => $data->clim_descuento,
@@ -773,6 +784,14 @@ class ClienteRepository implements ClienteRepositoryInterface
 	}
 
 	/**
+	 * clim_direccion en Informix: solo letras, números y espacios (legacy Anita).
+	 */
+	private function domicilioParaAnita(?string $domicilio): string
+	{
+		return preg_replace('([^A-Za-z0-9 ])', '', (string) ($domicilio ?? ''));
+	}
+
+	/**
 	 * Arma el payload HTTP (acc insert) para climae sin ejecutar el bridge.
 	 */
 	public function payloadInsertClimae(array $request): array
@@ -780,7 +799,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 		$this->setCamposAnita($request, $cuentacontable, $condicioniva, $condicioniibb, $codigotransporte,
 			$codigolocalidad, $codigoprovincia, $codigopais, $codigozonavta, $codigovendedor,
 			$codigolistaprecio, $codigoabasto, $codigocoeficiente,
-			$emitecertificado, $emitenotadecredito, $agregabonificacion, $regimen);
+			$emitecertificado, $emitenotadecredito, $agregabonificacion, $regimen, $codigotipoempresa);
 
 		$fecha = Carbon::now()->format('Ymd');
 
@@ -797,7 +816,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 
 		$nombre = preg_replace('([^A-Za-z0-9 ])', '', $request['nombre'] ?? '');
 		$contacto = preg_replace('([^A-Za-z0-9 ])', '', $request['contacto'] ?? '');
-		$domicilio = preg_replace('([^A-Za-z0-9 ])', '', $request['domicilio'] ?? '');
+		$domicilio = $this->domicilioParaAnita($request['domicilio'] ?? '');
 
 		$tipodocumento = ! empty($request['tipodocumento_id'])
 			? Tipodocumento::find($request['tipodocumento_id'])
@@ -855,7 +874,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 				'".$codigovendedor."',
 				'".$codigovendedor."',
 				'".$codigotransporte."',
-				'0',
+				'".$codigotipoempresa."',
 				' ',
 				' ',
 				'".$this->sqlLit($request['lugarentrega'] ?? '')."',
@@ -970,6 +989,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 			'urlweb' => $cliente->urlweb ?? '',
 			'condicioniva_id' => $cliente->condicioniva_id ?? 1,
 			'condicioniibb_id' => $cliente->condicioniibb_id ?? 4,
+			'tipoempresa_cliente_id' => $cliente->tipoempresa_cliente_id,
 			'cuentacontable_id' => $cliente->cuentacontable_id,
 			'transporte_id' => $cliente->transporte_id ?? 0,
 			'localidad_id' => $cliente->localidad_id ?? 0,
@@ -1144,7 +1164,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 		$this->setCamposAnita($request, $cuentacontable, $condicioniva, $condicioniibb, $codigotransporte,
 								$codigolocalidad, $codigoprovincia, $codigopais, $codigozonavta, $codigovendedor,
 								$codigolistaprecio, $codigoabasto, $codigocoeficiente,
-								$emitecertificado, $emitenotadecredito, $agregabonificacion, $regimen);
+								$emitecertificado, $emitenotadecredito, $agregabonificacion, $regimen, $codigotipoempresa);
 
 		if (array_key_exists('localidad_id', $request))
 			$localidad_id = $request['localidad_id'];
@@ -1153,7 +1173,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 
 		$nombre = preg_replace('([^A-Za-z0-9 ])', '', $request['nombre']);
 		$contacto = preg_replace('([^A-Za-z0-9 ])', '', $request['contacto']);
-		$domicilio = preg_replace('([^A-Za-z0-9 ])', '', $request['domicilio']);
+		$domicilio = $this->domicilioParaAnita($request['domicilio'] ?? '');
 
 		$tipodocumento = Tipodocumento::find($request['tipodocumento_id']);
 
@@ -1175,7 +1195,7 @@ class ClienteRepository implements ClienteRepositoryInterface
                 clim_cliente 	                = '".str_pad($request['codigo'], 6, "0", STR_PAD_LEFT)."',
                 clim_nombre 	                = '".$nombre."',
                 clim_contacto 	                = '".$contacto."',
-                clim_direccion 	                = '".$domicilio."',
+                clim_direccion 	                = '".$this->sqlLit($domicilio)."',
                 clim_localidad 	                = '".$request['desc_localidad']."',
                 clim_cod_postal 	            = '".$request['codigopostal']."',
                 clim_provincia 	                = '".$request['desc_provincia']."',
@@ -1190,6 +1210,7 @@ class ClienteRepository implements ClienteRepositoryInterface
                 clim_zonamult 	                = '".$codigoprovincia."',
                 clim_vendedor 	                = '".$codigovendedor."',
                 clim_expreso 	                = '".$codigotransporte."',
+                clim_tipo_empresa               = '".$codigotipoempresa."',
 				clim_lugar_entrega              = '".$request['lugarentrega']."',
                 clim_retiene_iva 	            = '".$request['retieneiva']."',
                 clim_lista_precio 	            = '".$codigolistaprecio."',
@@ -1404,7 +1425,8 @@ class ClienteRepository implements ClienteRepositoryInterface
 	private function setCamposAnita($request, &$cuentacontable, &$condicioniva, &$condicioniibb, &$codigotransporte,
 									&$codigolocalidad, &$codigoprovincia, &$codigopais, &$codigozonavta, &$codigovendedor,
 									&$codigolistaprecio, &$codigoabasto, &$codigocoeficiente,
-									&$emitecertificado, &$emitenotadecredito, &$agregabonificacion, &$regimen)
+									&$emitecertificado, &$emitenotadecredito, &$agregabonificacion, &$regimen,
+									&$codigotipoempresa)
 	{
 		$regimen = '0';
 
@@ -1414,11 +1436,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 		else
 			$cuentacontable = NULL;
 
-       	$transporte = Transporte::select('id', 'codigo')->where('id' , $request['transporte_id'])->first();
-		if ($transporte)
-			$codigotransporte = $transporte->codigo;
-		else
-			$codigotransporte = 0;
+		$codigotransporte = $this->codigoTransporteAnitaDesdeTransporteId($request['transporte_id'] ?? null);
 
 		$condicioniva_id = 1;
 		switch($request['condicioniva_id'])
@@ -1512,6 +1530,49 @@ class ClienteRepository implements ClienteRepositoryInterface
 			else
 				$codigocoeficiente = 0;
 		}
+
+		$tipoemp = TipoempresaCliente::select('id', 'codigo')->where('id', $request['tipoempresa_cliente_id'] ?? 0)->first();
+		if ($tipoemp) {
+			$codigotipoempresa = $tipoemp->codigo;
+		} else {
+			$codigotipoempresa = 0;
+		}
+	}
+
+	/**
+	 * clim_expreso en Informix (legacy): código del transporte/reparto (tabla expreso / transporte.codigo ERP).
+	 */
+	private function codigoTransporteAnitaDesdeTransporteId($transporteId): string
+	{
+		$id = (int) ($transporteId ?? 0);
+		if ($id <= 0) {
+			return '0';
+		}
+
+		$codigo = Transporte::query()->whereKey($id)->value('codigo');
+		$codigo = trim((string) ($codigo ?? ''));
+
+		return $codigo !== '' ? $codigo : '0';
+	}
+
+	/**
+	 * Resuelve transporte_id ERP desde clim_expreso importado de Anita.
+	 */
+	private function resolverTransporteIdDesdeClimExpreso($codigoAnita): ?int
+	{
+		$codigoAnita = trim((string) ($codigoAnita ?? ''));
+		if ($codigoAnita === '' || $codigoAnita === '0') {
+			return null;
+		}
+
+		$variantes = array_values(array_unique([
+			$codigoAnita,
+			ltrim($codigoAnita, '0'),
+		]));
+
+		$id = Transporte::query()->whereIn('codigo', $variantes)->value('id');
+
+		return $id ? (int) $id : null;
 	}
 
 	/**

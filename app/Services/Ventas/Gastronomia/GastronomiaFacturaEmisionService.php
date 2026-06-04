@@ -388,15 +388,25 @@ final class GastronomiaFacturaEmisionService
                 });
                 $profiler?->marcar('despues_transaccion');
 
-                $profiler?->marcar('antes_ticket');
-                $resultado = $this->aplicarImpresionTicketTrasEmision($resultado, $cfg, $cuenta);
-                $profiler?->marcar('despues_ticket');
+                $impresionTicketTrasWaitry = $this->debeImprimirTicketTrasWaitry($cuenta);
+
+                if (! $impresionTicketTrasWaitry) {
+                    $profiler?->marcar('antes_ticket');
+                    $resultado = $this->aplicarImpresionTicketTrasEmision($resultado, $cfg, $cuenta);
+                    $profiler?->marcar('despues_ticket');
+                }
 
                 if (
                     config('gastronomia.waitry_tras_respuesta', true)
                     && config('waitry.habilitado', false)
                 ) {
-                    $this->encolarWaitryTrasRespuesta($resultado, $cuenta, $mediosPago);
+                    $this->encolarWaitryTrasRespuesta(
+                        $resultado,
+                        $cuenta,
+                        $mediosPago,
+                        $cfg,
+                        $impresionTicketTrasWaitry,
+                    );
                     $profiler?->marcar('waitry_encolado');
                     $resultado = $this->enriquecerRespuestaExitoEmision($resultado, $cuenta, true);
 
@@ -406,6 +416,13 @@ final class GastronomiaFacturaEmisionService
                 $profiler?->marcar('antes_waitry');
                 $resultado = $this->aplicarWaitryComandaTrasEmision($resultado, $cuenta, $mediosPago);
                 $profiler?->marcar('despues_waitry');
+
+                if ($impresionTicketTrasWaitry) {
+                    $profiler?->marcar('antes_ticket');
+                    $resultado = $this->aplicarImpresionTicketTrasEmision($resultado, $cfg, $cuenta);
+                    $profiler?->marcar('despues_ticket');
+                }
+
                 $resultado = $this->enriquecerRespuestaExitoEmision($resultado, $cuenta, false);
 
                 return $this->adjuntarProfileEmision($resultado, $profiler, $cuenta);
@@ -746,13 +763,24 @@ final class GastronomiaFacturaEmisionService
         }
 
         $mensaje = 'Factura '.$facturaTxt.' emitida correctamente.';
+        $cuenta->refresh();
+        $displayId = trim((string) ($resultado['waitry_display_id'] ?? $cuenta->waitry_display_id ?? ''));
+        if ($displayId !== '') {
+            $resultado['waitry_display_id'] = $displayId;
+            $mensaje .= ' Papelito monitor: '.$displayId.'.';
+        }
+
         $waitryOrderId = (int) ($cuenta->waitry_order_id ?? 0);
 
-        if ($waitryEncolado && $waitryOrderId > 0) {
-            $mensaje .= ' Waitry se actualizará en segundo plano.';
+        if ($waitryEncolado && $displayId === '') {
+            if ($waitryOrderId > 0) {
+                $mensaje .= ' Waitry se actualizará en segundo plano.';
+            } else {
+                $mensaje .= ' El código de pedido en pantalla se imprimirá en el ticket.';
+            }
         } elseif (($resultado['waitry_pago'] ?? '') === 'ok') {
             $mensaje .= ' Pago registrado en Waitry.';
-        } elseif (($resultado['waitry_comanda'] ?? '') === 'ok') {
+        } elseif (($resultado['waitry_comanda'] ?? '') === 'ok' && $displayId === '') {
             $mensaje .= ' Comanda enviada a Waitry.';
         }
 
@@ -820,22 +848,44 @@ final class GastronomiaFacturaEmisionService
     }
 
     /**
-     * Waitry fuera del request HTTP (app terminating): no retrasa emitir-factura ni la grabación en Anita.
-     *
+     * Si la comanda se enviará a Waitry tras emitir, el ticket se imprime después para incluir el papelito.
+     */
+    private function debeImprimirTicketTrasWaitry(CuentaGastronomia $cuenta): bool
+    {
+        if (! config('waitry.habilitado', false)) {
+            return false;
+        }
+
+        return (int) ($cuenta->waitry_order_id ?? 0) <= 0;
+    }
+
+    /**
      * @param  array<string, mixed>  $resultado
      * @param  list<array{cuentacaja_id:int,moneda_id:int,monto:float,cotizacion?:float|null,observacion?:string|null}>  $mediosPago
      */
-    private function encolarWaitryTrasRespuesta(array $resultado, CuentaGastronomia $cuenta, array $mediosPago): void
-    {
+    private function encolarWaitryTrasRespuesta(
+        array $resultado,
+        CuentaGastronomia $cuenta,
+        array $mediosPago,
+        ConfiguracionPuntoventaGastronomia $cfg,
+        bool $impresionTicketPendiente,
+    ): void {
         $ventaId = (int) ($resultado['venta_id'] ?? 0);
         if ($ventaId <= 0) {
             return;
         }
 
         $cuentaId = (int) $cuenta->id;
+        $cfgId = (int) $cfg->id;
         $mediosPagoCopia = $mediosPago;
 
-        app()->terminating(function () use ($resultado, $cuentaId, $mediosPagoCopia): void {
+        app()->terminating(function () use (
+            $resultado,
+            $cuentaId,
+            $cfgId,
+            $mediosPagoCopia,
+            $impresionTicketPendiente,
+        ): void {
             $cuenta = CuentaGastronomia::query()->find($cuentaId);
             if ($cuenta === null) {
                 Log::warning('gastronomia.waitry.defer.cuenta_inexistente', ['cuenta_id' => $cuentaId]);
@@ -843,11 +893,35 @@ final class GastronomiaFacturaEmisionService
                 return;
             }
 
+            $cfgDefer = ConfiguracionPuntoventaGastronomia::query()->find($cfgId);
+            if ($cfgDefer === null) {
+                Log::warning('gastronomia.waitry.defer.cfg_inexistente', [
+                    'cuenta_id' => $cuentaId,
+                    'cfg_id' => $cfgId,
+                ]);
+
+                return;
+            }
+
             try {
-                $this->aplicarWaitryComandaTrasEmision($resultado, $cuenta, $mediosPagoCopia);
+                $resultadoWaitry = $this->aplicarWaitryComandaTrasEmision($resultado, $cuenta, $mediosPagoCopia);
             } catch (Throwable $e) {
                 Log::error('gastronomia.waitry.defer.excepcion', [
                     'cuenta_id' => $cuentaId,
+                    'venta_id' => $resultado['venta_id'] ?? null,
+                    'msg' => $e->getMessage(),
+                ]);
+                $resultadoWaitry = $resultado;
+            }
+
+            if (! $impresionTicketPendiente) {
+                return;
+            }
+
+            try {
+                $this->aplicarImpresionTicketTrasEmision($resultadoWaitry, $cfgDefer, $cuenta->fresh());
+            } catch (Throwable $e) {
+                Log::error('gastronomia.ticket_factura.defer.excepcion', [
                     'venta_id' => $resultado['venta_id'] ?? null,
                     'msg' => $e->getMessage(),
                 ]);
@@ -921,6 +995,11 @@ final class GastronomiaFacturaEmisionService
             $resultado['waitry_comanda'] = 'ok';
             if (isset($waitry['waitry_order_id'])) {
                 $resultado['waitry_order_id'] = $waitry['waitry_order_id'];
+            }
+            $cuenta->refresh();
+            $displayId = trim((string) ($waitry['waitry_display_id'] ?? $cuenta->waitry_display_id ?? ''));
+            if ($displayId !== '') {
+                $resultado['waitry_display_id'] = $displayId;
             }
 
             return $resultado;

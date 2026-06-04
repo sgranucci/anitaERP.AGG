@@ -34,6 +34,10 @@
                 <p class="mb-1 small"><strong>Ventana operativa:</strong> <span id="meta-ventana"></span></p>
                 <p class="mb-1 small"><strong>Rango calendario Waitry (API):</strong> <span id="meta-rango"></span></p>
                 <p class="mb-1 small"><strong>Órdenes incluidas:</strong> <span id="meta-cantidad"></span></p>
+                <p class="mb-1 small d-none" id="meta-canceladas-wrap">
+                    <strong>Waitry canceladas (excluidas del cuadro):</strong>
+                    <span id="meta-canceladas"></span>
+                </p>
                 <p class="mb-0 small"><strong>Tramo IDs Waitry:</strong> <span id="meta-ids"></span></p>
             </div>
         </div>
@@ -73,35 +77,30 @@
                 (<span id="label-total-facturacion"></span>).
                 Pendiente a facturar: <span id="label-pendiente-facturar"></span>.
                 Impago Waitry (ref.): <span id="label-impago-waitry"></span>.
+                <br>Haga clic en un importe del cuadro para ver el detalle de comandas con fecha/hora (conciliar vs Waitry).
             </p>
-            <div class="form-inline mb-2">
+            <div class="form-inline mb-2 flex-wrap">
                 <label for="input-porcentaje" class="mr-2 small">Porcentaje</label>
-                <input type="number" id="input-porcentaje" class="form-control form-control-sm" style="width:90px"
+                <input type="number" id="input-porcentaje" class="form-control form-control-sm mr-1" style="width:90px"
                        min="0" max="100" step="0.01" value="0">
-                <span class="ml-1 mr-2 small">%</span>
-                <button type="button" class="btn btn-sm btn-primary" id="btn-proceso-recalcular">
-                    Recalcular medios y preview de asientos
+                <span class="mr-2 small">%</span>
+                <button type="button" class="btn btn-sm btn-primary mr-2 mb-1" id="btn-proceso-recalcular">
+                    Recalcular medios
                 </button>
-                <span class="ml-2 text-muted small" id="label-objetivo-importe"></span>
+                <button type="button" class="btn btn-sm btn-outline-info mr-2 mb-1" id="btn-proceso-preview-asientos" disabled>
+                    <i class="fa fa-file-text-o"></i> Preview asientos factura
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary mb-1" id="btn-proceso-comandas-factura" disabled>
+                    <i class="fa fa-list"></i> Comandas incluidas
+                </button>
+                <span class="text-muted small mb-1" id="label-objetivo-importe"></span>
             </div>
         </div>
 
         <div id="panel-proceso-grupos" class="d-none">
-            <h6 class="mt-2">Grupos (detalle paginado)</h6>
+            <h6 class="mt-2">Grupos (auditoría — detalle paginado)</h6>
+            <p class="text-muted small mb-1">Desglose por categoría interna; no es la grilla de la factura del proceso.</p>
             <div id="acordeon-grupos"></div>
-        </div>
-
-        <div id="panel-proceso-asientos" class="d-none mt-3">
-            <h6>Preview de asientos (sin grabar)</h6>
-            <div id="asientos-advertencias" class="mb-1"></div>
-            <p class="small mb-1">
-                <strong>Debe:</strong> <span id="asientos-debe"></span>
-                · <strong>Haber:</strong> <span id="asientos-haber"></span>
-            </p>
-            <div id="lista-asientos"></div>
-            <p class="text-muted small mt-2 mb-0">
-                La facturación masiva y el grabado de asientos se habilitará tras validar este preview.
-            </p>
         </div>
     @endif
 
@@ -153,4 +152,126 @@
         </div>
     </div>
     @include('includes.contable.modalconsultacuentacontable')
+
+    <div class="modal fade" id="modal-cuadro-detalle" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-xl" role="document">
+            <div class="modal-content">
+                <div class="modal-header py-2">
+                    <h5 class="modal-title" id="modal-cuadro-detalle-titulo">Detalle cuadro</h5>
+                    <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+                </div>
+                <div class="modal-body p-2">
+                    <p class="small text-muted mb-2" id="modal-cuadro-detalle-resumen"></p>
+                    <div id="modal-cuadro-detalle-loading" class="d-none text-muted small">
+                        <i class="fa fa-spinner fa-spin"></i> Cargando…
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped mb-0">
+                            <thead class="thead-light">
+                                <tr>
+                                    <th>#Waitry</th>
+                                    <th>Ref.</th>
+                                    <th>Fecha/hora</th>
+                                    <th class="text-right">Total</th>
+                                    <th>Medio Waitry</th>
+                                    <th>Factura Anita</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-cuadro-detalle"></tbody>
+                        </table>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mt-2">
+                        <span class="small text-muted" id="modal-cuadro-detalle-pag"></span>
+                        <div>
+                            <button type="button" class="btn btn-xs btn-outline-secondary d-none" id="btn-cuadro-detalle-ant">Ant.</button>
+                            <button type="button" class="btn btn-xs btn-outline-secondary d-none" id="btn-cuadro-detalle-sig">Sig.</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modal-preview-asientos-factura" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header py-2">
+                    <h5 class="modal-title">Preview asientos — factura del proceso</h5>
+                    <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+                </div>
+                <div class="modal-body p-2">
+                    <div id="preview-factura-loading" class="d-none text-muted small mb-2">
+                        <i class="fa fa-spinner fa-spin"></i> Calculando preview…
+                    </div>
+                    <div id="preview-factura-resumen" class="small mb-2"></div>
+                    <div id="preview-factura-advertencias" class="mb-2"></div>
+                    <p class="small mb-1">
+                        <strong>Debe:</strong> <span id="preview-factura-debe"></span>
+                        · <strong>Haber:</strong> <span id="preview-factura-haber"></span>
+                    </p>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered mb-0">
+                            <thead class="thead-light">
+                                <tr>
+                                    <th>Cuenta</th>
+                                    <th>Concepto</th>
+                                    <th class="text-right">Debe</th>
+                                    <th class="text-right">Haber</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-preview-asientos-factura"></tbody>
+                        </table>
+                    </div>
+                    <p class="text-muted small mt-2 mb-0">
+                        Sin grabar. La emisión de la factura y el asiento contable se implementarán en un paso posterior.
+                    </p>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-preview-abrir-comandas">
+                        <i class="fa fa-list"></i> Ver comandas incluidas
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modal-comandas-factura" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-xl" role="document">
+            <div class="modal-content">
+                <div class="modal-header py-2">
+                    <h5 class="modal-title">Comandas incluidas en la factura del proceso</h5>
+                    <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+                </div>
+                <div class="modal-body p-2">
+                    <p class="small text-muted mb-2" id="modal-comandas-factura-resumen"></p>
+                    <div id="modal-comandas-factura-loading" class="d-none text-muted small mb-2">
+                        <i class="fa fa-spinner fa-spin"></i> Cargando…
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped mb-0">
+                            <thead class="thead-light">
+                                <tr>
+                                    <th>#Waitry</th>
+                                    <th>Ref.</th>
+                                    <th>Fecha/hora</th>
+                                    <th class="text-right">Total</th>
+                                    <th>Medio Waitry</th>
+                                    <th>Medio planificado</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-comandas-factura"></tbody>
+                        </table>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mt-2">
+                        <span class="small text-muted" id="modal-comandas-factura-pag"></span>
+                        <div>
+                            <button type="button" class="btn btn-xs btn-outline-secondary d-none" id="btn-comandas-factura-ant">Ant.</button>
+                            <button type="button" class="btn btn-xs btn-outline-secondary d-none" id="btn-comandas-factura-sig">Sig.</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 @endif

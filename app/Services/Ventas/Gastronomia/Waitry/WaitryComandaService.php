@@ -6,6 +6,7 @@ use App\Models\Ventas\CuentaGastronomia;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\WaitryComandaEnvio;
 use App\Support\Ventas\Waitry\WaitryComandaOrderItemsSupport;
+use App\Support\Ventas\Waitry\WaitryDisplayIdSupport;
 use App\Support\Ventas\Waitry\WaitryMediosPagoFromVentaSupport;
 use App\Support\Ventas\Waitry\WaitryPaymentPayloadSupport;
 use Carbon\Carbon;
@@ -243,12 +244,18 @@ final class WaitryComandaService
         }
 
         $orderId = $interpretacion['order_id'] ?? null;
-        $this->envioService->marcarExito($envio, $orderId, $data);
+        $displayId = $this->resolverDisplayIdTrasPush(
+            (int) $cuenta->empresa_id,
+            is_numeric($orderId) ? (int) $orderId : 0,
+            $data,
+        );
+        $this->envioService->marcarExito($envio, $orderId, $data, $displayId !== '' ? $displayId : null);
 
         Log::info('waitry.comanda.ok', [
             'venta_id' => $ventaId,
             'external_id' => $externalId,
             'waitry_order_id' => $orderId,
+            'waitry_display_id' => $displayId !== '' ? $displayId : null,
             'place_id' => $placeId,
             'payment_type' => $payload['payment']['type'] ?? null,
         ]);
@@ -256,7 +263,33 @@ final class WaitryComandaService
         return [
             'ok' => true,
             'waitry_order_id' => $orderId,
+            'waitry_display_id' => $displayId !== '' ? $displayId : null,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function resolverDisplayIdTrasPush(int $empresaId, int $orderId, array $data): string
+    {
+        $displayId = WaitryDisplayIdSupport::extraerDesdeRespuestaPush($data);
+        if ($displayId !== '' || $orderId <= 0) {
+            return $displayId;
+        }
+
+        $service = app(WaitryOrdenesExternasService::class);
+        for ($intento = 0; $intento < 3; $intento++) {
+            if ($intento > 0) {
+                usleep(350000);
+            }
+
+            $displayId = $service->resolverDisplayIdPorOrderId($empresaId, $orderId);
+            if ($displayId !== '') {
+                return $displayId;
+            }
+        }
+
+        return '';
     }
 
     private function externalIdDesdeVenta(int $ventaId): string

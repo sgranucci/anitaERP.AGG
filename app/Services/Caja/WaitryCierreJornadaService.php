@@ -12,6 +12,8 @@ use App\Support\Ventas\Gastronomia\CierreJornadaFacturadoAnitaSupport;
 use App\Support\Ventas\Gastronomia\VentaGastronomiaEmisionWaitrySupport;
 use App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport;
 use App\Support\Ventas\Waitry\WaitryOrdenCobroSupport;
+use App\Support\Ventas\Waitry\WaitryOrdenEstadoSupport;
+use App\Support\Ventas\Waitry\WaitryOrdenPaymentEnriquecimientoSupport;
 use Carbon\Carbon;
 use InvalidArgumentException;
 
@@ -86,11 +88,6 @@ final class WaitryCierreJornadaService
             })
             ->get();
 
-        $emisionesPorWaitry = VentaGastronomiaEmision::query()
-            ->with(['venta.cobranzasDirectas', 'venta.caja_movimientos.cobranzas', 'cuenta', 'waitryComandaEnvio'])
-            ->whereHas('venta', fn ($q) => $q->whereHas('puntoventas', fn ($pv) => $pv->where('empresa_id', $empresaId)))
-            ->get();
-
         $mapAnitaJornada = [];
         $emisionesJornadaSinWaitry = [];
         foreach ($emisionesJornada as $emision) {
@@ -102,12 +99,36 @@ final class WaitryCierreJornadaService
             }
         }
 
-        $mapAnitaPorWaitry = [];
-        foreach ($emisionesPorWaitry as $emision) {
-            $wid = VentaGastronomiaEmisionWaitrySupport::resolverOrderId($emision);
-            if ($wid > 0) {
-                $mapAnitaPorWaitry[$wid] = $emision;
+        $waitryIdsConciliacion = array_values(array_unique(array_merge(
+            array_keys($mapWaitry),
+            array_keys($mapAnitaJornada),
+        )));
+
+        $enriquecido = WaitryOrdenPaymentEnriquecimientoSupport::enriquecerDesdePos(
+            $this->ordenesExternasService,
+            $empresaId,
+            $mapWaitry,
+            $fechaJornada,
+            $jornada?->apertura_en,
+            $jornada?->cierre_en,
+        );
+        $mapWaitry = $enriquecido['ordenes'];
+        $mapPosCache = $enriquecido['map_pos'];
+
+        $mapAnitaPorWaitry = $this->mapEmisionesPorWaitryIds($empresaId, $waitryIdsConciliacion);
+
+        $waitryCanceladas = ['cantidad' => 0, 'total' => 0.0];
+        $mapWaitryActivas = [];
+        foreach ($mapWaitry as $orderId => $orden) {
+            if (WaitryOrdenEstadoSupport::esCancelada($orden)) {
+                $waitryCanceladas['cantidad']++;
+                $waitryCanceladas['total'] = round(
+                    $waitryCanceladas['total'] + $this->montoTotalWaitry($orden),
+                    2,
+                );
+                continue;
             }
+            $mapWaitryActivas[$orderId] = $orden;
         }
 
         $cuentasPendientes = CuentaGastronomia::query()
@@ -121,7 +142,7 @@ final class WaitryCierreJornadaService
         $filas = [];
         $idsProcesados = [];
 
-        foreach ($mapWaitry as $orderId => $orden) {
+        foreach ($mapWaitryActivas as $orderId => $orden) {
             $idsProcesados[] = $orderId;
             $emision = $mapAnitaPorWaitry[$orderId] ?? null;
             $cuentaPend = $cuentasPendientes->get($orderId);
@@ -136,12 +157,13 @@ final class WaitryCierreJornadaService
         }
 
         $mapPosConciliacion = $idsAnitaFueraListado !== []
-            ? $this->ordenesExternasService->mapOrdenesPorIdsConciliacion(
+            ? $this->resolverOrdenesPosFueraListado(
                 $empresaId,
                 $idsAnitaFueraListado,
                 $fechaJornada,
                 $jornada?->apertura_en,
                 $jornada?->cierre_en,
+                $mapPosCache,
             )
             : [];
 
@@ -175,7 +197,14 @@ final class WaitryCierreJornadaService
             return ((int) ($b['anita_venta_id'] ?? 0)) <=> ((int) ($a['anita_venta_id'] ?? 0));
         });
 
-        $resumen = $this->calcularResumen($filas, $mapWaitry, $emisionesJornada, $empresaId, $fechaJornada);
+        $resumen = $this->calcularResumen(
+            $filas,
+            $mapWaitryActivas,
+            $emisionesJornada,
+            $empresaId,
+            $fechaJornada,
+            $waitryCanceladas,
+        );
 
         return [
             'ok' => true,
@@ -347,8 +376,14 @@ final class WaitryCierreJornadaService
      * @param  \Illuminate\Support\Collection<int, VentaGastronomiaEmision>  $emisiones
      * @return array<string, mixed>
      */
-    private function calcularResumen(array $filas, array $mapWaitry, $emisiones, int $empresaId, string $fechaJornada): array
-    {
+    private function calcularResumen(
+        array $filas,
+        array $mapWaitry,
+        $emisiones,
+        int $empresaId,
+        string $fechaJornada,
+        array $waitryCanceladas = ['cantidad' => 0, 'total' => 0.0],
+    ): array {
         $totalWaitry = 0.0;
         $totalWaitryPagado = 0.0;
         $totalesAnita = CierreJornadaFacturadoAnitaSupport::totalesJornadaEmpresa($empresaId, $fechaJornada);
@@ -403,6 +438,8 @@ final class WaitryCierreJornadaService
 
         return [
             'ordenes_waitry' => count($mapWaitry),
+            'waitry_canceladas_cantidad' => (int) ($waitryCanceladas['cantidad'] ?? 0),
+            'waitry_canceladas_total' => round((float) ($waitryCanceladas['total'] ?? 0), 2),
             'facturas_anita_jornada' => $emisiones->count(),
             'facturas_anita_waitry' => $emisiones->filter(
                 fn (VentaGastronomiaEmision $e) => VentaGastronomiaEmisionWaitrySupport::resolverOrderId($e) > 0,
@@ -424,6 +461,75 @@ final class WaitryCierreJornadaService
             'por_medio_waitry' => array_values($porMedioWaitry),
             'tiene_diferencias' => ($sinFactura + $importadasPendientes + $montoDistinto + $medioDistinto + $soloAnita + $anitaSinWaitry + $jornadaDistinta) > 0,
         ];
+    }
+
+    /**
+     * @param  list<int>  $waitryIds
+     * @return array<int, VentaGastronomiaEmision>
+     */
+    private function mapEmisionesPorWaitryIds(int $empresaId, array $waitryIds): array
+    {
+        $waitryIds = array_values(array_unique(array_filter(
+            array_map(static fn ($id) => (int) $id, $waitryIds),
+            static fn (int $id) => $id > 0,
+        )));
+
+        if ($waitryIds === []) {
+            return [];
+        }
+
+        $emisiones = VentaGastronomiaEmision::query()
+            ->with(['venta.cobranzasDirectas', 'venta.caja_movimientos.cobranzas', 'cuenta', 'waitryComandaEnvio'])
+            ->whereHas('venta', fn ($q) => $q->whereHas('puntoventas', fn ($pv) => $pv->where('empresa_id', $empresaId)))
+            ->where(function ($q) use ($waitryIds) {
+                $q->whereIn('waitry_order_id', $waitryIds)
+                    ->orWhereHas('cuenta', fn ($c) => $c->whereIn('waitry_order_id', $waitryIds))
+                    ->orWhereHas('waitryComandaEnvio', fn ($w) => $w->whereIn('waitry_order_id', $waitryIds));
+            })
+            ->orderByDesc('venta_id')
+            ->get();
+
+        $map = [];
+        foreach ($emisiones as $emision) {
+            $wid = VentaGastronomiaEmisionWaitrySupport::resolverOrderId($emision);
+            if ($wid > 0 && in_array($wid, $waitryIds, true) && ! isset($map[$wid])) {
+                $map[$wid] = $emision;
+            }
+        }
+
+        return $map;
+    }
+
+    /**
+     * @param  list<int>  $orderIds
+     * @param  array<int, array<string, mixed>>  $mapPosCache
+     * @return array<int, array<string, mixed>>
+     */
+    private function resolverOrdenesPosFueraListado(
+        int $empresaId,
+        array $orderIds,
+        string $fechaJornada,
+        mixed $aperturaEn,
+        mixed $cierreEn,
+        array $mapPosCache,
+    ): array {
+        $desdeCache = WaitryOrdenPaymentEnriquecimientoSupport::filtrarMapPosPorIds($mapPosCache, $orderIds);
+        if (count($desdeCache) === count($orderIds)) {
+            return $desdeCache;
+        }
+
+        $faltantes = array_values(array_diff($orderIds, array_keys($desdeCache)));
+        if ($faltantes === []) {
+            return $desdeCache;
+        }
+
+        return $desdeCache + $this->ordenesExternasService->mapOrdenesPorIdsConciliacion(
+            $empresaId,
+            $faltantes,
+            $fechaJornada,
+            $aperturaEn,
+            $cierreEn,
+        );
     }
 
     /**

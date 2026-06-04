@@ -18,6 +18,19 @@ class CierreJornadaProcesoGrillaSupportTest extends TestCase
             'etiqueta' => 'Facturado Anita (jornada)',
             'tipo' => 'anita_jornada',
         ];
+        $totalesAnita = [
+            'anita_jornada' => $anitaJornada,
+            'anita_totem' => [
+                'qr' => 80.0,
+                'mp' => 0.0,
+                'efectivo' => 0.0,
+                'otros' => 0.0,
+                'total' => 80.0,
+                'etiqueta' => 'Facturado Anita — cobro TOTEM (medio real Waitry)',
+                'tipo' => 'anita_totem',
+            ],
+            'total' => 500.0,
+        ];
 
         $movimientos = [
             [
@@ -46,16 +59,17 @@ class CierreJornadaProcesoGrillaSupportTest extends TestCase
             ],
         ];
 
-        $resultado = CierreJornadaProcesoGrillaSupport::armar($movimientos, $anitaJornada);
+        $resultado = CierreJornadaProcesoGrillaSupport::armar($movimientos, $totalesAnita);
 
-        $this->assertCount(4, $resultado['filas']);
+        $this->assertCount(5, $resultado['filas']);
         $this->assertSame(500.0, $resultado['total_facturacion']);
         $this->assertSame(100.0, $resultado['total_pendiente_facturar']);
         $this->assertSame(80.0, $resultado['total_impago_waitry']);
         $this->assertSame(680.0, $resultado['total_cuadro']);
         $this->assertSame(100.0, $resultado['grilla']['qr_sin_facturar']);
         $this->assertSame(40.0, $resultado['grilla']['efectivo_waitry']);
-        $this->assertSame('waitry_pago', $resultado['filas'][1]['tipo']);
-        $this->assertSame('waitry_cash', $resultado['filas'][3]['tipo']);
+        $this->assertSame('waitry_pago', $resultado['filas'][2]['tipo']);
+        $this->assertSame('waitry_cash', $resultado['filas'][4]['tipo']);
+        $this->assertSame('anita_totem', $resultado['filas'][1]['tipo']);
     }
 }

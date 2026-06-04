@@ -105,7 +105,9 @@
         var ccEfectivoId = opcionesArqueo && opcionesArqueo.habilitar
             ? (parseInt(opcionesArqueo.cuentacaja_efectivo_id, 10) || 0)
             : 0;
-        var arqueoActivo = ccEfectivoId > 0;
+        var arqueoSoloLectura = !!(opcionesArqueo && opcionesArqueo.solo_lectura);
+        var arqueoActivo = !!(opcionesArqueo && opcionesArqueo.habilitar
+            && (ccEfectivoId > 0 || arqueoSoloLectura || opcionesArqueo.forzar));
         var totalFinal = totalCobradoRef != null ? Number(totalCobradoRef) : 0;
         if (totalCobradoRef == null) {
             (medios || []).forEach(function (p) { totalFinal += Number(p.total || 0); });
@@ -121,7 +123,9 @@
         html += '<thead class="thead-light"><tr><th>Medio de pago</th>';
         if (arqueoActivo) {
             html += '<th class="text-right" style="width:130px;">Esperado sistema</th>';
-            html += '<th class="text-right" style="width:160px;">Cobrado / contado</th>';
+            html += '<th class="text-right" style="width:160px;">'
+                + (arqueoSoloLectura ? 'Contado cajero' : 'Cobrado / contado')
+                + '</th>';
         } else {
             html += '<th class="text-right">Cobrado</th>';
         }
@@ -131,8 +135,9 @@
         html += '</tr></thead><tbody>';
         (medios || []).forEach(function (p) {
             var ccId = parseInt(p.cuentacaja_id, 10) || 0;
-            var monto = Number(p.total || 0);
-            var esEfectivo = arqueoActivo && ccId === ccEfectivoId;
+            var montoEsperado = Number(p.esperado != null ? p.esperado : p.total || 0);
+            var montoContado = p.contado != null ? Number(p.contado) : montoEsperado;
+            var esEfectivo = arqueoActivo && ccEfectivoId > 0 && ccId === ccEfectivoId;
             var trClass = esEfectivo ? ' class="gastro-cierre-fila-efectivo"' : '';
             html += '<tr' + trClass + '><td>' + esc(p.nombre || p.codigo || '—');
             if (esEfectivo) {
@@ -144,15 +149,25 @@
                 var clsEsperado = esEfectivo
                     ? 'gastro-rendicion-esperado-efectivo font-weight-bold'
                     : 'font-weight-bold';
-                html += '<span class="' + clsEsperado + '">$' + fmt(monto) + '</span>';
+                html += '<span class="' + clsEsperado + '">$' + fmt(montoEsperado) + '</span>';
                 html += '</td>';
                 html += '<td class="text-right">';
-                html += '<input type="text" inputmode="decimal" class="form-control form-control-sm text-right js-medio-contado-cierre" ';
-                html += 'value="' + esc(fmt(monto)) + '" data-esperado="' + esc(String(monto)) + '" data-cuentacaja-id="' + ccId + '"/>';
-                html += '<div class="js-hint-diff-medio-cierre"></div>';
+                if (arqueoSoloLectura) {
+                    var diffLect = Math.round((montoContado - montoEsperado) * 100) / 100;
+                    html += '<span class="font-weight-bold">$' + fmt(montoContado) + '</span>';
+                    if (Math.abs(diffLect) > 0.02) {
+                        var tipoLect = diffLect > 0 ? 'sobra' : 'falta';
+                        html += '<small class="d-block text-warning mt-1">Δ $' + fmt(Math.abs(diffLect))
+                            + ' (' + tipoLect + ' vs sistema)</small>';
+                    }
+                } else {
+                    html += '<input type="text" inputmode="decimal" class="form-control form-control-sm text-right js-medio-contado-cierre" ';
+                    html += 'value="' + esc(fmt(montoContado)) + '" data-esperado="' + esc(String(montoEsperado)) + '" data-cuentacaja-id="' + ccId + '"/>';
+                    html += '<div class="js-hint-diff-medio-cierre"></div>';
+                }
                 html += '</td>';
             } else {
-                html += '<td class="text-right font-weight-bold">$' + fmt(monto) + '</td>';
+                html += '<td class="text-right font-weight-bold">$' + fmt(montoEsperado) + '</td>';
             }
             if (conciliar && ccId > 0) {
                 html += '<td class="text-center">';
@@ -291,6 +306,25 @@
         enlazarArqueoMediosCierre(root);
     }
 
+    function recolectarMediosContadoCierreDesdeRoot(root) {
+        var list = [];
+        if (!root) {
+            return list;
+        }
+        root.querySelectorAll('.js-medio-contado-cierre').forEach(function (inp) {
+            var ccId = parseInt(inp.getAttribute('data-cuentacaja-id'), 10) || 0;
+            if (ccId <= 0) {
+                return;
+            }
+            list.push({
+                cuentacaja_id: ccId,
+                monto: parseDecimalArqueo(inp.value),
+            });
+        });
+
+        return list;
+    }
+
     function renderTotalMediosPagoFinalHtml(totales, opcionesConciliar, opcionesRender) {
         var medios = totales.por_medio_pago || [];
         var nc = {
@@ -307,10 +341,12 @@
             return '';
         }
         var arqueo = null;
-        if (opcionesRender && opcionesRender.arqueoEfectivo) {
+        if (opcionesRender && (opcionesRender.arqueoEfectivo || opcionesRender.arqueoMediosCierre)) {
             arqueo = {
                 habilitar: true,
                 cuentacaja_efectivo_id: parseInt(opcionesRender.cuentacaja_efectivo_id, 10) || 0,
+                solo_lectura: !!opcionesRender.arqueoSoloLectura,
+                forzar: !!(opcionesRender.arqueoMediosCierre || totales.arqueo_medios_cierre),
             };
         }
         var html = '<div class="mt-3 pt-3 border-top gastro-totales-medios-final">';
@@ -737,5 +773,6 @@
         renderNumeracionFiscalHtml: renderNumeracionFiscalHtml,
         enlazarArqueoMediosCierre: enlazarArqueoMediosCierre,
         enlazarArqueoEfectivoCierre: enlazarArqueoEfectivoCierre,
+        recolectarMediosContadoCierreDesdeRoot: recolectarMediosContadoCierreDesdeRoot,
     };
 })();

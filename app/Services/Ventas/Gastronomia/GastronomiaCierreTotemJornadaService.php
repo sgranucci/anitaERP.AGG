@@ -8,6 +8,7 @@ use App\Models\Ventas\JornadaGastronomia;
 use App\Models\Ventas\TotemWaitryGastronomia;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Services\Ventas\Gastronomia\Waitry\WaitryAnalyticsOrdenesService;
+use App\Services\Ventas\Gastronomia\Waitry\WaitryOrdenesExternasService;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Ventas\Waitry\WaitryCierreJornadaDiscrepanciaSupport;
 use App\Support\Ventas\Gastronomia\VentaGastronomiaEmisionWaitrySupport;
@@ -15,6 +16,8 @@ use App\Support\Ventas\Waitry\WaitryCierreJornadaVentanaSupport;
 use App\Support\Ventas\Waitry\WaitryInformeZConciliacionSupport;
 use App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport;
 use App\Support\Ventas\Waitry\WaitryOrdenCobroSupport;
+use App\Support\Ventas\Waitry\WaitryOrdenEstadoSupport;
+use App\Support\Ventas\Waitry\WaitryOrdenPaymentEnriquecimientoSupport;
 use App\Support\Ventas\Waitry\WaitryTotemJornadaResumenSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -31,6 +34,7 @@ final class GastronomiaCierreTotemJornadaService
 {
     public function __construct(
         private readonly WaitryAnalyticsOrdenesService $analyticsOrdenesService,
+        private readonly WaitryOrdenesExternasService $ordenesExternasService,
     ) {
     }
 
@@ -114,8 +118,10 @@ final class GastronomiaCierreTotemJornadaService
         $desde = $ids !== [] ? (int) min($ids) : null;
         $hastaId = $ids !== [] ? (int) max($ids) : $idAnterior;
 
+        $split = WaitryOrdenEstadoSupport::separarCanceladas($lineasCompletas);
+
         return [
-            'lineas' => $lineasCompletas,
+            'lineas' => $split['activas'],
             'meta' => [
                 'jornada_id' => (int) $jornada->id,
                 'empresa_id' => $empresaId,
@@ -127,7 +133,8 @@ final class GastronomiaCierreTotemJornadaService
                 'waitry_order_id_desde' => $desde,
                 'waitry_order_id_hasta' => $hastaId,
                 'rango_etiqueta' => $this->etiquetaRango($idAnterior, $desde, $hastaId),
-                'cantidad_movimientos' => count($lineasCompletas),
+                'cantidad_movimientos' => count($split['activas']),
+                'waitry_canceladas' => $split['resumen'],
                 'auditoria' => $listado['auditoria'],
             ],
         ];
@@ -685,6 +692,14 @@ final class GastronomiaCierreTotemJornadaService
             $ventana['hasta'] ?? null,
         );
 
+        $porId = $this->enriquecerPaymentOrdenesDesdePos(
+            $empresaId,
+            $porId,
+            $fechaJornada,
+            $aperturaEn,
+            $cierreEn,
+        )['ordenes'];
+
         $idsHuecos = $this->detectarHuecosSecuenciales($desdeExclusive, $porId);
 
         if (count($porId) > $limite) {
@@ -717,6 +732,27 @@ final class GastronomiaCierreTotemJornadaService
                 'huecos_pendientes_auditoria_dia' => $idsHuecos !== [],
             ],
         ];
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $ordenesPorId
+     * @return array{ordenes: array<int, array<string, mixed>>, map_pos: array<int, array<string, mixed>>}
+     */
+    private function enriquecerPaymentOrdenesDesdePos(
+        int $empresaId,
+        array $ordenesPorId,
+        string $fechaJornada,
+        mixed $aperturaEn,
+        mixed $cierreEn,
+    ): array {
+        return WaitryOrdenPaymentEnriquecimientoSupport::enriquecerDesdePos(
+            $this->ordenesExternasService,
+            $empresaId,
+            $ordenesPorId,
+            $fechaJornada,
+            $aperturaEn,
+            $cierreEn,
+        );
     }
 
     /**
@@ -940,6 +976,8 @@ final class GastronomiaCierreTotemJornadaService
                 'waitry_cobro_totem' => (bool) ($cuenta?->waitry_cobro_totem ?? $emision?->cuenta?->waitry_cobro_totem),
                 'venta_codigo' => $emision?->venta?->codigo ?? '',
                 'fuente_listado' => $orden['fuente'] ?? 'waitry',
+                'placed_at' => $orden['placed_at'] ?? $orden['created_at'] ?? null,
+                'waitry_cancelada' => WaitryOrdenEstadoSupport::esCancelada($orden),
             ];
         }
 

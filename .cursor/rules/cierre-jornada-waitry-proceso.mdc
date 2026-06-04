@@ -1,0 +1,116 @@
+---
+description: Cierre jornada Waitry — conciliación superior, proceso inferior (cuadro, redistribución, asientos, facturación futura)
+globs: app/Services/Caja/WaitryCierreJornadaService.php,app/Services/Ventas/Gastronomia/GastronomiaCierreJornadaProcesoService.php,app/Services/Ventas/Gastronomia/GastronomiaCierreTotemJornadaService.php,app/Support/Ventas/Gastronomia/CierreJornada*.php,app/Support/Ventas/Waitry/WaitryMedioPagoCuentacajaSupport.php,app/Support/Ventas/Waitry/WaitryOrdenEstadoSupport.php,app/Console/Commands/DiagnosticarGastronomia*.php,resources/views/caja/waitry_cierre_jornada/**,public/assets/pages/scripts/caja/waitry_cierre_jornada*.js,docs/waitry/**
+alwaysApply: false
+---
+
+# Cierre jornada Waitry — proceso completo
+
+Pantalla: **Caja → Rendiciones → Cierre jornada Waitry** (`caja/waitry-cierre-jornada`).
+
+Documentación extendida: [`docs/waitry/README.md`](../../docs/waitry/README.md).
+
+## Dos capas
+
+| Capa | Permiso | Servicio principal | Waitry API |
+|---|---|---|---|
+| **Conciliación superior** | `listar-waitry-cierre-jornada-caja` | `WaitryCierreJornadaService` | `getordersdetails` por fecha jornada |
+| **Proceso inferior** | `proceso-cierre-jornada-waitry-caja` | `GastronomiaCierreJornadaProcesoService` | mismo tramo + `getOrdersPOS` puntual si falta `payment.type` |
+
+El POS en vivo usa `getOrdersPOS` (doc. pág. 21); **no** mezclar con el cierre de jornada salvo enriquecimiento puntual.
+
+## Medios Waitry → columnas del cuadro
+
+| Tipo Waitry | Columna cuadro | Notas |
+|---|---|---|
+| `mercadopago` | QR / MP | |
+| `totalcoin` | QR | |
+| `credit_card` | QR | Cobro tótem; **no** confundir con tarjeta presencial Anita |
+| `cash` | Efectivo | No se factura en el proceso |
+| Otros | Otros | |
+
+Referencia: `WaitryMedioPagoCuentacajaSupport::esTipoQrWaitry()`, `CierreJornadaProcesoMedioSupport`.
+
+## Órdenes canceladas Waitry
+
+- Detectar con `WaitryOrdenEstadoSupport::esCancelada()`.
+- **Excluir** de cuadro, filas de conciliación, totales y candidatos a facturar.
+- Mostrar conteo/meta arriba (badge) para auditoría.
+- Una orden cancelada con ciclo cerrado en Waitry **no** implica factura Anita.
+
+## Cuadro de cierre (proceso inferior)
+
+Filas principales (`CierreJornadaProcesoGrillaSupport`):
+
+1. **Facturado Anita** — ventas `fechajornada` + emisiones Waitry; totales por medio real de cobranza.
+2. **Facturado Anita cobrado TOTEM** — puente contable (medio real vs cuenta TOTEM).
+3. **Waitry sin facturar** — candidatos a facturación del proceso.
+4. **Waitry impago** — solo referencia.
+5. **Waitry cash no facturar** — efectivo Waitry; fuera de facturación.
+
+Clic en celda → modal detalle (`CierreJornadaCuadroDetalleSupport`, API `cuadro-detalle/{fila}/{medio}`).
+
+Consola: `php artisan gastronomia:diagnostico-cuadro-cierre {empresa} {fecha} {fila} {medio} [--csv=]`.
+
+## Flujo operativo (implementado vs pendiente)
+
+| Paso | Estado | Clase / nota |
+|---|---|---|
+| Analizar tramo (cuadro + grupos) | OK | `analizarJornada()` |
+| % sobre facturado Anita | OK | input UI |
+| Recalcular redistribución QR ↔ efectivo | OK | `CierreJornadaProcesoRedistribucionSupport` |
+| Preview asientos (sin grabar) | OK | `CierreJornadaProcesoAsientosPreviewSupport` — requiere **Recalcular** |
+| Grabado asientos | **Pendiente** | no implementar sin pedido explícito |
+| Facturación masiva | **Pendiente** | |
+| Facturación unitaria | **Pendiente** | una factura por permiso → alivio de carga servidor |
+
+## Punto de venta del proceso (por empresa)
+
+Obligatorio antes de facturar (cuando exista el paso de emisión).
+
+**Resolución** (`CierreJornadaProcesoPuntoventaSupport`):
+
+1. `gastronomia_cierre_jornada_config.puntoventa_id` (BD, prioridad).
+2. `GASTRONOMIA_CIERRE_JORNADA_PUNTOVENTA_CODIGO_POR_EMPRESA` → `config/gastronomia.php` → `cierre_jornada_puntoventa_codigo_por_empresa`.
+
+**Validaciones:**
+
+- PV debe pertenecer a la empresa.
+- `modofacturacion` ≠ `M` (manual).
+- Al emitir (futuro): `CierreJornadaProcesoPuntoventaSupport::resolverOError($empresaId)`.
+
+**BSA (empresa_id = 1):** código PV `00003` (ej. «FCE BSA Chungo»).
+
+Variables `.env` + `.env.example` + `config/gastronomia.php` en el mismo cambio.
+
+## Config contable por empresa
+
+Tabla `gastronomia_cierre_jornada_config`: cuentas ventas, IVA, impuesto interno, fondo fijo máquinas, `puntoventa_id`.
+
+Support: `CierreJornadaProcesoConfigSupport::faltantes($cfg, $empresaId)`.
+
+Defaults globales opcionales: `GASTRONOMIA_CIERRE_JORNADA_CUENTA_*`.
+
+## Performance cierre Waitry
+
+- No filtrar emisiones sin criterio de empresa/jornada.
+- Limitar enriquecimiento individual `getOrdersPOS`: `GASTRONOMIA_CIERRE_TOTEM_ENRIQUECER_PAYMENT_INDIVIDUAL_MAX=0` (default producción).
+- Benchmark referencia post-fix: ~12 s / 465 filas día actual.
+
+## Prohibido
+
+- Facturación masiva o grabado de asientos sin implementación explícita y permisos.
+- Incluir órdenes Waitry canceladas en totales o redistribución.
+- Mapear `credit_card` Waitry a columna distinta de QR.
+- Duplicar lógica de PV fuera de `CierreJornadaProcesoPuntoventaSupport`.
+- Dejar variable `GASTRONOMIA_CIERRE_JORNADA_*` solo en `config/` sin `.env` + `.env.example`.
+
+## Comprobación rápida
+
+```bash
+rg "credit_card" app/Support/Ventas/Gastronomia/CierreJornadaProcesoMedioSupport.php
+rg "esCancelada" app/Support/Ventas/Waitry/WaitryOrdenEstadoSupport.php
+rg "resolverOError" app/Support/Ventas/Gastronomia/
+rg "GASTRONOMIA_CIERRE_JORNADA_PUNTOVENTA" .env .env.example config/gastronomia.php
+php artisan test --filter=CierreJornada
+```

@@ -9,7 +9,7 @@ final class CierreJornadaProcesoGrillaSupport
 {
     /**
      * @param  list<array<string, mixed>>  $movimientos  Movimientos ya enriquecidos (clasificar)
-     * @param  array{qr:float,mp:float,efectivo:float,otros:float,total:float}  $anitaJornada
+     * @param  array<string, mixed>  $totalesAnita  Salida de CierreJornadaFacturadoAnitaSupport
      * @return array{
      *   filas: list<array<string, mixed>>,
      *   grilla: array<string, float>,
@@ -19,9 +19,21 @@ final class CierreJornadaProcesoGrillaSupport
      *   total_cuadro: float
      * }
      */
-    public static function armar(array $movimientos, array $anitaJornada): array
+    public static function armar(array $movimientos, array $totalesAnita): array
     {
-        $anitaJornada = self::normalizarFilaMedios($anitaJornada);
+        $anitaJornada = self::normalizarFilaMedios(
+            is_array($totalesAnita['anita_jornada'] ?? null)
+                ? $totalesAnita['anita_jornada']
+                : $totalesAnita,
+        );
+        $anitaTotem = self::normalizarFilaMedios(
+            is_array($totalesAnita['anita_totem'] ?? null)
+                ? $totalesAnita['anita_totem']
+                : self::filaVacia(
+                    'Facturado Anita — cobro TOTEM (medio real Waitry)',
+                    'anita_totem',
+                ),
+        );
 
         $waitryPagoSinFact = self::filaVacia('Waitry pagado sin facturar (a facturar)', 'waitry_pago');
         $waitryImpago = self::filaVacia('Waitry impago (referencia)', 'waitry_impago');
@@ -60,7 +72,7 @@ final class CierreJornadaProcesoGrillaSupport
 
         $totalPendiente = $waitryPagoSinFact['total'];
         $totalImpago = $waitryImpago['total'];
-        $totalFacturacion = $anitaJornada['total'];
+        $totalFacturacion = round((float) ($totalesAnita['total'] ?? $anitaJornada['total'] ?? 0), 2);
         $totalCuadro = round($totalFacturacion + $totalPendiente + $totalImpago, 2);
 
         $grilla = [
@@ -68,6 +80,10 @@ final class CierreJornadaProcesoGrillaSupport
             'anita_mp' => $anitaJornada['mp'],
             'anita_efectivo' => $anitaJornada['efectivo'],
             'anita_otros' => $anitaJornada['otros'],
+            'anita_totem_qr' => $anitaTotem['qr'],
+            'anita_totem_mp' => $anitaTotem['mp'],
+            'anita_totem_efectivo' => $anitaTotem['efectivo'],
+            'anita_totem_otros' => $anitaTotem['otros'],
             'waitry_pago_qr' => $waitryPagoSinFact['qr'],
             'waitry_pago_mp' => $waitryPagoSinFact['mp'],
             'waitry_pago_efectivo' => $waitryPagoSinFact['efectivo'],
@@ -93,6 +109,7 @@ final class CierreJornadaProcesoGrillaSupport
         return [
             'filas' => [
                 $anitaJornada,
+                $anitaTotem,
                 $waitryPagoSinFact,
                 $waitryImpago,
                 $waitryCash,
@@ -150,13 +167,11 @@ final class CierreJornadaProcesoGrillaSupport
         if (isset($fila['etiqueta'])) {
             $base['etiqueta'] = (string) $fila['etiqueta'];
         }
-
-        $base = self::cerrarFila($base);
-        if (array_key_exists('total', $fila)) {
-            $base['total'] = round((float) $fila['total'], 2);
+        if (isset($fila['tipo'])) {
+            $base['tipo'] = (string) $fila['tipo'];
         }
 
-        return $base;
+        return self::cerrarFila($base);
     }
 
     private static function columnaDesdeClave(string $clave): string

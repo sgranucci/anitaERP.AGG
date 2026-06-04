@@ -8,6 +8,7 @@
 
     var apiEstado = app.getAttribute('data-api-estado') || '';
     var apiHabilitar = app.getAttribute('data-api-habilitar') || '';
+    var apiActualizarMontoHabilitacion = app.getAttribute('data-api-actualizar-monto-habilitacion') || '';
     var apiCierreParcial = app.getAttribute('data-api-cierre-parcial') || '';
     var apiCerrar = app.getAttribute('data-api-cerrar') || '';
     var apiAnularCierre = app.getAttribute('data-api-anular-cierre') || '';
@@ -19,6 +20,7 @@
     var puedeCierreParcial = app.getAttribute('data-puede-cierre-parcial') === '1';
     var puedeCerrar = app.getAttribute('data-puede-cerrar') === '1';
     var puedeAnularCierre = app.getAttribute('data-puede-anular-cierre') === '1';
+    var puedeModificarMontoHabilitacion = app.getAttribute('data-puede-modificar-monto-habilitacion') === '1';
     var puedeVerFactura = app.getAttribute('data-puede-ver-factura') === '1';
     var accion = app.getAttribute('data-accion') || '';
     var cfgGlobal = window.HABILITACION_TURNO_GASTRONOMIA || {};
@@ -201,12 +203,24 @@
     function renderPanelTurnoHabilitado(estado) {
         var html = '<div class="card border mb-3 gastro-panel-turno shadow-sm"><div class="card-body py-3 gastro-turno-resumen-wrap">';
         html += '<div class="row align-items-center">';
-        html += '<div class="col-md-3 col-6 mb-1 mb-md-0"><span class="text-muted d-block">Turno</span><strong>' + (estado.turno_nombre || '—') + '</strong></div>';
-        html += '<div class="col-md-3 col-6 mb-1 mb-md-0"><span class="text-muted d-block">Usuario</span><strong>' + (estado.usuario_habilitado || '—') + '</strong></div>';
-        html += '<div class="col-md-2 col-6"><span class="text-muted d-block">Jornada</span><strong>' + (estado.fecha_jornada_fmt || estado.fecha_jornada || '—') + '</strong></div>';
-        html += '<div class="col-md-2 col-6"><span class="text-muted d-block">Habilitado</span><strong>' + (estado.habilitacion_en_fmt || estado.habilitacion_en || '—') + '</strong></div>';
-        html += '<div class="col-md-2 col-12"><span class="text-muted d-block">Monto / parciales</span>';
-        html += '<strong>$' + fmt(estado.monto_habilitacion) + '</strong> · ' + (estado.cierres_parciales || 0) + ' parc.</div>';
+        html += '<div class="col-md-3 col-6 mb-1 mb-md-0"><span class="text-muted d-block">Turno</span><strong>' + esc(estado.turno_nombre || '—') + '</strong></div>';
+        html += '<div class="col-md-3 col-6 mb-1 mb-md-0"><span class="text-muted d-block">Usuario</span><strong>' + esc(estado.usuario_habilitado || '—') + '</strong></div>';
+        html += '<div class="col-md-2 col-6"><span class="text-muted d-block">Jornada</span><strong>' + esc(estado.fecha_jornada_fmt || estado.fecha_jornada || '—') + '</strong></div>';
+        html += '<div class="col-md-2 col-6"><span class="text-muted d-block">Habilitado</span><strong>' + esc(estado.habilitacion_en_fmt || estado.habilitacion_en || '—') + '</strong></div>';
+        html += '<div class="col-md-2 col-12">';
+        html += '<span class="text-muted d-block">Monto habilitación</span>';
+        if (puedeModificarMontoHabilitacion && apiActualizarMontoHabilitacion) {
+            html += '<div class="d-flex flex-wrap align-items-center mt-1" style="gap: 4px;">';
+            html += '<input type="number" step="0.01" min="0" class="form-control form-control-sm" id="input-monto-habilitacion-edit" ';
+            html += 'style="max-width: 130px;" value="' + esc(String(estado.monto_habilitacion != null ? estado.monto_habilitacion : 0)) + '" title="Corregir monto de habilitación"/>';
+            html += '<button type="button" class="btn btn-sm btn-primary" id="btn-guardar-monto-habilitacion" title="Persistir corrección del monto">';
+            html += '<i class="fa fa-save"></i> Guardar</button>';
+            html += '</div>';
+        } else {
+            html += '<strong>$' + fmt(estado.monto_habilitacion) + '</strong>';
+        }
+        html += '<small class="text-muted d-block mt-1">' + (estado.cierres_parciales || 0) + ' cierre(s) parcial(es)</small>';
+        html += '</div>';
         html += '</div>';
         if (estado.totales_turno) {
             var ok = estado.totales_turno.conciliacion_ok;
@@ -233,6 +247,55 @@
         }
         html += '</div></div>';
         return html;
+    }
+
+    function enlazarEdicionMontoHabilitacion(estado) {
+        if (!puedeModificarMontoHabilitacion || !apiActualizarMontoHabilitacion) {
+            return;
+        }
+        var btn = document.getElementById('btn-guardar-monto-habilitacion');
+        var inp = document.getElementById('input-monto-habilitacion-edit');
+        if (!btn || !inp || !estado || !estado.turno_operativo_id) {
+            return;
+        }
+        if (btn.getAttribute('data-monto-hab-bound') === '1') {
+            return;
+        }
+        btn.setAttribute('data-monto-hab-bound', '1');
+        btn.addEventListener('click', function () {
+            var montoNuevo = parseDecimalCierre(inp.value);
+            var montoActual = Math.round((parseFloat(estado.monto_habilitacion) || 0) * 100) / 100;
+            if (montoNuevo < 0) {
+                alert('El monto de habilitación no puede ser negativo.');
+                return;
+            }
+            if (montoNuevo === montoActual) {
+                alert('El monto indicado es igual al actual.');
+                return;
+            }
+            if (!confirm(
+                '¿Actualizar el monto de habilitación de $' + fmt(montoActual)
+                + ' a $' + fmt(montoNuevo) + '?'
+            )) {
+                return;
+            }
+            btn.disabled = true;
+            postJson(apiActualizarMontoHabilitacion, {
+                turno_operativo_id: estado.turno_operativo_id,
+                monto_habilitacion: montoNuevo,
+            }).then(function (res) {
+                btn.disabled = false;
+                if (res.data.ok) {
+                    alert(res.data.mensaje || 'Monto actualizado');
+                    cargarEstado();
+                } else {
+                    alert(res.data.error || mensajeErrorRespuesta(res));
+                }
+            }).catch(function () {
+                btn.disabled = false;
+                alert('Error al guardar el monto de habilitación.');
+            });
+        });
     }
 
     function renderAlertasControl(containerId, estado) {
@@ -1007,6 +1070,7 @@
 
         if (estado.turno_habilitado) {
             panel.innerHTML = renderPanelTurnoHabilitado(estado);
+            enlazarEdicionMontoHabilitacion(estado);
             if (cardHab) {
                 cardHab.classList.add('d-none');
             }
@@ -1173,12 +1237,22 @@
                 if (!confirm('¿Confirma el cierre definitivo del turno en esta terminal?')) {
                     return;
                 }
-                postJson(apiCerrar, {
+                var payloadCierre = {
                     redondeo_invitaciones: document.getElementById('redondeo_invitaciones').value,
                     redondeo_turno: document.getElementById('redondeo_turno').value,
                     sobrante_faltante: document.getElementById('sobrante_faltante').value,
                     observacion_cierre: document.getElementById('observacion_cierre').value,
-                }).then(function (res) {
+                };
+                var tabDef = document.getElementById('totales-tab-definitivo');
+                if (tabDef && window.GastronomiaTotalesTurnoRender
+                    && window.GastronomiaTotalesTurnoRender.recolectarMediosContadoCierreDesdeRoot) {
+                    var mediosContado = window.GastronomiaTotalesTurnoRender
+                        .recolectarMediosContadoCierreDesdeRoot(tabDef);
+                    if (mediosContado.length) {
+                        payloadCierre.medios_contado = mediosContado;
+                    }
+                }
+                postJson(apiCerrar, payloadCierre).then(function (res) {
                     if (res.data.ok) {
                         alert(res.data.mensaje || 'Turno cerrado');
                         if (res.data.url_comprobante_pdf) {

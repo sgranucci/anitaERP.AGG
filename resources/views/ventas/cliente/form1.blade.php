@@ -140,7 +140,7 @@
 				<div class="form-group row">
     				<label for="domicilio" class="col-lg-2 col-form-label requerido">Direcci&oacuten</label>
     				<div class="col-lg-4">
-    					<input type="text" name="domicilio" id="domicilio" class="form-control" pattern="[A-Za-z0-9]{1,255}" value="{{old('domicilio', $data->domicilio ?? '')}}" required/>
+    					<input type="text" name="domicilio" id="domicilio" class="form-control" maxlength="255" value="{{old('domicilio', $data->domicilio ?? '')}}" required/>
     				</div>
     				<div class="col-lg-4">
 					@if ($tasaarba != '')

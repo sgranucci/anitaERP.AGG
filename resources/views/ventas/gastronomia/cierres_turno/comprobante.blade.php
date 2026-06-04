@@ -339,41 +339,17 @@
     @endif
 
     @if (empty($d['solo_totales_mozo']) && ($tieneMedios || $hayNc || $hayInv))
-    <h2>Total final por medio de pago</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>Medio de pago</th>
-                <th class="num">Cobrado</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach ($totalesTurno['por_medio_pago'] ?? [] as $p)
-            <tr>
-                <td>{{ $p['nombre'] ?? $p['codigo'] ?? '—' }}</td>
-                <td class="num">${{ number_format((float) ($p['total'] ?? 0), 2, ',', '.') }}</td>
-            </tr>
-            @endforeach
-            @if ($hayNc)
-            <tr style="background:#fdecea;">
-                <td style="color:#922b21; font-weight:bold;">Notas de crédito ({{ $ncCantGlobal }})</td>
-                <td class="num" style="color:#922b21; font-weight:bold;">${{ number_format($ncTotalGlobal, 2, ',', '.') }}</td>
-            </tr>
-            @endif
-            @if ($hayInv)
-            <tr style="background:#fff8e1;">
-                <td style="color:#856404; font-weight:bold;">Invitaciones $0,01 ({{ $invCantGlobal }})</td>
-                <td class="num" style="color:#856404; font-weight:bold;">${{ number_format($invTotalGlobal, 2, ',', '.') }}</td>
-            </tr>
-            @endif
-        </tbody>
-        <tfoot>
-            <tr class="total-grande">
-                <td class="lbl">Total</td>
-                <td class="num">${{ number_format((float) ($totalesTurno['total_cobrado'] ?? 0), 2, ',', '.') }}</td>
-            </tr>
-        </tfoot>
-    </table>
+    @include('ventas.gastronomia.cierres_turno.partials.comprobante_medios_pago_cierre', [
+        'totalesTurno' => $totalesTurno,
+        'hayNc' => $hayNc,
+        'hayInv' => $hayInv,
+        'ncTotalGlobal' => $ncTotalGlobal,
+        'ncCantGlobal' => $ncCantGlobal,
+        'invTotalGlobal' => $invTotalGlobal,
+        'invCantGlobal' => $invCantGlobal,
+        'tituloMedios' => 'Total final por medio de pago',
+        'etiquetaTotal' => 'Total',
+    ])
     @endif
 
     @if (empty($d['solo_totales_mozo']) && $totalesDia !== null)

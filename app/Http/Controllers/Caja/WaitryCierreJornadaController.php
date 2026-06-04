@@ -118,6 +118,38 @@ class WaitryCierreJornadaController extends Controller
         }
     }
 
+    public function apiProcesoPreviewFactura(Request $request)
+    {
+        $this->canProcesoCierre();
+
+        $request->validate([
+            'empresa_id' => 'required|integer|min:1',
+            'fecha_jornada' => 'required|date',
+            'porcentaje' => 'nullable|numeric|min:0|max:100',
+            'pagina' => 'nullable|integer|min:1',
+            'por_pagina' => 'nullable|integer|min:10|max:200',
+        ]);
+
+        try {
+            @set_time_limit(180);
+
+            return response()->json($this->procesoService->previewFacturaProcesoPorEmpresaYFecha(
+                (int) $request->input('empresa_id'),
+                (string) $request->input('fecha_jornada'),
+                (float) $request->input('porcentaje', 0),
+                (int) $request->input('pagina', 1),
+                (int) $request->input('por_pagina', 50),
+            ));
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        } catch (Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'error' => GastronomiaJornadaService::mensajeDesdeExcepcion($e),
+            ], 422);
+        }
+    }
+
     public function apiProcesoMovimientosGrupo(Request $request, string $grupo)
     {
         $this->canProcesoCierre();
@@ -140,6 +172,31 @@ class WaitryCierreJornadaController extends Controller
         }
     }
 
+    public function apiProcesoCuadroDetalle(Request $request, string $fila, string $medio)
+    {
+        $this->canProcesoCierre();
+
+        $empresaId = (int) $request->input('empresa_id', 0);
+        $fechaJornada = (string) $request->input('fecha_jornada', '');
+        $pagina = max(1, (int) $request->input('pagina', 1));
+        $porPagina = max(10, min(200, (int) $request->input('por_pagina', 50)));
+
+        try {
+            @set_time_limit(180);
+
+            return response()->json($this->procesoService->detalleCuadroCeldaPorEmpresaYFecha(
+                $empresaId,
+                $fechaJornada,
+                mb_strtolower(trim($fila)),
+                mb_strtolower(trim($medio)),
+                $pagina,
+                $porPagina,
+            ));
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        }
+    }
+
     public function apiProcesoConfig(int $empresaId)
     {
         $this->canProcesoCierre();
@@ -153,7 +210,7 @@ class WaitryCierreJornadaController extends Controller
         return response()->json([
             'ok' => true,
             'config' => $cfg,
-            'faltantes' => CierreJornadaProcesoConfigSupport::faltantes($cfg),
+            'faltantes' => CierreJornadaProcesoConfigSupport::faltantes($cfg, $empresaId),
         ]);
     }
 

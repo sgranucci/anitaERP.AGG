@@ -1,0 +1,223 @@
+---
+description: Importación UIF multi-empresa (Biyemas, Kandiko, Rebisco) — fuente Anita legacy, rutas de archivos, export Activos Wilde
+globs: app/**/Uif/**,config/uif.php,app/Console/Commands/*Uif*,app/Repositories/Uif/**,app/Services/Uif/**
+alwaysApply: false
+---
+
+# Importación UIF — Biyemas, Kandiko y Rebisco
+
+Referencia ERP: `AnitaUifArchivosSync`, `ClienteUifFotoDocumento`, `ClientePremioUifFotoTesoreria`.  
+Referencia Anita legacy Kandiko: `mod_caja/abm_clientes_uif.php`, `include/Clientes_uif.php`, `mod_caja/abm_premios_uif.php`.
+
+## Reglas de negocio
+
+- **No todos los titulares están en UIF.** Buscar primero `clientes_uif` / `premios_uif` en el bridge de la empresa; si falta, fallback **Biyemas** (`ventas.climae`) vía `10.20.30.200:8080`.
+- Un cliente puede **no tener premio** → omitir foto de premio sin error fatal.
+- **DNI ≠ foto de premio:** son rutas y patrones distintos (ver tabla Kandiko).
+- **`pago_*` en tesorería = foto del premio**, no del DNI. El DNI va en `dni_uif/{numerodocumento}.pdf`.
+
+## Servidores Informix
+
+| Empresa | Bridge | `sistema` | Tablas clave |
+|---------|--------|-----------|--------------|
+| Biyemas (KSA) | `10.20.30.200:8080` | `base_admin` / `ventas` | `clientes_uif`, `premios_uif`, `climae` |
+| Kandiko (Wilde) | `192.168.20.100:8080` | `base_admin` | `clientes_uif`, `premios_uif` |
+| Rebisco | *(host AGG)* | `base_admin` | igual lógica Kandiko |
+
+**Montaje `/scan` en 10.20.30.210 (anitanextgen):** mismo árbol CIFS que `192.168.20.100`. Leer archivos **localmente**; no SSH al `.100`.
+
+En `ApiAnita`: `$data['servidor'] => '192.168.20.100:8080'` para Kandiko.
+
+**Permisos bridge:** el usuario del webserver en `.100` debe poder escribir `.sql` en `/usr2/biyemas/base_admin/` para que Informix ejecute consultas vía API.
+
+## Kandiko — rutas según fuente PHP Anita (`.100`)
+
+| Qué | Ruta disco | Patrón | PHP / notas |
+|-----|------------|--------|-------------|
+| **Documento DNI** | `/scan/tesoreria/dni_uif/` | `{numerodocumento}.pdf` | `abm_clientes_uif.php` botón “Documento Ok”, `MuestraDocumento()` |
+| **Adjuntos cliente** | `/usr2/www/htdocs/uif/archivos/clientes/` | `{inroclienteid}-{nombre}` | `Clientes_uif.php` → web `/uif/archivos/clientes/` |
+| **Adjuntos scan KSA** | `/scan/uif/archivos/clientes_KSA/` | `{inroclienteid}-nombre.pdf` | Réplica scan (no en PHP ABM; usar en export/migración) |
+| **Adjuntos scan RSA** | `/scan/uif/archivos/clientes_RSA/` | idem | Rebisco / multi-empresa |
+| **Adjuntos scan genérico** | `/scan/uif/archivos/clientes/` | idem | Fallback |
+| **Foto premio** | `/usr2/www/htdocs/mod_fotos/fotos_clientes/` | `pago_{inropremioid}.jpg` | Listado premios `abm_clientes_uif.php` (`.jpg` fijo en columna Foto) |
+| **Upload premio** | idem mod_fotos | `pago_{inropremioid}.{ext}` | `Clientes_uif.php` al grabar premio; `cextfoto` en `premios_uif` |
+| **Captura webcam** | mod_fotos | `foto_{hash}.png` | `mod_fotos/captura_foto.php` + `guardar_foto.php` → campo `foto_cliente` |
+| **Adjuntos premio** | `/usr2/www/htdocs/uif/archivos/premios/` | `{cliente_id}-{premio_id}-{nombre}` | `Clientes_uif.php` `guardaPremioUif_Archivo` |
+
+### Fallback premio (réplica en scan, no en PHP Anita)
+
+Si `mod_fotos` no tiene el archivo: **`/scan/tesoreria/fotos_clientes/pago_{inropremioid}.{ext}`** (común en Wilde reciente; usado por ERP Biyemas `ClientePremioUifFotoTesoreria`).
+
+Ejemplo verificado: cliente 4159 (Dirzu) → `pago_25642.png` en tesorería, no en mod_fotos HTTP.
+
+### Orden de resolución premio (export / import)
+
+1. HTTP `http://{host}/mod_fotos/fotos_clientes/pago_{inropremioid}.jpg` (y demás ext. según `cextfoto`).
+2. Índice del listado HTTP del directorio mod_fotos (`pago_{id}.*`).
+3. Fallback local `/scan/tesoreria/fotos_clientes/pago_{inropremioid}.*`.
+
+Consultar `premios_uif` ordenado por `inropremioid ASC`; tomar el **primer** premio con archivo existente.
+
+### Orden de resolución DNI (export / import)
+
+1. `/scan/tesoreria/dni_uif/{numerodocumento}.pdf` → copiar como `documento_{DNI}.pdf`
+2. Adjuntos scan: `clientes_KSA`, `clientes_RSA`, `clientes` bajo `/scan/uif/archivos/` con prefijo `{inroclienteid}-` (también prefijo zero-padded 6 dígitos)
+3. `AnitaUifArchivosSync::listarBasenamesClientePorPrefijo` + `rutasOrigenCandidatas` sobre mount `/scan/uif/archivos`
+
+## Biyemas (ERP actual)
+
+| Tipo | Ruta |
+|------|------|
+| Foto DNI legacy ERP | `/scan/tesoreria/fotos_clientes` o `dni_uif` |
+| Foto premio | `/scan/tesoreria/fotos_clientes/pago_{inropremioid}.{ext}` |
+| Adjuntos UIF | `ANITA_UIF_ARCHIVOS_MOUNT` → `/usr2/www/htdocs/uif/archivos` |
+
+## Rebisco
+
+- Igual que Kandiko en lógica; scan DNI: **`/scan/uif/archivos/clientes_RSA/`** (confirmar en servidor).
+
+---
+
+## Export planillas Activos Wilde — flujo completo
+
+### Caso de uso
+
+Cruzar DNIs de planillas Excel **Activos Crystal/Platino Wilde** con UIF Kandiko, copiar documentación a una carpeta local por DNI:
+
+- PDF/documento **DNI**
+- Adjuntos UIF del cliente (si existen)
+- Foto del **primer premio** con archivo (algunos clientes nunca tuvieron premio)
+
+### Implementación en anitaERP
+
+| Capa | Archivo |
+|------|---------|
+| Comando | `app/Console/Commands/ExportarFotosActivosWildeUif.php` |
+| Servicio export | `app/Services/Uif/ExportarFotosActivosWildeService.php` |
+| Lector Excel | `app/Services/Uif/ActivosWildePlanillaReader.php` |
+
+### Comando
+
+```bash
+php artisan uif:exportar-fotos-activos-wilde
+```
+
+Opciones:
+
+| Opción | Default | Uso |
+|--------|---------|-----|
+| `--excel=*` | Crystal + Platino en `~/tmp` | Rutas xlsx |
+| `--salida` | `/home/sergio/anitaERP_fotos_activos_wilde` | Carpeta raíz |
+| `--servidor-kandiko` | `192.168.20.100:8080` | Bridge Wilde |
+| `--servidor-biyemas` | `10.20.30.200:8080` | Fallback UIF + climae |
+| `--dni-pdf-mount` | `/scan/tesoreria/dni_uif` | Documento DNI |
+| `--adjuntos-mount` | `/scan/uif/archivos` | Adjuntos scan |
+| `--premio-http` | `http://192.168.20.100:8080/mod_fotos/fotos_clientes` | Foto premio Anita |
+| `--premio-mount-fallback` | `/scan/tesoreria/fotos_clientes` | Fallback premio |
+| `--dry-run` | — | Solo consulta; no copia |
+
+### Planillas Excel
+
+- Columna **Documento** (col. C, índice 2): formato `DNI - 12345678`
+- Columna **Titular** (col. B): nombre para el reporte
+- Planillas default:
+  - `/home/sergio/tmp/Copia de Activos Crystal Wilde.xlsx`
+  - `/home/sergio/tmp/Copia de Activos Platino Wilde.xlsx`
+- Requiere **Python 3 + openpyxl** en el host que ejecuta artisan
+
+### Algoritmo por DNI (`ExportarFotosActivosWildeService`)
+
+1. **Buscar cliente UIF**
+   - `clientes_uif` en Kandiko (`inrodocumento` = DNI, también sin ceros a la izquierda)
+   - Si no: `clientes_uif` en Biyemas → `fuente=biyemas_uif`
+   - Si no: `ventas.climae` en Biyemas (`clim_cuit` = DNI) → `fuente=biyemas_maestro` (sin archivos UIF automáticos)
+   - Si no: `fuente=no_encontrado`
+
+2. **Resolver archivos DNI** (`resolverArchivosDni`)
+   - `dni_uif/{DNI}.pdf`
+   - Glob adjuntos en `clientes_KSA`, `clientes_RSA`, `clientes`
+   - `AnitaUifArchivosSync` sobre mount adjuntos
+
+3. **Resolver primer premio con foto** (`buscarPrimerPremioConFoto`)
+   - Query `premios_uif WHERE inroclienteid = … ORDER BY inropremioid`
+   - Por cada premio: `resolverArchivoPremioAnita` (mod_fotos HTTP → índice HTTP → tesorería scan)
+
+4. **Copiar** (si no `--dry-run`)
+   - `{salida}/{DNI}/documento_{basename}`
+   - `{salida}/{DNI}/adjunto_{basename}`
+   - `{salida}/{DNI}/premio_{inropremioid}_{basename}`
+   - `{salida}/{DNI}/metadata.json` (fila completa)
+   - `{salida}/resumen.json` (estadísticas + detalle)
+
+### Clasificación en resumen
+
+| Estado | Condición |
+|--------|-----------|
+| `ok` | Tiene documento/adj. DNI **y** foto premio |
+| `parcial` | Tiene al menos uno de: documento/adj., premio, o `inroclienteid` en UIF |
+| `sin_datos` | No encontrado y sin archivos |
+
+### Resultado referencia (Activos Wilde, 126 DNIs únicos)
+
+Ejecución en anitanextgen tras refactor con rutas Anita correctas:
+
+| Métrica | Valor |
+|---------|-------|
+| DNIs únicos | 126 |
+| Completos (doc + premio) | 19 |
+| Parciales | 12 |
+| Sin datos | 95 |
+| Con documento/adj. | 26 |
+| Con premio | 24 |
+
+Muchos DNIs de la planilla **no están en UIF Kandiko** (titulares activos de ventas sin alta UIF). Ejemplo con DNI PDF pero sin premio: DNI `20879200` → `documento_20879200.pdf` desde `dni_uif`, sin `pago_*`.
+
+### Verificación rápida post-export
+
+```bash
+python3 -c "
+import json
+r=json.load(open('/home/sergio/anitaERP_fotos_activos_wilde/resumen.json'))
+print('ok',r['ok'],'parcial',r['parcial'],'sin',r['sin_datos'])
+print('con doc', sum(1 for d in r['detalle'] if d['dni_archivos']))
+print('con premio', sum(1 for d in r['detalle'] if d.get('premio_archivo')))
+"
+
+# Ejemplo DNI PDF en scan
+test -f /scan/tesoreria/dni_uif/20879200.pdf && echo OK dni_uif
+
+# Ejemplo premio tesorería (ajustar inropremioid)
+ls /scan/tesoreria/fotos_clientes/pago_25642.*
+```
+
+---
+
+## Producción módulo UIF ERP
+
+Importar clientes desde **Kandiko y Rebisco** (no solo Biyemas). Parametrizar por empresa:
+
+- bridge Informix
+- subcarpeta scan adjuntos (`clientes_KSA` / `clientes_RSA` / `clientes`)
+- mount `dni_uif`
+- URL `mod_fotos` + fallback `tesoreria/fotos_clientes`
+
+No hardcodear rutas Biyemas para empresas 2 y 3.
+
+Reutilizar la misma orden de resolución que `ExportarFotosActivosWildeService` al sincronizar fotos en producción.
+
+## Errores frecuentes
+
+| Síntoma | Causa | Acción |
+|---------|-------|--------|
+| API Anita vacía en Kandiko | Permisos `.sql` en `base_admin` | Arreglar permisos en `/usr2/biyemas/base_admin/` |
+| 0 premios vía HTTP | Premios recientes solo en tesorería scan | Usar `--premio-mount-fallback` |
+| Solo adjuntos KSA, sin PDF DNI | No se buscaba `dni_uif` | Priorizar `dni_uif/{DNI}.pdf` |
+| Confundir `pago_*` con DNI | Rutas tesorería mezcladas | DNI = `dni_uif/`; premio = `fotos_clientes/pago_*` |
+| SSH a `.100` falla | Sin clave | Usar montaje `/scan` local en `.210` |
+
+## Comprobación rápida código
+
+```bash
+rg "dni_uif|premio_mount_fallback|mod_fotos" app/Services/Uif/ExportarFotosActivosWildeService.php
+php artisan uif:exportar-fotos-activos-wilde --dry-run --excel="/path/un.xlsx"
+```

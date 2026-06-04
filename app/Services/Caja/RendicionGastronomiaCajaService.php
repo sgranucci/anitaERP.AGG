@@ -11,6 +11,7 @@ use App\Support\Caja\RendicionGastronomiaCajaListadoFiltros;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Ventas\GastronomiaCuentacajaEfectivo;
 use App\Support\Ventas\GastronomiaJornadaComprobantePermiso;
+use App\Support\Ventas\GastronomiaTurnoMediosContadoCierreSupport;
 use App\Support\Ventas\GastronomiaJornadaNumeracionComprobanteSupport;
 use App\Support\Ventas\GastronomiaTurnoObservacionHabilitacionSupport;
 use App\Support\Ventas\GastronomiaTurnoOperativoTotalesSupport;
@@ -582,6 +583,14 @@ class RendicionGastronomiaCajaService
             Carbon::parse($turno->cierre_en),
         );
 
+        $mediosContado = GastronomiaTurnoMediosContadoCierreSupport::desdeAlmacenado(
+            $turno->medios_contado_cierre_json,
+        );
+        $totales = GastronomiaTurnoMediosContadoCierreSupport::enriquecerTotalesConContado(
+            $totales,
+            $mediosContado,
+        );
+
         $movimientos = $this->movimientosDesdeTotales($totales);
 
         return [
@@ -611,7 +620,9 @@ class RendicionGastronomiaCajaService
             'sobrantefaltante' => round((float) ($turno->sobrante_faltante ?? 0), 2),
             'observacion_turno' => (string) ($turno->observacion_cierre ?? ''),
             'totales_turno' => $totales,
+            'medios_contado_cierre' => $mediosContado,
             'movimientos' => $movimientos,
+            'movimientos_desde_contado_cierre' => $mediosContado !== null,
             'turno_sin_actividad' => $movimientos === []
                 && round((float) ($totales['total_cobrado'] ?? 0), 2) <= self::TOLERANCIA
                 && round((float) ($totales['total_ventas'] ?? 0), 2) <= self::TOLERANCIA,
@@ -1181,7 +1192,7 @@ class RendicionGastronomiaCajaService
      * Medios de cobro del turno + fila virtual de notas de crédito (como cierre de turno).
      *
      * @param  array<string, mixed>  $totales  Resultado de GastronomiaTurnoOperativoTotalesSupport::calcular()
-     * @return list<array{cuentacaja_id:int, codigo:string, nombre:string, monto:float, cotizacion:float, es_nota_credito?:bool}>
+     * @return list<array{cuentacaja_id:int, codigo:string, nombre:string, monto:float, esperado?:float, cotizacion:float, es_nota_credito?:bool, desde_contado_cierre?:bool}>
      */
     private function movimientosDesdeTotales(array $totales): array
     {
@@ -1191,12 +1202,19 @@ class RendicionGastronomiaCajaService
             if ($cuentaId <= 0) {
                 continue;
             }
+            $esperado = round((float) ($p['esperado'] ?? $p['total'] ?? 0), 2);
+            $desdeContadoCierre = array_key_exists('contado', $p);
+            $monto = $desdeContadoCierre
+                ? round((float) $p['contado'], 2)
+                : $esperado;
             $movimientos[] = [
                 'cuentacaja_id' => $cuentaId,
                 'codigo' => (string) ($p['codigo'] ?? ''),
                 'nombre' => (string) ($p['nombre'] ?? $p['codigo'] ?? ''),
-                'monto' => round((float) ($p['total'] ?? 0), 2),
+                'monto' => $monto,
+                'esperado' => $esperado,
                 'cotizacion' => 1.0,
+                'desde_contado_cierre' => $desdeContadoCierre,
             ];
         }
 

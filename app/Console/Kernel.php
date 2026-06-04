@@ -48,7 +48,7 @@ class Kernel extends ConsoleKernel
         $schedule->command('prestamo:recordatorios')->dailyAt('07:30');
 
         $schedule->command('gastronomia:auditoria-anita-diaria')
-            ->dailyAt((string) config('gastronomia.auditoria_anita_diaria.hora', '01:00'))
+            ->dailyAt((string) config('gastronomia.auditoria_anita_diaria.hora', '06:30'))
             ->runInBackground()
             ->withoutOverlapping(180)
             ->when(fn () => (bool) config('gastronomia.auditoria_anita_diaria.habilitada', true));

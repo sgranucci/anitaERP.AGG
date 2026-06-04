@@ -5,11 +5,13 @@ namespace App\Services\Ventas\Gastronomia;
 use App\Models\Ventas\JornadaGastronomia;
 use Carbon\Carbon;
 use App\Models\Ventas\VentaGastronomiaEmision;
+use App\Support\Ventas\Gastronomia\CierreJornadaCuadroDetalleSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaFacturadoAnitaSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoAsientosPreviewSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoClasificacionSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoConfigSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoMedioSupport;
+use App\Support\Ventas\Gastronomia\CierreJornadaProcesoPuntoventaSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoRedistribucionSupport;
 use App\Support\Ventas\GastronomiaCuentacajaTotem;
 use App\Support\Ventas\Gastronomia\VentaGastronomiaEmisionWaitrySupport;
@@ -71,6 +73,28 @@ final class GastronomiaCierreJornadaProcesoService
     }
 
     /**
+     * Preview de asientos de la factura única del proceso (consolidado + comandas incluidas).
+     *
+     * @return array<string, mixed>
+     */
+    public function previewFacturaProcesoPorEmpresaYFecha(
+        int $empresaId,
+        string $fechaJornada,
+        float $porcentaje,
+        int $paginaComandas = 1,
+        int $porPaginaComandas = 50,
+    ): array {
+        $jornada = $this->resolverJornadaPorEmpresaFecha($empresaId, $fechaJornada);
+
+        return $this->previewFacturaProceso(
+            (int) $jornada->id,
+            $porcentaje,
+            $paginaComandas,
+            $porPaginaComandas,
+        );
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function movimientosGrupoPorEmpresaYFecha(
@@ -86,6 +110,58 @@ final class GastronomiaCierreJornadaProcesoService
     }
 
     /**
+     * Detalle de una celda del cuadro (fila × medio) para conciliar contra Waitry.
+     *
+     * @return array<string, mixed>
+     */
+    public function detalleCuadroCeldaPorEmpresaYFecha(
+        int $empresaId,
+        string $fechaJornada,
+        string $fila,
+        string $medio,
+        int $pagina = 1,
+        int $porPagina = 100,
+    ): array {
+        $jornada = $this->resolverJornadaPorEmpresaFecha($empresaId, $fechaJornada);
+
+        return $this->detalleCuadroCelda((int) $jornada->id, $fila, $medio, $pagina, $porPagina);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function detalleCuadroCelda(
+        int $jornadaId,
+        string $fila,
+        string $medio,
+        int $pagina = 1,
+        int $porPagina = 100,
+    ): array {
+        $jornada = $this->resolverJornada($jornadaId);
+        $empresaId = (int) $jornada->empresa_id;
+        $fecha = $jornada->fecha_jornada?->format('Y-m-d') ?? '';
+
+        $cargado = $this->cierreTotemJornadaService->movimientosParaJornada($jornada);
+        $lineas = $this->enriquecerLineasConCobranzaAnita($cargado['lineas'], $empresaId);
+        $totalesAnita = CierreJornadaFacturadoAnitaSupport::totalesJornadaEmpresa($empresaId, $fecha);
+        $clasificacion = CierreJornadaProcesoClasificacionSupport::clasificar($lineas, $empresaId, $totalesAnita);
+
+        $detalle = CierreJornadaCuadroDetalleSupport::consultar(
+            $empresaId,
+            $fecha,
+            $fila,
+            $medio,
+            $clasificacion['movimientos'],
+            $pagina,
+            $porPagina,
+        );
+
+        $detalle['meta'] = $cargado['meta'];
+
+        return $detalle;
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function analizarJornada(int $jornadaId): array
@@ -95,13 +171,13 @@ final class GastronomiaCierreJornadaProcesoService
 
         $cargado = $this->cierreTotemJornadaService->movimientosParaJornada($jornada);
         $lineas = $this->enriquecerLineasConCobranzaAnita($cargado['lineas'], $empresaId);
-        $anitaJornada = CierreJornadaFacturadoAnitaSupport::totalesJornadaEmpresa(
+        $totalesAnita = CierreJornadaFacturadoAnitaSupport::totalesJornadaEmpresa(
             $empresaId,
             $jornada->fecha_jornada?->format('Y-m-d') ?? '',
         );
 
-        $clasificacion = CierreJornadaProcesoClasificacionSupport::clasificar($lineas, $empresaId, $anitaJornada);
-        $config = CierreJornadaProcesoConfigSupport::paraEmpresa($empresaId);
+        $clasificacion = CierreJornadaProcesoClasificacionSupport::clasificar($lineas, $empresaId, $totalesAnita);
+        $config = CierreJornadaProcesoConfigSupport::paraEmpresaConDetalle($empresaId);
 
         return [
             'ok' => true,
@@ -116,7 +192,7 @@ final class GastronomiaCierreJornadaProcesoService
             'conteos' => $clasificacion['conteos'],
             'grupos_resumen' => $this->resumenGrupos($clasificacion['grupos'], $jornada, $empresaId),
             'config_contable' => $config,
-            'config_faltante' => CierreJornadaProcesoConfigSupport::faltantes($config),
+            'config_faltante' => CierreJornadaProcesoConfigSupport::faltantes($config, $empresaId),
             'notas' => $this->notasProceso(),
         ];
     }
@@ -129,13 +205,85 @@ final class GastronomiaCierreJornadaProcesoService
         $jornada = $this->resolverJornada($jornadaId);
         $empresaId = (int) $jornada->empresa_id;
 
+        $clasificacion = $this->clasificacionConRedistribucion($jornada, $porcentaje);
+
+        return [
+            'ok' => true,
+            'porcentaje' => $clasificacion['porcentaje'],
+            'objetivo_importe' => $clasificacion['objetivo_importe'],
+            'redistribucion' => $clasificacion['redistribucion'],
+            'grilla' => $clasificacion['grilla'],
+            'cuadro_filas' => $clasificacion['cuadro_filas'],
+            'total_facturacion' => $clasificacion['total_facturacion'],
+            'total_pendiente_facturar' => $clasificacion['total_pendiente_facturar'],
+            'total_impago_waitry' => $clasificacion['total_impago_waitry'],
+            'total_cuadro' => $clasificacion['total_cuadro'],
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function previewFacturaProceso(
+        int $jornadaId,
+        float $porcentaje,
+        int $paginaComandas = 1,
+        int $porPaginaComandas = 50,
+    ): array {
+        $jornada = $this->resolverJornada($jornadaId);
+        $empresaId = (int) $jornada->empresa_id;
+        $porPaginaComandas = max(10, min(200, $porPaginaComandas));
+        $paginaComandas = max(1, $paginaComandas);
+
+        $clasificacion = $this->clasificacionConRedistribucion($jornada, $porcentaje);
+        $config = CierreJornadaProcesoConfigSupport::paraEmpresa($empresaId);
+        $preview = CierreJornadaProcesoAsientosPreviewSupport::generarPreviewFacturaProceso(
+            $clasificacion['movimientos'],
+            $empresaId,
+            $config,
+        );
+
+        $comandas = CierreJornadaProcesoAsientosPreviewSupport::movimientosFacturaProceso(
+            $clasificacion['movimientos'],
+        );
+        $totalComandas = count($comandas);
+        $offset = ($paginaComandas - 1) * $porPaginaComandas;
+        $slice = array_slice($comandas, $offset, $porPaginaComandas);
+
+        return [
+            'ok' => true,
+            'porcentaje' => $clasificacion['porcentaje'],
+            'objetivo_importe' => $clasificacion['objetivo_importe'],
+            'factura_proceso' => $preview,
+            'puntoventa' => CierreJornadaProcesoPuntoventaSupport::resolverParaEmpresa($empresaId),
+            'comandas' => [
+                'pagina' => $paginaComandas,
+                'por_pagina' => $porPaginaComandas,
+                'total' => $totalComandas,
+                'total_paginas' => (int) max(1, ceil($totalComandas / $porPaginaComandas)),
+                'total_importe' => round(array_sum(array_map(
+                    fn (array $m) => (float) ($m['total'] ?? 0),
+                    $comandas,
+                )), 2),
+                'items' => $this->compactarMovimientosParaCliente($slice),
+            ],
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function clasificacionConRedistribucion(JornadaGastronomia $jornada, float $porcentaje): array
+    {
+        $empresaId = (int) $jornada->empresa_id;
+
         $cargado = $this->cierreTotemJornadaService->movimientosParaJornada($jornada);
         $lineas = $this->enriquecerLineasConCobranzaAnita($cargado['lineas'], $empresaId);
-        $anitaJornada = CierreJornadaFacturadoAnitaSupport::totalesJornadaEmpresa(
+        $totalesAnita = CierreJornadaFacturadoAnitaSupport::totalesJornadaEmpresa(
             $empresaId,
             $jornada->fecha_jornada?->format('Y-m-d') ?? '',
         );
-        $clasificacionBase = CierreJornadaProcesoClasificacionSupport::clasificar($lineas, $empresaId, $anitaJornada);
+        $clasificacionBase = CierreJornadaProcesoClasificacionSupport::clasificar($lineas, $empresaId, $totalesAnita);
 
         $redistribucion = CierreJornadaProcesoRedistribucionSupport::aplicar(
             $clasificacionBase['movimientos'],
@@ -143,22 +291,20 @@ final class GastronomiaCierreJornadaProcesoService
             $porcentaje,
         );
 
-        $empresaId = (int) $jornada->empresa_id;
         $clasificacion = CierreJornadaProcesoClasificacionSupport::clasificar(
             $redistribucion['movimientos'],
             $empresaId,
-            $anitaJornada,
-        );
-
-        $config = CierreJornadaProcesoConfigSupport::paraEmpresa($empresaId);
-        $previewAsientos = CierreJornadaProcesoAsientosPreviewSupport::generar(
-            $clasificacion['movimientos'],
-            $empresaId,
-            $config,
+            $totalesAnita,
         );
 
         return [
-            'ok' => true,
+            'movimientos' => $clasificacion['movimientos'],
+            'grilla' => $clasificacion['grilla'],
+            'cuadro_filas' => $clasificacion['cuadro_filas'],
+            'total_facturacion' => $clasificacion['total_facturacion'],
+            'total_pendiente_facturar' => $clasificacion['total_pendiente_facturar'],
+            'total_impago_waitry' => $clasificacion['total_impago_waitry'],
+            'total_cuadro' => $clasificacion['total_cuadro'],
             'porcentaje' => $redistribucion['porcentaje'],
             'objetivo_importe' => $redistribucion['objetivo_importe'],
             'redistribucion' => [
@@ -166,14 +312,6 @@ final class GastronomiaCierreJornadaProcesoService
                 'asignado_facturado_efectivo_a_qr' => $redistribucion['asignado_facturado_efectivo_a_qr'],
                 'ajustes' => $redistribucion['ajustes'],
             ],
-            'grilla' => $clasificacion['grilla'],
-            'cuadro_filas' => $clasificacion['cuadro_filas'],
-            'total_facturacion' => $clasificacion['total_facturacion'],
-            'total_pendiente_facturar' => $clasificacion['total_pendiente_facturar'],
-            'total_impago_waitry' => $clasificacion['total_impago_waitry'],
-            'total_cuadro' => $clasificacion['total_cuadro'],
-            'movimientos' => $this->compactarMovimientosParaCliente($clasificacion['movimientos']),
-            'preview_asientos' => $previewAsientos,
         ];
     }
 
@@ -195,11 +333,11 @@ final class GastronomiaCierreJornadaProcesoService
 
         $cargado = $this->cierreTotemJornadaService->movimientosParaJornada($jornada);
         $lineas = $this->enriquecerLineasConCobranzaAnita($cargado['lineas'], $empresaId);
-        $anitaJornada = CierreJornadaFacturadoAnitaSupport::totalesJornadaEmpresa(
+        $totalesAnita = CierreJornadaFacturadoAnitaSupport::totalesJornadaEmpresa(
             $empresaId,
             $jornada->fecha_jornada?->format('Y-m-d') ?? '',
         );
-        $clasificacion = CierreJornadaProcesoClasificacionSupport::clasificar($lineas, $empresaId, $anitaJornada);
+        $clasificacion = CierreJornadaProcesoClasificacionSupport::clasificar($lineas, $empresaId, $totalesAnita);
         $items = $clasificacion['grupos'][$grupo] ?? [];
         $total = count($items);
         $offset = ($pagina - 1) * $porPagina;
@@ -538,6 +676,7 @@ final class GastronomiaCierreJornadaProcesoService
                 'waitry_order_id' => $m['waitry_order_id'] ?? null,
                 'display_id' => $m['display_id'] ?? '',
                 'placed_at_fmt' => $m['placed_at_fmt'] ?? '',
+                'placed_at' => $m['placed_at'] ?? null,
                 'total' => round((float) ($m['total'] ?? 0), 2),
                 'grupo' => $m['grupo'] ?? '',
                 'facturada_erp' => ! empty($m['facturada_erp']),
@@ -562,11 +701,16 @@ final class GastronomiaCierreJornadaProcesoService
     {
         return [
             'Los movimientos incluyen órdenes Waitry desde el último ticket del cierre anterior hasta el cierre de esta jornada.',
-            'El cuadro parte del total facturado en Anita (fechajornada), suma lo cobrado en Waitry sin facturar (candidatos a facturación) e incluye impagos Waitry solo como referencia.',
+            'El cuadro parte del total facturado en Anita (fechajornada), con fila aparte para facturas cobradas con TOTEM (medio real Waitry), más lo cobrado en Waitry sin facturar (candidatos a facturación) e impagos Waitry solo como referencia.',
+            'Los medios de pago Waitry sin facturar se resuelven desde getOrdersPOS cuando getordersdetails no trae payment.type.',
             'El efectivo registrado en Waitry (cash) no se facturará; queda en fila aparte.',
             'Las facturas cobradas con TOTEM en Anita generan asiento puente (Debe medio real / Haber TOTEM); el QR de esas facturas entra en el cupo de redistribución a efectivo.',
             'El porcentaje se aplica sobre el total facturado Anita de la jornada y define cuánto mover de QR a efectivo (y viceversa en facturas ya emitidas).',
-            'Revise el preview de asientos antes de confirmar la facturación masiva (próximo paso).',
+            'Haga clic en un importe del cuadro para ver comandas con fecha/hora y conciliar contra Waitry.',
+            'Consola: php artisan gastronomia:diagnostico-cuadro-cierre {empresa} {fecha} {fila} {medio} [--csv=ruta]',
+            'Revise el preview de asientos antes de confirmar la facturación (próximo paso; una factura por permiso).',
+            'El punto de venta del proceso se resuelve por empresa (BD o GASTRONOMIA_CIERRE_JORNADA_PUNTOVENTA_CODIGO_POR_EMPRESA) y se validará al emitir.',
+            'Las órdenes Waitry canceladas no entran en totales ni en candidatos a facturar.',
         ];
     }
 }

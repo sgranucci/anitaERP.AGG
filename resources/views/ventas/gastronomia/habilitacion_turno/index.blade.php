@@ -108,6 +108,7 @@
 <div class="row" id="habilitacion-turno-app"
      data-api-estado="{{ url('ventas/gastronomia/habilitacion-turno/api/estado') }}"
      data-api-habilitar="{{ url('ventas/gastronomia/habilitacion-turno/api/habilitar') }}"
+     data-api-actualizar-monto-habilitacion="{{ route('gastronomia_habilitacion_turno_api_actualizar_monto_habilitacion') }}"
      data-api-cierre-parcial="{{ url('ventas/gastronomia/habilitacion-turno/api/cierre-parcial') }}"
      data-api-cerrar="{{ url('ventas/gastronomia/habilitacion-turno/api/cerrar') }}"
      data-api-anular-cierre="{{ route('gastronomia_habilitacion_turno_api_anular_cierre') }}"
@@ -120,6 +121,7 @@
      data-puede-cierre-parcial="{{ ($puede_cierre_parcial ?? false) ? '1' : '0' }}"
      data-puede-cerrar="{{ ($puede_cerrar ?? false) ? '1' : '0' }}"
      data-puede-anular-cierre="{{ ($puede_anular_cierre ?? false) ? '1' : '0' }}"
+     data-puede-modificar-monto-habilitacion="{{ ($puede_modificar_monto_habilitacion ?? false) ? '1' : '0' }}"
      data-puede-ver-factura="{{ ($puede_ver_factura ?? false) ? '1' : '0' }}"
      data-accion="{{ $accion ?? '' }}">
     <div class="col-lg-12">

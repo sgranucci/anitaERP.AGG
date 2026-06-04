@@ -187,6 +187,19 @@
 				</select>
 			</div>
 			<div class="form-group row">
+				<label for="tipoempresa_cliente_id" class="col-lg-4 col-form-label">Tipo de empresa</label>
+				<select name="tipoempresa_cliente_id" id="tipoempresa_cliente_id" data-placeholder="Tipo de empresa" class="col-lg-5 form-control" data-fouc>
+					<option value="">-- Seleccionar --</option>
+					@foreach($tipoempresa_cliente_query as $key => $value)
+						@if( (int) $value->id == (int) old('tipoempresa_cliente_id', $data->tipoempresa_cliente_id ?? ''))
+							<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>
+						@else
+							<option value="{{ $value->id }}">{{ $value->nombre }}</option>
+						@endif
+					@endforeach
+				</select>
+			</div>
+			<div class="form-group row">
 				<label for="vendedor" class="col-lg-4 col-form-label">Vendedor</label>
 				<select name="vendedor_id" id="vendedor_id" data-placeholder="Vendedor" class="col-lg-3 form-control" data-fouc>
 					<option value="">-- Seleccionar Vendedor --</option>

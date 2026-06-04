@@ -34,6 +34,7 @@ use App\Repositories\Ventas\Cliente_Articulo_SuspendidoRepositoryInterface;
 use App\Repositories\Ventas\Cliente_ArchivoRepositoryInterface;
 use App\Repositories\Ventas\Cliente_CuentacorrienteRepositoryInterface;
 use App\Repositories\Ventas\TiposuspensionclienteRepositoryInterface;
+use App\Repositories\Ventas\TipoempresaClienteRepositoryInterface;
 use App\Repositories\Ventas\DescuentoventaRepositoryInterface;
 use App\Repositories\Configuracion\TipodocumentoRepositoryInterface;
 use App\Repositories\Configuracion\CondicionIIBBRepositoryInterface;
@@ -66,6 +67,7 @@ class ClienteController extends Controller
 	private $cliente_archivoRepository;
     private $descuentoventaRepository;
     private $tiposuspensionclienteRepository;
+    private $tipoempresaClienteRepository;
     private $tipodocumentoRepository;
 	private $iibbService;
     private $facturacionService;
@@ -91,6 +93,7 @@ class ClienteController extends Controller
         CobranzaService $cobranzaService,
 		ClienteQueryInterface $clientequery,
         TiposuspensionclienteRepositoryInterface $tiposuspensionclienterepository,
+        TipoempresaClienteRepositoryInterface $tipoempresaClienterepository,
         Cliente_EntregaQueryInterface $cliente_entregaquery,
         OrdenventaRepositoryInterface $ordenventarepository,
         CondicionIIBBRepositoryInterface $condicionIIBBrepository,
@@ -105,6 +108,7 @@ class ClienteController extends Controller
         $this->cliente_archivoRepository = $cliente_archivoRepository;
         $this->descuentoventaRepository = $descuentoventarepository;
         $this->tiposuspensionclienteRepository = $tiposuspensionclienterepository;
+        $this->tipoempresaClienteRepository = $tipoempresaClienterepository;
         $this->iibbService = $iibbService;
         $this->facturacionService = $facturacionService;
         $this->cobranzaService = $cobranzaService;
@@ -221,6 +225,7 @@ class ClienteController extends Controller
             $distribuidor_query,
             $emitecertificado_enum, $emitenotadecredito_enum, $agregabonificacion_enum, $descuentoventa_query,
             $tipodocumento_query, $condicioniibb_query, $tipopercepcion_enum, $certificadonoretencion_enum,
+            $tipoempresa_cliente_query,
             'crear'); 
 
         if (!isset($tipoalta))
@@ -233,7 +238,7 @@ class ClienteController extends Controller
             'modofacturacion_enum', 'cajaespecial_enum', 'abasto_query', 'coeficiente_query', 'distribuidor_query',
             'emitecertificado_enum', 'emitenotadecredito_enum', 'agregabonificacion_enum', 'descuentoventa_query',
             'tipopercepcion_enum', 'certificadonoretencion_enum',
-            'tipodocumento_query', 'condicioniibb_query'));
+            'tipodocumento_query', 'condicioniibb_query', 'tipoempresa_cliente_query'));
     }
 
     public function crearRemoto(Request $request, $id)
@@ -261,6 +266,7 @@ class ClienteController extends Controller
             $distribuidor_query,
             $emitecertificado_enum, $emitenotadecredito_enum, $agregabonificacion_enum, $descuentoventa_query,
             $tipodocumento_query, $condicioniibb_query, $tipopercepcion_enum, $certificadonoretencion_enum,
+            $tipoempresa_cliente_query,
             'crear'); 
 
         if (!isset($tipoalta))
@@ -273,7 +279,7 @@ class ClienteController extends Controller
             'modofacturacion_enum', 'cajaespecial_enum', 'urlOrigen', 'idRemoto', 'abasto_query', 'coeficiente_query', 
             'emitecertificado_enum', 'emitenotadecredito_enum', 'agregabonificacion_enum',
             'distribuidor_query', 'descuentoventa_query', 'tipodocumento_query', 'tipopercepcion_enum', 'certificadonoretencion_enum',
-            'condicioniibb_query'));
+            'condicioniibb_query', 'tipoempresa_cliente_query'));
     }
 
     /**
@@ -393,6 +399,7 @@ class ClienteController extends Controller
             $distribuidor_query,
             $emitecertificado_enum, $emitenotadecredito_enum, $agregabonificacion_enum, $descuentoventa_query,
             $tipodocumento_query, $condicioniibb_query, $tipopercepcion_enum, $certificadonoretencion_enum,
+            $tipoempresa_cliente_query,
             'editar'); 
 
         // Setea url de origen si no es llamada desde clientes
@@ -419,6 +426,7 @@ class ClienteController extends Controller
             'tiposuspensioncliente_query', 'abasto_query', 'coeficiente_query',
             'emitecertificado_enum', 'emitenotadecredito_enum', 'agregabonificacion_enum', 'distribuidor_query', 'descuentoventa_query',
             'tipodocumento_query', 'tipopercepcion_enum', 'certificadonoretencion_enum', 'condicioniibb_query',
+            'tipoempresa_cliente_query',
             'suitecrmHabilitado', 'suitecrmPuedeEditar', 'suitecrmPuedeSincronizarCuenta'));
     }
 
@@ -508,6 +516,7 @@ class ClienteController extends Controller
             &$distribuidor_query, 
             &$emitecertificado_enum, &$emitenotadecredito_enum, &$agregabonificacion_enum, &$descuentoventa_query,
             &$tipodocumento_query, &$condicioniibb_query, &$tipopercepcion_enum, &$certificadonoretencion_enum,
+            &$tipoempresa_cliente_query,
             $funcion)
 	{
         $pais_query = Pais::orderBy('nombre')->get();
@@ -526,6 +535,7 @@ class ClienteController extends Controller
         $distribuidor_query = Distribuidor::orderBy('nombre')->get();
         $descuentoventa_query = Descuentoventa::orderBy('nombre')->get();
         $tipodocumento_query = $this->tipodocumentoRepository->all();
+        $tipoempresa_cliente_query = $this->tipoempresaClienteRepository->all();
 		$retieneiva_enum = Cliente::$enumRetieneiva;
 		$condicioniibb_enum = Cliente::$enumCondicioniibb;
 		$vaweb_enum = Cliente::$enumVaweb;

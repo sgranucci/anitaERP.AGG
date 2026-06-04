@@ -9,6 +9,7 @@ use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Services\Ventas\Gastronomia\GastronomiaCuentaService;
 use App\Support\Ventas\GastronomiaSkuCatalogoSupport;
 use App\Support\Ventas\Waitry\WaitryCierreJornadaVentanaSupport;
+use App\Support\Ventas\Waitry\WaitryDisplayIdSupport;
 use App\Support\Ventas\Waitry\WaitryFacturacionDuplicadosSupport;
 use App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport;
 use Carbon\Carbon;
@@ -35,6 +36,65 @@ final class WaitryOrdenesExternasService
     private function cuentaService(): GastronomiaCuentaService
     {
         return app(GastronomiaCuentaService::class);
+    }
+
+    /**
+     * Código alfanumérico del papelito Waitry para un orderId (getOrdersPOS).
+     */
+    public function resolverDisplayIdPorOrderId(int $empresaId, int $orderId): string
+    {
+        if ($orderId <= 0) {
+            return '';
+        }
+
+        $orden = $this->obtenerOrdenPorId($empresaId, $orderId, false);
+
+        return $orden !== null ? WaitryDisplayIdSupport::extraerDesdeOrden($orden) : '';
+    }
+
+    /**
+     * Completa waitry_display_id en cuenta si falta (consulta Waitry por orderId).
+     */
+    public function completarDisplayIdEnCuenta(CuentaGastronomia $cuenta): void
+    {
+        if (trim((string) ($cuenta->waitry_display_id ?? '')) !== '') {
+            return;
+        }
+
+        $orderId = (int) ($cuenta->waitry_order_id ?? 0);
+        if ($orderId <= 0 || ! config('waitry.habilitado', false)) {
+            return;
+        }
+
+        $displayId = $this->resolverDisplayIdPorOrderId((int) $cuenta->empresa_id, $orderId);
+        if ($displayId === '') {
+            return;
+        }
+
+        $cuenta->waitry_display_id = mb_substr($displayId, 0, 64);
+        $cuenta->save();
+    }
+
+    /**
+     * @param  array<string, mixed>  $orden
+     */
+    private function resolverDisplayIdParaImportacion(
+        int $empresaId,
+        array $orden,
+        int $waitryOrderId,
+        string $identificadorPapelito,
+    ): string {
+        $displayId = $this->extraerDisplayIdOrden($orden);
+        if ($displayId !== '') {
+            return $displayId;
+        }
+
+        $identificadorPapelito = trim($identificadorPapelito);
+        if ($identificadorPapelito !== '' && ! ctype_digit($identificadorPapelito)) {
+            return $identificadorPapelito;
+        }
+
+        return $this->resolverDisplayIdPorOrderId($empresaId, $waitryOrderId);
     }
 
     /**
@@ -228,6 +288,51 @@ final class WaitryOrdenesExternasService
             }
             $id = (int) ($orden['id'] ?? $orden['orderId'] ?? 0);
             if ($id > 0 && isset($buscados[$id])) {
+                $map[$id] = $orden;
+            }
+        }
+
+        return $map;
+    }
+
+    /**
+     * Índice orderId → orden getOrdersPOS en la ventana operativa de jornada (para enriquecer payment).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function mapOrdenesPosEnVentanaJornada(
+        int $empresaId,
+        string $fechaJornada,
+        mixed $aperturaEn = null,
+        mixed $cierreEn = null,
+    ): array {
+        $placeId = $this->resolverPlaceId($empresaId);
+        if ($placeId === null) {
+            return [];
+        }
+
+        $fechaJornada = trim($fechaJornada);
+        if ($fechaJornada === '') {
+            return [];
+        }
+
+        $consulta = $this->consultarOrdenesRaw(
+            (int) $placeId,
+            $this->rangoJornadaConciliacionGetOrdersPos($fechaJornada, $aperturaEn, $cierreEn),
+            false,
+        );
+
+        if (! ($consulta['ok'] ?? false)) {
+            return [];
+        }
+
+        $map = [];
+        foreach ($consulta['ordenes'] ?? [] as $orden) {
+            if (! is_array($orden)) {
+                continue;
+            }
+            $id = (int) ($orden['id'] ?? $orden['orderId'] ?? 0);
+            if ($id > 0) {
                 $map[$id] = $orden;
             }
         }
@@ -789,12 +894,24 @@ final class WaitryOrdenesExternasService
         }
 
         $cuenta->waitry_order_id = $waitryOrderId;
-        $displayId = $this->extraerDisplayIdOrden($orden);
+        $displayId = $this->resolverDisplayIdParaImportacion(
+            $empresaId,
+            $orden,
+            $waitryOrderId,
+            $identificadorPapelito,
+        );
         $cuenta->waitry_display_id = $displayId !== '' ? $displayId : null;
         $cuenta->waitry_cobro_totem = $cobroTotem;
-        $cuenta->waitry_tipo_pago = $cobroTotem
+        $waitryTipoPago = $cobroTotem
             ? WaitryMedioPagoCuentacajaSupport::extraerTipoPagoOrden($orden)
             : null;
+        if ($cobroTotem && ($waitryTipoPago === null || $waitryTipoPago === '') && $waitryOrderId > 0) {
+            $ordenPos = $this->obtenerOrdenPorIdConciliacion($empresaId, $waitryOrderId);
+            if ($ordenPos !== null) {
+                $waitryTipoPago = WaitryMedioPagoCuentacajaSupport::extraerTipoPagoOrden($ordenPos);
+            }
+        }
+        $cuenta->waitry_tipo_pago = $waitryTipoPago;
         $cuenta->save();
 
         $cuenta = $this->cuentaService()->cuentaConLineas($cuenta->id);
@@ -912,12 +1029,7 @@ final class WaitryOrdenesExternasService
      */
     private function extraerDisplayIdOrden(array $orden): string
     {
-        return trim((string) (
-            $orden['display_id']
-            ?? $orden['external_reference_id']
-            ?? $orden['externalDeliveryId']
-            ?? ''
-        ));
+        return WaitryDisplayIdSupport::extraerDesdeOrden($orden);
     }
 
     /**
@@ -1245,15 +1357,35 @@ final class WaitryOrdenesExternasService
             return 0.0;
         }
 
-        if (isset($price['total_price']['amount'])) {
-            $total = (float) $price['total_price']['amount'];
-            $qty = max(1.0, $cantidad);
+        $unit = isset($price['unit_price']['amount']) && is_numeric($price['unit_price']['amount'])
+            ? (float) $price['unit_price']['amount']
+            : null;
+        $total = isset($price['total_price']['amount']) && is_numeric($price['total_price']['amount'])
+            ? (float) $price['total_price']['amount']
+            : null;
+        $qty = max(1.0, $cantidad);
 
+        if ($unit !== null && $total !== null) {
+            // Waitry a veces repite unit_price en total_price aunque quantity > 1 (ej. 2× Coca).
+            if ($qty > 1. && abs($total - $unit) < 0.01) {
+                return round($unit, 4);
+            }
+
+            if ($total + 0.01 >= $unit * $qty) {
+                return round($total / $qty, 4);
+            }
+
+            if ($qty <= 1.) {
+                return round($total, 4);
+            }
+        }
+
+        if ($total !== null) {
             return round($total / $qty, 4);
         }
 
-        if (isset($price['unit_price']['amount'])) {
-            return round((float) $price['unit_price']['amount'], 4);
+        if ($unit !== null) {
+            return round($unit, 4);
         }
 
         return 0.0;

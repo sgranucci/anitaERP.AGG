@@ -5,6 +5,7 @@ namespace App\Support\Ventas;
 use App\Models\Ventas\CuentaGastronomia;
 use App\Models\Ventas\DescuentoGastronomia;
 use App\Models\Ventas\Venta;
+use App\Models\Ventas\VentaGastronomiaEmision;
 
 /**
  * Nombre de receptor en pantallas gastronomía (venta.nombre, no el cliente contable interno).
@@ -116,13 +117,7 @@ final class GastronomiaVentaDisplaySupport
      */
     public static function waitryOrderId(?Venta $venta): ?int
     {
-        if (! $venta) {
-            return null;
-        }
-
-        $venta->loadMissing('gastronomiaEmision.cuenta');
-
-        $emision = $venta->gastronomiaEmision;
+        $emision = self::emisionWaitryDesdeVenta($venta);
         if ($emision === null) {
             return null;
         }
@@ -138,22 +133,28 @@ final class GastronomiaVentaDisplaySupport
     }
 
     /**
+     * Código alfanumérico del papelito Waitry (tótem / comanda).
+     */
+    public static function waitryDisplayId(?Venta $venta): ?string
+    {
+        $emision = self::emisionWaitryDesdeVenta($venta);
+        $displayId = trim((string) ($emision?->cuenta?->waitry_display_id ?? ''));
+
+        return $displayId !== '' ? $displayId : null;
+    }
+
+    /**
      * Línea para ticket/PDF cuando la factura proviene de una cuenta Waitry.
+     * Solo muestra el código alfanumérico del papelito (no el orderId numérico).
      */
     public static function lineaOrdenWaitry(?Venta $venta): ?string
     {
-        $id = self::waitryOrderId($venta);
-        if ($id === null) {
+        $displayId = self::waitryDisplayId($venta);
+        if ($displayId === null) {
             return null;
         }
 
-        $venta->loadMissing('gastronomiaEmision.cuenta');
-        $displayId = trim((string) ($venta->gastronomiaEmision?->cuenta?->waitry_display_id ?? ''));
-        if ($displayId !== '' && $displayId !== (string) $id) {
-            return 'Orden Waitry: '.$displayId.' (#'.$id.')';
-        }
-
-        return 'Orden Waitry: '.$id;
+        return 'Papelito Waitry: '.$displayId;
     }
 
     /**
@@ -184,12 +185,8 @@ final class GastronomiaVentaDisplaySupport
 
     private static function cuentaGastronomiaDesdeVenta(Venta $venta): ?CuentaGastronomia
     {
-        $venta->loadMissing([
-            'gastronomiaEmision.cuenta.descuentoGastronomia',
-            'gastronomiaEmision.cuenta.clienteInternoDescuento',
-        ]);
-
-        $cuenta = $venta->gastronomiaEmision?->cuenta;
+        $emision = self::emisionWaitryDesdeVenta($venta);
+        $cuenta = $emision?->cuenta;
         if ($cuenta instanceof CuentaGastronomia) {
             $cuenta->loadMissing('descuentoGastronomia', 'clienteInternoDescuento');
 
@@ -197,6 +194,26 @@ final class GastronomiaVentaDisplaySupport
         }
 
         return null;
+    }
+
+    private static function emisionWaitryDesdeVenta(?Venta $venta): ?VentaGastronomiaEmision
+    {
+        if (! $venta) {
+            return null;
+        }
+
+        if ($venta->relationLoaded('gastronomiaEmision')) {
+            $emision = $venta->gastronomiaEmision;
+            if ($emision !== null && ! $emision->relationLoaded('cuenta')) {
+                $emision->loadMissing('cuenta');
+            }
+
+            return $emision;
+        }
+
+        $venta->loadMissing('gastronomiaEmision.cuenta');
+
+        return $venta->gastronomiaEmision;
     }
 
     private static function porcentajeDescuentoGastronomia(

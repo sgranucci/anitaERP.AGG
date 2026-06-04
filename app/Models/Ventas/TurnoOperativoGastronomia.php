@@ -37,6 +37,7 @@ class TurnoOperativoGastronomia extends Model implements Auditable
         'redondeo_invitaciones',
         'redondeo_turno',
         'sobrante_faltante',
+        'medios_contado_cierre_json',
         'observacion_cierre',
     ];
 
@@ -50,6 +51,7 @@ class TurnoOperativoGastronomia extends Model implements Auditable
         'redondeo_invitaciones' => 'float',
         'redondeo_turno' => 'float',
         'sobrante_faltante' => 'float',
+        'medios_contado_cierre_json' => 'array',
     ];
 
     public function empresa()

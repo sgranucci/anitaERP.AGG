@@ -14,7 +14,9 @@
         puedeProceso: true,
         urlAnalizar: @json(route('waitry_cierre_jornada_api_proceso_analizar')),
         urlRecalcular: @json(route('waitry_cierre_jornada_api_proceso_recalcular')),
+        urlPreviewFactura: @json(route('waitry_cierre_jornada_api_proceso_preview_factura')),
         urlMovimientosBase: @json($url_movimientos_proceso_base ?? ''),
+        urlCuadroDetalleBase: @json(url('caja/waitry-cierre-jornada/api/proceso/cuadro-detalle/__FILA__/__MEDIO__')),
         urlConfigBase: @json(url('caja/waitry-cierre-jornada/api/proceso/config/__EMPRESA_ID__')),
         urlConfigGuardarBase: @json(url('caja/waitry-cierre-jornada/api/proceso/config/__EMPRESA_ID__')),
         configInicial: @json($config_contable ?? []),
@@ -162,6 +164,12 @@
                         <span class="badge badge-secondary mr-1">Solo Anita (día W.): {{ $resumen['solo_anita'] ?? 0 }}</span>
                         <span class="badge badge-danger mr-1">Anita sin Waitry ID: {{ $resumen['anita_sin_waitry'] ?? 0 }}</span>
                         <span class="badge badge-dark">Otra jornada Anita: {{ $resumen['jornada_distinta'] ?? 0 }}</span>
+                        @if (($resumen['waitry_canceladas_cantidad'] ?? 0) > 0)
+                            <span class="badge badge-light border text-muted" title="Excluidas del cuadro y totales operativos">
+                                Waitry canceladas: {{ $resumen['waitry_canceladas_cantidad'] }}
+                                (${{ number_format((float) ($resumen['waitry_canceladas_total'] ?? 0), 2, ',', '.') }})
+                            </span>
+                        @endif
                     </div>
 
                     @if (! empty($resumen['por_medio_waitry']))

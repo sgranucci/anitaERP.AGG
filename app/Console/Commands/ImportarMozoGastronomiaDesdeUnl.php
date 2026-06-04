@@ -63,7 +63,10 @@ class ImportarMozoGastronomiaDesdeUnl extends Command
                 'empresa_id' => $empresaId,
             ];
 
-            $existente = MozoGastronomia::query()->where('codigo', $codigo)->first();
+            $existente = MozoGastronomia::query()
+                ->where('empresa_id', $empresaId)
+                ->where('codigo', $codigo)
+                ->first();
 
             DB::beginTransaction();
             try {

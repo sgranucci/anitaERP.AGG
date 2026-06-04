@@ -764,6 +764,64 @@
 
         <div class="row gastro-columnas-principales">
             <div class="col-xl-5">
+                <div class="card card-outline card-success mb-3 gastro-card-consumo-carga">
+                    <div class="card-header py-2"><span><i class="fa fa-cutlery"></i> Consumo (catálogo SKU {{ $prefijo_sku }}%)</span></div>
+                    <div class="card-body py-2">
+                        <p class="small text-muted mb-2 mb-md-1">
+                            @if ((int) $sku_catalogo_digitos_sufijo > 0)
+                                Ingrese solo los <strong>{{ (int) $sku_catalogo_digitos_sufijo }}</strong> dígitos del código;
+                                <kbd>Enter</kbd> agrega cantidad <strong>1</strong> a la cuenta;
+                                <kbd>+</kbd> abre el modal de cantidad antes de agregar.
+                                <kbd>Tab</kbd> busca el artículo y pasa al botón <strong>Agregar</strong> para cargar la cantidad.
+                            @else
+                                Use la lupa o el SKU;
+                                <kbd>Enter</kbd> en el campo SKU agrega con cantidad <strong>1</strong>;
+                                <kbd>+</kbd> abre el modal de cantidad antes de agregar;
+                                <kbd>Tab</kbd> busca y enfoca <strong>Agregar</strong> para ingresar cantidad.
+                            @endif
+                        </p>
+                        <table class="table table-sm table-borderless mb-0">
+                            <tbody>
+                            <tr id="tr-gastro-linea-articulo">
+                                <td class="align-middle py-1" style="white-space:nowrap;">
+                                    <input type="hidden" class="articulo_id" id="gastro_linea_articulo_id" value="">
+                                    <input type="hidden" class="categoria_id" value="">
+                                    <input type="hidden" class="subcategoria_id" value="">
+                                    <input type="hidden" class="unidadmedida_id" value="">
+                                    <button type="button" title="Consulta artículos (catálogo SKU {{ $prefijo_sku }})" class="btn-accion-tabla consultaarticulo tooltipsC" data-sku-prefijo-filtro="{{ $prefijo_sku }}" data-sku-digitos-filtro="{{ (int) $sku_catalogo_digitos_sufijo }}" data-listaprecio-id="{{ (int) ($listaprecio_id ?? config('precio.listaprecio_default_id', 1)) }}" data-listaprecio-nombre="{{ $listaprecio_nombre ?? '' }}">
+                                        <i class="fa fa-search text-primary"></i>
+                                    </button>
+                                    @if ((int) $sku_catalogo_digitos_sufijo > 0)
+                                        <div class="input-group input-group-sm d-inline-flex align-middle" style="width:auto;max-width:200px;vertical-align:middle;">
+                                            <div class="input-group-prepend"><span class="input-group-text py-0 px-2">{{ $prefijo_sku }}</span></div>
+                                            <input type="text" name="gastro_sku_sufijo" class="form-control gastro-sku-sufijo gastro-carga-sku" maxlength="{{ (int) $sku_catalogo_digitos_sufijo }}" inputmode="numeric" pattern="[0-9]*" placeholder="" autocomplete="off" style="min-width:72px;">
+                                            <input type="hidden" class="codigoarticulo" value="">
+                                        </div>
+                                    @else
+                                        <input type="text" class="form-control form-control-sm codigoarticulo gastro-carga-sku d-inline-block align-middle" style="width:118px;vertical-align:middle;" placeholder="SKU" autocomplete="off">
+                                    @endif
+                                </td>
+                                <td class="py-1">
+                                    <input type="text" class="form-control form-control-sm descripcionarticulo" placeholder="Descripción" readonly autocomplete="off">
+                                </td>
+                                <td class="align-middle py-1 text-nowrap">
+                                    <button type="button" class="btn btn-sm btn-success" id="btn-agregar-consumo"><i class="fa fa-plus"></i> Agregar</button>
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+                        @if ($wsfe_forzar_modo_caea)
+                            <div class="gastro-aviso-caea alert alert-warning py-2" role="status">
+                                @if (! empty($wsfe_failover_automatico))
+                                    <strong>Modo CAEA — contingencia ARCA</strong>: el monitor detectó problemas de comunicación con AFIP. Las facturas usan CAEA hasta recuperar el servicio.
+                                @else
+                                    <strong>Modo CAEA forzado</strong> (<code>ARCA_WSFE_FORZAR_MODO_CAEA=true</code>): las facturas no consultan el web service ARCA en línea.
+                                @endif
+                            </div>
+                        @endif
+                    </div>
+                </div>
+
                 <div class="card card-outline card-secondary mb-3">
                     <div class="card-header py-2 d-flex align-items-center flex-wrap">
                         <span><i class="fa fa-user"></i> Cuenta seleccionada</span>
@@ -847,64 +905,6 @@
                                 <button type="button" class="btn btn-sm btn-primary" id="btn-guardar-cabecera"><i class="fa fa-save"></i> Guardar datos cuenta</button>
                             </div>
                         </div>
-                    </div>
-                </div>
-
-                <div class="card card-outline card-success mb-3 gastro-card-consumo-carga">
-                    <div class="card-header py-2"><span><i class="fa fa-cutlery"></i> Consumo (catálogo SKU {{ $prefijo_sku }}%)</span></div>
-                    <div class="card-body py-2">
-                        <p class="small text-muted mb-2 mb-md-1">
-                            @if ((int) $sku_catalogo_digitos_sufijo > 0)
-                                Ingrese solo los <strong>{{ (int) $sku_catalogo_digitos_sufijo }}</strong> dígitos del código;
-                                <kbd>Enter</kbd> agrega cantidad <strong>1</strong> a la cuenta;
-                                <kbd>+</kbd> abre el modal de cantidad antes de agregar.
-                                <kbd>Tab</kbd> busca el artículo y pasa al botón <strong>Agregar</strong> para cargar la cantidad.
-                            @else
-                                Use la lupa o el SKU;
-                                <kbd>Enter</kbd> en el campo SKU agrega con cantidad <strong>1</strong>;
-                                <kbd>+</kbd> abre el modal de cantidad antes de agregar;
-                                <kbd>Tab</kbd> busca y enfoca <strong>Agregar</strong> para ingresar cantidad.
-                            @endif
-                        </p>
-                        <table class="table table-sm table-borderless mb-0">
-                            <tbody>
-                            <tr id="tr-gastro-linea-articulo">
-                                <td class="align-middle py-1" style="white-space:nowrap;">
-                                    <input type="hidden" class="articulo_id" id="gastro_linea_articulo_id" value="">
-                                    <input type="hidden" class="categoria_id" value="">
-                                    <input type="hidden" class="subcategoria_id" value="">
-                                    <input type="hidden" class="unidadmedida_id" value="">
-                                    <button type="button" title="Consulta artículos (catálogo SKU {{ $prefijo_sku }})" class="btn-accion-tabla consultaarticulo tooltipsC" data-sku-prefijo-filtro="{{ $prefijo_sku }}" data-sku-digitos-filtro="{{ (int) $sku_catalogo_digitos_sufijo }}" data-listaprecio-id="{{ (int) ($listaprecio_id ?? config('precio.listaprecio_default_id', 1)) }}" data-listaprecio-nombre="{{ $listaprecio_nombre ?? '' }}">
-                                        <i class="fa fa-search text-primary"></i>
-                                    </button>
-                                    @if ((int) $sku_catalogo_digitos_sufijo > 0)
-                                        <div class="input-group input-group-sm d-inline-flex align-middle" style="width:auto;max-width:200px;vertical-align:middle;">
-                                            <div class="input-group-prepend"><span class="input-group-text py-0 px-2">{{ $prefijo_sku }}</span></div>
-                                            <input type="text" name="gastro_sku_sufijo" class="form-control gastro-sku-sufijo gastro-carga-sku" maxlength="{{ (int) $sku_catalogo_digitos_sufijo }}" inputmode="numeric" pattern="[0-9]*" placeholder="" autocomplete="off" style="min-width:72px;">
-                                            <input type="hidden" class="codigoarticulo" value="">
-                                        </div>
-                                    @else
-                                        <input type="text" class="form-control form-control-sm codigoarticulo gastro-carga-sku d-inline-block align-middle" style="width:118px;vertical-align:middle;" placeholder="SKU" autocomplete="off">
-                                    @endif
-                                </td>
-                                <td class="py-1">
-                                    <input type="text" class="form-control form-control-sm descripcionarticulo" placeholder="Descripción" readonly autocomplete="off">
-                                </td>
-                                <td class="align-middle py-1 text-nowrap">
-                                    <button type="button" class="btn btn-sm btn-success" id="btn-agregar-consumo"><i class="fa fa-plus"></i> Agregar</button>
-                                </td>
-                            </tr>
-                            </tbody>
-                        </table>
-                        @if ($wsfe_forzar_modo_caea)
-                            <div class="gastro-aviso-caea alert alert-warning py-2" role="status">
-                                @if (! empty($wsfe_failover_automatico))
-                                    <strong>Modo CAEA — contingencia ARCA</strong>: el monitor detectó problemas de comunicación con AFIP. Las facturas usan CAEA hasta recuperar el servicio.
-                                @else
-                                    <strong>Modo CAEA forzado</strong> (<code>ARCA_WSFE_FORZAR_MODO_CAEA=true</code>): las facturas no consultan el web service ARCA en línea.
-                                @endif
-                            </div>
-                        @endif
                     </div>
                 </div>
             </div>

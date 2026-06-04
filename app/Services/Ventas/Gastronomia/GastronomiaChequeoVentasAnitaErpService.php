@@ -9,6 +9,7 @@ use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\Venta_Impuesto;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Concilia cabecera venta ERP ↔ Informix (Anita) factura por factura para IVA / totales.
@@ -156,7 +157,7 @@ final class GastronomiaChequeoVentasAnitaErpService
             ." AND ven_fecha_vto = '".$fechaEntera."'"
             ." AND ven_letra = 'B' ";
 
-        $lista = ApiAnita::decodificarListaFilas($api->apiCall([
+        $parsed = ApiAnita::parsearRespuestaLista($api->apiCall([
             'acc' => 'list',
             'tabla' => 'venta',
             'campos' => implode(',', [
@@ -167,6 +168,20 @@ final class GastronomiaChequeoVentasAnitaErpService
             'whereArmado' => $where,
             'orderBy' => 'ven_tipo, ven_nro',
         ]));
+
+        if ($parsed['error_lectura'] !== null) {
+            Log::warning('gastronomia.chequeo_anita.lista_jornada_fallo', [
+                'sucursal' => $sucursal,
+                'fecha_jornada' => $fechaEntera,
+                'msg' => $parsed['error_lectura'],
+            ]);
+
+            throw new \RuntimeException(
+                'No se pudo listar cabeceras Anita para la jornada: '.$parsed['error_lectura']
+            );
+        }
+
+        $lista = $parsed['filas'];
 
         $map = [];
         foreach ($lista as $fila) {
@@ -229,7 +244,20 @@ final class GastronomiaChequeoVentasAnitaErpService
             }
 
             [$tipo, $nroStr] = explode('-', $clave, 2);
-            $anita = $this->leerCabeceraAnitaPorComprobante($sucursal, $tipo, (int) $nroStr);
+            $consulta = $this->consultarCabeceraAnitaPorComprobante($sucursal, $tipo, (int) $nroStr);
+            if ($consulta['error_lectura'] !== null) {
+                $conteo['error']++;
+                $fila = $this->filaBase($venta, $clave, null);
+                $fila['estado'] = 'error';
+                $fila['diferencias'] = [
+                    'anita' => 'Error de lectura Anita (no se asume faltante): '.$consulta['error_lectura'],
+                ];
+                $filas[] = $fila;
+
+                continue;
+            }
+
+            $anita = $consulta['cabecera'];
             if ($anita !== null) {
                 $anitaPorClave[$clave] = $anita;
             }
@@ -470,8 +498,18 @@ final class GastronomiaChequeoVentasAnitaErpService
                     return false;
                 }
                 [$tipo, $nroStr] = explode('-', $clave, 2);
+                $consulta = $this->consultarCabeceraAnitaPorComprobante($sucursal, $tipo, (int) $nroStr);
+                if ($consulta['error_lectura'] !== null) {
+                    Log::warning('gastronomia.chequeo_anita.omitir_faltante_lectura_fallida', [
+                        'venta_id' => $venta->id,
+                        'codigo' => $venta->codigo,
+                        'msg' => $consulta['error_lectura'],
+                    ]);
 
-                return $this->leerCabeceraAnitaPorComprobante($sucursal, $tipo, (int) $nroStr) === null;
+                    return false;
+                }
+
+                return $consulta['cabecera'] === null;
             })
             ->values();
     }
@@ -516,8 +554,20 @@ final class GastronomiaChequeoVentasAnitaErpService
         int $numero,
         string $letra = 'B',
     ): ?object {
+        return $this->consultarCabeceraAnitaPorComprobante($sucursal, $tipo, $numero, $letra)['cabecera'];
+    }
+
+    /**
+     * @return array{cabecera: ?object, error_lectura: ?string}
+     */
+    public function consultarCabeceraAnitaPorComprobante(
+        int $sucursal,
+        string $tipo,
+        int $numero,
+        string $letra = 'B',
+    ): array {
         if ($sucursal <= 0 || $tipo === '' || $numero <= 0) {
-            return null;
+            return ['cabecera' => null, 'error_lectura' => null];
         }
 
         $api = new ApiAnita;
@@ -526,7 +576,7 @@ final class GastronomiaChequeoVentasAnitaErpService
             ." AND ven_nro = '".$numero."'"
             ." AND ven_letra = '".addslashes($letra)."' ";
 
-        $lista = ApiAnita::decodificarListaFilas($api->apiCall([
+        $parsed = ApiAnita::parsearRespuestaLista($api->apiCall([
             'acc' => 'list',
             'tabla' => 'venta',
             'campos' => implode(',', [
@@ -537,7 +587,32 @@ final class GastronomiaChequeoVentasAnitaErpService
             'whereArmado' => $where,
         ]));
 
-        return $lista[0] ?? null;
+        return [
+            'cabecera' => $parsed['filas'][0] ?? null,
+            'error_lectura' => $parsed['error_lectura'],
+        ];
+    }
+
+    /**
+     * @return array{cabecera: ?object, error_lectura: ?string}
+     */
+    public function consultarCabeceraAnitaDesdeVenta(Venta $venta, string $letra = 'B'): array
+    {
+        $venta->loadMissing('puntoventas');
+        $puntoventa = $venta->puntoventas;
+        if (! $puntoventa) {
+            return ['cabecera' => null, 'error_lectura' => 'Punto de venta no encontrado'];
+        }
+
+        $clave = $this->claveComprobanteDesdeVenta($venta);
+        if ($clave === null) {
+            return ['cabecera' => null, 'error_lectura' => 'Código de comprobante ERP no reconocido'];
+        }
+
+        [$tipo, $nroStr] = explode('-', $clave, 2);
+        $sucursal = $this->sucursalDesdeCodigoPuntoventa((string) $puntoventa->codigo);
+
+        return $this->consultarCabeceraAnitaPorComprobante($sucursal, $tipo, (int) $nroStr, $letra);
     }
 
     /**

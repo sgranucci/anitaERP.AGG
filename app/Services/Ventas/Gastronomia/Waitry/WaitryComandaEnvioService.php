@@ -6,6 +6,7 @@ use App\Jobs\EnviarWaitryComandaJob;
 use App\Models\Ventas\CuentaGastronomia;
 use App\Models\Ventas\WaitryComandaEnvio;
 use App\Support\Ventas\Gastronomia\VentaGastronomiaEmisionWaitrySupport;
+use App\Support\Ventas\Waitry\WaitryDisplayIdSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 
@@ -54,8 +55,12 @@ final class WaitryComandaEnvioService
     /**
      * @param  array<string, mixed>|null  $respuesta
      */
-    public function marcarExito(WaitryComandaEnvio $envio, int|string|null $orderId, ?array $respuesta = null): void
-    {
+    public function marcarExito(
+        WaitryComandaEnvio $envio,
+        int|string|null $orderId,
+        ?array $respuesta = null,
+        ?string $displayId = null,
+    ): void {
         $envio->estado = WaitryComandaEnvio::ESTADO_ENVIADO;
         $envio->waitry_order_id = is_numeric($orderId) ? (int) $orderId : null;
         $envio->ultimo_error = null;
@@ -67,6 +72,13 @@ final class WaitryComandaEnvioService
 
         $this->persistirOrderIdEnCuenta($envio->cuenta_gastronomia_id, $orderId);
         VentaGastronomiaEmisionWaitrySupport::persistirOrderIdEnEmision((int) $envio->venta_id, $orderId);
+
+        if ($displayId === null && is_array($respuesta)) {
+            $displayId = WaitryDisplayIdSupport::extraerDesdeRespuestaPush($respuesta);
+            $displayId = $displayId !== '' ? $displayId : null;
+        }
+
+        $this->persistirDisplayIdEnCuenta($envio->cuenta_gastronomia_id, $displayId);
     }
 
     public function persistirOrderIdEnCuenta(?int $cuentaGastronomiaId, int|string|null $orderId): void
@@ -78,6 +90,22 @@ final class WaitryComandaEnvioService
         CuentaGastronomia::query()
             ->where('id', $cuentaGastronomiaId)
             ->update(['waitry_order_id' => (int) $orderId]);
+    }
+
+    public function persistirDisplayIdEnCuenta(?int $cuentaGastronomiaId, ?string $displayId): void
+    {
+        $displayId = trim((string) $displayId);
+        if ($cuentaGastronomiaId === null || $displayId === '') {
+            return;
+        }
+
+        CuentaGastronomia::query()
+            ->where('id', $cuentaGastronomiaId)
+            ->where(function ($q) use ($displayId): void {
+                $q->whereNull('waitry_display_id')
+                    ->orWhere('waitry_display_id', '!=', $displayId);
+            })
+            ->update(['waitry_display_id' => mb_substr($displayId, 0, 64)]);
     }
 
     public function marcarOmitido(WaitryComandaEnvio $envio, string $motivo): void
