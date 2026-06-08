@@ -43,6 +43,18 @@ class GastronomiaMovimientoStockSupportMensajeErrorEmisionTest extends TestCase
         self::assertStringContainsString('soporte técnico', $msg);
     }
 
+    public function test_lock_wait_timeout_se_formatea_como_contencion(): void
+    {
+        $e = new RuntimeException(
+            'SQLSTATE[HY000]: General error: 1205 Lock wait timeout exceeded; try restarting transaction'
+        );
+        $msg = S::mensajeErrorEmision($e);
+
+        self::assertStringContainsString('bloqueo en base de datos', $msg);
+        self::assertStringContainsString('Espere unos segundos', $msg);
+        self::assertStringNotContainsString('Error interno del sistema al generar el comprobante', $msg);
+    }
+
     public function test_excepcion_de_transporte_se_formatea_con_contexto(): void
     {
         $e = new RuntimeException('Could not connect to host');

@@ -31,6 +31,7 @@
         urlFormulaBase: @json(($puede_ver_formula ?? false) ? url('stock/formula-articulo') : null),
         puedeVerFactura: @json($puede_ver_factura ?? false),
         puedeVerFormula: @json($puede_ver_formula ?? false),
+        puedeVerMovimientos: @json($puede_ver_movimientos ?? false),
         filtrosQuery: @json($filtrosQuery ?? []),
     };
 </script>
@@ -155,9 +156,22 @@
                                                 data-sku="{{ $f->sku ?? '' }}"
                                                 data-deposito-id="{{ $f->deposito_id ?? 0 }}"
                                                 data-puntoventa-id="{{ $f->puntoventa_id ?? 0 }}"
+                                                data-cantidad-total="{{ $f->cantidad_total ?? 0 }}"
                                                 title="Ver comprobantes que incluyen este artículo">
                                             <i class="fas fa-file-invoice text-primary"></i>
                                         </button>
+                                        @if ($puede_ver_movimientos ?? false)
+                                            <button type="button"
+                                                    class="btn-accion-tabla tooltipsC js-av-ver-movimientos"
+                                                    data-articulo-id="{{ $f->articulo_id }}"
+                                                    data-sku="{{ $f->sku ?? '' }}"
+                                                    data-deposito-id="{{ $f->deposito_id ?? 0 }}"
+                                                    data-puntoventa-id="{{ $f->puntoventa_id ?? 0 }}"
+                                                    data-cantidad-total="{{ $f->cantidad_total ?? 0 }}"
+                                                    title="Ver movimientos de stock que componen la cantidad del renglón">
+                                                <i class="fa fa-exchange text-primary"></i>
+                                            </button>
+                                        @endif
                                     </td>
                                 </tr>
                             @empty
@@ -183,6 +197,67 @@
                         <small class="text-muted">{{ $filas->total() }} fila(s).</small>
                     </div>
                 @endif
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modal-av-movimientos-articulo" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title" id="modal-av-movimientos-titulo">Movimientos de stock del artículo</h6>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">&times;</button>
+            </div>
+            <div class="modal-body py-2">
+                <div id="modal-av-movimientos-error" class="alert alert-danger py-2 small d-none" role="alert"></div>
+                <div class="d-flex flex-wrap justify-content-between align-items-center mb-2">
+                    <p class="small text-muted mb-1 mb-md-0" id="modal-av-movimientos-subtitulo"></p>
+                    <div class="d-flex flex-wrap align-items-center">
+                        @if ($puede_ver_factura ?? false)
+                            <button type="button"
+                                    id="modal-av-link-ver-facturas"
+                                    class="btn btn-outline-primary btn-sm d-none mr-1"
+                                    title="Listar comprobantes del artículo con los mismos filtros">
+                                <i class="fas fa-file-invoice"></i> Ver comprobantes
+                            </button>
+                        @endif
+                        <a href="#" id="modal-av-link-kardex" class="btn btn-outline-secondary btn-sm d-none" target="_blank" rel="noopener">
+                            <i class="fa fa-external-link-alt"></i> Abrir kardex completo
+                        </a>
+                    </div>
+                </div>
+                <div class="gastro-facturas-articulo-wrap">
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="thead-light">
+                            <tr>
+                                <th>ID</th>
+                                <th>Fecha</th>
+                                <th>Venta ID</th>
+                                <th>Comprobante</th>
+                                <th>Punto venta</th>
+                                <th>Depósito</th>
+                                <th class="text-right">Entrada</th>
+                                <th class="text-right">Salida</th>
+                                <th class="width120" data-orderable="false"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="modal-av-movimientos-body">
+                            <tr><td colspan="9" class="text-muted small">Seleccione un artículo…</td></tr>
+                        </tbody>
+                        <tfoot id="modal-av-movimientos-foot" class="d-none">
+                            <tr class="font-weight-bold bg-light">
+                                <td colspan="7" class="text-right small">Totales movimientos / cant. renglón:</td>
+                                <td class="text-right small" id="modal-av-mov-total-entrada">—</td>
+                                <td class="text-right small" id="modal-av-mov-total-salida">—</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+                <p class="small text-muted mb-0 mt-2" id="modal-av-movimientos-nota-cantidad"></p>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cerrar</button>
             </div>
         </div>
     </div>

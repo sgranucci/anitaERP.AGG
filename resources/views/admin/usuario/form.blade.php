@@ -1,3 +1,4 @@
+<div class="form1">
 <div class="card card-outline card-secondary mb-3">
     <div class="card-header py-2">
         <strong class="text-dark"><i class="far fa-user mr-1"></i> Identidad y acceso</strong>
@@ -52,16 +53,9 @@
         <strong class="text-dark"><i class="far fa-building mr-1"></i> Empresa y roles</strong>
     </div>
     <div class="card-body">
-        <div class="form-group row">
-            <label for="empresa_id" class="col-lg-3 col-form-label requerido">Empresas</label>
-            <div class="col-lg-8">
-                <select class="form-control select2" id="empresa_id" name="empresa_ids[]" multiple="multiple" required data-placeholder="Seleccione una o más empresas">
-                    @foreach ($empresa_query as $id => $nombre)
-                        <option value="{{ $id }}" {{ is_array(old('empresa_ids')) ? (in_array($id, old('empresa_ids')) ? 'selected' : '') : (isset($data) ? ($data->usuario_empresas->firstWhere('id', $id) ? 'selected' : '') : '') }}>{{ $nombre }}</option>
-                    @endforeach
-                </select>
-            </div>
-        </div>
+        @include('includes.form-empresa-asignada-multiple', [
+            'empresa_query' => $empresa_query,
+        ])
         <div class="form-group row mb-0">
             <label for="rol_id" class="col-lg-3 col-form-label requerido">Roles</label>
             <div class="col-lg-8">
@@ -139,4 +133,5 @@
             </div>
         </div>
     </div>
+</div>
 </div>

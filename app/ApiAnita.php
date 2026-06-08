@@ -405,7 +405,11 @@ class ApiAnita {
 
         switch ($data['acc']){
             case 'list':
-                $sql = "UNLOAD TO '".$this->fecha.".csv' DELIMITER '|' SELECT ".$data['campos']." FROM ".$data['tabla']." ".$data['whereArmado']." ".$data['groupBy']." ".$data['orderBy'];
+                $first = '';
+                if (! empty($data['limit'])) {
+                    $first = trim((string) $data['limit']).' ';
+                }
+                $sql = "UNLOAD TO '".$this->fecha.".csv' DELIMITER '|' SELECT ".$first.$data['campos']." FROM ".$data['tabla']." ".$data['whereArmado']." ".$data['groupBy']." ".$data['orderBy'];
             break;
             case 'insert':
                 $sql = "INSERT INTO ".$data['tabla']." (".$data['campos'].") VALUES (".$data['valores'].")";

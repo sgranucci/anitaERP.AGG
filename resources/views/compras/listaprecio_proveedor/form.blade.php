@@ -154,7 +154,7 @@
                     <input type="number" step="0.01" name="descuentos[]" class="form-control" value="{{ old('descuentos.'.$idx, isset($linea->descuento) ? $linea->descuento : '0') }}" {{ isset($visualizar) ? 'readonly' : '' }}>
                 </td>
                 <td>
-                    <input type="text" name="articulo_proveedores[]" class="form-control" maxlength="100" value="{{ old('articulo_proveedores.'.$idx, $linea->articulo_proveedor ?? '') }}" {{ isset($visualizar) ? 'readonly' : '' }}>
+                    <input type="text" name="codigos_articulo_proveedor[]" class="form-control" maxlength="100" value="{{ old('codigos_articulo_proveedor.'.$idx, $linea->codigo_articulo_proveedor ?? '') }}" {{ isset($visualizar) ? 'readonly' : '' }}>
                 </td>
                 <td>
                     <input type="date" name="fechavigencias[]" class="form-control" value="{{ old('fechavigencias.'.$idx, (isset($linea->fechavigencia) && $linea->fechavigencia) ? substr($linea->fechavigencia, 0, 10) : date('Y-m-d')) }}" {{ isset($visualizar) ? 'readonly' : '' }} required>

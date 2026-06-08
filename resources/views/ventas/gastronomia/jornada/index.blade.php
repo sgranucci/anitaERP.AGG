@@ -65,9 +65,9 @@
                         Al <strong>cerrar la jornada</strong> se consultan órdenes Waitry desde la
                         <strong>fecha y hora de apertura</strong> hasta la <strong>fecha y hora de cierre</strong>
                         (ej. jornada 30/05 cerrada el 31/05: comandas del 30/05 18:00 al 31/05 07:00),
-                        se calculan <strong>totales por medio de pago por tótem</strong>.
-                        Luego cargá el <strong>Informe Z</strong> de cada tótem para comparar con el sistema.
-                        El detalle de auditoría lista <strong>solo discrepancias</strong>, si las hay.
+                        se calcula el total <strong>Sistema</strong> por tótem: todo lo cobrado en Waitry que Anita <strong>todavía no presentó</strong> (tótems + QR por celular), más facturas con cobro puente <strong>TOTEM</strong>. El Posnet y demás medios ya facturados y cobrados en caja Anita <strong>no</strong> suman aquí porque ya entran por Anita.
+                        Al cierre del día se concilia <strong>una vez</strong> ese total con el <strong>Informe Z</strong> del kiosco para completar el universo de cobros de la empresa.
+                        Solo entran cobros del día <strong>no cancelados</strong> en Waitry; las anuladas no suman.
                         @if ((int) ($ultimo_waitry_order_id ?? 0) > 0)
                             Último ID Waitry incluido en cierres anteriores:
                             <strong>#{{ (int) $ultimo_waitry_order_id }}</strong>
@@ -79,14 +79,12 @@
                 @endif
 
                 <form method="get" action="{{ url('ventas/gastronomia/jornada') }}" class="form-inline mb-4" id="form-empresa-jornada">
-                    <label class="mr-2" for="empresa_id">Empresa</label>
-                    <select name="empresa_id" id="empresa_id" class="form-control mr-2">
-                        @foreach ($empresas as $emp)
-                            <option value="{{ $emp->id }}" @selected((int) $empresa_id === (int) $emp->id)>
-                                {{ $emp->nombre }}
-                            </option>
-                        @endforeach
-                    </select>
+                    @include('includes.listado.filtro_empresa_asignada_inline', [
+                        'empresas' => $empresas,
+                        'empresa_id' => $empresa_id,
+                        'required' => true,
+                        'permite_todas' => false,
+                    ])
                 </form>
 
                 @if ($estado)
@@ -205,17 +203,35 @@
                                             </div>
                                         @endif
                                         @if (! empty($cierre_totem_habilitado) && $estado['jornada_abierta'])
-                                            <div id="preview-cierre-totem-waitry" class="mb-3 border rounded p-2 bg-light small">
-                                                <div class="text-muted mb-0">
-                                                    <i class="fa fa-spinner fa-spin"></i>
-                                                    Consultando totales Waitry del tótem…
-                                                </div>
+                                            <div id="waitry-preview-cargando"
+                                                 class="alert alert-info py-2 mb-2"
+                                                 role="status"
+                                                 aria-live="polite">
+                                                <i class="fa fa-spinner fa-spin"></i>
+                                                <strong>Leyendo Waitry…</strong>
+                                                Consultando órdenes del tótem y armando totales del sistema.
+                                                <span class="small">(puede tardar hasta 1 minuto; no cierre la jornada hasta que termine)</span>
+                                            </div>
+                                            <div class="mb-2" id="preview-waitry-refresco-toolbar">
+                                                <button type="button"
+                                                        class="btn btn-outline-warning btn-sm"
+                                                        id="btn-refrescar-lectura-waitry-z"
+                                                        disabled
+                                                        title="Vuelve a consultar Waitry y actualiza totales Sistema; al cerrar la jornada se congela el último ticket leído">
+                                                    <i class="fa fa-refresh"></i>
+                                                    Actualizar lectura Waitry (congelar último ticket)
+                                                </button>
+                                                <span class="text-muted small ml-2">
+                                                    Use si hubo ventas en el tótem después de la carga inicial. Los montos Informe Z que ya cargó se mantienen; solo se actualizan los del sistema.
+                                                </span>
+                                            </div>
+                                            <div id="preview-cierre-totem-waitry" class="mb-3 border rounded p-2 bg-light small d-none">
                                             </div>
                                             <div id="preview-informe-z-acciones" class="mb-3 d-none">
                                                 <button type="button" class="btn btn-primary btn-sm" id="btn-guardar-informe-z-preview">
                                                     Guardar Informe Z
                                                 </button>
-                                                <span class="text-muted small ml-2">Opcional: guarda borrador mientras la jornada sigue abierta. Si cierra sin guardar, los montos ingresados aquí se envían igual al cerrar.</span>
+                                                <span class="text-muted small ml-2">Columna Sistema = tótems (QR/MP/Posnet) + QR por celular, excluyendo lo ya cobrado en Anita. Una sola conciliación Z al cierre del día. Opcional: guardar borrador.</span>
                                             </div>
                                         @endif
                                         <div id="jornada-cierre-en-progreso"
@@ -224,7 +240,7 @@
                                              aria-live="polite">
                                             <i class="fa fa-spinner fa-spin"></i>
                                             <strong>Cerrando la jornada…</strong>
-                                            Consultando órdenes Waitry y registrando el cierre. Puede tardar hasta un minuto. Espere, por favor.
+                                            Grabación rápida (sin consultar Waitry de nuevo). Los totales sistema debieron cargarse antes en la vista previa del Informe Z.
                                         </div>
                                         <div class="form-group">
                                             <label for="observacion_cerrar">Observación de cierre</label>

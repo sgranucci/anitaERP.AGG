@@ -3,27 +3,33 @@
 namespace App\Support\Ventas\Waitry;
 
 use App\Models\Caja\Cuentacaja;
+use App\Support\Ventas\Gastronomia\CierreJornadaProcesoMedioSupport;
+use App\Support\Ventas\GastronomiaCuentacajaEfectivo;
 use App\Support\Ventas\GastronomiaCuentacajaTotem;
 
 /**
  * Medios de pago Waitry (lecturas getOrdersPOS / getordersdetails) → cuenta de caja Anita.
  *
- * - Facturación (comanda ya pagada en tótem): siempre cuenta puente TOTEM en Anita, sin importar
- *   si Waitry cobró con Mercado Pago, Totalcoin u otro (`waitry_tipo_pago` queda solo como referencia).
- * - Informe Z / cierre jornada: {@see cuentaParaTipoInformeZ()} usa los medios reales mapeados en config.
+ * - **Cuenta puente TOTEM** ({@see TIPO_CUENTA_PUENTE_FACTURACION}): al facturar en Anita una comanda ya cobrada
+ *   en el POS físico se imputa a esa cuenta para no duplicar el asiento. El medio real Waitry (MP, Totalcoin…)
+ *   queda en `waitry_tipo_pago` solo como referencia. **No** agrupa cobros del Informe Z ni totales por medio.
+ * - **Informe Z / cierre jornada**: {@see cuentaParaTipoInformeZ()} y {@see resolverTipoMedioInformeZDesdeLinea()}
+ *   usan medios reales de `waitry.tipo_pago_cuentacaja` (MP, Totalcoin, etc.).
  */
 final class WaitryMedioPagoCuentacajaSupport
 {
+    /** Cuenta puente de facturación Anita (no es medio de cobro del tótem físico para Informe Z). */
+    public const TIPO_CUENTA_PUENTE_FACTURACION = 'totem';
+
     public const TIPO_MERCADOPAGO = 'mercadopago';
 
     public const TIPO_TOTALCOIN = 'totalcoin';
 
     public const TIPO_CREDIT_CARD = 'credit_card';
 
-    /** @var list<string> tipos normalizados = QR en cierre / facturación gastronomía */
+    /** @var list<string> tipos Waitry siempre QR (credit_card QR se distingue por gateway KIOSK MPQR). */
     public const TIPOS_QR_WAITRY_NORMALIZADOS = [
         'totalcoin',
-        'creditcard',
     ];
 
     /** @var list<string> */
@@ -33,13 +39,13 @@ final class WaitryMedioPagoCuentacajaSupport
     ];
 
     /**
-     * No son medios conciliables en Informe Z: cash (efectivo en tótem) y totem (cuenta puente).
+     * Excluidos del Informe Z: cuenta puente TOTEM (no medio del Z físico).
+     * El efectivo Waitry en POS sin facturar Anita no entra al Z; el efectivo de cobranza Anita sí.
      *
      * @var list<string>
      */
     private const TIPOS_EXCLUIDOS_INFORME_Z = [
-        'cash',
-        'totem',
+        self::TIPO_CUENTA_PUENTE_FACTURACION,
     ];
 
     /**
@@ -91,28 +97,276 @@ final class WaitryMedioPagoCuentacajaSupport
     }
 
     /**
-     * QR en tótem Waitry: Totalcoin o credit_card (Waitry no distingue QR físico de tarjeta en POS).
+     * QR en kiosco Waitry: Totalcoin o credit_card con gateway KIOSK MPQR.
      */
-    public static function esTipoQrWaitry(?string $tipo): bool
+    public static function esTipoQrWaitry(?string $tipo, ?string $gateway = null): bool
     {
         $tipoNorm = self::normalizarTipo($tipo);
+        if ($tipoNorm === null) {
+            return false;
+        }
 
-        return $tipoNorm !== null
-            && in_array($tipoNorm, self::TIPOS_QR_WAITRY_NORMALIZADOS, true);
+        if (in_array($tipoNorm, self::TIPOS_QR_WAITRY_NORMALIZADOS, true)) {
+            return true;
+        }
+
+        if ($tipoNorm === self::normalizarTipo(self::TIPO_CREDIT_CARD)) {
+            return WaitryPaymentGatewaySupport::esGatewayQrKiosko($gateway);
+        }
+
+        return false;
     }
 
     /**
-     * Efectivo en tótem y fallback TOTEM no se concilian en el Informe Z.
+     * credit_card cobrado en terminal Posnet del kiosco (sin MPQR).
+     */
+    public static function esCreditCardPosnet(?string $tipo, ?string $gateway = null): bool
+    {
+        $tipoNorm = self::normalizarTipo($tipo);
+
+        return $tipoNorm === self::normalizarTipo(self::TIPO_CREDIT_CARD)
+            && WaitryPaymentGatewaySupport::esGatewayPosnetKiosko($gateway);
+    }
+
+    /**
+     * Indica cuenta puente de facturación (comanda pagada en POS → asiento único en Anita).
+     */
+    public static function esTipoCuentaPuenteFacturacion(?string $tipo): bool
+    {
+        return self::normalizarTipo($tipo) === self::TIPO_CUENTA_PUENTE_FACTURACION;
+    }
+
+    /**
+     * Cuenta puente de facturación no es medio del Informe Z.
      */
     public static function esTipoExcluidoInformeZ(?string $tipo): bool
     {
         $tipoNorm = self::normalizarTipo($tipo);
 
         if ($tipoNorm === null) {
-            return true;
+            return false;
         }
 
         return in_array($tipoNorm, self::TIPOS_EXCLUIDOS_INFORME_Z, true);
+    }
+
+    /**
+     * Tipo de pago Waitry del POS (sin remapear cobranza Anita).
+     *
+     * @param  array<string, mixed>  $linea
+     */
+    public static function waitryTipoPagoDesdeLinea(array $linea): ?string
+    {
+        return self::normalizarTipo($linea['waitry_tipo_pago'] ?? null);
+    }
+
+    /**
+     * Medios Waitry del kiosco que pueden entrar al Informe Z (QR, MP, Posnet).
+     * El filtro de cobro Anita vs tótem está en {@see WaitryTotemJornadaResumenSupport::lineaEntraInformeZSistema()}.
+     */
+    public static function esTipoPagoInformeZSistema(?string $tipo): bool
+    {
+        $tipoNorm = self::normalizarTipo($tipo);
+        if ($tipoNorm === null || self::esTipoExcluidoInformeZ($tipoNorm)) {
+            return false;
+        }
+
+        if ($tipoNorm === 'cash') {
+            return false;
+        }
+
+        if ($tipoNorm === 'interface') {
+            return false;
+        }
+
+        if (self::esTipoPredefinido($tipoNorm)) {
+            return true;
+        }
+
+        return $tipoNorm === self::normalizarTipo(self::TIPO_CREDIT_CARD);
+    }
+
+    /**
+     * interface Waitry (p. ej. QR por celular) → tipo canónico según gateway del cobro.
+     */
+    public static function tipoDesdeInterfaceGateway(?string $gateway): ?string
+    {
+        return match (WaitryPaymentGatewaySupport::normalizarGateway($gateway)) {
+            'totalcoin' => self::TIPO_TOTALCOIN,
+            'mercadopago' => self::TIPO_MERCADOPAGO,
+            default => null,
+        };
+    }
+
+    /**
+     * Tipo Waitry válido para Informe Z (sin evaluar origen ni cobranza Anita).
+     *
+     * @param  array<string, mixed>  $linea
+     */
+    public static function lineaEntraInformeZSistema(array $linea): bool
+    {
+        if (WaitryPaymentGatewaySupport::esOrdenPushErp($linea)) {
+            return false;
+        }
+
+        $tipo = self::waitryTipoPagoDesdeLinea($linea);
+        $tipoNorm = self::normalizarTipo($tipo);
+        if ($tipoNorm === 'interface') {
+            $gateway = WaitryPaymentGatewaySupport::extraerGatewayDesdeLinea($linea);
+
+            return self::tipoDesdeInterfaceGateway($gateway) !== null;
+        }
+
+        return self::esTipoPagoInformeZSistema($tipo);
+    }
+
+    /**
+     * Medio canónico del Informe Z sistema para una línea Waitry.
+     *
+     * @param  array<string, mixed>  $linea
+     */
+    public static function tipoMedioInformeZSistemaDesdeLinea(array $linea, int $empresaId = 0): ?string
+    {
+        if (! self::lineaEntraInformeZSistema($linea)) {
+            return null;
+        }
+
+        $gateway = WaitryPaymentGatewaySupport::extraerGatewayDesdeLinea($linea);
+        $tipo = self::resolverTipoMedioInformeZDesdeLinea($linea, $empresaId);
+
+        return self::tipoRepresentativoInformeZ($tipo, $gateway);
+    }
+
+    /**
+     * Medio para resúmenes operativos de cierre tótem (todos los medios Waitry mapeados).
+     * Facturadas en Anita → cobranza real; sin facturar → tipo Waitry del POS.
+     *
+     * @param  array<string, mixed>  $linea
+     */
+    public static function resolverTipoMedioInformeZDesdeLinea(array $linea, int $empresaId): ?string
+    {
+        if (! empty($linea['facturada_erp']) && $empresaId > 0) {
+            $desdeAnita = self::tipoMedioInformeZDesdeCobranzaAnita($linea, $empresaId);
+            if ($desdeAnita !== null) {
+                return self::tipoRepresentativoInformeZ($desdeAnita) ?? $desdeAnita;
+            }
+        }
+
+        $gateway = WaitryPaymentGatewaySupport::extraerGatewayDesdeLinea($linea);
+        $tipo = self::normalizarTipo($linea['waitry_tipo_pago'] ?? null);
+        if ($tipo === 'cash') {
+            return null;
+        }
+        if ($tipo === 'interface') {
+            $desdeInterface = self::tipoDesdeInterfaceGateway($gateway);
+
+            return $desdeInterface !== null
+                ? (self::tipoRepresentativoInformeZ($desdeInterface, $gateway) ?? $desdeInterface)
+                : null;
+        }
+        if ($tipo !== null && ! self::esTipoExcluidoInformeZ($tipo)) {
+            return self::tipoRepresentativoInformeZ($tipo, $gateway) ?? $tipo;
+        }
+
+        return self::tipoPredefinidoFallbackInformeZ($empresaId);
+    }
+
+    /**
+     * @param  array<string, mixed>  $linea  Debe incluir anita_cuentacaja_id / anita_es_totem si facturada_erp.
+     */
+    public static function tipoMedioInformeZDesdeCobranzaAnita(array $linea, int $empresaId): ?string
+    {
+        $ccId = (int) ($linea['anita_cuentacaja_id'] ?? 0);
+        if ($ccId <= 0) {
+            return null;
+        }
+
+        $totem = GastronomiaCuentacajaTotem::cuentaParaEmpresa($empresaId);
+        $totemId = (int) ($totem['id'] ?? 0);
+
+        if ($totemId > 0 && $ccId === $totemId) {
+            $waitryReal = self::normalizarTipo($linea['waitry_tipo_pago'] ?? $linea['waitry_tipo_pago_cuenta'] ?? null);
+            if ($waitryReal !== null && ! self::esTipoCuentaPuenteFacturacion($waitryReal)) {
+                return $waitryReal;
+            }
+
+            return null;
+        }
+
+        return match (CierreJornadaProcesoMedioSupport::claveDesdeCuentacaja(['id' => $ccId], $empresaId)) {
+            CierreJornadaProcesoMedioSupport::CLAVE_EFECTIVO => 'cash',
+            CierreJornadaProcesoMedioSupport::CLAVE_QR => self::TIPO_TOTALCOIN,
+            CierreJornadaProcesoMedioSupport::CLAVE_MP => self::TIPO_MERCADOPAGO,
+            default => null,
+        };
+    }
+
+    /**
+     * Primer medio configurado en waitry.tipo_pago_cuentacaja (MP, Totalcoin, etc.).
+     */
+    public static function tipoPredefinidoFallbackInformeZ(int $empresaId): ?string
+    {
+        if ($empresaId <= 0) {
+            return self::TIPO_MERCADOPAGO;
+        }
+
+        foreach (array_keys(self::mediosConfiguradosParaEmpresa($empresaId)) as $tipo) {
+            if (! self::esTipoExcluidoInformeZ($tipo)) {
+                return self::tipoRepresentativoInformeZ($tipo) ?? $tipo;
+            }
+        }
+
+        return self::TIPO_MERCADOPAGO;
+    }
+
+    /**
+     * Tipo canónico para índices de mapas (fusión borrador, resúmenes). Nunca devuelve cuenta puente.
+     */
+    public static function tipoParaClaveMapaInformeZ(?string $tipo, int $empresaId, ?string $gateway = null): ?string
+    {
+        $tipoCanon = self::tipoRepresentativoInformeZ($tipo, $gateway);
+
+        return $tipoCanon ?? self::tipoPredefinidoFallbackInformeZ($empresaId);
+    }
+
+    /**
+     * Clave única de medio para Informe Z / resumen tótem (evita duplicar Totalcoin + credit_card en la misma cuenta).
+     */
+    public static function claveMedioInformeZ(?string $tipo, int $empresaId, ?string $gateway = null): string
+    {
+        $tipoNorm = self::tipoRepresentativoInformeZ($tipo, $gateway);
+        if ($tipoNorm === null) {
+            return '__excl__';
+        }
+
+        $ccId = self::cuentacajaIdPorTipo($tipoNorm, $empresaId, $gateway);
+        if ($ccId !== null && $ccId > 0) {
+            return 'cc:'.$ccId;
+        }
+
+        return 'tipo:'.$tipoNorm;
+    }
+
+    /**
+     * Tipo canónico en Informe Z / resumen tótem.
+     * credit_card + KIOSK MPQR → totalcoin (QR); credit_card Posnet permanece credit_card.
+     */
+    public static function tipoRepresentativoInformeZ(?string $tipo, ?string $gateway = null): ?string
+    {
+        $tipoNorm = self::normalizarTipo($tipo);
+        if ($tipoNorm === null || self::esTipoExcluidoInformeZ($tipoNorm)) {
+            return null;
+        }
+
+        if (self::esTipoQrWaitry($tipoNorm, $gateway)) {
+            return self::TIPO_TOTALCOIN;
+        }
+
+        if (self::esCreditCardPosnet($tipoNorm, $gateway)) {
+            return self::TIPO_CREDIT_CARD;
+        }
+
+        return $tipoNorm;
     }
 
     public static function esCuentacajaTotem(int $cuentacajaId, int $empresaId): bool
@@ -131,13 +385,19 @@ final class WaitryMedioPagoCuentacajaSupport
      *
      * @return array{id:int,nombre:string,codigo:string,moneda_id:int,moneda_abreviatura:?string}|null
      */
-    public static function cuentaParaTipoInformeZ(?string $tipo, int $empresaId): ?array
+    public static function cuentaParaTipoInformeZ(?string $tipo, int $empresaId, ?string $gateway = null): ?array
     {
         if ($empresaId <= 0 || self::esTipoExcluidoInformeZ($tipo)) {
             return null;
         }
 
-        $cuentacajaId = self::cuentacajaIdPorTipo($tipo, $empresaId);
+        if (self::normalizarTipo($tipo) === 'cash') {
+            $efectivoId = GastronomiaCuentacajaEfectivo::idParaEmpresa($empresaId);
+
+            return $efectivoId !== null ? self::cuentaDesdeId($efectivoId, $empresaId) : null;
+        }
+
+        $cuentacajaId = self::cuentacajaIdPorTipo($tipo, $empresaId, $gateway);
         if ($cuentacajaId === null) {
             return null;
         }
@@ -174,15 +434,21 @@ final class WaitryMedioPagoCuentacajaSupport
         return null;
     }
 
-    public static function cuentacajaIdPorTipo(?string $tipo, int $empresaId): ?int
+    public static function cuentacajaIdPorTipo(?string $tipo, int $empresaId, ?string $gateway = null): ?int
     {
         $tipo = self::normalizarTipo($tipo);
         if ($tipo === null || $empresaId <= 0) {
             return null;
         }
 
+        if (self::esTipoQrWaitry($tipo, $gateway)) {
+            $tipo = self::TIPO_TOTALCOIN;
+        } elseif (self::esCreditCardPosnet($tipo, $gateway)) {
+            $tipo = self::TIPO_MERCADOPAGO;
+        }
+
         $id = (int) (self::mapaTipoCuentacaja()[$tipo] ?? 0);
-        if ($id <= 0 && self::esTipoQrWaitry($tipo)) {
+        if ($id <= 0 && self::esTipoQrWaitry($tipo, $gateway)) {
             $id = (int) (self::mapaTipoCuentacaja()[self::TIPO_TOTALCOIN] ?? 0);
         }
         if ($id <= 0) {
@@ -241,16 +507,28 @@ final class WaitryMedioPagoCuentacajaSupport
         return self::cuentaPuenteTotemFacturacion($empresaId, $tipo);
     }
 
-    public static function etiquetaTipo(?string $tipo): string
+    public static function etiquetaTipo(?string $tipo, ?string $gateway = null): string
     {
-        if (self::esTipoQrWaitry($tipo)) {
+        $tipoNorm = self::normalizarTipo($tipo);
+        if ($tipoNorm === self::normalizarTipo(self::TIPO_CREDIT_CARD)) {
+            if (WaitryPaymentGatewaySupport::esGatewayQrKiosko($gateway)) {
+                return 'QR MP (kiosco)';
+            }
+            if (WaitryPaymentGatewaySupport::esGatewayPosnetKiosko($gateway)) {
+                return 'Posnet (tótem)';
+            }
+        }
+
+        if (self::esTipoQrWaitry($tipo, $gateway)) {
             return 'QR (Totalcoin / tótem)';
         }
 
-        return match (self::normalizarTipo($tipo)) {
+        return match ($tipoNorm) {
             self::TIPO_MERCADOPAGO => 'Mercado Pago',
             self::TIPO_TOTALCOIN => 'Totalcoin',
+            self::TIPO_CREDIT_CARD => 'Posnet (tótem)',
             'cash' => 'Efectivo',
+            'interface' => 'Mostrador (integración)',
             'debitcard' => 'Tarjeta débito',
             default => $tipo !== null && trim($tipo) !== '' ? trim($tipo) : '—',
         };

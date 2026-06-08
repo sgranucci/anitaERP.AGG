@@ -204,7 +204,7 @@ $(function () {
 					$tr.append(td('<strong>' + fmtNum(r.precio) + '</strong>'));
 					$tr.append(td(fmtNum(r.descuento)));
 					$tr.append(td('<strong>' + fmtNum(r.precio_neto_descuento) + '</strong>'));
-					$tr.append(td(esc(r.articulo_proveedor || '')));
+					$tr.append(td(esc(r.codigo_articulo_proveedor || r.articulo_proveedor || '')));
 					$tr.append(td(esc(r.linea_fechavigencia || '')));
 					$tr.append(td(esc(r.condicion_pago || '—')));
 					$tr.append(td(esc(r.condicion_entrega || '—')));

@@ -38,6 +38,10 @@ final class GastronomiaInsumoStkmovAnitaService
             return;
         }
 
+        if (! config('gastronomia.anita_replicar_insumos_al_facturar', true)) {
+            return;
+        }
+
         $movimientos = GastronomiaVentaDetalleSupport::movimientosInsumos((int) $venta->id);
         if ($movimientos->isEmpty()) {
             return;

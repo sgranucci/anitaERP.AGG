@@ -22,7 +22,7 @@ class TotemWaitryGastronomiaRepository implements TotemWaitryGastronomiaReposito
             ->orderBy('empresa_id')
             ->orderBy('ubicacion_id');
 
-        $this->aplicarFiltroEmpresasAsignadas($query);
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query);
 
         return $query->get();
     }
@@ -50,14 +50,5 @@ class TotemWaitryGastronomiaRepository implements TotemWaitryGastronomiaReposito
     public function findOrFail($id)
     {
         return $this->model->findOrFail($id);
-    }
-
-    private function aplicarFiltroEmpresasAsignadas($query): void
-    {
-        $empresasAsignadas = $this->empresaRepository->traeEmpresasAsignadas();
-
-        if (count($empresasAsignadas) > 1) {
-            $query->whereIn('empresa_id', $empresasAsignadas);
-        }
     }
 }

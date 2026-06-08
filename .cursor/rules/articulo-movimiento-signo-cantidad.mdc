@@ -1,0 +1,53 @@
+---
+description: Signo de articulo_movimiento.cantidad para entrada/salida en consultas de stock
+alwaysApply: true
+---
+
+# Signo de cantidad en movimientos de stock
+
+En `articulo_movimiento`, la columna **`cantidad`** ya viene firmada al grabar. Es la fuente de verdad del efecto sobre el saldo.
+
+## Contrato al grabar
+
+| Signo `cantidad` | Efecto en stock |
+|---|---|
+| Positiva | Entrada (suma) |
+| Negativa | Salida (resta) |
+
+Referencia: `TipotransaccionOperacionStockSupport` — entrada → positiva, salida → negativa. Ventas usan `operacionstock`; stock manual usa `tipotransaccion_stock.signo`. Anulaciones/reversos invierten la **cantidad** (`delta = -1 × cantidad`), no el tipo.
+
+## Consultas, listados, export y PDF (kardex)
+
+Para columnas **Entrada** / **Salida**:
+
+```php
+$cantidad = (float) ($row->cantidad ?? 0);
+$entrada = $cantidad > 0 ? $cantidad : null;
+$salida  = $cantidad < 0 ? abs($cantidad) : null;
+```
+
+Mostrar siempre **valor absoluto** en la columna que corresponda; la otra queda vacía.
+
+## Prohibido en visualización de kardex
+
+- Usar `tipotransaccion.signo` (signo **contable** / cuenta corriente).
+- Usar `operacionstock` o `tipotransaccion_stock.signo` para decidir la columna si `cantidad` ya está firmada.
+- Valores negativos en columnas Entrada/Salida (el signo solo elige columna).
+- Lógica duplicada que contradiga la suma de `articulo_movimiento.cantidad` del saldo.
+
+## Cuándo sí usar el tipo
+
+- **Grabación**: firmar `cantidad` según `operacionstock` o `signo` del tipo (`TipotransaccionOperacionStockSupport`, `ArticuloMovimientoCantidadSignoSupport`).
+- **Corrección de datos**: `CorregirSignoArticuloMovimientoService` compara cantidad vs tipo esperado.
+- **Etiqueta de tipo**: mostrar abreviatura/nombre del comprobante o movimiento; no define la columna.
+
+## Referencia canónica
+
+`App\Support\Stock\RecuentoMovimientosArticuloSupport::enriquecerFila()`.
+
+## Comprobación rápida
+
+```bash
+rg "tt\.signo|signo_transaccion" app/Support/Stock resources/views/stock app/Exports/Stock
+# En kardex nuevo no debe decidir columnas Entrada/Salida
+```

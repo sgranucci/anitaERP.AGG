@@ -93,11 +93,14 @@ final class WaitrySyncStatusPosService
      */
     private function armarPayload(int $waitryOrderId, array $mediosPago, int $empresaId): array
     {
+        $payment = $this->paymentPayloadSupport->armarBloquePayment($mediosPago, $empresaId);
+
         return [
             'order_id' => $waitryOrderId,
             'event' => (string) config('waitry.sync_status_pos_event', 'accepted'),
             'paid' => true,
-            'payment' => $this->paymentPayloadSupport->armarBloquePayment($mediosPago, $empresaId),
+            'totalPaid' => $this->paymentPayloadSupport->montoTotalPagado($mediosPago),
+            'payment' => $payment,
         ];
     }
 }

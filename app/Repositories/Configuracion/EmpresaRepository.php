@@ -40,7 +40,38 @@ class EmpresaRepository implements EmpresaRepositoryInterface
         // Extrae las empresas asignadas
         return collect(Session::get('usuario_empresas'))->pluck('id')->toArray();
     }
-    
+
+    /**
+     * Restringe un query a las empresas asignadas al usuario en sesión.
+     * Sin empresas asignadas (acceso total): no aplica filtro.
+     */
+    public function aplicarFiltroEmpresasAsignadas($query, string $column = 'empresa_id', bool $incluirNull = false): void
+    {
+        $empresasAsignadas = $this->traeEmpresasAsignadas();
+
+        if (count($empresasAsignadas) >= 1) {
+            if ($incluirNull) {
+                $query->where(function ($q) use ($empresasAsignadas, $column) {
+                    $q->whereIn($column, $empresasAsignadas)
+                        ->orWhereNull($column);
+                });
+            } else {
+                $query->whereIn($column, $empresasAsignadas);
+            }
+        }
+    }
+
+    public function empresaIdPermitida(int $empresaId): bool
+    {
+        $asignadas = $this->traeEmpresasAsignadas();
+
+        if (count($asignadas) === 0) {
+            return true;
+        }
+
+        return in_array($empresaId, $asignadas, true);
+    }
+
     public function allFiltrado()
     {
         // Extrae las empresas asignadas

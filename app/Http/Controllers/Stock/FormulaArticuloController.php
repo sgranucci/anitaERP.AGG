@@ -226,7 +226,7 @@ class FormulaArticuloController extends Controller
     {
         can('crear-formula-articulo');
 
-        $deposito_query = Depmae::orderByRaw('CAST(codigo AS UNSIGNED) ASC')->get();
+        $deposito_query = Depmae::query()->paraUsuarioAutorizado()->orderByRaw('CAST(codigo AS UNSIGNED) ASC')->get();
         $data = null;
         $estado_enum = Formula_Articulo_Estado::$enumEstado;
 
@@ -252,7 +252,7 @@ class FormulaArticuloController extends Controller
         $data = $this->formulaArticuloRepository->find($id);
         $this->stkmaeUltimaCompraAnitaService->enriquecerLineasFormulaConCosto($data->formula_articulo_hijos);
         $costoTotal = $this->formulaArticuloCostoTotalService->calcular($id);
-        $deposito_query = Depmae::orderByRaw('CAST(codigo AS UNSIGNED) ASC')->get();
+        $deposito_query = Depmae::query()->paraUsuarioAutorizado()->orderByRaw('CAST(codigo AS UNSIGNED) ASC')->get();
         $estado_enum = Formula_Articulo_Estado::$enumEstado;
         $retornoArticulo = $this->resolverRetornoArticulo($request);
         $ocultarVolver = $request->query('origen') === 'modal_consulta';

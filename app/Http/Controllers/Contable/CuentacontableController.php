@@ -62,7 +62,7 @@ class CuentacontableController extends Controller
     {
         can('crear-cuentas-contables');
 		$rubrocontable_query = Rubrocontable::all();
-        $empresa_query = $this->empresaRepository->all();
+        $empresa_query = $this->empresaRepository->allFiltrado();
         $cuentacontable_query = $this->cuentacontableRepository->all();
         $conceptogasto_query = $this->conceptogastoRepository->all();
         $centrocosto_query = $this->centrocostoRepository->all();
@@ -114,7 +114,7 @@ class CuentacontableController extends Controller
 
         $data = $this->cuentacontableRepository->findOrFail($id);
 		$rubrocontable_query = Rubrocontable::all();
-        $empresa_query = $this->empresaRepository->all();
+        $empresa_query = $this->empresaRepository->allFiltrado();
         $cuentacontable_query = $this->cuentacontableRepository->all();
         $conceptogasto_query = $this->conceptogastoRepository->all();
         $centrocosto_query = $this->centrocostoRepository->all();
@@ -240,7 +240,7 @@ class CuentacontableController extends Controller
 			$output['data'] .= '<td colspan="4">Sin resultados</td>';
 			$output['data'] .= '</tr>';
 		}
-		return(json_encode($output, JSON_UNESCAPED_UNICODE));
+		return response()->json($output);
 	}
 
     public function leerCuentaContablePorCodigo($empresa_id, $codigo)

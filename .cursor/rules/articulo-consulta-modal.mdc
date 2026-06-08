@@ -1,0 +1,32 @@
+---
+description: Modal compartido de consulta de artículos (includes.stock.modalconsultaarticulo)
+globs: resources/views/includes/stock/modalconsultaarticulo.blade.php,app/Http/Controllers/Stock/ArticuloController.php,app/Support/Stock/ArticuloConsultaDesdeModal.php,public/assets/pages/scripts/stock/articulo/consulta.js
+alwaysApply: false
+---
+
+# Consulta de artículos desde modal
+
+El modal **`includes.stock.modalconsultaarticulo`** + **`stock/articulo/consulta.js`** es compartido por requisiciones, OC, recuento, facturación gastronomía, pedidos, fórmulas, partidas de gasto, movimientos de stock, etc. Un cambio en el backend del modal o en `consulta.js` aplica **en todas** esas pantallas.
+
+## Botón Consultar (modal)
+
+- HTML generado en `ArticuloController@consultaArticulo` (y `ArticuloFerliController@consultaArticulo` para catálogo Ferli).
+- URL: `ArticuloConsultaDesdeModal::urlEditar($id)` → `origen=modal_consulta&vista=consulta`.
+- Permiso: `ArticuloConsultaDesdeModal::puedeConsultar()` (no solo `editar-articulos`).
+
+## ABM en pestaña nueva
+
+- Ruta `editar_articulo` con middleware `modo.consulta`.
+- `ArticuloController@editar`: `$soloConsulta` si `origen=modal_consulta`; permiso vía `puedeConsultar()`.
+- Vista `stock/articulo/editar`: sin «Volver al listado»; botón **Cerrar solapa** siempre en modo modal.
+- Sin permiso `actualizar-*`: solo lectura (`pe-none`) y solo **Cerrar solapa**.
+- Con permiso `actualizar-*`: formulario editable + **Actualizar** y **Cerrar solapa**; redirect conserva `origen=modal_consulta&vista=consulta`.
+
+## Ícono lápiz en grillas
+
+- Clase sugerida: `btn-link-articulo`.
+- JS: `actualizarLinkEditarArticulo()` en `consulta.js` (misma query string).
+
+## Al agregar permiso a un módulo nuevo que use el modal
+
+Ampliar la lista en `ArticuloConsultaDesdeModal::puedeConsultar()`.

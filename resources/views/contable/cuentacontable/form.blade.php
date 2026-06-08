@@ -1,20 +1,10 @@
 <div class="row">
     <div class="col-sm-6">
-		<div class="form-group row">
-			<label for="empresa_id" class="col-lg-3 col-form-label requerido">Empresa</label>
-			<div class="col-lg-8">
-				<select name="empresa_id" id="empresa_id" class="form-control" required>
-					<option value="">Seleccione la empresa</option>
-					@foreach($empresa_query as $id => $empresa)
-						@if( isset($data) && (int) $empresa->id == (int) $data->empresa_id )
-							<option value="{{$empresa->id}}" selected>{{$empresa->nombre}}</option>
-						@else
-							<option value="{{$empresa->id}}">{{$empresa->nombre}}</option>
-						@endif
-					@endforeach
-				</select>
-			</div>
-		</div>
+		@include('includes.form-empresa-asignada', [
+			'empresa_query' => $empresa_query,
+			'empresa_id' => $data->empresa_id ?? null,
+			'col_input' => 'col-lg-8',
+		])
 		<div class="form-group row">
 			<label for="nombre" class="col-lg-3 col-form-label requerido">Nombre</label>
 			<div class="col-lg-8">

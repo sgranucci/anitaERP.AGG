@@ -3,6 +3,7 @@
 namespace App\Repositories\Ventas;
 
 use App\Models\Ventas\Vendedor;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
 use Auth;
@@ -18,8 +19,10 @@ class VendedorRepository implements VendedorRepositoryInterface
      *
      * @param Post $post
      */
-    public function __construct(Vendedor $vendedor)
-    {
+    public function __construct(
+        Vendedor $vendedor,
+        private EmpresaRepositoryInterface $empresaRepository,
+    ) {
         $this->model = $vendedor;
     }
 
@@ -30,9 +33,10 @@ class VendedorRepository implements VendedorRepositoryInterface
         if (!$hay_vendedor)
 			Self::sincronizarConAnita();
 
-        $vendedor = $this->model->with('vendedorasociados')->orderBy('nombre','ASC')->get();
+        $query = $this->model->with('vendedorasociados')->orderBy('nombre', 'ASC');
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query);
 
-        return $vendedor;
+        return $query->get();
     }
 
     public function create(array $data)

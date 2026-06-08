@@ -11,12 +11,11 @@
         </button>
       </div>
       <div class="modal-body">
-        <form action="" method="post">
-          <div class="form-group row">
-            <label for="consultamozo" class="col-form-label">Buscar:</label>
-            <input type="text" name="consultamozo" id="consultamozo" autofocus>
-          </div>
-        </form>
+        {{-- Sin form anidado: el partial puede ir dentro de otros forms. --}}
+        <div class="form-group row">
+          <label for="consultamozo" class="col-form-label">Buscar:</label>
+          <input type="text" name="consultamozo" id="consultamozo" autofocus>
+        </div>
 
         <table class="table table-striped table-bordered table-hover" id="tabla-data-mozo">
           <thead>

@@ -231,6 +231,11 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Stock\Articulo_ProveedorRepositoryInterface',
+            'App\Repositories\Stock\Articulo_ProveedorRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Stock\Formula_ArticuloRepositoryInterface',
             'App\Repositories\Stock\Formula_ArticuloRepository',
         );
@@ -876,8 +881,33 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Stock\DepmaeRepositoryInterface',
+            'App\Repositories\Stock\DepmaeRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Stock\PrestamoRepositoryInterface',
             'App\Repositories\Stock\PrestamoRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Stock\Recepcion_ProveedorRepositoryInterface',
+            'App\Repositories\Stock\Recepcion_ProveedorRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Stock\RecuentoRepositoryInterface',
+            'App\Repositories\Stock\RecuentoRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Stock\Recuento_ItemRepositoryInterface',
+            'App\Repositories\Stock\Recuento_ItemRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Stock\Recuento_ArchivoRepositoryInterface',
+            'App\Repositories\Stock\Recuento_ArchivoRepository',
         );
 
         $this->app->bind(
@@ -1277,6 +1307,27 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             'App\Repositories\Sala\PrioridadSalaRepositoryInterface',
             'App\Repositories\Sala\PrioridadSalaRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Sala\RequisicionSalaRepositoryInterface',
+            'App\Repositories\Sala\RequisicionSalaRepository',
+        );
+        $this->app->bind(
+            'App\Repositories\Sala\RequisicionSalaArticuloRepositoryInterface',
+            'App\Repositories\Sala\RequisicionSalaArticuloRepository',
+        );
+        $this->app->bind(
+            'App\Repositories\Sala\RequisicionSalaEstadoRepositoryInterface',
+            'App\Repositories\Sala\RequisicionSalaEstadoRepository',
+        );
+        $this->app->bind(
+            'App\Repositories\Sala\RequisicionSalaArchivoRepositoryInterface',
+            'App\Repositories\Sala\RequisicionSalaArchivoRepository',
+        );
+        $this->app->bind(
+            'App\Queries\Sala\RequisicionSalaQueryInterface',
+            'App\Queries\Sala\RequisicionSalaQuery',
         );
 
         // Modulo UIF

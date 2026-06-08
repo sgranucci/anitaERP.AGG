@@ -13,19 +13,7 @@
     <input type="hidden" name="filtro_busqueda_rapida" id="filtro_busqueda_rapida" value="">
     <div class="card-body bg-light py-2 text-body">
         <div class="form-row align-items-end">
-            @if (($empresa_query ?? collect())->count() > 1)
-            <div class="form-group col-md-2 col-sm-6 mb-2">
-                <label class="small mb-1" for="empresa_id">Empresa</label>
-                <select name="empresa_id" id="empresa_id" class="form-control form-control-sm">
-                    <option value="">Todas (asignadas)</option>
-                    @foreach ($empresa_query as $emp)
-                        <option value="{{ $emp->id }}" @selected((int) ($f['empresa_id'] ?? 0) === (int) $emp->id)>{{ $emp->nombre }}</option>
-                    @endforeach
-                </select>
-            </div>
-            @elseif (($empresa_query ?? collect())->count() === 1)
-                <input type="hidden" name="empresa_id" value="{{ (int) $empresa_query->first()->id }}"/>
-            @endif
+            @include('includes.listado.filtro_empresa_asignada', ['f' => $f])
             <div class="form-group col-md-2 col-sm-6 mb-2">
                 <label class="small mb-1" for="fecha_jornada_desde">Desde (fecha jornada)</label>
                 <input type="date"

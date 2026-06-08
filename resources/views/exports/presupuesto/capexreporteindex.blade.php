@@ -2,13 +2,13 @@
     @if (!empty($reservarFilaLogoExcel))
         <tbody>
             <tr>
-                <td colspan="20" style="height: 52px;">&#160;</td>
+                <td colspan="22" style="height: 52px;">&#160;</td>
             </tr>
         </tbody>
     @endif
     <tbody>
         <tr>
-            <td colspan="20">
+            <td colspan="22">
                 <h2 style="margin: 0; font-size: 18pt; font-weight: bold;">{{ $titulo }}</h2>
                 @if (!empty($subtitulo))
                     <div style="font-size: 10pt; color: #555;">{{ $subtitulo }}</div>

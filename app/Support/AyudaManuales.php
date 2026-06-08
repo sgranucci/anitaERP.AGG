@@ -19,6 +19,13 @@ class AyudaManuales
                 'icono' => 'fa-shopping-cart',
                 'disponible' => true,
             ],
+            [
+                'modulo' => 'Stock — Recuento de inventario',
+                'bajada' => 'Conteos físicos, ajustes de stock, modos de cierre, importación Excel y consulta de movimientos.',
+                'url' => route('manual_stock'),
+                'icono' => 'fa-clipboard',
+                'disponible' => true,
+            ],
         ];
     }
 

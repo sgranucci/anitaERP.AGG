@@ -213,6 +213,7 @@
             if (totBox) {
                 totBox.innerHTML = renderTotalesHtml(estado.totales_turno, 'Facturación del turno', {
                     arqueoEfectivo: true,
+                    arqueoMediosCierre: true,
                     cuentacaja_efectivo_id: estado.cuentacaja_efectivo_id || G.cuentacajaEfectivoIdConfig || 0,
                 })
                     + renderTotalesHtml(estado.totales_dia, 'Acumulado del día (esta PC)')

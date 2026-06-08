@@ -1,3 +1,12 @@
+function mostrarSolapaArticulo(numero) {
+    var secciones = (typeof SECCIONES_SOLAPA_FORM !== 'undefined')
+        ? SECCIONES_SOLAPA_FORM
+        : '.form1,.form2,.form3,.form4,.form5,.form6,.form7,.form8,.form9';
+    $(secciones).hide();
+    $('.form' + numero).show();
+    $('[id^="botonform"]').removeClass('btn-primary').addClass('btn-info');
+    $('#botonform' + numero).removeClass('btn-info').addClass('btn-primary');
+}
 
     $(function () {
         $("#botonestado").click(function(){
@@ -29,84 +38,58 @@
             $("#botonestado").html("<i class='fa fa-bell'></i>&nbsp;Estado "+descripcion);
         });
 
-        $("#botonform1").click(function(){
-            $(".form1").show();
-            $(".form2").hide();
-            $(".form3").hide();
-            $(".form4").hide();
-            $(".form5").hide();
-            $(".form6").hide();
-            $(".form7").hide();
+        $(document).on('click', '#botonform1', function (e) {
+            e.preventDefault();
+            mostrarSolapaArticulo(1);
         });
 
-        $("#botonform2").click(function(){
-            $(".form1").hide();
-            $(".form2").show();
-            $(".form3").hide();
-            $(".form4").hide();
-            $(".form5").hide();
-            $(".form6").hide();
-            $(".form7").hide();            
-
+        $(document).on('click', '#botonform2', function (e) {
+            e.preventDefault();
+            mostrarSolapaArticulo(2);
 			$("#titulo").html("");
 			$("#titulo").html("<span class='fa fa-cash-register'></span> Datos facturac&oacute;n");
         });
 
-        $("#botonform3").click(function(){
-            $(".form1").hide();
-            $(".form2").hide();
-            $(".form3").show();
-            $(".form4").hide();
-            $(".form5").hide();
-            $(".form6").hide();
-            $(".form7").hide();
-
-		 	// Hace foco en el campo de la leyenda
-			$("#leyenda").focus();            
+        $(document).on('click', '#botonform3', function (e) {
+            e.preventDefault();
+            mostrarSolapaArticulo(3);
         });
 
-        $("#botonform4").click(function(){
-            $(".form1").hide();
-            $(".form2").hide();
-            $(".form3").hide();
-            $(".form4").show();
-            $(".form5").hide();
-            $(".form6").hide();
-            $(".form7").hide();            
+        $(document).on('click', '#botonform4', function (e) {
+            e.preventDefault();
+            mostrarSolapaArticulo(4);
         });
 
-        $("#botonform5").click(function(){
-            $(".form1").hide();
-            $(".form2").hide();
-            $(".form3").hide();
-            $(".form4").hide();
-            $(".form5").show();
-            $(".form6").hide();
-            $(".form7").hide();            
+        $(document).on('click', '#botonform5', function (e) {
+            e.preventDefault();
+            mostrarSolapaArticulo(5);
+		 	$("#leyenda").focus();
         });
 	                     
-        $("#botonform6").click(function(){
-            $(".form1").hide();
-            $(".form2").hide();
-            $(".form3").hide();
-            $(".form4").hide();
-            $(".form5").hide();
-            $(".form6").show();
-            $(".form7").hide();            
+        $(document).on('click', '#botonform6', function (e) {
+            e.preventDefault();
+            mostrarSolapaArticulo(6);
         });
 	                     
-        $("#botonform7").click(function(){
-            $(".form1").hide();
-            $(".form2").hide();
-            $(".form3").hide();
-            $(".form4").hide();
-            $(".form5").hide();
-            $(".form6").hide();
-            $(".form7").show();    
-            
-            // lee historia
+        $(document).on('click', '#botonform7', function (e) {
+            e.preventDefault();
+            mostrarSolapaArticulo(7);
 			leeHistoria();
         });
+
+        $(document).on('click', '#botonform8', function (e) {
+            e.preventDefault();
+            mostrarSolapaArticulo(8);
+        });
+
+        $(document).on('click', '#botonform9', function (e) {
+            e.preventDefault();
+            mostrarSolapaArticulo(9);
+        });
+
+        if ($('#botonform1').length) {
+            $('#botonform1').removeClass('btn-info').addClass('btn-primary');
+        }
 	             
         $('#descripcion').on('change', function () {                             
             let descripcion = $(this).val();

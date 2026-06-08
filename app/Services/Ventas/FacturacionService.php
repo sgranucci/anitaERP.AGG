@@ -79,6 +79,7 @@ use App\Services\Configuracion\ImpuestoService;
 use App\Services\Configuracion\CotizacionService;
 use App\Services\Ventas\FacturaelectronicaService;
 use App\Services\Stock\MovimientoStockService;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
@@ -982,9 +983,15 @@ class FacturacionService
 
 						$venta_emision = $this->venta_emisionRepository->create($dataArticuloMovimiento);
 
-						$articulo_movimiento = $this->articulo_movimientoService->
-										guardaArticuloMovimiento('create',
-										$dataArticuloMovimiento, null);
+						$dataFirmado = \App\Support\Ventas\TipotransaccionOperacionStockSupport::firmarPayloadDesdeTipotransaccion(
+							$dataArticuloMovimiento,
+							$tipotransaccion
+						);
+						if ($dataFirmado !== null) {
+							$articulo_movimiento = $this->articulo_movimientoService->
+											guardaArticuloMovimiento('create',
+											$dataFirmado, null);
+						}
 					}
 					
 					// Graba contabilidad
@@ -1943,6 +1950,7 @@ class FacturacionService
 			else
 				$tipoAnita = $tipotransaccion->abreviatura;
 
+			$numeroForzado = (int) ($data['numerocomprobante_forzado'] ?? 0);
 			switch($puntoventa->modofacturacion)
 			{
 				case 'C':
@@ -1950,23 +1958,35 @@ class FacturacionService
 					$this->facturaelectronicaService->armaTipoTransaccion($letra, $cliente->modoFacturacion, $codigoTipoTransaccion,
 																			$puntoventa, $totalComprobante);
 
-					$numero = $this->facturaelectronicaService
-								->traeUltimoNumeroComprobante($empresa->nroinscripcion,
-																$codigoTipoTransaccion,
-																$puntoventa);
+					if ($numeroForzado > 0) {
+						$numero = $numeroForzado - 1;
+					} else {
+						$numero = $this->facturaelectronicaService
+									->traeUltimoNumeroComprobante($empresa->nroinscripcion,
+																	$codigoTipoTransaccion,
+																	$puntoventa);
+					}
 					break;
 				case 'A':
-					GastronomiaEmisionProfiler::activo()?->marcar('anita_ultimo_numero_inicio');
-					$numero = Self::buscaUltimoNumeroComprobante($tipoAnita, $letra, $puntoventa);
-					GastronomiaEmisionProfiler::activo()?->marcar('anita_ultimo_numero_fin');
-					
+					if ($numeroForzado > 0) {
+						$numero = $numeroForzado - 1;
+					} else {
+						GastronomiaEmisionProfiler::activo()?->marcar('anita_ultimo_numero_inicio');
+						$numero = Self::buscaUltimoNumeroComprobante($tipoAnita, $letra, $puntoventa);
+						GastronomiaEmisionProfiler::activo()?->marcar('anita_ultimo_numero_fin');
+					}
 					break;
 				case 'M':
-					$venta = $this->ventaRepository->traeUltimoComprobanteVenta($tipoTransaccion_id, $puntoventa_id);
-					if ($venta)
-						$numero = $venta->numerocomprobante;
-					else	
-						$numero = 0;
+					if ($numeroForzado > 0) {
+						$numero = $numeroForzado - 1;
+					} else {
+						$venta = $this->ventaRepository->traeUltimoComprobanteVenta($tipoTransaccion_id, $puntoventa_id);
+						if ($venta) {
+							$numero = $venta->numerocomprobante;
+						} else {
+							$numero = 0;
+						}
+					}
 					break;
 			}			
 			$centrocosto_id = null;
@@ -2729,7 +2749,10 @@ class FacturacionService
 									$dataFactura, $asientoContable, $detalleContable, $signo, $centrocosto_id, $codigoCentrocosto,
 									$dataCAE, $venta_id, $referenciaFactura, $actividad_arca_id, $opcionesEmision = null)
 	{
-		$omitirMovimientoStock = is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_movimiento_stock']);
+		$omitirMovimientoStock = (is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_movimiento_stock']))
+			|| ! \App\Support\Ventas\TipotransaccionOperacionStockSupport::afectaStock(
+				$tipotransaccion->operacionstock ?? \App\Support\Ventas\TipotransaccionOperacionStockSupport::SIN_OPERACION
+			);
 		$omitirContabilidad = is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_contabilidad']);
 		$omitirCuentaCorriente = is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_cuenta_corriente']);
 		$omitirSolicitudArcaCae = is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_solicitud_arca_cae']);
@@ -2950,11 +2973,15 @@ class FacturacionService
 				$venta_emision = $this->venta_emisionRepository->create($dataEmision);
 
 				if (! $omitirMovimientoStock && isset($itemEmision['articulo_id']) && $dataArticuloMovimiento !== [])
-				{				
+				{
 					$dataTalle = [];
+					$dataFirmado = \App\Support\Ventas\TipotransaccionOperacionStockSupport::firmarPayloadMovimiento(
+						$dataArticuloMovimiento,
+						$tipotransaccion->operacionstock
+					);
 					$articulo_movimiento = $this->articulo_movimientoService->
 								guardaArticuloMovimiento('create',
-								$dataArticuloMovimiento, $dataTalle);
+								$dataFirmado, $dataTalle);
 				}
 			}
 			// Graba contabilidad
@@ -2974,27 +3001,51 @@ class FacturacionService
 			if ($puntoventa->modofacturacion != 'M')
 			{
 				if (! $omitirSincronizacionAnita) {
-					$replicacionAnitaIntentada = true;
 					$modoMinimoAnita = is_array($opcionesEmision)
 						&& ! empty($opcionesEmision['anita_modo_minimo']);
-					GastronomiaEmisionProfiler::activo()?->marcar('anita_graba_inicio');
-					// Graba anita
-					$anita = $this->grabaAnitaConReintentoPorDuplicado($puntoventa->codigo, $letra, 0, 0,
-								$venta, $dataCAE, $conceptosTotales, $cuentacorriente, $dataFactura, $signo,
-								$codigoTipoTransaccion, null,
-								true, $numeroOrdenventa, $codigoCentrocosto, $referenciaFactura,
-								$empresa->codigo, null, null, $modoMinimoAnita, $omitirCuentaCorriente);
+					$deferAnitaTrasCommit = $transaccionExterna
+						&& $modoMinimoAnita
+						&& filter_var(config('gastronomia.anita_tras_commit_al_facturar', true), FILTER_VALIDATE_BOOLEAN);
 
-					GastronomiaEmisionProfiler::activo()?->marcar('anita_graba_fin');
+					if ($deferAnitaTrasCommit) {
+						$ret['anita_pendiente'] = [
+							'puntoventa_codigo' => $puntoventa->codigo,
+							'letra' => $letra,
+							'venta' => $venta,
+							'data_cae' => $dataCAE,
+							'conceptos_totales' => $conceptosTotales,
+							'cuentacorriente' => $cuentacorriente,
+							'data_factura' => $dataFactura,
+							'signo' => $signo,
+							'codigo_tipo_transaccion' => $codigoTipoTransaccion,
+							'numero_orden_venta' => $numeroOrdenventa,
+							'codigo_centrocosto' => $codigoCentrocosto,
+							'referencia_factura' => $referenciaFactura,
+							'empresa_codigo' => $empresa->codigo,
+							'modo_minimo_anita' => true,
+							'omitir_cuenta_corriente_anita' => $omitirCuentaCorriente,
+						];
+					} else {
+						$replicacionAnitaIntentada = true;
+						GastronomiaEmisionProfiler::activo()?->marcar('anita_graba_inicio');
+						// Graba anita
+						$anita = $this->grabaAnitaConReintentoPorDuplicado($puntoventa->codigo, $letra, 0, 0,
+									$venta, $dataCAE, $conceptosTotales, $cuentacorriente, $dataFactura, $signo,
+									$codigoTipoTransaccion, null,
+									true, $numeroOrdenventa, $codigoCentrocosto, $referenciaFactura,
+									$empresa->codigo, null, null, $modoMinimoAnita, $omitirCuentaCorriente);
 
-					if (isset($anita['error']))
-					{
-						if ($anita['error'] === 'Errvend') {
-							throw new Exception('Error en grabación Anita: el cliente no tiene vendedor asignado.');
+						GastronomiaEmisionProfiler::activo()?->marcar('anita_graba_fin');
+
+						if (isset($anita['error']))
+						{
+							if ($anita['error'] === 'Errvend') {
+								throw new Exception('Error en grabación Anita: el cliente no tiene vendedor asignado.');
+							}
+
+							$detalle = trim((string) ($anita['mensaje'] ?? $anita['error'] ?? 'Error desconocido'));
+							throw new Exception('Error en grabación Anita: '.$detalle);
 						}
-
-						$detalle = trim((string) ($anita['mensaje'] ?? $anita['error'] ?? 'Error desconocido'));
-						throw new Exception('Error en grabación Anita: '.$detalle);
 					}
 				}
 
@@ -3031,6 +3082,8 @@ class FacturacionService
 
 			return $ret;
 		} catch (\Exception $e) {
+			$omitirContabilidadAnita = $omitirContabilidad
+				|| (is_array($opcionesEmision) && ! empty($opcionesEmision['anita_modo_minimo']));
 			$this->revertirVentaEnAnitaSiGrabada(
 				$venta,
 				$letra,
@@ -3038,6 +3091,7 @@ class FacturacionService
 				$empresa,
 				$omitirSincronizacionAnita,
 				$replicacionAnitaIntentada,
+				$omitirContabilidadAnita,
 			);
 
 			if (! $transaccionExterna) {
@@ -3062,6 +3116,7 @@ class FacturacionService
 		$empresa,
 		bool $omitirSincronizacionAnita = false,
 		bool $replicacionAnitaIntentada = false,
+		bool $omitirContabilidadAnita = false,
 	): void {
 		if ($omitirSincronizacionAnita || ! $replicacionAnitaIntentada || ! is_array($ventaArray)) {
 			return;
@@ -3082,13 +3137,14 @@ class FacturacionService
 			$puntoventa->codigo,
 			$ventaArray['numerocomprobante'],
 			$empresa->codigo,
+			$omitirContabilidadAnita,
 		);
 	}
 
 	/**
 	 * Elimina en Anita el comprobante asociado a una venta del ERP (rollback tras emisión gastronomía).
 	 */
-	public function borraAnitaDesdeVenta(\App\Models\Ventas\Venta $venta): void
+	public function borraAnitaDesdeVenta(\App\Models\Ventas\Venta $venta, bool $omitirContabilidadAnita = true): void
 	{
 		$codigo = trim((string) ($venta->codigo ?? ''));
 		if ($codigo === '') {
@@ -3119,6 +3175,7 @@ class FacturacionService
 			$puntoventa->codigo,
 			$venta->numerocomprobante,
 			$empresa->codigo,
+			$omitirContabilidadAnita,
 		);
 	}
 
@@ -4332,7 +4389,7 @@ class FacturacionService
 		$tipo = substr((string) ($venta['codigo'] ?? ''), 0, 3);
 		$numero = $venta['numerocomprobante'];
 
-		self::borraAnita($tipo, $letra, $puntoventa, $numero, $empresaCodigo);
+		self::borraAnita($tipo, $letra, $puntoventa, $numero, $empresaCodigo, $modoMinimoAnita);
 
 		return self::grabaAnita(
 			$puntoventa,
@@ -4391,6 +4448,27 @@ class FacturacionService
 		return 0;
 	}
 
+	/**
+	 * Último número de comprobante en Anita (PV mod A / CAEA) para numeración multi-lote.
+	 */
+	public function ultimoNumerocomprobanteAnitaCaea(object $puntoventa, object $tipotransaccion, string $letraComprobante): int
+	{
+		if (($puntoventa->modofacturacion ?? '') !== 'A') {
+			return 0;
+		}
+
+		$codigoTipoTransaccion = (string) ($tipotransaccion->codigo ?? '');
+		if ($codigoTipoTransaccion >= '200') {
+			$tipoAnita = substr((string) ($tipotransaccion->abreviatura ?? ''), 0, 1).'CE';
+		} else {
+			$tipoAnita = (string) ($tipotransaccion->abreviatura ?? '');
+		}
+
+		$letra = trim($letraComprobante) !== '' ? $letraComprobante : 'B';
+
+		return max(0, (int) $this->buscaUltimoNumeroComprobante($tipoAnita, $letra, $puntoventa));
+	}
+
 	// Busca el ultimo numero de comprobante
 	private function buscaUltimoNumeroComprobante($tipo, $letra, $puntoventa)
 	{
@@ -4438,190 +4516,190 @@ class FacturacionService
 		return 0;
 	}
 
-	// Borra factura en Anita
-	public function borraAnita($tipo, $letra, $puntoventa, $numero, $empresa)
+	/**
+	 * Replica en Informix una venta gastronomía diferida (post-commit de emitir-factura).
+	 *
+	 * @param  array<string, mixed>  $anitaPendiente
+	 */
+	public function ejecutarAnitaPendienteGastronomia(array $anitaPendiente): void
 	{
-        $apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'delete', 
-						'sistema' => 'ventas',
-						'tabla' => 'venta', 
-						'whereArmado' => " WHERE ven_tipo = '".$tipo."' AND
-												ven_letra = '".$letra."' AND
-												ven_sucursal = '".$puntoventa."' AND
-												ven_nro = '".$numero."'
-						" );
-		if ($this->flGrabaComprobanteDividido)
-		{
-			$data['path_sistema'] = '/usr2/villafranca';
-		}						
-        $apiAnita->apiCallEscritura($data, 'venta delete', 'facturacion.anita_bridge.fallo');
-
-		$apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'delete', 
-						'tabla' => 'venibr', 
-						'sistema' => 'ventas',
-						'whereArmado' => " WHERE veni_tipo = '".$tipo."' AND
-												veni_letra = '".$letra."' AND
-												veni_sucursal = '".$puntoventa."' AND
-												veni_nro = '".$numero."'
-						" );
-		if ($this->flGrabaComprobanteDividido)
-		{
-			$data['path_sistema'] = '/usr2/villafranca';
-		}						
-        $apiAnita->apiCallEscritura($data, 'venibr delete', 'facturacion.anita_bridge.fallo');
-
-		$apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'delete', 
-						'tabla' => 'vengrav', 
-						'sistema' => 'ventas',
-						'whereArmado' => " WHERE veng_tipo = '".$tipo."' AND
-												veng_letra = '".$letra."' AND
-												veng_sucursal = '".$puntoventa."' AND
-												veng_nro = '".$numero."'
-						" );
-		if ($this->flGrabaComprobanteDividido)
-		{
-			$data['path_sistema'] = '/usr2/villafranca';
-		}						
-        $apiAnita->apiCallEscritura($data, 'vengrav delete', 'facturacion.anita_bridge.fallo');
-
-		$apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'delete', 
-						'tabla' => 'vencae', 
-						'sistema' => 'ventas',
-						'whereArmado' => " WHERE venc_tipo = '".$tipo."' AND
-												venc_letra = '".$letra."' AND
-												venc_sucursal = '".$puntoventa."' AND
-												venc_nro = '".$numero."'
-						" );
-		if ($this->flGrabaComprobanteDividido)
-		{
-			$data['path_sistema'] = '/usr2/villafranca';
-		}						
-        $apiAnita->apiCallEscritura($data, 'vencae delete', 'facturacion.anita_bridge.fallo');
-
-		$apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'delete', 
-						'tabla' => 'climov', 
-						'sistema' => 'ventas',
-						'whereArmado' => " WHERE cliv_tipo = '".$tipo."' AND
-												cliv_letra = '".$letra."' AND
-												cliv_sucursal = '".$puntoventa."' AND
-												cliv_nro = '".$numero."'
-						" );
-		if ($this->flGrabaComprobanteDividido)
-		{
-			$data['path_sistema'] = '/usr2/villafranca';
-		}						
-        $apiAnita->apiCallEscritura($data, 'climov delete', 'facturacion.anita_bridge.fallo');
-
-		$apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'delete', 
-						'tabla' => 'comprob', 
-						'sistema' => 'ventas',
-						'whereArmado' => " WHERE comp_tipo = '".$tipo."' AND
-												comp_letra = '".$letra."' AND
-												comp_sucursal = '".$puntoventa."' AND
-												comp_nro_fact = '".$numero."'
-						" );
-		if ($this->flGrabaComprobanteDividido)
-		{
-			$data['path_sistema'] = '/usr2/villafranca';
-		}						
-        $apiAnita->apiCallEscritura($data, 'comprob delete', 'facturacion.anita_bridge.fallo');
-
-		$apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'delete', 
-						'tabla' => 'compaux', 
-						'sistema' => 'ventas',
-						'whereArmado' => " WHERE compa_tipo = '".$tipo."' AND
-												compa_letra = '".$letra."' AND
-												compa_sucursal = '".$puntoventa."' AND
-												compa_nro_fact = '".$numero."'
-						" );
-		if ($this->flGrabaComprobanteDividido)
-		{
-			$data['path_sistema'] = '/usr2/villafranca';
-		}						
-        $apiAnita->apiCallEscritura($data, 'compaux delete', 'facturacion.anita_bridge.fallo');
-
-		if (config('app.empresa') == 'Calzados Ferli')
-		{
-			$apiAnita = new ApiAnita();
-			$data = array( 'acc' => 'delete', 
-							'tabla' => 'compley', 
-							'sistema' => 'ventas',
-							'whereArmado' => " WHERE compl_tipo = '".$tipo."' AND
-													compl_letra = '".$letra."' AND
-													compl_sucursal = '".$puntoventa."' AND
-													compl_nro = '".$numero."'
-							" );
-			if ($this->flGrabaComprobanteDividido)
-			{
-				$data['path_sistema'] = '/usr2/villafranca';
-			}						
-			$apiAnita->apiCallEscritura($data, 'compley delete', 'facturacion.anita_bridge.fallo');
+		$venta = $anitaPendiente['venta'] ?? null;
+		if (! is_array($venta)) {
+			throw new \InvalidArgumentException('anita_pendiente sin datos de venta.');
 		}
 
-		$apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'delete', 
-						'tabla' => 'stkmov', 
-						'sistema' => 'ventas',
-						'whereArmado' => " WHERE stkv_tipo = '".$tipo."' AND
-												stkv_letra = '".$letra."' AND
-												stkv_sucursal = '".$puntoventa."' AND
-												stkv_nro = '".$numero."'
-						" );
-		if ($this->flGrabaComprobanteDividido)
-		{
-			$data['path_sistema'] = '/usr2/villafranca';
-		}						
-        $apiAnita->apiCallEscritura($data, 'stkmov delete', 'facturacion.anita_bridge.fallo');
+		GastronomiaEmisionProfiler::activo()?->marcar('anita_graba_inicio');
+		$anita = $this->grabaAnitaConReintentoPorDuplicado(
+			$anitaPendiente['puntoventa_codigo'] ?? 0,
+			(string) ($anitaPendiente['letra'] ?? ''),
+			0,
+			0,
+			$venta,
+			$anitaPendiente['data_cae'] ?? [],
+			$anitaPendiente['conceptos_totales'] ?? [],
+			$anitaPendiente['cuentacorriente'] ?? [],
+			$anitaPendiente['data_factura'] ?? [],
+			$anitaPendiente['signo'] ?? 1.,
+			$anitaPendiente['codigo_tipo_transaccion'] ?? '',
+			null,
+			true,
+			(int) ($anitaPendiente['numero_orden_venta'] ?? 0),
+			(int) ($anitaPendiente['codigo_centrocosto'] ?? 0),
+			(string) ($anitaPendiente['referencia_factura'] ?? ''),
+			$anitaPendiente['empresa_codigo'] ?? '',
+			null,
+			null,
+			! empty($anitaPendiente['modo_minimo_anita']),
+			! empty($anitaPendiente['omitir_cuenta_corriente_anita']),
+		);
+		GastronomiaEmisionProfiler::activo()?->marcar('anita_graba_fin');
 
-		if (config('app.empresa') == 'Calzados Ferli')
-		{
-			$apiAnita = new ApiAnita();
-			$data = array( 'acc' => 'delete', 
-							'tabla' => 'stkvmed', 
-							'sistema' => 'ventas',
-							'whereArmado' => " WHERE stkvm_tipo = '".$tipo."' AND
-													stkvm_letra = '".$letra."' AND
-													stkvm_sucursal = '".$puntoventa."' AND
-													stkvm_nro = '".$numero."'
-							" );
-			$apiAnita->apiCallEscritura($data, 'stkvmed delete', 'facturacion.anita_bridge.fallo');
+		if (is_array($anita) && isset($anita['error'])) {
+			if ($anita['error'] === 'Errvend') {
+				throw new \RuntimeException('Error en grabación Anita: el cliente no tiene vendedor asignado.');
+			}
+
+			$detalle = trim((string) ($anita['mensaje'] ?? $anita['error'] ?? 'Error desconocido'));
+
+			throw new \RuntimeException('Error en grabación Anita: '.$detalle);
+		}
+	}
+
+	/**
+	 * Borra factura en Anita (ventas +, opcionalmente, contab).
+	 * Detalle (stkmov, vengrav, …) antes que cabecera (venta). Cada DELETE es best-effort:
+	 * un fallo en una tabla no impide borrar el resto (evita huérfanos tras error 239).
+	 *
+	 * @param  bool  $omitirContabilidadAnita  true en gastronomía modo mínimo: no toca subdiario/ctamov (nunca se insertaron).
+	 */
+	public function borraAnita($tipo, $letra, $puntoventa, $numero, $empresa, bool $omitirContabilidadAnita = false)
+	{
+		$tipo = (string) $tipo;
+		$letra = (string) $letra;
+		$puntoventa = (string) $puntoventa;
+		$numero = (string) $numero;
+
+		if (config('app.empresa') == 'Calzados Ferli') {
+			$this->borraAnitaDeleteSeguro('stkvmed', 'stkvmed delete', 'ventas', "
+				WHERE stkvm_tipo = '".$tipo."' AND
+					stkvm_letra = '".$letra."' AND
+					stkvm_sucursal = '".$puntoventa."' AND
+					stkvm_nro = '".$numero."'
+			");
 		}
 
-		$apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'delete', 
-						'tabla' => 'subdiario', 
-						'sistema' => 'contab',
-						'whereArmado' => " WHERE subd_sistema='V' AND subd_tipo = '".$tipo."' AND
-												subd_letra = '".$letra."' AND
-												subd_sucursal = '".$puntoventa."' AND
-												subd_nro = '".$numero."'
-						" );
-		if ($this->flGrabaComprobanteDividido)
-		{
-			$data['path_sistema'] = '/usr2/villafranca';
-		}			
-        $apiAnita->apiCallEscritura($data, 'subdiario delete', 'facturacion.anita_bridge.fallo');
+		$this->borraAnitaDeleteSeguro('stkmov', 'stkmov delete', 'ventas', "
+			WHERE stkv_tipo = '".$tipo."' AND
+				stkv_letra = '".$letra."' AND
+				stkv_sucursal = '".$puntoventa."' AND
+				stkv_nro = '".$numero."'
+		");
 
+		if (config('app.empresa') == 'Calzados Ferli') {
+			$this->borraAnitaDeleteSeguro('compley', 'compley delete', 'ventas', "
+				WHERE compl_tipo = '".$tipo."' AND
+					compl_letra = '".$letra."' AND
+					compl_sucursal = '".$puntoventa."' AND
+					compl_nro = '".$numero."'
+			");
+		}
+
+		$this->borraAnitaDeleteSeguro('compaux', 'compaux delete', 'ventas', "
+			WHERE compa_tipo = '".$tipo."' AND
+				compa_letra = '".$letra."' AND
+				compa_sucursal = '".$puntoventa."' AND
+				compa_nro_fact = '".$numero."'
+		");
+
+		$this->borraAnitaDeleteSeguro('comprob', 'comprob delete', 'ventas', "
+			WHERE comp_tipo = '".$tipo."' AND
+				comp_letra = '".$letra."' AND
+				comp_sucursal = '".$puntoventa."' AND
+				comp_nro_fact = '".$numero."'
+		");
+
+		$this->borraAnitaDeleteSeguro('climov', 'climov delete', 'ventas', "
+			WHERE cliv_tipo = '".$tipo."' AND
+				cliv_letra = '".$letra."' AND
+				cliv_sucursal = '".$puntoventa."' AND
+				cliv_nro = '".$numero."'
+		");
+
+		$this->borraAnitaDeleteSeguro('venibr', 'venibr delete', 'ventas', "
+			WHERE veni_tipo = '".$tipo."' AND
+				veni_letra = '".$letra."' AND
+				veni_sucursal = '".$puntoventa."' AND
+				veni_nro = '".$numero."'
+		");
+
+		$this->borraAnitaDeleteSeguro('vengrav', 'vengrav delete', 'ventas', "
+			WHERE veng_tipo = '".$tipo."' AND
+				veng_letra = '".$letra."' AND
+				veng_sucursal = '".$puntoventa."' AND
+				veng_nro = '".$numero."'
+		");
+
+		$this->borraAnitaDeleteSeguro('vencae', 'vencae delete', 'ventas', "
+			WHERE venc_tipo = '".$tipo."' AND
+				venc_letra = '".$letra."' AND
+				venc_sucursal = '".$puntoventa."' AND
+				venc_nro = '".$numero."'
+		");
+
+		$this->borraAnitaDeleteSeguro('venta', 'venta delete', 'ventas', "
+			WHERE ven_tipo = '".$tipo."' AND
+				ven_letra = '".$letra."' AND
+				ven_sucursal = '".$puntoventa."' AND
+				ven_nro = '".$numero."'
+		");
+
+		if (! $omitirContabilidadAnita) {
+			$this->borraAnitaDeleteSeguro('subdiario', 'subdiario delete', 'contab', "
+				WHERE subd_sistema='V' AND subd_tipo = '".$tipo."' AND
+					subd_letra = '".$letra."' AND
+					subd_sucursal = '".$puntoventa."' AND
+					subd_nro = '".$numero."'
+			");
+
+			$this->borraAnitaDeleteSeguro('ctamov', 'ctamov delete', 'contab', "
+				WHERE ctav_empresa='".$empresa."' AND ctav_tipo = '".$tipo."' AND
+					ctav_letra = '".$letra."' AND
+					ctav_sucursal = '".$puntoventa."' AND
+					ctav_nro = '".$numero."'
+			");
+		}
+	}
+
+	/**
+	 * DELETE en Informix por comprobante; registra warning y continúa si falla (p. ej. tabla vacía o 239).
+	 */
+	private function borraAnitaDeleteSeguro(
+		string $tabla,
+		string $contexto,
+		string $sistema,
+		string $whereArmado,
+	): void {
 		$apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'delete', 
-						'tabla' => 'ctamov', 
-						'sistema' => 'contab',
-						'whereArmado' => " WHERE ctav_empresa='".$empresa."' AND ctav_tipo = '".$tipo."' AND
-												ctav_letra = '".$letra."' AND
-												ctav_sucursal = '".$puntoventa."' AND
-												ctav_nro = '".$numero."'
-						" );
-		if ($this->flGrabaComprobanteDividido)
-		{
+		$data = [
+			'acc' => 'delete',
+			'sistema' => $sistema,
+			'tabla' => $tabla,
+			'whereArmado' => $whereArmado,
+		];
+
+		if ($this->flGrabaComprobanteDividido) {
 			$data['path_sistema'] = '/usr2/villafranca';
-		}						
-        $apiAnita->apiCallEscritura($data, 'ctamov delete', 'facturacion.anita_bridge.fallo');
+		}
+
+		try {
+			$apiAnita->apiCallEscritura($data, $contexto, 'facturacion.anita_bridge.fallo');
+		} catch (\Throwable $e) {
+			Log::warning('facturacion.anita_bridge.borra_omitido', [
+				'contexto' => $contexto,
+				'tabla' => $tabla,
+				'msg' => $e->getMessage(),
+			]);
+		}
 	}
 
 	public function grabaVenCae($tipo, $letra, $puntoventa, $numerocomprobante, $cae, $fechavencimientocae)
@@ -5244,7 +5322,7 @@ class FacturacionService
 			$tipotransaccion_query = $this->tipotransaccionRepository->all(['V', 'C'], ['A']);
 
         $puntoventa_query = $this->puntoventaRepository->all();
-        $deposito_query = Depmae::all();
+        $deposito_query = Depmae::query()->paraUsuarioAutorizado()->orderBy('nombre')->get();
         $cliente_query = $this->clienteQuery->allQueryCargaPedido(['id','nombre','codigo']);
         $vendedor_query = Vendedor::all();
 		$vendedor_query->prepend((object) ['id'=>'0','nombre'=>'Primero']);
@@ -5266,8 +5344,9 @@ class FacturacionService
 	 * Completa la solicitud de CAE/CAEA pendiente (gastronomía u otros flujos con omitir_solicitud_arca_cae).
 	 *
 	 * @param  array<string, mixed>  $caePendiente
+	 * @return array<string, mixed>|null  Datos para grabar vencae en Anita post-respuesta (gastronomía).
 	 */
-	public function completarSolicitudCaePendiente(array $caePendiente): void
+	public function completarSolicitudCaePendiente(array $caePendiente, bool $deferVencaeAnita = false): ?array
 	{
 		$this->solicitaComprobanteARCA(
 			$caePendiente['empresa'],
@@ -5279,11 +5358,79 @@ class FacturacionService
 			$caePendiente['fecha_factura'],
 			$caePendiente['data_cae'],
 			$caePendiente['venta_id'],
+			$deferVencaeAnita,
 		);
+
+		if (! $deferVencaeAnita) {
+			return null;
+		}
+
+		return $this->armarVencaePendienteDesdeCaePendiente($caePendiente);
+	}
+
+	/**
+	 * Graba CAE en tabla vencae de Informix (Anita) para emisión gastronomía diferida.
+	 *
+	 * @param  array<string, mixed>  $vencaePendiente
+	 */
+	public function ejecutarVencaePendienteGastronomia(array $vencaePendiente): void
+	{
+		GastronomiaEmisionProfiler::activo()?->marcar('anita_vencae_inicio');
+
+		$resultado = $this->grabaVenCae(
+			(string) ($vencaePendiente['tipo_anita'] ?? ''),
+			(string) ($vencaePendiente['letra'] ?? ''),
+			$vencaePendiente['puntoventa_codigo'] ?? 0,
+			$vencaePendiente['numero_comprobante'] ?? 0,
+			(string) ($vencaePendiente['cae'] ?? ''),
+			(string) ($vencaePendiente['fechavencimientocae'] ?? ''),
+		);
+
+		GastronomiaEmisionProfiler::activo()?->marcar('anita_vencae_fin');
+
+		if ($resultado === 'Error') {
+			throw new \RuntimeException('No pudo grabar CAE en Anita (vencae).');
+		}
+	}
+
+	/**
+	 * @param  array<string, mixed>  $caePendiente
+	 * @return array<string, mixed>|null
+	 */
+	private function armarVencaePendienteDesdeCaePendiente(array $caePendiente): ?array
+	{
+		$puntoventa = $caePendiente['puntoventa'] ?? null;
+		if ($puntoventa !== null && (string) ($puntoventa->modofacturacion ?? '') === 'M') {
+			return null;
+		}
+
+		$ventaId = (int) ($caePendiente['venta_id'] ?? 0);
+		if ($ventaId <= 0) {
+			return null;
+		}
+
+		$venta = $this->ventaRepository->find($ventaId);
+		if ($venta === null || trim((string) ($venta->cae ?? '')) === '') {
+			return null;
+		}
+
+		$fechaVto = $venta->fechavencimientocae ?? null;
+		if ($fechaVto === null || $fechaVto === '') {
+			return null;
+		}
+
+		return [
+			'tipo_anita' => (string) ($caePendiente['tipo_anita'] ?? ''),
+			'letra' => (string) ($caePendiente['letra'] ?? ''),
+			'puntoventa_codigo' => $puntoventa !== null ? $puntoventa->codigo : 0,
+			'numero_comprobante' => $caePendiente['numero_comprobante'] ?? 0,
+			'cae' => (string) $venta->cae,
+			'fechavencimientocae' => date('Ymd', strtotime((string) $fechaVto)),
+		];
 	}
 
 	// Solicita CAE o CAEA
-	private function solicitaComprobanteARCA($empresa, $codigoTipoTransaccion, $tipoAnita, $letra, $puntoventa, $numeroComprobante, $fechaFactura, $dataCAE, $venta_id)
+	private function solicitaComprobanteARCA($empresa, $codigoTipoTransaccion, $tipoAnita, $letra, $puntoventa, $numeroComprobante, $fechaFactura, $dataCAE, $venta_id, bool $deferVencaeAnita = false)
 	{
 		// Solicita CAE o CAEA
 		$flGrabaCae = false;
@@ -5374,21 +5521,19 @@ class FacturacionService
 										],
 										$venta_id);
 
-		if ($puntoventa->modofacturacion != 'M')
+		if ($puntoventa->modofacturacion != 'M' && ! $deferVencaeAnita)
 		{
 			GastronomiaEmisionProfiler::activo()?->marcar('anita_vencae_inicio');
 			// Graba cae en Anita
-			$vencae = Self::grabaVenCae($tipoAnita, $letra, $puntoventa->codigo, 
-						$numeroComprobante, $cae['cae'], 
+			$vencae = Self::grabaVenCae($tipoAnita, $letra, $puntoventa->codigo,
+						$numeroComprobante, $cae['cae'],
 						date('Ymd', strtotime($cae['fechavencimientocae'])));
 
-			if (isset($vencae['error']))
-			{
-				if ($vencae['error'] == 'Error')
-					throw new Exception('No pudo grabar CAE en Anita '.$vencae['mensaje']);
+			if ($vencae === 'Error') {
+				throw new Exception('No pudo grabar CAE en Anita (vencae).');
 			}
 			GastronomiaEmisionProfiler::activo()?->marcar('anita_vencae_fin');
-		}	
+		}
 
 		return 'Success';
 	}

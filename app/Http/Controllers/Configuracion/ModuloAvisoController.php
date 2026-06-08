@@ -1,0 +1,147 @@
+<?php
+
+namespace App\Http\Controllers\Configuracion;
+
+use App\Http\Controllers\Controller;
+use App\Http\Requests\ValidacionModuloAvisoTipo;
+use App\Models\Configuracion\ModuloAvisoDestinatario;
+use App\Models\Configuracion\ModuloAvisoTipo;
+use App\Models\Seguridad\Usuario;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Repositories\Contable\CentrocostoRepositoryInterface;
+use Illuminate\Support\Facades\DB;
+
+class ModuloAvisoController extends Controller
+{
+    public function __construct(
+        private EmpresaRepositoryInterface $empresaRepository,
+        private CentrocostoRepositoryInterface $centrocostoRepository,
+    ) {
+    }
+
+    public function index()
+    {
+        can('listar-modulo-aviso');
+
+        $tipos = ModuloAvisoTipo::query()
+            ->withCount(['destinatarios as destinatarios_activos_count' => function ($q) {
+                $q->where('activo', true);
+            }])
+            ->orderBy('modulo')
+            ->orderBy('nombre')
+            ->get()
+            ->groupBy('modulo');
+
+        return view('configuracion.modulo_aviso.index', compact('tipos'));
+    }
+
+    public function editar(int $id)
+    {
+        can('editar-modulo-aviso');
+
+        $tipo = ModuloAvisoTipo::with(['destinatarios.usuarios', 'destinatarios.empresas', 'destinatarios.centrocostos'])
+            ->findOrFail($id);
+
+        return view('configuracion.modulo_aviso.editar', [
+            'tipo' => $tipo,
+            'empresa_query' => $this->empresaRepository->allFiltrado(),
+            'centrocosto_query' => $this->centrocostoRepository->all(),
+            'usuario_query' => Usuario::query()
+                ->whereNotNull('email')
+                ->where('email', '!=', '')
+                ->orderBy('nombre')
+                ->get(['id', 'nombre', 'email', 'usuario']),
+            'placeholders_ayuda' => $this->placeholdersAyuda($tipo->modulo, $tipo->codigo),
+        ]);
+    }
+
+    public function actualizar(ValidacionModuloAvisoTipo $request, int $id)
+    {
+        can('actualizar-modulo-aviso');
+
+        $tipo = ModuloAvisoTipo::findOrFail($id);
+
+        DB::transaction(function () use ($request, $tipo) {
+            $tipo->update([
+                'activo' => $request->boolean('activo'),
+                'mail_asunto' => $request->input('mail_asunto'),
+                'mail_texto' => $request->input('mail_texto'),
+                'mail_remitente' => $request->input('mail_remitente') ?: null,
+                'adjuntar_pdf' => $request->boolean('adjuntar_pdf'),
+                'incluir_link_consulta' => $request->boolean('incluir_link_consulta'),
+            ]);
+
+            $this->sincronizarDestinatarios($tipo, $request->input('destinatarios', []));
+        });
+
+        return redirect('configuracion/modulo-aviso')
+            ->with('mensaje', 'Configuración de aviso actualizada.');
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $filas
+     */
+    private function sincronizarDestinatarios(ModuloAvisoTipo $tipo, array $filas): void
+    {
+        $idsConservados = [];
+
+        foreach ($filas as $fila) {
+            $email = trim((string) ($fila['email'] ?? ''));
+            $usuarioId = ! empty($fila['usuario_id']) ? (int) $fila['usuario_id'] : null;
+            if ($email === '' && ! $usuarioId) {
+                continue;
+            }
+
+            $payload = [
+                'modulo_aviso_tipo_id' => $tipo->id,
+                'email' => $email !== '' ? $email : null,
+                'usuario_id' => $usuarioId,
+                'empresa_id' => ! empty($fila['empresa_id']) ? (int) $fila['empresa_id'] : null,
+                'centrocosto_id' => ! empty($fila['centrocosto_id']) ? (int) $fila['centrocosto_id'] : null,
+                'activo' => ! empty($fila['activo']),
+            ];
+
+            $destId = ! empty($fila['id']) ? (int) $fila['id'] : 0;
+            if ($destId > 0) {
+                $dest = ModuloAvisoDestinatario::where('modulo_aviso_tipo_id', $tipo->id)->find($destId);
+                if ($dest) {
+                    $dest->update($payload);
+                    $idsConservados[] = $dest->id;
+
+                    continue;
+                }
+            }
+
+            $nuevo = ModuloAvisoDestinatario::create($payload);
+            $idsConservados[] = $nuevo->id;
+        }
+
+        ModuloAvisoDestinatario::where('modulo_aviso_tipo_id', $tipo->id)
+            ->whereNotIn('id', $idsConservados)
+            ->delete();
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function placeholdersAyuda(string $modulo, string $codigo): array
+    {
+        $comunes = ['{link_consulta}'];
+
+        if ($modulo === 'sala' && $codigo === 'requisicion_sala_creacion') {
+            return array_merge($comunes, [
+                '{numero}', '{solicitante}', '{empresa}', '{centro_costo}',
+                '{fecha}', '{estado}', '{deposito}', '{zona_sala}', '{prioridad}',
+            ]);
+        }
+
+        if ($modulo === 'stock' && str_starts_with($codigo, 'prestamo_')) {
+            return array_merge($comunes, [
+                '{codigo}', '{numero}', '{solicitante}', '{deposito_origen}', '{deposito_destino}',
+                '{fecha_prestamo}', '{fecha_devolucion}', '{estado}',
+            ]);
+        }
+
+        return array_merge($comunes, ['{numero}', '{solicitante}', '{empresa}', '{centro_costo}', '{fecha}']);
+    }
+}

@@ -277,7 +277,7 @@ class FacturacionController extends Controller
         $mventa_query = Mventa::all();
         $tipotransaccion_query = $this->tipotransaccionRepository->all(['V', 'C'], ['A']);
         $puntoventa_query = $this->puntoventaRepository->all();
-        $deposito_query = Depmae::all();
+        $deposito_query = Depmae::query()->paraUsuarioAutorizado()->orderBy('nombre')->get();
         $cliente_query = $this->clienteQuery->allQueryCargaPedido(['id','nombre','codigo']);
         $vendedor_query = Vendedor::all();
 		$vendedor_query->prepend((object) ['id'=>'0','nombre'=>'Primero']);

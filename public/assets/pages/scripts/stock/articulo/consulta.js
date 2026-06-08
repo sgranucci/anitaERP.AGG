@@ -10,6 +10,64 @@ var consultaArticuloAjax = null;
 var consultaArticuloTimer = null;
 var CONSULTA_ARTICULO_DEBOUNCE_MS = 280;
 var CONSULTA_ARTICULO_MIN_LEN = 2;
+var CONSULTA_ARTICULO_URL_EDITAR_QUERY = '?origen=modal_consulta&vista=consulta';
+
+function urlEditarArticuloConsulta(articuloId) {
+    var id = parseInt(articuloId, 10) || 0;
+    if (id <= 0) {
+        return '#';
+    }
+    return carpetaBase + '/stock/articulo/' + id + '/editar' + CONSULTA_ARTICULO_URL_EDITAR_QUERY;
+}
+
+function actualizarLinkEditarArticulo($ctx, articuloId) {
+    if (!$ctx || !$ctx.length) {
+        return;
+    }
+    var $link = $ctx.find('.btn-link-articulo, a[href*="editar_articulo"], a[href*="/stock/articulo/"][href*="/editar"]');
+    if (!$link.length) {
+        return;
+    }
+    var id = parseInt(articuloId, 10) || 0;
+    if (id > 0) {
+        $link.attr('href', urlEditarArticuloConsulta(id)).removeClass('d-none');
+    } else {
+        $link.attr('href', '#').addClass('d-none');
+    }
+}
+
+function resolverInputCantidadLineaArticulo($tr, unidadmedida) {
+    if (!$tr || !$tr.length) {
+        return $();
+    }
+    var um = (unidadmedida || '').toString().trim().toUpperCase();
+    var $target = $();
+    if (um === 'CAJ') {
+        $target = $tr.find('.caja').filter(':visible:not([readonly])');
+    } else if (um === 'UN' || um === 'KG' || um === 'KIL') {
+        $target = $tr.find('.pieza').filter(':visible:not([readonly])');
+    }
+    if (!$target.length) {
+        $target = $tr.find('.input-cantidad-contada, .cantidad-linea, input.cantidad')
+            .filter(':visible:not([readonly])')
+            .first();
+    }
+    return $target.first();
+}
+
+function enfocarCantidadLineaArticulo($tr, unidadmedida) {
+    var $target = resolverInputCantidadLineaArticulo($tr, unidadmedida);
+    if (!$target.length) {
+        return false;
+    }
+    setTimeout(function () {
+        $target.trigger('focus');
+        if ($target[0] && typeof $target[0].select === 'function') {
+            $target[0].select();
+        }
+    }, 0);
+    return true;
+}
 
 function consultaArticuloResolverListaprecio() {
     var modal = $('#consultaarticuloModal');
@@ -150,6 +208,15 @@ $(document).off('keydown.ocNoEnterSubmitArticulo', 'input').on('keydown.ocNoEnte
 	if ($(this).hasClass('gastro-carga-sku')) {
 		return;
 	}
+	if ($(this).closest('#tabla-recuento-items').length && $(this).hasClass('input-cantidad-contada')) {
+		return;
+	}
+	if ($(this).closest('#tabla-recuento-items').length && $(this).hasClass('codigoarticulo')) {
+		return;
+	}
+	if ($(this).closest('.tm-deposito-campo').length && $(this).hasClass('codigodeposito')) {
+		return;
+	}
 	e.preventDefault();
 	return false;
 });
@@ -271,6 +338,9 @@ function activa_eventos_consultaarticulo()
         $(ptrcategoria_id).val(categoria_id);
         $(ptrsubcategoria_id).val(subcategoria_id);
 
+        var $ctxArt = ptrarticulo_id && ptrarticulo_id.length ? $(ptrarticulo_id).closest('tr') : $();
+        actualizarLinkEditarArticulo($ctxArt, seleccion);
+
         $("#articulo_id").val(seleccion);
         $("#descripcionarticulo").val(nombre);
         $("#codigoarticulo").val(codigo);
@@ -291,17 +361,10 @@ function activa_eventos_consultaarticulo()
             });
         }
 
-        if (unidadmedida != null)
-        {
-            if (unidadmedida.toUpperCase() == 'CAJ')
-                $(ptrarticulo_id).parents("tr").find(".caja").focus();
-
-            if (unidadmedida.toUpperCase() == 'UN')
-                $(ptrarticulo_id).parents("tr").find(".pieza").focus();        
-            
-            if (unidadmedida.toUpperCase() == 'KG' || unidadmedida.toUpperCase() == 'KIL')
-                $(ptrarticulo_id).parents("tr").find(".pieza").focus();           
-        }
+        var $trElegida = ptrarticulo_id && ptrarticulo_id.length ? $(ptrarticulo_id).closest('tr') : $();
+        $('#consultaarticuloModal').off('hidden.bs.modal.consultaArtFocusCant').one('hidden.bs.modal.consultaArtFocusCant', function () {
+            enfocarCantidadLineaArticulo($trElegida, unidadmedida);
+        });
         $('#consultaarticuloModal').modal('hide');
 
         // Si es salamin tira saca opciones que no van del descuento
@@ -393,6 +456,7 @@ function activa_eventos_consultaarticulo()
             $tr.find('.unidadmedida_id').val(data.unidadmedida_id);
             $tr.find('.categoria_id').val(data.categoria_id);
             $tr.find('.subcategoria_id').val(data.subcategoria_id);
+            actualizarLinkEditarArticulo($tr, data.id);
 
             $.each(data.unidadesdemedidas, function (index, value) {
                 if (index == 'abreviatura') {
@@ -408,20 +472,6 @@ function activa_eventos_consultaarticulo()
 
             let unidadmedida = $tr.find('.unidadmedida').val();
 
-            if (unidadmedida != null)
-            {
-                if (unidadmedida.toUpperCase() == 'CAJ') {
-                    $tr.find('.caja').focus();
-                }
-
-                if (unidadmedida.toUpperCase() == 'UN') {
-                    $tr.find('.pieza').focus();
-                }
-
-                if (unidadmedida.toUpperCase() == 'KG' || unidadmedida.toUpperCase() == 'KIL') {
-                    $tr.find('.pieza').focus();
-                }
-            }
             if (window.asignaPrecio) {
                 asignaPrecio(ptrrenglon, data.id, '');
             }
@@ -445,6 +495,8 @@ function activa_eventos_consultaarticulo()
             if (window.onArticuloSeleccionado) {
                 window.onArticuloSeleccionado(data, { row: $tr });
             }
+
+            enfocarCantidadLineaArticulo($tr, unidadmedida);
         }).fail(function () {
             $tr.find('.articulo_id').val('');
             $tr.find('.descripcionarticulo').val('');
@@ -484,5 +536,15 @@ function activa_eventos_consultaarticulo()
     });        
 
 }
+
+$(function () {
+    $('tr').each(function () {
+        var $tr = $(this);
+        var articuloId = parseInt($tr.find('.articulo_id').val(), 10) || 0;
+        if (articuloId > 0 && ($tr.find('.btn-link-articulo').length || $tr.find('a[href*="editar_articulo"]').length)) {
+            actualizarLinkEditarArticulo($tr, articuloId);
+        }
+    });
+});
 
 

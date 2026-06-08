@@ -2,6 +2,7 @@
 
 namespace App\Support\Ventas\Waitry;
 
+use App\Models\Ventas\JornadaGastronomia;
 use Carbon\Carbon;
 
 /**
@@ -74,29 +75,74 @@ final class WaitryCierreJornadaVentanaSupport
     }
 
     /**
+     * Hora de corte del tramo: cierre real de la jornada o «ahora» si sigue abierta.
+     */
+    public static function resolverCierreHasta(JornadaGastronomia $jornada, ?Carbon $ahora = null): Carbon
+    {
+        $ahora = $ahora ?? now();
+
+        if ((string) ($jornada->estado ?? '') === JornadaGastronomia::ESTADO_CERRADA
+            && $jornada->cierre_en !== null) {
+            return Carbon::parse($jornada->cierre_en);
+        }
+
+        return $ahora->copy();
+    }
+
+    /**
+     * Instantáneo de colocación/cobro en Waitry (no confundir con venta.fechajornada Anita).
+     */
+    public static function instanteOrdenColocacion(array $orden): ?Carbon
+    {
+        foreach (['placed_at', 'created_at', 'placedAt'] as $clave) {
+            $valor = $orden[$clave] ?? null;
+            if ($valor === null || $valor === '') {
+                continue;
+            }
+            try {
+                return Carbon::parse((string) $valor);
+            } catch (\Throwable) {
+                continue;
+            }
+        }
+
+        $ts = $orden['timestamp']['date'] ?? null;
+        if ($ts !== null && $ts !== '') {
+            try {
+                return Carbon::parse((string) $ts);
+            } catch (\Throwable) {
+                return null;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Tramo operativo: orderId &gt; tope anterior (en listado) + placed_at dentro de [apertura, cierre].
+     *
      * @param  array<string, mixed>  $orden
      */
     public static function ordenDentroVentanaOperativa(array $orden, Carbon $desde, Carbon $hasta): bool
     {
-        $placedAt = $orden['placed_at'] ?? null;
-        if ($placedAt === null || $placedAt === '') {
-            return true;
-        }
-
-        try {
-            $ts = Carbon::parse((string) $placedAt);
-        } catch (\Throwable) {
-            return true;
+        $ts = self::instanteOrdenColocacion($orden);
+        if ($ts === null) {
+            return false;
         }
 
         if ($ts->lt($desde)) {
             return false;
         }
-        if ($ts->gt($hasta)) {
-            return false;
-        }
 
-        return true;
+        return ! $ts->gt($hasta);
+    }
+
+    /**
+     * @param  array<string, mixed>  $orden
+     */
+    public static function perteneceTramoOrderId(int $orderId, int $desdeExclusive): bool
+    {
+        return $orderId > $desdeExclusive;
     }
 
     private static function parsearFecha(mixed $valor): ?Carbon

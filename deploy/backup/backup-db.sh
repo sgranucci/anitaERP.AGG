@@ -17,6 +17,7 @@ FAILED=0
 mkdir -p "${BACKUP_DIR}" "${BINLOG_DIR}"
 mkdir -p "$(dirname "${LOG_FILE}")"
 touch "${LOG_FILE}" 2>/dev/null || true
+chmod 664 "${LOG_FILE}" 2>/dev/null || true
 
 log() {
     local msg="[$(date '+%Y-%m-%d %H:%M:%S')] $*"
@@ -96,19 +97,35 @@ if [[ "${REMOTE_SYNC_ENABLED}" == "1" && -n "${REMOTE_HOST}" ]]; then
     [[ -f "${REMOTE_SSH_KEY}" ]] && SSH_OPTS+=(-i "${REMOTE_SSH_KEY}")
     RSYNC_SSH="ssh ${SSH_OPTS[*]}"
     REMOTE="${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}/"
+    REMOTE_BINLOG="${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}/binlog/"
+
+    sync_with_rsync_or_scp() {
+        local label="$1"
+        local remote_path="$2"
+        shift 2
+        if command -v rsync >/dev/null 2>&1 \
+            && rsync -az -e "${RSYNC_SSH}" "$@" "${remote_path}" 2>/dev/null; then
+            log "Sync ${label} OK (rsync) -> ${REMOTE_HOST}"
+            return 0
+        fi
+        if scp "${SSH_OPTS[@]}" "$@" "${remote_path}" 2>/dev/null; then
+            log "Sync ${label} OK (scp) -> ${REMOTE_HOST}"
+            return 0
+        fi
+        log_warn "sync ${label} falló hacia ${REMOTE_HOST} (rsync y scp)"
+        return 1
+    }
 
     if ssh "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}" "mkdir -p '${REMOTE_DIR}/binlog'"; then
-        if rsync -az -e "${RSYNC_SSH}" "${OUTPUT}" "${REMOTE}"; then
-            log "Sync dump OK -> ${REMOTE_HOST}"
-        else
-            log_warn "rsync dump falló hacia ${REMOTE_HOST}"
+        sync_with_rsync_or_scp "dump" "${REMOTE}" "${OUTPUT}" || true
+
+        if [[ -d "${BINLOG_DIR}" ]] && compgen -G "${BINLOG_DIR}/binlog.[0-9]*" >/dev/null; then
+            sync_with_rsync_or_scp "binlog files" "${REMOTE_BINLOG}" "${BINLOG_DIR}"/binlog.[0-9]* || true
         fi
-        if [[ -d "${BINLOG_DIR}" ]] && compgen -G "${BINLOG_DIR}/binlog.*" >/dev/null; then
-            rsync -az -e "${RSYNC_SSH}" "${BINLOG_DIR}/binlog."* "${REMOTE}binlog/" 2>/dev/null \
-                && log "Sync binlog files OK -> ${REMOTE_HOST}" \
-                || log_warn "rsync binlog files falló"
+
+        if compgen -G "${BINLOG_DIR}/binlog_snapshot_"*.txt >/dev/null; then
+            sync_with_rsync_or_scp "binlog snapshots" "${REMOTE_BINLOG}" "${BINLOG_DIR}"/binlog_snapshot_*.txt || true
         fi
-        rsync -az -e "${RSYNC_SSH}" "${BINLOG_DIR}/binlog_snapshot_"*.txt "${REMOTE}binlog/" 2>/dev/null || true
     else
         log_warn "SSH a ${REMOTE_HOST} falló — ejecutar una vez: ${SCRIPT_DIR}/setup-ssh-replica.sh"
     fi

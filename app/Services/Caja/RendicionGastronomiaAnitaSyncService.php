@@ -151,18 +151,48 @@ class RendicionGastronomiaAnitaSyncService
         $this->insertarEnAnitaConTotalZ($rendicion, null);
     }
 
+    /**
+     * Alta rendgastro + rendvalor desde contexto ya armado (proceso cierre Waitry).
+     *
+     * @param  array<string, mixed>  $ctx
+     */
+    public function insertarDesdeContexto(array $ctx): void
+    {
+        if (! $this->sincronizacionHabilitada()) {
+            return;
+        }
+
+        $this->insertarEnAnitaDesdeContexto($ctx, null);
+    }
+
     private function insertarEnAnitaConTotalZ(RendicionGastronomiaCaja $rendicion, ?float $totalZ): void
     {
         $ctx = RendicionGastronomiaAnitaContextBuilder::desdeRendicion($rendicion, $totalZ);
+        $this->insertarEnAnitaDesdeContexto($ctx, $rendicion);
+    }
+
+    /**
+     * @param  array<string, mixed>  $ctx
+     */
+    private function insertarEnAnitaDesdeContexto(array $ctx, ?RendicionGastronomiaCaja $rendicion): void
+    {
         $api = new ApiAnita;
         $nroOper = (int) ($ctx['nro_oper'] ?? 0);
         $tipoOper = (string) ($ctx['tipo_oper'] ?? '');
-        $cabeceraPreexistente = $nroOper > 0 && $this->existsCabeceraEnAnita($rendicion);
+        $cabeceraPreexistente = $nroOper > 0 && (
+            $rendicion !== null
+                ? $this->existsCabeceraEnAnita($rendicion)
+                : $this->existsCabeceraEnAnitaPorNroOper($nroOper, $tipoOper)
+        );
         $cabeceraInsertadaEnEsteIntento = false;
 
         try {
             if ($cabeceraPreexistente) {
-                $this->actualizarEnAnitaConTotalZ($rendicion, $totalZ);
+                if ($rendicion !== null) {
+                    $this->actualizarEnAnitaConTotalZ($rendicion, $ctx['total_z'] ?? null);
+                } else {
+                    $this->actualizarEnAnitaDesdeContexto($ctx);
+                }
 
                 return;
             }
@@ -178,7 +208,11 @@ class RendicionGastronomiaAnitaSyncService
                 $cabeceraInsertadaEnEsteIntento = true;
             } catch (\RuntimeException $e) {
                 if ($this->esErrorDuplicadoInformix($e)) {
-                    $this->actualizarEnAnitaConTotalZ($rendicion, $totalZ);
+                    if ($rendicion !== null) {
+                        $this->actualizarEnAnitaConTotalZ($rendicion, $ctx['total_z'] ?? null);
+                    } else {
+                        $this->actualizarEnAnitaDesdeContexto($ctx);
+                    }
 
                     return;
                 }
@@ -199,7 +233,7 @@ class RendicionGastronomiaAnitaSyncService
                 } catch (\Throwable $rollbackErr) {
                     Log::warning(self::LOG_EVENTO.'.compensacion_fallo', [
                         'nro_oper' => $nroOper,
-                        'turno_operativo_id' => $rendicion->turno_operativo_gastronomia_id,
+                        'turno_operativo_id' => $rendicion?->turno_operativo_gastronomia_id,
                         'mensaje' => $rollbackErr->getMessage(),
                     ]);
                 }
@@ -207,6 +241,49 @@ class RendicionGastronomiaAnitaSyncService
 
             throw $e;
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $ctx
+     */
+    private function actualizarEnAnitaDesdeContexto(array $ctx): void
+    {
+        $api = new ApiAnita;
+        $nroOper = (int) ($ctx['nro_oper'] ?? 0);
+        $tipoOper = (string) ($ctx['tipo_oper'] ?? '');
+        if ($nroOper <= 0 || $tipoOper === '') {
+            return;
+        }
+
+        $api->apiCallEscritura([
+            'acc' => 'update',
+            'tabla' => $this->tablaCabecera(),
+            'sistema' => $this->sistema(),
+            'valores' => RendicionGastronomiaCabeceraAnitaMapper::valoresUpdate($ctx),
+            'whereArmado' => RendicionGastronomiaCabeceraAnitaMapper::whereClave($nroOper, $tipoOper),
+        ], 'rendgastro update', self::LOG_EVENTO);
+
+        $this->eliminarValores($api, $nroOper, $tipoOper);
+        $this->insertarValores($api, $ctx);
+    }
+
+    public function existsCabeceraEnAnitaPorNroOper(int $nroOper, ?string $tipoOper = null): bool
+    {
+        if ($nroOper <= 0) {
+            return false;
+        }
+
+        $tipoOper = $tipoOper ?? $this->tipoOper();
+        $api = new ApiAnita;
+        $rows = ApiAnita::decodificarListaFilas($api->apiCall([
+            'acc' => 'list',
+            'sistema' => $this->sistema(),
+            'tabla' => $this->tablaCabecera(),
+            'campos' => 'rendg_nro_oper',
+            'whereArmado' => RendicionGastronomiaCabeceraAnitaMapper::whereClave($nroOper, $tipoOper),
+        ]));
+
+        return count($rows) > 0;
     }
 
     public function reaplicarTotalZPorPcEnJornada(int $jornadaId): void

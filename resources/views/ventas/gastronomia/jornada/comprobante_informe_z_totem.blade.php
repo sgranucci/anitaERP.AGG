@@ -12,6 +12,7 @@
     $facturasCant = (int) ($d['facturas_cantidad'] ?? 0);
     $facturasTotal = (float) ($d['facturas_total'] ?? 0);
     $informeZ = is_array($d['informe_z'] ?? null) ? $d['informe_z'] : null;
+    $informeZMeta = $informeZ;
     $conc = is_array($d['conciliacion'] ?? null) ? $d['conciliacion'] : null;
 @endphp
 <!DOCTYPE html>
@@ -36,6 +37,8 @@
         .ok { background: #d4edda; padding: 6px 8px; margin: 6px 0 10px 0; border: 1px solid #b7dfc1; }
         .warn { background: #fff3cd; padding: 6px 8px; margin: 6px 0 10px 0; border: 1px solid #e2c36b; }
         .bloque { margin-bottom: 12px; page-break-inside: avoid; }
+        .fila-discrepancia { background: #fff3cd; }
+        .total-grande { font-weight: bold; background: #e8f4fc; }
     </style>
 </head>
 <body>
@@ -95,6 +98,15 @@
             @endif
         @endif
 
+        @if ($informeZMeta && ! empty($informeZMeta['informe_z_en']))
+            <p class="muted" style="margin:0 0 8px;">
+                Cargado: {{ $informeZMeta['informe_z_en'] }}
+                @if (! empty($informeZMeta['usuario_nombre']))
+                    — {{ $informeZMeta['usuario_nombre'] }}
+                @endif
+            </p>
+        @endif
+
         @foreach (($d['totems'] ?? []) as $t)
             <div class="bloque">
                 <h2>
@@ -105,28 +117,43 @@
                     @if (! empty($t['waitry_table_id']))
                         <span class="muted">(tableId {{ (int) $t['waitry_table_id'] }})</span>
                     @endif
-                    @if (! empty($t['diferencia']) && abs((float) $t['diferencia']) > 0.0001)
-                        <span class="muted">— diferencia $ {{ number_format((float) $t['diferencia'], 2, ',', '.') }}</span>
+                    @if (empty($t['ok']))
+                        <span style="color:#922b21;"> — DIFERENCIA</span>
                     @endif
                 </h2>
 
                 <table>
                     <thead>
+                        <tr class="total-grande">
+                            <td colspan="3">
+                                <strong>Totales del tótem</strong>
+                            </td>
+                            <td class="num">
+                                Sist. $ {{ number_format((float) ($t['total_sistema'] ?? 0), 2, ',', '.') }}
+                                / Z $ {{ number_format((float) ($t['total_informe_z'] ?? 0), 2, ',', '.') }}
+                            </td>
+                        </tr>
                         <tr>
-                            <th style="width:55%;">Medio</th>
-                            <th class="num" style="width:45%;">Monto Informe Z</th>
+                            <th style="width:40%;">Medio</th>
+                            <th class="num" style="width:20%;">Sistema</th>
+                            <th class="num" style="width:20%;">Informe Z</th>
+                            <th class="num" style="width:20%;">Diferencia</th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach (($t['lineas'] ?? []) as $ln)
-                            <tr>
+                            <tr @if (empty($ln['ok'])) class="fila-discrepancia" @endif>
                                 <td>{{ $ln['etiqueta'] ?? '—' }}</td>
-                                <td class="num">{{ number_format((float) ($ln['monto'] ?? 0), 2, ',', '.') }}</td>
+                                <td class="num">{{ number_format((float) ($ln['monto_sistema'] ?? 0), 2, ',', '.') }}</td>
+                                <td class="num">{{ number_format((float) ($ln['monto_informe_z'] ?? 0), 2, ',', '.') }}</td>
+                                <td class="num">{{ number_format((float) ($ln['diferencia'] ?? 0), 2, ',', '.') }}</td>
                             </tr>
                         @endforeach
-                        <tr>
+                        <tr class="total-grande">
                             <td><strong>Total</strong></td>
-                            <td class="num"><strong>{{ number_format((float) ($t['total'] ?? 0), 2, ',', '.') }}</strong></td>
+                            <td class="num"><strong>{{ number_format((float) ($t['total_sistema'] ?? 0), 2, ',', '.') }}</strong></td>
+                            <td class="num"><strong>{{ number_format((float) ($t['total_informe_z'] ?? 0), 2, ',', '.') }}</strong></td>
+                            <td class="num"><strong>{{ number_format((float) ($t['diferencia'] ?? 0), 2, ',', '.') }}</strong></td>
                         </tr>
                     </tbody>
                 </table>

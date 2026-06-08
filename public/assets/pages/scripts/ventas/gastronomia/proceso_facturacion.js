@@ -559,6 +559,74 @@
         toast(txt, 'success');
     }
 
+    function skusOpcionalesPendientesDesdeImportWaitry(data) {
+        if (!data) return [];
+        if (Array.isArray(data.skus_opcionales_pendientes) && data.skus_opcionales_pendientes.length) {
+            return data.skus_opcionales_pendientes.slice();
+        }
+        const errores = Array.isArray(data.errores) ? data.errores : [];
+        const skus = [];
+        errores.forEach((err) => {
+            const s = String(err || '');
+            if (
+                s.indexOf('requiere opcionales') < 0 &&
+                s.indexOf('modal de opcionales') < 0 &&
+                s.indexOf('Debe seleccionar opcional') < 0
+            ) {
+                return;
+            }
+            let m = s.match(/SKU «([^»]+)»/);
+            if (m) {
+                skus.push(m[1]);
+                return;
+            }
+            m = s.match(/^([A-Za-z0-9]+):\s*Debe seleccionar opcional/);
+            if (m) skus.push(m[1]);
+        });
+        return skus.filter((v, i, a) => a.indexOf(v) === i);
+    }
+
+    /**
+     * Tras importar Waitry: los ítems con fórmula opcional no entran automáticamente;
+     * guía al cajero por el modal de opcionales (mismo flujo que carga manual).
+     */
+    async function cargarPendientesOpcionalesTrasImportWaitry(data) {
+        const skus = skusOpcionalesPendientesDesdeImportWaitry(data);
+        if (!skus.length || !cuentaId) return;
+
+        toast(
+            'La orden Waitry incluye artículos con opcionales que deben cargarse en el POS (no vienen del tótem). ' +
+                'Complete: ' +
+                skus.join(', ') +
+                '.',
+            'warning',
+            { timeOut: 12000, extendedTimeOut: 6000, closeButton: true, progressBar: true },
+        );
+
+        for (const sku of skus) {
+            let fullSku = sku;
+            if (skuDigitosSufijo > 0 && prefijoSku && !skuPermitidoGastronomia(sku)) {
+                const esc = prefijoSku.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const soloDigitos = sku.replace(new RegExp('^' + esc, 'i'), '');
+                if (/^\d+$/.test(soloDigitos)) {
+                    fullSku = prefijoSku + soloDigitos.padStart(skuDigitosSufijo, '0');
+                }
+            }
+            try {
+                const cat = await fetchArticuloCatalogoPorSku(fullSku);
+                const a = cat && cat.articulo;
+                if (!a || !a.id) {
+                    toast('No se encontró «' + sku + '» en catálogo para cargar opcionales.', 'warning');
+                    continue;
+                }
+                await iniciarAltaLinea(a, { pedirCantidad: true });
+                return;
+            } catch (e) {
+                toast((e.message || 'Error al abrir opcionales') + ' (' + sku + ')', 'error');
+            }
+        }
+    }
+
     function mensajesProcesoImportWaitry(waitryOrderId) {
         const id = waitryOrderId ? ' #' + waitryOrderId : '';
         return [
@@ -950,6 +1018,173 @@
 
     const GASTRONOMIA_MODAL_Z_BASE = 1050;
     const GASTRONOMIA_MODAL_Z_STEP = 20;
+
+    /** Modales que bloquean la grilla de opcionales si quedan abiertos encima (aviso, import Waitry). */
+    const MODALES_CERRAR_ANTES_OPCIONALES = [
+        'modal-gastro-aviso',
+        'modal-waitry-importar-id',
+    ];
+
+    function modalElementoVisible(modalId) {
+        const el = document.getElementById(modalId);
+        return !!(el && el.classList.contains('show'));
+    }
+
+    function contarModalesVisibles() {
+        return document.querySelectorAll('.modal.show').length;
+    }
+
+    function limpiarBackdropHuerfanoGastro() {
+        if (contarModalesVisibles() > 0) {
+            return;
+        }
+        document.body.classList.remove('modal-open');
+        document.querySelectorAll('.modal-backdrop').forEach((el) => el.remove());
+    }
+
+    /** Eleva z-index cuando hay otro modal abierto (canje, F8, apertura cuenta, etc.). */
+    function apilarModalGastroElevado($modal) {
+        if (!$modal || !$modal.length || typeof $ === 'undefined') {
+            return;
+        }
+        const capas = Math.max(1, contarModalesVisibles());
+        const zHijo = GASTRONOMIA_MODAL_Z_BASE + GASTRONOMIA_MODAL_Z_STEP * capas;
+        const zBackdrop = zHijo - 10;
+        $modal.data('gastroApiladoZ', zHijo);
+        $modal.addClass('gastro-modal-apilado');
+        $modal.css('z-index', zHijo);
+        $('.modal-backdrop').last().css('z-index', zBackdrop);
+    }
+
+    function desapilarModalGastroElevado($modal) {
+        if (!$modal || !$modal.length || !$modal.data('gastroApiladoZ')) {
+            return;
+        }
+        $modal.removeData('gastroApiladoZ');
+        $modal.removeClass('gastro-modal-apilado');
+        $modal.css('z-index', '');
+        if ($('.modal-backdrop').length) {
+            $('.modal-backdrop').last().css('z-index', '');
+        }
+        if (contarModalesVisibles() > 0 && typeof $ !== 'undefined') {
+            $('body').addClass('modal-open');
+        } else {
+            limpiarBackdropHuerfanoGastro();
+        }
+    }
+
+    /**
+     * Apertura fiable de modales Bootstrap (opcionales, cantidad, canjes).
+     * Cierra avisos bloqueantes, apila z-index si hay otro modal, reintenta si no quedó visible.
+     */
+    function mostrarModalBootstrap(modalId, opciones) {
+        const opts = opciones || {};
+        const onShown = opts.onShown;
+        const cerrarAntes = Array.isArray(opts.cerrarAntes)
+            ? opts.cerrarAntes
+            : MODALES_CERRAR_ANTES_OPCIONALES;
+        const apilar = opts.apilar !== false;
+        const esperaMs = opts.esperaMs != null ? opts.esperaMs : 90;
+
+        return new Promise((resolve, reject) => {
+            const abrirDirecto = () => {
+                if (typeof $ === 'undefined') {
+                    const el = document.getElementById(modalId);
+                    if (!el) {
+                        reject(new Error('Modal no encontrado: ' + modalId));
+                        return;
+                    }
+                    el.classList.add('show');
+                    el.style.display = 'block';
+                    el.removeAttribute('aria-hidden');
+                    document.body.classList.add('modal-open');
+                    if (typeof onShown === 'function') {
+                        onShown();
+                    }
+                    resolve();
+                    return;
+                }
+
+                const $target = $('#' + modalId);
+                if (!$target.length) {
+                    reject(new Error('Modal no encontrado: ' + modalId));
+                    return;
+                }
+
+                const verificarVisible = (intento) => {
+                    const el = document.getElementById(modalId);
+                    if (el && el.classList.contains('show')) {
+                        return;
+                    }
+                    if (intento < 1) {
+                        limpiarBackdropHuerfanoGastro();
+                        $target.modal('show');
+                        window.setTimeout(() => verificarVisible(intento + 1), 350);
+                    }
+                };
+
+                $target.off('shown.bs.modal.gastroShowOnce hidden.bs.modal.gastroStack');
+                $target.one('shown.bs.modal.gastroShowOnce', function () {
+                    if (apilar && contarModalesVisibles() > 1) {
+                        apilarModalGastroElevado($target);
+                    }
+                    if (typeof onShown === 'function') {
+                        onShown();
+                    }
+                    resolve();
+                });
+                $target.one('hidden.bs.modal.gastroStack', function () {
+                    desapilarModalGastroElevado($target);
+                });
+
+                if ($target.hasClass('show')) {
+                    if (apilar && contarModalesVisibles() > 0) {
+                        apilarModalGastroElevado($target);
+                    }
+                    if (typeof onShown === 'function') {
+                        onShown();
+                    }
+                    resolve();
+                    return;
+                }
+
+                $target.modal('show');
+                window.setTimeout(() => verificarVisible(0), 400);
+            };
+
+            const bloqueantes = cerrarAntes.filter((id) => modalElementoVisible(id));
+            if (!bloqueantes.length) {
+                abrirDirecto();
+                return;
+            }
+
+            let pendientes = bloqueantes.length;
+            const alCerrarUno = () => {
+                pendientes--;
+                if (pendientes <= 0) {
+                    limpiarBackdropHuerfanoGastro();
+                    window.setTimeout(abrirDirecto, esperaMs);
+                }
+            };
+            bloqueantes.forEach((id) => {
+                const $m = $('#' + id);
+                if (!$m.length) {
+                    alCerrarUno();
+                    return;
+                }
+                $m.one('hidden.bs.modal.gastroPrepShow', alCerrarUno);
+                $m.modal('hide');
+            });
+        });
+    }
+
+    function mostrarModalOpcionales(onShown) {
+        return mostrarModalBootstrap('modal-opcionales', { onShown: onShown, apilar: true });
+    }
+
+    function mostrarModalCantidad(onShown) {
+        return mostrarModalBootstrap('modal-cantidad', { onShown: onShown, apilar: true });
+    }
 
     function modalF8DescuentoAbierto() {
         const el = document.getElementById('modal-f8-descuento');
@@ -2695,6 +2930,8 @@
     let canjePremioValidado = null;
     /** Tras confirmar cupón: apertura de cuenta libre + aplicar automático al quedar abierta. */
     let canjePremioEsperaApertura = false;
+    /** Oculto temporalmente mientras se eligen opcionales de fórmula (no resetear validación). */
+    let canjePremioEsperaOpcionales = false;
     let canjePremioValidando = false;
     let canjePremioInputTimer = null;
     let canjePremioUltimoCodigoValidado = '';
@@ -2918,6 +3155,36 @@
         };
     }
 
+    function articuloStubDesdeLineaCuenta(linea) {
+        const art = linea && linea.articulo;
+        return {
+            id: parseInt((art && art.id) || linea.articulo_id, 10),
+            sku: (art && art.sku) || '',
+            descripcion: (art && art.descripcion) || '',
+        };
+    }
+
+    function valorOpcionalGuardadoCompleto(valor) {
+        if (valor === null || valor === undefined || valor === '' || valor === 0 || valor === '0') {
+            return false;
+        }
+        if (typeof valor === 'object') {
+            return parseInt(valor.formula_hija_id, 10) > 0 || parseInt(valor.articulo_id, 10) > 0;
+        }
+        if (typeof valor === 'string' && valor.indexOf('f:') === 0) {
+            return true;
+        }
+        return parseInt(valor, 10) > 0;
+    }
+
+    function lineaTieneOpcionalesCompletos(linea, grupos) {
+        if (!grupos || !grupos.length) {
+            return true;
+        }
+        const map = (linea && linea.opcionales_json) || {};
+        return grupos.every((g) => valorOpcionalGuardadoCompleto(map[String(g.orden)] ?? map[g.orden]));
+    }
+
     function pedirOpcionalesCanjePremio(articulo, grupos) {
         return new Promise((resolve) => {
             pendingOpcionalesCtx = {
@@ -2929,8 +3196,36 @@
             };
             pendingOpcionalesSeleccion = null;
             renderGrillaOpcionales(grupos, articulo);
-            $('#modal-opcionales').modal('show');
+            canjePremioEsperaOpcionales = true;
+            canjeFidelidadEsperaOpcionales = true;
+            void mostrarModalOpcionales(function () {
+                sincronizarVistaPasoOpcional();
+            }).catch((err) => {
+                canjePremioEsperaOpcionales = false;
+                canjeFidelidadEsperaOpcionales = false;
+                pendingOpcionalesCtx = null;
+                pendingOpcionalesSeleccion = null;
+                resolve(null);
+                toast(err.message || 'No se pudo abrir el selector de opcionales.', 'error');
+            });
         });
+    }
+
+    /**
+     * Modal de opcionales para un artículo (canje Wigos, fidelidad, etc.).
+     *
+     * @returns {Promise<object|null>} mapa orden → elección, o null si cancela
+     */
+    async function pedirOpcionalesParaArticulo(articulo) {
+        const aid = articulo && parseInt(articulo.id, 10);
+        if (!(aid > 0)) {
+            return {};
+        }
+        const grupos = await fetchGruposOpcionales(aid);
+        if (!grupos.length) {
+            return {};
+        }
+        return pedirOpcionalesCanjePremio(articulo, grupos);
     }
 
     /**
@@ -2949,27 +3244,68 @@
             }
         });
 
-        const necesitan = [];
-        for (const [aid, it] of porArticulo) {
-            const grupos = await fetchGruposOpcionales(aid);
-            if (grupos.length) {
-                necesitan.push({ articulo: articuloStubDesdeItemCanjePremio(it), grupos });
-            }
-        }
-
-        if (!necesitan.length) {
-            return {};
-        }
-
         const resultado = {};
-        for (const { articulo, grupos } of necesitan) {
-            const map = await pedirOpcionalesCanjePremio(articulo, grupos);
+        for (const [, it] of porArticulo) {
+            const articulo = articuloStubDesdeItemCanjePremio(it);
+            const map = await pedirOpcionalesParaArticulo(articulo);
             if (map === null) {
                 return null;
             }
-            resultado[String(articulo.id)] = map;
+            if (map && Object.keys(map).length) {
+                resultado[String(articulo.id)] = map;
+            }
         }
         return resultado;
+    }
+
+    /**
+     * Antes de facturar: si alguna línea quedó sin opcionales (p. ej. canje viejo), abre el modal y re-carga la línea.
+     *
+     * @returns {Promise<boolean>}
+     */
+    async function asegurarOpcionalesEnCuentaAntesDeFacturar(cuentaInicial) {
+        let cuenta = cuentaInicial;
+        const maxPasadas = Math.max(1, ((cuenta && cuenta.lineas) || []).length) + 2;
+        for (let pasada = 0; pasada < maxPasadas; pasada++) {
+            if (!cuenta || !cuenta.lineas || !cuenta.lineas.length) {
+                return true;
+            }
+            let lineaIncompleta = null;
+            let gruposIncompletos = [];
+            for (const ln of cuenta.lineas) {
+                const articulo = articuloStubDesdeLineaCuenta(ln);
+                if (!(articulo.id > 0)) {
+                    continue;
+                }
+                let grupos;
+                try {
+                    grupos = await fetchGruposOpcionales(articulo.id);
+                } catch (e) {
+                    toast(e.message, 'error');
+                    return false;
+                }
+                if (grupos.length && !lineaTieneOpcionalesCompletos(ln, grupos)) {
+                    lineaIncompleta = ln;
+                    gruposIncompletos = grupos;
+                    break;
+                }
+            }
+            if (!lineaIncompleta) {
+                return true;
+            }
+            const articuloFix = articuloStubDesdeLineaCuenta(lineaIncompleta);
+            const map = await pedirOpcionalesCanjePremio(articuloFix, gruposIncompletos);
+            if (map === null) {
+                return false;
+            }
+            await eliminarLinea(lineaIncompleta.id);
+            await agregarLineaApi(articuloFix, parseFloat(lineaIncompleta.cantidad) || 1, map);
+            const data = await api(`/ventas/gastronomia/api/cuenta/${cuentaId}`, { headers: hdrJson() });
+            cuenta = data.cuenta;
+            pintarLineas(cuenta);
+        }
+        toast('No se pudieron completar todos los opcionales de la cuenta.', 'warning');
+        return false;
     }
 
     async function aplicarCanjePremioACuenta(opciones) {
@@ -3189,7 +3525,7 @@
         if (typeof $ !== 'undefined') {
             $('#modal-gastro-canje-premio').on('keydown.gastroCanjePremio', manejarEnterModalCanjePremio);
             $('#modal-gastro-canje-premio').on('hidden.bs.modal', function () {
-                if (!canjePremioEsperaApertura) {
+                if (!canjePremioEsperaApertura && !canjePremioEsperaOpcionales) {
                     resetModalCanjePremio(true);
                 }
             });
@@ -3200,6 +3536,7 @@
     let canjeFidelidadArticuloId = null;
     /** Tras confirmar tarjeta: apertura de cuenta libre + aplicar automático al quedar abierta. */
     let canjeFidelidadEsperaApertura = false;
+    let canjeFidelidadEsperaOpcionales = false;
     let canjeFidelidadValidando = false;
     let canjeFidelidadInputTimer = null;
     let canjeFidelidadUltimoTrackdataValidado = '';
@@ -3486,6 +3823,15 @@
     async function continuarFacturacionTrasCanjeWigos(codigoDescuento) {
         try {
             await prepararDescuentoCanjeWigosEnPantalla(codigoDescuento);
+            let cuentaCanje = cuentaActivaConLineas;
+            if ((!cuentaCanje || !(cuentaCanje.lineas || []).length) && cuentaId) {
+                const dataCuenta = await api(`/ventas/gastronomia/api/cuenta/${cuentaId}`, { headers: hdrJson() });
+                cuentaCanje = dataCuenta.cuenta;
+            }
+            const opcionesCompletos = await asegurarOpcionalesEnCuentaAntesDeFacturar(cuentaCanje);
+            if (!opcionesCompletos) {
+                return;
+            }
             registrarAutoConfirmacionF8TrasCanjeWigos();
             await abrirModalF8Descuento();
             await emitirFactura({ exigirDescuento: true, prepararCobranzaSiFalta: true });
@@ -3556,15 +3902,33 @@
         const btn = document.getElementById('gastro-canje-fidelidad-confirmar');
         if (btn && !opts.silencioso) btn.disabled = true;
 
+        const artSel = (canjeFidelidadValidado.articulos || []).find(
+            (a) => parseInt(a.articulo_id, 10) === canjeFidelidadArticuloId,
+        );
+        const articuloFid = artSel
+            ? articuloStubDesdeItemCanjePremio(artSel)
+            : { id: canjeFidelidadArticuloId, sku: '', descripcion: '' };
+        const mapOpcFid = await pedirOpcionalesParaArticulo(articuloFid);
+        if (mapOpcFid === null) {
+            if (btn && !opts.silencioso) btn.disabled = false;
+            actualizarBotonConfirmarCanjeFidelidad();
+            return false;
+        }
+
         try {
+            const payloadFid = {
+                cuenta_id: cuentaId,
+                trackdata,
+                articulo_id: canjeFidelidadArticuloId,
+            };
+            if (mapOpcFid && Object.keys(mapOpcFid).length) {
+                payloadFid.opcionales_por_articulo = {};
+                payloadFid.opcionales_por_articulo[String(canjeFidelidadArticuloId)] = mapOpcFid;
+            }
             const data = await api('/ventas/gastronomia/api/aplicar-canje-fidelidad', {
                 method: 'POST',
                 headers: hdrJson(),
-                body: JSON.stringify({
-                    cuenta_id: cuentaId,
-                    trackdata,
-                    articulo_id: canjeFidelidadArticuloId,
-                }),
+                body: JSON.stringify(payloadFid),
             });
             if (!data.ok) {
                 const msg = data.error || data.mensaje || 'No se pudo aplicar el canje.';
@@ -3753,7 +4117,7 @@
         if (typeof $ !== 'undefined') {
             $('#modal-gastro-canje-fidelidad').on('keydown.gastroCanjeFid', manejarEnterModalCanjeFidelidad);
             $('#modal-gastro-canje-fidelidad').on('hidden.bs.modal', function () {
-                if (!canjeFidelidadEsperaApertura) {
+                if (!canjeFidelidadEsperaApertura && !canjeFidelidadEsperaOpcionales) {
                     resetModalCanjeFidelidad(true);
                 }
             });
@@ -4042,7 +4406,7 @@
         const input = document.getElementById('waitry-importar-id-input');
         const identificador = input ? String(input.value || '').trim() : '';
         if (!identificador || !/^[A-Za-z0-9_-]+$/.test(identificador)) {
-            toast('Ingrese el ID alfanumérico del papelito Waitry.', 'warning');
+            toast('Ingrese el número del monitor Waitry o el código del papelito.', 'warning');
             if (input) {
                 input.focus();
             }
@@ -4116,11 +4480,22 @@
             }
             await seleccionarCuenta(data.cuenta_id);
             mostrarResultadoImportacionWaitry(data, identificadorImport);
+            await cargarPendientesOpcionalesTrasImportWaitry(data);
             void cargarOrdenesWaitry({ refresh: true });
             cargarCuentasActivas();
         } catch (e) {
             const det = e.payload && e.payload.errores ? e.payload.errores.join(' · ') : '';
-            toast((e.message || 'Error al importar') + (det ? ': ' + det : ''), 'error');
+            const msg = (e.message || 'Error al importar') + (det ? ': ' + det : '');
+            if (e.payload && e.payload.requiere_carga_opcionales_en_pos) {
+                mostrarAvisoPersistente(
+                    msg +
+                        ' Abra una cuenta libre (mozo/cubiertos) y cargue el artículo con el modal de opcionales del POS.',
+                    'warning',
+                    { titulo: 'Waitry: solo artículos con opcionales' },
+                );
+            } else {
+                toast(msg, 'error');
+            }
         } finally {
             setFacturacionLoading(false);
         }
@@ -4949,7 +5324,11 @@
                 tarjeta.className = 'gastro-opc-tarjeta';
                 tarjeta.setAttribute('role', 'button');
                 tarjeta.setAttribute('tabindex', '0');
-                tarjeta.dataset.articuloId = String(o.articulo_id);
+                if (o.formula_hija_id) {
+                    tarjeta.dataset.formulaHijaId = String(o.formula_hija_id);
+                } else if (o.articulo_id) {
+                    tarjeta.dataset.articuloId = String(o.articulo_id);
+                }
                 tarjeta.dataset.orden = orden;
                 tarjeta.dataset.posicion = String(idx + 1);
                 tarjeta.title = (o.sku || '') + (o.descripcion ? ' — ' + o.descripcion : '');
@@ -5120,7 +5499,10 @@
         grupos.forEach((g, i) => {
             const orden = g.dataset.orden;
             const sel = g.querySelector('.gastro-opc-tarjeta.seleccionada');
-            if (sel && sel.dataset.articuloId) {
+            if (sel && sel.dataset.formulaHijaId) {
+                map[orden] = { formula_hija_id: parseInt(sel.dataset.formulaHijaId, 10) };
+                g.classList.remove('gastro-opc-faltante');
+            } else if (sel && sel.dataset.articuloId) {
                 map[orden] = parseInt(sel.dataset.articuloId, 10);
                 g.classList.remove('gastro-opc-faltante');
             } else {
@@ -5137,12 +5519,8 @@
     }
 
     async function fetchGruposOpcionales(articuloId) {
-        try {
-            const opData = await api(`/ventas/gastronomia/api/opcionales-articulo/${articuloId}`, { headers: hdrJson() });
-            return opData && Array.isArray(opData.grupos) ? opData.grupos : [];
-        } catch (e) {
-            return [];
-        }
+        const opData = await api(`/ventas/gastronomia/api/opcionales-articulo/${articuloId}`, { headers: hdrJson() });
+        return opData && Array.isArray(opData.grupos) ? opData.grupos : [];
     }
 
     /**
@@ -5171,12 +5549,14 @@
                 grupos,
             };
             renderGrillaOpcionales(grupos, articulo);
-            $('#modal-opcionales').modal('show');
+            await mostrarModalOpcionales(function () {
+                sincronizarVistaPasoOpcional();
+            });
             return;
         }
 
         pendingArticulo = articulo;
-        $('#modal-cantidad').modal('show');
+        await mostrarModalCantidad();
     }
 
     /**
@@ -5193,7 +5573,9 @@
             pendingOpcionalesCtx = { articulo, cantidad, modo: 'agregar-directo', grupos };
             pendingOpcionalesSeleccion = null;
             renderGrillaOpcionales(grupos, articulo);
-            $('#modal-opcionales').modal('show');
+            await mostrarModalOpcionales(function () {
+                sincronizarVistaPasoOpcional();
+            });
             return;
         }
 
@@ -5325,6 +5707,8 @@
         if (ctx.modo === 'canje-premio') {
             pendingOpcionalesCtx = null;
             pendingOpcionalesSeleccion = null;
+            canjePremioEsperaOpcionales = false;
+            canjeFidelidadEsperaOpcionales = false;
             $('#modal-opcionales').modal('hide');
             if (typeof ctx.onResolve === 'function') {
                 ctx.onResolve(map);
@@ -5339,7 +5723,7 @@
             const $opc = $('#modal-opcionales');
             $opc.off('hidden.bs.modal.gastroAbrirCantidad');
             $opc.one('hidden.bs.modal.gastroAbrirCantidad', function () {
-                $('#modal-cantidad').modal('show');
+                void mostrarModalCantidad();
             });
             $opc.modal('hide');
             return;
@@ -5377,6 +5761,20 @@
             cargarCuentasActivas();
             focusSkuConsumo();
         } catch (e) {
+            if (e.payload && e.payload.requiere_opcionales && Array.isArray(e.payload.grupos) && e.payload.grupos.length) {
+                pendingOpcionalesCtx = {
+                    articulo,
+                    cantidad,
+                    modo: 'agregar-directo',
+                    grupos: e.payload.grupos,
+                };
+                pendingOpcionalesSeleccion = null;
+                renderGrillaOpcionales(e.payload.grupos, articulo);
+                await mostrarModalOpcionales(function () {
+                    sincronizarVistaPasoOpcional();
+                });
+                return;
+            }
             if (e.message && e.message.includes('fetch')) toast(String(e), 'error');
             else toast(e.message, 'error');
         }
@@ -5461,7 +5859,14 @@
         }
         try {
             setFacturacionLoading(true, 'Validando cuenta y cobranza…');
-            const cuenta = opts.cuentaPrecargada || (await guardarCabecera(true));
+            let cuenta = opts.cuentaPrecargada || (await guardarCabecera(true));
+            setFacturacionLoading(true, 'Completando opcionales de fórmula…');
+            const opcionesOk = await asegurarOpcionalesEnCuentaAntesDeFacturar(cuenta);
+            if (!opcionesOk) {
+                return;
+            }
+            cuenta = cuentaActivaConLineas || cuenta;
+            setFacturacionLoading(true, 'Validando cuenta y cobranza…');
             let montoArs = totalFacturarDesdeCuenta(cuenta) || leerTotalAFacturarArs();
             let esCortesia = esFacturaCortesia(montoArs, cuenta);
             setTotalFacturadoArs(montoArs > 0 ? montoArs : esCortesia ? IMPORTE_MINIMO_FACTURA : 0);
@@ -6009,6 +6414,8 @@
                     const cb = pendingOpcionalesCtx.onResolve;
                     pendingOpcionalesCtx = null;
                     pendingOpcionalesSeleccion = null;
+                    canjePremioEsperaOpcionales = false;
+                    canjeFidelidadEsperaOpcionales = false;
                     if (typeof cb === 'function') {
                         cb(null);
                     }

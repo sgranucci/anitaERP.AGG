@@ -27,7 +27,7 @@ class ValidacionListaprecio_Proveedor extends FormRequest
             'articulo_ids.*' => 'nullable|integer|exists:articulo,id',
             'precios' => 'nullable|array',
             'descuentos' => 'nullable|array',
-            'articulo_proveedores' => 'nullable|array',
+            'codigos_articulo_proveedor' => 'nullable|array',
             'fechavigencias' => 'nullable|array',
             'fechavigencias.*' => 'nullable|date',
             'linea_ids' => 'nullable|array',

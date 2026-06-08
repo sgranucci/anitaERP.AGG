@@ -46,4 +46,24 @@ final class WaitryOrdenPaymentEnriquecimientoSupportTest extends TestCase
         $this->assertSame('mercadopago', WaitryMedioPagoCuentacajaSupport::extraerTipoPagoOrden($out[1]));
         $this->assertSame('mercadopago', WaitryMedioPagoCuentacajaSupport::extraerTipoPagoOrden($out[2]));
     }
+
+    public function test_fusionar_acceso_desde_pos_cuando_details_no_trae_table(): void
+    {
+        $details = [
+            'orderId' => 200,
+            'paid' => true,
+            'payment' => ['type' => 'credit_card'],
+        ];
+        $pos = [
+            'id' => 200,
+            'table' => ['id' => 101066, 'layout' => ['id' => 32211], 'name' => 'Tomasso'],
+            'tableId' => 101066,
+            'layout' => 32211,
+        ];
+
+        $fusion = WaitryOrdenPaymentEnriquecimientoSupport::fusionarAccesoDesdePos($details, $pos);
+
+        $this->assertSame(101066, (int) ($fusion['tableId'] ?? 0));
+        $this->assertSame(101066, (int) ($fusion['table']['id'] ?? 0));
+    }
 }

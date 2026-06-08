@@ -455,6 +455,7 @@
                 html: renderTotalesHtml(estado.totales_turno, 'Facturación del turno', {
                     conciliarMedios: true,
                     arqueoEfectivo: true,
+                    arqueoMediosCierre: true,
                     cuentacaja_efectivo_id: estado.cuentacaja_efectivo_id || 0,
                 }),
             });
@@ -1243,11 +1244,12 @@
                     sobrante_faltante: document.getElementById('sobrante_faltante').value,
                     observacion_cierre: document.getElementById('observacion_cierre').value,
                 };
-                var tabDef = document.getElementById('totales-tab-definitivo');
-                if (tabDef && window.GastronomiaTotalesTurnoRender
+                var rootMediosCierre = document.getElementById('tab-cierre-definitivo')
+                    || document.getElementById('totales-tab-definitivo');
+                if (rootMediosCierre && window.GastronomiaTotalesTurnoRender
                     && window.GastronomiaTotalesTurnoRender.recolectarMediosContadoCierreDesdeRoot) {
                     var mediosContado = window.GastronomiaTotalesTurnoRender
-                        .recolectarMediosContadoCierreDesdeRoot(tabDef);
+                        .recolectarMediosContadoCierreDesdeRoot(rootMediosCierre);
                     if (mediosContado.length) {
                         payloadCierre.medios_contado = mediosContado;
                     }

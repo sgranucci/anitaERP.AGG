@@ -22,7 +22,7 @@ class CapexReporteExport implements FromView, ShouldAutoSize, WithColumnFormatti
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'T';
+    private const COL_ULTIMA = 'V';
 
     private bool $hayFilaLogos = false;
 
@@ -68,6 +68,7 @@ class CapexReporteExport implements FromView, ShouldAutoSize, WithColumnFormatti
             'N' => '#,##0.00',
             'O' => '#,##0.00',
             'P' => '#,##0.00',
+            'R' => '#,##0.00',
         ];
     }
 
@@ -107,11 +108,13 @@ class CapexReporteExport implements FromView, ShouldAutoSize, WithColumnFormatti
             'M' => 12,
             'N' => 12,
             'O' => 12,
-            'P' => 12,
-            'Q' => 14,
-            'R' => 14,
-            'S' => 22,
-            'T' => 36,
+            'P' => 10,
+            'Q' => 22,
+            'R' => 12,
+            'S' => 14,
+            'T' => 14,
+            'U' => 22,
+            'V' => 36,
         ];
     }
 
@@ -162,7 +165,7 @@ class CapexReporteExport implements FromView, ShouldAutoSize, WithColumnFormatti
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
 
                 $primera = $this->filaPrimeraDatosExcel;
-                $sheet->getStyle('T'.$primera.':T'.$sheet->getHighestRow())
+                $sheet->getStyle('V'.$primera.':V'.$sheet->getHighestRow())
                     ->getAlignment()
                     ->setWrapText(true)
                     ->setVertical(Alignment::VERTICAL_TOP);

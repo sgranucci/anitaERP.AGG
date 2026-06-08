@@ -44,6 +44,14 @@ final class WaitryCierreJornadaVentanaSupportTest extends TestCase
             $ventana['desde'],
             $ventana['hasta'],
         ));
+
+        $this->assertFalse(WaitryCierreJornadaVentanaSupport::ordenDentroVentanaOperativa(
+            ['placed_at' => null],
+            $ventana['desde'],
+            $ventana['hasta'],
+        ));
+        $this->assertTrue(WaitryCierreJornadaVentanaSupport::perteneceTramoOrderId(100, 99));
+        $this->assertFalse(WaitryCierreJornadaVentanaSupport::perteneceTramoOrderId(99, 99));
     }
 
     public function test_discrepancia_impaga_y_ok_no_discrepancia(): void

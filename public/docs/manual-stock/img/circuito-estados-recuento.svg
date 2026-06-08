@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 420" font-family="Segoe UI, DejaVu Sans, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 Z" fill="#2E75B6"/>
+    </marker>
+    <style>
+      .box { fill:#f8f9fa; stroke:#2E75B6; stroke-width:2; rx:8; }
+      .title { font-size:14px; font-weight:bold; fill:#1F4E79; }
+      .label { font-size:11px; fill:#333; }
+      .edge { stroke:#2E75B6; stroke-width:1.5; fill:none; marker-end:url(#arrow); }
+      .edge-muted { stroke:#888; stroke-width:1.2; fill:none; marker-end:url(#arrow); }
+    </style>
+  </defs>
+  <text x="410" y="28" text-anchor="middle" class="title">Circuito de estados  Recuento de inventario</text>
+
+  <rect class="box" x="30" y="60" width="130" height="44"/>
+  <text x="95" y="87" text-anchor="middle" class="label">PENDIENTE</text>
+
+  <rect class="box" x="220" y="60" width="130" height="44"/>
+  <text x="285" y="87" text-anchor="middle" class="label">SUSPENDIDO</text>
+
+  <rect class="box" x="420" y="60" width="160" height="44"/>
+  <text x="500" y="87" text-anchor="middle" class="label">CERRADO PARCIAL</text>
+
+  <rect class="box" x="620" y="60" width="160" height="44"/>
+  <text x="700" y="87" text-anchor="middle" class="label">CERRADO TOTAL</text>
+
+  <rect class="box" x="220" y="170" width="130" height="44"/>
+  <text x="285" y="197" text-anchor="middle" class="label">ANULADO</text>
+
+  <rect class="box" x="30" y="280" width="760" height="110" fill="#eef6ff" stroke="#85C1E9"/>
+  <text x="50" y="305" class="label" font-weight="bold">Acciones clave</text>
+  <text x="50" y="328" class="label">" Suspender / Reactivar: PENDIENTE ” SUSPENDIDO</text>
+  <text x="50" y="348" class="label">" Cerrar parcial/total: genera mov. stock (RCAJP/RCAJN) según modo de cierre</text>
+  <text x="50" y="368" class="label">" Anular cierre: reverso RCAJR ’ vuelve a PENDIENTE</text>
+  <text x="420" y="328" class="label">" Anular recuento: desde PENDIENTE o SUSPENDIDO (sin stock)</text>
+  <text x="420" y="348" class="label">" Eliminar: solo PENDIENTE</text>
+
+  <path class="edge" d="M160 82 H220"/>
+  <text x="190" y="74" text-anchor="middle" class="label" font-size="9">suspender</text>
+  <path class="edge-muted" d="M220 104 V130 H285 V104" />
+  <path class="edge" d="M285 104 V130 H285 V104" style="display:none"/>
+  <path class="edge" d="M285 104 C285 130 285 130 285 104" style="display:none"/>
+  <path class="edge-muted" d="M285 104 V125 H220 V104"/>
+  <text x="252" y="118" class="label" font-size="9">reactivar</text>
+
+  <path class="edge" d="M160 82 H380"/>
+  <text x="270" y="74" class="label" font-size="9">cerrar parcial</text>
+  <path class="edge" d="M160 82 H650"/>
+  <text x="400" y="74" class="label" font-size="9">cerrar total</text>
+
+  <path class="edge-muted" d="M95 104 V150 H285 V170"/>
+  <text x="120" y="145" class="label" font-size="9">anular</text>
+
+  <path class="edge-muted" d="M500 104 V240 H95 V280"/>
+  <text x="300" y="230" class="label" font-size="9">anular cierre</text>
+  <path class="edge-muted" d="M700 104 V240 H95 V280"/>
+</svg>

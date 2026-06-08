@@ -32,7 +32,24 @@ class ConfiguracionPuntoventaGastronomia extends Model implements Auditable
         'tipotransaccion_id',
         'tipotransaccion_nota_credito_id',
         'tipotransaccion_caja_id',
+        'waitry_habilitado',
     ];
+
+    protected $casts = [
+        'waitry_habilitado' => 'boolean',
+    ];
+
+    /**
+     * Waitry global (.env) y habilitado para esta terminal (CRUD configuración PV).
+     */
+    public function waitryHabilitadoEnTerminal(): bool
+    {
+        if (! config('waitry.habilitado', false)) {
+            return false;
+        }
+
+        return (bool) ($this->waitry_habilitado ?? true);
+    }
 
     public function empresa()
     {

@@ -35,6 +35,7 @@ class JornadaGastronomiaController extends Controller
 
         $empresas = $this->empresaRepository->allFiltrado();
         $empresaId = (int) $request->input('empresa_id', $empresas->first()->id ?? 0);
+        $this->assertAccesoEmpresa($empresaId);
 
         $estado = $empresaId > 0 ? $this->jornadaService->estadoParaEmpresa($empresaId) : null;
         $historial = $empresaId > 0
@@ -166,16 +167,18 @@ class JornadaGastronomiaController extends Controller
                     return response()->json(['ok' => false, 'error' => 'Cierre tótem Waitry no habilitado.'], 422);
                 }
                 $snapshot = is_array($preview['snapshot_cierre'] ?? null) ? $preview['snapshot_cierre'] : null;
-                $resumen = [
-                    'por_totem' => $preview['por_totem'] ?? [],
-                    'total_general' => $preview['total_general'] ?? [],
-                ];
+                $resumen = is_array($preview['resumen_informe_z'] ?? null)
+                    ? $preview['resumen_informe_z']
+                    : [
+                        'por_totem' => [],
+                        'total_general' => ['cantidad_ordenes' => 0, 'total_ingreso' => 0.0, 'por_medio_pago' => []],
+                    ];
             } else {
-                $resumenTotems = $snapshot['resumen_totems'];
-                $resumen = [
-                    'por_totem' => $resumenTotems['por_totem'] ?? [],
-                    'total_general' => $resumenTotems['total_general'] ?? [],
-                ];
+                $resumen = is_array($snapshot['resumen_informe_z'] ?? null)
+                    ? $snapshot['resumen_informe_z']
+                    : \App\Support\Ventas\Waitry\WaitryInformeZConciliacionSupport::filtrarResumenSoloCreditCardPosnet(
+                        is_array($snapshot['resumen_totems'] ?? null) ? $snapshot['resumen_totems'] : [],
+                    );
             }
 
             $resultado = $this->informeZService->guardarBorradorJornadaAbierta(
@@ -244,49 +247,80 @@ class JornadaGastronomiaController extends Controller
             ->get()
             ->keyBy(fn ($t) => (int) $t->id);
 
+        $conciliacion = is_array($informeZ['conciliacion'] ?? null) ? $informeZ['conciliacion'] : null;
+        $bloquesConc = is_array($conciliacion['totems'] ?? null) ? $conciliacion['totems'] : [];
+
         $totemsPdf = [];
-        foreach (($informeZ['totems'] ?? []) as $t) {
-            if (! is_array($t)) {
-                continue;
-            }
-            $totemId = (int) ($t['totem_id'] ?? 0);
-            $modelo = $totems->get($totemId);
-            $lineas = is_array($t['lineas'] ?? null) ? $t['lineas'] : [];
-            $outLineas = [];
-            $total = 0.0;
-            foreach ($lineas as $ln) {
-                if (! is_array($ln)) {
+        if ($bloquesConc !== []) {
+            foreach ($bloquesConc as $ct) {
+                if (! is_array($ct)) {
                     continue;
                 }
-                $monto = round((float) ($ln['monto'] ?? 0), 2);
-                $total = round($total + $monto, 2);
-                $outLineas[] = [
-                    'etiqueta' => \App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport::etiquetaTipo($ln['tipo_waitry'] ?? null),
-                    'monto' => $monto,
+                $totemId = (int) ($ct['totem_id'] ?? 0);
+                $modelo = $totems->get($totemId);
+                $outLineas = [];
+                foreach ($ct['lineas'] ?? [] as $ln) {
+                    if (! is_array($ln)) {
+                        continue;
+                    }
+                    $outLineas[] = [
+                        'etiqueta' => (string) ($ln['etiqueta'] ?? '—'),
+                        'monto_sistema' => round((float) ($ln['monto_sistema'] ?? 0), 2),
+                        'monto_informe_z' => round((float) ($ln['monto_informe_z'] ?? 0), 2),
+                        'diferencia' => round((float) ($ln['diferencia'] ?? 0), 2),
+                        'ok' => ! empty($ln['ok']),
+                    ];
+                }
+
+                $totemsPdf[] = [
+                    'totem_id' => $totemId,
+                    'ubicacion_nombre' => (string) ($ct['ubicacion_nombre'] ?? $modelo?->ubicacion?->nombre ?? 'Tótem'),
+                    'detalle' => (string) ($ct['detalle'] ?? $modelo?->detalle ?? ''),
+                    'waitry_table_id' => (int) ($ct['waitry_table_id'] ?? $modelo?->waitry_table_id ?? 0),
+                    'ok' => ! empty($ct['ok']),
+                    'lineas' => $outLineas,
+                    'total_sistema' => round((float) ($ct['total_sistema'] ?? 0), 2),
+                    'total_informe_z' => round((float) ($ct['total_informe_z'] ?? 0), 2),
+                    'diferencia' => round((float) ($ct['diferencia_total'] ?? 0), 2),
                 ];
             }
-            $totalSistema = 0.0;
-            $diferencia = 0.0;
-            if (is_array($informeZ['conciliacion']['totems'] ?? null)) {
-                foreach ($informeZ['conciliacion']['totems'] as $ct) {
-                    if (is_array($ct) && (int) ($ct['totem_id'] ?? 0) === $totemId) {
-                        $totalSistema = (float) ($ct['total_sistema'] ?? 0);
-                        $diferencia = (float) ($ct['diferencia'] ?? ((float) $total - $totalSistema));
-                        break;
-                    }
+        } else {
+            foreach (($informeZ['totems'] ?? []) as $t) {
+                if (! is_array($t)) {
+                    continue;
                 }
-            }
+                $totemId = (int) ($t['totem_id'] ?? 0);
+                $modelo = $totems->get($totemId);
+                $lineas = is_array($t['lineas'] ?? null) ? $t['lineas'] : [];
+                $outLineas = [];
+                $totalZ = 0.0;
+                foreach ($lineas as $ln) {
+                    if (! is_array($ln)) {
+                        continue;
+                    }
+                    $montoZ = round((float) ($ln['monto'] ?? $ln['monto_informe_z'] ?? 0), 2);
+                    $totalZ = round($totalZ + $montoZ, 2);
+                    $outLineas[] = [
+                        'etiqueta' => \App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport::etiquetaTipo($ln['tipo_waitry'] ?? null),
+                        'monto_sistema' => 0.0,
+                        'monto_informe_z' => $montoZ,
+                        'diferencia' => $montoZ,
+                        'ok' => true,
+                    ];
+                }
 
-            $totemsPdf[] = [
-                'totem_id' => $totemId,
-                'ubicacion_nombre' => (string) ($modelo?->ubicacion?->nombre ?? 'Tótem'),
-                'detalle' => (string) ($modelo?->detalle ?? ''),
-                'waitry_table_id' => (int) ($modelo?->waitry_table_id ?? 0),
-                'lineas' => $outLineas,
-                'total' => $total,
-                'total_sistema' => $totalSistema,
-                'diferencia' => $diferencia,
-            ];
+                $totemsPdf[] = [
+                    'totem_id' => $totemId,
+                    'ubicacion_nombre' => (string) ($modelo?->ubicacion?->nombre ?? 'Tótem'),
+                    'detalle' => (string) ($modelo?->detalle ?? ''),
+                    'waitry_table_id' => (int) ($modelo?->waitry_table_id ?? 0),
+                    'ok' => true,
+                    'lineas' => $outLineas,
+                    'total_sistema' => 0.0,
+                    'total_informe_z' => $totalZ,
+                    'diferencia' => $totalZ,
+                ];
+            }
         }
 
         $empresaNombre = (string) ($cierre->empresa?->nombre ?? '');
@@ -310,7 +344,7 @@ class JornadaGastronomiaController extends Controller
             'facturas_total' => $facturasTotal,
             'fecha_emision_comprobante' => now()->format('d/m/Y H:i'),
             'informe_z' => $informeZ,
-            'conciliacion' => is_array($informeZ['conciliacion'] ?? null) ? $informeZ['conciliacion'] : null,
+            'conciliacion' => $conciliacion,
             'totems' => $totemsPdf,
         ];
 
@@ -348,8 +382,7 @@ class JornadaGastronomiaController extends Controller
             return;
         }
 
-        $asignadas = $this->empresaRepository->traeEmpresasAsignadas();
-        if (count($asignadas) > 1 && ! in_array($empresaId, $asignadas, true)) {
+        if (! $this->empresaRepository->empresaIdPermitida($empresaId)) {
             abort(403, 'Empresa no permitida para su usuario.');
         }
     }
@@ -361,6 +394,8 @@ class JornadaGastronomiaController extends Controller
         if ($empresaId <= 0) {
             return response()->json(['ok' => false, 'error' => 'Empresa inválida.'], 422);
         }
+
+        $this->assertAccesoEmpresa($empresaId);
 
         return response()->json([
             'ok' => true,
@@ -424,6 +459,8 @@ class JornadaGastronomiaController extends Controller
         $fechaJornada = (string) $request->input('fecha_jornada', now()->format('Y-m-d'));
         $observacion = $request->input('observacion');
 
+        $this->assertAccesoEmpresa($empresaId);
+
         try {
             $jornada = $this->jornadaService->abrir($empresaId, $fechaJornada, is_string($observacion) ? $observacion : null);
 
@@ -467,6 +504,8 @@ class JornadaGastronomiaController extends Controller
         $informeZTotemsArr = is_array($informeZTotems) ? $informeZTotems : null;
         $snapshotRequest = $request->input('cierre_totem_snapshot');
         $cierreTotemSnapshot = is_array($snapshotRequest) ? $snapshotRequest : null;
+
+        $this->assertAccesoEmpresa($empresaId);
 
         try {
             $jornada = $this->jornadaService->cerrar(

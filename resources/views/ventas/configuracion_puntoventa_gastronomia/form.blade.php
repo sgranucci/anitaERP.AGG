@@ -14,19 +14,12 @@
         <small class="form-text text-muted">Opcional: nombre amigable (ej. Caja salón, Terminal cocina).</small>
     </div>
 </div>
-<div class="form-group row">
-    <label for="empresa_id" class="col-lg-3 col-form-label requerido">Empresa</label>
-    <div class="col-lg-8">
-        <select name="empresa_id" id="empresa_id" class="form-control" required>
-            <option value="">Seleccione…</option>
-            @foreach ($empresa_query as $empresa)
-                <option value="{{ $empresa->id }}" {{ (int) old('empresa_id', $data->empresa_id ?? config('cliente.EMPRESA_DEFAULT_ID')) === (int) $empresa->id ? 'selected' : '' }}>
-                    {{ $empresa->nombre }}
-                </option>
-            @endforeach
-        </select>
-    </div>
-</div>
+@include('includes.form-empresa-asignada', [
+    'empresa_query' => $empresa_query,
+    'empresa_id' => $data->empresa_id ?? null,
+    'solo_lectura' => ! empty($data->id),
+    'col_input' => 'col-lg-8',
+])
 <div class="form-group row">
     <label for="puntoventa_cae_id" class="col-lg-3 col-form-label requerido">Punto de venta CAE</label>
     <div class="col-lg-8">
@@ -149,6 +142,16 @@
             @endforeach
         </select>
         <small class="form-text text-muted">Movimiento de caja que genera el POS al cobrar (operación cobranza de clientes).</small>
+    </div>
+</div>
+<div class="form-group row">
+    <label for="waitry_habilitado" class="col-lg-3 col-form-label requerido">Integración Waitry</label>
+    <div class="col-lg-8">
+        <select name="waitry_habilitado" id="waitry_habilitado" class="form-control" required>
+            <option value="1" {{ (int) old('waitry_habilitado', $data->waitry_habilitado ?? 1) === 1 ? 'selected' : '' }}>Sí</option>
+            <option value="0" {{ (int) old('waitry_habilitado', $data->waitry_habilitado ?? 1) === 0 ? 'selected' : '' }}>No</option>
+        </select>
+        <small class="form-text text-muted">Si elige «No», esta terminal no consultará Waitry, no importará cuentas externas ni enviará comandas tras facturar.</small>
     </div>
 </div>
 <div class="form-group row">

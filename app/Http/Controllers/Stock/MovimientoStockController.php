@@ -7,6 +7,8 @@ use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Requests\ValidacionMovimientoStock;
 use App\Services\Stock\MovimientoStockService;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Repositories\Stock\DepmaeRepositoryInterface;
 use App\Repositories\Stock\Tipotransaccion_StockRepository;
 use App\Repositories\Stock\LoteRepositoryInterface;
 use App\Models\Stock\Depmae;
@@ -21,15 +23,21 @@ class MovimientoStockController extends Controller
 	private $movimientoStockService;
     private $tipotransaccionStockRepository;
     private $loteRepository;
+    private $depmaeRepository;
+    private $empresaRepository;
 	
     public function __construct(MovimientoStockService $movimientoStockservice,
                                 LoteRepositoryInterface $loterepository,
-                                Tipotransaccion_StockRepository $tipotransaccionStockRepository
+                                Tipotransaccion_StockRepository $tipotransaccionStockRepository,
+                                DepmaeRepositoryInterface $depmaerepository,
+                                EmpresaRepositoryInterface $empresarepository,
     							)
     {
         $this->movimientoStockService = $movimientoStockservice;
         $this->tipotransaccionStockRepository = $tipotransaccionStockRepository;
         $this->loteRepository = $loterepository;
+        $this->depmaeRepository = $depmaerepository;
+        $this->empresaRepository = $empresarepository;
     }
 
     /**
@@ -61,11 +69,14 @@ class MovimientoStockController extends Controller
                                 $tipotransaccion_query, $lote_query);
 
         $tipotransacciondefault_id = $this->resolverTipotransaccionStockDefaultId();
+        $empresa_query = $this->empresaRepository->allFiltrado();
+        $empresa_id = old('empresa_id', $empresa_query->first()->id ?? null);
 
         return view('stock.movimientostock.crear', compact(
             'mventa_query', 'articulo_query', 'modulo_query', 'listaprecio_query', 
             'articuloall_query', 'articuloxsku_query', 
-            'tipotransaccion_query', 'tipotransacciondefault_id', 'deposito_query', 'lote_query'));
+            'tipotransaccion_query', 'tipotransacciondefault_id', 'deposito_query', 'lote_query',
+            'empresa_query', 'empresa_id'));
     }
 
     /**
@@ -109,10 +120,20 @@ class MovimientoStockController extends Controller
                             $tipotransaccion_query, $lote_query, $movimientostock);
 
 		$tipotransacciondefault_id = $this->resolverTipotransaccionStockDefaultId();
+        $empresa_query = $this->empresaRepository->allFiltrado();
+        $depositoActualId = (int) ($movimientostock->articulos_movimiento[0]->deposito_id ?? 0);
+        $empresa_id = old(
+            'empresa_id',
+            $depositoActualId > 0
+                ? (Depmae::query()->whereKey($depositoActualId)->value('empresa_id') ?? $empresa_query->first()->id)
+                : ($empresa_query->first()->id ?? null)
+        );
+
         return view('stock.movimientostock.editar', compact('movimientostock', 
 			'mventa_query', 'articulo_query', 'modulo_query', 
 			'listaprecio_query', 'articuloall_query', 'articuloxsku_query', 
-			'tipotransaccion_query', 'tipotransacciondefault_id', 'deposito_query', 'lote_query'));            
+			'tipotransaccion_query', 'tipotransacciondefault_id', 'deposito_query', 'lote_query',
+            'empresa_query', 'empresa_id'));            
     }
 
     /**
@@ -170,7 +191,7 @@ class MovimientoStockController extends Controller
     {
         $mventa_query = Mventa::all();
         $tipotransaccion_query = $this->tipotransaccionStockRepository->all(['E','S'], ['A']);
-        $deposito_query = Depmae::all();
+        $deposito_query = $this->depmaeRepository->allFiltrado();
     
         $articulo_ids = Array();
         if ($movimientostock != null)	

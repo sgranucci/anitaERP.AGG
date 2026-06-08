@@ -12,16 +12,20 @@ final class WaitryPaymentPayloadSupport
 {
     public function __construct(
         private readonly WaitryPaymentTypeSupport $paymentTypeSupport,
+        private readonly WaitryPaymentGatewaySupport $paymentGatewaySupport,
     ) {
     }
 
     /**
      * @param  list<array{cuentacaja_id:int,moneda_id:int,monto:float,cotizacion?:float|null,observacion?:string|null}>  $mediosPago
-     * @return array{type: string, total_fee: array{amount: float, currency_code: string, formatted_amount: string}}
+     * @return array{
+     *     type: string,
+     *     total_fee: array{amount: float, currency_code: string, formatted_amount: string},
+     *     payments?: list<array{gateway: string, amount: float}>
+     * }
      */
-    public function armarBloquePayment(array $mediosPago, int $empresaId): array
+    public function armarBloquePayment(array $mediosPago, int $empresaId, bool $pagoOrdenExternaPush = false): array
     {
-        $tipoPago = $this->paymentTypeSupport->resolverDesdeMediosPago($mediosPago, $empresaId);
         $monto = $this->paymentTypeSupport->montoTotalMedioPrincipal($mediosPago);
         if ($monto <= 0.) {
             throw new InvalidArgumentException('Waitry: el monto del pago debe ser mayor a cero.');
@@ -30,14 +34,46 @@ final class WaitryPaymentPayloadSupport
         $monedaId = $this->paymentTypeSupport->monedaIdMedioPrincipal($mediosPago);
         $currencyCode = $this->codigoMonedaWaitry($monedaId);
 
-        return [
+        $bloque = [
             'total_fee' => [
                 'amount' => $monto,
                 'currency_code' => $currencyCode,
                 'formatted_amount' => $this->formatearMonto($monto, $currencyCode),
             ],
-            'type' => $tipoPago,
+            'type' => $pagoOrdenExternaPush
+                ? WaitryPaymentTypeSupport::TIPO_INTERFACE
+                : $this->paymentTypeSupport->resolverDesdeMediosPago($mediosPago, $empresaId),
         ];
+
+        if ($pagoOrdenExternaPush) {
+            $payments = $this->paymentGatewaySupport->armarPaymentsDesdeMediosPago($mediosPago, $empresaId);
+            if ($payments !== []) {
+                $bloque['payments'] = $payments;
+            }
+        }
+
+        return $bloque;
+    }
+
+    /**
+     * Suma de montos cobrados (para totalPaid en push/sync).
+     *
+     * @param  list<array{cuentacaja_id:int,moneda_id:int,monto:float,cotizacion?:float|null,observacion?:string|null}>  $mediosPago
+     */
+    public function montoTotalPagado(array $mediosPago): float
+    {
+        $total = 0.0;
+        foreach ($mediosPago as $medio) {
+            if (! is_array($medio)) {
+                continue;
+            }
+            $monto = (float) ($medio['monto'] ?? 0);
+            if ($monto > 0.) {
+                $total += $monto;
+            }
+        }
+
+        return round($total, 2);
     }
 
     private function codigoMonedaWaitry(int $monedaId): string

@@ -18,6 +18,16 @@
     $saldosDestinoJson = json_encode($saldosDestino ?? [], JSON_UNESCAPED_UNICODE);
 @endphp
 <div class="row">
+    <div class="col-md-12">
+        @include('includes.form-empresa-asignada', [
+            'empresa_query' => $empresa_query,
+            'empresa_id' => $empresa_id ?? null,
+            'col_label' => 'col-lg-2',
+            'col_input' => 'col-lg-4',
+        ])
+    </div>
+</div>
+<div class="row">
     <div class="col-md-3">
         <div class="form-group">
             <label class="requerido">Fecha del préstamo</label>
@@ -38,7 +48,7 @@
             <select name="deposito_origen_id" id="deposito_origen_id" class="form-control" required>
                 <option value="">-- Seleccionar --</option>
                 @foreach ($depositos as $d)
-                    <option value="{{ $d->id }}"
+                    <option value="{{ $d->id }}" data-empresa-id="{{ $d->empresa_id }}"
                         @if ((int) old('deposito_origen_id', $prestamo->deposito_origen_id ?? 0) === (int) $d->id) selected @endif>
                         {{ $d->nombre }}
                     </option>
@@ -52,7 +62,7 @@
             <select name="deposito_destino_id" id="deposito_destino_id" class="form-control" required>
                 <option value="">-- Seleccionar --</option>
                 @foreach ($depositos as $d)
-                    <option value="{{ $d->id }}"
+                    <option value="{{ $d->id }}" data-empresa-id="{{ $d->empresa_id }}"
                         @if ((int) old('deposito_destino_id', $prestamo->deposito_destino_id ?? 0) === (int) $d->id) selected @endif>
                         {{ $d->nombre }}
                     </option>

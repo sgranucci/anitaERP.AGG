@@ -5,9 +5,12 @@
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/includes/listado-filtros.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/caja/cuentacaja/filtro.js")}}" type="text/javascript"></script>
 @endsection
 
-<?php use App\Helpers\biblioteca ?>
+<?php use App\Helpers\biblioteca;
+use App\Support\Caja\CuentacajaListadoFiltros; ?>
 
 @section('contenido')
 <div class="row">
@@ -16,16 +19,32 @@
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Cuentas de Caja</h3>
-                <div class="card-tools">
-                    <a href="{{route('crear_cuentacaja')}}" class="btn btn-outline-secondary btn-sm">
-                       	@if (can('crear-cuentas-de-caja', false))
-                        	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
-						@endif
-                    </a>
+                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @include('includes.listado.filtros_toolbar', [
+                        'formId' => 'form-filtros-cuentacaja',
+                        'filtroValor' => $filtros['valor'] ?? '',
+                        'tieneCriterios' => CuentacajaListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
+                        'limpiarUrl' => route('cuentacaja'),
+                        'placeholder' => 'Búsqueda rápida (tolera errores de tipeo)…',
+                        'toggleTarget' => '#panel-filtros-cuentacaja',
+                        'toggleId' => 'btn-toggle-filtros-cuentacaja',
+                        'inputId' => 'filtro_valor',
+                        'nuevoRegistroUrl' => route('crear_cuentacaja'),
+                        'nuevoRegistroCan' => 'crear-cuentas-de-caja',
+                    ])
                 </div>
             </div>
+            <form method="get" action="{{ route('cuentacaja') }}" id="form-filtros-cuentacaja" class="mb-0">
+                @include('caja.cuentacaja.partials.filtros_listado', [
+                    'limpiarUrl' => route('cuentacaja'),
+                ])
+            </form>
             <div class="card-body table-responsive p-0">
-                <table class="table table-striped table-bordered table-hover" id="tabla-data">
+                @include('includes.exportar-tabla-queryparams', [
+                    'ruta' => 'lista_cuentacaja',
+                    'queryparams' => $filtrosQuery ?? [],
+                ])
+                <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead>
                         <tr>
                             <th class="width20">ID</th>
@@ -84,4 +103,5 @@
         </div>
     </div>
 </div>
+{{ $datas->appends($filtrosQuery ?? [])->links() }}
 @endsection

@@ -104,6 +104,10 @@
                 const url = new URL(saldoUrl, window.location.origin);
                 url.searchParams.append('articulo_id', String(articuloId));
                 depositos.forEach(function (d) { url.searchParams.append('depositos[]', String(d)); });
+                const empresaId = parseInt((document.getElementById('empresa_id') || {}).value || '0', 10);
+                if (empresaId > 0) {
+                    url.searchParams.append('empresa_id', String(empresaId));
+                }
                 const res = await fetch(url.toString(), { credentials: 'same-origin', headers: { Accept: 'application/json' } });
                 if (!res.ok) throw new Error('http ' + res.status);
                 const data = await res.json();

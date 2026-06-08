@@ -18,29 +18,24 @@
        <input type="text" name="nombre" id="nombre" class="form-control" value="{{old('nombre', $data->nombre ?? '')}}" required/>
     </div>
 </div>
+@include('includes.form-empresa-asignada', [
+    'empresa_query' => $empresa_query,
+    'empresa_id' => $data->empresa_id ?? null,
+    'col_input' => 'col-lg-4',
+])
+@if($empresasArca->isNotEmpty())
 <div class="form-group row">
-    <label for="empresa_id" class="col-lg-3 col-form-label requerido">Empresa</label>
+    <div class="col-lg-3"></div>
     <div class="col-lg-4">
-        <select name="empresa_id" id="empresa_id" data-placeholder="Empresa" class="form-control required" data-fouc required>
-            <option value="">-- Seleccionar --</option>
-            @foreach($empresa_query as $key => $value)
-                @if( (int) $value->id == (int) old('empresa_id', $data->empresa_id ?? ''))
-                    <option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>
-                @else
-                    <option value="{{ $value->id }}">{{ $value->nombre }}</option>
-                @endif
-            @endforeach
-        </select>
-        @if($empresasArca->isNotEmpty())
         <small class="form-text text-muted">
             Empresas con certificado ARCA:
             @foreach($empresasArca as $empArca)
                 {{ $empArca->nombre }}@if(!$loop->last), @endif
             @endforeach
         </small>
-        @endif
     </div>
 </div>
+@endif
 <div class="form-group row" id="puntoventa-arca-panel"
      data-url-puntos="{{ route('puntoventa_arca_puntos_venta') }}"
      data-empresa-arca-id="{{ $empresaArcaId }}">

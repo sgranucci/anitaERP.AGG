@@ -35,13 +35,20 @@
         }
     ],
     "paid": true,
+    "totalPaid": 30.0,
     "payment": {
         "total_fee": {
             "amount": 30.0,
             "currency_code": "ARS",
             "formatted_amount": "$30.00"
         },
-        "type": "cash"
+        "type": "interface",
+        "payments": [
+            {
+                "gateway": "CASH",
+                "amount": 30.0
+            }
+        ]
     },
     "external_id": "12345",
     "client_name": "Juan",

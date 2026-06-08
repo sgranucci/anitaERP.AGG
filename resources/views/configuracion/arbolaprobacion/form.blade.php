@@ -19,18 +19,12 @@
                 @endforeach
             </select>
         </div>
-        <div class="form-group row">
-            <label for="Empresa" class="col-lg-4 col-form-label">Empresa</label>
-            <select name="empresa_id" id="empresa_id" data-placeholder="Empresa" class="col-lg-5 form-control" required data-fouc>
-                @foreach($empresa_query as $key => $value)
-                    @if( (int) $value->id == (int) old('empresa_id', $data->empresa_id ?? session('empresa_id')))
-                        <option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-                    @else
-                        <option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-                    @endif
-                @endforeach
-            </select>
-        </div>
+        @include('includes.form-empresa-asignada', [
+            'empresa_query' => $empresa_query,
+            'empresa_id' => $data->empresa_id ?? session('empresa_id'),
+            'col_label' => 'col-lg-4',
+            'col_input' => 'col-lg-5',
+        ])
         <div class="form-group row">
             <label for="recordatorio" class="col-lg-4 col-form-label requerido">Recordatorio</label>
             <select id="recordatorio" name="recordatorio" data-placeholder="Si envia mail recordatorio" class="col-lg-4 form-control" required>
@@ -85,12 +79,15 @@
 <h4>Niveles</h4>
 @php
     $esRequisiciones = (old('tipoarbol', $data->tipoarbol ?? '') === 'Requisiciones');
+    $esRequisicionesSala = (old('tipoarbol', $data->tipoarbol ?? '') === 'Requisiciones de sala');
 @endphp
 <div class="alert alert-info" role="alert" style="margin-top: 10px;">
     <strong>Usuario opcional por nivel.</strong>
     Si en un nivel no se asigna usuario, el nivel se considera <strong>aprobado automáticamente</strong>.
     @if($esRequisiciones)
         En requisiciones, además se aplicará el <strong>Estado req.</strong> configurado para ese nivel (si está definido).
+    @elseif($esRequisicionesSala)
+        En requisiciones de sala, además se aplicará el <strong>Estado req.</strong> configurado para ese nivel (si está definido).
     @else
         (Este comportamiento aplica al circuito del árbol; en requisiciones también puede impactar el estado.)
     @endif
@@ -165,10 +162,13 @@
                         @php
                             $idxNivel = $loop->index;
                             $nombreTipoOc = \App\Models\Configuracion\Arbolaprobacion::$enumTipoArbol[array_search('OC', array_column(\App\Models\Configuracion\Arbolaprobacion::$enumTipoArbol, 'valor'))]['nombre'];
+                            $nombreTipoRs = \App\Models\Configuracion\Arbolaprobacion::$enumTipoArbol[array_search('RS', array_column(\App\Models\Configuracion\Arbolaprobacion::$enumTipoArbol, 'valor'))]['nombre'];
                             $tipoArbolSel = old('tipoarbol', isset($data) ? ($data->tipoarbol ?? '') : '');
                             $docEstadosOpciones = ($tipoArbolSel === $nombreTipoOc)
                                 ? ($ordencompra_estados_arbol_enum ?? [])
-                                : ($requisicion_estados_arbol_enum ?? []);
+                                : (($tipoArbolSel === $nombreTipoRs)
+                                    ? ($requisicion_sala_estados_arbol_enum ?? [])
+                                    : ($requisicion_estados_arbol_enum ?? []));
                             $selDoc = old('documento_estado_al_aprobar.'.$idxNivel, $arbolaprobacion_niveles->documento_estado_al_aprobar ?? '');
                         @endphp
                         <select name="documento_estado_al_aprobar[]" class="form-control form-control-sm" title="Opcional; estado del documento al aprobar este nivel">

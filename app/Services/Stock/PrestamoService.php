@@ -2,10 +2,6 @@
 
 namespace App\Services\Stock;
 
-use App\Mail\Stock\PrestamoAprobacion;
-use App\Mail\Stock\PrestamoCambioEstado;
-use App\Mail\Stock\PrestamoRecordatorio;
-use App\Models\Seguridad\Usuario;
 use App\Models\Stock\Articulo_Movimiento;
 use App\Models\Stock\Configuracion_Prestamo;
 use App\Models\Stock\MovimientoStock;
@@ -15,13 +11,11 @@ use App\Models\Stock\Prestamo_Item;
 use App\Models\Stock\Prestamo_Token;
 use App\Models\Stock\Tipotransaccion_Stock;
 use App\Repositories\Stock\Articulo_Saldo_DepositoRepositoryInterface;
-use App\Repositories\Stock\Deposito_AdministradorRepositoryInterface;
 use App\Repositories\Stock\PrestamoRepositoryInterface;
+use App\Services\Configuracion\ModuloAvisoService;
 use Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Str;
 
 
 /**
@@ -44,7 +38,7 @@ class PrestamoService
     public function __construct(
         private readonly PrestamoRepositoryInterface $prestamoRepository,
         private readonly Articulo_Saldo_DepositoRepositoryInterface $saldoRepository,
-        private readonly Deposito_AdministradorRepositoryInterface $depAdminRepository,
+        private readonly ModuloAvisoService $moduloAvisoService,
     ) {}
 
     public function listar()
@@ -393,7 +387,9 @@ class PrestamoService
         $enviados = 0;
         foreach ($prestamos as $prestamo) {
             try {
-                $this->enviarRecordatorio($prestamo, $config);
+                $this->moduloAvisoService->enviar('stock', 'prestamo_recordatorio', (int) $prestamo->id, [
+                    'vencido' => $prestamo->estaVencido(),
+                ]);
                 $prestamo->ultimo_recordatorio_enviado_el = now()->toDateString();
                 $prestamo->save();
                 $enviados++;
@@ -568,121 +564,14 @@ class PrestamoService
 
     private function generarTokensYNotificarAprobacion(Prestamo $prestamo): void
     {
-        $config = Configuracion_Prestamo::vigente();
-        if (! $config->enviar_aprobacion) {
-            return;
-        }
-
-        $admins = $this->depAdminRepository->porDeposito($prestamo->deposito_destino_id);
-        if ($admins->isEmpty()) {
-            Log::warning('PrestamoService: depósito destino sin administradores', [
-                'prestamo_id' => $prestamo->id,
-                'deposito_destino_id' => $prestamo->deposito_destino_id,
-            ]);
-
-            return;
-        }
-
-        $expira = now()->addHours((int) ($config->horas_validez_token ?? 168));
-
-        foreach ($admins as $admin) {
-            $usuario = $admin->usuarios;
-            if (! $usuario || empty($usuario->email)) {
-                continue;
-            }
-
-            $tokenAprobar = $this->crearToken($prestamo, Prestamo_Token::ACCION_APROBAR, (int) $usuario->id, $expira);
-            $tokenRechazar = $this->crearToken($prestamo, Prestamo_Token::ACCION_RECHAZAR, (int) $usuario->id, $expira);
-            $tokenVer = $this->crearToken($prestamo, Prestamo_Token::ACCION_VISUALIZAR, (int) $usuario->id, $expira);
-
-            $links = [
-                'aprobar' => route('prestamo_aprobar_publico', ['token' => $tokenAprobar->token]),
-                'rechazar' => route('prestamo_rechazar_publico', ['token' => $tokenRechazar->token]),
-                'visualizar' => route('prestamo_ver_publico', ['token' => $tokenVer->token]),
-            ];
-
-            try {
-                $mailable = (new PrestamoAprobacion(
-                    $prestamo->loadMissing(['items.articulos:id,sku,descripcion', 'depositoOrigen', 'depositoDestino', 'solicitante']),
-                    $usuario,
-                    $links,
-                    $config
-                ));
-                if (! empty($config->mail_remitente)) {
-                    $mailable = $mailable->from($config->mail_remitente);
-                }
-                $envio = Mail::to($usuario->email);
-                if ($cc = $config->copiasComoArray()) {
-                    $envio->cc($cc);
-                }
-                $envio->send($mailable);
-            } catch (\Throwable $e) {
-                Log::error('PrestamoService: falló envío de mail aprobación', [
-                    'prestamo_id' => $prestamo->id,
-                    'usuario_id' => $usuario->id,
-                    'error' => $e->getMessage(),
-                ]);
-            }
-        }
+        $this->moduloAvisoService->enviar('stock', 'prestamo_solicitud', (int) $prestamo->id);
     }
 
     private function notificarSolicitante(Prestamo $prestamo, string $tipo, ?string $mensaje): void
     {
-        /** @var Usuario|null $solicitante */
-        $solicitante = $prestamo->solicitante;
-        if (! $solicitante || empty($solicitante->email)) {
-            return;
-        }
-
-        $config = Configuracion_Prestamo::vigente();
-        try {
-            $mailable = new PrestamoCambioEstado(
-                $prestamo->loadMissing(['items.articulos:id,sku,descripcion', 'depositoOrigen', 'depositoDestino', 'aprobador']),
-                $tipo,
-                $mensaje,
-                $config
-            );
-            if (! empty($config->mail_remitente)) {
-                $mailable = $mailable->from($config->mail_remitente);
-            }
-            Mail::to($solicitante->email)->send($mailable);
-        } catch (\Throwable $e) {
-            Log::error('PrestamoService::notificarSolicitante falló', [
-                'prestamo_id' => $prestamo->id,
-                'tipo' => $tipo,
-                'error' => $e->getMessage(),
-            ]);
-        }
-    }
-
-    private function enviarRecordatorio(Prestamo $prestamo, Configuracion_Prestamo $config): void
-    {
-        $admins = $this->depAdminRepository->porDeposito($prestamo->deposito_destino_id);
-        $destinatarios = $admins->pluck('usuarios.email')->filter()->unique()->values()->all();
-        if (empty($destinatarios)) {
-            return;
-        }
-
-        $vencido = $prestamo->estaVencido();
-        $mailable = new PrestamoRecordatorio($prestamo, $config, $vencido);
-        if (! empty($config->mail_remitente)) {
-            $mailable = $mailable->from($config->mail_remitente);
-        }
-        $envio = Mail::to($destinatarios);
-        if ($cc = $config->copiasComoArray()) {
-            $envio->cc($cc);
-        }
-        $envio->send($mailable);
-    }
-
-    private function crearToken(Prestamo $prestamo, string $accion, int $usuarioId, $expira): Prestamo_Token
-    {
-        return Prestamo_Token::create([
-            'prestamo_id' => $prestamo->id,
-            'token' => Str::random(60),
-            'accion' => $accion,
-            'usuario_destino_id' => $usuarioId,
-            'expira_el' => $expira,
+        $codigo = $tipo === 'rechazado' ? 'prestamo_rechazado_solicitante' : 'prestamo_aprobado_solicitante';
+        $this->moduloAvisoService->enviar('stock', $codigo, (int) $prestamo->id, [
+            'mensaje' => $mensaje,
         ]);
     }
 

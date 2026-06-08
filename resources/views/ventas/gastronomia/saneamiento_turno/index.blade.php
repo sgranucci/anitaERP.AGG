@@ -47,14 +47,13 @@
                 </div>
 
                 <form method="get" action="{{ route('gastronomia_saneamiento_turno') }}" class="form-inline mb-4" id="form-filtro-saneamiento">
-                    <label class="mr-2" for="empresa_id">Empresa</label>
-                    <select name="empresa_id" id="empresa_id" class="form-control mr-3" required>
-                        @foreach ($empresas as $emp)
-                            <option value="{{ $emp->id }}" @selected((int) $empresa_id === (int) $emp->id)>
-                                {{ $emp->nombre }}
-                            </option>
-                        @endforeach
-                    </select>
+                    @include('includes.listado.filtro_empresa_asignada_inline', [
+                        'empresas' => $empresas,
+                        'empresa_id' => $empresa_id,
+                        'select_class' => 'mr-3',
+                        'required' => true,
+                        'permite_todas' => false,
+                    ])
                     <label class="mr-2" for="identificador_pc">Terminal (opcional)</label>
                     <input type="text" name="identificador_pc" id="identificador_pc" class="form-control mr-3"
                            value="{{ $identificador_pc }}" placeholder="Todas las PV configuradas"/>

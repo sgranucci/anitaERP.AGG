@@ -45,6 +45,9 @@
                 @foreach(($requisicion_estados_arbol_enum ?? []) as $estReq)
                     <option value="{{ $estReq['nombre'] }}">{{ str_replace('_', ' ', $estReq['nombre']) }}</option>
                 @endforeach
+                @foreach(($requisicion_sala_estados_arbol_enum ?? []) as $estRs)
+                    <option value="{{ $estRs['nombre'] }}">{{ str_replace('_', ' ', $estRs['nombre']) }}</option>
+                @endforeach
                 @foreach(($ordencompra_estados_arbol_enum ?? []) as $estOc)
                     <option value="{{ $estOc['nombre'] }}">{{ $estOc['nombre'] }}</option>
                 @endforeach

@@ -26,6 +26,7 @@ final class GastronomiaPreflightEmisionService
         private readonly GastronomiaFacturacionService $facturacionGastronomiaService,
         private readonly GastronomiaJornadaService $jornadaService,
         private readonly GastronomiaTurnoOperativoService $turnoOperativoService,
+        private readonly GastronomiaFormulaOpcionalesService $opcionalesService,
     ) {
     }
 
@@ -102,6 +103,9 @@ final class GastronomiaPreflightEmisionService
         if ($cuenta->lineas->isEmpty()) {
             $errores[] = 'La cuenta no tiene consumos cargados.';
         }
+
+        $cuenta->loadMissing('lineas.articulo');
+        $errores = array_merge($errores, $this->opcionalesService->erroresOpcionalesEnLineas($cuenta->lineas));
 
         if ($cuenta->estado !== CuentaGastronomia::ESTADO_ABIERTA) {
             $errores[] = 'La cuenta no está abierta.';

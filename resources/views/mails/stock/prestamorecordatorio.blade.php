@@ -10,13 +10,17 @@
         <p style="font-size:15px;">El préstamo <strong>{{ $prestamo->codigo }}</strong>
             <span style="color:#dc3545;"><strong>está vencido</strong></span> y los materiales aún
             figuran a tu cargo.</p>
-        @if (! empty($config->mail_texto_devolucion_vencida))
+        @if (! empty($textoIntro))
+            <p>{{ $textoIntro }}</p>
+        @elseif (! empty($config->mail_texto_devolucion_vencida))
             <p>{{ $config->mail_texto_devolucion_vencida }}</p>
         @endif
     @else
         <p>Te recordamos que tenés materiales pendientes de devolución del préstamo
             <strong>{{ $prestamo->codigo }}</strong>.</p>
-        @if (! empty($config->mail_texto_recordatorio))
+        @if (! empty($textoIntro))
+            <p>{{ $textoIntro }}</p>
+        @elseif (! empty($config->mail_texto_recordatorio))
             <p>{{ $config->mail_texto_recordatorio }}</p>
         @endif
     @endif

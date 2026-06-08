@@ -13,6 +13,8 @@ use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Repositories\Ventas\CategoriafidelidadEntregaGastronomiaRepositoryInterface;
 use App\Repositories\Ventas\CategoriafidelidadGastronomiaRepositoryInterface;
 use App\Services\Stock\PrecioService;
+use App\Support\Stock\FormulaArticuloGastronomia;
+use App\Support\Ventas\GastronomiaFormulaOpcionalSeleccion;
 use App\Support\Wigos\WigosTrackdataNormalizer;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -30,6 +32,7 @@ final class GastronomiaCategoriafidelidadCanjeService
         private readonly CategoriafidelidadGastronomiaRepositoryInterface $categoriaRepository,
         private readonly CategoriafidelidadEntregaGastronomiaRepositoryInterface $entregaRepository,
         private readonly GastronomiaCuentaService $cuentaService,
+        private readonly GastronomiaFormulaOpcionalesService $opcionalesService,
     ) {
     }
 
@@ -101,6 +104,7 @@ final class GastronomiaCategoriafidelidadCanjeService
     }
 
     /**
+     * @param  array<int|string, int|string|array|null>  $opcionalesPorOrden
      * @return array{cuenta:CuentaGastronomia,validacion:array<string,mixed>}
      */
     public function aplicarACuenta(
@@ -108,6 +112,7 @@ final class GastronomiaCategoriafidelidadCanjeService
         string $trackdata,
         int $articuloId,
         int $listaprecioId,
+        array $opcionalesPorOrden = [],
     ): array {
         if ($cuenta->estado !== CuentaGastronomia::ESTADO_ABIERTA) {
             throw new InvalidArgumentException('La cuenta no está abierta.');
@@ -152,12 +157,23 @@ final class GastronomiaCategoriafidelidadCanjeService
             throw new InvalidArgumentException('El artículo seleccionado no pertenece a la categoría de fidelidad.');
         }
 
-        DB::transaction(function () use ($cuenta, $validacion, $item, $descuento, $clienteInternoId) {
+        $opcionalesPorOrden = GastronomiaFormulaOpcionalSeleccion::normalizarMapaDesdeRequest($opcionalesPorOrden);
+
+        $articulo = Articulo::query()->find($articuloId);
+        if ($articulo && FormulaArticuloGastronomia::opcionalesHabilitados()) {
+            $grupos = $this->opcionalesService->gruposOpcionalesPorArticulo($articulo);
+            if ($grupos !== []) {
+                $this->opcionalesService->validarSeleccionOpcionales($articulo, $opcionalesPorOrden);
+            }
+        }
+
+        DB::transaction(function () use ($cuenta, $validacion, $item, $descuento, $clienteInternoId, $opcionalesPorOrden) {
             $this->cuentaService->agregarLinea(
                 $cuenta->fresh(['lineas']),
                 (int) $item['articulo_id'],
                 1.,
                 (float) $item['precio_unitario'],
+                $opcionalesPorOrden,
             );
 
             $this->cuentaService->actualizarCabecera($cuenta->fresh(), [

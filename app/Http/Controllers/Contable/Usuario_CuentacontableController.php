@@ -50,7 +50,7 @@ class Usuario_CuentacontableController extends Controller
         can('crear-usuario-cuentacontable');
 
         $usuario_query = Usuario::orderBy('id')->get();
-        $empresa_query = $this->empresaRepository->all();
+        $empresa_query = $this->empresaRepository->allFiltrado();
 
         return view('contable.usuario_cuentacontable.crear', compact('usuario_query', 'empresa_query'));
     }
@@ -87,7 +87,7 @@ class Usuario_CuentacontableController extends Controller
         can('editar-usuario-cuentacontable');
 
         $usuario_query = Usuario::orderBy('id')->get();
-        $empresa_query = $this->empresaRepository->all();
+        $empresa_query = $this->empresaRepository->allFiltrado();
 		$usuario_cuentacontable = $this->usuario_cuentacontableRepository->leePorUsuario($usuario_id);
         return view('contable.usuario_cuentacontable.editar', compact('usuario_id', 'usuario_query', 'empresa_query', 
                                                                     'usuario_cuentacontable'));

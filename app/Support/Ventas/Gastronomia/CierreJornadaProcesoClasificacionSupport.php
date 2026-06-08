@@ -31,6 +31,7 @@ final class CierreJornadaProcesoClasificacionSupport
      *   conteos: array<string, int>,
      *   grilla: array<string, float>,
      *   cuadro_filas: list<array<string, mixed>>,
+     *   cuadro_columnas_medios: list<array{id:string,cuentacaja_id:int,codigo:string,nombre:string,etiqueta:string}>,
      *   total_facturacion: float,
      *   total_pendiente_facturar: float,
      *   total_impago_waitry: float,
@@ -78,7 +79,7 @@ final class CierreJornadaProcesoClasificacionSupport
             ];
         }
 
-        $cuadro = CierreJornadaProcesoGrillaSupport::armar($enriquecidos, $totalesAnita);
+        $cuadro = CierreJornadaProcesoGrillaSupport::armar($enriquecidos, $totalesAnita, $empresaId);
 
         $conteos = [];
         foreach ($grupos as $clave => $items) {
@@ -91,7 +92,12 @@ final class CierreJornadaProcesoClasificacionSupport
             'conteos' => $conteos,
             'grilla' => $cuadro['grilla'],
             'cuadro_filas' => $cuadro['filas'],
+            'cuadro_columnas_medios' => $cuadro['columnas_medios'] ?? [],
             'total_facturacion' => $cuadro['total_facturacion'],
+            'total_anita_jornada_cuadro' => $cuadro['total_anita_jornada_cuadro'] ?? 0.0,
+            'total_anita_totem_cuadro' => $cuadro['total_anita_totem_cuadro'] ?? 0.0,
+            'total_anita_sin_waitry' => $cuadro['total_anita_sin_waitry'] ?? 0.0,
+            'total_notas_credito' => $cuadro['total_notas_credito'] ?? 0.0,
             'total_pendiente_facturar' => $cuadro['total_pendiente_facturar'],
             'total_impago_waitry' => $cuadro['total_impago_waitry'],
             'total_cuadro' => $cuadro['total_cuadro'],
@@ -107,13 +113,14 @@ final class CierreJornadaProcesoClasificacionSupport
         if (! empty($mov['discrepancia_gap'])) {
             $mov['grupo'] = self::GRUPO_HUECO_AUDITORIA;
             $mov['medio_anita_clave'] = CierreJornadaProcesoMedioSupport::CLAVE_OTRO;
-            $mov['medio_waitry_clave'] = CierreJornadaProcesoMedioSupport::claveDesdeWaitryTipo($mov['waitry_tipo_pago'] ?? null);
+            $mov['medio_waitry_clave'] = CierreJornadaProcesoMedioSupport::claveDesdeWaitryLinea($mov);
 
             return $mov;
         }
 
         $waitryTipo = $mov['waitry_tipo_pago'] ?? null;
-        $mov['medio_waitry_clave'] = CierreJornadaProcesoMedioSupport::claveDesdeWaitryTipo($waitryTipo);
+        $waitryGateway = $mov['waitry_payment_gateway'] ?? null;
+        $mov['medio_waitry_clave'] = CierreJornadaProcesoMedioSupport::claveDesdeWaitryTipo($waitryTipo, $waitryGateway);
         $anitaEsTotem = (bool) ($mov['anita_es_totem'] ?? false);
         $facturada = ! empty($mov['facturada_erp']);
 
@@ -121,7 +128,7 @@ final class CierreJornadaProcesoClasificacionSupport
             if ($anitaEsTotem) {
                 $mov['grupo'] = self::GRUPO_FACTURADO_TOTEM;
                 $mov['medio_anita_clave'] = $mov['medio_waitry_clave'];
-                $mov['medio_real_waitry_label'] = WaitryMedioPagoCuentacajaSupport::etiquetaTipo($waitryTipo);
+                $mov['medio_real_waitry_label'] = WaitryMedioPagoCuentacajaSupport::etiquetaTipo($waitryTipo, $waitryGateway);
             } else {
                 $mov['grupo'] = self::GRUPO_FACTURADO_MEDIO_REAL;
                 $mov['medio_anita_clave'] = CierreJornadaProcesoMedioSupport::claveDesdeCuentacaja(
@@ -139,7 +146,7 @@ final class CierreJornadaProcesoClasificacionSupport
             return $mov;
         }
 
-        if (CierreJornadaProcesoMedioSupport::esWaitryQr($waitryTipo)) {
+        if (CierreJornadaProcesoMedioSupport::esWaitrySinFacturarRedistribuible($waitryTipo, $waitryGateway)) {
             $mov['grupo'] = self::GRUPO_SIN_FACTURAR_QR;
 
             return $mov;

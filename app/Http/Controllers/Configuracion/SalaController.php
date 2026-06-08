@@ -43,7 +43,7 @@ class SalaController extends Controller
     public function crear()
     {
         can('crear-sala');
-        $empresa_query = $this->empresaRepository->all();
+        $empresa_query = $this->empresaRepository->allFiltrado();
 
         return view('configuracion.sala.crear', compact('empresa_query'));
     }
@@ -72,7 +72,7 @@ class SalaController extends Controller
     {
         can('editar-sala');
         $data = $this->repository->findOrFail($id);
-        $empresa_query = $this->empresaRepository->all();
+        $empresa_query = $this->empresaRepository->allFiltrado();
 
         return view('configuracion.sala.editar', compact('data', 'empresa_query'));
     }

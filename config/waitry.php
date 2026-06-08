@@ -28,8 +28,36 @@ return [
     'sync_status_pos_event' => env('WAITRY_SYNC_STATUS_POS_EVENT', 'accepted'),
 
     /**
+     * Gateway en payment.payments (pushExternalOrder, Control Z).
+     * Clave = tipo Waitry normalizado (mercadopago, cash, …); valor = texto gateway.
+     *
+     * @var array<string, string>
+     */
+    'pago_gateway_por_tipo' => (static function (): array {
+        $raw = env('WAITRY_PAGO_GATEWAY_POR_TIPO');
+        if (is_string($raw) && $raw !== '') {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded)) {
+                $map = [];
+                foreach ($decoded as $tipo => $gateway) {
+                    $tipoNorm = mb_strtolower(trim(str_replace([' ', '-', '_'], '', (string) $tipo)));
+                    $gw = trim((string) $gateway);
+                    if ($tipoNorm !== '' && $gw !== '') {
+                        $map[$tipoNorm] = $gw;
+                    }
+                }
+                if ($map !== []) {
+                    return $map;
+                }
+            }
+        }
+
+        return [];
+    })(),
+
+    /**
      * Medios Waitry (lecturas) → cuenta de caja Anita (multiempresa).
-     * mercadopago → 201, totalcoin → 226 por defecto.
+     * Gastronomía: mercadopago y totalcoin (QR Waitry) comparten cuenta MP (201); los tipos Waitry siguen separados.
      *
      * @var array<string, int>
      */
@@ -54,7 +82,7 @@ return [
 
         return [
             'mercadopago' => 201,
-            'totalcoin' => 226,
+            'totalcoin' => 201,
         ];
     })(),
 

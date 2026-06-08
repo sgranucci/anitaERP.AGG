@@ -107,15 +107,27 @@ final class RendicionGastronomiaJornadaPresentacionService
         $conciliacion = null;
         $informeZCargado = false;
 
+        $totemTotalGeneral = null;
+        $tramoTotem = null;
+
         if ($cierreTotem instanceof CierreTotemJornadaGastronomia) {
             $detalle = is_array($cierreTotem->detalle_json) ? $cierreTotem->detalle_json : [];
-            $resumen = $detalle['resumen_totems'] ?? ['por_totem' => [], 'total_general' => []];
+            $resumenOperativo = $detalle['resumen_totems'] ?? ['por_totem' => [], 'total_general' => []];
+            $resumenInformeZ = WaitryInformeZConciliacionSupport::resumenSistemaDesdeDetalleCierre($detalle);
+            $totemTotalGeneral = is_array($resumenOperativo['total_general'] ?? null)
+                ? $resumenOperativo['total_general']
+                : null;
+            $tramoTotem = is_array($resumenOperativo['tramo'] ?? null) ? $resumenOperativo['tramo'] : null;
             $plantilla = WaitryInformeZConciliacionSupport::plantillaCarga(
                 (int) $cierreTotem->empresa_id,
-                $resumen,
+                $resumenInformeZ,
             );
             $informeZ = is_array($cierreTotem->informe_z_json) ? $cierreTotem->informe_z_json : null;
-            $plantilla = WaitryInformeZConciliacionSupport::fusionarInformeZEnPlantilla($plantilla, $informeZ);
+            $plantilla = WaitryInformeZConciliacionSupport::fusionarInformeZEnPlantilla(
+                $plantilla,
+                $informeZ,
+                (int) $cierreTotem->empresa_id,
+            );
             if ($informeZ !== null && isset($informeZ['totems'])) {
                 $informeZCargado = true;
                 $conciliacion = is_array($informeZ['conciliacion'] ?? null)
@@ -138,6 +150,9 @@ final class RendicionGastronomiaJornadaPresentacionService
             'tolerancia_informe_z' => WaitryInformeZConciliacionSupport::toleranciaMonto(),
             'sin_cierre_totem_jornada' => (bool) ($marcadores['sin_cierre_totem_jornada'] ?? false),
             'aviso_cierre_totem' => $marcadores['aviso_cierre_totem'] ?? null,
+            'totem_total_general' => $totemTotalGeneral,
+            'totem_tramo' => $tramoTotem,
+            'tramo_ultimo_ticket_origen' => is_array($tramoTotem) ? ($tramoTotem['tramo_ultimo_ticket_origen'] ?? null) : null,
         ]);
     }
 

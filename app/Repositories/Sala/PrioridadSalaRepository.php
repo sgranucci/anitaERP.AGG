@@ -20,7 +20,7 @@ class PrioridadSalaRepository implements PrioridadSalaRepositoryInterface
     public function all()
     {
         $query = $this->model->with('empresas')->orderBy('nombre');
-        $this->aplicarFiltroEmpresasAsignadas($query);
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query);
 
         return $query->get();
     }
@@ -52,14 +52,5 @@ class PrioridadSalaRepository implements PrioridadSalaRepositoryInterface
     public function findOrFail($id)
     {
         return $this->model->with('empresas')->findOrFail($id);
-    }
-
-    private function aplicarFiltroEmpresasAsignadas($query): void
-    {
-        $empresasAsignadas = $this->empresaRepository->traeEmpresasAsignadas();
-
-        if (count($empresasAsignadas) > 1) {
-            $query->whereIn('empresa_id', $empresasAsignadas);
-        }
     }
 }

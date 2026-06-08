@@ -8,16 +8,16 @@ use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\TurnoGastronomia;
 use App\Models\Ventas\TurnoOperativoGastronomia;
 use App\Support\Ventas\GastronomiaTurnoOperativoTotalesSupport;
+use App\Support\Ventas\GastronomiaVentaComprobanteSignoSupport;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
  * Datos del informe gerente gastronomía (ventas ERP en fecha de jornada).
+ * Totales y top artículos usan signo del comprobante (tipotransaccion.signo), no saldo de stock.
  */
 final class GastronomiaInformeGerenteQuery
 {
-    private const VENTA_TOTAL_EXPR = 'CASE WHEN tt.signo = -1 THEN -v.total ELSE v.total END';
-
     public function __construct(
         private readonly GastronomiaArticulosVendidosQuery $articulosVendidosQuery,
     ) {}
@@ -39,6 +39,14 @@ final class GastronomiaInformeGerenteQuery
     }
 
     /**
+     * @return list<array{articulo_id:int,sku:string,descripcion:string,cantidad:float,importe:float}>
+     */
+    public function top10MesPorCantidad(int $empresaId, string $fechaJornada): array
+    {
+        return $this->articulosVendidosQuery->topPorMes($empresaId, $fechaJornada, 'cantidad', 10);
+    }
+
+    /**
      * @return list<array{turno_id:int,etiqueta:string,total:float,cantidad:int}>
      */
     public function ventasPorTurno(int $empresaId, string $fechaJornada): array
@@ -57,7 +65,7 @@ final class GastronomiaInformeGerenteQuery
                 'v.id as venta_id',
                 'v.created_at',
                 'vge.identificador_pc',
-                DB::raw(self::VENTA_TOTAL_EXPR.' as total'),
+                DB::raw(GastronomiaVentaComprobanteSignoSupport::sqlTotalComprobante().' as total'),
             ])
             ->get();
 
@@ -174,7 +182,7 @@ final class GastronomiaInformeGerenteQuery
                 'dg.codigo as descuento_codigo',
                 'dg.nombre as descuento_nombre',
                 DB::raw('COUNT(DISTINCT v.id) as cantidad'),
-                DB::raw('SUM('.self::VENTA_TOTAL_EXPR.') as importe'),
+                DB::raw('SUM('.GastronomiaVentaComprobanteSignoSupport::sqlTotalComprobante().') as importe'),
             ])
             ->groupBy('dg.id', 'dg.codigo', 'dg.nombre')
             ->get();
@@ -219,7 +227,7 @@ final class GastronomiaInformeGerenteQuery
             ->whereNull('v.deleted_at')
             ->where('pv.empresa_id', $empresaId)
             ->whereDate('v.fechajornada', $fechaJornada)
-            ->selectRaw('COALESCE(SUM('.self::VENTA_TOTAL_EXPR.'), 0) as total')
+            ->selectRaw('COALESCE(SUM('.GastronomiaVentaComprobanteSignoSupport::sqlTotalComprobante().'), 0) as total')
             ->first();
 
         return round((float) ($row->total ?? 0), 2);

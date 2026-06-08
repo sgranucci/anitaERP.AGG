@@ -14,6 +14,7 @@ use App\Repositories\Ventas\JornadaGastronomiaRepositoryInterface;
 use App\Services\Stock\FormulaArticuloService;
 use App\Services\Ventas\Gastronomia\GastronomiaCuentaService;
 use App\Services\Ventas\Gastronomia\GastronomiaJornadaService;
+use App\Support\Stock\MovimientosArticuloDepositoSupport;
 use App\Support\Ventas\GastronomiaArticulosVendidosListadoFiltros;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -39,9 +40,11 @@ class GastronomiaArticulosVendidosController extends Controller
         if ($empresaId <= 0 && $empresaQuery->count() === 1) {
             $empresaId = (int) $empresaQuery->first()->id;
         }
+        $this->assertAccesoEmpresa($empresaId);
 
         $filtros = GastronomiaArticulosVendidosListadoFiltros::resolverDesdeRequest($request);
         $filtros = $this->aplicarDefaultsFiltros($filtros, $empresaId, $request);
+        $this->assertAccesoEmpresa((int) ($filtros['empresa_id'] ?? 0));
 
         $perPage = max(10, min(200, (int) $request->input('per_page', 50)));
         $filas = $this->query->listado($filtros, true, $perPage);
@@ -73,6 +76,7 @@ class GastronomiaArticulosVendidosController extends Controller
             'puede_ver_factura' => can('ver-factura-gastronomia', false),
             'puede_ver_articulo' => can('editar-articulos', false),
             'puede_ver_formula' => can('listar-formula-articulo', false) || can('listar-articulos', false),
+            'puede_ver_movimientos' => MovimientosArticuloDepositoSupport::puedeConsultar(),
         ]);
     }
 
@@ -88,9 +92,11 @@ class GastronomiaArticulosVendidosController extends Controller
         if ($empresaId <= 0 && $empresaQuery->count() === 1) {
             $empresaId = (int) $empresaQuery->first()->id;
         }
+        $this->assertAccesoEmpresa($empresaId);
 
         $filtros = GastronomiaArticulosVendidosListadoFiltros::resolverDesdeRequest($request);
         $filtros = $this->aplicarDefaultsFiltros($filtros, $empresaId, $request);
+        $this->assertAccesoEmpresa((int) ($filtros['empresa_id'] ?? 0));
 
         $filas = $this->query->listado($filtros, false);
 
@@ -125,8 +131,11 @@ class GastronomiaArticulosVendidosController extends Controller
         }
 
         $empresaId = (int) $request->input('empresa_id', 0);
+        $this->assertAccesoEmpresa($empresaId);
+
         $filtros = GastronomiaArticulosVendidosListadoFiltros::resolverDesdeRequest($request);
         $filtros = $this->aplicarDefaultsFiltros($filtros, $empresaId, $request);
+        $this->assertAccesoEmpresa((int) ($filtros['empresa_id'] ?? 0));
 
         $facturas = $this->query->facturasPorArticulo($articuloId, $filtros);
 
@@ -169,6 +178,44 @@ class GastronomiaArticulosVendidosController extends Controller
             'formula_id' => $formulaId > 0 ? $formulaId : null,
             'formula_mensaje' => is_array($formulaResuelta) ? ($formulaResuelta['mensaje'] ?? null) : null,
             'url_formula' => $urlFormula,
+        ]);
+    }
+
+    public function apiMovimientos(Request $request, int $articuloId)
+    {
+        can('listar-articulos-vendidos-gastronomia');
+
+        if (! MovimientosArticuloDepositoSupport::puedeConsultar()) {
+            return response()->json(['ok' => false, 'error' => 'No tiene permisos para consultar movimientos de stock.'], 403);
+        }
+
+        if ($articuloId <= 0) {
+            return response()->json(['ok' => false, 'error' => 'Artículo inválido.'], 422);
+        }
+
+        $empresaId = (int) $request->input('empresa_id', 0);
+        $this->assertAccesoEmpresa($empresaId);
+
+        $filtros = GastronomiaArticulosVendidosListadoFiltros::resolverDesdeRequest($request);
+        $filtros = $this->aplicarDefaultsFiltros($filtros, $empresaId, $request);
+        $this->assertAccesoEmpresa((int) ($filtros['empresa_id'] ?? 0));
+
+        $resultado = $this->query->movimientosPorArticulo($articuloId, $filtros);
+
+        $depositoId = (int) ($filtros['deposito_id'] ?? 0);
+        $urlKardex = route('recuento_movimientos_articulo', array_filter([
+            'articulo_id' => $articuloId,
+            'deposito_id' => $depositoId > 0 ? $depositoId : null,
+            'volver' => $request->fullUrl(),
+            'vista' => 'consulta',
+        ]));
+
+        return response()->json([
+            'ok' => true,
+            'articulo_id' => $articuloId,
+            'movimientos' => $resultado['movimientos'],
+            'totales' => $resultado['totales'],
+            'url_kardex' => $urlKardex,
         ]);
     }
 
@@ -264,6 +311,7 @@ class GastronomiaArticulosVendidosController extends Controller
         }
 
         return Depmae::query()
+            ->paraUsuarioAutorizado()
             ->whereIn('id', $depIds)
             ->orderBy('codigo')
             ->get(['id', 'codigo', 'nombre']);
@@ -281,5 +329,16 @@ class GastronomiaArticulosVendidosController extends Controller
         $pdf->loadHTML($view, 'UTF-8')->save($path.'/'.$nombreBase.'.pdf');
 
         return response()->download($path.'/'.$nombreBase.'.pdf');
+    }
+
+    private function assertAccesoEmpresa(int $empresaId): void
+    {
+        if ($empresaId <= 0) {
+            return;
+        }
+
+        if (! $this->empresaRepository->empresaIdPermitida($empresaId)) {
+            abort(403, 'Empresa no permitida para su usuario.');
+        }
     }
 }

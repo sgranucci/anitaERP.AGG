@@ -10,20 +10,24 @@ use App\Models\Caja\Cheque;
 use App\Repositories\Caja\ChequeRepositoryInterface;
 use App\Repositories\Caja\ChequeraRepositoryInterface;
 use App\Repositories\Caja\CuentacajaRepositoryInterface;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 
 class ChequeController extends Controller
 {
 	private $repository;
     private $cuentacajaRepository;
     private $chequeraRepository;
+    private $empresaRepository;
 
     public function __construct(ChequeRepositoryInterface $repository,
                                 ChequeraRepositoryInterface $chequerarepository,
-                                CuentacajaRepositoryInterface $cuentacajarepository)
+                                CuentacajaRepositoryInterface $cuentacajarepository,
+                                EmpresaRepositoryInterface $empresarepository)
     {
         $this->repository = $repository;
         $this->cuentacajaRepository = $cuentacajarepository;
-        $this->chequerapository = $chequerarepository;
+        $this->chequeraRepository = $chequerarepository;
+        $this->empresaRepository = $empresarepository;
     }
 
     /**
@@ -57,10 +61,11 @@ class ChequeController extends Controller
         $caracter_enum = Cheque::$enumCaracter;
         $estado_enum = cheque::$enumEstado;
         $chequera_query = $this->chequeraRepository->all();
+        $empresa_query = $this->empresaRepository->allFiltrado();
 
         return view('caja.cheque.crear', compact('cuentacaja_query',
                                                 'origen_enum', 'caracter_enum',
-                                                'estado_enum', 'chequera_query'));
+                                                'estado_enum', 'chequera_query', 'empresa_query'));
     }
 
     /**
@@ -92,10 +97,11 @@ class ChequeController extends Controller
         $origen_enum = cheque::$enumOrigen;
         $estado_enum = cheque::$enumEstado;
         $chequera_query = $this->chequeraRepository->all();
+        $empresa_query = $this->empresaRepository->allFiltrado();
 
         return view('caja.cheque.editar', compact('data', 'cuentacaja_query',
                                                 'origen_enum', 
-                                                'estado_enum', 'chequera_query'));
+                                                'estado_enum', 'chequera_query', 'empresa_query'));
     }
 
     /**

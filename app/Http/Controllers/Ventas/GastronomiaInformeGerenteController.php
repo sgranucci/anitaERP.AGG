@@ -29,6 +29,7 @@ class GastronomiaInformeGerenteController extends Controller
         if ($empresaId <= 0 && $empresaQuery->count() === 1) {
             $empresaId = (int) $empresaQuery->first()->id;
         }
+        $this->assertAccesoEmpresa($empresaId);
 
         $fechaJornada = trim((string) $request->input('fecha_jornada', ''));
         if ($fechaJornada === '' && $empresaId > 0) {
@@ -68,5 +69,16 @@ class GastronomiaInformeGerenteController extends Controller
             'jornadas' => $jornadas,
             'jornada_registro' => $jornadaRegistro,
         ]);
+    }
+
+    private function assertAccesoEmpresa(int $empresaId): void
+    {
+        if ($empresaId <= 0) {
+            return;
+        }
+
+        if (! $this->empresaRepository->empresaIdPermitida($empresaId)) {
+            abort(403, 'Empresa no permitida para su usuario.');
+        }
     }
 }

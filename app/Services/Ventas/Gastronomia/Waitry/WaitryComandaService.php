@@ -244,11 +244,7 @@ final class WaitryComandaService
         }
 
         $orderId = $interpretacion['order_id'] ?? null;
-        $displayId = $this->resolverDisplayIdTrasPush(
-            (int) $cuenta->empresa_id,
-            is_numeric($orderId) ? (int) $orderId : 0,
-            $data,
-        );
+        $displayId = WaitryDisplayIdSupport::extraerDesdeRespuestaPush($data);
         $this->envioService->marcarExito($envio, $orderId, $data, $displayId !== '' ? $displayId : null);
 
         Log::info('waitry.comanda.ok', [
@@ -265,31 +261,6 @@ final class WaitryComandaService
             'waitry_order_id' => $orderId,
             'waitry_display_id' => $displayId !== '' ? $displayId : null,
         ];
-    }
-
-    /**
-     * @param  array<string, mixed>  $data
-     */
-    private function resolverDisplayIdTrasPush(int $empresaId, int $orderId, array $data): string
-    {
-        $displayId = WaitryDisplayIdSupport::extraerDesdeRespuestaPush($data);
-        if ($displayId !== '' || $orderId <= 0) {
-            return $displayId;
-        }
-
-        $service = app(WaitryOrdenesExternasService::class);
-        for ($intento = 0; $intento < 3; $intento++) {
-            if ($intento > 0) {
-                usleep(350000);
-            }
-
-            $displayId = $service->resolverDisplayIdPorOrderId($empresaId, $orderId);
-            if ($displayId !== '') {
-                return $displayId;
-            }
-        }
-
-        return '';
     }
 
     private function externalIdDesdeVenta(int $ventaId): string
@@ -366,10 +337,13 @@ final class WaitryComandaService
 
         if ($pagada && $mediosPago !== []) {
             try {
+                $empresaId = (int) $cuenta->empresa_id;
                 $payload['payment'] = $this->paymentPayloadSupport->armarBloquePayment(
                     $mediosPago,
-                    (int) $cuenta->empresa_id,
+                    $empresaId,
+                    pagoOrdenExternaPush: true,
                 );
+                $payload['totalPaid'] = $this->paymentPayloadSupport->montoTotalPagado($mediosPago);
             } catch (InvalidArgumentException $e) {
                 Log::warning('waitry.comanda.payment_omitido', [
                     'venta_id' => (int) $venta->id,

@@ -31,23 +31,13 @@ class Caja_AsignacionRepository implements Caja_AsignacionRepositoryInterface
             $query->whereIn('estado', $estado);
         }
 
-        $this->aplicarFiltroEmpresasAsignadas($query);
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query);
 
         if ($empresaId !== null && $empresaId > 0) {
             $query->where('empresa_id', $empresaId);
         }
 
         return $query->orderBy('id', 'desc')->get();
-    }
-
-    private function aplicarFiltroEmpresasAsignadas($query): void
-    {
-        $empresaIds = $this->empresaRepository->allFiltrado()->pluck('id')->all();
-        $totalEmpresas = $this->empresaRepository->all()->count();
-
-        if ($totalEmpresas > 0 && count($empresaIds) > 0 && count($empresaIds) < $totalEmpresas) {
-            $query->whereIn('empresa_id', $empresaIds);
-        }
     }
 
     public function create(array $data)

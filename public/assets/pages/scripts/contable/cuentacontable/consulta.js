@@ -7,7 +7,7 @@ function buscar_datos(consulta) {
     $.ajax({
         url: carpetaBase+'/contable/cuentacontable/consultacuentacontable',
         type: 'POST',
-        dataType: 'HTML',
+        dataType: 'json',
 	    headers: {
         	'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
     	},
@@ -16,18 +16,19 @@ function buscar_datos(consulta) {
             empresa_id: empresa_id
         },
     })
-    .done (function(respuesta) {
+    .done(function(respuesta) {
         var html = '';
-        try {
-            var parsed = typeof respuesta === 'string'
-                ? JSON.parse(respuesta.replace(/\\/g, ''))
-                : respuesta;
-            html = parsed.data || '';
-        } catch (e) {
-            html = respuesta;
+        if (respuesta && typeof respuesta === 'object' && respuesta.data !== undefined) {
+            html = respuesta.data;
+        } else if (typeof respuesta === 'string') {
+            try {
+                var parsed = JSON.parse(respuesta);
+                html = parsed.data || '';
+            } catch (e) {
+                html = respuesta;
+            }
         }
-        $("#datoscuentas").html("");
-        $("#datoscuentas").html(html);
+        $('#datoscuentas').html(html);
     })
     .fail (function() {
         console.log("error");
@@ -123,22 +124,24 @@ function activa_eventos_consulta_cuentacontable()
     });
 
     $(document).on('click', '.eligeconsultacuentacontable', function () {
-        var seleccion = $(this).parents("tr").children().html();
-        var nombre = $(this).parents("tr").find(".nombrecuentacontable").html();
-        var codigo = $(this).parents("tr").find(".codigocuentacontable").html();
+        var $tr = $(this).closest('tr');
+        var seleccion = $tr.find('.cuentacontable_id').first().text().trim();
+        var codigo = $tr.find('.codigocuentacontable').first().text().trim();
+        var nombre = $tr.find('.nombrecuentacontable').first().text().trim();
 
         // Asigna a grilla los valores devueltos por consulta
-        $(cuentacontablexcodigo).val(seleccion);
-        $(nombrexcodigo).val(nombre);
-        $(codigoxcodigo).val(codigo);
+        if (cuentacontablexcodigo && cuentacontablexcodigo.length) {
+            $(cuentacontablexcodigo).val(seleccion);
+            $(nombrexcodigo).val(nombre);
+            $(codigoxcodigo).val(codigo);
+            $(cuentacontablexcodigo).parents('tr').find('.cuentacontable_id_previa').val(seleccion);
+            $(cuentacontablexcodigo).parents('tr').find('.codigo_previo').val(codigo);
+        }
 
-        $("#cuentacontable_id").val(seleccion);
-        $("#nombrecuentacontable").val(nombre);
-        $("#codigocuentacontable").val(codigo);
+        $('#cuentacontable_id').val(seleccion);
+        $('#nombrecuentacontable').val(nombre);
+        $('#codigocuentacontable').val(codigo);
 
-        //* Asigna nueva cuentacontable
-        $(cuentacontablexcodigo).parents("tr").find(".cuentacontable_id_previa").val($(cuentacontablexcodigo).val());
-    
         $('#consultacuentaModal').modal('hide');
     });
 

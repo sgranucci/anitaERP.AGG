@@ -38,6 +38,30 @@ NOMBRE_VARIABLE=valor
 - Documentar **solo** en `.env.example` sin reflejar el valor operativo en `.env`.
 - Asumir que el usuario “ya tiene” la variable: si el código la lee, debe estar en `.env`.
 
+## Activar cambios en runtime (obligatorio)
+
+Laravel **no** relee `.env` automáticamente si hay config cacheada. Tras modificar **`.env`**, **`.env.example`** o **`config/*.php`** que usa `env()`:
+
+1. **Ejecutar siempre** (el agente, en la misma sesión del cambio — no delegar al operador):
+
+```bash
+php artisan config:clear
+```
+
+2. **Si el entorno usa config cacheada** (producción / deploy con `config:cache`):
+
+```bash
+php artisan config:cache
+```
+
+3. **Verificar** que el valor quedó activo (ajustar la clave al cambio):
+
+```bash
+php -r "require 'vendor/autoload.php'; \$app = require 'bootstrap/app.php'; \$app->make('Illuminate\Contracts\Console\Kernel')->bootstrap(); var_export(config('nombre.clave'));"
+```
+
+4. **No cerrar** el cambio de env sin haber corrido al menos `config:clear` y comprobado el valor en runtime.
+
 ## Comprobación rápida
 
 Tras agregar `env('NUEVA_VAR')` en config:

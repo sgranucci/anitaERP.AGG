@@ -10,6 +10,7 @@ use App\Models\Ventas\JornadaGastronomia;
 use App\Models\Ventas\TurnoOperativoGastronomia;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Repositories\Ventas\JornadaGastronomiaRepositoryInterface;
+use App\Support\Ventas\Waitry\WaitryInformeZConciliacionSupport;
 use Carbon\Carbon;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Auth;
@@ -268,6 +269,15 @@ final class GastronomiaJornadaService
         $informeZFinal = $borradorInformeZ;
         $snapshotResumen = $this->resumenDesdeSnapshotCierre($borradorInformeZ, $cierreTotemSnapshot);
 
+        if ($this->cierreTotemJornadaService->habilitado()) {
+            if ($snapshotResumen === null) {
+                throw new InvalidArgumentException(
+                    'Falta el snapshot del cierre tótem Waitry. Cargue la vista previa del Informe Z antes de cerrar '
+                    .'(el cierre no vuelve a consultar Waitry).'
+                );
+            }
+        }
+
         if (is_array($informeZTotems) && $informeZTotems !== [] && $this->cierreTotemJornadaService->habilitado()) {
             if ($snapshotResumen !== null) {
                 $desdeRequest = $this->informeZService->construirInformeZDesdePayload(
@@ -279,6 +289,12 @@ final class GastronomiaJornadaService
                     $informeZFinal = $desdeRequest;
                 }
             }
+        }
+
+        if ($this->cierreTotemJornadaService->habilitado() && $informeZFinal === null) {
+            throw new InvalidArgumentException(
+                'Debe validar y cargar los montos del Informe Z (esperado sistema e ingresado por medio de pago en cada tótem) antes de cerrar la jornada.'
+            );
         }
 
         $vaciasAutoDescartadas = $this->autoDescartarCuentasAbiertasVaciasPorEmpresa($empresaId);
@@ -452,9 +468,14 @@ final class GastronomiaJornadaService
             return null;
         }
 
-        $resumen = $snapshot['resumen_totems'] ?? null;
-        if (! is_array($resumen)) {
-            return null;
+        if (is_array($snapshot['resumen_informe_z'] ?? null)) {
+            $resumen = $snapshot['resumen_informe_z'];
+        } else {
+            $resumenOperativo = $snapshot['resumen_totems'] ?? null;
+            if (! is_array($resumenOperativo)) {
+                return null;
+            }
+            $resumen = WaitryInformeZConciliacionSupport::filtrarResumenSoloCreditCardPosnet($resumenOperativo);
         }
 
         return [

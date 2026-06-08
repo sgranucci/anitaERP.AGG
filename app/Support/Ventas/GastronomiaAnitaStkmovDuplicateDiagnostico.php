@@ -19,9 +19,11 @@ namespace App\Support\Ventas;
  * 2. Emisión en vivo + auditoría/backfill concurrentes (p. ej. 01:00 con POS abierto).
  *    Mitigación: auditoría @ 06:30; no marcar faltante si falla lectura bridge.
  *
- * 3. Rollback parcial tras fallo en grabaAnita (stkmov insert falla, borraAnita/revert falla
- *    con el mismo error 239 en delete). Queda cabecera o stkmov huérfano; reintento duplica.
- *    Ver logs: gastronomia.emitir_factura.fallo + gastronomia.revertir_anita.fallo.
+ * 3. Rollback parcial tras fallo en grabaAnita (stkmov insert falla, borraAnita abortaba al primer
+ *    DELETE fallido y dejaba stkmov/vengrav huérfanos; reintento duplica). Mitigación:
+ *    borraAnita borra detalle antes que venta y continúa aunque falle un paso; defer post-commit
+ *    limpia con borraAnitaDesdeVenta si ejecutarAnitaPendiente falla.
+ *    Ver logs: gastronomia.anita.defer.venta_fallo + facturacion.anita_bridge.borra_omitido.
  *
  * 4. Falso «sin cabecera» cuando el bridge devolvía {"Error":…} y decodificarListaFilas
  *    interpretaba lista vacía → backfill innecesario. Mitigación: ApiAnita::parsearRespuestaLista().

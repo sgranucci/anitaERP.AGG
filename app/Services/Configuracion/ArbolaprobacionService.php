@@ -90,6 +90,12 @@ class ArbolaprobacionService
                 return 0;
             }
             $arbolaprobacion = $this->arbolaprobacionRepository->findPorTipoArbolYEmpresa($tipoarbol, (int) $requisicionPre->empresa_id);
+        } elseif ($tipocomprobante === 'RS') {
+            $reqSalaPre = app(\App\Repositories\Sala\RequisicionSalaRepositoryInterface::class)->find($comprobante_id);
+            if (! $reqSalaPre) {
+                return 0;
+            }
+            $arbolaprobacion = $this->arbolaprobacionRepository->findPorTipoArbolYEmpresa($tipoarbol, (int) $reqSalaPre->empresa_id);
         } elseif ($tipocomprobante === 'OC') {
             $ocPre = $this->ordencompraRepository->find($comprobante_id);
             if (! $ocPre) {
@@ -108,6 +114,13 @@ class ArbolaprobacionService
                 return $this->procesaArbolOrdenVenta($arbolaprobacion, $tipoarbol, $comprobante_id, $arrayReplace);
             case 'RE':
                 return $this->procesaArbolRequisicion($arbolaprobacion, $tipoarbol, $comprobante_id, $arrayReplace);
+            case 'RS':
+                return app(\App\Services\Sala\RequisicionSalaArbolIntegracionService::class)->procesaArbol(
+                    $comprobante_id,
+                    $operacion,
+                    fn ($tipo, $id) => $this->leeAprobacionComprobante($tipo, $id),
+                    fn (...$args) => $this->buscaProximoNivel(...$args),
+                );
             case 'OC':
                 return $this->procesaArbolOrdencompra($arbolaprobacion, $tipoarbol, $comprobante_id, $arrayReplace);
             default:
@@ -473,6 +486,10 @@ class ArbolaprobacionService
             case 'Requisiciones':
                 $arbolaprobacion_movimiento = $this->arbolaprobacion_movimientoRepository->findPorRequisicion($comprobante_id);
                 break;
+            case 'Requisiciones de sala':
+                $arbolaprobacion_movimiento = app(\App\Services\Sala\RequisicionSalaArbolIntegracionService::class)
+                    ->findPorRequisicionSala((int) $comprobante_id);
+                break;
             case 'Ordenes de compra':
                 $arbolaprobacion_movimiento = $this->arbolaprobacion_movimientoRepository->findPorOrdencompra($comprobante_id);
                 break;
@@ -625,6 +642,8 @@ class ArbolaprobacionService
                 ->where('id', '!=', $aprobacion_id);
             if ($movimientoPre->requisicion_id) {
                 $q->where('requisicion_id', $movimientoPre->requisicion_id);
+            } elseif ($movimientoPre->requisicion_sala_id) {
+                $q->where('requisicion_sala_id', $movimientoPre->requisicion_sala_id);
             } elseif ($movimientoPre->ordenventa_id) {
                 $q->where('ordenventa_id', $movimientoPre->ordenventa_id);
             } elseif ($movimientoPre->ordencompra_id) {
@@ -651,6 +670,28 @@ class ArbolaprobacionService
                 );
                 if ($nivelCfg !== null && filled($nivelCfg->documento_estado_al_aprobar)) {
                     $this->aplicaEstadoRequisicionPorNombre(
+                        $comprobante_id,
+                        trim($nivelCfg->documento_estado_al_aprobar),
+                        'Árbol de aprobación: nivel '.$movimientoPre->nivel.' aprobado',
+                        $usuario_id
+                    );
+                }
+            }
+
+            if ($tipocomprobante === 'RS') {
+                $arbol = $this->arbolaprobacionRepository->find($movimientoPre->arbolaprobacion_id);
+                $reqSala = app(\App\Repositories\Sala\RequisicionSalaRepositoryInterface::class)->find($comprobante_id);
+                $totales = \App\Support\Sala\RequisicionSalaTotalesCabecera::desdeModelo($reqSala);
+                $nivelCfg = $this->encuentraNivelCoincidente(
+                    $arbol,
+                    (int) $reqSala->centrocosto_id,
+                    $movimientoPre->nivel,
+                    $reqSala->fecha,
+                    $totales['monto'],
+                    $totales['moneda_id']
+                );
+                if ($nivelCfg !== null && filled($nivelCfg->documento_estado_al_aprobar)) {
+                    app(\App\Services\Sala\RequisicionSalaArbolIntegracionService::class)->aplicaEstadoPorNombre(
                         $comprobante_id,
                         trim($nivelCfg->documento_estado_al_aprobar),
                         'Árbol de aprobación: nivel '.$movimientoPre->nivel.' aprobado',
@@ -686,6 +727,16 @@ class ArbolaprobacionService
                 $reqActual = $this->requisicionRepository->find($comprobante_id);
                 $nombreEnCompras = Requisicion_Estado::$enumEstado[array_search('K', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
                 if ($reqActual && $reqActual->estado === $nombreEnCompras) {
+                    DB::commit();
+
+                    return;
+                }
+            }
+
+            if ($tipocomprobante === 'RS') {
+                $reqSalaActual = app(\App\Repositories\Sala\RequisicionSalaRepositoryInterface::class)->find($comprobante_id);
+                $nombreEnComprasSala = \App\Models\Sala\RequisicionSalaEstado::$enumEstado[array_search('5', array_column(\App\Models\Sala\RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'];
+                if ($reqSalaActual && $reqSalaActual->estado === $nombreEnComprasSala) {
                     DB::commit();
 
                     return;
@@ -1049,6 +1100,8 @@ class ArbolaprobacionService
                 ->where('id', '!=', $aprobacion_id);
             if ($movimientoPre->requisicion_id) {
                 $q->where('requisicion_id', $movimientoPre->requisicion_id);
+            } elseif ($movimientoPre->requisicion_sala_id) {
+                $q->where('requisicion_sala_id', $movimientoPre->requisicion_sala_id);
             } elseif ($movimientoPre->ordenventa_id) {
                 $q->where('ordenventa_id', $movimientoPre->ordenventa_id);
             } elseif ($movimientoPre->ordencompra_id) {
@@ -1090,6 +1143,10 @@ class ArbolaprobacionService
                         'Requisición suspendida / rechazada en árbol: '.$observacion
                     );
                     $this->requisicionRepository->update(['estado' => $estado], $comprobante_id);
+                    break;
+                case 'RS':
+                    app(\App\Services\Sala\RequisicionSalaArbolIntegracionService::class)
+                        ->suspendePorRechazo($comprobante_id, $usuario_id, $observacion);
                     break;
                 case 'OC':
                     $estadoOc = OrdencompraEstados::SUSPENDIDA;
@@ -1702,5 +1759,59 @@ class ArbolaprobacionService
 
             return $row;
         })->values();
+    }
+
+    public function validaRequisicionSalaRequestContraArbol(array $data): void
+    {
+        app(\App\Services\Sala\RequisicionSalaArbolIntegracionService::class)->validaRequestContraArbol($data);
+    }
+
+    public function validaRequisicionSalaModeloContraArbol(\App\Models\Sala\RequisicionSala $req): void
+    {
+        app(\App\Services\Sala\RequisicionSalaArbolIntegracionService::class)->validaModeloContraArbol($req);
+    }
+
+    public function portalDatosRequisicionSalaPorHash(int $id, string $hash, string $modo): ?array
+    {
+        $integracion = app(\App\Services\Sala\RequisicionSalaArbolIntegracionService::class);
+        $mov = $integracion->movimientoPendientePorHash($id, $hash, $modo);
+        if (! $mov) {
+            return null;
+        }
+        $requisicionSala = app(\App\Repositories\Sala\RequisicionSalaRepositoryInterface::class)->find($id);
+        $totales = \App\Support\Sala\RequisicionSalaTotalesCabecera::desdeModelo($requisicionSala);
+        $estadoTrasAprobar = null;
+        if ($modo === 'aprobacion') {
+            $estadoTrasAprobar = $this->estadoTrasAprobarSegunMovimientoRequisicionSala($requisicionSala, $mov);
+        }
+
+        return [
+            'requisicion_sala' => $requisicionSala,
+            'movimiento' => $mov,
+            'estado_tras_aprobar' => $estadoTrasAprobar,
+            'monto_items' => (float) ($totales['monto'] ?? 0),
+        ];
+    }
+
+    public function estadoTrasAprobarSegunMovimientoRequisicionSala(
+        \App\Models\Sala\RequisicionSala $req,
+        Arbolaprobacion_Movimiento $mov
+    ): ?string {
+        $arbol = $this->arbolaprobacionRepository->find($mov->arbolaprobacion_id);
+        $totales = \App\Support\Sala\RequisicionSalaTotalesCabecera::desdeModelo($req);
+        $nivelCfg = $this->encuentraNivelCoincidente(
+            $arbol,
+            (int) $req->centrocosto_id,
+            $mov->nivel,
+            $req->fecha,
+            $totales['monto'],
+            $totales['moneda_id']
+        );
+        if ($nivelCfg === null) {
+            return null;
+        }
+        $s = trim((string) ($nivelCfg->documento_estado_al_aprobar ?? ''));
+
+        return $s !== '' ? $s : null;
     }
 }

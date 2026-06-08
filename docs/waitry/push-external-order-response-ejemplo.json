@@ -1,7 +1,9 @@
 {
     "ok": true,
+    "msg": "pushExternalOrder: finish",
     "response": {
         "orderId": 987654,
-        "externalId": "12345"
+        "external_id": "12345",
+        "external_delivery_id": "E-26BADA"
     }
 }

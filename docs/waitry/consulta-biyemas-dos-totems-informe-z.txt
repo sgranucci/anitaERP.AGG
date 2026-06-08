@@ -1,0 +1,107 @@
+Consulta Waitry — Biyemas: 2 tótems, Informe Z y diferenciación de comandas
+================================================================================
+Empresa: Biyemas (Anita ERP)
+Fecha referencia: jornada 03/06/2026
+Contacto: [completar nombre / mail]
+
+CONTEXTO
+--------
+Tenemos 3 KDS y 2 tótems físicos (Posnet):
+  1. Tomasso — salón principal
+  2. Pizzería/Salón — 2 kioscos Waitry (K1 y K2)
+
+En nuestro sistema mapeamos los tótems por layout Waitry (table.layout.id en getOrdersPOS / getordersdetails):
+
+  Tótem físico     Layout ID   Nombre layout    Mesa(s) Waitry    display_id típico
+  ---------------  ----------  ---------------  ----------------  -------------------
+  Tomasso          32211       Mostrador        101066 (C)        E-… (push desde Anita)
+  Pizzería K1      32392       Kiosco 1         103443 (K1)       W-… (nativo Waitry)
+  Pizzería K2      32393       Kiosco 2         103444 (K2)       W-… (nativo Waitry)
+
+
+HALLAZGO PRINCIPAL (jornada 03/06/2026)
+---------------------------------------
+El punto de venta de facturación en Anita (PV) NO aparece en Waitry y no nos sirve para separar tótems.
+
+  PV Anita              Órdenes en tramo   ¿Van a mesa Pizzería K1/K2?   Layout Waitry real
+  --------------------  -----------------  ----------------------------  -------------------
+  00008 Pizzería        211                NO — van a mesa 101066        32211 Mostrador
+  00003 Chungo/Tomasso  97                 —                             32211 Mostrador
+  00005 Bonafide        21                 —                             32211 Mostrador
+
+Las comandas facturadas desde el PV 8 (Pizzería) se empujan a Waitry como E-… al Mostrador (32211), igual que las del PV 3. Solo los pedidos nativos del kiosco (W-…) usan layouts 32392/32393 y mesas K1/K2.
+
+
+INFORME Z / POSNET (03/06/2026)
+-------------------------------
+Al conciliar el Informe Z (Control Z del Posnet) vs comandas Waitry:
+
+  Canal Waitry                      creditcard   Entran al "Sistema" Posnet
+  --------------------------------  -----------  ---------------------------
+  Mostrador 32211 (Tomasso)         329          0 (todas E-, importadas ERP)
+  Kiosco 1/2 (32392/32393)          41           27 (W-, sin facturar Anita)
+
+En Tomasso el Posnet real del día fue ~$331.700 (Z manual), pero nuestro sistema da Sistema $0 porque Waitry marca esas órdenes como push Anita, no cobro nativo de kiosco.
+
+
+PREGUNTAS PARA WAITRY
+---------------------
+
+1. ¿Existe un campo en la orden (getordersdetails / getOrdersPOS) que indique qué tótem/kiosco físico cobró con Posnet, independiente de table.layout.id?
+
+2. Órdenes push desde ERP (external_reference_id, display E-…):
+   - ¿Pueden llevar payment.payments[].gateway (ej. KIOSK MP) cuando el cobro fue en terminal físico Tomasso?
+   - Hoy muchas vienen con payment.payments: [] y solo type: credit_card.
+
+3. PV / sucursal / placeId: ¿Hay forma de que una comanda push Anita llegue al layout Kiosco (32392/32393) en lugar del Mostrador (32211) cuando se factura desde el PC Pizzería (PV 8)?
+
+4. Diferenciar Tomasso vs Pizzería en Mostrador: cuando varios PV empujan al mismo layout 32211 / mesa 101066, ¿Waitry puede etiquetar el origen del tótem o el dispositivo que procesó el Posnet?
+
+5. Informe Z por dispositivo: ¿El Z del Posnet se puede exportar o consultar por API por layout, por mesa, o por terminal/kiosco? Necesitamos cuadrar:
+   - Tomasso Mostrador → Z ~$331.700
+   - Kiosco 1 → parcial K1
+   - Kiosco 2 → parcial K2
+
+6. display_id: ¿Confirman que E- = push ERP y W- = pedido nativo kiosco? ¿Hay otros prefijos relevantes?
+
+
+EJEMPLOS DE COMANDAS (JSON)
+---------------------------
+
+Tomasso — PV 3, push Anita:
+{
+  "orderId": 17571551,
+  "display_id": "E-85F50B",
+  "table": { "id": 101066, "layout": { "id": 32211, "name": "Mostrador" } },
+  "payment": { "type": "credit_card", "payments": [] }
+}
+
+Pizzería PV 8 — también termina en Mostrador (no en K1/K2):
+{
+  "orderId": 17571704,
+  "display_id": "E-B27038",
+  "table": { "id": 101066, "layout": { "id": 32211, "name": "Mostrador" } },
+  "payment": { "type": "credit_card", "payments": [] }
+}
+
+Kiosco Pizzería — nativo Waitry:
+{
+  "orderId": 17572996,
+  "display_id": "W-7CDC9E",
+  "table": { "id": 103443, "layout": { "id": 32392, "name": "Kiosco 1" } },
+  "payment": {
+    "type": "credit_card",
+    "payments": [{ "gateway": "KIOSK MPQR", "amount": 6600 }]
+  }
+}
+
+
+LO QUE HACEMOS HOY EN ANITA
+---------------------------
+- Repartimos comandas por table.layout.id (prioridad) y mesa.
+- Informe Z desglosa parciales Pizzería por K1/K2 (mesas 103443/103444).
+- Tomasso queda en layout 32211; el pendiente para cuadrar el Z de Tomasso es saber si Waitry puede marcar de otra forma el cobro Posnet físico en órdenes push E-.
+
+Quedamos atentos a su respuesta. Gracias.
+
+[Completar: nombre, teléfono, mail de contacto]

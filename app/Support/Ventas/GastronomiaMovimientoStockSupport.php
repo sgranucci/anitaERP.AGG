@@ -96,11 +96,37 @@ final class GastronomiaMovimientoStockSupport
                 : 'No se pudo completar la facturación: validación interna falló sin detalle. Revise la configuración del PV gastronomía.';
         }
 
+        if (self::esErrorContencionBaseDatos($msg)) {
+            return self::mensajeContencionBaseDatos($msg);
+        }
+
         return \App\Support\Ventas\ArcaWsfeEmisionResiliencia::formatearMensajeOperador(
             $msg,
             null,
             $contexto,
         );
+    }
+
+    private static function esErrorContencionBaseDatos(string $mensaje): bool
+    {
+        $m = strtolower($mensaje);
+
+        return str_contains($m, 'lock wait timeout')
+            || str_contains($m, '1205')
+            || str_contains($m, 'deadlock found');
+    }
+
+    private static function mensajeContencionBaseDatos(string $detalle): string
+    {
+        $detalleVisible = trim($detalle) !== '' ? trim($detalle) : '(sin detalle adicional)';
+
+        return 'No se pudo completar la facturación: el sistema está ocupado procesando otra operación '
+            .'(espera de bloqueo en base de datos). '
+            .'Detalle técnico: '.$detalleVisible.'. '
+            .'Espere unos segundos e intente nuevamente. '
+            .'Si el error persiste con varias terminales activas, avise a soporte técnico '
+            .'(puede haber una emisión anterior demorada bloqueando la cobranza). '
+            .'No reintente con los mismos datos hasta confirmar si la factura ya se emitió.';
     }
 
     public static function nullableFkId(mixed $value): ?int

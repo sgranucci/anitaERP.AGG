@@ -134,7 +134,8 @@ class GastronomiaProcesoFacturacionController extends Controller
             'wsfe_receptor_cf_umbral_monto' => (float) config('arca_wsfe.receptor.consumidor_final_umbral_monto', 0),
             'wsfe_forzar_modo_caea' => \App\Support\Ventas\ArcaWsfeEmisionResiliencia::forzarModoCaea(),
             'wsfe_failover_automatico' => \App\Support\Ventas\ArcaWsfeEmisionResiliencia::failoverAutomaticoActivo(),
-            'modo_seleccion_preferido' => $this->leerPreferenciaModoSeleccion() ?? 'mesa',
+            'modo_seleccion_preferido' => $this->leerPreferenciaModoSeleccion($cfg) ?? 'mesa',
+            'waitry_habilitado_terminal' => $cfg?->waitryHabilitadoEnTerminal() ?? false,
             'cuentas_libres_habilitadas' => (bool) config('gastronomia.cuentas_libres_habilitadas', true),
             'cubiertos_obligatorio_al_abrir' => (bool) config('gastronomia.cubiertos_obligatorio_al_abrir', true),
             'cubiertos_default_al_abrir' => max(0, (int) config('gastronomia.cubiertos_default_al_abrir', 1)),
@@ -203,7 +204,7 @@ class GastronomiaProcesoFacturacionController extends Controller
             'receptor_cf_nombre' => trim((string) config('arca_wsfe.receptor.consumidor_final_razon_social', 'CONSUMIDOR FINAL')),
             'tipotransaccion_caja_id' => GastronomiaCobranzaService::resolverTipotransaccionCajaId($cfg),
             'cobranza_config_error' => GastronomiaCobranzaService::mensajeConfigCobranzaFaltante($cfg),
-            'modo_seleccion_preferido' => $this->leerPreferenciaModoSeleccion() ?? 'mesa',
+            'modo_seleccion_preferido' => $this->leerPreferenciaModoSeleccion($cfg) ?? 'mesa',
             'cuentas_libres_habilitadas' => (bool) config('gastronomia.cuentas_libres_habilitadas', true),
             'cubiertos_obligatorio_al_abrir' => (bool) config('gastronomia.cubiertos_obligatorio_al_abrir', true),
             'cubiertos_default_al_abrir' => max(0, (int) config('gastronomia.cubiertos_default_al_abrir', 1)),
@@ -216,7 +217,7 @@ class GastronomiaProcesoFacturacionController extends Controller
                 GastronomiaIdentificadorPc::resolver($request),
             ),
             'url_habilitacion_turno' => route('gastronomia_habilitacion_turno'),
-            'waitry_habilitado' => config('waitry.habilitado', false),
+            'waitry_habilitado' => $cfg->waitryHabilitadoEnTerminal(),
             'waitry_get_orders_minutos_atras' => max(0, (int) config('waitry.get_orders_minutos_atras', 20)),
             'waitry_get_orders_cache_segundos' => max(0, (int) config('waitry.get_orders_cache_segundos', 15)),
         ]);
@@ -231,8 +232,8 @@ class GastronomiaProcesoFacturacionController extends Controller
             return $cfg;
         }
 
-        if (! config('waitry.habilitado', false)) {
-            return response()->json(['ok' => false, 'error' => 'Integración Waitry deshabilitada.'], 422);
+        if (! $cfg->waitryHabilitadoEnTerminal()) {
+            return response()->json(['ok' => false, 'error' => 'Integración Waitry deshabilitada para esta terminal.'], 422);
         }
 
         $desde = $request->get('from');
@@ -281,8 +282,8 @@ class GastronomiaProcesoFacturacionController extends Controller
             return $cfg;
         }
 
-        if (! config('waitry.habilitado', false)) {
-            return response()->json(['ok' => false, 'error' => 'Integración Waitry deshabilitada.'], 422);
+        if (! $cfg->waitryHabilitadoEnTerminal()) {
+            return response()->json(['ok' => false, 'error' => 'Integración Waitry deshabilitada para esta terminal.'], 422);
         }
 
         $identificadorPapelito = trim((string) $request->get('waitry_order_id'));
@@ -300,17 +301,29 @@ class GastronomiaProcesoFacturacionController extends Controller
                 'ok' => false,
                 'error' => $resultado['error'] ?? 'No se pudo importar la orden.',
                 'errores' => $resultado['errores'] ?? [],
+                'requiere_carga_opcionales_en_pos' => (bool) ($resultado['requiere_carga_opcionales_en_pos'] ?? false),
             ], 422);
         }
+
+        $erroresImport = $resultado['errores'] ?? [];
+        $skusOpcionalesPendientes = $this->extraerSkusOpcionalesPendientesDesdeErroresWaitry($erroresImport);
+        $soloOpcionalesEnPos = (bool) ($resultado['requiere_carga_opcionales_en_pos'] ?? false);
 
         return response()->json([
             'ok' => true,
             'cuenta_id' => $resultado['cuenta']->id,
             'cuenta' => $resultado['cuenta'],
-            'errores' => $resultado['errores'] ?? [],
-            'mensaje' => 'Cuenta Waitry «'.$identificadorPapelito.'» importada correctamente.',
-            'warn' => ($resultado['errores'] ?? []) !== []
-                ? 'Importación parcial: algunos ítems no se cargaron (ver detalle).'
+            'errores' => $erroresImport,
+            'skus_opcionales_pendientes' => $skusOpcionalesPendientes,
+            'requiere_carga_opcionales_en_pos' => $soloOpcionalesEnPos,
+            'mensaje' => $soloOpcionalesEnPos
+                ? 'Cuenta Waitry «'.$identificadorPapelito.'» abierta. Complete los consumos con opcionales en el POS.'
+                : 'Cuenta Waitry «'.$identificadorPapelito.'» importada correctamente.',
+            'warn' => $erroresImport !== []
+                ? ($skusOpcionalesPendientes !== []
+                    ? 'Faltan en la cuenta (opcionales): '.implode(', ', $skusOpcionalesPendientes)
+                        .'. Se abrirá el asistente para cargarlos.'
+                    : 'Importación parcial: algunos ítems no se cargaron (ver detalle).')
                 : null,
         ]);
     }
@@ -414,13 +427,18 @@ class GastronomiaProcesoFacturacionController extends Controller
     {
         can('usar-proceso-facturacion-gastronomia');
 
+        $cfg = $this->requireCfgPv($request);
+        if ($cfg instanceof \Illuminate\Http\JsonResponse) {
+            return $cfg;
+        }
+
         $modoRaw = $request->input('modo');
         $modo = is_string($modoRaw) ? trim($modoRaw) : '';
         if ($modo === 'cuenta' && ! config('gastronomia.cuentas_libres_habilitadas', true)) {
             return response()->json(['ok' => false, 'message' => 'Las cuentas libres no están habilitadas.'], 422);
         }
         $modosValidos = ['mesa', 'cuenta'];
-        if (config('waitry.habilitado', false)) {
+        if ($cfg->waitryHabilitadoEnTerminal()) {
             $modosValidos[] = 'waitry';
         }
         if (! in_array($modo, $modosValidos, true)) {
@@ -592,10 +610,9 @@ class GastronomiaProcesoFacturacionController extends Controller
             ? (float) $request->get('precio_unitario')
             : $this->resolverPrecioLista((int) $articulo->id);
 
-        $opcionales = [];
-        foreach (($request->get('opcionales') ?? []) as $k => $v) {
-            $opcionales[(string) $k] = $v !== null ? (int) $v : null;
-        }
+        $opcionales = \App\Support\Ventas\GastronomiaFormulaOpcionalSeleccion::normalizarMapaDesdeRequest(
+            (array) ($request->get('opcionales') ?? [])
+        );
 
         if (FormulaArticuloGastronomia::opcionalesHabilitados()) {
             $grupos = $this->opcionalesService->gruposOpcionalesPorArticulo($articulo);
@@ -1084,17 +1101,9 @@ class GastronomiaProcesoFacturacionController extends Controller
         $cuenta = $this->cuentaService->cuentaConLineas((int) $request->get('cuenta_id'));
 
         try {
-            $opcionalesPorArticulo = [];
-            foreach (($request->get('opcionales_por_articulo') ?? []) as $articuloId => $mapa) {
-                if (! is_array($mapa)) {
-                    continue;
-                }
-                $normalizado = [];
-                foreach ($mapa as $orden => $aid) {
-                    $normalizado[(string) $orden] = $aid !== null && $aid !== '' ? (int) $aid : null;
-                }
-                $opcionalesPorArticulo[(int) $articuloId] = $normalizado;
-            }
+            $opcionalesPorArticulo = $this->normalizarOpcionalesPorArticuloDesdeRequest(
+                (array) ($request->get('opcionales_por_articulo') ?? [])
+            );
 
             $resultado = $this->ticketCanjePremioService->aplicarACuenta(
                 $cuenta,
@@ -1163,6 +1172,8 @@ class GastronomiaProcesoFacturacionController extends Controller
             'cuenta_id' => 'required|integer|min:1',
             'trackdata' => 'required|string|min:1|max:128',
             'articulo_id' => 'required|integer|min:1',
+            'opcionales_por_articulo' => 'nullable|array',
+            'opcionales' => 'nullable|array',
         ]);
 
         $cfg = $this->requireCfgPv($request);
@@ -1173,11 +1184,20 @@ class GastronomiaProcesoFacturacionController extends Controller
         $cuenta = $this->cuentaService->cuentaConLineas((int) $request->get('cuenta_id'));
 
         try {
+            $articuloId = (int) $request->get('articulo_id');
+            $opcionalesPorArticulo = $this->normalizarOpcionalesPorArticuloDesdeRequest(
+                (array) ($request->get('opcionales_por_articulo') ?? [])
+            );
+            $opcionalesLinea = $opcionalesPorArticulo[$articuloId]
+                ?? $opcionalesPorArticulo[(string) $articuloId]
+                ?? [];
+
             $resultado = $this->categoriafidelidadCanjeService->aplicarACuenta(
                 $cuenta,
                 (string) $request->get('trackdata'),
-                (int) $request->get('articulo_id'),
+                $articuloId,
                 $this->listaPrecioIdDesdeCfg($cfg),
+                $opcionalesLinea,
             );
         } catch (\InvalidArgumentException|\RuntimeException $e) {
             return $this->respuestaErrorCanjeFidelidad($e);
@@ -1465,12 +1485,12 @@ class GastronomiaProcesoFacturacionController extends Controller
         return $id ? (int) $id : null;
     }
 
-    private function leerPreferenciaModoSeleccion(): ?string
+    private function leerPreferenciaModoSeleccion(?ConfiguracionPuntoventaGastronomia $cfg = null): ?string
     {
         $modo = Cache::get(generaKey('gastronomia-modo-seleccion'));
 
         $modosValidos = ['mesa', 'cuenta'];
-        if (config('waitry.habilitado', false)) {
+        if ($cfg !== null && $cfg->waitryHabilitadoEnTerminal()) {
             $modosValidos[] = 'waitry';
         }
 
@@ -1504,5 +1524,53 @@ class GastronomiaProcesoFacturacionController extends Controller
         $p = end($precios);
 
         return (float) ($p['precio'] ?? 0);
+    }
+
+    /**
+     * @param  array<int|string, mixed>  $raw
+     * @return array<int, array<string, int|string>>
+     */
+    private function normalizarOpcionalesPorArticuloDesdeRequest(array $raw): array
+    {
+        $out = [];
+        foreach ($raw as $articuloId => $mapa) {
+            if (! is_array($mapa)) {
+                continue;
+            }
+            $norm = \App\Support\Ventas\GastronomiaFormulaOpcionalSeleccion::normalizarMapaDesdeRequest($mapa);
+            if ($norm !== []) {
+                $out[(int) $articuloId] = $norm;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<string>  $errores
+     * @return list<string>
+     */
+    private function extraerSkusOpcionalesPendientesDesdeErroresWaitry(array $errores): array
+    {
+        $skus = [];
+        foreach ($errores as $err) {
+            $err = trim((string) $err);
+            if ($err === '') {
+                continue;
+            }
+            $esOpcional = str_contains($err, 'requiere opcionales de fórmula')
+                || str_contains($err, 'modal de opcionales')
+                || str_contains($err, 'Debe seleccionar opcional');
+            if (! $esOpcional) {
+                continue;
+            }
+            if (preg_match('/SKU «([^»]+)»/u', $err, $m)) {
+                $skus[] = $m[1];
+            } elseif (preg_match('/^([A-Za-z0-9]+):\s*Debe seleccionar opcional/u', $err, $m)) {
+                $skus[] = $m[1];
+            }
+        }
+
+        return array_values(array_unique($skus));
     }
 }

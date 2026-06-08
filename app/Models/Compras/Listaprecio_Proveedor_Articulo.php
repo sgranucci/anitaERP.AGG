@@ -14,7 +14,7 @@ class Listaprecio_Proveedor_Articulo extends Model implements Auditable
     protected $table = 'listaprecio_proveedor_articulo';
 
     protected $fillable = [
-        'listaprecio_proveedor_id', 'articulo_id', 'precio', 'articulo_proveedor', 'descuento',
+        'listaprecio_proveedor_id', 'articulo_id', 'precio', 'codigo_articulo_proveedor', 'descuento',
         'fechavigencia', 'usuarioultcambio_id',
     ];
 

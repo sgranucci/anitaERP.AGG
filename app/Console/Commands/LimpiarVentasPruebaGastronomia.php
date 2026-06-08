@@ -88,6 +88,13 @@ class LimpiarVentasPruebaGastronomia extends Command
         return $ok === $ordenadas->count() ? self::SUCCESS : self::FAILURE;
     }
 
+    public function eliminarVentaPorId(int $ventaId): void
+    {
+        DB::transaction(function () use ($ventaId): void {
+            $this->eliminarVentaEnCascada($ventaId);
+        });
+    }
+
     private function ventasEnRango(int $puntoventaId, string $desde, string $hasta): Collection
     {
         return Venta::withTrashed()

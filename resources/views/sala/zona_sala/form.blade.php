@@ -4,16 +4,8 @@
         <input type="text" name="nombre" id="nombre" class="form-control" value="{{old('nombre', $data->nombre ?? '')}}" required/>
     </div>
 </div>
-<div class="form-group row">
-    <label for="empresa_id" class="col-lg-3 col-form-label requerido">Empresa</label>
-    <select name="empresa_id" id="empresa_id" data-placeholder="Empresa" class="col-lg-3 form-control" data-fouc required>
-        <option value="">-- Seleccionar empresa --</option>
-        @foreach($empresa_query as $value)
-            @if( (int) $value->id === (int) old('empresa_id', $data->empresa_id ?? session('empresa_id')))
-                <option value="{{ $value->id }}" selected="select">{{ $value->id }} {{ $value->nombre }}</option>
-            @else
-                <option value="{{ $value->id }}">{{ $value->id }} {{ $value->nombre }}</option>
-            @endif
-        @endforeach
-    </select>
-</div>
+@include('includes.form-empresa-asignada', [
+    'empresa_query' => $empresa_query,
+    'empresa_id' => $data->empresa_id ?? null,
+    'col_input' => 'col-lg-4',
+])

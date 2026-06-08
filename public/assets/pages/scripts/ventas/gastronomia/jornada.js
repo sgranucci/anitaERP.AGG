@@ -22,11 +22,19 @@
     var btnAbrir = document.getElementById('btn-abrir-jornada');
     var btnCerrar = document.getElementById('btn-cerrar-jornada');
     var btnCerrarHtmlOriginal = btnCerrar ? btnCerrar.innerHTML : '';
+    var btnCerrarDisabledInicial = btnCerrar ? btnCerrar.disabled : false;
     var avisoCierreEnProgreso = document.getElementById('jornada-cierre-en-progreso');
 
     function empresaId() {
-        return selectEmpresa ? parseInt(selectEmpresa.value, 10) || 0 : 0;
+        var fromSelect = selectEmpresa ? parseInt(selectEmpresa.value, 10) || 0 : 0;
+        if (fromSelect > 0) {
+            return fromSelect;
+        }
+        var fromCfg = window.JORNADA_GASTRONOMIA && parseInt(window.JORNADA_GASTRONOMIA.empresaId, 10);
+        return fromCfg > 0 ? fromCfg : 0;
     }
+
+    var waitryPreviewCargaEnCurso = false;
 
     if (selectEmpresa) {
         selectEmpresa.addEventListener('change', function () {
@@ -176,7 +184,11 @@
                 titulo += ' <span class="text-muted">(tableId ' + parseInt(bloque.waitry_table_id, 10) + ')</span>';
             }
 
-            html += '<div class="card mb-2 jornada-informe-z-totem" data-totem-idx="' + idxTotem + '" data-totem-id="' + parseInt(bloque.totem_id, 10) + '">';
+            html += '<div class="card mb-2 jornada-informe-z-totem" data-totem-idx="' + idxTotem + '" data-totem-id="' + parseInt(bloque.totem_id, 10) + '"';
+            if (bloque.waitry_table_id) {
+                html += ' data-waitry-table-id="' + parseInt(bloque.waitry_table_id, 10) + '"';
+            }
+            html += '>';
             html += '<div class="card-header py-2"><strong>' + titulo + '</strong>';
             html += ' <span class="float-right text-muted small">Sistema: $' + formatearMonto(bloque.total_ingreso_sistema) + '</span></div>';
             html += '<div class="card-body p-0"><table class="table table-sm table-bordered mb-0 jornada-informe-z-tabla">';
@@ -319,6 +331,7 @@
         var cards = contenedor ? contenedor.querySelectorAll('.jornada-informe-z-totem') : [];
         cards.forEach(function (card) {
             var totemId = parseInt(card.getAttribute('data-totem-id'), 10) || 0;
+            var tableId = parseInt(card.getAttribute('data-waitry-table-id'), 10) || 0;
             var lineas = [];
             card.querySelectorAll('.jornada-informe-z-linea').forEach(function (tr) {
                 var ccId = parseInt((tr.querySelector('.cuentacaja_id') || {}).value, 10) || 0;
@@ -326,7 +339,8 @@
                 var nomInp = tr.querySelector('.nombre');
                 var inp = tr.querySelector('.js-monto-informe-z');
                 var monto = parseMontoInformeZ(inp ? inp.value : '0');
-                if (ccId <= 0 && monto <= 0) {
+                var mSistema = parseFloat(inp ? (inp.getAttribute('data-monto-sistema') || tr.getAttribute('data-monto-sistema') || '0') : '0') || 0;
+                if (ccId <= 0 && monto <= 0 && mSistema <= 0) {
                     return;
                 }
                 lineas.push({
@@ -335,10 +349,16 @@
                     cuentacaja_nombre: nomInp ? String(nomInp.value || '').trim() : '',
                     tipo_waitry: tr.getAttribute('data-tipo-waitry') || 'totem',
                     monto: monto,
+                    monto_informe_z: monto,
+                    monto_sistema: Math.round(mSistema * 100) / 100,
                 });
             });
             if (totemId > 0) {
-                totemsOut.push({ totem_id: totemId, lineas: lineas });
+                var entry = { totem_id: totemId, lineas: lineas };
+                if (tableId > 0) {
+                    entry.waitry_table_id = tableId;
+                }
+                totemsOut.push(entry);
             }
         });
 
@@ -514,12 +534,99 @@
         el.classList.remove('d-none');
     }
 
+    function mapaMontosInformeZPreservar(totemsPayload) {
+        var mapa = {};
+        (totemsPayload || []).forEach(function (t) {
+            var tid = parseInt(t.totem_id, 10) || 0;
+            if (tid <= 0) {
+                return;
+            }
+            mapa[tid] = { porCuenta: {}, porTipo: {} };
+            (t.lineas || []).forEach(function (ln) {
+                var monto = ln.monto_informe_z != null ? Number(ln.monto_informe_z) : Number(ln.monto || 0);
+                if (isNaN(monto)) {
+                    monto = 0;
+                }
+                var ccId = parseInt(ln.cuentacaja_id, 10) || 0;
+                var tipo = String(ln.tipo_waitry || '').trim();
+                if (ccId > 0) {
+                    mapa[tid].porCuenta[String(ccId)] = monto;
+                }
+                if (tipo) {
+                    mapa[tid].porTipo[tipo] = monto;
+                }
+            });
+        });
+        return mapa;
+    }
+
+    function fusionarMontosInformeZEnPlantilla(totems, mapaPreservar) {
+        if (!mapaPreservar || !totems) {
+            return totems;
+        }
+        return totems.map(function (bloque) {
+            var tid = parseInt(bloque.totem_id, 10) || 0;
+            var bloqueMapa = mapaPreservar[tid];
+            if (!bloqueMapa) {
+                return bloque;
+            }
+            var lineas = (bloque.lineas || []).map(function (ln) {
+                var ccId = parseInt(ln.cuentacaja_id, 10) || 0;
+                var tipo = String(ln.tipo_waitry || '').trim();
+                var montoZ = null;
+                if (ccId > 0 && bloqueMapa.porCuenta[String(ccId)] != null) {
+                    montoZ = bloqueMapa.porCuenta[String(ccId)];
+                } else if (tipo && bloqueMapa.porTipo[tipo] != null) {
+                    montoZ = bloqueMapa.porTipo[tipo];
+                }
+                if (montoZ == null) {
+                    return ln;
+                }
+                return Object.assign({}, ln, { monto_informe_z: montoZ });
+            });
+            return Object.assign({}, bloque, { lineas: lineas });
+        });
+    }
+
+    function habilitarBotonRefrescoWaitry(habilitar) {
+        var btn = document.getElementById('btn-refrescar-lectura-waitry-z');
+        if (btn) {
+            btn.disabled = !habilitar || waitryPreviewCargaEnCurso;
+        }
+    }
+
+    function mostrarCargaPreviewWaitry(enCurso) {
+        waitryPreviewCargaEnCurso = !!enCurso;
+        var banner = document.getElementById('waitry-preview-cargando');
+        var contenedor = document.getElementById('preview-cierre-totem-waitry');
+        var acciones = document.getElementById('preview-informe-z-acciones');
+
+        if (banner) {
+            banner.classList.toggle('d-none', !enCurso);
+        }
+
+        if (contenedor) {
+            contenedor.classList.toggle('d-none', enCurso);
+        }
+        if (acciones && enCurso) {
+            acciones.classList.add('d-none');
+        }
+
+        habilitarBotonRefrescoWaitry(!enCurso && !!estadoPreviewInformeZ.snapshot);
+
+        if (btnCerrar && puedeCerrar) {
+            btnCerrar.disabled = enCurso || btnCerrarDisabledInicial;
+        }
+    }
+
     function renderPreviewCierreTotem(preview) {
         var contenedor = document.getElementById('preview-cierre-totem-waitry');
         var acciones = document.getElementById('preview-informe-z-acciones');
         if (!contenedor) {
             return;
         }
+
+        contenedor.classList.remove('d-none');
 
         if (!preview) {
             contenedor.innerHTML = '<p class="text-muted mb-0">Vista previa Waitry no disponible.</p>';
@@ -539,37 +646,65 @@
         html += '<span class="text-muted">Actualizado: ' + escHtml(preview.preview_en || '—') + '</span>';
         html += '</div>';
 
+        if (preview.waitry_order_id_hasta != null && parseInt(preview.waitry_order_id_hasta, 10) > 0) {
+            html += '<p class="mb-2 small">';
+            html += '<strong>Último ticket Waitry (se congela al cerrar la jornada):</strong> #'
+                + escHtml(String(preview.waitry_order_id_hasta));
+            if (preview.rango_etiqueta) {
+                html += ' · ' + escHtml(preview.rango_etiqueta);
+            }
+            html += '</p>';
+        }
+
         if (preview.ventana_operativa) {
             html += '<p class="text-muted mb-1">Ventana: ' + escHtml(preview.ventana_operativa) + '</p>';
         }
         if (preview.rango_etiqueta) {
             html += '<p class="mb-2">' + escHtml(preview.rango_etiqueta) + '</p>';
         }
+        if (preview.tramo_ultimo_ticket_origen === 'ultimo_leido') {
+            html += '<p class="text-muted small mb-2">Último ticket del tramo: el mayor ID leído en esta vista previa '
+                + '(al cerrar se congela; no se vuelve a consultar Waitry).</p>';
+        }
 
         var totalIngreso = preview.total_ingreso_totem != null
             ? Number(preview.total_ingreso_totem)
             : Number((preview.total_general || {}).total_ingreso || 0);
+        var cantCanceladas = parseInt(preview.cantidad_canceladas_excluidas, 10) || 0;
+        var cantAnuladasDesc = parseInt(preview.cantidad_anuladas_descuento_excluidas, 10) || 0;
+        var resAnuladasDesc = preview.waitry_anuladas_descuento || {};
         var cantOrdenes = preview.cantidad_ingreso_totem != null
             ? parseInt(preview.cantidad_ingreso_totem, 10)
-            : parseInt((preview.total_general || {}).cantidad_ordenes || preview.cantidad_ordenes || 0, 10);
+            : parseInt(preview.cantidad_ordenes, 10) || parseInt((preview.total_general || {}).cantidad_ordenes || 0, 10);
 
         html += '<div class="alert alert-secondary py-2 mb-2">';
         html += '<strong>Ingreso tótem (sistema):</strong> $' + formatearMonto(totalIngreso);
-        html += ' · <strong>Órdenes:</strong> ' + cantOrdenes;
+        html += ' · <strong>Cobros en tótem (no cancelados):</strong> ' + cantOrdenes;
+        if (cantCanceladas > 0) {
+            html += ' · <span class="text-muted">Excluidas ' + cantCanceladas + ' cancelada(s) en Waitry</span>';
+        }
+        if (cantAnuladasDesc > 0) {
+            html += ' · <span class="text-muted">Excluidas ' + cantAnuladasDesc
+                + ' anulada(s) por descuento 100 % (neto $0)</span>';
+        }
         html += '</div>';
 
-        if (preview.hay_discrepancias) {
-            html += '<div class="alert alert-warning py-2 mb-2">';
-            html += 'Hay ' + parseInt(preview.cantidad_discrepancias || 0, 10)
-                + ' discrepancia(s) para revisar en auditoría del día';
-            var huecos = parseInt(preview.cantidad_huecos_secuencia || 0, 10);
-            if (huecos > 0) {
-                html += ' (incluye ' + huecos + ' hueco(s) en secuencia Waitry; no se consultan al cerrar la jornada)';
-            } else {
-                html += ' (órdenes Waitry vs ERP)';
+        var diag = preview.diagnostico_waitry || null;
+        if (diag) {
+            var ordTramo = parseInt(diag.ordenes_waitry_en_tramo, 10) || 0;
+            var conIngreso = parseInt(diag.lineas_con_ingreso_totem, 10) || 0;
+            var totalResumen = Number(diag.total_ingreso_resumen || 0);
+            if (ordTramo > 0 && (totalResumen <= 0.0001 || conIngreso <= 0)) {
+                html += '<div class="alert alert-warning py-2 mb-2 small">';
+                html += 'Waitry devolvió ' + ordTramo + ' orden(es) en el tramo, pero ninguna se contó como cobro en tótem '
+                    + '(revisar medio de pago, ventana operativa o waitry_table_id del tótem).';
+                html += '</div>';
+            } else if (ordTramo <= 0 && totalResumen <= 0.0001) {
+                html += '<div class="alert alert-warning py-2 mb-2 small">';
+                html += 'No hay órdenes Waitry nuevas en el tramo desde el último cierre. Si hubo ventas en el tótem, use '
+                    + '«Actualizar lectura Waitry» después de que se registren en Waitry.';
+                html += '</div>';
             }
-            html += '.';
-            html += '</div>';
         }
 
         if (preview.informe_z_cargado && preview.informe_z_en) {
@@ -584,7 +719,8 @@
         html += '<div id="preview-informe-z-tablas">';
         html += construirHtmlTablasInformeZ(preview.totems || [], 'preview');
         html += '</div>';
-        html += '<p class="text-muted mb-0 mt-2 small">Los totales Waitry se consultan una sola vez aquí. Al cerrar la jornada solo se guardan el Informe Z y el último ticket Waitry (sin volver a consultar Waitry).</p>';
+        html += '<p class="text-muted mb-0 mt-2 small">Los totales del sistema salen de la carga inicial o de «Actualizar lectura Waitry». '
+            + 'Al cerrar la jornada se congela el último ticket mostrado arriba y no se vuelve a consultar Waitry.</p>';
 
         contenedor.innerHTML = html;
 
@@ -598,23 +734,26 @@
         if (acciones) {
             acciones.classList.toggle('d-none', (preview.totems || []).length === 0);
         }
+
+        habilitarBotonRefrescoWaitry(true);
     }
 
-    function cargarPreviewCierreTotem() {
+    function cargarPreviewCierreTotem(opciones) {
+        opciones = opciones || {};
         var contenedor = document.getElementById('preview-cierre-totem-waitry');
-        if (!contenedor || !cierreTotemHabilitado || !jornadaAbierta) {
-            return;
+        if (!cierreTotemHabilitado || !jornadaAbierta) {
+            return Promise.resolve(null);
         }
 
         var eid = empresaId();
         var url = urlPreviewCierreTotem(eid);
         if (!url || eid <= 0) {
-            return;
+            return Promise.reject(new Error('Empresa o URL de vista previa inválida.'));
         }
 
-        contenedor.innerHTML = '<div class="text-muted mb-0">'
-            + '<i class="fa fa-spinner fa-spin"></i> Consultando totales Waitry del tótem…'
-            + ' <span class="small">(puede tardar hasta 1 minuto)</span></div>';
+        url += (url.indexOf('?') >= 0 ? '&' : '?') + '_=' + Date.now();
+
+        mostrarCargaPreviewWaitry(true);
 
         var timeoutMs = 90000;
         var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
@@ -624,7 +763,7 @@
             }, timeoutMs)
             : null;
 
-        fetch(url, {
+        return fetch(url, {
             credentials: 'same-origin',
             headers: { Accept: 'application/json' },
             signal: controller ? controller.signal : undefined,
@@ -635,36 +774,102 @@
                 });
             })
             .then(function (res) {
+                if (timeoutId) {
+                    window.clearTimeout(timeoutId);
+                }
                 if (!res.ok || !res.data.ok) {
                     throw new Error(extraerMensajeError(res, 'No se pudieron consultar los totales Waitry.'));
                 }
-                renderPreviewCierreTotem(res.data.preview);
+                var preview = res.data.preview;
+                if (opciones.mapaInformeZPreservar && preview && preview.totems) {
+                    preview.totems = fusionarMontosInformeZEnPlantilla(
+                        preview.totems,
+                        opciones.mapaInformeZPreservar
+                    );
+                }
+                renderPreviewCierreTotem(preview);
+                return preview;
             })
             .catch(function (e) {
+                if (timeoutId) {
+                    window.clearTimeout(timeoutId);
+                }
                 var msg = e && e.name === 'AbortError'
                     ? 'La consulta Waitry superó el tiempo de espera (' + Math.round(timeoutMs / 1000) + ' s).'
                     : (e.message || 'Error al consultar Waitry.');
-                contenedor.innerHTML = '<div class="alert alert-danger py-2 mb-2">'
-                    + escHtml(msg)
-                    + '</div>'
-                    + '<button type="button" class="btn btn-outline-secondary btn-sm" id="btn-reintentar-preview-waitry">'
-                    + 'Reintentar consulta Waitry</button>';
-                var btnRetry = document.getElementById('btn-reintentar-preview-waitry');
-                if (btnRetry) {
-                    btnRetry.addEventListener('click', function () {
-                        cargarPreviewCierreTotem();
-                    });
+                if (contenedor) {
+                    contenedor.classList.remove('d-none');
+                    contenedor.innerHTML = '<div class="alert alert-danger py-2 mb-2">'
+                        + escHtml(msg)
+                        + '</div>'
+                        + '<button type="button" class="btn btn-outline-secondary btn-sm" id="btn-reintentar-preview-waitry">'
+                        + 'Reintentar consulta Waitry</button>';
+                    var btnRetry = document.getElementById('btn-reintentar-preview-waitry');
+                    if (btnRetry) {
+                        btnRetry.addEventListener('click', function () {
+                            cargarPreviewCierreTotem();
+                        });
+                    }
                 }
+                throw e;
             })
             .finally(function () {
                 if (timeoutId) {
                     window.clearTimeout(timeoutId);
                 }
+                mostrarCargaPreviewWaitry(false);
+            });
+    }
+
+    function refrescarLecturaWaitryAntesCierre() {
+        if (!cierreTotemHabilitado || !jornadaAbierta) {
+            return;
+        }
+        var msg = '¿Actualizar la lectura Waitry?\n\n'
+            + '• Se consultará de nuevo el tótem (puede tardar hasta 1 minuto).\n'
+            + '• Se actualizarán los totales del sistema (columna Sistema).\n'
+            + '• Al cerrar la jornada se congelará el nuevo último ticket Waitry.\n'
+            + '• Los montos del Informe Z que ya cargó en pantalla se conservan.\n\n'
+            + 'Al confirmar el cierre del día no se vuelve a consultar Waitry.';
+        if (!window.confirm(msg)) {
+            return;
+        }
+
+        var tablasEl = document.getElementById('preview-informe-z-tablas');
+        var preservar = null;
+        if (tablasEl) {
+            var payload = recolectarPayloadInformeZDesdeContenedor(
+                tablasEl,
+                estadoPreviewInformeZ.totems,
+                estadoPreviewInformeZ.jornadaId
+            );
+            preservar = mapaMontosInformeZPreservar(payload.totems);
+        }
+
+        var btnRefresco = document.getElementById('btn-refrescar-lectura-waitry-z');
+        if (btnRefresco) {
+            btnRefresco.disabled = true;
+        }
+
+        cargarPreviewCierreTotem({ mapaInformeZPreservar: preservar })
+            .then(function () {
+                alertar('Lectura Waitry actualizada. Revise los totales Sistema y el último ticket antes de cerrar la jornada.', false);
+            })
+            .catch(function (e) {
+                alertar(e.message || 'No se pudo actualizar la lectura Waitry.', true);
+            })
+            .finally(function () {
+                habilitarBotonRefrescoWaitry(!!estadoPreviewInformeZ.snapshot);
             });
     }
 
     if (cierreTotemHabilitado && jornadaAbierta) {
         cargarPreviewCierreTotem();
+
+        var btnRefrescoWaitry = document.getElementById('btn-refrescar-lectura-waitry-z');
+        if (btnRefrescoWaitry) {
+            btnRefrescoWaitry.addEventListener('click', refrescarLecturaWaitryAntesCierre);
+        }
 
         var btnGuardarPreview = document.getElementById('btn-guardar-informe-z-preview');
         if (btnGuardarPreview) {
@@ -933,9 +1138,77 @@
         });
     }
 
+    function enviarCierreJornada(bodyCerrar) {
+        postJson(apiCerrar, bodyCerrar).then(function (res) {
+            if (res.ok && res.data.ok) {
+                var msg = res.data.mensaje || 'Jornada cerrada.';
+                var ct = res.data.jornada && res.data.jornada.cierre_totem;
+                var jornadaId = res.data.jornada && res.data.jornada.id;
+
+                if (ct) {
+                    if (ct.cantidad_lineas) {
+                        msg += ' Órdenes Waitry: ' + ct.cantidad_lineas + '.';
+                    }
+                    if (ct.total_ingreso_totem != null && ct.total_ingreso_totem > 0) {
+                        msg += ' Ingreso tótem: $' + Number(ct.total_ingreso_totem).toFixed(2) + '.';
+                    }
+                }
+
+                alertar(msg, false);
+
+                var informeZYaCargado = res.data.jornada && res.data.jornada.informe_z_cargado;
+
+                if (!cierreTotemHabilitado || jornadaId <= 0) {
+                    window.location.reload();
+                    return;
+                }
+
+                if (!informeZYaCargado) {
+                    finalizarUiTrasCierreJornada(jornadaId, {
+                        abrirPdf: false,
+                        informeZPendiente: true,
+                    });
+                    return;
+                }
+
+                finalizarUiTrasCierreJornada(jornadaId, { abrirPdf: !!ct });
+                return;
+            }
+            alertar(extraerMensajeError(res, 'No se pudo cerrar la jornada.'), true);
+            mostrarCierreJornadaEnProgreso(false);
+        }).catch(function () {
+            alertar('Error de comunicación al cerrar la jornada (sin respuesta del servidor).', true);
+            mostrarCierreJornadaEnProgreso(false);
+        });
+    }
+
+    function validarCierreTotemAntesDeCerrar() {
+        if (!cierreTotemHabilitado) {
+            return null;
+        }
+        if (waitryPreviewCargaEnCurso) {
+            return 'Espere a que termine la lectura Waitry antes de cerrar la jornada.';
+        }
+        if (!estadoPreviewInformeZ.snapshot) {
+            return 'Debe cargar la vista previa del cierre tótem (se actualiza al abrir la pantalla o con «Actualizar consulta Waitry»). '
+                + 'El cierre de jornada no vuelve a consultar Waitry: la grabación usa ese snapshot.';
+        }
+        var informeZTotems = recolectarInformeZPreviewParaCierre();
+        if (!informeZTotems || informeZTotems.length === 0) {
+            return 'Complete y valide los montos del Informe Z por tótem y medio de pago (columnas Sistema e Informe Z) antes de cerrar la jornada.';
+        }
+        return null;
+    }
+
     if (puedeCerrar && btnCerrar) {
         btnCerrar.addEventListener('click', function () {
             if (!window.confirm('¿Confirma el cierre de la jornada? No podrá facturar hasta abrir una nueva.')) {
+                return;
+            }
+
+            var errTotem = validarCierreTotemAntesDeCerrar();
+            if (errTotem) {
+                alertar(errTotem, true);
                 return;
             }
 
@@ -954,47 +1227,7 @@
                 bodyCerrar.cierre_totem_snapshot = estadoPreviewInformeZ.snapshot;
             }
 
-            postJson(apiCerrar, bodyCerrar).then(function (res) {
-                if (res.ok && res.data.ok) {
-                    var msg = res.data.mensaje || 'Jornada cerrada.';
-                    var ct = res.data.jornada && res.data.jornada.cierre_totem;
-                    var jornadaId = res.data.jornada && res.data.jornada.id;
-
-                    if (ct) {
-                        if (ct.cantidad_lineas) {
-                            msg += ' Órdenes Waitry: ' + ct.cantidad_lineas + '.';
-                        }
-                        if (ct.total_ingreso_totem != null && ct.total_ingreso_totem > 0) {
-                            msg += ' Ingreso tótem: $' + Number(ct.total_ingreso_totem).toFixed(2) + '.';
-                        }
-                    }
-
-                    alertar(msg, false);
-
-                    var informeZYaCargado = res.data.jornada && res.data.jornada.informe_z_cargado;
-
-                    if (!cierreTotemHabilitado || jornadaId <= 0) {
-                        window.location.reload();
-                        return;
-                    }
-
-                    if (!informeZYaCargado) {
-                        finalizarUiTrasCierreJornada(jornadaId, {
-                            abrirPdf: false,
-                            informeZPendiente: true,
-                        });
-                        return;
-                    }
-
-                    finalizarUiTrasCierreJornada(jornadaId, { abrirPdf: !!ct });
-                    return;
-                }
-                alertar(extraerMensajeError(res, 'No se pudo cerrar la jornada.'), true);
-                mostrarCierreJornadaEnProgreso(false);
-            }).catch(function () {
-                alertar('Error de comunicación al cerrar la jornada (sin respuesta del servidor).', true);
-                mostrarCierreJornadaEnProgreso(false);
-            });
+            enviarCierreJornada(bodyCerrar);
         });
     }
 

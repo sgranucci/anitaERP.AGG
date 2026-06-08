@@ -34,6 +34,8 @@ use App\Services\Ordenventa\OrdenventaService;
 use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Localidad;
 use App\Models\Configuracion\Moneda;
+use App\Models\Caja\Cobranza;
+use App\Models\Caja\Caja_Movimiento;
 use App\Models\Caja\Caja_Movimiento_Estado;
 use App\Models\Caja\Cobranza_Estado;
 use App\Models\Ventas\Venta;
@@ -1556,6 +1558,21 @@ class CobranzaService
 		$venta = $payload['venta'];
 		$venta->loadMissing(['clientes', 'puntoventas']);
 
+		$cobranzaExistente = Cobranza::query()
+			->where('venta_id', (int) $venta->id)
+			->first();
+		if ($cobranzaExistente) {
+			$cajaMovimientoId = (int) (Caja_Movimiento::query()
+				->where('cobranza_id', $cobranzaExistente->id)
+				->orderByDesc('id')
+				->value('id') ?? 0);
+
+			return [
+				'cobranza_id' => (int) $cobranzaExistente->id,
+				'caja_movimiento_id' => $cajaMovimientoId,
+			];
+		}
+
 		session(['empresa_id' => $payload['empresa_id']]);
 
 		$montoAplicado = abs((float) $venta->total);
@@ -1606,7 +1623,10 @@ class CobranzaService
 			(string) ($venta->codigo ?? ''),
 		);
 
-		DB::beginTransaction();
+		$transaccionExterna = DB::transactionLevel() > 0;
+		if (! $transaccionExterna) {
+			DB::beginTransaction();
+		}
 		try {
 			$cobranza = $this->cobranzaRepository->create($data);
 			if (! $cobranza || $cobranza === 'Error') {
@@ -1616,19 +1636,23 @@ class CobranzaService
 			$request = new Request($data);
 			self::agregaGastronomia($data, $cobranza, $request);
 
-			$cajaMovimientoId = (int) (\App\Models\Caja\Caja_Movimiento::query()
+			$cajaMovimientoId = (int) (Caja_Movimiento::query()
 				->where('cobranza_id', $cobranza->id)
 				->orderByDesc('id')
 				->value('id') ?? 0);
 
-			DB::commit();
+			if (! $transaccionExterna) {
+				DB::commit();
+			}
 
 			return [
 				'cobranza_id' => (int) $cobranza->id,
 				'caja_movimiento_id' => $cajaMovimientoId,
 			];
 		} catch (\Throwable $e) {
-			DB::rollBack();
+			if (! $transaccionExterna) {
+				DB::rollBack();
+			}
 			throw $e;
 		}
 	}

@@ -87,19 +87,13 @@
                 </div>
             </div>
 
-            <div class="form-group row">
-                <label for="empresa_id" class="col-lg-4 control-label requerido">Empresa</label>
-                <div class="col-lg-8">
-                    <select name="empresa_id" id="empresa_id" class="form-control" required {{ $soloLectura ? 'disabled' : '' }}>
-                        <option value="">Seleccione…</option>
-                        @foreach ($empresa_query as $empresa)
-                            <option value="{{ $empresa->id }}" {{ (int) old('empresa_id', (isset($data) && $data) ? $data->empresa_id : '') === (int) $empresa->id ? 'selected' : '' }}>
-                                {{ $empresa->nombre }}
-                            </option>
-                        @endforeach
-                    </select>
-                </div>
-            </div>
+            @include('includes.form-empresa-asignada', [
+                'empresa_query' => $empresa_query,
+                'empresa_id' => (isset($data) && $data) ? $data->empresa_id : null,
+                'solo_lectura' => $soloLectura,
+                'col_label' => 'col-lg-4',
+                'col_input' => 'col-lg-8',
+            ])
 
             <div class="form-group row">
                 <label for="solicitante_show" class="col-lg-4 control-label">Solicitante</label>

@@ -2,8 +2,10 @@
 
 namespace App\Imports\Compras;
 
+use App\Models\Compras\Listaprecio_Proveedor;
 use App\Repositories\Compras\Listaprecio_Proveedor_ArticuloRepositoryInterface;
 use App\Repositories\Stock\ArticuloRepositoryInterface;
+use App\Support\Compras\ArticuloProveedorCodigoSyncSupport;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\ToCollection;
 
@@ -56,15 +58,27 @@ class Listaprecio_ProveedorArticuloImport implements ToCollection
                 continue;
             }
 
+            $codigo = $codProv !== '' ? $codProv : $sku;
             $this->articuloRepo->createRow([
                 'listaprecio_proveedor_id' => $this->listaprecioProveedorId,
                 'articulo_id' => $art->id,
                 'precio' => $precio,
                 'descuento' => min(100, max(0, $descuento)),
-                'articulo_proveedor' => $codProv !== '' ? $codProv : $sku,
+                'codigo_articulo_proveedor' => $codigo,
                 'fechavigencia' => $this->fechavigencia,
                 'usuarioultcambio_id' => $this->usuarioId,
             ]);
+
+            $lista = Listaprecio_Proveedor::query()->find($this->listaprecioProveedorId);
+            if ($lista && $lista->proveedor_id) {
+                ArticuloProveedorCodigoSyncSupport::desdeLista(
+                    (int) $art->id,
+                    (int) $lista->proveedor_id,
+                    $codigo,
+                    $this->listaprecioProveedorId
+                );
+            }
+
             $this->importados++;
         }
     }

@@ -14,6 +14,13 @@
         max-height: 360px;
         overflow: auto;
     }
+    .informe-gerente-tabla-top10 {
+        max-height: none;
+        overflow: visible;
+    }
+    .informe-gerente-chart-wrap--bar {
+        height: 360px;
+    }
 </style>
 <script src="{{ asset('assets/lte/plugins/chart.js/Chart.min.js') }}" type="text/javascript"></script>
 <script>
@@ -53,7 +60,7 @@
                         <div class="col-lg-6 mb-3">
                             <div class="card card-outline card-info h-100">
                                 <div class="card-header py-2"><strong>Top 10 artículos vendidos — cantidad</strong></div>
-                                <div class="card-body p-0 informe-gerente-tabla-scroll">
+                                <div class="card-body p-0 informe-gerente-tabla-top10">
                                     @include('ventas.gastronomia.informe_gerente.partials.tabla_top10', ['filas' => $informe['top10_cantidad'], 'orden' => 'cantidad'])
                                 </div>
                             </div>
@@ -61,8 +68,36 @@
                         <div class="col-lg-6 mb-3">
                             <div class="card card-outline card-info h-100">
                                 <div class="card-header py-2"><strong>Top 10 artículos vendidos — valor</strong></div>
-                                <div class="card-body p-0 informe-gerente-tabla-scroll">
+                                <div class="card-body p-0 informe-gerente-tabla-top10">
                                     @include('ventas.gastronomia.informe_gerente.partials.tabla_top10', ['filas' => $informe['top10_valor'], 'orden' => 'importe'])
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-lg-6 mb-3">
+                            <div class="card card-outline card-info h-100">
+                                <div class="card-header py-2">
+                                    <strong>Top 10 artículos vendidos — cantidad (día)</strong>
+                                </div>
+                                <div class="card-body">
+                                    <div class="informe-gerente-chart-wrap informe-gerente-chart-wrap--bar">
+                                        <canvas id="chart-articulos-dia"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-6 mb-3">
+                            <div class="card card-outline card-info h-100">
+                                <div class="card-header py-2">
+                                    <strong>Top 10 artículos vendidos — cantidad (mes)</strong>
+                                    <span class="float-right small text-muted">{{ $informe['mes_jornada_label'] ?? '' }}</span>
+                                </div>
+                                <div class="card-body">
+                                    <div class="informe-gerente-chart-wrap informe-gerente-chart-wrap--bar">
+                                        <canvas id="chart-articulos-mes"></canvas>
+                                    </div>
                                 </div>
                             </div>
                         </div>

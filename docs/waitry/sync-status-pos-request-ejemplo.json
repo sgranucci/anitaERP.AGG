@@ -2,6 +2,7 @@
     "order_id": 11313,
     "event": "accepted",
     "paid": true,
+    "totalPaid": 5.16,
     "payment": {
         "total_fee": {
             "amount": 5.16,

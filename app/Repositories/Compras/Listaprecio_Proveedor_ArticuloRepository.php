@@ -2,7 +2,9 @@
 
 namespace App\Repositories\Compras;
 
+use App\Models\Compras\Listaprecio_Proveedor;
 use App\Models\Compras\Listaprecio_Proveedor_Articulo;
+use App\Support\Compras\ArticuloProveedorCodigoSyncSupport;
 
 class Listaprecio_Proveedor_ArticuloRepository implements Listaprecio_Proveedor_ArticuloRepositoryInterface
 {
@@ -69,7 +71,7 @@ class Listaprecio_Proveedor_ArticuloRepository implements Listaprecio_Proveedor_
                 'articulo_id' => $articulo_id,
                 'precio' => $precio,
                 'descuento' => (float) ($data['descuentos'][$i] ?? 0),
-                'articulo_proveedor' => substr((string) ($data['articulo_proveedores'][$i] ?? ''), 0, 100),
+                'codigo_articulo_proveedor' => substr((string) ($data['codigos_articulo_proveedor'][$i] ?? ''), 0, 100),
                 'fechavigencia' => $fechavigencia,
                 'usuarioultcambio_id' => $usuario_id,
             ];
@@ -80,6 +82,16 @@ class Listaprecio_Proveedor_ArticuloRepository implements Listaprecio_Proveedor_
                     ->update($payload);
             } else {
                 $this->model->create($payload);
+            }
+
+            $lista = Listaprecio_Proveedor::query()->find($listaprecio_proveedor_id);
+            if ($lista && $lista->proveedor_id) {
+                ArticuloProveedorCodigoSyncSupport::desdeLista(
+                    (int) $articulo_id,
+                    (int) $lista->proveedor_id,
+                    $payload['codigo_articulo_proveedor'] ?: null,
+                    (int) $listaprecio_proveedor_id
+                );
             }
         }
     }

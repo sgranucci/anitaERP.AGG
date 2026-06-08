@@ -10,7 +10,7 @@ interface MozoGastronomiaRepositoryInterface extends RepositoryInterface
 
     public function existeRegistro(): bool;
 
-    public function consultaMozo(string $consulta, int $empresaId): string;
+    public function consultaMozo(string $consulta, int $empresaId, bool $filtrarEmpresasAsignadas = false): string;
 
-    public function findPorCodigo(string $codigo, int $empresaId): ?MozoGastronomia;
+    public function findPorCodigo(string $codigo, int $empresaId, bool $filtrarEmpresasAsignadas = false): ?MozoGastronomia;
 }

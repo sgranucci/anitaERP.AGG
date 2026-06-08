@@ -1,0 +1,596 @@
+(function () {
+    'use strict';
+
+    function fmt(n) {
+        if (n === null || n === undefined || Number.isNaN(Number(n))) return '—';
+        const num = Number(n);
+        if (Math.abs(num - Math.trunc(num)) < 1e-9) return String(Math.trunc(num));
+        return num.toFixed(6).replace(/0+$/, '').replace(/\.$/, '');
+    }
+
+    function carpetaBase() {
+        return typeof window.carpetaBase !== 'undefined' ? window.carpetaBase : '';
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const tbody = document.getElementById('tbody-recuento-items');
+        if (!tbody) return;
+
+        const saldoUrl = (document.getElementById('recuento-saldo-articulo-url') || {}).value || '';
+        const aleatorioUrl = (document.getElementById('recuento-aleatorio-url') || {}).value || '';
+        const csrf = (document.getElementById('recuento-csrf') || {}).value || '';
+        const selDeposito = document.getElementById('recuento_deposito_id')
+            || document.querySelector('.tm-deposito-campo .deposito_id');
+        const template = document.getElementById('template-recuento-item-row');
+
+        function depositoId() {
+            return selDeposito ? parseInt(selDeposito.value, 10) || 0 : 0;
+        }
+
+        function actualizarLinkArticulo(tr, articuloId) {
+            const link = tr.querySelector('.btn-link-articulo') || tr.querySelector('a[href*="editar_articulo"]');
+            if (!link) return;
+            if (articuloId > 0) {
+                const urlFn = typeof urlEditarArticuloConsulta === 'function'
+                    ? urlEditarArticuloConsulta
+                    : function (id) { return carpetaBase() + '/stock/articulo/' + id + '/editar?origen=modal_consulta&vista=consulta'; };
+                link.href = urlFn(articuloId);
+                link.classList.remove('d-none');
+            } else {
+                link.classList.add('d-none');
+            }
+        }
+
+        function cargarSaldo(tr, articuloId) {
+            const depId = depositoId();
+            if (!articuloId || !depId || !saldoUrl) return;
+            fetch(saldoUrl + '?articulo_id=' + articuloId + '&deposito_id=' + depId, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data.error) return;
+                    const saldo = data.saldo;
+                    const inp = tr.querySelector('.saldo_sistema_input');
+                    const span = tr.querySelector('.saldo-deposito');
+                    if (inp) inp.value = saldo;
+                    if (span) span.textContent = fmt(saldo);
+                    pintarDiferencia(tr);
+                })
+                .catch(function () {});
+        }
+
+        function pintarDiferencia(tr) {
+            const saldo = parseFloat((tr.querySelector('.saldo_sistema_input') || {}).value || 0);
+            const contado = parseFloat((tr.querySelector('.input-cantidad-contada') || {}).value || 0);
+            const td = tr.querySelector('.diferencia-linea');
+            if (!td || Number.isNaN(saldo) || Number.isNaN(contado)) return;
+            const dif = contado - saldo;
+            td.textContent = fmt(dif);
+            td.classList.toggle('text-danger', Math.abs(dif) > 1e-9);
+        }
+
+        function limpiarFilaArticulo(tr) {
+            if (!tr) return;
+            (tr.querySelector('.recuento_item_id') || {}).value = '';
+            (tr.querySelector('.articulo_id') || {}).value = '';
+            (tr.querySelector('.codigoarticulo') || {}).value = '';
+            (tr.querySelector('.descripcionarticulo') || {}).value = '';
+            (tr.querySelector('.unidadmedida_id') || {}).value = '';
+            (tr.querySelector('.saldo_sistema_input') || {}).value = '';
+            (tr.querySelector('.input-cantidad-contada') || {}).value = '';
+            const um = tr.querySelector('.unidad-medida-label');
+            if (um) um.textContent = '—';
+            const spanSaldo = tr.querySelector('.saldo-deposito');
+            if (spanSaldo) spanSaldo.textContent = '—';
+            const td = tr.querySelector('.diferencia-linea');
+            if (td) {
+                td.textContent = '—';
+                td.classList.remove('text-danger');
+            }
+            actualizarLinkArticulo(tr, 0);
+            if (typeof window.actualizarBotonMovimientosRecuentoFila === 'function') {
+                window.actualizarBotonMovimientosRecuentoFila(tr);
+            }
+        }
+
+        function filaConArticuloId(articuloId, excluirTr) {
+            const id = parseInt(articuloId, 10);
+            if (!id) return null;
+            const rows = tbody.querySelectorAll('tr.recuento-item-row');
+            for (let i = 0; i < rows.length; i++) {
+                const tr = rows[i];
+                if (excluirTr && tr === excluirTr) continue;
+                const aid = parseInt((tr.querySelector('.articulo_id') || {}).value, 10) || 0;
+                if (aid === id) return tr;
+            }
+            return null;
+        }
+
+        function rechazarArticuloDuplicado(tr, articuloId, etiqueta) {
+            const existente = filaConArticuloId(articuloId, tr);
+            if (!existente) return false;
+
+            limpiarFilaArticulo(tr);
+            avisarArticuloDuplicadoEnGrilla(existente, etiqueta || articuloId);
+            return true;
+        }
+
+        function avisarArticuloDuplicadoEnGrilla(filaExistente, etiqueta) {
+            const skuExistente = (filaExistente.querySelector('.codigoarticulo') || {}).value || '';
+            const ref = etiqueta || skuExistente || '';
+            const msg = 'El artículo «' + ref + '» ya está cargado en otra línea del recuento. '
+                + 'Cada artículo solo puede figurar una vez; modifique la cantidad contada en la línea existente.';
+
+            if (typeof Biblioteca !== 'undefined' && typeof Biblioteca.notificaciones === 'function') {
+                Biblioteca.notificaciones(msg, 'Recuento', 'warning');
+            } else {
+                alert(msg);
+            }
+
+            filaExistente.classList.add('recuento-linea-duplicada-aviso');
+            setTimeout(function () {
+                filaExistente.classList.remove('recuento-linea-duplicada-aviso');
+            }, 2500);
+
+            enfocarSkuFila(filaExistente);
+            const cant = filaExistente.querySelector('.input-cantidad-contada');
+            if (cant) {
+                setTimeout(function () {
+                    cant.focus();
+                    if (typeof cant.select === 'function') cant.select();
+                }, 120);
+            }
+        }
+
+        function agregarFila(data) {
+            if (!template) return null;
+            if (data && data.articulo_id) {
+                const existente = filaConArticuloId(data.articulo_id, null);
+                if (existente) {
+                    avisarArticuloDuplicadoEnGrilla(existente, data.sku || data.descripcion || data.articulo_id);
+                    return existente;
+                }
+            }
+            const tr = template.content.firstElementChild.cloneNode(true);
+            tbody.appendChild(tr);
+            if (data) {
+                (tr.querySelector('.recuento_item_id') || {}).value = data.recuento_item_id || '';
+                (tr.querySelector('.articulo_id') || {}).value = data.articulo_id || '';
+                (tr.querySelector('.codigoarticulo') || {}).value = data.sku || '';
+                (tr.querySelector('.descripcionarticulo') || {}).value = data.detalle || data.descripcion || '';
+                (tr.querySelector('.unidadmedida_id') || {}).value = data.unidadmedida_id || '';
+                (tr.querySelector('.saldo_sistema_input') || {}).value = data.saldo_sistema ?? '';
+                (tr.querySelector('.input-cantidad-contada') || {}).value = data.cantidad_contada ?? 0;
+                const um = tr.querySelector('.unidad-medida-label');
+                if (um) um.textContent = data.unidadmedida || '—';
+                const spanSaldo = tr.querySelector('.saldo-deposito');
+                if (spanSaldo) spanSaldo.textContent = fmt(data.saldo_sistema);
+                actualizarLinkArticulo(tr, parseInt(data.articulo_id, 10) || 0);
+            }
+            pintarDiferencia(tr);
+            if (typeof window.actualizarBotonMovimientosRecuentoFila === 'function') {
+                window.actualizarBotonMovimientosRecuentoFila(tr);
+            }
+            return tr;
+        }
+
+        function enfocarSkuFila(tr) {
+            if (!tr) return;
+            const sku = tr.querySelector('.codigoarticulo');
+            if (!sku) return;
+            setTimeout(function () {
+                sku.focus();
+                if (typeof sku.select === 'function') {
+                    sku.select();
+                }
+            }, 0);
+        }
+
+        function enfocarPrimerSkuRecuento() {
+            const tr = tbody.querySelector('tr.recuento-item-row');
+            enfocarSkuFila(tr);
+        }
+
+        function empresaRecuentoDefinida() {
+            const emp = document.getElementById('empresa_id');
+            if (!emp) {
+                return false;
+            }
+            return parseInt(String(emp.value || '').trim(), 10) > 0;
+        }
+
+        function enfocarDepositoRecuento() {
+            const inp = document.getElementById('recuento_deposito_id_codigo')
+                || document.querySelector('#tm_deposito_recuento .codigodeposito');
+            if (!inp || inp.readOnly || inp.disabled) {
+                return;
+            }
+            setTimeout(function () {
+                inp.focus();
+                if (typeof inp.select === 'function') {
+                    inp.select();
+                }
+            }, 150);
+        }
+
+        function aplicarFocoInicialRecuento() {
+            if (!empresaRecuentoDefinida()) {
+                return;
+            }
+            if (depositoId() > 0) {
+                enfocarPrimerSkuRecuento();
+                return;
+            }
+            enfocarDepositoRecuento();
+        }
+
+        function validarSkuRecuento(input) {
+            if (!input || !input.classList.contains('codigoarticulo')) {
+                return;
+            }
+            if (!input.closest('#tabla-recuento-items')) {
+                return;
+            }
+            if (typeof $ !== 'undefined') {
+                $(input).trigger('change');
+            } else {
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        }
+
+        function agregarFilaNuevaConFocoSku() {
+            const tr = agregarFila(null);
+            enfocarSkuFila(tr);
+            return tr;
+        }
+
+        tbody.querySelectorAll('tr.recuento-item-row').forEach(function (tr) {
+            pintarDiferencia(tr);
+        });
+
+        document.getElementById('btn-agregar-item-recuento')?.addEventListener('click', function () {
+            agregarFilaNuevaConFocoSku();
+        });
+
+        tbody.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter' && e.which !== 13) return;
+
+            if (e.target.classList.contains('codigoarticulo')) {
+                e.preventDefault();
+                e.stopPropagation();
+                validarSkuRecuento(e.target);
+                return;
+            }
+
+            if (!e.target.classList.contains('input-cantidad-contada')) return;
+
+            const tr = e.target.closest('tr');
+            const articuloId = parseInt((tr && tr.querySelector('.articulo_id') || {}).value, 10) || 0;
+            if (!articuloId) return;
+
+            e.preventDefault();
+            e.stopPropagation();
+            agregarFilaNuevaConFocoSku();
+        });
+
+        tbody.addEventListener('click', function (e) {
+            if (e.target.closest('.btn-eliminar-item')) {
+                const rows = tbody.querySelectorAll('tr.recuento-item-row');
+                if (rows.length <= 1) return;
+                e.target.closest('tr').remove();
+            }
+        });
+
+        tbody.addEventListener('input', function (e) {
+            if (e.target.classList.contains('input-cantidad-contada')) {
+                pintarDiferencia(e.target.closest('tr'));
+            }
+        });
+
+        if (selDeposito && typeof $ !== 'undefined') {
+            $(selDeposito).on('change.recuentoDep', function () {
+                tbody.querySelectorAll('tr.recuento-item-row').forEach(function (tr) {
+                    const aid = parseInt((tr.querySelector('.articulo_id') || {}).value, 10) || 0;
+                    if (aid) cargarSaldo(tr, aid);
+                });
+            });
+        }
+
+        window.enfocarPrimerSkuRecuento = enfocarPrimerSkuRecuento;
+        window.onDepositoAplicadoEnFormulario = function (data, $ctx) {
+            if (!document.getElementById('form-recuento') || !$ctx || !$ctx.length) {
+                return;
+            }
+            if (!$ctx.closest('#form-recuento').length) {
+                return;
+            }
+            var delay = $('#consultadepositoModal').hasClass('show') ? 280 : 80;
+            setTimeout(enfocarPrimerSkuRecuento, delay);
+        };
+
+        function aplicarArticuloEnFila(tr, art) {
+            (tr.querySelector('.articulo_id') || {}).value = art.id;
+            (tr.querySelector('.codigoarticulo') || {}).value = art.sku || '';
+            (tr.querySelector('.descripcionarticulo') || {}).value = art.descripcion || '';
+            (tr.querySelector('.unidadmedida_id') || {}).value = art.unidadmedida_id || '';
+            const um = tr.querySelector('.unidad-medida-label');
+            if (um) um.textContent = art.unidadmedida_abreviatura || art.um || '—';
+            actualizarLinkArticulo(tr, parseInt(art.id, 10));
+            cargarSaldo(tr, parseInt(art.id, 10));
+            if (typeof window.actualizarBotonMovimientosRecuentoFila === 'function') {
+                window.actualizarBotonMovimientosRecuentoFila(tr);
+            }
+        }
+
+        window.onArticuloSeleccionado = function (dataArticulo, ctx) {
+            if (!ctx || !ctx.row) return;
+            const tr = ctx.row.jquery ? ctx.row[0] : ctx.row;
+            if (!tr || !tr.closest('#tabla-recuento-items')) return;
+            const artId = parseInt(dataArticulo.id, 10) || 0;
+            if (artId && rechazarArticuloDuplicado(tr, artId, dataArticulo.sku || dataArticulo.descripcion)) {
+                return;
+            }
+            aplicarArticuloEnFila(tr, {
+                id: dataArticulo.id,
+                sku: dataArticulo.sku,
+                descripcion: dataArticulo.descripcion,
+                unidadmedida_id: dataArticulo.unidadmedida_id,
+                unidadmedida_abreviatura: dataArticulo.unidadesdemedidas ? dataArticulo.unidadesdemedidas.abreviatura : ''
+            });
+        };
+
+        const btnAleatorio = document.getElementById('btn-recuento-aleatorio');
+        if (btnAleatorio && aleatorioUrl) {
+            btnAleatorio.addEventListener('click', function () {
+                const depId = depositoId();
+                const cantidad = parseInt(prompt('¿Cuántos artículos sortear al azar?', '10'), 10);
+                if (!depId || !cantidad || cantidad <= 0) return;
+
+                fetch(aleatorioUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': csrf,
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({ deposito_id: depId, cantidad: cantidad })
+                })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        if (data.error) {
+                            alert(data.error);
+                            return;
+                        }
+                        tbody.innerHTML = '';
+                        (data.lineas || []).forEach(function (ln) { agregarFila(ln); });
+                        if (!data.lineas || !data.lineas.length) agregarFila(null);
+                    })
+                    .catch(function () { alert('No se pudo generar el recuento aleatorio.'); });
+            });
+        }
+
+        function repoblarLineas(lineas) {
+            tbody.innerHTML = '';
+            (lineas || []).forEach(function (ln) { agregarFila(ln); });
+            if (!lineas || !lineas.length) agregarFila(null);
+        }
+
+        const formImportExcel = document.getElementById('form-importar-recuento-excel');
+        if (formImportExcel) {
+            formImportExcel.addEventListener('submit', function (e) {
+                e.preventDefault();
+                const errBox = document.getElementById('importar-recuento-excel-error');
+                const btnSubmit = document.getElementById('btn-importar-recuento-excel-submit');
+                const esPreview = formImportExcel.dataset.preview === '1';
+                const formData = new FormData(formImportExcel);
+
+                if (errBox) {
+                    errBox.classList.add('d-none');
+                    errBox.textContent = '';
+                }
+
+                if (esPreview) {
+                    const depId = depositoId();
+                    if (!depId) {
+                        const msg = 'Seleccione el depósito antes de importar desde Excel.';
+                        if (errBox) {
+                            errBox.textContent = msg;
+                            errBox.classList.remove('d-none');
+                        } else {
+                            alert(msg);
+                        }
+                        return;
+                    }
+                    formData.set('deposito_id', String(depId));
+                }
+
+                if (btnSubmit) btnSubmit.disabled = true;
+
+                fetch(formImportExcel.action, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': csrf,
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    },
+                    body: formData
+                })
+                    .then(function (r) {
+                        return r.json().then(function (data) {
+                            if (!r.ok) {
+                                let msg = data.message || data.mensaje;
+                                if (!msg && data.errors) {
+                                    msg = Object.values(data.errors).flat().join(' ');
+                                }
+                                throw { message: msg || 'Error al importar el archivo.' };
+                            }
+                            return data;
+                        });
+                    })
+                    .then(function (data) {
+                        repoblarLineas(data.lineas || []);
+                        formImportExcel.reset();
+                        $('#modal-importar-recuento-excel').modal('hide');
+                        if (data.preview) {
+                            const tipoInput = document.getElementById('recuento-tipo');
+                            if (tipoInput) tipoInput.value = 'IMPORTADO';
+                        }
+                        if (data.mensaje) {
+                            const alertBox = document.querySelector('.alert-success, .mensaje-flash');
+                            if (typeof window.mostrarMensaje === 'function') {
+                                window.mostrarMensaje(data.mensaje, 'success');
+                            } else {
+                                alert(data.mensaje);
+                            }
+                        }
+                    })
+                    .catch(function (err) {
+                        const msg = (err && (err.message || err.mensaje)) || 'Error al importar el archivo.';
+                        if (errBox) {
+                            errBox.textContent = msg;
+                            errBox.classList.remove('d-none');
+                        } else {
+                            alert(msg);
+                        }
+                    })
+                    .finally(function () {
+                        if (btnSubmit) btnSubmit.disabled = false;
+                    });
+            });
+        }
+
+        function activarSolapa(num) {
+            document.querySelectorAll('.form1, .form2, .form3').forEach(function (el) {
+                el.style.display = 'none';
+            });
+            const panel = document.querySelector('.form' + num);
+            if (panel) panel.style.display = '';
+
+            document.querySelectorAll('#botonform1, #botonform2, #botonform3').forEach(function (b) {
+                b.classList.remove('btn-primary');
+                b.classList.add('btn-info');
+            });
+            const btn = document.getElementById('botonform' + num);
+            if (btn) {
+                btn.classList.remove('btn-info');
+                btn.classList.add('btn-primary');
+            }
+        }
+
+        function validarRecuentoAntesDeEnviar(form) {
+            var resultado = typeof validarCamposObligatoriosFormulario === 'function'
+                ? validarCamposObligatoriosFormulario(form)
+                : { valido: true, primerInvalido: null, cantidadInvalidos: 0 };
+
+            if (!depositoId()) {
+                resultado.valido = false;
+                resultado.cantidadInvalidos = (resultado.cantidadInvalidos || 0) + 1;
+                var depCod = document.getElementById('recuento_deposito_id_codigo')
+                    || form.querySelector('.codigodeposito');
+                if (depCod) {
+                    if (typeof marcarCampoObligatorio === 'function') {
+                        marcarCampoObligatorio(depCod, true);
+                    }
+                    resultado.primerInvalido = depCod;
+                }
+            }
+
+            var filasConArticulo = 0;
+            var idsVistos = {};
+            var filaDuplicada = null;
+            tbody.querySelectorAll('tr.recuento-item-row').forEach(function (tr) {
+                var aid = parseInt((tr.querySelector('.articulo_id') || {}).value, 10) || 0;
+                if (aid <= 0) return;
+                filasConArticulo++;
+                if (idsVistos[aid]) {
+                    resultado.valido = false;
+                    filaDuplicada = filaDuplicada || tr;
+                    var skuInp = tr.querySelector('.codigoarticulo');
+                    if (skuInp && typeof marcarCampoObligatorio === 'function') {
+                        marcarCampoObligatorio(skuInp, true);
+                    }
+                    return;
+                }
+                idsVistos[aid] = tr;
+            });
+            if (filasConArticulo === 0) {
+                resultado.valido = false;
+                resultado.cantidadInvalidos = (resultado.cantidadInvalidos || 0) + 1;
+                if (!resultado.primerInvalido) {
+                    resultado.primerInvalido = tbody.querySelector('.codigoarticulo');
+                }
+            } else if (filaDuplicada) {
+                resultado.valido = false;
+                resultado.cantidadInvalidos = (resultado.cantidadInvalidos || 0) + 1;
+                resultado.articuloDuplicado = true;
+                if (!resultado.primerInvalido) {
+                    resultado.primerInvalido = filaDuplicada.querySelector('.codigoarticulo');
+                }
+            }
+
+            return resultado;
+        }
+
+        const formRecuento = document.getElementById('form-recuento');
+        if (formRecuento) {
+            formRecuento.setAttribute('novalidate', 'novalidate');
+            formRecuento.addEventListener('submit', function (e) {
+                var resultado = validarRecuentoAntesDeEnviar(formRecuento);
+                if (resultado.valido) {
+                    return;
+                }
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                if (typeof mostrarSolapaDelPrimerCampoInvalido === 'function') {
+                    mostrarSolapaDelPrimerCampoInvalido(resultado.primerInvalido);
+                } else {
+                    activarSolapa(1);
+                }
+                var mensajeExtra = '';
+                if (!depositoId()) {
+                    mensajeExtra = ' Valide el dep\u00f3sito (c\u00f3digo + Enter o modal).';
+                } else if (resultado.articuloDuplicado) {
+                    mensajeExtra = ' Hay art\u00edculos repetidos en la grilla. Cada art\u00edculo debe figurar una sola vez.';
+                } else if (resultado.cantidadInvalidos === 1 && resultado.primerInvalido
+                    && resultado.primerInvalido.classList.contains('codigoarticulo')) {
+                    mensajeExtra = ' Agregue al menos un art\u00edculo.';
+                }
+                if (typeof notificarCamposObligatoriosPendientes === 'function') {
+                    notificarCamposObligatoriosPendientes(resultado.primerInvalido, resultado.cantidadInvalidos);
+                    if (mensajeExtra && typeof Biblioteca !== 'undefined') {
+                        Biblioteca.notificaciones(mensajeExtra.trim(), 'Recuento', 'info');
+                    }
+                } else {
+                    alert('Complete los campos obligatorios antes de guardar.' + mensajeExtra);
+                }
+                if (resultado.primerInvalido && resultado.primerInvalido.classList.contains('codigoarticulo')) {
+                    enfocarSkuFila(resultado.primerInvalido.closest('tr'));
+                } else if (resultado.primerInvalido && resultado.primerInvalido.classList.contains('codigodeposito')) {
+                    enfocarDepositoRecuento();
+                } else if (typeof enfocarCampoInvalido === 'function') {
+                    enfocarCampoInvalido(resultado.primerInvalido);
+                }
+            });
+        }
+
+        document.getElementById('botonform1')?.addEventListener('click', function () { activarSolapa(1); });
+        document.getElementById('botonform2')?.addEventListener('click', function () { activarSolapa(2); });
+        document.getElementById('botonform3')?.addEventListener('click', function () { activarSolapa(3); });
+
+        if (typeof activa_eventos_consultaarticulo === 'function') {
+            activa_eventos_consultaarticulo();
+        }
+
+        const empEl = document.getElementById('empresa_id');
+        if (empEl && empEl.tagName === 'SELECT') {
+            empEl.addEventListener('change', function () {
+                if (empresaRecuentoDefinida()) {
+                    enfocarDepositoRecuento();
+                }
+            });
+        }
+
+        aplicarFocoInicialRecuento();
+    });
+})();

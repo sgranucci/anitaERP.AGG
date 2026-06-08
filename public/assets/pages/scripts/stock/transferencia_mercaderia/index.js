@@ -279,6 +279,7 @@
             method: 'POST',
             data: {
                 _token: $('meta[name="csrf-token"]').attr('content'),
+                empresa_id: parseInt($('#empresa_id').val(), 10) || '',
                 deposito_salida_id: depSal,
                 deposito_entrada_id: depEnt,
                 tipotransaccion_stock_id: tipo,
@@ -325,6 +326,18 @@
         });
 
         $('#deposito_entrada_id').on('change', guardarPreferencias);
+
+        $('#empresa_id').on('change', function () {
+            $('.tm-deposito-campo').each(function () {
+                $(this).find('.deposito_id').val('').trigger('change');
+                $(this).find('.codigodeposito').val('');
+                $(this).find('.descripciondeposito').val('');
+            });
+            $('#tm_lista').empty();
+            $('#tm_panel_filtro').hide();
+            setEstado('');
+            actualizarBotonTransferir();
+        });
 
         if (typeof activa_eventos_consultadeposito === 'function') {
             activa_eventos_consultadeposito();

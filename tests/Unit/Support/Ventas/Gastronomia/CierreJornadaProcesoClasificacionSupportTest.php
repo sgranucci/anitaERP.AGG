@@ -44,6 +44,21 @@ class CierreJornadaProcesoClasificacionSupportTest extends TestCase
                 'waitry_order_id' => 10,
                 'total' => 50.0,
                 'waitry_tipo_pago' => 'credit_card',
+                'waitry_payment_gateway' => 'KIOSK MPQR',
+                'paid_waitry' => true,
+                'facturada_erp' => false,
+            ],
+            [
+                'waitry_order_id' => 12,
+                'total' => 80.0,
+                'waitry_tipo_pago' => 'mercadopago',
+                'paid_waitry' => true,
+                'facturada_erp' => false,
+            ],
+            [
+                'waitry_order_id' => 13,
+                'total' => 70.0,
+                'waitry_tipo_pago' => 'credit_card',
                 'paid_waitry' => true,
                 'facturada_erp' => false,
             ],
@@ -68,10 +83,12 @@ class CierreJornadaProcesoClasificacionSupportTest extends TestCase
         $resultado = CierreJornadaProcesoClasificacionSupport::clasificar($movimientos, 1, $totalesAnita);
 
         $this->assertSame(150.0, $resultado['grilla']['qr_sin_facturar']);
-        $this->assertSame(150.0, $resultado['grilla']['cobrado_waitry_sin_facturar']);
+        $this->assertSame(150.0, $resultado['grilla']['waitry_pago_mp']);
+        $this->assertSame(300.0, $resultado['grilla']['cobrado_waitry_sin_facturar']);
         $this->assertSame(50.0, $resultado['grilla']['efectivo_waitry']);
         $this->assertSame(200.0, $resultado['total_facturacion']);
-        $this->assertSame(150.0, $resultado['total_pendiente_facturar']);
+        $this->assertSame(300.0, $resultado['total_pendiente_facturar']);
+        $this->assertSame(4, $resultado['conteos'][CierreJornadaProcesoClasificacionSupport::GRUPO_SIN_FACTURAR_QR]);
         $this->assertCount(5, $resultado['cuadro_filas']);
         $this->assertSame('anita_jornada', $resultado['cuadro_filas'][0]['tipo']);
         $this->assertSame('anita_totem', $resultado['cuadro_filas'][1]['tipo']);

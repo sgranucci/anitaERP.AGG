@@ -239,14 +239,13 @@ Generar órdenes de compra desde requisición
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="form-group row mb-2">
-                                    <label class="col-lg-4 col-form-label requerido">Empresa</label>
+                                    <label class="col-lg-4 col-form-label requerido" for="wz_empresa_id">Empresa</label>
                                     <div class="col-lg-8">
-                                        <select id="wz_empresa_id" class="form-control form-control-sm">
-                                            <option value="">Seleccione…</option>
-                                            @foreach ($empresa_query as $empresa)
-                                                <option value="{{ $empresa->id }}">{{ $empresa->nombre }}</option>
-                                            @endforeach
-                                        </select>
+                                        @include('includes.form-empresa-asignada-control', [
+                                            'empresa_query' => $empresa_query,
+                                            'id' => 'wz_empresa_id',
+                                            'name' => 'wz_empresa_id',
+                                        ])
                                     </div>
                                 </div>
                                 <div class="form-group row mb-2">

@@ -21,6 +21,9 @@ final class WaitryPaymentTypeSupport
 
     public const TIPO_TOTALCOIN = 'totalcoin';
 
+    /** Pago registrado desde sistema externo (pushExternalOrder). */
+    public const TIPO_INTERFACE = 'interface';
+
     /** @var list<string> */
     public const TIPOS_VALIDOS = [
         self::TIPO_CASH,
@@ -28,6 +31,7 @@ final class WaitryPaymentTypeSupport
         self::TIPO_DEBIT_CARD,
         self::TIPO_MERCADOPAGO,
         self::TIPO_TOTALCOIN,
+        self::TIPO_INTERFACE,
     ];
 
     /** @var list<string> */

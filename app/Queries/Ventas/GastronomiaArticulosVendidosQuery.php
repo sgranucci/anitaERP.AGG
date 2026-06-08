@@ -4,19 +4,33 @@ namespace App\Queries\Ventas;
 
 use App\Models\Ventas\JornadaGastronomia;
 use App\Support\Listado\CoincidenciaFlexibleTexto;
+use App\Support\Stock\ArticuloUsoInsumoSupport;
+use App\Support\Stock\RecuentoMovimientosArticuloSupport;
 use App\Support\Ventas\GastronomiaArticulosVendidosListadoFiltros;
+use App\Support\Ventas\GastronomiaVentaComprobanteSignoSupport;
 use App\Support\Ventas\GastronomiaVentaDetalleSupport;
+use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
+/**
+ * Artículos vendidos gastronomía: agrega venta_emision con signo del comprobante (tt.signo).
+ * No usa articulo_movimiento.cantidad (signo de operacionstock / saldo).
+ */
 class GastronomiaArticulosVendidosQuery
 {
-    private const CANTIDAD_EXPR = 'CASE WHEN tt.signo = -1 THEN -ve.cantidad ELSE ve.cantidad END';
+    private static function cantidadExpr(): string
+    {
+        return GastronomiaVentaComprobanteSignoSupport::sqlCantidadLineaVenta();
+    }
 
-    private const IMPORTE_EXPR = 'CASE WHEN tt.signo = -1 THEN -ve.cantidad * ve.precio ELSE ve.cantidad * ve.precio END';
+    private static function importeExpr(): string
+    {
+        return GastronomiaVentaComprobanteSignoSupport::sqlImporteLineaVenta();
+    }
 
     private const DEPOSITO_EXPR = 'COALESCE(am_dep.deposito_id, am_dep_v.deposito_id, ve.deposito_id)';
 
@@ -45,7 +59,7 @@ class GastronomiaArticulosVendidosQuery
 
     /**
      * Top N artículos vendidos en una jornada (líneas facturadas en venta_emision).
-     * No incluye insumos de fórmula (articulo_movimiento con sufijo « — Ing.»).
+     * Excluye artículos con uso «INSUMO GASTRONOMIA» (insumos de fórmula).
      *
      * @return list<array{articulo_id:int,sku:string,descripcion:string,cantidad:float,importe:float}>
      */
@@ -59,6 +73,41 @@ class GastronomiaArticulosVendidosQuery
             return [];
         }
 
+        return $this->topPorRangoJornada($empresaId, $fechaJornada, $fechaJornada, $orden, $limit);
+    }
+
+    /**
+     * Top N artículos vendidos en el mes calendario de la fecha de jornada.
+     *
+     * @return list<array{articulo_id:int,sku:string,descripcion:string,cantidad:float,importe:float}>
+     */
+    public function topPorMes(
+        int $empresaId,
+        string $fechaReferenciaYmd,
+        string $orden = 'cantidad',
+        int $limit = 10,
+    ): array {
+        if ($empresaId <= 0) {
+            return [];
+        }
+
+        $fecha = Carbon::parse($fechaReferenciaYmd);
+        $desde = $fecha->copy()->startOfMonth()->format('Y-m-d');
+        $hasta = $fecha->copy()->endOfMonth()->format('Y-m-d');
+
+        return $this->topPorRangoJornada($empresaId, $desde, $hasta, $orden, $limit);
+    }
+
+    /**
+     * @return list<array{articulo_id:int,sku:string,descripcion:string,cantidad:float,importe:float}>
+     */
+    private function topPorRangoJornada(
+        int $empresaId,
+        string $fechaDesde,
+        string $fechaHasta,
+        string $orden,
+        int $limit,
+    ): array {
         $orderCol = $orden === 'importe' ? 'importe_total' : 'cantidad_total';
 
         $rows = DB::table('venta_emision as ve')
@@ -69,14 +118,19 @@ class GastronomiaArticulosVendidosQuery
             ->join('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
             ->whereNull('v.deleted_at')
             ->where('pv.empresa_id', $empresaId)
-            ->whereDate('v.fechajornada', $fechaJornada)
+            ->whereDate('v.fechajornada', '>=', $fechaDesde)
+            ->whereDate('v.fechajornada', '<=', $fechaHasta);
+
+        $this->aplicarExclusionInsumos($rows);
+
+        $rows = $rows
             ->select([
                 've.articulo_id',
                 'a.sku',
                 'a.descripcion',
             ])
-            ->selectRaw('SUM('.self::CANTIDAD_EXPR.') as cantidad_total')
-            ->selectRaw('SUM('.self::IMPORTE_EXPR.') as importe_total')
+            ->selectRaw('SUM('.self::cantidadExpr().') as cantidad_total')
+            ->selectRaw('SUM('.self::importeExpr().') as importe_total')
             ->groupBy('ve.articulo_id', 'a.sku', 'a.descripcion')
             ->orderByDesc($orderCol)
             ->orderBy('a.sku')
@@ -138,6 +192,8 @@ class GastronomiaArticulosVendidosQuery
 
         $this->aplicarJoinsDeposito($query);
 
+        $this->aplicarExclusionInsumos($query);
+
         $this->aplicarFiltrosEstructurales($query, $filtros);
 
         $valor = trim((string) ($filtros['valor'] ?? ''));
@@ -181,6 +237,8 @@ class GastronomiaArticulosVendidosQuery
 
         $this->aplicarJoinsDeposito($query);
 
+        $this->aplicarExclusionInsumos($query);
+
         $query
             ->select([
                 'v.id as venta_id',
@@ -191,6 +249,7 @@ class GastronomiaArticulosVendidosQuery
                 'v.puntoventa_id',
                 've.deposito_id',
                 'vge.venta_factura_origen_id',
+                'tt.signo as tipotransaccion_signo',
                 'd.codigo as deposito_codigo',
                 'd.nombre as deposito_nombre',
                 'd_ing.codigo as deposito_insumos_codigo',
@@ -198,8 +257,8 @@ class GastronomiaArticulosVendidosQuery
             ])
             ->selectRaw(self::DEPOSITO_EXPR.' as deposito_resuelto_id')
             ->selectRaw(self::DEPOSITO_INSUMO_EXPR.' as deposito_insumos_id')
-            ->selectRaw(self::CANTIDAD_EXPR.' as cantidad')
-            ->selectRaw(self::IMPORTE_EXPR.' as importe')
+            ->selectRaw(self::cantidadExpr().' as cantidad')
+            ->selectRaw(self::importeExpr().' as importe')
             ->selectRaw("TRIM(CONCAT(COALESCE(pv.codigo, ''), ' ', COALESCE(pv.nombre, ''))) as puntoventa_etiqueta");
 
         $this->aplicarFiltrosEstructurales($query, $filtros);
@@ -232,11 +291,152 @@ class GastronomiaArticulosVendidosQuery
                     'importe' => round((float) $row->importe, 2),
                     'puntoventa_etiqueta' => trim((string) ($row->puntoventa_etiqueta ?? '')),
                     'deposito_etiqueta' => $this->etiquetaDepositoFila($row),
-                    'es_nota_credito' => $row->venta_factura_origen_id !== null,
+                    'es_nota_credito' => GastronomiaVentaComprobanteSignoSupport::esNotaCreditoSigno($row->tipotransaccion_signo ?? null),
                 ];
             })
             ->values()
             ->all();
+    }
+
+    /**
+     * Movimientos de stock del artículo vendido (salida del ítem facturado, no insumos de fórmula).
+     *
+     * @return array{
+     *   movimientos: list<array{
+     *     id:int,
+     *     fecha:?string,
+     *     venta_id:int,
+     *     venta_codigo:string,
+     *     concepto:string,
+     *     deposito_etiqueta:string,
+     *     puntoventa_etiqueta:string,
+     *     entrada:?float,
+     *     salida:?float,
+     *     es_nota_credito:bool
+     *   }>,
+     *   totales: array{
+     *     cantidad_movimientos:int,
+     *     entrada_total:float,
+     *     salida_total:float,
+     *     cantidad_venta:float
+     *   }
+     * }
+     */
+    public function movimientosPorArticulo(int $articuloId, array $filtros): array
+    {
+        if ($articuloId <= 0) {
+            return [
+                'movimientos' => [],
+                'totales' => [
+                    'cantidad_movimientos' => 0,
+                    'entrada_total' => 0.,
+                    'salida_total' => 0.,
+                    'cantidad_venta' => 0.,
+                ],
+            ];
+        }
+
+        $sufijo = GastronomiaVentaDetalleSupport::SUFIJO_CONCEPTO_INSUMO;
+
+        $query = DB::table('articulo_movimiento as am')
+            ->join('venta as v', 'v.id', '=', 'am.venta_id')
+            ->join('venta_gastronomia_emision as vge', 'vge.venta_id', '=', 'v.id')
+            ->leftJoin('venta_emision as ve', function ($join) use ($articuloId) {
+                $join->on('ve.id', '=', 'am.venta_emision_id')
+                    ->where('ve.articulo_id', '=', $articuloId);
+            })
+            ->leftJoin('depmae as d', 'd.id', '=', 'am.deposito_id')
+            ->leftJoin('tipotransaccion as tt', 'tt.id', '=', 'v.tipotransaccion_id')
+            ->leftJoin('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
+            ->where('am.articulo_id', $articuloId)
+            ->where('am.concepto', 'not like', '%'.$sufijo)
+            ->whereNull('v.deleted_at')
+            ->where(function ($w) use ($articuloId) {
+                $w->whereNotNull('ve.id')
+                    ->orWhere(function ($w2) use ($articuloId) {
+                        $w2->whereNull('am.venta_emision_id')
+                            ->whereExists(function ($sub) use ($articuloId) {
+                                $sub->select(DB::raw(1))
+                                    ->from('venta_emision as ve2')
+                                    ->whereColumn('ve2.venta_id', 'am.venta_id')
+                                    ->where('ve2.articulo_id', $articuloId);
+                            });
+                    });
+            })
+            ->select([
+                'am.id',
+                'am.fecha',
+                'am.cantidad',
+                'am.concepto',
+                'am.venta_id',
+                'am.deposito_id',
+                'v.codigo as venta_codigo',
+                'tt.signo as tipotransaccion_signo',
+                'd.codigo as deposito_codigo',
+                'd.nombre as deposito_nombre',
+            ])
+            ->selectRaw("TRIM(CONCAT(COALESCE(pv.codigo, ''), ' ', COALESCE(pv.nombre, ''))) as puntoventa_etiqueta");
+
+        $depositoId = (int) ($filtros['deposito_id'] ?? 0);
+        $filtrosEstructurales = $filtros;
+        $filtrosEstructurales['deposito_id'] = 0;
+        $this->aplicarFiltrosEstructurales($query, $filtrosEstructurales);
+
+        if ($depositoId > 0) {
+            $query->where('am.deposito_id', $depositoId);
+        }
+
+        $movimientos = $query
+            ->orderByDesc('am.fecha')
+            ->orderByDesc('am.id')
+            ->get()
+            ->map(function ($row) {
+                $cantidad = (float) ($row->cantidad ?? 0);
+                $fecha = $row->fecha
+                    ? \Illuminate\Support\Carbon::parse($row->fecha)->format('d/m/Y')
+                    : null;
+
+                return [
+                    'id' => (int) $row->id,
+                    'fecha' => $fecha,
+                    'venta_id' => (int) ($row->venta_id ?? 0),
+                    'venta_codigo' => (string) ($row->venta_codigo ?? ''),
+                    'concepto' => RecuentoMovimientosArticuloSupport::resolverConceptoDisplay($row),
+                    'deposito_etiqueta' => RecuentoMovimientosArticuloSupport::etiquetaDeposito([
+                        'id' => (int) ($row->deposito_id ?? 0),
+                        'codigo' => (string) ($row->deposito_codigo ?? ''),
+                        'nombre' => (string) ($row->deposito_nombre ?? ''),
+                    ]),
+                    'puntoventa_etiqueta' => trim((string) ($row->puntoventa_etiqueta ?? '')),
+                    'entrada' => $cantidad > 0 ? round($cantidad, 4) : null,
+                    'salida' => $cantidad < 0 ? round(abs($cantidad), 4) : null,
+                    'es_nota_credito' => GastronomiaVentaComprobanteSignoSupport::esNotaCreditoSigno($row->tipotransaccion_signo ?? null),
+                ];
+            })
+            ->values()
+            ->all();
+
+        $entradaTotal = 0.;
+        $salidaTotal = 0.;
+        foreach ($movimientos as $mov) {
+            $entradaTotal += (float) ($mov['entrada'] ?? 0);
+            $salidaTotal += (float) ($mov['salida'] ?? 0);
+        }
+
+        $cantidadVenta = round(array_sum(array_column(
+            $this->facturasPorArticulo($articuloId, $filtros),
+            'cantidad',
+        )), 4);
+
+        return [
+            'movimientos' => $movimientos,
+            'totales' => [
+                'cantidad_movimientos' => count($movimientos),
+                'entrada_total' => round($entradaTotal, 4),
+                'salida_total' => round($salidaTotal, 4),
+                'cantidad_venta' => $cantidadVenta,
+            ],
+        ];
     }
 
     private function queryBase(array $filtros, bool $aplicarTexto = true): Builder
@@ -250,6 +450,8 @@ class GastronomiaArticulosVendidosQuery
             ->whereNull('v.deleted_at');
 
         $this->aplicarJoinsDeposito($query);
+
+        $this->aplicarExclusionInsumos($query);
 
         $query
             ->select([
@@ -268,8 +470,8 @@ class GastronomiaArticulosVendidosQuery
                 'pv.nombre as pv_nombre',
             ])
             ->selectRaw(self::DEPOSITO_INSUMO_EXPR.' as deposito_insumos_id')
-            ->selectRaw('SUM('.self::CANTIDAD_EXPR.') as cantidad_total')
-            ->selectRaw('SUM('.self::IMPORTE_EXPR.') as importe_total')
+            ->selectRaw('SUM('.self::cantidadExpr().') as cantidad_total')
+            ->selectRaw('SUM('.self::importeExpr().') as importe_total')
             ->selectRaw('COUNT(DISTINCT v.id) as cantidad_comprobantes')
             ->groupBy(
                 've.articulo_id',
@@ -296,6 +498,22 @@ class GastronomiaArticulosVendidosQuery
         }
 
         return $query;
+    }
+
+    /**
+     * Excluye artículos con uso maestro «INSUMO GASTRONOMIA» (componentes de fórmula).
+     */
+    private function aplicarExclusionInsumos(Builder $query): void
+    {
+        $query->whereNotExists(function ($sub) {
+            $sub->select(DB::raw(1))
+                ->from('usoarticulo as ua_ins')
+                ->whereColumn('ua_ins.id', 'a.usoarticulo_id')
+                ->whereRaw(
+                    'UPPER(TRIM(ua_ins.nombre)) = ?',
+                    [ArticuloUsoInsumoSupport::NOMBRE_USO_INSUMO],
+                );
+        });
     }
 
     private function aplicarJoinsDeposito(Builder $query): void

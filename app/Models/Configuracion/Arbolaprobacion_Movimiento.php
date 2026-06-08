@@ -9,6 +9,7 @@ use App\Models\Seguridad\Usuario;
 use App\Models\Ordenventa\Ordenventa;
 use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Requisicion;
+use App\Models\Sala\RequisicionSala;
 use App\Traits\Configuracion\Arbolaprobacion_MovimientoTrait;
 
 class Arbolaprobacion_Movimiento extends Model implements Auditable
@@ -17,7 +18,7 @@ class Arbolaprobacion_Movimiento extends Model implements Auditable
 	use Arbolaprobacion_MovimientoTrait;
     
     protected $fillable = [
-                            'arbolaprobacion_id', 'fechaenvio', 'enviousuario_id', 'requisicion_id', 'ordencompra_id',
+                            'arbolaprobacion_id', 'fechaenvio', 'enviousuario_id', 'requisicion_id', 'requisicion_sala_id', 'ordencompra_id',
 							'solicitudpago_id', 'ordenventa_id', 'hashaprobacion', 'hashrechazo', 'hashvisualizar', 'nivel',
 							'destinatariousuario_id', 'fechaproceso', 'estado', 'observacion'
                         ];
@@ -36,6 +37,11 @@ class Arbolaprobacion_Movimiento extends Model implements Auditable
 	public function requisiciones()
 	{
     	return $this->belongsTo(Requisicion::class, 'requisicion_id');
+	}
+
+	public function requisicion_salas()
+	{
+    	return $this->belongsTo(RequisicionSala::class, 'requisicion_sala_id');
 	}
 
 	public function ordencompras()

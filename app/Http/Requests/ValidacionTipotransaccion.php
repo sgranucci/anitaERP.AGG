@@ -29,6 +29,7 @@ class ValidacionTipotransaccion extends FormRequest
             'abreviatura' => 'required|max:5|unique:tipotransaccion,abreviatura,' . $this->route('id'),
             'codigo' => 'required|string|max:50',
             'operacion' => ['required', Rule::in(array_keys(\App\Traits\Ventas\TipotransaccionTrait::$enumOperacion))],
+            'operacionstock' => ['required', Rule::in(array_keys(\App\Traits\Ventas\TipotransaccionTrait::$enumOperacionStock))],
         ];
     }
 }

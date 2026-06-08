@@ -37,15 +37,17 @@ En la misma pantalla (**Caja → Rendiciones → Cierre jornada Waitry**), secci
 - Preview de asientos contables **sin grabar** (tras **Recalcular**).
 - Configuración por empresa: cuentas contables + punto de venta (`gastronomia_cierre_jornada_config`).
 
-#### Medios Waitry → columnas
+#### Medios Waitry → columnas (kiosco)
 
-| Tipo Waitry | Columna |
-|---|---|
-| `mercadopago`, `totalcoin`, `credit_card` | QR (tótem / MP) |
-| `cash` | Efectivo (no se factura en el proceso) |
-| Otros | Otros |
+| Criterio Waitry | Columna cuadro | Informe Z (Posnet) |
+|---|---|---|
+| `totalcoin` | QR | No |
+| `credit_card` + sin `payments` o gateway `KIOSK MP` | MP | **Sí** |
+| `credit_card` + gateway `KIOSK MPQR` | QR | No |
+| `cash` (kiosko pagado en mostrador) | Efectivo | No |
+| `interface` / `external_reference_id` `E-…` (mostrador Anita) | Según gateway push | No |
 
-`credit_card` en Waitry = cobro en tótem (QR), no tarjeta presencial Anita.
+`credit_card` en Waitry ya no es sinónimo de QR: distinguir por `payment.payments[].gateway`.
 
 #### Órdenes canceladas
 
@@ -101,12 +103,34 @@ Al facturar una cuenta importada desde Waitry (`cuenta_gastronomia.waitry_order_
 | `order_id` | `waitry_order_id` de la cuenta |
 | `event` | `accepted` (`WAITRY_SYNC_STATUS_POS_EVENT`) |
 | `paid` | `true` |
-| `payment.type` | `cash` \| `mercadopago` \| `totalcoin` |
+| `totalPaid` | suma de montos cobrados en Anita (obligatorio para registrar el pago en Waitry) |
+| `payment.type` | `cash` \| `mercadopago` \| `totalcoin` (medio real de cobranza en caja) |
 | `payment.total_fee` | monto y moneda del medio de cobro principal |
 
 **Tipo de pago (Anita → Waitry):** solo las cuentas mapeadas en `WAITRY_TIPO_PAGO_CUENTACAJA` como **Mercado Pago** o **Totalcoin** conservan su tipo; **cualquier otro medio** (efectivo, tarjetas, FISERV, etc.) se envía como `cash`.
 
+**`totalPaid`:** suma de la cobranza en Anita; sin este campo Waitry puede marcar la orden pagada pero mostrar `credit_card` por defecto.
+
 Si falla la API, la factura **no** se revierte; el POS recibe aviso en `warn` (`waitry_pago` / `waitry_pago_mensaje`).
+
+## Push Orders — pago externo (interface)
+
+Waitry registra cobros de **pushExternalOrder** con `payment.type` = **`interface`** (no `cash` / `credit_card` en el tipo principal). El medio real va en `payment.payments[]`:
+
+| Campo | Uso |
+|-------|-----|
+| `gateway` | Identificación Control Z (configurable: `WAITRY_PAGO_GATEWAY_POR_TIPO`; default `MERCADOPAGO`, `TOTALCOIN`, `CASH`, …) |
+| `amount` | Importe de ese medio |
+
+**Lectura tótem (getOrdersPOS):** distinción Posnet vs QR en `credit_card` vía `payment.payments[].gateway`:
+
+| Gateway | Significado |
+|---|---|
+| *(vacío / sin payments)* | Terminal Posnet junto al kiosco |
+| `KIOSK MP` | Terminal Posnet (config nueva Waitry) |
+| `KIOSK MPQR` | QR Mercado Pago en kiosco |
+
+Órdenes de mostrador Anita: `payment.type=interface` o `external_reference_id` con prefijo `E-`.
 
 ## Push Orders (pushExternalOrder, doc. pág. 28)
 
@@ -123,7 +147,8 @@ Ver [`push-external-order-request-ejemplo.json`](push-external-order-request-eje
 | `external_id` | **`venta.id`** (string) — correlación con la venta interna |
 | `orderItems` | Líneas de `venta_emision` (SKU → `item.externalId`) |
 | `paid` | `true` si hubo cobranza en el POS |
-| `payment` | Si hubo cobranza: `type` (`cash`, `credit_card`, `debit_card`, `mercadopago`, `totalcoin`, …) y `total_fee` (mismo formato que syncStatusPOS) |
+| `totalPaid` | Monto pagado (junto con `paid` registra el cobro en Waitry como **interface**) |
+| `payment` | Si hubo cobranza: `type` = **`interface`**, `total_fee`, y `payments[]` con `gateway` + `amount` por medio (Control Z; ej. `MERCADOPAGO`, `CASH`) |
 | `client_name` / `external_client_id` | Cliente de factura de la cuenta (si existe) |
 
 ## Response
@@ -134,11 +159,11 @@ Ver [`push-external-order-response-ejemplo.json`](push-external-order-response-e
 |--------------|-------------------|
 | `externalId` | Debe coincidir con `venta.id` enviado en `external_id` |
 | `orderId` | `cuenta_gastronomia.waitry_order_id` y `waitry_comanda_envio.waitry_order_id` |
-| `display_id` (respuesta o getOrdersPOS) | `cuenta_gastronomia.waitry_display_id` — código alfanumérico del papelito |
+| `external_delivery_id` (respuesta push; también `display_id` en getOrdersPOS) | `cuenta_gastronomia.waitry_display_id` — código alfanumérico del papelito |
 
-Si `display_id` no viene en la respuesta del push, Anita lo consulta con getOrdersPOS por `orderId`.
+El papelito se toma de la **misma respuesta** de `pushExternalOrder` (`response.external_delivery_id`), sin consulta extra a getOrdersPOS en la emisión.
 
-El ticket fiscal y el PDF de factura incluyen **Papelito Waitry: …** cuando hay `waitry_display_id` o `waitry_order_id`. Si la comanda se envía a Waitry al facturar (cuenta sin orden previa), la impresión del ticket se difiere hasta recibir el papelito.
+El ticket fiscal y el PDF de factura incluyen **Papelito Waitry: …** cuando hay `waitry_display_id` o `waitry_order_id`. Si la comanda se envía a Waitry al facturar (cuenta sin orden previa), la impresión del ticket se difiere hasta completar el push (misma respuesta HTTP).
 
 ## Configuración (.env)
 

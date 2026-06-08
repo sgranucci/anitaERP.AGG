@@ -19,7 +19,7 @@ class UbicacionGastronomiaRepository implements UbicacionGastronomiaRepositoryIn
     public function all()
     {
         $query = $this->model->with('empresa')->orderBy('nombre');
-        $this->aplicarFiltroEmpresasAsignadas($query);
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query);
 
         return $query->get();
     }
@@ -27,22 +27,13 @@ class UbicacionGastronomiaRepository implements UbicacionGastronomiaRepositoryIn
     public function listarParaSelect(?int $empresaId = null)
     {
         $query = $this->model->orderBy('nombre');
-        $this->aplicarFiltroEmpresasAsignadas($query);
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query);
 
         if ($empresaId !== null && $empresaId > 0) {
             $query->where('empresa_id', $empresaId);
         }
 
         return $query->get();
-    }
-
-    private function aplicarFiltroEmpresasAsignadas($query): void
-    {
-        $empresasAsignadas = $this->empresaRepository->traeEmpresasAsignadas();
-
-        if (count($empresasAsignadas) > 1) {
-            $query->whereIn('empresa_id', $empresasAsignadas);
-        }
     }
 
     public function create(array $data)

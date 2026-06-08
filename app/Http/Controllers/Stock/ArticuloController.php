@@ -36,13 +36,19 @@ use App\Repositories\Stock\Articulo_CajaRepositoryInterface;
 use App\Repositories\Stock\Articulo_CostoRepositoryInterface;
 use App\Repositories\Stock\Articulo_CuentacontableRepositoryInterface;
 use App\Repositories\Stock\Articulo_EstadoRepositoryInterface;
+use App\Repositories\Stock\Articulo_ProveedorRepositoryInterface;
 use App\Repositories\Stock\ArticuloRepositoryInterface;
 use App\Repositories\Ventas\DescuentoventaRepositoryInterface;
 use App\Support\Stock\PrecioListaVigenteSupport;
 use App\Services\Stock\ArticuloAnitaSyncService;
 use App\Services\Stock\PrecioService;
 use App\Services\Stock\StkdepSaldoAnitaService;
+use App\Services\Stock\ArticuloParteUnicaService;
+use App\Support\Stock\ArticuloConsultaDesdeModal;
 use App\Support\Stock\ArticuloListadoFiltros;
+use App\Support\Compras\ArticuloProveedorMatchSupport;
+use App\Support\Compras\ArticuloProveedorPrecioListaSupport;
+use App\Support\Stock\ArticuloProveedorLineasSupport;
 use App\Support\Stock\ArticuloUltimoCreatePrefill;
 use Auth;
 use Carbon\Carbon;
@@ -67,6 +73,8 @@ class ArticuloController extends Controller
     private $articulo_archivoRepository;
 
     private $articulo_cuentacontableRepository;
+
+    private $articulo_proveedorRepository;
 
     private $cuentacontableRepository;
 
@@ -95,6 +103,7 @@ class ArticuloController extends Controller
         Articulo_EstadoRepositoryInterface $articulo_estadoRepository,
         Articulo_ArchivoRepositoryInterface $articulo_archivoRepository,
         Articulo_CuentacontableRepositoryInterface $articulo_cuentacontableRepository,
+        Articulo_ProveedorRepositoryInterface $articulo_proveedorRepository,
         CuentacontableRepositoryInterface $cuentacontableRepository,
         ArticuloRepositoryInterface $articuloRepository,
         OficinacompraRepositoryInterface $oficinacompraRepository,
@@ -113,6 +122,7 @@ class ArticuloController extends Controller
         $this->articulo_estadoRepository = $articulo_estadoRepository;
         $this->articulo_archivoRepository = $articulo_archivoRepository;
         $this->articulo_cuentacontableRepository = $articulo_cuentacontableRepository;
+        $this->articulo_proveedorRepository = $articulo_proveedorRepository;
         $this->cuentacontableRepository = $cuentacontableRepository;
         $this->articuloRepository = $articuloRepository;
         $this->oficinacompraRepository = $oficinacompraRepository;
@@ -414,7 +424,7 @@ class ArticuloController extends Controller
         $unidadmedida = Unidadmedida::orderBy('nombre')->get();
         $usosArticulos = Usoarticulo::all();
         $tiposArticulos = Tipoarticulo::all();
-        $deposito_query = Depmae::orderByRaw('CAST(codigo AS UNSIGNED) ASC')->get();
+        $deposito_query = Depmae::query()->paraUsuarioAutorizado()->orderByRaw('CAST(codigo AS UNSIGNED) ASC')->get();
         $oficinacompra_query = $this->oficinacompraRepository->all();
         $periodicidadcompra_query = $this->periodicidadcompraRepository->all();
         $condicionentrega_query = $this->condicionentregaRepository->all();
@@ -444,13 +454,14 @@ class ArticuloController extends Controller
         ];
 
         $producto = ArticuloUltimoCreatePrefill::cargarProductoPrefill();
+        $articulo_proveedor_lineas = ArticuloProveedorLineasSupport::lineasParaFormulario($producto);
 
         return view('stock.articulo.crear', compact('producto', 'categoria', 'subcategoria', 'linea', 'marca', 'tipoimputacion_enum',
             'unidadmedida', 'usosArticulos', 'oficinacompra_query', 'referer', 'codimp',
             'periodicidadcompra_query', 'condicionentrega_query', 'empresa_query', 'estado_enum',
             'tiposArticulos', 'deposito_query', 'numeroparte_enum', 'nofactura_enum',
             'tipoproducto_query', 'capacidad_query', 'color_query', 'tipoliquido_query',
-            'divide_enum'));
+            'divide_enum', 'articulo_proveedor_lineas'));
     }
 
     public function guardar(ValidacionArticulo $request)
@@ -485,6 +496,10 @@ class ArticuloController extends Controller
                 $articulo_estado = $this->articulo_estadoRepository->create($data, $articulo->id);
                 $articulo_cuentacontable = $this->articulo_cuentacontableRepository->create($data, $articulo->id);
                 $articulo_archivo = $this->articulo_archivoRepository->create($request, $articulo->id);
+
+                if (can('actualizar-compras-articulos', false)) {
+                    $this->articulo_proveedorRepository->syncFromRequest($data, (int) $articulo->id);
+                }
             }
 
             $producto = $this->articuloRepository->find($articulo->id);
@@ -525,7 +540,14 @@ class ArticuloController extends Controller
 
     public function editar($id, $type = null, $filtros = null)
     {
-        can('editar-articulos');
+        $soloConsulta = request()->query('origen') === 'modal_consulta';
+        if ($soloConsulta) {
+            if (! ArticuloConsultaDesdeModal::puedeConsultar()) {
+                abort(403);
+            }
+        } else {
+            can('editar-articulos');
+        }
 
         $producto = $this->articuloRepository->find($id);
         $puedeActualizarArticulo = can('actualizar-articulos', false);
@@ -538,7 +560,7 @@ class ArticuloController extends Controller
         $usosArticulos = Usoarticulo::all();
         $tiposArticulos = Tipoarticulo::all();
         $codimp = Impuesto::all();
-        $deposito_query = Depmae::orderByRaw('CAST(codigo AS UNSIGNED) ASC')->get();
+        $deposito_query = Depmae::query()->paraUsuarioAutorizado()->orderByRaw('CAST(codigo AS UNSIGNED) ASC')->get();
         $oficinacompra_query = $this->oficinacompraRepository->all();
         $periodicidadcompra_query = $this->periodicidadcompraRepository->all();
         $condicionentrega_query = $this->condicionentregaRepository->all();
@@ -546,7 +568,7 @@ class ArticuloController extends Controller
         $tipoimputacion_enum = Articulo_Cuentacontable::$enumTipoImputacion;
 
         $referer = request()->headers->get('referer');
-        $ocultarVolver = request()->query('origen') === 'modal_consulta';
+        $ocultarVolver = $soloConsulta;
 
         $nofactura_enum = Articulo_Estado::$enumNoFactura;
         $estado_enum = Articulo_Estado::$enumEstado;
@@ -568,6 +590,11 @@ class ArticuloController extends Controller
             ['id' => '1', 'nombre' => 'Lleva número de parte'],
         ];
 
+        $articulo_proveedor_lineas = ArticuloProveedorLineasSupport::lineasParaFormulario($producto);
+        $partesUnicasTotal = (string) ($producto->numeroparte ?? '0') === '1'
+            ? app(ArticuloParteUnicaService::class)->contarPorArticulo((int) $producto->id)
+            : 0;
+
         return view('stock.articulo.editar', compact('producto', 'id', 'categoria', 'marca', 'linea', 'subcategoria',
             'usosArticulos', 'codimp', 'empresa_query', 'referer', 'estado_enum',
             'unidadmedida', 'filtros', 'nofactura_enum', 'tiposArticulos',
@@ -575,7 +602,8 @@ class ArticuloController extends Controller
             'deposito_query', 'numeroparte_enum', 'oficinacompra_query',
             'divide_enum',
             'tipoproducto_query', 'capacidad_query', 'color_query', 'tipoliquido_query',
-            'puedeActualizarArticulo', 'ocultarVolver'));
+            'puedeActualizarArticulo', 'ocultarVolver', 'soloConsulta',
+            'articulo_proveedor_lineas', 'partesUnicasTotal'));
     }
 
     public function actualizar(ValidacionArticulo $request, $id)
@@ -600,6 +628,10 @@ class ArticuloController extends Controller
 
             $articulo_archivo = $this->articulo_archivoRepository->update($request, $id);
 
+            if (can('actualizar-compras-articulos', false)) {
+                $this->articulo_proveedorRepository->syncFromRequest($data, (int) $id);
+            }
+
             // Lee nuevo precio con relaciones para interface Anita
             $producto = Articulo::with('categorias')->with('subcategorias')->with('lineas')->with('mventas')->with('impuestos')
                 ->with('unidadesdemedidas')->with('unidadesdemedidasalternativas')->with('cuentascontablesventas')
@@ -622,14 +654,19 @@ class ArticuloController extends Controller
         } catch (\Exception $e) {
             DB::rollback();
 
-            dd($e->getMessage());
-
-            return ['errores' => $e->getMessage()];
+            return redirect()
+                ->back()
+                ->withInput()
+                ->with('errores', $e->getMessage());
         }
 
         if ($request->input('origen') === 'modal_consulta') {
             return redirect()
-                ->route('editar_articulo', ['id' => $id, 'origen' => 'modal_consulta'])
+                ->route('editar_articulo', [
+                    'id' => $id,
+                    'origen' => 'modal_consulta',
+                    'vista' => 'consulta',
+                ])
                 ->with('status', 'Artículo actualizado con éxito');
         }
 
@@ -750,7 +787,7 @@ class ArticuloController extends Controller
         $output['listaprecio_id'] = $listaPrecio['id'];
         $output['listaprecio_nombre'] = $listaPrecio['nombre'];
         $output['mostrar_precio_lista'] = $listaPrecio['mostrar'];
-        $puedeConsultarArticulo = can('editar-articulos', false);
+        $puedeConsultarArticulo = ArticuloConsultaDesdeModal::puedeConsultar();
         if (count($query) > 0) {
             foreach ($query as $row) {
                 $output['data'] .= '<tr>';
@@ -770,8 +807,15 @@ class ArticuloController extends Controller
                 $output['data'] .= '<td>'
                     .'<a class="btn btn-warning btn-sm eligeconsultaarticulo">Elegir</a>';
                 if ($puedeConsultarArticulo) {
-                    $output['data'] .= ' <a class="btn btn-info btn-sm" href="'.e(url('stock/articulo/'.$row['articulo_id'].'/editar')).'" target="_blank" rel="noopener">Consultar</a>';
+                    $urlConsulta = ArticuloConsultaDesdeModal::urlEditar((int) $row['articulo_id']);
+                    $output['data'] .= ' <a class="btn btn-info btn-sm" href="'.e($urlConsulta).'" target="_blank" rel="noopener">Consultar</a>';
                 }
+                $output['data'] .= ' <button type="button" class="btn btn-outline-secondary btn-sm btn-movimientos-articulo-deposito d-none"'
+                    .' data-articulo-id="'.(int) $row['articulo_id'].'"'
+                    .' data-articulo-sku="'.e((string) $row['sku']).'"'
+                    .' data-articulo-descripcion="'.e((string) $row['descripcion']).'"'
+                    .' title="Movimientos de stock en el dep&oacute;sito del recuento">'
+                    .'<i class="fa fa-list"></i></button>';
                 $output['data'] .= '</td>';
                 $output['data'] .= '</tr>';
             }
@@ -787,6 +831,48 @@ class ArticuloController extends Controller
     public function leeUnArticulo($articulo_id)
     {
         return $this->articuloRepository->find($articulo_id);
+    }
+
+    public function precioProveedorArticulo(int $articulo_id, int $proveedor_id)
+    {
+        if (! can('editar-articulos', false)
+            && ! can('listar-articulos', false)
+            && ! can('editar-compras-articulos', false)
+            && ! can('actualizar-compras-articulos', false)) {
+            abort(403);
+        }
+
+        $vigente = ArticuloProveedorPrecioListaSupport::precioVigente($articulo_id, $proveedor_id);
+
+        if (! $vigente) {
+            return response()->json(['tiene_precio' => false]);
+        }
+
+        return response()->json(array_merge($vigente, ['tiene_precio' => true]));
+    }
+
+    public function resolverArticuloProveedor(int $proveedor_id, Request $request)
+    {
+        if (! can('editar-articulos', false)
+            && ! can('listar-articulos', false)
+            && ! can('editar-compras-articulos', false)
+            && ! can('actualizar-compras-articulos', false)
+            && ! can('listar-requisicion', false)
+            && ! can('crear-ordencompra', false)) {
+            abort(403);
+        }
+
+        $match = ArticuloProveedorMatchSupport::resolver(
+            $proveedor_id,
+            $request->query('codigo_articulo_proveedor'),
+            $request->query('codigobarra')
+        );
+
+        if (! $match) {
+            return response()->json(['encontrado' => false]);
+        }
+
+        return response()->json(array_merge($match, ['encontrado' => true]));
     }
 
     public function leeUnArticuloPorSku($sku)

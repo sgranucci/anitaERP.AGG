@@ -16,27 +16,40 @@ Editar lista de precios proveedor
         @include('includes.mensaje')
         <div class="card card-danger">
             <div class="card-header">
-                <h3 class="card-title">Lista: {{ $data->nombre }}</h3>
+                <h3 class="card-title">
+                    @if (! empty($soloConsulta) && empty($puedeActualizarLista))
+                        Consultar
+                    @else
+                        Editar
+                    @endif
+                    lista: {{ $data->nombre }}
+                </h3>
                 <div class="card-tools">
+                    @if (empty($ocultarVolver))
                     <a href="{{ route('consultar_listaprecio_proveedor') }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
+                    @endif
                 </div>
             </div>
-            <form action="{{ route('actualizar_listaprecio_proveedor', ['id' => $data->id]) }}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off">
+            <form action="{{ route('actualizar_listaprecio_proveedor', ['id' => $data->id]) }}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off" @if(!empty($soloConsulta) && empty($puedeActualizarLista)) onsubmit="return false;" @endif>
                 @csrf @method('put')
+                @if (! empty($soloConsulta))
+                    <input type="hidden" name="origen" value="modal_consulta">
+                @endif
                 <div align="center" style="margin: 5px;">
                     <button type="button" id="botonform1" class="btn btn-primary btn-sm">Datos principales</button>
                     <button type="button" id="botonform3" class="btn btn-info btn-sm">Historia estados</button>
                     <button type="button" id="botonform4" class="btn btn-info btn-sm"><span class="fa fa-copy"></span> Archivos asociados</button>
-                    @if (can('actualizar-listaprecio-proveedor', false))
+                    @if (can('actualizar-listaprecio-proveedor', false) && empty($visualizar))
                     <button type="button" id="botonform-importexcel" class="btn btn-success btn-sm">
                         <i class="fa fa-file-excel-o"></i> Importar Excel
                     </button>
                     @endif
                 </div>
+                <div class="@if(!empty($soloConsulta) && empty($puedeActualizarLista)) pe-none @endif" @if(!empty($soloConsulta) && empty($puedeActualizarLista)) style="opacity:.92" @endif>
                 <div class="card-body">
-                    @include('compras.listaprecio_proveedor.form')
+                    @include('compras.listaprecio_proveedor.form', ['visualizar' => $visualizar ?? false])
                     <div class="form3" style="display:none;">
                         <h5>Historia de estados</h5>
                         <table class="table table-bordered">
@@ -46,14 +59,24 @@ Editar lista de precios proveedor
                     </div>
                     @include('compras.listaprecio_proveedor.form_archivos')
                 </div>
+                </div>
                 <div class="card-footer">
-                    <div class="col-lg-4">
-                        @include('includes.boton-form-editar')
+                    <div class="row">
+                        <div class="col-lg-12 text-center">
+                            @if (! empty($soloConsulta))
+                                @if (! empty($puedeActualizarLista))
+                                    @include('includes.boton-form-editar')
+                                @endif
+                                <button type="button" class="btn btn-secondary @if(!empty($puedeActualizarLista)) ml-2 @endif" onclick="window.close()">Cerrar solapa</button>
+                            @else
+                                @include('includes.boton-form-editar')
+                            @endif
+                        </div>
                     </div>
                 </div>
             </form>
 
-            @if (can('actualizar-listaprecio-proveedor', false))
+            @if (can('actualizar-listaprecio-proveedor', false) && empty($visualizar))
             <div class="card-body border-top" id="importar-excel" style="display: none;">
                 <h5 class="mb-2"><i class="fa fa-file-excel-o text-success"></i> Importar precios desde Excel</h5>
                 <p class="small text-muted mb-2">Columnas: <strong>A</strong> = SKU artículo, <strong>B</strong> = precio, <strong>C</strong> = % descuento (opcional), <strong>D</strong> = código artículo proveedor (opcional). La primera fila puede ser encabezado (SKU, …).</p>

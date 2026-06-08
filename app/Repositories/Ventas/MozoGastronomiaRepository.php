@@ -3,19 +3,25 @@
 namespace App\Repositories\Ventas;
 
 use App\Models\Ventas\MozoGastronomia;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 
 class MozoGastronomiaRepository implements MozoGastronomiaRepositoryInterface
 {
     protected $model;
 
-    public function __construct(MozoGastronomia $mozoGastronomia)
-    {
+    public function __construct(
+        MozoGastronomia $mozoGastronomia,
+        private EmpresaRepositoryInterface $empresaRepository,
+    ) {
         $this->model = $mozoGastronomia;
     }
 
     public function all()
     {
-        return $this->model->with('empresa')->orderBy('nombre')->orderBy('codigo')->get();
+        $query = $this->model->with('empresa')->orderBy('nombre')->orderBy('codigo');
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query);
+
+        return $query->get();
     }
 
     public function create(array $data)
@@ -48,13 +54,18 @@ class MozoGastronomiaRepository implements MozoGastronomiaRepositoryInterface
         return $this->model->query()->exists();
     }
 
-    public function consultaMozo(string $consulta, int $empresaId): string
+    public function consultaMozo(string $consulta, int $empresaId, bool $filtrarEmpresasAsignadas = false): string
     {
         $columns = ['mozo_gastronomia.id', 'mozo_gastronomia.nombre', 'mozo_gastronomia.codigo'];
         $columnsOut = ['id', 'nombre', 'codigo'];
         $consulta = strtoupper(trim($consulta));
 
-        $query = $this->model->newQuery()->where('empresa_id', $empresaId);
+        $query = $this->model->newQuery();
+        if ($filtrarEmpresasAsignadas) {
+            $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query);
+        } else {
+            $query->where('empresa_id', $empresaId);
+        }
         if ($consulta !== '') {
             $query->where(function ($q) use ($consulta, $columns) {
                 foreach ($columns as $col) {
@@ -82,17 +93,14 @@ class MozoGastronomiaRepository implements MozoGastronomiaRepositoryInterface
         return json_encode($output, JSON_UNESCAPED_UNICODE);
     }
 
-    public function findPorCodigo(string $codigo, int $empresaId): ?MozoGastronomia
+    public function findPorCodigo(string $codigo, int $empresaId, bool $filtrarEmpresasAsignadas = false): ?MozoGastronomia
     {
         $codigo = trim($codigo);
         if ($codigo === '') {
             return null;
         }
 
-        $mozo = $this->model->newQuery()
-            ->where('empresa_id', $empresaId)
-            ->where('codigo', $codigo)
-            ->first();
+        $mozo = $this->buscarMozoPorCodigoQuery($codigo, $empresaId, $filtrarEmpresasAsignadas)->first();
 
         if ($mozo) {
             return $mozo;
@@ -100,12 +108,21 @@ class MozoGastronomiaRepository implements MozoGastronomiaRepositoryInterface
 
         $alt = ltrim($codigo, '0');
         if ($alt !== '' && $alt !== $codigo) {
-            return $this->model->newQuery()
-                ->where('empresa_id', $empresaId)
-                ->where('codigo', $alt)
-                ->first();
+            return $this->buscarMozoPorCodigoQuery($alt, $empresaId, $filtrarEmpresasAsignadas)->first();
         }
 
         return null;
+    }
+
+    private function buscarMozoPorCodigoQuery(string $codigo, int $empresaId, bool $filtrarEmpresasAsignadas)
+    {
+        $query = $this->model->newQuery()->where('codigo', $codigo);
+        if ($filtrarEmpresasAsignadas) {
+            $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query);
+        } else {
+            $query->where('empresa_id', $empresaId);
+        }
+
+        return $query;
     }
 }

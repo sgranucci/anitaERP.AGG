@@ -15,6 +15,12 @@ Configuración de Préstamos
             <form action="{{ route('actualizar_configuracion_prestamo') }}" id="form-general" class="form-horizontal" method="POST" autocomplete="off">
                 @csrf @method('put')
                 <div class="card-body">
+                    <div class="alert alert-info py-2">
+                        Las <strong>plantillas de correo</strong> (asunto y textos de notificación) se configuran en
+                        <a href="{{ route('consultar_modulo_aviso') }}">Configuración → Avisos por módulo</a>
+                        (tipos de aviso del módulo Stock / Préstamos).
+                        En esta pantalla se mantienen las reglas operativas del circuito.
+                    </div>
                     <h5>Notificaciones</h5>
                     <div class="form-check">
                         <input type="checkbox" class="form-check-input" name="enviar_aprobacion" id="enviar_aprobacion" value="1"

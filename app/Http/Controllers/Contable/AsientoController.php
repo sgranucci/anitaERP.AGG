@@ -118,6 +118,25 @@ class AsientoController extends Controller
 		return view('contable.asiento.indexp', $datas);       
     }
 
+    public function imprimirPdf($id)
+    {
+        if (! can('listar-asiento', false) && ! can('editar-asiento', false)) {
+            return redirect()->route('inicio')->with('mensaje', 'No tienes permisos para imprimir el asiento');
+        }
+
+        $data = $this->asientoRepository->find((int) $id);
+
+        $html = view('contable.asiento.pdf', compact('data'))->render();
+
+        $pdf = \App::make('dompdf.wrapper');
+        $pdf->setPaper('legal', 'portrait');
+        $pdf->loadHTML($html);
+
+        $nombreArchivo = 'Asiento_'.preg_replace('/[^\w\-]+/', '_', (string) $data->numeroasiento).'.pdf';
+
+        return $pdf->download($nombreArchivo);
+    }
+
     /**
      * Show the form for creating a new resource.
      *
@@ -129,7 +148,7 @@ class AsientoController extends Controller
 
         $tipoasiento_query = $this->tipoasientoRepository->all();
         $moneda_query = $this->monedaRepository->all();
-        $empresa_query = $this->empresaRepository->all();
+        $empresa_query = $this->empresaRepository->allFiltrado();
         $cuentacontable_query = $this->cuentacontableRepository->all();
         $centrocosto_query = $this->centrocostoRepository->all();
         
@@ -189,7 +208,7 @@ class AsientoController extends Controller
 
         $tipoasiento_query = $this->tipoasientoRepository->all();
         $moneda_query = $this->monedaRepository->all();
-        $empresa_query = $this->empresaRepository->all();
+        $empresa_query = $this->empresaRepository->allFiltrado();
         $cuentacontable_query = $this->cuentacontableRepository->all();
         $centrocosto_query = $this->centrocostoRepository->all();
 

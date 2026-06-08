@@ -17,6 +17,18 @@ class Articulo_Saldo_DepositoRepository implements Articulo_Saldo_DepositoReposi
         return $row ? (float) $row->cantidad : 0.0;
     }
 
+    public function saldoAFecha(int $articuloId, int $depositoId, string $fecha): float
+    {
+        $total = DB::table('articulo_movimiento')
+            ->where('articulo_id', $articuloId)
+            ->where('deposito_id', $depositoId)
+            ->whereNull('deleted_at')
+            ->where('fecha', '<=', $fecha)
+            ->sum('cantidad');
+
+        return (float) ($total ?? 0);
+    }
+
     public function saldosArticuloPorDeposito(int $articuloId, array $depositoIds = []): array
     {
         $query = Articulo_Saldo_Deposito::query()

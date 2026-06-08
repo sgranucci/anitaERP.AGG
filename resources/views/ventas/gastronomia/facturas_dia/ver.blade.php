@@ -79,6 +79,28 @@
         max-width: 7rem;
         white-space: nowrap;
     }
+    .gastro-waitry-comandas-grid {
+        table-layout: fixed;
+        width: 100%;
+    }
+    .gastro-col-monto,
+    th.gastro-col-monto,
+    td.gastro-col-monto {
+        min-width: 6.85rem;
+        max-width: 9.5rem;
+        white-space: nowrap;
+        text-align: right !important;
+        font-variant-numeric: tabular-nums;
+        font-feature-settings: "tnum";
+    }
+    .gastro-waitry-comandas-grid th:nth-child(1),
+    .gastro-waitry-comandas-grid td:nth-child(1) {
+        width: 6.5rem;
+    }
+    .gastro-waitry-comandas-grid th:nth-child(3),
+    .gastro-waitry-comandas-grid td:nth-child(3) {
+        width: 9.5rem;
+    }
 </style>
 @endsection
 
@@ -170,6 +192,8 @@
             </div>
         </div>
 
+        @include('ventas.gastronomia.facturas_dia.partials.panel_waitry_comandas')
+
         @if ($cobranzas->isNotEmpty() || $movimientosInsumos->isNotEmpty())
         <div class="card card-outline card-success mb-3">
             <div class="card-header py-2">
@@ -259,6 +283,14 @@
                     <li class="nav-item">
                         <a class="nav-link" data-toggle="tab" href="#tab-contable">Asiento</a>
                     </li>
+                    @if (($waitry_comandas ?? []) !== [])
+                        <li class="nav-item">
+                            <a class="nav-link" data-toggle="tab" href="#tab-waitry-comandas">
+                                Comandas Waitry
+                                <span class="badge badge-info">{{ count($waitry_comandas) }}</span>
+                            </a>
+                        </li>
+                    @endif
                 </ul>
             </div>
             <div class="card-body tab-content">
@@ -505,6 +537,12 @@
                         @endforeach
                     @endif
                 </div>
+
+                @if (($waitry_comandas ?? []) !== [])
+                    <div class="tab-pane fade" id="tab-waitry-comandas">
+                        @include('ventas.gastronomia.facturas_dia.partials.panel_waitry_comandas', ['solo_tabla' => true])
+                    </div>
+                @endif
             </div>
         </div>
     </div>

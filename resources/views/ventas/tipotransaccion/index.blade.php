@@ -31,6 +31,7 @@
                             <th class="width20">ID</th>
                             <th>Nombre</th>
                             <th>Operaci&oacute;n</th>
+                            <th>Operaci&oacute;n stock</th>
                             <th>Abreviatura</th>
                             <th>Tipo AFIP</th>
                             <th>Signo</th>
@@ -44,6 +45,7 @@
                             <td>{{$data->id}}</td>
                             <td>{{$data->nombre}}</td>
                             <td>{{$operacionEnum[$data->operacion]}}</td>
+                            <td>{{$operacionStockEnum[$data->operacionstock] ?? ''}}</td>
                             <td>{{$data->abreviatura}}</td>
                             <td>{{$data->codigo}}</td>
                             <td>{{$signoEnum[$data->signo]}}</td>

@@ -8,6 +8,9 @@ use App\Services\Caja\WaitryCierreJornadaService;
 use App\Services\Ventas\Gastronomia\GastronomiaCierreJornadaProcesoService;
 use App\Services\Ventas\Gastronomia\GastronomiaJornadaService;
 use App\Support\Caja\RendicionGastronomiaPdfPermiso;
+use App\Services\Ventas\Gastronomia\GastronomiaCierreJornadaFacturaProcesoEmisionService;
+use App\Support\Ventas\Gastronomia\CierreJornadaProcesoAsientosPreviewSupport;
+use App\Support\Ventas\Gastronomia\CierreJornadaProcesoPuntoventaSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoConfigSupport;
 use Illuminate\Http\Request;
 use InvalidArgumentException;
@@ -19,6 +22,7 @@ class WaitryCierreJornadaController extends Controller
         private readonly WaitryCierreJornadaService $cierreJornadaService,
         private readonly GastronomiaCierreJornadaProcesoService $procesoService,
         private readonly EmpresaRepositoryInterface $empresaRepository,
+        private readonly GastronomiaJornadaService $jornadaService,
     ) {
     }
 
@@ -28,13 +32,14 @@ class WaitryCierreJornadaController extends Controller
 
         $empresas = $this->empresaRepository->allFiltrado();
         $empresaId = (int) $request->input('empresa_id', $empresas->first()->id ?? 0);
-        $fechaJornada = (string) $request->input('fecha_jornada', now()->format('Y-m-d'));
+        $fechaJornada = $this->resolverFechaJornadaConsulta($request, $empresaId);
 
         $payload = null;
         $error = null;
 
         if ($request->has('empresa_id') && $request->has('fecha_jornada') && $empresaId > 0) {
             try {
+                $this->prepararEntornoProcesoApi();
                 $payload = $this->cierreJornadaService->conciliar($empresaId, $fechaJornada);
                 if (! ($payload['ok'] ?? false)) {
                     $error = $payload['error'] ?? 'No se pudo conciliar la jornada.';
@@ -75,10 +80,12 @@ class WaitryCierreJornadaController extends Controller
         $fechaJornada = (string) $request->input('fecha_jornada', '');
 
         try {
-            @set_time_limit(180);
+            $this->prepararEntornoProcesoApi();
+
+            $refrescar = filter_var($request->input('refrescar_waitry', false), FILTER_VALIDATE_BOOLEAN);
 
             return response()->json(
-                $this->procesoService->analizarPorEmpresaYFecha($empresaId, $fechaJornada),
+                $this->procesoService->analizarPorEmpresaYFecha($empresaId, $fechaJornada, $refrescar),
             );
         } catch (InvalidArgumentException $e) {
             return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
@@ -101,12 +108,136 @@ class WaitryCierreJornadaController extends Controller
         ]);
 
         try {
-            @set_time_limit(180);
+            $this->prepararEntornoProcesoApi();
 
             return response()->json($this->procesoService->recalcularPorEmpresaYFecha(
                 (int) $request->input('empresa_id'),
                 (string) $request->input('fecha_jornada'),
                 (float) $request->input('porcentaje'),
+            ));
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        } catch (Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'error' => GastronomiaJornadaService::mensajeDesdeExcepcion($e),
+            ], 422);
+        }
+    }
+
+    public function apiProcesoEmitirFactura(Request $request)
+    {
+        $this->canProcesoCierre();
+
+        $request->validate([
+            'empresa_id' => 'required|integer|min:1',
+            'fecha_jornada' => 'required|date',
+            'porcentaje' => 'nullable|numeric|min:0|max:100',
+            'puntoventa_id' => 'nullable|integer|min:1',
+            'fecha_factura' => 'nullable|date',
+            'usar_recuperacion_snapshot' => 'nullable|boolean',
+        ]);
+
+        try {
+            $this->prepararEntornoProcesoApi(300);
+
+            return response()->json($this->procesoService->emitirFacturaProcesoPorEmpresaYFecha(
+                (int) $request->input('empresa_id'),
+                (string) $request->input('fecha_jornada'),
+                (float) $request->input('porcentaje', 0),
+                (int) $request->input('puntoventa_id', 0),
+                $request->input('fecha_factura') ? (string) $request->input('fecha_factura') : null,
+                $request->boolean('usar_recuperacion_snapshot'),
+            ));
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        } catch (\RuntimeException $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        } catch (Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'error' => GastronomiaJornadaService::mensajeDesdeExcepcion($e),
+            ], 422);
+        }
+    }
+
+    public function apiProcesoGrabarAsientos(Request $request)
+    {
+        $this->canProcesoCierre();
+
+        $request->validate([
+            'empresa_id' => 'required|integer|min:1',
+            'fecha_jornada' => 'required|date',
+            'porcentaje' => 'nullable|numeric|min:0|max:100',
+            'fecha_asiento' => 'nullable|date',
+        ]);
+
+        try {
+            $this->prepararEntornoProcesoApi(300);
+
+            return response()->json($this->procesoService->grabarAsientosProcesoPorEmpresaYFecha(
+                (int) $request->input('empresa_id'),
+                (string) $request->input('fecha_jornada'),
+                (float) $request->input('porcentaje', 0),
+                $request->input('fecha_asiento') ? (string) $request->input('fecha_asiento') : null,
+            ));
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        } catch (\RuntimeException $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        } catch (Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'error' => GastronomiaJornadaService::mensajeDesdeExcepcion($e),
+            ], 422);
+        }
+    }
+
+    public function apiProcesoRevertir(Request $request)
+    {
+        $this->canProcesoCierre();
+
+        $request->validate([
+            'empresa_id' => 'required|integer|min:1',
+            'fecha_jornada' => 'required|date',
+        ]);
+
+        try {
+            $this->prepararEntornoProcesoApi(300);
+
+            return response()->json($this->procesoService->revertirProcesoPorEmpresaYFecha(
+                (int) $request->input('empresa_id'),
+                (string) $request->input('fecha_jornada'),
+            ));
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        } catch (\RuntimeException $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        } catch (Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'error' => GastronomiaJornadaService::mensajeDesdeExcepcion($e),
+            ], 422);
+        }
+    }
+
+    public function apiProcesoPreviewLotesFactura(Request $request)
+    {
+        $this->canProcesoCierre();
+
+        $request->validate([
+            'empresa_id' => 'required|integer|min:1',
+            'fecha_jornada' => 'required|date',
+            'porcentaje' => 'nullable|numeric|min:0|max:100',
+        ]);
+
+        try {
+            $this->prepararEntornoProcesoApi();
+
+            return response()->json($this->procesoService->previewLotesFacturaProcesoPorEmpresaYFecha(
+                (int) $request->input('empresa_id'),
+                (string) $request->input('fecha_jornada'),
+                (float) $request->input('porcentaje', 0),
             ));
         } catch (InvalidArgumentException $e) {
             return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
@@ -127,11 +258,12 @@ class WaitryCierreJornadaController extends Controller
             'fecha_jornada' => 'required|date',
             'porcentaje' => 'nullable|numeric|min:0|max:100',
             'pagina' => 'nullable|integer|min:1',
-            'por_pagina' => 'nullable|integer|min:10|max:200',
+            'por_pagina' => 'nullable|integer|min:10|max:500',
+            'comandas_alcance' => 'nullable|string|in:factura_proceso,efectivo_no_facturado',
         ]);
 
         try {
-            @set_time_limit(180);
+            $this->prepararEntornoProcesoApi();
 
             return response()->json($this->procesoService->previewFacturaProcesoPorEmpresaYFecha(
                 (int) $request->input('empresa_id'),
@@ -139,6 +271,10 @@ class WaitryCierreJornadaController extends Controller
                 (float) $request->input('porcentaje', 0),
                 (int) $request->input('pagina', 1),
                 (int) $request->input('por_pagina', 50),
+                (string) $request->input(
+                    'comandas_alcance',
+                    CierreJornadaProcesoAsientosPreviewSupport::COMANDAS_ALCANCE_FACTURA_PROCESO,
+                ),
             ));
         } catch (InvalidArgumentException $e) {
             return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
@@ -157,9 +293,11 @@ class WaitryCierreJornadaController extends Controller
         $empresaId = (int) $request->input('empresa_id', 0);
         $fechaJornada = (string) $request->input('fecha_jornada', '');
         $pagina = max(1, (int) $request->input('pagina', 1));
-        $porPagina = max(10, min(200, (int) $request->input('por_pagina', 50)));
+        $porPagina = max(10, min(500, (int) $request->input('por_pagina', 50)));
 
         try {
+            $this->prepararEntornoProcesoApi();
+
             return response()->json($this->procesoService->movimientosGrupoPorEmpresaYFecha(
                 $empresaId,
                 $fechaJornada,
@@ -169,6 +307,11 @@ class WaitryCierreJornadaController extends Controller
             ));
         } catch (InvalidArgumentException $e) {
             return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        } catch (Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'error' => GastronomiaJornadaService::mensajeDesdeExcepcion($e),
+            ], 422);
         }
     }
 
@@ -179,10 +322,13 @@ class WaitryCierreJornadaController extends Controller
         $empresaId = (int) $request->input('empresa_id', 0);
         $fechaJornada = (string) $request->input('fecha_jornada', '');
         $pagina = max(1, (int) $request->input('pagina', 1));
-        $porPagina = max(10, min(200, (int) $request->input('por_pagina', 50)));
+        $porPagina = max(10, min(500, (int) $request->input('por_pagina', 50)));
+        $porcentaje = $request->has('porcentaje')
+            ? (float) $request->input('porcentaje')
+            : null;
 
         try {
-            @set_time_limit(180);
+            $this->prepararEntornoProcesoApi();
 
             return response()->json($this->procesoService->detalleCuadroCeldaPorEmpresaYFecha(
                 $empresaId,
@@ -191,10 +337,39 @@ class WaitryCierreJornadaController extends Controller
                 mb_strtolower(trim($medio)),
                 $pagina,
                 $porPagina,
+                $porcentaje,
             ));
         } catch (InvalidArgumentException $e) {
             return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        } catch (Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'error' => GastronomiaJornadaService::mensajeDesdeExcepcion($e),
+            ], 422);
         }
+    }
+
+    public function apiProcesoOpcionesEmitir(Request $request)
+    {
+        $this->canProcesoCierre();
+
+        $request->validate([
+            'empresa_id' => 'required|integer|min:1',
+            'fecha_jornada' => 'required|date',
+        ]);
+
+        $empresaId = (int) $request->input('empresa_id');
+        $fechaJornada = (string) $request->input('fecha_jornada');
+        $emisionService = app(GastronomiaCierreJornadaFacturaProcesoEmisionService::class);
+        $pvDefault = CierreJornadaProcesoPuntoventaSupport::resolverParaEmpresa($empresaId);
+
+        return response()->json([
+            'ok' => true,
+            'fecha_jornada' => $fechaJornada,
+            'fecha_factura_default' => $fechaJornada,
+            'puntoventa_default' => $pvDefault,
+            'puntoventas' => $emisionService->listarPuntosVentaElectronicos($empresaId),
+        ]);
     }
 
     public function apiProcesoConfig(int $empresaId)
@@ -236,6 +411,32 @@ class WaitryCierreJornadaController extends Controller
         can('proceso-cierre-jornada-waitry-caja');
     }
 
+    private function prepararEntornoProcesoApi(int $timeLimitSegundos = 180): void
+    {
+        $memory = (string) config('gastronomia.cierre_jornada_proceso_memory_limit', '256M');
+        if ($memory !== '') {
+            @ini_set('memory_limit', $memory);
+        }
+        @set_time_limit(max(60, $timeLimitSegundos));
+    }
+
+    private function resolverFechaJornadaConsulta(Request $request, int $empresaId): string
+    {
+        $fechaJornada = trim((string) $request->input('fecha_jornada', ''));
+        if ($fechaJornada === '' && $empresaId > 0) {
+            $estado = $this->jornadaService->estadoParaEmpresa($empresaId);
+            if (! empty($estado['fecha_jornada'])) {
+                $fechaJornada = (string) $estado['fecha_jornada'];
+            }
+        }
+
+        if ($fechaJornada === '') {
+            $fechaJornada = now()->format('Y-m-d');
+        }
+
+        return $fechaJornada;
+    }
+
     public function listar(Request $request, ?string $formato = null)
     {
         can('listar-waitry-cierre-jornada-caja');
@@ -244,7 +445,7 @@ class WaitryCierreJornadaController extends Controller
         ini_set('max_execution_time', '0');
 
         $empresaId = (int) $request->input('empresa_id', 0);
-        $fechaJornada = (string) $request->input('fecha_jornada', now()->format('Y-m-d'));
+        $fechaJornada = $this->resolverFechaJornadaConsulta($request, $empresaId);
         $empresas = $this->empresaRepository->allFiltrado();
         $empresaNombre = $empresas->firstWhere('id', $empresaId)?->nombre ?? '';
 

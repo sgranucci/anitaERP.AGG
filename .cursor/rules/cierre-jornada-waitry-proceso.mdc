@@ -14,8 +14,10 @@ Documentación extendida: [`docs/waitry/README.md`](../../docs/waitry/README.md)
 
 | Capa | Permiso | Servicio principal | Waitry API |
 |---|---|---|---|
-| **Conciliación superior** | `listar-waitry-cierre-jornada-caja` | `WaitryCierreJornadaService` | `getordersdetails` por fecha jornada |
-| **Proceso inferior** | `proceso-cierre-jornada-waitry-caja` | `GastronomiaCierreJornadaProcesoService` | mismo tramo + `getOrdersPOS` puntual si falta `payment.type` |
+| **Conciliación superior** | `listar-waitry-cierre-jornada-caja` | `WaitryCierreJornadaService` | mismo tramo que inferior si hay jornada + cierre tótem habilitado |
+| **Proceso inferior** | `proceso-cierre-jornada-waitry-caja` | `GastronomiaCierreJornadaProcesoService` | `GastronomiaCierreTotemJornadaService` + `getOrdersPOS` puntual |
+
+**Tramo Waitry (ambas capas, con jornada):** `order_id > último cierre empresa` + `placed_at` entre `apertura_en` y cierre (`cierre_en` o ahora si abierta). API `getordersdetails` en **días calendario** que cubren esa ventana (p. ej. 03/06 y 04/06); las comandas del 04/06 antes del cierre pertenecen a la jornada 03/06. Support: `WaitryCierreJornadaVentanaSupport`. Anita facturado del cuadro sigue en `venta.fechajornada`.
 
 El POS en vivo usa `getOrdersPOS` (doc. pág. 21); **no** mezclar con el cierre de jornada salvo enriquecimiento puntual.
 
@@ -29,7 +31,15 @@ El POS en vivo usa `getOrdersPOS` (doc. pág. 21); **no** mezclar con el cierre 
 | `cash` | Efectivo | No se factura en el proceso |
 | Otros | Otros | |
 
-Referencia: `WaitryMedioPagoCuentacajaSupport::esTipoQrWaitry()`, `CierreJornadaProcesoMedioSupport`.
+**Cuenta puente TOTEM (`WaitryMedioPagoCuentacajaSupport::TIPO_CUENTA_PUENTE_FACTURACION`):** solo facturación Anita de comanda ya cobrada en el POS (evita duplicar asiento). **No** es medio de cobro del tótem físico ni renglón del Informe Z. Nunca usar `?? 'totem'` como fallback de `payment.type` en totales Z.
+
+**Informe Z — columna Sistema (universo Waitry no presentado por Anita):** una conciliación al cierre del día. Suma por tótem comandas **activas** cobradas en Waitry con **QR + MP + Posnet** (kiosco) y **QR por celular** (`payment.type=interface` con gateway `TOTALCOIN`/`MERCADOPAGO`, sin prefijo `E-`) que **no** entraron por cobranza real en Anita. **Incluye** sin facturar y facturadas con cobro puente **TOTEM**. **Excluye** facturadas y cobradas en cuenta operativa Anita (Posnet/MP/QR ya rendidos por Anita) y push mostrador (`E-…` / `interface` facturada desde Anita). Resumen: `armarParaInformeZ()` / `lineaEntraInformeZSistema()`; persistido en `detalle_json.resumen_informe_z`.
+
+**Tótems Waitry (`totem_waitry_gastronomia`):** cada tótem debe tener `waitry_layout_id` (punto de acceso Waitry, `table.layout.id` en getOrdersPOS — prioridad al mapear) y/o `waitry_table_id` + `waitry_table_ids_adicionales` (mesas concretas). Sin match, el reparto Informe Z cae en heurística por `order_id`. Kioscos distintos: un tótem por layout (ej. Kiosco 1 `32392`, Kiosco 2 `32393`).
+
+**Tramo Informe Z (ej. jornada 03/06 cerrada 04/06 ~06:00):** no es solo calendario `fecha_jornada`. Incluye comandas con `placed_at` entre `apertura_en` y `cierre_en` de la jornada (madrugada del día siguiente hasta el cierre). Límite inferior: `waitry_order_id_anterior` del cierre tótem de esa jornada (`waitryOrderIdAnteriorParaJornada()`). Tope superior: `waitry_order_id_hasta` persistido al cerrar (`resolverTopeWaitryOrderIdHasta()` / `filtrarOrdenesActivasPorTopeHasta()`). Jornada abierta sin cierre: tope = máximo order_id leído en la consulta.
+
+Referencia: `WaitryMedioPagoCuentacajaSupport::lineaEntraInformeZSistema()`, `esTipoPagoInformeZSistema()`. El resumen operativo del cierre tótem (`armar()`) sigue con todos los medios Waitry.
 
 ## Órdenes canceladas Waitry
 
@@ -57,11 +67,11 @@ Consola: `php artisan gastronomia:diagnostico-cuadro-cierre {empresa} {fecha} {f
 | Paso | Estado | Clase / nota |
 |---|---|---|
 | Analizar tramo (cuadro + grupos) | OK | `analizarJornada()` |
-| % sobre facturado Anita | OK | input UI |
-| Recalcular redistribución QR ↔ efectivo | OK | `CierreJornadaProcesoRedistribucionSupport` |
+| % sobre facturado Anita | OK | input UI; objetivo en **pesos enteros** |
+| Recalcular redistribución QR ↔ efectivo | OK | `CierreJornadaProcesoRedistribucionSupport` — Waitry QR→efectivo + compensación mismo importe en facturas Anita efectivo→QR (**solo memoria**); cuadro «Facturado Anita» muestra QR contable tras compensación |
 | Preview asientos (sin grabar) | OK | `CierreJornadaProcesoAsientosPreviewSupport` — requiere **Recalcular** |
-| Grabado asientos | **Pendiente** | no implementar sin pedido explícito |
-| Facturación masiva | **Pendiente** | |
+| Grabado asientos | **Implementado** | `GastronomiaCierreJornadaAsientosGrabacionService` → `AsientoRepository` / ctamov; tras factura proceso |
+| Facturación única proceso | **Implementado** | `GastronomiaCierreJornadaFacturaProcesoEmisionService`; botón panel inferior + modal PV/fecha |
 | Facturación unitaria | **Pendiente** | una factura por permiso → alivio de carga servidor |
 
 ## Punto de venta del proceso (por empresa)
@@ -77,7 +87,7 @@ Obligatorio antes de facturar (cuando exista el paso de emisión).
 
 - PV debe pertenecer a la empresa.
 - `modofacturacion` ≠ `M` (manual).
-- Al emitir (futuro): `CierreJornadaProcesoPuntoventaSupport::resolverOError($empresaId)`.
+- Al emitir: `POST …/api/proceso/emitir-factura` con `puntoventa_id`, `fecha_factura`; PV default vía `CierreJornadaProcesoPuntoventaSupport::resolverOError($empresaId)`.
 
 **BSA (empresa_id = 1):** código PV `00003` (ej. «FCE BSA Chungo»).
 
@@ -102,6 +112,7 @@ Defaults globales opcionales: `GASTRONOMIA_CIERRE_JORNADA_CUENTA_*`.
 - Facturación masiva o grabado de asientos sin implementación explícita y permisos.
 - Incluir órdenes Waitry canceladas en totales o redistribución.
 - Mapear `credit_card` Waitry a columna distinta de QR.
+- Usar tipo `totem` / cuenta puente para agrupar cobros del Informe Z o columnas Sistema por medio real.
 - Duplicar lógica de PV fuera de `CierreJornadaProcesoPuntoventaSupport`.
 - Dejar variable `GASTRONOMIA_CIERRE_JORNADA_*` solo en `config/` sin `.env` + `.env.example`.
 

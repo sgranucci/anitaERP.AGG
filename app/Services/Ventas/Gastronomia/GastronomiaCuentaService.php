@@ -8,6 +8,8 @@ use App\Models\Ventas\CuentaGastronomia;
 use App\Models\Ventas\CuentaGastronomiaLinea;
 use App\Models\Ventas\MesaGastronomia;
 use App\Models\Ventas\MozoGastronomia;
+use App\Support\Stock\FormulaArticuloGastronomia;
+use App\Support\Ventas\GastronomiaFormulaOpcionalSeleccion;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
 use App\Support\Ventas\GastronomiaSkuCatalogoSupport;
 use Illuminate\Database\Eloquent\Collection;
@@ -20,6 +22,7 @@ class GastronomiaCuentaService
     public function __construct(
         private readonly GastronomiaJornadaService $jornadaService,
         private readonly GastronomiaTurnoOperativoService $turnoOperativoService,
+        private readonly GastronomiaFormulaOpcionalesService $opcionalesService,
     ) {
     }
     /**
@@ -373,47 +376,73 @@ class GastronomiaCuentaService
         }
 
         $idsOpcionales = [];
+        $idsFormulasHijas = [];
         foreach ($lineas as $linea) {
             $map = $linea->opcionales_json;
-            if (!is_array($map)) {
+            if (! is_array($map)) {
                 continue;
             }
-            foreach ($map as $articuloId) {
-                $articuloId = (int) $articuloId;
-                if ($articuloId > 0) {
-                    $idsOpcionales[$articuloId] = true;
+            foreach ($map as $valor) {
+                $decoded = \App\Support\Ventas\GastronomiaFormulaOpcionalSeleccion::decodificar($valor);
+                if ($decoded === null) {
+                    continue;
+                }
+                if ($decoded['tipo'] === 'articulo') {
+                    $idsOpcionales[$decoded['id']] = true;
+                } elseif ($decoded['tipo'] === 'formula_hija') {
+                    $idsFormulasHijas[$decoded['id']] = true;
                 }
             }
         }
 
         $articulosOpcionales = [];
-        if (!empty($idsOpcionales)) {
+        if (! empty($idsOpcionales)) {
             $articulosOpcionales = Articulo::query()
                 ->whereIn('id', array_keys($idsOpcionales))
                 ->get(['id', 'sku', 'descripcion'])
                 ->keyBy('id');
         }
 
+        $formulasHijasOpcionales = [];
+        if (! empty($idsFormulasHijas)) {
+            $formulasHijasOpcionales = \App\Models\Stock\Formula_Articulo::query()
+                ->with('articulos')
+                ->whereIn('id', array_keys($idsFormulasHijas))
+                ->get()
+                ->keyBy('id');
+        }
+
         foreach ($lineas as $linea) {
             $map = $linea->opcionales_json;
-            if (!is_array($map) || empty($map)) {
+            if (! is_array($map) || empty($map)) {
                 $linea->setAttribute('opcionales_detalle', []);
                 continue;
             }
 
             $detalle = [];
-            foreach ($map as $orden => $articuloId) {
-                $articuloId = (int) $articuloId;
-                if ($articuloId <= 0) {
+            foreach ($map as $orden => $valor) {
+                $decoded = \App\Support\Ventas\GastronomiaFormulaOpcionalSeleccion::decodificar($valor);
+                if ($decoded === null) {
                     continue;
                 }
-                $art = $articulosOpcionales[$articuloId] ?? null;
-                $detalle[] = [
-                    'orden' => (string) $orden,
-                    'articulo_id' => $articuloId,
-                    'sku' => $art->sku ?? null,
-                    'descripcion' => $art->descripcion ?? null,
-                ];
+                if ($decoded['tipo'] === 'articulo') {
+                    $art = $articulosOpcionales[$decoded['id']] ?? null;
+                    $detalle[] = [
+                        'orden' => (string) $orden,
+                        'articulo_id' => $decoded['id'],
+                        'sku' => $art->sku ?? null,
+                        'descripcion' => $art->descripcion ?? null,
+                    ];
+                } else {
+                    $sub = $formulasHijasOpcionales[$decoded['id']] ?? null;
+                    $art = $sub?->articulos;
+                    $detalle[] = [
+                        'orden' => (string) $orden,
+                        'formula_hija_id' => $decoded['id'],
+                        'sku' => $art->sku ?? ('F#'.$decoded['id']),
+                        'descripcion' => $art->descripcion ?? 'Subfórmula',
+                    ];
+                }
             }
             usort($detalle, fn ($a, $b) => strnatcmp($a['orden'], $b['orden']));
             $linea->setAttribute('opcionales_detalle', $detalle);
@@ -503,7 +532,7 @@ class GastronomiaCuentaService
     }
 
     /**
-     * @param  array<int|string, int|null>  $opcionalesPorOrden  ej. ["1" => 123, "2" => 456]
+     * @param  array<int|string, int|string|array|null>  $opcionalesPorOrden  ej. ["1" => "f:1648", "2" => 4719]
      */
     public function agregarLinea(
         CuentaGastronomia $cuenta,
@@ -527,6 +556,16 @@ class GastronomiaCuentaService
         );
 
         $this->validarCabeceraOperativa($cuenta);
+
+        $opcionalesPorOrden = GastronomiaFormulaOpcionalSeleccion::normalizarMapaDesdeRequest($opcionalesPorOrden);
+
+        $articulo = Articulo::query()->find($articuloId);
+        if ($articulo && FormulaArticuloGastronomia::opcionalesHabilitados()) {
+            $grupos = $this->opcionalesService->gruposOpcionalesPorArticulo($articulo);
+            if ($grupos !== []) {
+                $this->opcionalesService->validarSeleccionOpcionales($articulo, $opcionalesPorOrden);
+            }
+        }
 
         $maxNum = (int) DB::table('cuenta_gastronomia_linea')->where('cuenta_gastronomia_id', $cuenta->id)->max('numero_linea');
 

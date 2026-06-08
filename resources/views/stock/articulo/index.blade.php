@@ -11,6 +11,9 @@ Art&iacute;culos
 <script src="{{asset("assets/pages/scripts/configuracion/configurar_salida.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/configuracion/configurar_modeloetiqueta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/articulo/consulta-precios.js")}}" type="text/javascript"></script>
+@if (\App\Support\Stock\MovimientosArticuloDepositoSupport::puedeConsultar())
+<script src="{{ asset('assets/pages/scripts/stock/recuento/movimientos_articulo.js') }}" type="text/javascript"></script>
+@endif
 
 <script>
 var url = "{{ route('configurar_salida', ['programa' => ':programa']) }}";
@@ -139,6 +142,17 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
                                         <i class="fas fa-dollar-sign text-success"></i>
                                 	</button>
 								@endif
+                       			@if (\App\Support\Stock\MovimientosArticuloDepositoSupport::puedeConsultar())
+                                	<button type="button"
+                                	    class="btn-accion-tabla btn-movimientos-stock-articulo tooltipsC"
+                                	    title="Movimientos de stock por dep&oacute;sito"
+                                	    data-articulo-id="{{ $articulo->id }}"
+                                	    data-articulo-sku="{{ $articulo->codigoarticulo ?? $articulo->sku ?? '' }}"
+                                	    data-articulo-descripcion="{{ $articulo->descripcion ?? '' }}"
+                                	    data-deposito-id="{{ $articulo->depositoentrega_id ?? '' }}">
+                                        <i class="fa fa-exchange text-primary"></i>
+                                	</button>
+								@endif
                        			@if (can('borrar-articulos', false))
                                 <form action="{{route('eliminar_articulo', ['id' => $articulo->id])}}" class="d-inline form-eliminar" method="POST">
                                     @csrf @method("delete")
@@ -158,4 +172,7 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
 </div>
 {{ $articulos->appends($filtrosQuery ?? [])->links() }}
 @include('includes.stock.modalconsultaprecioarticulo')
+@if (\App\Support\Stock\MovimientosArticuloDepositoSupport::puedeConsultar())
+<input type="hidden" id="recuento-movimientos-articulo-url" value="{{ route('recuento_movimientos_articulo') }}">
+@endif
 @endsection

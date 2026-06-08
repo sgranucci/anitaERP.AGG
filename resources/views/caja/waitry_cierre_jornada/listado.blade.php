@@ -18,8 +18,9 @@
         <p class="resumen">
             Órdenes Waitry: {{ $resumen['ordenes_waitry'] ?? 0 }}
             · Facturas Anita: {{ $resumen['facturas_anita_waitry'] ?? 0 }}
-            · Total Waitry: ${{ number_format((float) ($resumen['total_waitry'] ?? 0), 2, ',', '.') }}
-            · Total Anita: ${{ number_format((float) ($resumen['total_anita_facturado'] ?? 0), 2, ',', '.') }}
+            · Tramo Waitry: ${{ number_format((float) ($resumen['total_waitry'] ?? 0), 2, ',', '.') }}
+            · Anita→Waitry: ${{ number_format((float) ($resumen['total_anita_enviadas_waitry'] ?? 0), 2, ',', '.') }}
+            · Anita jornada: ${{ number_format((float) ($resumen['total_anita_facturado'] ?? 0), 2, ',', '.') }}
             · Dif. global: ${{ number_format((float) ($resumen['diferencia_global'] ?? 0), 2, ',', '.') }}
         </p>
     @endif
@@ -29,7 +30,7 @@
                 <th>Orden Waitry</th>
                 <th>Ref.</th>
                 <th>Fecha/hora Waitry</th>
-                <th class="num">Total Waitry</th>
+                <th class="num">Importe Waitry</th>
                 <th>Pagada W.</th>
                 <th>Venta Anita</th>
                 <th class="num">Total Anita</th>

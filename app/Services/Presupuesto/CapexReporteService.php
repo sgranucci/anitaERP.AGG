@@ -3,6 +3,8 @@
 namespace App\Services\Presupuesto;
 
 use App\ApiAnita;
+use App\Models\Compras\Concepto_Ivacompra;
+use App\Models\Contable\Cuentacontable;
 use App\Models\Presupuesto\Capex;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use Illuminate\Support\Collection;
@@ -17,6 +19,14 @@ class CapexReporteService
     private const CHUNK_NUMEROS_OC = 80;
 
     private const CHUNK_FACTURAS = 40;
+
+    private const CHUNK_SUBDIARIO = 15;
+
+    /** tipoconcepto distinto de N/G/E → IVA, percepciones, retenciones, etc. */
+    private const TIPOS_CONCEPTO_IVACOMPRA_EXCLUIDOS = ['I', 'P', 'B', 'M', 'T', 'S', 'A'];
+
+    /** @var list<int>|null */
+    private ?array $codigosCuentasImpuestosExcluidas = null;
 
     public function __construct(
         private readonly EmpresaRepositoryInterface $empresaRepository,
@@ -67,7 +77,8 @@ class CapexReporteService
             }
         }
 
-        $montosPorFactura = $this->precargarMontosFacturas(array_values($facturasUnicas));
+        $datosPorFactura = $this->precargarDatosFacturas(array_values($facturasUnicas));
+        $subdiarioPorFactura = $this->precargarSubdiarioFacturas(array_values($facturasUnicas), $datosPorFactura);
         $pagosPorFactura = $this->precargarPagosFacturas(array_values($facturasUnicas));
 
         $filas = [];
@@ -80,7 +91,8 @@ class CapexReporteService
                     $capex,
                     $ordenesPorCodigo[$codigo] ?? [],
                     $facturasPorOc,
-                    $montosPorFactura,
+                    $datosPorFactura,
+                    $subdiarioPorFactura,
                     $pagosPorFactura
                 )
             );
@@ -270,11 +282,11 @@ class CapexReporteService
 
     /**
      * @param  list<array{proveedor:string, tipo:string, letra:string, sucursal:int, numero:int}>  $facturas
-     * @return array<string, float>
+     * @return array<string, array{monto: float, nro_interno: int, empresa: int}>
      */
-    private function precargarMontosFacturas(array $facturas): array
+    private function precargarDatosFacturas(array $facturas): array
     {
-        $montos = [];
+        $datos = [];
 
         foreach (array_chunk($facturas, self::CHUNK_FACTURAS) as $chunk) {
             $condiciones = [];
@@ -304,7 +316,9 @@ class CapexReporteService
                     prov_letra,
                     prov_sucursal,
                     prov_nro,
-                    prov_monto
+                    prov_monto,
+                    prov_nro_interno,
+                    prov_empresa
                 ',
                 'whereArmado' => ' WHERE '.implode(' OR ', $condiciones),
             ];
@@ -324,19 +338,251 @@ class CapexReporteService
                     trim((string) ($row->prov_proveedor ?? ''))
                 );
 
-                if (! isset($montos[$clave])) {
-                    $montos[$clave] = 0.0;
+                if (! isset($datos[$clave])) {
+                    $datos[$clave] = [
+                        'monto' => 0.0,
+                        'nro_interno' => (int) ($row->prov_nro_interno ?? 0),
+                        'empresa' => (int) ($row->prov_empresa ?? 0),
+                    ];
                 }
 
-                $montos[$clave] += (float) ($row->prov_monto ?? 0);
+                $datos[$clave]['monto'] += (float) ($row->prov_monto ?? 0);
+
+                if ($datos[$clave]['nro_interno'] <= 0) {
+                    $datos[$clave]['nro_interno'] = (int) ($row->prov_nro_interno ?? 0);
+                }
+
+                if ($datos[$clave]['empresa'] <= 0) {
+                    $datos[$clave]['empresa'] = (int) ($row->prov_empresa ?? 0);
+                }
             }
         }
 
-        foreach ($montos as $clave => $total) {
-            $montos[$clave] = round($total, 2);
+        foreach ($datos as $clave => $item) {
+            $datos[$clave]['monto'] = round($item['monto'], 2);
         }
 
-        return $montos;
+        return $datos;
+    }
+
+    /**
+     * @param  list<array{proveedor:string, tipo:string, letra:string, sucursal:int, numero:int}>  $facturas
+     * @param  array<string, array{monto: float, nro_interno: int, empresa: int}>  $datosPorFactura
+     * @return array<string, array{cotizacion: ?float, cuenta_contable: string}>
+     */
+    private function precargarSubdiarioFacturas(array $facturas, array $datosPorFactura): array
+    {
+        $facturasConInterno = [];
+
+        foreach ($facturas as $factura) {
+            $clave = $this->claveComprobante(
+                $factura['tipo'],
+                $factura['letra'],
+                $factura['sucursal'],
+                $factura['numero'],
+                $factura['proveedor'],
+            );
+            $datos = $datosPorFactura[$clave] ?? null;
+            $nroInterno = (int) ($datos['nro_interno'] ?? 0);
+
+            if ($nroInterno <= 0) {
+                continue;
+            }
+
+            $facturasConInterno[] = [
+                'clave' => $clave,
+                'tipo' => $factura['tipo'],
+                'letra' => $factura['letra'],
+                'sucursal' => (int) $factura['sucursal'],
+                'numero' => (int) $factura['numero'],
+                'nro_interno' => $nroInterno,
+                'empresa' => (int) ($datos['empresa'] ?? 0),
+            ];
+        }
+
+        if ($facturasConInterno === []) {
+            return [];
+        }
+
+        $lineasPorClave = [];
+        $codigosExcluidos = $this->codigosCuentasImpuestosExcluidas();
+
+        foreach (array_chunk($facturasConInterno, self::CHUNK_SUBDIARIO) as $chunk) {
+            $condiciones = [];
+
+            foreach ($chunk as $factura) {
+                $condicion = '(
+                    subd_tipo=\''.trim($factura['tipo']).'\' and
+                    subd_letra=\''.trim($factura['letra']).'\' and
+                    subd_sucursal='.(int) $factura['sucursal'].' and
+                    subd_nro='.(int) $factura['numero'].' and
+                    subd_nro_interno='.(int) $factura['nro_interno'];
+
+                if ((int) $factura['empresa'] > 0) {
+                    $condicion .= ' and subd_empresa='.(int) $factura['empresa'];
+                }
+
+                $condicion .= ')';
+                $condiciones[] = $condicion;
+            }
+
+            if ($condiciones === []) {
+                continue;
+            }
+
+            $apiAnita = new ApiAnita();
+            $leeAnita = [
+                'acc' => 'list',
+                'sistema' => 'contab',
+                'tabla' => 'subdiario, ctamae',
+                'campos' => '
+                    subd_tipo,
+                    subd_letra,
+                    subd_sucursal,
+                    subd_nro,
+                    subd_nro_interno,
+                    subd_cotizacion,
+                    subd_cuenta,
+                    subd_importe,
+                    subd_tipo_mov,
+                    ctam_desc
+                ',
+                'whereArmado' => ' WHERE
+                    subd_sistema=\'C\' and
+                    subd_cuenta=ctam_cuenta and
+                    subd_empresa=ctam_empresa and
+                    ('.implode(' OR ', $condiciones).')',
+            ];
+
+            $dataAnita = json_decode($apiAnita->apiCall($leeAnita));
+
+            if (! is_array($dataAnita)) {
+                continue;
+            }
+
+            foreach ($dataAnita as $row) {
+                $claveSubdiario = $this->claveSubdiario(
+                    (string) ($row->subd_tipo ?? ''),
+                    (string) ($row->subd_letra ?? ''),
+                    (int) ($row->subd_sucursal ?? 0),
+                    (int) ($row->subd_nro ?? 0),
+                    (int) ($row->subd_nro_interno ?? 0),
+                );
+
+                if (! isset($lineasPorClave[$claveSubdiario])) {
+                    $lineasPorClave[$claveSubdiario] = [
+                        'cotizacion' => null,
+                        'lineas' => [],
+                    ];
+                }
+
+                $cotizacion = (float) ($row->subd_cotizacion ?? 0);
+                if ($cotizacion > 0 && $lineasPorClave[$claveSubdiario]['cotizacion'] === null) {
+                    $lineasPorClave[$claveSubdiario]['cotizacion'] = round($cotizacion, 4);
+                }
+
+                $lineasPorClave[$claveSubdiario]['lineas'][] = $row;
+            }
+        }
+
+        $resultado = [];
+
+        foreach ($facturasConInterno as $factura) {
+            $claveSubdiario = $this->claveSubdiario(
+                $factura['tipo'],
+                $factura['letra'],
+                $factura['sucursal'],
+                $factura['numero'],
+                $factura['nro_interno'],
+            );
+
+            $bloque = $lineasPorClave[$claveSubdiario] ?? null;
+
+            $resultado[$factura['clave']] = [
+                'cotizacion' => is_array($bloque) ? ($bloque['cotizacion'] ?? null) : null,
+                'cuenta_contable' => $this->resolverCuentaGastoSubdiario(
+                    is_array($bloque) ? ($bloque['lineas'] ?? []) : [],
+                    $codigosExcluidos,
+                ),
+            ];
+        }
+
+        return $resultado;
+    }
+
+    /**
+     * @param  list<object>  $lineas
+     * @param  list<int>  $codigosExcluidos
+     */
+    private function resolverCuentaGastoSubdiario(array $lineas, array $codigosExcluidos): string
+    {
+        $mejor = null;
+
+        foreach ($lineas as $linea) {
+            if (trim((string) ($linea->subd_tipo_mov ?? '')) !== 'D') {
+                continue;
+            }
+
+            $codigo = (int) ($linea->subd_cuenta ?? 0);
+            if ($codigo <= 0 || in_array($codigo, $codigosExcluidos, true)) {
+                continue;
+            }
+
+            $importe = abs((float) ($linea->subd_importe ?? 0));
+            if ($importe <= 0) {
+                continue;
+            }
+
+            if ($mejor === null || $importe > $mejor['importe']) {
+                $mejor = [
+                    'codigo' => $codigo,
+                    'nombre' => trim((string) ($linea->ctam_desc ?? '')),
+                    'importe' => $importe,
+                ];
+            }
+        }
+
+        if ($mejor === null) {
+            return '';
+        }
+
+        $nombreLocal = Cuentacontable::query()
+            ->where('codigo', $mejor['codigo'])
+            ->value('nombre');
+
+        $nombre = $nombreLocal ? trim((string) $nombreLocal) : $mejor['nombre'];
+
+        return trim($mejor['codigo'].' '.$nombre);
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function codigosCuentasImpuestosExcluidas(): array
+    {
+        if ($this->codigosCuentasImpuestosExcluidas !== null) {
+            return $this->codigosCuentasImpuestosExcluidas;
+        }
+
+        $conceptos = Concepto_Ivacompra::query()
+            ->whereIn('tipoconcepto', self::TIPOS_CONCEPTO_IVACOMPRA_EXCLUIDOS)
+            ->with(['cuentacontablesdebe', 'cuentacontableshaber'])
+            ->get(['id', 'cuentacontabledebe_id', 'cuentacontablehaber_id']);
+
+        $codigos = [];
+
+        foreach ($conceptos as $concepto) {
+            foreach (['cuentacontablesdebe', 'cuentacontableshaber'] as $relacion) {
+                $cuenta = $concepto->{$relacion};
+                if ($cuenta && (int) $cuenta->codigo > 0) {
+                    $codigos[(int) $cuenta->codigo] = true;
+                }
+            }
+        }
+
+        $this->codigosCuentasImpuestosExcluidas = array_keys($codigos);
+
+        return $this->codigosCuentasImpuestosExcluidas;
     }
 
     /**
@@ -414,7 +660,8 @@ class CapexReporteService
     /**
      * @param  list<array{tipo:string, letra:string, sucursal:int, numero:int, mes:string, moneda_id:string, total:float}>  $ordenes
      * @param  array<int, list<array{proveedor:string, tipo:string, letra:string, sucursal:int, numero:int}>>  $facturasPorOc
-     * @param  array<string, float>  $montosPorFactura
+     * @param  array<string, array{monto: float, nro_interno: int, empresa: int}>  $datosPorFactura
+     * @param  array<string, array{cotizacion: ?float, cuenta_contable: string}>  $subdiarioPorFactura
      * @param  array<string, list<object>>  $pagosPorFactura
      * @return list<array<string, mixed>>
      */
@@ -422,7 +669,8 @@ class CapexReporteService
         Capex $capex,
         array $ordenes,
         array $facturasPorOc,
-        array $montosPorFactura,
+        array $datosPorFactura,
+        array $subdiarioPorFactura,
         array $pagosPorFactura,
     ): array {
         $montoCapex = $this->calcularMontoCapex($capex);
@@ -495,7 +743,8 @@ class CapexReporteService
                     $factura['sucursal'],
                     $factura['numero']
                 );
-                $importeFc = $montosPorFactura[$fcClave] ?? null;
+                $importeFc = $datosPorFactura[$fcClave]['monto'] ?? null;
+                $subdiario = $subdiarioPorFactura[$fcClave] ?? null;
                 $pagos = $pagosPorFactura[$fcClave] ?? [];
 
                 if ($pagos === []) {
@@ -505,6 +754,8 @@ class CapexReporteService
                         'monto_capex' => $this->asignarMontoCapex($montoCapexAsignado, $montoCapex),
                         'importe_oc' => $this->asignarImporteUnico($ocImporteAsignado, $ocClave, $importeOc),
                         'importe_fc' => $this->asignarImporteUnico($fcImporteAsignado, $fcClave, $importeFc),
+                        'cotizacion_fc' => $this->asignarCotizacionUnica($fcImporteAsignado, $fcClave, $subdiario['cotizacion'] ?? null),
+                        'cuenta_contable' => $this->asignarTextoUnico($fcImporteAsignado, $fcClave, $subdiario['cuenta_contable'] ?? ''),
                         'oc' => $ocTexto,
                         'fc' => $fcTexto,
                     ]);
@@ -519,6 +770,8 @@ class CapexReporteService
                         'monto_capex' => $this->asignarMontoCapex($montoCapexAsignado, $montoCapex),
                         'importe_oc' => $this->asignarImporteUnico($ocImporteAsignado, $ocClave, $importeOc),
                         'importe_fc' => $this->asignarImporteUnico($fcImporteAsignado, $fcClave, $importeFc),
+                        'cotizacion_fc' => $this->asignarCotizacionUnica($fcImporteAsignado, $fcClave, $subdiario['cotizacion'] ?? null),
+                        'cuenta_contable' => $this->asignarTextoUnico($fcImporteAsignado, $fcClave, $subdiario['cuenta_contable'] ?? ''),
                         'importe_pago' => round((float) ($pago->aplvp_monto ?? 0), 2),
                         'oc' => $ocTexto,
                         'fc' => $fcTexto,
@@ -544,6 +797,8 @@ class CapexReporteService
             'monto_capex' => null,
             'importe_oc' => null,
             'importe_fc' => null,
+            'cotizacion_fc' => null,
+            'cuenta_contable' => '',
             'importe_pago' => null,
             'oc' => '',
             'fc' => '',
@@ -580,6 +835,34 @@ class CapexReporteService
         return $importe;
     }
 
+    /**
+     * @param  array<string, true>  $asignados
+     */
+    private function asignarCotizacionUnica(array &$asignados, string $clave, ?float $cotizacion): ?float
+    {
+        if ($cotizacion === null || isset($asignados[$clave.'|cotizacion'])) {
+            return null;
+        }
+
+        $asignados[$clave.'|cotizacion'] = true;
+
+        return $cotizacion;
+    }
+
+    /**
+     * @param  array<string, true>  $asignados
+     */
+    private function asignarTextoUnico(array &$asignados, string $clave, string $texto): string
+    {
+        if ($texto === '' || isset($asignados[$clave.'|texto'])) {
+            return '';
+        }
+
+        $asignados[$clave.'|texto'] = true;
+
+        return $texto;
+    }
+
     private function claveComprobante(
         string $tipo,
         string $letra,
@@ -588,6 +871,16 @@ class CapexReporteService
         string $proveedor = '',
     ): string {
         return trim($proveedor).'|'.trim($tipo).'|'.trim($letra).'|'.$sucursal.'|'.$numero;
+    }
+
+    private function claveSubdiario(
+        string $tipo,
+        string $letra,
+        int $sucursal,
+        int $numero,
+        int $nroInterno,
+    ): string {
+        return trim($tipo).'|'.trim($letra).'|'.$sucursal.'|'.$numero.'|'.$nroInterno;
     }
 
     private function proveedorAnita(string $proveedor): string
@@ -685,13 +978,13 @@ class CapexReporteService
     {
         $clave = $this->claveComprobante($tipo, $letra, $sucursal, $numero, $proveedor);
 
-        return $this->precargarMontosFacturas([[
+        return $this->precargarDatosFacturas([[
             'proveedor' => $proveedor,
             'tipo' => $tipo,
             'letra' => $letra,
             'sucursal' => $sucursal,
             'numero' => $numero,
-        ]])[$clave] ?? null;
+        ]])[$clave]['monto'] ?? null;
     }
 
     private function formatearPartidas(Capex $capex): string

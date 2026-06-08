@@ -35,18 +35,9 @@ class PuntoventaRepository implements PuntoventaRepositoryInterface
             $query->where('estado', $estado);
         }
 
-        $this->aplicarFiltroEmpresasAsignadas($query);
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query);
 
         return $query->get();
-    }
-
-    private function aplicarFiltroEmpresasAsignadas($query): void
-    {
-        $empresasAsignadas = $this->empresaRepository->traeEmpresasAsignadas();
-
-        if (count($empresasAsignadas) > 1) {
-            $query->whereIn('empresa_id', $empresasAsignadas);
-        }
     }
 
     public function create(array $data, ?bool $syncAnita = null)

@@ -143,7 +143,7 @@ class IngresoEgresoController extends Controller
         $tipotransaccion_caja_query = $this->tipotransaccion_cajaRepository->all();
         $conceptogasto_query = $this->conceptogastoRepository->all();
         $moneda_query = $this->monedaRepository->all();
-        $empresa_query = $this->empresaRepository->all();
+        $empresa_query = $this->empresaRepository->allFiltrado();
         $cuentacaja_query = $this->cuentacajaRepository->all();
         $cuentacontable_query = $this->cuentacontableRepository->all();
         $centrocosto_query = $this->centrocostoRepository->all();
@@ -196,7 +196,7 @@ class IngresoEgresoController extends Controller
         $tipotransaccion_caja_query = $this->tipotransaccion_cajaRepository->all();
         $conceptogasto_query = $this->conceptogastoRepository->all();
         $moneda_query = $this->monedaRepository->all();
-        $empresa_query = $this->empresaRepository->all();
+        $empresa_query = $this->empresaRepository->allFiltrado();
         $cuentacaja_query = $this->cuentacajaRepository->all();
         $cuentacontable_query = $this->cuentacontableRepository->all();
         $centrocosto_query = $this->centrocostoRepository->all();

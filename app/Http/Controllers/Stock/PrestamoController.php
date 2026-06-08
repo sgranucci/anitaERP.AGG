@@ -8,7 +8,9 @@ use App\Models\Stock\Articulo;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Prestamo;
 use App\Models\Stock\Prestamo_Token;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Stock\Articulo_Saldo_DepositoRepositoryInterface;
+use App\Repositories\Stock\DepmaeRepositoryInterface;
 use App\Services\Stock\PrestamoService;
 use Auth;
 use Illuminate\Http\JsonResponse;
@@ -19,6 +21,8 @@ class PrestamoController extends Controller
     public function __construct(
         private readonly PrestamoService $service,
         private readonly Articulo_Saldo_DepositoRepositoryInterface $saldoRepository,
+        private readonly DepmaeRepositoryInterface $depmaeRepository,
+        private readonly EmpresaRepositoryInterface $empresaRepository,
     ) {}
 
     public function index()
@@ -32,10 +36,12 @@ class PrestamoController extends Controller
     public function crear()
     {
         can('crear-prestamo');
-        $depositos = Depmae::orderBy('nombre')->get(['id', 'nombre', 'codigo']);
+        $depositos = $this->depmaeRepository->allFiltrado();
+        $empresa_query = $this->empresaRepository->allFiltrado();
+        $empresa_id = old('empresa_id', $empresa_query->first()->id ?? null);
         $articulos = $this->articulosParaSelect();
 
-        return view('stock.prestamo.crear', compact('depositos', 'articulos'));
+        return view('stock.prestamo.crear', compact('depositos', 'articulos', 'empresa_query', 'empresa_id'));
     }
 
     public function guardar(ValidacionPrestamo $request)
@@ -56,13 +62,19 @@ class PrestamoController extends Controller
     {
         can('editar-prestamo');
         $prestamo = $this->service->buscar($id);
-        $depositos = Depmae::orderBy('nombre')->get(['id', 'nombre', 'codigo']);
+        $depositos = $this->depmaeRepository->allFiltrado();
+        $empresa_query = $this->empresaRepository->allFiltrado();
+        $empresa_id = old(
+            'empresa_id',
+            (int) (Depmae::query()->whereKey((int) $prestamo->deposito_origen_id)->value('empresa_id')
+                ?? $empresa_query->first()->id)
+        );
         $articulos = $this->articulosParaSelect();
         $saldosOrigen = $this->saldosArticulosDelPrestamo($prestamo, (int) $prestamo->deposito_origen_id);
         $saldosDestino = $this->saldosArticulosDelPrestamo($prestamo, (int) $prestamo->deposito_destino_id);
 
         return view('stock.prestamo.editar', compact(
-            'prestamo', 'depositos', 'articulos', 'saldosOrigen', 'saldosDestino'
+            'prestamo', 'depositos', 'articulos', 'saldosOrigen', 'saldosDestino', 'empresa_query', 'empresa_id'
         ));
     }
 
@@ -193,9 +205,17 @@ class PrestamoController extends Controller
     {
         can('listar-prestamo');
         $articuloId = (int) $request->input('articulo_id', 0);
+        $empresaId = (int) $request->input('empresa_id', 0);
         $depositoIds = array_filter(array_map('intval', (array) $request->input('depositos', [])));
         if ($articuloId <= 0 || empty($depositoIds)) {
             return response()->json(['saldos' => []]);
+        }
+
+        if ($empresaId > 0) {
+            $depositoIds = array_values(array_filter(
+                $depositoIds,
+                fn (int $depId) => Depmae::existeParaEmpresa($depId, $empresaId)
+            ));
         }
 
         $saldos = $this->saldoRepository->saldosArticuloPorDeposito($articuloId, $depositoIds);

@@ -7,6 +7,11 @@ interface Articulo_Saldo_DepositoRepositoryInterface
     public function saldo(int $articuloId, int $depositoId): float;
 
     /**
+     * Saldo acumulado a una fecha inclusive (suma articulo_movimiento.cantidad).
+     */
+    public function saldoAFecha(int $articuloId, int $depositoId, string $fecha): float;
+
+    /**
      * @param  array<int, int>  $depositoIds
      * @return array<int, float>  map deposito_id => saldo
      */

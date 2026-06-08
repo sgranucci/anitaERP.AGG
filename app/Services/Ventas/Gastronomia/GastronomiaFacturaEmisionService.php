@@ -8,7 +8,6 @@ use App\Models\Ventas\CuentaGastronomia;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\Tipotransaccion;
-use App\Support\Stock\FormulaArticuloGastronomia;
 use App\Support\Ventas\GastronomiaEmisionProfiler;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
@@ -27,7 +26,9 @@ use Throwable;
 
 /**
  * Orquesta la emisión de factura desde una cuenta gastronómica (validaciones, PV, receptor, persistencia).
- * Factura + cobranza + ingredientes + cierre de cuenta en una sola transacción: ante cualquier fallo no queda nada grabado.
+ * Factura + cobranza + CAE/ARCA + cierre de cuenta en una sola transacción: si ARCA falla, rollback total.
+ * Anita puede replicarse tras responder al POS. Insumos stkmov en Informix solo si
+ * GASTRONOMIA_ANITA_REPLICAR_INSUMOS_AL_FACTURAR=true (hoy false en .env).
  */
 final class GastronomiaFacturaEmisionService
 {
@@ -260,26 +261,9 @@ final class GastronomiaFacturaEmisionService
             return ['error' => 'La cuenta no está abierta.'];
         }
 
-        foreach ($cuenta->lineas as $linea) {
-            $art = $linea->articulo;
-            if (! $art) {
-                return ['error' => 'Artículo inexistente en línea '.$linea->id.'.'];
-            }
-
-            if (FormulaArticuloGastronomia::opcionalesHabilitados()) {
-                $grupos = $this->opcionalesService->gruposOpcionalesPorArticulo($art);
-                if ($grupos !== []) {
-                    $opcMap = [];
-                    foreach (($linea->opcionales_json ?? []) as $k => $v) {
-                        $opcMap[(string) $k] = $v !== null ? (int) $v : null;
-                    }
-                    try {
-                        $this->opcionalesService->validarSeleccionOpcionales($art, $opcMap);
-                    } catch (InvalidArgumentException $e) {
-                        return ['error' => $e->getMessage()];
-                    }
-                }
-            }
+        $erroresOpcionales = $this->opcionalesService->erroresOpcionalesEnLineas($cuenta->lineas);
+        if ($erroresOpcionales !== []) {
+            return ['error' => $erroresOpcionales[0]];
         }
 
         $cfg = $cuenta->configuracionPuntoventa ?? $this->cuentaService->resolverConfiguracionPv();
@@ -388,7 +372,30 @@ final class GastronomiaFacturaEmisionService
                 });
                 $profiler?->marcar('despues_transaccion');
 
-                $impresionTicketTrasWaitry = $this->debeImprimirTicketTrasWaitry($cuenta);
+                if ($this->debeEncolarAnitaTrasRespuesta($resultado)) {
+                    $this->encolarAnitaTrasRespuesta($resultado, $cfg, $payload);
+                    $profiler?->marcar('anita_encolado');
+                    unset($resultado['anita_pendiente'], $resultado['vencae_pendiente'], $resultado['descuentopie_post_commit']);
+                } else {
+                    try {
+                        $resultado = $this->completarAnitaPostCommit(
+                            $resultado,
+                            $cfg,
+                            $payload,
+                            $profiler,
+                        );
+                    } catch (Throwable $e) {
+                        Log::error('gastronomia.emitir_factura.post_commit.fallo', [
+                            'venta_id' => $resultado['venta_id'] ?? null,
+                            'msg' => $e->getMessage(),
+                        ]);
+                        $aviso = 'Factura emitida con CAE; falló la replicación en Anita: '.$e->getMessage();
+                        $warnPrevio = trim((string) ($resultado['warn'] ?? ''));
+                        $resultado['warn'] = $warnPrevio !== '' ? $warnPrevio."\n\n".$aviso : $aviso;
+                    }
+                }
+
+                $impresionTicketTrasWaitry = $this->debeImprimirTicketTrasWaitry($cuenta, $cfg);
 
                 if (! $impresionTicketTrasWaitry) {
                     $profiler?->marcar('antes_ticket');
@@ -398,7 +405,7 @@ final class GastronomiaFacturaEmisionService
 
                 if (
                     config('gastronomia.waitry_tras_respuesta', true)
-                    && config('waitry.habilitado', false)
+                    && $cfg->waitryHabilitadoEnTerminal()
                 ) {
                     $this->encolarWaitryTrasRespuesta(
                         $resultado,
@@ -491,6 +498,11 @@ final class GastronomiaFacturaEmisionService
     ): array {
         $ventaAnitaRevertir = null;
 
+        $cuenta = CuentaGastronomia::query()
+            ->whereKey($cuenta->id)
+            ->lockForUpdate()
+            ->firstOrFail();
+
         try {
             $profiler?->marcar('tx_emitir_comprobante_inicio');
             // 1) Número ARCA + grabación venta/ítems (CAE diferido vía omitir_solicitud_arca_cae).
@@ -518,7 +530,7 @@ final class GastronomiaFacturaEmisionService
                 );
             }
 
-            if (config('gastronomia.sincronizar_anita_al_facturar', true)) {
+            if (config('gastronomia.sincronizar_anita_al_facturar', true) && empty($resultado['anita_pendiente'])) {
                 $ventaAnitaRevertir = $venta;
             }
 
@@ -570,18 +582,13 @@ final class GastronomiaFacturaEmisionService
                 $monedaId,
                 (string) ($payload['fechajornada'] ?? $payload['fechafactura']),
             );
+            $profiler?->marcar('tx_ingredientes_fin');
 
-            $this->insumoStkmovAnitaService->replicarMovimientosInsumos(
-                $venta->fresh(),
-                $cfg,
-                (float) ($payload['descuentopie'] ?? 0),
-            );
-            $profiler?->marcar('tx_ingredientes_anita_fin');
-
-            // 4) CAE/CAEA en ARCA (último paso fiscal, con recuperación si falla la comunicación).
+            // 4) CAE/CAEA en ARCA (obligatorio antes del commit; si falla, rollback de factura y cobranza).
+            $vencaePendiente = null;
             if (! empty($resultado['cae_pendiente']) && is_array($resultado['cae_pendiente'])) {
                 $profiler?->marcar('tx_vencae_inicio');
-                $this->facturacionGastronomiaService->completarSolicitudCaePendiente($resultado['cae_pendiente']);
+                $vencaePendiente = $this->facturacionGastronomiaService->completarSolicitudCaePendiente($resultado['cae_pendiente']);
                 $profiler?->marcar('tx_vencae_fin');
             }
 
@@ -619,6 +626,9 @@ final class GastronomiaFacturaEmisionService
                 'warn' => $warn,
                 'sin_cobranza' => $sinCobranza,
                 'cobranza_id' => $cobranzaId,
+                'anita_pendiente' => $resultado['anita_pendiente'] ?? null,
+                'vencae_pendiente' => $vencaePendiente,
+                'descuentopie_post_commit' => (float) ($payload['descuentopie'] ?? 0),
             ], fn ($v) => $v !== null && $v !== '' && $v !== false);
         } catch (Throwable $e) {
             if ($ventaAnitaRevertir !== null) {
@@ -724,18 +734,34 @@ final class GastronomiaFacturaEmisionService
 
             $opcionalesLinea = is_array($linea->opcionales_json) ? $linea->opcionales_json : [];
             $opcionalesPorItem[$indexPadre] = [];
-            foreach ($opcionalesLinea as $orden => $aid) {
-                $opcionalesPorItem[$indexPadre][(string) $orden] = $aid !== null && $aid !== ''
-                    ? (int) $aid
-                    : null;
+            foreach ($opcionalesLinea as $orden => $valor) {
+                $opcionalesPorItem[$indexPadre][(string) $orden] = \App\Support\Ventas\GastronomiaFormulaOpcionalSeleccion::estaVacio($valor)
+                    ? null
+                    : $valor;
             }
 
-            foreach ($opcionalesLinea as $aid) {
-                if (! $aid) {
+            foreach ($opcionalesLinea as $valor) {
+                $decoded = \App\Support\Ventas\GastronomiaFormulaOpcionalSeleccion::decodificar($valor);
+                if ($decoded === null) {
                     continue;
                 }
 
-                $articuloIds[] = (int) $aid;
+                $articuloOpcionalId = null;
+                if ($decoded['tipo'] === 'articulo') {
+                    $articuloOpcionalId = $decoded['id'];
+                } elseif ($decoded['tipo'] === 'formula_hija') {
+                    $sub = \App\Models\Stock\Formula_Articulo::query()
+                        ->find($decoded['id']);
+                    if ($sub && $sub->articulo_id) {
+                        $articuloOpcionalId = (int) $sub->articulo_id;
+                    }
+                }
+
+                if ($articuloOpcionalId === null || $articuloOpcionalId <= 0) {
+                    continue;
+                }
+
+                $articuloIds[] = $articuloOpcionalId;
                 $cantidades[] = (float) $linea->cantidad;
                 $precios[] = 0.;
                 $descripciones[] = '';
@@ -812,6 +838,199 @@ final class GastronomiaFacturaEmisionService
         return $resultado;
     }
 
+    private function replicarInsumosAnitaAlFacturar(): bool
+    {
+        return filter_var(
+            config('gastronomia.anita_replicar_insumos_al_facturar', true),
+            FILTER_VALIDATE_BOOLEAN,
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $resultado
+     */
+    private function debeEncolarAnitaTrasRespuesta(array $resultado): bool
+    {
+        if (! filter_var(config('gastronomia.anita_tras_respuesta', true), FILTER_VALIDATE_BOOLEAN)) {
+            return false;
+        }
+
+        if (! config('gastronomia.sincronizar_anita_al_facturar', true)) {
+            return false;
+        }
+
+        $ventaId = (int) ($resultado['venta_id'] ?? 0);
+        if ($ventaId <= 0) {
+            return false;
+        }
+
+        $tieneAnitaPendiente = ! empty($resultado['anita_pendiente']) && is_array($resultado['anita_pendiente']);
+        $tieneVencaePendiente = ! empty($resultado['vencae_pendiente']) && is_array($resultado['vencae_pendiente']);
+
+        return $tieneAnitaPendiente || $tieneVencaePendiente || $this->replicarInsumosAnitaAlFacturar();
+    }
+
+    /**
+     * Replica venta e insumos (opcional) en Informix tras responder al POS.
+     * Insumos: solo si GASTRONOMIA_ANITA_REPLICAR_INSUMOS_AL_FACTURAR=true.
+     *
+     * @param  array<string, mixed>  $resultado
+     * @param  array<string, mixed>  $payload
+     */
+    private function encolarAnitaTrasRespuesta(
+        array $resultado,
+        ConfiguracionPuntoventaGastronomia $cfg,
+        array $payload,
+    ): void {
+        $ventaId = (int) ($resultado['venta_id'] ?? 0);
+        if ($ventaId <= 0) {
+            return;
+        }
+
+        $anitaPendiente = (! empty($resultado['anita_pendiente']) && is_array($resultado['anita_pendiente']))
+            ? $resultado['anita_pendiente']
+            : null;
+        $vencaePendiente = (! empty($resultado['vencae_pendiente']) && is_array($resultado['vencae_pendiente']))
+            ? $resultado['vencae_pendiente']
+            : null;
+        $descuentoPie = (float) ($resultado['descuentopie_post_commit'] ?? $payload['descuentopie'] ?? 0);
+        $cfgId = (int) $cfg->id;
+        $replicarInsumos = $this->replicarInsumosAnitaAlFacturar();
+
+        app()->terminating(function () use ($ventaId, $anitaPendiente, $vencaePendiente, $cfgId, $descuentoPie, $replicarInsumos): void {
+            if (is_array($anitaPendiente)) {
+                try {
+                    $this->facturacionGastronomiaService->ejecutarAnitaPendienteGastronomia($anitaPendiente);
+                } catch (Throwable $e) {
+                    Log::error('gastronomia.anita.defer.venta_fallo', [
+                        'venta_id' => $ventaId,
+                        'msg' => $e->getMessage(),
+                    ]);
+                    $this->limpiarAnitaParcialTrasFalloDefer($ventaId);
+                }
+            }
+
+            if (is_array($vencaePendiente)) {
+                try {
+                    $this->facturacionGastronomiaService->ejecutarVencaePendienteGastronomia($vencaePendiente);
+                } catch (Throwable $e) {
+                    Log::error('gastronomia.anita.defer.vencae_fallo', [
+                        'venta_id' => $ventaId,
+                        'msg' => $e->getMessage(),
+                    ]);
+                }
+            }
+
+            if (! $replicarInsumos) {
+                return;
+            }
+
+            $cfgDefer = ConfiguracionPuntoventaGastronomia::query()->find($cfgId);
+            if ($cfgDefer === null) {
+                Log::warning('gastronomia.anita.defer.cfg_inexistente', [
+                    'venta_id' => $ventaId,
+                    'cfg_id' => $cfgId,
+                ]);
+
+                return;
+            }
+
+            $venta = Venta::query()->find($ventaId);
+            if ($venta === null) {
+                Log::warning('gastronomia.anita.defer.venta_inexistente', ['venta_id' => $ventaId]);
+
+                return;
+            }
+
+            try {
+                $this->insumoStkmovAnitaService->replicarMovimientosInsumos($venta, $cfgDefer, $descuentoPie);
+            } catch (Throwable $e) {
+                Log::error('gastronomia.anita.defer.insumos_fallo', [
+                    'venta_id' => $ventaId,
+                    'msg' => $e->getMessage(),
+                ]);
+            }
+        });
+    }
+
+    /**
+     * Tras fallo en grabaAnita diferida: intenta borrar cabecera/detalle parcial en Informix
+     * para evitar duplicate key en el backfill de auditoría.
+     */
+    private function limpiarAnitaParcialTrasFalloDefer(int $ventaId): void
+    {
+        if ($ventaId <= 0) {
+            return;
+        }
+
+        $venta = Venta::query()->find($ventaId);
+        if ($venta === null) {
+            return;
+        }
+
+        try {
+            $this->facturacionGastronomiaService->revertirVentaEnAnitaSiHabilitado($venta);
+            Log::info('gastronomia.anita.defer.cleanup_ok', [
+                'venta_id' => $ventaId,
+                'codigo' => $venta->codigo,
+            ]);
+        } catch (Throwable $e) {
+            Log::warning('gastronomia.anita.defer.cleanup_fallo', [
+                'venta_id' => $ventaId,
+                'msg' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Replicación Anita post-commit síncrona (fallback si anita_tras_respuesta=false).
+     * Insumos: solo si GASTRONOMIA_ANITA_REPLICAR_INSUMOS_AL_FACTURAR=true.
+     *
+     * @param  array<string, mixed>  $resultado
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function completarAnitaPostCommit(
+        array $resultado,
+        ConfiguracionPuntoventaGastronomia $cfg,
+        array $payload,
+        ?GastronomiaEmisionProfiler $profiler = null,
+    ): array {
+        $ventaId = (int) ($resultado['venta_id'] ?? 0);
+        if ($ventaId <= 0) {
+            return $resultado;
+        }
+
+        if (! empty($resultado['anita_pendiente']) && is_array($resultado['anita_pendiente'])) {
+            $profiler?->marcar('post_anita_inicio');
+            $this->facturacionGastronomiaService->ejecutarAnitaPendienteGastronomia($resultado['anita_pendiente']);
+            $profiler?->marcar('post_anita_fin');
+        }
+
+        if (! empty($resultado['vencae_pendiente']) && is_array($resultado['vencae_pendiente'])) {
+            $profiler?->marcar('post_vencae_inicio');
+            $this->facturacionGastronomiaService->ejecutarVencaePendienteGastronomia($resultado['vencae_pendiente']);
+            $profiler?->marcar('post_vencae_fin');
+        }
+
+        if ($this->replicarInsumosAnitaAlFacturar()) {
+            $venta = Venta::query()->find($ventaId);
+            if ($venta) {
+                $profiler?->marcar('post_insumos_anita_inicio');
+                $this->insumoStkmovAnitaService->replicarMovimientosInsumos(
+                    $venta,
+                    $cfg,
+                    (float) ($resultado['descuentopie_post_commit'] ?? $payload['descuentopie'] ?? 0),
+                );
+                $profiler?->marcar('post_insumos_anita_fin');
+            }
+        }
+
+        unset($resultado['anita_pendiente'], $resultado['vencae_pendiente'], $resultado['descuentopie_post_commit']);
+
+        return $resultado;
+    }
+
     /**
      * @param  array{venta_id?:int,factura?:string,warn?:string,sin_cobranza?:bool,cobranza_id?:int}  $resultado
      * @return array{venta_id?:int,factura?:string,warn?:string,sin_cobranza?:bool,cobranza_id?:int,impresion_ticket?:string,impresion_ticket_mensaje?:string}
@@ -850,9 +1069,9 @@ final class GastronomiaFacturaEmisionService
     /**
      * Si la comanda se enviará a Waitry tras emitir, el ticket se imprime después para incluir el papelito.
      */
-    private function debeImprimirTicketTrasWaitry(CuentaGastronomia $cuenta): bool
+    private function debeImprimirTicketTrasWaitry(CuentaGastronomia $cuenta, ConfiguracionPuntoventaGastronomia $cfg): bool
     {
-        if (! config('waitry.habilitado', false)) {
+        if (! $cfg->waitryHabilitadoEnTerminal()) {
             return false;
         }
 
@@ -946,7 +1165,9 @@ final class GastronomiaFacturaEmisionService
             return $resultado;
         }
 
-        if (! config('waitry.habilitado', false)) {
+        $cuenta->loadMissing('configuracionPuntoventa');
+        $cfg = $cuenta->configuracionPuntoventa;
+        if ($cfg === null || ! $cfg->waitryHabilitadoEnTerminal()) {
             return $resultado;
         }
 

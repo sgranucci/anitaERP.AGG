@@ -9,6 +9,7 @@ trait ArbolaprobacionTrait {
 		['id' => '2', 'valor' => 'OC', 'nombre'  => 'Ordenes de compra'],
 		['id' => '3', 'valor' => 'SP', 'nombre'  => 'Solicitudes de pago'],
 		['id' => '4', 'valor' => 'OV', 'nombre'  => 'Ordenes de venta'],
+		['id' => '5', 'valor' => 'RS', 'nombre'  => 'Requisiciones de sala'],
 			];
 
 	public static $enumRecordatorio = [

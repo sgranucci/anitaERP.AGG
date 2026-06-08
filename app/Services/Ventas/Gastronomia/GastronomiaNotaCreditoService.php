@@ -135,6 +135,7 @@ final class GastronomiaNotaCreditoService
                 $profiler,
             ) {
                 $ventaAnitaRevertir = null;
+                $vencaePendiente = null;
 
                 $profiler?->marcar('nc_emitir_comprobante_inicio');
                 $resultado = $this->facturacionGastronomiaService->emitirComprobante($payload, $cuenta);
@@ -185,7 +186,7 @@ final class GastronomiaNotaCreditoService
 
                 if (! empty($resultado['cae_pendiente']) && is_array($resultado['cae_pendiente'])) {
                     $profiler?->marcar('nc_cae_diferido_inicio');
-                    $this->facturacionGastronomiaService->completarSolicitudCaePendiente($resultado['cae_pendiente']);
+                    $vencaePendiente = $this->facturacionGastronomiaService->completarSolicitudCaePendiente($resultado['cae_pendiente']);
                     $profiler?->marcar('nc_cae_diferido_fin');
                 }
 
@@ -208,9 +209,12 @@ final class GastronomiaNotaCreditoService
                     'venta_id' => $ventaNc->id,
                     'factura' => $facturaTxt,
                     'mensaje' => 'Nota de crédito '.$facturaTxt.' generada correctamente.',
+                    'vencae_pendiente' => $vencaePendiente ?? null,
                 ];
             });
             $profiler?->marcar('despues_transaccion');
+
+            $this->completarVencaeDiferidoTrasNotaCredito($resultadoTx);
 
             $profiler?->marcar('nc_ticket_inicio');
             $resultadoFinal = $this->aplicarImpresionTicketTrasNotaCredito($resultadoTx, $cfg, $cuenta);
@@ -469,5 +473,34 @@ final class GastronomiaNotaCreditoService
         $resultado['warn'] = $aviso;
 
         return $resultado;
+    }
+
+    /**
+     * @param  array<string, mixed>  $resultadoTx
+     */
+    private function completarVencaeDiferidoTrasNotaCredito(array $resultadoTx): void
+    {
+        $vencaePendiente = $resultadoTx['vencae_pendiente'] ?? null;
+        if (! is_array($vencaePendiente) || $vencaePendiente === []) {
+            return;
+        }
+
+        $ventaId = (int) ($resultadoTx['venta_id'] ?? 0);
+        $ejecutar = function () use ($vencaePendiente, $ventaId): void {
+            try {
+                $this->facturacionGastronomiaService->ejecutarVencaePendienteGastronomia($vencaePendiente);
+            } catch (Throwable $e) {
+                Log::error('gastronomia.nota_credito.vencae_defer.fallo', [
+                    'venta_id' => $ventaId,
+                    'msg' => $e->getMessage(),
+                ]);
+            }
+        };
+
+        if (filter_var(config('gastronomia.anita_tras_respuesta', true), FILTER_VALIDATE_BOOLEAN)) {
+            app()->terminating($ejecutar);
+        } else {
+            $ejecutar();
+        }
     }
 }

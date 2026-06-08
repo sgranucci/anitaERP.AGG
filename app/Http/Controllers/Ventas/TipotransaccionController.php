@@ -26,10 +26,11 @@ class TipotransaccionController extends Controller
         can('listar-tipos-transacciones');
         $datas = $this->repository->all(['V', 'U', 'C']);
         $operacionEnum = Tipotransaccion::$enumOperacion;
+        $operacionStockEnum = Tipotransaccion::$enumOperacionStock;
         $signoEnum = Tipotransaccion::$enumSigno;
         $estadoEnum = Tipotransaccion::$enumEstado;
 
-        return view('ventas.tipotransaccion.index', compact('datas', 'operacionEnum', 'signoEnum', 'estadoEnum'));
+        return view('ventas.tipotransaccion.index', compact('datas', 'operacionEnum', 'operacionStockEnum', 'signoEnum', 'estadoEnum'));
     }
 
     /**
@@ -158,6 +159,7 @@ class TipotransaccionController extends Controller
     private function datosFormulario(?Tipotransaccion $data = null): array
     {
         $operacionEnum = Tipotransaccion::$enumOperacion;
+        $operacionStockEnum = Tipotransaccion::$enumOperacionStock;
         $signoEnum = Tipotransaccion::$enumSigno;
         $estadoEnum = Tipotransaccion::$enumEstado;
         $empresa_query = $this->empresasArcaQuery();
@@ -181,6 +183,7 @@ class TipotransaccionController extends Controller
 
         return compact(
             'operacionEnum',
+            'operacionStockEnum',
             'signoEnum',
             'estadoEnum',
             'empresa_query',

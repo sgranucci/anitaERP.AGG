@@ -97,6 +97,11 @@
                                     </button>
                                 </form>
 								@endif
+                       			@if (can('listar-asiento', false) || can('editar-asiento', false))
+                                	<a href="{{ route('imprimir_pdf_asiento', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Emitir asiento en PDF" target="_blank" rel="noopener noreferrer">
+                                    <i class="fas fa-file-pdf text-danger"></i>
+                                	</a>
+								@endif
                             </td>
                         </tr>
                         @endforeach

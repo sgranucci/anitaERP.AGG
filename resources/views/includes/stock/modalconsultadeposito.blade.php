@@ -8,12 +8,11 @@
         </button>
       </div>
       <div class="modal-body">
-        <form action="" method="post">
-          <div class="form-group row">
-            <label for="consultadeposito" class="col-form-label">Buscar:</label>
-            <input type="text" name="consultadeposito" id="consultadeposito" autofocus>
-          </div>
-        </form>
+        {{-- Sin form anidado: si el partial va dentro de otro form, HTML cierra el padre y el submit falla. --}}
+        <div class="form-group row">
+          <label for="consultadeposito" class="col-form-label">Buscar:</label>
+          <input type="text" name="consultadeposito" id="consultadeposito" autofocus>
+        </div>
 
         <table class="table table-striped table-bordered table-hover" id="tabla-data-deposito">
           <thead>
@@ -21,7 +20,7 @@
               <th>Código</th>
               <th>Descripción</th>
               <th>Tipo</th>
-              <th></th>
+              <th>Acciones</th>
           </thead>
           <tbody id="datosdeposito"></tbody>
         </table>

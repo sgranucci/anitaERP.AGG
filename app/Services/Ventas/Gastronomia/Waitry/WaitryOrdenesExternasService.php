@@ -7,6 +7,8 @@ use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
 use App\Models\Ventas\CuentaGastronomia;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Services\Ventas\Gastronomia\GastronomiaCuentaService;
+use App\Services\Ventas\Gastronomia\GastronomiaFormulaOpcionalesService;
+use App\Support\Stock\FormulaArticuloGastronomia;
 use App\Support\Ventas\GastronomiaSkuCatalogoSupport;
 use App\Support\Ventas\Waitry\WaitryCierreJornadaVentanaSupport;
 use App\Support\Ventas\Waitry\WaitryDisplayIdSupport;
@@ -38,6 +40,16 @@ final class WaitryOrdenesExternasService
         return app(GastronomiaCuentaService::class);
     }
 
+    private function opcionalesService(): GastronomiaFormulaOpcionalesService
+    {
+        return app(GastronomiaFormulaOpcionalesService::class);
+    }
+
+    private function analyticsOrdenesService(): WaitryAnalyticsOrdenesService
+    {
+        return app(WaitryAnalyticsOrdenesService::class);
+    }
+
     /**
      * Código alfanumérico del papelito Waitry para un orderId (getOrdersPOS).
      */
@@ -57,7 +69,8 @@ final class WaitryOrdenesExternasService
      */
     public function completarDisplayIdEnCuenta(CuentaGastronomia $cuenta): void
     {
-        if (trim((string) ($cuenta->waitry_display_id ?? '')) !== '') {
+        $actual = trim((string) ($cuenta->waitry_display_id ?? ''));
+        if ($actual !== '' && WaitryDisplayIdSupport::esIdentificadorMonitorValido($actual)) {
             return;
         }
 
@@ -90,7 +103,11 @@ final class WaitryOrdenesExternasService
         }
 
         $identificadorPapelito = trim($identificadorPapelito);
-        if ($identificadorPapelito !== '' && ! ctype_digit($identificadorPapelito)) {
+        if ($identificadorPapelito !== '' && WaitryDisplayIdSupport::esIdentificadorMonitorValido($identificadorPapelito)) {
+            if (WaitryDisplayIdSupport::esContadorMonitorNumerico($identificadorPapelito)) {
+                return WaitryDisplayIdSupport::normalizarContadorMonitor($identificadorPapelito);
+            }
+
             return $identificadorPapelito;
         }
 
@@ -817,7 +834,7 @@ final class WaitryOrdenesExternasService
         $empresaId = (int) $cfg->empresa_id;
         $identificadorPapelito = trim($identificadorPapelito);
         if ($identificadorPapelito === '') {
-            return ['ok' => false, 'error' => 'Debe indicar el ID alfanumérico del papelito Waitry.'];
+            return ['ok' => false, 'error' => 'Debe indicar el número del monitor o código Waitry.'];
         }
 
         $resolucion = $this->obtenerOrdenPorIdentificadorPapelito(
@@ -879,6 +896,23 @@ final class WaitryOrdenesExternasService
                 continue;
             }
 
+            if (FormulaArticuloGastronomia::opcionalesHabilitados()) {
+                $grupos = $this->opcionalesService()->gruposOpcionalesPorArticulo($articulo);
+                if ($grupos !== []) {
+                    $msgOpc = 'SKU «'.$sku.'» ('.($ln['titulo'] ?? '').') requiere opcionales de fórmula: '
+                        .'no se importa desde Waitry. Carguelo manualmente en el POS (modal de opcionales).';
+                    $errores[] = $msgOpc;
+                    Log::info('waitry.item_omitido_opcionales', [
+                        'waitry_order_id' => $waitryOrderId,
+                        'sku' => $sku,
+                        'articulo_id' => (int) $articulo->id,
+                        'grupos_opcionales' => count($grupos),
+                    ]);
+
+                    continue;
+                }
+            }
+
             try {
                 $this->cuentaService()->agregarLinea(
                     $cuenta,
@@ -917,6 +951,28 @@ final class WaitryOrdenesExternasService
         $cuenta = $this->cuentaService()->cuentaConLineas($cuenta->id);
 
         if ($cuenta->lineas->isEmpty()) {
+            $soloOpcionales = $errores !== []
+                && count($errores) === count($lineasWaitry)
+                && collect($errores)->every(
+                    static fn (string $e): bool => str_contains($e, 'requiere opcionales de fórmula')
+                        || str_contains($e, 'Debe seleccionar opcional')
+                );
+
+            if ($soloOpcionales) {
+                Log::info('waitry.cuenta_sin_lineas_solo_opcionales', [
+                    'waitry_order_id' => $waitryOrderId,
+                    'cuenta_id' => $cuenta->id,
+                    'errores' => $errores,
+                ]);
+
+                return [
+                    'ok' => true,
+                    'cuenta' => $cuenta,
+                    'errores' => $errores,
+                    'requiere_carga_opcionales_en_pos' => true,
+                ];
+            }
+
             $cuenta->delete();
 
             return [
@@ -944,7 +1000,8 @@ final class WaitryOrdenesExternasService
     }
 
     /**
-     * Resuelve orden por ID numérico (orderId) o código alfanumérico del papelito (display_id, etc.).
+     * Resuelve orden por secuencia del monitor (getordersdetails.sequence), orderId global
+     * o código alfanumérico legacy (display_id, E-…).
      *
      * @return array{0: array<string, mixed>, 1: int}|null
      */
@@ -956,6 +1013,17 @@ final class WaitryOrdenesExternasService
         $identificador = trim($identificador);
         if ($identificador === '') {
             return null;
+        }
+
+        if (WaitryDisplayIdSupport::esContadorMonitorNumerico($identificador)) {
+            $porSecuencia = $this->resolverOrdenPorSecuenciaMonitor(
+                $empresaId,
+                $identificador,
+                $soloPendientesDePago,
+            );
+            if ($porSecuencia !== null) {
+                return $porSecuencia;
+            }
         }
 
         if (ctype_digit($identificador)) {
@@ -979,6 +1047,59 @@ final class WaitryOrdenesExternasService
         }
 
         return [$orden, $orderId];
+    }
+
+    /**
+     * @return array{0: array<string, mixed>, 1: int}|null
+     */
+    private function resolverOrdenPorSecuenciaMonitor(
+        int $empresaId,
+        string $secuencia,
+        bool $soloPendientesDePago,
+    ): ?array {
+        $orderId = $this->buscarOrderIdPorSecuenciaMonitor($empresaId, $secuencia);
+        if ($orderId === null) {
+            return null;
+        }
+
+        $orden = $this->obtenerOrdenPorId($empresaId, $orderId, $soloPendientesDePago);
+        if ($orden === null) {
+            return null;
+        }
+
+        return [$orden, $orderId];
+    }
+
+    private function buscarOrderIdPorSecuenciaMonitor(int $empresaId, string $secuencia): ?int
+    {
+        $secuencia = WaitryDisplayIdSupport::normalizarContadorMonitor($secuencia);
+        if ($secuencia === '') {
+            return null;
+        }
+
+        $tz = (string) config('app.timezone', 'UTC');
+        $hoy = Carbon::now($tz);
+        $fechas = array_values(array_unique([
+            $hoy->format('Y-m-d'),
+            $hoy->copy()->subDay()->format('Y-m-d'),
+        ]));
+
+        foreach ($fechas as $fecha) {
+            $consulta = $this->analyticsOrdenesService()->ordenesPorRangoFecha($empresaId, $fecha, $fecha);
+            if (! ($consulta['ok'] ?? false)) {
+                continue;
+            }
+
+            $orderId = WaitryDisplayIdSupport::orderIdDesdeOrdenesPorSecuencia(
+                $secuencia,
+                $consulta['ordenes'] ?? [],
+            );
+            if ($orderId !== null) {
+                return $orderId;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -1057,6 +1178,11 @@ final class WaitryOrdenesExternasService
             if ($valor !== '') {
                 $codigos[] = $valor;
             }
+        }
+
+        $secuencia = WaitryDisplayIdSupport::normalizarContadorMonitor($orden['sequence'] ?? null);
+        if ($secuencia !== '') {
+            $codigos[] = $secuencia;
         }
 
         $orderId = (int) ($orden['id'] ?? $orden['orderId'] ?? 0);
@@ -1242,16 +1368,18 @@ final class WaitryOrdenesExternasService
     }
 
     /**
-     * Ítems del carrito getOrdersPOS (cart.items: external_id, quantity, price).
+     * Ítems del carrito getOrdersPOS (cart.items: external_id, quantity, price)
+     * o orderItems (getordersdetails / pushExternalOrder).
      *
+     * @param  bool  $incluirItemsPagados  true en cierre jornada: las órdenes ya cobradas traen paid=1 en cada ítem.
      * @return list<array{sku:string,titulo:string,cantidad:float,precio_unitario:float}>
      */
-    public function extraerLineasDesdeOrden(array $orden): array
+    public function extraerLineasDesdeOrden(array $orden, bool $incluirItemsPagados = false): array
     {
         $items = $orden['cart']['items'] ?? $orden['items'] ?? null;
         if (! is_array($items) || $items === []) {
             if (! empty($orden['orderItems']) && is_array($orden['orderItems'])) {
-                return $this->extraerLineasFormatoPush($orden['orderItems']);
+                return $this->extraerLineasFormatoPush($orden['orderItems'], $incluirItemsPagados);
             }
 
             return [];
@@ -1263,14 +1391,7 @@ final class WaitryOrdenesExternasService
                 continue;
             }
 
-            $sku = trim((string) (
-                $row['external_id']
-                ?? $row['item']['externalId']
-                ?? $row['item']['external_id']
-                ?? $row['item']['externalCode']
-                ?? $row['item']['external_code']
-                ?? ''
-            ));
+            $sku = $this->extraerSkuWaitryDesdeFila($row);
             if ($sku === '') {
                 continue;
             }
@@ -1287,10 +1408,14 @@ final class WaitryOrdenesExternasService
 
             $lineas[] = [
                 'sku' => $sku,
-                'titulo' => trim((string) ($row['title'] ?? $row['item']['name'] ?? $sku)),
+                'titulo' => $this->extraerTituloWaitryDesdeFila($row, $sku),
                 'cantidad' => $cantidad,
                 'precio_unitario' => $precioUnitario,
             ];
+        }
+
+        if ($lineas === [] && ! empty($orden['orderItems']) && is_array($orden['orderItems'])) {
+            return $this->extraerLineasFormatoPush($orden['orderItems'], $incluirItemsPagados);
         }
 
         return $lineas;
@@ -1300,25 +1425,21 @@ final class WaitryOrdenesExternasService
      * @param  list<array<string, mixed>>  $orderItems
      * @return list<array{sku:string,titulo:string,cantidad:float,precio_unitario:float}>
      */
-    private function extraerLineasFormatoPush(array $orderItems): array
+    private function extraerLineasFormatoPush(array $orderItems, bool $incluirItemsPagados = false): array
     {
         $lineas = [];
         foreach ($orderItems as $oi) {
             if (! is_array($oi)) {
                 continue;
             }
-            if (array_key_exists('paid', $oi) && ! in_array($oi['paid'], [0, '0', false], true)) {
+            if (! $incluirItemsPagados
+                && array_key_exists('paid', $oi)
+                && ! in_array($oi['paid'], [0, '0', false], true)) {
                 continue;
             }
 
             $item = is_array($oi['item'] ?? null) ? $oi['item'] : [];
-            $sku = trim((string) (
-                $item['externalId']
-                ?? $item['external_id']
-                ?? $item['externalCode']
-                ?? $item['external_code']
-                ?? ''
-            ));
+            $sku = $this->extraerSkuWaitryDesdeFila($oi, $item);
             if ($sku === '') {
                 continue;
             }
@@ -1334,13 +1455,152 @@ final class WaitryOrdenesExternasService
 
             $lineas[] = [
                 'sku' => $sku,
-                'titulo' => trim((string) ($item['name'] ?? $sku)),
+                'titulo' => $this->extraerTituloWaitryDesdeFila($oi, $sku, $item),
                 'cantidad' => $cantidad,
                 'precio_unitario' => round($precio, 4),
             ];
         }
 
         return $lineas;
+    }
+
+    /**
+     * SKU del ítem o de variaciones/modificadores (ej. «Cerveza Goyeneche» → variación «Goyeneche Blonde» V0942).
+     *
+     * @param  array<string, mixed>  $fila
+     * @param  array<string, mixed>  $item
+     */
+    private function extraerSkuWaitryDesdeFila(array $fila, array $item = []): string
+    {
+        if ($item === [] && is_array($fila['item'] ?? null)) {
+            $item = $fila['item'];
+        }
+
+        $sku = trim((string) (
+            $fila['external_id']
+            ?? $fila['externalId']
+            ?? $fila['externalCode']
+            ?? $fila['external_code']
+            ?? $item['externalId']
+            ?? $item['external_id']
+            ?? $item['externalCode']
+            ?? $item['external_code']
+            ?? ''
+        ));
+        if ($sku !== '') {
+            return $sku;
+        }
+
+        return $this->extraerSkuDesdeVariacionesWaitry($fila);
+    }
+
+    /**
+     * @param  array<string, mixed>  $fila
+     */
+    private function extraerSkuDesdeVariacionesWaitry(array $fila): string
+    {
+        $colecciones = [
+            $fila['orderItemVariations'] ?? null,
+            $fila['selected_modifier_groups'] ?? null,
+        ];
+
+        foreach ($colecciones as $variaciones) {
+            if (! is_array($variaciones) || $variaciones === []) {
+                continue;
+            }
+
+            foreach ($variaciones as $variacion) {
+                if (! is_array($variacion)) {
+                    continue;
+                }
+
+                $itemVariacion = $variacion['itemVariation']['item']
+                    ?? $variacion['item']
+                    ?? null;
+                if (is_array($itemVariacion)) {
+                    $sku = trim((string) (
+                        $itemVariacion['externalId']
+                        ?? $itemVariacion['external_id']
+                        ?? $itemVariacion['externalCode']
+                        ?? $itemVariacion['external_code']
+                        ?? ''
+                    ));
+                    if ($sku !== '') {
+                        return $sku;
+                    }
+                }
+
+                $sku = trim((string) (
+                    $variacion['external_id']
+                    ?? $variacion['externalId']
+                    ?? $variacion['externalCode']
+                    ?? $variacion['external_code']
+                    ?? ''
+                ));
+                if ($sku !== '') {
+                    return $sku;
+                }
+
+                $anidados = $variacion['selected_modifier_groups'] ?? null;
+                if (is_array($anidados) && $anidados !== []) {
+                    $sku = $this->extraerSkuDesdeVariacionesWaitry(['selected_modifier_groups' => $anidados]);
+                    if ($sku !== '') {
+                        return $sku;
+                    }
+                }
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * @param  array<string, mixed>  $fila
+     * @param  array<string, mixed>  $item
+     */
+    private function extraerTituloWaitryDesdeFila(array $fila, string $sku, array $item = []): string
+    {
+        if ($item === [] && is_array($fila['item'] ?? null)) {
+            $item = $fila['item'];
+        }
+
+        $titulo = trim((string) (
+            $fila['title']
+            ?? $item['name']
+            ?? $item['namePos']
+            ?? ''
+        ));
+
+        foreach ([$fila['orderItemVariations'] ?? null, $fila['selected_modifier_groups'] ?? null] as $variaciones) {
+            if (! is_array($variaciones)) {
+                continue;
+            }
+            foreach ($variaciones as $variacion) {
+                if (! is_array($variacion)) {
+                    continue;
+                }
+                $itemVariacion = $variacion['itemVariation']['item'] ?? $variacion['item'] ?? null;
+                if (! is_array($itemVariacion)) {
+                    continue;
+                }
+                $nombreVariacion = trim((string) ($itemVariacion['name'] ?? $itemVariacion['namePos'] ?? ''));
+                if ($nombreVariacion === '') {
+                    continue;
+                }
+                $skuVariacion = trim((string) (
+                    $itemVariacion['externalId']
+                    ?? $itemVariacion['external_id']
+                    ?? $itemVariacion['externalCode']
+                    ?? $itemVariacion['external_code']
+                    ?? ''
+                ));
+                if ($skuVariacion === $sku) {
+                    return $nombreVariacion;
+                }
+            }
+        }
+
+        return $titulo !== '' ? $titulo : $sku;
     }
 
     /**

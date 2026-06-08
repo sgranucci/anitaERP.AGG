@@ -15,5 +15,9 @@ interface EmpresaRepositoryInterface extends RepositoryInterface
     public function findPorCodigo($codigo);
     public function traeEmpresasAsignadas();
 
+    public function aplicarFiltroEmpresasAsignadas($query, string $column = 'empresa_id', bool $incluirNull = false): void;
+
+    public function empresaIdPermitida(int $empresaId): bool;
+
 }
 

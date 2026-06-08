@@ -59,7 +59,7 @@ class RepStockOtController extends Controller
         $categoria_query->push((object) ['id'=>'99999999','nombre'=>'Ultimo']);
         $mventa_query = Mventa::all();
         $mventa_query->prepend((object) ['id'=>'0','nombre'=>'Todas las marcas']);
-        $deposito_query = Depmae::all();
+        $deposito_query = Depmae::query()->paraUsuarioAutorizado()->orderBy('nombre')->get();
         $deposito_query->prepend((object) ['id'=>'0','nombre'=>'Todos los depositos']);
 
         return view('stock.repstockot.create', compact('estado_enum', 'articulo_query', 'linea_query', 

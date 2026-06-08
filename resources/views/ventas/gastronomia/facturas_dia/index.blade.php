@@ -584,11 +584,22 @@
                                         <span class="text-muted">—</span>
                                     @endif
                                 </small></td>
-                                <td><small>{{ $v?->codigo ?? '—' }}</small></td>
+                                <td><small>{{ $v?->codigo ?? '—' }}</small>
+                                    @php
+                                        $cantWaitry = \App\Support\Ventas\Gastronomia\GastronomiaVentaWaitryComandasSupport::cantidadComandas($r);
+                                    @endphp
+                                    @if ($cantWaitry > 1)
+                                        <br><small class="text-info" title="Comandas Waitry en esta factura">
+                                            {{ $cantWaitry }} comandas Waitry
+                                        </small>
+                                    @elseif ($cantWaitry === 1 && \App\Support\Ventas\GastronomiaVentaDisplaySupport::waitryDisplayId($v))
+                                        <br><small class="text-muted">Waitry {{ \App\Support\Ventas\GastronomiaVentaDisplaySupport::waitryDisplayId($v) }}</small>
+                                    @endif
+                                </td>
                                 <td><small>{{ $v ? \App\Support\Ventas\GastronomiaVentaDisplaySupport::nombreReceptorFactura($v) : '—' }}</small></td>
                                 <td><small>{{ $r->cuenta?->mozo?->nombre ?? '—' }}</small></td>
                                 <td><small>{{ $pvTxt !== '' ? $pvTxt : '—' }}</small></td>
-                                <td class="text-right"><small>{{ number_format((float) ($v?->total ?? 0), 2, ',', '.') }}</small></td>
+                                <td class="text-right gastro-col-monto"><small>{{ number_format((float) ($v?->total ?? 0), 2, ',', '.') }}</small></td>
                                 @if ($colInsumos)
                                     <td class="text-right"><small>{{ number_format($cantItem, 3, ',', '.') }}</small></td>
                                     <td>

@@ -1,11 +1,12 @@
 <template id="template-renglon-cuentacontableiibb">
 	<tr class="item-cuentacontableiibb">
 		<td>
-			<select name="empresa_ids[]" data-placeholder="Empresa" class="empresa form-control required" required data-fouc>
-				@foreach($empresa_query as $value)
-					<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-				@endforeach
-			</select>
+			@include('includes.form-empresa-asignada-control', [
+				'empresa_query' => $empresa_query,
+				'name' => 'empresa_ids[]',
+				'select_class' => 'empresa',
+				'required' => true,
+			])
 		</td>
 		<td>
 			<div class="form-group row" id="cuenta">

@@ -60,6 +60,11 @@
             <div class="card-header">
                 <h3 class="card-title">Editar Asiento - {{$data->tipoasientos->nombre}}- Numero {{$data->numeroasiento}}</h3>
                 <div class="card-tools">
+                    @if (can('listar-asiento', false) || can('editar-asiento', false))
+                    <a href="{{ route('imprimir_pdf_asiento', ['id' => $data->id]) }}" class="btn btn-primary btn-sm" title="Emitir asiento en PDF" target="_blank" rel="noopener noreferrer">
+                        <i class="fas fa-file-pdf"></i> Emitir PDF
+                    </a>
+                    @endif
                     <a href="{{route('asiento')}}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>

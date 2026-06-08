@@ -10,6 +10,8 @@ use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Services\Ventas\Gastronomia\Waitry\WaitryAnalyticsOrdenesService;
 use App\Services\Ventas\Gastronomia\Waitry\WaitryOrdenesExternasService;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Ventas\GastronomiaCuentacajaTotem;
+use App\Support\Ventas\GastronomiaVentaDetalleSupport;
 use App\Support\Ventas\Waitry\WaitryCierreJornadaDiscrepanciaSupport;
 use App\Support\Ventas\Gastronomia\VentaGastronomiaEmisionWaitrySupport;
 use App\Support\Ventas\Waitry\WaitryCierreJornadaVentanaSupport;
@@ -18,6 +20,8 @@ use App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport;
 use App\Support\Ventas\Waitry\WaitryOrdenCobroSupport;
 use App\Support\Ventas\Waitry\WaitryOrdenEstadoSupport;
 use App\Support\Ventas\Waitry\WaitryOrdenPaymentEnriquecimientoSupport;
+use App\Support\Ventas\Waitry\WaitryPaymentGatewaySupport;
+use App\Support\Ventas\Waitry\WaitryTableAccesoSupport;
 use App\Support\Ventas\Waitry\WaitryTotemJornadaResumenSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -63,6 +67,40 @@ final class GastronomiaCierreTotemJornadaService
         return max(0, (int) $hasta);
     }
 
+    /**
+     * Tope inferior (exclusivo) de order_id Waitry al consultar el tramo de una jornada.
+     *
+     * - Jornada con cierre tótem guardado: {@see CierreTotemJornadaGastronomia::$waitry_order_id_anterior}
+     *   (no usar {@see ultimoWaitryOrderIdHasta()} si esa jornada es la última cerrada: su propio hasta
+     *   descartaría todo el tramo al reauditar en Caja).
+     * - Jornada abierta o sin cierre tótem: último hasta de otras jornadas de la empresa.
+     */
+    public function waitryOrderIdAnteriorParaJornada(JornadaGastronomia $jornada): int
+    {
+        $cierre = CierreTotemJornadaGastronomia::query()
+            ->where('jornada_gastronomia_id', (int) $jornada->id)
+            ->first();
+
+        if ($cierre !== null) {
+            return max(0, (int) $cierre->waitry_order_id_anterior);
+        }
+
+        $empresaId = (int) $jornada->empresa_id;
+        if ($empresaId <= 0) {
+            return 0;
+        }
+
+        $hasta = CierreTotemJornadaGastronomia::query()
+            ->where('empresa_id', $empresaId)
+            ->where('jornada_gastronomia_id', '!=', (int) $jornada->id)
+            ->whereNotNull('waitry_order_id_hasta')
+            ->orderByDesc('waitry_order_id_hasta')
+            ->orderByDesc('id')
+            ->value('waitry_order_id_hasta');
+
+        return max(0, (int) $hasta);
+    }
+
     /** @deprecated Use ultimoWaitryOrderIdHasta() */
     public function ultimoTicketMovimientoIdHasta(int $empresaId): int
     {
@@ -90,8 +128,8 @@ final class GastronomiaCierreTotemJornadaService
         }
 
         $fechaJornada = $jornada->fecha_jornada?->format('Y-m-d') ?? Carbon::today()->format('Y-m-d');
-        $idAnterior = $this->ultimoWaitryOrderIdHasta($empresaId);
-        $hasta = $cierreHasta ?? $jornada->cierre_en ?? now();
+        $idAnterior = $this->waitryOrderIdAnteriorParaJornada($jornada);
+        $hasta = $cierreHasta ?? WaitryCierreJornadaVentanaSupport::resolverCierreHasta($jornada);
 
         $listado = $this->listarOrdenesWaitryNuevas(
             $empresaId,
@@ -102,9 +140,12 @@ final class GastronomiaCierreTotemJornadaService
         );
 
         $ventana = $listado['ventana'];
+        $filtroOrdenes = WaitryOrdenEstadoSupport::filtrarOrdenesActivas($listado['ordenes']);
+        $ordenesActivas = $filtroOrdenes['activas'];
+
         $lineasCompletas = $this->armarLineasConEstadoErp(
             $empresaId,
-            $listado['ordenes'],
+            $ordenesActivas,
             $ventana['desde'] ?? null,
             $ventana['hasta'] ?? null,
         );
@@ -113,7 +154,7 @@ final class GastronomiaCierreTotemJornadaService
             $this->armarLineasHuecosPendientesAuditoria($listado['auditoria']['ids_huecos_secuencia'] ?? []),
         );
 
-        $ids = array_keys($listado['ordenes']);
+        $ids = array_keys($ordenesActivas);
         sort($ids, SORT_NUMERIC);
         $desde = $ids !== [] ? (int) min($ids) : null;
         $hastaId = $ids !== [] ? (int) max($ids) : $idAnterior;
@@ -134,15 +175,115 @@ final class GastronomiaCierreTotemJornadaService
                 'waitry_order_id_hasta' => $hastaId,
                 'rango_etiqueta' => $this->etiquetaRango($idAnterior, $desde, $hastaId),
                 'cantidad_movimientos' => count($split['activas']),
+                'cantidad_canceladas_excluidas' => $filtroOrdenes['cantidad_excluidas'],
+                'cantidad_anuladas_descuento_excluidas' => (int) ($filtroOrdenes['cantidad_anuladas_descuento_excluidas'] ?? 0)
+                    + count($split['anuladas_descuento'] ?? []),
                 'waitry_canceladas' => $split['resumen'],
+                'waitry_anuladas_descuento' => self::fusionarResumenExcluidas(
+                    $filtroOrdenes['waitry_anuladas_descuento'] ?? ['cantidad' => 0, 'total' => 0.0],
+                    $split['resumen_anuladas_descuento'] ?? ['cantidad' => 0, 'total' => 0.0],
+                ),
                 'auditoria' => $listado['auditoria'],
             ],
         ];
     }
 
     /**
-     * Totales Waitry que se incluirían al cerrar la jornada abierta (sin persistir).
-     * Usa la fecha/hora actual como cierre hipotético.
+     * Tramo Waitry para el proceso de Caja (auditoría / facturación).
+     *
+     * - Jornada abierta (sin cierre gastronomía): corte temporal = ahora; último ticket = el mayor ID leído en esa consulta.
+     * - Jornada cerrada: ventana hasta {@see JornadaGastronomia::$cierre_en}; si existe registro de cierre tótem de esa jornada,
+     *   el tope de ID es {@see CierreTotemJornadaGastronomia::$waitry_order_id_hasta} (mismo que al cerrar en Ventas).
+     *
+     * @return array{
+     *   lineas: list<array<string, mixed>>,
+     *   meta: array<string, mixed>
+     * }
+     */
+    public function movimientosParaProcesoCaja(JornadaGastronomia $jornada): array
+    {
+        $cerrada = (string) ($jornada->estado ?? '') === JornadaGastronomia::ESTADO_CERRADA
+            && $jornada->cierre_en !== null;
+
+        if (! $cerrada) {
+            $cargado = $this->movimientosParaJornada(
+                $jornada,
+                WaitryCierreJornadaVentanaSupport::resolverCierreHasta($jornada),
+            );
+            $cargado['meta']['tramo_modo'] = 'auditoria_en_curso';
+            $cargado['meta']['tramo_ultimo_ticket_origen'] = 'ultimo_leido';
+            $cargado['meta']['tramo_cierre_hasta'] = now()->toIso8601String();
+
+            return $cargado;
+        }
+
+        $cargado = $this->movimientosParaJornada($jornada, $jornada->cierre_en);
+        $cierreTotem = CierreTotemJornadaGastronomia::query()
+            ->where('jornada_gastronomia_id', (int) $jornada->id)
+            ->first();
+
+        if ($cierreTotem !== null) {
+            return $this->aplicarTopeUltimoTicketCierreGastronomia($cargado, $cierreTotem);
+        }
+
+        $cargado['meta']['tramo_modo'] = 'definitivo_sin_registro_totem';
+        $cargado['meta']['tramo_ultimo_ticket_origen'] = 'ultimo_leido_cierre_jornada';
+        $cargado['meta']['tramo_cierre_hasta'] = $jornada->cierre_en->toIso8601String();
+
+        return $cargado;
+    }
+
+    /**
+     * @param  array{lineas: list<array<string, mixed>>, meta: array<string, mixed>}  $cargado
+     * @return array{lineas: list<array<string, mixed>>, meta: array<string, mixed>}
+     */
+    private function aplicarTopeUltimoTicketCierreGastronomia(array $cargado, CierreTotemJornadaGastronomia $cierre): array
+    {
+        $hasta = (int) $cierre->waitry_order_id_hasta;
+        $anterior = (int) $cierre->waitry_order_id_anterior;
+        $desdeRegistro = $cierre->waitry_order_id_desde !== null ? (int) $cierre->waitry_order_id_desde : null;
+
+        $lineas = array_values(array_filter(
+            $cargado['lineas'],
+            fn (array $l) => $this->waitryOrderIdDeLinea($l) <= $hasta,
+        ));
+
+        $ids = [];
+        foreach ($lineas as $linea) {
+            $id = $this->waitryOrderIdDeLinea($linea);
+            if ($id > 0) {
+                $ids[] = $id;
+            }
+        }
+        sort($ids, SORT_NUMERIC);
+        $desde = $ids !== [] ? (int) min($ids) : $desdeRegistro;
+
+        $meta = $cargado['meta'];
+        $meta['waitry_order_id_hasta'] = $hasta;
+        $meta['waitry_order_id_anterior'] = $anterior;
+        $meta['waitry_order_id_desde'] = $desde;
+        $meta['rango_etiqueta'] = $this->etiquetaRango($anterior, $desde, $hasta);
+        $meta['cantidad_movimientos'] = count($lineas);
+        $meta['tramo_modo'] = 'definitivo_cierre_gastronomia';
+        $meta['tramo_ultimo_ticket_origen'] = 'cierre_gastronomia';
+        $meta['cierre_totem_jornada_id'] = (int) $cierre->id;
+
+        return [
+            'lineas' => $lineas,
+            'meta' => $meta,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $linea
+     */
+    private function waitryOrderIdDeLinea(array $linea): int
+    {
+        return max(0, (int) ($linea['waitry_order_id'] ?? $linea['order_id'] ?? 0));
+    }
+
+    /**
+     * Vista previa Informe Z / totales tótem (consulta Waitry). Los cálculos van aquí, no al grabar el cierre.
      *
      * @return array<string, mixed>|null
      */
@@ -152,47 +293,9 @@ final class GastronomiaCierreTotemJornadaService
             return null;
         }
 
+        $consulta = $this->consultarTramoInformeZ($jornada);
         $empresaId = (int) $jornada->empresa_id;
-        if ($empresaId <= 0) {
-            return null;
-        }
-
-        $fechaJornada = $jornada->fecha_jornada?->format('Y-m-d') ?? Carbon::today()->format('Y-m-d');
-        $idAnterior = $this->ultimoWaitryOrderIdHasta($empresaId);
-
-        $listado = $this->listarOrdenesWaitryNuevas(
-            $empresaId,
-            $fechaJornada,
-            $idAnterior,
-            $jornada->apertura_en,
-            now(),
-        );
-
-        $ventana = $listado['ventana'];
-        $lineasCompletas = $this->armarLineasConEstadoErp(
-            $empresaId,
-            $listado['ordenes'],
-            $ventana['desde'] ?? null,
-            $ventana['hasta'] ?? null,
-        );
-        $lineasCompletas = array_merge(
-            $lineasCompletas,
-            $this->armarLineasHuecosPendientesAuditoria($listado['auditoria']['ids_huecos_secuencia'] ?? []),
-        );
-        $lineasDiscrepancias = WaitryCierreJornadaDiscrepanciaSupport::filtrar($lineasCompletas);
-
-        $totems = TotemWaitryGastronomia::query()
-            ->with('ubicacion')
-            ->where('empresa_id', $empresaId)
-            ->orderBy('ubicacion_id')
-            ->get();
-        $resumenTotems = WaitryTotemJornadaResumenSupport::armar($totems, $lineasCompletas);
-
-        $ids = array_keys($listado['ordenes']);
-        sort($ids, SORT_NUMERIC);
-        $desde = $ids !== [] ? (int) min($ids) : null;
-        $hasta = $ids !== [] ? (int) max($ids) : $idAnterior;
-
+        $resumenTotems = $consulta['resumen_informe_z'];
         $totalGeneral = $resumenTotems['total_general'] ?? [
             'cantidad_ordenes' => 0,
             'total_ingreso' => 0.0,
@@ -201,36 +304,33 @@ final class GastronomiaCierreTotemJornadaService
 
         $plantilla = WaitryInformeZConciliacionSupport::plantillaCarga($empresaId, $resumenTotems);
         $borrador = is_array($jornada->informe_z_borrador_json) ? $jornada->informe_z_borrador_json : null;
-        $plantilla = WaitryInformeZConciliacionSupport::fusionarInformeZEnPlantilla($plantilla, $borrador);
+        $plantilla = WaitryInformeZConciliacionSupport::fusionarInformeZEnPlantilla($plantilla, $borrador, $empresaId);
         $conciliacion = $borrador !== null
             ? WaitryInformeZConciliacionSupport::conciliar($plantilla)
             : null;
 
-        $snapshotCierre = $this->armarSnapshotCierre(
-            $idAnterior,
-            $desde,
-            $hasta,
-            $resumenTotems,
-            $listado['auditoria'],
-            (string) ($ventana['etiqueta'] ?? ''),
-        );
-
         return [
             'jornada_id' => (int) $jornada->id,
             'fecha_jornada' => $jornada->fecha_jornada?->format('d/m/Y') ?? '',
-            'ventana_operativa' => $ventana['etiqueta'] ?? '',
-            'consulta_waitry_rango' => $listado['auditoria']['consulta_waitry_rango'] ?? '',
-            'waitry_order_id_anterior' => $idAnterior,
-            'waitry_order_id_desde' => $desde,
-            'waitry_order_id_hasta' => $hasta,
-            'rango_etiqueta' => $this->etiquetaRango($idAnterior, $desde, $hasta),
-            'cantidad_ordenes' => count($lineasCompletas),
-            'cantidad_discrepancias' => count($lineasDiscrepancias),
-            'cantidad_huecos_secuencia' => count($listado['auditoria']['ids_huecos_secuencia'] ?? []),
-            'hay_discrepancias' => count($lineasDiscrepancias) > 0,
+            'ventana_operativa' => $consulta['ventana_operativa'],
+            'consulta_waitry_rango' => $consulta['auditoria']['consulta_waitry_rango'] ?? '',
+            'waitry_order_id_anterior' => $consulta['waitry_order_id_anterior'],
+            'waitry_order_id_desde' => $consulta['waitry_order_id_desde'],
+            'waitry_order_id_hasta' => $consulta['waitry_order_id_hasta'],
+            'rango_etiqueta' => $consulta['rango_etiqueta'],
+            'tramo_ultimo_ticket_origen' => $consulta['tramo_ultimo_ticket_origen'],
+            'tramo_modo' => $consulta['tramo_modo'],
+            'cantidad_ordenes' => (int) ($consulta['cantidad_ordenes_informe_z'] ?? 0),
+            'cantidad_canceladas_excluidas' => (int) ($consulta['cantidad_canceladas_excluidas'] ?? 0),
+            'cantidad_anuladas_descuento_excluidas' => (int) ($consulta['cantidad_anuladas_descuento_excluidas'] ?? 0),
+            'waitry_anuladas_descuento' => is_array($consulta['waitry_anuladas_descuento'] ?? null)
+                ? $consulta['waitry_anuladas_descuento']
+                : ['cantidad' => 0, 'total' => 0.0],
             'por_totem' => $resumenTotems['por_totem'] ?? [],
+            'resumen_informe_z' => $consulta['resumen_informe_z'] ?? $resumenTotems,
             'total_general' => $totalGeneral,
             'total_ingreso_totem' => (float) ($totalGeneral['total_ingreso'] ?? 0),
+            'total_informe_z_sistema' => (float) (($consulta['resumen_informe_z']['total_general']['total_ingreso'] ?? 0)),
             'cantidad_ingreso_totem' => (int) ($totalGeneral['cantidad_ordenes'] ?? 0),
             'totems' => $plantilla,
             'conciliacion' => $conciliacion,
@@ -239,8 +339,211 @@ final class GastronomiaCierreTotemJornadaService
             'usuario_informe_z' => $borrador['usuario_nombre'] ?? null,
             'tolerancia' => WaitryInformeZConciliacionSupport::toleranciaMonto(),
             'preview_en' => now()->format('d/m/Y H:i'),
-            'snapshot_cierre' => $snapshotCierre,
+            'snapshot_cierre' => $consulta['snapshot_cierre'],
+            'diagnostico_waitry' => $consulta['diagnostico_waitry'] ?? null,
         ];
+    }
+
+    /**
+     * Tramo Waitry + resúmenes para Informe Z (misma regla que al cerrar / vista previa).
+     *
+     * @return array<string, mixed> Salida de {@see consultarTramoInformeZ()}
+     */
+    public function datosTramoInformeZ(JornadaGastronomia $jornada): array
+    {
+        return $this->consultarTramoInformeZ($jornada);
+    }
+
+    /**
+     * Consulta Waitry y arma resumen por tótem / total general por medio (Informe Z).
+     *
+     * Tramo: order_id &gt; tope anterior de la jornada, placed_at en [apertura, cierre jornada],
+     * order_id &lt;= último ticket del cierre ({@see CierreTotemJornadaGastronomia::$waitry_order_id_hasta} si ya cerró).
+     * Informe Z sistema: cobros Waitry QR/MP/Posnet no cobrados en caja Anita real (+ facturadas con cuenta TOTEM).
+     *
+     * @return array{
+     *   resumen_totems: array{por_totem:list<array<string,mixed>>,total_general:array<string,mixed>,tramo?:array<string,mixed>},
+     *   snapshot_cierre: array<string, mixed>,
+     *   auditoria: array<string, mixed>,
+     *   ventana_operativa: string,
+     *   waitry_order_id_anterior: int,
+     *   waitry_order_id_desde: ?int,
+     *   waitry_order_id_hasta: int,
+     *   rango_etiqueta: string,
+     *   tramo_ultimo_ticket_origen: string,
+     *   tramo_modo: string,
+     *   cantidad_ordenes_listado: int,
+     *   cantidad_discrepancias: int
+     * }
+     */
+    private function consultarTramoInformeZ(JornadaGastronomia $jornada): array
+    {
+        $empresaId = (int) $jornada->empresa_id;
+        if ($empresaId <= 0) {
+            throw new InvalidArgumentException('Empresa inválida.');
+        }
+
+        $fechaJornada = $jornada->fecha_jornada?->format('Y-m-d') ?? Carbon::today()->format('Y-m-d');
+        $idAnterior = $this->waitryOrderIdAnteriorParaJornada($jornada);
+        $cierreHasta = WaitryCierreJornadaVentanaSupport::resolverCierreHasta($jornada);
+
+        $listado = $this->listarOrdenesWaitryNuevas(
+            $empresaId,
+            $fechaJornada,
+            $idAnterior,
+            $jornada->apertura_en,
+            $cierreHasta,
+        );
+
+        $ventana = $listado['ventana'];
+        $filtroOrdenes = WaitryOrdenEstadoSupport::filtrarOrdenesActivas($listado['ordenes']);
+        $ordenesParaInformeZ = $filtroOrdenes['activas'];
+        $topeHastaId = $this->resolverTopeWaitryOrderIdHasta($jornada, $ordenesParaInformeZ);
+        $ordenesParaInformeZ = $this->filtrarOrdenesActivasPorTopeHasta($ordenesParaInformeZ, $topeHastaId);
+        $cantidadCanceladasExcluidas = $filtroOrdenes['cantidad_excluidas'];
+
+        $lineasCompletas = $this->armarLineasConEstadoErp(
+            $empresaId,
+            $ordenesParaInformeZ,
+            $ventana['desde'] ?? null,
+            $ventana['hasta'] ?? null,
+        );
+        $split = WaitryOrdenEstadoSupport::separarCanceladas($lineasCompletas);
+        $cantidadAnuladasDescuentoExcluidas = (int) ($filtroOrdenes['cantidad_anuladas_descuento_excluidas'] ?? 0)
+            + count($split['anuladas_descuento'] ?? []);
+        $lineasActivas = $split['activas'];
+
+        $totems = TotemWaitryGastronomia::query()
+            ->with('ubicacion')
+            ->where('empresa_id', $empresaId)
+            ->orderBy('ubicacion_id')
+            ->get();
+        $resumenTotems = WaitryTotemJornadaResumenSupport::armar($totems, $lineasActivas, $empresaId);
+        $totemsInformeZ = $totems->filter(static fn (TotemWaitryGastronomia $t) => $t->participaInformeZ());
+        $resumenInformeZ = WaitryTotemJornadaResumenSupport::armarParaInformeZ($totemsInformeZ, $lineasActivas, $empresaId);
+
+        $ids = array_keys($ordenesParaInformeZ);
+        sort($ids, SORT_NUMERIC);
+        $desde = $ids !== [] ? (int) min($ids) : null;
+        $hasta = $topeHastaId > 0 ? $topeHastaId : ($ids !== [] ? (int) max($ids) : $idAnterior);
+        $origenTopeHasta = $this->origenTopeWaitryOrderIdHasta($jornada);
+
+        $resumenTotems = $this->resumenTotemsConMetadatosTramo(
+            $resumenTotems,
+            $idAnterior,
+            $desde,
+            $hasta,
+            $origenTopeHasta,
+            'auditoria_en_curso',
+            $cierreHasta->toIso8601String(),
+        );
+        $resumenInformeZ = $this->resumenTotemsConMetadatosTramo(
+            $resumenInformeZ,
+            $idAnterior,
+            $desde,
+            $hasta,
+            $origenTopeHasta,
+            'auditoria_en_curso',
+            $cierreHasta->toIso8601String(),
+        );
+
+        $auditoriaInformeZ = [
+            'consulta_waitry_rango' => $listado['auditoria']['consulta_waitry_rango'] ?? '',
+            'cantidad_canceladas_excluidas' => $cantidadCanceladasExcluidas,
+            'cantidad_anuladas_descuento_excluidas' => $cantidadAnuladasDescuentoExcluidas,
+            'waitry_anuladas_descuento' => self::fusionarResumenExcluidas(
+                $filtroOrdenes['waitry_anuladas_descuento'] ?? ['cantidad' => 0, 'total' => 0.0],
+                $split['resumen_anuladas_descuento'] ?? ['cantidad' => 0, 'total' => 0.0],
+            ),
+        ];
+
+        $snapshotCierre = $this->armarSnapshotCierre(
+            $idAnterior,
+            $desde,
+            $hasta,
+            $resumenTotems,
+            $auditoriaInformeZ,
+            (string) ($ventana['etiqueta'] ?? ''),
+            $resumenInformeZ,
+        );
+
+        $lineasConIngreso = array_filter(
+            $lineasActivas,
+            static fn (array $ln) => WaitryTotemJornadaResumenSupport::lineaEntraInformeZSistema($ln),
+        );
+
+        return [
+            'resumen_totems' => $resumenTotems,
+            'resumen_informe_z' => $resumenInformeZ,
+            'snapshot_cierre' => $snapshotCierre,
+            'ventana_operativa' => (string) ($ventana['etiqueta'] ?? ''),
+            'waitry_order_id_anterior' => $idAnterior,
+            'waitry_order_id_desde' => $desde,
+            'waitry_order_id_hasta' => $hasta,
+            'rango_etiqueta' => $this->etiquetaRango($idAnterior, $desde, $hasta),
+            'tramo_ultimo_ticket_origen' => 'ultimo_leido',
+            'tramo_modo' => 'auditoria_en_curso',
+            'cantidad_ordenes_informe_z' => count($lineasConIngreso),
+            'waitry_order_id_hasta_tope' => $hasta,
+            'waitry_order_id_hasta_origen' => $origenTopeHasta,
+            'cantidad_canceladas_excluidas' => $cantidadCanceladasExcluidas,
+            'cantidad_anuladas_descuento_excluidas' => $cantidadAnuladasDescuentoExcluidas,
+            'waitry_anuladas_descuento' => $auditoriaInformeZ['waitry_anuladas_descuento'],
+            'diagnostico_waitry' => [
+                'ordenes_waitry_en_tramo' => count($listado['ordenes']),
+                'ordenes_sin_cancelar' => count($ordenesParaInformeZ),
+                'lineas_con_ingreso_totem' => count($lineasConIngreso),
+                'total_ingreso_resumen' => (float) ($resumenTotems['total_general']['total_ingreso'] ?? 0),
+                'total_informe_z_sistema' => (float) ($resumenInformeZ['total_general']['total_ingreso'] ?? 0),
+            ],
+        ];
+    }
+
+    /**
+     * @param  array{por_totem:list<array<string,mixed>>,total_general:array<string,mixed>}  $resumenTotems
+     * @param  array<string, mixed>  $snapshot
+     * @return array{por_totem:list<array<string,mixed>>,total_general:array<string,mixed>,tramo?:array<string,mixed>}
+     */
+    private function marcarResumenTotemsDefinitivoAlPersistir(
+        array $resumenTotems,
+        JornadaGastronomia $jornada,
+        array $snapshot,
+    ): array {
+        $tramo = is_array($resumenTotems['tramo'] ?? null) ? $resumenTotems['tramo'] : [];
+        $tramo['tramo_modo'] = 'definitivo_cierre_jornada';
+        $tramo['tramo_ultimo_ticket_origen'] = $tramo['tramo_ultimo_ticket_origen'] ?? 'ultimo_leido';
+        $tramo['jornada_cierre_en'] = $jornada->cierre_en?->toIso8601String();
+        $tramo['persistido_en'] = now()->toIso8601String();
+        $tramo['waitry_order_id_hasta'] = (int) ($snapshot['waitry_order_id_hasta'] ?? $tramo['waitry_order_id_hasta'] ?? 0);
+        $resumenTotems['tramo'] = $tramo;
+
+        return $resumenTotems;
+    }
+
+    /**
+     * @param  array{por_totem:list<array<string,mixed>>,total_general:array<string,mixed>}  $resumenTotems
+     * @return array{por_totem:list<array<string,mixed>>,total_general:array<string,mixed>,tramo:array<string,mixed>}
+     */
+    private function resumenTotemsConMetadatosTramo(
+        array $resumenTotems,
+        int $idAnterior,
+        ?int $desde,
+        int $hasta,
+        string $ultimoTicketOrigen,
+        string $tramoModo,
+        string $cierreHastaIso,
+    ): array {
+        $resumenTotems['tramo'] = [
+            'waitry_order_id_anterior' => $idAnterior,
+            'waitry_order_id_desde' => $desde,
+            'waitry_order_id_hasta' => $hasta,
+            'tramo_ultimo_ticket_origen' => $ultimoTicketOrigen,
+            'tramo_modo' => $tramoModo,
+            'tramo_cierre_hasta' => $cierreHastaIso,
+            'rango_etiqueta' => $this->etiquetaRango($idAnterior, $desde, $hasta),
+        ];
+
+        return $resumenTotems;
     }
 
     /**
@@ -271,97 +574,14 @@ final class GastronomiaCierreTotemJornadaService
         }
 
         $snapshot = $this->resolverSnapshotCierre($informeZBorrador, $snapshotCierre);
-        if ($snapshot !== null) {
-            return $this->registrarAlCerrarJornadaDesdeSnapshot($jornada, $snapshot, $informeZBorrador);
+        if ($snapshot === null) {
+            throw new InvalidArgumentException(
+                'Falta el snapshot del cierre tótem Waitry. Actualice la vista previa del Informe Z antes de cerrar la jornada '
+                .'(el cierre no vuelve a consultar Waitry para mantener la grabación rápida).'
+            );
         }
 
-        $fechaJornada = $jornada->fecha_jornada?->format('Y-m-d') ?? Carbon::today()->format('Y-m-d');
-        $idAnterior = $this->ultimoWaitryOrderIdHasta($empresaId);
-
-        $listado = $this->listarOrdenesWaitryNuevas(
-            $empresaId,
-            $fechaJornada,
-            $idAnterior,
-            $jornada->apertura_en,
-            $jornada->cierre_en,
-        );
-        $ordenesPorId = $listado['ordenes'];
-        $auditoria = $listado['auditoria'];
-        $ventana = $listado['ventana'];
-
-        $lineasCompletas = $this->armarLineasConEstadoErp(
-            $empresaId,
-            $ordenesPorId,
-            $ventana['desde'] ?? null,
-            $ventana['hasta'] ?? null,
-        );
-        $lineasCompletas = array_merge(
-            $lineasCompletas,
-            $this->armarLineasHuecosPendientesAuditoria($auditoria['ids_huecos_secuencia'] ?? []),
-        );
-        $lineasDiscrepancias = WaitryCierreJornadaDiscrepanciaSupport::filtrar($lineasCompletas);
-        $auditoria['cantidad_discrepancias'] = count($lineasDiscrepancias);
-        $auditoria['ventana_operativa'] = $ventana['etiqueta'] ?? '';
-
-        $totems = TotemWaitryGastronomia::query()
-            ->with('ubicacion')
-            ->where('empresa_id', $empresaId)
-            ->orderBy('ubicacion_id')
-            ->get();
-        $resumenTotems = WaitryTotemJornadaResumenSupport::armar($totems, $lineasCompletas);
-
-        $ids = array_keys($ordenesPorId);
-        sort($ids, SORT_NUMERIC);
-
-        $desde = $ids !== [] ? (int) min($ids) : null;
-        $hasta = $ids !== [] ? (int) max($ids) : $idAnterior;
-
-        $totalMonto = round(array_sum(array_map(
-            fn (array $l) => (float) ($l['total'] ?? 0),
-            $lineasCompletas,
-        )), 2);
-
-        $impagas = 0;
-        $pagadas = 0;
-        $facturadas = 0;
-        foreach ($lineasCompletas as $l) {
-            if (! empty($l['facturada_erp'])) {
-                $facturadas++;
-            }
-            if ($l['paid_waitry'] === true || ! empty($l['waitry_cobro_totem'])) {
-                $pagadas++;
-            } elseif ($l['paid_waitry'] === false) {
-                $impagas++;
-            }
-        }
-
-        $limiteDetalle = max(100, (int) config('gastronomia.cierre_totem_jornada_max_lineas_detalle', 3000));
-        $truncado = count($lineasDiscrepancias) > $limiteDetalle;
-        $lineasPdf = $truncado
-            ? array_slice($lineasDiscrepancias, 0, $limiteDetalle)
-            : $lineasDiscrepancias;
-
-        $informeZJson = $this->informeZJsonParaPersistir($informeZBorrador);
-
-        return $this->persistirRegistroCierreTotem(
-            $jornada,
-            $empresaId,
-            $idAnterior,
-            $desde,
-            $hasta,
-            count($lineasCompletas),
-            $totalMonto,
-            $impagas,
-            $pagadas,
-            $facturadas,
-            [
-                'lineas' => $lineasPdf,
-                'resumen_totems' => $resumenTotems,
-                'auditoria' => $auditoria,
-            ],
-            $informeZJson,
-            $truncado,
-        );
+        return $this->registrarAlCerrarJornadaDesdeSnapshot($jornada, $snapshot, $informeZBorrador);
     }
 
     /**
@@ -376,6 +596,11 @@ final class GastronomiaCierreTotemJornadaService
     ): CierreTotemJornadaGastronomia {
         $empresaId = (int) $jornada->empresa_id;
         $resumenTotems = is_array($snapshot['resumen_totems'] ?? null) ? $snapshot['resumen_totems'] : [];
+        $resumenTotems = $this->marcarResumenTotemsDefinitivoAlPersistir($resumenTotems, $jornada, $snapshot);
+        $resumenInformeZ = is_array($snapshot['resumen_informe_z'] ?? null)
+            ? $snapshot['resumen_informe_z']
+            : WaitryInformeZConciliacionSupport::filtrarResumenSoloCreditCardPosnet($resumenTotems);
+        $resumenInformeZ = $this->marcarResumenTotemsDefinitivoAlPersistir($resumenInformeZ, $jornada, $snapshot);
         $totalGeneral = is_array($resumenTotems['total_general'] ?? null) ? $resumenTotems['total_general'] : [];
         $idAnterior = (int) ($snapshot['waitry_order_id_anterior'] ?? $this->ultimoWaitryOrderIdHasta($empresaId));
         $desde = isset($snapshot['waitry_order_id_desde']) ? (int) $snapshot['waitry_order_id_desde'] : null;
@@ -386,6 +611,16 @@ final class GastronomiaCierreTotemJornadaService
         $auditoria['snapshot_preview_en'] = $snapshot['preview_en'] ?? null;
 
         $informeZJson = $this->informeZJsonParaPersistir($informeZBorrador);
+
+        $detalleJson = [
+            'lineas' => [],
+            'resumen_totems' => $resumenTotems,
+            'resumen_informe_z' => $resumenInformeZ,
+            'auditoria' => $auditoria,
+        ];
+        if (is_array($informeZJson) && is_array($informeZJson['totems'] ?? null)) {
+            $detalleJson['informe_z_por_totem'] = $informeZJson['totems'];
+        }
 
         return $this->persistirRegistroCierreTotem(
             $jornada,
@@ -398,11 +633,7 @@ final class GastronomiaCierreTotemJornadaService
             0,
             0,
             0,
-            [
-                'lineas' => [],
-                'resumen_totems' => $resumenTotems,
-                'auditoria' => $auditoria,
-            ],
+            $detalleJson,
             $informeZJson,
             false,
         );
@@ -445,8 +676,9 @@ final class GastronomiaCierreTotemJornadaService
         array $resumenTotems,
         array $auditoria,
         string $ventanaOperativa,
+        ?array $resumenInformeZ = null,
     ): array {
-        return [
+        $snapshot = [
             'waitry_order_id_anterior' => $idAnterior,
             'waitry_order_id_desde' => $desde,
             'waitry_order_id_hasta' => $hasta,
@@ -455,6 +687,11 @@ final class GastronomiaCierreTotemJornadaService
             'ventana_operativa' => $ventanaOperativa,
             'preview_en' => now()->format('Y-m-d H:i:s'),
         ];
+        if (is_array($resumenInformeZ)) {
+            $snapshot['resumen_informe_z'] = $resumenInformeZ;
+        }
+
+        return $snapshot;
     }
 
     /**
@@ -530,7 +767,7 @@ final class GastronomiaCierreTotemJornadaService
                 ->where('empresa_id', (int) $cierre->empresa_id)
                 ->orderBy('ubicacion_id')
                 ->get();
-            $resumenTotems = WaitryTotemJornadaResumenSupport::armar($totems, $lineas);
+            $resumenTotems = WaitryTotemJornadaResumenSupport::armar($totems, $lineas, (int) $cierre->empresa_id);
         }
 
         return [
@@ -583,7 +820,7 @@ final class GastronomiaCierreTotemJornadaService
      * @param  list<array<string, mixed>>  $lineas
      * @return list<array{tipo:?string,etiqueta:string,cantidad:int,total:float,cuentacaja_label:?string}>
      */
-    private function resumenPorMedioWaitry(array $lineas): array
+    private function resumenPorMedioWaitry(array $lineas, int $empresaId): array
     {
         $map = [];
         foreach ($lineas as $ln) {
@@ -593,7 +830,10 @@ final class GastronomiaCierreTotemJornadaService
             $monto = (float) ($ln['monto_cobro_waitry'] ?? 0) > 0.0001
                 ? (float) $ln['monto_cobro_waitry']
                 : (float) ($ln['total'] ?? 0);
-            $tipo = WaitryMedioPagoCuentacajaSupport::normalizarTipo($ln['waitry_tipo_pago'] ?? null) ?? 'totem';
+            $tipo = WaitryMedioPagoCuentacajaSupport::resolverTipoMedioInformeZDesdeLinea($ln, $empresaId);
+            if ($tipo === null) {
+                continue;
+            }
             if (! isset($map[$tipo])) {
                 $map[$tipo] = [
                     'tipo' => $ln['waitry_tipo_pago'] ?? null,
@@ -608,6 +848,73 @@ final class GastronomiaCierreTotemJornadaService
         }
 
         return array_values($map);
+    }
+
+    /**
+     * Último order_id Waitry a incluir en el tramo de esta jornada.
+     * Jornada cerrada con cierre tótem: el guardado al cerrar; abierta: el mayor leído en la consulta.
+     *
+     * @param  array<int|string, array<string, mixed>>  $ordenesActivas
+     */
+    private function resolverTopeWaitryOrderIdHasta(JornadaGastronomia $jornada, array $ordenesActivas): int
+    {
+        $cierre = CierreTotemJornadaGastronomia::query()
+            ->where('jornada_gastronomia_id', (int) $jornada->id)
+            ->first();
+
+        if ($cierre !== null && (int) $cierre->waitry_order_id_hasta > 0) {
+            return (int) $cierre->waitry_order_id_hasta;
+        }
+
+        $max = 0;
+        foreach ($ordenesActivas as $orden) {
+            if (! is_array($orden)) {
+                continue;
+            }
+            $id = (int) ($orden['orderId'] ?? $orden['id'] ?? 0);
+            if ($id > $max) {
+                $max = $id;
+            }
+        }
+
+        return $max;
+    }
+
+    private function origenTopeWaitryOrderIdHasta(JornadaGastronomia $jornada): string
+    {
+        $cierre = CierreTotemJornadaGastronomia::query()
+            ->where('jornada_gastronomia_id', (int) $jornada->id)
+            ->first();
+
+        if ($cierre !== null && (int) $cierre->waitry_order_id_hasta > 0) {
+            return 'ultimo_ticket_cierre_jornada';
+        }
+
+        return 'ultimo_leido';
+    }
+
+    /**
+     * @param  array<int|string, array<string, mixed>>  $ordenes
+     * @return array<int|string, array<string, mixed>>
+     */
+    private function filtrarOrdenesActivasPorTopeHasta(array $ordenes, int $hastaInclusive): array
+    {
+        if ($hastaInclusive <= 0) {
+            return $ordenes;
+        }
+
+        return array_filter(
+            $ordenes,
+            static function ($orden) use ($hastaInclusive) {
+                if (! is_array($orden)) {
+                    return false;
+                }
+                $id = (int) ($orden['orderId'] ?? $orden['id'] ?? 0);
+
+                return $id > 0 && $id <= $hastaInclusive;
+            },
+            ARRAY_FILTER_USE_BOTH,
+        );
     }
 
     public function etiquetaRango(int $idAnterior, ?int $desde, ?int $hasta): string
@@ -653,20 +960,35 @@ final class GastronomiaCierreTotemJornadaService
             $rangoCal['desde'],
             $rangoCal['hasta'],
         );
-        if (! ($waitry['ok'] ?? false)) {
-            throw new RuntimeException(
-                $waitry['error'] ?? 'No se pudieron obtener órdenes Waitry (getordersdetails) para el cierre de jornada.'
-            );
-        }
 
         $porId = [];
         $descartadasFueraVentana = 0;
-        foreach ($waitry['ordenes'] ?? [] as $orden) {
+        $fuenteConsulta = 'getordersdetails';
+        $ordenesFuente = ($waitry['ok'] ?? false) ? ($waitry['ordenes'] ?? []) : [];
+
+        if ($ordenesFuente === []) {
+            $mapPos = $this->ordenesExternasService->mapOrdenesPosEnVentanaJornada(
+                $empresaId,
+                $fechaJornada,
+                $aperturaEn,
+                $cierreEn,
+            );
+            if ($mapPos !== []) {
+                $ordenesFuente = array_values($mapPos);
+                $fuenteConsulta = 'getOrdersPOS';
+            } elseif (! ($waitry['ok'] ?? false)) {
+                throw new RuntimeException(
+                    $waitry['error'] ?? 'No se pudieron obtener órdenes Waitry (getordersdetails) para el cierre de jornada.'
+                );
+            }
+        }
+
+        foreach ($ordenesFuente as $orden) {
             if (! is_array($orden)) {
                 continue;
             }
             $id = (int) ($orden['orderId'] ?? $orden['id'] ?? 0);
-            if ($id <= $desdeExclusive) {
+            if (! WaitryCierreJornadaVentanaSupport::perteneceTramoOrderId($id, $desdeExclusive)) {
                 continue;
             }
             $normalizada = $this->analyticsOrdenesService->normalizarOrden($orden);
@@ -680,7 +1002,7 @@ final class GastronomiaCierreTotemJornadaService
                 continue;
             }
             $porId[$id] = $normalizada;
-            $porId[$id]['fuente'] = 'getordersdetails';
+            $porId[$id]['fuente'] = $fuenteConsulta;
         }
 
         $idsErpSuplemento = $this->suplementarOrdenesDesdeErp(
@@ -721,7 +1043,8 @@ final class GastronomiaCierreTotemJornadaService
                 'ventana_desde' => $ventana['desde']->format('Y-m-d H:i:s'),
                 'ventana_hasta' => $ventana['hasta']->format('Y-m-d H:i:s'),
                 'waitry_order_id_anterior' => $desdeExclusive,
-                'cantidad_getordersdetails' => count($waitry['ordenes'] ?? []),
+                'cantidad_getordersdetails' => count($ordenesFuente),
+                'waitry_fuente_consulta' => $fuenteConsulta,
                 'cantidad_descartadas_fuera_ventana' => $descartadasFueraVentana,
                 'cantidad_incluidas' => count($porId),
                 'ids_suplementados_erp' => $idsErpSuplemento,
@@ -836,51 +1159,83 @@ final class GastronomiaCierreTotemJornadaService
         ?Carbon $ventanaDesde = null,
         ?Carbon $ventanaHasta = null,
     ): array {
-        $idsErp = [];
+        if ($ventanaDesde === null || $ventanaHasta === null) {
+            return [];
+        }
+
+        $desdeSql = $ventanaDesde->format('Y-m-d H:i:s');
+        $hastaSql = $ventanaHasta->format('Y-m-d H:i:s');
+        $stubs = [];
 
         CuentaGastronomia::query()
             ->where('empresa_id', $empresaId)
             ->whereNotNull('waitry_order_id')
             ->where('waitry_order_id', '>', $desdeExclusive)
-            ->pluck('waitry_order_id')
-            ->each(function ($id) use (&$idsErp) {
-                $idsErp[(int) $id] = true;
+            ->where(function ($q) use ($desdeSql, $hastaSql) {
+                $q->whereBetween('updated_at', [$desdeSql, $hastaSql])
+                    ->orWhereBetween('created_at', [$desdeSql, $hastaSql]);
+            })
+            ->orderByDesc('id')
+            ->get()
+            ->unique('waitry_order_id')
+            ->each(function (CuentaGastronomia $cuenta) use (&$stubs) {
+                $orderId = (int) $cuenta->waitry_order_id;
+                $instante = $cuenta->updated_at ?? $cuenta->created_at;
+                $stubs[$orderId] = [
+                    'placed_at' => $instante?->format('Y-m-d H:i:s'),
+                    'totalAmount' => 0.0,
+                    'paid' => $cuenta->waitry_cobro_totem ? true : null,
+                    'waitry_tipo_pago' => $cuenta->waitry_tipo_pago,
+                ];
             });
 
         VentaGastronomiaEmision::query()
+            ->with('venta:id,total,created_at')
             ->whereNotNull('waitry_order_id')
             ->where('waitry_order_id', '>', $desdeExclusive)
-            ->whereHas('venta', function ($q) use ($empresaId, $fechaJornada, $ventanaDesde, $ventanaHasta) {
+            ->whereHas('venta', function ($q) use ($empresaId, $desdeSql, $hastaSql) {
                 $q->whereHas('puntoventas', fn ($pv) => $pv->where('empresa_id', $empresaId));
-                $q->where(function ($fecha) use ($fechaJornada, $ventanaDesde, $ventanaHasta) {
-                    $fecha->whereDate('fechajornada', $fechaJornada);
-                    if ($ventanaDesde !== null && $ventanaHasta !== null) {
-                        $fecha->orWhereBetween('created_at', [
-                            $ventanaDesde->format('Y-m-d H:i:s'),
-                            $ventanaHasta->format('Y-m-d H:i:s'),
-                        ]);
-                    }
-                });
+                $q->whereBetween('created_at', [$desdeSql, $hastaSql]);
             })
-            ->pluck('waitry_order_id')
-            ->each(function ($id) use (&$idsErp) {
-                $idsErp[(int) $id] = true;
+            ->orderByDesc('venta_id')
+            ->get()
+            ->each(function (VentaGastronomiaEmision $emision) use (&$stubs) {
+                $orderId = (int) $emision->waitry_order_id;
+                if ($orderId <= 0) {
+                    return;
+                }
+                if (! isset($stubs[$orderId])) {
+                    $stubs[$orderId] = [
+                        'placed_at' => $emision->venta?->created_at?->format('Y-m-d H:i:s'),
+                        'totalAmount' => round((float) ($emision->venta?->total ?? 0), 2),
+                        'paid' => null,
+                    ];
+                }
             });
 
         $agregados = [];
-        foreach (array_keys($idsErp) as $orderId) {
+        foreach ($stubs as $orderId => $stub) {
             if (isset($porId[$orderId])) {
                 continue;
             }
-            $porId[$orderId] = [
+            $ordenStub = [
                 'id' => $orderId,
                 'orderId' => $orderId,
                 'display_id' => null,
-                'placed_at' => null,
-                'totalAmount' => 0.0,
-                'paid' => null,
+                'placed_at' => $stub['placed_at'] ?? null,
+                'totalAmount' => (float) ($stub['totalAmount'] ?? 0),
+                'paid' => $stub['paid'] ?? null,
+                'waitry_tipo_pago' => $stub['waitry_tipo_pago'] ?? null,
                 'fuente' => 'erp',
             ];
+            if (! WaitryCierreJornadaVentanaSupport::ordenDentroVentanaOperativa(
+                $ordenStub,
+                $ventanaDesde,
+                $ventanaHasta,
+            )) {
+                continue;
+            }
+            $porId[$orderId] = $ordenStub;
             $agregados[] = $orderId;
         }
 
@@ -912,7 +1267,13 @@ final class GastronomiaCierreTotemJornadaService
             ->keyBy(fn (CuentaGastronomia $c) => (int) $c->waitry_order_id);
 
         $emisionesPorWaitry = VentaGastronomiaEmision::query()
-            ->with(['venta:id,codigo,total', 'cuenta:id,waitry_cobro_totem,waitry_tipo_pago,waitry_order_id', 'waitryComandaEnvio'])
+            ->with([
+                'venta:id,codigo,total',
+                'venta.cobranzasDirectas',
+                'venta.caja_movimientos.cobranzas',
+                'cuenta:id,waitry_cobro_totem,waitry_tipo_pago,waitry_order_id',
+                'waitryComandaEnvio',
+            ])
             ->whereHas('venta', fn ($q) => $q->whereHas('puntoventas', fn ($pv) => $pv->where('empresa_id', $empresaId)))
             ->orderByDesc('venta_id')
             ->get();
@@ -943,28 +1304,67 @@ final class GastronomiaCierreTotemJornadaService
                 array_key_exists('paid', $orden) && in_array($orden['paid'], [0, '0', false], true) ? false : null
             );
             $montoCobro = WaitryOrdenCobroSupport::montoCobro($orden);
+            $waitryGateway = WaitryPaymentGatewaySupport::extraerGatewayDesdeOrden($orden);
             $waitryTipoPago = WaitryMedioPagoCuentacajaSupport::extraerTipoPagoOrden($orden)
-                ?? $cuenta?->waitry_tipo_pago
-                ?? $emision?->cuenta?->waitry_tipo_pago;
-            $cuentaEsperada = WaitryMedioPagoCuentacajaSupport::cuentaParaTipoWaitry($waitryTipoPago, $empresaId);
-            $waitryTableId = WaitryOrdenCobroSupport::extraerTableId($orden);
+                ?? WaitryMedioPagoCuentacajaSupport::normalizarTipo($cuenta?->waitry_tipo_pago)
+                ?? WaitryMedioPagoCuentacajaSupport::normalizarTipo($emision?->cuenta?->waitry_tipo_pago);
+            if ($waitryTipoPago === null && WaitryTotemJornadaResumenSupport::cobradaEnWaitryLinea([
+                'paid_waitry' => $paid,
+                'waitry_cobro_totem' => (bool) ($cuenta?->waitry_cobro_totem ?? $emision?->cuenta?->waitry_cobro_totem),
+                'monto_cobro_waitry' => $montoCobro,
+            ])) {
+                $waitryTipoPago = WaitryMedioPagoCuentacajaSupport::resolverTipoMedioInformeZDesdeLinea(
+                    ['waitry_tipo_pago' => null],
+                    $empresaId,
+                );
+            }
+            $cuentaEsperada = WaitryMedioPagoCuentacajaSupport::cuentaParaTipoInformeZ($waitryTipoPago, $empresaId, $waitryGateway)
+                ?? WaitryMedioPagoCuentacajaSupport::cuentaParaTipoWaitry($waitryTipoPago, $empresaId);
+            $accesoWaitry = WaitryTableAccesoSupport::extraerDesdeOrden($orden);
+            $waitryTableId = $accesoWaitry['table_id'];
+
+            $displayId = trim((string) (
+                $orden['display_id']
+                ?? $orden['externalDeliveryId']
+                ?? $orden['external_reference_id']
+                ?? $cuenta?->waitry_display_id
+                ?? ''
+            ));
+
+            $anitaCuentacajaId = null;
+            $anitaCuentacajaLabel = null;
+            $anitaEsTotem = false;
+            if ($emision !== null) {
+                $medioAnita = $this->primerMedioCobranzaEmision($emision, $empresaId);
+                if ($medioAnita !== null) {
+                    $anitaCuentacajaId = $medioAnita['cuentacaja_id'];
+                    $anitaCuentacajaLabel = $medioAnita['label'];
+                    $totemId = (int) (GastronomiaCuentacajaTotem::cuentaParaEmpresa($empresaId)['id'] ?? 0);
+                    $anitaEsTotem = $totemId > 0 && $anitaCuentacajaId === $totemId;
+                }
+            }
 
             $lineas[] = [
                 'waitry_order_id' => $orderId,
-                'display_id' => trim((string) (
-                    $orden['display_id']
-                    ?? $orden['externalDeliveryId']
-                    ?? $orden['external_reference_id']
-                    ?? $cuenta?->waitry_display_id
-                    ?? ''
-                )),
+                'display_id' => $displayId,
                 'placed_at_fmt' => $this->formatearPlacedAt($orden['placed_at'] ?? null),
                 'total' => $total,
+                'total_amount_waitry' => WaitryOrdenEstadoSupport::montoBrutoWaitry($orden),
+                'total_discount_waitry' => WaitryOrdenEstadoSupport::montoDescuentoWaitry($orden),
                 'monto_cobro_waitry' => $montoCobro,
                 'waitry_table_id' => $waitryTableId,
+                'waitry_table_name' => $accesoWaitry['table_name'],
+                'waitry_layout_id' => $accesoWaitry['layout_id'],
+                'waitry_layout_name' => $accesoWaitry['layout_name'],
                 'paid_waitry' => $paid,
                 'waitry_tipo_pago' => $waitryTipoPago,
-                'waitry_medio_label' => WaitryMedioPagoCuentacajaSupport::etiquetaTipo($waitryTipoPago),
+                'waitry_payment_gateway' => $waitryGateway,
+                'orden_push_erp' => WaitryPaymentGatewaySupport::esOrdenPushErp([
+                    'waitry_tipo_pago' => $waitryTipoPago,
+                    'display_id' => $displayId,
+                    'external_reference_id' => $orden['external_reference_id'] ?? null,
+                ]),
+                'waitry_medio_label' => WaitryMedioPagoCuentacajaSupport::etiquetaTipo($waitryTipoPago, $waitryGateway),
                 'cuentacaja_esperada_id' => $cuentaEsperada['id'] ?? null,
                 'cuentacaja_esperada_label' => isset($cuentaEsperada['codigo'], $cuentaEsperada['nombre'])
                     ? trim($cuentaEsperada['codigo'].' — '.$cuentaEsperada['nombre'])
@@ -978,12 +1378,49 @@ final class GastronomiaCierreTotemJornadaService
                 'fuente_listado' => $orden['fuente'] ?? 'waitry',
                 'placed_at' => $orden['placed_at'] ?? $orden['created_at'] ?? null,
                 'waitry_cancelada' => WaitryOrdenEstadoSupport::esCancelada($orden),
+                'waitry_anulada_descuento' => WaitryOrdenEstadoSupport::esAnuladaPorDescuentoTotal($orden),
+                'total_neto_waitry' => WaitryOrdenEstadoSupport::montoNetoOperativo($orden),
+                'empresa_id' => $empresaId,
+                'anita_cuentacaja_id' => $anitaCuentacajaId,
+                'anita_cuentacaja_label' => $anitaCuentacajaLabel,
+                'anita_es_totem' => $anitaEsTotem,
+                'waitry_tipo_pago_cuenta' => $emision?->cuenta?->waitry_tipo_pago,
             ];
         }
 
         usort($lineas, fn (array $a, array $b) => ($a['waitry_order_id'] ?? 0) <=> ($b['waitry_order_id'] ?? 0));
 
         return $lineas;
+    }
+
+    /**
+     * @return array{cuentacaja_id:int,label:string}|null
+     */
+    private function primerMedioCobranzaEmision(VentaGastronomiaEmision $emision, int $empresaId): ?array
+    {
+        $venta = $emision->venta;
+        if ($venta === null) {
+            return null;
+        }
+
+        $cobranzas = GastronomiaVentaDetalleSupport::cobranzasDeVenta($venta);
+        foreach (GastronomiaVentaDetalleSupport::mediosPagoPorCobranza($cobranzas) as $lineasMedio) {
+            foreach ($lineasMedio as $medio) {
+                $ccId = (int) ($medio->cuentacaja_id ?? 0);
+                if ($ccId <= 0) {
+                    continue;
+                }
+                $codigo = trim((string) ($medio->codigo ?? ''));
+                $nombre = trim((string) ($medio->nombre ?? ''));
+                $label = $codigo !== '' && $nombre !== ''
+                    ? $codigo.' — '.$nombre
+                    : ($codigo !== '' ? $codigo : ($nombre !== '' ? $nombre : '#'.$ccId));
+
+                return ['cuentacaja_id' => $ccId, 'label' => $label];
+            }
+        }
+
+        return null;
     }
 
     private function formatearPlacedAt(mixed $placedAt): string
@@ -997,5 +1434,18 @@ final class GastronomiaCierreTotemJornadaService
         } catch (\Throwable) {
             return (string) $placedAt;
         }
+    }
+
+    /**
+     * @param  array{cantidad:int,total:float}  $a
+     * @param  array{cantidad:int,total:float}  $b
+     * @return array{cantidad:int,total:float}
+     */
+    private static function fusionarResumenExcluidas(array $a, array $b): array
+    {
+        return [
+            'cantidad' => (int) ($a['cantidad'] ?? 0) + (int) ($b['cantidad'] ?? 0),
+            'total' => round((float) ($a['total'] ?? 0) + (float) ($b['total'] ?? 0), 2),
+        ];
     }
 }

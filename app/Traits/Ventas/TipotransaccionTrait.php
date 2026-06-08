@@ -15,6 +15,13 @@ trait TipotransaccionTrait {
 			'R' => 'Resta',
 			];
 
+	public static $enumOperacionStock = [
+		'S' => 'Salida',
+		'E' => 'Entrada',
+		'N' => 'Nulo',
+		'O' => 'Sin operación sobre stock',
+		];
+
 	public static $enumEstado = [
 			'A' => 'Activa',
 			'S' => 'Suspendida',

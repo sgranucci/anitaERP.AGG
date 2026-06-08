@@ -504,10 +504,9 @@ final class GastronomiaTicketCanjePremioService
             ?? $opcionalesPorArticulo[(string) $articuloId]
             ?? [];
 
-        $opcionales = [];
-        foreach ($raw as $k => $v) {
-            $opcionales[(string) $k] = $v !== null && $v !== '' ? (int) $v : null;
-        }
+        $opcionales = \App\Support\Ventas\GastronomiaFormulaOpcionalSeleccion::normalizarMapaDesdeRequest(
+            is_array($raw) ? $raw : []
+        );
 
         if (! FormulaArticuloGastronomia::opcionalesHabilitados()) {
             return $opcionales;

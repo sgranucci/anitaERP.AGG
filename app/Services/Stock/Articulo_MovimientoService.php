@@ -48,8 +48,17 @@ class Articulo_MovimientoService
 		$tipotransaccion = $this->resolveTipoTransaccion($dataMovimiento);
 		if ($tipotransaccion)
 		{
-			$signoCantidad = $dataMovimiento['signo_cantidad'] ?? $tipotransaccion->signo;
-			unset($dataMovimiento['signo_cantidad']);
+			$cantidadYaFirmada = ! empty($dataMovimiento['cantidad_ya_firmada']);
+			unset($dataMovimiento['cantidad_ya_firmada']);
+
+			if (! $cantidadYaFirmada) {
+				$signoCantidad = $dataMovimiento['signo_cantidad'] ?? $tipotransaccion->signo;
+				unset($dataMovimiento['signo_cantidad']);
+				$dataMovimiento['cantidad'] = $dataMovimiento['cantidad'] * ($signoCantidad == 'S' ? 1 : -1);
+			} else {
+				unset($dataMovimiento['signo_cantidad']);
+			}
+
 			unset($dataMovimiento['tipotransaccion_id'], $dataMovimiento['tipotransaccion_stock_id']);
 			if ($tipotransaccion instanceof Tipotransaccion_Stock) {
 				$dataMovimiento['tipotransaccion_stock_id'] = $tipotransaccion->id;
@@ -58,7 +67,6 @@ class Articulo_MovimientoService
 				$dataMovimiento['tipotransaccion_id'] = $tipotransaccion->id;
 				$dataMovimiento['tipotransaccion_stock_id'] = null;
 			}
-			$dataMovimiento['cantidad'] = $dataMovimiento['cantidad'] * ($signoCantidad == 'S' ? 1 : -1);
 			$dataMovimiento['precio'] = str_replace(',', '', $dataMovimiento['precio']);
 
 			//if (!array_key_exists('deposito_id', $dataMovimiento))

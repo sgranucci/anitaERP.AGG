@@ -1,7 +1,4 @@
 @php
-    $empresasDisponibles = collect($empresa_query ?? []);
-    $empresaUnica = $empresasDisponibles->count() === 1;
-    $empresaNombreSeleccionada = $empresasDisponibles->firstWhere('id', (int) ($empresa_id ?? 0))?->nombre;
     $empresasExcluidas = collect($empresas_sin_pv ?? []);
 @endphp
 
@@ -10,7 +7,7 @@
     Solo puede habilitar o cerrar turnos en empresas que tengan
     <strong>configuración de punto de venta gastronomía</strong> para la terminal
     <code>{{ $identificador_pc }}</code>.
-    @if ($empresaUnica)
+    @if (collect($empresa_query ?? [])->count() === 1)
         Si su usuario tiene una sola empresa operativa en esta PC, queda preseleccionada automáticamente.
     @else
         Al cambiar la empresa en el listado se recarga el panel automáticamente.
@@ -23,7 +20,7 @@
     @endif
 </div>
 
-@if ($empresasDisponibles->isEmpty())
+@if (collect($empresa_query ?? [])->isEmpty())
     <div class="alert alert-warning mb-3">
         Ninguna de las empresas asignadas a su usuario tiene punto de venta gastronomía configurado
         para la terminal <code>{{ $identificador_pc }}</code>.
@@ -40,18 +37,12 @@
         @if (! empty($accion))
             <input type="hidden" name="accion" value="{{ $accion }}"/>
         @endif
-        <label class="mr-2" for="empresa_id">Empresa</label>
-        @if ($empresaUnica)
-            <input type="hidden" name="empresa_id" id="empresa_id" value="{{ $empresa_id }}"/>
-            <input type="text" class="form-control mr-2" readonly value="{{ $empresaNombreSeleccionada }}"/>
-        @else
-            <select name="empresa_id" id="empresa_id" class="form-control mr-2 js-auto-consultar-empresa" required>
-                @foreach ($empresasDisponibles as $emp)
-                    <option value="{{ $emp->id }}" @selected((int) ($empresa_id ?? 0) === (int) $emp->id)>
-                        {{ $emp->nombre }}
-                    </option>
-                @endforeach
-            </select>
-        @endif
+        @include('includes.listado.filtro_empresa_asignada_inline', [
+            'empresa_query' => $empresa_query,
+            'empresa_id' => $empresa_id,
+            'required' => true,
+            'permite_todas' => false,
+            'select_class' => 'js-auto-consultar-empresa',
+        ])
     </form>
 @endif

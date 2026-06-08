@@ -138,11 +138,35 @@ final class RendicionGastronomiaAnitaTotalZPorPcService
     }
 
     /**
-     * Última rendición de la PC en la jornada (por fecha real de registro en caja).
+     * Portadora del Z del día en la PC: turno N → T → M (misma regla que rendgastro / reparación).
+     * Si hay varias rendiciones del mismo turno, la de mayor fecharendicion.
      */
     private function resolverRendicionPortadoraZ(Collection $grupoPc): ?RendicionGastronomiaCaja
     {
-        return $grupoPc
+        /** @var array<string, Collection<int, RendicionGastronomiaCaja>> $porLetra */
+        $porLetra = [];
+        foreach ($grupoPc as $rendicion) {
+            $letra = RendicionGastronomiaAnitaRendgastroSupport::letraTurnoDesdeNombre(
+                $rendicion->turnoOperativo?->turno?->nombre,
+            );
+            if (! isset($porLetra[$letra])) {
+                $porLetra[$letra] = collect();
+            }
+            $porLetra[$letra]->push($rendicion);
+        }
+
+        foreach (RendicionGastronomiaAnitaRendgastroSupport::SECUENCIA_TURNO_PORTADORA as $letra) {
+            if (! empty($porLetra[$letra]) && $porLetra[$letra]->isNotEmpty()) {
+                return $this->elegirUltimaRendicionPorFecharendicion($porLetra[$letra]);
+            }
+        }
+
+        return $this->elegirUltimaRendicionPorFecharendicion($grupoPc);
+    }
+
+    private function elegirUltimaRendicionPorFecharendicion(Collection $grupo): ?RendicionGastronomiaCaja
+    {
+        return $grupo
             ->sort(function (RendicionGastronomiaCaja $a, RendicionGastronomiaCaja $b): int {
                 $tsA = $a->fecharendicion?->getTimestamp() ?? 0;
                 $tsB = $b->fecharendicion?->getTimestamp() ?? 0;

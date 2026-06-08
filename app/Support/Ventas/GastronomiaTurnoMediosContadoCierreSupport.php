@@ -130,6 +130,9 @@ final class GastronomiaTurnoMediosContadoCierreSupport
             $porMedio = [];
         }
 
+        /** @var array<int, true> $ccIdsIncluidos */
+        $ccIdsIncluidos = [];
+
         $enriquecidos = [];
         foreach ($porMedio as $p) {
             if (! is_array($p)) {
@@ -140,8 +143,25 @@ final class GastronomiaTurnoMediosContadoCierreSupport
             if ($ccId > 0 && isset($porContado[$ccId])) {
                 $copia['esperado'] = (float) $porContado[$ccId]['esperado'];
                 $copia['contado'] = (float) $porContado[$ccId]['contado'];
+                $ccIdsIncluidos[$ccId] = true;
             }
             $enriquecidos[] = $copia;
+        }
+
+        foreach ($mediosContado as $m) {
+            $ccId = (int) ($m['cuentacaja_id'] ?? 0);
+            if ($ccId <= 0 || isset($ccIdsIncluidos[$ccId])) {
+                continue;
+            }
+            $enriquecidos[] = [
+                'cuentacaja_id' => $ccId,
+                'codigo' => (string) $m['codigo'],
+                'nombre' => (string) $m['nombre'],
+                'total' => (float) $m['esperado'],
+                'esperado' => (float) $m['esperado'],
+                'contado' => (float) $m['contado'],
+            ];
+            $ccIdsIncluidos[$ccId] = true;
         }
 
         if ($enriquecidos === []) {
@@ -157,8 +177,21 @@ final class GastronomiaTurnoMediosContadoCierreSupport
             }
         }
 
+        usort($enriquecidos, fn ($a, $b) => strcmp((string) ($a['nombre'] ?? ''), (string) ($b['nombre'] ?? '')));
+
+        $totalContado = 0.0;
+        foreach ($enriquecidos as $p) {
+            if (! is_array($p)) {
+                continue;
+            }
+            $totalContado += array_key_exists('contado', $p)
+                ? (float) $p['contado']
+                : (float) ($p['total'] ?? 0);
+        }
+
         $totalesTurno['por_medio_pago'] = $enriquecidos;
         $totalesTurno['arqueo_medios_cierre'] = true;
+        $totalesTurno['total_cobrado_contado'] = round($totalContado, 2);
 
         return $totalesTurno;
     }

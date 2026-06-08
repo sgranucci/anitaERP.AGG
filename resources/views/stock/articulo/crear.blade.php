@@ -8,7 +8,11 @@
 <script src="{{asset("assets/pages/scripts/stock/articulo/contable.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/articulo/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/contable/cuentacontable/consulta.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/stock/articulo/crear.js")}}" type="text/javascript"></script>
+<script src="{{asset('assets/pages/scripts/stock/articulo/crear.js')}}?v=20260607" type="text/javascript"></script>
+@if (can('editar-compras-articulos', false) || can('actualizar-compras-articulos', false))
+<script src="{{ asset('assets/pages/scripts/compras/proveedor/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/articulo/proveedores.js') }}?v=20260607c" type="text/javascript"></script>
+@endif
 @if (can('listar-formula-articulo', false) || can('listar-articulos', false))
 <script>
 window.consultaFormulaArticuloConfig = {
@@ -55,7 +59,10 @@ window.consultaFormulaArticuloConfig = {
                     @if (can('editar-compras-articulos', false) || can('actualizar-compras-articulos', false))
                         <button type="button" id="botonform3" class="btn btn-info btn-sm">
                             <span class="fa fa-copy"></span> Compras
-                        </button>   
+                        </button>
+                        <button type="button" id="botonform8" class="btn btn-info btn-sm">
+                            <span class="fa fa-truck"></span> Proveedores
+                        </button>
                     @endif      
                     @if (can('editar-contabilidad-articulos', false) || can('actualizar-contabilidad-articulos', false))                                
                         <button type="button" id="botonform4" class="btn btn-info btn-sm">
@@ -80,6 +87,9 @@ window.consultaFormulaArticuloConfig = {
                     @include('stock.articulo.form5')
                     @include('stock.articulo.form6')
                     @include('stock.articulo.form7')
+                    @if (can('editar-compras-articulos', false) || can('actualizar-compras-articulos', false))
+                        @include('stock.articulo.form8')
+                    @endif
                 </div>
                 <div class="card-footer">
                 	<div class="row">
@@ -92,4 +102,7 @@ window.consultaFormulaArticuloConfig = {
 </div>
 @include('includes.contable.modalconsultacuentacontable')
 @include('stock.formula_articulo.partials.modal_ver_formula_articulo')
+@if (can('editar-compras-articulos', false) || can('actualizar-compras-articulos', false))
+@include('includes.compras.modalconsultaproveedor')
+@endif
 @endsection

@@ -5,6 +5,7 @@ namespace App\Repositories\Caja;
 use App\Models\Caja\Cuentacaja;
 use App\Models\Contable\Cuentacontable;
 use App\Models\Configuracion\Empresa;
+use App\Support\Caja\CuentacajaListadoFiltros;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Repositories\Caja\BancoRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
@@ -49,21 +50,59 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
         }
 
         $query = $this->model->with('empresas')->with('cuentacontables')->with('bancos')->with('usocuentacajas');
-        $this->aplicarFiltroEmpresasAsignadas($query);
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'empresa_id', true);
 
         return $query->get();
     }
 
-    private function aplicarFiltroEmpresasAsignadas($query): void
+    public function leeCuentacaja($filtros, $flPaginando = null)
     {
-        $empresasAsignadas = $this->empresaRepository->traeEmpresasAsignadas();
+        $hay_cuentacaja = Cuentacaja::first();
 
-        if (count($empresasAsignadas) > 1) {
-            $query->where(function ($q) use ($empresasAsignadas) {
-                $q->whereIn('empresa_id', $empresasAsignadas)
-                    ->orWhereNull('empresa_id');
-            });
+        if (! $hay_cuentacaja) {
+            self::sincronizarConAnita();
+        } elseif (self::usaTablaTesmcbu()) {
+            self::sincronizarCbuConAnita();
         }
+
+        if (is_string($filtros)) {
+            $texto = trim($filtros);
+            $filtros = [
+                'modo' => CuentacajaListadoFiltros::MODO_TODOS,
+                'campo' => 'nombre',
+                'operador' => 'contiene',
+                'valor' => $texto,
+                'valor_hasta' => '',
+                'busqueda' => $texto,
+            ];
+        } elseif (! is_array($filtros)) {
+            $filtros = CuentacajaListadoFiltros::filtrosVacios();
+        }
+
+        $query = $this->model->select('cuentacaja.*')
+            ->leftJoin('banco', 'banco.id', '=', 'cuentacaja.banco_id')
+            ->leftJoin('empresa', 'empresa.id', '=', 'cuentacaja.empresa_id')
+            ->leftJoin('cuentacontable', 'cuentacontable.id', '=', 'cuentacaja.cuentacontable_id')
+            ->leftJoin('moneda', 'moneda.id', '=', 'cuentacaja.moneda_id')
+            ->with(['empresas', 'cuentacontables', 'bancos', 'monedas', 'usocuentacajas']);
+
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'cuentacaja.empresa_id', true);
+
+        if (CuentacajaListadoFiltros::tieneCriteriosAplicados($filtros)) {
+            CuentacajaListadoFiltros::aplicar($query, $filtros);
+        }
+
+        $query->orderBy('cuentacaja.nombre');
+
+        if (isset($flPaginando)) {
+            if ($flPaginando) {
+                return $query->paginate(10);
+            }
+
+            return $query->get();
+        }
+
+        return $query->get();
     }
 
     public function create(array $data)

@@ -30,16 +30,8 @@
         <small class="form-text text-muted">Corresponde a mes_codigo en Anita (clave de sincronización).</small>
     </div>
 </div>
-<div class="form-group row">
-    <label for="empresa_id" class="col-lg-3 col-form-label requerido">Empresa</label>
-    <div class="col-lg-8">
-        <select name="empresa_id" id="empresa_id" class="form-control" required>
-            <option value="">Seleccione…</option>
-            @foreach ($empresa_query as $empresa)
-                <option value="{{ $empresa->id }}" {{ (int) old('empresa_id', $data->empresa_id ?? config('cliente.EMPRESA_DEFAULT_ID')) === (int) $empresa->id ? 'selected' : '' }}>
-                    {{ $empresa->nombre }}
-                </option>
-            @endforeach
-        </select>
-    </div>
-</div>
+@include('includes.form-empresa-asignada', [
+    'empresa_query' => $empresa_query,
+    'empresa_id' => $data->empresa_id ?? null,
+    'col_input' => 'col-lg-8',
+])

@@ -29,6 +29,8 @@
         <th class="num">Monto CAPEX</th>
         <th class="num">Importe OC</th>
         <th class="num">Importe FC</th>
+        <th class="num">Cotización FC</th>
+        <th>Cuenta contable</th>
         <th class="num">Importe pago</th>
         <th>OC</th>
         <th>FC</th>
@@ -54,6 +56,8 @@
             <td class="num">{{ $formatearMonto($fila['monto_capex'] ?? null) }}</td>
             <td class="num">{{ $formatearMonto($fila['importe_oc'] ?? null) }}</td>
             <td class="num">{{ $formatearMonto($fila['importe_fc'] ?? null) }}</td>
+            <td class="num">{{ $formatearMonto($fila['cotizacion_fc'] ?? null) }}</td>
+            <td>{{ $fila['cuenta_contable'] ?? '' }}</td>
             <td class="num">{{ $formatearMonto($fila['importe_pago'] ?? null) }}</td>
             <td>{{ $fila['oc'] ?? '' }}</td>
             <td>{{ $fila['fc'] ?? '' }}</td>
@@ -68,7 +72,7 @@
         </tr>
     @empty
         <tr>
-            <td colspan="20" class="text-center text-muted">Sin registros para los filtros indicados.</td>
+            <td colspan="22" class="text-center text-muted">Sin registros para los filtros indicados.</td>
         </tr>
     @endforelse
 </tbody>

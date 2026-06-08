@@ -46,7 +46,9 @@ class ArticuloRepository implements ArticuloRepositoryInterface
                                 ->with('categorias')->with('unidadesdemedidas')
                                 ->with('categorias')->with('subcategorias')->with('lineas')->with('mventas')->with('impuestos')
 								->with('unidadesdemedidas')->with('unidadesdemedidasalternativas')->with('usoarticulos')
-                                ->with('articulo_estados')->with('articulo_archivos')->with('articulo_cuentacontables');
+                                ->with('articulo_estados')->with('articulo_archivos')->with('articulo_cuentacontables')
+                                ->with('articulo_proveedores.proveedores')
+                                ->with('articulo_proveedores.unidadesmedidacompra');
 
         if (config('app.empresa') === 'FRASLE') {
             $query = $query->with('tipoproductos')->with('capacidades')->with('colores')->with('tipoliquidos');

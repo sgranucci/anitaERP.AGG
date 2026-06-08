@@ -8,13 +8,16 @@ use App\Models\Ventas\CuentaGastronomiaLinea;
 use App\Models\Stock\Articulo_Movimiento;
 use App\Models\Stock\Formula_Articulo;
 use App\Models\Stock\Formula_Articulo_Hijo;
+use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
 use App\Services\Stock\Articulo_MovimientoService;
 use App\Support\Stock\FormulaArticuloFactorCosto;
 use App\Support\Stock\FormulaArticuloGastronomia;
 use App\Support\Ventas\GastronomiaDepositoConfigSupport;
 use App\Support\Ventas\GastronomiaMovimientoStockSupport;
+use App\Support\Ventas\TipotransaccionOperacionStockSupport;
 use App\Support\Ventas\GastronomiaVentaDetalleSupport;
+use App\Support\Ventas\GastronomiaFormulaOpcionalSeleccion;
 use App\Support\Ventas\GastronomiaVentaEmisionMapSupport;
 
 /**
@@ -43,6 +46,11 @@ final class GastronomiaFormulaConsumoService
         int $monedaId,
         ?string $fechaJornada = null,
     ): void {
+        $tipo = Tipotransaccion::query()->find($tipotransaccionId);
+        if ($tipo === null || ! TipotransaccionOperacionStockSupport::afectaStock($tipo->operacionstock)) {
+            return;
+        }
+
         $fechaJornada = $fechaJornada ?? $fechaFactura;
         $venta->loadMissing(['venta_emisiones']);
         $cuenta->loadMissing(['lineas.articulo']);
@@ -68,10 +76,10 @@ final class GastronomiaFormulaConsumoService
             }
 
             $this->registrarMovimientoItemFacturado(
+                $tipo,
                 $venta,
                 $linea,
                 $ventaEmisionId,
-                $tipotransaccionId,
                 $conceptoTipoNombre,
                 $fechaFactura,
                 $monedaId,
@@ -87,7 +95,7 @@ final class GastronomiaFormulaConsumoService
             $opcMap = [];
             if (FormulaArticuloGastronomia::opcionalesHabilitados()) {
                 foreach (($linea->opcionales_json ?? []) as $k => $v) {
-                    $opcMap[(string) $k] = $v !== null ? (int) $v : null;
+                    $opcMap[(string) $k] = $v;
                 }
             }
 
@@ -99,7 +107,7 @@ final class GastronomiaFormulaConsumoService
                     continue;
                 }
 
-                $dataMovimiento = GastronomiaMovimientoStockSupport::normalizarPayloadMovimiento([
+                $this->persistirMovimientoStock($tipo, GastronomiaMovimientoStockSupport::normalizarPayloadMovimiento([
                     'fecha' => $fechaFactura,
                     'fechajornada' => $fechaJornada,
                     'tipotransaccion_id' => $tipotransaccionId,
@@ -113,18 +121,96 @@ final class GastronomiaFormulaConsumoService
                     'moneda_id' => $monedaId,
                     'incluyeimpuesto' => 1,
                     'deposito_id' => $depositoInsumosId,
-                ]);
+                ]));
+            }
+        }
+    }
 
-                $this->articuloMovimientoService->guardaArticuloMovimiento('create', $dataMovimiento, []);
+    /**
+     * Insumos ERP tras factura del proceso cierre Waitry (sin CuentaGastronomia, como POS).
+     */
+    public function registrarMovimientosIngredientesDesdeVentaEmitida(
+        Venta $venta,
+        ConfiguracionPuntoventaGastronomia $cfg,
+        int $tipotransaccionId,
+        string $conceptoTipoNombre,
+        string $fechaFactura,
+        int $monedaId,
+        ?string $fechaJornada = null,
+    ): void {
+        $tipo = Tipotransaccion::query()->find($tipotransaccionId);
+        if ($tipo === null || ! TipotransaccionOperacionStockSupport::afectaStock($tipo->operacionstock)) {
+            return;
+        }
+
+        $fechaJornada = $fechaJornada ?? $fechaFactura;
+        $venta->loadMissing(['venta_emisiones.articulos']);
+
+        $depositoVentaId = GastronomiaDepositoConfigSupport::depositoVentaId($cfg);
+        $depositoInsumosId = GastronomiaDepositoConfigSupport::depositoInsumosId($cfg);
+
+        foreach ($venta->venta_emisiones as $emision) {
+            $articulo = $emision->articulos;
+            if (! $articulo) {
+                continue;
+            }
+
+            $ventaEmisionId = (int) $emision->id;
+            $descuento = (float) ($emision->descuento ?? 0);
+            $precioNet = (float) $emision->precio * (1 - $descuento / 100.);
+
+            $this->persistirMovimientoStock($tipo, GastronomiaMovimientoStockSupport::normalizarPayloadMovimiento([
+                'fecha' => $fechaFactura,
+                'fechajornada' => $fechaJornada,
+                'tipotransaccion_id' => $tipotransaccionId,
+                'venta_id' => $venta->id,
+                'venta_emision_id' => $ventaEmisionId,
+                'articulo_id' => (int) $emision->articulo_id,
+                'concepto' => $conceptoTipoNombre,
+                'cantidad' => (float) $emision->cantidad,
+                'precio' => (string) $precioNet,
+                'costo' => 0,
+                'moneda_id' => $monedaId,
+                'incluyeimpuesto' => 1,
+                'deposito_id' => $depositoVentaId,
+            ]));
+
+            if (! $articulo->formula) {
+                continue;
+            }
+
+            $aggregados = [];
+            $this->expandFormula((int) $articulo->formula, (float) $emision->cantidad, [], $aggregados, 0);
+
+            foreach ($aggregados as $ingArticuloId => $cantidad) {
+                if ($cantidad <= 0) {
+                    continue;
+                }
+
+                $this->persistirMovimientoStock($tipo, GastronomiaMovimientoStockSupport::normalizarPayloadMovimiento([
+                    'fecha' => $fechaFactura,
+                    'fechajornada' => $fechaJornada,
+                    'tipotransaccion_id' => $tipotransaccionId,
+                    'venta_id' => $venta->id,
+                    'venta_emision_id' => $ventaEmisionId,
+                    'articulo_id' => (int) $ingArticuloId,
+                    'concepto' => $conceptoTipoNombre.GastronomiaVentaDetalleSupport::SUFIJO_CONCEPTO_INSUMO,
+                    'cantidad' => $cantidad,
+                    'precio' => '0',
+                    'costo' => 0,
+                    'moneda_id' => $monedaId,
+                    'incluyeimpuesto' => 1,
+                    'deposito_id' => $depositoInsumosId,
+                ]));
             }
         }
     }
 
     private function registrarMovimientoItemFacturado(
+        Tipotransaccion $tipo,
         Venta $venta,
         CuentaGastronomiaLinea $linea,
         int $ventaEmisionId,
-        int $tipotransaccionId,
         string $conceptoTipoNombre,
         string $fechaFactura,
         int $monedaId,
@@ -134,10 +220,10 @@ final class GastronomiaFormulaConsumoService
         $pct = (float) $linea->descuento_linea_pct;
         $precioNet = (float) $linea->precio_unitario * (1 - $pct / 100);
 
-        $dataMovimiento = GastronomiaMovimientoStockSupport::normalizarPayloadMovimiento([
+        $this->persistirMovimientoStock($tipo, GastronomiaMovimientoStockSupport::normalizarPayloadMovimiento([
             'fecha' => $fechaFactura,
             'fechajornada' => $fechaJornada,
-            'tipotransaccion_id' => $tipotransaccionId,
+            'tipotransaccion_id' => $tipo->id,
             'venta_id' => $venta->id,
             'venta_emision_id' => $ventaEmisionId,
             'articulo_id' => (int) $linea->articulo_id,
@@ -148,9 +234,20 @@ final class GastronomiaFormulaConsumoService
             'moneda_id' => $monedaId,
             'incluyeimpuesto' => 1,
             'deposito_id' => $depositoId,
-        ]);
+        ]));
+    }
 
-        $this->articuloMovimientoService->guardaArticuloMovimiento('create', $dataMovimiento, []);
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function persistirMovimientoStock(Tipotransaccion $tipo, array $data): void
+    {
+        $dataFirmado = TipotransaccionOperacionStockSupport::firmarPayloadDesdeTipotransaccion($data, $tipo);
+        if ($dataFirmado === null) {
+            return;
+        }
+
+        $this->articuloMovimientoService->guardaArticuloMovimiento('create', $dataFirmado, []);
     }
 
     /**
@@ -183,12 +280,15 @@ final class GastronomiaFormulaConsumoService
 
             foreach ($opcionales->sortKeys() as $orden => $grupo) {
                 $chosen = $opcionalesPorOrden[$orden] ?? null;
-                if ($chosen === null || $chosen === 0) {
+                $decoded = GastronomiaFormulaOpcionalSeleccion::decodificar($chosen);
+                if ($decoded === null) {
                     continue;
                 }
 
                 /** @var Formula_Articulo_Hijo|null $match */
-                $match = $grupo->firstWhere('articulo_id', $chosen);
+                $match = $grupo->first(
+                    fn (Formula_Articulo_Hijo $h) => GastronomiaFormulaOpcionalSeleccion::coincideConHijo($h, $decoded)
+                );
                 if (! $match) {
                     continue;
                 }
@@ -199,10 +299,29 @@ final class GastronomiaFormulaConsumoService
     }
 
     /**
+     * Insumos de fórmula para una cantidad vendida (sin movimiento de stock).
+     *
+     * @param  array<string, int|null>  $opcionalesPorOrden
+     * @return array<int, float> articulo_id => cantidad
+     */
+    public function insumosAgregadosPorArticulo(int $articuloId, float $cantidadVendida, array $opcionalesPorOrden = []): array
+    {
+        $articulo = \App\Models\Stock\Articulo::query()->find($articuloId);
+        if ($articulo === null || ! $articulo->formula || $cantidadVendida <= 0.) {
+            return [];
+        }
+
+        $aggregados = [];
+        $this->expandFormula((int) $articulo->formula, $cantidadVendida, $opcionalesPorOrden, $aggregados, 0);
+
+        return $aggregados;
+    }
+
+    /**
      * @param  array<int, float>  $aggregados
      */
     /**
-     * Revierte en articulo_movimiento las salidas de la factura origen (mismo ítems/insumos, signo Resta en el tipo NC).
+     * Revierte en articulo_movimiento las salidas de la factura origen según operacionstock del tipo NC.
      *
      * @throws \Throwable
      */
@@ -216,6 +335,11 @@ final class GastronomiaFormulaConsumoService
         int $monedaId,
         ?string $fechaJornada = null,
     ): void {
+        $tipoNc = Tipotransaccion::query()->find($tipotransaccionNcId);
+        if ($tipoNc === null || ! TipotransaccionOperacionStockSupport::afectaStock($tipoNc->operacionstock)) {
+            return;
+        }
+
         $fechaJornada = $fechaJornada ?? $fechaComprobante;
         $ventaNc->loadMissing(['venta_emisiones']);
         $ventaOrigen->loadMissing(['venta_emisiones']);
@@ -245,7 +369,7 @@ final class GastronomiaFormulaConsumoService
                     : GastronomiaDepositoConfigSupport::depositoVentaId($cfg);
             }
 
-            $dataMovimiento = GastronomiaMovimientoStockSupport::normalizarPayloadMovimiento([
+            $this->persistirMovimientoStock($tipoNc, GastronomiaMovimientoStockSupport::normalizarPayloadMovimiento([
                 'fecha' => $fechaComprobante,
                 'fechajornada' => $fechaJornada,
                 'tipotransaccion_id' => $tipotransaccionNcId,
@@ -265,9 +389,7 @@ final class GastronomiaFormulaConsumoService
                 'deposito_id' => $depositoId,
                 'combinacion_id' => $movOrigen->combinacion_id,
                 'loteimportacion_id' => $movOrigen->loteimportacion_id,
-            ]);
-
-            $this->articuloMovimientoService->guardaArticuloMovimiento('create', $dataMovimiento, []);
+            ]));
         }
     }
 

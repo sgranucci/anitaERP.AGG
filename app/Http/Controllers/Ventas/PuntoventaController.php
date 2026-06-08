@@ -324,10 +324,7 @@ class PuntoventaController extends Controller
             ->whereIn('id', $ids)
             ->orderBy('nombre');
 
-        $empresasAsignadas = $this->empresaRepository->traeEmpresasAsignadas();
-        if (count($empresasAsignadas) > 1) {
-            $query->whereIn('id', $empresasAsignadas);
-        }
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'id');
 
         return $query->get(['id', 'nombre']);
     }

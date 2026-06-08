@@ -6,6 +6,7 @@ use App\Services\Ventas\Gastronomia\Waitry\WaitryOrdenesExternasService;
 
 /**
  * getordersdetails no incluye payment.type; se completa desde getOrdersPOS cuando falta.
+ * También completa table/layout (punto de acceso) para repartir ingresos por tótem físico.
  */
 final class WaitryOrdenPaymentEnriquecimientoSupport
 {
@@ -34,9 +35,32 @@ final class WaitryOrdenPaymentEnriquecimientoSupport
      * @param  array<string, mixed>  $ordenPos   Orden getOrdersPOS con bloque payment
      * @return array<string, mixed>
      */
-    public static function fusionarPaymentDesdePos(array $ordenBase, array $ordenPos): array
+    public static function fusionarAccesoDesdePos(array $ordenBase, array $ordenPos): array
     {
         $orden = $ordenBase;
+        $accesoPos = WaitryTableAccesoSupport::extraerDesdeOrden($ordenPos);
+        $accesoBase = WaitryTableAccesoSupport::extraerDesdeOrden($orden);
+
+        if (($accesoBase['layout_id'] ?? null) === null && ($accesoPos['layout_id'] ?? null) !== null) {
+            if (is_array($ordenPos['table'] ?? null)) {
+                $orden['table'] = $ordenPos['table'];
+            }
+            if (! isset($orden['tableId']) && ($accesoPos['table_id'] ?? null) !== null) {
+                $orden['tableId'] = $accesoPos['table_id'];
+            }
+        } elseif (($accesoBase['table_id'] ?? null) === null && ($accesoPos['table_id'] ?? null) !== null) {
+            if (is_array($ordenPos['table'] ?? null)) {
+                $orden['table'] = $ordenPos['table'];
+            }
+            $orden['tableId'] = $accesoPos['table_id'];
+        }
+
+        return $orden;
+    }
+
+    public static function fusionarPaymentDesdePos(array $ordenBase, array $ordenPos): array
+    {
+        $orden = self::fusionarAccesoDesdePos($ordenBase, $ordenPos);
 
         $paymentPos = $ordenPos['payment'] ?? null;
         if (is_array($paymentPos) && $paymentPos !== []) {
@@ -70,8 +94,12 @@ final class WaitryOrdenPaymentEnriquecimientoSupport
         $out = [];
         foreach ($ordenesPorId as $id => $orden) {
             $id = (int) $id;
-            if (self::ordenRequiereEnriquecimientoPayment($orden) && isset($mapPos[$id])) {
-                $orden = self::fusionarPaymentDesdePos($orden, $mapPos[$id]);
+            if (isset($mapPos[$id])) {
+                if (self::ordenRequiereEnriquecimientoPayment($orden)) {
+                    $orden = self::fusionarPaymentDesdePos($orden, $mapPos[$id]);
+                } else {
+                    $orden = self::fusionarAccesoDesdePos($orden, $mapPos[$id]);
+                }
             }
             $out[$id] = $orden;
         }

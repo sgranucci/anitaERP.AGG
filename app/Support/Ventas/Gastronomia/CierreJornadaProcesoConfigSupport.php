@@ -17,8 +17,9 @@ final class CierreJornadaProcesoConfigSupport
     private const CAMPOS_CUENTA = [
         'cuenta_ventas_id',
         'cuenta_iva_id',
-        'cuenta_impuesto_interno_id',
+        'cuenta_ventas_kiosco_id',
         'cuenta_fondo_fijo_maquinas_id',
+        'cuenta_diferencia_caja_id',
     ];
 
     private const CAMPO_PUNTOVENTA = 'puntoventa_id';
@@ -27,8 +28,9 @@ final class CierreJornadaProcesoConfigSupport
      * @return array{
      *   cuenta_ventas_id:?int,
      *   cuenta_iva_id:?int,
-     *   cuenta_impuesto_interno_id:?int,
+     *   cuenta_ventas_kiosco_id:?int,
      *   cuenta_fondo_fijo_maquinas_id:?int,
+     *   cuenta_diferencia_caja_id:?int,
      *   puntoventa_id:?int,
      *   completo:bool
      * }
@@ -42,8 +44,9 @@ final class CierreJornadaProcesoConfigSupport
         $defaults = [
             'cuenta_ventas_id' => self::intOrNull(config('gastronomia.cierre_jornada_cuenta_ventas_id')),
             'cuenta_iva_id' => self::intOrNull(config('gastronomia.cierre_jornada_cuenta_iva_id')),
-            'cuenta_impuesto_interno_id' => self::intOrNull(config('gastronomia.cierre_jornada_cuenta_impuesto_interno_id')),
+            'cuenta_ventas_kiosco_id' => self::intOrNull(config('gastronomia.cierre_jornada_cuenta_ventas_kiosco_id')),
             'cuenta_fondo_fijo_maquinas_id' => self::intOrNull(config('gastronomia.cierre_jornada_cuenta_fondo_fijo_maquinas_id')),
+            'cuenta_diferencia_caja_id' => self::intOrNull(config('gastronomia.cierre_jornada_cuenta_diferencia_caja_id')),
         ];
 
         if (! Schema::hasTable(self::TABLA)) {
@@ -58,8 +61,9 @@ final class CierreJornadaProcesoConfigSupport
         return self::normalizar([
             'cuenta_ventas_id' => $row->cuenta_ventas_id ?? $defaults['cuenta_ventas_id'],
             'cuenta_iva_id' => $row->cuenta_iva_id ?? $defaults['cuenta_iva_id'],
-            'cuenta_impuesto_interno_id' => $row->cuenta_impuesto_interno_id ?? $defaults['cuenta_impuesto_interno_id'],
+            'cuenta_ventas_kiosco_id' => $row->cuenta_ventas_kiosco_id ?? $defaults['cuenta_ventas_kiosco_id'],
             'cuenta_fondo_fijo_maquinas_id' => $row->cuenta_fondo_fijo_maquinas_id ?? $defaults['cuenta_fondo_fijo_maquinas_id'],
+            'cuenta_diferencia_caja_id' => $row->cuenta_diferencia_caja_id ?? $defaults['cuenta_diferencia_caja_id'],
             'puntoventa_id' => $row->puntoventa_id ?? null,
         ]);
     }
@@ -93,8 +97,9 @@ final class CierreJornadaProcesoConfigSupport
             'puntoventa_id' => self::intOrNull($data['puntoventa_id'] ?? null),
             'cuenta_ventas_id' => self::intOrNull($data['cuenta_ventas_id'] ?? null),
             'cuenta_iva_id' => self::intOrNull($data['cuenta_iva_id'] ?? null),
-            'cuenta_impuesto_interno_id' => self::intOrNull($data['cuenta_impuesto_interno_id'] ?? null),
+            'cuenta_ventas_kiosco_id' => self::intOrNull($data['cuenta_ventas_kiosco_id'] ?? null),
             'cuenta_fondo_fijo_maquinas_id' => self::intOrNull($data['cuenta_fondo_fijo_maquinas_id'] ?? null),
+            'cuenta_diferencia_caja_id' => self::intOrNull($data['cuenta_diferencia_caja_id'] ?? null),
             'updated_at' => now(),
         ];
 
@@ -140,8 +145,9 @@ final class CierreJornadaProcesoConfigSupport
         $cfg = [
             'cuenta_ventas_id' => self::intOrNull($raw['cuenta_ventas_id'] ?? null),
             'cuenta_iva_id' => self::intOrNull($raw['cuenta_iva_id'] ?? null),
-            'cuenta_impuesto_interno_id' => self::intOrNull($raw['cuenta_impuesto_interno_id'] ?? null),
+            'cuenta_ventas_kiosco_id' => self::intOrNull($raw['cuenta_ventas_kiosco_id'] ?? null),
             'cuenta_fondo_fijo_maquinas_id' => self::intOrNull($raw['cuenta_fondo_fijo_maquinas_id'] ?? null),
+            'cuenta_diferencia_caja_id' => self::intOrNull($raw['cuenta_diferencia_caja_id'] ?? null),
             'puntoventa_id' => self::intOrNull($raw['puntoventa_id'] ?? null),
         ];
         $cfg['completo'] = $cfg['cuenta_ventas_id'] > 0 && $cfg['cuenta_iva_id'] > 0;
@@ -211,8 +217,9 @@ final class CierreJornadaProcesoConfigSupport
         $etiquetas = [
             'cuenta_ventas_id' => 'Cuenta de ventas',
             'cuenta_iva_id' => 'Cuenta de IVA',
-            'cuenta_impuesto_interno_id' => 'Cuenta de impuesto interno',
+            'cuenta_ventas_kiosco_id' => 'Cuenta ventas de kiosco (cigarrillos)',
             'cuenta_fondo_fijo_maquinas_id' => 'Cuenta de fondo fijo máquinas',
+            'cuenta_diferencia_caja_id' => 'Cuenta diferencia de caja (invitaciones $0,01)',
         ];
 
         foreach (self::CAMPOS_CUENTA as $campoId) {

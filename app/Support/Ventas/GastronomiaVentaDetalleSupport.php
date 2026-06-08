@@ -27,9 +27,13 @@ final class GastronomiaVentaDetalleSupport
     {
         $venta->loadMissing(['cobranzasDirectas', 'caja_movimientos.cobranzas']);
 
-        $porVentaId = $venta->relationLoaded('cobranzasDirectas') && $venta->cobranzasDirectas->isNotEmpty()
-            ? $venta->cobranzasDirectas
-            : Cobranza::query()->where('venta_id', $venta->id)->get();
+        if ($venta->relationLoaded('cobranzasDirectas')) {
+            $porVentaId = $venta->cobranzasDirectas;
+        } elseif ((int) $venta->id > 0) {
+            $porVentaId = Cobranza::query()->where('venta_id', $venta->id)->get();
+        } else {
+            $porVentaId = collect();
+        }
 
         $porCaja = collect();
         foreach ($venta->caja_movimientos as $mov) {

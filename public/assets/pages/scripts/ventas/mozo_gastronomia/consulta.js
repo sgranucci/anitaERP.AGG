@@ -55,11 +55,18 @@ function abrirConsultaMozoModal() {
     $('#consultamozoModal').modal('show');
 }
 
+function empresaIdFacturacionGastronomia() {
+    if (typeof window.GASTRONOMIA !== 'undefined' && window.GASTRONOMIA.empresaId) {
+        return window.GASTRONOMIA.empresaId;
+    }
+    return '';
+}
+
 function buscar_datos_mozo(consulta) {
-    var empresaId =
-        typeof window.GASTRONOMIA !== 'undefined' && window.GASTRONOMIA.empresaId
-            ? window.GASTRONOMIA.empresaId
-            : '';
+    var data = { consulta: consulta || '' };
+    if (typeof window.GASTRONOMIA !== 'undefined') {
+        data.empresa_id = empresaIdFacturacionGastronomia();
+    }
 
     $.ajax({
         url: carpetaBase + '/ventas/mozo-gastronomia/consultamozo',
@@ -68,10 +75,7 @@ function buscar_datos_mozo(consulta) {
         headers: {
             'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content'),
         },
-        data: {
-            consulta: consulta || '',
-            empresa_id: empresaId,
-        },
+        data: data,
     })
         .done(function (respuesta) {
             var html = '';
@@ -173,10 +177,7 @@ function activa_eventos_consultamozo() {
 }
 
 function leerMozoPorCodigo(codigo, ptrrenglon, onDone) {
-    var empresaId =
-        typeof window.GASTRONOMIA !== 'undefined' && window.GASTRONOMIA.empresaId
-            ? window.GASTRONOMIA.empresaId
-            : '';
+    var empresaId = empresaIdFacturacionGastronomia();
     var codigomozo = (codigo || '').trim();
     if (!codigomozo) {
         if (typeof onDone === 'function') {

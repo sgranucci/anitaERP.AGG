@@ -27,7 +27,7 @@ class LoginController extends Controller
         $roles = $user->roles()->get();
         $empresas = $user->usuario_empresas()->get();
         if ($roles->isNotEmpty()) {
-            $user->loadMissing(['centrocostos', 'sectorLegajocompra']);
+            $user->loadMissing(['centrocostos', 'sectorLegajocompra', 'depositosAutorizados']);
             $user->setSession($roles->toArray(), $empresas->toArray());
         } else {
             $this->guard()->logout();

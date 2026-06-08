@@ -32,9 +32,26 @@ return [
     ],
 
     /**
+     * Auditoría diaria rendg_total_z / rendg_tot_nc (rendgastro) vs ERP.
+     * Comando: rendicion-gastronomia:auditoria-anita
+     */
+    'auditoria_diaria' => [
+        'habilitada' => filter_var(env('RENDICION_GASTRONOMIA_AUDITORIA_DIARIA', true), FILTER_VALIDATE_BOOLEAN),
+        'hora' => env('RENDICION_GASTRONOMIA_AUDITORIA_HORA', '07:00'),
+        'empresa_id' => (int) env('RENDICION_GASTRONOMIA_AUDITORIA_EMPRESA_ID', 1),
+        'tolerancia' => (float) env('RENDICION_GASTRONOMIA_AUDITORIA_TOLERANCIA', 0.02),
+        /** PV que facturan solo en Anita (estacionamiento); no alertar si ERP=0 y Anita tiene Z. */
+        'puntoventa_codigos_solo_anita' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env('RENDICION_GASTRONOMIA_AUDITORIA_PV_SOLO_ANITA', '00013,00072,00073,00074')),
+        ))),
+    ],
+
+    /**
      * Código rendv_codigo por empresa y familia de medio de cobro.
      * Familias: efectivo, mercadopago, fiserv, totalcoin, canje_tarjeta.
      */
+
     'codigos_rendvalor' => [
         1 => [
             'efectivo' => 1,

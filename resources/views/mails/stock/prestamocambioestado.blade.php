@@ -6,6 +6,10 @@
     <title>Préstamo {{ $prestamo->codigo }} — {{ ucfirst($tipoCambio) }}</title>
 </head>
 <body style="font-family: Arial, sans-serif; color:#222;">
+    @if (! empty($textoIntro))
+        <p>{{ $textoIntro }}</p>
+    @endif
+
     @if ($tipoCambio === 'aprobado')
         <p>El préstamo <strong>{{ $prestamo->codigo }}</strong> fue <span style="color:#28a745;"><strong>APROBADO</strong></span>
             por el destinatario.</p>

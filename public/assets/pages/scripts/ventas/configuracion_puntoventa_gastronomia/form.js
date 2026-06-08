@@ -3,6 +3,8 @@ $(function () {
     const $pvCae = $('#puntoventa_cae_id');
     const $pvCaea = $('#puntoventa_caea_id');
     const $ubicacion = $('#ubicacion_id');
+    const $depositoVenta = $('#deposito_venta_id');
+    const $depositoInsumos = $('#deposito_insumos_id');
 
     if (!$empresa.length) {
         return;
@@ -15,10 +17,12 @@ $(function () {
         return $('<option>').attr('value', '').text(texto);
     }
 
-    function limpiarPvYUbicacion() {
+    function limpiarSelectsPorEmpresa() {
         $pvCae.empty().append(opcionVacia('Seleccione…'));
         $pvCaea.empty().append(opcionVacia('Seleccione…'));
         $ubicacion.empty().append(opcionVacia('Todas las ubicaciones'));
+        $depositoVenta.empty().append(opcionVacia('Seleccione…'));
+        $depositoInsumos.empty().append(opcionVacia('Seleccione…'));
     }
 
     function rellenarPuntoventa($select, items) {
@@ -35,9 +39,19 @@ $(function () {
         });
     }
 
+    function rellenarDepositos(items) {
+        $depositoVenta.empty().append(opcionVacia('Seleccione…'));
+        $depositoInsumos.empty().append(opcionVacia('Seleccione…'));
+        (items || []).forEach(function (item) {
+            const $opt = $('<option>').attr('value', item.id).text(item.label);
+            $depositoVenta.append($opt.clone());
+            $depositoInsumos.append($opt.clone());
+        });
+    }
+
     function cargarSelectsPorEmpresa(empresaId) {
         if (!empresaId) {
-            limpiarPvYUbicacion();
+            limpiarSelectsPorEmpresa();
             return;
         }
 
@@ -46,14 +60,15 @@ $(function () {
                 rellenarPuntoventa($pvCae, data.puntoventa_cae);
                 rellenarPuntoventa($pvCaea, data.puntoventa_caea);
                 rellenarUbicaciones(data.ubicaciones);
+                rellenarDepositos(data.depositos);
             })
             .fail(function () {
-                limpiarPvYUbicacion();
+                limpiarSelectsPorEmpresa();
             });
     }
 
     $empresa.on('change', function () {
-        limpiarPvYUbicacion();
+        limpiarSelectsPorEmpresa();
         cargarSelectsPorEmpresa(String($(this).val() || ''));
     });
 });

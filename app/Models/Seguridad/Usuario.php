@@ -8,7 +8,9 @@ use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Oficinacompra;
 use App\Models\Contable\Centrocosto;
 use App\Models\Contable\Usuario_Cuentacontable;
+use App\Models\Stock\Depmae;
 use App\Models\Ventas\Vendedor;
+use App\Support\Stock\UsuarioDepositoAutorizado;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Hash;
@@ -64,6 +66,11 @@ class Usuario extends Authenticatable implements Auditable
         return $this->hasMany(Usuario_Cuentacontable::class)->with('cuentacontables');
     }
 
+    public function depositosAutorizados()
+    {
+        return $this->belongsToMany(Depmae::class, 'usuario_deposito', 'usuario_id', 'deposito_id');
+    }
+
     public function setSession($roles, $empresas)
     {
         $centro = $this->relationLoaded('centrocostos') ? $this->centrocostos : $this->centrocostos()->first();
@@ -92,6 +99,7 @@ class Usuario extends Authenticatable implements Auditable
             Session::put('roles', $roles);
         }
         Session::put('usuario_empresas', $empresas);
+        UsuarioDepositoAutorizado::cargarEnSession($this);
     }
 
     public static function setFoto($request, $actual = false)

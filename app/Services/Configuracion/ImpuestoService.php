@@ -954,10 +954,13 @@ class ImpuestoService extends FacturacionService
 		$opcionales = $hijos->where('esopcional', true)->groupBy(fn ($h) => (string) ($h->ordenopcional ?? '0'));
 		foreach ($opcionales as $orden => $grupo) {
 			$chosen = $opcionalesPorOrden[(string) $orden] ?? null;
-			if ($chosen === null || $chosen === 0) {
+			$decoded = \App\Support\Ventas\GastronomiaFormulaOpcionalSeleccion::decodificar($chosen);
+			if ($decoded === null) {
 				continue;
 			}
-			$match = $grupo->firstWhere('articulo_id', $chosen);
+			$match = $grupo->first(
+				fn ($h) => \App\Support\Ventas\GastronomiaFormulaOpcionalSeleccion::coincideConHijo($h, $decoded)
+			);
 			if (! $match) {
 				continue;
 			}

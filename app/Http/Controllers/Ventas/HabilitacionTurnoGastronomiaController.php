@@ -597,8 +597,7 @@ class HabilitacionTurnoGastronomiaController extends Controller
             return;
         }
 
-        $asignadas = $this->empresaRepository->traeEmpresasAsignadas();
-        if (count($asignadas) > 1 && ! in_array($empresaId, $asignadas, true)) {
+        if (! $this->empresaRepository->empresaIdPermitida($empresaId)) {
             abort(403, 'Empresa no permitida para su usuario.');
         }
     }

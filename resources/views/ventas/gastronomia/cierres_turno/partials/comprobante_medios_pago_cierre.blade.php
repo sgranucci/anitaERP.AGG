@@ -2,6 +2,8 @@
     $arqueoMedios = ! empty($totalesTurno['arqueo_medios_cierre']);
     $tituloMedios = $tituloMedios ?? 'Total final por medio de pago';
     $etiquetaTotal = $etiquetaTotal ?? 'Total';
+    $totalEsperadoSistema = (float) ($totalesTurno['total_cobrado'] ?? 0);
+    $totalContadoCajero = (float) ($totalesTurno['total_cobrado_contado'] ?? $totalEsperadoSistema);
 @endphp
 <h2>{{ $tituloMedios }}</h2>
 @if ($arqueoMedios)
@@ -76,9 +78,11 @@
         <tr class="total-grande">
             <td class="lbl">{{ $etiquetaTotal }}</td>
             @if ($arqueoMedios)
-                <td></td>
+                <td class="num">${{ number_format($totalEsperadoSistema, 2, ',', '.') }}</td>
+                <td class="num">${{ number_format($totalContadoCajero, 2, ',', '.') }}</td>
+            @else
+                <td class="num">${{ number_format($totalEsperadoSistema, 2, ',', '.') }}</td>
             @endif
-            <td class="num">${{ number_format((float) ($totalesTurno['total_cobrado'] ?? 0), 2, ',', '.') }}</td>
         </tr>
     </tfoot>
 </table>

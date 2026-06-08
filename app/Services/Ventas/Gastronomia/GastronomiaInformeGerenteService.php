@@ -24,20 +24,24 @@ final class GastronomiaInformeGerenteService
 
         $topCantidad = $this->query->top10PorCantidad($empresaId, $fecha);
         $topValor = $this->query->top10PorValor($empresaId, $fecha);
+        $topMesCantidad = $this->query->top10MesPorCantidad($empresaId, $fecha);
         $porTurno = $this->query->ventasPorTurno($empresaId, $fecha);
         $porPv = $this->query->ventasPorPuntoVenta($empresaId, $fecha);
         $descuentos = $this->query->facturasPorDescuento($empresaId, $fecha);
         $recepciones = $this->recepcionesAnita->resumen($empresaId, $fecha);
 
         $totalJornada = $this->query->totalVentasJornada($empresaId, $fecha);
+        $fechaCarbon = Carbon::parse($fecha);
 
         return [
             'empresa_id' => $empresaId,
             'fecha_jornada' => $fecha,
-            'fecha_jornada_label' => Carbon::parse($fecha)->format('d/m/Y'),
+            'fecha_jornada_label' => $fechaCarbon->format('d/m/Y'),
+            'mes_jornada_label' => $this->etiquetaMes($fechaCarbon),
             'total_ventas_jornada' => $totalJornada,
             'top10_cantidad' => $topCantidad,
             'top10_valor' => $topValor,
+            'top10_mes_cantidad' => $topMesCantidad,
             'ventas_por_turno' => $porTurno,
             'ventas_por_puntoventa' => $porPv,
             'facturas_por_descuento' => $descuentos,
@@ -49,8 +53,73 @@ final class GastronomiaInformeGerenteService
                 'descuento' => $this->pieDescuentos($descuentos),
                 'recepciones_dia' => $this->pieRecepcionesPorProveedor($recepciones['dia'] ?? []),
                 'recepciones_mes' => $this->pieRecepcionesPorProveedor($recepciones['mes'] ?? []),
+                'articulos_dia' => $this->barDesdeTop10($topCantidad, 'cantidad'),
+                'articulos_mes' => $this->barDesdeTop10($topMesCantidad, 'cantidad'),
             ],
         ];
+    }
+
+    private function etiquetaMes(Carbon $fecha): string
+    {
+        $meses = [
+            1 => 'Enero', 2 => 'Febrero', 3 => 'Marzo', 4 => 'Abril',
+            5 => 'Mayo', 6 => 'Junio', 7 => 'Julio', 8 => 'Agosto',
+            9 => 'Septiembre', 10 => 'Octubre', 11 => 'Noviembre', 12 => 'Diciembre',
+        ];
+
+        return ($meses[(int) $fecha->format('n')] ?? $fecha->format('m')).' '.$fecha->format('Y');
+    }
+
+    /**
+     * @param  list<array{sku?:string,descripcion?:string,cantidad?:float,importe?:float}>  $filas
+     * @return array{labels:list<string>,values:list<float>,metric:string}
+     */
+    private function barDesdeTop10(array $filas, string $metric = 'cantidad'): array
+    {
+        $labels = [];
+        $values = [];
+
+        foreach ($filas as $fila) {
+            $valor = $metric === 'importe'
+                ? round((float) ($fila['importe'] ?? 0), 2)
+                : round((float) ($fila['cantidad'] ?? 0), 2);
+            if ($valor <= 0) {
+                continue;
+            }
+
+            $sku = trim((string) ($fila['sku'] ?? ''));
+            $descripcion = trim((string) ($fila['descripcion'] ?? ''));
+            $etiqueta = $sku !== '' ? $sku : $descripcion;
+            if ($sku !== '' && $descripcion !== '') {
+                $etiqueta = $sku.' — '.$this->truncarTexto($descripcion, 32);
+            }
+            if ($etiqueta === '') {
+                $etiqueta = 'Artículo';
+            }
+
+            $labels[] = $etiqueta;
+            $values[] = $valor;
+        }
+
+        if ($labels !== []) {
+            $labels = array_reverse($labels);
+            $values = array_reverse($values);
+        }
+
+        return [
+            'labels' => $labels,
+            'values' => $values,
+            'metric' => $metric,
+        ];
+    }
+
+    private function truncarTexto(string $texto, int $max): string
+    {
+        if (mb_strlen($texto) <= $max) {
+            return $texto;
+        }
+
+        return rtrim(mb_substr($texto, 0, max(1, $max - 1))).'…';
     }
 
     private function normalizarFecha(string $fecha): string

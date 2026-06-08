@@ -79,16 +79,15 @@
 					@foreach (old('tasa', $producto->articulo_cuentacontables->count() ? $producto->articulo_cuentacontables : ['']) as $cuentacontable)
             			<tr class="item-cuentacontable">
 							<td>
-								<select name="empresa_ids[]" data-placeholder="Empresa" class="empresa form-control" data-fouc>
-									<option value="">-- Seleccionar --</option>
-									@foreach($empresa_query as $value)
-										@if( (int) $value->id == (int) old('empresa_ids[]', $cuentacontable->empresa_id ?? ''))
-											<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-										@else
-											<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-										@endif
-									@endforeach
-								</select>
+								@include('includes.form-empresa-asignada-control', [
+									'empresa_query' => $empresa_query,
+									'empresa_id' => $cuentacontable->empresa_id ?? null,
+									'name' => 'empresa_ids[]',
+									'select_class' => 'empresa',
+									'permite_vacio' => true,
+									'opcion_vacia' => '-- Seleccionar --',
+									'required' => false,
+								])
 							</td>
                             <td>
                                 <select name="tipoimputaciones[]" data-placeholder="Tipo de Imputación" class="tipoimputacion form-control required" required data-fouc>

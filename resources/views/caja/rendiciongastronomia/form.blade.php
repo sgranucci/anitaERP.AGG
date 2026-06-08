@@ -213,17 +213,13 @@
                     @if ($esEdicion)
                         <input type="hidden" name="empresa_id" id="empresa_id" value="{{ $empresaSel }}"/>
                         <input type="text" class="form-control" readonly value="{{ $data->empresa?->nombre ?? '—' }}"/>
-                    @elseif ($empresaUnica)
-                        @php $empUnica = $empresasDisponibles->first(); @endphp
-                        <input type="hidden" name="empresa_id" id="empresa_id" value="{{ $empUnica->id }}"/>
-                        <input type="text" class="form-control" readonly value="{{ $empUnica->nombre }}"/>
                     @else
-                        <select name="empresa_id" id="empresa_id" class="form-control" required>
-                            <option value="">— Seleccionar —</option>
-                            @foreach ($empresasDisponibles as $emp)
-                                <option value="{{ $emp->id }}" @selected((string) $empresaSel === (string) $emp->id)>{{ $emp->nombre }}</option>
-                            @endforeach
-                        </select>
+                        @include('includes.form-empresa-asignada-control', [
+                            'empresa_query' => $empresasDisponibles,
+                            'empresa_id' => $empresaSel,
+                            'required' => true,
+                            'opcion_vacia' => '— Seleccionar —',
+                        ])
                     @endif
                 </div>
                 <div class="form-group col-md-4">

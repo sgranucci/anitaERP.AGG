@@ -117,12 +117,30 @@ return [
     /**
      * Gastronomía: en Anita venta + vengrav + stkmov (platos) + vencae; omite comprob, compaux, venibr, climov.
      * Facturación normal desde Ventas no usa esta opción (grabaAnita completo).
-     * Los insumos por fórmula siguen en stkmov vía GastronomiaInsumoStkmovAnitaService.
+     * Los insumos por fórmula en stkmov Informix dependen de anita_replicar_insumos_al_facturar.
      */
     'anita_modo_minimo' => filter_var(env('GASTRONOMIA_ANITA_MODO_MINIMO', true), FILTER_VALIDATE_BOOLEAN),
 
     /**
-     * Auditoría diaria ERP ↔ Anita (gastronomía): comando gastronomia:auditoria-anita-diaria @ 06:30.
+     * Al facturar (y NC gastronomía): replica en Informix vía bridge cada stkmov de insumo de fórmula
+     * (GastronomiaInsumoStkmovAnitaService, 1 HTTP por línea). false = solo stock ERP; no bloquea el POS.
+     * Faltantes en Anita: auditoría diaria si GASTRONOMIA_AUDITORIA_ANITA_REPLICAR_INSUMOS=true.
+     */
+    'anita_replicar_insumos_al_facturar' => filter_var(env('GASTRONOMIA_ANITA_REPLICAR_INSUMOS_AL_FACTURAR', true), FILTER_VALIDATE_BOOLEAN),
+
+    /**
+     * Tras commit de la emisión gastronomía: replica venta + vencae en Informix sin bloquear cobranza/locks MySQL.
+     * CAE/ARCA sigue dentro de la transacción (rollback si falla).
+     */
+    'anita_tras_commit_al_facturar' => filter_var(env('GASTRONOMIA_ANITA_TRAS_COMMIT_AL_FACTURAR', true), FILTER_VALIDATE_BOOLEAN),
+
+    /**
+     * Anita (venta + vencae + insumos opcionales) después de responder al POS.
+     * Insumos stkmov: GASTRONOMIA_ANITA_REPLICAR_INSUMOS_AL_FACTURAR (default true en config, false en prod).
+     */
+    'anita_tras_respuesta' => filter_var(env('GASTRONOMIA_ANITA_TRAS_RESPUESTA', true), FILTER_VALIDATE_BOOLEAN),
+
+    /**
      * Usa venta.fecha (calendario), no fechajornada. Replica faltantes vía bridge y alerta por mail.
      */
     'auditoria_anita_diaria' => [
@@ -276,8 +294,35 @@ return [
      */
     'cierre_jornada_cuenta_ventas_id' => env('GASTRONOMIA_CIERRE_JORNADA_CUENTA_VENTAS_ID'),
     'cierre_jornada_cuenta_iva_id' => env('GASTRONOMIA_CIERRE_JORNADA_CUENTA_IVA_ID'),
-    'cierre_jornada_cuenta_impuesto_interno_id' => env('GASTRONOMIA_CIERRE_JORNADA_CUENTA_IMPUESTO_INTERNO_ID'),
+    /** Haber ventas kiosco / cigarrillos (gravado + imp. interno) en asientos del cierre Waitry. */
+    'cierre_jornada_cuenta_ventas_kiosco_id' => env('GASTRONOMIA_CIERRE_JORNADA_CUENTA_VENTAS_KIOSCO_ID'),
     'cierre_jornada_cuenta_fondo_fijo_maquinas_id' => env('GASTRONOMIA_CIERRE_JORNADA_CUENTA_FONDO_FIJO_MAQUINAS_ID'),
+    /** Invitaciones / cortesía $0,01 sin cobranza (redondeo rendiciones); debe del asiento 2. */
+    'cierre_jornada_cuenta_diferencia_caja_id' => env('GASTRONOMIA_CIERRE_JORNADA_CUENTA_DIFERENCIA_CAJA_ID'),
+
+    /**
+     * Límite de memoria PHP para APIs del proceso de cierre Waitry (analizar, recalcular, detalle).
+     * El snapshot con miles de órdenes supera 128M al decodificar JSON.
+     */
+    'cierre_jornada_proceso_memory_limit' => env('GASTRONOMIA_CIERRE_JORNADA_PROCESO_MEMORY_LIMIT', '256M'),
+
+    /**
+     * Tipo transacción stock (tipotransaccion_stock.id) para ajuste por consumo de insumos
+     * de comandas Waitry no facturadas (parte efectivo tras redistribución). Default 7 = salida.
+     */
+    'cierre_jornada_tipotransaccion_stock_ajuste_consumo_id' => (int) env(
+        'GASTRONOMIA_CIERRE_JORNADA_TIPOTRANSACCION_STOCK_AJUSTE_CONSUMO_ID',
+        7,
+    ),
+
+    /** Abreviatura tipoasiento para grabación de asientos del proceso cierre Waitry (default VTA). */
+    'cierre_jornada_tipoasiento_abreviatura' => env('GASTRONOMIA_CIERRE_JORNADA_TIPOASIENTO_ABREVIATURA', 'VTA'),
+
+    /**
+     * Porcentaje del tope CF (ARCA) para agrupar comandas en cada lote de facturación del proceso Waitry.
+     * Default 20 = lotes ~20 % de ARCA_WSFE_RECEPTOR_CF_UMBRAL_MONTO.
+     */
+    'cierre_jornada_cf_lote_porcentaje_tope' => (float) env('GASTRONOMIA_CIERRE_JORNADA_CF_LOTE_PORCENTAJE_TOPE', 20),
 
     /**
      * Punto de venta fijo para facturación del proceso de cierre Waitry (una factura por permiso).

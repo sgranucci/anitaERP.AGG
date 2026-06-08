@@ -30,15 +30,12 @@
                         ])
                     </div>
                     <form method="get" action="{{ route('interbanking_saldos_historicos') }}" class="d-flex flex-wrap align-items-end justify-content-end ml-auto">
-                        <div class="form-group mr-2 mb-2">
-                            <label for="empresa_id" class="mr-1">Empresa</label>
-                            <select name="empresa_id" id="empresa_id" class="form-control">
-                                <option value="">Todas</option>
-                                @foreach ($empresas as $e)
-                                    <option value="{{ $e->id }}" @selected((int)($empresaId ?? 0) === (int)$e->id)>{{ $e->nombre }}</option>
-                                @endforeach
-                            </select>
-                        </div>
+                        @include('includes.listado.filtro_empresa_asignada_campo', [
+                            'empresas' => $empresas,
+                            'empresa_id' => $empresaId ?? null,
+                            'label_class' => 'mr-1',
+                            'permite_todas' => true,
+                        ])
                         <div class="form-group mr-2 mb-2">
                             <label for="fecha_desde" class="mr-1">Desde</label>
                             <input type="date" name="fecha_desde" id="fecha_desde" class="form-control"

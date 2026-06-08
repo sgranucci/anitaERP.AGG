@@ -19,7 +19,7 @@ class AreaComandaGastronomiaRepository implements AreaComandaGastronomiaReposito
     public function all()
     {
         $query = $this->model->with('empresa')->orderBy('nombre')->orderBy('codigo');
-        $this->aplicarFiltroEmpresasAsignadas($query);
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query);
 
         return $query->get();
     }
@@ -60,14 +60,5 @@ class AreaComandaGastronomiaRepository implements AreaComandaGastronomiaReposito
             ->where('empresa_id', $empresaId)
             ->where('codigo', $codigo)
             ->first();
-    }
-
-    private function aplicarFiltroEmpresasAsignadas($query): void
-    {
-        $empresasAsignadas = $this->empresaRepository->traeEmpresasAsignadas();
-
-        if (count($empresasAsignadas) > 1) {
-            $query->whereIn('empresa_id', $empresasAsignadas);
-        }
     }
 }

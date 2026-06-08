@@ -18,6 +18,7 @@ use App\Repositories\Compras\Listaprecio_ProveedorRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Stock\ArticuloRepositoryInterface;
 use App\Services\Compras\Listaprecio_ProveedorService;
+use App\Support\Compras\ListaprecioProveedorConsultaDesdeModal;
 use Auth;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Facades\Excel;
@@ -127,7 +128,14 @@ class Listaprecio_ProveedorController extends Controller
 
     public function editar($id)
     {
-        can('editar-listaprecio-proveedor');
+        $soloConsulta = request()->query('origen') === 'modal_consulta';
+        if ($soloConsulta) {
+            if (! ListaprecioProveedorConsultaDesdeModal::puedeConsultar()) {
+                abort(403);
+            }
+        } else {
+            can('editar-listaprecio-proveedor');
+        }
 
         $data = $this->repository->find($id);
         $proveedor_query = Proveedor::orderBy('nombre')->get();
@@ -136,6 +144,9 @@ class Listaprecio_ProveedorController extends Controller
         $condicioncompra_query = $this->condicioncompraRepository->all();
         $moneda_query = $this->monedaRepository->all();
         $estado_enum = Listaprecio_Proveedor_Estado::$enumEstado;
+        $ocultarVolver = $soloConsulta;
+        $puedeActualizarLista = can('actualizar-listaprecio-proveedor', false);
+        $visualizar = $soloConsulta && ! $puedeActualizarLista;
 
         return view('compras.listaprecio_proveedor.editar', compact(
             'data',
@@ -144,7 +155,11 @@ class Listaprecio_ProveedorController extends Controller
             'condicionentrega_query',
             'condicioncompra_query',
             'moneda_query',
-            'estado_enum'
+            'estado_enum',
+            'soloConsulta',
+            'ocultarVolver',
+            'puedeActualizarLista',
+            'visualizar'
         ));
     }
 
@@ -154,6 +169,16 @@ class Listaprecio_ProveedorController extends Controller
 
         $ret = $this->service->actualiza($request, (int) $id);
         if ($ret['mensaje'] === 'ok') {
+            if ($request->input('origen') === 'modal_consulta') {
+                return redirect()
+                    ->route('editar_listaprecio_proveedor', [
+                        'id' => $id,
+                        'origen' => 'modal_consulta',
+                        'vista' => 'consulta',
+                    ])
+                    ->with('mensaje', 'Lista de precios actualizada con éxito');
+            }
+
             return redirect()->route('consultar_listaprecio_proveedor')->with('mensaje', 'Lista de precios actualizada con éxito');
         }
 

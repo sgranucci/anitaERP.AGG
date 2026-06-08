@@ -32,10 +32,7 @@ class ConfiguracionPuntoventaGastronomiaRepository implements ConfiguracionPunto
                 'tipotransaccion',
             ]);
 
-        $empresasAsignadas = $this->empresaRepository->traeEmpresasAsignadas();
-        if (count($empresasAsignadas) > 1) {
-            $query->whereIn('empresa_id', $empresasAsignadas);
-        }
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query);
 
         return $query->orderBy('identificador_pc')->get();
     }

@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class ValidacionDepmae extends FormRequest
 {
@@ -26,9 +27,16 @@ class ValidacionDepmae extends FormRequest
         $id = $this->route('id');
 
         return [
-            'codigo' => 'required|max:20|unique:depmae,codigo,'.$id,
+            'codigo' => [
+                'required',
+                'max:20',
+                Rule::unique('depmae', 'codigo')->ignore($id)->where(function ($query) {
+                    return $query->where('empresa_id', $this->get('empresa_id'));
+                }),
+            ],
             'nombre' => 'required|max:50|unique:depmae,nombre,'.$id,
             'tipodeposito' => 'required',
+            'empresa_id' => 'required|integer|exists:empresa,id',
         ];
     }
 

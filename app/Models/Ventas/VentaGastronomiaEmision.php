@@ -15,8 +15,14 @@ class VentaGastronomiaEmision extends Model
     public $incrementing = false;
 
     protected $fillable = [
-        'venta_id', 'cuenta_gastronomia_id', 'waitry_order_id', 'identificador_pc',
+        'venta_id', 'cuenta_gastronomia_id', 'waitry_order_id', 'waitry_comandas_json',
+        'cierre_jornada_proceso_lote', 'identificador_pc',
         'configuracion_puntoventa_gastronomia_id', 'venta_factura_origen_id',
+    ];
+
+    protected $casts = [
+        'waitry_comandas_json' => 'array',
+        'cierre_jornada_proceso_lote' => 'integer',
     ];
 
     public function venta()

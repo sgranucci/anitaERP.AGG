@@ -7,6 +7,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=backup.conf
 source "${SCRIPT_DIR}/backup.conf"
+[[ -f "${SCRIPT_DIR}/backup.local.conf" ]] && source "${SCRIPT_DIR}/backup.local.conf"
+
+if [[ -z "${REMOTE_HOST}" || -z "${REMOTE_USER}" ]]; then
+    echo "ERROR: REMOTE_HOST / REMOTE_USER vacíos." >&2
+    echo "Crear ${SCRIPT_DIR}/backup.local.conf (ver backup.local.conf.example, bloque AGG)." >&2
+    exit 1
+fi
 
 KEY="${REMOTE_SSH_KEY:-${HOME}/.ssh/id_rsa}"
 PUB="${KEY}.pub"

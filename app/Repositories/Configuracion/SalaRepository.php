@@ -3,8 +3,8 @@
 namespace App\Repositories\Configuracion;
 
 use App\Models\Configuracion\Sala;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Collection;
 use Auth;
 
@@ -12,35 +12,24 @@ class SalaRepository implements SalaRepositoryInterface
 {
     protected $model;
 
-    /**
-     * PostRepository constructor.
-     *
-     * @param Post $post
-     */
-    public function __construct(Sala $sala
-                                )
-    {
+    public function __construct(
+        Sala $sala,
+        private EmpresaRepositoryInterface $empresaRepository,
+    ) {
         $this->model = $sala;
     }
 
     public function all()
     {
-        $sala = $this->model;
+        $query = $this->model->with('empresas')->orderBy('nombre');
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query);
 
-        return $sala->with('empresas')->orderBy('nombre')->get();
+        return $query->get();
     }
 
     public function allFiltrado()
     {
-        // Extrae las empresas asignadas
-        $empresas = collect(Session::get('usuario_empresas'))->pluck('id')->toArray();
-
-        if (count($empresas) > 1)
-            $sala = $this->model->with('empresas')->whereIn('empresa_id', $empresas)->orderBy('nombre')->get();
-        else
-            $sala = $this->model->with('empresas')->orderBy('nombre')->get();
-
-        return $sala;
+        return $this->all();
     }
 
     public function create(array $data)

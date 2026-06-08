@@ -1,11 +1,8 @@
-<div class="form-group row">
-	<label for="empresa" class="col-lg-3 col-form-label">Empresa</label>
-	<select name="empresa_id" id="empresa_id" data-placeholder="Empresa" class="col-lg-4 form-control required" data-fouc required>
-		@foreach($empresa_query as $key => $value)
-			<option value="{{ $value->id }}">{{ $value->id }} {{ $value->nombre }}</option>    
-		@endforeach
-	</select>
-</div>    
+@include('includes.form-empresa-asignada', [
+    'empresa_query' => $empresa_query,
+    'mostrar_id' => true,
+    'col_input' => 'col-lg-4',
+])
 <div class="form-group row">
 	<label for="impuesto" class="col-lg-3 col-form-label">Impuesto</label>
 	<select name="impuesto" id="impuesto" data-placeholder="Impuesto" class="col-lg-4 form-control required" data-fouc required>

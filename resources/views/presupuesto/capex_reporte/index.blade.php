@@ -14,7 +14,8 @@
             <div class="card-body">
                 <p class="text-muted mb-3">
                     Cruza los proyectos CAPEX del ERP con órdenes de compra (bridge Anita),
-                    facturas aplicadas (<code>aplicped</code>) y pagos (<code>aplmovp</code>).
+                    facturas aplicadas (<code>aplicped</code>), pagos (<code>aplmovp</code>)
+                    y datos contables de factura (<code>subdiario</code> / <code>ctamae</code>).
                     Cada factura y cada pago genera un renglón; los importes OC/FC se cargan una sola vez
                     por comprobante para que en Excel pueda sumar por proyecto y contrastar con el
                     <strong>Monto CAPEX</strong> grabado (misma lógica que el listado de partidas).

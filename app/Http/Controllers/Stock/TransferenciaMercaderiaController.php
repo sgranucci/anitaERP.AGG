@@ -5,16 +5,20 @@ namespace App\Http\Controllers\Stock;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionTransferenciaMercaderia;
 use App\Models\Stock\Depmae;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Repositories\Stock\DepmaeRepositoryInterface;
 use App\Repositories\Stock\Tipotransaccion_StockRepository;
 use App\Services\Stock\TransferenciaMercaderiaService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
+use App\Support\Stock\UsuarioDepositoAutorizado;
 
 class TransferenciaMercaderiaController extends Controller
 {
     public function __construct(
         private TransferenciaMercaderiaService $transferenciaService,
         private Tipotransaccion_StockRepository $tipotransaccionStockRepository,
+        private DepmaeRepositoryInterface $depmaeRepository,
+        private EmpresaRepositoryInterface $empresaRepository,
     ) {}
 
     public function index()
@@ -23,26 +27,38 @@ class TransferenciaMercaderiaController extends Controller
 
         $tipotransacciones = $this->tipotransaccionStockRepository->all(['T'], ['A']);
         $defaults = $this->transferenciaService->defaultsUsuario();
+        $empresa_query = $this->empresaRepository->allFiltrado();
+        $empresa_id = old('empresa_id', $empresa_query->first()->id ?? null);
 
-        $depSalida = $this->resolverDepositoDefault($defaults['deposito_salida_id'] ?? null);
-        $depEntrada = $this->resolverDepositoDefault($defaults['deposito_entrada_id'] ?? null);
+        $depSalida = $this->resolverDepositoDefault($defaults['deposito_salida_id'] ?? null, $empresa_id);
+        $depEntrada = $this->resolverDepositoDefault($defaults['deposito_entrada_id'] ?? null, $empresa_id);
 
         return view('stock.transferencia_mercaderia.index', compact(
             'tipotransacciones',
             'defaults',
             'depSalida',
-            'depEntrada'
+            'depEntrada',
+            'empresa_query',
+            'empresa_id',
         ));
     }
 
-    private function resolverDepositoDefault($id): ?Depmae
+    private function resolverDepositoDefault($id, $empresaId = null): ?Depmae
     {
         $id = (int) $id;
         if ($id <= 0) {
             return null;
         }
 
-        return Depmae::query()->find($id);
+        $query = Depmae::query()->whereKey($id);
+        $empresaId = (int) $empresaId;
+        if ($empresaId > 0) {
+            $query->paraEmpresa($empresaId);
+        }
+
+        UsuarioDepositoAutorizado::aplicarFiltroQuery($query);
+
+        return $query->first();
     }
 
     public function preferencias(Request $request): JsonResponse

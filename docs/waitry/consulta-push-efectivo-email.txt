@@ -1,0 +1,100 @@
+Asunto: pushExternalOrder — cobro efectivo desde ERP se persiste como credit_card / gateway interface
+
+---
+
+Estimados,
+
+Somos el equipo de Anita ERP. Integramos Waitry con nuestro POS de gastronomía (local BONUS Avellaneda, placeId 11782, mesa mostrador tableId 101066).
+
+Usamos POST pushExternalOrder cuando la venta se origina en Anita (sin orden previa en Waitry): facturamos en caja y enviamos la comanda con el pago incluido, según la documentación que tenemos de ustedes:
+
+- paid: true y totalPaid = monto cobrado en POS
+- payment.type: "interface"
+- Medio real en payment.payments[] con gateway + amount (p. ej. "CASH", "MERCADOPAGO", etc.)
+
+Problema: en producción, las ventas cobradas en efectivo en Anita no quedan registradas como efectivo en Waitry. Al consultar la orden (getOrdersPOS / getordersdetails), Waitry devuelve payment.type: "credit_card" y payments[].gateway: "interface", perdiendo el gateway CASH que enviamos.
+
+Revisamos 17 órdenes de los últimos 14 días con cobro efectivo en Anita; las 17 presentan el mismo comportamiento (monto correcto, pero tipo/gateway incorrectos).
+
+---
+
+Caso de ejemplo (05/06/2026)
+
+Factura Anita:        FAC B 00008-808645
+external_id (venta):  3854
+orderId Waitry:       17603733
+Monto:                $ 9.700 (efectivo)
+display_id / papelito: E-FA7E98
+
+Fragmento enviado en pushExternalOrder (bloque payment):
+
+{
+  "paid": true,
+  "totalPaid": 9700,
+  "payment": {
+    "type": "interface",
+    "total_fee": {
+      "amount": 9700,
+      "currency_code": "PES",
+      "formatted_amount": "$9700.00"
+    },
+    "payments": [
+      {
+        "gateway": "CASH",
+        "amount": 9700
+      }
+    ]
+  },
+  "external_id": "3854",
+  "placeId": 11782,
+  "table": { "tableId": 101066 }
+}
+
+Respuesta de push: ok: true, orderId: 17603733 (orden creada correctamente).
+
+Lo que devuelve Waitry al consultar la orden (orderId 17603733):
+
+{
+  "payment": {
+    "type": "credit_card",
+    "total_fee": {
+      "amount": 9700,
+      "currency_code": "ARS",
+      "formatted_amount": "$9700"
+    },
+    "payments": [
+      {
+        "gateway": "interface",
+        "paidId": "3854",
+        "amount": 9700,
+        "status": "finished"
+      }
+    ]
+  },
+  "display_id": "E-FA7E98",
+  "external_reference_id": "E-FA7E98"
+}
+
+Esperábamos payment.type: "interface" (o "cash") y payments[].gateway: "CASH", no credit_card + interface.
+
+---
+
+Preguntas
+
+1. ¿Es el comportamiento esperado de Waitry para órdenes pushExternalOrder pagadas en efectivo desde un ERP externo?
+2. Si no lo es: ¿deben enviarse otros valores en payment.type o en payments[].gateway para que quede como efectivo en reportes y conciliación?
+3. ¿Existe configuración en el panel de Waitry que afecte cómo se mapea el gateway CASH en pushes de mostrador?
+4. ¿Pueden revisar el orderId 17603733 (external_id 3854) y confirmar qué recibieron en el push vs. qué persistieron?
+
+Otros orderId del mismo día con el mismo patrón (referencia): 17603720 (venta 3845), 17603694 (venta 3839), 17603714 (venta 3843).
+
+---
+
+Este desfasaje nos impacta la conciliación de cierre de jornada (clasificación efectivo vs. tarjeta/QR en el cuadro Waitry).
+
+Quedamos atentos a su respuesta. Gracias.
+
+[Nombre]
+[Cargo — Anita ERP]
+[Email]
+[Teléfono opcional]

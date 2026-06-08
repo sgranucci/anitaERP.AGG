@@ -133,7 +133,7 @@ final class GastronomiaVentaDisplaySupport
     }
 
     /**
-     * Código alfanumérico del papelito Waitry (tótem / comanda).
+     * Número/código del monitor Waitry (external_delivery_id o legacy E-…).
      */
     public static function waitryDisplayId(?Venta $venta): ?string
     {
@@ -145,7 +145,6 @@ final class GastronomiaVentaDisplaySupport
 
     /**
      * Línea para ticket/PDF cuando la factura proviene de una cuenta Waitry.
-     * Solo muestra el código alfanumérico del papelito (no el orderId numérico).
      */
     public static function lineaOrdenWaitry(?Venta $venta): ?string
     {
@@ -154,7 +153,7 @@ final class GastronomiaVentaDisplaySupport
             return null;
         }
 
-        return 'Papelito Waitry: '.$displayId;
+        return 'Papelito monitor: '.$displayId;
     }
 
     /**

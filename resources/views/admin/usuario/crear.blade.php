@@ -4,6 +4,8 @@
 @endsection
 
 @section("scripts")
+<script src="{{asset("assets/pages/scripts/stock/depmae/consulta.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/admin/usuario/depositos.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/usuario/crear.js")}}" type="text/javascript"></script>
 @endsection
 
@@ -21,10 +23,19 @@
                     </a>
                 </div>
             </div>
-            <form action="{{route('guardar_usuario')}}" id="form-general" enctype="multipart/form-data" class="form-horizontal form--label-right" method="POST" autocomplete="off">
+            <form action="{{route('guardar_usuario')}}" id="form-general" data-admin-usuario-depositos="1" enctype="multipart/form-data" class="form-horizontal form--label-right" method="POST" autocomplete="off">
                 @csrf
+                <div align="center" style="margin: 5px;">
+                    <button type="button" id="botonform1" class="btn btn-primary btn-sm">
+                        <i class="far fa-user"></i> Datos del usuario
+                    </button>
+                    <button type="button" id="botonform2" class="btn btn-info btn-sm">
+                        <i class="fas fa-warehouse"></i> Depósitos autorizados
+                    </button>
+                </div>
                 <div class="card-body">
                     @include('admin.usuario.form')
+                    @include('admin.usuario.form2')
                 </div>
                 <div class="card-footer">
                     <div class="row">
@@ -38,4 +49,5 @@
         </div>
     </div>
 </div>
+@include('includes.stock.modalconsultadeposito')
 @endsection

@@ -2,8 +2,11 @@
 
 namespace App\Services\Ventas\Gastronomia;
 
+use App\Models\Configuracion\Condicioniva;
+use App\Models\Ventas\Cliente;
 use App\Models\Ventas\CuentaGastronomia;
 use App\Models\Ventas\DescuentoGastronomia;
+use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\Venta_Impuesto;
 use App\Services\Ventas\FacturacionService;
@@ -308,6 +311,70 @@ final class GastronomiaFacturacionService
     }
 
     /**
+     * Emisión factura única del cierre Waitry (sin cuenta gastronómica; CF, sin descuentos).
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array{factura?:string,error?:string,venta_id?:int,cae_pendiente?:array,anita_pendiente?:array}
+     */
+    public function emitirComprobanteProcesoCierre(array $payload): array
+    {
+        $payload['descuentopie'] = 0.;
+        $payload['descuentoimportepie'] = 0.;
+        $payload['descuentolinea'] = 0.;
+
+        $payload['venta_receptor'] = $payload['venta_receptor']
+            ?? app(GastronomiaReceptorFacturacionService::class)->datosVentaReceptorConsumidorFinal();
+
+        $payload['omitir_percepciones'] = true;
+
+        $opciones = $this->opcionesEmisionGastronomia();
+        $payload['opciones_emision'] = $opciones;
+
+        $resultado = $this->facturacionService->generaComprobanteGeneral($payload);
+
+        if (! is_array($resultado)) {
+            return ['error' => 'Respuesta inesperada del servicio de facturación.'];
+        }
+
+        if (! empty($resultado['error'])) {
+            $mensaje = trim((string) ($resultado['mensaje'] ?? $resultado['error']));
+
+            return ['error' => $mensaje, 'mensaje' => $mensaje];
+        }
+
+        if (isset($resultado['venta_id'])) {
+            $resultado['venta_id'] = (int) $resultado['venta_id'];
+        }
+
+        return $resultado;
+    }
+
+    /**
+     * Piso de numeración Anita para PV CAEA (mod A) en emisión multi-lote del cierre Waitry.
+     */
+    public function ultimoNumerocomprobanteAnitaCaeaParaProceso(object $puntoventa, int $tipotransaccionId): int
+    {
+        if (($puntoventa->modofacturacion ?? '') !== 'A') {
+            return 0;
+        }
+
+        $tipo = Tipotransaccion::query()->find($tipotransaccionId);
+        if ($tipo === null) {
+            return 0;
+        }
+
+        $receptor = app(GastronomiaReceptorFacturacionService::class)->datosVentaReceptorConsumidorFinal();
+        $clienteId = (int) ($receptor['cliente_id'] ?? config('facturacion.CLIENTE_CONSUMIDOR_FINAL_ID', 1));
+        $letra = 'B';
+        $cliente = Cliente::query()->find($clienteId);
+        if ($cliente !== null && $cliente->condicioniva_id) {
+            $letra = (string) (Condicioniva::query()->whereKey($cliente->condicioniva_id)->value('letra') ?? 'B');
+        }
+
+        return $this->facturacionService->ultimoNumerocomprobanteAnitaCaea($puntoventa, $tipo, $letra);
+    }
+
+    /**
      * Gastronomía cobra en el momento: no se registra deuda en cuenta corriente del cliente.
      *
      * @return array<string, bool>
@@ -329,10 +396,43 @@ final class GastronomiaFacturacionService
      * Solicita CAE/CAEA en ARCA para una venta ya grabada (último paso de emisión gastronomía).
      *
      * @param  array<string, mixed>  $caePendiente  Contexto devuelto por generaComprobanteGeneral (cae_pendiente).
+     * @return array<string, mixed>|null  vencae_pendiente si se difiere la grabación en Informix
      */
-    public function completarSolicitudCaePendiente(array $caePendiente): void
+    public function completarSolicitudCaePendiente(array $caePendiente): ?array
     {
-        $this->facturacionService->completarSolicitudCaePendiente($caePendiente);
+        return $this->facturacionService->completarSolicitudCaePendiente(
+            $caePendiente,
+            $this->debeDiferirVencaeAnita(),
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $anitaPendiente
+     */
+    public function ejecutarAnitaPendienteGastronomia(array $anitaPendiente): void
+    {
+        $this->facturacionService->ejecutarAnitaPendienteGastronomia($anitaPendiente);
+    }
+
+    /**
+     * @param  array<string, mixed>  $vencaePendiente
+     */
+    public function ejecutarVencaePendienteGastronomia(array $vencaePendiente): void
+    {
+        $this->facturacionService->ejecutarVencaePendienteGastronomia($vencaePendiente);
+    }
+
+    /**
+     * Gastronomía: vencae en Informix va al mismo encolado post-respuesta que la venta Anita.
+     */
+    public function debeDiferirVencaeAnita(): bool
+    {
+        if (! config('gastronomia.sincronizar_anita_al_facturar', true)) {
+            return false;
+        }
+
+        return filter_var(config('gastronomia.anita_tras_respuesta', true), FILTER_VALIDATE_BOOLEAN)
+            || filter_var(config('gastronomia.anita_tras_commit_al_facturar', true), FILTER_VALIDATE_BOOLEAN);
     }
 
     /**

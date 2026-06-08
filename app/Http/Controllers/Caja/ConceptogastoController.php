@@ -49,7 +49,7 @@ class ConceptogastoController extends Controller
     {
         can('crear-conceptos-de-gastos');
 
-        $empresa_query = $this->empresaRepository->all();
+        $empresa_query = $this->empresaRepository->allFiltrado();
 
         return view('caja.conceptogasto.crear', compact('empresa_query'));
     }
@@ -98,7 +98,7 @@ class ConceptogastoController extends Controller
     {
         can('editar-conceptos-de-gastos');
         $data = $this->repository->findOrFail($id);
-        $empresa_query = $this->empresaRepository->all();
+        $empresa_query = $this->empresaRepository->allFiltrado();
 
         return view('caja.conceptogasto.editar', compact('data', 'empresa_query'));
     }

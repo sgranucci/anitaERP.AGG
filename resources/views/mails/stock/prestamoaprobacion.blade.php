@@ -8,7 +8,9 @@
 <body style="font-family: Arial, sans-serif; color:#222;">
     <p>Hola <strong>{{ $destinatario->nombre }}</strong>,</p>
 
-    @if (! empty($config->mail_texto_aprobacion))
+    @if (! empty($textoIntro))
+        <p>{{ $textoIntro }}</p>
+    @elseif (! empty($config->mail_texto_aprobacion))
         <p>{{ $config->mail_texto_aprobacion }}</p>
     @else
         <p>Te están enviando un préstamo de materiales hacia tu depósito. Por favor revisalo y, según corresponda,

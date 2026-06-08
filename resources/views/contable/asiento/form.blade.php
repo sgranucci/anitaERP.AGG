@@ -1,19 +1,12 @@
 <div class="card form1">
     <div class="row">
         <div class="col-sm-6">
-            <div class="form-group row">
-                <label for="empresa" class="col-lg-3 col-form-label">Empresa</label>
-                <select name="empresa_id" id="empresa_id" data-placeholder="Empresa" class="col-lg-7 form-control required" data-fouc>
-                    <option value="">-- Seleccionar empresa --</option>
-                    @foreach($empresa_query as $key => $value)
-                        @if( (int) $value->id == (int) old('empresa_id', $data->empresa_id ?? session('empresa_id')))
-                            <option value="{{ $value->id }}" selected="select">{{ $value->id }} {{ $value->nombre }}</option>    
-                        @else
-                            <option value="{{ $value->id }}">{{ $value->id }} {{ $value->nombre }}</option>    
-                        @endif
-                    @endforeach
-                </select>
-            </div>
+            @include('includes.form-empresa-asignada', [
+                'empresa_query' => $empresa_query,
+                'empresa_id' => $data->empresa_id ?? session('empresa_id'),
+                'mostrar_id' => true,
+                'col_input' => 'col-lg-7',
+            ])
             <div class="form-group row">
                 <label for="tipoasiento" class="col-lg-3 col-form-label">Tipo de asiento</label>
                 <select name="tipoasiento_id" id="tipoasiento_id" data-placeholder="Tipo de asiento" class="col-lg-7 form-control required" data-fouc>

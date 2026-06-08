@@ -26,15 +26,19 @@
 				<input type="text" name="lote" id="lote" class="form-control" value="{{old('lote', $movimientostock->articulos_movimiento[0]->lote ?? 'LOTE DE ALTA')}}" required>
 			</div>				
 		</div>
+		@include('includes.form-empresa-asignada', [
+			'empresa_query' => $empresa_query,
+			'empresa_id' => $empresa_id ?? null,
+		])
 		<div class="form-group row">
    			<label for="deposito" class="col-lg-3 col-form-label requerido">Depósito</label>
         	<select name="deposito_id" id="deposito_id" data-placeholder="Depósito" class="col-lg-8 form-control required" data-fouc>
         		<option value="">-- Seleccionar depósito  --</option>
         		@foreach($deposito_query as $key => $value)
         			@if( (int) $value->id == (int) old('deposito_id', $movimientostock->articulos_movimiento[0]->deposito_id ?? '1'))
-        				<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
+        				<option value="{{ $value->id }}" data-empresa-id="{{ $value->empresa_id }}" selected="select">{{ $value->nombre }}</option>    
         			@else
-        				<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
+        				<option value="{{ $value->id }}" data-empresa-id="{{ $value->empresa_id }}">{{ $value->nombre }}</option>    
         			@endif
         		@endforeach
         	</select>

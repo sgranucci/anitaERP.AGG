@@ -1,0 +1,71 @@
+---
+description: Navegación desde modales de consulta hacia ABM relacionados (ver información completa)
+globs: resources/views/**/modal*.blade.php,app/Http/Controllers/**/*.php,app/Repositories/**/*.php,public/assets/pages/scripts/**/consulta.js
+alwaysApply: false
+---
+
+# Navegación a ABM desde modales de consulta
+
+Al implementar modales que listan entidades para **elegir** un registro en un formulario, priorizar que el usuario pueda **consultar el ABM** sin perder el contexto del formulario origen.
+
+## Regla general
+
+En cada fila del modal (o junto al campo en el formulario), ofrecer acceso al ABM del recurso cuando exista ruta y permiso:
+
+| Contexto | Patrón |
+|---|---|
+| Modal de búsqueda (tabla) | Columna **Acciones**: botón amarillo **Elegir** + botón/info **Consultar** |
+| Campo en formulario (código + descripción) | Ícono lápiz / enlace azul al ABM si hay ID cargado |
+| Listados e ítems de grilla | `btn-accion-tabla` con `fa fa-edit` hacia editar del maestro |
+
+**Consultar** en modal: enlace `target="_blank" rel="noopener"` hacia la pantalla de edición/consulta del ABM (no cierra el modal ni navega la ventana actual).
+
+Referencia depósitos: `DepmaeController@consultaDeposito` + `includes.stock.modalconsultadeposito`.
+
+Referencia artículos: `ArticuloController@consultaArticulo` + `includes.stock.modalconsultaarticulo` + `App\Support\Stock\ArticuloConsultaDesdeModal` (permisos y URL modo consulta).
+
+Referencia cuentas contables: `CuentacontableController@consultaCuentacontable` (botón info + query `origen=modal_consulta` cuando aplique vista solo lectura).
+
+## Estilos
+
+| Acción | Control |
+|---|---|
+| Elegir (aplicar al formulario) | `btn btn-warning btn-sm` + clase JS `eligeconsulta*` |
+| Consultar ABM (nueva pestaña) | `btn btn-info btn-sm` o `btn-accion-tabla` + `text-primary` |
+| Editar desde campo compacto | `btn-accion-tabla` + `fa fa-edit`, `target="_blank"` |
+
+## Backend (HTML del modal vía AJAX)
+
+```php
+$output['data'] .= '<td class="text-nowrap">';
+$output['data'] .= '<a class="btn btn-warning btn-sm eligeconsultadeposito">Elegir</a>';
+if ($puedeAbrirAbm) {
+    $url = route('editar_depmae', [
+        'id' => $row->id,
+        'origen' => 'modal_consulta',
+        'vista' => 'consulta',
+    ]);
+    $output['data'] .= ' <a class="btn btn-info btn-sm" href="'.e($url).'" target="_blank" rel="noopener">Consultar</a>';
+}
+$output['data'] .= '</td>';
+```
+
+- La solapa ABM debe abrir con **`origen=modal_consulta&vista=consulta`**: el layout oculta menú lateral (`body.modo-consulta`) y muestra banner «Modo consulta».
+- Ruta GET/PUT del ABM con middleware **`modo.consulta`**.
+- Formulario en modo modal: sin «Volver al listado»; botón **Cerrar solapa** siempre.
+- Sin permiso **`actualizar-*`**: solo lectura (`pe-none`) y solo **Cerrar solapa**.
+- Con permiso **`actualizar-*`**: formulario editable + **Actualizar** + **Cerrar solapa**; el PUT exitoso redirige conservando `origen=modal_consulta&vista=consulta`.
+- Usar `route()` y `e()` en href; no concatenar IDs sin escapar.
+
+## Checklist al crear un modal de consulta nuevo
+
+1. Columna **Acciones** con **Elegir** + **Consultar** (si hay ABM).
+2. Enlace Consultar abre ABM en pestaña nueva.
+3. En el formulario destino, enlace/icono al ABM cuando el ID esté cargado.
+4. Documentar permisos mínimos para abrir el ABM desde el modal.
+
+## Prohibido
+
+- Modales de selección sin ninguna vía para ver el registro maestro (solo Elegir).
+- Consultar reemplazando la ventana del formulario en curso (`target="_self"` en modales de proceso).
+- Omitir permisos: no mostrar Consultar si el usuario no puede abrir el ABM.

@@ -89,11 +89,24 @@ class MozoGastronomiaController extends Controller
      */
     public function consultaMozo(Request $request)
     {
-        can('usar-proceso-facturacion-gastronomia');
+        if ($request->has('empresa_id')) {
+            can('usar-proceso-facturacion-gastronomia');
+            $empresaId = (int) ($request->get('empresa_id') ?: config('cliente.EMPRESA_DEFAULT_ID'));
 
-        $empresaId = (int) ($request->get('empresa_id') ?: config('cliente.EMPRESA_DEFAULT_ID'));
+            return $this->repository->consultaMozo(
+                (string) ($request->get('consulta') ?? ''),
+                $empresaId,
+                false,
+            );
+        }
 
-        return $this->repository->consultaMozo((string) ($request->get('consulta') ?? ''), $empresaId);
+        can('listar-mozo-gastronomia');
+
+        return $this->repository->consultaMozo(
+            (string) ($request->get('consulta') ?? ''),
+            0,
+            true,
+        );
     }
 
     public function leeUnMozoPorCodigo(Request $request, string $codigo)
@@ -101,7 +114,7 @@ class MozoGastronomiaController extends Controller
         can('usar-proceso-facturacion-gastronomia');
 
         $empresaId = (int) ($request->get('empresa_id') ?: config('cliente.EMPRESA_DEFAULT_ID'));
-        $mozo = $this->repository->findPorCodigo($codigo, $empresaId);
+        $mozo = $this->repository->findPorCodigo($codigo, $empresaId, false);
 
         if (! $mozo) {
             return response()->json(['error' => 'Mozo no encontrado'], 404);

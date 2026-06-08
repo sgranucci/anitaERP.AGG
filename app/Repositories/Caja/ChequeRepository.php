@@ -66,16 +66,19 @@ class ChequeRepository implements ChequeRepositoryInterface
         if (!$hay_cheque)
             self::sincronizarConAnita();
 
-        return $this->model->with('empresas')
-                            ->with('cuentacajas')
-                            ->with('bancos')
-                            ->with('tipodocumentos')
-                            ->with('proveedores')
-                            ->with('clientes')
-                            ->with('monedas')
-                            ->with('cajas')
-                            ->with('chequeras')
-                            ->get();
+        $query = $this->model->with('empresas')
+            ->with('cuentacajas')
+            ->with('bancos')
+            ->with('tipodocumentos')
+            ->with('proveedores')
+            ->with('clientes')
+            ->with('monedas')
+            ->with('cajas')
+            ->with('chequeras');
+
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query);
+
+        return $query->get();
     }
 
     public function create(array $data)

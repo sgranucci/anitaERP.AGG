@@ -40,21 +40,14 @@
 		</select>
 	</div>
 </div>
-<div class="form-group row">
-	<label for="empresa_id" class="col-lg-3 col-form-label">Empresa</label>
-	<div class="col-lg-8">
-		<select name="empresa_id" id="empresa_id" data-placeholder="Empresa" class="form-control" data-fouc>
-			<option value="">-- Para todas las empresas --</option>
-			@foreach($empresa_query as $key => $value)
-				@if( (int) $value->id == (int) old('empresa_id', $data->empresa_id ?? ''))
-					<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>
-				@else
-					<option value="{{ $value->id }}">{{ $value->nombre }}</option>
-				@endif
-			@endforeach
-		</select>
-	</div>
-</div>
+@include('includes.form-empresa-asignada', [
+    'empresa_query' => $empresa_query,
+    'empresa_id' => $data->empresa_id ?? null,
+    'required' => false,
+    'permite_vacio' => true,
+    'opcion_vacia' => '-- Para todas las empresas --',
+    'col_input' => 'col-lg-8',
+])
 <div class="form-group row" id="cuenta">
 	<label for="cuentacontable_id" class="col-lg-3 col-form-label requerido">Cuenta contable</label>
 	<input type="hidden" class="cuentacontable_id" id="cuentacontable_id" name="cuentacontable_id" value="{{ old('cuentacontable_id', $data->cuentacontable_id ?? '') }}">

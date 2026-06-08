@@ -56,11 +56,22 @@ class ValidacionConfiguracionPuntoventaGastronomia extends FormRequest
             'salida_comanda_id' => 'required|exists:salida,id',
             'salida_factura_id' => 'required|exists:salida,id',
             'listaprecio_id' => 'required|exists:listaprecio,id',
-            'deposito_venta_id' => 'required|exists:depmae,id',
-            'deposito_insumos_id' => 'required|exists:depmae,id',
+            'deposito_venta_id' => [
+                'required',
+                Rule::exists('depmae', 'id')->where(function ($query) use ($empresaId) {
+                    $query->where('empresa_id', $empresaId);
+                }),
+            ],
+            'deposito_insumos_id' => [
+                'required',
+                Rule::exists('depmae', 'id')->where(function ($query) use ($empresaId) {
+                    $query->where('empresa_id', $empresaId);
+                }),
+            ],
             'tipotransaccion_id' => 'required|exists:tipotransaccion,id',
             'tipotransaccion_nota_credito_id' => 'nullable|exists:tipotransaccion,id',
             'tipotransaccion_caja_id' => 'required|exists:tipotransaccion_caja,id',
+            'waitry_habilitado' => 'required|in:0,1',
         ];
     }
 
@@ -79,6 +90,7 @@ class ValidacionConfiguracionPuntoventaGastronomia extends FormRequest
             'tipotransaccion_id' => 'tipo de transacción (factura)',
             'tipotransaccion_nota_credito_id' => 'tipo de transacción (nota de crédito)',
             'tipotransaccion_caja_id' => 'tipo de transacción de caja (cobranza)',
+            'waitry_habilitado' => 'integración Waitry',
         ];
     }
 }

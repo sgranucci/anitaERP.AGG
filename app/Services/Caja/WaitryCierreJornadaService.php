@@ -5,8 +5,11 @@ namespace App\Services\Caja;
 use App\Models\Ventas\CuentaGastronomia;
 use App\Models\Ventas\JornadaGastronomia;
 use App\Models\Ventas\VentaGastronomiaEmision;
+use App\Services\Ventas\Gastronomia\GastronomiaCierreTotemJornadaService;
 use App\Services\Ventas\Gastronomia\Waitry\WaitryAnalyticsOrdenesService;
 use App\Services\Ventas\Gastronomia\Waitry\WaitryOrdenesExternasService;
+use App\Support\Ventas\Waitry\WaitryCierreJornadaVentanaSupport;
+use App\Support\Ventas\Waitry\WaitryConciliacionCircuitoSupport;
 use App\Support\Ventas\GastronomiaVentaDetalleSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaFacturadoAnitaSupport;
 use App\Support\Ventas\Gastronomia\VentaGastronomiaEmisionWaitrySupport;
@@ -14,11 +17,15 @@ use App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport;
 use App\Support\Ventas\Waitry\WaitryOrdenCobroSupport;
 use App\Support\Ventas\Waitry\WaitryOrdenEstadoSupport;
 use App\Support\Ventas\Waitry\WaitryOrdenPaymentEnriquecimientoSupport;
+use App\Support\Ventas\Waitry\WaitryPaymentGatewaySupport;
 use Carbon\Carbon;
 use InvalidArgumentException;
 
 /**
- * Cierre de jornada Waitry (tesorería): concilia getordersdetails vs ventas Anita por fechajornada.
+ * Cierre de jornada Waitry (tesorería): concilia getordersdetails vs ventas Anita.
+ *
+ * Con jornada gastronomía abierta/cerrada: mismo tramo que Informe Z y proceso Caja
+ * (order_id &gt; último cierre, placed_at entre apertura y cierre, API en días calendario que abarque la ventana).
  */
 final class WaitryCierreJornadaService
 {
@@ -27,6 +34,7 @@ final class WaitryCierreJornadaService
     public function __construct(
         private readonly WaitryAnalyticsOrdenesService $analyticsOrdenesService,
         private readonly WaitryOrdenesExternasService $ordenesExternasService,
+        private readonly GastronomiaCierreTotemJornadaService $cierreTotemJornadaService,
     ) {
     }
 
@@ -50,8 +58,6 @@ final class WaitryCierreJornadaService
 
         $fechaJornada = $this->normalizarFecha($fechaJornada);
         $fechaFmt = $this->formatearFecha($fechaJornada);
-        $fechaWaitryHasta = Carbon::parse($fechaJornada)->addDay()->format('Y-m-d');
-        $fechaWaitryHastaFmt = $this->formatearFecha($fechaWaitryHasta);
 
         $jornada = JornadaGastronomia::query()
             ->where('empresa_id', $empresaId)
@@ -59,11 +65,46 @@ final class WaitryCierreJornadaService
             ->orderByDesc('id')
             ->first();
 
-        $waitry = $this->analyticsOrdenesService->ordenesPorRangoFecha($empresaId, $fechaJornada, $fechaWaitryHasta);
-        if (! ($waitry['ok'] ?? false)) {
+        $usaTramoJornada = $jornada !== null
+            && $this->cierreTotemJornadaService->habilitado();
+        $idAnterior = 0;
+        $ventanaOperativa = null;
+
+        if ($usaTramoJornada) {
+            $idAnterior = $this->cierreTotemJornadaService->waitryOrderIdAnteriorParaJornada($jornada);
+            $cierreHasta = WaitryCierreJornadaVentanaSupport::resolverCierreHasta($jornada);
+            $resuelto = WaitryCierreJornadaVentanaSupport::resolverParaCierreJornada(
+                $fechaJornada,
+                $jornada->apertura_en,
+                $cierreHasta,
+            );
+            $fechaWaitryDesde = $resuelto['rango_calendario']['desde'];
+            $fechaWaitryHasta = $resuelto['rango_calendario']['hasta'];
+            $ventanaOperativa = $resuelto['ventana'];
+        } else {
+            $fechaWaitryDesde = $fechaJornada;
+            $fechaWaitryHasta = Carbon::parse($fechaJornada)->addDay()->format('Y-m-d');
+        }
+
+        $fechaWaitryHastaFmt = $this->formatearFecha($fechaWaitryHasta);
+
+        $cierreHasta = $usaTramoJornada && $jornada !== null
+            ? WaitryCierreJornadaVentanaSupport::resolverCierreHasta($jornada)
+            : $jornada?->cierre_en;
+
+        $consultaWaitry = $this->obtenerOrdenesWaitryParaConciliacion(
+            $empresaId,
+            $fechaWaitryDesde,
+            $fechaWaitryHasta,
+            $fechaJornada,
+            $jornada,
+            $usaTramoJornada,
+            $cierreHasta,
+        );
+        if (($consultaWaitry['error'] ?? '') !== '' && ($consultaWaitry['ordenes'] ?? []) === []) {
             return [
                 'ok' => false,
-                'error' => $waitry['error'] ?? 'No se pudieron obtener órdenes Waitry.',
+                'error' => $consultaWaitry['error'],
                 'empresa_id' => $empresaId,
                 'fecha_jornada' => $fechaJornada,
                 'fecha_jornada_fmt' => $fechaFmt,
@@ -71,13 +112,38 @@ final class WaitryCierreJornadaService
             ];
         }
 
-        $ordenesWaitry = $waitry['ordenes'] ?? [];
+        $waitryFuente = (string) ($consultaWaitry['fuente'] ?? 'getordersdetails');
+        $ordenesWaitry = $consultaWaitry['ordenes'] ?? [];
         $mapWaitry = [];
+        $descartadasFueraVentana = 0;
+        $descartadasPorIdAnterior = 0;
         foreach ($ordenesWaitry as $orden) {
             $id = (int) ($orden['orderId'] ?? $orden['id'] ?? 0);
-            if ($id > 0) {
-                $mapWaitry[$id] = $orden;
+            if ($id <= 0) {
+                continue;
             }
+            if ($usaTramoJornada) {
+                if (! WaitryCierreJornadaVentanaSupport::perteneceTramoOrderId($id, $idAnterior)) {
+                    $descartadasPorIdAnterior++;
+
+                    continue;
+                }
+                $normalizada = $this->analyticsOrdenesService->normalizarOrden($orden);
+                if ($ventanaOperativa !== null
+                    && ! WaitryCierreJornadaVentanaSupport::ordenDentroVentanaOperativa(
+                        $normalizada,
+                        $ventanaOperativa['desde'],
+                        $ventanaOperativa['hasta'],
+                    )) {
+                    $descartadasFueraVentana++;
+
+                    continue;
+                }
+                $mapWaitry[$id] = $normalizada;
+
+                continue;
+            }
+            $mapWaitry[$id] = $orden;
         }
 
         $emisionesJornada = VentaGastronomiaEmision::query()
@@ -93,6 +159,9 @@ final class WaitryCierreJornadaService
         foreach ($emisionesJornada as $emision) {
             $wid = VentaGastronomiaEmisionWaitrySupport::resolverOrderId($emision);
             if ($wid > 0) {
+                if ($usaTramoJornada && ! WaitryCierreJornadaVentanaSupport::perteneceTramoOrderId($wid, $idAnterior)) {
+                    continue;
+                }
                 $mapAnitaJornada[$wid] = $emision;
             } else {
                 $emisionesJornadaSinWaitry[] = $emision;
@@ -117,13 +186,24 @@ final class WaitryCierreJornadaService
 
         $mapAnitaPorWaitry = $this->mapEmisionesPorWaitryIds($empresaId, $waitryIdsConciliacion);
 
+        $mapCuentasImportadas = $this->mapCuentasImportadasPorWaitryIds($empresaId, $waitryIdsConciliacion);
+
         $waitryCanceladas = ['cantidad' => 0, 'total' => 0.0];
+        $waitryAnuladasDescuento = ['cantidad' => 0, 'total' => 0.0];
         $mapWaitryActivas = [];
         foreach ($mapWaitry as $orderId => $orden) {
             if (WaitryOrdenEstadoSupport::esCancelada($orden)) {
                 $waitryCanceladas['cantidad']++;
                 $waitryCanceladas['total'] = round(
                     $waitryCanceladas['total'] + $this->montoTotalWaitry($orden),
+                    2,
+                );
+                continue;
+            }
+            if (WaitryOrdenEstadoSupport::esAnuladaPorDescuentoTotal($orden)) {
+                $waitryAnuladasDescuento['cantidad']++;
+                $waitryAnuladasDescuento['total'] = round(
+                    $waitryAnuladasDescuento['total'] + WaitryOrdenEstadoSupport::montoBrutoWaitry($orden),
                     2,
                 );
                 continue;
@@ -146,7 +226,8 @@ final class WaitryCierreJornadaService
             $idsProcesados[] = $orderId;
             $emision = $mapAnitaPorWaitry[$orderId] ?? null;
             $cuentaPend = $cuentasPendientes->get($orderId);
-            $filas[] = $this->armarFila($orderId, $orden, $emision, $cuentaPend, $fechaJornada, $empresaId);
+            $cuentaImportada = $mapCuentasImportadas[$orderId] ?? null;
+            $filas[] = $this->armarFila($orderId, $orden, $emision, $cuentaPend, $cuentaImportada, $fechaJornada, $empresaId);
         }
 
         $idsAnitaFueraListado = [];
@@ -174,7 +255,7 @@ final class WaitryCierreJornadaService
             $ordenPos = $mapPosConciliacion[$orderId] ?? null;
             if ($ordenPos !== null) {
                 $ordenNorm = $this->analyticsOrdenesService->normalizarOrden($ordenPos);
-                $fila = $this->armarFila($orderId, $ordenNorm, $emision, null, $fechaJornada, $empresaId);
+                $fila = $this->armarFila($orderId, $ordenNorm, $emision, null, $mapCuentasImportadas[$orderId] ?? null, $fechaJornada, $empresaId);
                 $fila['waitry_fuente_consulta'] = 'getOrdersPOS';
                 $fila['waitry_en_listado_dia'] = false;
                 $filas[] = $fila;
@@ -197,6 +278,8 @@ final class WaitryCierreJornadaService
             return ((int) ($b['anita_venta_id'] ?? 0)) <=> ((int) ($a['anita_venta_id'] ?? 0));
         });
 
+        $filas = WaitryConciliacionCircuitoSupport::enriquecerFilas($filas);
+
         $resumen = $this->calcularResumen(
             $filas,
             $mapWaitryActivas,
@@ -204,6 +287,7 @@ final class WaitryCierreJornadaService
             $empresaId,
             $fechaJornada,
             $waitryCanceladas,
+            $waitryAnuladasDescuento,
         );
 
         return [
@@ -212,7 +296,21 @@ final class WaitryCierreJornadaService
             'fecha_jornada' => $fechaJornada,
             'fecha_jornada_fmt' => $fechaFmt,
             'jornada' => $this->jornadaResumen($jornada),
-            'meta_conciliacion' => $this->metaConciliacion($fechaJornada, $fechaFmt, $fechaWaitryHasta, $fechaWaitryHastaFmt, $jornada),
+            'meta_conciliacion' => $this->metaConciliacion(
+                $fechaJornada,
+                $fechaFmt,
+                $fechaWaitryDesde,
+                $fechaWaitryHasta,
+                $fechaWaitryHastaFmt,
+                $jornada,
+                $usaTramoJornada,
+                $idAnterior,
+                $ventanaOperativa,
+                $descartadasFueraVentana,
+                $descartadasPorIdAnterior,
+                $waitryFuente,
+                $consultaWaitry['fallback_de'] ?? null,
+            ),
             'resumen' => $resumen,
             'filas' => $filas,
         ];
@@ -227,12 +325,13 @@ final class WaitryCierreJornadaService
         array $orden,
         ?VentaGastronomiaEmision $emision,
         ?CuentaGastronomia $cuentaPendiente,
+        ?CuentaGastronomia $cuentaImportada,
         string $fechaJornadaConsulta,
         int $empresaId,
     ): array {
-        $waitryTotal = $this->montoTotalWaitry($orden);
-        $waitryPaid = $this->esPagadaWaitry($orden);
+        $waitryPaid = $this->resolverPagadaWaitry($orden);
         $anitaTotal = $emision !== null ? round((float) ($emision->venta?->total ?? 0), 2) : null;
+        $waitryTotal = $this->montoImporteWaitryConciliacion($orden, $anitaTotal);
         $diferencia = $anitaTotal !== null ? round($waitryTotal - $anitaTotal, 2) : null;
         $anitaFechajornada = $this->fechaJornadaVenta($emision);
         $jornadaCoincide = $anitaFechajornada === null || $anitaFechajornada === $fechaJornadaConsulta;
@@ -240,7 +339,9 @@ final class WaitryCierreJornadaService
         $waitryTipoPago = WaitryMedioPagoCuentacajaSupport::extraerTipoPagoOrden($orden)
             ?? $emision?->cuenta?->waitry_tipo_pago
             ?? $cuentaPendiente?->waitry_tipo_pago;
-        $cuentaEsperada = WaitryMedioPagoCuentacajaSupport::cuentaParaTipoWaitry($waitryTipoPago, $empresaId);
+        $waitryGateway = WaitryPaymentGatewaySupport::extraerGatewayDesdeOrden($orden);
+        $cuentaEsperada = WaitryMedioPagoCuentacajaSupport::cuentaParaTipoInformeZ($waitryTipoPago, $empresaId, $waitryGateway)
+            ?? WaitryMedioPagoCuentacajaSupport::cuentaParaTipoWaitry($waitryTipoPago, $empresaId);
         $anitaMedio = $this->primerMedioCobranzaAnita($emision);
 
         $estado = 'sin_factura_anita';
@@ -263,6 +364,9 @@ final class WaitryCierreJornadaService
             ? VentaGastronomiaEmisionWaitrySupport::metaEnvioComanda($emision)
             : ['estado' => null, 'ultimo_error' => null];
 
+        $cuentaRef = $cuentaImportada ?? $cuentaPendiente ?? $emision?->cuenta;
+        $importadaErp = $cuentaImportada !== null || $cuentaPendiente !== null;
+
         return [
             'waitry_order_id' => $orderId,
             'referencia_waitry' => trim((string) (
@@ -277,7 +381,8 @@ final class WaitryCierreJornadaService
             'waitry_paid' => $waitryPaid,
             'waitry_total' => $waitryTotal,
             'waitry_tipo_pago' => $waitryTipoPago,
-            'waitry_medio_label' => WaitryMedioPagoCuentacajaSupport::etiquetaTipo($waitryTipoPago),
+            'waitry_payment_gateway' => $waitryGateway,
+            'waitry_medio_label' => WaitryMedioPagoCuentacajaSupport::etiquetaTipo($waitryTipoPago, $waitryGateway),
             'cuentacaja_esperada_id' => $cuentaEsperada['id'] ?? null,
             'cuentacaja_esperada_label' => isset($cuentaEsperada['codigo'], $cuentaEsperada['nombre'])
                 ? trim($cuentaEsperada['codigo'].' — '.$cuentaEsperada['nombre'])
@@ -287,7 +392,9 @@ final class WaitryCierreJornadaService
             'anita_fechajornada' => $anitaFechajornada,
             'anita_fechajornada_fmt' => $anitaFechajornada ? $this->formatearFecha($anitaFechajornada) : null,
             'anita_total' => $anitaTotal,
-            'anita_totem' => (bool) ($emision?->cuenta?->waitry_cobro_totem ?? $cuentaPendiente?->waitry_cobro_totem),
+            'anita_totem' => (bool) ($cuentaRef?->waitry_cobro_totem),
+            'importada_erp' => $importadaErp,
+            'cuenta_importada_id' => $cuentaImportada?->id,
             'anita_cuentacaja_id' => $anitaMedio['cuentacaja_id'] ?? null,
             'anita_cuentacaja_label' => $anitaMedio['label'] ?? null,
             'cuenta_pendiente_id' => $cuentaPendiente?->id,
@@ -383,6 +490,7 @@ final class WaitryCierreJornadaService
         int $empresaId,
         string $fechaJornada,
         array $waitryCanceladas = ['cantidad' => 0, 'total' => 0.0],
+        array $waitryAnuladasDescuento = ['cantidad' => 0, 'total' => 0.0],
     ): array {
         $totalWaitry = 0.0;
         $totalWaitryPagado = 0.0;
@@ -398,6 +506,11 @@ final class WaitryCierreJornadaService
         $jornadaDistinta = 0;
         $porMedioWaitry = [];
 
+        $totalAnitaEnviadasWaitry = 0.0;
+        $totalAnitaConImporteWaitryEnGrilla = 0.0;
+        $totalWaitryEnFilasConAnita = 0.0;
+        $totalAnitaSoloAnitaMonto = 0.0;
+
         foreach ($filas as $f) {
             match ($f['estado']) {
                 'conciliada' => $conciliadas++,
@@ -410,6 +523,23 @@ final class WaitryCierreJornadaService
                 'anita_sin_waitry' => $anitaSinWaitry++,
                 default => null,
             };
+
+            $orderId = (int) ($f['waitry_order_id'] ?? 0);
+            $anitaTotal = $f['anita_total'] ?? null;
+            $waitryTotal = $f['waitry_total'] ?? null;
+            if ($anitaTotal === null || $orderId <= 0) {
+                continue;
+            }
+
+            $anita = (float) $anitaTotal;
+            $totalAnitaEnviadasWaitry = round($totalAnitaEnviadasWaitry + $anita, 2);
+            if (($f['estado'] ?? '') === 'solo_anita') {
+                $totalAnitaSoloAnitaMonto = round($totalAnitaSoloAnitaMonto + $anita, 2);
+            }
+            if ($waitryTotal !== null) {
+                $totalAnitaConImporteWaitryEnGrilla = round($totalAnitaConImporteWaitryEnGrilla + $anita, 2);
+                $totalWaitryEnFilasConAnita = round($totalWaitryEnFilasConAnita + (float) $waitryTotal, 2);
+            }
         }
 
         foreach ($mapWaitry as $orden) {
@@ -417,7 +547,11 @@ final class WaitryCierreJornadaService
             $totalWaitry += $monto;
             if ($this->esPagadaWaitry($orden)) {
                 $totalWaitryPagado += $monto;
-                $tipo = WaitryMedioPagoCuentacajaSupport::extraerTipoPagoOrden($orden) ?? 'totem';
+                $tipo = WaitryMedioPagoCuentacajaSupport::extraerTipoPagoOrden($orden)
+                    ?? WaitryMedioPagoCuentacajaSupport::tipoPredefinidoFallbackInformeZ($empresaId);
+                if ($tipo === null || WaitryMedioPagoCuentacajaSupport::esTipoExcluidoInformeZ($tipo)) {
+                    continue;
+                }
                 if (! isset($porMedioWaitry[$tipo])) {
                     $cuenta = WaitryMedioPagoCuentacajaSupport::cuentaParaTipoInformeZ($tipo, $empresaId);
                     $porMedioWaitry[$tipo] = [
@@ -440,11 +574,17 @@ final class WaitryCierreJornadaService
             'ordenes_waitry' => count($mapWaitry),
             'waitry_canceladas_cantidad' => (int) ($waitryCanceladas['cantidad'] ?? 0),
             'waitry_canceladas_total' => round((float) ($waitryCanceladas['total'] ?? 0), 2),
+            'waitry_anuladas_descuento_cantidad' => (int) ($waitryAnuladasDescuento['cantidad'] ?? 0),
+            'waitry_anuladas_descuento_total' => round((float) ($waitryAnuladasDescuento['total'] ?? 0), 2),
             'facturas_anita_jornada' => $emisiones->count(),
             'facturas_anita_waitry' => $emisiones->filter(
                 fn (VentaGastronomiaEmision $e) => VentaGastronomiaEmisionWaitrySupport::resolverOrderId($e) > 0,
             )->count(),
             'total_waitry' => round($totalWaitry, 2),
+            'total_anita_enviadas_waitry' => $totalAnitaEnviadasWaitry,
+            'total_anita_con_importe_waitry' => $totalAnitaConImporteWaitryEnGrilla,
+            'total_anita_solo_anita_monto' => $totalAnitaSoloAnitaMonto,
+            'diferencia_importes_pareados' => round($totalAnitaConImporteWaitryEnGrilla - $totalWaitryEnFilasConAnita, 2),
             'total_waitry_pagado' => round($totalWaitryPagado, 2),
             'total_anita_facturado' => round($totalAnita, 2),
             'total_anita_facturas' => $totalesAnita['total_facturas'],
@@ -460,6 +600,7 @@ final class WaitryCierreJornadaService
             'jornada_distinta' => $jornadaDistinta,
             'por_medio_waitry' => array_values($porMedioWaitry),
             'tiene_diferencias' => ($sinFactura + $importadasPendientes + $montoDistinto + $medioDistinto + $soloAnita + $anitaSinWaitry + $jornadaDistinta) > 0,
+            'circuitos' => WaitryConciliacionCircuitoSupport::resumenPorCircuito($filas),
         ];
     }
 
@@ -589,11 +730,74 @@ final class WaitryCierreJornadaService
     }
 
     /**
+     * @param  list<int>  $waitryIds
+     * @return array<int, CuentaGastronomia>
+     */
+    private function mapCuentasImportadasPorWaitryIds(int $empresaId, array $waitryIds): array
+    {
+        $waitryIds = array_values(array_unique(array_filter(
+            array_map(static fn ($id) => (int) $id, $waitryIds),
+            static fn (int $id) => $id > 0,
+        )));
+
+        if ($waitryIds === []) {
+            return [];
+        }
+
+        $map = [];
+        CuentaGastronomia::query()
+            ->where('empresa_id', $empresaId)
+            ->whereIn('waitry_order_id', $waitryIds)
+            ->orderByDesc('id')
+            ->get()
+            ->each(function (CuentaGastronomia $cuenta) use (&$map): void {
+                $orderId = (int) $cuenta->waitry_order_id;
+                if ($orderId > 0 && ! isset($map[$orderId])) {
+                    $map[$orderId] = $cuenta;
+                }
+            });
+
+        return $map;
+    }
+
+    /**
+     * @param  array<string, mixed>  $orden
+     */
+    private function resolverPagadaWaitry(array $orden): ?bool
+    {
+        return WaitryOrdenCobroSupport::resolverEstadoPagoWaitry($orden);
+    }
+
+    /**
+     * Importe Waitry para conciliar: bruto de la comanda; si falta en POS, total Anita pareado.
+     *
+     * @param  array<string, mixed>  $orden
+     */
+    private function montoImporteWaitryConciliacion(array $orden, ?float $anitaTotal): float
+    {
+        $bruto = WaitryOrdenEstadoSupport::montoBrutoWaitry($orden);
+        if ($bruto > 0.0001) {
+            return $bruto;
+        }
+
+        $cobro = WaitryOrdenCobroSupport::montoCobro($orden);
+        if ($cobro > 0.0001) {
+            return $cobro;
+        }
+
+        if ($anitaTotal !== null && $anitaTotal > 0.0001) {
+            return round($anitaTotal, 2);
+        }
+
+        return 0.0;
+    }
+
+    /**
      * @param  array<string, mixed>  $orden
      */
     private function esPagadaWaitry(array $orden): bool
     {
-        return WaitryOrdenCobroSupport::cobradaEnTotem($orden);
+        return WaitryOrdenCobroSupport::resolverEstadoPagoWaitry($orden) === true;
     }
 
     /**
@@ -603,14 +807,7 @@ final class WaitryCierreJornadaService
      */
     private function montoTotalWaitry(array $orden): float
     {
-        $total = isset($orden['totalAmount']) && is_numeric($orden['totalAmount'])
-            ? round((float) $orden['totalAmount'], 2)
-            : 0.0;
-        if ($total <= 0.0001) {
-            $total = WaitryOrdenCobroSupport::montoCobro($orden);
-        }
-
-        return $total;
+        return $this->montoImporteWaitryConciliacion($orden, null);
     }
 
     private function etiquetaEstado(string $estado): string
@@ -699,31 +896,105 @@ final class WaitryCierreJornadaService
     /**
      * @return array<string, mixed>
      */
+    /**
+     * @param  array{desde:Carbon,hasta:Carbon,etiqueta:string}|null  $ventanaOperativa
+     */
     private function metaConciliacion(
         string $fechaJornada,
         string $fechaFmt,
+        string $fechaWaitryDesde,
         string $fechaWaitryHasta,
         string $fechaWaitryHastaFmt,
         ?JornadaGastronomia $jornada,
+        bool $usaTramoJornada,
+        int $idAnterior,
+        ?array $ventanaOperativa,
+        int $descartadasFueraVentana,
+        int $descartadasPorIdAnterior,
+        string $waitryFuente = 'getordersdetails',
+        ?string $waitryFallbackDe = null,
     ): array {
         $meta = [
-            'waitry_api' => 'getordersdetails',
-            'waitry_desde' => $fechaJornada,
+            'waitry_api' => $waitryFuente,
+            'waitry_desde' => $fechaWaitryDesde,
             'waitry_hasta' => $fechaWaitryHasta,
-            'waitry_rango_etiqueta' => 'Calendario Waitry: '.$fechaFmt.' — '.$fechaWaitryHastaFmt
-                .' (+1 día calendario por ventas después de medianoche)',
-            'anita_criterio' => 'venta.fechajornada = '.$fechaFmt.' (todas las emisiones gastronomía; orderId desde emisión, cuenta o envío KDS)',
+            'waitry_rango_etiqueta' => 'Calendario Waitry API: '.$this->formatearFecha($fechaWaitryDesde)
+                .' — '.$fechaWaitryHastaFmt,
+            'anita_criterio' => 'venta.fechajornada = '.$fechaFmt.' (emisiones gastronomía; orderId en emisión, cuenta o KDS)',
         ];
+        if ($waitryFallbackDe !== null && $waitryFallbackDe !== '') {
+            $meta['waitry_fallback_de'] = $waitryFallbackDe;
+        }
 
-        if ($jornada !== null) {
-            $apertura = $jornada->apertura_en?->format('d/m/Y H:i');
-            $cierre = $jornada->cierre_en?->format('d/m/Y H:i');
-            if ($apertura !== null || $cierre !== null) {
-                $meta['ventana_jornada_etiqueta'] = trim(($apertura ?? '—').' — '.($cierre ?? '—'))
-                    .' (referencia; el proceso inferior usa esta ventana + tramo de IDs Waitry)';
-            }
+        if ($usaTramoJornada && $ventanaOperativa !== null) {
+            $meta['tramo_order_id_desde'] = $idAnterior + 1;
+            $meta['tramo_order_id_anterior'] = $idAnterior;
+            $meta['ventana_operativa'] = $ventanaOperativa['etiqueta'];
+            $meta['waitry_criterio_tramo'] = 'order_id > #'.$idAnterior
+                .' y placed_at dentro de ventana operativa (mismo criterio que Informe Z y proceso Caja)';
+            $meta['descartadas_fuera_ventana'] = $descartadasFueraVentana;
+            $meta['descartadas_por_id_anterior'] = $descartadasPorIdAnterior;
+        } elseif ($jornada !== null) {
+            $meta['ventana_jornada_etiqueta'] = $jornada->apertura_en?->format('d/m/Y H:i')
+                .' — '.($jornada->cierre_en?->format('d/m/Y H:i') ?? 'abierta');
         }
 
         return $meta;
+    }
+
+    /**
+     * getordersdetails primero; si falla o viene vacío, getOrdersPOS en ventana de jornada.
+     *
+     * @return array{
+     *   ordenes: list<array<string, mixed>>,
+     *   fuente: string,
+     *   error?: string,
+     *   fallback_de?: string
+     * }
+     */
+    private function obtenerOrdenesWaitryParaConciliacion(
+        int $empresaId,
+        string $fechaWaitryDesde,
+        string $fechaWaitryHasta,
+        string $fechaJornada,
+        ?JornadaGastronomia $jornada,
+        bool $usaTramoJornada,
+        mixed $cierreHasta = null,
+    ): array {
+        $waitry = $this->analyticsOrdenesService->ordenesPorRangoFecha(
+            $empresaId,
+            $fechaWaitryDesde,
+            $fechaWaitryHasta,
+        );
+
+        if (($waitry['ok'] ?? false) && ($waitry['ordenes'] ?? []) !== []) {
+            return [
+                'ordenes' => $waitry['ordenes'],
+                'fuente' => 'getordersdetails',
+            ];
+        }
+
+        $mapPos = $this->ordenesExternasService->mapOrdenesPosEnVentanaJornada(
+            $empresaId,
+            $fechaJornada,
+            $jornada?->apertura_en,
+            $cierreHasta,
+        );
+
+        if ($mapPos !== []) {
+            return [
+                'ordenes' => array_values($mapPos),
+                'fuente' => 'getOrdersPOS',
+                'fallback_de' => ($waitry['ok'] ?? false)
+                    ? 'getordersdetails_vacio'
+                    : (string) ($waitry['error'] ?? 'getordersdetails_error'),
+            ];
+        }
+
+        return [
+            'ordenes' => [],
+            'fuente' => 'getordersdetails',
+            'error' => $waitry['error'] ?? 'No se pudieron obtener órdenes Waitry.',
+        ];
     }
 }

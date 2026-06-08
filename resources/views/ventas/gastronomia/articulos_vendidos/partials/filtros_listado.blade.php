@@ -13,15 +13,7 @@
     <input type="hidden" name="filtro_busqueda_rapida" id="filtro_busqueda_rapida" value="">
     <div class="card-body bg-light py-2 text-body">
         <div class="form-row align-items-end">
-            <div class="form-group col-md-2 col-sm-6 mb-2">
-                <label class="small mb-1" for="empresa_id">Empresa</label>
-                <select name="empresa_id" id="empresa_id" class="form-control form-control-sm">
-                    <option value="">Todas</option>
-                    @foreach ($empresa_query as $emp)
-                        <option value="{{ $emp->id }}" @selected((int) ($f['empresa_id'] ?? 0) === (int) $emp->id)>{{ $emp->nombre }}</option>
-                    @endforeach
-                </select>
-            </div>
+            @include('includes.listado.filtro_empresa_asignada', ['f' => $f])
             <div class="form-group col-md-2 col-sm-6 mb-2">
                 <label class="small mb-1" for="puntoventa_id">Punto de venta</label>
                 <select name="puntoventa_id" id="puntoventa_id" class="form-control form-control-sm">

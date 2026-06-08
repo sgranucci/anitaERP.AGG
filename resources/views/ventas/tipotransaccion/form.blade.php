@@ -24,18 +24,21 @@
      data-url-tipos="{{ route('tipotransaccion_arca_tipos_cbte') }}">
     <label for="empresa_arca_id" class="col-lg-3 col-form-label">Empresa (ARCA)</label>
     <div class="col-lg-4">
-        <select name="empresa_arca_id" id="empresa_arca_id" class="form-control" data-fouc
-                @if($empresa_query->isEmpty()) disabled @endif>
-            @if($empresa_query->isEmpty())
+        @if($empresa_query->isEmpty())
+            <select name="empresa_arca_id" id="empresa_arca_id" class="form-control" data-fouc disabled>
                 <option value="">Sin empresas WSFE configuradas</option>
-            @else
-                @foreach($empresa_query as $empresa)
-                    <option value="{{ $empresa->id }}" @if((int) $empresa->id === $empresaArcaId) selected @endif>
-                        {{ $empresa->nombre }}
-                    </option>
-                @endforeach
-            @endif
-        </select>
+            </select>
+        @else
+            @include('includes.form-empresa-asignada-control', [
+                'empresa_query' => $empresa_query,
+                'empresa_id' => $empresaArcaId,
+                'id' => 'empresa_arca_id',
+                'name' => 'empresa_arca_id',
+                'required' => false,
+                'mostrar_opcion_vacia' => false,
+                'data_fouc' => true,
+            ])
+        @endif
         <small class="form-text text-muted">
             Use <strong>Actualizar desde ARCA</strong> para cargar el catálogo AFIP.
             @if(!empty($webserviceArcaEtiqueta))
@@ -97,6 +100,19 @@
                 <option value="{{ $value }}" selected="select">{{ $operacion }}</option>    
             @else
                 <option value="{{ $value }}">{{ $operacion }}</option>    
+            @endif
+        @endforeach
+    </select>
+</div>
+<div class="form-group row">
+    <label for="operacionstock" class="col-lg-3 col-form-label requerido">Operaci&oacute;n sobre stock</label>
+    <select name="operacionstock" class="col-lg-4 form-control" required>
+        <option value="">-- Elija operaci&oacute;n sobre stock --</option>
+        @foreach($operacionStockEnum as $value => $operacionStock)
+            @if( $value == old('operacionstock', $data?->operacionstock ?? ''))
+                <option value="{{ $value }}" selected="select">{{ $operacionStock }}</option>
+            @else
+                <option value="{{ $value }}">{{ $operacionStock }}</option>
             @endif
         @endforeach
     </select>

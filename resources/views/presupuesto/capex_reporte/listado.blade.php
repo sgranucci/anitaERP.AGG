@@ -63,25 +63,27 @@
     <table class="data">
         <colgroup>
             <col style="width: 3%;">
-            <col style="width: 6%;">
-            <col style="width: 6%;">
-            <col style="width: 5%;">
-            <col style="width: 5%;">
-            <col style="width: 5%;">
-            <col style="width: 6%;">
+            <col style="width: 4%;">
+            <col style="width: 7%;">
+            <col style="width: 4%;">
+            <col style="width: 4%;">
+            <col style="width: 4%;">
+            <col style="width: 4%;">
             <col style="width: 3%;">
             <col style="width: 3%;">
             <col style="width: 3%;">
             <col style="width: 3%;">
             <col style="width: 4%;">
-            <col style="width: 5%;">
-            <col style="width: 5%;">
-            <col style="width: 5%;">
-            <col style="width: 5%;">
-            <col style="width: 5%;">
-            <col style="width: 5%;">
+            <col style="width: 4%;">
+            <col style="width: 4%;">
+            <col style="width: 3%;">
             <col style="width: 7%;">
-            <col style="width: 12%;">
+            <col style="width: 4%;">
+            <col style="width: 4%;">
+            <col style="width: 4%;">
+            <col style="width: 5%;">
+            <col style="width: 5%;">
+            <col style="width: 10%;">
         </colgroup>
         @include('presupuesto.capex_reporte.partials.tabla_datos', ['filas' => $filas])
     </table>

@@ -18,15 +18,11 @@
             </div>
             <div class="card-body">
                 <form method="get" action="{{ route('arca_caea') }}" class="d-flex flex-wrap align-items-end mb-3">
-                    <div class="form-group mr-2 mb-2">
-                        <label for="empresa_id">Empresa</label>
-                        <select name="empresa_id" id="empresa_id" class="form-control">
-                            <option value="">Todas</option>
-                            @foreach ($empresas as $e)
-                                <option value="{{ $e->id }}" @selected((int) $empresaId === (int) $e->id)>{{ $e->nombre }}</option>
-                            @endforeach
-                        </select>
-                    </div>
+                    @include('includes.listado.filtro_empresa_asignada_campo', [
+                        'empresas' => $empresas,
+                        'empresa_id' => $empresaId,
+                        'permite_todas' => true,
+                    ])
                     <div class="form-group mr-2 mb-2">
                         <label for="periodo">Periodo (AAAAMM)</label>
                         <input type="number" name="periodo" id="periodo" class="form-control" min="200001" max="299912"
@@ -54,11 +50,14 @@
                                 @csrf
                                 <div class="form-group mr-2 mb-2">
                                     <label for="sol_empresa_id" class="mr-1">Empresa</label>
-                                    <select name="empresa_id" id="sol_empresa_id" class="form-control" required>
-                                        @foreach ($empresas as $e)
-                                            <option value="{{ $e->id }}" @selected((int) $empresaId === (int) $e->id)>{{ $e->nombre }}</option>
-                                        @endforeach
-                                    </select>
+                                    @include('includes.form-empresa-asignada-control', [
+                                        'empresa_query' => $empresas,
+                                        'empresa_id' => $empresaId,
+                                        'id' => 'sol_empresa_id',
+                                        'name' => 'empresa_id',
+                                        'required' => true,
+                                        'mostrar_opcion_vacia' => false,
+                                    ])
                                 </div>
                                 <div class="form-group mr-2 mb-2">
                                     <label for="sol_periodo" class="mr-1">Periodo</label>

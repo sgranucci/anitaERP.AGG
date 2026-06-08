@@ -214,6 +214,7 @@ final class GastronomiaCierreTurnoReporteSupport
             (int) $turno->empresa_id,
             $fechaJornada,
             $turno->habilitacion_en,
+            $turno->cierre_en,
         );
 
         $mediosContado = GastronomiaTurnoMediosContadoCierreSupport::desdeAlmacenado(
@@ -298,7 +299,7 @@ final class GastronomiaCierreTurnoReporteSupport
 
             if ($empresaId > 0) {
                 $qPar->whereHas('turnoOperativo', fn ($t) => $t->where('empresa_id', $empresaId));
-            } elseif (count($empresasAsignadas) > 1) {
+            } elseif (count($empresasAsignadas) >= 1) {
                 $qPar->whereHas('turnoOperativo', fn ($t) => $t->whereIn('empresa_id', $empresasAsignadas));
             }
 
@@ -337,7 +338,7 @@ final class GastronomiaCierreTurnoReporteSupport
 
             if ($empresaId > 0) {
                 $qCer->where('empresa_id', $empresaId);
-            } elseif (count($empresasAsignadas) > 1) {
+            } elseif (count($empresasAsignadas) >= 1) {
                 $qCer->whereIn('empresa_id', $empresasAsignadas);
             }
 

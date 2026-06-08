@@ -97,6 +97,16 @@ class Articulo extends Model implements Auditable
         return $this->hasMany(Articulo_Archivo::class);
     }
 
+    public function articulo_proveedores()
+    {
+        return $this->hasMany(Articulo_Proveedor::class);
+    }
+
+    public function articulo_partes_unicas()
+    {
+        return $this->hasMany(Articulo_ParteUnica::class, 'articulo_id');
+    }
+
     public function formula_articulo()
     {
         return $this->belongsTo(Formula_Articulo::class, 'formula', 'id');

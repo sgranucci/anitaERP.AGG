@@ -2,6 +2,8 @@
 
 namespace App\Models\Stock;
 
+use App\Models\Configuracion\Empresa;
+use App\Support\Stock\UsuarioDepositoAutorizado;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -12,9 +14,77 @@ class Depmae extends Model
 {
     use DepmaeTrait;
 
-    protected $fillable = ['nombre', 'tipodeposito', 'codigo'];
+    protected $fillable = ['nombre', 'tipodeposito', 'codigo', 'empresa_id'];
     protected $table = 'depmae';
     protected $keyField = 'depm_deposito';
+
+    public function empresas()
+    {
+        return $this->belongsTo(Empresa::class, 'empresa_id');
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder<self>  $query
+     * @return \Illuminate\Database\Eloquent\Builder<self>
+     */
+    public function scopeParaEmpresa($query, int $empresaId)
+    {
+        if ($empresaId <= 0) {
+            return $query;
+        }
+
+        return $query->where('empresa_id', $empresaId);
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder<self>  $query
+     * @return \Illuminate\Database\Eloquent\Builder<self>
+     */
+    public function scopeParaUsuarioAutorizado($query)
+    {
+        return UsuarioDepositoAutorizado::aplicarFiltroQuery($query);
+    }
+
+    public static function autorizadoParaUsuario(int $depmaeId): bool
+    {
+        return UsuarioDepositoAutorizado::depositoAutorizado($depmaeId);
+    }
+
+    public static function autorizadoParaUsuarioYEmpresa(int $depmaeId, int $empresaId): bool
+    {
+        if (! static::existeParaEmpresa($depmaeId, $empresaId)) {
+            return false;
+        }
+
+        return static::autorizadoParaUsuario($depmaeId);
+    }
+
+    public static function existeParaEmpresa(int $depmaeId, int $empresaId): bool
+    {
+        if ($depmaeId <= 0) {
+            return false;
+        }
+
+        $query = static::query()->whereKey($depmaeId);
+
+        return $empresaId > 0
+            ? $query->paraEmpresa($empresaId)->exists()
+            : $query->exists();
+    }
+
+    public function perteneceAEmpresa(int $empresaId): bool
+    {
+        if ($empresaId <= 0) {
+            return true;
+        }
+
+        return (int) $this->empresa_id === $empresaId;
+    }
+
+    private function replicaEnAnita(int $empresaId): bool
+    {
+        return $empresaId <= 1;
+    }
 
     public function sincronizarConAnita(){
         $apiAnita = new ApiAnita();
@@ -74,14 +144,19 @@ class Depmae extends Model
 	    		$tipoDeposito = 'N';
 
             Depmae::create([
-                "nombre" => $data->depm_desc,
-                "tipodeposito" => $tipoDeposito,
-                "codigo" => $key
+                'nombre' => $data->depm_desc,
+                'tipodeposito' => $tipoDeposito,
+                'codigo' => $key,
+                'empresa_id' => 1,
             ]);
         }
     }
 
 	public function guardarAnita($request, $id) {
+        if (! $this->replicaEnAnita((int) $request->empresa_id)) {
+            return;
+        }
+
         $apiAnita = new ApiAnita();
 
 	if (config('app.empresa') == 'Calzados Ferli' ||
@@ -104,6 +179,10 @@ class Depmae extends Model
 	}
 
 	public function actualizarAnita($request, $id) {
+        if (! $this->replicaEnAnita((int) $request->empresa_id)) {
+            return;
+        }
+
         $apiAnita = new ApiAnita();
 
         if (config('app.empresa') == 'Calzados Ferli' ||
@@ -123,7 +202,11 @@ class Depmae extends Model
         $apiAnita->apiCallEscritura($data);
 	}
 
-	public function eliminarAnita($id) {
+	public function eliminarAnita($id, int $empresaId = 1) {
+        if (! $this->replicaEnAnita($empresaId)) {
+            return;
+        }
+
         $apiAnita = new ApiAnita();
         if (config('app.empresa') == 'Calzados Ferli' ||
 	    	config('app.empresa') == 'EL BIERZO')

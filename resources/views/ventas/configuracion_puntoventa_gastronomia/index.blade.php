@@ -39,6 +39,7 @@
                             <th>Tipo factura</th>
                             <th>Salida comandas</th>
                             <th>Salida facturas</th>
+                            <th>Waitry</th>
                             <th class="width80" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -58,6 +59,7 @@
                             <td>{{ optional($data->tipotransaccion)->abreviatura }} — {{ optional($data->tipotransaccion)->nombre }}</td>
                             <td>{{ optional($data->salidaComanda)->nombre }}</td>
                             <td>{{ optional($data->salidaFactura)->nombre }}</td>
+                            <td>{{ ($data->waitry_habilitado ?? true) ? 'Sí' : 'No' }}</td>
                             <td>
                                 @if (can('editar-configuracion-puntoventa-gastronomia', false))
                                     <a href="{{ route('editar_configuracion_puntoventa_gastronomia', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">

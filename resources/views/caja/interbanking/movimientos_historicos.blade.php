@@ -57,15 +57,12 @@ $(function () {
                         ])
                     </div>
                     <form method="get" action="{{ route('interbanking_movimientos_persistidos') }}" class="d-flex flex-wrap align-items-end justify-content-end ml-auto">
-                        <div class="form-group mr-2 mb-2">
-                            <label for="empresa_id" class="mr-1">Empresa</label>
-                            <select name="empresa_id" id="empresa_id" class="form-control">
-                                <option value="">Todas</option>
-                                @foreach ($empresas as $e)
-                                    <option value="{{ $e->id }}" @selected((int)($empresaId ?? 0) === (int)$e->id)>{{ $e->nombre }}</option>
-                                @endforeach
-                            </select>
-                        </div>
+                        @include('includes.listado.filtro_empresa_asignada_campo', [
+                            'empresas' => $empresas,
+                            'empresa_id' => $empresaId ?? null,
+                            'label_class' => 'mr-1',
+                            'permite_todas' => true,
+                        ])
                         <div class="form-group mr-2 mb-2">
                             <label for="fecha_desde" class="mr-1">Proceso desde</label>
                             <input type="date" name="fecha_desde" id="fecha_desde" class="form-control"
@@ -134,12 +131,15 @@ $(function () {
                             <input type="hidden" name="fecha_hasta" value="{{ request('fecha_hasta', $fechaHasta->format('Y-m-d')) }}">
                             <div class="form-group col-md-2">
                                 <label for="sync_empresa_id">Empresa</label>
-                                <select name="empresa_id" id="sync_empresa_id" class="form-control" required>
-                                    <option value="">—</option>
-                                    @foreach ($empresas as $e)
-                                        <option value="{{ $e->id }}" @selected((int)($prefill['empresa_id'] ?? 0) === (int)$e->id)>{{ $e->nombre }}</option>
-                                    @endforeach
-                                </select>
+                                @include('includes.form-empresa-asignada-control', [
+                                    'empresa_query' => $empresas,
+                                    'empresa_id' => $prefill['empresa_id'] ?? null,
+                                    'id' => 'sync_empresa_id',
+                                    'name' => 'empresa_id',
+                                    'required' => true,
+                                    'mostrar_opcion_vacia' => true,
+                                    'opcion_vacia' => '—',
+                                ])
                             </div>
                             <div class="form-group col-md-2">
                                 <label for="sync_account_number">Nº cuenta</label>

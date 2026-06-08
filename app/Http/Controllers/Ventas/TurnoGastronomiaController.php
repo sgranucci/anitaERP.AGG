@@ -83,9 +83,7 @@ class TurnoGastronomiaController extends Controller
 
     private function assertEmpresaPermitida(int $empresaId): void
     {
-        $empresasAsignadas = $this->empresaRepository->traeEmpresasAsignadas();
-
-        if (count($empresasAsignadas) > 1 && ! in_array($empresaId, $empresasAsignadas, true)) {
+        if (! $this->empresaRepository->empresaIdPermitida($empresaId)) {
             abort(403, 'Empresa no permitida para su usuario.');
         }
     }

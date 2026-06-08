@@ -1,0 +1,49 @@
+<?php
+
+namespace App\Mail\Configuracion;
+
+use Illuminate\Bus\Queueable;
+use Illuminate\Mail\Mailable;
+use Illuminate\Queue\SerializesModels;
+
+class ModuloAvisoMail extends Mailable
+{
+    use Queueable, SerializesModels;
+
+    public string $textoCuerpo;
+
+    public string $tituloEvento;
+
+    public ?string $linkConsulta;
+
+    /**
+     * @param  array{contenido: string, nombre: string}|null  $pdfAdjunto
+     */
+    public function __construct(
+        string $asunto,
+        string $textoCuerpo,
+        string $tituloEvento,
+        ?string $linkConsulta,
+        private ?array $pdfAdjunto = null,
+    ) {
+        $this->subject($asunto);
+        $this->textoCuerpo = $textoCuerpo;
+        $this->tituloEvento = $tituloEvento;
+        $this->linkConsulta = $linkConsulta;
+    }
+
+    public function build(): self
+    {
+        $mail = $this->view('mails.configuracion.modulo_aviso');
+
+        if ($this->pdfAdjunto && ! empty($this->pdfAdjunto['contenido']) && ! empty($this->pdfAdjunto['nombre'])) {
+            $mail->attachData(
+                $this->pdfAdjunto['contenido'],
+                $this->pdfAdjunto['nombre'],
+                ['mime' => 'application/pdf']
+            );
+        }
+
+        return $mail;
+    }
+}

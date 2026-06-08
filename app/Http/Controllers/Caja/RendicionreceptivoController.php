@@ -137,7 +137,7 @@ class RendicionreceptivoController extends Controller
         $moneda_query = $this->monedaRepository->all();
         $guia_query = $this->guiaRepository->all();
         $movil_query = $this->movilRepository->all();
-        $empresa_query = $this->empresaRepository->all();
+        $empresa_query = $this->empresaRepository->allFiltrado();
         $cuentacaja_query = $this->cuentacajaRepository->all();
         $conceptogasto_query = $this->conceptogastoRepository->all();
         $ordenservicio_id_query = $this->rendicionreceptivoService->leeOrdenServicioPendiente();
@@ -191,7 +191,7 @@ class RendicionreceptivoController extends Controller
         $moneda_query = $this->monedaRepository->all();
         $guia_query = $this->guiaRepository->all();
         $movil_query = $this->movilRepository->all();
-        $empresa_query = $this->empresaRepository->all();
+        $empresa_query = $this->empresaRepository->allFiltrado();
         $cuentacaja_query = $this->cuentacajaRepository->all();
         $conceptogasto_query = $this->conceptogastoRepository->all();
         $ordenservicio_id_query = $this->rendicionreceptivoService->leeOrdenServicioPendiente();

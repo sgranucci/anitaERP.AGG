@@ -30,16 +30,15 @@
 					@foreach (old('cuentas', $usuario_cuentacontable->count() ? $usuario_cuentacontable : ['']) as $cuentacontable)
             			<tr class="item-cuenta">
 							<td>
-								<select name="empresa_ids[]" data-placeholder="Empresa" class="empresa form-control required" required data-fouc>
-									<option value="">-- Seleccionar --</option>
-									@foreach($empresa_query as $value)
-										@if( (int) $value->id == (int) old('empresa_ids[]', $cuentacontable->cuentacontables->empresa_id ?? ''))
-											<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-										@else
-											<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-										@endif
-									@endforeach
-								</select>
+								@include('includes.form-empresa-asignada-control', [
+									'empresa_query' => $empresa_query,
+									'empresa_id' => $cuentacontable->cuentacontables->empresa_id ?? null,
+									'name' => 'empresa_ids[]',
+									'select_class' => 'empresa',
+									'permite_vacio' => true,
+									'opcion_vacia' => '-- Seleccionar --',
+									'required' => true,
+								])
 							</td>
 							<td>
 								<div class="form-group row" id="cuenta">
@@ -67,12 +66,14 @@
 		<template id="template-renglon-cuenta">
             	<tr class="item-cuenta">
 					<td>
-						<select name="empresa_ids[]" data-placeholder="Empresa" class="empresa form-control required" required data-fouc>
-							<option value="">-- Seleccionar --</option>
-							@foreach($empresa_query as $value)
-								<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-							@endforeach
-						</select>
+						@include('includes.form-empresa-asignada-control', [
+							'empresa_query' => $empresa_query,
+							'name' => 'empresa_ids[]',
+							'select_class' => 'empresa',
+							'permite_vacio' => true,
+							'opcion_vacia' => '-- Seleccionar --',
+							'required' => true,
+						])
 					</td>
 					<td>
 						<div class="form-group row" id="cuenta">

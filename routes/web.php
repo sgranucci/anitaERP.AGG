@@ -335,12 +335,13 @@ Route::delete('stock/mventa/{id}', 'Stock\MventaController@eliminar')->name('eli
  */
 
 Route::get('stock/depmae', 'Stock\DepmaeController@index')->name('depmae');
+Route::get('stock/listadepmae/{formato?}/{busqueda?}', 'Stock\DepmaeController@listar')->name('lista_depmae');
 Route::get('stock/depmae/crear', 'Stock\DepmaeController@crear')->name('crear_depmae');
 Route::post('stock/depmae/consultadeposito', 'Stock\DepmaeController@consultaDeposito')->name('consulta_depmae');
 Route::get('stock/depmae/leer/{codigo}', 'Stock\DepmaeController@leeUnDepositoPorCodigo')->name('leer_depmae');
 Route::post('stock/depmae', 'Stock\DepmaeController@guardar')->name('guardar_depmae');
-Route::get('stock/depmae/{id}/editar', 'Stock\DepmaeController@editar')->name('editar_depmae');
-Route::put('stock/depmae/{id}', 'Stock\DepmaeController@actualizar')->name('actualizar_depmae');
+Route::get('stock/depmae/{id}/editar', 'Stock\DepmaeController@editar')->name('editar_depmae')->middleware('modo.consulta');
+Route::put('stock/depmae/{id}', 'Stock\DepmaeController@actualizar')->name('actualizar_depmae')->middleware('modo.consulta');
 Route::delete('stock/depmae/{id}', 'Stock\DepmaeController@eliminar')->name('eliminar_depmae');
 
 /*
@@ -709,6 +710,13 @@ Route::put('configuracion/empresa/{id}', 'Configuracion\EmpresaController@actual
 Route::delete('configuracion/empresa/{id}', 'Configuracion\EmpresaController@eliminar')->name('eliminar_empresa');
 
 /*
+ * Avisos configurables por módulo
+ */
+Route::get('configuracion/modulo-aviso', 'Configuracion\ModuloAvisoController@index')->name('consultar_modulo_aviso');
+Route::get('configuracion/modulo-aviso/{id}/editar', 'Configuracion\ModuloAvisoController@editar')->name('editar_modulo_aviso');
+Route::put('configuracion/modulo-aviso/{id}', 'Configuracion\ModuloAvisoController@actualizar')->name('actualizar_modulo_aviso');
+
+/*
  * Arbol de aprobacion
  */
 
@@ -721,6 +729,7 @@ Route::delete('configuracion/arbolaprobacion/{id}', 'Configuracion\Arbolaprobaci
 
 Route::get('arbolaprobacion/aprobar/{tipocomprobante}/{comprobante_id}/{hash}', 'Configuracion\ArbolaprobacionController@aprobar');
 Route::post('arbolaprobacion/aprobar-requisicion', 'Configuracion\ArbolaprobacionController@confirmarAprobacionRequisicion')->name('aprobar_requisicion_externo');
+Route::post('arbolaprobacion/aprobar-requisicion-sala', 'Configuracion\ArbolaprobacionController@confirmarAprobacionRequisicionSala')->name('aprobar_requisicion_sala_externo');
 Route::post('arbolaprobacion/aprobar-ordencompra', 'Configuracion\ArbolaprobacionController@confirmarAprobacionOrdencompra')->name('aprobar_ordencompra_externo');
 Route::get('arbolaprobacion/buscarechazo/{tipocomprobante}/{comprobante_id}/{hash}', 'Configuracion\ArbolaprobacionController@buscaRechazo')->name('busca_rechazo');
 Route::put('arbolaprobacion/rechazar', 'Configuracion\ArbolaprobacionController@rechazar')->name('rechazar');
@@ -787,6 +796,7 @@ Route::get('contable/asiento/{id}/editar', 'Contable\AsientoController@editar')-
 Route::put('contable/actualizarasiento/{id}', 'Contable\AsientoController@actualizar')->name('actualizar_asiento');
 Route::delete('contable/asiento/{id}', 'Contable\AsientoController@eliminar')->name('eliminar_asiento');
 Route::get('contable/listaasiento/{formato?}/{busqueda?}', 'Contable\AsientoController@listar')->name('lista_asiento');
+Route::get('contable/asiento/{id}/imprimir-pdf', 'Contable\AsientoController@imprimirPdf')->name('imprimir_pdf_asiento');
 Route::post('contable/copiar_asiento', 'Contable\AsientoController@copiarAsiento')->name('copiar_asiento');
 Route::post('contable/revertir_asiento', 'Contable\AsientoController@revertirAsiento')->name('revertir_asiento');
 
@@ -822,7 +832,12 @@ Route::get('stock/articulo', 'Stock\ArticuloController@index')->name('articulo')
 Route::get('stock/articulo/crear', 'Stock\ArticuloController@crear')->name('crear_articulo');
 Route::post('stock/articulo/sincronizar-anita', 'Stock\ArticuloController@sincronizarDesdeAnita')->name('sincronizar_articulo_anita');
 Route::post('stock/articulo', 'Stock\ArticuloController@guardar')->name('guardar_articulo');
+Route::get('stock/articulo/{articulo_id}/precio-proveedor/{proveedor_id}', 'Stock\ArticuloController@precioProveedorArticulo')->name('precio_proveedor_articulo');
+Route::get('stock/articulo/resolver-proveedor/{proveedor_id}', 'Stock\ArticuloController@resolverArticuloProveedor')->name('resolver_articulo_proveedor');
 Route::get('stock/articulo/{id}/editar', 'Stock\ArticuloController@editar')->name('editar_articulo')->middleware('modo.consulta');
+Route::get('stock/articulo/{id}/partes-unicas', 'Stock\ArticuloParteUnicaController@index')->name('articulo_partes_unicas');
+Route::post('stock/articulo/{id}/partes-unicas', 'Stock\ArticuloParteUnicaController@guardar')->name('crear_articulo_parte_unica');
+Route::delete('stock/articulo/parte-unica/{id}', 'Stock\ArticuloParteUnicaController@eliminar')->name('eliminar_articulo_parte_unica');
 Route::put('stock/articulo/{id}', 'Stock\ArticuloController@actualizar')->name('actualizar_articulo')->middleware('modo.consulta');
 Route::delete('stock/articulo/{id}', 'Stock\ArticuloController@eliminar')->name('eliminar_articulo');
 Route::get('stock/download_articulo/{sku}', 'Stock\ArticuloController@download')->name('download_articulo');
@@ -927,6 +942,53 @@ Route::post('stock/prestamo/{id}/devolver', 'Stock\PrestamoController@devolver')
 Route::post('stock/prestamo/{id}/cancelar', 'Stock\PrestamoController@cancelar')->name('cancelar_prestamo');
 Route::post('stock/prestamo/{id}/reenviar-correo', 'Stock\PrestamoController@reenviarCorreo')->name('reenviar_correo_prestamo');
 Route::get('stock/prestamo/api/saldo-articulo', 'Stock\PrestamoController@saldoArticulo')->name('prestamo_saldo_articulo');
+
+/*
+ * Recepción y devolución a proveedores
+ */
+Route::get('stock/recepcion-proveedor', 'Stock\RecepcionProveedorController@index')->name('recepcion_proveedor');
+Route::get('stock/recepcion-proveedor/crear', 'Stock\RecepcionProveedorController@crear')->name('crear_recepcion_proveedor');
+Route::post('stock/recepcion-proveedor', 'Stock\RecepcionProveedorController@guardar')->name('guardar_recepcion_proveedor');
+Route::get('stock/recepcion-proveedor/{id}/editar', 'Stock\RecepcionProveedorController@editar')->name('editar_recepcion_proveedor');
+Route::put('stock/recepcion-proveedor/{id}', 'Stock\RecepcionProveedorController@actualizar')->name('actualizar_recepcion_proveedor');
+Route::post('stock/recepcion-proveedor/{id}/confirmar', 'Stock\RecepcionProveedorController@confirmar')->name('confirmar_recepcion_proveedor');
+Route::get('stock/recepcion-proveedor/api/precarga-oc', 'Stock\RecepcionProveedorController@apiPrecargaOc')->name('recepcion_proveedor_precarga_oc');
+Route::get('stock/listarecepcionproveedor/{formato?}/{busqueda?}', 'Stock\RecepcionProveedorController@listar')->name('lista_recepcion_proveedor');
+Route::get('stock/recepcion-proveedor/{id}/com-pdf', 'Stock\RecepcionProveedorController@imprimirCom')->name('recepcion_proveedor_com_pdf');
+Route::get('stock/recepcion-proveedor/{id}/devolucion', 'Stock\RecepcionProveedorController@crearDevolucion')->name('crear_devolucion_recepcion_proveedor');
+Route::post('stock/recepcion-proveedor/{id}/devolucion', 'Stock\RecepcionProveedorController@guardarDevolucion')->name('guardar_devolucion_recepcion_proveedor');
+Route::post('stock/recepcion-proveedor/{id}/anular', 'Stock\RecepcionProveedorController@anular')->name('anular_recepcion_proveedor');
+Route::post('stock/recepcion-proveedor/{id}/ocr', 'Stock\RecepcionProveedorController@subirOcr')->name('recepcion_proveedor_ocr');
+Route::get('configuracion/recepcion-proveedor', 'Configuracion\ConfiguracionRecepcionProveedorController@index')->name('configuracion_recepcion_proveedor');
+Route::put('configuracion/recepcion-proveedor', 'Configuracion\ConfiguracionRecepcionProveedorController@actualizar')->name('actualizar_configuracion_recepcion_proveedor');
+Route::post('configuracion/recepcion-proveedor/tolerancias', 'Configuracion\ConfiguracionRecepcionProveedorController@guardarTolerancias')->name('guardar_tolerancias_recepcion_proveedor');
+
+/*
+ * Recuento de inventario por depósito
+ */
+Route::get('stock/recuento', 'Stock\RecuentoController@index')->name('recuento');
+Route::get('stock/listarecuento/{formato?}/{busqueda?}', 'Stock\RecuentoController@listar')->name('lista_recuento');
+Route::get('stock/recuento/crear', 'Stock\RecuentoController@crear')->name('crear_recuento');
+Route::post('stock/recuento', 'Stock\RecuentoController@guardar')->name('guardar_recuento');
+Route::get('stock/recuento/{id}/editar', 'Stock\RecuentoController@editar')->name('editar_recuento');
+Route::put('stock/recuento/{id}', 'Stock\RecuentoController@actualizar')->name('actualizar_recuento');
+Route::delete('stock/recuento/{id}', 'Stock\RecuentoController@eliminar')->name('eliminar_recuento');
+Route::get('stock/recuento/{id}/ver', 'Stock\RecuentoController@ver')->name('ver_recuento');
+Route::post('stock/recuento/{id}/suspender', 'Stock\RecuentoController@suspender')->name('suspender_recuento');
+Route::post('stock/recuento/{id}/reactivar', 'Stock\RecuentoController@reactivar')->name('reactivar_recuento');
+Route::post('stock/recuento/{id}/anular', 'Stock\RecuentoController@anular')->name('anular_recuento');
+Route::post('stock/recuento/{id}/cerrar-parcial', 'Stock\RecuentoController@cerrarParcial')->name('cerrar_recuento_parcial');
+Route::post('stock/recuento/{id}/cerrar-total', 'Stock\RecuentoController@cerrarTotal')->name('cerrar_recuento_total');
+Route::post('stock/recuento/{id}/anular-cierre', 'Stock\RecuentoController@anularCierre')->name('anular_cierre_recuento');
+Route::get('stock/recuento/{id}/pdf', 'Stock\RecuentoController@pdf')->name('imprimir_pdf_recuento');
+Route::get('stock/recuento/api/saldo-articulo', 'Stock\RecuentoController@saldoArticulo')->name('recuento_saldo_articulo');
+Route::get('stock/recuento/movimientos-articulo', 'Stock\RecuentoMovimientosArticuloController@index')->name('recuento_movimientos_articulo')->middleware('modo.consulta');
+Route::get('stock/listarecuento-movimientos-articulo/{formato?}', 'Stock\RecuentoMovimientosArticuloController@listar')->name('lista_recuento_movimientos_articulo')->middleware('modo.consulta');
+Route::post('stock/recuento/api/aleatorio', 'Stock\RecuentoController@aleatorio')->name('recuento_aleatorio');
+Route::post('stock/recuento/api/importar-preview', 'Stock\RecuentoController@importarPreview')->name('importar_recuento_preview');
+Route::get('stock/recuento/{id}/importar', 'Stock\RecuentoController@importarForm')->name('importar_recuento_form');
+Route::post('stock/recuento/{id}/importar', 'Stock\RecuentoController@importar')->name('importar_recuento');
+Route::get('stock/recuento/{id}/archivo/{nombre}', 'Stock\RecuentoController@descargarArchivo')->name('descargar_archivo_recuento');
 
 /*
  * Endpoints públicos por token (sin login) que reciben los administradores
@@ -1312,6 +1374,7 @@ Route::get('ventas/gastronomia/informe-gerente', 'Ventas\GastronomiaInformeGeren
 Route::get('ventas/gastronomia/articulos-vendidos', 'Ventas\GastronomiaArticulosVendidosController@index')->name('gastronomia_articulos_vendidos')->middleware('modo.consulta');
 Route::get('ventas/lista-gastronomia-articulos-vendidos/{formato}', 'Ventas\GastronomiaArticulosVendidosController@exportar')->name('listar_gastronomia_articulos_vendidos');
 Route::get('ventas/gastronomia/articulos-vendidos/api/{articuloId}/facturas', 'Ventas\GastronomiaArticulosVendidosController@apiFacturas')->name('gastronomia_articulos_vendidos_api_facturas');
+Route::get('ventas/gastronomia/articulos-vendidos/api/{articuloId}/movimientos', 'Ventas\GastronomiaArticulosVendidosController@apiMovimientos')->name('gastronomia_articulos_vendidos_api_movimientos');
 
 Route::get('ventas/arca-caea', 'Ventas\ArcaCaeaController@index')->name('arca_caea');
 Route::get('ventas/arca-caea/{id}', 'Ventas\ArcaCaeaController@show')->name('arca_caea_ver');
@@ -1530,6 +1593,7 @@ Route::post('graficos/generaordenes', 'Graficos\GraficosController@generaOrdenes
  */
 
 Route::get('caja/cuentacaja', 'Caja\CuentacajaController@index')->name('cuentacaja');
+Route::get('caja/listacuentacaja/{formato?}/{busqueda?}', 'Caja\CuentacajaController@listar')->name('lista_cuentacaja');
 Route::get('caja/cuentacaja/crear', 'Caja\CuentacajaController@crear')->name('crear_cuentacaja');
 Route::post('caja/cuentacaja', 'Caja\CuentacajaController@guardar')->name('guardar_cuentacaja');
 Route::get('caja/cuentacaja/{id}/editar', 'Caja\CuentacajaController@editar')->name('editar_cuentacaja')->middleware('modo.consulta');
@@ -1704,6 +1768,11 @@ Route::get('caja/listarwaitrycierrejornada/{formato?}', 'Caja\WaitryCierreJornad
 Route::get('caja/waitry-cierre-jornada/api/proceso/analizar', 'Caja\WaitryCierreJornadaController@apiProcesoAnalizar')->name('waitry_cierre_jornada_api_proceso_analizar');
 Route::post('caja/waitry-cierre-jornada/api/proceso/recalcular', 'Caja\WaitryCierreJornadaController@apiProcesoRecalcular')->name('waitry_cierre_jornada_api_proceso_recalcular');
 Route::get('caja/waitry-cierre-jornada/api/proceso/preview-factura', 'Caja\WaitryCierreJornadaController@apiProcesoPreviewFactura')->name('waitry_cierre_jornada_api_proceso_preview_factura');
+Route::get('caja/waitry-cierre-jornada/api/proceso/preview-lotes-factura', 'Caja\WaitryCierreJornadaController@apiProcesoPreviewLotesFactura')->name('waitry_cierre_jornada_api_proceso_preview_lotes_factura');
+Route::post('caja/waitry-cierre-jornada/api/proceso/emitir-factura', 'Caja\WaitryCierreJornadaController@apiProcesoEmitirFactura')->name('waitry_cierre_jornada_api_proceso_emitir_factura');
+Route::post('caja/waitry-cierre-jornada/api/proceso/grabar-asientos', 'Caja\WaitryCierreJornadaController@apiProcesoGrabarAsientos')->name('waitry_cierre_jornada_api_proceso_grabar_asientos');
+Route::post('caja/waitry-cierre-jornada/api/proceso/revertir', 'Caja\WaitryCierreJornadaController@apiProcesoRevertir')->name('waitry_cierre_jornada_api_proceso_revertir');
+Route::get('caja/waitry-cierre-jornada/api/proceso/opciones-emitir', 'Caja\WaitryCierreJornadaController@apiProcesoOpcionesEmitir')->name('waitry_cierre_jornada_api_proceso_opciones_emitir');
 Route::get('caja/waitry-cierre-jornada/api/proceso/movimientos/{grupo}', 'Caja\WaitryCierreJornadaController@apiProcesoMovimientosGrupo')->name('waitry_cierre_jornada_api_proceso_movimientos');
 Route::get('caja/waitry-cierre-jornada/api/proceso/cuadro-detalle/{fila}/{medio}', 'Caja\WaitryCierreJornadaController@apiProcesoCuadroDetalle')->name('waitry_cierre_jornada_api_proceso_cuadro_detalle');
 Route::get('caja/waitry-cierre-jornada/api/proceso/config/{empresaId}', 'Caja\WaitryCierreJornadaController@apiProcesoConfig')->name('waitry_cierre_jornada_api_proceso_config');
@@ -2051,8 +2120,8 @@ Route::get('compras/listaprecio_proveedor', 'Compras\Listaprecio_ProveedorContro
 Route::get('compras/listar_listaprecio_proveedor/{formato?}/{busqueda?}', 'Compras\Listaprecio_ProveedorController@listar')->name('listar_listaprecio_proveedor');
 Route::get('compras/listaprecio_proveedor/crear', 'Compras\Listaprecio_ProveedorController@crear')->name('crear_listaprecio_proveedor');
 Route::post('compras/listaprecio_proveedor', 'Compras\Listaprecio_ProveedorController@guardar')->name('guardar_listaprecio_proveedor');
-Route::get('compras/listaprecio_proveedor/{id}/editar', 'Compras\Listaprecio_ProveedorController@editar')->name('editar_listaprecio_proveedor');
-Route::put('compras/listaprecio_proveedor/{id}', 'Compras\Listaprecio_ProveedorController@actualizar')->name('actualizar_listaprecio_proveedor');
+Route::get('compras/listaprecio_proveedor/{id}/editar', 'Compras\Listaprecio_ProveedorController@editar')->name('editar_listaprecio_proveedor')->middleware('modo.consulta');
+Route::put('compras/listaprecio_proveedor/{id}', 'Compras\Listaprecio_ProveedorController@actualizar')->name('actualizar_listaprecio_proveedor')->middleware('modo.consulta');
 Route::delete('compras/listaprecio_proveedor/{id}', 'Compras\Listaprecio_ProveedorController@eliminar')->name('eliminar_listaprecio_proveedor');
 Route::post('compras/listaprecio_proveedor/{id}/cambiar_estado', 'Compras\Listaprecio_ProveedorController@cambiarEstado')->name('cambiar_estado_listaprecio_proveedor');
 Route::get('compras/leer_historia_listaprecio_proveedor/{listaprecio_proveedor_id}', 'Compras\Listaprecio_ProveedorController@leerHistoria')->name('lee_historia_listaprecio_proveedor');
@@ -2097,6 +2166,13 @@ Route::get('ayuda', 'AyudaController@index')->name('ayuda');
 Route::get('compras/manual', 'Compras\ManualComprasController@index')->name('manual_compras');
 Route::get('compras/manual/descargar-pdf', 'Compras\ManualComprasController@descargarPdf')->name('manual_compras_pdf');
 Route::get('compras/manual/descargar-word', 'Compras\ManualComprasController@descargarWord')->name('manual_compras_word');
+
+/*
+ * Manual de usuario — Recuento de inventario (Stock)
+ */
+Route::get('stock/recuento/manual', 'Stock\ManualStockController@index')->name('manual_stock');
+Route::get('stock/recuento/manual/descargar-pdf', 'Stock\ManualStockController@descargarPdf')->name('manual_stock_pdf');
+Route::get('stock/recuento/manual/descargar-word', 'Stock\ManualStockController@descargarWord')->name('manual_stock_word');
 
 /* Modulo receptivo */
 
@@ -2339,6 +2415,20 @@ Route::post('sala/prioridad-sala', 'Sala\PrioridadSalaController@guardar')->name
 Route::get('sala/prioridad-sala/{id}/editar', 'Sala\PrioridadSalaController@editar')->name('editar_prioridad_sala');
 Route::put('sala/prioridad-sala/{id}', 'Sala\PrioridadSalaController@actualizar')->name('actualizar_prioridad_sala');
 Route::delete('sala/prioridad-sala/{id}', 'Sala\PrioridadSalaController@eliminar')->name('eliminar_prioridad_sala');
+
+Route::get('sala/requisicion-sala', 'Sala\RequisicionSalaController@index')->name('consultar_requisicion_sala');
+Route::get('sala/listarequisicionsala/{formato?}/{busqueda?}', 'Sala\RequisicionSalaController@listar')->name('listar_requisicion_sala');
+Route::get('sala/requisicion-sala/crear', 'Sala\RequisicionSalaController@crear')->name('crear_requisicion_sala');
+Route::get('sala/requisicion-sala/consulta-npu', 'Sala\RequisicionSalaController@consultaNumeroParteUnica')->name('requisicion_sala_consulta_npu');
+Route::get('sala/requisicion-sala/{id}/imprimir-pdf', 'Sala\RequisicionSalaController@imprimirPdf')->name('imprimir_pdf_requisicion_sala');
+Route::post('sala/requisicion-sala', 'Sala\RequisicionSalaController@guardar')->name('guardar_requisicion_sala');
+Route::get('sala/requisicion-sala/visualizar/{id}/{hash}', 'Sala\RequisicionSalaController@visualizar')->name('visualizar_requisicion_sala');
+Route::get('sala/requisicion-sala/{id}/editar', 'Sala\RequisicionSalaController@editar')->name('editar_requisicion_sala');
+Route::put('sala/requisicion-sala/{id}', 'Sala\RequisicionSalaController@actualizar')->name('actualizar_requisicion_sala');
+Route::delete('sala/requisicion-sala/{id}', 'Sala\RequisicionSalaController@eliminar')->name('eliminar_requisicion_sala');
+Route::get('sala/requisicion-sala/{id}/archivo/{archivo}', 'Sala\RequisicionSalaController@descargarArchivo')->name('requisicion_sala_archivo');
+Route::post('sala/requisicion-sala/{id}/enviar-arbol-aprobacion', 'Sala\RequisicionSalaController@enviarArbolAprobacion')->name('enviar_arbol_requisicion_sala');
+Route::get('sala/leer_historia_requisicion_sala/{id}', 'Sala\RequisicionSalaController@leerHistoria')->name('lee_historia_requisicion_sala');
 
 /* Modulo UIF */
 /*

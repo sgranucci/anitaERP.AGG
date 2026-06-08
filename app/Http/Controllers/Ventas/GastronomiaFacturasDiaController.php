@@ -18,6 +18,7 @@ use App\Services\Ventas\Gastronomia\GastronomiaCategoriafidelidadCanjeService;
 use App\Services\Ventas\Gastronomia\GastronomiaFacturaMedioPagoService;
 use App\Services\Ventas\Gastronomia\GastronomiaTicketCanjePremioService;
 use App\Services\Ventas\Gastronomia\Waitry\WaitryOrdenesExternasService;
+use App\Support\Ventas\Gastronomia\GastronomiaVentaWaitryComandasSupport;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
 use App\Support\Ventas\GastronomiaDepositoConfigSupport;
 use App\Support\Ventas\GastronomiaVentaDetalleSupport;
@@ -351,6 +352,7 @@ class GastronomiaFacturasDiaController extends Controller
             $meta->load('cuenta');
         }
         $venta->setRelation('gastronomiaEmision', $meta);
+        $meta->setRelation('venta', $venta);
 
         $cobranzas = GastronomiaVentaDetalleSupport::cobranzasDeVenta($venta);
         $movimientosInsumos = GastronomiaVentaDetalleSupport::movimientosInsumos($ventaId);
@@ -389,9 +391,15 @@ class GastronomiaFacturasDiaController extends Controller
             && $cobranzas->isNotEmpty()
             && ! ($esComprobanteNc ?? false);
 
+        $waitryComandas = GastronomiaVentaWaitryComandasSupport::comandasDesdeEmision($meta);
+
         return view('ventas.gastronomia.facturas_dia.ver', [
             'meta' => $meta,
             'venta' => $venta,
+            'waitry_comandas' => $waitryComandas,
+            'waitry_comandas_total' => GastronomiaVentaWaitryComandasSupport::totalComandas($meta),
+            'es_factura_cierre_jornada' => GastronomiaVentaWaitryComandasSupport::esFacturaCierreJornadaProceso($meta),
+            'cierre_jornada_proceso_lote' => $meta->cierre_jornada_proceso_lote,
             'cobranzas' => $cobranzas,
             'movimientosInsumos' => $movimientosInsumos,
             'insumosPorDeposito' => $insumosPorDeposito,

@@ -89,11 +89,17 @@
             </div>
             <div class="col-sm-6">
                 <div class="form-group row">
-    				<label for="skualternativo" class="col-lg-4 col-form-label">SKU alternativo</label>
+    				<label for="skualternativo" class="col-lg-4 col-form-label" title="SKU alternativo / insumo">SKU Alt./Insumo</label>
     				<div class="col-lg-5">
     					<input type="text" name="skualternativo" id="skualternativo" class="form-control" value="{{old('skualternativo', $producto->skualternativo ?? '')}}"/>
                 	</div>
-                </div>     
+                </div>
+                <div class="form-group row">
+                    <div class="col-lg-4"></div>
+                    <div class="col-lg-8">
+                        <small class="form-text text-muted">Si este art&iacute;culo debe apuntar a un insumo, ingrese aqu&iacute; el SKU de ese insumo.</small>
+                    </div>
+                </div>
                 <div class="form-group row">
     				<label for="unidadesxenvase" class="col-lg-4 col-form-label">Unidades x envase</label>
     				<div class="col-lg-2">

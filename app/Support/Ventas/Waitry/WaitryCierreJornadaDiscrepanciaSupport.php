@@ -30,6 +30,10 @@ final class WaitryCierreJornadaDiscrepanciaSupport
             return 'Presente en ERP, ausente en Waitry del rango consultado';
         }
 
+        if (WaitryOrdenEstadoSupport::esAnuladaPorDescuentoTotalLinea($ln)) {
+            return null;
+        }
+
         if (($ln['paid_waitry'] ?? null) === false) {
             return 'Impaga en Waitry';
         }

@@ -2,7 +2,80 @@ var ptrDeposito_id;
 var ptrCodigoDeposito_id;
 var ptrDescripcionDeposito;
 
+function esFormularioDepmaeAbm() {
+    return $('#form-general').length && $('#codigo[name="codigo"]').length;
+}
+
+function empresaIdParaConsultaDeposito() {
+    if (esFormularioDepmaeAbm()) {
+        return '';
+    }
+    var $emp = $('#empresa_id');
+    if (!$emp.length) {
+        return '';
+    }
+    return String($emp.val() || '').trim();
+}
+
+function actualizarLinkEditarDeposito($ctx, depositoId) {
+    if (!$ctx || !$ctx.length) {
+        return;
+    }
+    var $link = $ctx.find('.btn-link-editar-deposito');
+    if (!$link.length) {
+        return;
+    }
+    var id = parseInt(depositoId, 10) || 0;
+    if (id > 0) {
+        $link.attr('href', carpetaBase + '/stock/depmae/' + id + '/editar?origen=modal_consulta&vista=consulta').removeClass('d-none');
+    } else {
+        $link.attr('href', '#').addClass('d-none');
+    }
+}
+
+function limpiarCamposDepositoEnFormulario($ctx) {
+    if (!$ctx || !$ctx.length) {
+        return;
+    }
+    $ctx.find('.deposito_id').val('').trigger('change');
+    $ctx.find('.codigodeposito').val('');
+    $ctx.find('.descripciondeposito').val('');
+    actualizarLinkEditarDeposito($ctx, 0);
+}
+
+/**
+ * Si el formulario tiene select #empresa_id vacío, precarga la empresa del depósito elegido.
+ */
+function aplicarEmpresaDesdeDeposito(empresaId) {
+    var $emp = $('#empresa_id');
+    if (!$emp.length || !$emp.is('select')) {
+        return;
+    }
+    var empId = String(empresaId || '').trim();
+    if (!empId) {
+        return;
+    }
+    var actual = String($emp.val() || '').trim();
+    if (actual !== '') {
+        return;
+    }
+    window._omitirLimpiarDepositoAlCambiarEmpresa = true;
+    $emp.val(empId).trigger('change');
+    window._omitirLimpiarDepositoAlCambiarEmpresa = false;
+}
+
 function buscar_datos_deposito(consulta) {
+    var payload = {
+        consulta: consulta || '',
+    };
+    if (typeof window.payloadExtraConsultaDeposito === 'function') {
+        $.extend(payload, window.payloadExtraConsultaDeposito());
+    }
+    var empresaId = empresaIdParaConsultaDeposito();
+    if (empresaId && !payload.empresa_ids) {
+        payload.empresa_id = empresaId;
+    }
+
     $.ajax({
         url: carpetaBase + '/stock/depmae/consultadeposito',
         type: 'POST',
@@ -10,9 +83,7 @@ function buscar_datos_deposito(consulta) {
         headers: {
             'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content'),
         },
-        data: {
-            consulta: consulta || '',
-        },
+        data: payload,
     })
         .done(function (respuesta) {
             var html = '';
@@ -32,12 +103,43 @@ function buscar_datos_deposito(consulta) {
         });
 }
 
-$('input').keydown(function (e) {
-    if (e.which === 13) {
-        e.preventDefault();
-        return false;
+function notificarDepositoAplicado($ctx, data) {
+    if (!$ctx || !$ctx.length) {
+        return;
     }
+    $ctx.find('.deposito_id').trigger('change');
+    if (typeof window.onDepositoAplicadoEnFormulario === 'function') {
+        window.onDepositoAplicadoEnFormulario(data, $ctx);
+    }
+}
+
+$('input').keydown(function (e) {
+    if (e.which !== 13 && e.key !== 'Enter') {
+        return;
+    }
+    if ($(this).is('.codigodeposito, #consultadeposito')) {
+        return;
+    }
+    if ($(this).closest('#tabla-recuento-items').length) {
+        return;
+    }
+    e.preventDefault();
+    return false;
 });
+
+$(document)
+    .off('keydown.leerDepositoEnter', '.codigodeposito')
+    .on('keydown.leerDepositoEnter', '.codigodeposito', function (e) {
+        if (e.which !== 13 && e.key !== 'Enter') {
+            return;
+        }
+        if (esFormularioDepmaeAbm()) {
+            return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        leerDepositoPorCodigo($(this).val(), this);
+    });
 
 $(document).on('keyup', '#consultadeposito', function () {
     buscar_datos_deposito($(this).val());
@@ -89,6 +191,7 @@ function activa_eventos_consultadeposito() {
             var codigo = $tr.find('.codigo').html();
             var descripcion = $tr.find('.descripcion').html();
             var tipodeposito = $tr.find('.tipodeposito').html() || '';
+            var empresaIdDep = $tr.find('.empresa-id').html() || '';
 
             if ($('#form-general').length && $('#codigo[name="codigo"]').length
                 && typeof window.aplicarDepositoEnFormularioAbm === 'function') {
@@ -104,9 +207,27 @@ function activa_eventos_consultadeposito() {
                 return;
             }
 
+            if (ptrDeposito_id && ptrDeposito_id.length && ptrDeposito_id.closest('#tbody-usuario-deposito-table').length) {
+                var depId = String(id || '').trim();
+                var $trTabla = ptrDeposito_id.closest('tr');
+                var duplicado = false;
+                $('#tbody-usuario-deposito-table .deposito_id').each(function () {
+                    if ($(this).closest('tr').is($trTabla)) {
+                        return;
+                    }
+                    if (String($(this).val() || '') === depId) {
+                        duplicado = true;
+                    }
+                });
+                if (duplicado) {
+                    alert('Depósito ya cargado');
+                    $('#consultadepositoModal').modal('hide');
+                    return;
+                }
+            }
+
             if (ptrDeposito_id && ptrDeposito_id.length) {
                 ptrDeposito_id.val(id);
-                ptrDeposito_id.trigger('change');
             }
             if (ptrCodigoDeposito_id && ptrCodigoDeposito_id.length) {
                 ptrCodigoDeposito_id.val(codigo);
@@ -115,12 +236,29 @@ function activa_eventos_consultadeposito() {
                 ptrDescripcionDeposito.val(descripcion);
             }
 
+            var $ctxDep = ptrDeposito_id && ptrDeposito_id.length
+                ? ptrDeposito_id.closest('.tm-deposito-campo, .depmae-campo-consulta, tr')
+                : $();
+            actualizarLinkEditarDeposito($ctxDep, id);
+            aplicarEmpresaDesdeDeposito(empresaIdDep);
+
+            if (ptrDeposito_id && ptrDeposito_id.length && ptrDeposito_id.closest('#tbody-usuario-deposito-table').length) {
+                ptrDeposito_id.closest('tr').find('.empresa-deposito-nombre').val($tr.find('.empresa-nombre').html() || '');
+            }
+
+            var payloadDep = { id: id, codigo: codigo, descripcion: descripcion };
+            $('#consultadepositoModal').one('hidden.bs.modal.depAplicadoRecuento', function () {
+                notificarDepositoAplicado($ctxDep, payloadDep);
+            });
             $('#consultadepositoModal').modal('hide');
         });
 
     $(document)
         .off('change.leerDepositoCod', '.codigodeposito')
         .on('change.leerDepositoCod', '.codigodeposito', function (e) {
+            if (esFormularioDepmaeAbm()) {
+                return;
+            }
             e.preventDefault();
             leerDepositoPorCodigo($(this).val(), this);
         });
@@ -136,15 +274,35 @@ function leerDepositoPorCodigo(codigo, ptrrenglon, onDone) {
     }
 
     var $ctx = $(ptrrenglon).closest('.tm-deposito-campo, .depmae-campo-consulta, tr');
+    var codOriginal = cod;
     if ($ctx.length) {
         $ctx.find('.deposito_id').val('');
-        $ctx.find('.codigodeposito').val('');
         $ctx.find('.descripciondeposito').val('');
     }
 
-    $.get(carpetaBase + '/stock/depmae/leer/' + encodeURIComponent(cod))
+    var leerUrl = carpetaBase + '/stock/depmae/leer/' + encodeURIComponent(cod);
+    var extraPayload = typeof window.payloadExtraConsultaDeposito === 'function'
+        ? window.payloadExtraConsultaDeposito()
+        : {};
+    var empresaId = empresaIdParaConsultaDeposito();
+    if (extraPayload.empresa_ids && extraPayload.empresa_ids.length) {
+        extraPayload.empresa_ids.forEach(function (id, idx) {
+            leerUrl += (leerUrl.indexOf('?') >= 0 ? '&' : '?') + 'empresa_ids[' + idx + ']=' + encodeURIComponent(id);
+        });
+        if (extraPayload.omitir_filtro_usuario) {
+            leerUrl += (leerUrl.indexOf('?') >= 0 ? '&' : '?') + 'omitir_filtro_usuario=1';
+        }
+    } else if (empresaId) {
+        leerUrl += (leerUrl.indexOf('?') >= 0 ? '&' : '?') + 'empresa_id=' + encodeURIComponent(empresaId);
+    }
+
+    $.get(leerUrl)
         .done(function (data) {
             if (!data || !data.id) {
+                if ($ctx.length) {
+                    $ctx.find('.codigodeposito').val(codOriginal);
+                }
+                alert('Dep\u00f3sito no encontrado');
                 if (typeof onDone === 'function') {
                     onDone(null);
                 }
@@ -163,17 +321,52 @@ function leerDepositoPorCodigo(codigo, ptrrenglon, onDone) {
             }
 
             if ($ctx.length) {
-                $ctx.find('.deposito_id').val(data.id).trigger('change');
+                $ctx.find('.deposito_id').val(data.id);
                 $ctx.find('.codigodeposito').val(data.codigo);
                 $ctx.find('.descripciondeposito').val(data.descripcion);
+                actualizarLinkEditarDeposito($ctx, data.id);
+                aplicarEmpresaDesdeDeposito(data.empresa_id);
+                if ($ctx.closest('#tbody-usuario-deposito-table').length) {
+                    $ctx.find('.empresa-deposito-nombre').val(data.empresa_nombre || '');
+                }
+                notificarDepositoAplicado($ctx, data);
             }
             if (typeof onDone === 'function') {
                 onDone(data);
             }
         })
         .fail(function () {
+            if ($ctx.length) {
+                $ctx.find('.codigodeposito').val(codOriginal);
+            }
             if (typeof onDone === 'function') {
                 onDone(null);
             }
         });
 }
+
+$(document).on('change', '#empresa_id', function () {
+    if ($('.tm-deposito-campo').length && typeof buscar_datos_deposito === 'function') {
+        buscar_datos_deposito($('#consultadeposito').val());
+    }
+    if (window._omitirLimpiarDepositoAlCambiarEmpresa) {
+        return;
+    }
+    $('.tm-deposito-campo').each(function () {
+        var $ctx = $(this);
+        if ($ctx.closest('#tbody-usuario-deposito-table').length) {
+            return;
+        }
+        limpiarCamposDepositoEnFormulario($ctx);
+    });
+});
+
+$(function () {
+    if (typeof activa_eventos_consultadeposito === 'function') {
+        activa_eventos_consultadeposito();
+    }
+    $('.tm-deposito-campo').each(function () {
+        var $ctx = $(this);
+        actualizarLinkEditarDeposito($ctx, parseInt($ctx.find('.deposito_id').val(), 10) || 0);
+    });
+});

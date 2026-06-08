@@ -1,0 +1,87 @@
+---
+description: Ingreso de depósito con modal, filtros empresa/usuario (Stock y Facturación)
+globs: resources/views/stock/**/*.blade.php,resources/views/ventas/**/*.blade.php,public/assets/pages/scripts/stock/depmae/consulta.js,app/Http/Controllers/Stock/DepmaeController.php
+alwaysApply: false
+---
+
+# Depósito: modal de consulta y filtros
+
+Patrón obligatorio para **elegir depósito** en formularios de Stock y Facturación (no usar `<select>` salvo listados/filtros simples).
+
+## UI
+
+| Elemento | Implementación |
+|---|---|
+| Partial | `resources/views/stock/partials/campo_consulta_deposito.blade.php` |
+| Modal | `@include('includes.stock.modalconsultadeposito')` |
+| JS | `public/assets/pages/scripts/stock/depmae/consulta.js` + `activa_eventos_consultadeposito()` |
+| Layout CRUD | `layout => 'form_row'` (label `col-lg-4 text-right`, input `col-lg-7`) |
+| Layout móvil / TM | `layout => 'inline'` (transferencia mercadería) |
+
+Campos en el partial:
+- `input[type=hidden].deposito_id` con `name="deposito_id"` (o el name del formulario)
+- `.codigodeposito` (editable, blur/change resuelve por código)
+- `.descripciondeposito` (readonly)
+- Botón `.consultadeposito` → modal
+- Enlace `.btn-link-editar-deposito` → ABM `route('editar_depmae', id)` (permiso `editar-depositos`)
+
+Contenedor: clase `tm-deposito-campo`.
+
+En `campo_consulta_deposito.blade.php`, placeholders y titles usan entidades HTML (`C&oacute;d.`, `Descripci&oacute;n`, `dep&oacute;sitos`) para evitar corrupci&oacute;n de acentos al editar el archivo; no reemplazar por UTF-8 suelto sin verificar encoding.
+
+Modal `consultadeposito`: columna **Acciones** con **Elegir** y **Consultar** (ABM con `origen=modal_consulta&vista=consulta`, menú oculto en la pestaña nueva). Ver reglas `navegacion-abm-desde-modales.mdc` y layout `vista=consulta`.
+
+Modo modal en `depmae/editar`: sin permiso `actualizar-depositos` → solo lectura + **Cerrar solapa**; con permiso → editable + **Actualizar** + **Cerrar solapa** (redirect conserva query de consulta).
+
+## Regla de filtrado (backend + modal)
+
+Aplicada en `DepmaeController@consultaDeposito` y `leeUnDepositoPorCodigo`:
+
+1. **Siempre** restringir a depósitos autorizados del usuario (`UsuarioDepositoAutorizado::aplicarFiltroQuery`), salvo `omitir_filtro_usuario=1` (solo admin usuarios).
+2. **Empresa del formulario cargada** (`#empresa_id` con valor): filtrar además por esa empresa (`empresa_id` en POST/GET).
+3. **Empresa vacía** y usuario con empresas asignadas: filtrar por todas sus empresas (`EmpresaRepository::aplicarFiltroEmpresasAsignadas`).
+4. **Usuario sin empresas asignadas** (acceso total): sin filtro de empresa adicional.
+
+Excepción admin usuario: enviar `empresa_ids[]` vía `window.payloadExtraConsultaDeposito()` (ver `admin/usuario/depositos.js`).
+
+## JS en formularios
+
+- Leer empresa desde `#empresa_id` (hidden o select); `consulta.js` la envía al modal automáticamente.
+- **Al elegir depósito** con `#empresa_id` select vacío: precargar `empresa_id` del depósito (`aplicarEmpresaDesdeDeposito`), sin blanquear el depósito recién elegido.
+- **Al cambiar `#empresa_id` manualmente**: blanquear todos los `.tm-deposito-campo` del formulario (excepto filas `#tbody-usuario-deposito-table`).
+- Validar backend con `Depmae::autorizadoParaUsuarioYEmpresa()` y `UsuarioDepositoAutorizado::depositoAutorizado()`.
+
+## Permisos consulta modal
+
+Además de depósitos/TM/admin usuarios, permitir consulta a quien pueda: `crear-recuento`, `editar-recuento`, `actualizar-recuento`, `ver-recuento` (y equivalentes del módulo que se agregue).
+
+## Ejemplo (CRUD recuento)
+
+```blade
+@include('stock.partials.campo_consulta_deposito', [
+    'prefix' => 'recuento',
+    'layout' => 'form_row',
+    'inputId' => 'recuento_deposito_id',
+    'depositoId' => $depositoId,
+    'codigo' => $codigo,
+    'descripcion' => $descripcion,
+    'col_label' => 'col-lg-4 control-label text-right pr-2',
+    'col_input' => 'col-lg-7',
+])
+@include('includes.stock.modalconsultadeposito')
+<script src="{{ asset('assets/pages/scripts/stock/depmae/consulta.js') }}"></script>
+```
+
+## Prohibido
+
+- `<select name="deposito_id">` en formularios de alta/edición de procesos (recuento, TM, facturación con depósito, etc.).
+- Consultar depósitos sin filtro de usuario cuando el usuario tiene depósitos autorizados.
+- Ignorar `#empresa_id` al abrir el modal si el formulario ya fijó empresa.
+
+## Comprobación rápida
+
+```bash
+rg "select name=\"deposito_id\"" resources/views/stock/recuento/
+rg "tm-deposito-campo" resources/views/stock/recuento/
+rg "crear-recuento" app/Http/Controllers/Stock/DepmaeController.php
+```

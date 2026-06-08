@@ -690,7 +690,7 @@ class ArticuloFerliController extends Controller
 
         $output = [];
         $output['data'] = '';
-        $puedeAbrirFichaArticulo = can('editar-articulos', false);
+        $puedeAbrirFichaArticulo = \App\Support\Stock\ArticuloConsultaDesdeModal::puedeConsultar();
         if (count($query) > 0) {
             foreach ($query as $row) {
                 $output['data'] .= '<tr>';
@@ -700,7 +700,7 @@ class ArticuloFerliController extends Controller
                 $output['data'] .= '<td>'
                     .'<a class="btn btn-warning btn-sm eligeconsultaarticulo">Elegir</a>';
                 if ($puedeAbrirFichaArticulo) {
-                    $urlFicha = url('stock/articulo/'.$row['articulo_id'].'/editar');
+                    $urlFicha = \App\Support\Stock\ArticuloConsultaDesdeModal::urlEditar((int) $row['articulo_id']);
                     $output['data'] .= ' <a class="btn btn-info btn-sm" href="'.e($urlFicha).'" target="_blank" rel="noopener">Consultar</a>';
                 }
                 $output['data'] .= '</td>';

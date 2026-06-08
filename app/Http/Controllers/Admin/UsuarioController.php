@@ -12,6 +12,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\OficinacompraRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Ventas\VendedorRepositoryInterface;
+use App\Support\Stock\UsuarioDepositoAutorizado;
 use Illuminate\Http\Request;
 
 class UsuarioController extends Controller
@@ -78,13 +79,15 @@ class UsuarioController extends Controller
         // Actualiza las empresas
         $usuario->auditSync('usuario_empresas', $request->empresa_ids);
 
+        $this->sincronizarDepositosAutorizados($usuario, $request);
+
         return redirect('admin/usuario')->with('mensaje', 'Usuario creado con éxito');
     }
 
     public function editar($id)
     {
         $rols = Rol::orderBy('id')->pluck('nombre', 'id')->toArray();
-        $data = Usuario::with('roles')->with('usuario_empresas')->findOrFail($id);
+        $data = Usuario::with(['roles', 'usuario_empresas', 'depositosAutorizados.empresas'])->findOrFail($id);
         $empresa_query = $this->empresaRepository->all()->pluck('nombre', 'id')->toArray();
         $centrocosto_query = $this->centrocostoRepository->all()->toArray();
         $vendedor_query = $this->vendedorRepository->all()->pluck('nombre', 'id')->toArray();
@@ -120,6 +123,8 @@ class UsuarioController extends Controller
 
         // Actualiza las empresas
         $usuario->auditSync('usuario_empresas', $request->empresa_ids);
+
+        $this->sincronizarDepositosAutorizados($usuario, $request);
 
         return redirect('admin/usuario')->with('mensaje', 'Usuario actualizado con exito');
     }
@@ -219,5 +224,24 @@ class UsuarioController extends Controller
             'usuario' => $usuario->usuario,
             'empresa_ok' => $empresa_ok,
         ]);
+    }
+
+    private function sincronizarDepositosAutorizados(Usuario $usuario, Request $request): void
+    {
+        $depositoIds = array_values(array_unique(array_filter(array_map(
+            'intval',
+            $request->input('deposito_ids', [])
+        ))));
+
+        if ($depositoIds === []) {
+            $usuario->auditSync('depositosAutorizados', []);
+
+            return;
+        }
+
+        $empresaIds = $request->input('empresa_ids', []);
+        $validIds = UsuarioDepositoAutorizado::idsValidosParaEmpresas($depositoIds, $empresaIds);
+
+        $usuario->auditSync('depositosAutorizados', $validIds);
     }
 }

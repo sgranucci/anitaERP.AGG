@@ -21,7 +21,7 @@ alwaysApply: false
 
 ## Implementación
 
-- Preferir el partial `resources/views/includes/form-empresa-asignada.blade.php`:
+- Preferir el partial `resources/views/includes/form-empresa-asignada.blade.php` (formularios) o `form-empresa-asignada-control.blade.php` (tablas/plantillas JS).
 
 ```blade
 @include('includes.form-empresa-asignada', [
@@ -39,3 +39,26 @@ alwaysApply: false
 - Enviar `empresa_id` en POST/GET de búsquedas (cierres de turno, mozos, etc.).
 - URLs AJAX: prefijo `config('app.app_carpeta')` / variable global `carpetaBase`, no solo `route()` si la app corre en subcarpeta (`/anitaERP/public`).
 - CSRF: incluir `_token` del formulario en el body del POST (el layout no siempre define `meta csrf-token`).
+
+## Listados e índices (backend)
+
+- Filtrar con `EmpresaRepository::aplicarFiltroEmpresasAsignadas($query)` (aplica si hay **≥ 1** empresa asignada; sin asignación = acceso total).
+- Validar acceso puntual con `EmpresaRepository::empresaIdPermitida($empresaId)`.
+- **No** usar `count($asignadas) > 1` para decidir si filtrar: usuarios con una sola empresa también deben ver solo su empresa.
+
+## Filtros en listados (vista)
+
+- Panel collapse CRUD: `includes.listado.filtro_empresa_asignada` (select si hay 2+, hidden si hay 1).
+- Form-inline GET (jornada, waitry, saneamiento, habilitación turno): `includes.listado.filtro_empresa_asignada_inline` (`permite_todas` / `required` según pantalla).
+- Toolbar con form-group (ARCA CAEA, Interbanking): `includes.listado.filtro_empresa_asignada_campo`.
+- Toolbar de índice CRUD: ocultar selector de empresa cuando `$empresa_query->count() === 1` y preseleccionar en backend.
+
+## Admin usuario (multiselect)
+
+- Usar `EmpresaRepository::all()` (todas las empresas del sistema), no `allFiltrado()`.
+- Partial: `includes.form-empresa-asignada-multiple` (`empresa_ids[]`, select2 si hay 2+, hidden si hay 1 en el sistema).
+
+## Tipo transacción (ARCA)
+
+- Campo `empresa_arca_id` con empresas WSFE (`TipotransaccionController::empresasArcaQuery()`), no `allFiltrado()`.
+- Usar `form-empresa-asignada-control` con `mostrar_opcion_vacia => false`; si no hay empresas ARCA, select disabled con mensaje.

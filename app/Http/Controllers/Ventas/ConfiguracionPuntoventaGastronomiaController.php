@@ -150,6 +150,7 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
                 'puntoventa_cae' => [],
                 'puntoventa_caea' => [],
                 'ubicaciones' => [],
+                'depositos' => [],
             ]);
         }
 
@@ -171,6 +172,9 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
                 ->map(fn ($u) => ['id' => $u->id, 'nombre' => $u->nombre])
                 ->values()
                 ->all(),
+            'depositos' => $this->formatDepositoOptions(
+                $this->queryDepositosPorEmpresa($empresaId)->get(['id', 'codigo', 'nombre'])
+            ),
         ]);
     }
 
@@ -180,6 +184,25 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
             'id' => $pv->id,
             'label' => trim($pv->codigo.' — '.$pv->nombre),
         ])->values()->all();
+    }
+
+    private function formatDepositoOptions($collection): array
+    {
+        return $collection->map(fn ($dep) => [
+            'id' => $dep->id,
+            'label' => trim($dep->codigo.' — '.$dep->nombre),
+        ])->values()->all();
+    }
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Builder<Depmae>
+     */
+    private function queryDepositosPorEmpresa(?int $empresaId)
+    {
+        return Depmae::query()
+            ->paraUsuarioAutorizado()
+            ->when($empresaId !== null && $empresaId > 0, fn ($q) => $q->paraEmpresa($empresaId))
+            ->orderByRaw('CAST(codigo AS UNSIGNED) ASC');
     }
 
     private function cargarSelects(
@@ -216,16 +239,13 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
             ->where('operacion', 'C')
             ->orderBy('nombre')
             ->get(['id', 'abreviatura', 'nombre']);
-        $deposito_query = Depmae::query()
-            ->orderByRaw('CAST(codigo AS UNSIGNED) ASC')
+        $deposito_query = $this->queryDepositosPorEmpresa($empresaId)
             ->get(['id', 'codigo', 'nombre']);
     }
 
     private function assertEmpresaPermitida(int $empresaId): void
     {
-        $empresasAsignadas = $this->empresaRepository->traeEmpresasAsignadas();
-
-        if (count($empresasAsignadas) > 1 && ! in_array($empresaId, $empresasAsignadas, true)) {
+        if (! $this->empresaRepository->empresaIdPermitida($empresaId)) {
             abort(403);
         }
     }

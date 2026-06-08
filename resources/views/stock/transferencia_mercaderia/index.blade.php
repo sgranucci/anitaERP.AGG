@@ -144,6 +144,14 @@
             <div class="card-body py-2">
                 <div class="tm-cabecera">
                     <div class="form-row">
+                        <div class="col-12 mb-2">
+                            @include('includes.form-empresa-asignada', [
+                                'empresa_query' => $empresa_query,
+                                'empresa_id' => $empresa_id ?? null,
+                                'col_label' => 'col-12',
+                                'col_input' => 'col-12',
+                            ])
+                        </div>
                         @include('stock.partials.campo_consulta_deposito', [
                             'prefix' => 'salida',
                             'label' => 'Depósito salida',

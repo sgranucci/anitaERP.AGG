@@ -16,6 +16,9 @@ Patrón **obligatorio** para todo index con búsqueda. Referencias canónicas:
 | Capex | `CapexListadoFiltros` | `presupuesto/capex/index` |
 | Presupuestos | `PresupuestoListadoFiltros` | `presupuesto/presupuesto/index` |
 | Partidas de gasto | `PartidagastoListadoFiltros` | `presupuesto/partidagasto/index` |
+| Cuentas de caja | `CuentacajaListadoFiltros` | `caja/cuentacaja/index` |
+
+Ver también **`index-listado-paginado-export.mdc`** (paginación server-side, PDF/Excel/CSV con logos y estilo unificado).
 
 ## UX obligatoria
 

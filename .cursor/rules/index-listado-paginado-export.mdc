@@ -1,0 +1,83 @@
+---
+description: Index CRUD paginado con export PDF/Excel/CSV alineado al sistema (filtros + reportes con logos)
+globs: resources/views/**/index.blade.php,resources/views/**/listado.blade.php,resources/views/exports/**/*.blade.php,app/Exports/**/*.php,app/Http/Controllers/**/*Controller.php,app/Repositories/**/*.php,app/Queries/**/*.php,routes/web.php
+alwaysApply: true
+---
+
+# Index paginado y exportaciones de listado
+
+Todo **index nuevo** o migrado debe seguir este stack junto con `listado-filtros-crud.mdc`. Referencias canónicas:
+
+| Módulo | Index | Export | PDF |
+|---|---|---|---|
+| Cuentas de caja | `caja/cuentacaja/index` | `CuentacajaListadoExport` | `caja/cuentacaja/listado` |
+| Clientes UIF | `uif/cliente_uif/index` | `Cliente_UifExport` | `uif/cliente_uif/listado` |
+| Capex | `presupuesto/capex/index` | `CapexExport` | `presupuesto/capex/listado` |
+| Clientes Ventas | `ventas/cliente/index` | `ClienteListadoExport` | `ventas/cliente/listado` |
+
+Listados Compras con ítems/lotes: además `export-listados-compras.mdc`.
+
+## Vista index (obligatorio)
+
+| Elemento | Patrón |
+|---|---|
+| Tabla | `id="tabla-paginada"` — **no** `tabla-data` (DataTables client-side) en indexes nuevos |
+| Paginación | `{{ $coleccion->appends($filtrosQuery ?? [])->links() }}` |
+| Export toolbar | `@include('includes.exportar-tabla-queryparams', ['ruta' => 'lista_{recurso}', 'queryparams' => $filtrosQuery ?? []])` |
+| Scripts | `admin/index.js` + `listado-filtros.js` + `{modulo}/{recurso}/filtro.js` |
+| Botón Nuevo | En `filtros_toolbar` (`nuevoRegistroUrl` / `nuevoRegistroCan`), no suelto en header legacy |
+
+## Backend index + export
+
+1. **Repository/Query**: `lee{Recurso}($filtros, $flPaginando)` — `true` → `paginate(10)`; `false` → `get()` para export.
+2. **Controller `index`**: `Request $request`, `{Recurso}ListadoFiltros::resolverDesdeRequest`, pasar `filtros`, `filtrosQuery`, `camposFiltro`.
+3. **Ruta export**: `Route::get('{modulo}/lista{recurso}/{formato?}/{busqueda?}', …@listar)->name('lista_{recurso}');`
+4. **Controller `listar`**: permiso listar; `ini_set` memoria/tiempo; `$filtros = …::resolverDesdeRequest($request, $busqueda)`; switch `PDF` / `EXCEL` / `CSV`; redirect al index con `paraQueryString($filtros)` si falta formato.
+
+## Clase Export (Excel/CSV)
+
+Patrón `Cliente_UifExport` / `CuentacajaListadoExport`:
+
+- `FromView` + `parametros($filtros)` con `$flDesdeIndex = true`
+- `lee*( $filtros, false)` en `view()`
+- Logos: `EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($filas)` — filas con atributo **`nombreempresa`** (mapear desde relación si hace falta)
+- Vista Excel: `exports/{modulo}/{recurso}index.blade.php`
+- Fila logos opcional (`reservarFilaLogoExcel`); título fusionado; cabecera fila N con fill **`#85C1E9`**, font Arial 11 bold `#17202A`
+- `freezePane` en primera fila de datos; `columnWidths` explícitos; wrap en columnas largas
+- `columnFormats`: columnas ID/código/CBU/etc. como `FORMAT_TEXT`
+
+## PDF listado
+
+Vista `{modulo}/{recurso}/listado.blade.php`:
+
+- Cabecera: logos (`EmpresaLogoArchivo::logosCabeceraDesdeColeccion`), título, `Generado d/m/Y H:i`, contador registros
+- Tabla `.data`: thead `#85C1E9`, filas pares `#f5f5f5`, bordes `#cccccc`, DejaVu Sans 8px
+- DomPDF: `legal` + `landscape`; guardar en `storage/pdf/listados/listado_{recurso}.pdf`
+
+## Prohibido en indexes nuevos
+
+- `tabla-data` + export botones DataTables como única exportación
+- `@include('includes.exportar-tabla', ['busqueda' => …])` legacy sin `$filtrosQuery`
+- Export que ignore filtros activos o use solo la página paginada visible
+- PDF/Excel sin cabecera de título ni estilo `#85C1E9` en thead (salvo excepción documentada del módulo)
+
+## Archivos al crear/migrar un index
+
+| Capa | Archivo |
+|---|---|
+| Export | `app/Exports/{Modulo}/{Recurso}ListadoExport.php` |
+| Excel view | `resources/views/exports/{modulo}/{recurso}index.blade.php` |
+| PDF view | `resources/views/{modulo}/{recurso}/listado.blade.php` |
+| Ruta | `lista_{recurso}` en `routes/web.php` |
+| Controller | métodos `index(Request)` + `listar(Request, $formato, $busqueda)` |
+
+## Comprobación rápida
+
+```bash
+rg 'id="tabla-data"' resources/views/{modulo}/{recurso}/index.blade.php          # vacío en index nuevo
+rg 'exportar-tabla-queryparams' resources/views/{modulo}/{recurso}/index.blade.php # debe existir
+rg 'function listar' app/Http/Controllers/{Modulo}/{Recurso}Controller.php
+rg 'lista_{recurso}' routes/web.php
+rg '85C1E9' app/Exports/{Modulo}/{Recurso}ListadoExport.php resources/views/{modulo}/{recurso}/listado.blade.php
+php artisan view:cache
+```

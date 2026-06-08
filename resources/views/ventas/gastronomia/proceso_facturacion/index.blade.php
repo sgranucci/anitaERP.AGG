@@ -611,7 +611,7 @@
             cierreParcial: @json(url('ventas/gastronomia/api/cierre-parcial-turno')),
             cerrar: @json(url('ventas/gastronomia/api/cerrar-turno')),
         },
-        waitryHabilitado: @json(config('waitry.habilitado', false)),
+        waitryHabilitado: @json($waitry_habilitado_terminal ?? false),
         waitryTrasRespuesta: @json(config('gastronomia.waitry_tras_respuesta', true)),
         sincronizarAnitaAlFacturar: @json(config('gastronomia.sincronizar_anita_al_facturar', true)),
         waitryGetOrdersMinutosAtras: {{ max(0, (int) config('waitry.get_orders_minutos_atras', 20)) }},
@@ -625,7 +625,7 @@
 </script>
 @php
     $gastroCuentasLibresHabilitadas = $cuentas_libres_habilitadas ?? true;
-    $gastroWaitryHabilitado = (bool) config('waitry.habilitado', false);
+    $gastroWaitryHabilitado = (bool) ($waitry_habilitado_terminal ?? false);
     $gastroModoPreferido = $modo_seleccion_preferido ?? 'mesa';
     $gastroModoCuentas = $gastroCuentasLibresHabilitadas && $gastroModoPreferido === 'cuenta';
     $gastroModoWaitry = $gastroWaitryHabilitado && $gastroModoPreferido === 'waitry';
@@ -734,7 +734,7 @@
                     @endif
                     @if ($gastroWaitryHabilitado)
                     <button type="button" class="btn btn-outline-secondary{{ $gastroModoWaitry ? ' active' : '' }}" id="btn-modo-waitry">Cuentas externas</button>
-                    <button type="button" class="btn btn-outline-secondary" id="btn-waitry-importar-por-id" title="Importar cuenta por ID del papelito del tótem Waitry">
+                    <button type="button" class="btn btn-outline-secondary" id="btn-waitry-importar-por-id" title="Importar cuenta por número del monitor o código Waitry">
                         <i class="fa fa-barcode"></i> Por ID
                     </button>
                     @endif
@@ -1152,9 +1152,9 @@
                 <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">&times;</button>
             </div>
             <div class="modal-body py-2">
-                <label class="small mb-1" for="waitry-importar-id-input">ID del papelito</label>
-                <input type="text" class="form-control form-control-sm" id="waitry-importar-id-input" placeholder="Ej. A1B2C3" maxlength="64" autocomplete="off" inputmode="text">
-                <p class="text-muted small mb-0 mt-2">Código alfanumérico impreso en el papelito del tótem Waitry. Incluye órdenes ya cobradas en Waitry.</p>
+                <label class="small mb-1" for="waitry-importar-id-input">Número del monitor Waitry</label>
+                <input type="text" class="form-control form-control-sm" id="waitry-importar-id-input" placeholder="Ej. 301" maxlength="64" autocomplete="off" inputmode="numeric">
+                <small class="form-text text-muted">Número secuencial del ticket del tótem (hoy). También acepta código alfanumérico legacy (E-…) o orderId Waitry. Incluye órdenes ya cobradas en Waitry.</small>
             </div>
             <div class="modal-footer py-2">
                 <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cancelar</button>

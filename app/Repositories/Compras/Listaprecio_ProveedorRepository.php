@@ -230,7 +230,7 @@ class Listaprecio_ProveedorRepository implements Listaprecio_ProveedorRepository
                     'articulo_id' => $art->id,
                     'precio' => (float) ($m->listpv_precio ?? 0),
                     'descuento' => $this->parseDescuentoAnita($m->lispv_descuento ?? null),
-                    'articulo_proveedor' => substr(rtrim((string) ($m->lispv_art_prov ?? '')), 0, 100) ?: '',
+                    'codigo_articulo_proveedor' => substr(rtrim((string) ($m->lispv_art_prov ?? '')), 0, 100) ?: '',
                     'fechavigencia' => $this->anitaIntToDate((int) ($m->listpv_fecha ?? 0)),
                     'usuarioultcambio_id' => $usuarioId,
                 ];
@@ -409,7 +409,7 @@ class Listaprecio_ProveedorRepository implements Listaprecio_ProveedorRepository
                     '".((float) $ln->precio)."',
                     '".$proveedorCodigo."',
                     '".substr(preg_replace('([^A-Za-z0-9 ])', '', (string) $desc), 0, 30)."',
-                    '".substr((string) ($ln->articulo_proveedor ?? ''), 0, 30)."',
+                    '".substr((string) ($ln->codigo_articulo_proveedor ?? ''), 0, 30)."',
                     '".((float) ($ln->descuento ?? 0))."'
                 ",
             ];

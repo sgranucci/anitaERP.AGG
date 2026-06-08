@@ -19,7 +19,7 @@ final class GastronomiaVentaDisplaySupportWaitryTest extends TestCase
         $venta->setRelation('gastronomiaEmision', $emision);
 
         $this->assertSame(
-            'Papelito Waitry: B-9',
+            'Papelito monitor: B-9',
             GastronomiaVentaDisplaySupport::lineaOrdenWaitry($venta),
         );
     }
@@ -32,7 +32,25 @@ final class GastronomiaVentaDisplaySupportWaitryTest extends TestCase
         $emision->setRelation('cuenta', $cuenta);
         $venta->setRelation('gastronomiaEmision', $emision);
 
-        $this->assertSame('Papelito Waitry: Z1', GastronomiaVentaDisplaySupport::lineaOrdenWaitry($venta));
+        $this->assertSame('Papelito monitor: Z1', GastronomiaVentaDisplaySupport::lineaOrdenWaitry($venta));
+    }
+
+    public function test_linea_papelito_con_contador_numerico_monitor(): void
+    {
+        $venta = new Venta(['id' => 1]);
+        $emision = new VentaGastronomiaEmision(['waitry_order_id' => 17613458]);
+        $cuenta = new CuentaGastronomia([
+            'waitry_order_id' => 17613458,
+            'waitry_display_id' => '301',
+        ]);
+        $emision->setRelation('cuenta', $cuenta);
+        $venta->setRelation('gastronomiaEmision', $emision);
+
+        $this->assertSame('301', GastronomiaVentaDisplaySupport::waitryDisplayId($venta));
+        $this->assertSame(
+            'Papelito monitor: 301',
+            GastronomiaVentaDisplaySupport::lineaOrdenWaitry($venta),
+        );
     }
 
     public function test_linea_papelito_solo_order_id_numerico_retorna_null(): void

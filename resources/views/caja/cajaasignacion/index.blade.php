@@ -19,13 +19,13 @@
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
                     @if ($mostrarFiltroEmpresa)
                         <form method="get" action="{{ route('consulta_cajaasignacion') }}" class="form-inline mr-2 mb-1 mb-sm-0">
-                            <label class="mr-1 mb-0 small text-white-50" for="empresa_id">Empresa</label>
-                            <select name="empresa_id" id="empresa_id" class="form-control form-control-sm mr-2" title="Empresa">
-                                <option value="">Todas</option>
-                                @foreach ($empresa_query as $emp)
-                                    <option value="{{ $emp->id }}" @selected((int) ($empresaId ?? 0) === (int) $emp->id)>{{ $emp->nombre }}</option>
-                                @endforeach
-                            </select>
+                            @include('includes.listado.filtro_empresa_asignada_inline', [
+                                'empresa_query' => $empresa_query,
+                                'empresa_id' => $empresaId ?? null,
+                                'label_class' => 'mr-1 mb-0 small text-white-50',
+                                'select_class' => 'form-control-sm',
+                                'permite_todas' => true,
+                            ])
                             <button type="submit" class="btn btn-light btn-sm" title="Consultar">
                                 <i class="fa fa-search"></i>
                             </button>

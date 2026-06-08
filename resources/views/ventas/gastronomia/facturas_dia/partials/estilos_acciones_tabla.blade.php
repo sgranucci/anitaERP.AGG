@@ -25,4 +25,15 @@
     .facturas-dia-tabla-acciones .btn-accion-tabla .fa {
         pointer-events: none;
     }
+
+    .gastro-col-monto,
+    th.gastro-col-monto,
+    td.gastro-col-monto {
+        min-width: 6.85rem;
+        max-width: 10rem;
+        white-space: nowrap;
+        text-align: right !important;
+        font-variant-numeric: tabular-nums;
+        font-feature-settings: "tnum";
+    }
 </style>

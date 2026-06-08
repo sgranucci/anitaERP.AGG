@@ -14,6 +14,8 @@ use App\Repositories\Caja\UsocuentacajaRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
+use App\Support\Caja\CuentacajaListadoFiltros;
+use App\Exports\Caja\CuentacajaListadoExport;
 
 class CuentacajaController extends Controller
 {
@@ -44,13 +46,60 @@ class CuentacajaController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function index()
+    public function index(Request $request)
     {
         can('listar-cuentas-de-caja');
-		$datas = $this->repository->all();
+
+        $filtros = CuentacajaListadoFiltros::resolverDesdeRequest($request);
+        $datas = $this->repository->leeCuentacaja($filtros, true);
         $tipocuenta_enum = Cuentacaja::$enumTipocuenta;
 
-        return view('caja.cuentacaja.index', compact('datas', 'tipocuenta_enum'));
+        return view('caja.cuentacaja.index', [
+            'datas' => $datas,
+            'tipocuenta_enum' => $tipocuenta_enum,
+            'filtros' => $filtros,
+            'filtrosQuery' => CuentacajaListadoFiltros::paraQueryString($filtros),
+            'camposFiltro' => CuentacajaListadoFiltros::CAMPOS,
+        ]);
+    }
+
+    public function listar(Request $request, $formato = null, $busqueda = null)
+    {
+        can('listar-cuentas-de-caja');
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $filtros = CuentacajaListadoFiltros::resolverDesdeRequest($request, $busqueda);
+        $tipocuenta_enum = Cuentacaja::$enumTipocuenta;
+
+        switch ($formato) {
+            case 'PDF':
+                $datas = $this->repository->leeCuentacaja($filtros, false);
+
+                $view = \View::make('caja.cuentacaja.listado', compact('datas', 'tipocuenta_enum'))
+                    ->render();
+                $path = storage_path('pdf/listados');
+                $nombre_pdf = 'listado_cuentacaja';
+
+                $pdf = \App::make('dompdf.wrapper');
+                $pdf->setPaper('legal', 'landscape');
+                $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
+
+                return response()->download($path.'/'.$nombre_pdf.'.pdf');
+
+            case 'EXCEL':
+                return (new CuentacajaListadoExport($this->repository))
+                    ->parametros($filtros)
+                    ->download('cuentacaja.xlsx');
+
+            case 'CSV':
+                return (new CuentacajaListadoExport($this->repository))
+                    ->parametros($filtros)
+                    ->download('cuentacaja.csv', \Maatwebsite\Excel\Excel::CSV);
+        }
+
+        return redirect()->route('cuentacaja', CuentacajaListadoFiltros::paraQueryString($filtros));
     }
 
     /**

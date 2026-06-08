@@ -29,8 +29,9 @@
                             <th class="width20">ID</th>
                             <th>Empresa</th>
                             <th>Ubicación</th>
-                            <th>Table ID Waitry</th>
+                            <th>Layout / Table Waitry</th>
                             <th>Detalle</th>
+                            <th>Informe Z</th>
                             <th class="width80" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -40,8 +41,35 @@
                             <td>{{ $data->id }}</td>
                             <td>{{ optional($data->empresa)->nombre }}</td>
                             <td>{{ optional($data->ubicacion)->nombre }}</td>
-                            <td>{{ $data->waitry_table_id ?: '—' }}</td>
+                            <td>
+                                @if ($data->waitry_layout_id)
+                                    <span class="d-block"><strong>L</strong> {{ $data->waitry_layout_id }}
+                                        @if ($data->waitry_layout_ids_adicionales)
+                                            + {{ $data->waitry_layout_ids_adicionales }}
+                                        @endif
+                                    </span>
+                                @endif
+                                @if ($data->waitry_table_id || $data->waitry_table_ids_adicionales)
+                                    <span class="d-block text-muted">
+                                        <strong>T</strong>
+                                        {{ $data->waitry_table_id ?: '—' }}
+                                        @if ($data->waitry_table_ids_adicionales)
+                                            + {{ $data->waitry_table_ids_adicionales }}
+                                        @endif
+                                    </span>
+                                @endif
+                                @if (! $data->waitry_layout_id && ! $data->waitry_layout_ids_adicionales && ! $data->waitry_table_id && ! $data->waitry_table_ids_adicionales)
+                                    —
+                                @endif
+                            </td>
                             <td>{{ $data->detalle }}</td>
+                            <td>
+                                @if ($data->informe_z_habilitado ?? true)
+                                    <span class="badge badge-primary">Posnet Z</span>
+                                @else
+                                    <span class="badge badge-secondary">Solo operativo</span>
+                                @endif
+                            </td>
                             <td>
                                 @if (can('editar-totem-waitry-gastronomia', false))
                                     <a href="{{ route('editar_totem_waitry_gastronomia', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
