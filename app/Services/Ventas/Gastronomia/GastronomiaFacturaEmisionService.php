@@ -1057,13 +1057,18 @@ final class GastronomiaFacturaEmisionService
         array $resultado,
         ConfiguracionPuntoventaGastronomia $cfg,
         CuentaGastronomia $cuenta,
+        bool $sincrono = false,
     ): array {
         $ventaId = (int) ($resultado['venta_id'] ?? 0);
         if ($ventaId <= 0) {
             return $resultado;
         }
 
-        $imp = $this->facturaTicketService->imprimirTrasEmisionEncolado($ventaId, $cfg, $cuenta);
+        // defer() ya se ejecutó (middleware terminate) antes de app()->terminating().
+        // Waitry post-respuesta corre en terminating: imprimir ahí debe ser sincrónico.
+        $imp = $sincrono
+            ? $this->facturaTicketService->imprimirTrasEmision($ventaId, $cfg, $cuenta)
+            : $this->facturaTicketService->imprimirTrasEmisionEncolado($ventaId, $cfg, $cuenta);
         if (! empty($imp['omitida'])) {
             return $resultado;
         }
@@ -1156,7 +1161,7 @@ final class GastronomiaFacturaEmisionService
             }
 
             try {
-                $this->aplicarImpresionTicketTrasEmision($resultadoWaitry, $cfgDefer, $cuenta->fresh());
+                $this->aplicarImpresionTicketTrasEmision($resultadoWaitry, $cfgDefer, $cuenta->fresh(), sincrono: true);
             } catch (Throwable $e) {
                 Log::error('gastronomia.ticket_factura.defer.excepcion', [
                     'venta_id' => $resultado['venta_id'] ?? null,
