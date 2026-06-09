@@ -51,6 +51,23 @@ $app = require_once __DIR__.'/../bootstrap/app.php';
 
 $kernel = $app->make(Illuminate\Contracts\Http\Kernel::class);
 
+/*
+| DirectoryIndex en subdirectorio (p. ej. /anitaERP/public/) deja REQUEST_URI con
+| barra final. Con route:cache, CompiledRouteCollection recorta esa barra y el
+| emparejamiento de GET en / falla (405, solo HEAD).
+*/
+if (isset($_SERVER['REQUEST_URI'], $_SERVER['SCRIPT_NAME'])) {
+    $scriptDir = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME']));
+    if ($scriptDir !== '/' && $scriptDir !== '.') {
+        $requestPath = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?? '/';
+        if (rtrim($requestPath, '/') === rtrim($scriptDir, '/')
+            && ! str_ends_with($requestPath, '/index.php')) {
+            $query = parse_url($_SERVER['REQUEST_URI'], PHP_URL_QUERY);
+            $_SERVER['REQUEST_URI'] = $scriptDir.'/index.php'.($query ? '?'.$query : '');
+        }
+    }
+}
+
 $response = $kernel->handle(
     $request = Illuminate\Http\Request::capture()
 );

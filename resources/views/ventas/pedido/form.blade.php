@@ -51,23 +51,20 @@
 		<div class="form-group row" id="divlugar">
     		<label for="lugarentrega" class="col-lg-3 col-form-label">Lugar de Entrega</label>
     		<div class="col-lg-8">
-    			<input type="text" name="lugarentrega" id="lugarentrega" class="form-control" value="{{old('lugarentrega', $pedido->lugarentrega ?? '')}}">
+    			<div class="input-group">
+    				<input type="text" name="lugarentrega" id="lugarentrega" class="form-control" value="{{old('lugarentrega', $pedido->lugarentrega ?? '')}}">
+    				<div class="input-group-append" id="div-cambiar-lugarentrega" style="display: none;">
+    					<button type="button" id="btn-cambiar-lugarentrega" class="btn btn-outline-secondary btn-sm" title="Cambiar lugar de entrega">
+    						Cambiar
+    					</button>
+    				</div>
+    			</div>
     		</div>
 		</div>
-		<div class="form-group row" id="divcodigoentrega">
-        	<label class="col-lg-3 col-form-label">Entrega en</label>
-        	<select name="cliente_entrega_id" id='cliente_entrega_id' data-placeholder="Entrega" class="col-lg-8 form-control" data-fouc>
-        		@if($pedido->cliente_entrega_id ?? '')
-					@if($pedido->cliente_entrega_id == "")
-        				<option selected></option>
-        			@else
-        				<option value="{{old('cliente_entrega_id', $pedido->cliente_entrega_id)}}" selected>{{$pedido->entrega_nombre}}</option>
-					@endif
-        		@endif
-        	</select>
-        	<input type="hidden" id="cliente_entrega_id_previa" name="cliente_entrega_id_previa" value="{{old('cliente_entrega_id', $pedido->cliente_entrega_id ?? '')}}" >
-        	<input type="hidden" id="entrega_nombre" name="entrega_nombre" value="{{old('entrega_nombre', $pedido->entrega_nombre ?? '')}}" >
-        </div>
+		<input type="hidden" name="cliente_entrega_id" id="cliente_entrega_id" value="{{old('cliente_entrega_id', $pedido->cliente_entrega_id ?? '')}}">
+		<input type="hidden" id="cliente_entrega_id_previa" name="cliente_entrega_id_previa" value="{{old('cliente_entrega_id', $pedido->cliente_entrega_id ?? '')}}">
+		<input type="hidden" id="entrega_nombre" name="entrega_nombre" value="{{old('entrega_nombre', $pedido->entrega_nombre ?? '')}}">
+		<input type="hidden" id="fl_cliente_tiene_entrega" value="0">
 	</div>
 	<div class="col-sm-6">
 		<div class="form-group row">
@@ -294,6 +291,7 @@
 @include('includes.ventas.modalconsultacliente')
 @include('includes.ventas.modalconsultatransporte')
 @include('includes.ventas.modalconsultazonavta')
+@include('includes.ventas.modalseleccionclienteentrega')
 @include('ventas.ordentrabajo.modalcrearordentrabajo')
 @include('ventas.pedido.modalfacturapedido')
 @include('ventas.pedido.modalpesada')

@@ -33,6 +33,13 @@ class AyudaManuales
                 'icono' => 'fa-utensils',
                 'disponible' => true,
             ],
+            [
+                'modulo' => 'Ventas — Pedidos y facturación',
+                'bajada' => 'Carga de pedidos, pesada con QR, facturación con remito, cierres y reportes de ventas.',
+                'url' => route('manual_ventas'),
+                'icono' => 'fa-file-invoice',
+                'disponible' => true,
+            ],
         ];
     }
 

@@ -41,7 +41,12 @@
 					<td>{{$data->id}}</td>
 					<td>{{date("d/m/Y", strtotime($data->fecha ?? ''))}}</td>
 					<td>{{date("d/m/Y", strtotime($data->fechavencimiento ?? ''))}}</td>
-					<td>{{$data->ventas->codigo}}</td>
+					<td>
+						{{$data->ventas->codigo}}
+						@if (!empty($data->ventas->lugarentrega))
+							<br><small>Entrega: {{ $data->ventas->lugarentrega }}</small>
+						@endif
+					</td>
 					<td>{{$data->monedas->abreviatura}}</td>
 					<td style="text-align: right;">
 						@if ($data->total >= 0)

@@ -30,6 +30,7 @@ use App\Repositories\Configuracion\OficinacompraRepositoryInterface;
 use App\Repositories\Configuracion\PeriodicidadcompraRepositoryInterface;
 use App\Repositories\Configuracion\SeteoModeloetiquetaRepositoryInterface;
 use App\Repositories\Configuracion\SeteosalidaRepositoryInterface;
+use App\Support\Configuracion\SeteoSalidaProgramaSupport;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Stock\Articulo_ArchivoRepositoryInterface;
 use App\Repositories\Stock\Articulo_CajaRepositoryInterface;
@@ -403,7 +404,7 @@ class ArticuloController extends Controller
             $path = Storage::path($nombreEtiqueta);
 
             // Trae la impresora
-            $seteosalida = $this->seteoSalidaRepository->buscaSeteo($usuario_id, '');
+            $seteosalida = $this->seteoSalidaRepository->buscaSeteo($usuario_id, SeteoSalidaProgramaSupport::STOCK_ARTICULO);
             $comando = sprintf($seteosalida->salidas->comando, $path);
             system($comando);
 

@@ -1,7 +1,65 @@
 <?php
 
+/**
+ * Mapa empresa_id => puntoventa_id para NC de descuentos en cobranza.
+ * Override: COBRANZA_NC_PUNTOVENTA_POR_EMPRESA='{"1":5}'
+ *
+ * @return array<int, int>
+ */
+$ncPuntoventaPorEmpresa = (static function (): array {
+    $raw = env('COBRANZA_NC_PUNTOVENTA_POR_EMPRESA');
+    if ($raw === null || $raw === '') {
+        return [];
+    }
+    $decoded = is_array($raw) ? $raw : json_decode((string) $raw, true);
+    if (! is_array($decoded)) {
+        return [];
+    }
+    $map = [];
+    foreach ($decoded as $empresaId => $pvId) {
+        if ((int) $empresaId > 0 && (int) $pvId > 0) {
+            $map[(int) $empresaId] = (int) $pvId;
+        }
+    }
+
+    return $map;
+})();
+
+/**
+ * Mapa letra => tipotransaccion_id para NC (opcional; fallback nc_tipotransaccion_id).
+ *
+ * @return array<string, int>
+ */
+$ncTipotransaccionPorLetra = (static function (): array {
+    $raw = env('COBRANZA_NC_TIPOTRANSACCION_POR_LETRA');
+    if ($raw === null || $raw === '') {
+        return [];
+    }
+    $decoded = is_array($raw) ? $raw : json_decode((string) $raw, true);
+    if (! is_array($decoded)) {
+        return [];
+    }
+    $map = [];
+    foreach ($decoded as $letra => $tipoId) {
+        $l = strtoupper(trim((string) $letra));
+        if ($l !== '' && (int) $tipoId > 0) {
+            $map[$l] = (int) $tipoId;
+        }
+    }
+
+    return $map;
+})();
+
 return [
 	"GRABACION" => "CON_PRECARGA",
+
+    /** Descuentos en cobranza → NC fiscal en ARCA al confirmar/grabar */
+    'descuento_nc_habilitado' => filter_var(env('COBRANZA_DESCUENTO_NC_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+    'nc_puntoventa_por_empresa' => $ncPuntoventaPorEmpresa,
+    'nc_tipotransaccion_id' => (int) env('COBRANZA_NC_TIPOTRANSACCION_ID', 4),
+    'nc_tipotransaccion_por_letra' => $ncTipotransaccionPorLetra,
+    'nc_articulo_id' => (int) env('COBRANZA_NC_ARTICULO_ID', 0),
+    'nc_articulo_sku' => (string) env('COBRANZA_NC_ARTICULO_SKU', ''),
 
     /**
      * Lock de numeración tesorería (cobranza + caja_movimiento sin cobranza_id).

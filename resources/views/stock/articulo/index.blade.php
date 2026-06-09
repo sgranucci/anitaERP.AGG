@@ -16,7 +16,8 @@ Art&iacute;culos
 @endif
 
 <script>
-var url = "{{ route('configurar_salida', ['programa' => ':programa']) }}";
+window.seteoSalidaPrograma = @json(\App\Support\Configuracion\SeteoSalidaProgramaSupport::STOCK_ARTICULO);
+window.seteoSalidaConfigurarUrl = @json(route('configurar_salida', ['programa' => ':programa']));
 
 function checkState(index){
 }

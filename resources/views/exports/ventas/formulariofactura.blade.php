@@ -55,10 +55,13 @@
 </head>
 <body>
 @php
+	use App\Support\Configuracion\EmpresaLogoArchivo;
 	// Misma plantilla para todas las empresas: columnas extra y 2.ª hoja solo en EL BIERZO (config por instalación).
 	$facturaPdfEsElBierzo = config('app.empresa') === 'EL BIERZO';
 	$facturaPdfCeldaTotales = 'background-color: #e9ecef; border: 1px solid #dee2e6;';
 	$facturaPdfPieCentroTieneTexto = ($letra === 'B') || $facturaPdfEsElBierzo;
+	$logoEmpresaDat = EmpresaLogoArchivo::dataUriDesdeNombre($venta->puntoventas->empresas->nombre ?? null);
+	$logoEmpresaDataUri = $logoEmpresaDat['uri'] ?? null;
 @endphp
 <div id="area-pdf">
 	<div class="page">
@@ -67,7 +70,9 @@
 				<thead>
 				<tr style="height: 85px;">
 					<th style="width=150px; word-wrap: break-word; vertical-align: top;">
-						<img style="margin: 1px;" width="180" height="80" src="data:image/png;base64,{{ base64_encode(file_get_contents("/var/www/html/anitaERP/public/storage/imagenes/logos/".$venta->puntoventas->empresas->nombre.".png")) }}">
+						@if ($logoEmpresaDataUri)
+							<img style="margin: 1px;" width="180" height="80" src="{{ $logoEmpresaDataUri }}" alt="">
+						@endif
 						<div>
 							<strong style="font-size: 20px;">{{$venta->puntoventas->empresas->nombre}}</strong>
 							<p style="font-size: 16px;">
@@ -125,8 +130,8 @@
 								@if (isset($venta->transportes->nombre))
 									Transporte: {{ $venta->transportes->nombre ?? ''}}<br>
 								@endif
-								@if (isset($venta->lugarentrega))
-									Lugar de entrega: {{ $venta->lugarentrega ?? ''}}<br>
+								@if (!empty($venta->lugarentrega))
+									Lugar de entrega: {{ $venta->lugarentrega }}<br>
 								@endif
 								@include('exports.ventas.partials.papelito_waitry_factura', ['venta' => $venta])
 							</p>
@@ -305,7 +310,9 @@
 				<thead>
 				<tr style="height: 85px;">
 					<th style="width=150px; word-wrap: break-word; vertical-align: top;">
-						<img style="margin: 1px;" width="180" height="80" src="data:image/png;base64,{{ base64_encode(file_get_contents("/var/www/html/anitaERP/public/storage/imagenes/logos/".$venta->puntoventas->empresas->nombre.".png")) }}">
+						@if ($logoEmpresaDataUri)
+							<img style="margin: 1px;" width="180" height="80" src="{{ $logoEmpresaDataUri }}" alt="">
+						@endif
 						<div>
 							<strong style="font-size: 20px;">{{$venta->puntoventas->empresas->nombre}}</strong>
 							<p style="font-size: 16px;">
@@ -361,8 +368,8 @@
 								@if (isset($venta->transportes->nombre))
 									Transporte: {{ $venta->transportes->nombre ?? ''}}<br>
 								@endif
-								@if (isset($venta->lugarentrega))
-									Lugar de entrega: {{ $venta->lugarentrega ?? ''}}<br>
+								@if (!empty($venta->lugarentrega))
+									Lugar de entrega: {{ $venta->lugarentrega }}<br>
 								@endif
 								@include('exports.ventas.partials.papelito_waitry_factura', ['venta' => $venta])
 							</p>

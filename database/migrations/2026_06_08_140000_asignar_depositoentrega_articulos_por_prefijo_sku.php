@@ -19,6 +19,10 @@ return new class extends Migration
 
     public function up(): void
     {
+        if (strtoupper((string) config('app.empresa')) !== 'AGG') {
+            return;
+        }
+
         $depositosPorPrefijo = $this->resolverDepositosPorPrefijo();
 
         foreach (self::PREFIJO_A_CODIGO_DEPOSITO as $prefijo => $codigoDeposito) {

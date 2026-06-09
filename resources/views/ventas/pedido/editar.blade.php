@@ -19,6 +19,10 @@
 
 	function sub()
 	{
+        if (typeof validarLugarEntregaAntesGuardar === 'function' && !validarLugarEntregaAntesGuardar()) {
+            return false;
+        }
+
         $('#formgeneral').submit();
     }
 
@@ -35,21 +39,16 @@
     	});
        
 		$("#divlugar").show();
-		$("#divcodigoentrega").hide();
 
         var cliente_id = $("#cliente_id").val();
-        completarCliente_Entrega(cliente_id);
-        asignaDatosCliente(cliente_id, false);
+        if (cliente_id > 0) {
+            completarCliente_Entrega(cliente_id);
+            asignaDatosCliente(cliente_id, false);
+        }
 
         setTimeout(() => {
             muestraTipoSuspension();
         }, 1000);
-
-        if ($("#cliente_entrega_id_previa").val() != "") {
-            setTimeout(() => {
-                    $("#cliente_entrega_id").val($("#cliente_entrega_id_previa").val());
-            }, 1000);
-        }
 	  });
 </script>
 @endsection

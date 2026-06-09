@@ -6,14 +6,11 @@
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/configuracion/salida.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/configuracion/salida-configurar.js")}}" type="text/javascript"></script>
 <script>
 
     $(function () {
-        var programa = $("#programa").val();
-        buscarSalida(programa);
-
-        setTimeout(() => {
-        }, 300);
+        buscarSalida($("#programa").val());
     });
 
 	function actualizar()
@@ -22,17 +19,24 @@
         var salida_id = $("#salida_id").val();
         var urlRetorno = $("#urlretorno").val();
 
-        if (programa == '')
-            programa = 'xx';
+        if (!salida_id) {
+            alert('Seleccione una impresora.');
+            return;
+        }
 
-        // Actualiza configuracion de salida
-        var listarUri = "/anitaERP/public/configuracion/setearsalida/"+programa+"/"+salida_id;
+        var listarUri = carpetaBase + '/configuracion/setearsalida/'
+            + encodeURIComponent(programa)
+            + '/'
+            + encodeURIComponent(salida_id);
 
-        $.get(listarUri, function(data){
-            setTimeout(() => {
-                window.history.back();
-            }, 300);	
-		});
+        $.get(listarUri, function(){
+            if (urlRetorno) {
+                window.location.href = urlRetorno;
+                return;
+            }
+
+            window.history.back();
+        });
     }
 
 </script>
@@ -45,7 +49,7 @@
         @include('includes.mensaje')
         <div class="card card-danger">
             <div class="card-header">
-                <h3 class="card-title">Configurar Salida {{$programa}}</h3>
+                <h3 class="card-title">Configurar impresora — {{ $programaEtiqueta ?? $programa }}</h3>
                 <div class="card-tools">
                     <a href="javascript:history.back()" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver atrás

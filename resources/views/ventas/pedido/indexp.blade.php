@@ -11,7 +11,8 @@ Pedidos de Clientes
 
 <script>
 
-var url = "{{ route('configurar_salida', ['programa' => ':programa']) }}";
+window.seteoSalidaPrograma = @json(\App\Support\Configuracion\SeteoSalidaProgramaSupport::VENTAS_PEDIDO);
+window.seteoSalidaConfigurarUrl = @json(route('configurar_salida', ['programa' => ':programa']));
 
 function limpiaFiltros(){
 	$('#estado').val('');

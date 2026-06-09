@@ -51,6 +51,7 @@
 	var kiloanulacion;
 	var itemPedido_id;
 	var flSaltarFocusDescuentoPedido = false;
+	var flAgregarRenglonTrasDescuentoPedido = false;
 
 	function esCampoPedidoEnfocable(el) {
 		if (!el || el.tagName === 'TEXTAREA') {
@@ -152,6 +153,9 @@
 		if (!esCampoPedidoEnfocable(event.target)) {
 			return;
 		}
+		if (confirmarDescuentoPedidoConEnter(event)) {
+			return;
+		}
 
 		event.preventDefault();
 
@@ -180,6 +184,117 @@
 		}
 	}
 
+	function esSelectDescuentoPedido(el) {
+		return !!(el && el.tagName === 'SELECT' && el.classList.contains('descuentoventa_id') && !el.disabled);
+	}
+
+	function opcionesNavegablesDescuentoPedido(select) {
+		return Array.prototype.filter.call(select.options, function (opt) {
+			return !opt.disabled;
+		});
+	}
+
+	function navegarDescuentoPedidoConFlechas(event) {
+		if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') {
+			return;
+		}
+		if (!esSelectDescuentoPedido(event.target)) {
+			return;
+		}
+
+		event.preventDefault();
+		event.stopPropagation();
+
+		var select = event.target;
+		var opts = opcionesNavegablesDescuentoPedido(select);
+
+		if (!opts.length) {
+			return;
+		}
+
+		var idx = -1;
+
+		for (var i = 0; i < opts.length; i++) {
+			if (opts[i].selected || String(opts[i].value) === String(select.value)) {
+				idx = i;
+				break;
+			}
+		}
+
+		if (event.key === 'ArrowDown') {
+			idx = idx < 0 ? 0 : Math.min(idx + 1, opts.length - 1);
+		} else {
+			idx = idx < 0 ? opts.length - 1 : Math.max(idx - 1, 0);
+		}
+
+		select.selectedIndex = Array.prototype.indexOf.call(select.options, opts[idx]);
+	}
+
+	function agregarRenglonPedidoTrasDescuento() {
+		if (!puedeAgregarRenglonPedido()) {
+			alert('No puede generar pedidos con mas de 42 ítems');
+			return;
+		}
+
+		agregaRenglon();
+	}
+
+	function confirmarDescuentoPedidoConEnter(event) {
+		if (!esSelectDescuentoPedido(event.target)) {
+			return false;
+		}
+
+		event.preventDefault();
+		event.stopPropagation();
+
+		if (!event.target.value) {
+			agregarRenglonPedidoTrasDescuento();
+			return true;
+		}
+
+		flAgregarRenglonTrasDescuentoPedido = true;
+		$(event.target).trigger('change');
+		return true;
+	}
+
+	function esAtajoAgregarRenglonPedido(event) {
+		return event.key === '+' || event.code === 'NumpadAdd' || (event.key === '=' && event.shiftKey);
+	}
+
+	function estaEnTablaArticulosPedido(el) {
+		return !!(el && el.closest && el.closest('#itemspedido-table'));
+	}
+
+	function hayModalPedidoAbierto() {
+		return document.querySelector('.modal.show, .modal.in') !== null;
+	}
+
+	function puedeAgregarRenglonPedido() {
+		return $('#tbody-tabla .item-pedido').length < 42;
+	}
+
+	function agregarRenglonPedidoConTeclado(event) {
+		if (!esAtajoAgregarRenglonPedido(event)) {
+			return;
+		}
+		if (!estaEnTablaArticulosPedido(event.target)) {
+			return;
+		}
+		if (hayModalPedidoAbierto()) {
+			return;
+		}
+
+		event.preventDefault();
+		event.stopPropagation();
+
+		if (!puedeAgregarRenglonPedido()) {
+			alert('No puede generar pedidos con mas de 42 ítems');
+			return;
+		}
+
+		agregaRenglon(event);
+	}
+
 	function initPedidoEnterNavigation() {
 		var form = document.getElementById('formgeneral');
 
@@ -188,44 +303,139 @@
 		}
 
 		form.dataset.pedidoEnterNav = '1';
+		form.addEventListener('keydown', agregarRenglonPedidoConTeclado, true);
+		form.addEventListener('keydown', navegarDescuentoPedidoConFlechas, true);
 		form.addEventListener('keydown', avanzarCampoPedidoConEnter, true);
 	}
 	
 	function completarCliente_Entrega(cliente_id){
-        var loc_id;
-		var lugarentrega = $("#lugarentrega").val();
-        $.get(carpetaBase+'/ventas/leercliente_entrega/'+cliente_id, function(data){
-            var entr = $.map(data, function(value, index){
-                return [value];
-            });
-            $("#cliente_entrega_id").empty();
-            $("#cliente_entrega_id").append('<option value=""></option>');
-            fl_tiene_entrega = false;
-            $.each(entr, function(index,value){
-				if (value.nombre != lugarentrega)
-				{
-                	$("#cliente_entrega_id").append('<option value="'+value.id+'">'+value.nombre+'</option>');
+		window._entregasClienteActual = [];
+
+		$.get(carpetaBase+'/ventas/leercliente_entrega/'+cliente_id, function(data){
+			var entr = $.map(data, function(value){
+				return [value];
+			});
+
+			window._entregasClienteActual = entr;
+			fl_tiene_entrega = entr.length > 0;
+			$('#fl_cliente_tiene_entrega').val(fl_tiene_entrega ? '1' : '0');
+
+			if (!fl_tiene_entrega) {
+				$('#cliente_entrega_id').val('');
+				$('#entrega_nombre').val('');
+				$('#div-cambiar-lugarentrega').hide();
+				$('#lugarentrega').prop('readonly', false);
+
+				$.get(carpetaBase+'/ventas/leercliente/'+cliente_id, function(clienteData){
+					var datoscli = $.map(clienteData, function(value){
+						return [value];
+					});
+					$('#lugarentrega').val(datoscli[6] || '');
+				});
+				return;
+			}
+
+			$('#lugarentrega').prop('readonly', true);
+
+			if (entr.length === 1) {
+				aplicarLugarEntregaCliente(entr[0]);
+				$('#div-cambiar-lugarentrega').hide();
+				return;
+			}
+
+			$('#div-cambiar-lugarentrega').show();
+
+			var entregaPreviaId = $('#cliente_entrega_id_previa').val() || $('#cliente_entrega_id').val();
+			if (entregaPreviaId) {
+				var entregaPrevia = null;
+				$.each(entr, function(index, value){
+					if (String(value.id) === String(entregaPreviaId)) {
+						entregaPrevia = value;
+					}
+				});
+
+				if (entregaPrevia) {
+					aplicarLugarEntregaCliente(entregaPrevia);
+					return;
 				}
-				else
-				{
-                	$("#cliente_entrega_id").append('<option value="'+value.id+'" selected>'+value.nombre+'</option>');
-				}
-                fl_tiene_entrega = true;
-            });
-            if (fl_tiene_entrega)
-            {
-              $("#divcodigoentrega").show();
-              $("#divlugar").hide();
-            }
-            else
-            {
-              $("#divcodigoentrega").hide();
-              $("#divlugar").show();
-            }
-        });
-        setTimeout(() => {
-        }, 3000);
-    }
+			}
+
+			limpiarLugarEntregaCliente();
+			mostrarModalSeleccionEntrega(entr);
+		});
+	}
+
+	function limpiarLugarEntregaCliente() {
+		$('#cliente_entrega_id').val('');
+		$('#entrega_nombre').val('');
+		$('#lugarentrega').val('');
+	}
+
+	function aplicarLugarEntregaCliente(entrega) {
+		if (!entrega) {
+			return;
+		}
+
+		$('#cliente_entrega_id').val(entrega.id);
+		$('#cliente_entrega_id_previa').val(entrega.id);
+		$('#entrega_nombre').val(entrega.nombre);
+		$('#lugarentrega').val(entrega.nombre).prop('readonly', true);
+	}
+
+	function renderFilasModalEntrega(entregas) {
+		var html = '';
+
+		$.each(entregas, function(index, value){
+			html += '<tr>';
+			html += '<td class="nombre">'+ (value.nombre || '') +'</td>';
+			html += '<td class="domicilio">'+ (value.domicilio || '') +'</td>';
+			html += '<td class="localidad">'+ (value.localidad || '') +'</td>';
+			html += '<td class="provincia">'+ (value.provincia || '') +'</td>';
+			html += '<td class="text-nowrap"><button type="button" class="btn btn-warning btn-sm eligelugarentrega" data-id="'+ value.id +'">Elegir</button></td>';
+			html += '</tr>';
+		});
+
+		$('#datosclienteentrega').html(html);
+	}
+
+	function mostrarModalSeleccionEntrega(entregas) {
+		if (!entregas || !entregas.length) {
+			return;
+		}
+
+		renderFilasModalEntrega(entregas);
+		$('#seleccionclienteentregaModal').modal('show');
+	}
+
+	function validarLugarEntregaAntesGuardar() {
+		if ($('#fl_cliente_tiene_entrega').val() === '1' && !$('#cliente_entrega_id').val()) {
+			alert('Debe seleccionar un lugar de entrega del cliente.');
+			mostrarModalSeleccionEntrega(window._entregasClienteActual || []);
+			return false;
+		}
+
+		return true;
+	}
+
+	$(document).on('click', '#btn-cambiar-lugarentrega', function(){
+		mostrarModalSeleccionEntrega(window._entregasClienteActual || []);
+	});
+
+	$(document).on('click', '.eligelugarentrega', function(){
+		var entregaId = $(this).data('id');
+		var entrega = null;
+
+		$.each(window._entregasClienteActual || [], function(index, value){
+			if (String(value.id) === String(entregaId)) {
+				entrega = value;
+			}
+		});
+
+		if (entrega) {
+			aplicarLugarEntregaCliente(entrega);
+			$('#seleccionclienteentregaModal').modal('hide');
+		}
+	});
 
     function completarCombinaciones(articulo, combinacion_id, flsinfiltro){
         var comb_id;
@@ -512,11 +722,12 @@
 			if (articulo_nuevo != articulo_ant)
 			{
 				// Blanquea cantidades
-				$(this).parents("tr").find(".caja").val('');
-				$(this).parents("tr").find(".pieza").val('');
-				$(this).parents("tr").find(".kilo").val('');
-				$(this).parents("tr").find(".pesada").val('');
-				$(this).parents("tr").find(".descuentoventa_id").val('');
+				var $tr = $(this).parents("tr");
+				$tr.find(".caja").val('');
+				$tr.find(".pieza").val('');
+				$tr.find(".kilo").val('');
+				$tr.find(".pesada").val('');
+				reseteaDescuentoFila($tr);
 			}
         });
 
@@ -584,12 +795,13 @@
         });
 
         $(".unidadmedida_id").on('change', function() {
-			// Blanquea cantidades
-			$(this).parents("tr").find(".caja").val('');
-			$(this).parents("tr").find(".pieza").val('');
-			$(this).parents("tr").find(".kilo").val('');
-			$(this).parents("tr").find(".pesada").val('');
-			$(this).parents("tr").find(".descuentoventa_id").val('');
+			// Blanquea cantidades y habilita descuento para recalcular
+			var $tr = $(this).parents("tr");
+			$tr.find(".caja").val('');
+			$tr.find(".pieza").val('');
+			$tr.find(".kilo").val('');
+			$tr.find(".pesada").val('');
+			reseteaDescuentoFila($tr);
 
 			var unidadmedida = $(this).find('option:selected').text();
 
@@ -638,10 +850,10 @@
 			if (categoria_id == categoria_secos_id && subcategoria_id == subcategoria_maquina_id && 
 				parseFloat(pieza) < parseFloat(cantidadDescuento))
 			{
+				flAgregarRenglonTrasDescuentoPedido = false;
 				alert('No puede usar descuento mayor a las piezas pedidas. Descuento Piezas '+cantidadDescuento+' Piezas Pedidas '+pieza);
 
-				$(this).parents("tr").find(".descuentoventa_id").val('');
-				$(this).parents("tr").find(".descuentoventaanterior_id").val('');
+				reseteaDescuentoFila($(this).parents("tr"));
 			}
 			else
 			{
@@ -1710,7 +1922,9 @@
 				$('#nombretransporte').val(nombretransporte);
 				$('#condicionventa_id').val(condicionventa_id);
 				$('#descuento').val(descuento);
-				$('#lugarentrega').val(lugarentrega);
+				if ($('#fl_cliente_tiene_entrega').val() !== '1') {
+					$('#lugarentrega').val(lugarentrega);
+				}
 				$('#zonavta_id').val(zonavta_id);
 			}
 			$('#tiposuspension_id').val(tiposuspension_id);
@@ -1814,7 +2028,10 @@
 
 				TotalPedido();
 
-				if (flSaltarFocusDescuentoPedido) {
+				if (flAgregarRenglonTrasDescuentoPedido) {
+					flAgregarRenglonTrasDescuentoPedido = false;
+					agregarRenglonPedidoTrasDescuento();
+				} else if (flSaltarFocusDescuentoPedido) {
 					var $kilo = $(ptr).parents("tr").find(".kilo");
 
 					if ($kilo.length && !$kilo.prop('readonly')) {
@@ -2045,6 +2262,12 @@
 			$(ptr).parents("tr").find('.descuentoventa_id option[value="4"]').remove();
 		}
 
+	}
+
+	function reseteaDescuentoFila($tr)
+	{
+		$tr.find('.descuentoventa_id').val('').prop('disabled', false);
+		$tr.find('.descuentoventaanterior_id').val('');
 	}
 
 	function marcaDescuento()

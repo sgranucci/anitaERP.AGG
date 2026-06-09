@@ -2,6 +2,7 @@
 
 namespace App\Repositories\Configuracion;
 
+use App\Support\Configuracion\SeteoSalidaProgramaSupport;
 use Illuminate\Http\Request;
 use App\Models\Configuracion\Seteosalida;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -70,42 +71,60 @@ class SeteosalidaRepository implements SeteosalidaRepositoryInterface
 
     public function buscaSeteo($usuario_id, $opcion = null)
     {
-		$programa = $this->armaNombrePrograma($opcion);
+        $programa = $this->armaNombrePrograma($opcion);
 
         $seteosalida = $this->model->where('usuario_id', $usuario_id)
-                                    ->where('programa', $programa)
-                                    ->with('salidas')
-                                    ->first();
-        return $seteosalida;
+            ->where('programa', $programa)
+            ->with('salidas.ubicacionImpresora')
+            ->first();
+
+        if ($seteosalida) {
+            return $seteosalida;
+        }
+
+        foreach (SeteoSalidaProgramaSupport::clavesLegacy($opcion) as $legacy) {
+            if ($legacy === $programa) {
+                continue;
+            }
+
+            $seteosalida = $this->model->where('usuario_id', $usuario_id)
+                ->where('programa', $legacy)
+                ->with('salidas.ubicacionImpresora')
+                ->first();
+
+            if ($seteosalida) {
+                return $seteosalida;
+            }
+        }
+
+        return null;
     }
 
     public function leeSeteo($usuario_id, $programa)
     {
+        $programaCanonico = SeteoSalidaProgramaSupport::resolver($programa);
+
         $seteosalida = $this->model->where('usuario_id', $usuario_id)
-                                    ->where('programa', $programa)
-                                    ->with('salidas')
-                                    ->first();
-        return $seteosalida;
+            ->where('programa', $programaCanonico)
+            ->with('salidas.ubicacionImpresora')
+            ->first();
+
+        if ($seteosalida) {
+            return $seteosalida;
+        }
+
+        if ($programa !== null && $programa !== '' && $programa !== $programaCanonico) {
+            return $this->model->where('usuario_id', $usuario_id)
+                ->where('programa', $programa)
+                ->with('salidas.ubicacionImpresora')
+                ->first();
+        }
+
+        return null;
     }
 
     public function armaNombrePrograma($opcion = null)
     {
-        if ($opcion == 'xx')
-            $opcion = null;
-
-        $programa = request()->server('HTTP_REFERER');
-
-        // Puentea seteo desde botones de impresion de OT en pedidos y ordenes de trabajo
-        if (strstr($programa, 'pedido'))
-            $programa = "http://160.132.0.209/anitaERP/public/ventas/repemisionot";
-
-        if (strstr($programa, 'ordenestrabajo'))
-            $programa = "http://160.132.0.209/anitaERP/public/ventas/repemisionot";
-
-        // Agrega programa enviado a la url completa
-        $urlCompleta = str_replace('/', '_', $programa);
-        $programa = $urlCompleta.($opcion ? '_'.Str::slug($opcion, '_'): '');
-
-        return $programa;
+        return SeteoSalidaProgramaSupport::resolver($opcion);
     }
 }

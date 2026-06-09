@@ -109,6 +109,10 @@ return new class extends Migration
 
     public function up(): void
     {
+        if (strtoupper((string) config('app.empresa')) !== 'AGG') {
+            return;
+        }
+
         $arbol = DB::table('arbolaprobacion')
             ->where('tipoarbol', 'Requisiciones')
             ->where('empresa_id', self::EMPRESA_ID)

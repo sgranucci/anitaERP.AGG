@@ -213,6 +213,24 @@ body.manual-gastronomia {
     color: #dbeafe;
 }
 
+.mc-flow-box {
+    background: #f0f7ff;
+    border: 1px solid #b8d4f0;
+    border-radius: 8px;
+    padding: .85rem 1rem;
+    margin: 1rem 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: .8rem;
+    white-space: pre-line;
+    overflow-x: auto;
+    color: var(--mc-text);
+}
+
+[data-theme="dark"] .mc-flow-box {
+    background: #1e293b;
+    border-color: #334155;
+}
+
 .mc-chapter {
     margin-bottom: 2.5rem;
     scroll-margin-top: 5rem;

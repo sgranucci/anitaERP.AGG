@@ -21,6 +21,10 @@ return new class extends Migration
 
     public function up(): void
     {
+        if (strtoupper((string) config('app.empresa')) !== 'AGG') {
+            return;
+        }
+
         if (! Schema::hasTable('ubicaciones_gastronomia') || ! Schema::hasTable('totem_waitry_gastronomia')) {
             return;
         }

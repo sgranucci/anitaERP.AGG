@@ -183,12 +183,15 @@ class CobranzaController extends Controller
         
         $tipotransaccion_caja_id = session('tipotransaccioncobranza_caja_id');
         $empresa_id = session('empresa_id');
+        $puede_descuento_cobranza = can('generar-nota-de-credito', false)
+            && (bool) config('cobranza.descuento_nc_habilitado', true);
 
         return view('caja.cobranza.crear', compact('tipotransaccion_caja_query', 'moneda_query', 
                                                 'tipotransaccion_caja_id', 'empresa_id',
                                                 'empresa_query',  'retencion_cobranza_query', 
                                                 'venta_id', 'referer', 'ordenventa_id',
-                                                'centrocosto_query', 'caja_id', 'nombreCaja', 'origen'));
+                                                'centrocosto_query', 'caja_id', 'nombreCaja', 'origen',
+                                                'puede_descuento_cobranza'));
     }
 
     /**
@@ -227,6 +230,7 @@ class CobranzaController extends Controller
         can('editar-cobranza');
 
         $data = $this->cobranzaRepository->find($id);
+        $data->load('cobranza_descuentos');
 
         $tipotransaccion_caja_query = $this->tipotransaccion_cajaRepository->all();
         $moneda_query = $this->monedaRepository->all();
@@ -246,12 +250,26 @@ class CobranzaController extends Controller
 
         $tipotransaccion_caja_id = session('tipotransaccioncobranza_caja_id');
         $empresa_id = session('empresa_id');
+        $puede_descuento_cobranza = can('generar-nota-de-credito', false)
+            && (bool) config('cobranza.descuento_nc_habilitado', true);
+        $cobranza_descuentos_json = ($data->cobranza_descuentos ?? collect())
+            ->where('estado', '!=', 'emitida')
+            ->values()
+            ->map(fn ($d) => [
+                'venta_origen_id' => $d->venta_origen_id,
+                'tipo' => $d->tipo,
+                'valor' => $d->valor,
+                'importe_calculado' => $d->importe_calculado,
+                'leyenda' => $d->leyenda,
+            ])
+            ->all();
 
         return view('caja.cobranza.editar', compact('data', 
                                                     'tipotransaccion_caja_query', 'moneda_query',
                                                     'tipotransaccion_caja_id', 'empresa_id',
                                                     'empresa_query',  'retencion_cobranza_query',
-                                                    'centrocosto_query', 'caja_id', 'nombreCaja', 'origen'));
+                                                    'centrocosto_query', 'caja_id', 'nombreCaja', 'origen',
+                                                    'puede_descuento_cobranza', 'cobranza_descuentos_json'));
     }
 
     /**

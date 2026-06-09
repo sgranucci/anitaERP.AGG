@@ -17,6 +17,7 @@ use App\Repositories\Ventas\Ordentrabajo_TareaRepositoryInterface;
 use App\Repositories\Ventas\VentaRepositoryInterface;
 use App\Repositories\Produccion\TareaRepositoryInterface;
 use App\Repositories\Configuracion\SeteosalidaRepositoryInterface;
+use App\Support\Configuracion\SeteoSalidaProgramaSupport;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Combinacion;
 use App\Models\Stock\Categoria;
@@ -1037,7 +1038,7 @@ class OrdentrabajoService
 		Storage::disk('local')->put($nombreEtiqueta, $etiqueta);
 		$path = Storage::path($nombreEtiqueta);
 		$usuario_id = Auth::user()->id;
-        $seteosalida = $this->seteoSalidaRepository->buscaSeteo($usuario_id, "");
+        $seteosalida = $this->seteoSalidaRepository->buscaSeteo($usuario_id, SeteoSalidaProgramaSupport::VENTAS_REPETIQUETAOT);
 
 		$comando = sprintf($seteosalida->salidas->comando, $path);
 		system($comando);
@@ -2104,7 +2105,7 @@ class OrdentrabajoService
 		//$cmd = "./bin/imp_otr ".$path." ".$nombreQR." hp-diego";
 
 		$usuario_id = Auth::user()->id;
-        $seteosalida = $this->seteoSalidaRepository->buscaSeteo($usuario_id, "");
+        $seteosalida = $this->seteoSalidaRepository->buscaSeteo($usuario_id, SeteoSalidaProgramaSupport::VENTAS_REPEMISIONOT);
 
 		$cmd = sprintf($seteosalida->salidas->comando, $path, $nombreQR);
 		//system($comando);

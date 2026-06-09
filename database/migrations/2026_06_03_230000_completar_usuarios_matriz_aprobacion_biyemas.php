@@ -11,6 +11,10 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (strtoupper((string) config('app.empresa')) !== 'AGG') {
+            return;
+        }
+
         $empresaBiyemas = (int) DB::table('empresa')
             ->where('nombre', 'like', 'BIYEMAS%')
             ->value('id');

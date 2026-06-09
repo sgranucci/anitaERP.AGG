@@ -6,6 +6,17 @@
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/caja/cobranza/crear.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/caja/cobranza/descuento_comprobante.js")}}" type="text/javascript"></script>
+@if (!empty($cobranza_descuentos_json))
+<script type="text/javascript">
+    $(function () {
+        setTimeout(function () {
+            sincronizaFilasNcPendientes();
+            sumaMontoComprobante();
+        }, 400);
+    });
+</script>
+@endif
 <script src="{{asset("assets/pages/scripts/contable/cuentacontable/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/caja/cuentacaja/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/contable/asiento/asiento_externo.js")}}" type="text/javascript"></script>

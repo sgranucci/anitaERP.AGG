@@ -8,10 +8,12 @@ use App\Repositories\Ventas\Pedido_CombinacionRepositoryInterface;
 use App\Repositories\Ventas\Pedido_ArticuloRepositoryInterface;
 use App\Repositories\Ventas\Pedido_Articulo_EstadoRepositoryInterface;
 use App\Repositories\Ventas\Pedido_Articulo_CajaRepositoryInterface;
+use App\Repositories\Ventas\Cliente_EntregaRepositoryInterface;
 use App\Repositories\Ventas\Ordentrabajo_Combinacion_TalleRepositoryInterface;
 use App\Repositories\Ventas\Ordentrabajo_TareaRepositoryInterface;
 use App\Repositories\Ventas\OrdentrabajoRepositoryInterface;
 use App\Repositories\Configuracion\SeteosalidaRepositoryInterface;
+use App\Support\Configuracion\SeteoSalidaProgramaSupport;
 use App\Services\Configuracion\ImpuestoService;
 use App\Services\Stock\Articulo_MovimientoService;
 use App\Services\Stock\PrecioService;
@@ -51,6 +53,7 @@ class PedidoService
 	protected $articulo_movimientoService;
 	protected $precioService;
 	protected $seteosalidaRepository;
+	protected $cliente_entregaRepository;
 
     public function __construct(PedidoRepositoryInterface $pedidorepository,
 								Pedido_ArticuloRepositoryInterface $pedidoarticulorepository,
@@ -66,7 +69,8 @@ class PedidoService
 								ImpuestoService $impuestoservice,
 								OrdentrabajoService $ordentrabajoservice,
 								Articulo_MovimientoService $articulo_movimientoservice,
-								SeteosalidaRepositoryInterface $seteosalidarepository
+								SeteosalidaRepositoryInterface $seteosalidarepository,
+								Cliente_EntregaRepositoryInterface $cliente_entregarepository
 								)
     {
         $this->pedidoRepository = $pedidorepository;
@@ -84,6 +88,7 @@ class PedidoService
 		$this->ordentrabajoService = $ordentrabajoservice;
 		$this->precioService = $precioservice;
 		$this->seteosalidaRepository = $seteosalidarepository;
+		$this->cliente_entregaRepository = $cliente_entregarepository;
     }
 
 	public function leePedido($id)
@@ -200,6 +205,7 @@ class PedidoService
 		$path = storage_path('pdf/pedido');
 
         $pdf = App::make('dompdf.wrapper');
+        $pdf->setPaper('legal', 'landscape');
         $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
 
 		// Arma nombre de archivo
@@ -209,7 +215,7 @@ class PedidoService
 		//$path = Storage::path($nombreReporte);
 
 		$usuario_id = Auth::user()->id;
-        $seteosalida = $this->seteosalidaRepository->buscaSeteo($usuario_id, "");
+        $seteosalida = $this->seteosalidaRepository->buscaSeteo($usuario_id, SeteoSalidaProgramaSupport::VENTAS_PEDIDO);
 
 		$comandos = explode(' ', $seteosalida->salidas->comando);
 
@@ -242,6 +248,7 @@ class PedidoService
 		$path = storage_path('pdf/pedido');
 
         $pdf = App::make('dompdf.wrapper');
+        $pdf->setPaper('legal', 'landscape');
         $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
 
 		return response()->download($path.'/'.$nombre_pdf.'.pdf');
@@ -417,6 +424,26 @@ class PedidoService
 	  	ini_set('memory_limit', '512M');
 
 		$cliente = $this->clienteQuery->traeClienteporId($data['cliente_id']);
+
+		if (!$cliente)
+			return ['error' => 'Cliente inexistente'];
+
+		$entregasCliente = $this->cliente_entregaRepository->leeClienteEntrega($data['cliente_id']);
+		if ($entregasCliente->count() > 0) {
+			$clienteEntregaId = (int) ($data['cliente_entrega_id'] ?? 0);
+			if ($clienteEntregaId <= 0) {
+				return ['error' => 'Debe seleccionar un lugar de entrega del cliente'];
+			}
+
+			$entrega = $entregasCliente->firstWhere('id', $clienteEntregaId);
+			if (!$entrega) {
+				return ['error' => 'El lugar de entrega seleccionado no pertenece al cliente'];
+			}
+
+			$data['lugarentrega'] = $entrega->nombre;
+		} else {
+			$data['cliente_entrega_id'] = null;
+		}
 
 		if ($funcion == 'create')
 		{	

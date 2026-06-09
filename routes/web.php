@@ -94,6 +94,20 @@ Route::post('configuracion/salida', 'Configuracion\SalidaController@guardar')->n
 Route::get('configuracion/salida/{id}/editar', 'Configuracion\SalidaController@editar')->name('editar_salida');
 Route::put('configuracion/salida/{id}', 'Configuracion\SalidaController@actualizar')->name('actualizar_salida');
 Route::delete('configuracion/salida/{id}', 'Configuracion\SalidaController@eliminar')->name('eliminar_salida');
+Route::get('configuracion/ubicacion-impresora', 'Configuracion\UbicacionImpresoraController@index')->name('ubicacion_impresora');
+Route::get('configuracion/lista-ubicacion-impresora/{formato?}/{busqueda?}', 'Configuracion\UbicacionImpresoraController@listar')->name('lista_ubicacion_impresora');
+Route::get('configuracion/ubicacion-impresora/crear', 'Configuracion\UbicacionImpresoraController@crear')->name('crear_ubicacion_impresora');
+Route::post('configuracion/ubicacion-impresora', 'Configuracion\UbicacionImpresoraController@guardar')->name('guardar_ubicacion_impresora');
+Route::get('configuracion/ubicacion-impresora/{id}/editar', 'Configuracion\UbicacionImpresoraController@editar')->name('editar_ubicacion_impresora');
+Route::put('configuracion/ubicacion-impresora/{id}', 'Configuracion\UbicacionImpresoraController@actualizar')->name('actualizar_ubicacion_impresora');
+Route::delete('configuracion/ubicacion-impresora/{id}', 'Configuracion\UbicacionImpresoraController@eliminar')->name('eliminar_ubicacion_impresora');
+Route::get('configuracion/uso-salida-impresora', 'Configuracion\UsoSalidaImpresoraController@index')->name('uso_salida_impresora');
+Route::get('configuracion/lista-uso-salida-impresora/{formato?}/{busqueda?}', 'Configuracion\UsoSalidaImpresoraController@listar')->name('lista_uso_salida_impresora');
+Route::get('configuracion/uso-salida-impresora/crear', 'Configuracion\UsoSalidaImpresoraController@crear')->name('crear_uso_salida_impresora');
+Route::post('configuracion/uso-salida-impresora', 'Configuracion\UsoSalidaImpresoraController@guardar')->name('guardar_uso_salida_impresora');
+Route::get('configuracion/uso-salida-impresora/{id}/editar', 'Configuracion\UsoSalidaImpresoraController@editar')->name('editar_uso_salida_impresora');
+Route::put('configuracion/uso-salida-impresora/{id}', 'Configuracion\UsoSalidaImpresoraController@actualizar')->name('actualizar_uso_salida_impresora');
+Route::delete('configuracion/uso-salida-impresora/{id}', 'Configuracion\UsoSalidaImpresoraController@eliminar')->name('eliminar_uso_salida_impresora');
 Route::get('configuracion/configurarsalida/{programa?}', 'Configuracion\SalidaController@configurarSalida')->name('configurar_salida');
 Route::get('configuracion/setearsalida/{programa}/{salida}', 'Configuracion\SalidaController@setearSalida')->name('setear_salida');
 Route::get('configuracion/buscarsalida/{programa?}', 'Configuracion\SalidaController@buscarSalida')->name('buscar_salida');
@@ -2279,6 +2293,10 @@ Route::get('compras/manual/descargar-word', 'Compras\ManualComprasController@des
 Route::get('ventas/gastronomia/manual', 'Ventas\ManualGastronomiaController@index')->name('manual_gastronomia');
 Route::get('ventas/gastronomia/manual/descargar-pdf', 'Ventas\ManualGastronomiaController@descargarPdf')->name('manual_gastronomia_pdf');
 Route::get('ventas/gastronomia/manual/descargar-word', 'Ventas\ManualGastronomiaController@descargarWord')->name('manual_gastronomia_word');
+
+Route::get('ventas/manual', 'Ventas\ManualVentasController@index')->name('manual_ventas');
+Route::get('ventas/manual/descargar-pdf', 'Ventas\ManualVentasController@descargarPdf')->name('manual_ventas_pdf');
+Route::get('ventas/manual/descargar-word', 'Ventas\ManualVentasController@descargarWord')->name('manual_ventas_word');
 
 /*
  * Manual de usuario — Recuento de inventario (Stock)

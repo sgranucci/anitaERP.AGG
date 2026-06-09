@@ -50,6 +50,12 @@ class Cobranza extends Model implements Auditable
     	return $this->hasMany(Cobranza_Retencion::class, 'cobranza_id')->with('retencion_cobranzas');
 	}
 
+	public function cobranza_descuentos()
+	{
+    	return $this->hasMany(Cobranza_Descuento::class, 'cobranza_id')
+            ->with(['ventaOrigen', 'ventaNc', 'clienteCuentacorrienteOrigen']);
+	}
+
 	public function cliente_cuentacorrientes()
 	{
     	return $this->hasMany(Cliente_Cuentacorriente::class, 'cobranza_id');

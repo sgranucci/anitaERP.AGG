@@ -67,7 +67,12 @@
                             <td>{{$data->empresas->nombre ?? '' }}</td>
                             <td>{{date("d/m/Y", strtotime($data->fecha ?? ''))}}</td>
                             <td>{{date("d/m/Y", strtotime($data->fechavencimiento ?? ''))}}</td>
-                            <td class="comprobante">{{$data->cobranza_id > 0 ? $data->cobranzas->detalle : $data->ventas->codigo}}</td>
+                            <td class="comprobante">
+                                {{$data->cobranza_id > 0 ? $data->cobranzas->detalle : $data->ventas->codigo}}
+                                @if ($data->venta_id > 0 && !empty($data->ventas->lugarentrega))
+                                    <br><small class="text-muted">Entrega: {{ $data->ventas->lugarentrega }}</small>
+                                @endif
+                            </td>
                             <td>
                                 {{$data->monedas->abreviatura}}
                                 <input type="hidden" name="moneda" class="form-control moneda" value="{{$data->monedas->id}}"> 

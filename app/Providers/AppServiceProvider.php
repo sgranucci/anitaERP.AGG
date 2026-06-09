@@ -775,6 +775,16 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Configuracion\UbicacionImpresoraRepositoryInterface',
+            'App\Repositories\Configuracion\UbicacionImpresoraRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Configuracion\UsoSalidaImpresoraRepositoryInterface',
+            'App\Repositories\Configuracion\UsoSalidaImpresoraRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Configuracion\SeteosalidaRepositoryInterface',
             'App\Repositories\Configuracion\SeteosalidaRepository',
         );

@@ -46,6 +46,7 @@ function eliminarPedido(event) {
             <div class="card-header">
                 <h3 class="card-title">Pedidos de clientes</h3>
                 <div class="card-tools">
+                    @include('includes.ventas.boton-manual')
 					@if (session()->get('filtrosPedidos') == '')
 						<a href="javascript:void(0)" class="btn btn-outline-secondary btn-sm" id='btn_advanced_filter' data-url-parameter='' 
 							title='Filtros y búsquedas avanzadas' class="btn btn-sm btn-default ">

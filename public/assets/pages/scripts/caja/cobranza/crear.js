@@ -725,6 +725,7 @@ var saldoFinalCobranza = 0;
 			var url = carpetaBase+'/ventas/cliente/consultadeuda/'+cliente_id+'/'+empresa_id;
 	
 		$('#tbody-comprobante-table').empty();
+		$('#tbody-nc-pendiente-table').empty();
 
 		$.get(url, function(data){
 			$.each(data, function(index, item) {
@@ -806,16 +807,24 @@ var saldoFinalCobranza = 0;
 		// Muestra totales por moneda
 		$(wrapper).empty();
 
+		const descuentosMoneda = (typeof totalDescuentosPorMoneda === 'function') ? totalDescuentosPorMoneda() : {};
+
 		idMoneda.forEach(function(moneda, indice, array) {
 			let detalleLabel = 'Total a cobrar '+descripcionMoneda[moneda];
+			const desc = descuentosMoneda[moneda] || 0;
+			const neto = (totalMoneda[moneda] || 0) - desc;
 
 			if (totalMoneda[moneda] !== undefined && totalMoneda[moneda] != 0) 
 			{
 				$(wrapper).append('<label class="col-lg-2 col-form-label">'+detalleLabel+'</label>');
 				$(wrapper).append('<input type="hidden" name="monedacomprobantes[]" class="form-control col-lg-1" readonly value="'+moneda+'" />');
-				$(wrapper).append('<input type="text" name="totalcomprobantes[]" class="form-control col-lg-1" readonly value="'+totalMoneda[moneda].toFixed(2)+'" />');
+				$(wrapper).append('<input type="text" name="totalcomprobantes[]" class="form-control col-lg-1" readonly value="'+neto.toFixed(2)+'" />');
 			}
 		});
+
+		if (typeof sumaTotalDescuentosPantalla === 'function') {
+			sumaTotalDescuentosPantalla();
+		}
 
 		sumaCobranza();
 	}
@@ -950,6 +959,21 @@ var saldoFinalCobranza = 0;
 				saldoFinalCobranza += (valor * coef);
 			}
         });
+
+		if (typeof totalDescuentosPorMoneda === 'function') {
+			const descuentosMoneda = totalDescuentosPorMoneda();
+			idMoneda.forEach(function(moneda) {
+				const desc = descuentosMoneda[moneda] || 0;
+				if (desc <= 0) {
+					return;
+				}
+				let cotizacion = $("#tbody-comprobante-table .monedacomprobante").filter(function(){ return $(this).val() == moneda; }).first().parents("tr").find('.cotizacioncomprobante').val();
+				let coef = calculaCoeficienteMoneda(monedaDefault, moneda, cotizacion);
+				totalMoneda[moneda] -= desc;
+				flMovimientoMoneda[moneda] = true;
+				saldoFinalCobranza -= (desc * coef);
+			});
+		}
 
 		$("#tbody-cuenta-table .monto").each(function() {
             let valor = parseFloat($(this).val());
@@ -1362,6 +1386,8 @@ var saldoFinalCobranza = 0;
 			success: function (data) {
 				if (data.mensaje == 'ok')
 					alert("Se grabó transacción de caja con éxito");
+				else if (data.errores)
+					alert("Error de grabación: " + data.errores);
 				else
 					alert("Error de grabacion");
 

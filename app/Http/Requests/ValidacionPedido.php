@@ -28,6 +28,7 @@ class ValidacionPedido extends FormRequest
             'fechaentrega' => 'required',
             'cliente_id' => 'required|integer',
             'vendedor_id' => 'required|integer',
+            'cliente_entrega_id' => 'nullable|integer',
             'lugarentrega' => 'nullable|string|max:255',
             'leyenda' => 'nullable|string|max:255',
             'descuento' => 'sometimes|numeric|min:0|max:100',

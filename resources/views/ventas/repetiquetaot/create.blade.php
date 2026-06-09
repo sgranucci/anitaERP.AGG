@@ -13,13 +13,26 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.6-rc.0/js/select2.min.js"></script>
 <script src="{{asset("assets/pages/scripts/configuracion/salida.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/configuracion/configurar_salida.js")}}" type="text/javascript"></script>
 
 <script>
+    window.resolverSeteoSalidaPrograma = function () {
+        var tipo = $('#tipoetiqueta').val() || '';
+
+        if (!tipo) {
+            return @json(\App\Support\Configuracion\SeteoSalidaProgramaSupport::VENTAS_REPETIQUETAOT);
+        }
+
+        return @json(\App\Support\Configuracion\SeteoSalidaProgramaSupport::VENTAS_REPETIQUETAOT) + '_' + String(tipo).toLowerCase().replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '');
+    };
+
+    window.seteoSalidaConfigurarUrl = @json(route('configurar_salida', ['programa' => ':programa']));
+
     $(function () {
         imprimirSalida();
 
         $('#tipoetiqueta').on('change', function (event) {
-			event.preventDefault();
+            event.preventDefault();
             imprimirSalida();
         });
     });
@@ -30,27 +43,6 @@
         });
     });
     $("#ordenestrabajo").focus();
-
-    function configurarSalida()
-    {
-        var programa = $("#tipoetiqueta").val();
-        var url = "{{ route('configurar_salida', ['programa' => ':programa']) }}";
-
-        url = url.replace(':programa', programa);
-        location.href = url;
-    }
-
-    function imprimirSalida()
-    {
-        // manejo de configuracion del listado
-        var programa = $("#tipoetiqueta").val();
-
-        buscarSalida(programa);
-
-        setTimeout(() => {
-            $("#nombresalida").text(" - Imprime en: "+nombreSalida);
-        }, 300);
-    }
 </script>
 
 @endsection

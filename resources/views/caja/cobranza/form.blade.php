@@ -98,7 +98,17 @@
                     @if (! is_object($comprobante))
                         @continue
                     @endif
-                    <tr class="item-comprobante">
+                    @php
+                        $ventaOrigenId = $comprobante->cliente_cuentacorrientes->venta_id ?? null;
+                        $descuentoFila = null;
+                        if ($ventaOrigenId && isset($data) && ($data->cobranza_descuentos ?? null)) {
+                            $descuentoFila = $data->cobranza_descuentos
+                                ->first(fn ($d) => (int) $d->venta_origen_id === (int) $ventaOrigenId
+                                    && $d->estado === \App\Models\Caja\Cobranza_Descuento::ESTADO_PENDIENTE);
+                        }
+                        $tieneDescuentoPendiente = $descuentoFila && (float) $descuentoFila->importe_calculado > 0;
+                    @endphp
+                    <tr class="item-comprobante{{ $tieneDescuentoPendiente ? ' tiene-descuento-cobranza' : '' }}">
                         <td>
                             <input type="text" class="codigocomprobante form-control" name="codigocomprobantes[]" value="{{$comprobante->cliente_cuentacorrientes->ventas->codigo ?? ''}}" >
                         </td>							
@@ -137,7 +147,12 @@
                                 <a href="{{route('editar_factura', ['id' => $comprobante->cliente_cuentacorrientes->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                 <i class="fa fa-edit"></i>
                                 </a>
-                            @endif           
+                            @endif
+                            @if (($puede_descuento_cobranza ?? false))
+                                <button type="button" class="btn-accion-tabla tooltipsC btn-descuento-comprobante" title="Descuento (genera NC al confirmar)">
+                                    <i class="fa fa-percent {{ $tieneDescuentoPendiente ? 'text-success' : 'text-warning' }}"></i>
+                                </button>
+                            @endif
                             @if (can('generar-nota-de-credito', false))
                                 @if ($comprobante->total > 0)
                                     <a href="{{route('generar_notadecredito', ['id' => $comprobante->cliente_cuentacorrientes->id])}}" class="btn-accion-tabla tooltipsC" title="Generar nota de crédito">
@@ -155,13 +170,23 @@
                             <input name="checkaplicaciones[]" class="checkaplicacion" type="checkbox" autocomplete="off"> 
                             <input type="hidden" class="idcuentacorriente form-control" name="idcuentacorrientes[]" value="{{$comprobante->cliente_cuentacorrientes->id}}" >
                             <input type="hidden" class="idventa form-control" name="idventas[]" value="{{$comprobante->cliente_cuentacorrientes->venta_id}}" >
+                            <input type="hidden" class="descuento_tipo" name="descuento_tipos[]" value="{{ $descuentoFila->tipo ?? '' }}" />
+                            <input type="hidden" class="descuento_valor" name="descuento_valores[]" value="{{ $descuentoFila->valor ?? '' }}" />
+                            <input type="hidden" class="descuento_importe" name="descuento_importes[]" value="{{ $descuentoFila->importe_calculado ?? '' }}" />
+                            <input type="hidden" class="descuento_venta_origen_id" name="descuento_venta_origen_ids[]" value="{{ $tieneDescuentoPendiente ? $descuentoFila->venta_origen_id : '' }}" />
+                            <input type="hidden" class="descuento_cc_origen_id" name="descuento_cc_origen_ids[]" value="{{ $tieneDescuentoPendiente ? $descuentoFila->cliente_cuentacorriente_origen_id : '' }}" />
+                            <input type="hidden" class="descuento_leyenda" name="descuento_leyendas[]" value="{{ $descuentoFila->leyenda ?? '' }}" />
                         </td>
                     </tr>
                 @endforeach
             @endif
             </tbody>
+            <tbody id="tbody-nc-pendiente-table"></tbody>
         </table>
         @include('caja.cobranza.template')
+        @include('caja.cobranza.template_nc_pendiente')
+        <div class="form-group row totales-descuentos-cobranza">
+        </div>
         <div class="form-group row totales-por-comprobante">
         </div>
         <div class="form-group row totales-por-moneda">
@@ -179,5 +204,6 @@
 @include('includes.caja.modalconsultacuentacaja')
 @include('includes.ventas.modalconsultacliente')
 @include('caja.cobranza.revertircobranzamodal')
+@include('caja.cobranza.modal_descuento_comprobante')
 
 

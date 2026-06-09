@@ -30,6 +30,7 @@ use App\Repositories\Configuracion\Retencion_CobranzaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Caja\CobranzaNumeracionTransaccion;
+use App\Services\Caja\CobranzaDescuentoNotaCreditoService;
 use App\Services\Ordenventa\OrdenventaService;
 use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Localidad;
@@ -183,6 +184,8 @@ class CobranzaService
 				}
 
 				if ($origen) {
+					$this->procesarDescuentosAntesDeGrabar($data);
+
 					$cobranza = $this->cobranzaRepository->create($data);
 
 					if (! $cobranza) {
@@ -190,9 +193,12 @@ class CobranzaService
 					}
 
 					Self::agrega($data, $cobranza, $request);
+					$this->persistirDescuentosCobranza($cobranza->id, $data);
 				} else {
 					DB::beginTransaction();
 					try {
+						$this->procesarDescuentosAntesDeGrabar($data);
+
 						$cobranza = $this->cobranzaRepository->create($data);
 
 						if ($cobranza == 'Error') {
@@ -201,6 +207,7 @@ class CobranzaService
 
 						if ($cobranza) {
 							Self::agrega($data, $cobranza, $request);
+							$this->persistirDescuentosCobranza($cobranza->id, $data);
 						}
 
 						$anita = self::grabaAnita(
@@ -358,7 +365,6 @@ class CobranzaService
 			} catch (\Exception $e) {
 				DB::rollback();
 
-				dd($e->getMessage());
 				return ['errores' => $e->getMessage()];
 			}
 		}
@@ -367,6 +373,8 @@ class CobranzaService
 
 	private function actualiza($data, $id, $request)
 	{
+		$this->procesarDescuentosAntesDeGrabar($data);
+
 		// Graba cobranza 
 		$cobranza = $this->cobranzaRepository->update($data, $id);
 
@@ -506,7 +514,53 @@ class CobranzaService
 						'empresa_id' => $data['empresa_id']
 				]);		
 			}
-		}		
+		}
+
+		$this->persistirDescuentosCobranza($id, $data);
+	}
+
+	/**
+	 * @param  array<string, mixed>  $data
+	 */
+	private function procesarDescuentosAntesDeGrabar(array &$data): void
+	{
+		/** @var CobranzaDescuentoNotaCreditoService $descuentoService */
+		$descuentoService = app(CobranzaDescuentoNotaCreditoService::class);
+		$descuentos = $descuentoService->parseDescuentosDesdeRequest($data);
+
+		if ($descuentos === []) {
+			$data['_cobranza_descuentos'] = [];
+			$data['_cobranza_descuentos_emitidos'] = [];
+
+			return;
+		}
+
+		if (! can('generar-nota-de-credito', false)) {
+			throw new Exception('No tiene permiso para generar notas de crédito por descuento en cobranza.');
+		}
+
+		$data['_cobranza_descuentos'] = $descuentos;
+		$data['_cobranza_descuentos_emitidos'] = [];
+
+		if (CobranzaDescuentoNotaCreditoService::debeEmitirNotasCredito((string) ($data['estado'] ?? ''))) {
+			$data['_cobranza_descuentos_emitidos'] = $descuentoService->emitirDescuentosPendientes($data, $descuentos);
+		}
+	}
+
+	/**
+	 * @param  array<string, mixed>  $data
+	 */
+	private function persistirDescuentosCobranza(int $cobranzaId, array $data): void
+	{
+		$descuentos = $data['_cobranza_descuentos'] ?? [];
+		if ($descuentos === []) {
+			return;
+		}
+
+		/** @var CobranzaDescuentoNotaCreditoService $descuentoService */
+		$descuentoService = app(CobranzaDescuentoNotaCreditoService::class);
+		$emitidos = $data['_cobranza_descuentos_emitidos'] ?? [];
+		$descuentoService->persistirDescuentos($cobranzaId, $descuentos, $emitidos);
 	}
 
 	public function generaAsientoContable(array $data)

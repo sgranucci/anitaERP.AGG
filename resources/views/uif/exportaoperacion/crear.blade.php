@@ -12,7 +12,8 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.4.1/css/bootstrap-datepicker3.css"/>
 <script>
 
-    var url = "{{ route('configurar_salida', ['programa' => ':programa']) }}";
+window.seteoSalidaPrograma = @json(\App\Support\Configuracion\SeteoSalidaProgramaSupport::UIF_EXPORTA_OPERACION);
+window.seteoSalidaConfigurarUrl = @json(route('configurar_salida', ['programa' => ':programa']));
 
     $(function () {
         $('.periodo').datepicker( {

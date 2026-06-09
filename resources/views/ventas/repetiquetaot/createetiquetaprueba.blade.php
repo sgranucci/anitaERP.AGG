@@ -5,28 +5,14 @@
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/configuracion/salida.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/configuracion/configurar_salida.js")}}" type="text/javascript"></script>
 <script>
+    window.seteoSalidaPrograma = @json(\App\Support\Configuracion\SeteoSalidaProgramaSupport::VENTAS_REPETIQUETAOT);
+    window.seteoSalidaConfigurarUrl = @json(route('configurar_salida', ['programa' => ':programa']));
+
     $(function () {
         imprimirSalida();
     });
-
-    function imprimirSalida()
-    {
-        buscarSalida("");
-
-        setTimeout(() => {
-            $("#nombresalida").text(" - Imprime en: "+nombreSalida);
-        }, 300);
-    }
-    
-    function configurarSalida()
-    {
-        var url = "{{ route('configurar_salida', ['programa' => ':programa']) }}";
-        var programa = "";
-
-        url = url.replace(':programa', programa);
-        location.href = url;
-    }
 </script>
 
 @endsection

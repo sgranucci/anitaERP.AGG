@@ -52,6 +52,10 @@ return new class extends Migration
 
     public function up(): void
     {
+        if (strtoupper((string) config('app.empresa')) !== 'AGG') {
+            return;
+        }
+
         $monedaPesos = (int) DB::table('moneda')->where('nombre', 'PESOS')->value('id');
         if (! $monedaPesos) {
             throw new \RuntimeException('No se encontró la moneda PESOS.');

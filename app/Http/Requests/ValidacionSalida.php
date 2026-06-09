@@ -24,8 +24,11 @@ class ValidacionSalida extends FormRequest
     public function rules()
     {
         return [
-            'nombre' => 'required|max:255|unique:salida,nombre,' . $this->route('id'),
-            'comando' => 'required|max:255,' 
+            'nombre' => 'required|max:255|unique:salida,nombre,'.$this->route('id'),
+            'ubicacion_impresora_id' => 'required|exists:ubicacion_impresora,id',
+            'comando' => 'required|max:255,',
+            'uso_salida_impresora_ids' => 'nullable|array',
+            'uso_salida_impresora_ids.*' => 'integer|exists:uso_salida_impresora,id',
         ];
     }
 }

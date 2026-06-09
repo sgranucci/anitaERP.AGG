@@ -28,6 +28,10 @@
             return false;
         }
 
+        if (typeof validarLugarEntregaAntesGuardar === 'function' && !validarLugarEntregaAntesGuardar()) {
+            return false;
+        }
+
 		$('#formgeneral').submit();
 	}
 
@@ -42,7 +46,6 @@
         });
 
 		$("#divlugar").show();
-		$("#divcodigoentrega").hide();
 
         var cliente_id = $("#cliente_id").val();
 		if (cliente_id > 0)

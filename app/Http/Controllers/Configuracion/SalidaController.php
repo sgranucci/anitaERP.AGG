@@ -5,9 +5,14 @@ namespace App\Http\Controllers\Configuracion;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Storage;
+use App\Models\Configuracion\Salida;
 use App\Http\Requests\ValidacionSalida;
 use App\Repositories\Configuracion\SalidaRepositoryInterface;
 use App\Repositories\Configuracion\SeteosalidaRepositoryInterface;
+use App\Repositories\Configuracion\UbicacionImpresoraRepositoryInterface;
+use App\Repositories\Configuracion\UsoSalidaImpresoraRepositoryInterface;
+use App\Support\Configuracion\SalidaParaProgramaSupport;
+use App\Support\Configuracion\SeteoSalidaProgramaSupport;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
 
@@ -15,12 +20,18 @@ class SalidaController extends Controller
 {
     private $repository;
     private $seteosalidaRepository;
+    private $ubicacionImpresoraRepository;
+    private $usoSalidaImpresoraRepository;
 
     public function __construct(SalidaRepositoryInterface $salidarepository,
-                                SeteosalidaRepositoryInterface $seteosalidarepository)
+                                SeteosalidaRepositoryInterface $seteosalidarepository,
+                                UbicacionImpresoraRepositoryInterface $ubicacionImpresoraRepository,
+                                UsoSalidaImpresoraRepositoryInterface $usoSalidaImpresoraRepository)
     {
         $this->repository = $salidarepository;
         $this->seteosalidaRepository = $seteosalidarepository;
+        $this->ubicacionImpresoraRepository = $ubicacionImpresoraRepository;
+        $this->usoSalidaImpresoraRepository = $usoSalidaImpresoraRepository;
     }
 
     /**
@@ -44,7 +55,11 @@ class SalidaController extends Controller
     public function crear()
     {
         can('crear-salidas');
-        return view('configuracion.salida.crear');
+        $data = new Salida();
+        $ubicacion_impresora_query = $this->ubicacionImpresoraRepository->all();
+        $uso_salida_impresora_query = $this->usoSalidaImpresoraRepository->all();
+
+        return view('configuracion.salida.crear', compact('data', 'ubicacion_impresora_query', 'uso_salida_impresora_query'));
     }
 
     /**
@@ -71,8 +86,10 @@ class SalidaController extends Controller
     {
         can('editar-salidas');
         $data = $this->repository->findOrFail($id);
+        $ubicacion_impresora_query = $this->ubicacionImpresoraRepository->all();
+        $uso_salida_impresora_query = $this->usoSalidaImpresoraRepository->all();
 
-        return view('configuracion.salida.editar', compact('data'));
+        return view('configuracion.salida.editar', compact('data', 'ubicacion_impresora_query', 'uso_salida_impresora_query'));
     }
 
     /**
@@ -101,52 +118,55 @@ class SalidaController extends Controller
     {
         //can('configurar-salidas');
 
-        // Agrega programa enviado a la url completa
-        $urlRetorno = $request->server('HTTP_REFERER');
+        $urlRetorno = $request->query('retorno', $request->server('HTTP_REFERER'));
         $programa = $this->seteosalidaRepository->armaNombrePrograma($opcion);
+        $programaEtiqueta = SeteoSalidaProgramaSupport::etiqueta($programa);
 
-        // Extrae programa para retornar desde la URL completa
-        $string = explode('/',$urlRetorno);
-        $pgmretorno = $string[count($string)-1];
-        $salidas_query = $this->repository->all();
-
-        // Lee configuracion de salida
         $usuario_id = $request->session()->get('usuario_id');
-        
-        // Busca configuracion
+
         $seteosalida = $this->seteosalidaRepository->buscaSeteo($usuario_id, $opcion);
 
-        if ($seteosalida)
-            $datas['salida_id'] = $seteosalida->salida_id;
-        else
-            $datas['salida_id'] = 1;
-        return view('configuracion.salida.configurar', compact('datas', 'salidas_query', 'programa', 'pgmretorno'));
+        $datas['salida_id'] = $seteosalida?->salida_id ?? '';
+
+        $salidas_query = $this->repository->paraProgramaSeteo(
+            $programa,
+            $datas['salida_id'] ? (int) $datas['salida_id'] : null
+        );
+
+        return view('configuracion.salida.configurar', compact(
+            'datas',
+            'salidas_query',
+            'programa',
+            'programaEtiqueta',
+            'urlRetorno'
+        ));
     }
 
     public function setearSalida(Request $request, $opcion, $salida_id)
     {
         $usuario_id = $request->session()->get('usuario_id');
+        $programa = $this->seteosalidaRepository->armaNombrePrograma($opcion);
 
-        // Busca configuracion pre-grabada
-        $seteosalida = $this->seteosalidaRepository->leeSeteo($usuario_id, $opcion);
-
-        // Graba configuracion
-        if ($seteosalida)
-        {
-            $programa = $seteosalida->programa;
-            $seteosalida = $this->seteosalidaRepository->update(['usuario_id' => $usuario_id, 
-                                                                'salida_id' => $salida_id,
-                                                                'programa' => $programa], 
-                                                                $seteosalida->id);
+        if (! SalidaParaProgramaSupport::salidaPermitidaParaPrograma($programa, (int) $salida_id)) {
+            abort(422, 'La impresora seleccionada no está habilitada para este programa.');
         }
-        else
-        {
-            $programa = $opcion;
 
-            $seteosalida = $this->seteosalidaRepository->create(['usuario_id' => $usuario_id, 
-                                                                'salida_id' => $salida_id,
-                                                                'programa' => $programa]);
+        $seteosalida = $this->seteosalidaRepository->leeSeteo($usuario_id, $programa);
+
+        if ($seteosalida) {
+            $seteosalida = $this->seteosalidaRepository->update([
+                'usuario_id' => $usuario_id,
+                'salida_id' => $salida_id,
+                'programa' => $programa,
+            ], $seteosalida->id);
+        } else {
+            $seteosalida = $this->seteosalidaRepository->create([
+                'usuario_id' => $usuario_id,
+                'salida_id' => $salida_id,
+                'programa' => $programa,
+            ]);
         }
+
         return ['retorno' => $seteosalida];
     }
 
@@ -154,20 +174,21 @@ class SalidaController extends Controller
     {
         $usuario_id = $request->session()->get('usuario_id');
 
-        // Busca configuracion
         $seteosalida = $this->seteosalidaRepository->buscaSeteo($usuario_id, $opcion);
 
         $vendedor = Auth::user()->vendedor_id;
-        if ($vendedor)
-        {
+        if ($vendedor && ! $seteosalida) {
             $impresoraDefault = config('pedido.impresora_default');
-            $seteosalida = ['id' => 999999, 'salidas' => ['nombre' => $impresoraDefault]];
+            if ($impresoraDefault) {
+                return ['id' => 999999, 'salidas' => ['nombre' => $impresoraDefault, 'ubicacion' => '']];
+            }
         }
 
-        if ($seteosalida)        
+        if ($seteosalida) {
             return $seteosalida;
-        else    
-            return ['id' => 999999, 'salidas' => ['nombre' => 'Sin impresora seteada']];
+        }
+
+        return ['id' => 999999, 'salidas' => ['nombre' => 'Sin impresora seteada', 'ubicacion' => '']];
     }
 
     /**

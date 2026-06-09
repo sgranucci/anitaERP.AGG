@@ -31,6 +31,7 @@ Salidas
                             <th class="width20">ID</th>
                             <th>Nombre</th>
                             <th>Ubicaci&oacute;n</th>
+                            <th>Usos</th>
                             <th>Comando</th>
                             <th class="width80" data-orderable="false"></th>
                         </tr>
@@ -41,6 +42,7 @@ Salidas
                             <td>{{$data->id}}</td>
                             <td>{{$data->nombre}}</td>
                             <td>{{$data->ubicacion}}</td>
+                            <td>{{ $data->usos_etiqueta }}</td>
                             <td>{{$data->comando}}</td>
                             <td>
                        			@if (can('editar-salidas', false))

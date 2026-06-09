@@ -277,6 +277,48 @@ class FacturacionService
         return $this->ventaRepository->leeSinPaginar($busqueda);
     }
 
+	private function clienteTieneLugaresEntrega(int $clienteId): bool
+	{
+		return $this->cliente_entregaRepository->leeClienteEntrega($clienteId)->count() > 0;
+	}
+
+	private function sincronizarLugarEntregaPedido($pedido): void
+	{
+		if ($pedido->lugarentrega == null && (int) ($pedido->cliente_entrega_id ?? 0) > 0) {
+			$cliente_entrega = $this->cliente_entregaRepository->find($pedido->cliente_entrega_id);
+
+			if ($cliente_entrega) {
+				$pedido->lugarentrega = $cliente_entrega->nombre;
+			}
+		}
+	}
+
+	private function provinciaPercepcionDesdePedido($cliente, $pedido): ?int
+	{
+		if ($pedido && (int) ($pedido->cliente_entrega_id ?? 0) > 0) {
+			$clienteEntrega = $this->cliente_entregaRepository->find($pedido->cliente_entrega_id);
+
+			if ($clienteEntrega && $clienteEntrega->provincia_id) {
+				return (int) $clienteEntrega->provincia_id;
+			}
+		}
+
+		return $cliente->provincia_id;
+	}
+
+	private function validarLugarEntregaPedido($cliente, $pedido): ?array
+	{
+		if (!$this->clienteTieneLugaresEntrega((int) $cliente->id)) {
+			return null;
+		}
+
+		if ((int) ($pedido->cliente_entrega_id ?? 0) <= 0) {
+			return ['error' => 'Debe seleccionar un lugar de entrega del cliente en el pedido'];
+		}
+
+		return null;
+	}
+
 	// Calcula la factura por pedido
 
 	public function calculaFacturaPorPedido(array $data)
@@ -315,14 +357,12 @@ class FacturacionService
 		else	
 			$pedido = $pedido_query[0];
 
-			// Lee lugar de entrega
-		if ($pedido->lugarentrega == null && $pedido->cliente_entrega_id > 0)
-		{
-			$cliente_entrega = $this->cliente_entregaRepository->find($pedido->cliente_entrega_id);
-
-			if ($cliente_entrega)
-				$pedido->lugarentrega = $cliente_entrega->nombre;
+		$errorEntrega = $this->validarLugarEntregaPedido($cliente, $pedido);
+		if ($errorEntrega) {
+			return $errorEntrega;
 		}
+
+		$this->sincronizarLugarEntregaPedido($pedido);
 
 		// Lee los items a facturar
 		$dataFactura = [];
@@ -462,12 +502,13 @@ class FacturacionService
 			}
 		}
 		// Arma datos del cliente
+		$provinciaPercepcion = $this->provinciaPercepcionDesdePedido($cliente, $pedido);
 		if (strtoupper(config('app.empresa') == "EL BIERZO"))
 			$datosCliente = [ "condicioniva_id" => $cliente->condicioniva_id,
 							"numerodocumento" => $cliente->numerodocumento,
 							"retieneiva" => $cliente->retieneiva,
 							"condicioniibb_id" => $cliente->condicioniibb_id,
-							"provincia" => $cliente->provincia_id,
+							"provincia" => $provinciaPercepcion,
 							"descuentoimportepie" => $this->descuentoImportePie,
 							"id" => $cliente->id,
 							"abasto_id" => $cliente->abasto_id,
@@ -478,7 +519,7 @@ class FacturacionService
 							"numerodocumento" => $cliente->numerodocumento,
 							"retieneiva" => $cliente->retieneiva,
 							"condicioniibb_id" => $cliente->condicioniibb_id,
-							"provincia" => $cliente->provincia_id,
+							"provincia" => $provinciaPercepcion,
 							"descuentoimportepie" => $this->descuentoImportePie,
 							"id" => $cliente->id
 							];
@@ -522,6 +563,11 @@ class FacturacionService
 			return ['error' => 'Pedido inexistente'];
 		else	
 			$pedido = $pedido_query[0];
+
+		$errorEntrega = $this->validarLugarEntregaPedido($cliente, $pedido);
+		if ($errorEntrega) {
+			return $errorEntrega;
+		}
 
 		// Controla si divide factura
 		if (($pedido->transportes->tipoexpreso == '4' || $pedido->transportes->tipoexpreso == '3') && 
@@ -652,14 +698,8 @@ class FacturacionService
 
 		$cotizacion = $this->cotizacionService->calculaCotizacionVenta($fechaFactura, $moneda_id);
 
-		// Lee lugar de entrega
-		if ($pedido->lugarentrega == null && $pedido->cliente_entrega_id > 0)
-		{
-			$cliente_entrega = $this->cliente_entregaRepository->find($pedido->cliente_entrega_id);
-
-			if ($cliente_entrega)
-				$pedido->lugarentrega = $cliente_entrega->nombre;
-		}
+		$this->sincronizarLugarEntregaPedido($pedido);
+		$provinciaPercepcion = $this->provinciaPercepcionDesdePedido($cliente, $pedido);
 
 		// Saca letra del comprobante
 		$condicioniva = $this->condicionivaRepository->find($cliente->condicioniva_id);
@@ -874,7 +914,7 @@ class FacturacionService
 						'nombre' => $cliente->nombre,
 						'domicilio' => $cliente->domicilio,
 						'localidad_id' => $cliente->localidad_id,
-						'provincia_id' => $cliente->provincia_id,
+						'provincia_id' => $provinciaPercepcion,
 						'pais_id' => $cliente->pais_id,
 						'codigopostal' => $cliente->codigopostal,
 						'email' => $cliente->email,
@@ -2245,17 +2285,12 @@ class FacturacionService
 						}
 						else
 						{
-							if ($pedido->cliente_entrega_id == 0)
-								return ['error' => 'No tiene lugar de entrega cargado'];
-
-								// Lee lugar de entrega
-							if ($pedido->lugarentrega == null && $pedido->cliente_entrega_id > 0)
-							{
-								$cliente_entrega = $this->cliente_entregaRepository->find($pedido->cliente_entrega_id);
-
-								if ($cliente_entrega)
-									$pedido->lugarentrega = $cliente_entrega->nombre;
+							$errorEntrega = $this->validarLugarEntregaPedido($cliente, $pedido);
+							if ($errorEntrega) {
+								return $errorEntrega;
 							}
+
+							$this->sincronizarLugarEntregaPedido($pedido);
 						}
 						// Trae el lote
 						$lotestock_id = $item->ordentrabajo_stock_id;
@@ -2369,12 +2404,15 @@ class FacturacionService
 				}
 			}
 		}
+		$this->sincronizarLugarEntregaPedido($pedido);
+		$provinciaPercepcion = $this->provinciaPercepcionDesdePedido($cliente, $pedido);
+
 		// Arma datos del cliente
 		$datosCliente = [ "condicioniva_id" => $cliente->condicioniva_id,
 						  "numerodocumento" => $cliente->numerodocumento,
 						  "retieneiva" => $cliente->retieneiva,
 						  "condicioniibb" => $cliente->condicioniibb,
-						  "provincia" => $cliente->provincia_id,
+						  "provincia" => $provinciaPercepcion,
 						  "descuentoimportepie" => $this->descuentoImportePie,
 						  "id" => $cliente->id
 						];
@@ -2535,7 +2573,7 @@ class FacturacionService
 						'nombre' => $cliente->nombre,
 						'domicilio' => $cliente->domicilio,
 						'localidad_id' => $cliente->localidad_id,
-						'provincia_id' => $cliente->provincia_id,
+						'provincia_id' => $provinciaPercepcion,
 						'pais_id' => $cliente->pais_id,
 						'codigopostal' => $cliente->codigopostal,
 						'email' => $cliente->email,

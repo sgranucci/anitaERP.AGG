@@ -10,7 +10,8 @@
 
 <script>
 
-    var url = "{{ route('configurar_salida', ['programa' => ':programa']) }}";
+window.seteoSalidaPrograma = @json(\App\Support\Configuracion\SeteoSalidaProgramaSupport::VENTAS_REPEMISIONOT);
+window.seteoSalidaConfigurarUrl = @json(route('configurar_salida', ['programa' => ':programa']));
 
     $(function () {
 		$("#ordenestrabajo").focus();
