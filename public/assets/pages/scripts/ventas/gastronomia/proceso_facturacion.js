@@ -553,6 +553,52 @@
     }
 
     /** Éxito de emisión — mismo criterio que notas de crédito (mensaje + warn aparte). */
+    function registrarControlTiemposEmision(data, tInicioMs) {
+        if (typeof tInicioMs !== 'number' || tInicioMs <= 0) {
+            return;
+        }
+        const tClienteMs = Math.round(performance.now() - tInicioMs);
+        const tServidorMs =
+            data && data.emision_profile_total_ms != null ? Math.round(Number(data.emision_profile_total_ms)) : null;
+        const umbralMs = Number((G && G.emisionUmbralAdvertenciaMs) || 10000);
+        const payload = {
+            cliente_ms: tClienteMs,
+            servidor_ms: tServidorMs,
+            factura: (data && data.factura) || null,
+            cuenta_id: cuentaId || null,
+        };
+        if (G && G.emisionProfileEnRespuesta && data && Array.isArray(data.emision_profile)) {
+            payload.etapas = data.emision_profile;
+            payload.etapas_lentas = data.emision_profile_etapas_lentas || null;
+        }
+        if (typeof console !== 'undefined' && console.info) {
+            console.info('[gastronomia.emision.tiempos]', payload);
+            if (payload.etapas && console.table) {
+                console.table(
+                    payload.etapas.map(function (e) {
+                        return { etapa: e.etapa, ms: e.ms, acum_ms: e.acum_ms };
+                    }),
+                );
+            }
+        }
+        const referenciaMs = tServidorMs != null ? tClienteMs : tClienteMs;
+        const excedeUmbral = umbralMs > 0 && referenciaMs >= umbralMs;
+        if (excedeUmbral && typeof console !== 'undefined' && console.warn) {
+            console.warn(
+                '[gastronomia.emision.lento] ' +
+                    referenciaMs +
+                    ' ms (umbral ' +
+                    umbralMs +
+                    ' ms). Cliente=' +
+                    tClienteMs +
+                    ' ms' +
+                    (tServidorMs != null ? ', servidor=' + tServidorMs + ' ms' : '') +
+                    '.',
+                payload.etapas_lentas || payload.etapas,
+            );
+        }
+    }
+
     function mostrarResultadoEmisionFactura(data) {
         const factura = (data && data.factura) || '';
         let txt =
@@ -6004,6 +6050,7 @@
                 setTotalFacturadoArs(montoArs > 0 ? montoArs : IMPORTE_MINIMO_FACTURA);
             }
             iniciarRotacionMensajesProceso(mensajesProcesoEmision(cuenta));
+            const tInicioEmisionMs = performance.now();
             const data = await api('/ventas/gastronomia/api/emitir-factura', {
                 method: 'POST',
                 headers: hdrJson(),
@@ -6015,6 +6062,7 @@
                 }),
             });
             detenerRotacionMensajesProceso();
+            registrarControlTiemposEmision(data, tInicioEmisionMs);
             mostrarResultadoEmisionFactura(data);
             cargarMesas();
             cargarCuentasActivas();

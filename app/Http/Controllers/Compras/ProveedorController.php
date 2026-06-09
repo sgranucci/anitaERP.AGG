@@ -465,22 +465,39 @@ class ProveedorController extends Controller
 		if ($funcion == 'editar')
 		{
             $fechaHoy = Carbon::now();
-            
-			$tasaarba = $this->iibbService->leeTasaPercepcion($nroinscripcion, '902', $fechaHoy);
-            $tasacaba = $this->iibbService->leeTasaPercepcion($nroinscripcion, '901', $fechaHoy);
 
-            if (!$tasaarba)
-				$tasaarba = 'No esta en padron';
-            else    
-                $tasaarba = round($tasaarba->tasaretencion, 2).'%';
-			if (!$tasacaba)
-				$tasacaba = 'No esta en padron';
-            else
-                $tasacaba = round($tasacaba->tasaretencion, 2).'%';
+			$tasaIibbArba = $this->iibbService->leeTasaPercepcion($nroinscripcion, '902', $fechaHoy);
+            $tasaIibbCaba = $this->iibbService->leeTasaPercepcion($nroinscripcion, '901', $fechaHoy);
+
+            $tasaArbaValor = $this->tasaPercepcionDesdePadron($tasaIibbArba);
+            $tasaarba = $tasaArbaValor === null ? 'No esta en padron' : round($tasaArbaValor, 2).'%';
+
+            $tasaCabaValor = $this->tasaPercepcionDesdePadron($tasaIibbCaba);
+            $tasacaba = ($tasaCabaValor === null || $tasaCabaValor < 0.00001)
+                ? 'No esta en padron'
+                : round($tasaCabaValor, 2).'%';
 		}
 		else
 			$tasaarba = $tasacaba = '';
 	}
+
+    /**
+     * Tasa de percepción IIBB según registro de padrón (ARBA/CABA: modelo; otras jurisd.: array con "tasa").
+     */
+    private function tasaPercepcionDesdePadron($registroPadron): ?float
+    {
+        if (!$registroPadron) {
+            return null;
+        }
+
+        if (is_array($registroPadron)) {
+            $tasa = $registroPadron['tasapercepcion'] ?? $registroPadron['tasa'] ?? null;
+        } else {
+            $tasa = $registroPadron->tasapercepcion ?? $registroPadron->tasa ?? null;
+        }
+
+        return ($tasa !== null && $tasa !== '') ? (float) $tasa : null;
+    }
 
     // Reporte maestro de proveedores
     public function indexReporteProveedor()

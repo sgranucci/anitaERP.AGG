@@ -2014,10 +2014,12 @@ class FacturacionService
 					if ($numeroForzado > 0) {
 						$numero = $numeroForzado - 1;
 					} else {
+						GastronomiaEmisionProfiler::activo()?->marcar('arca_ultimo_numero_inicio');
 						$numero = $this->facturaelectronicaService
 									->traeUltimoNumeroComprobante($empresa->nroinscripcion,
 																	$codigoTipoTransaccion,
 																	$puntoventa);
+						GastronomiaEmisionProfiler::activo()?->marcar('arca_ultimo_numero_fin');
 					}
 					break;
 				case 'A':
@@ -5490,12 +5492,15 @@ class FacturacionService
 			case 'C':
 			case 'E':
 				try {
+					GastronomiaEmisionProfiler::activo()?->marcar('arca_solicita_cae_inicio');
 					$cae = $this->facturaelectronicaService->solicitaCAE(
 						$empresa->nroinscripcion,
 						$codigoTipoTransaccion,
 						$puntoventa,
 						$dataCAE);
+					GastronomiaEmisionProfiler::activo()?->marcar('arca_solicita_cae_fin');
 				} catch (\Throwable $e) {
+					GastronomiaEmisionProfiler::activo()?->marcar('arca_solicita_cae_fin');
 					$cae = ['Error' => $e->getMessage()];
 				}
 				$flGrabaCae = true;

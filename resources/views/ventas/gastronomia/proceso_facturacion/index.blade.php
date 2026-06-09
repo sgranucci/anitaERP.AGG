@@ -613,6 +613,8 @@
         },
         waitryHabilitado: @json($waitry_habilitado_terminal ?? false),
         waitryTrasRespuesta: @json(config('gastronomia.waitry_tras_respuesta', true)),
+        emisionProfileEnRespuesta: @json(config('gastronomia.emision_profile_en_respuesta', false)),
+        emisionUmbralAdvertenciaMs: {{ max(0, (int) config('gastronomia.emision_umbral_advertencia_ms', 10000)) }},
         sincronizarAnitaAlFacturar: @json(config('gastronomia.sincronizar_anita_al_facturar', true)),
         waitryGetOrdersMinutosAtras: {{ max(0, (int) config('waitry.get_orders_minutos_atras', 20)) }},
         listaprecioId: {{ (int) ($listaprecio_id ?? config('precio.listaprecio_default_id', 1)) }},

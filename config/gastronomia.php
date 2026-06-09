@@ -170,6 +170,11 @@ return [
     'emision_profile_en_respuesta' => filter_var(env('GASTRONOMIA_EMISION_PROFILE_EN_RESPUESTA', false), FILTER_VALIDATE_BOOLEAN),
 
     /**
+     * Si el total de emisión supera este umbral (ms), se loguea gastronomia.emision.lento con las etapas más costosas.
+     */
+    'emision_umbral_advertencia_ms' => max(0, (int) env('GASTRONOMIA_EMISION_UMBRAL_ADVERTENCIA_MS', 10000)),
+
+    /**
      * Cuenta de caja de efectivo por empresa para efectivizar (F5): cobro en efectivo + factura + impresión.
      * Clave = empresa_id, valor = cuentacaja_id.
      * Alternativa: env JSON GASTRONOMIA_CUENTACAJA_EFECTIVO_POR_EMPRESA='{"1":42,"2":15}' (fusiona/sobrescribe).

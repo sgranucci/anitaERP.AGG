@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diagrama ER — Módulo Gastronomía — AnitaERP</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        :root {
+            --azul: #1F4E79;
+            --azul-claro: #2E75B6;
+            --gris: #666;
+            --fondo: #f8fafc;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: "Segoe UI", Calibri, Arial, sans-serif;
+            margin: 0;
+            color: #17202A;
+            background: var(--fondo);
+            line-height: 1.45;
+        }
+        .toolbar {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: var(--azul);
+            color: #fff;
+            padding: 12px 24px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .toolbar h1 { margin: 0; font-size: 1.1rem; font-weight: 600; }
+        .toolbar p { margin: 0; font-size: 0.85rem; opacity: 0.9; }
+        .toolbar-actions { display: flex; gap: 8px; }
+        .btn {
+            background: #fff;
+            color: var(--azul);
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        .btn:hover { background: #e8f0fe; }
+        .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+        .cover {
+            background: #fff;
+            border-radius: 8px;
+            padding: 48px 40px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 4px rgba(0,0,0,.08);
+            text-align: center;
+        }
+        .cover h2 { color: var(--azul); font-size: 1.8rem; margin: 0 0 8px; }
+        .cover .sub { color: var(--azul-claro); font-size: 1.1rem; margin-bottom: 24px; }
+        .cover .meta { color: var(--gris); font-size: 0.9rem; }
+        section {
+            background: #fff;
+            border-radius: 8px;
+            padding: 28px 32px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 4px rgba(0,0,0,.08);
+            page-break-inside: avoid;
+        }
+        section h2 {
+            color: var(--azul);
+            font-size: 1.25rem;
+            margin: 0 0 6px;
+            border-bottom: 2px solid var(--azul-claro);
+            padding-bottom: 8px;
+        }
+        section .lead { color: var(--gris); font-size: 0.9rem; margin: 0 0 20px; }
+        .mermaid { text-align: center; overflow-x: auto; }
+        table.data {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.82rem;
+            margin-top: 16px;
+        }
+        table.data th {
+            background: #85C1E9;
+            color: #17202A;
+            text-align: left;
+            padding: 8px 10px;
+            border: 1px solid #ccc;
+        }
+        table.data td {
+            padding: 6px 10px;
+            border: 1px solid #ccc;
+            vertical-align: top;
+        }
+        table.data tr:nth-child(even) td { background: #f5f5f5; }
+        code { font-size: 0.8rem; background: #eef2f7; padding: 1px 4px; border-radius: 3px; }
+        .footer-note {
+            text-align: center;
+            color: var(--gris);
+            font-size: 0.8rem;
+            padding: 16px;
+        }
+        @media print {
+            .toolbar { display: none; }
+            body { background: #fff; }
+            .container { max-width: none; padding: 0; }
+            section, .cover { box-shadow: none; border: 1px solid #ddd; }
+            section { page-break-before: auto; }
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <div>
+            <h1>Diagrama entidad-relación — Gastronomía</h1>
+            <p>Abrir en navegador → Imprimir → Guardar como PDF para adjuntar al mail</p>
+        </div>
+        <div class="toolbar-actions">
+            <button class="btn" onclick="window.print()">Imprimir / PDF</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="cover">
+            <h2>Modelo de datos — Módulo Gastronomía</h2>
+            <p class="sub">AnitaERP · Entidades y relaciones</p>
+            <p class="meta">27 tablas del módulo + referencias a tablas transversales del ERP<br>Generado: junio 2026 · Namespace PHP: <code>App\Models\Ventas\*Gastronomia*</code></p>
+        </div>
+
+        <section>
+            <h2>1. Maestros, layout y comandas</h2>
+            <p class="lead">Ubicaciones, mesas, mozos, descuentos, turnos horarios y áreas de comanda.</p>
+            <div class="mermaid">
+erDiagram
+    empresa ||--o{ ubicaciones_gastronomia : tiene
+    empresa ||--o{ mesa_gastronomia : tiene
+    empresa ||--o{ mozo_gastronomia : tiene
+    empresa ||--o{ turno_gastronomia : tiene
+    empresa ||--o{ area_comanda_gastronomia : tiene
+    ubicaciones_gastronomia ||--o{ mesa_gastronomia : agrupa
+    ubicaciones_gastronomia ||--o| configuracion_puntoventa_gastronomia : terminal
+    ubicaciones_gastronomia ||--o| totem_waitry_gastronomia : totem
+    cliente ||--o{ descuento_gastronomia : invitacion
+    subcategoria ||--o{ subcategoria_area_comanda : asignada
+    area_comanda_gastronomia ||--o{ subcategoria_area_comanda : recibe
+            </div>
+        </section>
+
+        <section>
+            <h2>2. Configuración de punto de venta</h2>
+            <p class="lead">Terminal por PC: facturación, comandas, depósitos, lista de precios e integración Waitry.</p>
+            <div class="mermaid">
+erDiagram
+    empresa ||--o{ configuracion_puntoventa_gastronomia : configura
+    configuracion_puntoventa_gastronomia }o--|| puntoventa : CAE
+    configuracion_puntoventa_gastronomia }o--|| puntoventa : CAEA
+    configuracion_puntoventa_gastronomia }o--o| ubicaciones_gastronomia : ubicacion
+    configuracion_puntoventa_gastronomia }o--|| salida : comanda
+    configuracion_puntoventa_gastronomia }o--|| salida : factura
+    configuracion_puntoventa_gastronomia }o--o| listaprecio : precios
+    configuracion_puntoventa_gastronomia }o--o| depmae : deposito_venta
+    configuracion_puntoventa_gastronomia }o--o| depmae : deposito_insumos
+    configuracion_puntoventa_gastronomia }o--o| tipotransaccion : factura
+    configuracion_puntoventa_gastronomia }o--o| tipotransaccion : NC
+    configuracion_puntoventa_gastronomia }o--o| tipotransaccion_caja : caja
+    empresa ||--o| gastronomia_cierre_jornada_config : 1_por_empresa
+            </div>
+        </section>
+
+        <section>
+            <h2>3. Jornada, turnos y cierre</h2>
+            <p class="lead">Apertura diaria, habilitación por terminal, cierres parciales y cierre de tótems Waitry.</p>
+            <div class="mermaid">
+erDiagram
+    empresa ||--o{ jornada_gastronomia : abre
+    usuario ||--o{ jornada_gastronomia : apertura_cierre
+    jornada_gastronomia ||--o{ turno_operativo_gastronomia : contiene
+    turno_gastronomia ||--o{ turno_operativo_gastronomia : tipo
+    configuracion_puntoventa_gastronomia ||--o{ turno_operativo_gastronomia : terminal
+    usuario ||--o{ turno_operativo_gastronomia : habilita_cierra
+    turno_operativo_gastronomia ||--o{ cierre_parcial_turno_gastronomia : parciales
+    jornada_gastronomia ||--o| cierre_totem_jornada_gastronomia : cierre_totem
+    jornada_gastronomia ||--o| gastronomia_cierre_jornada_proceso_snapshot : snapshot
+            </div>
+        </section>
+
+        <section>
+            <h2>4. Cuenta, líneas y emisión</h2>
+            <p class="lead">Núcleo operativo: mesa/cuenta libre, consumos, facturación y envío Waitry.</p>
+            <div class="mermaid">
+erDiagram
+    mesa_gastronomia ||--o{ cuenta_gastronomia : mesa
+    mozo_gastronomia ||--o{ cuenta_gastronomia : mozo
+    cliente ||--o{ cuenta_gastronomia : factura
+    descuento_gastronomia ||--o{ cuenta_gastronomia : descuento
+    configuracion_puntoventa_gastronomia ||--o{ cuenta_gastronomia : PV
+    venta ||--o| cuenta_gastronomia : facturada
+    cuenta_gastronomia ||--|{ cuenta_gastronomia_linea : lineas
+    articulo ||--o{ cuenta_gastronomia_linea : item
+    venta ||--|| venta_gastronomia_emision : extension
+    cuenta_gastronomia ||--o{ venta_gastronomia_emision : origen
+    venta ||--o| waitry_comanda_envio : envio
+            </div>
+        </section>
+
+        <section>
+            <h2>5. Canjes, fidelidad y tickets</h2>
+            <p class="lead">Programa fidelidad Wigos, canje premio cupón y ticket tarjeta (CTG).</p>
+            <div class="mermaid">
+erDiagram
+    categoriafidelidad_gastronomia ||--|{ categoriafidelidad_articulo_gastronomia : articulos
+    articulo ||--o{ categoriafidelidad_articulo_gastronomia : ""
+    categoriafidelidad_gastronomia ||--o{ categoriafidelidad_entrega_gastronomia : entregas
+    venta ||--o{ categoriafidelidad_entrega_gastronomia : factura
+    venta ||--o{ tickettarjeta_gastronomia : CTG
+    venta ||--o{ ticketcanje_gastronomia : premio
+    mozo_gastronomia ||--o{ ticketcanje_gastronomia : mozo
+            </div>
+        </section>
+
+        <section>
+            <h2>6. Rendición de caja (Anita)</h2>
+            <p class="lead">Rendición por turno o jornada, movimientos por cuenta de caja y secuencia Anita.</p>
+            <div class="mermaid">
+erDiagram
+    empresa ||--o{ rendicion_gastronomia_caja : ""
+    rendicion_gastronomia_caja }o--o| turno_operativo_gastronomia : tipo_turno
+    rendicion_gastronomia_caja }o--o| jornada_gastronomia : tipo_jornada
+    rendicion_gastronomia_caja }o--o| cierre_totem_jornada_gastronomia : ""
+    rendicion_gastronomia_caja ||--|{ rendicion_gastronomia_movimiento_caja : medios
+    cuentacaja ||--o{ rendicion_gastronomia_movimiento_caja : ""
+    empresa ||--|| rendicion_gastronomia_secuencia_empresa : secuencia
+            </div>
+        </section>
+
+        <section>
+            <h2>7. Flujo operativo simplificado</h2>
+            <p class="lead">Secuencia típica de uso diario del módulo.</p>
+            <div class="mermaid">
+flowchart LR
+    A[Abrir jornada] --> B[Habilitar turno por PC]
+    B --> C[Cuentas y consumos]
+    C --> D[Facturar venta]
+    D --> E[Cierre parcial opcional]
+    E --> F[Cierre turno]
+    F --> G[Rendicion caja]
+    A --> H[Cierre totem Waitry]
+    H --> I[Cierre jornada proceso]
+            </div>
+        </section>
+
+        <section>
+            <h2>Catálogo de tablas del módulo</h2>
+            <p class="lead">Referencia rápida para adjuntar al mail o documentación interna.</p>
+            <table class="data">
+                <thead>
+                    <tr><th>Grupo</th><th>Tabla</th><th>Descripción</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>Layout</td><td><code>ubicaciones_gastronomia</code></td><td>Sectores/salones por empresa</td></tr>
+                    <tr><td>Layout</td><td><code>mesa_gastronomia</code></td><td>Mesas numeradas por ubicación</td></tr>
+                    <tr><td>Layout</td><td><code>mozo_gastronomia</code></td><td>Mozos / camareros</td></tr>
+                    <tr><td>Layout</td><td><code>descuento_gastronomia</code></td><td>Descuentos e invitaciones</td></tr>
+                    <tr><td>Layout</td><td><code>turno_gastronomia</code></td><td>Turnos horarios (mañana, noche…)</td></tr>
+                    <tr><td>Comandas</td><td><code>area_comanda_gastronomia</code></td><td>Áreas de impresión (cocina, bar…)</td></tr>
+                    <tr><td>Comandas</td><td><code>subcategoria_area_comanda</code></td><td>N:M subcategoría ↔ área</td></tr>
+                    <tr><td>Config</td><td><code>configuracion_puntoventa_gastronomia</code></td><td>Terminal por identificador_pc</td></tr>
+                    <tr><td>Config</td><td><code>totem_waitry_gastronomia</code></td><td>Tótems Waitry por ubicación</td></tr>
+                    <tr><td>Config</td><td><code>gastronomia_cierre_jornada_config</code></td><td>Cuentas contables cierre jornada</td></tr>
+                    <tr><td>Jornada</td><td><code>jornada_gastronomia</code></td><td>Día operativo abierto/cerrado</td></tr>
+                    <tr><td>Jornada</td><td><code>turno_operativo_gastronomia</code></td><td>Turno habilitado por PC</td></tr>
+                    <tr><td>Jornada</td><td><code>cierre_parcial_turno_gastronomia</code></td><td>Cierres X parciales</td></tr>
+                    <tr><td>Jornada</td><td><code>cierre_totem_jornada_gastronomia</code></td><td>Cierre tickets totem del día</td></tr>
+                    <tr><td>Jornada</td><td><code>gastronomia_cierre_jornada_proceso_snapshot</code></td><td>Snapshot contable congelado</td></tr>
+                    <tr><td>Operación</td><td><code>cuenta_gastronomia</code></td><td>Mesa o cuenta libre abierta</td></tr>
+                    <tr><td>Operación</td><td><code>cuenta_gastronomia_linea</code></td><td>Ítems consumidos</td></tr>
+                    <tr><td>Operación</td><td><code>venta_gastronomia_emision</code></td><td>Extensión 1:1 de venta</td></tr>
+                    <tr><td>Operación</td><td><code>waitry_comanda_envio</code></td><td>Cola envío comandas Waitry</td></tr>
+                    <tr><td>Canjes</td><td><code>categoriafidelidad_gastronomia</code></td><td>Categorías fidelidad Wigos</td></tr>
+                    <tr><td>Canjes</td><td><code>categoriafidelidad_articulo_gastronomia</code></td><td>Artículos canjeables</td></tr>
+                    <tr><td>Canjes</td><td><code>categoriafidelidad_entrega_gastronomia</code></td><td>Entregas registradas</td></tr>
+                    <tr><td>Canjes</td><td><code>tickettarjeta_gastronomia</code></td><td>Canje ticket tarjeta CTG</td></tr>
+                    <tr><td>Canjes</td><td><code>ticketcanje_gastronomia</code></td><td>Canje premio cupón Wigos</td></tr>
+                    <tr><td>Caja</td><td><code>rendicion_gastronomia_caja</code></td><td>Rendición turno o jornada</td></tr>
+                    <tr><td>Caja</td><td><code>rendicion_gastronomia_movimiento_caja</code></td><td>Medios de cobro rendidos</td></tr>
+                    <tr><td>Caja</td><td><code>rendicion_gastronomia_secuencia_empresa</code></td><td>Secuencia nro Anita por empresa</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        <p class="footer-note">AnitaERP — Documento generado desde migraciones y modelos del módulo Gastronomía (Ventas)</p>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'base',
+            themeVariables: {
+                primaryColor: '#d4e6f1',
+                primaryTextColor: '#17202A',
+                primaryBorderColor: '#2E75B6',
+                lineColor: '#2E75B6',
+                secondaryColor: '#eaf2f8',
+                tertiaryColor: '#f8fafc'
+            },
+            er: { useMaxWidth: true },
+            flowchart: { useMaxWidth: true, htmlLabels: true }
+        });
+    </script>
+</body>
+</html>

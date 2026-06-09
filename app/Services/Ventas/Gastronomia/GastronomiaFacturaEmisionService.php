@@ -830,6 +830,11 @@ final class GastronomiaFacturaEmisionService
         ?GastronomiaEmisionProfiler $profiler,
         CuentaGastronomia $cuenta,
     ): array {
+        $etapasLentas = null;
+        if ($profiler !== null) {
+            $etapasLentas = $profiler->etapasMasLentas(5);
+        }
+
         $etapas = GastronomiaEmisionProfiler::finalizar($profiler, ['cuenta_id' => $cuenta->id]);
         if (
             $etapas !== null
@@ -839,6 +844,13 @@ final class GastronomiaFacturaEmisionService
             $resultado['emision_profile_total_ms'] = $etapas !== []
                 ? (float) end($etapas)['acum_ms']
                 : 0.;
+            if ($etapasLentas !== null) {
+                $resultado['emision_profile_etapas_lentas'] = $etapasLentas;
+            }
+            $resultado['emision_umbral_advertencia_ms'] = max(
+                0,
+                (int) config('gastronomia.emision_umbral_advertencia_ms', 10000),
+            );
         }
 
         return $resultado;
@@ -1051,13 +1063,13 @@ final class GastronomiaFacturaEmisionService
             return $resultado;
         }
 
-        $imp = $this->facturaTicketService->imprimirTrasEmision($ventaId, $cfg, $cuenta);
+        $imp = $this->facturaTicketService->imprimirTrasEmisionEncolado($ventaId, $cfg, $cuenta);
         if (! empty($imp['omitida'])) {
             return $resultado;
         }
 
         if (! empty($imp['ok'])) {
-            $resultado['impresion_ticket'] = 'ok';
+            $resultado['impresion_ticket'] = ! empty($imp['encolada']) ? 'encolada' : 'ok';
 
             return $resultado;
         }

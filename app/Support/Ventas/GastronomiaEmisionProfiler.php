@@ -67,10 +67,36 @@ final class GastronomiaEmisionProfiler
 
     public function registrarLog(array $contexto = []): void
     {
-        Log::info('gastronomia.emision.profile', array_merge($contexto, [
+        $payload = array_merge($contexto, [
             'total_ms' => $this->totalMs(),
             'etapas' => $this->resumen(),
-        ]));
+        ]);
+
+        Log::info('gastronomia.emision.profile', $payload);
+
+        $umbralMs = max(0, (int) config('gastronomia.emision_umbral_advertencia_ms', 10000));
+        if ($umbralMs > 0 && $this->totalMs() >= $umbralMs) {
+            Log::warning('gastronomia.emision.lento', array_merge($contexto, [
+                'total_ms' => $this->totalMs(),
+                'umbral_ms' => $umbralMs,
+                'etapas_lentas' => $this->etapasMasLentas(5),
+            ]));
+        }
+    }
+
+    /**
+     * @return list<array{etapa:string,ms:float,acum_ms:float}>
+     */
+    public function etapasMasLentas(int $limite = 5): array
+    {
+        if ($this->marcas === []) {
+            return [];
+        }
+
+        $etapas = $this->marcas;
+        usort($etapas, static fn (array $a, array $b): int => ($b['ms'] <=> $a['ms']));
+
+        return array_slice($etapas, 0, max(1, $limite));
     }
 
     public static function finalizar(?self $profiler, array $contexto = []): ?array
