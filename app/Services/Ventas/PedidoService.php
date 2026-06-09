@@ -17,6 +17,7 @@ use App\Support\Configuracion\SeteoSalidaProgramaSupport;
 use App\Services\Configuracion\ImpuestoService;
 use App\Services\Stock\Articulo_MovimientoService;
 use App\Services\Stock\PrecioService;
+use App\Services\Ventas\PedidoProduccionAvisoService;
 use App\Queries\Ventas\PedidoQueryInterface;
 use App\Queries\Ventas\ClienteQueryInterface;
 use App\Queries\Ventas\OrdentrabajoQueryInterface;
@@ -54,6 +55,7 @@ class PedidoService
 	protected $precioService;
 	protected $seteosalidaRepository;
 	protected $cliente_entregaRepository;
+	protected $pedidoProduccionAvisoService;
 
     public function __construct(PedidoRepositoryInterface $pedidorepository,
 								Pedido_ArticuloRepositoryInterface $pedidoarticulorepository,
@@ -70,7 +72,8 @@ class PedidoService
 								OrdentrabajoService $ordentrabajoservice,
 								Articulo_MovimientoService $articulo_movimientoservice,
 								SeteosalidaRepositoryInterface $seteosalidarepository,
-								Cliente_EntregaRepositoryInterface $cliente_entregarepository
+								Cliente_EntregaRepositoryInterface $cliente_entregarepository,
+								PedidoProduccionAvisoService $pedidoproduccionavisoservice
 								)
     {
         $this->pedidoRepository = $pedidorepository;
@@ -89,6 +92,7 @@ class PedidoService
 		$this->precioService = $precioservice;
 		$this->seteosalidaRepository = $seteosalidarepository;
 		$this->cliente_entregaRepository = $cliente_entregarepository;
+		$this->pedidoProduccionAvisoService = $pedidoproduccionavisoservice;
     }
 
 	public function leePedido($id)
@@ -170,12 +174,12 @@ class PedidoService
 		return $datas;
 	}
 
-	public function leePedidosPorEstadoSinPaginar($busqueda)
+	public function leePedidosPorEstadoSinPaginar($busqueda, $estado = '', $reparto = '', $fechaentrega = '')
 	{
 		ini_set('memory_limit', '512M');
         ini_set('max_execution_time', '2400');
 
-		$pedidos = $this->pedidoQuery->allPedidoIndexSinPaginar($busqueda);
+		$pedidos = $this->pedidoQuery->allPedidoIndexSinPaginar($busqueda, $estado, $reparto, $fechaentrega);
 
 		return $pedidos;
 	}
@@ -503,6 +507,8 @@ class PedidoService
 		if (!array_key_exists('leyenda',$data))
 			$data['leyenda'] = ' ';
 
+		$articuloIdsAvisoProduccion = [];
+
 		DB::beginTransaction();
 
 		try 
@@ -630,6 +636,7 @@ class PedidoService
 									"observacion" => $observaciones[$i_movimiento],
 									"estado" => $data['estado']			
 								]);
+							$articuloIdsAvisoProduccion[] = $articulos[$i_movimiento];
 						}
 					}
 				}
@@ -720,6 +727,11 @@ class PedidoService
 
 			return ['error' => $e->getMessage()];
 		}
+
+		if ($articuloIdsAvisoProduccion !== []) {
+			$this->pedidoProduccionAvisoService->despacharSiCorresponde((int) $id, $articuloIdsAvisoProduccion);
+		}
+
 		return ['id'=>$data['pedido_id'], 'codigo'=>$data['codigo']];
 	}
 

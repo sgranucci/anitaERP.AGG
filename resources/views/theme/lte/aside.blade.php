@@ -1,4 +1,4 @@
-<aside class="main-sidebar sidebar-dark-primary elevation-4">
+<aside class="main-sidebar sidebar-dark-primary elevation-4 anita-sidebar">
     <!-- Brand Logo -->
     <a href="{{ config('app.empresa_link') }}" class="brand-link">
         <img src="{{asset("assets/$theme/dist/img/AdminLTELogo.png")}}" alt="AdminLTE Logo"
@@ -30,7 +30,8 @@
             </div>
         </div>
         <!-- sidebar menu: : style can be found in sidebar.less -->
-        <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
+        <nav class="mt-1">
+        <ul class="nav nav-pills nav-sidebar nav-child-indent flex-column" data-widget="treeview" role="menu" data-accordion="false">
             @foreach ($menusComposer as $key => $item)
                 @if ($item["menu_id"] != 0)
                     @break
@@ -38,6 +39,7 @@
                 @include("theme.$theme.menu-item", ["item" => $item])
             @endforeach
         </ul>
+        </nav>
     </div>
     <!-- /.sidebar -->
 </aside>

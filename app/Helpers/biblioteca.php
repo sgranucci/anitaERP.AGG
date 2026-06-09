@@ -15,6 +15,29 @@ if (!function_exists('getMenuActivo')) {
     }
 }
 
+if (!function_exists('menuItemEsActivoOAncestro')) {
+    /**
+     * Indica si el ítem o algún descendiente coincide con la ruta actual (para expandir el árbol en servidor).
+     *
+     * @param  array<string, mixed>  $item
+     */
+    function menuItemEsActivoOAncestro(array $item): bool
+    {
+        $url = $item['url'] ?? '';
+        if ($url !== '' && getMenuActivo($url) === 'active') {
+            return true;
+        }
+
+        foreach ($item['submenu'] ?? [] as $submenu) {
+            if (menuItemEsActivoOAncestro($submenu)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}
+
 if (!function_exists('canUser')) {
     function can($permiso, $redirect = true)
     {

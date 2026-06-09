@@ -79,6 +79,24 @@
                             @endforeach
                         </select>
                         </div>
+                    </div>
+                    <div class="form-group row">
+                        <label for="enviaalarma" class="col-lg-4 col-form-label">Aviso a producci&oacute;n</label>
+                        <div class="col-lg-5">
+                        <select id="enviaalarma" name="enviaalarma" class="form-control">
+                            @foreach($enviaalarma_enum ?? [] as $value)
+                                @if( isset($producto) && $value['nombre'] == old('enviaalarma', $producto->enviaalarma ?? 'No Envia Alarma'))
+                                    <option value="{{ $value['nombre'] }}" selected="select">{{ $value['nombre'] }}</option>
+                                @else
+                                    @if( !isset($producto) && $value['nombre'] === 'No Envia Alarma')
+                                        <option value="{{ $value['nombre'] }}" selected="select">{{ $value['nombre'] }}</option>
+                                    @else
+                                        <option value="{{ $value['nombre'] }}">{{ $value['nombre'] }}</option>
+                                    @endif
+                                @endif
+                            @endforeach
+                        </select>
+                        </div>
                     </div>  
                 @endif
             </div>

@@ -213,6 +213,17 @@ Route::put('configuracion/tipodocumento/{id}', 'Configuracion\TipodocumentoContr
 Route::delete('configuracion/tipodocumento/{id}', 'Configuracion\TipodocumentoController@eliminar')->name('eliminar_tipodocumento');
 
 /*
+ * Actividades ARCA (compras y ventas)
+ */
+
+Route::get('configuracion/actividad_arca', 'Configuracion\Actividad_ArcaController@index')->name('consultar_actividad_arca');
+Route::get('configuracion/actividad_arca/crear', 'Configuracion\Actividad_ArcaController@crear')->name('crear_actividad_arca');
+Route::post('configuracion/actividad_arca', 'Configuracion\Actividad_ArcaController@guardar')->name('guardar_actividad_arca');
+Route::get('configuracion/actividad_arca/{id}/editar', 'Configuracion\Actividad_ArcaController@editar')->name('editar_actividad_arca');
+Route::put('configuracion/actividad_arca/{id}', 'Configuracion\Actividad_ArcaController@actualizar')->name('actualizar_actividad_arca');
+Route::delete('configuracion/actividad_arca/{id}', 'Configuracion\Actividad_ArcaController@eliminar')->name('eliminar_actividad_arca');
+
+/*
  * Feriados
  */
 
@@ -2845,17 +2856,6 @@ Route::post('ventas/abasto', 'Ventas\AbastoController@guardar')->name('guardar_a
 Route::get('ventas/abasto/{id}/editar', 'Ventas\AbastoController@editar')->name('editar_abasto');
 Route::put('ventas/abasto/{id}', 'Ventas\AbastoController@actualizar')->name('actualizar_abasto');
 Route::delete('ventas/abasto/{id}', 'Ventas\AbastoController@eliminar')->name('eliminar_abasto');
-
-/*
- * Actividad
- */
-
-Route::get('configuracion/actividad_arca', 'Configuracion\Actividad_ArcaController@index')->name('consultar_actividad_arca');
-Route::get('configuracion/actividad_arca/crear', 'Configuracion\Actividad_ArcaController@crear')->name('crear_actividad_arca');
-Route::post('configuracion/actividad_arca', 'Configuracion\Actividad_ArcaController@guardar')->name('guardar_actividad_arca');
-Route::get('configuracion/actividad_arca/{id}/editar', 'Configuracion\Actividad_ArcaController@editar')->name('editar_actividad_arca');
-Route::put('configuracion/actividad_arca/{id}', 'Configuracion\Actividad_ArcaController@actualizar')->name('actualizar_actividad_arca');
-Route::delete('configuracion/actividad_arca/{id}', 'Configuracion\Actividad_ArcaController@eliminar')->name('eliminar_actividad_arca');
 
 /*
  * Modelos de etiquetas

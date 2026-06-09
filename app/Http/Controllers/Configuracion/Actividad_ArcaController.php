@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Configuracion;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
-use Illuminate\Support\Facades\Storage;
 use App\Http\Requests\ValidacionActividad_Arca;
 use App\Repositories\Configuracion\Actividad_ArcaRepositoryInterface;
 

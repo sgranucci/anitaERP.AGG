@@ -9,5 +9,10 @@ trait ArticuloTrait {
 		['id' => '2', 'valor' => 'N', 'nombre'  => 'NO DIVIDE'],
 			];
 
+	public static $enumEnviaAlarma = [
+		['nombre' => 'Envia Alarma'],
+		['nombre' => 'No Envia Alarma'],
+	];
+
 }
 

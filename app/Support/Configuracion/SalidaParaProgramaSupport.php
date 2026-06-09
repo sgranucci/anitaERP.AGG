@@ -14,11 +14,8 @@ class SalidaParaProgramaSupport
     {
         $programa = SeteoSalidaProgramaSupport::resolver($programa);
 
-        return $query->where(function (Builder $q) use ($programa) {
-            $q->whereDoesntHave('usoSalidaImpresoras')
-                ->orWhereHas('usoSalidaImpresoras', function (Builder $uq) use ($programa) {
-                    self::aplicarFiltroUsoParaPrograma($uq, $programa);
-                });
+        return $query->whereHas('usoSalidaImpresoras', function (Builder $uq) use ($programa) {
+            self::aplicarFiltroUsoParaPrograma($uq, $programa);
         });
     }
 

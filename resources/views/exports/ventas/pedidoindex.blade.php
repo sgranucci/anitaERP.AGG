@@ -1,68 +1,56 @@
-<h4> Pedidos de Ventas </h4>
-<table> 
-	<thead>
-	<tr>
-		<th class="width20">ID</th>
-		<th>Fecha</th>
-		<th>Fecha entrega</th>
-		<th class="width50">Cliente</th>
-		<th>Cajas</th>
-		<th>Piezas</th>
-		<th>Kilos</th>
-		<th>Pesada</th>
-		<th>Reparto</th>
-		<th class="width60">Estado</th>
-	</tr>
-  	</thead>
+@php
+    use App\Support\Ventas\PedidoListadoSupport;
+@endphp
+<table>
+    @if (!empty($reservarFilaLogoExcel))
+        <tbody>
+            <tr>
+                <td colspan="10" style="height: 52px;">&#160;</td>
+            </tr>
+        </tbody>
+    @endif
     <tbody>
-		@php $totalKilo = 0; $totalCaja = 0; $totalPieza = 0; $totalPesada = 0; $totalPesada = 0; @endphp
-		@foreach($pedidos as $pedido)
-			<tr data-entry-id="{{ $pedido['id'] }}">
-				<td>
-					{{ $pedido['id'] ?? '' }}
-				</td>
-				<td>
-					{{date("d-m-Y", strtotime($pedido['fecha'] ?? ''))}} 
-				</td>
-				<td>
-					{{date("d-m-Y", strtotime($pedido['fechaentrega'] ?? ''))}} 
-				</td>								
-				<td>
-					<b>{{ $pedido['nombrecliente'] ?? '' }}</b>
-				</td>
-				<td>
-					@php $caja = 0; @endphp
-					@foreach ($pedido->pedido_articulos as $item)
-						@php $caja = $caja + $item->caja; $totalCaja += $item->caja @endphp
-					@endforeach
-					{{$caja}}
-				</td>		
-				<td>
-					@php $pieza = 0; @endphp
-					@foreach ($pedido->pedido_articulos as $item)
-						@php $pieza = $pieza + $item->pieza; $totalPieza += $item->pieza @endphp
-					@endforeach
-					{{$pieza}}
-				</td>															
-				<td>
-					@php $kilo = 0; @endphp
-					@foreach ($pedido->pedido_articulos as $item)
-						@php $kilo = $kilo + $item->kilo; $totalKilo += $item->kilo @endphp
-					@endforeach
-					{{$kilo}}
-				</td>
-				<td>
-					@php $pesada = 0; @endphp
-					@foreach ($pedido->pedido_articulos as $item)
-						@php $pesada = $pesada + $item->pesada; $totalPesada += $item->pesada @endphp
-					@endforeach
-					{{$pesada}}
-				</td>									
-				<td>{{ $pedido->nombretransporte ?? ''}}</td>
-				<td>
-					{{ $pedido['estado'] }}
-				</td>
-			</tr>
-		@endforeach
-	</tbody>
+        <tr>
+            <td colspan="10">
+                <h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Listado de pedidos de clientes</h2>
+            </td>
+        </tr>
+    </tbody>
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Fecha</th>
+            <th>Fecha entrega</th>
+            <th>Cliente</th>
+            <th>Cajas</th>
+            <th>Piezas</th>
+            <th>Kilos</th>
+            <th>Pesada</th>
+            <th>Reparto</th>
+            <th>Estado</th>
+        </tr>
+    </thead>
+    <tbody>
+        @php $totalCaja = 0; $totalPieza = 0; $totalKilo = 0; $totalPesada = 0; @endphp
+        @foreach ($pedidos as $pedido)
+            @php
+                $totales = PedidoListadoSupport::totalesPedido($pedido);
+                $totalCaja += $totales['caja'];
+                $totalPieza += $totales['pieza'];
+                $totalKilo += $totales['kilo'];
+                $totalPesada += $totales['pesada'];
+            @endphp
+            @include('ventas.pedido.partials.export_listado_filas', compact('pedido', 'totales'))
+        @endforeach
+        @if (count($pedidos) > 0)
+            <tr>
+                <td colspan="4" style="font-weight: bold;">Totales</td>
+                <td style="font-weight: bold;">{{ $totalCaja }}</td>
+                <td style="font-weight: bold;">{{ $totalPieza }}</td>
+                <td style="font-weight: bold;">{{ $totalKilo }}</td>
+                <td style="font-weight: bold;">{{ $totalPesada }}</td>
+                <td colspan="2"></td>
+            </tr>
+        @endif
+    </tbody>
 </table>

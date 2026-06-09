@@ -142,6 +142,13 @@ class ModuloAvisoController extends Controller
             ]);
         }
 
+        if ($modulo === 'ventas' && $codigo === 'pedido_produccion_alarma') {
+            return array_merge($comunes, [
+                '{numero}', '{cliente}', '{vendedor}', '{fecha}', '{fecha_entrega}',
+                '{estado}', '{usuario}', '{articulos_alarma}',
+            ]);
+        }
+
         return array_merge($comunes, ['{numero}', '{solicitante}', '{empresa}', '{centro_costo}', '{fecha}']);
     }
 }

@@ -30,6 +30,7 @@
     @yield("styles")
 
     <link rel="stylesheet" href="{{asset("assets/css/custom.css")}}">
+    <link rel="stylesheet" href="{{asset("assets/css/sidebar.css")}}">
 
     @routes
     <!-- HTML5 Shim and Respond.js IE8 support of HTML5 elements and media queries -->

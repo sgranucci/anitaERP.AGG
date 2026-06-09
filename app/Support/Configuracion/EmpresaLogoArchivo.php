@@ -43,6 +43,7 @@ final class EmpresaLogoArchivo
 
     /**
      * PNG por defecto: config('app.empresa').png (ej. AGG.png).
+     * Si no existe, prueba alias conocidos (ej. EL BIERZO → logo-bierzo.png).
      */
     public static function rutaPngDefault(): ?string
     {
@@ -58,8 +59,31 @@ final class EmpresaLogoArchivo
 
         $base = basename(str_replace(['..', '\\', '/'], '', $slug));
         $ruta = $dir.DIRECTORY_SEPARATOR.$base.'.png';
+        if (is_file($ruta)) {
+            return $ruta;
+        }
 
-        return is_file($ruta) ? $ruta : null;
+        foreach (self::aliasPngDefault($base) as $archivo) {
+            $rutaAlias = $dir.DIRECTORY_SEPARATOR.$archivo;
+            if (is_file($rutaAlias)) {
+                return $rutaAlias;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Archivos PNG alternativos cuando config('app.empresa').png no existe.
+     *
+     * @return list<string>
+     */
+    private static function aliasPngDefault(string $slugEmpresa): array
+    {
+        return match ($slugEmpresa) {
+            'EL BIERZO' => ['logo-bierzo.png', 'Frig.El Bierzo SA.png'],
+            default => [],
+        };
     }
 
     /**

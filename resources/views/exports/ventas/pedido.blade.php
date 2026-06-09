@@ -31,6 +31,23 @@
 			line-height: 1.5;
 			margin-bottom: 12px;
 		}
+		table.pedido-cliente-block {
+			width: 100%;
+			border-collapse: collapse;
+			margin-bottom: 12px;
+		}
+		table.pedido-cliente-block td {
+			border: none;
+			vertical-align: top;
+			padding: 0;
+		}
+		.pedido-totales-division {
+			font-size: 12px;
+			text-align: right;
+			line-height: 1.5;
+			white-space: nowrap;
+			width: 1%;
+		}
 		table.pedido-items {
 			font-family: DejaVu Sans, Helvetica, Arial, sans-serif;
 			border-collapse: collapse;
@@ -80,12 +97,46 @@
 		</tr>
 	</thead>
 </table>
+@php
+	$mostrarTotalesDivision = config('app.empresa') === 'EL BIERZO'
+		&& optional($pedido->transportes)->tipoexpreso === '4';
+	$totalNetoDivision = 0.;
+	$ajusteDivision = 0.;
+	$totalDivision = 0.;
+	if ($mostrarTotalesDivision) {
+		$coeficienteDivision = (float) config('facturacion.COEFICIENTE_EXTRA_REPARTO_101', 1.10);
+		foreach ($pedido->pedido_articulos as $itemDivision) {
+			$totalNetoDivision += (float) ($itemDivision->precio ?? 0) * (float) ($itemDivision->pesada ?? 0);
+		}
+		$totalNetoDivision = round($totalNetoDivision, 2);
+		$ajusteDivision = round($totalNetoDivision * ($coeficienteDivision - 1), 2);
+		$totalDivision = round($totalNetoDivision + $ajusteDivision, 2);
+	}
+@endphp
+@if ($mostrarTotalesDivision)
+<table class="pedido-cliente-block">
+	<tr>
+		<td class="pedido-cliente">
+			<strong>Cliente: {{ $pedido->clientes->nombre ?? '' }}</strong><br>
+			<strong>Reparto: {{ $pedido->transportes->nombre ?? '' }}</strong><br>
+			<strong>Zona de Vta.: {{ $pedido->zonavtas->nombre ?? '' }}</strong><br>
+			<strong>Lugar de entrega: {{ $pedido->lugarentrega ?? '' }}</strong>
+		</td>
+		<td class="pedido-totales-division">
+			{{ number_format($totalNetoDivision, 2) }}<br>
+			{{ number_format($ajusteDivision, 2) }}<br>
+			{{ number_format($totalDivision, 2) }}
+		</td>
+	</tr>
+</table>
+@else
 <div class="pedido-cliente">
 	<strong>Cliente: {{ $pedido->clientes->nombre ?? '' }}</strong><br>
 	<strong>Reparto: {{ $pedido->transportes->nombre ?? '' }}</strong><br>
 	<strong>Zona de Vta.: {{ $pedido->zonavtas->nombre ?? '' }}</strong><br>
 	<strong>Lugar de entrega: {{ $pedido->lugarentrega ?? '' }}</strong>
 </div>
+@endif
 <table class="pedido-items">
 	<thead>
 		<tr>

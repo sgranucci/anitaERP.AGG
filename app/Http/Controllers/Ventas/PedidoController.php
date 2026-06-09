@@ -18,6 +18,7 @@ use App\Repositories\Ventas\FormapagoRepositoryInterface;
 use App\Repositories\Ventas\DescuentoventaRepositoryInterface;
 use App\Repositories\Configuracion\Actividad_ArcaRepositoryInterface;
 use App\Services\Ventas\PedidoService;
+use App\Services\Ventas\PedidoListadoPdfService;
 use App\Models\Configuracion\Moneda;
 use App\Models\Ventas\Cliente;
 use App\Models\Stock\Articulo;
@@ -33,6 +34,7 @@ use App\Models\Stock\Listaprecio;
 use App\Models\Ventas\Vendedor;
 use App\Models\Ventas\Condicionventa;
 use App\Exports\Ventas\PedidoExport;
+use App\Exports\Ventas\PedidoListadoExport;
 use App\Exports\Ventas\KiloPedidoExport;
 use App\Exports\Ventas\TotalPedidoExport;
 use App\Exports\Ventas\GeneralPedidoExport;
@@ -44,6 +46,7 @@ use Carbon\Carbon;
 class PedidoController extends Controller
 {
 	private $pedidoService;
+	private $pedidoListadoPdfService;
 	private $clienteQuery;
 	private $transporteRepository;
 	private $tiposuspensionclienteRepository;
@@ -57,6 +60,7 @@ class PedidoController extends Controller
 	private $actividad_arcaRepository;
 
     public function __construct(PedidoService $pedidoservice,
+    							PedidoListadoPdfService $pedidoListadoPdfService,
     							TransporteRepositoryInterface $transporterepository,
 								TiposuspensionclienteRepositoryInterface $tiposuspensionclienteRepository,
 								MotivocierrepedidoRepositoryInterface $motivocierrepedidoRepository,
@@ -70,6 +74,7 @@ class PedidoController extends Controller
 								Actividad_ArcaRepositoryInterface $actividad_arcarepository)
     {
         $this->pedidoService = $pedidoservice;
+        $this->pedidoListadoPdfService = $pedidoListadoPdfService;
         $this->transporteRepository = $transporterepository;
 		$this->tiposuspencionclienteRepository = $tiposuspensionclienteRepository;
 		$this->motivocierrepedidoRepository = $motivocierrepedidoRepository;
@@ -136,53 +141,13 @@ class PedidoController extends Controller
     {
 		can('listar-pedidos');
 
-		if (session('filtrosPedidos') == null)
-        {
-			$filtros = [];
-			if ($request->url() != $request->fullUrl())
-			{
-				$url = urldecode($request->fullUrl());
-				$components = parse_url($url);
-				parse_str($components['query'], $filtros);
-
-                if ($filtros != '' && isset($filtros['filter_column']))
-                    session(['filtrosPedidos' => $filtros]);
-                else
-                    $filtros = [];
-			}
-		}
-		else
-		{
-			$filtros = session('filtrosPedidos');
-		}
-
+		$filtrosResueltos = $this->resolveFiltrosPedidoIndex($request);
+		$filtros = $filtrosResueltos['filtros'];
 		$busqueda = $request->busqueda;
-		// Aplica los filtros si es que hay definidos
-		$estado = $reparto = '';
-		$fechaEntrega = Carbon::now();
-		if ($filtros != '' && isset($filtros['filter_column']))
-		{
-			for ($ii = 0; $ii < count($filtros['filter_column']); $ii++)
-			{
-				if ($filtros['filter_column'][$ii]['type'] == '')
-					continue;
+		$estado = $filtrosResueltos['estado'];
+		$reparto = $filtrosResueltos['reparto'];
+		$fechaEntrega = $filtrosResueltos['fechaEntrega'];
 
-				if ($filtros['filter_column'][$ii]['value'] != '')
-				if ($filtros['filter_column'][$ii]['column'] == 'estado' &&
-					$filtros['filter_column'][$ii]['type'] == '=')
-					$estado = $filtros['filter_column'][$ii]['value'];
-					
-				if ($filtros['filter_column'][$ii]['column'] == 'reparto')
-					$reparto = $filtros['filter_column'][$ii]['value'];
-
-				if ($filtros['filter_column'][$ii]['column'] == 'fechaentrega' &&
-					$filtros['filter_column'][$ii]['value'][0] != '')
-				{
-					$fechaEntrega = $filtros['filter_column'][$ii]['value'][0].'/'.
-									$filtros['filter_column'][$ii]['value'][1];
-				}
-			}
-		}
 		$pedidos = $this->pedidoService->leePedidosPorEstadoPaginando($busqueda, $estado, $reparto, $fechaEntrega);
 
 		$datas = ['pedidos' => $pedidos, 'busqueda' => $busqueda];
@@ -197,30 +162,94 @@ class PedidoController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
+        $filtrosResueltos = $this->resolveFiltrosPedidoIndex($request);
+        $estado = $filtrosResueltos['estado'];
+        $reparto = $filtrosResueltos['reparto'];
+        $fechaEntrega = $filtrosResueltos['fechaEntrega'];
+
         switch($formato)
         {
         case 'PDF':
-			return (new PedidoExport($this->pedidoService))
-						->parametros($busqueda)
-						->download('pedido.pdf');
-            break;
+            $rutaPdf = $this->pedidoListadoPdfService->generar(
+                $busqueda,
+                $estado,
+                $reparto,
+                $fechaEntrega
+            );
+
+            return response()->download($rutaPdf, 'listado_pedido.pdf')->deleteFileAfterSend(true);
 
         case 'EXCEL':
-            return (new PedidoExport($this->pedidoService))
-                        ->parametros($busqueda)
+            return (new PedidoListadoExport($this->pedidoService))
+                        ->parametros($busqueda, $estado, $reparto, $fechaEntrega)
                         ->download('pedido.xlsx');
-            break;
 
         case 'CSV':
-            return (new PedidoExport($this->pedidoService))
-                        ->parametros($busqueda)
+            return (new PedidoListadoExport($this->pedidoService))
+                        ->parametros($busqueda, $estado, $reparto, $fechaEntrega)
                         ->download('pedido.csv', \Maatwebsite\Excel\Excel::CSV);
-            break;            
         }   
 
-        $datas = ['pedidos' => $pedidos, 'busqueda' => $busqueda];
+        return redirect()->route('pedido', array_filter(['busqueda' => $busqueda]));
+    }
 
-		return view('ventas.pedido.indexp', $datas);       
+    /**
+     * @return array{filtros: array<string, mixed>, estado: string, reparto: array<int, mixed>|string, fechaEntrega: \Carbon\Carbon|string}
+     */
+    private function resolveFiltrosPedidoIndex(Request $request): array
+    {
+        if (session('filtrosPedidos') == null) {
+            $filtros = [];
+            if ($request->url() != $request->fullUrl()) {
+                $url = urldecode($request->fullUrl());
+                $components = parse_url($url);
+                parse_str($components['query'] ?? '', $filtros);
+
+                if ($filtros != '' && isset($filtros['filter_column'])) {
+                    session(['filtrosPedidos' => $filtros]);
+                } else {
+                    $filtros = [];
+                }
+            }
+        } else {
+            $filtros = session('filtrosPedidos');
+        }
+
+        $estado = '';
+        $reparto = '';
+        $fechaEntrega = Carbon::now();
+
+        if ($filtros != '' && isset($filtros['filter_column'])) {
+            for ($ii = 0; $ii < count($filtros['filter_column']); $ii++) {
+                if ($filtros['filter_column'][$ii]['type'] == '') {
+                    continue;
+                }
+
+                if ($filtros['filter_column'][$ii]['value'] != '') {
+                    if ($filtros['filter_column'][$ii]['column'] == 'estado' &&
+                        $filtros['filter_column'][$ii]['type'] == '=') {
+                        $estado = $filtros['filter_column'][$ii]['value'];
+                    }
+
+                    if ($filtros['filter_column'][$ii]['column'] == 'reparto') {
+                        $reparto = $filtros['filter_column'][$ii]['value'];
+                    }
+
+                    if ($filtros['filter_column'][$ii]['column'] == 'fechaentrega' &&
+                        $filtros['filter_column'][$ii]['value'][0] != '') {
+                        $fechaEntrega = $filtros['filter_column'][$ii]['value'][0].'/'.
+                                        $filtros['filter_column'][$ii]['value'][1];
+                    }
+                }
+            }
+        }
+
+        return [
+            'filtros' => $filtros,
+            'estado' => $estado,
+            'reparto' => $reparto,
+            'fechaEntrega' => $fechaEntrega,
+        ];
     }
 
 	public function limpiafiltro(Request $request) {

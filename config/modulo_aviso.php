@@ -17,6 +17,7 @@ return [
         'stock.recepcion_proveedor_cantidad_diferencia' => App\Services\Configuracion\Handlers\StockRecepcionProveedorAvisoHandler::class,
         'stock.recepcion_proveedor_articulo_extra' => App\Services\Configuracion\Handlers\StockRecepcionProveedorAvisoHandler::class,
         'stock.recepcion_proveedor_faltante_oc' => App\Services\Configuracion\Handlers\StockRecepcionProveedorAvisoHandler::class,
+        'ventas.pedido_produccion_alarma' => App\Services\Configuracion\Handlers\VentasPedidoProduccionAvisoHandler::class,
     ],
 
 ];

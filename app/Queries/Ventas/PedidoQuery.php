@@ -42,104 +42,96 @@ class PedidoQuery implements PedidoQueryInterface
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        // Filtra vendedores
-		$vendedores = $this->vendedorRepository->leeVendedoresAsociados();
-
-        $pedidos = $this->model->select('pedido.id as id',
-                                'pedido.fecha as fecha',
-                                'pedido.fechaentrega as fechaentrega',
-                                'cliente.nombre as nombrecliente',
-                                'pedido.codigo as codigo',
-                                'pedido.estadopedido as estado',
-                                'pedido.transporte_id as transporte_id',
-                                'transporte.nombre as nombretransporte',
-                                'transporte.codigo as codigotransporte')
-                                ->join('cliente', 'cliente.id', '=', 'pedido.cliente_id')
-                                ->join('transporte', 'transporte.id', 'pedido.transporte_id')
-                                ->with('pedido_articulos');
-
-        if ($estado != '')
-        {
-            $pedidos = $pedidos->where('pedido.estadopedido', $estado);
-        }
-
-        if (count($vendedores) > 0)
-			$pedidos = $pedidos->whereIn('cliente.vendedor_id', $vendedores);
-
-        if (isset($reparto[0]) && $reparto[0] != '')
-        {
-            // Verifica si vienen rangos o repartos en particular (/ o ,;)
-            if (specialChars($reparto[0], '/'))
-            {
-                $repartos = explode("/", $reparto[0]);
-
-                $pedidos = $pedidos->whereBetween('transporte.codigo', $repartos);
-            }
-            else if (specialChars($reparto[0], ',;'))
-            {
-                $repartos = explode(",", $reparto[0]);
-
-                if (count($repartos) == 0)
-                    $repartos = explode(";", $reparto[0]);
-
-                $pedidos = $pedidos->whereIn('transporte.codigo', $repartos);
-            }
-            else
-                $pedidos = $pedidos->where('transporte.codigo', $reparto[0]);
-        }
-
-        if ($fechaentrega != '')
-        {
-            if (gettype($fechaentrega) != 'string')
-                $pedidos = $pedidos->where('pedido.fechaentrega', '>=', $fechaentrega->format('Y-m-d'));
-            else
-            {
-                $fechasEntrega = explode("/", $fechaentrega);
-                $pedidos = $pedidos->whereBetween('pedido.fechaentrega', $fechasEntrega);
-            }
-        }
-
-        $pedidos = $pedidos->where(function ($query) use ($busqueda) {
-                            $query->orwhere('cliente.nombre', 'like', '%'.$busqueda.'%')
-                                    ->orwhere('pedido.fecha', $busqueda)
-                                    ->orwhere('pedido.id', $busqueda)
-                                    ->orWhere('pedido.estadopedido', 'like', '%'.$busqueda.'%')
-                                    ->orWhere('transporte.nombre', 'like', '%'.$busqueda.'%');
-                            });
-
-
-        $pedidos = $pedidos->orderBy('id','desc')
-                ->paginate(10);
-
-        return $pedidos;
+        return $this->queryPedidoIndexListado($busqueda, $estado, $reparto, $fechaentrega)
+            ->with('pedido_articulos')
+            ->orderBy('id', 'desc')
+            ->paginate(10);
     }
 
-    public function allPedidoIndexSinPaginar($busqueda)
+    public function allPedidoIndexSinPaginar($busqueda, $estado = '', $reparto = '', $fechaentrega = '')
     {
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $pedidos = $this->model->select('pedido.id as id',
-                                'pedido.fecha as fecha',
-                                'pedido.fechaentrega as fechaentrega',
-                                'cliente.nombre as nombrecliente',
-                                'pedido.codigo as codigo',
-                                'pedido.estadopedido as estado',
-                                'pedido.transporte_id as transporte_id',
-                                'transporte.nombre as nombretransporte',
-                                'transporte.codigo as codigotransporte')
-                                ->join('cliente', 'cliente.id', '=', 'pedido.cliente_id')
-                                ->join('transporte', 'transporte.id', 'pedido.transporte_id')
-                                ->with('pedido_combinaciones')
-                                ->where('cliente.nombre', 'like', '%'.$busqueda.'%')
-                                ->orwhere('pedido.fecha', $busqueda)
-                                ->orwhere('pedido.id', $busqueda)
-                                ->orWhere('pedido.estadopedido', 'like', '%'.$busqueda.'%')
-                                ->orWhereHas('mventas', function ($query) use ($busqueda) {
-                                    $query->where('nombre', 'like', '%'.$busqueda.'%');
-                                })
-                                ->orderBy('id','desc')
-                                ->get();
+        return $this->queryPedidoIndexListado($busqueda, $estado, $reparto, $fechaentrega)
+            ->with('pedido_articulos')
+            ->orderBy('id', 'desc')
+            ->get();
+    }
+
+    public function allPedidoIndexListadoCursor($busqueda, $estado = '', $reparto = '', $fechaentrega = '')
+    {
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        return $this->queryPedidoIndexListado($busqueda, $estado, $reparto, $fechaentrega)
+            ->orderBy('id', 'desc')
+            ->cursor();
+    }
+
+    /**
+     * @param  array<int, mixed>|string  $reparto
+     */
+    private function queryPedidoIndexListado($busqueda, $estado = '', $reparto = '', $fechaentrega = '')
+    {
+        $vendedores = $this->vendedorRepository->leeVendedoresAsociados();
+
+        $pedidos = $this->model->select(
+            'pedido.id as id',
+            'pedido.fecha as fecha',
+            'pedido.fechaentrega as fechaentrega',
+            'cliente.nombre as nombrecliente',
+            'pedido.codigo as codigo',
+            'pedido.estadopedido as estado',
+            'pedido.transporte_id as transporte_id',
+            'transporte.nombre as nombretransporte',
+            'transporte.codigo as codigotransporte'
+        )
+            ->join('cliente', 'cliente.id', '=', 'pedido.cliente_id')
+            ->join('transporte', 'transporte.id', 'pedido.transporte_id');
+
+        if ($estado != '') {
+            $pedidos = $pedidos->where('pedido.estadopedido', $estado);
+        }
+
+        if (count($vendedores) > 0) {
+            $pedidos = $pedidos->whereIn('cliente.vendedor_id', $vendedores);
+        }
+
+        if (isset($reparto[0]) && $reparto[0] != '') {
+            if (specialChars($reparto[0], '/')) {
+                $repartos = explode('/', $reparto[0]);
+                $pedidos = $pedidos->whereBetween('transporte.codigo', $repartos);
+            } elseif (specialChars($reparto[0], ',;')) {
+                $repartos = explode(',', $reparto[0]);
+                if (count($repartos) == 0) {
+                    $repartos = explode(';', $reparto[0]);
+                }
+                $pedidos = $pedidos->whereIn('transporte.codigo', $repartos);
+            } else {
+                $pedidos = $pedidos->where('transporte.codigo', $reparto[0]);
+            }
+        }
+
+        if ($fechaentrega != '') {
+            if (gettype($fechaentrega) != 'string') {
+                $pedidos = $pedidos->where('pedido.fechaentrega', '>=', $fechaentrega->format('Y-m-d'));
+            } else {
+                $fechasEntrega = explode('/', $fechaentrega);
+                $pedidos = $pedidos->whereBetween('pedido.fechaentrega', $fechasEntrega);
+            }
+        }
+
+        if ($busqueda !== null && $busqueda !== '') {
+            $pedidos = $pedidos->where(function ($query) use ($busqueda) {
+                $query->orwhere('cliente.nombre', 'like', '%'.$busqueda.'%')
+                    ->orwhere('pedido.fecha', $busqueda)
+                    ->orwhere('pedido.id', $busqueda)
+                    ->orWhere('pedido.estadopedido', 'like', '%'.$busqueda.'%')
+                    ->orWhere('transporte.nombre', 'like', '%'.$busqueda.'%');
+            });
+        }
+
         return $pedidos;
     }
                 

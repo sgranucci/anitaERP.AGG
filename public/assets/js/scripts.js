@@ -16,9 +16,10 @@ $(document).ready(function () {
         html: true,
         container: 'body'
     });
-    var menu = $('ul.nav-sidebar').find('a.active').parents('li.has-treeview');
-    menu.addClass('menu-open');
-    menu.children('a').addClass('active');
+    var menuParents = $('ul.nav-sidebar').find('a.active').parents('li.has-treeview');
+    menuParents.addClass('menu-open');
+    menuParents.children('a').addClass('menu-parent-open');
+    $('ul.nav-sidebar li.menu-open > .nav-treeview').css('display', 'block');
     // Trabajo con Ventana de Roles.
     const modal = $('#modal-seleccionar-rol');
     if (modal.length && modal.data('rol-set') == 'NO') {

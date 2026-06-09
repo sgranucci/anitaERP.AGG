@@ -1,48 +1,41 @@
-@if ($item["submenu"] == [])
-    <li class="nav-item">
-        <a href="{{url($item['url'])}}" class="nav-link {{getMenuActivo($item["url"])}}">
-            <i class="nav-icon fa {{$item["icono"]}}"></i>
-            @switch($item['nivel'])
-            @case(2)
-                <p style="color: DodgerBlue;">
-                @break
-            @case(3)
-                <p style="color: Green;">
-                @break
-            @default
-                <p style="">
-            @endswitch
-                @for ($sp = 1; $sp < $item['nivel']; $sp++)
-                    &nbsp
-                @endfor
-        	    {{ $item["nombre"] }}
-            </p>
+@php
+    $nivel = (int) ($item['nivel'] ?? 0);
+    $url = $item['url'] ?? '';
+    $esActivo = $url !== '' ? getMenuActivo($url) : '';
+    $tieneSubmenu = ! empty($item['submenu']);
+    $ramaActiva = $tieneSubmenu && menuItemEsActivoOAncestro($item);
+    $esPadreAbierto = $ramaActiva && $esActivo !== 'active';
+    $claseLink = trim($esActivo . ($esPadreAbierto ? ' menu-parent-open' : ''));
+    $icono = $item['icono'] ?? 'fa-circle';
+@endphp
+
+@if (! $tieneSubmenu)
+    <li class="nav-item nav-menu-level-{{ $nivel }}">
+        <a href="{{ url($url) }}" class="nav-link {{ $claseLink }}">
+            @if ($nivel === 0)
+                <i class="nav-icon fa {{ $icono }}"></i>
+            @else
+                <i class="nav-icon fas fa-circle nav-icon-dot"></i>
+            @endif
+            <p>{{ $item['nombre'] }}</p>
         </a>
     </li>
 @else
-    <li class="nav-item has-treeview">
-        <a href="javascript:;" class="nav-link">
-          <i class="nav-icon fa {{$item["icono"]}}"></i>
-            @switch($item['nivel'])
-            @case(2)
-                <p style="color: DodgerBlue;">
-                @break
-            @case(3)
-                <p style="color: Green;">
-                @break
-            @default
-                <p style="">
-            @endswitch
-            @for ($sp = 1; $sp < $item['nivel']; $sp++)
-                &nbsp
-            @endfor
-            {{ $item["nombre"] }}
-            <i class="right fas fa-angle-left"></i>
-          </p>
+    <li class="nav-item has-treeview nav-menu-level-{{ $nivel }}{{ $ramaActiva ? ' menu-open' : '' }}">
+        <a href="javascript:;" class="nav-link {{ $claseLink }}">
+            @if ($nivel === 0)
+                <i class="nav-icon fa {{ $icono }}"></i>
+            @else
+                <i class="nav-icon fa {{ $icono }}"></i>
+            @endif
+            <p>
+                {{ $item['nombre'] }}
+                <i class="right fas fa-angle-left"></i>
+            </p>
         </a>
         <ul class="nav nav-treeview">
-            @foreach ($item["submenu"] as $submenu)
-                @include("theme.$theme.menu-item", ["item" => $submenu, "submenu" => 1, "nivel" => $submenu['nivel']])
+            @foreach ($item['submenu'] as $submenu)
+                @include("theme.$theme.menu-item", ['item' => $submenu])
             @endforeach
         </ul>
     </li>

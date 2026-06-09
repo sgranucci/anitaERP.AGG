@@ -9,7 +9,9 @@ interface PedidoQueryInterface
     public function allPendiente($cliente_id = null);
     public function allPedidoIndex($cliente_id, $estado);
     public function allPedidoIndexPaginando($busqueda, $estado, $reparto, $fechaentrega);
-    public function allPedidoIndexSinPaginar($busqueda);
+    public function allPedidoIndexSinPaginar($busqueda, $estado = '', $reparto = '', $fechaentrega = '');
+
+    public function allPedidoIndexListadoCursor($busqueda, $estado = '', $reparto = '', $fechaentrega = '');
     public function allPendienteOt($articulo_id, $combinacion_id);
     public function leePedidoporCodigo($codigo);
     public function leePedidoporId($id);
