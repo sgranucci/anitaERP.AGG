@@ -295,4 +295,5 @@
 @include('ventas.ordentrabajo.modalcrearordentrabajo')
 @include('ventas.pedido.modalfacturapedido')
 @include('ventas.pedido.modalpesada')
+@include('includes.proceso-overlay-pedido')
 

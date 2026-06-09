@@ -154,24 +154,19 @@ class FacturaElectronicaService
 					if (isset($caea['Error'])) {
 						return $caea;
 					}
-					$out = $this->arcaMtxcaFacturaElectronicaService->informarComprobanteCaeaDomestico(
-						$empresaId,
-						$puntoventa,
-						(int) $tipotransaccion,
-						$datos,
-						[
-							'caea' => $caea['cae'],
-							'fechavencimiento' => $caea['fechavencimientocae'],
-						],
-					);
-				} else {
-					$out = $this->arcaMtxcaFacturaElectronicaService->solicitaCaeDomestico(
+
+					return [
+						'cae' => $caea['cae'],
+						'fechavencimientocae' => $caea['fechavencimientocae'],
+					];
+				}
+
+				$out = $this->arcaMtxcaFacturaElectronicaService->solicitaCaeDomestico(
 						$empresaId,
 						$puntoventa,
 						(int) $tipotransaccion,
 						$datos
 					);
-				}
 
 				return [
 					'cae' => $out['cae'],

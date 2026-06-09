@@ -30,5 +30,7 @@ function buscarSalida(programa)
         } else {
             nombreSalida = (data.salidas && data.salidas.nombre) ? data.salidas.nombre : 'Sin impresora seteada';
         }
+    }).fail(function () {
+        nombreSalida = 'Sin impresora seteada';
     });
 }

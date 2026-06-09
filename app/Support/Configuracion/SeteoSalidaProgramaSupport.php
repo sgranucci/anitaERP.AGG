@@ -74,9 +74,18 @@ class SeteoSalidaProgramaSupport
 
         $referer = request()->header('referer') ?? request()->server('HTTP_REFERER') ?? '';
         if ($referer !== '') {
-            $legacy = self::legacyDesdeReferer($referer, self::normalizarEntrada($opcion));
-            if ($legacy !== $canonical) {
-                $claves[] = $legacy;
+            // Seteos históricos grabados solo con referer (opción vacía en buscaSeteo).
+            $legacySinSufijo = self::legacyDesdeReferer($referer, null);
+            if ($legacySinSufijo !== $canonical) {
+                $claves[] = $legacySinSufijo;
+            }
+
+            $opcionNorm = self::normalizarEntrada($opcion);
+            if ($opcionNorm !== null) {
+                $legacyConSufijo = self::legacyDesdeReferer($referer, $opcionNorm);
+                if ($legacyConSufijo !== $canonical && $legacyConSufijo !== $legacySinSufijo) {
+                    $claves[] = $legacyConSufijo;
+                }
             }
         }
 

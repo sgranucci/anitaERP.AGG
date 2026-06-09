@@ -8,11 +8,12 @@ Pedidos de Clientes
 <script src="{{asset("assets/pages/scripts/ventas/pedido/filtro.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/configuracion/salida.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/configuracion/configurar_salida.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/ventas/pedido/proceso-overlay.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/ventas/pedido/imprimir.js")}}" type="text/javascript"></script>
 
 <script>
 
 window.seteoSalidaPrograma = @json(\App\Support\Configuracion\SeteoSalidaProgramaSupport::VENTAS_PEDIDO);
-window.seteoSalidaConfigurarUrl = @json(route('configurar_salida', ['programa' => ':programa']));
 
 function limpiaFiltros(){
 	$('#estado').val('');
@@ -73,7 +74,7 @@ function eliminarPedido(event) {
                         	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
 						@endif
                     </a>
-					<a href="#" onclick="configurarSalida()" class="btn btn-outline-secondary btn-sm">
+					<a href="#" onclick="return configurarSalida();" class="btn btn-outline-secondary btn-sm">
 						<i class="fa fa-fw fa-cog"></i> Configura salida
 					</a>
                 </div>
@@ -168,7 +169,10 @@ function eliminarPedido(event) {
                                 	</form>
 								@endif
                        			@if (can('listar-pedidos', false))
-                                	<a href="{{route('listar_pedido', ['id' => $pedido['id']])}}" class="btn-accion-tabla tooltipsC" title="Listar el pedido">
+                                	<a href="#"
+                                	   class="btn-accion-tabla tooltipsC btn-imprimir-pedido-listado"
+                                	   title="Imprimir pedido"
+                                	   data-pedido-id="{{ $pedido['id'] }}">
                                    	<i class="fa fa-print"></i>
                                 	</a>
 									<a href="{{route('listar_pedido_pdf', ['id' => $pedido['id']])}}" class="btn-accion-tabla tooltipsC" title="Listar el pedido en PDF">
@@ -186,5 +190,7 @@ function eliminarPedido(event) {
 </div>
 @include('includes.filtropedido')
 {{ $pedidos->appends(['busqueda' => $busqueda])->links() }}
+
+@include('includes.proceso-overlay-pedido')
 
 @endsection

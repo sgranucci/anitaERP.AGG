@@ -308,14 +308,7 @@ class FacturacionService
 
 	private function validarLugarEntregaPedido($cliente, $pedido): ?array
 	{
-		if (!$this->clienteTieneLugaresEntrega((int) $cliente->id)) {
-			return null;
-		}
-
-		if ((int) ($pedido->cliente_entrega_id ?? 0) <= 0) {
-			return ['error' => 'Debe seleccionar un lugar de entrega del cliente en el pedido'];
-		}
-
+		// Sin lugar de entrega asignado: se factura con null (no bloquear).
 		return null;
 	}
 
@@ -530,6 +523,14 @@ class FacturacionService
 		// Arma total de comprobante
 		$totalComprobante = $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Total', 'importe');
 
+		if ($dataFactura === []) {
+			return ['error' => 'No hay ítems para facturar: verifique que estén en estado pendiente y con pesada cargada.'];
+		}
+
+		if ($totalComprobante == 0.) {
+			return ['error' => 'El total del comprobante es 0. Revise que los ítems del pedido tengan precio mayor a cero.'];
+		}
+
 		return ['datosfactura' => $dataFactura, 'datoscliente' => $datosCliente, 'totalcomprobante' => $totalComprobante,
 				'conceptostotales' => $conceptosTotales];
 	}
@@ -568,6 +569,8 @@ class FacturacionService
 		if ($errorEntrega) {
 			return $errorEntrega;
 		}
+
+		$retorno = null;
 
 		// Controla si divide factura
 		if (($pedido->transportes->tipoexpreso == '4' || $pedido->transportes->tipoexpreso == '3') && 
@@ -628,8 +631,8 @@ class FacturacionService
 				$retorno = [$retorno1, $retorno2];
 			}
 		}
-		else
-		{
+
+		if ($retorno === null) {
 			$this->flGrabaComprobanteDividido = false;
 			$this->flDivide = false;
 
@@ -685,6 +688,14 @@ class FacturacionService
 
 		// Recalcula la factura
 		$calculoFactura = Self::calculaFacturaPorPedido($data);
+
+		if (! is_array($calculoFactura) || isset($calculoFactura['error'])) {
+			return ['error' => $calculoFactura['error'] ?? 'No se pudo calcular la factura del pedido.'];
+		}
+
+		if (empty($calculoFactura['datosfactura'])) {
+			return ['error' => 'No hay datos para facturar el pedido.'];
+		}
 
 		$dataFactura = $calculoFactura['datosfactura'];
 		$conceptosTotales = $calculoFactura['conceptostotales'];
@@ -1065,7 +1076,7 @@ class FacturacionService
 					}
 					DB::commit();
 
-					return ['factura' => substr($venta['codigo'],0,3).' '.$letra.' '.$puntoventa->codigo.'-'.$venta['numerocomprobante']];
+					return ['factura' => $venta['codigo']];
 				} catch (\Exception $e) {
 					DB::rollback();
 
@@ -1074,14 +1085,16 @@ class FacturacionService
 						self::borraAnita(substr($venta['codigo'], 0, 3), $letra, 
 											$puntoventa->codigo, $venta['numerocomprobante'], $empresa->codigo);
 
-					dd($e->getMessage());
-
 					return ['error' => $e->getMessage()];
 				}
 			}
+
+			return ['error' => 'No se pudo numerar el comprobante.'];
 		}
 		else
-			return 'Error con punto de venta asignado';
+			return ['error' => 'Error con punto de venta asignado'];
+
+		return ['error' => 'No se pudo generar la factura del pedido.'];
 	}
 
 	// Calcula la factura por orden de venta
@@ -5519,32 +5532,12 @@ class FacturacionService
 			case 'A':
 				if ($empresa->nroinscripcion)
 				{
-					$wsPv = (string) ($puntoventa->webservice ?? '');
-					if ($wsPv === 'wsmtxca' && (string) config('arca_mtxca.transporte', 'afip_php') === 'soap') {
-						try {
-							$cae = $this->facturaelectronicaService->solicitaCAE(
-								$empresa->nroinscripcion,
-								$codigoTipoTransaccion,
-								$puntoventa,
-								$dataCAE);
-						} catch (\Throwable $e) {
-							$cae = ['Error' => $e->getMessage()];
-						}
-						if (isset($cae['Error'])) {
-							$msgError = (string) $cae['Error'];
-							if (\App\Support\Ventas\ArcaWsfeEmisionResiliencia::esFallaComunicacionSinRespuestaClara($msgError, $wsPv)) {
-								throw new Exception(
-									'No hubo respuesta de ARCA al informar el comprobante CAEA '.$numeroComprobante.'. Detalle: '.$msgError
-								);
-							}
-							throw new Exception('No pudo informar comprobante CAEA (MTXCA). '.$msgError);
-						}
-					} else {
-						$cae = $this->facturaelectronicaService->buscaCAEA($empresa->nroinscripcion, $fechaFactura);
+					// PV CAEA: numeración local (Anita) al emitir; CAEA vigente en arca_caea.
+					// No se informa comprobante en ARCA en línea (informe quincenal aparte).
+					$cae = $this->facturaelectronicaService->buscaCAEA($empresa->nroinscripcion, $fechaFactura);
 
-						if (isset($cae['Error'])) {
-							throw new Exception('No pudo asignar CAEA, no esta pedido para la quincena');
-						}
+					if (isset($cae['Error'])) {
+						throw new Exception('No pudo asignar CAEA, no esta pedido para la quincena');
 					}
 				}
 				else

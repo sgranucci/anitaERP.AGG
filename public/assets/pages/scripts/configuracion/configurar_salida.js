@@ -1,48 +1,50 @@
-
-    function codigoSeteoSalida()
-    {
-        if (typeof window.resolverSeteoSalidaPrograma === 'function') {
-            return String(window.resolverSeteoSalidaPrograma());
-        }
-
-        if (typeof window.seteoSalidaPrograma !== 'undefined' && window.seteoSalidaPrograma !== null) {
-            return String(window.seteoSalidaPrograma);
-        }
-
-        return '';
+function codigoSeteoSalida()
+{
+    if (typeof window.resolverSeteoSalidaPrograma === 'function') {
+        return String(window.resolverSeteoSalidaPrograma());
     }
 
-    function urlConfigurarSalida()
-    {
-        if (window.seteoSalidaConfigurarUrl) {
-            return window.seteoSalidaConfigurarUrl;
-        }
-
-        return carpetaBase + '/configuracion/configurarsalida/:programa';
+    if (typeof window.seteoSalidaPrograma !== 'undefined' && window.seteoSalidaPrograma !== null) {
+        return String(window.seteoSalidaPrograma);
     }
 
-    $(function () {
+    return '';
+}
+
+function urlConfigurarSalida()
+{
+    return carpetaBase + '/configuracion/configurarsalida/:programa';
+}
+
+$(function () {
+    imprimirSalida();
+    setTimeout(function () {
         imprimirSalida();
-        setTimeout(function () {
-            imprimirSalida();
-        }, 300);
-    });
+    }, 300);
+});
 
-    function imprimirSalida()
-    {
-        buscarSalida(codigoSeteoSalida());
+function imprimirSalida()
+{
+    buscarSalida(codigoSeteoSalida());
 
-        setTimeout(function () {
-            var texto = nombreSalida || 'Sin impresora seteada';
-            $("#nombresalida").text(" - Imprime en: " + texto);
-        }, 300);
+    setTimeout(function () {
+        var texto = nombreSalida || 'Sin impresora seteada';
+        $("#nombresalida").text(" - Imprime en: " + texto);
+    }, 300);
+}
+
+function configurarSalida()
+{
+    var programa = codigoSeteoSalida();
+    if (!programa) {
+        alert('No se pudo determinar el programa de impresión para esta pantalla.');
+        return false;
     }
 
-    function configurarSalida()
-    {
-        var programa = codigoSeteoSalida();
-        var url = urlConfigurarSalida().replace(':programa', encodeURIComponent(programa));
-        var retorno = encodeURIComponent(window.location.href);
+    var url = urlConfigurarSalida().replace(':programa', encodeURIComponent(programa));
+    var retorno = encodeURIComponent(window.location.href);
 
-        location.href = url + '?retorno=' + retorno;
-    }
+    window.location.href = url + '?retorno=' + retorno;
+
+    return false;
+}

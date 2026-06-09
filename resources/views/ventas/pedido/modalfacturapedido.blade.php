@@ -75,6 +75,7 @@
                         </div>
                     </div>
                 </div>
+                <div id="alert-preview-factura-pedido" class="alert alert-warning d-none mb-2" role="alert"></div>
                 <div class="form-group">
                     <label for="recipient-name" class="col-form-label">Items a Facturar</label>
                     <table class="table table-sm" id="factura-pedido-table">

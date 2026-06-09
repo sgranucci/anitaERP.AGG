@@ -271,8 +271,10 @@ class ArcaMtxcaFacturaElectronicaService
             throw new Exception($this->formatSoapFault('autorizarComprobante', $e, $client));
         }
 
+        $result = $this->unwrapSoapResponse($raw, 'autorizarComprobanteResponse');
+
         return $this->parseAutorizacionResponse(
-            $raw->autorizarComprobanteResponse ?? null,
+            $result,
             'autorizarComprobante',
             $empresaId,
             $cuit,
@@ -330,8 +332,9 @@ class ArcaMtxcaFacturaElectronicaService
             throw new Exception($this->formatSoapFault('informarComprobanteCAEA', $e, $client));
         }
 
+        $result = $this->unwrapSoapResponse($raw, 'informarComprobanteCAEAResponse');
         $parsed = $this->parseAutorizacionResponse(
-            $raw->informarComprobanteCAEAResponse ?? null,
+            $result,
             'informarComprobanteCAEA',
             $empresaId,
             $cuit,

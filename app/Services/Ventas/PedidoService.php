@@ -192,45 +192,88 @@ class PedidoService
 
 	public function listarPedido($id)
 	{
+		$resultado = $this->imprimirPedido((int) $id);
+
+		if ($resultado['ok']) {
+			return redirect()->back()->with('mensaje', $resultado['mensaje']);
+		}
+
+		return redirect()->back()->with('errores', [$resultado['mensaje']]);
+	}
+
+	/**
+	 * @return array{ok:bool,mensaje:string}
+	 */
+	public function imprimirPedido(int $id): array
+	{
 	  	ini_set('memory_limit', '512M');
-
-		//$pdfMerger = PDFMerger::init();
-
-		$data = $this->pedidoQuery->leePedidoporId($id);
-		$pedido = $data[0];
-		$nombre_pdf = 'pedido-'.$id.'-'.$pedido->clientes->nombre;
-
-		$view =  View::make('exports.ventas.pedido', compact('pedido'))
-			    ->render();
-		$path = storage_path('pdf/pedido');
-
-        $pdf = App::make('dompdf.wrapper');
-        $pdf->setPaper('legal', 'landscape');
-        $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
-
-		// Arma nombre de archivo
-		$nombreReporte = $path.'/'.$nombre_pdf.'.pdf';
-
-		//Storage::disk('local')->put($nombreReporte, $reporte);
-		//$path = Storage::path($nombreReporte);
 
 		$usuario_id = Auth::user()->id;
         $seteosalida = $this->seteosalidaRepository->buscaSeteo($usuario_id, SeteoSalidaProgramaSupport::VENTAS_PEDIDO);
 
-		$comandos = explode(' ', $seteosalida->salidas->comando);
-
-		// reemplaza %s por nombre del archivo
-		$comandos[array_search('%s', $comandos)] = $nombreReporte;
-		$process = new Process($comandos);
-		$process->run();
-		if (!$process->isSuccessful()) {
-	   		throw new ProcessFailedException($process);
+		if (! $seteosalida || ! $seteosalida->salidas) {
+			return [
+				'ok' => false,
+				'mensaje' => 'No hay impresora configurada para pedidos. Use «Configura salida» en el listado.',
+			];
 		}
-    	//echo $process->getOutput();
 
-		Storage::disk('local')->delete($nombreReporte);
+		$comandoRaw = trim((string) $seteosalida->salidas->comando);
+		if ($comandoRaw === '' || ! str_contains($comandoRaw, '%s')) {
+			return [
+				'ok' => false,
+				'mensaje' => 'El comando de la impresora configurada debe incluir %s (ruta del PDF).',
+			];
+		}
 
-		return redirect()->back();
+		$nombreReporte = null;
+
+		try {
+			$data = $this->pedidoQuery->leePedidoporId($id);
+			$pedido = $data[0];
+			$nombre_pdf = 'pedido-'.$id.'-'.$pedido->clientes->nombre;
+
+			$view = View::make('exports.ventas.pedido', compact('pedido'))->render();
+			$path = storage_path('pdf/pedido');
+
+			if (! is_dir($path) && ! mkdir($path, 0777, true) && ! is_dir($path)) {
+				throw new Exception('No se pudo crear el directorio de PDF de pedidos.');
+			}
+
+	        $pdf = App::make('dompdf.wrapper');
+	        $pdf->setPaper('legal', 'landscape');
+	        $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
+
+			$nombreReporte = $path.'/'.$nombre_pdf.'.pdf';
+
+			$comandos = explode(' ', $comandoRaw);
+			$indiceMarcador = array_search('%s', $comandos, true);
+			if ($indiceMarcador === false) {
+				throw new Exception('Comando de impresora inválido (%s no encontrado).');
+			}
+
+			$comandos[$indiceMarcador] = $nombreReporte;
+			$process = new Process($comandos);
+			$process->run();
+
+			if (! $process->isSuccessful()) {
+		   		throw new ProcessFailedException($process);
+			}
+
+			return [
+				'ok' => true,
+				'mensaje' => 'Impresión exitosa.',
+			];
+		} catch (Exception $e) {
+			return [
+				'ok' => false,
+				'mensaje' => 'No se pudo imprimir el pedido: '.$e->getMessage(),
+			];
+		} finally {
+			if ($nombreReporte !== null && is_file($nombreReporte)) {
+				@unlink($nombreReporte);
+			}
+		}
 	}
 
 	public function listarPedidoPdf($id)

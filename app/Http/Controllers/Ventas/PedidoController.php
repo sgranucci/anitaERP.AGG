@@ -531,8 +531,16 @@ class PedidoController extends Controller
 	}
 
 	/* Lista el pedido */
-	public function listarPedido($id, $cliente_id = null)
+	public function listarPedido(Request $request, $id, $cliente_id = null)
 	{
+		can('listar-pedidos');
+
+		if ($request->ajax() || $request->wantsJson()) {
+			$resultado = $this->pedidoService->imprimirPedido((int) $id);
+
+			return response()->json($resultado, $resultado['ok'] ? 200 : 422);
+		}
+
 		return $this->pedidoService->listarPedido($id);
 	}
 

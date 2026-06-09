@@ -53,6 +53,207 @@
 	var flSaltarFocusDescuentoPedido = false;
 	var flAgregarRenglonTrasDescuentoPedido = false;
 
+	function mensajeErrorFacturaPedido(data) {
+		if (data == null || data === '') {
+			return 'Sin respuesta del servidor.';
+		}
+		if (typeof data === 'string') {
+			return data;
+		}
+		if (data.error) {
+			return String(data.error);
+		}
+		if (Array.isArray(data)) {
+			for (var i = 0; i < data.length; i++) {
+				if (data[i] && data[i].error) {
+					return String(data[i].error);
+				}
+			}
+		}
+		return null;
+	}
+
+	function normalizarTextoFactura(valor) {
+		if (valor == null || valor === '') {
+			return null;
+		}
+		var texto = String(valor).trim();
+		if (texto === '' || texto === 'undefined' || texto === 'null') {
+			return null;
+		}
+		return texto;
+	}
+
+	function extraerFacturaDeItem(item) {
+		if (!item || typeof item !== 'object') {
+			return null;
+		}
+		if (item.error) {
+			return null;
+		}
+		return normalizarTextoFactura(item.factura)
+			|| normalizarTextoFactura(item.codigo)
+			|| normalizarTextoFactura(item.referencia)
+			|| normalizarTextoFactura(item.numero);
+	}
+
+	function facturasGeneradasPedido(data) {
+		var facturas = [];
+		if (Array.isArray(data)) {
+			for (var j = 0; j < data.length; j++) {
+				var facturaItem = extraerFacturaDeItem(data[j]);
+				if (facturaItem) {
+					facturas.push(facturaItem);
+				}
+			}
+			return facturas;
+		}
+
+		var facturaUnica = extraerFacturaDeItem(data);
+		if (facturaUnica) {
+			facturas.push(facturaUnica);
+		}
+		return facturas;
+	}
+
+	function mensajeErrorAjaxFacturaPedido(xhr) {
+		if (xhr && xhr.responseJSON) {
+			var msgJson = mensajeErrorFacturaPedido(xhr.responseJSON);
+			if (msgJson) {
+				return msgJson;
+			}
+			if (xhr.responseJSON.message) {
+				return String(xhr.responseJSON.message);
+			}
+		}
+		if (xhr && xhr.responseText && xhr.responseText.indexOf('<') < 0) {
+			return xhr.responseText.substring(0, 500);
+		}
+		return 'Error al facturar el pedido' + (xhr && xhr.status ? ' (HTTP ' + xhr.status + ').' : '.');
+	}
+
+	function analizarResultadoFacturaPedido(data) {
+		var items = Array.isArray(data) ? data : [data];
+		var comprobantes = [];
+		var errores = [];
+
+		for (var i = 0; i < items.length; i++) {
+			var item = items[i];
+			if (item == null || typeof item !== 'object') {
+				errores.push('Respuesta inválida del servidor.');
+				continue;
+			}
+
+			var errorItem = item.error ? String(item.error).trim() : '';
+			var factura = extraerFacturaDeItem(item);
+
+			if (errorItem) {
+				errores.push(errorItem);
+				if (factura) {
+					comprobantes.push({ codigo: factura, ok: false, detalle: errorItem });
+				}
+				continue;
+			}
+
+			if (factura) {
+				comprobantes.push({ codigo: factura, ok: true, detalle: null });
+			}
+		}
+
+		var facturasOk = comprobantes.filter(function (c) { return c.ok; });
+		var estado = 'error';
+		var titulo = 'No se pudo facturar el pedido';
+		var subtitulo = '';
+		var exito = false;
+
+		if (errores.length && facturasOk.length) {
+			estado = 'parcial';
+			titulo = 'Facturación parcial';
+			subtitulo = 'Se generaron comprobantes, pero el proceso terminó con errores.';
+			exito = true;
+		} else if (errores.length) {
+			estado = 'error';
+			titulo = 'Error al facturar el pedido';
+			subtitulo = errores.length === 1 ? errores[0] : 'Revise los detalles a continuación.';
+		} else if (facturasOk.length) {
+			estado = 'ok';
+			titulo = facturasOk.length > 1 ? 'Facturación exitosa' : 'Factura generada';
+			subtitulo = facturasOk.length > 1
+				? 'Se emitieron ' + facturasOk.length + ' comprobantes.'
+				: 'El comprobante quedó registrado correctamente.';
+			exito = true;
+		} else {
+			errores.push('No se recibió el número de factura generada.');
+			subtitulo = errores[0];
+		}
+
+		return {
+			estado: estado,
+			titulo: titulo,
+			subtitulo: subtitulo,
+			facturas: comprobantes,
+			errores: errores,
+			exito: exito,
+			codigosOk: facturasOk.map(function (c) { return c.codigo; }),
+		};
+	}
+
+	function mostrarResultadoFacturaPedidoEnOverlay(resumen, onContinuar) {
+		if (!window.PedidoProcesoOverlay || typeof PedidoProcesoOverlay.mostrarResultado !== 'function') {
+			var fallback = resumen.exito
+				? ('Facturación exitosa: ' + (resumen.codigosOk.join(', ') || ''))
+				: (resumen.errores[0] || 'Error al facturar el pedido.');
+			if (window.toastr) {
+				toastr[resumen.exito ? 'success' : 'error'](fallback, '', { timeOut: 9000, closeButton: true });
+			} else {
+				alert(fallback);
+			}
+			if (typeof onContinuar === 'function') {
+				onContinuar(!!resumen.exito);
+			}
+			return;
+		}
+
+		PedidoProcesoOverlay.mostrarResultado({
+			tipo: resumen.estado === 'ok' ? 'ok' : (resumen.estado === 'parcial' ? 'parcial' : 'error'),
+			titulo: resumen.titulo,
+			subtitulo: resumen.subtitulo,
+			facturas: resumen.facturas,
+			errores: resumen.estado === 'ok' ? [] : resumen.errores,
+			boton: resumen.exito ? 'Continuar' : 'Cerrar',
+			onCerrar: function () {
+				if (typeof onContinuar === 'function') {
+					onContinuar(!!resumen.exito);
+				}
+			},
+		});
+	}
+
+	function mostrarResultadoFacturaPedido(data, onContinuar) {
+		var resumen = analizarResultadoFacturaPedido(data);
+		mostrarResultadoFacturaPedidoEnOverlay(resumen, onContinuar);
+		return !!resumen.exito;
+	}
+
+	var mensajesProcesoFacturaPedido = [
+		'Calculando importes de la factura…',
+		'Numerando comprobante…',
+		'Registrando venta en el sistema…',
+		'Grabando en Anita…',
+	];
+
+	function iniciarProcesoFacturaPedido() {
+		if (window.PedidoProcesoOverlay) {
+			PedidoProcesoOverlay.iniciar(mensajesProcesoFacturaPedido, 'Facturando pedido…');
+		}
+	}
+
+	function detenerProcesoFacturaPedido() {
+		if (window.PedidoProcesoOverlay) {
+			PedidoProcesoOverlay.detener();
+		}
+	}
+
 	function esCampoPedidoEnfocable(el) {
 		if (!el || el.tagName === 'TEXTAREA') {
 			return false;
@@ -1423,6 +1624,7 @@
 
 		modal.find('#tbody-tabla-factura').empty();
 		modal.find('#tbody-tabla-total-factura').empty();
+		modal.find('#alert-preview-factura-pedido').addClass('d-none').text('');
 
 		modalActivo = "facturarPedidoModal";
 
@@ -1525,6 +1727,7 @@
 
 		// Agrega totales
 		agregaRenglonTotalItemFactura();
+		$('#factura-pedido-table tr.item-factura').last().addClass('renglon-total-item-factura');
 
 		let totalcajaspedido = $("#totalcajaspedido").val();
 		let totalpiezaspedido = $("#totalpiezaspedido").val();
@@ -1641,23 +1844,46 @@
 			totalcajaspedido: totalcajaspedido,
 			_token: token
 		},
-		function(data, status){
-			if (data.error)
-				alert(data.error);
-			else
-			{
-				$.each(data.conceptostotales, function(index, item) {
-					// index es la posición del elemento en el array
-					// item es el elemento en sí
-					if (item.importe != 0)
+		function(data){
+			modal.find('#alert-preview-factura-pedido').addClass('d-none').text('');
+
+			var errorCalculo = mensajeErrorFacturaPedido(data);
+			if (errorCalculo) {
+				modal.find('#alert-preview-factura-pedido')
+					.removeClass('d-none alert-info alert-success')
+					.addClass('alert alert-warning')
+					.text(errorCalculo);
+				if (window.toastr) {
+					toastr.warning(errorCalculo, 'Preview de factura', { timeOut: 9000, closeButton: true, progressBar: true });
+				} else {
+					alert(errorCalculo);
+				}
+				return;
+			}
+
+			var lineasFactura = $('#tbody-tabla-factura tr').not('.renglon-total-item-factura').length;
+			if (lineasFactura === 0) {
+				var sinItems = 'No hay ítems pendientes en el pedido para mostrar en la factura.';
+				modal.find('#alert-preview-factura-pedido')
+					.removeClass('d-none alert-info alert-success')
+					.addClass('alert alert-warning')
+					.text(sinItems);
+				if (window.toastr) {
+					toastr.warning(sinItems, 'Preview de factura', { timeOut: 9000, closeButton: true });
+				}
+			}
+
+			$.each(data.conceptostotales, function(index, item) {
+					var esTotal = item.concepto === 'Total';
+					if (item.importe != 0 || esTotal)
 					{
 						agregaRenglonTotalFactura();
 
 						$('#total-factura-pedido-table').find('tr').last().find('.conceptototal').val(item.concepto);
 						$('#total-factura-pedido-table').find('tr').last().find('.tasatotal').val(parseFloat(item.tasa).toFixed(2));
-						$('#total-factura-pedido-table').find('tr').last().find('.importetotal').val(item.importe.toFixed(2));
+						$('#total-factura-pedido-table').find('tr').last().find('.importetotal').val(parseFloat(item.importe).toFixed(2));
 
-						if (item.concepto == "Total")
+						if (esTotal)
 						{
 							$('#total-factura-pedido-table').find('tr').last().find('.conceptototal').css('fontWeight', 'bold');
 							$('#total-factura-pedido-table').find('tr').last().find('.importetotal').css('fontWeight', 'bold');
@@ -1666,7 +1892,6 @@
 				});
 				$('.tasatotal').css('text-align', 'right');
 				$('.importetotal').css('text-align', 'right');
-			}
 		});
 
 	});
@@ -1807,43 +2032,58 @@
 		
 		$('#facturarPedidoModal').modal('hide');
 
-		$.post(carpetaBase+"/ventas/facturarporpedido",
-				{
-					pedido_articulo_ids: pedido_articulo_ids,
-					cliente_id: cliente_id,
-					pedido_id: pedido_id,
-					ordentrabajo_id: ordentrabajo_ids,
-					tipotransaccion_id: tipotransaccion_id,
-					puntoventa_id: puntoventa_id,
-					fechafactura: fechafactura,
-					descuentopie: descuentopie,
-					descuentoimportepie: descuentoimportepie,
-					descuentolinea: descuentolinea,
-					leyendafactura: leyendafactura,
-					cantidadbulto: cantidadbulto,
-					puntoventaremito_id: puntoventaremito_id,
-					formapago_id: formapago_id,
-					incoterm_id: incoterm_id,
-					mercaderia: mercaderia,
-					leyendaexportacion: leyendaexportacion,
-					actividad_arca_id: actividad_arca_id,
-					_token: token
-				},
-				function(data, status){
-					if (data.length > 1)
-					{
-						alert("Factura Número: " + data[0].factura + "\nFactura Número: "+ data[1].factura + "\nEstado: " + status);
+		iniciarProcesoFacturaPedido();
+
+		$.ajax({
+			url: carpetaBase + '/ventas/facturarporpedido',
+			method: 'POST',
+			dataType: 'json',
+			data: {
+				pedido_articulo_ids: pedido_articulo_ids,
+				cliente_id: cliente_id,
+				pedido_id: pedido_id,
+				ordentrabajo_id: ordentrabajo_ids,
+				tipotransaccion_id: tipotransaccion_id,
+				puntoventa_id: puntoventa_id,
+				fechafactura: fechafactura,
+				descuentopie: descuentopie,
+				descuentoimportepie: descuentoimportepie,
+				descuentolinea: descuentolinea,
+				leyendafactura: leyendafactura,
+				cantidadbulto: cantidadbulto,
+				puntoventaremito_id: puntoventaremito_id,
+				formapago_id: formapago_id,
+				incoterm_id: incoterm_id,
+				mercaderia: mercaderia,
+				leyendaexportacion: leyendaexportacion,
+				actividad_arca_id: actividad_arca_id,
+				_token: token
+			},
+		})
+			.done(function (data) {
+				mostrarResultadoFacturaPedido(data, function (exito) {
+					if (!exito) {
+						return;
 					}
-					else
-						alert("Factura Número: " + data[0].factura + "\nEstado: " + status);
 
-					$("#facturarPedidoModal").modal('hide');
-					$("#estadopedido").val('Facturado');
-
+					$('#facturarPedidoModal').modal('hide');
+					$('#estadopedido').val('Facturado');
 					TotalPedido();
-
 					window.history.go(0);
-				}).fail(function(error) {alert(error)});
+				});
+			})
+			.fail(function (xhr) {
+				var msg = mensajeErrorAjaxFacturaPedido(xhr);
+				mostrarResultadoFacturaPedidoEnOverlay({
+					estado: 'error',
+					titulo: 'Error al facturar el pedido',
+					subtitulo: msg,
+					facturas: [],
+					errores: [msg],
+					exito: false,
+					codigosOk: [],
+				});
+			});
 	});
 
 	$('#facturarPedidoModal').on('hidden.bs.modal', function () {

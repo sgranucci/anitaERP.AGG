@@ -405,13 +405,29 @@ class ArticuloController extends Controller
 
             // Trae la impresora
             $seteosalida = $this->seteoSalidaRepository->buscaSeteo($usuario_id, SeteoSalidaProgramaSupport::STOCK_ARTICULO);
-            $comando = sprintf($seteosalida->salidas->comando, $path);
-            system($comando);
+            if (! $seteosalida || ! $seteosalida->salidas) {
+                Storage::disk('local')->delete($nombreEtiqueta);
+
+                return redirect()->back()->with('errores', [
+                    'No hay impresora configurada para artículos. Use «Configura salida» en el listado.',
+                ]);
+            }
+
+            $comando = trim((string) $seteosalida->salidas->comando);
+            if ($comando === '' || ! str_contains($comando, '%s')) {
+                Storage::disk('local')->delete($nombreEtiqueta);
+
+                return redirect()->back()->with('errores', [
+                    'El comando de la impresora configurada debe incluir %s (ruta del archivo de etiqueta).',
+                ]);
+            }
+
+            system(sprintf($comando, $path));
 
             Storage::disk('local')->delete($nombreEtiqueta);
         }
 
-        return redirect()->back()->with('status', 'El producto seleccionado se imprimió con exito.');
+        return redirect()->back()->with('mensaje', 'El producto seleccionado se imprimió con éxito.');
     }
 
     public function crear()

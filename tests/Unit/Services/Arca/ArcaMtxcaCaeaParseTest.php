@@ -60,6 +60,26 @@ class ArcaMtxcaCaeaParseTest extends TestCase
         self::assertSame($flat, $this->invokeUnwrap($svc, $flat, 'solicitarCAEAResponse'));
     }
 
+    public function test_unwrap_soap_response_informar_comprobante_caea_en_raiz(): void
+    {
+        $svc = $this->serviceSinConstructor();
+        $inner = (object) [
+            'resultado' => 'A',
+            'comprobanteResponse' => (object) [
+                'CAE' => 86217108690903,
+                'fechaVencimientoCAE' => '2026-06-15',
+            ],
+        ];
+        $wrapped = (object) ['informarComprobanteCAEAResponse' => $inner];
+        $flat = (object) [
+            'resultado' => 'A',
+            'comprobanteResponse' => $inner->comprobanteResponse,
+        ];
+
+        self::assertSame($inner, $this->invokeUnwrap($svc, $wrapped, 'informarComprobanteCAEAResponse'));
+        self::assertSame($flat, $this->invokeUnwrap($svc, $flat, 'informarComprobanteCAEAResponse'));
+    }
+
     private function serviceSinConstructor(): ArcaMtxcaFacturaElectronicaService
     {
         $ref = new ReflectionClass(ArcaMtxcaFacturaElectronicaService::class);
