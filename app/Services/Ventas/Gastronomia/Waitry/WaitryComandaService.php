@@ -7,6 +7,7 @@ use App\Models\Ventas\Venta;
 use App\Models\Ventas\WaitryComandaEnvio;
 use App\Support\Ventas\Waitry\WaitryComandaOrderItemsSupport;
 use App\Support\Ventas\Waitry\WaitryDisplayIdSupport;
+use App\Support\Ventas\Waitry\WaitryExternalClientIdSupport;
 use App\Support\Ventas\Waitry\WaitryMediosPagoFromVentaSupport;
 use App\Support\Ventas\Waitry\WaitryPaymentPayloadSupport;
 use Carbon\Carbon;
@@ -358,16 +359,17 @@ final class WaitryComandaService
             $payload['notes'] = mb_substr($notas, 0, 255);
         }
 
+        $refFactura = WaitryExternalClientIdSupport::desdeFactura($facturaTxt, (int) $venta->id);
+        if ($refFactura !== '') {
+            $payload['external_client_id'] = $refFactura;
+        }
+
         $cuenta->loadMissing('cliente');
         $cliente = $cuenta->cliente;
         if ($cliente !== null) {
             $nombre = trim((string) ($cliente->nombre ?? $cliente->fantasia ?? ''));
             if ($nombre !== '') {
                 $payload['client_name'] = mb_substr($nombre, 0, 120);
-            }
-            $doc = trim((string) ($cliente->numerodocumento ?? ''));
-            if ($doc !== '') {
-                $payload['external_client_id'] = mb_substr($doc, 0, 32);
             }
         }
 

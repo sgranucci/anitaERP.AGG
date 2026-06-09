@@ -26,6 +26,13 @@ class AyudaManuales
                 'icono' => 'fa-clipboard',
                 'disponible' => true,
             ],
+            [
+                'modulo' => 'Gastronomía',
+                'bajada' => 'Jornada, turnos, facturación en salón, cierres, restricciones de emisión y consultas gerenciales.',
+                'url' => route('manual_gastronomia'),
+                'icono' => 'fa-utensils',
+                'disponible' => true,
+            ],
         ];
     }
 

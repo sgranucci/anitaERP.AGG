@@ -85,7 +85,7 @@
     <strong>Usuario opcional por nivel.</strong>
     Si en un nivel no se asigna usuario, el nivel se considera <strong>aprobado automáticamente</strong>.
     @if($esRequisiciones)
-        En requisiciones, además se aplicará el <strong>Estado req.</strong> configurado para ese nivel (si está definido).
+        En requisiciones, además se aplicará el <strong>Estado req.</strong> configurado para ese nivel; si no se define, quedará en <strong>APROBADA</strong>.
     @elseif($esRequisicionesSala)
         En requisiciones de sala, además se aplicará el <strong>Estado req.</strong> configurado para ese nivel (si está definido).
     @else
@@ -103,7 +103,7 @@
                 <th style="width: 10%;">Desde Monto</th>
                 <th style="width: 10%;">Hasta Monto</th>
                 <th style="width: 8%;">Moneda</th>
-                <th style="width: 14%;" title="Estado de la requisición al aprobar este nivel (solo tipo Requisiciones; opcional)">Estado req.</th>
+                <th style="width: 14%;" title="Estado de la requisición al aprobar este nivel (solo tipo Requisiciones; si queda vacío, APROBADA)">Estado req.</th>
                 <th></th>
             </tr>
         </thead>
@@ -170,6 +170,9 @@
                                     ? ($requisicion_sala_estados_arbol_enum ?? [])
                                     : ($requisicion_estados_arbol_enum ?? []));
                             $selDoc = old('documento_estado_al_aprobar.'.$idxNivel, $arbolaprobacion_niveles->documento_estado_al_aprobar ?? '');
+                            if ($selDoc === '' && $esRequisiciones) {
+                                $selDoc = 'APROBADA';
+                            }
                         @endphp
                         <select name="documento_estado_al_aprobar[]" class="form-control form-control-sm" title="Opcional; estado del documento al aprobar este nivel">
                             <option value="">—</option>

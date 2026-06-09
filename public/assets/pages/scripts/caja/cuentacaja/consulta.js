@@ -1,11 +1,17 @@
 function buscar_datos_cuentacaja(consulta) {
-    let empresa_id = $('#empresa_id').val() || $('#gastro-empresa-id').val() || '';
+    let empresa_id = $('#empresa_id').val() || $('#gastro-empresa-id').val() || $('#est-empresa-id').val() || '';
     if (typeof window.GASTRONOMIA !== 'undefined' && window.GASTRONOMIA.empresaId) {
         empresa_id = window.GASTRONOMIA.empresaId;
+    }
+    if (typeof window.ESTACIONAMIENTO !== 'undefined' && window.ESTACIONAMIENTO.empresaId) {
+        empresa_id = window.ESTACIONAMIENTO.empresaId;
     }
     let usocuentacaja_id = '';
     if (typeof window.GASTRONOMIA !== 'undefined' && parseInt(window.GASTRONOMIA.usocuentacajaGastronomiaId, 10) > 0) {
         usocuentacaja_id = parseInt(window.GASTRONOMIA.usocuentacajaGastronomiaId, 10);
+    }
+    if (typeof window.ESTACIONAMIENTO !== 'undefined' && parseInt(window.ESTACIONAMIENTO.usocuentacajaEstacionamientoId, 10) > 0) {
+        usocuentacaja_id = parseInt(window.ESTACIONAMIENTO.usocuentacajaEstacionamientoId, 10);
     }
 
     $.ajax({

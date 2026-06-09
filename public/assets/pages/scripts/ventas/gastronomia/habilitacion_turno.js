@@ -635,9 +635,13 @@
             }
             btn.dataset.boundConciliar = '1';
             btn.addEventListener('click', function () {
+                var rawMozoId = btn.getAttribute('data-mozo-id');
+                var mozoId = rawMozoId !== null && rawMozoId !== '' ? parseInt(rawMozoId, 10) : null;
                 abrirModalMedio(
                     parseInt(btn.getAttribute('data-cuentacaja-id'), 10),
-                    btn.getAttribute('data-medio-nombre') || ''
+                    btn.getAttribute('data-medio-nombre') || '',
+                    isNaN(mozoId) ? null : mozoId,
+                    btn.getAttribute('data-mozo-nombre') || ''
                 );
             });
         });
@@ -735,7 +739,7 @@
         });
     }
 
-    function abrirModalMedio(cuentacajaId, medioNombre) {
+    function abrirModalMedio(cuentacajaId, medioNombre, mozoId, mozoNombre) {
         if (!cuentacajaId || !apiConciliacionMedio) {
             return;
         }
@@ -743,7 +747,11 @@
         var body = document.getElementById('modal-conciliacion-medio-body');
         setHeadersModalConciliacion('facturas');
         if (titulo) {
-            titulo.textContent = 'Facturas — ' + (medioNombre || 'Medio de pago');
+            var tit = 'Facturas — ' + (medioNombre || 'Medio de pago');
+            if (mozoNombre) {
+                tit += ' · ' + mozoNombre;
+            }
+            titulo.textContent = tit;
         }
         if (body) {
             body.innerHTML = '<tr><td colspan="8" class="text-center text-muted p-3">Cargando…</td></tr>';
@@ -753,6 +761,9 @@
         }
 
         var url = apiConciliacionMedio + '?cuentacaja_id=' + encodeURIComponent(cuentacajaId);
+        if (mozoId && mozoId > 0) {
+            url += '&mozo_id=' + encodeURIComponent(mozoId);
+        }
         getJson(url).then(function (res) {
             if (!body) {
                 return;
@@ -764,7 +775,11 @@
             var facturas = res.data.facturas || [];
             var baseVer = res.data.url_factura_ver_base || urlFacturaVerBase;
             if (!facturas.length) {
-                body.innerHTML = '<tr><td colspan="8" class="text-muted p-3">Sin facturas con este medio en el turno.</td></tr>';
+                body.innerHTML = '<tr><td colspan="8" class="text-muted p-3">'
+                    + (mozoNombre
+                        ? 'Sin facturas de ' + mozoNombre + ' con este medio en el turno.'
+                        : 'Sin facturas con este medio en el turno.')
+                    + '</td></tr>';
                 return;
             }
             var html = '';

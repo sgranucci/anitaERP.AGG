@@ -202,6 +202,11 @@ final class CierreJornadaProcesoAsientosGrabacionSupport
                     'No se pudo resolver cuenta contable para cuenta caja id '.$cuentaRefId.'.',
                 );
             }
+            $cuentacontableId = CierreJornadaProcesoAsientosCuentaSupport::aplicarRemapCuentacontableMedioCobro(
+                $cuentacontableId,
+                $empresaId,
+                (int) $caja->id,
+            );
             $cache[$cuentaRefId] = $cuentacontableId;
 
             return $cuentacontableId;

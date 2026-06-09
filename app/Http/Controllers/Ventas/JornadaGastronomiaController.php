@@ -429,8 +429,6 @@ class JornadaGastronomiaController extends Controller
         }
 
         try {
-            @set_time_limit(120);
-
             return response()->json([
                 'ok' => true,
                 'preview' => $this->cierreTotemJornadaService->previewParaJornadaAbierta($jornada),

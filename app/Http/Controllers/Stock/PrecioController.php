@@ -233,16 +233,46 @@ class PrecioController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function crear()
+    public function crear(Request $request)
     {
         can('crear-precios');
-        $articulo_query = Articulo::where('usoarticulo_id', '1')->get();
         $listaprecio_query = Listaprecio::all();
         $moneda_query = Moneda::all();
 
         $esEdicion = false;
+        $retornoArticuloPrecios = $this->resolverRetornoArticuloPrecios($request);
 
-        return view('stock.precio.crear', compact('articulo_query', 'listaprecio_query', 'moneda_query', 'esEdicion'));
+        $precio = new Precio();
+        $articuloId = (int) $request->query('articulo_id', 0);
+        if ($articuloId <= 0 && $retornoArticuloPrecios !== null) {
+            $articuloId = $retornoArticuloPrecios['articulo_id'];
+        }
+        if ($articuloId > 0) {
+            $articulo = Articulo::query()
+                ->select('id', 'sku', 'descripcion', 'detalle')
+                ->find($articuloId);
+            if ($articulo) {
+                $precio->articulo_id = $articulo->id;
+                $precio->setRelation('articulos', $articulo);
+            }
+        }
+
+        $listaprecioId = (int) $request->query('listaprecio_id', 0);
+        if ($listaprecioId > 0) {
+            $listaprecio = Listaprecio::find($listaprecioId);
+            if ($listaprecio) {
+                $precio->listaprecio_id = $listaprecio->id;
+                $precio->setRelation('listaprecios', $listaprecio);
+            }
+        }
+
+        return view('stock.precio.crear', compact(
+            'listaprecio_query',
+            'moneda_query',
+            'esEdicion',
+            'retornoArticuloPrecios',
+            'precio'
+        ));
     }
 
     /**
@@ -262,7 +292,7 @@ class PrecioController extends Controller
         // $Precio = new Precio();
         // $Precio->guardarAnita($precio);
 
-        return redirect('stock/precio')->with('mensaje', 'Precio creado con exito');
+        return $this->redirectDespuesDeGuardarPrecio($request, 'Precio creado con exito');
     }
 
     /**
@@ -276,14 +306,13 @@ class PrecioController extends Controller
         can('editar-precios');
 
         $precio = Precio::where('id', $id)->with('articulos:id,descripcion,detalle,sku')->with('listaprecios')->with('monedas')->with('usuarios')->first();
-        $articulo_query = Articulo::select('id', 'sku', 'descripcion')->where('sku', 'not like', '%FON%')->where('sku', 'not like', '%SER%')->orderby('descripcion')->get();
         $listaprecio_query = Listaprecio::all();
         $moneda_query = Moneda::all();
 
         $esEdicion = true;
         $retornoArticuloPrecios = $this->resolverRetornoArticuloPrecios($request);
 
-        return view('stock.precio.editar', compact('precio', 'articulo_query', 'listaprecio_query', 'moneda_query', 'esEdicion', 'retornoArticuloPrecios'));
+        return view('stock.precio.editar', compact('precio', 'listaprecio_query', 'moneda_query', 'esEdicion', 'retornoArticuloPrecios'));
     }
 
     /**
@@ -351,6 +380,11 @@ class PrecioController extends Controller
             }
         }
         unset($fila);
+
+        $data['puede_crear'] = can('crear-precios', false);
+        if ($data['puede_crear']) {
+            $data['crear_url'] = route('crear_precio');
+        }
 
         return response()->json($data);
     }

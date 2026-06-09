@@ -41,7 +41,7 @@ final class GastronomiaCategoriafidelidadCanjeService
      */
     public function validarTarjeta(string $trackdata, int $empresaId, int $listaprecioId, ?int $articuloId = null): array
     {
-        $cuentaWigos = $this->wigosAccountInfo->consultarPorTrackdata($trackdata);
+        $cuentaWigos = $this->wigosAccountInfo->consultarPorTrackdata($trackdata, $empresaId);
         $documento = $cuentaWigos['documento'];
 
         if ($this->entregaRepository->existeCanjeHoyPorDocumento($documento)) {

@@ -325,4 +325,8 @@ $(function () {
             actualizarTotalesFiltro(dt);
         }
     });
+
+    $('#waitry-auditoria-conciliacion-collapse').on('shown.bs.collapse', function () {
+        dt.columns.adjust().draw(false);
+    });
 });

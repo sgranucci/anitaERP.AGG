@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Support\Ventas\Waitry;
 
+use App\Support\Ventas\Gastronomia\CierreJornadaProcesoMedioSupport;
 use App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport;
 use Tests\TestCase;
 
@@ -79,10 +80,32 @@ final class WaitryMedioPagoCuentacajaSupportTest extends TestCase
     {
         $this->assertTrue(WaitryMedioPagoCuentacajaSupport::esTipoQrWaitry('totalcoin'));
         $this->assertTrue(WaitryMedioPagoCuentacajaSupport::esTipoQrWaitry('credit_card', 'KIOSK MPQR'));
+        $this->assertTrue(WaitryMedioPagoCuentacajaSupport::esTipoQrWaitry('kioskmpqr', 'KIOSK MPQR'));
         $this->assertFalse(WaitryMedioPagoCuentacajaSupport::esTipoQrWaitry('credit_card'));
         $this->assertFalse(WaitryMedioPagoCuentacajaSupport::esTipoQrWaitry('credit_card', 'KIOSK MP'));
+        $this->assertFalse(WaitryMedioPagoCuentacajaSupport::esTipoQrWaitry('kioskmp', 'KIOSK MP'));
         $this->assertFalse(WaitryMedioPagoCuentacajaSupport::esTipoQrWaitry('mercadopago'));
         $this->assertFalse(WaitryMedioPagoCuentacajaSupport::esTipoQrWaitry('cash'));
+    }
+
+    public function test_kioskmp_es_posnet_y_redistribuible(): void
+    {
+        $this->assertTrue(WaitryMedioPagoCuentacajaSupport::esCreditCardPosnet('kioskmp', 'KIOSK MP'));
+        $this->assertSame(
+            CierreJornadaProcesoMedioSupport::CLAVE_MP,
+            CierreJornadaProcesoMedioSupport::claveDesdeWaitryTipo('kioskmp', 'KIOSK MP'),
+        );
+        $this->assertTrue(CierreJornadaProcesoMedioSupport::esWaitrySinFacturarRedistribuible('kioskmp', 'KIOSK MP'));
+    }
+
+    public function test_kioskmpqr_es_qr_y_redistribuible(): void
+    {
+        $this->assertTrue(WaitryMedioPagoCuentacajaSupport::esTipoQrWaitry('kioskmpqr', 'KIOSK MPQR'));
+        $this->assertSame(
+            CierreJornadaProcesoMedioSupport::CLAVE_QR,
+            CierreJornadaProcesoMedioSupport::claveDesdeWaitryTipo('kioskmpqr', 'KIOSK MPQR'),
+        );
+        $this->assertTrue(CierreJornadaProcesoMedioSupport::esWaitrySinFacturarRedistribuible('kioskmpqr', 'KIOSK MPQR'));
     }
 
     public function test_linea_entra_informe_z_acepta_medios_kiosco_y_excluye_push_erp(): void
@@ -107,5 +130,17 @@ final class WaitryMedioPagoCuentacajaSupportTest extends TestCase
     {
         $this->assertSame('QR MP (kiosco)', WaitryMedioPagoCuentacajaSupport::etiquetaTipo('credit_card', 'KIOSK MPQR'));
         $this->assertSame('Posnet (tótem)', WaitryMedioPagoCuentacajaSupport::etiquetaTipo('credit_card'));
+    }
+
+    public function test_extraer_tipo_pago_normaliza_credit_card_con_gateway_interface(): void
+    {
+        $orden = [
+            'payment' => [
+                'type' => 'credit_card',
+                'payments' => [['gateway' => 'interface', 'amount' => 9700]],
+            ],
+        ];
+
+        $this->assertSame('interface', WaitryMedioPagoCuentacajaSupport::extraerTipoPagoOrden($orden));
     }
 }

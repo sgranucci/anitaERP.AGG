@@ -2,12 +2,15 @@
 
 namespace App\Services\Stock;
 
+use App\ApiAnita;
 use App\Models\Stock\Articulo;
+use App\Support\Stock\ArticuloSkuMatchSupport;
 
 /**
- * Altas de artículos en el ERP desde Anita (stkmae) vía {@see ApiAnita}, mismo criterio que el listado histórico.
+ * Altas y actualizaciones de artículos en el ERP desde Anita (stkmae) vía {@see ApiAnita}.
  *
  * @see Articulo::sincronizarConAnita()
+ * @see Articulo::traerRegistroDeAnita()
  */
 class ArticuloAnitaSyncService
 {
@@ -17,5 +20,106 @@ class ArticuloAnitaSyncService
     public function sincronizarDesdeAnita(): array
     {
         return (new Articulo)->sincronizarConAnita();
+    }
+
+    /**
+     * Importa o actualiza un artículo por SKU ERP (ej. V0432) desde Anita.
+     *
+     * @return array{sku:string, codigo_anita:string, accion:'importado'|'actualizado', advertencias:list<string>}
+     */
+    public function sincronizarSkuDesdeAnita(string $sku): array
+    {
+        $sku = trim($sku);
+        if ($sku === '') {
+            throw new \InvalidArgumentException('Debe indicar el SKU del artículo.');
+        }
+
+        $codigoAnita = $this->resolverCodigoAnitaPorSku($sku);
+        if ($codigoAnita === null) {
+            throw new \RuntimeException("Artículo «{$sku}» no encontrado en Anita (stkmae).");
+        }
+
+        $skuLocal = ltrim($codigoAnita, '0');
+        $existe = ArticuloSkuMatchSupport::existe($skuLocal);
+        $accion = $existe ? 'actualizado' : 'importado';
+
+        (new Articulo)->traerRegistroDeAnita($codigoAnita, ! $existe);
+
+        $canonico = ArticuloSkuMatchSupport::resolverCanonico($skuLocal);
+        if ($canonico === null) {
+            throw new \RuntimeException("No se pudo importar/actualizar «{$sku}» desde Anita.");
+        }
+
+        $inactivados = ArticuloSkuMatchSupport::inactivarDuplicados($skuLocal, (int) $canonico->id);
+        $advertencias = [];
+        if ($inactivados !== []) {
+            $advertencias[] = 'Duplicados por SKU inactivados (ids: '.implode(', ', $inactivados).').';
+        }
+
+        return [
+            'sku' => (string) $canonico->fresh()->sku,
+            'codigo_anita' => $codigoAnita,
+            'accion' => $accion,
+            'advertencias' => $advertencias,
+        ];
+    }
+
+    /**
+     * Resuelve stkm_articulo en Anita (13 caracteres con ceros) a partir del SKU ERP.
+     */
+    public function resolverCodigoAnitaPorSku(string $sku): ?string
+    {
+        $sku = trim($sku);
+        if ($sku === '') {
+            return null;
+        }
+
+        $candidatos = array_values(array_unique(array_filter([
+            str_pad($sku, 13, '0', STR_PAD_LEFT),
+            str_pad(strtoupper($sku), 13, '0', STR_PAD_LEFT),
+            str_pad(strtolower($sku), 13, '0', STR_PAD_LEFT),
+        ])));
+
+        $apiAnita = new ApiAnita;
+        foreach ($candidatos as $codigo) {
+            if ($this->existeEnStkmae($apiAnita, $codigo)) {
+                return $codigo;
+            }
+        }
+
+        $skuEsc = addslashes($sku);
+        $data = [
+            'acc' => 'list',
+            'tabla' => 'stkmae',
+            'campos' => 'stkm_articulo',
+            'whereArmado' => " WHERE stkm_articulo LIKE '%{$skuEsc}' ",
+        ];
+        $res = json_decode($apiAnita->apiCall($data));
+        if (! is_array($res) || $res === []) {
+            return null;
+        }
+
+        $skuNorm = strtoupper($sku);
+        foreach ($res as $row) {
+            $codigo = trim((string) ($row->stkm_articulo ?? ''));
+            if ($codigo !== '' && strtoupper(ltrim($codigo, '0')) === $skuNorm) {
+                return $codigo;
+            }
+        }
+
+        return trim((string) ($res[0]->stkm_articulo ?? '')) ?: null;
+    }
+
+    private function existeEnStkmae(ApiAnita $apiAnita, string $codigo): bool
+    {
+        $data = [
+            'acc' => 'list',
+            'tabla' => 'stkmae',
+            'campos' => 'stkm_articulo',
+            'whereArmado' => " WHERE stkm_articulo = '".addslashes($codigo)."' ",
+        ];
+        $res = json_decode($apiAnita->apiCall($data));
+
+        return is_array($res) && count($res) > 0;
     }
 }

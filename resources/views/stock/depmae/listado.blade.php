@@ -1,4 +1,5 @@
 @php
+    use App\Models\Stock\Depmae;
     use App\Support\Configuracion\EmpresaLogoArchivo;
     foreach ($datas as $row) {
         $row->nombreempresa = $row->empresas->nombre ?? '';
@@ -74,13 +75,7 @@
 					<td>{{ $data->id }}</td>
 					<td>{{ $data->nombre }}</td>
 					<td>{{ $data->empresas->nombre ?? '' }}</td>
-					<td>
-						@foreach($tipodeposito_enum as $tipodeposito)
-							@if ($tipodeposito['valor'] == $data->tipodeposito)
-								{{ $tipodeposito['nombre'] }}
-							@endif
-						@endforeach
-					</td>
+					<td>{{ Depmae::etiquetaTipoDeposito($data->tipodeposito) }}</td>
 					<td>{{ $data->codigo }}</td>
 				</tr>
 			@endforeach

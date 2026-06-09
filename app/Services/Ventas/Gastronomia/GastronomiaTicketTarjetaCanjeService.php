@@ -8,6 +8,7 @@ use App\Models\Ventas\TickettarjetaGastronomia;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Support\Ventas\GastronomiaCuentacajaCanjeTarjeta;
+use App\Support\Ventas\GastronomiaTicketTarjetaAnitaBridgeSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use InvalidArgumentException;
@@ -33,7 +34,7 @@ final class GastronomiaTicketTarjetaCanjeService
     float $montoCobranzaYaCargadoArs,
     array $ticketsYaSeleccionados,
   ): array {
-    [$ticketId, $numeroTicket, $fila] = $this->resolverTicketDesdeCodigo($codigoBarras);
+    [$ticketId, $numeroTicket, $fila] = $this->resolverTicketDesdeCodigo($codigoBarras, $empresaId);
     $this->assertNoDuplicadoEnSeleccion($ticketId, $numeroTicket, $ticketsYaSeleccionados);
     $this->assertNoCanjeadoEnErp($ticketId, $numeroTicket);
     $this->validarEstadoAnitaPendiente($fila);
@@ -102,7 +103,7 @@ final class GastronomiaTicketTarjetaCanjeService
 
       $this->assertNoCanjeadoEnErp($ticket['ticket_id'], $ticket['numeroticket']);
 
-      $fila = $this->buscarTicketEnAnita($ticket['ticket_id'], $ticket['numeroticket']);
+      $fila = $this->buscarTicketEnAnita($ticket['ticket_id'], $ticket['numeroticket'], $empresaId);
       $this->validarEstadoAnitaPendiente($fila);
       $this->validarVencimiento($fila);
 
@@ -125,7 +126,7 @@ final class GastronomiaTicketTarjetaCanjeService
         'usuario_id' => $usuarioId,
       ]);
 
-      $this->marcarCanjeadoEnAnita($fila, $venta, $usuarioId);
+      $this->marcarCanjeadoEnAnita($fila, $venta, $usuarioId, $empresaId);
     }
   }
 
@@ -202,6 +203,9 @@ final class GastronomiaTicketTarjetaCanjeService
    * EAN lleva el movimiento (6), el nroticket con cero adelante (6) y dígito verificador (1):
    * 5541010525473. OCR o lectura del pie del código suele devolver 554101-0525473.
    *
+   * Kandiko (Wilde): movimiento(6) + 00000 + renglón(1) + verificador → 8324560000013 = 832456/1.
+   * El último dígito (3) es verificador EAN, no parte del nroticket (evitar 13).
+   *
    * @return list<array{0:int,1:int}>
    */
   public function candidatosParseoCodigo(string $codigoBarras): array
@@ -239,8 +243,10 @@ final class GastronomiaTicketTarjetaCanjeService
     $cola = substr($digits, 6);
     $agregar($lista, $vistos, $ticketId, self::normalizarNumeroTicketDesdeCola($cola));
 
-    // Compatibilidad con lecturas sin guión que ya traían solo movimiento + nroticket (ej. 55365952217).
-    $agregar($lista, $vistos, $ticketId, (int) $cola);
+    // Respaldo sin dígito verificador EAN (lecturas < 13 dígitos, ej. 55365952217).
+    if (strlen($cola) < 7) {
+      $agregar($lista, $vistos, $ticketId, (int) $cola);
+    }
 
     return $lista;
   }
@@ -290,7 +296,7 @@ final class GastronomiaTicketTarjetaCanjeService
   /**
    * @return array{0:int,1:int,2:object}
    */
-  private function resolverTicketDesdeCodigo(string $codigoBarras): array
+  private function resolverTicketDesdeCodigo(string $codigoBarras, int $empresaId): array
   {
     $candidatos = $this->candidatosParseoCodigo($codigoBarras);
     if ($candidatos === []) {
@@ -300,13 +306,18 @@ final class GastronomiaTicketTarjetaCanjeService
     $ultimoError = null;
     foreach ($candidatos as [$ticketId, $numeroTicket]) {
       try {
-        $fila = $this->buscarTicketEnAnita($ticketId, $numeroTicket);
+        $fila = $this->buscarTicketEnAnita($ticketId, $numeroTicket, $empresaId);
 
         return [$ticketId, $numeroTicket, $fila];
       } catch (InvalidArgumentException $e) {
         $ultimoError = $e;
         if (! str_contains($e->getMessage(), 'No se encontró el ticket tarjeta')) {
           throw $e;
+        }
+
+        $resuelto = $this->buscarTicketEnAnitaPorSoloMovimientoId($ticketId, $empresaId);
+        if ($resuelto !== null) {
+          return $resuelto;
         }
       }
     }
@@ -317,13 +328,117 @@ final class GastronomiaTicketTarjetaCanjeService
         static fn (array $par): int => (int) ($par[1] ?? 0),
         $candidatos
       )));
-      $resuelto = $this->buscarTicketEnAnitaSoloPorMovimiento($movimientoId, $numerosLeidos);
+      $resuelto = $this->buscarTicketEnAnitaPorSoloMovimientoId($movimientoId, $empresaId);
       if ($resuelto !== null) {
         return $resuelto;
       }
+
+      $ultimoError = $this->errorTicketNoEncontradoEnAnita(
+        $movimientoId,
+        $numerosLeidos[0] ?? 0,
+        $empresaId,
+        $ultimoError,
+      );
     }
 
     throw $ultimoError ?? new InvalidArgumentException('Código de barras inválido.');
+  }
+
+  /**
+   * Fallback Kandiko/Wilde: si movimiento+nroticket exacto no existe, trae el pendiente del movimiento.
+   *
+   * @return array{0:int,1:int,2:object}|null
+   */
+  private function buscarTicketEnAnitaPorSoloMovimientoId(int $movimientoId, int $empresaId): ?array
+  {
+    if ($movimientoId <= 0) {
+      return null;
+    }
+
+    $filas = $this->listarTicketsPorMovimientoEnAnita($movimientoId, $empresaId, false);
+    if ($filas === []) {
+      return null;
+    }
+
+    usort($filas, static fn (object $a, object $b): int => (int) ($b->ifecha ?? 0) <=> (int) ($a->ifecha ?? 0));
+    $elegida = $filas[0];
+
+    $ticketId = (int) ($elegida->imovimientoid ?? $movimientoId);
+    $numeroTicket = (int) ($elegida->inroticket ?? 0);
+    if ($ticketId <= 0 || $numeroTicket <= 0) {
+      return null;
+    }
+
+    return [$ticketId, $numeroTicket, $elegida];
+  }
+
+  private function errorTicketNoEncontradoEnAnita(
+    int $movimientoId,
+    int $numeroLeido,
+    int $empresaId,
+    ?InvalidArgumentException $previo = null,
+  ): InvalidArgumentException {
+    $params = GastronomiaTicketTarjetaAnitaBridgeSupport::parametrosBridge($empresaId);
+    $servidor = trim((string) ($params['servidor'] ?? ''));
+
+    $partes = ['No se encontró el ticket tarjeta '.$movimientoId.'/'.$numeroLeido.' en Anita'];
+    if ($servidor !== '') {
+      $partes[] = '('.$servidor.')';
+    }
+
+    if ($numeroLeido > 0 && $numeroLeido <= 99) {
+      $partes[] = '— el «-'.$numeroLeido.'» del vale es renglón; en Anita el inroticket suele ser otro número';
+    }
+
+    $pendientesExpirados = $this->contarTicketsPendientesVencidosPorMovimiento($movimientoId, $empresaId);
+    if ($pendientesExpirados > 0) {
+      $partes[] = '(hay '.$pendientesExpirados.' ticket(s) pendiente(s) vencido(s) para movimiento '.$movimientoId.')';
+    } elseif ($this->contarTicketsPorMovimiento($movimientoId, $empresaId) === 0) {
+      $partes[] = '(movimiento '.$movimientoId.' sin registros en tickettarj; verifique emisión en caja Anita)';
+    }
+
+    return new InvalidArgumentException(implode(' ', $partes).'.');
+  }
+
+  private function contarTicketsPendientesVencidosPorMovimiento(int $movimientoId, int $empresaId): int
+  {
+    $payload = $this->payloadAnitaTickettarj($empresaId, [
+      'acc' => 'list',
+      'tabla' => 'tickettarj',
+      'campos' => 'imovimientoid, inroticket, ifecha, cestado',
+      'whereArmado' => ' WHERE imovimientoid = '.$movimientoId
+        .' AND '.$this->sqlFiltroCestadoPendiente(),
+    ]);
+
+    $filas = ApiAnita::decodificarListaFilas($this->apiAnita->apiCall($payload));
+    $hoy = Carbon::today();
+    $dias = max(1, (int) config('gastronomia.ticket_tarjeta_vencimiento_dias', 30));
+    $vencidos = 0;
+
+    foreach ($filas as $fila) {
+      try {
+        $fechaEmision = Carbon::parse($this->anitaIntToDate((int) ($fila->ifecha ?? 0)))->startOfDay();
+      } catch (\Throwable) {
+        continue;
+      }
+      if ($hoy->gt($fechaEmision->copy()->addDays($dias))) {
+        $vencidos++;
+      }
+    }
+
+    return $vencidos;
+  }
+
+  private function contarTicketsPorMovimiento(int $movimientoId, int $empresaId): int
+  {
+    $payload = $this->payloadAnitaTickettarj($empresaId, [
+      'acc' => 'list',
+      'tabla' => 'tickettarj',
+      'campos' => 'imovimientoid',
+      'whereArmado' => ' WHERE imovimientoid = '.$movimientoId,
+    ]);
+
+    return count(ApiAnita::decodificarListaFilas($this->apiAnita->apiCall($payload)));
   }
 
   private function extraerMovimientoId(string $codigoBarras): int
@@ -346,42 +461,21 @@ final class GastronomiaTicketTarjetaCanjeService
   }
 
   /**
-   * Último recurso: lista tickets pendientes del movimiento y elige el inroticket más parecido al leído.
-   *
-   * @param  list<int>  $numerosLeidos
-   * @return array{0:int,1:int,2:object}|null
+   * @return list<object>
    */
-  private function buscarTicketEnAnitaSoloPorMovimiento(int $movimientoId, array $numerosLeidos): ?array
+  private function listarTicketsPendientesPorMovimientoEnAnita(int $movimientoId, int $empresaId): array
   {
-    $filas = $this->listarTicketsPendientesPorMovimientoEnAnita($movimientoId);
-    if ($filas === []) {
-      return null;
-    }
-
-    $numerosLeidos = array_values(array_filter($numerosLeidos, static fn (int $n): bool => $n > 0));
-    $elegida = $this->elegirFilaPorSimilitudInroticket($filas, $numerosLeidos);
-    if ($elegida === null) {
-      return null;
-    }
-
-    $ticketId = (int) ($elegida->imovimientoid ?? $movimientoId);
-    $numeroTicket = (int) ($elegida->inroticket ?? 0);
-    if ($ticketId <= 0 || $numeroTicket <= 0) {
-      return null;
-    }
-
-    return [$ticketId, $numeroTicket, $elegida];
+    return $this->listarTicketsPorMovimientoEnAnita($movimientoId, $empresaId, true);
   }
 
   /**
    * @return list<object>
    */
-  private function listarTicketsPendientesPorMovimientoEnAnita(int $movimientoId): array
+  private function listarTicketsPorMovimientoEnAnita(int $movimientoId, int $empresaId, bool $excluirVencidos): array
   {
-    $payload = [
+    $payload = $this->payloadAnitaTickettarj($empresaId, [
       'acc' => 'list',
       'tabla' => 'tickettarj',
-      'sistema' => (string) config('gastronomia.ticket_tarjeta_anita_sistema', 'base_admin'),
       'campos' => implode(', ', [
         'imovimientoid',
         'cnrodocumento',
@@ -394,19 +488,20 @@ final class GastronomiaTicketTarjetaCanjeService
         'ifechacanje',
       ]),
       'whereArmado' => ' WHERE imovimientoid = '.$movimientoId
-        ." AND cestado = '".TickettarjetaGastronomia::ESTADO_PENDIENTE."' ",
-    ];
+        .' AND '.$this->sqlFiltroCestadoPendiente(),
+    ]);
 
     $filas = ApiAnita::decodificarListaFilas($this->apiAnita->apiCall($payload));
+
+    $filas = array_values(array_filter($filas, static fn (object $fila): bool => (int) ($fila->inroticket ?? 0) > 0));
+    if ($filas === [] || ! $excluirVencidos) {
+      return $filas;
+    }
+
     $hoy = Carbon::today();
     $dias = max(1, (int) config('gastronomia.ticket_tarjeta_vencimiento_dias', 30));
 
     return array_values(array_filter($filas, function (object $fila) use ($hoy, $dias): bool {
-      $numero = (int) ($fila->inroticket ?? 0);
-      if ($numero <= 0) {
-        return false;
-      }
-
       try {
         $fechaEmision = Carbon::parse($this->anitaIntToDate((int) ($fila->ifecha ?? 0)))->startOfDay();
       } catch (\Throwable) {
@@ -417,75 +512,11 @@ final class GastronomiaTicketTarjetaCanjeService
     }));
   }
 
-  /**
-   * @param  list<object>  $filas
-   * @param  list<int>  $numerosLeidos
-   */
-  private function elegirFilaPorSimilitudInroticket(array $filas, array $numerosLeidos): ?object
+  private function buscarTicketEnAnita(int $ticketId, int $numeroTicket, int $empresaId): object
   {
-    if ($filas === []) {
-      return null;
-    }
-
-    if (count($filas) === 1) {
-      return $filas[0];
-    }
-
-    $mejorFila = null;
-    $mejorPuntaje = -1;
-
-    foreach ($filas as $fila) {
-      $enAnita = (int) ($fila->inroticket ?? 0);
-      if ($enAnita <= 0) {
-        continue;
-      }
-
-      $puntajeFila = 0;
-      foreach ($numerosLeidos as $leido) {
-        $puntajeFila = max($puntajeFila, $this->puntajeSimilitudInroticket($leido, $enAnita));
-      }
-
-      if ($puntajeFila > $mejorPuntaje) {
-        $mejorPuntaje = $puntajeFila;
-        $mejorFila = $fila;
-      }
-    }
-
-    $umbralMinimo = 120;
-
-    return ($mejorFila !== null && $mejorPuntaje >= $umbralMinimo) ? $mejorFila : null;
-  }
-
-  private function puntajeSimilitudInroticket(int $leido, int $enAnita): int
-  {
-    if ($leido <= 0 || $enAnita <= 0) {
-      return 0;
-    }
-
-    if ($leido === $enAnita) {
-      return 1000;
-    }
-
-    $sLeido = (string) $leido;
-    $sAnita = (string) $enAnita;
-
-    if (str_starts_with($sLeido, $sAnita) || str_starts_with($sAnita, $sLeido)) {
-      return 500 - abs(strlen($sLeido) - strlen($sAnita));
-    }
-
-    if (str_ends_with($sLeido, $sAnita) || str_ends_with($sAnita, $sLeido)) {
-      return 400 - abs($leido - $enAnita);
-    }
-
-    return max(0, 100 - abs($leido - $enAnita));
-  }
-
-  private function buscarTicketEnAnita(int $ticketId, int $numeroTicket): object
-  {
-    $payload = [
+    $payload = $this->payloadAnitaTickettarj($empresaId, [
       'acc' => 'list',
       'tabla' => 'tickettarj',
-      'sistema' => (string) config('gastronomia.ticket_tarjeta_anita_sistema', 'base_admin'),
       'campos' => implode(', ', [
         'imovimientoid',
         'cnrodocumento',
@@ -498,7 +529,7 @@ final class GastronomiaTicketTarjetaCanjeService
         'ifechacanje',
       ]),
       'whereArmado' => ' WHERE imovimientoid = '.$ticketId.' AND inroticket = '.$numeroTicket.' ',
-    ];
+    ]);
 
     $fila = ApiAnita::primeraFilaLista($this->apiAnita->apiCall($payload));
     if ($fila === null) {
@@ -583,7 +614,7 @@ final class GastronomiaTicketTarjetaCanjeService
     $saldoTickets = max(0., round($totalFacturaArs - $montoSinTickets, 2));
 
     foreach ($tickets as $ticket) {
-      $fila = $this->buscarTicketEnAnita($ticket['ticket_id'], $ticket['numeroticket']);
+      $fila = $this->buscarTicketEnAnita($ticket['ticket_id'], $ticket['numeroticket'], $empresaId);
       $montoticket = $this->resolverMontoticket($fila);
       $esperado = $this->calcularMontoAplicar($montoticket, $saldoTickets);
       $montoCobranza = round((float) $ticket['monto_cobranza'], 2);
@@ -632,7 +663,7 @@ final class GastronomiaTicketTarjetaCanjeService
     return $tickets;
   }
 
-  private function marcarCanjeadoEnAnita(object $fila, Venta $venta, int $usuarioId): void
+  private function marcarCanjeadoEnAnita(object $fila, Venta $venta, int $usuarioId, int $empresaId): void
   {
     $ticketId = (int) ($fila->imovimientoid ?? 0);
     $numeroTicket = (int) ($fila->inroticket ?? 0);
@@ -654,15 +685,14 @@ final class GastronomiaTicketTarjetaCanjeService
       "cusuario_fact = '".$this->escaparSqlAnita($usuarioFact)."'",
     ]);
 
-    $payload = [
+    $payload = $this->payloadAnitaTickettarj($empresaId, [
       'acc' => 'update',
       'tabla' => 'tickettarj',
-      'sistema' => (string) config('gastronomia.ticket_tarjeta_anita_sistema', 'base_admin'),
       'valores' => $valores,
       'whereArmado' => ' WHERE imovimientoid = '.$ticketId
         .' AND inroticket = '.$numeroTicket
-        ." AND cestado = '".TickettarjetaGastronomia::ESTADO_PENDIENTE."' ",
-    ];
+        .' AND '.$this->sqlFiltroCestadoPendiente(),
+    ]);
 
     $this->apiAnita->apiCallEscritura($payload, 'tickettarj canje ticket '.$ticketId.'/'.$numeroTicket);
   }
@@ -709,5 +739,23 @@ final class GastronomiaTicketTarjetaCanjeService
   private function escaparSqlAnita(string $valor): string
   {
     return str_replace("'", "''", $valor);
+  }
+
+  /** Informix CHAR: cestado suele venir como 'P ' con espacios; = 'P' no matchea. */
+  private function sqlFiltroCestadoPendiente(): string
+  {
+    return "TRIM(cestado) = '".TickettarjetaGastronomia::ESTADO_PENDIENTE."'";
+  }
+
+  /**
+   * @param  array<string, mixed>  $base
+   * @return array<string, mixed>
+   */
+  private function payloadAnitaTickettarj(int $empresaId, array $base): array
+  {
+    return array_merge(
+      GastronomiaTicketTarjetaAnitaBridgeSupport::parametrosBridge($empresaId),
+      $base,
+    );
   }
 }

@@ -659,7 +659,7 @@ class Articulo extends Model implements Auditable
 
                 $usoarticulo_id = 1;
             }
-            $codigoNomenclador = $data->stkm_cod_nomenc;
+            $codigoNomenclador = $data->stkm_cod_nomenc ?? null;
 
             if (config('app.empresa') == 'EL BIERZO') {
                 $tipoarticulo_id = 1;
@@ -783,6 +783,7 @@ class Articulo extends Model implements Auditable
                 $data->stkm_fe_ult_compra = 20100101;
             }
             $fechaultimacompra = date('Y-m-d', strtotime($data->stkm_fe_ult_compra));
+            $formulaErpId = $this->formulaIdDesdeCodigoAnita($data->stkm_formula ?? 0);
 
             switch (config('app.empresa')) {
                 case 'AGG':
@@ -868,7 +869,7 @@ class Articulo extends Model implements Auditable
                         'peso' => $data->stkm_peso_aprox,
                         'nofactura' => $noFactura,
                         'impuesto_id' => $impuesto_id,
-                        'formula' => $data->stkm_formula,
+                        'formula' => $formulaErpId,
                         'nomenclador' => $codigoNomenclador,
                         'foto' => $data->stkm_nombre_foto,
                         'unidadmedida_id' => $unidadmedida_id > 0 ? $unidadmedida_id : null,
@@ -973,7 +974,7 @@ class Articulo extends Model implements Auditable
                         'peso' => $data->stkm_peso_aprox,
                         'nofactura' => $noFactura,
                         'impuesto_id' => $impuesto_id,
-                        'formula' => $data->stkm_formula,
+                        'formula' => $formulaErpId,
                         'nomenclador' => $codigoNomenclador,
                         'foto' => $data->stkm_nombre_foto,
                         'unidadmedida_id' => $unidadmedida_id > 0 ? $unidadmedida_id : null,
@@ -1031,7 +1032,7 @@ class Articulo extends Model implements Auditable
                         'peso' => $data->stkm_peso_aprox,
                         'nofactura' => $data->stkm_fl_no_factura,
                         'impuesto_id' => $impuesto_id,
-                        'formula' => $data->stkm_formula,
+                        'formula' => $formulaErpId,
                         'nomenclador' => $codigoNomenclador,
                         'foto' => $data->stkm_nombre_foto,
                         'unidadmedida_id' => $unidadmedida_id > 0 ? $unidadmedida_id : null,
@@ -1066,10 +1067,24 @@ class Articulo extends Model implements Auditable
                     ];
                     break;
             }
+            $skuLocal = ltrim($data->stkm_articulo, '0');
+            $articuloExistente = \App\Support\Stock\ArticuloSkuMatchSupport::resolverCanonico($skuLocal);
+            if ($fl_crea_registro && $articuloExistente !== null) {
+                $fl_crea_registro = false;
+            }
+
             if ($fl_crea_registro) {
                 $articulo = Articulo::create($arrayCampos);
             } else {
-                $articulo = Articulo::where('sku', ltrim($data->stkm_articulo, '0'))->update($arrayCampos);
+                if ($articuloExistente === null) {
+                    return;
+                }
+                $articuloExistente->update($arrayCampos);
+                $articulo = $articuloExistente->fresh();
+                if ($articulo === null) {
+                    return;
+                }
+                \App\Support\Stock\ArticuloSkuMatchSupport::inactivarDuplicados($skuLocal, (int) $articulo->id);
             }
 
             // Agrega cuentas contables
@@ -1119,7 +1134,9 @@ class Articulo extends Model implements Auditable
             // Agrega estados
             $x['estadofechas'][] = Carbon::now();
             $x['estados'][] = $estado;
-            $x['estadoobservaciones'][] = 'Alta de Artículo desde Anita';
+            $x['estadoobservaciones'][] = $fl_crea_registro
+                ? 'Alta de Artículo desde Anita'
+                : 'Actualización de Artículo desde Anita';
             $x['estadousuarios'][] = Auth::user()->id;
 
             $articulo_estado = $this->articulo_estadoRepository->create($x, $articulo->id);
@@ -1197,6 +1214,29 @@ class Articulo extends Model implements Auditable
         if (count($dataAnita) > 0) {
             $valor = $dataAnita[0]->valor;
         }
+    }
+
+    /**
+     * Traduce stkm_formula de Anita (código de fórmula) al id local formula_articulo.id.
+     */
+    private function formulaIdDesdeCodigoAnita($codigoAnita): ?int
+    {
+        $codigo = trim((string) ($codigoAnita ?? ''));
+        if ($codigo === '' || $codigo === '0') {
+            return null;
+        }
+
+        $formula = Formula_Articulo::query()
+            ->select('id')
+            ->where(function ($q) use ($codigo) {
+                $q->where('codigo', $codigo);
+                if (ctype_digit($codigo)) {
+                    $q->orWhere('anita_stkcm_formula', (int) $codigo);
+                }
+            })
+            ->first();
+
+        return $formula?->id;
     }
 
     /**

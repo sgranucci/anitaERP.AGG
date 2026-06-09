@@ -83,6 +83,30 @@ final class WaitryComandaOrderItemsSupportTest extends TestCase
         $this->assertSame(300., (float) $items[1]['price']);
     }
 
+    public function test_construir_incluye_notes_de_comentario_cocina(): void
+    {
+        $venta = new Venta(['id' => 4, 'total' => 100.]);
+        $emision = $this->emision(1, 'SKU-A', 1, 100.);
+        $emision->forceFill(['comentario_cocina' => 'Sin cebolla']);
+        $venta->setRelation('venta_emisiones', collect([$emision]));
+
+        $items = WaitryComandaOrderItemsSupport::construirDesdeVenta($venta, false);
+
+        $this->assertSame('Sin cebolla', $items[0]['notes']);
+    }
+
+    public function test_construir_notes_null_sin_comentario(): void
+    {
+        $venta = new Venta(['id' => 5, 'total' => 50.]);
+        $venta->setRelation('venta_emisiones', collect([
+            $this->emision(1, 'SKU-A', 1, 50.),
+        ]));
+
+        $items = WaitryComandaOrderItemsSupport::construirDesdeVenta($venta, false);
+
+        $this->assertNull($items[0]['notes']);
+    }
+
     private function emision(int $numeroitem, string $sku, float $cantidad, float $precio): Venta_Emision
     {
         $articulo = new Articulo;

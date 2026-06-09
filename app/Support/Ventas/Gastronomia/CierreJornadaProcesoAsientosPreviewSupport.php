@@ -505,7 +505,7 @@ final class CierreJornadaProcesoAsientosPreviewSupport
             $asiento['numero'] = $i + 1;
             $codigo = (string) ($asiento['codigo'] ?? '');
             if ($codigo === 'compensacion_efectivo_no_facturado') {
-                $asiento['titulo'] = $asiento['numero'].' — Compensación efectivo no facturado (Waitry) vs fondo fijo máquinas';
+                $asiento['titulo'] = $asiento['numero'].' — Reduccion FF Maquinas';
                 $movsComp = self::movimientosCompensacionEfectivoNoFacturado($movimientos);
                 $asiento['comandas_alcance'] = self::COMANDAS_ALCANCE_EFECTIVO_NO_FACTURADO;
                 $asiento['cantidad_comandas'] = count($movsComp);
@@ -1120,9 +1120,14 @@ final class CierreJornadaProcesoAsientosPreviewSupport
             foreach ($cajas as $caja) {
                 $cont = $caja->cuentacontables;
                 if ($cont !== null) {
+                    $etiq = CierreJornadaProcesoAsientosCuentaSupport::etiquetaCuentacontableMedioCobro(
+                        (int) $cont->id,
+                        $empresaId,
+                        (int) $caja->id,
+                    );
                     $map[(int) $caja->id] = [
-                        'codigo' => trim((string) $cont->codigo),
-                        'nombre' => trim((string) $cont->nombre),
+                        'codigo' => trim((string) ($etiq['codigo'] ?? $cont->codigo)),
+                        'nombre' => trim((string) ($etiq['nombre'] ?? $cont->nombre)),
                         'tipo' => 'contable',
                     ];
                     continue;
@@ -1198,13 +1203,13 @@ final class CierreJornadaProcesoAsientosPreviewSupport
 
         $lineas = [
             self::lineaDebe('Efectivo Waitry no incluido en factura del proceso', $efectivoId, $total),
-            self::lineaHaber('Compensación fondo fijo máquinas — efectivo no facturado', $fondoFijoId, $total),
+            self::lineaHaber('Reduccion FF Maquinas', $fondoFijoId, $total),
         ];
 
         $asiento = self::armarAsientoConsolidado(
             0,
             'compensacion_efectivo_no_facturado',
-            'Asiento de compensación',
+            'Reduccion FF Maquinas',
             $lineas,
             ['total' => $total],
             true,

@@ -80,7 +80,7 @@ class ArbolaprobacionService
         $this->cotizacionQuery = $cotizacionquery;
     }
 
-    public function procesaArbolaprobacion($tipocomprobante, $comprobante_id, $operacion)
+    public function procesaArbolaprobacion($tipocomprobante, $comprobante_id, $operacion, array $opciones = [])
     {
         $arrayReplace = ['/', '%'];
         $tipoarbol = Arbolaprobacion::$enumTipoArbol[array_search($tipocomprobante, array_column(Arbolaprobacion::$enumTipoArbol, 'valor'))]['nombre'];
@@ -113,7 +113,11 @@ class ArbolaprobacionService
             case 'OV':
                 return $this->procesaArbolOrdenVenta($arbolaprobacion, $tipoarbol, $comprobante_id, $arrayReplace);
             case 'RE':
-                return $this->procesaArbolRequisicion($arbolaprobacion, $tipoarbol, $comprobante_id, $arrayReplace);
+                if ($operacion === 'resume') {
+                    $opciones['es_retome'] = true;
+                }
+
+                return $this->procesaArbolRequisicion($arbolaprobacion, $tipoarbol, $comprobante_id, $arrayReplace, $opciones);
             case 'RS':
                 return app(\App\Services\Sala\RequisicionSalaArbolIntegracionService::class)->procesaArbol(
                     $comprobante_id,
@@ -223,7 +227,7 @@ class ArbolaprobacionService
         }
     }
 
-    private function procesaArbolRequisicion($arbolaprobacion, $tipoarbol, $comprobante_id, array $arrayReplace): int
+    private function procesaArbolRequisicion($arbolaprobacion, $tipoarbol, $comprobante_id, array $arrayReplace, array $opciones = []): int
     {
         $requisicion = $this->requisicionRepository->find($comprobante_id);
         if (! $requisicion) {
@@ -240,6 +244,9 @@ class ArbolaprobacionService
         }
 
         $centrocostoArbol = $this->centroCostoParaArbolAprobacionDesdeModelo($requisicion);
+        $esRetome = ! empty($opciones['es_retome']);
+        $nivelRetome = (int) ($opciones['nivel_retome'] ?? 0);
+        $destinatarioRetome = (int) ($opciones['destinatario_usuario_id'] ?? 0);
 
         while (true) {
             $requisicion = $this->requisicionRepository->find($comprobante_id);
@@ -304,6 +311,16 @@ class ArbolaprobacionService
                 $uids = [$proximoNivel['proximousuario']];
             }
             $uids = array_values(array_unique(array_filter($uids)));
+
+            if ($esRetome
+                && $nivelRetome > 0
+                && (int) $proximoNivel['proximonivel'] === $nivelRetome
+                && count($uids) > 1) {
+                if ($destinatarioRetome <= 0 || ! in_array($destinatarioRetome, $uids, true)) {
+                    throw new \RuntimeException('Debe seleccionar un firmante válido para continuar el árbol de aprobación.');
+                }
+                $uids = [$destinatarioRetome];
+            }
 
             $ya = Arbolaprobacion_Movimiento::where('requisicion_id', $comprobante_id)
                 ->where('nivel', $proximoNivel['proximonivel'])
@@ -601,9 +618,7 @@ class ArbolaprobacionService
         $totales = RequisicionTotalesCabecera::desdeModelo($requisicion, $this->cotizacionQuery);
 
         return [
-            'estado_tras_aprobar' => $estadoAlAprobarEsteNivel !== null && $estadoAlAprobarEsteNivel !== ''
-                ? $estadoAlAprobarEsteNivel
-                : null,
+            'estado_tras_aprobar' => $this->estadoRequisicionAlAprobarNivel($estadoAlAprobarEsteNivel),
             'monto_items' => $totales['monto'],
             'moneda_abrev_items' => $totales['monedacabecera_abreviatura'],
         ];
@@ -668,10 +683,10 @@ class ArbolaprobacionService
                     $totalesReq['monto'],
                     $totalesReq['moneda_id']
                 );
-                if ($nivelCfg !== null && filled($nivelCfg->documento_estado_al_aprobar)) {
+                if ($nivelCfg !== null) {
                     $this->aplicaEstadoRequisicionPorNombre(
                         $comprobante_id,
-                        trim($nivelCfg->documento_estado_al_aprobar),
+                        $nivelCfg->documento_estado_al_aprobar,
                         'Árbol de aprobación: nivel '.$movimientoPre->nivel.' aprobado',
                         $usuario_id
                     );
@@ -1003,14 +1018,22 @@ class ArbolaprobacionService
         ];
     }
 
+    /**
+     * Estado de requisición al aprobar un nivel: el configurado en el árbol o APROBADA si no hay ninguno.
+     */
+    private function estadoRequisicionAlAprobarNivel(?string $estadoConfigurado): string
+    {
+        $s = $estadoConfigurado !== null ? trim($estadoConfigurado) : '';
+        if ($s !== '' && Requisicion_Estado::esNombreEstadoValido($s)) {
+            return $s;
+        }
+
+        return Requisicion_Estado::$enumEstado[array_search('A', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
+    }
+
     private function aplicaEstadoRequisicionPorNombre(int $requisicion_id, ?string $estadoNombre, string $observacion, $usuarioHistoriaId): void
     {
-        if ($estadoNombre === null || $estadoNombre === '') {
-            return;
-        }
-        if (! Requisicion_Estado::esNombreEstadoValido($estadoNombre)) {
-            return;
-        }
+        $estadoNombre = $this->estadoRequisicionAlAprobarNivel($estadoNombre);
 
         $this->requisicion_estadoRepository->creaEstado(
             $requisicion_id,
@@ -1172,6 +1195,71 @@ class ArbolaprobacionService
     public function nombreTipoArbolRequisiciones(): string
     {
         return Arbolaprobacion::$enumTipoArbol[array_search('RE', array_column(Arbolaprobacion::$enumTipoArbol, 'valor'))]['nombre'];
+    }
+
+    /**
+     * Firmantes del siguiente nivel al retomar el árbol desde EN COMPRAS (botón «Envía al árbol»).
+     *
+     * @return array{nivel: int, requiere_seleccion: bool, firmantes: list<array{id: int, nombre: string, usuario: string, email: string}>}
+     */
+    public function firmantesRetomeArbolRequisicion(Requisicion $requisicion): array
+    {
+        $nombreEnCompras = Requisicion_Estado::$enumEstado[array_search('K', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
+        if ($requisicion->estado !== $nombreEnCompras) {
+            throw new \RuntimeException('Solo se puede consultar firmantes cuando la requisición está en estado EN COMPRAS.');
+        }
+
+        $this->validaRequisicionModeloContraArbol($requisicion);
+
+        $tipoarbol = $this->nombreTipoArbolRequisiciones();
+        $trees = $this->arbolaprobacionRepository->findPorTipoArbolYEmpresa($tipoarbol, (int) $requisicion->empresa_id);
+        if ($trees->isEmpty() || $trees->count() !== 1) {
+            throw new \RuntimeException('No hay un árbol de aprobación activo de requisiciones para la empresa de la requisición.');
+        }
+
+        $arbol = $trees->first();
+        $centrocostoArbol = $this->centroCostoParaArbolAprobacionDesdeModelo($requisicion);
+        $estadoAprobacionActual = $this->leeAprobacionComprobante($tipoarbol, (int) $requisicion->id);
+        $totalesReq = RequisicionTotalesCabecera::desdeModelo($requisicion, $this->cotizacionQuery);
+        $proximoNivel = $this->buscaProximoNivel(
+            $arbol,
+            $centrocostoArbol,
+            $estadoAprobacionActual['nivelactual'],
+            $requisicion->fecha,
+            $totalesReq['monto'],
+            $totalesReq['moneda_id']
+        );
+
+        if ($proximoNivel['proximonivel'] <= 0) {
+            throw new \RuntimeException('El árbol de aprobación no tiene un nivel aplicable para continuar el circuito.');
+        }
+
+        $uids = $proximoNivel['proximousuarios'] ?? [];
+        if (! is_array($uids) || count($uids) === 0) {
+            $uids = $proximoNivel['proximousuario'] ? [(int) $proximoNivel['proximousuario']] : [];
+        }
+        $uids = array_values(array_unique(array_filter(array_map('intval', $uids))));
+
+        $firmantes = [];
+        foreach ($uids as $uid) {
+            $usuario = $this->usuarioRepository->find($uid);
+            if (! $usuario) {
+                continue;
+            }
+            $nombre = trim((string) ($usuario->nombre ?? ''));
+            $firmantes[] = [
+                'id' => (int) $usuario->id,
+                'nombre' => $nombre !== '' ? $nombre : (string) ($usuario->usuario ?? ''),
+                'usuario' => (string) ($usuario->usuario ?? ''),
+                'email' => (string) ($usuario->email ?? ''),
+            ];
+        }
+
+        return [
+            'nivel' => (int) $proximoNivel['proximonivel'],
+            'requiere_seleccion' => count($firmantes) > 1,
+            'firmantes' => $firmantes,
+        ];
     }
 
     /**
@@ -1403,12 +1491,12 @@ class ArbolaprobacionService
                     $totalesReq['monto'],
                     $totalesReq['moneda_id']
                 );
-                $est = $nivelCfg && filled($nivelCfg->documento_estado_al_aprobar)
-                    ? trim((string) $nivelCfg->documento_estado_al_aprobar)
+                $est = $nivelCfg
+                    ? $this->estadoRequisicionAlAprobarNivel($nivelCfg->documento_estado_al_aprobar)
                     : null;
-                $row['indicacion_estado_requisicion'] = $est !== null && $est !== ''
+                $row['indicacion_estado_requisicion'] = $est !== null
                     ? 'Tras aprobar este nivel, la requisición quedaría en estado: '.$est.'.'
-                    : 'Sin estado configurado al aprobar este nivel (continúa el circuito del árbol).';
+                    : 'No se pudo determinar el estado al aprobar este nivel.';
             } else {
                 $row['indicacion_estado_requisicion'] = 'No hay árbol de aprobación activo para la empresa de esta requisición.';
             }
@@ -1520,9 +1608,8 @@ class ArbolaprobacionService
         if ($nivelCfg === null) {
             return null;
         }
-        $s = trim((string) ($nivelCfg->documento_estado_al_aprobar ?? ''));
 
-        return $s !== '' ? $s : null;
+        return $this->estadoRequisicionAlAprobarNivel($nivelCfg->documento_estado_al_aprobar);
     }
 
     public function nombreTipoArbolOrdenesCompra(): string

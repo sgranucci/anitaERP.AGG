@@ -340,8 +340,27 @@ final class WaitryCierreJornadaService
             ?? $emision?->cuenta?->waitry_tipo_pago
             ?? $cuentaPendiente?->waitry_tipo_pago;
         $waitryGateway = WaitryPaymentGatewaySupport::extraerGatewayDesdeOrden($orden);
-        $cuentaEsperada = WaitryMedioPagoCuentacajaSupport::cuentaParaTipoInformeZ($waitryTipoPago, $empresaId, $waitryGateway)
-            ?? WaitryMedioPagoCuentacajaSupport::cuentaParaTipoWaitry($waitryTipoPago, $empresaId);
+        $referenciaWaitry = trim((string) (
+            $orden['display_id']
+            ?? $orden['externalDeliveryId']
+            ?? $orden['external_reference_id']
+            ?? ''
+        ));
+        $esOrdenPushErp = WaitryPaymentGatewaySupport::esOrdenPushErp([
+            'display_id' => $referenciaWaitry,
+            'external_reference_id' => $orden['external_reference_id'] ?? null,
+            'referencia_waitry' => $referenciaWaitry,
+            'waitry_tipo_pago' => $waitryTipoPago,
+            'waitry_payment_gateway' => $waitryGateway,
+            'payment' => $orden['payment'] ?? null,
+            'facturada_erp' => $emision !== null,
+            'anita_es_totem' => (bool) ($emision?->cuenta?->waitry_cobro_totem),
+            'waitry_cobro_totem' => (bool) ($emision?->cuenta?->waitry_cobro_totem),
+        ]);
+        $cuentaEsperada = $esOrdenPushErp
+            ? null
+            : (WaitryMedioPagoCuentacajaSupport::cuentaParaTipoInformeZ($waitryTipoPago, $empresaId, $waitryGateway)
+                ?? WaitryMedioPagoCuentacajaSupport::cuentaParaTipoWaitry($waitryTipoPago, $empresaId));
         $anitaMedio = $this->primerMedioCobranzaAnita($emision);
 
         $estado = 'sin_factura_anita';
@@ -351,10 +370,13 @@ final class WaitryCierreJornadaService
             } else {
                 $estado = abs((float) $diferencia) > self::TOLERANCIA_MONTO ? 'monto_distinto' : 'conciliada';
             }
-            if ($estado === 'conciliada' && $waitryPaid && $anitaMedio !== null && $cuentaEsperada !== null) {
-                if ((int) ($anitaMedio['cuentacaja_id'] ?? 0) !== (int) $cuentaEsperada['id']) {
-                    $estado = 'medio_distinto';
-                }
+            if (! $esOrdenPushErp
+                && $estado === 'conciliada'
+                && $waitryPaid
+                && $anitaMedio !== null
+                && $cuentaEsperada !== null
+                && (int) ($anitaMedio['cuentacaja_id'] ?? 0) !== (int) $cuentaEsperada['id']) {
+                $estado = 'medio_distinto';
             }
         } elseif ($cuentaPendiente !== null) {
             $estado = 'importada_pendiente';

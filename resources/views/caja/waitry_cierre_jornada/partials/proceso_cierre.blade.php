@@ -109,6 +109,30 @@
         body.waitry-proceso-en-curso {
             overflow: hidden;
         }
+        body.waitry-aviso-vivo-activo {
+            overflow: hidden;
+        }
+        #proceso-aviso-vivo-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 2060;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.55);
+        }
+        #proceso-aviso-vivo-overlay.is-visible {
+            display: flex;
+        }
+        #proceso-aviso-vivo-card {
+            max-width: 34rem;
+            width: 100%;
+            min-width: 18rem;
+        }
+        #proceso-aviso-vivo-paso {
+            min-height: 1.35rem;
+        }
     </style>
     <hr class="my-4">
     <h4 class="mb-2">
@@ -135,7 +159,22 @@
             </button>
         </div>
 
-        <div id="proceso-loading" class="alert alert-info d-none py-2">
+        <div id="proceso-aviso-vivo-overlay"
+             class="d-none"
+             role="status"
+             aria-live="assertive"
+             aria-hidden="true">
+            <div id="proceso-aviso-vivo-card" class="bg-white rounded shadow text-center px-4 py-3">
+                <i id="proceso-aviso-vivo-icon"
+                   class="fa fa-spinner fa-spin fa-2x text-info mb-2"
+                   aria-hidden="true"></i>
+                <div><strong id="proceso-aviso-vivo-titulo">Procesando…</strong></div>
+                <div id="proceso-aviso-vivo-paso" class="small font-weight-bold text-primary mt-2"></div>
+                <div class="small text-muted mt-1" id="proceso-aviso-vivo-subtitulo"></div>
+                <div class="small text-muted mt-2">Por favor espere. No cierre ni recargue la página.</div>
+            </div>
+        </div>
+        <div id="proceso-loading" class="alert alert-info d-none py-2" aria-hidden="true">
             <i class="fa fa-spinner fa-spin"></i> Procesando movimientos Waitry…
         </div>
         <div id="proceso-error" class="alert alert-danger d-none py-2"></div>
@@ -149,6 +188,7 @@
             <div class="bg-white rounded shadow text-center px-4 py-3" style="max-width: 92vw; min-width: 18rem;">
                 <i class="fa fa-spinner fa-spin fa-2x text-primary mb-2" aria-hidden="true"></i>
                 <div><strong>Recalculando medios de pago…</strong></div>
+                <div id="proceso-recalculando-paso" class="small font-weight-bold text-primary mt-2"></div>
                 <div class="small text-muted mt-1">
                     Aplicando el porcentaje <strong id="proceso-recalculando-porcentaje">—</strong> %
                     sobre el facturado Anita.
@@ -302,10 +342,13 @@
                 'label' => 'Ayuda — cuadro y porcentaje',
                 'inner' => 'caja.waitry_cierre_jornada.partials.ayuda.proceso_cuadro',
             ])
+            <div id="proceso-error-acciones" class="alert alert-danger d-none py-2 mb-2" role="alert"
+                 aria-live="polite"></div>
             <div class="form-inline mb-2 flex-wrap">
                 <label for="input-porcentaje" class="mr-2 small">Porcentaje</label>
                 <input type="number" id="input-porcentaje" class="form-control form-control-sm mr-1" style="width:90px"
-                       min="0" max="100" step="0.01" value="0">
+                       min="0" max="100" step="0.0001" value="0"
+                       title="Porcentaje sobre facturado Anita; el máximo depende del Waitry sin facturar recodificable (ver debajo).">
                 <span class="mr-2 small">%</span>
                 <button type="button" class="btn btn-sm btn-primary mr-2 mb-1" id="btn-proceso-recalcular">
                     Recalcular medios
@@ -339,7 +382,7 @@
                     · Máx. % permitido:
                     <strong id="ctx-porcentaje-maximo">—</strong>
                 </span>
-                <span class="d-none text-danger ml-1" id="ctx-porcentaje-excedido"></span>
+                <span class="d-none text-danger d-block mt-1" id="ctx-porcentaje-excedido"></span>
                 <br>
                 <span class="text-muted" id="ctx-objetivo-tras-pct-wrap">
                     Al % indicado → objetivo recodificar:
@@ -355,7 +398,15 @@
                             <i class="fa fa-check-circle text-success"></i>
                             Resultado del proceso — facturas y asientos
                         </h6>
-                        <span class="badge badge-success d-none" id="badge-proceso-cierre-completado">Cierre completado</span>
+                        <div class="d-flex flex-wrap align-items-center">
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-primary mr-2 mb-1 d-none"
+                                    id="btn-proceso-imprimir-pdfs-facturas"
+                                    title="Abrir los PDF de las facturas emitidas (opcional)">
+                                <i class="fa fa-print"></i> Imprimir PDFs
+                            </button>
+                            <span class="badge badge-success d-none mb-1" id="badge-proceso-cierre-completado">Cierre completado</span>
+                        </div>
                     </div>
                     <div class="card-body py-2">
                         <p class="small text-muted mb-2" id="proceso-resultado-resumen"></p>

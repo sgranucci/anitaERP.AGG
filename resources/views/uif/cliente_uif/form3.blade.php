@@ -2,6 +2,7 @@
     $detalleClienteUifRestringido = esSoloVisualizacionClienteUif();
     $consultaPremiosCliente = request()->query('origen') === 'modal_consulta' && request()->query('uif_tab') === '3';
     $suffixConsultaPremios = $consultaPremiosCliente ? '&origen=modal_consulta&vista=consulta' : '';
+    $suffixAltaPremio = ! empty($ocultarVolver ?? false) ? '&origen=modal_consulta&vista=consulta' : '';
     $mostrarForm3Directo = ! empty($soloSolapaPremios ?? false);
 @endphp
 <div class="form3"@if (! $mostrarForm3Directo) style="display: none"@endif>
@@ -70,5 +71,16 @@
        		</tbody>
        	</table>
 		@include('uif.cliente_uif.template2')
-    </div>	
+        @if (isset($data->id) && can('crear-cliente-premio-uif', false) && ! $detalleClienteUifRestringido)
+        <div class="row">
+            <div class="col-md-12">
+                <a id="agrega_renglon_premio"
+                   href="{{ route('crea_cliente_premio_uif', ['id' => $data->id]) }}?return_cliente_tab=3{{ $suffixAltaPremio }}"
+                   class="pull-right btn btn-danger">
+                    + Agrega premio
+                </a>
+            </div>
+        </div>
+        @endif
+    </div>
 </div>

@@ -2,7 +2,9 @@
 
 namespace App\Services\Ventas\Gastronomia;
 
+use App\Support\Wigos\WigosConfigResolver;
 use App\Support\Wigos\WigosTrackdataNormalizer;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use InvalidArgumentException;
 use RuntimeException;
@@ -28,7 +30,7 @@ final class WigosAccountInfoService
      *   raw:array<string,mixed>
      * }
      */
-    public function consultarPorTrackdata(string $trackdata): array
+    public function consultarPorTrackdata(string $trackdata, int $empresaId = 0): array
     {
         if (! config('wigos.account_info_habilitado', false)) {
             throw new RuntimeException(
@@ -37,31 +39,44 @@ final class WigosAccountInfoService
         }
 
         $track = $this->normalizarTrackdata($trackdata);
-        $url = $this->construirUrl($track);
-
-        try {
-            $response = Http::timeout(max(3, (int) config('wigos.account_info_timeout', 8)))
-                ->acceptJson()
-                ->get($url);
-        } catch (Throwable $e) {
-            throw new RuntimeException(
-                'No se pudo conectar con el servidor de tarjetas Wigos. Verifique la red o avise a sistemas.'
-                .($e->getMessage() !== '' ? ' ('.$e->getMessage().')' : ''),
-                0,
-                $e
-            );
+        $urls = WigosConfigResolver::accountInfoUrls($empresaId);
+        if ($urls === []) {
+            throw new RuntimeException('Falta configurar WIGOS_ACCOUNT_INFO_URL o servidores Wigos por empresa.');
         }
 
-        if (! $response->successful()) {
-            throw new RuntimeException($this->mensajeErrorHttpWigos($response->status(), $response->json()));
+        $errores = [];
+        $timeout = max(3, (int) config('wigos.account_info_timeout', 8));
+
+        foreach ($urls as $plantilla) {
+            $url = $this->construirUrl($plantilla, $track);
+
+            try {
+                $response = Http::timeout($timeout)->acceptJson()->get($url);
+            } catch (Throwable $e) {
+                $errores[] = $this->etiquetaUrl($plantilla).': '.$e->getMessage();
+                continue;
+            }
+
+            if (! $response->successful()) {
+                if ($this->debeReintentarEnOtroServidor($response)) {
+                    $errores[] = $this->etiquetaUrl($plantilla).': '.$this->mensajeErrorHttpWigos($response->status(), $response->json());
+                    continue;
+                }
+
+                throw new RuntimeException($this->mensajeErrorHttpWigos($response->status(), $response->json()));
+            }
+
+            $json = $response->json();
+            if (! is_array($json)) {
+                throw new RuntimeException('La respuesta de Wigos no es JSON válido.');
+            }
+
+            return $this->parsearRespuesta($json);
         }
 
-        $json = $response->json();
-        if (! is_array($json)) {
-            throw new RuntimeException('La respuesta de Wigos no es JSON válido.');
-        }
-
-        return $this->parsearRespuesta($json);
+        throw new RuntimeException(
+            'No se pudo conectar con el servidor de tarjetas Wigos. '.implode(' | ', $errores)
+        );
     }
 
     private function normalizarTrackdata(string $trackdata): string
@@ -90,13 +105,8 @@ final class WigosAccountInfoService
             .($detalleWigos !== '' ? ' '.$detalleWigos.'.' : '');
     }
 
-    private function construirUrl(string $trackdata): string
+    private function construirUrl(string $plantilla, string $trackdata): string
     {
-        $plantilla = trim((string) config('wigos.account_info_url', ''));
-        if ($plantilla === '') {
-            throw new RuntimeException('Falta configurar WIGOS_ACCOUNT_INFO_URL.');
-        }
-
         if (str_contains($plantilla, '%s')) {
             return sprintf($plantilla, rawurlencode($trackdata));
         }
@@ -104,6 +114,20 @@ final class WigosAccountInfoService
         $sep = str_contains($plantilla, '?') ? '&' : '?';
 
         return $plantilla.$sep.'trackdata='.rawurlencode($trackdata);
+    }
+
+    private function debeReintentarEnOtroServidor(Response $response): bool
+    {
+        return $response->status() >= 500 || $response->status() === 404;
+    }
+
+    private function etiquetaUrl(string $plantilla): string
+    {
+        if (preg_match('#https?://([^/:]+)#', $plantilla, $m)) {
+            return $m[1];
+        }
+
+        return 'Wigos';
     }
 
     /**

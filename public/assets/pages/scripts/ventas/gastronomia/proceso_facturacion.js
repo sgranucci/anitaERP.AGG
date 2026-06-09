@@ -347,9 +347,38 @@
 
     const UMBRAL_AVISO_PERSISTENTE = 90;
 
+    function esErrorOperacionGrave(msg) {
+        const s = String(msg || '').trim().toLowerCase();
+        if (!s) return false;
+        return (
+            /no tiene impuesto configurado/i.test(s) ||
+            /impuesto configurado/i.test(s) ||
+            /no query results for model/i.test(s) ||
+            /query results for model/i.test(s) ||
+            /revise el maestro de art[ií]culos/i.test(s) ||
+            /no puede cargar consumos en esta cuenta/i.test(s) ||
+            /debe indicar (el mozo|cubiertos)/i.test(s) ||
+            /la cuenta no est[aá] abierta/i.test(s)
+        );
+    }
+
+    function notificarErrorOperacion(msg, opciones) {
+        const texto = String(msg || '').trim() || 'No se pudo completar la operación.';
+        const opts = opciones || {};
+        if (esErrorOperacionGrave(texto) || opts.grave) {
+            mostrarAvisoPersistente(texto, 'error', {
+                titulo: opts.titulo || 'No se puede continuar',
+                detalle: opts.detalle || '',
+            });
+            return;
+        }
+        toast(texto, 'error');
+    }
+
     function debeUsarAvisoPersistente(msg, type) {
         const s = String(msg || '').trim();
         if (!s) return false;
+        if (type === 'error' && esErrorOperacionGrave(s)) return true;
         if (type === 'warning' && s.length >= UMBRAL_AVISO_PERSISTENTE) return true;
         if (type === 'error' && (s.length >= UMBRAL_AVISO_PERSISTENTE || /factura emitida/i.test(s))) return true;
         return false;
@@ -4964,7 +4993,7 @@
             actualizarBtnConfirmarCanjePremio();
             actualizarBotonConfirmarCanjeFidelidad();
         } catch (e) {
-            toast(e.message, 'error');
+            notificarErrorOperacion(e.message);
         }
     }
 
@@ -5023,13 +5052,21 @@
             const pu = Number(ln.precio_unitario);
             const cant = Number(ln.cantidad);
             const opcDetalleHtml = htmlOpcionalesDetalleLinea(ln);
+            const comentarioCocina = (ln.comentario_cocina || '').trim();
+            const btnComentarioClass = comentarioCocina
+                ? 'btn btn-sm btn-info py-0 px-2 ml-1 btn-gastro-comentario-cocina'
+                : 'btn btn-sm btn-outline-info py-0 px-2 ml-1 btn-gastro-comentario-cocina';
+            const btnComentarioTitle = comentarioCocina
+                ? 'Comentario cocina: ' + comentarioCocina
+                : 'Comentario para cocina (KDS)';
             html += `<tr>
         <td>${ln.numero_linea}</td>
-        <td>${ln.articulo ? escaparHtmlOpcional(ln.articulo.sku) + ' — ' + escaparHtmlOpcional(ln.articulo.descripcion) : ''}${opcDetalleHtml}</td>
+        <td>${ln.articulo ? escaparHtmlOpcional(ln.articulo.sku) + ' — ' + escaparHtmlOpcional(ln.articulo.descripcion) : ''}${opcDetalleHtml}${comentarioCocina ? '<br><small class="text-info"><i class="fas fa-utensils"></i> ' + escaparHtmlOpcional(comentarioCocina) + '</small>' : ''}</td>
         <td class="text-nowrap align-middle">
           <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 btn-gastro-qty" data-dir="-1" data-linea="${ln.id}" data-cant="${cant}" title="Menos">−</button>
           <span class="mx-1">${cant}</span>
           <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 btn-gastro-qty" data-dir="1" data-linea="${ln.id}" data-cant="${cant}" title="Más">+</button>
+          <button type="button" class="${btnComentarioClass}" data-linea="${ln.id}" data-comentario="${escaparHtmlOpcional(comentarioCocina)}" title="${escaparHtmlOpcional(btnComentarioTitle)}" aria-label="Comentario para cocina"><i class="fas fa-utensils"></i></button>
         </td>
         <td>${pu.toFixed(2)}</td>
         <td><button type="button" class="btn btn-sm btn-link text-danger btn-del-linea" data-linea="${ln.id}">quitar</button></td>
@@ -5059,7 +5096,63 @@
                 void patchCantidadLinea(lineaId, next);
             });
         });
+        wrap.querySelectorAll('.btn-gastro-comentario-cocina').forEach((b) => {
+            b.addEventListener('click', () => abrirModalComentarioCocina(b));
+        });
         void aplicarCobranzaWaitryTotemSiCorresponde(cuenta);
+    }
+
+    let lineaComentarioCocinaId = null;
+
+    function abrirModalComentarioCocina(btn) {
+        if (bloquearOperacionPosPorJornadaTurno()) {
+            return;
+        }
+        lineaComentarioCocinaId = btn.getAttribute('data-linea');
+        const tr = btn.closest('tr');
+        const articuloTxt = tr && tr.cells[1] ? tr.cells[1].textContent.trim().split('\n')[0] : '';
+        const fld = document.getElementById('fld-comentario-cocina');
+        const lbl = document.getElementById('modal-comentario-cocina-articulo');
+        if (lbl) {
+            lbl.textContent = articuloTxt || 'Ítem de la cuenta';
+        }
+        if (fld) {
+            fld.value = btn.getAttribute('data-comentario') || '';
+        }
+        mostrarModalBootstrap('modal-comentario-cocina', {
+            onShown: function () {
+                if (fld) {
+                    fld.focus();
+                    fld.select();
+                }
+            },
+            apilar: true,
+        });
+    }
+
+    async function guardarComentarioCocinaLinea() {
+        if (bloquearOperacionPosPorJornadaTurno()) {
+            return;
+        }
+        if (!cuentaId || !lineaComentarioCocinaId) {
+            return;
+        }
+        const fld = document.getElementById('fld-comentario-cocina');
+        const comentario = fld ? String(fld.value || '').trim() : '';
+        try {
+            const data = await api(`/ventas/gastronomia/api/cuenta/${cuentaId}/linea/${lineaComentarioCocinaId}`, {
+                method: 'PATCH',
+                headers: hdrJson(),
+                body: JSON.stringify({ comentario_cocina: comentario }),
+            });
+            $('#modal-comentario-cocina').modal('hide');
+            lineaComentarioCocinaId = null;
+            pintarLineas(data.cuenta);
+            toast(comentario ? 'Comentario de cocina guardado.' : 'Comentario de cocina quitado.', 'success');
+            focusSkuConsumo();
+        } catch (e) {
+            toast(e.message, 'error');
+        }
     }
 
     function bodyCabeceraCuenta() {
@@ -5775,8 +5868,8 @@
                 });
                 return;
             }
-            if (e.message && e.message.includes('fetch')) toast(String(e), 'error');
-            else toast(e.message, 'error');
+            if (e.message && e.message.includes('fetch')) notificarErrorOperacion(String(e));
+            else notificarErrorOperacion(e.message);
         }
     }
 
@@ -6302,6 +6395,21 @@
             await iniciarAltaLinea(articuloParaModal);
         });
         document.getElementById('modal-cantidad-confirmar').addEventListener('click', continuarDespuesCantidad);
+        const btnComentarioCocinaGuardar = document.getElementById('modal-comentario-cocina-guardar');
+        if (btnComentarioCocinaGuardar) {
+            btnComentarioCocinaGuardar.addEventListener('click', () => {
+                void guardarComentarioCocinaLinea();
+            });
+        }
+        const fldComentarioCocina = document.getElementById('fld-comentario-cocina');
+        if (fldComentarioCocina) {
+            fldComentarioCocina.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    void guardarComentarioCocinaLinea();
+                }
+            });
+        }
         const fldCantidad = document.getElementById('fld-cantidad-linea');
         if (fldCantidad) {
             fldCantidad.addEventListener('keydown', manejarEnterModalCantidad);

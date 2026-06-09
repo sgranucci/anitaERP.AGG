@@ -86,19 +86,31 @@
         mostrarBannerRecalculo(html);
     }
 
-    function setError(msg) {
+    function setError(msg, opciones) {
+        opciones = opciones || {};
         setRecalculoOk('');
-        var box = el('proceso-error');
-        if (!box) {
-            return;
-        }
+        var cajas = [el('proceso-error'), el('proceso-error-acciones')];
         if (!msg) {
-            box.classList.add('d-none');
-            box.textContent = '';
+            cajas.forEach(function (box) {
+                if (box) {
+                    box.classList.add('d-none');
+                    box.textContent = '';
+                }
+            });
             return;
         }
-        box.textContent = msg;
-        box.classList.remove('d-none');
+        cajas.forEach(function (box) {
+            if (box) {
+                box.textContent = msg;
+                box.classList.remove('d-none');
+            }
+        });
+        if (opciones.scrollAcciones) {
+            var destino = el('proceso-error-acciones') || el('proceso-error');
+            if (destino && typeof destino.scrollIntoView === 'function') {
+                destino.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }
     }
 
     function resumenCompensacionAnita(red) {
@@ -156,6 +168,143 @@
 
     var textoProcesoLoadingDefault = '<i class="fa fa-spinner fa-spin"></i> Procesando movimientos Waitry…';
 
+    var avisoVivoTimer = null;
+
+    function detenerAvisoVivo() {
+        if (avisoVivoTimer) {
+            clearInterval(avisoVivoTimer);
+            avisoVivoTimer = null;
+        }
+        var overlay = el('proceso-aviso-vivo-overlay');
+        if (overlay) {
+            overlay.classList.remove('is-visible');
+            overlay.classList.add('d-none');
+            overlay.setAttribute('aria-hidden', 'true');
+        }
+        document.body.classList.remove('waitry-aviso-vivo-activo');
+    }
+
+    function setAvisoVivoTexto(titulo, paso, subtitulo, iconClass) {
+        var tituloEl = el('proceso-aviso-vivo-titulo');
+        var pasoEl = el('proceso-aviso-vivo-paso');
+        var subtituloEl = el('proceso-aviso-vivo-subtitulo');
+        var iconEl = el('proceso-aviso-vivo-icon');
+        if (tituloEl && titulo) {
+            tituloEl.textContent = titulo;
+        }
+        if (pasoEl) {
+            pasoEl.textContent = paso || '';
+        }
+        if (subtituloEl) {
+            subtituloEl.textContent = subtitulo || '';
+        }
+        if (iconEl && iconClass) {
+            iconEl.className = 'fa fa-spinner fa-spin fa-2x mb-2 ' + iconClass;
+        }
+    }
+
+    function mostrarAvisoVivo(activo, opts) {
+        opts = opts || {};
+        var overlay = el('proceso-aviso-vivo-overlay');
+        if (!overlay) {
+            return;
+        }
+        if (!activo) {
+            detenerAvisoVivo();
+            return;
+        }
+        setAvisoVivoTexto(
+            opts.titulo || 'Procesando cierre Waitry…',
+            opts.paso || '',
+            opts.subtitulo || '',
+            opts.iconClass || 'text-info',
+        );
+        overlay.classList.remove('d-none');
+        overlay.classList.add('is-visible');
+        overlay.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('waitry-aviso-vivo-activo');
+    }
+
+    function iniciarAvisoVivoRotacion(opts) {
+        opts = opts || {};
+        detenerAvisoVivo();
+        var mensajes = opts.mensajes || [];
+        if (!mensajes.length) {
+            mostrarAvisoVivo(true, opts);
+            return;
+        }
+        var idx = 0;
+        mostrarAvisoVivo(true, {
+            titulo: opts.titulo,
+            subtitulo: opts.subtitulo,
+            iconClass: opts.iconClass,
+            paso: mensajes[0],
+        });
+        avisoVivoTimer = setInterval(function () {
+            idx = (idx + 1) % mensajes.length;
+            setAvisoVivoTexto(null, mensajes[idx], null, null);
+        }, opts.intervaloMs || 2400);
+    }
+
+    function mensajesProcesoAnalizar() {
+        return [
+            'Leyendo snapshot del tramo Waitry…',
+            'Clasificando comandas por medio de pago…',
+            'Armando cuadro de cierre…',
+            'Calculando totales Anita vs Waitry…',
+            'Preparando estado de jornada y botones…',
+        ];
+    }
+
+    function mensajesProcesoRecalcular() {
+        return [
+            'Validando porcentaje recodificable…',
+            'Redistribuyendo Waitry QR/MP → efectivo…',
+            'Compensando facturas Anita efectivo → medio original…',
+            'Actualizando cuadro y tablas de redistribución…',
+        ];
+    }
+
+    function mensajesProcesoRefrescoTrasOperacion(operacion) {
+        return [
+            'Sincronizando estado tras ' + operacion + '…',
+            'Refrescando cuadro y totales…',
+            'Cargando facturas y asientos del proceso…',
+            'Habilitando siguientes pasos…',
+        ].concat(mensajesProcesoAnalizar());
+    }
+
+    var recalculoPasoTimer = null;
+
+    function detenerRotacionRecalculoPaso() {
+        if (recalculoPasoTimer) {
+            clearInterval(recalculoPasoTimer);
+            recalculoPasoTimer = null;
+        }
+        var pasoEl = el('proceso-recalculando-paso');
+        if (pasoEl) {
+            pasoEl.textContent = '';
+        }
+    }
+
+    function iniciarRotacionRecalculoPaso(mensajes, intervaloMs) {
+        detenerRotacionRecalculoPaso();
+        mensajes = mensajes || mensajesProcesoRecalcular();
+        if (!mensajes.length) {
+            return;
+        }
+        var pasoEl = el('proceso-recalculando-paso');
+        if (!pasoEl) {
+            return;
+        }
+        var idx = 0;
+        pasoEl.textContent = mensajes[0];
+        recalculoPasoTimer = setInterval(function () {
+            idx = (idx + 1) % mensajes.length;
+            pasoEl.textContent = mensajes[idx];
+        }, intervaloMs || 2400);
+    }
+
     function mostrarOverlayRecalculando(activo, pct) {
         var overlay = el('proceso-recalculando-overlay');
         var pctEl = el('proceso-recalculando-porcentaje');
@@ -173,6 +322,7 @@
             overlay.setAttribute('aria-hidden', 'false');
             document.body.classList.add('waitry-recalculo-en-curso');
         } else {
+            detenerRotacionRecalculoPaso();
             overlay.classList.add('d-none');
             overlay.style.display = '';
             overlay.setAttribute('aria-hidden', 'true');
@@ -362,18 +512,26 @@
         }
     }
 
-    function setProcesoLoading(visible, textoHtml) {
-        var loading = el('proceso-loading');
-        if (!loading) {
+    function setProcesoLoading(visible, opciones) {
+        if (!visible) {
+            detenerAvisoVivo();
+            mostrar('proceso-loading', false);
             return;
         }
-        if (textoHtml) {
-            loading.innerHTML = textoHtml;
+        var opts = {};
+        if (typeof opciones === 'string') {
+            opts = { titulo: opciones.replace(/<[^>]+>/g, '').trim() };
+        } else if (opciones && typeof opciones === 'object') {
+            opts = opciones;
         }
-        mostrar('proceso-loading', visible);
-        if (!visible && !textoHtml) {
-            loading.innerHTML = textoProcesoLoadingDefault;
-        }
+        iniciarAvisoVivoRotacion({
+            titulo: opts.titulo || 'Analizando tramo de jornada…',
+            subtitulo: opts.subtitulo || 'Waitry vs Anita — actualizando cuadro de cierre.',
+            mensajes: opts.mensajes || mensajesProcesoAnalizar(),
+            iconClass: opts.iconClass || 'text-info',
+            intervaloMs: opts.intervaloMs,
+        });
+        mostrar('proceso-loading', false);
     }
 
     function mensajeErrorApi(data, fallback) {
@@ -515,6 +673,15 @@
             + '<span class="small"> Ver</span></a>';
     }
 
+    function urlPdfFacturaGastronomia(ventaId) {
+        var base = CFG.urlFacturaPdfBase;
+        if (!base || !ventaId) {
+            return '';
+        }
+
+        return String(base).replace(/\/$/, '') + '/' + ventaId;
+    }
+
     function htmlBotonVerFactura(ventaId) {
         var url = urlVerFacturaGastronomia(ventaId);
         if (!url) {
@@ -525,6 +692,52 @@
             + 'title="Ver factura en Anita (medio de pago, emisión y cobranzas)">'
             + '<i class="fas fa-file-invoice text-primary"></i>'
             + '<span class="small"> Ver</span></a>';
+    }
+
+    function htmlBotonPdfFactura(ventaId) {
+        var url = urlPdfFacturaGastronomia(ventaId);
+        if (!url) {
+            return '';
+        }
+
+        return '<a href="' + escapeHtml(url) + '" class="btn-accion-tabla tooltipsC" target="_blank" rel="noopener" '
+            + 'title="PDF comprobante (imprimir o guardar)">'
+            + '<i class="fas fa-file-pdf text-danger"></i>'
+            + '<span class="small"> PDF</span></a>';
+    }
+
+    function htmlAccionesFacturaProceso(ventaId) {
+        var partes = [];
+        var ver = htmlBotonVerFactura(ventaId);
+        var pdf = htmlBotonPdfFactura(ventaId);
+        if (ver.indexOf('text-muted') === -1) {
+            partes.push(ver);
+        }
+        if (pdf) {
+            partes.push(pdf);
+        }
+
+        return partes.length > 0 ? partes.join(' ') : '<span class="text-muted">—</span>';
+    }
+
+    function abrirPdfsFacturasProceso(facturas) {
+        var urls = (facturas || []).map(function (fac) {
+            return urlPdfFacturaGastronomia(fac.venta_id);
+        }).filter(function (u) {
+            return !!u;
+        });
+        if (urls.length === 0) {
+            alert('No hay comprobantes PDF para abrir.');
+            return;
+        }
+        if (urls.length > 10 && !window.confirm(
+            'Se abrirán ' + urls.length + ' PDFs en pestañas nuevas. ¿Continuar?'
+        )) {
+            return;
+        }
+        urls.forEach(function (u) {
+            window.open(u, '_blank', 'noopener');
+        });
     }
 
     function etiquetaMedioAnitaOPlanificado(it) {
@@ -976,9 +1189,18 @@
                 elTotal.textContent = fmtMoney(data.total_cuadro || totales.total);
             }
         }
-        el('label-total-facturacion').textContent = fmtMoney(data.total_facturacion || 0);
-        el('label-pendiente-facturar').textContent = fmtMoney(data.total_pendiente_facturar || 0);
-        el('label-impago-waitry').textContent = fmtMoney(data.total_impago_waitry || 0);
+        var elTotFact = el('label-total-facturacion');
+        var elPendFact = el('label-pendiente-facturar');
+        var elImpago = el('label-impago-waitry');
+        if (elTotFact) {
+            elTotFact.textContent = fmtMoney(data.total_facturacion || 0);
+        }
+        if (elPendFact) {
+            elPendFact.textContent = fmtMoney(data.total_pendiente_facturar || 0);
+        }
+        if (elImpago) {
+            elImpago.textContent = fmtMoney(data.total_impago_waitry || 0);
+        }
         actualizarDesgloseAnitaCuadro(data);
         actualizarContextoPorcentaje(data);
     }
@@ -1131,6 +1353,14 @@
                 ? (ctx.porcentajeMaximo + '%')
                 : '—';
         }
+        var inputPct = el('input-porcentaje');
+        if (inputPct && ctx.porcentajeMaximo > 0.0001) {
+            inputPct.setAttribute(
+                'title',
+                'Máximo recodificable para esta jornada: ' + ctx.porcentajeMaximo + '% '
+                + '(Waitry sin facturar QR/MP: ' + fmtMoney(ctx.totalRecodificable) + ').',
+            );
+        }
         if (elObj) {
             elObj.textContent = pct > 0.0001 ? fmtMoney(val.objetivo) : '—';
         }
@@ -1241,7 +1471,7 @@
                     + '<td>' + escapeHtml(fac.factura || '—') + '</td>'
                     + '<td class="text-right waitry-cierre-col-monto">' + fmtMoney(fac.total) + '</td>'
                     + '<td class="text-right">' + (fac.cantidad_comandas || '—') + '</td>'
-                    + '<td class="text-nowrap">' + htmlBotonVerFactura(fac.venta_id) + '</td>';
+                    + '<td class="text-nowrap">' + htmlAccionesFacturaProceso(fac.venta_id) + '</td>';
                 tbodyFac.appendChild(tr);
             });
         }
@@ -1297,6 +1527,19 @@
                 tbodyAsi.appendChild(trVac);
             }
         }
+        var btnImprimirPdfs = el('btn-proceso-imprimir-pdfs-facturas');
+        if (btnImprimirPdfs) {
+            if (tieneFacturas && facturas.some(function (fac) {
+                return !!urlPdfFacturaGastronomia(fac.venta_id);
+            })) {
+                btnImprimirPdfs.classList.remove('d-none');
+                btnImprimirPdfs.dataset.facturasJson = JSON.stringify(facturas);
+            } else {
+                btnImprimirPdfs.classList.add('d-none');
+                delete btnImprimirPdfs.dataset.facturasJson;
+            }
+        }
+
         if (pendientes) {
             if (tieneFacturas && !tieneAsientos) {
                 pendientes.classList.remove('d-none');
@@ -1458,7 +1701,12 @@
         }).then(function (data) {
             if (data && data.ok) {
                 alert(data.mensaje || 'Proceso revertido correctamente.');
-                analizar();
+                analizar({
+                    titulo: 'Actualizando tras revertir el proceso…',
+                    subtitulo: 'Se eliminaron facturas y asientos; se refresca el cuadro.',
+                    mensajes: mensajesProcesoRefrescoTrasOperacion('la reversión'),
+                    iconClass: 'text-warning',
+                });
             }
         }).catch(function (e) {
             alert(e.message);
@@ -1694,6 +1942,7 @@
             fecha_factura: fechaFactura,
         }).then(function (data) {
             if (data && data.ok) {
+                sincronizarJornadaProcesoDesdeRespuesta(data);
                 if (typeof window.jQuery !== 'undefined') {
                     window.jQuery('#modal-emitir-factura-proceso').modal('hide');
                 }
@@ -1701,14 +1950,15 @@
                 if (data.ajuste_insumos && data.ajuste_insumos.movimientostock_id) {
                     msg += '\nAjuste de insumos: movimiento #' + data.ajuste_insumos.movimientostock_id + '.';
                 }
+                msg += '\n\nYa puede usar «Grabar asientos contables». El botón «Emitir facturas» queda deshabilitado (emisión completada).';
+                msg += '\n\nPara imprimir los comprobantes, use «Imprimir PDFs» o la columna Acciones del panel de resultado.';
                 alert(msg);
-                var pdfUrls = data.pdf_urls || (data.pdf_url ? [data.pdf_url] : []);
-                pdfUrls.forEach(function (u) {
-                    if (u) {
-                        window.open(u, '_blank');
-                    }
+                analizar({
+                    titulo: 'Actualizando tras emisión de facturas…',
+                    subtitulo: 'La emisión terminó; se refresca el cuadro y el panel de resultado.',
+                    mensajes: mensajesProcesoRefrescoTrasOperacion('la emisión de facturas'),
+                    iconClass: 'text-success',
                 });
-                analizar();
             }
         }).catch(function (e) {
             alert(e.message);
@@ -1718,6 +1968,7 @@
                 btnConfirmar.disabled = false;
             }
             actualizarBotonEmitirFactura(procesoEstado.jornadaProceso);
+            actualizarBotonGrabarAsientos(procesoEstado.jornadaProceso);
         });
     }
 
@@ -1751,7 +2002,12 @@
         }).then(function (data) {
             if (data && data.ok) {
                 alert(data.mensaje || 'Asientos grabados correctamente.');
-                analizar();
+                analizar({
+                    titulo: 'Actualizando tras grabar asientos…',
+                    subtitulo: 'Los asientos se grabaron; se refresca el estado del proceso.',
+                    mensajes: mensajesProcesoRefrescoTrasOperacion('la grabación de asientos'),
+                    iconClass: 'text-primary',
+                });
             }
         }).catch(function (e) {
             alert(e.message);
@@ -2553,7 +2809,7 @@
         renderRedistribucion(data);
     }
 
-    function analizar() {
+    function analizar(opcionesAviso) {
         var params = empresaYFechaDesdeFormulario();
         if (params.empresa_id <= 0 || !params.fecha_jornada) {
             setError('Seleccione empresa y fecha de jornada y pulse Consultar.');
@@ -2561,7 +2817,7 @@
         }
         setError('');
         setRecalculoOk('');
-        setProcesoLoading(true);
+        setProcesoLoading(true, opcionesAviso);
         var url = (CFG.urlAnalizar || '') + '?empresa_id=' + params.empresa_id
             + '&fecha_jornada=' + encodeURIComponent(params.fecha_jornada);
         apiGet(url).then(function (data) {
@@ -2576,12 +2832,22 @@
     function recalcular() {
         var params = empresaYFechaDesdeFormulario();
         if (params.empresa_id <= 0 || !params.fecha_jornada) {
-            setError('Seleccione empresa y fecha de jornada y pulse Consultar.');
+            setError('Seleccione empresa y fecha de jornada y pulse Consultar.', { scrollAcciones: true });
             return;
         }
         var grillaVisible = el('panel-proceso-grilla') && !el('panel-proceso-grilla').classList.contains('d-none');
         if (!grillaVisible) {
-            setError('Primero pulse «Analizar tramo de jornada (Waitry vs Anita)»; después use Recalcular medios.');
+            setError(
+                'Primero pulse «Analizar tramo de jornada (Waitry vs Anita)»; después use Recalcular medios.',
+                { scrollAcciones: true },
+            );
+            return;
+        }
+        if (!procesoEstado.lastCuadroData) {
+            setError(
+                'No hay datos del cuadro en pantalla. Pulse «Analizar tramo de jornada (Waitry vs Anita)» e intente de nuevo.',
+                { scrollAcciones: true },
+            );
             return;
         }
         setError('');
@@ -2592,7 +2858,7 @@
             pct,
         );
         if (!ctxVal.ok) {
-            setError(ctxVal.mensaje || 'El porcentaje excede lo recodificable.');
+            setError(ctxVal.mensaje || 'El porcentaje excede lo recodificable.', { scrollAcciones: true });
             actualizarContextoPorcentaje(procesoEstado.lastCuadroData || {});
             return;
         }
@@ -2601,6 +2867,7 @@
             btnRecalc.disabled = true;
         }
         mostrarOverlayRecalculando(true, pct);
+        iniciarRotacionRecalculoPaso(mensajesProcesoRecalcular());
         apiPost(CFG.urlRecalcular || '', {
             empresa_id: params.empresa_id,
             fecha_jornada: params.fecha_jornada,
@@ -2616,7 +2883,7 @@
             mostrar('panel-proceso-grilla', true);
             setRecalculoOk(mensajeRecalculoOk(data));
         }).catch(function (e) {
-            setError(e.message);
+            setError(e.message, { scrollAcciones: true });
         }).finally(function () {
             mostrarOverlayRecalculando(false);
             if (btnRecalc) {
@@ -2827,6 +3094,23 @@
         var btnConfirmarRevertir = el('btn-confirmar-revertir-proceso');
         if (btnConfirmarRevertir) {
             btnConfirmarRevertir.addEventListener('click', confirmarRevertirProceso);
+        }
+        var btnImprimirPdfs = el('btn-proceso-imprimir-pdfs-facturas');
+        if (btnImprimirPdfs) {
+            btnImprimirPdfs.addEventListener('click', function () {
+                var raw = btnImprimirPdfs.dataset.facturasJson || '';
+                if (!raw) {
+                    var jp = procesoEstado.jornadaProceso;
+                    var rg = jp && jp.resultado_grabado ? jp.resultado_grabado : null;
+                    abrirPdfsFacturasProceso(rg ? rg.facturas : []);
+                    return;
+                }
+                try {
+                    abrirPdfsFacturasProceso(JSON.parse(raw));
+                } catch (e) {
+                    abrirPdfsFacturasProceso([]);
+                }
+            });
         }
         var btnPreviewComandas = el('btn-preview-abrir-comandas');
         if (btnPreviewComandas) {

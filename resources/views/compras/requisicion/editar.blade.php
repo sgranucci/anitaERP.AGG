@@ -12,11 +12,13 @@ Requisiciones
 <script src="{{asset("assets/pages/scripts/compras/requisicion/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/requisicion/consulta-listasprecio.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/requisicion/presupuestos.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/compras/requisicion/enviar-arbol.js")}}" type="text/javascript"></script>
 @include('compras.requisicion.partials.comprobantes_asociados_script')
 @endsection
 
 @section('contenido')
 @include('compras.requisicion.partials.comprobantes_asociados_modal')
+@include('compras.requisicion.partials.modal_firmante_retome_arbol')
 <div class="row" id="editar">
     <div class="col-lg-12">
         @include('includes.form-error')
@@ -47,12 +49,14 @@ Requisiciones
                     @endif
                     @if(empty($visualizar))
                         @if (can('editar-requisicion', false) && ($data->estado ?? '') === ($estado_en_compras ?? 'EN COMPRAS'))
-                        <form action="{{ route('enviar_arbol_requisicion', ['id' => $data->id]) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Enviar esta requisición al árbol de aprobación para continuar el circuito?');">
-                            @csrf
-                            <button type="submit" class="btn btn-success btn-sm ml-1">
-                                <i class="fa fa-sitemap"></i> Envía al árbol de aprobación
-                            </button>
-                        </form>
+                        <button type="button"
+                                class="btn btn-success btn-sm ml-1 js-enviar-arbol-requisicion"
+                                data-requisicion-id="{{ $data->id }}"
+                                data-preview-url="{{ route('firmantes_retome_arbol_requisicion', ['id' => $data->id]) }}"
+                                data-post-url="{{ route('enviar_arbol_requisicion', ['id' => $data->id]) }}"
+                                data-redirect-url="{{ route('editar_requisicion', ['id' => $data->id]) }}">
+                            <i class="fa fa-sitemap"></i> Envía al árbol de aprobación
+                        </button>
                         @endif
                     @endif
                 </div>

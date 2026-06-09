@@ -258,6 +258,45 @@ return [
     'ticket_tarjeta_anita_sistema' => env('GASTRONOMIA_TICKET_TARJETA_ANITA_SISTEMA', 'base_admin'),
 
     /**
+     * Bridge Anita por empresa para canje CTG (tickettarj). Clave = empresa_id.
+     * Biyemas (1) usa ANITA_IP + IFX_SERVER global; Kandiko/Rebisco host e IFX propios.
+     * Sistema tickettarj: GASTRONOMIA_TICKET_TARJETA_ANITA_SISTEMA (base_admin) para las 3 empresas.
+     * Override: env JSON GASTRONOMIA_TICKET_TARJETA_ANITA_POR_EMPRESA.
+     *
+     * @var array<int, array<string, string>>
+     */
+    'ticket_tarjeta_anita_por_empresa' => (static function (): array {
+        $raw = env('GASTRONOMIA_TICKET_TARJETA_ANITA_POR_EMPRESA');
+        if (is_string($raw) && $raw !== '') {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded)) {
+                $map = [];
+                foreach ($decoded as $empresaId => $cfg) {
+                    if (is_array($cfg) && $cfg !== []) {
+                        $map[(int) $empresaId] = $cfg;
+                    }
+                }
+                if ($map !== []) {
+                    return $map;
+                }
+            }
+        }
+
+        return [
+            2 => [
+                'servidor' => '192.168.20.100:8080',
+                'path_sistema' => '/usr2/biyemas',
+                'ifx_server' => 'kancadmin',
+            ],
+            3 => [
+                'servidor' => '192.168.40.100:8080',
+                'path_sistema' => '/usr2/biyemas',
+                'ifx_server' => 'rencadmin',
+            ],
+        ];
+    })(),
+
+    /**
      * Al cerrar jornada gastronomía: registrar rango de órdenes Waitry del tótem (waitry_order_id)
      * vía getordersdetails + PDF. Requiere WAITRY_HABILITADO. Siguiente cierre: id &gt; último hasta guardado.
      */
@@ -301,10 +340,10 @@ return [
     'cierre_jornada_cuenta_diferencia_caja_id' => env('GASTRONOMIA_CIERRE_JORNADA_CUENTA_DIFERENCIA_CAJA_ID'),
 
     /**
-     * Límite de memoria PHP para APIs del proceso de cierre Waitry (analizar, recalcular, detalle).
-     * El snapshot con miles de órdenes supera 128M al decodificar JSON.
+     * Límite de memoria PHP para cierre Waitry (Informe Z jornada, analizar tramo, recalcular %, detalle).
+     * Jornadas con alto volumen de órdenes/emisiones pueden superar 512M.
      */
-    'cierre_jornada_proceso_memory_limit' => env('GASTRONOMIA_CIERRE_JORNADA_PROCESO_MEMORY_LIMIT', '256M'),
+    'cierre_jornada_proceso_memory_limit' => env('GASTRONOMIA_CIERRE_JORNADA_PROCESO_MEMORY_LIMIT', '1024M'),
 
     /**
      * Tipo transacción stock (tipotransaccion_stock.id) para ajuste por consumo de insumos

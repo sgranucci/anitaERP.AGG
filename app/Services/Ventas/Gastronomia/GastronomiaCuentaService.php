@@ -9,6 +9,7 @@ use App\Models\Ventas\CuentaGastronomiaLinea;
 use App\Models\Ventas\MesaGastronomia;
 use App\Models\Ventas\MozoGastronomia;
 use App\Support\Stock\FormulaArticuloGastronomia;
+use App\Support\Ventas\GastronomiaArticuloImpuestoValidacion;
 use App\Support\Ventas\GastronomiaFormulaOpcionalSeleccion;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
 use App\Support\Ventas\GastronomiaSkuCatalogoSupport;
@@ -339,6 +340,11 @@ class GastronomiaCuentaService
 
     public function enriquecerCuentaParaApi(CuentaGastronomia $cuenta): CuentaGastronomia
     {
+        $cuenta->loadMissing('lineas.articulo');
+        if ($cuenta->lineas->isNotEmpty()) {
+            GastronomiaArticuloImpuestoValidacion::validarCuentaConLineas($cuenta);
+        }
+
         $receptor = app(GastronomiaReceptorFacturacionService::class);
         $preview = app(GastronomiaFacturaEmisionService::class)->previewTotalesParaCuenta($cuenta);
         $extras = [
@@ -435,12 +441,15 @@ class GastronomiaCuentaService
                     ];
                 } else {
                     $sub = $formulasHijasOpcionales[$decoded['id']] ?? null;
-                    $art = $sub?->articulos;
+                    $etiqueta = \App\Support\Stock\FormulaArticuloSubformulaPosSupport::etiquetaOpcional(
+                        $sub,
+                        $decoded['id'],
+                    );
                     $detalle[] = [
                         'orden' => (string) $orden,
                         'formula_hija_id' => $decoded['id'],
-                        'sku' => $art->sku ?? ('F#'.$decoded['id']),
-                        'descripcion' => $art->descripcion ?? 'Subfórmula',
+                        'sku' => $etiqueta['sku'],
+                        'descripcion' => $etiqueta['descripcion'],
                     ];
                 }
             }
@@ -560,7 +569,13 @@ class GastronomiaCuentaService
         $opcionalesPorOrden = GastronomiaFormulaOpcionalSeleccion::normalizarMapaDesdeRequest($opcionalesPorOrden);
 
         $articulo = Articulo::query()->find($articuloId);
-        if ($articulo && FormulaArticuloGastronomia::opcionalesHabilitados()) {
+        if (! $articulo) {
+            throw new InvalidArgumentException('Artículo inexistente.');
+        }
+
+        GastronomiaArticuloImpuestoValidacion::validarCuentaConLineas($cuenta, $articulo);
+
+        if (FormulaArticuloGastronomia::opcionalesHabilitados()) {
             $grupos = $this->opcionalesService->gruposOpcionalesPorArticulo($articulo);
             if ($grupos !== []) {
                 $this->opcionalesService->validarSeleccionOpcionales($articulo, $opcionalesPorOrden);
@@ -640,6 +655,24 @@ class GastronomiaCuentaService
         }
 
         $linea->update(['cantidad' => $cantidad]);
+
+        return $this->cuentaConLineas($cuenta->id);
+    }
+
+    public function actualizarComentarioCocinaLinea(CuentaGastronomiaLinea $linea, ?string $comentario): CuentaGastronomia
+    {
+        $cuenta = $linea->cuenta;
+        if ($cuenta->estado !== CuentaGastronomia::ESTADO_ABIERTA) {
+            throw new InvalidArgumentException('La cuenta no está abierta.');
+        }
+
+        if (! $this->puedeEditarLineas($cuenta)) {
+            throw new InvalidArgumentException('No puede modificar consumos de esta cuenta en esta PC.');
+        }
+
+        $linea->update([
+            'comentario_cocina' => \App\Support\Ventas\GastronomiaComentarioCocinaSupport::normalizar($comentario),
+        ]);
 
         return $this->cuentaConLineas($cuenta->id);
     }

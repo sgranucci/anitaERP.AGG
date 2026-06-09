@@ -1180,6 +1180,28 @@
     </div>
 </div>
 
+<!-- Modal comentario cocina (KDS Waitry) -->
+<div class="modal fade" id="modal-comentario-cocina" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title">Comentario para cocina</h6>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body py-2">
+                <p class="small text-muted mb-2" id="modal-comentario-cocina-articulo"></p>
+                <label class="small mb-1" for="fld-comentario-cocina">Indicaciones para la comanda (KDS)</label>
+                <textarea class="form-control form-control-sm" id="fld-comentario-cocina" rows="3" maxlength="255" placeholder="Ej. sin cebolla, bien cocido…"></textarea>
+                <small class="form-text text-muted">Se envía a Waitry en el ítem al facturar.</small>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-sm btn-primary" id="modal-comentario-cocina-guardar">Guardar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @if ($requiere_habilitacion_turno ?? true)
     @include('ventas.gastronomia.proceso_facturacion.partials.modales_turno_operativo')
 @endif

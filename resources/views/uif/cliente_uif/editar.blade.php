@@ -43,14 +43,6 @@
                     &nbsp;ID:&nbsp;{{$data->id }}&nbsp;{{$data->nombre}}
                 @endif
                 <div class="card-tools">
-                    @if (can('crear-cliente-premio-uif', false) && ! esSoloVisualizacionClienteUif())
-                    <a id="barra-alta-premio-uif-cliente"
-                       href="{{ route('crea_cliente_premio_uif', ['id' => $data->id]) }}?return_cliente_tab=3{{ !empty($ocultarVolver) ? '&origen=modal_consulta&vista=consulta' : '' }}"
-                       class="btn btn-outline-secondary btn-sm"
-                       style="{{ !empty($soloSolapaPremios) ? '' : 'display: none;' }}">
-                        <i class="fa fa-fw fa-plus-circle"></i> Nuevo premio
-                    </a>
-                    @endif
                     @if (empty($soloSolapaPremios))
 					<button type="button" id="botonestado" class="btn btn-info btn-sm">
                         <i class="fa fa-bell"></i> Estado {{ $data->descripcionestado }}

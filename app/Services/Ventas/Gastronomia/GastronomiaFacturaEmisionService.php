@@ -8,6 +8,7 @@ use App\Models\Ventas\CuentaGastronomia;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\Tipotransaccion;
+use App\Support\Ventas\GastronomiaComentarioCocinaSupport;
 use App\Support\Ventas\GastronomiaEmisionProfiler;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
@@ -583,6 +584,11 @@ final class GastronomiaFacturaEmisionService
                 (string) ($payload['fechajornada'] ?? $payload['fechafactura']),
             );
             $profiler?->marcar('tx_ingredientes_fin');
+
+            GastronomiaComentarioCocinaSupport::persistirDesdeCuenta(
+                $venta->fresh(['venta_emisiones']),
+                $cuenta->fresh(['lineas']),
+            );
 
             // 4) CAE/CAEA en ARCA (obligatorio antes del commit; si falla, rollback de factura y cobranza).
             $vencaePendiente = null;

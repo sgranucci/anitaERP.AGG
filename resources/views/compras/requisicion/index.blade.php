@@ -7,6 +7,7 @@ Requisiciones
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/filtro.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/requisicion/enviar-arbol.js') }}" type="text/javascript"></script>
 @include('compras.requisicion.partials.comprobantes_asociados_script')
 @endsection
 
@@ -14,6 +15,7 @@ Requisiciones
 
 @section('contenido')
 @include('compras.requisicion.partials.comprobantes_asociados_modal')
+@include('compras.requisicion.partials.modal_firmante_retome_arbol')
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
@@ -86,12 +88,15 @@ Requisiciones
                                     <i class="fas fa-edit"></i>
                                 </a>
                                 @if (($data->estado ?? '') === ($estado_en_compras ?? 'EN COMPRAS'))
-                                <form action="{{ route('enviar_arbol_requisicion', ['id' => $data->id]) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Enviar esta requisición al árbol de aprobación para continuar el circuito?');">
-                                    @csrf
-                                    <button type="submit" class="btn-accion-tabla tooltipsC text-success" title="Envía al árbol de aprobación">
-                                        <i class="fas fa-sitemap"></i>
-                                    </button>
-                                </form>
+                                <button type="button"
+                                        class="btn-accion-tabla tooltipsC text-success js-enviar-arbol-requisicion"
+                                        title="Envía al árbol de aprobación"
+                                        data-requisicion-id="{{ $data->id }}"
+                                        data-preview-url="{{ route('firmantes_retome_arbol_requisicion', ['id' => $data->id]) }}"
+                                        data-post-url="{{ route('enviar_arbol_requisicion', ['id' => $data->id]) }}"
+                                        data-redirect-url="{{ route('consultar_requisicion') }}">
+                                    <i class="fas fa-sitemap"></i>
+                                </button>
                                 @endif
                                 @endif
                                 @if (can('listar-requisicion', false) || can('editar-requisicion', false))

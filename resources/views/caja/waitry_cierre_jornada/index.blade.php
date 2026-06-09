@@ -23,7 +23,8 @@
         urlMovimientosBase: @json($url_movimientos_proceso_base ?? ''),
         urlCuadroDetalleBase: @json(url('caja/waitry-cierre-jornada/api/proceso/cuadro-detalle/__FILA__/__MEDIO__')),
         urlFacturaVerBase: @json(can('ver-factura-gastronomia', false) ? url('ventas/gastronomia/facturas-dia') : null),
-        urlAsientoVerBase: @json(can('editar-asiento', false) ? url('contable/asiento') : null),
+        urlFacturaPdfBase: @json(url('ventas/listaunafactura')),
+        urlAsientoVerBase: @json((can('listar-asiento', false) || can('editar-asiento', false)) ? url('contable/asiento') : null),
         urlMovimientoStockVerBase: @json(can('editar-movimientos-de-stock', false) ? url('stock/movimientostock') : null),
         urlConfigBase: @json(url('caja/waitry-cierre-jornada/api/proceso/config/__EMPRESA_ID__')),
         urlConfigGuardarBase: @json(url('caja/waitry-cierre-jornada/api/proceso/config/__EMPRESA_ID__')),
@@ -76,25 +77,6 @@
                         $metaConciliacion = $payload['meta_conciliacion'] ?? [];
                     @endphp
 
-                    @if (! empty($metaConciliacion))
-                        <div class="alert alert-secondary py-2 mb-3">
-                            <p class="mb-1 small">
-                                <strong>Consulta Waitry:</strong>
-                                {{ $metaConciliacion['waitry_rango_etiqueta'] ?? '' }}
-                            </p>
-                            <p class="mb-1 small">
-                                <strong>Cruce Anita:</strong>
-                                {{ $metaConciliacion['anita_criterio'] ?? '' }}
-                            </p>
-                            @if (! empty($metaConciliacion['ventana_jornada_etiqueta']))
-                                <p class="mb-0 small">
-                                    <strong>Jornada gastronomía (apertura — cierre):</strong>
-                                    {{ $metaConciliacion['ventana_jornada_etiqueta'] }}
-                                </p>
-                            @endif
-                        </div>
-                    @endif
-
                     @if (! empty($payload['jornada']))
                         <div class="alert alert-info py-2">
                             Jornada Anita #{{ $payload['jornada']['id'] }}
@@ -118,7 +100,46 @@
                         $circuitoImportadaImpaga = $circuitosConciliacion[\App\Support\Ventas\Waitry\WaitryConciliacionCircuitoSupport::CIRCUITO_IMPORTADA_IMPAGA_WAITRY] ?? [];
                         $circuitoTotemImpaga = $circuitosConciliacion[\App\Support\Ventas\Waitry\WaitryConciliacionCircuitoSupport::CIRCUITO_TOTEM_IMPORTADA_IMPAGA_COBRADA_ANITA] ?? [];
                         $circuitoAnita = $circuitosConciliacion[\App\Support\Ventas\Waitry\WaitryConciliacionCircuitoSupport::CIRCUITO_ANITA_FACTURA_WAITRY] ?? [];
+                        $auditoriaOrdenesWaitry = (int) ($resumen['ordenes_waitry'] ?? 0);
+                        $auditoriaDifGlobal = (float) ($resumen['diferencia_global'] ?? 0);
                     @endphp
+                    <div class="card border-primary mb-3" id="waitry-panel-auditoria-conciliacion">
+                        <div class="card-header py-2 d-flex flex-wrap align-items-center justify-content-between bg-light">
+                            <button type="button"
+                                    class="btn btn-link btn-sm text-left p-0 collapsed font-weight-bold"
+                                    id="btn-waitry-auditoria-conciliacion-toggle"
+                                    data-toggle="collapse"
+                                    data-target="#waitry-auditoria-conciliacion-collapse"
+                                    aria-expanded="false"
+                                    aria-controls="waitry-auditoria-conciliacion-collapse">
+                                <i class="fa fa-balance-scale text-primary"></i>
+                                Auditoría Waitry vs Anita
+                            </button>
+                            <span class="small text-muted ml-md-2">
+                                {{ $auditoriaOrdenesWaitry }} orden(es) Waitry
+                                · Dif. global ${{ number_format($auditoriaDifGlobal, 2, ',', '.') }}
+                            </span>
+                        </div>
+                        <div class="collapse" id="waitry-auditoria-conciliacion-collapse">
+                            <div class="card-body py-2">
+                    @if (! empty($metaConciliacion))
+                        <div class="alert alert-secondary py-2 mb-3">
+                            <p class="mb-1 small">
+                                <strong>Consulta Waitry:</strong>
+                                {{ $metaConciliacion['waitry_rango_etiqueta'] ?? '' }}
+                            </p>
+                            <p class="mb-1 small">
+                                <strong>Cruce Anita:</strong>
+                                {{ $metaConciliacion['anita_criterio'] ?? '' }}
+                            </p>
+                            @if (! empty($metaConciliacion['ventana_jornada_etiqueta']))
+                                <p class="mb-0 small">
+                                    <strong>Jornada gastronomía (apertura — cierre):</strong>
+                                    {{ $metaConciliacion['ventana_jornada_etiqueta'] }}
+                                </p>
+                            @endif
+                        </div>
+                    @endif
                     <style>
                         .waitry-circuito-box { cursor: pointer; user-select: none; transition: box-shadow 0.15s ease; }
                         .waitry-circuito-box.filtro-activo { box-shadow: 0 0 0 3px #343a40; }
@@ -612,6 +633,9 @@
                                 @endforelse
                             </tbody>
                         </table>
+                    </div>
+                            </div>
+                        </div>
                     </div>
                 @elseif ($consultado && ! $error)
                     <div class="alert alert-info">No hay datos para mostrar.</div>

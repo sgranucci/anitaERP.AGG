@@ -7,7 +7,7 @@ Menú - Rol
 <script src="{{asset("assets/pages/scripts/admin/menu-rol/index.js")}}" type="text/javascript"></script>
 <script src="https://unpkg.com/sticky-table-headers"></script>
 <script>
-    $('#tabla-data').stickyTableHeaders();
+    $('#tabla-menu-rol-data').stickyTableHeaders();
 </script>
 @endsection
 
@@ -23,8 +23,8 @@ Menú - Rol
         <div class="card card-success">
             <div class="card-header">
                 <h3 class="card-title">Menús y permisos por rol</h3>
-                <div class="d-md-flex justify-content-md-end">
-					<form action="{{ route('menu_rol') }}" method="GET">
+                <div class="d-md-flex justify-content-md-end flex-wrap">
+					<form action="{{ route('menu_rol') }}" method="GET" class="mr-2 mb-2">
 						<div class="btn-group">
 							<input type="text" name="centrocosto" class="form-control" placeholder="Filtra C.Costo (código o nombre)…" value="{{ old('centrocosto', request('centrocosto')) }}">
 							<button type="submit" class="btn btn-default">
@@ -32,6 +32,9 @@ Menú - Rol
 							</button>
 						</div>
 					</form>
+                    <div class="btn-group mb-2">
+                        <input type="text" id="filtro-nombre-menu" class="form-control" placeholder="Buscar menú (ej. estacionamiento)…" autocomplete="off">
+                    </div>
                 </div>
             </div>
             <div class="card-body pb-0">
@@ -42,7 +45,7 @@ Menú - Rol
             </div>
             <div class="card-body table-responsive p-0">
                 @csrf
-                <table class="table table-striped table-bordered table-hover tabla-menu-rol" id="tabla-data">
+                <table class="table table-striped table-bordered table-hover tabla-menu-rol" id="tabla-menu-rol-data">
                     <thead>
                         <tr>
                             <th>Menú</th>

@@ -165,7 +165,7 @@ class TblaprobArbolAprobacionRequisicionesSeeder extends Seeder
                 'desdemonto' => $fila['desde'],
                 'hastamonto' => $fila['hasta'],
                 'moneda_id' => $monedaPesos,
-                'documento_estado_al_aprobar' => null,
+                'documento_estado_al_aprobar' => 'APROBADA',
             ]);
             $insertados++;
         }

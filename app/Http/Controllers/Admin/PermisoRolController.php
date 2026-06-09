@@ -44,15 +44,20 @@ class PermisoRolController extends Controller
             }
         }
         else
-            $rols = Rol::orderBy('id')->pluck('nombre', 'id')->toArray();   
-        
+            $rols = Rol::orderBy('id')->pluck('nombre', 'id')->toArray();
+
         if (isset($request->permiso))
         {
             $permiso = $request->permiso;
-            $permisos = Permiso::where('nombre', 'LIKE', '%'.$permiso.'%')->get();
+            $permisos = Permiso::where(function ($q) use ($permiso) {
+                $q->where('nombre', 'LIKE', '%'.$permiso.'%')
+                    ->orWhere('slug', 'LIKE', '%'.$permiso.'%');
+            })
+                ->orderBy('nombre')
+                ->get();
         }
-        else           
-            $permisos = Permiso::get();
+        else
+            $permisos = Permiso::orderBy('nombre')->get();
 
         $permisosRols = Permiso::with('roles')->get()->pluck('roles', 'id')->toArray();
 

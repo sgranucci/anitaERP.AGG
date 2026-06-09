@@ -14,7 +14,7 @@ class CuentaGastronomiaLinea extends Model implements Auditable
 
     protected $fillable = [
         'cuenta_gastronomia_id', 'articulo_id', 'cantidad', 'precio_unitario',
-        'descuento_linea_pct', 'opcionales_json', 'numero_linea',
+        'descuento_linea_pct', 'opcionales_json', 'numero_linea', 'comentario_cocina',
     ];
 
     protected $casts = [

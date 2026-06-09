@@ -22,6 +22,7 @@ use App\Services\Ventas\Gastronomia\GastronomiaCategoriafidelidadCanjeService;
 use App\Services\Ventas\Gastronomia\GastronomiaTicketCanjePremioService;
 use App\Services\Ventas\Gastronomia\GastronomiaPreflightEmisionService;
 use App\Services\Ventas\Gastronomia\GastronomiaEmisionDiagnosticoService;
+use App\Services\Ventas\Gastronomia\GastronomiaTicketDiagnosticoService;
 use App\Services\Ventas\Gastronomia\GastronomiaFormulaOpcionalesService;
 use App\Services\Ventas\Gastronomia\GastronomiaTurnoOperativoService;
 use App\Services\Ventas\Gastronomia\Waitry\WaitryOrdenesExternasService;
@@ -54,6 +55,7 @@ class GastronomiaProcesoFacturacionController extends Controller
         private readonly GastronomiaTicketCanjePremioService $ticketCanjePremioService,
         private readonly GastronomiaCategoriafidelidadCanjeService $categoriafidelidadCanjeService,
         private readonly GastronomiaEmisionDiagnosticoService $emisionDiagnosticoService,
+        private readonly GastronomiaTicketDiagnosticoService $ticketDiagnosticoService,
     ) {}
 
     public function apiDiagnosticoEmision(Request $request)
@@ -78,6 +80,36 @@ class GastronomiaProcesoFacturacionController extends Controller
             'interpretacion' => [
                 'cuello_botella_probable' => $this->interpretarCuelloBotella($medicion),
             ],
+        ]);
+    }
+
+    public function apiDiagnosticoTicket(Request $request)
+    {
+        can('usar-proceso-facturacion-gastronomia');
+
+        $cfg = $this->requireCfgPv($request);
+        if ($cfg instanceof \Illuminate\Http\JsonResponse) {
+            return $cfg;
+        }
+
+        $opciones = ['cfg_id' => (int) $cfg->id];
+        if ($request->filled('venta_id')) {
+            $opciones['venta_id'] = (int) $request->get('venta_id');
+        }
+        if ($request->boolean('imprimir')) {
+            $opciones['imprimir'] = true;
+        }
+
+        try {
+            $medicion = $this->ticketDiagnosticoService->medir($opciones);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'ok' => empty($medicion['errores'] ?? []),
+            'identificador_pc' => GastronomiaIdentificadorPc::resolver($request),
+            'medicion' => $medicion,
         ]);
     }
 
@@ -489,7 +521,11 @@ class GastronomiaProcesoFacturacionController extends Controller
     {
         can('usar-proceso-facturacion-gastronomia');
 
-        $cuenta = $this->cuentaService->cuentaConLineas((int) $id);
+        try {
+            $cuenta = $this->cuentaService->cuentaConLineas((int) $id);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
 
         return response()->json(['cuenta' => $cuenta]);
     }
@@ -634,13 +670,16 @@ class GastronomiaProcesoFacturacionController extends Controller
                 $opcionales,
                 (float) ($request->get('descuento_linea_pct') ?? 0.)
             );
+            $cuentaActualizada = $this->cuentaService->cuentaConLineas($cuenta->id);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
         } catch (\Throwable $e) {
             return response()->json(['error' => $e->getMessage()], 422);
         }
 
         return response()->json([
             'linea' => $linea->load('articulo'),
-            'cuenta' => $this->cuentaService->cuentaConLineas($cuenta->id),
+            'cuenta' => $cuentaActualizada,
         ]);
     }
 
@@ -753,7 +792,8 @@ class GastronomiaProcesoFacturacionController extends Controller
         can('usar-proceso-facturacion-gastronomia');
 
         $request->validate([
-            'cantidad' => 'required|numeric|min:0.0001',
+            'cantidad' => 'sometimes|required|numeric|min:0.0001',
+            'comentario_cocina' => 'sometimes|nullable|string|max:255',
         ]);
 
         $linea = CuentaGastronomiaLinea::query()
@@ -762,7 +802,16 @@ class GastronomiaProcesoFacturacionController extends Controller
             ->firstOrFail();
 
         try {
-            $cuenta = $this->cuentaService->actualizarCantidadLinea($linea, (float) $request->get('cantidad'));
+            if ($request->has('comentario_cocina')) {
+                $cuenta = $this->cuentaService->actualizarComentarioCocinaLinea(
+                    $linea,
+                    $request->input('comentario_cocina'),
+                );
+            } elseif ($request->has('cantidad')) {
+                $cuenta = $this->cuentaService->actualizarCantidadLinea($linea, (float) $request->get('cantidad'));
+            } else {
+                return response()->json(['error' => 'Indique cantidad o comentario de cocina.'], 422);
+            }
         } catch (\Throwable $e) {
             return response()->json(['error' => $e->getMessage()], 422);
         }

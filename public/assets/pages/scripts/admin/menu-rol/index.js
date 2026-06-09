@@ -83,6 +83,14 @@
         return html;
     }
 
+    $('#filtro-nombre-menu').on('input', function () {
+        var q = String($(this).val() || '').toLowerCase().trim();
+        $('#tabla-menu-rol-data tbody tr').each(function () {
+            var texto = $(this).find('td:first').text().toLowerCase();
+            $(this).toggle(q === '' || texto.indexOf(q) !== -1);
+        });
+    });
+
     $('.btn-permisos-menu').on('click', function () {
         var menuId = $(this).data('menu-id');
         var menuNombre = $(this).data('menu-nombre');

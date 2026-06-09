@@ -2,9 +2,10 @@
 
 namespace App\Console\Commands;
 
-use App\Support\Wigos\WigosSqlServerOpenSsl;
 use App\Services\Ventas\Gastronomia\WigosAccountInfoService;
 use App\Services\Ventas\Gastronomia\WigosCanjePremioService;
+use App\Support\Wigos\WigosConfigResolver;
+use App\Support\Wigos\WigosSqlServerOpenSsl;
 use App\Support\Wigos\WigosSqlServerProcess;
 use Illuminate\Console\Command;
 use PDO;
@@ -20,6 +21,7 @@ use Throwable;
 class WigosProbarConexion extends Command
 {
     protected $signature = 'wigos:probar-conexion
+                            {--empresa=0 : empresa_id Anita (p. ej. 2 = Kandiko Wilde)}
                             {--cupon= : Cupón real para invocar spVoucherGiftData (opcional)}
                             {--trackdata= : Trackdata de tarjeta para probar AccountInfoJSON (opcional)}';
 
@@ -27,16 +29,21 @@ class WigosProbarConexion extends Command
 
     public function handle(): int
     {
-        $this->probarSqlServer();
-        $this->probarAccountInfo();
+        $empresaId = max(0, (int) $this->option('empresa'));
+
+        $this->probarSqlServer($empresaId);
+        $this->probarAccountInfo($empresaId);
 
         return self::SUCCESS;
     }
 
-    private function probarSqlServer(): void
+    private function probarSqlServer(int $empresaId): void
     {
         $this->line('');
         $this->line('=== SQL Server (canje premio Wigos) ===');
+        if ($empresaId > 0) {
+            $this->info('Empresa Anita: '.$empresaId);
+        }
 
         if (! config('wigos.habilitado', false)) {
             $this->warn('WIGOS_HABILITADO=false — integración deshabilitada.');
@@ -51,14 +58,11 @@ class WigosProbarConexion extends Command
         $opensslConf = WigosSqlServerOpenSsl::rutaConfiguracion();
         $this->info('OpenSSL Wigos (subproceso): '.($opensslConf ?? 'no configurado'));
 
-        $primario = strtoupper(trim((string) config('wigos.curr_wigos', 'A')));
-        if (! in_array($primario, ['A', 'B'], true)) {
-            $primario = 'A';
-        }
+        $primario = WigosConfigResolver::currWigos($empresaId);
         $secundario = $primario === 'A' ? 'B' : 'A';
 
         foreach ([$primario, $secundario] as $alias) {
-            $this->probarConexionAlias($alias);
+            $this->probarConexionAlias($alias, $empresaId);
         }
 
         $cupon = trim((string) $this->option('cupon'));
@@ -67,7 +71,7 @@ class WigosProbarConexion extends Command
             $this->info('Invocando spVoucherGiftData con cupón '.$cupon.' …');
 
             try {
-                $filas = app(WigosCanjePremioService::class)->consultarPorCodigoBarras($cupon);
+                $filas = app(WigosCanjePremioService::class)->consultarPorCodigoBarras($cupon, $empresaId);
                 $this->info('Filas: '.count($filas).' | STATUS: '.($filas[0]->STATUS ?? '?'));
                 foreach ($filas as $f) {
                     $this->line(' - GIFT_ID='.($f->GIFT_ID ?? '').
@@ -81,9 +85,9 @@ class WigosProbarConexion extends Command
         }
     }
 
-    private function probarConexionAlias(string $alias): void
+    private function probarConexionAlias(string $alias, int $empresaId): void
     {
-        $cfg = (array) config('wigos.connections.'.$alias, []);
+        $cfg = WigosConfigResolver::conexion($alias, $empresaId);
         $host = trim((string) ($cfg['host'] ?? ''));
         if ($host === '') {
             $this->warn("[$alias] sin host configurado — se omite.");
@@ -95,7 +99,7 @@ class WigosProbarConexion extends Command
         $this->info("[$alias] probando ".$endpoint.' / '.($cfg['database'] ?? ''));
 
         try {
-            $res = WigosSqlServerProcess::consultarVersion($alias);
+            $res = WigosSqlServerProcess::consultarVersion($alias, $empresaId);
             $linea = trim(preg_split('/[\r\n]/', $res['version'])[0] ?? '');
             $this->info("[$alias] OK — ".$linea);
         } catch (RuntimeException $e) {
@@ -103,10 +107,13 @@ class WigosProbarConexion extends Command
         }
     }
 
-    private function probarAccountInfo(): void
+    private function probarAccountInfo(int $empresaId): void
     {
         $this->line('');
         $this->line('=== HTTP AccountInfoJSON (canje fidelidad) ===');
+        if ($empresaId > 0) {
+            $this->info('Empresa Anita: '.$empresaId);
+        }
 
         if (! config('wigos.account_info_habilitado', false)) {
             $this->warn('WIGOS_ACCOUNT_INFO_HABILITADO=false — consulta de tarjeta deshabilitada.');
@@ -114,7 +121,8 @@ class WigosProbarConexion extends Command
             return;
         }
 
-        $this->info('URL: '.config('wigos.account_info_url'));
+        $urls = WigosConfigResolver::accountInfoUrls($empresaId);
+        $this->info('URLs: '.($urls !== [] ? implode(' → ', $urls) : '(sin configurar)'));
         $this->info('Timeout: '.config('wigos.account_info_timeout').'s');
 
         $trackdata = trim((string) $this->option('trackdata'));
@@ -125,7 +133,7 @@ class WigosProbarConexion extends Command
         }
 
         try {
-            $res = app(WigosAccountInfoService::class)->consultarPorTrackdata($trackdata);
+            $res = app(WigosAccountInfoService::class)->consultarPorTrackdata($trackdata, $empresaId);
             $this->info('AccountInfo OK — account='.$res['account_number'].
                 ' doc='.$res['documento'].
                 ' '.$res['apellido'].' '.$res['nombre'].

@@ -2,6 +2,7 @@
 
 namespace App\Services\Ventas\Gastronomia;
 
+use App\Support\Wigos\WigosConfigResolver;
 use App\Support\Wigos\WigosSqlServerProcess;
 use InvalidArgumentException;
 use PDOException;
@@ -27,7 +28,7 @@ final class WigosCanjePremioService
      *   STATUS:string
      * }>
      */
-    public function consultarPorCodigoBarras(string $numerocupon): array
+    public function consultarPorCodigoBarras(string $numerocupon, int $empresaId = 0): array
     {
         if (! config('wigos.habilitado', false)) {
             throw new RuntimeException(
@@ -40,24 +41,21 @@ final class WigosCanjePremioService
             throw new InvalidArgumentException('Debe indicar el número de cupón.');
         }
 
-        $primario = strtoupper(trim((string) config('wigos.curr_wigos', 'A')));
-        if (! in_array($primario, ['A', 'B'], true)) {
-            $primario = 'A';
-        }
+        $primario = WigosConfigResolver::currWigos($empresaId);
         $secundario = $primario === 'A' ? 'B' : 'A';
 
         $errores = [];
 
         try {
-            $filas = $this->ejecutarSp($primario, $codigo);
+            $filas = $this->ejecutarSp($primario, $codigo, $empresaId);
         } catch (RuntimeException $e) {
             $errores[$primario] = $e->getMessage();
             $filas = null;
         }
 
-        if ($filas === null && $this->conexionConfigurada($secundario)) {
+        if ($filas === null && $this->conexionConfigurada($secundario, $empresaId)) {
             try {
-                $filas = $this->ejecutarSp($secundario, $codigo);
+                $filas = $this->ejecutarSp($secundario, $codigo, $empresaId);
             } catch (RuntimeException $e) {
                 $errores[$secundario] = $e->getMessage();
                 $filas = null;
@@ -95,14 +93,14 @@ final class WigosCanjePremioService
     /**
      * @return list<object>
      */
-    private function ejecutarSp(string $alias, string $codigo): array
+    private function ejecutarSp(string $alias, string $codigo, int $empresaId = 0): array
     {
-        if (! $this->conexionConfigurada($alias)) {
+        if (! $this->conexionConfigurada($alias, $empresaId)) {
             throw new RuntimeException('Wigos '.$alias.': conexión no configurada (host vacío).');
         }
 
         try {
-            return WigosSqlServerProcess::ejecutarSpVoucherGiftData($alias, $codigo);
+            return WigosSqlServerProcess::ejecutarSpVoucherGiftData($alias, $codigo, $empresaId);
         } catch (RuntimeException $e) {
             throw new RuntimeException(
                 $this->normalizarMensajeError($alias, $e),
@@ -148,11 +146,8 @@ final class WigosCanjePremioService
         return 'Wigos '.$alias.': '.$msg;
     }
 
-    private function conexionConfigurada(string $alias): bool
+    private function conexionConfigurada(string $alias, int $empresaId = 0): bool
     {
-        $cfg = (array) config('wigos.connections.'.$alias, []);
-        $host = trim((string) ($cfg['host'] ?? ''));
-
-        return $host !== '';
+        return WigosConfigResolver::conexionConfigurada($alias, $empresaId);
     }
 }

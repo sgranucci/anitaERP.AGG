@@ -172,7 +172,14 @@
             if (conciliar && ccId > 0) {
                 html += '<td class="text-center">';
                 html += '<button type="button" class="btn btn-xs btn-outline-info js-conciliar-medio" data-cuentacaja-id="' + ccId + '" ';
-                html += 'data-medio-nombre="' + esc(p.nombre || p.codigo || '') + '" title="Ver facturas de este medio">';
+                html += 'data-medio-nombre="' + esc(p.nombre || p.codigo || '') + '"';
+                if (mozoId !== '') {
+                    html += ' data-mozo-id="' + esc(mozoId) + '"';
+                }
+                if (mozoNombre) {
+                    html += ' data-mozo-nombre="' + esc(mozoNombre) + '"';
+                }
+                html += ' title="Ver facturas de este medio' + (mozoNombre ? ' de ' + esc(mozoNombre) : '') + '">';
                 html += '<i class="fa fa-search"></i> Facturas</button></td>';
             } else if (conciliar) {
                 html += '<td></td>';

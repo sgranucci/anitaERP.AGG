@@ -9,7 +9,10 @@ Dep&oacute;sitos
 <script src="{{ asset('assets/pages/scripts/stock/depmae/filtro.js') }}" type="text/javascript"></script>
 @endsection
 
-<?php use App\Support\Stock\DepmaeListadoFiltros; ?>
+<?php
+use App\Models\Stock\Depmae;
+use App\Support\Stock\DepmaeListadoFiltros;
+?>
 
 @section('contenido')
 <div class="row">
@@ -60,13 +63,7 @@ Dep&oacute;sitos
                             <td>{{ $data->id }}</td>
                             <td>{{ $data->nombre }}</td>
                             <td>{{ optional($data->empresas)->nombre ?? '—' }}</td>
-                            <td>
-                                @foreach($tipodeposito_enum as $tipodeposito)
-                                    @if ($tipodeposito['valor'] == $data->tipodeposito)
-                                        {{ $tipodeposito['nombre'] }}
-                                    @endif
-                                @endforeach
-                            </td>
+                            <td>{{ Depmae::etiquetaTipoDeposito($data->tipodeposito) ?: '—' }}</td>
                             <td>{{ $data->codigo }}</td>
                             <td>
                        			@if (can('editar-depositos', false))

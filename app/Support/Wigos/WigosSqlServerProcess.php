@@ -19,9 +19,9 @@ final class WigosSqlServerProcess
     /**
      * @return array{version: string}
      */
-    public static function consultarVersion(string $alias): array
+    public static function consultarVersion(string $alias, int $empresaId = 0): array
     {
-        $decoded = self::ejecutar($alias, ['action' => 'version']);
+        $decoded = self::ejecutar($alias, ['action' => 'version'], $empresaId);
 
         return ['version' => (string) ($decoded['version'] ?? '')];
     }
@@ -29,12 +29,12 @@ final class WigosSqlServerProcess
     /**
      * @return list<object>
      */
-    public static function ejecutarSpVoucherGiftData(string $alias, string $codigo): array
+    public static function ejecutarSpVoucherGiftData(string $alias, string $codigo, int $empresaId = 0): array
     {
         $decoded = self::ejecutar($alias, [
             'action' => 'spVoucherGiftData',
             'barcode' => $codigo,
-        ]);
+        ], $empresaId);
 
         $filas = $decoded['rows'] ?? [];
         if (! is_array($filas)) {
@@ -48,9 +48,9 @@ final class WigosSqlServerProcess
      * @param  array<string, mixed>  $extra
      * @return array<string, mixed>
      */
-    private static function ejecutar(string $alias, array $extra): array
+    private static function ejecutar(string $alias, array $extra, int $empresaId = 0): array
     {
-        $cfg = (array) config('wigos.connections.'.$alias, []);
+        $cfg = WigosConfigResolver::conexion($alias, $empresaId);
         $host = trim((string) ($cfg['host'] ?? ''));
         if ($host === '') {
             throw new RuntimeException('Wigos '.$alias.': conexión no configurada (host vacío).');

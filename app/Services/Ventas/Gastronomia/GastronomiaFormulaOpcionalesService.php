@@ -5,6 +5,7 @@ namespace App\Services\Ventas\Gastronomia;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Formula_Articulo;
 use App\Support\Stock\FormulaArticuloGastronomia;
+use App\Support\Stock\FormulaArticuloSubformulaPosSupport;
 use App\Support\Ventas\GastronomiaFormulaOpcionalSeleccion;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
@@ -86,20 +87,15 @@ final class GastronomiaFormulaOpcionalesService
         }
 
         if ($h->formula_hija_id) {
-            $sub = $h->formula_hija;
-            $artSub = $sub?->articulos;
-            $sku = $artSub ? (string) $artSub->sku : '';
-            $desc = $artSub ? (string) $artSub->descripcion : '';
-
-            if ($sku === '' && $desc === '') {
-                $sku = 'F#'.$h->formula_hija_id;
-                $desc = 'Subfórmula';
-            }
+            $etiqueta = FormulaArticuloSubformulaPosSupport::etiquetaOpcional(
+                $h->formula_hija,
+                (int) $h->formula_hija_id,
+            );
 
             return [
                 'formula_hija_id' => (int) $h->formula_hija_id,
-                'sku' => $sku,
-                'descripcion' => $desc,
+                'sku' => $etiqueta['sku'],
+                'descripcion' => $etiqueta['descripcion'],
             ];
         }
 

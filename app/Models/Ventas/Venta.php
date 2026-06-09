@@ -105,6 +105,11 @@ class Venta extends Model implements Auditable
         return $this->hasOne(VentaGastronomiaEmision::class, 'venta_id');
     }
 
+    public function estacionamientoEmision()
+    {
+        return $this->hasOne(\App\Models\Caja\Estacionamiento\VentaEstacionamientoEmision::class, 'venta_id');
+    }
+
     public function actividad_arcas()
 	{
     	return $this->hasMany(Actividad_Arca::class, 'actividad_arca_id');

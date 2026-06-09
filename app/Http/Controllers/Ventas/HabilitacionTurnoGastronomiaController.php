@@ -229,12 +229,18 @@ class HabilitacionTurnoGastronomiaController extends Controller
         $fechaJornada = $activo->jornada?->fecha_jornada?->format('Y-m-d')
             ?? Carbon::today()->format('Y-m-d');
 
+        $mozoIdInput = $request->input('mozo_id');
+        $mozoId = ($mozoIdInput !== null && $mozoIdInput !== '' && (int) $mozoIdInput > 0)
+            ? (int) $mozoIdInput
+            : null;
+
         $facturas = GastronomiaTurnoOperativoTotalesSupport::facturasPorMedioPago(
             $pc,
             (int) $cfg->empresa_id,
             $fechaJornada,
             $cuentacajaId,
             $activo->habilitacion_en,
+            $mozoId,
         );
 
         $totales = GastronomiaTurnoOperativoTotalesSupport::calcular(
@@ -255,6 +261,7 @@ class HabilitacionTurnoGastronomiaController extends Controller
         return response()->json([
             'ok' => true,
             'cuentacaja_id' => $cuentacajaId,
+            'mozo_id' => $mozoId,
             'medio_nombre' => $medioNombre,
             'facturas' => $facturas,
             'url_factura_ver_base' => url('ventas/gastronomia/facturas-dia'),

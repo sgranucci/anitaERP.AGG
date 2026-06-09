@@ -1075,6 +1075,7 @@ final class GastronomiaTurnoOperativoTotalesSupport
      *   codigo:string,
      *   cliente:string,
      *   mozo_nombre:string,
+     *   mozo_id:?int,
      *   hora:string,
      *   total_facturado:float,
      *   monto_medio:float,
@@ -1088,6 +1089,7 @@ final class GastronomiaTurnoOperativoTotalesSupport
         string $fechaJornada,
         int $cuentacajaId,
         ?Carbon $desdeHabilitacion = null,
+        ?int $mozoId = null,
     ): array {
         if ($cuentacajaId <= 0) {
             return [];
@@ -1101,6 +1103,9 @@ final class GastronomiaTurnoOperativoTotalesSupport
             if (! empty($fila['es_nota_credito'])) {
                 continue;
             }
+            if ($mozoId !== null && (int) ($fila['mozo_id'] ?? 0) !== $mozoId) {
+                continue;
+            }
             $montoMedio = (float) ($fila['medios'][$cuentacajaId] ?? 0);
             if ($montoMedio < 0.001) {
                 continue;
@@ -1109,6 +1114,7 @@ final class GastronomiaTurnoOperativoTotalesSupport
                 'venta_id' => $fila['venta_id'],
                 'codigo' => $fila['codigo'],
                 'cliente' => $fila['cliente'],
+                'mozo_id' => $fila['mozo_id'] ?? null,
                 'mozo_nombre' => $fila['mozo_nombre'],
                 'hora' => $fila['hora'],
                 'total_facturado' => $fila['total_facturado'],

@@ -45,16 +45,24 @@ class MenuRolController extends Controller
         $rols = $this->obtenerRolsFiltrados($request);
         $rolIds = array_keys($rols);
 
-        $permisos = Permiso::where('menu_id', $menu->id)
+        $menuIds = $this->collectMenuIdsConDescendientes((int) $menu->id);
+        $nombresMenu = Menu::whereIn('id', $menuIds)->pluck('nombre', 'id');
+
+        $permisos = Permiso::whereIn('menu_id', $menuIds)
             ->with('roles')
             ->orderBy('nombre')
             ->get()
-            ->map(function (Permiso $p) use ($rolIds) {
+            ->map(function (Permiso $p) use ($rolIds, $nombresMenu, $menu) {
                 $ids = $p->roles->pluck('id')->all();
+                $menuOrigen = (int) $p->menu_id !== (int) $menu->id
+                    ? ($nombresMenu[$p->menu_id] ?? '')
+                    : '';
 
                 return [
                     'id' => $p->id,
-                    'nombre' => $p->nombre,
+                    'nombre' => $menuOrigen !== ''
+                        ? $p->nombre.' ('.$menuOrigen.')'
+                        : $p->nombre,
                     'roles_ids' => array_values(array_intersect($ids, $rolIds)),
                 ];
             });
@@ -64,6 +72,23 @@ class MenuRolController extends Controller
             'roles' => $rols,
             'permisos' => $permisos,
         ]);
+    }
+
+    /**
+     * Incluye permisos de submenús (ej. Estacionamiento → Categorías de automóviles).
+     *
+     * @return list<int>
+     */
+    private function collectMenuIdsConDescendientes(int $menuId): array
+    {
+        $ids = [$menuId];
+        $hijos = Menu::where('menu_id', $menuId)->pluck('id')->all();
+
+        foreach ($hijos as $hijoId) {
+            $ids = array_merge($ids, $this->collectMenuIdsConDescendientes((int) $hijoId));
+        }
+
+        return array_values(array_unique($ids));
     }
 
     /**

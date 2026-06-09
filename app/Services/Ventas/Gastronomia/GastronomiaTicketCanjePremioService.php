@@ -44,7 +44,7 @@ final class GastronomiaTicketCanjePremioService
         $cupon = $this->normalizarNumerocupon($numerocupon);
         $this->assertNoCanjeadoEnErp($cupon);
 
-        $filasWigos = $this->wigosService->consultarPorCodigoBarras($cupon);
+        $filasWigos = $this->wigosService->consultarPorCodigoBarras($cupon, $empresaId);
         $items = $this->decodificarFilasWigos($filasWigos, $cupon, $empresaId, $listaprecioId);
 
         if ($items === []) {

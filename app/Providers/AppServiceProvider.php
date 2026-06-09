@@ -36,6 +36,7 @@ class AppServiceProvider extends ServiceProvider
         View::composer('theme.lte.aside', function ($view) {
             $nivelActual = 0;
             $menus = Menu::getMenu(true, $nivelActual);
+            $menus = \App\Support\Caja\Estacionamiento\EstacionamientoModuloSupport::filtrarMenuAside($menus);
             $view->with('menusComposer', $menus);
         });
         View::composer('theme.lte.header', function ($view) {
@@ -353,6 +354,44 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             'App\Repositories\Caja\UsocuentacajaRepositoryInterface',
             'App\Repositories\Caja\UsocuentacajaRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Caja\Estacionamiento\CategoriaAutomovilRepositoryInterface',
+            'App\Repositories\Caja\Estacionamiento\CategoriaAutomovilRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Caja\Estacionamiento\ItemEstacionamientoRepositoryInterface',
+            'App\Repositories\Caja\Estacionamiento\ItemEstacionamientoRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Caja\Estacionamiento\ListaPrecioEstacionamientoRepositoryInterface',
+            'App\Repositories\Caja\Estacionamiento\ListaPrecioEstacionamientoRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Caja\Estacionamiento\ListaPrecioEstacionamientoItemRepositoryInterface',
+            'App\Repositories\Caja\Estacionamiento\ListaPrecioEstacionamientoItemRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Caja\Estacionamiento\JornadaEstacionamientoRepositoryInterface',
+            'App\Repositories\Caja\Estacionamiento\JornadaEstacionamientoRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Caja\Estacionamiento\TurnoEstacionamientoRepositoryInterface',
+            'App\Repositories\Caja\Estacionamiento\TurnoEstacionamientoRepository',
+        );
+        $this->app->bind(
+            'App\Repositories\Caja\Estacionamiento\DescuentoEstacionamientoRepositoryInterface',
+            'App\Repositories\Caja\Estacionamiento\DescuentoEstacionamientoRepository',
+        );
+        $this->app->bind(
+            'App\Repositories\Caja\Estacionamiento\ConfiguracionPuntoventaEstacionamientoRepositoryInterface',
+            'App\Repositories\Caja\Estacionamiento\ConfiguracionPuntoventaEstacionamientoRepository',
         );
 
         $this->app->bind(

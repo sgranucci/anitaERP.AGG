@@ -20,6 +20,9 @@ final class WaitryPaymentGatewaySupport
     /** Prefijo external_reference_id de órdenes inyectadas desde Anita (pushExternalOrder). */
     public const PREFIJO_REFERENCIA_PUSH_ERP = 'E-';
 
+    /** Gateway persistido por Waitry al leer cobros de pushExternalOrder (medio real solo en Anita). */
+    public const GATEWAY_COBRO_EXTERNO_PUSH_ERP = 'interface';
+
     /**
      * @param  list<array{cuentacaja_id:int,moneda_id:int,monto:float,cotizacion?:float|null,observacion?:string|null}>  $mediosPago
      * @return list<array{gateway: string, amount: float}>
@@ -195,8 +198,16 @@ final class WaitryPaymentGatewaySupport
     }
 
     /**
+     * Gateway de cobro externo (pushExternalOrder) al consultar la orden en Waitry.
+     */
+    public static function esGatewayCobroExternoPushErp(?string $gateway): bool
+    {
+        return self::normalizarGateway($gateway) === self::normalizarGateway(self::GATEWAY_COBRO_EXTERNO_PUSH_ERP);
+    }
+
+    /**
      * Orden originada en Anita y replicada a Waitry (pushExternalOrder / mostrador).
-     * No confundir con {@code payment.type=interface} de cobro QR por celular en Waitry.
+     * No confundir con {@code payment.type=interface} + gateway TOTALCOIN/MERCADOPAGO (QR por celular).
      *
      * @param  array<string, mixed>  $ordenOLinea
      */
@@ -209,14 +220,6 @@ final class WaitryPaymentGatewaySupport
             }
         }
 
-        $tipo = WaitryMedioPagoCuentacajaSupport::normalizarTipo(
-            WaitryMedioPagoCuentacajaSupport::extraerTipoPagoOrden($ordenOLinea)
-                ?? ($ordenOLinea['waitry_tipo_pago'] ?? null),
-        );
-        if ($tipo !== WaitryMedioPagoCuentacajaSupport::normalizarTipo(WaitryPaymentTypeSupport::TIPO_INTERFACE)) {
-            return false;
-        }
-
         if (empty($ordenOLinea['facturada_erp'])) {
             return false;
         }
@@ -225,6 +228,20 @@ final class WaitryPaymentGatewaySupport
             return false;
         }
 
-        return true;
+        $gateway = self::extraerGatewayDesdeLinea($ordenOLinea);
+
+        if (self::esGatewayCobroExternoPushErp($gateway)) {
+            return true;
+        }
+
+        $tipo = WaitryMedioPagoCuentacajaSupport::normalizarTipo(
+            WaitryMedioPagoCuentacajaSupport::extraerTipoPagoOrden($ordenOLinea)
+                ?? ($ordenOLinea['waitry_tipo_pago'] ?? null),
+        );
+        if ($tipo !== WaitryMedioPagoCuentacajaSupport::normalizarTipo(WaitryPaymentTypeSupport::TIPO_INTERFACE)) {
+            return false;
+        }
+
+        return $gateway === null;
     }
 }

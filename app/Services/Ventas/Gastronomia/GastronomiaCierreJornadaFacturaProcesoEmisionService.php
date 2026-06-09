@@ -427,6 +427,7 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
                 ))),
                 'cobranza_id' => $primera['cobranza_id'] ?? null,
                 'ajuste_insumos' => $resultado['ajuste_insumos'] ?? null,
+                'jornada_proceso' => $this->contextoJornadaProcesoTrasEmision($jornadaId),
             ];
         } catch (InvalidArgumentException $e) {
             throw $e;
@@ -697,6 +698,7 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
                 'facturas' => $facturas,
                 'venta_id' => (int) ($facturas[0]['venta_id'] ?? 0),
                 'factura' => (string) ($facturas[0]['factura'] ?? ''),
+                'jornada_proceso' => $this->contextoJornadaProcesoTrasEmision($jornadaId),
             ];
         } catch (InvalidArgumentException $e) {
             throw $e;
@@ -861,6 +863,7 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
             'facturas' => [],
             'cantidad_lotes' => 0,
             'ajuste_insumos' => $ajuste,
+            'jornada_proceso' => $this->contextoJornadaProcesoTrasEmision((int) $jornada->id),
         ];
     }
 
@@ -1060,5 +1063,22 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
         }
         $snapshot->payload = $payload;
         $snapshot->save();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function contextoJornadaProcesoTrasEmision(int $jornadaId): array
+    {
+        $jornada = JornadaGastronomia::query()->find($jornadaId);
+        if ($jornada === null) {
+            return [];
+        }
+
+        $snapshot = GastronomiaCierreJornadaProcesoSnapshot::query()
+            ->where('jornada_gastronomia_id', $jornadaId)
+            ->first();
+
+        return CierreJornadaProcesoJornadaSupport::contexto($jornada, $snapshot);
     }
 }

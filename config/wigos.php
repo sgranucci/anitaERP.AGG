@@ -62,4 +62,45 @@ return [
             'password' => env('WIGOS_B_PASSWORD'),
         ],
     ],
+
+    /**
+     * Overrides por empresa Anita (AGG: Kandiko Wilde = 2, Rebisco = 3).
+     * JSON env WIGOS_POR_EMPRESA o defaults embebidos.
+     *
+     * @var array<int, array<string, mixed>>
+     */
+    'por_empresa' => (static function (): array {
+        $raw = env('WIGOS_POR_EMPRESA');
+        if (is_string($raw) && $raw !== '') {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded)) {
+                $map = [];
+                foreach ($decoded as $empresaId => $cfg) {
+                    if (is_array($cfg) && $cfg !== []) {
+                        $map[(int) $empresaId] = $cfg;
+                    }
+                }
+                if ($map !== []) {
+                    return $map;
+                }
+            }
+        }
+
+        return [
+            2 => [
+                'curr_wigos' => 'A',
+                'connections' => [
+                    'A' => ['host' => 'serverwigosksaa'],
+                    'B' => ['host' => 'serverwigosksab'],
+                ],
+            ],
+            3 => [
+                'curr_wigos' => 'A',
+                'connections' => [
+                    'A' => ['host' => 'serverwigosrsaa'],
+                    'B' => ['host' => 'serverwigosrsab'],
+                ],
+            ],
+        ];
+    })(),
 ];

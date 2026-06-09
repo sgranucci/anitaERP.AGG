@@ -367,19 +367,58 @@ class RequisicionController extends Controller
         return redirect('compras/requisicion')->with('mensaje', $mensaje);
     }
 
+    public function firmantesRetomeArbol($id)
+    {
+        can('editar-requisicion');
+
+        $ret = $this->requisicionService->firmantesRetomeArbol((int) $id);
+        if (($ret['mensaje'] ?? '') === 'ok') {
+            return response()->json($ret);
+        }
+
+        return response()->json([
+            'mensaje' => 'error',
+            'errores' => $ret['errores'] ?? 'No se pudieron consultar los firmantes del árbol.',
+        ], 422);
+    }
+
     public function enviarArbolAprobacion(Request $request, $id)
     {
         can('editar-requisicion');
 
-        $ret = $this->requisicionService->enviarArbolAprobacionDesdeEnCompras((int) $id);
+        $destinatarioId = (int) $request->input('destinatario_usuario_id', 0);
+        $destinatarioId = $destinatarioId > 0 ? $destinatarioId : null;
+
+        $ret = $this->requisicionService->enviarArbolAprobacionDesdeEnCompras((int) $id, $destinatarioId);
 
         if ($ret['mensaje'] === 'ok') {
             $mensaje = 'Requisición enviada al árbol de aprobación; el circuito continúa con el siguiente nivel.';
+        } elseif ($ret['mensaje'] === 'seleccionar_firmante') {
+            $mensaje = 'Debe seleccionar un firmante para continuar el árbol de aprobación.';
         } else {
             $mensaje = $ret['errores'] ?? 'No se pudo enviar al árbol de aprobación.';
         }
 
-        return redirect()->route('consultar_requisicion')->with('mensaje', $mensaje);
+        $flashKey = $ret['mensaje'] === 'ok' ? 'mensaje' : 'mensaje_error';
+
+        if ($request->ajax() || $request->wantsJson()) {
+            if ($ret['mensaje'] === 'ok') {
+                session()->flash('mensaje', $mensaje);
+
+                return response()->json([
+                    'mensaje' => 'ok',
+                    'texto' => $mensaje,
+                    'redirect' => $request->input('redirect_url') ?: url()->previous(),
+                ]);
+            }
+
+            return response()->json([
+                'mensaje' => $ret['mensaje'],
+                'errores' => $mensaje,
+            ], 422);
+        }
+
+        return redirect()->back()->with($flashKey, $mensaje);
     }
 
     public function eliminar(Request $request, $id)

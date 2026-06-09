@@ -15,4 +15,20 @@ trait DepmaeTrait {
 		['id' => 8, 'valor' => 'F', 'nombre' => 'Formulas']
 		];
 
+	public static function etiquetaTipoDeposito(?string $tipodeposito): string
+	{
+		$tipo = trim((string) ($tipodeposito ?? ''));
+		if ($tipo === '') {
+			return '';
+		}
+
+		foreach (self::$enumTipoDeposito as $fila) {
+			if ($tipo === ($fila['valor'] ?? '') || strcasecmp($tipo, (string) ($fila['nombre'] ?? '')) === 0) {
+				return (string) $fila['nombre'];
+			}
+		}
+
+		return $tipo;
+	}
+
 }

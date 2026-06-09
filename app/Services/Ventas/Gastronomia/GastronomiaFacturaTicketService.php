@@ -142,6 +142,7 @@ final class GastronomiaFacturaTicketService
         }
 
         try {
+            $t0Total = microtime(true);
             $venta = $this->cargarVenta($ventaId);
             if ($cuenta !== null) {
                 $cuenta->loadMissing('mozo');
@@ -157,14 +158,30 @@ final class GastronomiaFacturaTicketService
                 $venta->gastronomiaEmision->setRelation('cuenta', $cuenta);
             }
 
+            $t0Gen = microtime(true);
             $bytes = $this->generarBytesTicket($venta, $cuenta);
+            $msGenerar = round((microtime(true) - $t0Gen) * 1000, 2);
             $this->guardarVistaPreviaTexto($ventaId);
             $ruta = $this->guardarArchivoTemporal($ventaId, $bytes);
+            $msImprimir = null;
             try {
+                $t0Imp = microtime(true);
                 $this->ejecutarComandoSalida($comando, $ruta);
+                $msImprimir = round((microtime(true) - $t0Imp) * 1000, 2);
             } finally {
                 @unlink($ruta);
             }
+
+            Log::info('gastronomia.ticket_factura.timing', [
+                'venta_id' => $ventaId,
+                'cfg_id' => (int) $cfg->id,
+                'salida_id' => (int) $salida->id,
+                'puntoventa_codigo' => $venta->puntoventas->codigo ?? null,
+                'generar_ms' => $msGenerar,
+                'imprimir_ms' => $msImprimir,
+                'total_ms' => round((microtime(true) - $t0Total) * 1000, 2),
+                'ticket_bytes' => strlen($bytes),
+            ]);
 
             return ['ok' => true];
         } catch (Throwable $e) {

@@ -39,7 +39,10 @@ class ArticuloConsultaDesdeModal
             || can('editar-orden-produccion', false)
             || can('actualizar-orden-produccion', false)
             || can('listar-orden-produccion', false)
-            || can('usar-proceso-facturacion-gastronomia', false);
+            || can('usar-proceso-facturacion-gastronomia', false)
+            || can('crear-precios', false)
+            || can('editar-precios', false)
+            || can('listar-precios', false);
     }
 
     public static function urlEditar(int $id): string

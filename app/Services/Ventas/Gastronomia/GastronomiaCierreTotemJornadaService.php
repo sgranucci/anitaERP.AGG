@@ -118,6 +118,8 @@ final class GastronomiaCierreTotemJornadaService
      */
     public function movimientosParaJornada(JornadaGastronomia $jornada, ?Carbon $cierreHasta = null): array
     {
+        $this->prepararEntornoConsultaCierreTotem();
+
         if (! $this->habilitado()) {
             throw new InvalidArgumentException('Cierre tótem Waitry no habilitado.');
         }
@@ -378,6 +380,8 @@ final class GastronomiaCierreTotemJornadaService
      */
     private function consultarTramoInformeZ(JornadaGastronomia $jornada): array
     {
+        $this->prepararEntornoConsultaCierreTotem();
+
         $empresaId = (int) $jornada->empresa_id;
         if ($empresaId <= 0) {
             throw new InvalidArgumentException('Empresa inválida.');
@@ -1242,6 +1246,60 @@ final class GastronomiaCierreTotemJornadaService
         return $agregados;
     }
 
+    private function prepararEntornoConsultaCierreTotem(): void
+    {
+        $memory = (string) config('gastronomia.cierre_jornada_proceso_memory_limit', '1024M');
+        if ($memory !== '') {
+            @ini_set('memory_limit', $memory);
+        }
+        @set_time_limit(180);
+    }
+
+    /**
+     * Emisiones gastronomía vinculadas a los order_id del tramo (no todo el histórico de la empresa).
+     *
+     * @param  list<int>  $ids
+     * @return array<int, VentaGastronomiaEmision>
+     */
+    private function mapaEmisionPorWaitryOrderIds(int $empresaId, array $ids): array
+    {
+        $idsUnicos = array_values(array_unique(array_filter(array_map('intval', $ids), static fn (int $id) => $id > 0)));
+        if ($idsUnicos === []) {
+            return [];
+        }
+
+        $eager = [
+            'venta:id,codigo,total',
+            'venta.cobranzasDirectas',
+            'venta.caja_movimientos.cobranzas',
+            'cuenta:id,waitry_cobro_totem,waitry_tipo_pago,waitry_order_id',
+            'waitryComandaEnvio',
+        ];
+
+        $map = [];
+        foreach (array_chunk($idsUnicos, 500) as $lote) {
+            $emisiones = VentaGastronomiaEmision::query()
+                ->with($eager)
+                ->whereHas('venta', fn ($q) => $q->whereHas('puntoventas', fn ($pv) => $pv->where('empresa_id', $empresaId)))
+                ->where(function ($q) use ($lote) {
+                    $q->whereIn('waitry_order_id', $lote)
+                        ->orWhereHas('cuenta', fn ($c) => $c->whereIn('waitry_order_id', $lote))
+                        ->orWhereHas('waitryComandaEnvio', fn ($e) => $e->whereIn('waitry_order_id', $lote));
+                })
+                ->orderByDesc('venta_id')
+                ->get();
+
+            foreach ($emisiones as $emision) {
+                $wid = VentaGastronomiaEmisionWaitrySupport::resolverOrderId($emision);
+                if ($wid > 0 && ! isset($map[$wid])) {
+                    $map[$wid] = $emision;
+                }
+            }
+        }
+
+        return $map;
+    }
+
     /**
      * @param  array<int, array<string, mixed>>  $ordenesPorId
      * @return list<array<string, mixed>>
@@ -1266,25 +1324,7 @@ final class GastronomiaCierreTotemJornadaService
             ->unique('waitry_order_id')
             ->keyBy(fn (CuentaGastronomia $c) => (int) $c->waitry_order_id);
 
-        $emisionesPorWaitry = VentaGastronomiaEmision::query()
-            ->with([
-                'venta:id,codigo,total',
-                'venta.cobranzasDirectas',
-                'venta.caja_movimientos.cobranzas',
-                'cuenta:id,waitry_cobro_totem,waitry_tipo_pago,waitry_order_id',
-                'waitryComandaEnvio',
-            ])
-            ->whereHas('venta', fn ($q) => $q->whereHas('puntoventas', fn ($pv) => $pv->where('empresa_id', $empresaId)))
-            ->orderByDesc('venta_id')
-            ->get();
-
-        $mapEmisionPorWaitryId = [];
-        foreach ($emisionesPorWaitry as $emision) {
-            $wid = VentaGastronomiaEmisionWaitrySupport::resolverOrderId($emision);
-            if ($wid > 0 && in_array($wid, $ids, true) && ! isset($mapEmisionPorWaitryId[$wid])) {
-                $mapEmisionPorWaitryId[$wid] = $emision;
-            }
-        }
+        $mapEmisionPorWaitryId = $this->mapaEmisionPorWaitryOrderIds($empresaId, $ids);
 
         $lineas = [];
         foreach ($ordenesPorId as $orderId => $orden) {

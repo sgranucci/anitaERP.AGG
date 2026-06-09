@@ -27,6 +27,12 @@ final class WaitryMedioPagoCuentacajaSupport
 
     public const TIPO_CREDIT_CARD = 'credit_card';
 
+    /** Posnet del kiosco (Waitry payment.type dedicado, equivale a credit_card + gateway KIOSK MP). */
+    public const TIPO_KIOSK_MP = 'kioskmp';
+
+    /** QR MP en kiosco (equivale a credit_card + gateway KIOSK MPQR). */
+    public const TIPO_KIOSK_MPQR = 'kioskmpqr';
+
     /** @var list<string> tipos Waitry siempre QR (credit_card QR se distingue por gateway KIOSK MPQR). */
     public const TIPOS_QR_WAITRY_NORMALIZADOS = [
         'totalcoin',
@@ -106,6 +112,10 @@ final class WaitryMedioPagoCuentacajaSupport
             return false;
         }
 
+        if ($tipoNorm === self::normalizarTipo(self::TIPO_KIOSK_MPQR)) {
+            return true;
+        }
+
         if (in_array($tipoNorm, self::TIPOS_QR_WAITRY_NORMALIZADOS, true)) {
             return true;
         }
@@ -118,11 +128,18 @@ final class WaitryMedioPagoCuentacajaSupport
     }
 
     /**
-     * credit_card cobrado en terminal Posnet del kiosco (sin MPQR).
+     * credit_card cobrado en terminal Posnet del kiosco (sin MPQR), o payment.type kioskmp.
      */
     public static function esCreditCardPosnet(?string $tipo, ?string $gateway = null): bool
     {
         $tipoNorm = self::normalizarTipo($tipo);
+        if ($tipoNorm === null) {
+            return false;
+        }
+
+        if ($tipoNorm === self::normalizarTipo(self::TIPO_KIOSK_MP)) {
+            return ! WaitryPaymentGatewaySupport::esGatewayQrKiosko($gateway);
+        }
 
         return $tipoNorm === self::normalizarTipo(self::TIPO_CREDIT_CARD)
             && WaitryPaymentGatewaySupport::esGatewayPosnetKiosko($gateway);
@@ -180,6 +197,13 @@ final class WaitryMedioPagoCuentacajaSupport
         }
 
         if (self::esTipoPredefinido($tipoNorm)) {
+            return true;
+        }
+
+        if (in_array($tipoNorm, [
+            self::normalizarTipo(self::TIPO_KIOSK_MP),
+            self::normalizarTipo(self::TIPO_KIOSK_MPQR),
+        ], true)) {
             return true;
         }
 
@@ -410,6 +434,25 @@ final class WaitryMedioPagoCuentacajaSupport
      */
     public static function extraerTipoPagoOrden(array $orden): ?string
     {
+        $tipo = self::extraerTipoPagoOrdenSinNormalizarPush($orden);
+        if ($tipo === null) {
+            return null;
+        }
+
+        $gateway = WaitryPaymentGatewaySupport::extraerGatewayDesdeOrden($orden);
+        if ($tipo === self::normalizarTipo(self::TIPO_CREDIT_CARD)
+            && WaitryPaymentGatewaySupport::esGatewayCobroExternoPushErp($gateway)) {
+            return self::normalizarTipo(WaitryPaymentTypeSupport::TIPO_INTERFACE);
+        }
+
+        return $tipo;
+    }
+
+    /**
+     * @param  array<string, mixed>  $orden
+     */
+    private static function extraerTipoPagoOrdenSinNormalizarPush(array $orden): ?string
+    {
         $payment = $orden['payment'] ?? null;
         if (is_array($payment)) {
             foreach (['type', 'paymentType', 'payment_type'] as $clave) {
@@ -510,6 +553,12 @@ final class WaitryMedioPagoCuentacajaSupport
     public static function etiquetaTipo(?string $tipo, ?string $gateway = null): string
     {
         $tipoNorm = self::normalizarTipo($tipo);
+        if ($tipoNorm === self::normalizarTipo(self::TIPO_KIOSK_MPQR)) {
+            return 'QR MP (kiosco)';
+        }
+        if ($tipoNorm === self::normalizarTipo(self::TIPO_KIOSK_MP)) {
+            return 'Posnet (tótem)';
+        }
         if ($tipoNorm === self::normalizarTipo(self::TIPO_CREDIT_CARD)) {
             if (WaitryPaymentGatewaySupport::esGatewayQrKiosko($gateway)) {
                 return 'QR MP (kiosco)';

@@ -202,11 +202,12 @@ final class WaitryComandaOrderItemsSupport
 
         $nombre = trim((string) ($articulo->descripcion ?? $emision->detalle ?? $sku));
         $subtotal = round($precio * $count, 2);
+        $notasCocina = \App\Support\Ventas\GastronomiaComentarioCocinaSupport::normalizar($emision->comentario_cocina ?? null);
 
         return [
             'timestamp' => $tsItem,
             'count' => $count,
-            'notes' => null,
+            'notes' => $notasCocina,
             'price' => $precio,
             'tax' => $tax,
             'discount' => 0.0,

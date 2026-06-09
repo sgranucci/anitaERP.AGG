@@ -44,21 +44,48 @@ $(function () {
 		return 'index';
 	}
 
-	function urlEditarPrecioConRetorno(baseUrl, articuloId, fechaRef) {
+	function urlPrecioConRetornoArticulo(baseUrl, articuloId, fechaRef, listaprecioId) {
 		if (!baseUrl || !articuloId) {
 			return baseUrl;
 		}
 		var sep = baseUrl.indexOf('?') >= 0 ? '&' : '?';
-		return (
+		var url =
 			baseUrl +
 			sep +
-			'retorno_articulo_id=' +
+			'articulo_id=' +
+			encodeURIComponent(articuloId) +
+			'&retorno_articulo_id=' +
 			encodeURIComponent(articuloId) +
 			'&retorno_origen=' +
 			encodeURIComponent(detectarOrigenRetorno()) +
 			'&retorno_fecha_referencia=' +
-			encodeURIComponent(fechaRef || hoyIso())
-		);
+			encodeURIComponent(fechaRef || hoyIso());
+		if (listaprecioId) {
+			url += '&listaprecio_id=' + encodeURIComponent(listaprecioId);
+		}
+		return url;
+	}
+
+	function urlEditarPrecioConRetorno(baseUrl, articuloId, fechaRef) {
+		return urlPrecioConRetornoArticulo(baseUrl, articuloId, fechaRef, '');
+	}
+
+	function actualizarBotonNuevoPrecio(data, fechaRef, listaprecioId) {
+		var $btn = $('#consultaprecioarticuloNuevo');
+		if (!$btn.length) {
+			return;
+		}
+		var puedeCrear = data && data.puede_crear && data.crear_url;
+		if (!puedeCrear || !articuloIdActivo) {
+			$btn.addClass('d-none');
+			return;
+		}
+		$btn
+			.attr(
+				'href',
+				urlPrecioConRetornoArticulo(data.crear_url, articuloIdActivo, fechaRef, listaprecioId)
+			)
+			.removeClass('d-none');
 	}
 
 	function abrirModalConsulta(articuloId, sku, desc, fechaRef, listaprecioId) {
@@ -73,6 +100,7 @@ $(function () {
 		$('#consultaprecioarticuloListaId').val(listaprecioId ? String(listaprecioId) : '');
 		$('#consultaprecioarticuloBody').empty();
 		$('#consultaprecioarticuloError').addClass('d-none').text('');
+		$('#consultaprecioarticuloNuevo').addClass('d-none');
 		$('#consultaprecioarticuloModal').modal('show');
 		cargarConsulta();
 	}
@@ -104,6 +132,7 @@ $(function () {
 		$.getJSON(urlConsulta, params)
 			.done(function (data) {
 				$load.addClass('d-none');
+				actualizarBotonNuevoPrecio(data, fechaRef, listaprecioId);
 
 				var art = data.articulo || {};
 				var sku = art.sku || articuloSkuActivo;
@@ -172,6 +201,7 @@ $(function () {
 			})
 			.fail(function (xhr) {
 				$load.addClass('d-none');
+				$('#consultaprecioarticuloNuevo').addClass('d-none');
 				var msg =
 					(xhr.responseJSON && xhr.responseJSON.message) ||
 					xhr.statusText ||

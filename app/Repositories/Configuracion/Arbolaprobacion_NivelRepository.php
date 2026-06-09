@@ -2,8 +2,11 @@
 
 namespace App\Repositories\Configuracion;
 
+use App\Models\Compras\Requisicion_Estado;
+use App\Models\Configuracion\Arbolaprobacion;
 use App\Models\Configuracion\Arbolaprobacion_Nivel;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\DB;
 
 class Arbolaprobacion_NivelRepository implements Arbolaprobacion_NivelRepositoryInterface
 {
@@ -67,6 +70,9 @@ class Arbolaprobacion_NivelRepository implements Arbolaprobacion_NivelRepository
         $hastamontos = $data['hastamontos'] ?? [];
         $moneda_ids = $data['moneda_ids'] ?? [];
         $estados_req = $data['documento_estado_al_aprobar'] ?? [];
+        $tipoarbol = $data['tipoarbol'] ?? DB::table('arbolaprobacion')->where('id', $arbolaprobacion_id)->value('tipoarbol');
+        $nombreTipoRequisiciones = Arbolaprobacion::$enumTipoArbol[array_search('RE', array_column(Arbolaprobacion::$enumTipoArbol, 'valor'))]['nombre'];
+        $estadoAprobadaRequisicion = Requisicion_Estado::$enumEstado[array_search('A', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
 
         $guardados = [];
 
@@ -74,6 +80,9 @@ class Arbolaprobacion_NivelRepository implements Arbolaprobacion_NivelRepository
             $rowId = isset($ids[$i]) && $ids[$i] !== '' ? (int) $ids[$i] : null;
             $usuarioId = isset($usuario_ids[$i]) && $usuario_ids[$i] !== '' ? $usuario_ids[$i] : null;
             $estReq = isset($estados_req[$i]) && $estados_req[$i] !== '' ? $estados_req[$i] : null;
+            if ($estReq === null && $tipoarbol === $nombreTipoRequisiciones) {
+                $estReq = $estadoAprobadaRequisicion;
+            }
 
             $payload = [
                 'arbolaprobacion_id' => $arbolaprobacion_id,

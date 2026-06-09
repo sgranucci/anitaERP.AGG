@@ -154,7 +154,29 @@ class RequisicionService
      * Reanuda el envío al siguiente nivel del árbol cuando la requisición quedó en EN_COMPRAS
      * (el circuito se detuvo hasta esta acción explícita).
      */
-    public function enviarArbolAprobacionDesdeEnCompras(int $id): array
+    /**
+     * @return array{mensaje: string, errores?: string, nivel?: int, firmantes?: list<array<string, mixed>>}
+     */
+    public function firmantesRetomeArbol(int $id): array
+    {
+        $req = $this->requisicionRepository->find($id);
+        if (! $req) {
+            return ['mensaje' => 'error', 'errores' => 'Requisición no encontrada.'];
+        }
+        if (! $this->usuarioPuedeEditarRequisicionEnCompras($req)) {
+            return ['mensaje' => 'error', 'errores' => 'No puede actuar sobre esta requisición en compras: su oficina de compra no coincide con la de la requisición.'];
+        }
+
+        try {
+            $preview = $this->arbolaprobacionService->firmantesRetomeArbolRequisicion($req);
+        } catch (\RuntimeException $e) {
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        }
+
+        return array_merge(['mensaje' => 'ok'], $preview);
+    }
+
+    public function enviarArbolAprobacionDesdeEnCompras(int $id, ?int $destinatarioUsuarioId = null): array
     {
         $req = $this->requisicionRepository->find($id);
         if (! $req) {
@@ -169,9 +191,28 @@ class RequisicionService
         }
 
         try {
-            $this->arbolaprobacionService->validaRequisicionModeloContraArbol($req);
+            $preview = $this->arbolaprobacionService->firmantesRetomeArbolRequisicion($req);
         } catch (\RuntimeException $e) {
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        }
+
+        if ($preview['requiere_seleccion']) {
+            if ($destinatarioUsuarioId === null || $destinatarioUsuarioId <= 0) {
+                return [
+                    'mensaje' => 'seleccionar_firmante',
+                    'nivel' => $preview['nivel'],
+                    'firmantes' => $preview['firmantes'],
+                ];
+            }
+            $idsValidos = array_column($preview['firmantes'], 'id');
+            if (! in_array($destinatarioUsuarioId, $idsValidos, true)) {
+                return ['mensaje' => 'error', 'errores' => 'El firmante seleccionado no es válido para este nivel del árbol.'];
+            }
+        }
+
+        $opcionesArbol = ['nivel_retome' => (int) $preview['nivel']];
+        if ($preview['requiere_seleccion'] && $destinatarioUsuarioId > 0) {
+            $opcionesArbol['destinatario_usuario_id'] = $destinatarioUsuarioId;
         }
 
         DB::beginTransaction();
@@ -186,7 +227,7 @@ class RequisicionService
             );
             $this->requisicionRepository->update(['estado' => $nombreEnArbol], $id);
 
-            $this->arbolaprobacionService->procesaArbolaprobacion('RE', $id, 'resume');
+            $this->arbolaprobacionService->procesaArbolaprobacion('RE', $id, 'resume', $opcionesArbol);
 
             DB::commit();
         } catch (\Exception $e) {

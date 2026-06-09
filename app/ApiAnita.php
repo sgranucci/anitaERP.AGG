@@ -69,6 +69,9 @@ class ApiAnita {
             if (isset($mapa[$clave]) && trim((string) $mapa[$clave]) !== '') {
                 return trim((string) $mapa[$clave]);
             }
+            if (preg_match('#^[\w.\-]+$#', trim($claveIfx))) {
+                return trim($claveIfx);
+            }
         }
 
         return trim((string) config('anita.ifx_server', ''));
@@ -88,7 +91,7 @@ class ApiAnita {
         }
 
         $bdd = (string) config('anita.bdd', 'ventas');
-        $bddPath = rtrim((string) config('anita.bdd_path', ''), '/');
+        $bddPath = rtrim((string) ($data['path_sistema'] ?? config('anita.bdd_path', '')), '/');
         $sistema = (isset($data['sistema']) && trim((string) $data['sistema']) !== '')
             ? trim((string) $data['sistema'])
             : $bdd;

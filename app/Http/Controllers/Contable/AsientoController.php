@@ -202,7 +202,9 @@ class AsientoController extends Controller
      */
     public function editar($id)
     {
-        can('editar-asiento');
+        if (! can('listar-asiento', false) && ! can('editar-asiento', false)) {
+            return redirect()->route('inicio')->with('mensaje', 'No tienes permisos para consultar el asiento');
+        }
 
 		$data = $this->asientoRepository->find($id);
 

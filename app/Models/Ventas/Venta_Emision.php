@@ -13,7 +13,7 @@ class Venta_Emision extends Model implements Auditable
     use \OwenIt\Auditing\Auditable;
 
     protected $fillable = ['venta_id','numeroitem', 'pedido_combinacion_id', 'ordentrabajo_id', 'lotestock',
-                        'articulo_id', 'combinacion_id', 'detalle', 'modulo_id', 'talle_id', 
+                        'articulo_id', 'combinacion_id', 'detalle', 'comentario_cocina', 'modulo_id', 'talle_id', 
                         'cantidad', 'pieza', 'caja',
                         'precio', 
                         'impuesto_id', 'incluyeimpuesto', 

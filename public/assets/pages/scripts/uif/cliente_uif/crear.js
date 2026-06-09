@@ -132,21 +132,12 @@
             $("#botonestado").html("<i class='fa fa-bell'></i>&nbsp;Estado "+descripcion);
         });
 
-        function sincronizarBarraAltaPremioUifCliente() {
-            var $bar = $('#barra-alta-premio-uif-cliente');
-            if (!$bar.length) {
-                return;
-            }
-            $bar.toggle($('.form3').is(':visible'));
-        }
-
         $("#botonform1").click(function(){
             $(".form1").show();
             $(".form2").hide();
             $(".form3").hide();
             $(".form4").hide();
             $(".form5").hide();
-            sincronizarBarraAltaPremioUifCliente();
         });
 
         $("#botonform2").click(function(){
@@ -158,7 +149,6 @@
 
 			$("#titulo").html("");
 			$("#titulo").html("<span class='fa fa-cash-register'></span> Datos facturac&oacute;n");
-            sincronizarBarraAltaPremioUifCliente();
             if (esEdicionClienteUif()) {
                 verificaAlertaUif();
             }
@@ -183,7 +173,6 @@
                 	}, 1000);
 				}
             });
-            sincronizarBarraAltaPremioUifCliente();
         });
 
         $("#botonform4").click(function(){
@@ -192,7 +181,6 @@
             $(".form3").hide();
             $(".form4").show();
             $(".form5").hide();
-            sincronizarBarraAltaPremioUifCliente();
         });
 
         $("#botonform5").click(function(){
@@ -201,7 +189,6 @@
             $(".form3").hide();
             $(".form4").hide();
             $(".form5").show();
-            sincronizarBarraAltaPremioUifCliente();
         });
 
         // Controla apertura modal de anulacion
@@ -258,18 +245,15 @@
                 $('.form3').show();
                 $('.form4').hide();
                 $('.form5').hide();
-                sincronizarBarraAltaPremioUifCliente();
             }
         } else if (tabParam === '4') {
             $('#botonform4').trigger('click');
         } else if (tabParam === '5') {
             $('#botonform5').trigger('click');
         }
-        sincronizarBarraAltaPremioUifCliente();
 
         $('#agrega_renglon_riesgo').on('click', agregaRenglonRiesgo);
         $(document).on('click', '.eliminar_riesgo', borraRenglonRiesgo);
-        $('#agrega_renglon_premio').on('click', agregaRenglonPremio);
         $(document).on('click', '.eliminar_premio', borraRenglonPremio);
         $('#agrega_renglon_archivo').on('click', agregaRenglonArchivo);
         $(document).on('click', '.eliminararchivo', borraRenglonArchivo);
@@ -431,14 +415,6 @@
         {
             $('#nombretiposuspension').text('');
         }
-    }
-
-    function agregaRenglonPremio(event){
-    	event.preventDefault();
-    	var renglon = $('#template-renglon-premio').html();
-
-    	$("#tbody-tabla-premio").append(renglon);
-    	actualizaRenglonesPremio();
     }
 
     function borraRenglonPremio(event) {

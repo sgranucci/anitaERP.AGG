@@ -45,7 +45,7 @@ En la misma pantalla (**Caja → Rendiciones → Cierre jornada Waitry**), secci
 | `credit_card` + sin `payments` o gateway `KIOSK MP` | MP | **Sí** |
 | `credit_card` + gateway `KIOSK MPQR` | QR | No |
 | `cash` (kiosko pagado en mostrador) | Efectivo | No |
-| `interface` / `external_reference_id` `E-…` (mostrador Anita) | Según gateway push | No |
+| `interface` / `external_reference_id` `E-…` (mostrador Anita) | Medio real de cobranza Anita (no Waitry) | No |
 
 `credit_card` en Waitry ya no es sinónimo de QR: distinguir por `payment.payments[].gateway`.
 
@@ -115,12 +115,16 @@ Si falla la API, la factura **no** se revierte; el POS recibe aviso en `warn` (`
 
 ## Push Orders — pago externo (interface)
 
-Waitry registra cobros de **pushExternalOrder** con `payment.type` = **`interface`** (no `cash` / `credit_card` en el tipo principal). El medio real va en `payment.payments[]`:
+Waitry registra cobros de **pushExternalOrder** con `payment.type` = **`interface`** (no `cash` / `credit_card` en el tipo principal). El medio real va en `payment.payments[]` **al enviar**:
 
-| Campo | Uso |
+| Campo | Uso al enviar (Anita → Waitry) |
 |-------|-----|
-| `gateway` | Identificación Control Z (configurable: `WAITRY_PAGO_GATEWAY_POR_TIPO`; default `MERCADOPAGO`, `TOTALCOIN`, `CASH`, …) |
+| `gateway` | Medio real Control Z (`WAITRY_PAGO_GATEWAY_POR_TIPO`; default `MERCADOPAGO`, `TOTALCOIN`, `CASH`, …) |
 | `amount` | Importe de ese medio |
+
+**Al leer la orden** (getOrdersPOS / getordersdetails), Waitry **siempre persiste** `payments[].gateway` = **`interface`**, aunque hayamos enviado `CASH` o `MERCADOPAGO`. Es intencional: no mezclar cobros externos con cobros nativos del POS en sus reportes. En Anita, la conciliación y el cuadro de cierre usan el **medio real de cobranza en ERP** (cuenta de caja de la factura), no el gateway Waitry. No se marca «medio distinto» en push mostrador (`E-…` / gateway `interface`).
+
+En Slots, Waitry alinea `payment.type` con `payment.payments[].gateway` en cobros del tótem; si no hay `payments`, envía `type=cash` y el estado de cobro se infiere con `payment.total_fee.amount` (0 = impaga, &gt; 0 = cobrada).
 
 **Lectura tótem (getOrdersPOS):** distinción Posnet vs QR en `credit_card` vía `payment.payments[].gateway`:
 
@@ -130,7 +134,7 @@ Waitry registra cobros de **pushExternalOrder** con `payment.type` = **`interfac
 | `KIOSK MP` | Terminal Posnet (config nueva Waitry) |
 | `KIOSK MPQR` | QR Mercado Pago en kiosco |
 
-Órdenes de mostrador Anita: `payment.type=interface` o `external_reference_id` con prefijo `E-`.
+Órdenes de mostrador Anita: prefijo `E-` en `display_id` / `external_reference_id`, o `payments[].gateway=interface` al leer. Si Waitry devuelve `type=credit_card` con gateway `interface`, Anita normaliza a `interface` (`WaitryMedioPagoCuentacajaSupport::extraerTipoPagoOrden`).
 
 ## Push Orders (pushExternalOrder, doc. pág. 28)
 
@@ -145,11 +149,14 @@ Ver [`push-external-order-request-ejemplo.json`](push-external-order-request-eje
 | `placeId` | `WAITRY_PLACE_ID_POR_EMPRESA` por `empresa_id` |
 | `table` | `WAITRY_TABLE_POR_EMPRESA` — ver [`table-por-empresa.json`](table-por-empresa.json) |
 | `external_id` | **`venta.id`** (string) — correlación con la venta interna |
-| `orderItems` | Líneas de `venta_emision` (SKU → `item.externalId`) |
+| `orderItems` | Líneas de `venta_emision` (SKU → `item.externalId`; `notes` = comentario cocina del ítem si existe) |
 | `paid` | `true` si hubo cobranza en el POS |
 | `totalPaid` | Monto pagado (junto con `paid` registra el cobro en Waitry como **interface**) |
 | `payment` | Si hubo cobranza: `type` = **`interface`**, `total_fee`, y `payments[]` con `gateway` + `amount` por medio (Control Z; ej. `MERCADOPAGO`, `CASH`) |
-| `client_name` / `external_client_id` | Cliente de factura de la cuenta (si existe) |
+| `notes` (orden) | Etiqueta del comprobante Anita (p. ej. `FC A 00003-123456`) — referencia de origen; reservado a futuro para observaciones generales de la factura |
+| `orderItems[].notes` | Comentario de cocina por ítem (`cuenta_gastronomia_linea.comentario_cocina` → `venta_emision.comentario_cocina`) — visible en KDS |
+| `client_name` | Cliente de factura de la cuenta (si existe) |
+| `external_client_id` | Referencia compacta del comprobante (`00003-123456`); antes se enviaba el DNI del cliente |
 
 ## Response
 

@@ -1,3 +1,4 @@
+@php use App\Models\Stock\Depmae; @endphp
 <table>
 	@if (!empty($reservarFilaLogoExcel))
 		<tbody>
@@ -26,13 +27,7 @@
 				<td>{{ $data->id }}</td>
 				<td>{{ $data->nombre }}</td>
 				<td>{{ $data->empresas->nombre ?? '' }}</td>
-				<td>
-					@foreach($tipodeposito_enum as $tipodeposito)
-						@if ($tipodeposito['valor'] == $data->tipodeposito)
-							{{ $tipodeposito['nombre'] }}
-						@endif
-					@endforeach
-				</td>
+				<td>{{ Depmae::etiquetaTipoDeposito($data->tipodeposito) }}</td>
 				<td>{{ $data->codigo }}</td>
 			</tr>
 		@endforeach

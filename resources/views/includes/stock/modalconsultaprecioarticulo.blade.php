@@ -52,6 +52,11 @@
         </div>
       </div>
       <div class="modal-footer py-2">
+        @if (can('crear-precios', false))
+          <a href="{{ route('crear_precio') }}" id="consultaprecioarticuloNuevo" class="btn btn-success btn-sm mr-auto d-none">
+            <i class="fa fa-plus"></i> Nuevo precio
+          </a>
+        @endif
         <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cerrar</button>
       </div>
     </div>

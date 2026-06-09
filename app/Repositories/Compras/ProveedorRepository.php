@@ -3,6 +3,8 @@
 namespace App\Repositories\Compras;
 
 use App\Models\Compras\Proveedor;
+use App\Models\Compras\Proveedor_Exclusion;
+use App\Models\Compras\Proveedor_Formapago;
 use App\Models\Configuracion\Impuesto;
 use App\Models\Configuracion\Localidad;
 use App\Models\Configuracion\Provincia;
@@ -20,7 +22,9 @@ use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Configuracion\LocalidadRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
+use App\Support\Compras\ProveedorExclusionAnitaSupport;
 use App\Support\Compras\ProveedorListadoFiltros;
+use App\Models\Seguridad\Usuario;
 use App\Traits\AnitaBridgeEscritura;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
@@ -247,35 +251,146 @@ class ProveedorRepository implements ProveedorRepositoryInterface
         return $proveedor;
     }
 
-    public function sincronizarConAnita(){
-		ini_set('max_execution_time', '300');
-	  	ini_set('memory_limit', '512M');
+    public function existeProveedorPorCodigo(string $codigo): bool
+    {
+        $codigo = ProveedorExclusionAnitaSupport::codigoErpDesdeAnita($codigo);
 
-        $apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'list', 
-						'sistema' => 'compras',
-						'campos' => "$this->keyFieldAnita as $this->keyField, $this->keyFieldAnita", 
-						'tabla' => $this->tableAnita[0] );
-        $dataAnita = json_decode($apiAnita->apiCall($data));
-
-        $datosLocal = Proveedor::all();
-        $datosLocalArray = [];
-        foreach ($datosLocal as $value) {
-            $datosLocalArray[] = $value->{$this->keyField};
-        }
-
-        foreach ($dataAnita as $value) {
-            if (!in_array(ltrim($value->{$this->keyField}, '0'), $datosLocalArray)) {
-                $this->traerRegistroDeAnita($value->{$this->keyFieldAnita}, true);
-            }
-			else
-			{
-                $this->traerRegistroDeAnita($value->{$this->keyFieldAnita}, false);
-			}
-        }
+        return $this->model->where('codigo', $codigo)->exists();
     }
 
-    private function traerRegistroDeAnita($key, $fl_crea_registro){
+    public function previewSincronizacionDesdeAnita(string $codigoAnita): ?array
+    {
+        $key = ProveedorExclusionAnitaSupport::codigoAnitaParaBridge($codigoAnita);
+        $codigoErp = ProveedorExclusionAnitaSupport::codigoErpDesdeAnita($key);
+        $apiAnita = new ApiAnita();
+
+        $promae = $this->consultarPromaeAnita($apiAnita, $key);
+        if ($promae === null) {
+            return null;
+        }
+
+        $filasProexcl = $this->consultarProexclAnita($apiAnita, $key);
+        $lineasExclusion = ProveedorExclusionAnitaSupport::lineasErpDesdeAnita($filasProexcl, $promae);
+        $filasPropago = $this->consultarPropagoAnita($apiAnita, $key);
+        $existe = $this->existeProveedorPorCodigo($codigoErp);
+
+        return [
+            'codigo' => $codigoErp,
+            'codigo_anita' => $key,
+            'nombre_anita' => trim((string) ($promae->prom_nombre ?? '')),
+            'accion' => $existe ? 'actualizar' : 'insertar',
+            'exclusiones_anita' => count($lineasExclusion),
+            'formapagos_anita' => count($filasPropago),
+            'proexcl_filas' => count($filasProexcl),
+            'proexcl_tipo_invalido' => count($filasProexcl) - count(array_filter($filasProexcl, function ($fila) use ($promae) {
+                $tipo = ProveedorExclusionAnitaSupport::tipoRetencionAnitaErpCodigo((string) ($fila->proex_tipo_ret ?? ''));
+
+                return $tipo !== null
+                    || ProveedorExclusionAnitaSupport::inferirTipoRetencionDesdePromaePorFechas($fila, $promae) !== null
+                    || ProveedorExclusionAnitaSupport::inferirTipoRetencionDesdeComentario((string) ($fila->proex_comentario ?? '')) !== null;
+            })),
+        ];
+    }
+
+    /**
+     * @return array{
+     *     insertados: int,
+     *     actualizados: int,
+     *     omitidos: int,
+     *     errores: int,
+     *     solo_en_erp: list<string>,
+     *     dry_run: bool
+     * }
+     */
+    public function resincronizarDesdeAnita(bool $dryRun = false): array
+    {
+        ini_set('max_execution_time', '0');
+        ini_set('memory_limit', '512M');
+
+        $stats = [
+            'insertados' => 0,
+            'actualizados' => 0,
+            'omitidos' => 0,
+            'errores' => 0,
+            'solo_en_erp' => [],
+            'dry_run' => $dryRun,
+        ];
+
+        $apiAnita = new ApiAnita();
+        $data = [
+            'acc' => 'list',
+            'sistema' => 'compras',
+            'campos' => "{$this->keyFieldAnita} as {$this->keyField}, {$this->keyFieldAnita}",
+            'tabla' => $this->tableAnita[0],
+        ];
+        $dataAnita = json_decode($apiAnita->apiCall($data));
+        if (! is_array($dataAnita)) {
+            return $stats;
+        }
+
+        $codigosAnita = [];
+        foreach ($dataAnita as $value) {
+            $codigoAnita = (string) ($value->{$this->keyFieldAnita} ?? '');
+            if ($codigoAnita === '') {
+                continue;
+            }
+            $codigosAnita[] = ProveedorExclusionAnitaSupport::codigoErpDesdeAnita($codigoAnita);
+
+            if ($dryRun) {
+                $preview = $this->previewSincronizacionDesdeAnita($codigoAnita);
+                if ($preview === null) {
+                    $stats['omitidos']++;
+
+                    continue;
+                }
+                if ($preview['accion'] === 'insertar') {
+                    $stats['insertados']++;
+                } else {
+                    $stats['actualizados']++;
+                }
+
+                continue;
+            }
+
+            try {
+                $resultado = $this->traerRegistroDeAnita($codigoAnita);
+                if ($resultado === 'insertado') {
+                    $stats['insertados']++;
+                } elseif ($resultado === 'actualizado') {
+                    $stats['actualizados']++;
+                } else {
+                    $stats['omitidos']++;
+                }
+            } catch (\Throwable) {
+                $stats['errores']++;
+            }
+        }
+
+        $codigosAnitaFlip = array_flip($codigosAnita);
+        $this->model->newQuery()
+            ->whereNull('deleted_at')
+            ->orderBy('codigo')
+            ->pluck('codigo')
+            ->each(function ($codigoErp) use (&$stats, $codigosAnitaFlip) {
+                $codigo = ProveedorExclusionAnitaSupport::codigoErpDesdeAnita((string) $codigoErp);
+                if (! isset($codigosAnitaFlip[$codigo])) {
+                    $stats['solo_en_erp'][] = $codigo;
+                }
+            });
+
+        return $stats;
+    }
+
+    public function sincronizarConAnita(){
+		$this->resincronizarDesdeAnita(false);
+    }
+
+    /**
+     * @return 'insertado'|'actualizado'|null
+     */
+    public function traerRegistroDeAnita(string $codigoAnita, ?bool $fl_crea_registro = null): ?string
+    {
+        $key = ProveedorExclusionAnitaSupport::codigoAnitaParaBridge($codigoAnita);
         $apiAnita = new ApiAnita();
         $data = array( 
             'acc' => 'list', 'tabla' => $this->tableAnita[0], 
@@ -367,10 +482,19 @@ class ProveedorRepository implements ProveedorRepositoryInterface
         );
         $dataAdicionalAnita = json_decode($apiAnita->apiCall($data));
 
-		$usuario_id = Auth::user()->id;
+		$usuario_id = Auth::id() ?? (int) (Usuario::query()->orderBy('id')->value('id') ?? 1);
+
+        if (! is_array($dataAnita) || ! isset($dataAnita[0])) {
+            return null;
+        }
 
         if (isset($dataAnita)) {
             $data = $dataAnita[0];
+            $codigoErp = ProveedorExclusionAnitaSupport::codigoErpDesdeAnita((string) $data->prom_proveedor);
+            if ($fl_crea_registro === null) {
+                $fl_crea_registro = ! $this->existeProveedorPorCodigo($codigoErp);
+            }
+            $resultado = null;
 
 			$localidad_id = NULL;
 			$provincia_id = NULL;
@@ -578,7 +702,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 
 			$arr_campos = [
 				"nombre" => $data->prom_nombre,
-				"codigo" => ltrim($data->prom_proveedor, '0'),
+				"codigo" => $codigoErp,
             	"contacto" => $data->prom_contacto,
             	"fantasia" => $data->prom_fantasia,
 				"email" => $data->prom_e_mail,
@@ -620,16 +744,69 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 				"usuario_id" => $usuario_id,
             	];
 	
-			if ($fl_crea_registro)
+			if ($fl_crea_registro) {
             	$proveedor = $this->model->create($arr_campos);
-			else
-            	$proveedor = $this->model->findOrFail(ltrim($data->prom_proveedor, '0'))->update($arr_campos);
+                $resultado = 'insertado';
+            } else {
+                $proveedor = $this->model->where('codigo', $codigoErp)->first();
+                if ($proveedor === null) {
+                    $proveedor = $this->model->create($arr_campos);
+                    $resultado = 'insertado';
+                } else {
+                    $proveedor->update($arr_campos);
+                    $proveedor = $proveedor->fresh();
+                    $resultado = 'actualizado';
+                }
+            }
 
-			// Graba tabla de exclusiones
-			$data = array( 
-				'acc' => 'list', 'tabla' => $this->tableAnita[2], 
-				'sistema' => 'compras',
-				'campos' => '
+            $filasProexcl = $this->consultarProexclAnita($apiAnita, $key);
+            $this->reemplazarExclusionesDesdeAnita($proveedor, $filasProexcl, $data);
+
+            $filasPropago = $this->consultarPropagoAnita($apiAnita, $key);
+            $this->reemplazarFormapagosDesdeAnita($proveedor, $filasPropago);
+
+            return $resultado;
+        }
+
+        return null;
+    }
+
+    private function consultarPromaeAnita(ApiAnita $apiAnita, string $key): ?object
+    {
+        $data = [
+            'acc' => 'list',
+            'tabla' => $this->tableAnita[0],
+            'sistema' => 'compras',
+            'campos' => '
+				prom_proveedor,
+				prom_nombre,
+				prom_excl_retiva,
+				prom_fecha_excl,
+				prom_fe_ini_excl,
+				prom_excl_retgan,
+				prom_fecha_exclrg,
+				prom_fe_ini_exclrg,
+				prom_excl_retib,
+				prom_fecha_exclib,
+				prom_fe_ini_exclib
+			',
+            'whereArmado' => " WHERE {$this->keyFieldAnita} = '{$key}' ",
+        ];
+        $filas = ApiAnita::decodificarListaFilas($apiAnita->apiCall($data));
+
+        return $filas[0] ?? null;
+    }
+
+    /**
+     * @return list<object>
+     */
+    private function consultarProexclAnita(ApiAnita $apiAnita, string $key): array
+    {
+        $data = [
+            'acc' => 'list',
+            'tabla' => $this->tableAnita[2],
+            'sistema' => 'compras',
+            'campos' => '
 					proex_proveedor,
 					proex_nro_linea,
 					proex_tipo_ret,
@@ -638,41 +815,22 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 					proex_porc_excl,
 					proex_comentario
 				',
-				'whereArmado' => " WHERE proex_proveedor = '".$key."' " 
-			);
-			$dataAnita = json_decode($apiAnita->apiCall($data));
+            'whereArmado' => " WHERE proex_proveedor = '{$key}' ",
+        ];
 
-			foreach ($dataAnita as $exclusion)
-			{
-				switch($exclusion->proex_tipo_ret)
-				{
-					case '0': // ganancias
-						$tipoRetencion = 'G';
-						break;
-					case '1': // iva
-						$tipoRetencion = 'I';
-						break;
-					case '2': // ingresos brutos
-						$tipoRetencion = 'B';
-						break;
-				}
-				$arr_proexcl = [
-					"proveedor_id" => $proveedor->id,
-					"comentario" => $exclusion->proex_comentario,
-					"tiporetencion" => $tipoRetencion,
-					"desdefecha" => $exclusion->proex_desde_fecha,
-					"hastafecha" => $exclusion->proex_hasta_fecha,
-					"porcentajeexclusion" => $exclusion->proex_porc_excl
-				];
-				if ($fl_crea_registro)
-					$this->proveedor_exclusionRepository->createUnique($arr_proexcl);
-			}
-	
-			// Graba tabla de formas de pago
-			$data = array( 
-				'acc' => 'list', 'tabla' => $this->tableAnita[3], 
-				'sistema' => 'compras',
-				'campos' => '
+        return ApiAnita::decodificarListaFilas($apiAnita->apiCall($data));
+    }
+
+    /**
+     * @return list<object>
+     */
+    private function consultarPropagoAnita(ApiAnita $apiAnita, string $key): array
+    {
+        $data = [
+            'acc' => 'list',
+            'tabla' => $this->tableAnita[3],
+            'sistema' => 'compras',
+            'campos' => '
 					prop_proveedor,
 					prop_nombre,
 					prop_forma_pago,
@@ -686,64 +844,62 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 					prop_e_mail_conf,
 					prop_offset
 				',
-				'whereArmado' => " WHERE prop_proveedor = '".$key."' " 
-			);
-			$dataAnita = json_decode($apiAnita->apiCall($data));
+            'whereArmado' => " WHERE prop_proveedor = '{$key}' ",
+        ];
 
-			foreach ($dataAnita as $formapago)
-			{
-				// Busca forma de pago
-				$forma = $this->formapagoRepository->findPorAbreviatura($formapago->prop_forma_pago);
+        return ApiAnita::decodificarListaFilas($apiAnita->apiCall($data));
+    }
 
-				if ($forma)
-					$formapago_id = $forma->id;
-				else
-					$formapago_id = 1;
+    private function reemplazarExclusionesDesdeAnita(Proveedor $proveedor, array $filasProexcl, object $promae): void
+    {
+        Proveedor_Exclusion::query()->where('proveedor_id', $proveedor->id)->delete();
 
-				// Busca tipo de cuenta de caja
-				$tipocuentacaja = $this->tipocuentacajaRepository->find($formapago->prop_tipo_cta);
-				if ($tipocuentacaja)
-					$tipocuentacaja_id = $tipocuentacaja->id;
-				else
-					$tipocuentacaja_id = 1;
+        $lineas = ProveedorExclusionAnitaSupport::lineasErpDesdeAnita($filasProexcl, $promae);
+        foreach ($lineas as $linea) {
+            Proveedor_Exclusion::query()->create([
+                'proveedor_id' => $proveedor->id,
+                'comentario' => $linea['comentario'],
+                'tiporetencion' => $linea['tiporetencion'],
+                'desdefecha' => $linea['desdefecha'],
+                'hastafecha' => $linea['hastafecha'],
+                'porcentajeexclusion' => $linea['porcentajeexclusion'],
+            ]);
+        }
+    }
 
-				// Busca banco
-				$banco = $this->bancoRepository->findPorCodigo($formapago->prop_cod_banco);
-				if ($banco)
-					$banco_id = $banco->id;
-				else
-					$banco_id = null;
+    private function reemplazarFormapagosDesdeAnita(Proveedor $proveedor, array $filasPropago): void
+    {
+        Proveedor_Formapago::query()->where('proveedor_id', $proveedor->id)->delete();
 
-				// Busca medio de pago
-				$mediopago = $this->mediopagoRepository->findPorCodigo($formapago->prop_tipo_comp);
-				if ($mediopago)
-					$mediopago_id = $mediopago->id;
-				else
-					$mediopago_id = null;
+        foreach ($filasPropago as $formapago) {
+            $forma = $this->formapagoRepository->findPorAbreviatura($formapago->prop_forma_pago);
+            $formapago_id = $forma ? $forma->id : 1;
 
-				// Busca moneda
-				$moneda = $this->monedaRepository->findPorCodigo($formapago->prop_cod_mon);
-				if ($moneda)
-					$moneda_id = $moneda->id;
-				else
-					$moneda_id = 1;
+            $tipocuentacaja = $this->tipocuentacajaRepository->find($formapago->prop_tipo_cta);
+            $tipocuentacaja_id = $tipocuentacaja ? $tipocuentacaja->id : 1;
 
-				$arr_formapago = [
-					"proveedor_id" => $proveedor->id,
-					"nombre" => $formapago->prop_nombre,
-					"formapago_id" => $formapago_id,
-					"cbu" => $formapago->prop_cbu,
-					"tipocuentacaja_id" => $tipocuentacaja_id,
-					"moneda_id" => $moneda_id,
-					"numerocuenta" => $formapago->prop_nro_cuenta,
-					"nroinscripcion" => $formapago->prop_cuit,
-					"banco_id" => $banco_id,
-					"mediopago_id" => $mediopago_id,
-					"email" => $formapago->prop_e_mail_conf,
-				];
-				if ($fl_crea_registro)
-					$this->proveedor_formapagoRepository->createUnique($arr_formapago);
-			}			
+            $banco = $this->bancoRepository->findPorCodigo($formapago->prop_cod_banco);
+            $banco_id = $banco ? $banco->id : null;
+
+            $mediopago = $this->mediopagoRepository->findPorCodigo($formapago->prop_tipo_comp);
+            $mediopago_id = $mediopago ? $mediopago->id : null;
+
+            $moneda = $this->monedaRepository->findPorCodigo($formapago->prop_cod_mon);
+            $moneda_id = $moneda ? $moneda->id : 1;
+
+            Proveedor_Formapago::query()->create([
+                'proveedor_id' => $proveedor->id,
+                'nombre' => $formapago->prop_nombre,
+                'formapago_id' => $formapago_id,
+                'cbu' => $formapago->prop_cbu,
+                'tipocuentacaja_id' => $tipocuentacaja_id,
+                'moneda_id' => $moneda_id,
+                'numerocuenta' => $formapago->prop_nro_cuenta,
+                'nroinscripcion' => $formapago->prop_cuit,
+                'banco_id' => $banco_id,
+                'mediopago_id' => $mediopago_id,
+                'email' => $formapago->prop_e_mail_conf,
+            ]);
         }
     }
 
@@ -1155,28 +1311,19 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 
 	private function grabaExclusion($request, ?ApiAnita $apiAnita = null)
 	{
-		// Graba exclusiones
-		if (isset($request['desdefechas']))
-		{
-			$apiAnita = $apiAnita ?? new ApiAnita();
+		$lineas = ProveedorExclusionAnitaSupport::lineasDesdeRequest($request);
+		if ($lineas === []) {
+			return;
+		}
 
-			$desdefechas = $request['desdefechas'];
-			$hastafechas = $request['hastafechas'];
-			$porcentajeexclusiones = $request['porcentajeexclusiones'];
-			$tiporetenciones = $request['tiporetenciones'];
-			$comentarios = $request['comentarios'];
-			
-			if ($desdefechas[0] != null)
-				$qExclusion = count($desdefechas);
-			else
-				$qExclusion = 0;
-			for ($i_exclusion=0; $i_exclusion < $qExclusion; $i_exclusion++) 
-			{
-				$desdeFecha = Carbon::createFromFormat( 'Y-m-d', $desdefechas[$i_exclusion])->format('Ymd');
-				$hastaFecha = Carbon::createFromFormat( 'Y-m-d', $hastafechas[$i_exclusion])->format('Ymd');
-				$data = array( 'tabla' => $this->tableAnita[2], 'acc' => 'insert',
-						'sistema' => 'compras',
-							'campos' => '
+		$apiAnita = $apiAnita ?? new ApiAnita();
+
+		foreach ($lineas as $iExclusion => $linea) {
+			$data = [
+				'tabla' => $this->tableAnita[2],
+				'acc' => 'insert',
+				'sistema' => 'compras',
+				'campos' => '
 							proex_proveedor,
 							proex_nro_linea,
 							proex_tipo_ret,
@@ -1185,17 +1332,16 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 							proex_porc_excl,
 							proex_comentario
 							',
-						'valores' => " 
-								'".str_pad($request['codigo'], 6, "0", STR_PAD_LEFT)."', 
-								'".$i_exclusion."', 
-								'".$tiporetenciones[$i_exclusion]."',
-								'".$desdeFecha."',
-								'".$hastaFecha."',
-								'".$porcentajeexclusiones[$i_exclusion]."',
-								'".$comentarios[$i_exclusion]."' "
-						);
-				$this->apiCallAnitaEscritura($apiAnita, $data, 'proexcl insert');
-			}
+				'valores' => "
+								'".str_pad($request['codigo'], 6, '0', STR_PAD_LEFT)."',
+								'".$iExclusion."',
+								'".$linea['tipo_anita']."',
+								'".ProveedorExclusionAnitaSupport::fechaAnitaInformix($linea['desde'])."',
+								'".ProveedorExclusionAnitaSupport::fechaAnitaInformix($linea['hasta'])."',
+								'".$linea['porcentaje']."',
+								'".ProveedorExclusionAnitaSupport::escaparSqlAnita($linea['comentario'])."' ",
+			];
+			$this->apiCallAnitaEscritura($apiAnita, $data, 'proexcl insert');
 		}
 	}
 
@@ -1383,38 +1529,18 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 		$retieneiva = $data['retieneiva'];
 		$retienesuss = $data['retienesuss'];
 
-		$exclusionretiva = $exclusionretgan = $exclusionretib = 0;
-		$fechaexclusionretiva = $fechaexclusionretgan = $fechaexclusionretib = 0;
-		$fechainicioexclusionretiva = $fechainicioexclusionretgan = $fechainicioexclusionretib = 0;
-		if (isset($data['desdefechas']))
-		{
-			$desdefechas = $data['desdefechas'];
-			$hastafechas = $data['hastafechas'];
-			$porcentajeexclusiones = $data['porcentajeexclusiones'];
-			$tiporetenciones = $data['tiporetenciones'];
-
-			for ($i = 0; $i < count($desdefechas); $i++)
-			{
-				switch($tiporetenciones[$i])
-				{
-					case 'I':
-						$exclusionretiva = $porcentajeexclusiones[$i];
-						$fechaexclusionretiva = $hastafechas[$i];
-						$fechainicioexclusionretiva = $desdefechas[$i];
-						break;
-					case 'G': 
-						$exclusionretgan = $porcentajeexclusiones[$i];
-						$fechaexclusionretgan = $hastafechas[$i];
-						$fechainicioexclusionretgan = $desdefechas[$i];
-						break;					
-					case 'B':
-						$exclusionretib = $porcentajeexclusiones[$i];
-						$fechaexclusionretib = $hastafechas[$i];
-						$fechainicioexclusionretib = $desdefechas[$i];
-						break;
-				}
-			}
-		}
+		$camposExclusionPromae = ProveedorExclusionAnitaSupport::camposPromaeDesdeLineas(
+			ProveedorExclusionAnitaSupport::lineasDesdeRequest($data)
+		);
+		$exclusionretiva = $camposExclusionPromae['exclusionretiva'];
+		$fechaexclusionretiva = $camposExclusionPromae['fechaexclusionretiva'];
+		$fechainicioexclusionretiva = $camposExclusionPromae['fechainicioexclusionretiva'];
+		$exclusionretgan = $camposExclusionPromae['exclusionretgan'];
+		$fechaexclusionretgan = $camposExclusionPromae['fechaexclusionretgan'];
+		$fechainicioexclusionretgan = $camposExclusionPromae['fechainicioexclusionretgan'];
+		$exclusionretib = $camposExclusionPromae['exclusionretib'];
+		$fechaexclusionretib = $camposExclusionPromae['fechaexclusionretib'];
+		$fechainicioexclusionretib = $camposExclusionPromae['fechainicioexclusionretib'];
 
 		switch($data['condicionIIBB_id'])
 		{
@@ -1465,7 +1591,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 			$conceptogasto = $data['conceptogasto_id'];
 			
 		$retiva = $this->retencionivaRepository->findPorId($data['retencioniva_id']);
-		if ($retencioniva)
+		if ($retiva)
 			$retencioniva = $retiva->codigo;
 		else
 			$retencioniva = 0;

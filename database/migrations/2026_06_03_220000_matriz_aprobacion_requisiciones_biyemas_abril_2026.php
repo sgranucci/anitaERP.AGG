@@ -25,6 +25,8 @@ return new class extends Migration
 
     private const ESTADO_EN_COMPRAS = 'EN COMPRAS';
 
+    private const ESTADO_APROBADA = 'APROBADA';
+
     /**
      * Matriz «Matriz Aprobacion Requi - Abril 2026.xlsx» — empresa BIYEMAS.
      *
@@ -288,7 +290,7 @@ return new class extends Migration
                 'desdemonto' => $desde,
                 'hastamonto' => $hasta,
                 'moneda_id' => $monedaId,
-                'documento_estado_al_aprobar' => null,
+                'documento_estado_al_aprobar' => self::ESTADO_APROBADA,
             ]);
             $insertados++;
         }

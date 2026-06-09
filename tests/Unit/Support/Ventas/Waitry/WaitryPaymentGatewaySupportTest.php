@@ -77,4 +77,36 @@ final class WaitryPaymentGatewaySupportTest extends TestCase
             'anita_es_totem' => true,
         ]));
     }
+
+    public function test_gateway_interface_facturada_es_push_erp(): void
+    {
+        $this->assertTrue(WaitryPaymentGatewaySupport::esOrdenPushErp([
+            'payment' => [
+                'type' => 'credit_card',
+                'payments' => [['gateway' => 'interface', 'amount' => 9700]],
+            ],
+            'waitry_tipo_pago' => 'interface',
+            'facturada_erp' => true,
+        ]));
+    }
+
+    public function test_interface_qr_celular_facturada_no_es_push_erp(): void
+    {
+        $this->assertFalse(WaitryPaymentGatewaySupport::esOrdenPushErp([
+            'payment' => [
+                'type' => 'interface',
+                'payments' => [['gateway' => 'TOTALCOIN', 'amount' => 40]],
+            ],
+            'waitry_tipo_pago' => 'interface',
+            'facturada_erp' => true,
+        ]));
+    }
+
+    public function test_es_gateway_cobro_externo_push_erp(): void
+    {
+        $this->assertTrue(WaitryPaymentGatewaySupport::esGatewayCobroExternoPushErp('interface'));
+        $this->assertTrue(WaitryPaymentGatewaySupport::esGatewayCobroExternoPushErp('INTERFACE'));
+        $this->assertFalse(WaitryPaymentGatewaySupport::esGatewayCobroExternoPushErp('CASH'));
+        $this->assertFalse(WaitryPaymentGatewaySupport::esGatewayCobroExternoPushErp(null));
+    }
 }

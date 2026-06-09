@@ -246,14 +246,16 @@ function activa_eventos_consultaarticulo()
             $('#consultaarticuloModal').removeData('articuloListaprecioNombre');
         }
 
-        //if ($(this).parents("tr").find(".articulo_id").length > 0) {
-            ptrarticulo_id = $(this).closest("tr").find(".articulo_id");
-            ptrcodigoarticulo = $(this).closest("tr").find(".codigoarticulo");
-            ptrnombrearticulo = $(this).closest("tr").find(".descripcionarticulo");
-            ptrunidadmedida = $(this).closest("tr").find(".unidadmedida");
-            ptrcategoria_id = $(this).closest("tr").find(".categoria_id");
-            ptrsubcategoria_id = $(this).closest("tr").find(".subcategoria_id");
-        //}
+        var $ctxConsulta = $(this).closest('tr');
+        if (!$ctxConsulta.length) {
+            $ctxConsulta = $(this).closest('.tm-articulo-campo');
+        }
+        ptrarticulo_id = $ctxConsulta.find('.articulo_id');
+        ptrcodigoarticulo = $ctxConsulta.find('.codigoarticulo');
+        ptrnombrearticulo = $ctxConsulta.find('.descripcionarticulo');
+        ptrunidadmedida = $ctxConsulta.find('.unidadmedida');
+        ptrcategoria_id = $ctxConsulta.find('.categoria_id');
+        ptrsubcategoria_id = $ctxConsulta.find('.subcategoria_id');
         // Abre modal de consulta
         $("#consultaarticuloModal").modal('show');
     });
@@ -338,7 +340,13 @@ function activa_eventos_consultaarticulo()
         $(ptrcategoria_id).val(categoria_id);
         $(ptrsubcategoria_id).val(subcategoria_id);
 
-        var $ctxArt = ptrarticulo_id && ptrarticulo_id.length ? $(ptrarticulo_id).closest('tr') : $();
+        var $ctxArt = $();
+        if (ptrarticulo_id && ptrarticulo_id.length) {
+            $ctxArt = $(ptrarticulo_id).closest('tr');
+            if (!$ctxArt.length) {
+                $ctxArt = $(ptrarticulo_id).closest('.tm-articulo-campo');
+            }
+        }
         actualizarLinkEditarArticulo($ctxArt, seleccion);
 
         $("#articulo_id").val(seleccion);
@@ -538,11 +546,11 @@ function activa_eventos_consultaarticulo()
 }
 
 $(function () {
-    $('tr').each(function () {
-        var $tr = $(this);
-        var articuloId = parseInt($tr.find('.articulo_id').val(), 10) || 0;
-        if (articuloId > 0 && ($tr.find('.btn-link-articulo').length || $tr.find('a[href*="editar_articulo"]').length)) {
-            actualizarLinkEditarArticulo($tr, articuloId);
+    $('tr, .tm-articulo-campo').each(function () {
+        var $ctx = $(this);
+        var articuloId = parseInt($ctx.find('.articulo_id').val(), 10) || 0;
+        if (articuloId > 0 && ($ctx.find('.btn-link-articulo').length || $ctx.find('a[href*="editar_articulo"]').length)) {
+            actualizarLinkEditarArticulo($ctx, articuloId);
         }
     });
 });

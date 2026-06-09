@@ -10,9 +10,10 @@ use Illuminate\Support\Facades\Auth;
 class SincronizarArticuloDesdeAnita extends Command
 {
     protected $signature = 'articulo:sincronizar-anita
+                            {--sku= : Importar/actualizar un solo artículo por SKU ERP (ej. V0432)}
                             {--usuario= : ID usuario para altas (cuentas/estado; default: primer usuario)}';
 
-    protected $description = 'Importa artículos nuevos desde Anita (stkmae) vía ApiAnita; solo altas que no existan ya en el ERP por SKU.';
+    protected $description = 'Importa artículos desde Anita (stkmae) vía ApiAnita. Sin --sku: solo altas nuevas. Con --sku: importa o actualiza ese artículo.';
 
     public function handle(ArticuloAnitaSyncService $sync): int
     {
@@ -33,7 +34,21 @@ class SincronizarArticuloDesdeAnita extends Command
             return self::FAILURE;
         }
 
+        $sku = $this->option('sku');
+        $sku = is_string($sku) ? trim($sku) : '';
+
         try {
+            if ($sku !== '') {
+                $this->info("Sincronizando artículo {$sku} desde Anita…");
+                $ret = $sync->sincronizarSkuDesdeAnita($sku);
+                $this->info("SKU {$ret['sku']} (Anita {$ret['codigo_anita']}): {$ret['accion']}.");
+                foreach ($ret['advertencias'] as $w) {
+                    $this->warn($w);
+                }
+
+                return self::SUCCESS;
+            }
+
             $this->info('Sincronizando artículos desde Anita (puede tardar varios minutos)…');
             $ret = $sync->sincronizarDesdeAnita();
         } catch (\Throwable $e) {

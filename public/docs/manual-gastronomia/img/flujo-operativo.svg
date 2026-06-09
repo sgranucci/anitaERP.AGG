@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 320" font-family="DejaVu Sans, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 Z" fill="#2E75B6"/>
+    </marker>
+  </defs>
+  <rect width="920" height="320" fill="#f8fafc"/>
+  <text x="460" y="28" text-anchor="middle" font-size="16" font-weight="bold" fill="#1F4E79">Flujo mínimo operativo  Gastronomía</text>
+  <g font-size="11" fill="#17202A">
+    <rect x="20" y="60" width="120" height="52" rx="6" fill="#d4edda" stroke="#28a745"/>
+    <text x="80" y="82" text-anchor="middle" font-weight="bold">1. Abrir jornada</text>
+    <text x="80" y="98" text-anchor="middle">Ventas ’ Jornada</text>
+
+    <rect x="170" y="60" width="130" height="52" rx="6" fill="#fff3cd" stroke="#ffc107"/>
+    <text x="235" y="82" text-anchor="middle" font-weight="bold">2. Habilitar turno</text>
+    <text x="235" y="98" text-anchor="middle">Por terminal / PC</text>
+
+    <rect x="330" y="60" width="150" height="52" rx="6" fill="#cce5ff" stroke="#007bff"/>
+    <text x="405" y="82" text-anchor="middle" font-weight="bold">3. Facturar cuentas</text>
+    <text x="405" y="98" text-anchor="middle">Proceso facturación</text>
+
+    <rect x="510" y="60" width="130" height="52" rx="6" fill="#ffe8cc" stroke="#fd7e14"/>
+    <text x="575" y="82" text-anchor="middle" font-weight="bold">4. Cierre parcial</text>
+    <text x="575" y="98" text-anchor="middle">Opcional (X)</text>
+
+    <rect x="670" y="60" width="120" height="52" rx="6" fill="#f8d7da" stroke="#dc3545"/>
+    <text x="730" y="82" text-anchor="middle" font-weight="bold">5. Cierre turno</text>
+    <text x="730" y="98" text-anchor="middle">Definitivo</text>
+
+    <rect x="820" y="60" width="80" height="52" rx="6" fill="#e2d5f1" stroke="#6f42c1"/>
+    <text x="860" y="88" text-anchor="middle" font-weight="bold">6. Cierre</text>
+    <text x="860" y="102" text-anchor="middle">jornada</text>
+  </g>
+  <line x1="140" y1="86" x2="168" y2="86" stroke="#2E75B6" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="300" y1="86" x2="328" y2="86" stroke="#2E75B6" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="480" y1="86" x2="508" y2="86" stroke="#2E75B6" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="640" y1="86" x2="668" y2="86" stroke="#2E75B6" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="790" y1="86" x2="818" y2="86" stroke="#2E75B6" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="40" y="150" width="840" height="140" rx="8" fill="#ffffff" stroke="#ced4da"/>
+  <text x="60" y="175" font-size="12" font-weight="bold" fill="#495057">Consultas y control (durante o al cierre)</text>
+  <text x="60" y="200" font-size="11" fill="#212529">" Facturas del día  comprobantes emitidos, NC, medios de pago, canjes</text>
+  <text x="60" y="220" font-size="11" fill="#212529">" Cierres de turno  parciales y definitivos, comprobantes PDF, conciliación</text>
+  <text x="60" y="240" font-size="11" fill="#212529">" Informe gerente  totales, top artículos, gráficos por jornada</text>
+  <text x="60" y="260" font-size="11" fill="#212529">" Artículos vendidos  detalle por SKU con drill-down a facturas y movimientos</text>
+  <text x="60" y="280" font-size="11" fill="#212529">" Saneamiento de turnos  cuentas pendientes, cierre remoto, extensión de horarios</text>
+</svg>

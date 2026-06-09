@@ -206,41 +206,21 @@ class ApiController extends Controller
             'conceptos.*.importe' => 'required|numeric',
         ]);
 
-        // Busca proveedor por documento
-        $proveedores = $this->proveedorRepository->findPorDocumento($request->cuit_proveedor);
+        $numeroOc = trim((string) $request->input('numero_oc', ''));
+        try {
+            $resueltoProveedor = $numeroOc !== ''
+                ? $this->resolverProveedorDesdeOrdenCompra($request->cuit_proveedor, $numeroOc)
+                : null;
 
-        $proveedor_id = 1;
-        $codigoProveedor = '000001';
-        if ($proveedores)
-        {
-            foreach ($proveedores as $proveedor)
-            {
-                if ($proveedor->estado == '0')
-                {
-                    $proveedor_id = $proveedor->id;
-                    $codigoProveedor = $proveedor->codigo;
-                }
-            }        
-        }
-        else
-        {
-            // Lo busca sin guiones
-            $numerodocumento =  str_replace("-", "", $request->cuit_proveedor); 
-
-            $proveedores = $this->proveedorRepository->findPorDocumento($numerodocumento);
-
-            if ($proveedores)
-            {
-                foreach ($proveedores as $proveedor)
-                {
-                    if ($proveedor->estado == '0')
-                    {
-                        $proveedor_id = $proveedor->id;
-                        $codigoProveedor = $proveedor->codigo;
-                    }
-                }
+            if ($resueltoProveedor === null) {
+                $resueltoProveedor = $this->resolverProveedorDesdeCuit($request->cuit_proveedor);
             }
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
         }
+
+        $proveedor_id = $resueltoProveedor['proveedor_id'];
+        $codigoProveedor = $resueltoProveedor['codigoProveedor'];
 
         // Busca empresa por documento
         $empresas = $this->empresaRepository->findPorDocumento($request->cuit_empresa);
@@ -383,5 +363,105 @@ class ApiController extends Controller
                 'errores' => $e->getMessage(),
             ], 422);
         }
+    }
+
+    /**
+     * Resuelve el proveedor usando el código de la OC (penmp_proveedor).
+     * Devuelve null si la OC no existe (para permitir fallback por CUIT).
+     *
+     * @return array{proveedor_id: int, codigoProveedor: string}|null
+     */
+    private function resolverProveedorDesdeOrdenCompra(string $cuit, string $numeroOc): ?array
+    {
+        $ordencompra = $this->ordencompraService->leeOrdenCompra($numeroOc);
+        if ($ordencompra === 'OC inexistente') {
+            return null;
+        }
+
+        $datosOrdenCompra = $ordencompra['ordencompra'];
+        $cuitOrdenCompra = str_replace('-', '', (string) ($datosOrdenCompra->prom_cuit ?? ''));
+        $cuitNormalizado = str_replace('-', '', $cuit);
+
+        if ($cuitOrdenCompra !== $cuitNormalizado) {
+            throw new \RuntimeException('OC no corresponde con el CUIT indicado');
+        }
+
+        $codigoProveedorOc = ltrim((string) ($datosOrdenCompra->penmp_proveedor ?? ''), '0');
+        if ($codigoProveedorOc === '') {
+            throw new \RuntimeException('La orden de compra no tiene proveedor asignado');
+        }
+
+        $proveedor = $this->proveedorRepository->findPorCodigo($codigoProveedorOc);
+        if (! $proveedor) {
+            throw new \RuntimeException(
+                'Proveedor de la OC (código '.$codigoProveedorOc.') no existe en el ERP'
+            );
+        }
+
+        if (! $this->proveedorEstaActivo($proveedor)) {
+            throw new \RuntimeException(
+                'Proveedor de la OC (código '.$codigoProveedorOc.') no está activo'
+            );
+        }
+
+        return [
+            'proveedor_id' => (int) $proveedor->id,
+            'codigoProveedor' => (string) $proveedor->codigo,
+        ];
+    }
+
+    /**
+     * @return array{proveedor_id: int, codigoProveedor: string}
+     */
+    private function resolverProveedorDesdeCuit(string $cuit): array
+    {
+        $proveedor_id = 1;
+        $codigoProveedor = '000001';
+
+        foreach ($this->variantesDocumentoCuit($cuit) as $numerodocumento) {
+            $proveedores = $this->proveedorRepository->findPorDocumento($numerodocumento);
+            if (! $proveedores || $proveedores->isEmpty()) {
+                continue;
+            }
+
+            foreach ($proveedores as $proveedor) {
+                if ($this->proveedorEstaActivo($proveedor)) {
+                    return [
+                        'proveedor_id' => (int) $proveedor->id,
+                        'codigoProveedor' => (string) $proveedor->codigo,
+                    ];
+                }
+            }
+        }
+
+        return compact('proveedor_id', 'codigoProveedor');
+    }
+
+    private function proveedorEstaActivo(object $proveedor): bool
+    {
+        return in_array($proveedor->estado, ['0', 'Activo'], true);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function variantesDocumentoCuit(string $cuit): array
+    {
+        $cuit = trim($cuit);
+        $sinGuiones = str_replace('-', '', $cuit);
+        $variantes = [$cuit];
+
+        if ($sinGuiones !== $cuit) {
+            $variantes[] = $sinGuiones;
+        }
+
+        if (strlen($sinGuiones) === 11 && ctype_digit($sinGuiones)) {
+            $conGuiones = substr($sinGuiones, 0, 2).'-'.substr($sinGuiones, 2, 8).'-'.substr($sinGuiones, 10, 1);
+            if (! in_array($conGuiones, $variantes, true)) {
+                $variantes[] = $conGuiones;
+            }
+        }
+
+        return array_values(array_unique($variantes));
     }
 }
