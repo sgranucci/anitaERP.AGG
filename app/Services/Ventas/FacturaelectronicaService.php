@@ -15,6 +15,7 @@ use App\Services\Arca\ArcaCaeaLocalService;
 use App\Services\Arca\ArcaMtxcaFacturaElectronicaService;
 use App\Services\Arca\ArcaWsfeCaeaService;
 use App\Services\Arca\ArcaWsfeFacturaElectronicaService;
+use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
 
 class FacturaElectronicaService 
 {
@@ -56,7 +57,7 @@ class FacturaElectronicaService
 			&& (string) config('arca_mtxca.transporte', 'afip_php') === 'soap';
 	}
 
-	public function traeUltimoNumeroComprobante($nroinscripcion, $tipotransaccion, $puntoventa)
+	public function traeUltimoNumeroComprobante($nroinscripcion, $tipotransaccion, $puntoventa, array $opciones = [])
 	{
 		if ($puntoventa->modofacturacion == 'A') // CAEA
 		{
@@ -69,23 +70,40 @@ class FacturaElectronicaService
 				if ($empresaId < 1) {
 					return -1;
 				}
+				$webservice = (string) ($puntoventa->webservice ?? '');
+				$soapTimeoutPos = ArcaWsfeEmisionResiliencia::soapTimeoutPosParaOpciones($opciones, $webservice);
 				try {
 					if ($this->debeUsarSoapMtxca($puntoventa)) {
 						$n = $this->arcaMtxcaFacturaElectronicaService->consultarUltimoComprobanteAutorizado(
 							$empresaId,
 							(int) $puntoventa->codigo,
-							(int) $tipotransaccion
+							(int) $tipotransaccion,
+							$soapTimeoutPos,
 						);
 					} else {
 						$n = $this->arcaWsfeFacturaElectronicaService->feCompUltimoAutorizado(
 							$empresaId,
 							(int) $puntoventa->codigo,
-							(int) $tipotransaccion
+							(int) $tipotransaccion,
+							$soapTimeoutPos,
 						);
 					}
 
 					return $n > 0 ? (string) $n : -1;
 				} catch (\Throwable $e) {
+					$mensaje = $e->getMessage();
+					if (ArcaWsfeEmisionResiliencia::esErrorTransporte($mensaje)) {
+						if (empty($opciones['notificar_failover_transporte_en_capa_superior'])) {
+							ArcaWsfeEmisionResiliencia::notificarFallaTransporteEmision(
+								$mensaje,
+								$webservice,
+								['probe' => 'FECompUltimoAutorizado'],
+							);
+						}
+
+						throw $e;
+					}
+
 					return -1;
 				}
 			}
@@ -141,8 +159,11 @@ class FacturaElectronicaService
 		return $ultimoNumero;
 	}
 
-	public function solicitaCAE($nroinscripcion, $tipotransaccion, $puntoventa, $datos)
+	public function solicitaCAE($nroinscripcion, $tipotransaccion, $puntoventa, $datos, array $opciones = [])
 	{
+		$webservice = (string) ($puntoventa->webservice ?? '');
+		$soapTimeoutPos = ArcaWsfeEmisionResiliencia::soapTimeoutPosParaOpciones($opciones, $webservice);
+
 		if ($this->debeUsarSoapMtxca($puntoventa)) {
 			$empresaId = (int) ($puntoventa->empresa_id ?? 0);
 			if ($empresaId < 1) {
@@ -165,7 +186,8 @@ class FacturaElectronicaService
 						$empresaId,
 						$puntoventa,
 						(int) $tipotransaccion,
-						$datos
+						$datos,
+						$soapTimeoutPos,
 					);
 
 				return [
@@ -187,7 +209,8 @@ class FacturaElectronicaService
 					$empresaId,
 					$puntoventa,
 					(int) $tipotransaccion,
-					$datos
+					$datos,
+					$soapTimeoutPos,
 				);
 
 				return [

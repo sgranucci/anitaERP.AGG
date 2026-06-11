@@ -34,7 +34,6 @@ final class GastronomiaNotaCreditoService
         private readonly GastronomiaJornadaService $jornadaService,
         private readonly GastronomiaInsumoStkmovAnitaService $insumoStkmovAnitaService,
         private readonly GastronomiaCuentaService $cuentaService,
-        private readonly GastronomiaTurnoOperativoService $turnoOperativoService,
         private readonly GastronomiaFacturaTicketService $facturaTicketService,
     ) {
     }
@@ -90,14 +89,12 @@ final class GastronomiaNotaCreditoService
             return ['ok' => false, 'error' => 'No hay configuración de punto de venta gastronomía para esta terminal.'];
         }
 
-        $identificadorPc = GastronomiaIdentificadorPc::resolver($request);
         $empresaId = (int) $cfg->empresa_id;
 
         try {
             if (config('gastronomia.jornada_obligatoria', true)) {
                 $this->jornadaService->exigirJornadaAbierta($empresaId);
             }
-            $this->turnoOperativoService->exigirTurnoHabilitadoSiConfigurado($identificadorPc, $empresaId);
         } catch (InvalidArgumentException $e) {
             return ['ok' => false, 'error' => $e->getMessage()];
         }
@@ -210,10 +207,14 @@ final class GastronomiaNotaCreditoService
                     'factura' => $facturaTxt,
                     'mensaje' => 'Nota de crédito '.$facturaTxt.' generada correctamente.',
                     'vencae_pendiente' => $vencaePendiente ?? null,
+                    'anita_pendiente' => (! empty($resultado['anita_pendiente']) && is_array($resultado['anita_pendiente']))
+                        ? $resultado['anita_pendiente']
+                        : null,
                 ];
             });
             $profiler?->marcar('despues_transaccion');
 
+            $this->completarAnitaPendienteTrasNotaCredito($resultadoTx);
             $this->completarVencaeDiferidoTrasNotaCredito($resultadoTx);
 
             $profiler?->marcar('nc_ticket_inicio');
@@ -473,6 +474,39 @@ final class GastronomiaNotaCreditoService
         $resultado['warn'] = $aviso;
 
         return $resultado;
+    }
+
+    /**
+     * @param  array<string, mixed>  $resultadoTx
+     */
+    private function completarAnitaPendienteTrasNotaCredito(array $resultadoTx): void
+    {
+        $anitaPendiente = $resultadoTx['anita_pendiente'] ?? null;
+        if (! is_array($anitaPendiente) || $anitaPendiente === []) {
+            return;
+        }
+
+        if (! config('gastronomia.sincronizar_anita_al_facturar', true)) {
+            return;
+        }
+
+        $ventaId = (int) ($resultadoTx['venta_id'] ?? 0);
+        $ejecutar = function () use ($anitaPendiente, $ventaId): void {
+            try {
+                $this->facturacionGastronomiaService->ejecutarAnitaPendienteGastronomia($anitaPendiente);
+            } catch (Throwable $e) {
+                Log::error('gastronomia.nota_credito.anita_defer.fallo', [
+                    'venta_id' => $ventaId,
+                    'msg' => $e->getMessage(),
+                ]);
+            }
+        };
+
+        if (filter_var(config('gastronomia.anita_tras_respuesta', true), FILTER_VALIDATE_BOOLEAN)) {
+            app()->terminating($ejecutar);
+        } else {
+            $ejecutar();
+        }
     }
 
     /**

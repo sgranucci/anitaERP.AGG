@@ -3,12 +3,15 @@
 namespace App\Services\Caja\Estacionamiento;
 
 use App\Models\Caja\Estacionamiento\CierreParcialTurnoEstacionamiento;
+use App\Models\Caja\RendicionEstacionamientoCaja;
 use App\Models\Caja\Estacionamiento\ConfiguracionPuntoventaEstacionamiento;
+use App\Models\Caja\Estacionamiento\CuentaEstacionamiento;
 use App\Models\Caja\Estacionamiento\JornadaEstacionamiento;
 use App\Models\Caja\Estacionamiento\TicketEstacionamiento;
 use App\Models\Caja\Estacionamiento\TurnoEstacionamiento;
 use App\Models\Caja\Estacionamiento\TurnoOperativoEstacionamiento;
 use App\Models\Caja\Estacionamiento\VentaEstacionamientoEmision;
+use App\Support\Caja\Estacionamiento\EstacionamientoCuentacajaEfectivo;
 use App\Support\Caja\Estacionamiento\EstacionamientoTurnoNumeracionComprobanteSupport;
 use App\Support\Caja\Estacionamiento\EstacionamientoTurnoOperativoTotalesSupport;
 use App\Support\Ventas\GastronomiaTurnoMediosContadoCierreSupport;
@@ -29,6 +32,15 @@ final class EstacionamientoTurnoOperativoService
     public static function requiereHabilitacionTurno(): bool
     {
         return (bool) config('estacionamiento.requiere_habilitacion_turno', true);
+    }
+
+    /**
+     * Bloqueo por ticket_estacionamiento en estado ingreso al cerrar turno/jornada.
+     * Desactivado por defecto hasta implementar emisión de ticket de ingreso de autos.
+     */
+    public static function validarTicketsIngresoAlCerrar(): bool
+    {
+        return (bool) config('estacionamiento.validar_tickets_ingreso_al_cerrar', false);
     }
 
     public function turnoHabilitadoEnPc(string $identificadorPc): ?TurnoOperativoEstacionamiento
@@ -157,12 +169,163 @@ final class EstacionamientoTurnoOperativoService
             'tickets_pendientes_ingreso' => $activo !== null
                 ? $this->contarTicketsPendientesIngresoEnTerminal($activo)
                 : 0,
+            'url_facturas_dia' => route('estacionamiento_facturas_dia', ['empresa_id' => $empresaId]),
+            'url_saneamiento_turno' => route('estacionamiento_saneamiento_turno', ['empresa_id' => $empresaId]),
+            'cuentacaja_efectivo_id' => (int) (EstacionamientoCuentacajaEfectivo::idParaEmpresa($empresaId) ?? 0),
         ];
     }
 
     public function contarTicketsPendientesIngresoEnTerminal(TurnoOperativoEstacionamiento $turno): int
     {
+        if (! self::validarTicketsIngresoAlCerrar()) {
+            return 0;
+        }
+
         return $this->queryTicketsPendientesIngresoTerminal($turno)->count();
+    }
+
+    public function contarTicketsPendientesIngresoJornada(int $empresaId, ?JornadaEstacionamiento $jornada = null): int
+    {
+        if (! self::validarTicketsIngresoAlCerrar()) {
+            return 0;
+        }
+
+        if ($empresaId <= 0) {
+            return 0;
+        }
+
+        $jornada ??= $this->jornadaService->jornadaAbierta($empresaId);
+        if ($jornada === null) {
+            return 0;
+        }
+
+        return (int) TicketEstacionamiento::query()
+            ->where('empresa_id', $empresaId)
+            ->where('jornada_estacionamiento_id', (int) $jornada->id)
+            ->where('estado', TicketEstacionamiento::ESTADO_INGRESO)
+            ->count();
+    }
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Collection<int, TicketEstacionamiento>
+     */
+    public function listarTicketsPendientesIngresoParaPuntoventa(int $empresaId, int $jornadaId, int $cfgId, string $pc)
+    {
+        if (! self::validarTicketsIngresoAlCerrar()) {
+            return TicketEstacionamiento::query()->whereRaw('1 = 0')->get();
+        }
+
+        return $this->queryTicketsPendientesIngresoParaPuntoventa($empresaId, $jornadaId, $cfgId, $pc)->get();
+    }
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Collection<int, CuentaEstacionamiento>
+     */
+    public function listarCuentasSinFacturarEnTerminal(TurnoOperativoEstacionamiento $turno)
+    {
+        return $this->listarCuentasSinFacturarParaPuntoventa(
+            (int) $turno->empresa_id,
+            (int) $turno->configuracion_puntoventa_estacionamiento_id,
+            (string) $turno->identificador_pc,
+        );
+    }
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Collection<int, CuentaEstacionamiento>
+     */
+    public function listarCuentasAbiertasEnTerminal(TurnoOperativoEstacionamiento $turno)
+    {
+        return $this->listarCuentasAbiertasParaPuntoventa(
+            (int) $turno->empresa_id,
+            (int) $turno->configuracion_puntoventa_estacionamiento_id,
+            (string) $turno->identificador_pc,
+        );
+    }
+
+    public function contarCuentasAbiertasConItemsEnTerminal(TurnoOperativoEstacionamiento $turno): int
+    {
+        return $this->queryCuentasNoFacturadasParaPuntoventa(
+            (int) $turno->empresa_id,
+            (int) $turno->configuracion_puntoventa_estacionamiento_id,
+            (string) $turno->identificador_pc,
+            [CuentaEstacionamiento::ESTADO_ABIERTA],
+        )->whereHas('lineas')->count();
+    }
+
+    public function autoDescartarCuentasAbiertasVaciasEnTerminal(TurnoOperativoEstacionamiento $turno): int
+    {
+        return $this->queryCuentasNoFacturadasParaPuntoventa(
+            (int) $turno->empresa_id,
+            (int) $turno->configuracion_puntoventa_estacionamiento_id,
+            (string) $turno->identificador_pc,
+            [CuentaEstacionamiento::ESTADO_ABIERTA],
+        )->whereDoesntHave('lineas')->update(['estado' => CuentaEstacionamiento::ESTADO_CERRADA]);
+    }
+
+    public function contarCuentasCerradasSinFacturarEnTerminal(TurnoOperativoEstacionamiento $turno): int
+    {
+        return $this->queryCuentasNoFacturadasParaPuntoventa(
+            (int) $turno->empresa_id,
+            (int) $turno->configuracion_puntoventa_estacionamiento_id,
+            (string) $turno->identificador_pc,
+            [CuentaEstacionamiento::ESTADO_CERRADA],
+        )->count();
+    }
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Collection<int, CuentaEstacionamiento>
+     */
+    public function listarCuentasSinFacturarParaPuntoventa(int $empresaId, int $cfgId, string $pc)
+    {
+        return $this->queryCuentasNoFacturadasParaPuntoventa(
+            $empresaId,
+            $cfgId,
+            $pc,
+            [CuentaEstacionamiento::ESTADO_ABIERTA, CuentaEstacionamiento::ESTADO_CERRADA],
+        )->get();
+    }
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Collection<int, CuentaEstacionamiento>
+     */
+    public function listarCuentasAbiertasParaPuntoventa(int $empresaId, int $cfgId, string $pc)
+    {
+        return $this->queryCuentasNoFacturadasParaPuntoventa(
+            $empresaId,
+            $cfgId,
+            $pc,
+            [CuentaEstacionamiento::ESTADO_ABIERTA],
+        )->get();
+    }
+
+    /**
+     * @param  list<int>  $idsCubiertas
+     * @return \Illuminate\Database\Eloquent\Collection<int, CuentaEstacionamiento>
+     */
+    public function listarCuentasNoFacturadasNoCubiertas(int $empresaId, array $idsCubiertas)
+    {
+        return CuentaEstacionamiento::query()
+            ->with(['lineas', 'cliente', 'categoriaAutomovil'])
+            ->where('empresa_id', $empresaId)
+            ->whereIn('estado', [CuentaEstacionamiento::ESTADO_ABIERTA, CuentaEstacionamiento::ESTADO_CERRADA])
+            ->when($idsCubiertas !== [], fn ($q) => $q->whereNotIn('id', $idsCubiertas))
+            ->orderBy('id')
+            ->get();
+    }
+
+    /**
+     * @param  list<int>  $idsCubiertas
+     * @return \Illuminate\Database\Eloquent\Collection<int, TicketEstacionamiento>
+     */
+    public function listarTicketsPendientesNoCubiertos(int $empresaId, int $jornadaId, array $idsCubiertas)
+    {
+        return TicketEstacionamiento::query()
+            ->where('empresa_id', $empresaId)
+            ->where('jornada_estacionamiento_id', $jornadaId)
+            ->where('estado', TicketEstacionamiento::ESTADO_INGRESO)
+            ->when($idsCubiertas !== [], fn ($q) => $q->whereNotIn('id', $idsCubiertas))
+            ->orderBy('numero_ticket')
+            ->get();
     }
 
     /**
@@ -170,6 +333,10 @@ final class EstacionamientoTurnoOperativoService
      */
     public function listarTicketsPendientesIngresoEnTerminal(TurnoOperativoEstacionamiento $turno)
     {
+        if (! self::validarTicketsIngresoAlCerrar()) {
+            return TicketEstacionamiento::query()->whereRaw('1 = 0')->get();
+        }
+
         return $this->queryTicketsPendientesIngresoTerminal($turno)->get();
     }
 
@@ -846,6 +1013,19 @@ final class EstacionamientoTurnoOperativoService
             $errores[] = 'El cierre pertenece a otra jornada. Solo puede anular dentro de la jornada abierta actual.';
         }
 
+        if (RendicionEstacionamientoCaja::query()
+            ->where('turno_operativo_estacionamiento_id', (int) $turno->id)
+            ->exists()) {
+            $errores[] = 'El turno tiene una rendición de estacionamiento en caja asociada. Elimine o corrija la rendición antes de anular el cierre.';
+        }
+
+        if (RendicionEstacionamientoCaja::query()
+            ->where('tipo', RendicionEstacionamientoCaja::TIPO_JORNADA)
+            ->where('jornada_estacionamiento_id', (int) $turno->jornada_estacionamiento_id)
+            ->exists()) {
+            $errores[] = 'La jornada de este turno ya fue presentada en caja (rendición de jornada). Elimine esa rendición antes de anular el cierre del turno.';
+        }
+
         $habilitado = $this->turnoHabilitadoEnPc($pcReq);
         if ($habilitado !== null && (int) $habilitado->id !== (int) $turno->id) {
             $errores[] = 'Hay otro turno habilitado en esta terminal. No puede anular un cierre anterior mientras exista un turno activo.';
@@ -1110,6 +1290,67 @@ final class EstacionamientoTurnoOperativoService
         $txt = trim((string) $observacion);
 
         return $txt === '' ? null : mb_substr($txt, 0, 2000);
+    }
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Builder<TicketEstacionamiento>
+     */
+    private function queryTicketsPendientesIngresoParaPuntoventa(int $empresaId, int $jornadaId, int $cfgId, string $pc)
+    {
+        $query = TicketEstacionamiento::query()
+            ->where('empresa_id', $empresaId)
+            ->where('jornada_estacionamiento_id', $jornadaId)
+            ->where('estado', TicketEstacionamiento::ESTADO_INGRESO);
+
+        if ($cfgId <= 0 && $pc === '') {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query
+            ->where(function ($q) use ($cfgId, $pc) {
+                if ($cfgId > 0) {
+                    $q->where('configuracion_puntoventa_estacionamiento_id', $cfgId);
+                }
+                if ($pc !== '') {
+                    if ($cfgId > 0) {
+                        $q->orWhere('identificador_pc', $pc);
+                    } else {
+                        $q->where('identificador_pc', $pc);
+                    }
+                }
+            })
+            ->orderBy('numero_ticket');
+    }
+
+    /**
+     * @param  list<string>  $estados
+     * @return \Illuminate\Database\Eloquent\Builder<CuentaEstacionamiento>
+     */
+    private function queryCuentasNoFacturadasParaPuntoventa(int $empresaId, int $cfgId, string $pc, array $estados)
+    {
+        $query = CuentaEstacionamiento::query()
+            ->with(['lineas', 'cliente', 'categoriaAutomovil', 'ticket'])
+            ->where('empresa_id', $empresaId)
+            ->whereIn('estado', $estados);
+
+        if ($cfgId <= 0 && $pc === '') {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query
+            ->where(function ($q) use ($cfgId, $pc) {
+                if ($cfgId > 0) {
+                    $q->where('configuracion_puntoventa_estacionamiento_id', $cfgId);
+                }
+                if ($pc !== '') {
+                    if ($cfgId > 0) {
+                        $q->orWhere('identificador_pc', $pc);
+                    } else {
+                        $q->where('identificador_pc', $pc);
+                    }
+                }
+            })
+            ->orderBy('id');
     }
 
     /**

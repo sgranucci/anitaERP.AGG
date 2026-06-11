@@ -8,6 +8,7 @@ use App\Models\Ventas\MozoGastronomia;
 use App\Models\Ventas\TurnoOperativoGastronomia;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Models\Ventas\Venta;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Ventas\Gastronomia\GastronomiaCuentaService;
 use App\Services\Ventas\Gastronomia\GastronomiaFacturaTicketService;
 use App\Services\Ventas\Gastronomia\GastronomiaJornadaService;
@@ -21,7 +22,9 @@ use App\Services\Ventas\Gastronomia\Waitry\WaitryOrdenesExternasService;
 use App\Support\Ventas\Gastronomia\GastronomiaVentaWaitryComandasSupport;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
 use App\Support\Ventas\GastronomiaDepositoConfigSupport;
+use App\Support\Ventas\GastronomiaNotaCreditoUiSupport;
 use App\Support\Ventas\GastronomiaVentaDetalleSupport;
+use App\Models\Ventas\JornadaGastronomia;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -40,12 +43,15 @@ class GastronomiaFacturasDiaController extends Controller
         private readonly GastronomiaCategoriafidelidadCanjeService $categoriafidelidadCanjeService,
         private readonly GastronomiaFacturaMedioPagoService $facturaMedioPagoService,
         private readonly WaitryOrdenesExternasService $waitryOrdenesExternasService,
+        private readonly EmpresaRepositoryInterface $empresaRepository,
     ) {}
 
     public function index(Request $request)
     {
         can('listar-facturas-gastronomia-dia');
 
+        $empresaQuery = $this->empresaRepository->allFiltrado();
+        $empresaId = $this->resolverEmpresaIdFacturasDia($request);
         $pc = GastronomiaIdentificadorPc::resolver($request);
         $fecha = $this->resolverFechaFiltro($request);
         $jornada = $this->estadoJornadaParaRequest($request);
@@ -53,9 +59,10 @@ class GastronomiaFacturasDiaController extends Controller
         $busqueda = trim((string) $request->get('busqueda', ''));
 
         $requiereTurno = GastronomiaTurnoOperativoService::requiereHabilitacionTurno();
+        $cfgPv = $empresaId > 0
+            ? $this->cuentaService->resolverConfiguracionPv($request, $empresaId)
+            : $this->cuentaService->resolverConfiguracionPv($request);
         $turnoActivo = $requiereTurno ? $this->turnoOperativoService->turnoHabilitadoEnPc($pc) : null;
-        $cfgPv = $this->cuentaService->resolverConfiguracionPv($request);
-        $empresaId = (int) ($cfgPv?->empresa_id ?? 0);
         $filtroTurno = $this->resolverFiltroTurno($request, $turnoActivo, $pc, $empresaId, $fecha);
         $turnosSelector = $requiereTurno && $empresaId > 0
             ? $this->listarTurnosParaSelector($pc, $empresaId, $fecha)
@@ -99,6 +106,7 @@ class GastronomiaFacturasDiaController extends Controller
         $turnoHabilitado = ! $requiereTurno || $turnoActivo !== null;
         $urlHabilitacionTurno = route('gastronomia_habilitacion_turno');
         $totalesFacturacion = $this->calcularTotalesFacturasDia($request, $articuloFiltro);
+        $jornadasAbiertasPorEmpresa = $this->mapaJornadasAbiertasPorEmpresa();
 
         return view('ventas.gastronomia.facturas_dia.index', [
             'registros' => $registros,
@@ -108,8 +116,9 @@ class GastronomiaFacturasDiaController extends Controller
             'busqueda' => $busqueda,
             'identificador_pc' => $pc,
             'tiene_cfg_pv' => $cfgPv !== null,
+            'empresa_query' => $empresaQuery,
             'empresa_id' => $empresaId > 0 ? $empresaId : null,
-            'empresa_nombre' => $cfgPv?->empresa?->nombre,
+            'empresa_nombre' => $empresaQuery->firstWhere('id', $empresaId)?->nombre ?? $cfgPv?->empresa?->nombre,
             'todas_pc' => $todasPc,
             'articulo_sku' => $articuloSku,
             'articulo_filtro' => $articuloFiltro,
@@ -117,6 +126,7 @@ class GastronomiaFacturasDiaController extends Controller
             'mozos_selector' => $mozosSelector,
             'insumos_por_venta' => $insumosPorVenta,
             'jornada' => $jornada,
+            'jornadas_abiertas_por_empresa' => $jornadasAbiertasPorEmpresa,
             'requiere_habilitacion_turno' => $requiereTurno,
             'turno_habilitado' => $turnoHabilitado,
             'turno_activo' => $turnoActivo,
@@ -148,8 +158,9 @@ class GastronomiaFacturasDiaController extends Controller
 
         $fecha = $this->resolverFechaFiltro($request);
         $identificador_pc = GastronomiaIdentificadorPc::resolver($request);
-        $cfgPv = $this->cuentaService->resolverConfiguracionPv($request);
-        $empresa_nombre = $cfgPv?->empresa?->nombre;
+        $empresaId = $this->resolverEmpresaIdFacturasDia($request);
+        $empresa_nombre = $this->empresaRepository->allFiltrado()->firstWhere('id', $empresaId)?->nombre
+            ?? $this->cuentaService->resolverConfiguracionPv($request, $empresaId > 0 ? $empresaId : null)?->empresa?->nombre;
 
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
@@ -330,7 +341,7 @@ class GastronomiaFacturasDiaController extends Controller
 
         $meta = VentaGastronomiaEmision::query()
             ->where('venta_id', $ventaId)
-            ->with(['cuenta.lineas.articulo', 'configuracionPuntoventa'])
+            ->with(['cuenta.lineas.articulo', 'configuracionPuntoventa', 'venta.tipotransacciones', 'venta.puntoventas'])
             ->firstOrFail();
 
         $venta = Venta::query()
@@ -370,10 +381,6 @@ class GastronomiaFacturasDiaController extends Controller
             ? null
             : GastronomiaNotaCreditoService::notaCreditoExistenteParaFactura($ventaId);
 
-        $tipoFactura = $venta->tipotransacciones;
-        $esFacturaVenta = ! $esComprobanteNc
-            && (! $tipoFactura || $tipoFactura->signo === 'S');
-
         $pc = GastronomiaIdentificadorPc::resolver($request);
         $requiereTurno = GastronomiaTurnoOperativoService::requiereHabilitacionTurno();
         $turnoHabilitado = ! $requiereTurno;
@@ -381,11 +388,18 @@ class GastronomiaFacturasDiaController extends Controller
             $turnoHabilitado = $this->turnoOperativoService->turnoHabilitadoEnPc($pc) !== null;
         }
 
-        $puedeNc = can('generar-nota-credito-gastronomia-facturas-dia', false)
-            && $esFacturaVenta
-            && (float) ($venta->total ?? 0) >= 0.01
-            && $ncVentaId === null
-            && (! $requiereTurno || $turnoHabilitado);
+        $jornadasAbiertasPorEmpresa = $this->mapaJornadasAbiertasPorEmpresa();
+        $empresaIdJornada = GastronomiaNotaCreditoUiSupport::empresaIdDesdeEmision($meta);
+        $jornada = $empresaIdJornada > 0
+            ? $this->jornadaService->estadoParaEmpresa($empresaIdJornada)
+            : null;
+        $jornadaAbierta = ! empty($jornadasAbiertasPorEmpresa[$empresaIdJornada]);
+
+        $puedeNc = GastronomiaNotaCreditoUiSupport::puedeGenerarNotaCredito(
+            $meta,
+            $ncVentaId,
+            $jornadasAbiertasPorEmpresa,
+        );
 
         $puedeCambiarMedioPago = can('cambiar-medio-pago-gastronomia-facturas-dia', false)
             && $cobranzas->isNotEmpty()
@@ -414,6 +428,7 @@ class GastronomiaFacturasDiaController extends Controller
             'es_comprobante_nc' => $esComprobanteNc,
             'requiere_habilitacion_turno' => $requiereTurno,
             'turno_habilitado' => $turnoHabilitado,
+            'jornada_abierta' => $jornadaAbierta,
             'url_habilitacion_turno' => route('gastronomia_habilitacion_turno'),
             'identificador_pc' => $pc,
             'puede_cambiar_medio_pago' => $puedeCambiarMedioPago,
@@ -486,8 +501,7 @@ class GastronomiaFacturasDiaController extends Controller
         $todasPc = $request->boolean('todas_pc');
         $requiereTurno = GastronomiaTurnoOperativoService::requiereHabilitacionTurno();
         $turnoActivo = $requiereTurno ? $this->turnoOperativoService->turnoHabilitadoEnPc($pc) : null;
-        $cfgPv = $this->cuentaService->resolverConfiguracionPv($request);
-        $empresaId = (int) ($cfgPv?->empresa_id ?? 0);
+        $empresaId = $this->resolverEmpresaIdFacturasDia($request);
         $filtroTurno = $this->resolverFiltroTurno($request, $turnoActivo, $pc, $empresaId, $fecha);
         $desdeHabilitacion = $filtroTurno['desde'];
         $hastaTurno = $filtroTurno['hasta'];
@@ -495,12 +509,14 @@ class GastronomiaFacturasDiaController extends Controller
 
         $q = VentaGastronomiaEmision::query()
             ->with([
+                'configuracionPuntoventa',
                 'venta' => fn ($qq) => $qq->withExists([
                     'ticketcanjesGastronomia as tiene_canje_premio',
                     'categoriafidelidadEntregasGastronomia as tiene_canje_fidelidad',
                     'tickettarjetasGastronomia as tiene_ticket_tarjeta',
                 ]),
                 'venta.clientes',
+                'venta.tipotransacciones',
                 'venta.puntoventas.empresas',
                 'venta.cobranzasDirectas',
                 'venta.caja_movimientos.cobranzas',
@@ -524,7 +540,10 @@ class GastronomiaFacturasDiaController extends Controller
                             ->orWhere('codigo', 'like', '%-'.$numeroComprobantePadded)
                             ->orWhere('codigo', 'like', '%'.$numeroComprobantePadded);
                     });
-            })->orderByDesc('venta_id');
+            });
+            $this->aplicarFiltroEmpresaEnEmision($q, $empresaId);
+
+            return $q->orderByDesc('venta_id');
         }
 
         if (! $todasPc) {
@@ -532,10 +551,7 @@ class GastronomiaFacturasDiaController extends Controller
         }
 
         if ($empresaId > 0) {
-            $q->where(function ($w) use ($empresaId) {
-                $w->whereHas('configuracionPuntoventa', fn ($c) => $c->where('empresa_id', $empresaId))
-                    ->orWhereHas('venta.puntoventas', fn ($p) => $p->where('empresa_id', $empresaId));
-            });
+            $this->aplicarFiltroEmpresaEnEmision($q, $empresaId);
         }
 
         $q->whereHas('venta', function ($vq) use ($fecha, $desdeHabilitacion, $hastaTurno) {
@@ -814,12 +830,101 @@ class GastronomiaFacturasDiaController extends Controller
      */
     private function estadoJornadaParaRequest(Request $request): ?array
     {
-        $cfg = $this->cuentaService->resolverConfiguracionPv($request);
-        if ($cfg === null) {
-            return null;
+        $empresaId = $this->resolverEmpresaIdFacturasDia($request);
+        if ($empresaId > 0) {
+            return $this->jornadaService->estadoParaEmpresa($empresaId);
         }
 
-        return $this->jornadaService->estadoParaEmpresa((int) $cfg->empresa_id);
+        $cfg = $this->cuentaService->resolverConfiguracionPv($request);
+        if ($cfg !== null) {
+            return $this->jornadaService->estadoParaEmpresa((int) $cfg->empresa_id);
+        }
+
+        foreach (array_keys($this->mapaJornadasAbiertasPorEmpresa()) as $empresaIdAbierta) {
+            $estado = $this->jornadaService->estadoParaEmpresa((int) $empresaIdAbierta);
+            if (! empty($estado['jornada_abierta'])) {
+                return $estado;
+            }
+        }
+
+        $primeraEmpresaId = (int) ($this->empresaRepository->allFiltrado()->first()?->id ?? 0);
+
+        return $primeraEmpresaId > 0
+            ? $this->jornadaService->estadoParaEmpresa($primeraEmpresaId)
+            : null;
+    }
+
+    private function resolverEmpresaIdFacturasDia(Request $request): int
+    {
+        $empresaQuery = $this->empresaRepository->allFiltrado();
+        $empresaId = (int) $request->input('empresa_id', 0);
+
+        if ($empresaId > 0 && ! $this->empresaRepository->empresaIdPermitida($empresaId)) {
+            $empresaId = 0;
+        }
+
+        if ($empresaId <= 0) {
+            $cfgPv = $this->cuentaService->resolverConfiguracionPv($request);
+            $empresaDesdePv = (int) ($cfgPv?->empresa_id ?? 0);
+            if ($empresaDesdePv > 0 && $this->empresaRepository->empresaIdPermitida($empresaDesdePv)) {
+                $empresaId = $empresaDesdePv;
+            }
+        }
+
+        if ($empresaId <= 0 && $empresaQuery->count() === 1) {
+            $empresaId = (int) $empresaQuery->first()->id;
+        }
+
+        if ($empresaId <= 0 && $empresaQuery->isNotEmpty()) {
+            $empresaId = (int) $empresaQuery->first()->id;
+        }
+
+        return $empresaId;
+    }
+
+    private function aplicarFiltroEmpresaEnEmision(Builder $q, int $empresaId): void
+    {
+        if ($empresaId <= 0) {
+            return;
+        }
+
+        $q->where(function ($w) use ($empresaId) {
+            $w->whereHas('configuracionPuntoventa', fn ($c) => $c->where('empresa_id', $empresaId))
+                ->orWhereHas('venta.puntoventas', fn ($p) => $p->where('empresa_id', $empresaId));
+        });
+    }
+
+    /**
+     * Empresas con jornada abierta hoy (según empresas asignadas al usuario).
+     *
+     * @return array<int, true>
+     */
+    private function mapaJornadasAbiertasPorEmpresa(): array
+    {
+        $empresaIds = collect(session()->get('usuario_empresas', []))
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn ($id) => $id > 0)
+            ->unique()
+            ->values();
+
+        if ($empresaIds->isEmpty()) {
+            return JornadaGastronomia::query()
+                ->where('estado', JornadaGastronomia::ESTADO_ABIERTA)
+                ->pluck('empresa_id')
+                ->mapWithKeys(fn ($id) => [(int) $id => true])
+                ->all();
+        }
+
+        $map = [];
+        foreach ($empresaIds as $empresaId) {
+            $estado = $this->jornadaService->estadoParaEmpresa($empresaId);
+            if (! empty($estado['jornada_abierta'])) {
+                $map[$empresaId] = true;
+            }
+        }
+
+        return $map;
     }
 
     /**

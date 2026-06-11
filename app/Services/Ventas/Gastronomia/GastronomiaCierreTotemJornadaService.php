@@ -305,9 +305,8 @@ final class GastronomiaCierreTotemJornadaService
         ];
 
         $plantilla = WaitryInformeZConciliacionSupport::plantillaCarga($empresaId, $resumenTotems);
-        $borrador = is_array($jornada->informe_z_borrador_json) ? $jornada->informe_z_borrador_json : null;
-        $plantilla = WaitryInformeZConciliacionSupport::fusionarInformeZEnPlantilla($plantilla, $borrador, $empresaId);
-        $conciliacion = $borrador !== null
+        $plantilla = WaitryInformeZConciliacionSupport::precargarMontosInformeZDesdeSistema($plantilla);
+        $conciliacion = $plantilla !== []
             ? WaitryInformeZConciliacionSupport::conciliar($plantilla)
             : null;
 
@@ -336,9 +335,10 @@ final class GastronomiaCierreTotemJornadaService
             'cantidad_ingreso_totem' => (int) ($totalGeneral['cantidad_ordenes'] ?? 0),
             'totems' => $plantilla,
             'conciliacion' => $conciliacion,
-            'informe_z_cargado' => $borrador !== null,
-            'informe_z_en' => $borrador['informe_z_en'] ?? null,
-            'usuario_informe_z' => $borrador['usuario_nombre'] ?? null,
+            'informe_z_precarga_automatica' => true,
+            'informe_z_cargado' => $plantilla !== [],
+            'informe_z_en' => null,
+            'usuario_informe_z' => null,
             'tolerancia' => WaitryInformeZConciliacionSupport::toleranciaMonto(),
             'preview_en' => now()->format('d/m/Y H:i'),
             'snapshot_cierre' => $consulta['snapshot_cierre'],
@@ -813,8 +813,8 @@ final class GastronomiaCierreTotemJornadaService
             ],
             'auditoria' => $auditoria,
             'informe_z' => is_array($cierre->informe_z_json) ? $cierre->informe_z_json : null,
-            'conciliacion_informe_z' => is_array($cierre->informe_z_json['conciliacion'] ?? null)
-                ? $cierre->informe_z_json['conciliacion']
+            'conciliacion_informe_z' => ($presentacionIz = WaitryInformeZConciliacionSupport::conciliacionPresentacionDesdeCierre($cierre)) !== null
+                ? $presentacionIz['conciliacion']
                 : null,
             'informe_z_cargado' => is_array($cierre->informe_z_json) && isset($cierre->informe_z_json['totems']),
         ];

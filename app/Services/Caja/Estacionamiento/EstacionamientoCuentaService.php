@@ -47,7 +47,7 @@ class EstacionamientoCuentaService
         if ($existente) {
             return $this->enriquecerCuentaParaApi(
                 $existente->load([
-                    'lineas.articulo',
+                    'lineas.itemEstacionamiento',
                     'lineas.itemEstacionamiento',
                     'cliente',
                     'categoriaAutomovil',
@@ -77,7 +77,7 @@ class EstacionamientoCuentaService
 
         return $this->enriquecerCuentaParaApi(
             $cuenta->load([
-                'lineas.articulo',
+                'lineas.itemEstacionamiento',
                 'lineas.itemEstacionamiento',
                 'cliente',
                 'categoriaAutomovil',
@@ -92,7 +92,7 @@ class EstacionamientoCuentaService
     {
         $cuenta = CuentaEstacionamiento::query()
             ->with([
-                'lineas.articulo',
+                'lineas.itemEstacionamiento',
                 'lineas.itemEstacionamiento',
                 'cliente',
                 'categoriaAutomovil',
@@ -109,7 +109,7 @@ class EstacionamientoCuentaService
     {
         return CuentaEstacionamiento::query()
             ->with([
-                'lineas.articulo',
+                'lineas.itemEstacionamiento',
                 'lineas.itemEstacionamiento',
                 'cliente',
                 'categoriaAutomovil',
@@ -132,7 +132,7 @@ class EstacionamientoCuentaService
 
     public function enriquecerCuentaParaApi(CuentaEstacionamiento $cuenta): CuentaEstacionamiento
     {
-        $cuenta->loadMissing('lineas.articulo');
+        $cuenta->loadMissing('lineas.itemEstacionamiento');
 
         $receptor = app(EstacionamientoReceptorFacturacionService::class);
         $preview = app(EstacionamientoFacturaEmisionService::class)->previewTotalesParaCuenta($cuenta);
@@ -236,7 +236,7 @@ class EstacionamientoCuentaService
 
         return $this->enriquecerCuentaParaApi(
             $cuenta->fresh([
-                'lineas.articulo',
+                'lineas.itemEstacionamiento',
                 'lineas.itemEstacionamiento',
                 'cliente',
                 'categoriaAutomovil',
@@ -249,10 +249,15 @@ class EstacionamientoCuentaService
     public function agregarLinea(
         CuentaEstacionamiento $cuenta,
         int $itemEstacionamientoId,
+        float $cantidad = 1,
         ?string $descripcion = null,
     ): CuentaEstacionamientoLinea {
         if ($cuenta->estado !== CuentaEstacionamiento::ESTADO_ABIERTA) {
             throw new InvalidArgumentException('La cuenta no está abierta.');
+        }
+
+        if ($cantidad <= 0) {
+            throw new InvalidArgumentException('Cantidad inválida.');
         }
 
         $this->turnoOperativoService->exigirTurnoHabilitadoSiConfigurado(
@@ -272,14 +277,6 @@ class EstacionamientoCuentaService
             throw new InvalidArgumentException('El ítem de estacionamiento no existe o no está activo.');
         }
 
-        $articuloId = (int) ($item->articulo_id ?? 0);
-        if ($articuloId <= 0) {
-            throw new InvalidArgumentException(
-                'El ítem «'.$item->nombre.'» no tiene artículo de stock vinculado (articulo_id). '
-                .'Configure el artículo en el ABM de ítems de estacionamiento.'
-            );
-        }
-
         $precioData = $this->listaPrecioResolver->precioItem(
             (int) $cuenta->empresa_id,
             (int) $cuenta->categoria_automovil_estacionamiento_id,
@@ -294,8 +291,7 @@ class EstacionamientoCuentaService
             'cuenta_estacionamiento_id' => $cuenta->id,
             'numero_linea' => $maxNum + 1,
             'item_estacionamiento_id' => $itemEstacionamientoId,
-            'articulo_id' => $articuloId,
-            'cantidad' => 1,
+            'cantidad' => $cantidad,
             'precio_unitario' => $precioData['precio'],
             'descripcion' => $descripcion !== null && trim($descripcion) !== ''
                 ? trim($descripcion)
@@ -314,13 +310,40 @@ class EstacionamientoCuentaService
         $linea->delete();
     }
 
-    public function cerrarCuenta(CuentaEstacionamiento $cuenta): void
+    public function actualizarCantidadLinea(CuentaEstacionamientoLinea $linea, float $cantidad): CuentaEstacionamiento
+    {
+        $cuenta = $linea->cuenta;
+        if ($cuenta->estado !== CuentaEstacionamiento::ESTADO_ABIERTA) {
+            throw new InvalidArgumentException('La cuenta no está abierta.');
+        }
+
+        $this->turnoOperativoService->exigirTurnoHabilitadoSiConfigurado(
+            EstacionamientoIdentificadorPc::resolver(),
+            (int) $cuenta->empresa_id,
+        );
+
+        if ($cantidad < 0.0001) {
+            throw new InvalidArgumentException('La cantidad debe ser mayor a cero.');
+        }
+
+        $linea->update(['cantidad' => $cantidad]);
+
+        return $this->cuentaConLineas((int) $cuenta->id);
+    }
+
+    public function cerrarSinFacturar(CuentaEstacionamiento $cuenta): void
     {
         if ($cuenta->estado !== CuentaEstacionamiento::ESTADO_ABIERTA) {
             throw new InvalidArgumentException('La cuenta no está abierta.');
         }
 
         $cuenta->update(['estado' => CuentaEstacionamiento::ESTADO_CERRADA]);
+    }
+
+    /** @see cerrarSinFacturar */
+    public function cerrarCuenta(CuentaEstacionamiento $cuenta): void
+    {
+        $this->cerrarSinFacturar($cuenta);
     }
 
     public function marcarFacturada(CuentaEstacionamiento $cuenta, int $ventaId): void

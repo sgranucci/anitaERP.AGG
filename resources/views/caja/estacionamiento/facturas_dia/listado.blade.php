@@ -73,7 +73,7 @@
                 <th>Ítem</th>
                 <th>Punto de venta</th>
                 <th class="num">Total</th>
-                <th>Cuenta gastro.</th>
+                <th>Cuenta estac.</th>
                 <th>PC emisión</th>
             </tr>
         </thead>

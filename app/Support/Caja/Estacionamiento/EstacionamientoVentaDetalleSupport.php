@@ -51,14 +51,17 @@ final class EstacionamientoVentaDetalleSupport
             ->values()
             ->map(function (Venta_Emision $em) {
                 $itemId = self::resolverItemEstacionamientoIdDesdeEmision($em);
+                $detalle = EstacionamientoFacturaPayloadSupport::etiquetaItemDesdeDetalle(
+                    (string) ($em->detalle ?? '')
+                );
 
                 return (object) [
                     'venta_emision_id' => (int) $em->id,
                     'item_estacionamiento_id' => $itemId,
                     'codigo' => $itemId !== null
-                        ? (string) (ItemEstacionamiento::query()->whereKey($itemId)->value('nombre') ?? '—')
-                        : '—',
-                    'detalle' => (string) ($em->articulos?->descripcion ?? $em->detalle ?? '—'),
+                        ? (string) (ItemEstacionamiento::query()->whereKey($itemId)->value('nombre') ?? $detalle)
+                        : $detalle,
+                    'detalle' => $detalle,
                     'cantidad' => (float) $em->cantidad,
                     'precio' => (float) $em->precio,
                 ];
@@ -137,26 +140,82 @@ final class EstacionamientoVentaDetalleSupport
             ->contains(fn ($row) => (int) ($row->item_estacionamiento_id ?? 0) === $itemEstacionamientoId);
     }
 
-    private static function resolverItemEstacionamientoIdDesdeEmision(Venta_Emision $em): ?int
+    public static function cantidadItemFacturadoEnVenta(int $ventaId, int $itemEstacionamientoId): float
     {
-        $em->loadMissing('articulos');
-        $detalle = trim((string) ($em->detalle ?? $em->articulos?->descripcion ?? ''));
-        if ($detalle === '') {
-            return null;
+        if ($ventaId <= 0 || $itemEstacionamientoId <= 0) {
+            return 0.;
         }
 
-        $itemId = ItemEstacionamiento::query()
-            ->where('nombre', $detalle)
-            ->value('id');
+        $venta = Venta::query()->with('venta_emisiones')->find($ventaId);
+        if (! $venta) {
+            return 0.;
+        }
 
-        return $itemId !== null ? (int) $itemId : null;
+        return (float) self::itemsFacturadosFiltrados($venta, $itemEstacionamientoId)
+            ->sum(fn ($row) => (float) ($row->cantidad ?? 0));
+    }
+
+    private static function resolverItemEstacionamientoIdDesdeEmision(Venta_Emision $em): ?int
+    {
+        $detalle = trim((string) ($em->detalle ?? ''));
+
+        return EstacionamientoFacturaPayloadSupport::resolverItemEstacionamientoIdDesdeDetalle($detalle);
+    }
+
+    /**
+     * Aplica filtro por ítem estacionamiento en consultas de venta_emision.
+     */
+    public static function aplicarFiltroItemEnEmisionesQuery($query, ?object $itemFiltro): void
+    {
+        if ($itemFiltro === null || (int) ($itemFiltro->id ?? 0) <= 0) {
+            return;
+        }
+
+        $itemId = (int) $itemFiltro->id;
+        $nombre = trim((string) ($itemFiltro->nombre ?? ''));
+        $prefijo = EstacionamientoFacturaPayloadSupport::PREFIJO_DETALLE_ITEM.$itemId.']';
+
+        $query->whereHas('venta', function ($vq) use ($prefijo, $nombre) {
+            $vq->whereHas('venta_emisiones', function ($e) use ($prefijo, $nombre) {
+                $e->where(function ($w) use ($prefijo, $nombre) {
+                    $w->where('detalle', 'like', str_replace(['%', '_'], ['\\%', '\\_'], $prefijo).'%');
+                    if ($nombre !== '') {
+                        $w->orWhere('detalle', $nombre)
+                            ->orWhere('detalle', 'like', '%'.addcslashes($nombre, '%_\\').'%');
+                    }
+                });
+            });
+        });
+    }
+
+    /**
+     * @return list<array{id:int,nombre:string}>
+     */
+    public static function itemsSelectorParaEmpresa(?int $empresaId): array
+    {
+        if ($empresaId === null || $empresaId <= 0) {
+            return [];
+        }
+
+        return ItemEstacionamiento::query()
+            ->where('empresa_id', $empresaId)
+            ->where('estado', ItemEstacionamiento::ESTADO_ACTIVO)
+            ->orderBy('nombre')
+            ->get(['id', 'nombre'])
+            ->map(fn (ItemEstacionamiento $item) => [
+                'id' => (int) $item->id,
+                'nombre' => (string) $item->nombre,
+            ])
+            ->all();
     }
 
     private static function itemFiltroDto(ItemEstacionamiento $item): object
     {
+        $nombre = (string) ($item->nombre ?? '');
+
         return (object) [
             'id' => (int) $item->id,
-            'nombre' => (string) ($item->nombre ?? ''),
+            'nombre' => $nombre,
         ];
     }
 }

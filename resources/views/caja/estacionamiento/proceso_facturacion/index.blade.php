@@ -17,6 +17,19 @@
         padding-top: 0.35rem !important;
         padding-bottom: 0.35rem !important;
     }
+    .est-cuenta-activa-bar.est-procesando {
+        border-left-color: #ffc107;
+        background: linear-gradient(90deg, #fff3cd 0%, #fffdf5 100%);
+    }
+    .est-cuenta-activa-bar .est-cuenta-proceso-msg {
+        font-size: 0.875rem;
+        color: #856404;
+        font-weight: 600;
+    }
+    #modal-est-aviso .est-aviso-detalle {
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
     .est-categoria-bar {
         border-left: 4px solid #ffc107;
         background: #fff8e1;
@@ -163,11 +176,43 @@
     }
     .est-totales-resumen { font-size: 1rem; }
     .est-totales-resumen .est-total-diff { color: #dc3545; font-weight: normal; }
-    #modal-f8-descuento .est-cliente-descuento-fijo {
-        background: #e9ecef;
-        border-radius: 0.25rem;
-        padding: 0.5rem 0.75rem;
-        font-size: 0.9rem;
+    #modal-f8-descuento #est-descuento-slot-modal,
+    #modal-f8-descuento #est-descuento-movable {
+        display: block;
+        width: 100%;
+    }
+    #modal-f8-descuento #est-descuento-movable .form-group {
+        margin-bottom: 0.75rem;
+    }
+    #modal-f8-descuento .est-campo-consulta {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.35rem;
+    }
+    #modal-f8-descuento .btn-accion-tabla {
+        flex-shrink: 0;
+    }
+    #modal-f8-descuento .est-campo-id {
+        width: 72px;
+        flex: 0 0 72px;
+    }
+    #modal-f8-descuento .est-campo-codigo {
+        width: 110px;
+        flex: 0 0 110px;
+    }
+    #modal-f8-descuento .est-campo-nombre {
+        flex: 1 1 180px;
+        min-width: 0;
+    }
+    #est-descuento-en-modal-aviso {
+        font-size: 0.85rem;
+        color: #6c757d;
+        font-style: italic;
+    }
+    body.modal-open #consultaclienteModal.show.est-modal-sobre-f8,
+    body.modal-open #consultadescuentoModal.show.est-modal-sobre-f8 {
+        z-index: 1070;
     }
 </style>
 @endsection
@@ -189,6 +234,8 @@
         requiereHabilitacionTurno: @json($requiere_habilitacion_turno ?? true),
         turnoOperativo: @json($turno_operativo ?? null),
         urlHabilitacionTurno: @json($url_habilitacion_turno),
+        sincronizarAnitaAlFacturar: @json(config('estacionamiento.sincronizar_anita_al_facturar', false)),
+        ticketImpresionAutomatica: @json(config('estacionamiento.ticket_impresion_automatica', true)),
         rutas: {
             apiBase: @json(url('caja/estacionamiento/api')),
             descuentoLeer: @json(url('caja/estacionamiento/descuento/leer')),
@@ -197,9 +244,13 @@
         },
     };
 </script>
-<script src="{{ asset('assets/pages/scripts/caja/cuentacaja/consulta.js') }}"></script>
-<script src="{{ asset('assets/pages/scripts/ventas/cliente/consulta.js') }}"></script>
-<script src="{{ asset('assets/pages/scripts/caja/estacionamiento/proceso_facturacion.js') }}"></script>
+@php
+    $estJsBase = rtrim((string) config('app.app_carpeta'), '/') . '/assets/pages/scripts';
+@endphp
+<script src="{{ $estJsBase }}/caja/cuentacaja/consulta.js?v={{ @filemtime(public_path('assets/pages/scripts/caja/cuentacaja/consulta.js')) ?: time() }}"></script>
+<script src="{{ $estJsBase }}/ventas/cliente/consulta.js?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cliente/consulta.js')) ?: time() }}"></script>
+<script src="{{ $estJsBase }}/caja/estacionamiento/descuento/consulta.js?v={{ @filemtime(public_path('assets/pages/scripts/caja/estacionamiento/descuento/consulta.js')) ?: time() }}"></script>
+<script src="{{ $estJsBase }}/caja/estacionamiento/proceso_facturacion.js?v={{ @filemtime(public_path('assets/pages/scripts/caja/estacionamiento/proceso_facturacion.js')) ?: time() }}"></script>
 @endsection
 
 @section('contenido')
@@ -253,11 +304,12 @@
             </div>
         @endif
 
-        <div id="est-bar-cuenta-activa" class="est-cuenta-activa-bar callout callout-info d-none" role="status">
-            <div class="d-flex align-items-center flex-nowrap" style="gap: 0.5rem;">
+        <div id="est-bar-cuenta-activa" class="est-cuenta-activa-bar callout callout-info d-none" role="status" aria-live="polite">
+            <div class="d-flex align-items-center flex-wrap" style="gap: 0.5rem;">
                 <span class="text-muted small flex-shrink-0">Cuenta activa:</span>
                 <span id="est-cuenta-activa-linea" class="font-weight-bold">—</span>
-                <span class="badge badge-info">ABIERTA</span>
+                <span class="badge badge-info" id="est-cuenta-activa-estado">ABIERTA</span>
+                <span id="est-cuenta-proceso-msg" class="est-cuenta-proceso-msg d-none"></span>
             </div>
         </div>
 
@@ -268,7 +320,7 @@
                     <option value="">— Seleccione categoría —</option>
                 </select>
                 <span id="est-categoria-nombre-visible" class="est-categoria-nombre d-none"></span>
-                <small class="text-muted">Cambie la categoría si ingresa otro vehículo</small>
+                <small id="est-categoria-hint-cambio" class="text-muted">Cambie la categoría si ingresa otro vehículo</small>
             </div>
         </div>
 
@@ -281,7 +333,7 @@
                     <div class="card-body py-2">
                         <p class="small text-muted mb-2">
                             Ingrese el <strong>ID</strong> del ítem, use la lupa o seleccione un icono.
-                            Cantidad siempre <strong>1</strong>.
+                            <strong>Enter</strong> agrega con cantidad 1; <strong>+</strong> o el botón Agregar abren cantidad.
                         </p>
                         <div class="est-campo-consulta mb-2">
                             <input type="text" id="est-item-id-input" class="form-control form-control-sm est-campo-id" placeholder="ID" inputmode="numeric" autocomplete="off">
@@ -330,23 +382,8 @@
                                 </div>
                             </div>
                         </div>
-                        <div id="est-descuento-movable">
-                            <div class="form-group mb-2">
-                                <label class="small mb-0">Descuento estacionamiento</label>
-                                <div class="est-campo-consulta">
-                                    <input type="text" class="form-control form-control-sm est-campo-id" id="descuento_estacionamiento_id" placeholder="ID" autocomplete="off">
-                                    <input type="text" class="form-control form-control-sm est-campo-codigo" id="codigodescuento" placeholder="Código" autocomplete="off">
-                                    <input type="text" class="form-control form-control-sm est-campo-nombre" id="nombredescuento" placeholder="Nombre" readonly>
-                                </div>
-                            </div>
-                            <div id="panel-cliente-descuento" class="form-group mb-2 d-none">
-                                <label class="small mb-0 text-primary">Cliente interno descuento (fijo)</label>
-                                <div class="est-campo-consulta mt-1">
-                                    <input type="text" class="form-control form-control-sm est-campo-id" id="cliente_descuento_id" readonly>
-                                    <input type="text" class="form-control form-control-sm est-campo-codigo" id="codigocliente_descuento" readonly>
-                                    <input type="text" class="form-control form-control-sm est-campo-nombre" id="nombrecliente_descuento" readonly>
-                                </div>
-                            </div>
+                        <div id="est-descuento-slot-original">
+                            <div id="est-descuento-en-modal-aviso" class="d-none mb-2">Descuento y cliente interno se cargan en el modal central (F8).</div>
                         </div>
                         <button type="button" class="btn btn-sm btn-outline-danger mr-1" id="btn-est-cerrar-cuenta">
                             <i class="fa fa-times"></i> Cerrar cuenta
@@ -362,21 +399,27 @@
                 <div class="card card-outline card-dark mb-3 est-card-detalle">
                     <div class="card-header py-2 d-flex justify-content-between align-items-center flex-wrap">
                         <span><i class="fa fa-list"></i> Consumos / cobranza</span>
-                        <div class="btn-group btn-group-sm">
-                            <button type="button" class="btn btn-outline-success" id="tool-facturar" title="Facturar (F5)">
-                                <i class="fa fa-file-invoice-dollar"></i>
-                            </button>
-                            <button type="button" class="btn btn-outline-secondary" id="tool-descuento" title="Descuento (F8)">
-                                <i class="fa fa-percent"></i>
-                            </button>
-                            <a href="{{ route('estacionamiento_facturas_dia') }}" class="btn btn-outline-primary" title="Facturas del día">
-                                <i class="fa fa-calendar-day"></i>
-                            </a>
-                            @if ($requiere_habilitacion_turno ?? true)
-                            <a href="{{ route('estacionamiento_habilitacion_turno') }}" class="btn btn-outline-warning" title="Habilitación / cierre turno">
-                                <i class="fa fa-lock"></i>
-                            </a>
-                            @endif
+                        <div class="d-flex align-items-center flex-wrap" style="gap: 0.5rem;">
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-success" id="tool-facturar" title="Facturar (F5)">
+                                    <i class="fa fa-file-invoice-dollar"></i>
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" id="tool-descuento" title="Descuento (F8)">
+                                    <i class="fa fa-percent"></i>
+                                </button>
+                                <a href="{{ route('estacionamiento_facturas_dia') }}" class="btn btn-outline-primary" title="Facturas del día">
+                                    <i class="fa fa-calendar-day"></i>
+                                </a>
+                                @if ($requiere_habilitacion_turno ?? true)
+                                <a href="{{ route('estacionamiento_habilitacion_turno') }}" class="btn btn-outline-warning" title="Habilitación / cierre turno">
+                                    <i class="fa fa-lock"></i>
+                                </a>
+                                @endif
+                            </div>
+                            <span id="est-facturacion-loading" style="display:none; color:#6c757d; font-size:0.95em; white-space:nowrap;" aria-live="polite">
+                                <i class="fa fa-spinner fa-spin" aria-hidden="true"></i>
+                                <span class="est-facturacion-loading-text">Facturando…</span>
+                            </span>
                         </div>
                     </div>
                     <div class="card-body py-2 d-flex flex-column" style="min-height: 420px;">
@@ -408,9 +451,6 @@
                                 <div id="est-totales-cobranza" class="est-totales-resumen ml-auto"></div>
                             </div>
                         </div>
-                        <span id="est-facturacion-loading" class="d-none text-muted small mt-2">
-                            <i class="fa fa-spinner fa-spin"></i> Facturando…
-                        </span>
                     </div>
                 </div>
             </div>
@@ -418,8 +458,22 @@
     </div>
 </div>
 
+<div id="est-facturacion-procesando-overlay"
+     class="d-none"
+     role="status"
+     aria-live="assertive"
+     aria-hidden="true"
+     style="position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 2050; display: flex; align-items: center; justify-content: center; padding: 1rem;">
+    <div class="bg-white rounded shadow text-center px-4 py-3" style="max-width: 92vw; min-width: 18rem;">
+        <i class="fa fa-spinner fa-spin fa-2x text-warning mb-2" aria-hidden="true"></i>
+        <div><strong id="est-facturacion-procesando-titulo">Procesando…</strong></div>
+        <div class="small text-muted mt-1" id="est-facturacion-procesando-subtitulo">Por favor espere. No cierre ni recargue la página.</div>
+    </div>
+</div>
+
 @include('includes.ventas.modalconsultacliente')
 @include('includes.caja.modalconsultacuentacaja')
+@include('includes.caja.modalconsultadescuento_estacionamiento')
 
 <template id="est-template-renglon-cuenta">
     <tr class="item-cuenta-est">
@@ -441,44 +495,86 @@
     </tr>
 </template>
 
-<div class="modal fade" id="modal-f8-descuento" tabindex="-1" role="dialog" aria-labelledby="modalF8Titulo" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered" role="document">
+<div class="modal fade" id="modal-f8-descuento" tabindex="-1" role="dialog" aria-labelledby="modalF8Titulo" data-backdrop="true" data-keyboard="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
         <div class="modal-content">
             <div class="modal-header py-2">
-                <h5 class="modal-title" id="modalF8Titulo">Facturar con descuento (F8)</h5>
+                <h5 class="modal-title" id="modalF8Titulo">Facturar con descuento estacionamiento</h5>
                 <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar"><span aria-hidden="true">&times;</span></button>
             </div>
-            <div class="modal-body">
-                <p class="small text-muted">Indique el código de descuento. El cliente interno es fijo por configuración.</p>
-                <div class="form-group mb-2">
-                    <label class="small mb-0">Código descuento <span class="text-danger">*</span></label>
-                    <input type="text" id="modal-f8-codigo-descuento" class="form-control" autocomplete="off" autofocus>
-                    <input type="hidden" id="modal-f8-descuento-id">
-                    <input type="text" id="modal-f8-nombre-descuento" class="form-control form-control-sm mt-1" readonly placeholder="Nombre descuento">
-                </div>
-                <div class="est-cliente-descuento-fijo">
-                    <strong>Cliente descuento (fijo):</strong>
-                    <span id="modal-f8-cliente-descuento-texto">—</span>
+            <div class="modal-body py-3">
+                <p class="small text-muted mb-3">
+                    Indique el código de descuento (Enter o lupa) y el cliente interno si corresponde.
+                    Si el descuento no es del 100%, al confirmar complete el medio de cobro en la grilla y pulse F8 de nuevo.
+                </p>
+                <div id="est-descuento-slot-modal">
+                    <div id="est-descuento-movable">
+                        <div class="form-group mb-2">
+                            <label class="small mb-0">Descuento estacionamiento</label>
+                            <div class="est-campo-consulta">
+                                <input type="text" class="form-control form-control-sm est-campo-id descuento_estacionamiento_id" id="descuento_estacionamiento_id" placeholder="ID" autocomplete="off">
+                                <button type="button" title="Consulta descuentos" class="btn-accion-tabla consultadescuento tooltipsC">
+                                    <i class="fa fa-search text-primary"></i>
+                                </button>
+                                <input type="text" class="form-control form-control-sm est-campo-codigo codigodescuento" id="codigodescuento" placeholder="Código" autocomplete="off">
+                                <input type="text" class="form-control form-control-sm est-campo-nombre nombredescuento" id="nombredescuento" placeholder="Nombre" readonly>
+                            </div>
+                        </div>
+                        <div id="panel-cliente-descuento" class="form-group mb-2">
+                            <label class="small mb-0 text-primary">Cliente interno del descuento <span class="text-danger">*</span></label>
+                            <div class="est-campo-consulta mt-1">
+                                <input type="text" class="form-control form-control-sm est-campo-id" id="cliente_descuento_id" placeholder="ID" autocomplete="off">
+                                <button type="button" title="Consulta cliente interno (invita / centro de costo)" class="btn-accion-tabla consultaclienteinternodescuento tooltipsC">
+                                    <i class="fa fa-search text-primary"></i>
+                                </button>
+                                <input type="text" class="form-control form-control-sm est-campo-codigo codigoclienteinternodescuento" id="codigocliente_descuento" placeholder="Código" autocomplete="off">
+                                <input type="text" class="form-control form-control-sm est-campo-nombre nombreclienteinternodescuento" id="nombrecliente_descuento" placeholder="Nombre / razón social" readonly>
+                            </div>
+                            <small class="form-text text-muted">Quien invita o centro de costos. <strong>No</strong> es el cliente de la factura.</small>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer py-2">
                 <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-primary btn-sm" id="modal-f8-descuento-confirmar">Facturar con descuento</button>
+                <button type="button" class="btn btn-primary btn-sm" id="modal-f8-descuento-confirmar">Facturar</button>
             </div>
         </div>
     </div>
 </div>
 
-<div class="modal fade" id="modal-est-aviso" tabindex="-1" role="dialog">
-    <div class="modal-dialog modal-dialog-centered" role="document">
+<div class="modal fade" id="modal-est-cantidad" tabindex="-1">
+    <div class="modal-dialog modal-sm">
         <div class="modal-content">
             <div class="modal-header py-2">
+                <h6 class="modal-title">Cantidad</h6>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body py-2">
+                <input type="number" step="any" min="0.0001" class="form-control" id="est-fld-cantidad-linea" value="1">
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-primary" id="modal-est-cantidad-confirmar">
+                    Continuar <small class="text-white-50">(Enter)</small>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modal-est-aviso" tabindex="-1" role="dialog" aria-labelledby="modal-est-aviso-titulo" data-backdrop="static" data-keyboard="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header py-2" id="modal-est-aviso-header">
                 <h5 class="modal-title" id="modal-est-aviso-titulo">Aviso</h5>
                 <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
             </div>
-            <div class="modal-body" id="modal-est-aviso-body"></div>
+            <div class="modal-body">
+                <div class="est-aviso-detalle d-none" id="modal-est-aviso-detalle"></div>
+                <div id="modal-est-aviso-body"></div>
+            </div>
             <div class="modal-footer py-2">
-                <button type="button" class="btn btn-primary btn-sm" data-dismiss="modal">Aceptar</button>
+                <button type="button" class="btn btn-primary btn-sm" id="modal-est-aviso-aceptar" data-dismiss="modal">Aceptar</button>
             </div>
         </div>
     </div>

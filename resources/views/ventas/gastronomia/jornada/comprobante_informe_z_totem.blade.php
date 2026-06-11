@@ -86,6 +86,15 @@
             No hay Informe Z cargado para esta jornada.
         </div>
     @else
+        @if (! empty($informeZMeta['precarga_automatica']))
+            <p class="muted" style="margin:0 0 8px;">
+                Informe Z precargado automáticamente al cerrar la jornada (Z = Sistema por medio de pago).
+                @if (! empty($informeZMeta['ajustado_en_caja']))
+                    Ajustado en caja{{ ! empty($informeZMeta['ajuste_caja_en']) ? ' el '.$informeZMeta['ajuste_caja_en'] : '' }}{{ ! empty($informeZMeta['ajuste_caja_usuario_nombre']) ? ' — '.$informeZMeta['ajuste_caja_usuario_nombre'] : '' }}.
+                @endif
+            </p>
+        @endif
+
         @if ($conc !== null)
             @if (! empty($conc['ok']))
                 <div class="ok">
@@ -100,7 +109,7 @@
 
         @if ($informeZMeta && ! empty($informeZMeta['informe_z_en']))
             <p class="muted" style="margin:0 0 8px;">
-                Cargado: {{ $informeZMeta['informe_z_en'] }}
+                Registrado: {{ $informeZMeta['informe_z_en'] }}
                 @if (! empty($informeZMeta['usuario_nombre']))
                     — {{ $informeZMeta['usuario_nombre'] }}
                 @endif
@@ -108,13 +117,17 @@
         @endif
 
         @foreach (($d['totems'] ?? []) as $t)
+            @php
+                $esUnificado = (int) ($t['totem_id'] ?? -1) === 0
+                    || ! empty($t['plantilla_unificada']);
+            @endphp
             <div class="bloque">
                 <h2>
-                    {{ $t['ubicacion_nombre'] ?? 'Tótem' }}
-                    @if (! empty($t['detalle']))
+                    {{ $t['ubicacion_nombre'] ?? 'Informe Z Waitry' }}
+                    @if (! $esUnificado && ! empty($t['detalle']))
                         — {{ $t['detalle'] }}
                     @endif
-                    @if (! empty($t['waitry_table_id']))
+                    @if (! $esUnificado && ! empty($t['waitry_table_id']))
                         <span class="muted">(tableId {{ (int) $t['waitry_table_id'] }})</span>
                     @endif
                     @if (empty($t['ok']))
@@ -126,7 +139,7 @@
                     <thead>
                         <tr class="total-grande">
                             <td colspan="3">
-                                <strong>Totales del tótem</strong>
+                                <strong>{{ $esUnificado ? 'Totales de la jornada' : 'Totales del tótem' }}</strong>
                             </td>
                             <td class="num">
                                 Sist. $ {{ number_format((float) ($t['total_sistema'] ?? 0), 2, ',', '.') }}

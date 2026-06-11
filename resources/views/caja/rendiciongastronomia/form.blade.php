@@ -118,6 +118,11 @@
                 'informe_z_cargado',
                 'informe_z_en',
                 'usuario_informe_z',
+                'informe_z_plantilla',
+                'informe_z_precarga_automatica',
+                'informe_z_ajustado_en_caja',
+                'informe_z_ajuste_caja_en',
+                'informe_z_ajuste_caja_usuario',
                 'conciliacion_informe_z',
                 'tolerancia_informe_z',
                 'cierre_totem_habilitado',
@@ -321,14 +326,14 @@
             <div class="card-body py-2">
                 <p class="mb-2 small">
                     Compare con el comprobante o resumen que entrega el operador de gastronomía:
-                    totales facturados y cobrados, medios de pago, redondeos y (en jornada) último Waitry, numeración por PV e Informe Z por tótem.
+                    totales facturados y cobrados, medios de pago, redondeos y (en jornada) último Waitry, numeración por PV e Informe Z unificado por medio de pago.
                 </p>
                 <ul class="small mb-0 pl-3" id="lista-verificacion-gastronomia">
                     <li id="verif-item-comprobante" class="text-muted">Abrir el comprobante de cierre gastronomía (botón arriba).</li>
                     <li id="verif-item-totales" class="text-muted">Revisar facturación y cobranzas del cierre.</li>
                     <li id="verif-item-medios" class="text-muted">Contrastar medios rendidos en caja con lo físico recibido.</li>
                     <li id="verif-item-jornada-waitry" class="text-muted d-none">Validar último ticket Waitry y numeración de comprobantes.</li>
-                    <li id="verif-item-jornada-z" class="text-muted d-none">Validar Informe Z vs totales del sistema por tótem.</li>
+                    <li id="verif-item-jornada-z" class="text-muted d-none">Validar Informe Z vs totales del sistema; corregir montos Z si difieren del comprobante físico Waitry.</li>
                 </ul>
             </div>
         </div>
@@ -349,8 +354,9 @@
         </div>
 
         <div id="panel-informe-z-jornada" class="d-none card card-outline card-secondary mb-3">
-            <div class="card-header py-2"><strong>Conciliación Informe Z (tótems Waitry)</strong></div>
+            <div class="card-header py-2"><strong>Informe Z Waitry — conciliación y ajuste en caja</strong></div>
             <div class="card-body py-2 small" id="contenido-informe-z-jornada"></div>
+            <input type="hidden" name="informe_z_totems_json" id="informe_z_totems_json" value="">
         </div>
 
         <div class="card card-outline card-info mb-3">

@@ -178,12 +178,12 @@
         if (empFd) {
             empFd.value = empresaId;
         }
-        if (typeof window.GASTRONOMIA === 'undefined') {
-            window.GASTRONOMIA = {};
+        if (typeof window.ESTACIONAMIENTO === 'undefined') {
+            window.ESTACIONAMIENTO = {};
         }
-        window.GASTRONOMIA.empresaId = empresaId;
-        window.GASTRONOMIA.usocuentacajaGastronomiaId = datosCarga
-            ? parseInt(datosCarga.usocuentacaja_gastronomia_id, 10) || 0
+        window.ESTACIONAMIENTO.empresaId = empresaId;
+        window.ESTACIONAMIENTO.usocuentacajaEstacionamientoId = datosCarga
+            ? parseInt(datosCarga.usocuentacaja_estacionamiento_id, 10) || 0
             : 0;
 
         cuentacajaxcodigo = tr.querySelector('.cuentacaja_id');
@@ -324,6 +324,9 @@
                     nombre: ln.nombre,
                     moneda_id: ln.moneda_id,
                     moneda_abreviatura: ln.moneda,
+                    icono: ln.icono,
+                    icono_color: ln.icono_color,
+                    etiqueta_boton: ln.etiqueta_boton,
                 });
 
                 wireFila(tr);
@@ -412,8 +415,10 @@
             var codigo = trModal.find('.codigo').html();
             var moneda_id = trModal.find('.moneda_id').html();
             var tr = cuentacajaxcodigo.closest('tr');
-            asignarCuentaEnFila(tr, {
-                id: parseInt(id, 10),
+            var cuentaId = parseInt(id, 10);
+            var cuentaDesdeLista = cuentasPorId[String(cuentaId)] || null;
+            asignarCuentaEnFila(tr, cuentaDesdeLista || {
+                id: cuentaId,
                 nombre: nombre,
                 codigo: codigo,
                 moneda_id: parseInt(moneda_id, 10),

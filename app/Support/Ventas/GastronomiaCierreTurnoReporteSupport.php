@@ -461,6 +461,7 @@ final class GastronomiaCierreTurnoReporteSupport
             'puntoventa_etiqueta' => self::etiquetaPuntoventaDesdeConfiguracion($t->configuracionPuntoventa),
             'turno_nombre' => $t->turno?->nombre ?? '',
             'fecha_jornada' => $t->jornada?->fecha_jornada?->format('d/m/Y') ?? '',
+            'jornada_gastronomia_id' => (int) ($t->jornada_gastronomia_id ?? 0),
             'usuario' => $t->usuarioCierre?->nombre ?? '',
             'total' => (float) ($t->monto_facturacion_turno ?? 0),
             'monto_habilitacion' => (float) $t->monto_habilitacion,

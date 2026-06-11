@@ -347,10 +347,14 @@ final class ArcaWsfeEmisionResiliencia
     /**
      * true: corresponde reintentar la transacción usando PV CAEA porque el primer intento (CAE)
      * cayó por un problema de COMUNICACIÓN. Nunca reintentar cuando el error es de datos o sistema.
+     *
+     * No usa forzarModoCaea(): si el failover se activa durante la misma emisión (p. ej. tras
+     * registrar fallos de numeración), la transacción sigue en PV CAE (yaUsaCaea=false) y debe
+     * poder reintentar con forzarPvCaea.
      */
     public static function debeReintentarTransaccionConCaea(?string $mensaje, bool $yaUsaCaea, ?string $webservice = null): bool
     {
-        if ($yaUsaCaea || self::forzarModoCaea($webservice)) {
+        if ($yaUsaCaea) {
             return false;
         }
 
@@ -359,6 +363,52 @@ final class ArcaWsfeEmisionResiliencia
         }
 
         return self::esErrorTransporte($mensaje);
+    }
+
+    /**
+     * Timeout SOAP reducido para emisión en POS (gastronomía). null = usar soap_timeout estándar.
+     */
+    public static function soapTimeoutPosParaOpciones(?array $opcionesEmision, ?string $webservice = null): ?int
+    {
+        if (empty($opcionesEmision['emision_pos_arca'])) {
+            return null;
+        }
+
+        $desdeOpciones = (int) ($opcionesEmision['soap_timeout_arca_pos'] ?? 0);
+        if ($desdeOpciones > 0) {
+            return max(5, $desdeOpciones);
+        }
+
+        $configKey = self::configKey($webservice);
+        $desdeConfig = (int) config($configKey.'.soap_timeout_pos', 0);
+
+        return $desdeConfig > 0 ? max(5, $desdeConfig) : null;
+    }
+
+    /**
+     * Registra un fallo de transporte ante ARCA para acelerar el failover CAEA global
+     * (misma histéresis que arca:monitorear-conectividad).
+     *
+     * @param  array{ultimo_nro?:int|null,probe?:string|null}  $meta
+     */
+    public static function notificarFallaTransporteEmision(
+        ?string $mensaje,
+        ?string $webservice = null,
+        array $meta = [],
+    ): void {
+        if (! self::esErrorTransporte($mensaje)) {
+            return;
+        }
+
+        if (filter_var(config(self::configKey($webservice).'.emision.forzar_modo_caea'), FILTER_VALIDATE_BOOLEAN)) {
+            return;
+        }
+
+        $failoverKey = self::esWsMtxca($webservice)
+            ? ArcaFailoverStore::WS_MTXCA
+            : ArcaFailoverStore::WS_WSFE;
+
+        ArcaFailoverStore::registrarChequeo($failoverKey, false, $mensaje, $meta);
     }
 
     public static function mensajeAvisoModoCaeaForzado(?string $webservice = null): ?string

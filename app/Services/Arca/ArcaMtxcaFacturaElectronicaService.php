@@ -145,13 +145,13 @@ class ArcaMtxcaFacturaElectronicaService
         return $items;
     }
 
-    public function consultarUltimoComprobanteAutorizado(int $empresaId, int $ptoVta, int $cbteTipo): int
+    public function consultarUltimoComprobanteAutorizado(int $empresaId, int $ptoVta, int $cbteTipo, ?int $soapTimeoutSeconds = null): int
     {
         $this->assertTransporteSoap();
         $cuit = $this->cuitEmisor($empresaId);
         $ctx = $this->resolveWsaaContext($empresaId);
         $ts = $this->wsaa->getTokenSign((string) config('arca_mtxca.wsaa_service_id'), $ctx);
-        $client = $this->soapClient();
+        $client = $this->soapClient($soapTimeoutSeconds);
 
         try {
             $raw = $client->consultarUltimoComprobanteAutorizado([
@@ -247,8 +247,13 @@ class ArcaMtxcaFacturaElectronicaService
      * @param  object  $puntoventa  Puntoventa (codigo, webservice, actividad_arca_id)
      * @return array{cae: string, fechavencimientocae: string, resultado: string, observaciones: string}
      */
-    public function solicitaCaeDomestico(int $empresaId, object $puntoventa, int $cbteTipo, array $datos): array
-    {
+    public function solicitaCaeDomestico(
+        int $empresaId,
+        object $puntoventa,
+        int $cbteTipo,
+        array $datos,
+        ?int $soapTimeoutSeconds = null,
+    ): array {
         $this->assertTransporteSoap();
         if (($puntoventa->webservice ?? '') !== 'wsmtxca') {
             throw new Exception('ARCA MTXCA: solo aplica a webservice wsmtxca.');
@@ -257,7 +262,7 @@ class ArcaMtxcaFacturaElectronicaService
         $cuit = $this->cuitEmisor($empresaId);
         $ctx = $this->resolveWsaaContext($empresaId);
         $ts = $this->wsaa->getTokenSign((string) config('arca_mtxca.wsaa_service_id'), $ctx);
-        $client = $this->soapClient();
+        $client = $this->soapClient($soapTimeoutSeconds);
 
         $ptoVta = (int) $puntoventa->codigo;
         $comprobante = $this->buildComprobanteRequest($empresaId, $puntoventa, $cbteTipo, $ptoVta, $datos, null);
@@ -1036,7 +1041,7 @@ class ArcaMtxcaFacturaElectronicaService
         }
     }
 
-    private function soapClient(): SoapClient
+    private function soapClient(?int $timeoutOverrideSeconds = null): SoapClient
     {
         $env = (string) config('arca.env', 'homo');
         $cfg = config("arca_mtxca.mtxca.{$env}");
@@ -1048,7 +1053,9 @@ class ArcaMtxcaFacturaElectronicaService
         if ($url === '') {
             throw new Exception("ARCA MTXCA: URL no configurada para env={$env}.");
         }
-        $timeout = max(10, (int) config('arca_mtxca.soap_timeout', 60));
+        $timeout = $timeoutOverrideSeconds !== null && $timeoutOverrideSeconds > 0
+            ? max(5, $timeoutOverrideSeconds)
+            : max(10, (int) config('arca_mtxca.soap_timeout', 60));
 
         return new SoapClient($wsdl, [
             'soap_version' => SOAP_1_2,

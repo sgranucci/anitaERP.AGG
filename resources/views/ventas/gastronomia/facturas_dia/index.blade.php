@@ -306,15 +306,14 @@
     <div class="col-lg-12">
         @include('includes.mensaje')
         <div class="alert alert-info py-2 mb-2">
-            @if ($tiene_cfg_pv ?? false)
-                Terminal: <strong>{{ $identificador_pc }}</strong>
+            Terminal: <strong>{{ $identificador_pc }}</strong>
+            @if ($empresa_nombre ?? null)
                 · Empresa: <strong>{{ $empresa_nombre }}</strong>
-                ·
-            @else
-                Terminal: <strong>{{ $identificador_pc }}</strong>
-                · <span class="text-warning">Sin configuración PV gastronomía para esta terminal</span>
-                ·
             @endif
+            @if (! ($tiene_cfg_pv ?? false))
+                · <span class="text-warning">Sin configuración PV gastronomía para esta terminal</span>
+            @endif
+            ·
             Fecha jornada <strong>{{ $fecha }}</strong>
             · Fecha calendario <strong>{{ $fecha_calendario ?? \Illuminate\Support\Carbon::today()->format('Y-m-d') }}</strong>
             @if (! empty($jornada['jornada_abierta']))
@@ -348,11 +347,10 @@
                 · mostrando facturas del día en esta terminal
             @endif
         </div>
-        @if (($requiere_habilitacion_turno ?? false) && ! ($turno_habilitado ?? false))
+        @if (can('generar-nota-credito-gastronomia-facturas-dia', false) && empty($jornadas_abiertas_por_empresa ?? []))
             <div class="alert alert-warning py-2 mb-2">
-                No hay turno habilitado en esta terminal (<strong>{{ $identificador_pc }}</strong>).
-                Debe <a href="{{ $url_habilitacion_turno ?? route('gastronomia_habilitacion_turno') }}">habilitar el turno</a>
-                antes de generar notas de crédito desde este listado.
+                No hay jornada abierta en ninguna empresa asignada.
+                Debe abrir la jornada en Ventas → Gastronomía → Jornada antes de generar notas de crédito.
             </div>
         @endif
         <div class="card card-info">
@@ -370,6 +368,23 @@
                 </div>
                 <div class="d-md-flex justify-content-md-end align-items-md-end flex-wrap">
                     <form action="{{ route('gastronomia_facturas_dia') }}" method="GET" class="d-flex flex-wrap align-items-end mb-2 mb-md-0">
+                        @if (($empresa_query ?? collect())->count() > 1)
+                            <div class="form-group mb-0 mr-2">
+                                @include('includes.listado.filtro_empresa_asignada_inline', [
+                                    'empresa_query' => $empresa_query,
+                                    'empresa_id' => $empresa_id ?? 0,
+                                    'id' => 'empresa_id_fd',
+                                    'required' => true,
+                                    'permite_todas' => false,
+                                    'mostrar_opcion_vacia' => false,
+                                    'select_class' => 'form-control form-control-sm',
+                                    'label_class' => 'small text-muted mb-0 d-block',
+                                    'label' => 'Empresa',
+                                ])
+                            </div>
+                        @elseif (($empresa_query ?? collect())->count() === 1)
+                            <input type="hidden" name="empresa_id" value="{{ $empresa_query->first()->id }}">
+                        @endif
                         <div class="form-group mb-0 mr-2">
                             <label for="fecha_fd" class="small text-muted mb-0 d-block">Fecha jornada</label>
                             <input type="date" id="fecha_fd" name="fecha" value="{{ $fecha }}" class="form-control form-control-sm">
@@ -434,6 +449,7 @@
                         @if (($articulo_filtro ?? null) || ($busqueda ?? '') !== '' || ($mozo_gastronomia_id ?? null))
                             <a href="{{ route('gastronomia_facturas_dia', array_filter([
                                 'fecha' => $fecha,
+                                'empresa_id' => ($empresa_id ?? null) ?: null,
                                 'todas_pc' => ($todas_pc ?? false) ? '1' : null,
                                 'turno_filtro' => ($turno_filtro_val ?? '0') !== '0' ? ($turno_filtro_val ?? '0') : null,
                             ])) }}"
@@ -469,6 +485,7 @@
                             'ruta' => 'listar_gastronomia_facturas_dia',
                             'queryparams' => array_filter([
                                 'fecha' => $fecha,
+                                'empresa_id' => ($empresa_id ?? null) ?: null,
                                 'busqueda' => $busqueda ?? '',
                                 'todas_pc' => ($todas_pc ?? false) ? '1' : null,
                                 'turno_filtro' => ($requiere_habilitacion_turno ?? false) && ($turno_filtro_val ?? '0') !== '0'
@@ -549,11 +566,11 @@
                                     $verParams['articulo_id'] = $articulo_filtro->id;
                                 }
                                 $ncVentaId = ($notas_credito_por_factura ?? [])[$r->venta_id] ?? null;
-                                $puedeNc = can('generar-nota-credito-gastronomia-facturas-dia', false)
-                                    && $v
-                                    && (float) ($v->total ?? 0) >= 0.01
-                                    && $ncVentaId === null
-                                    && (! ($requiere_habilitacion_turno ?? false) || ($turno_habilitado ?? false));
+                                $puedeNc = \App\Support\Ventas\GastronomiaNotaCreditoUiSupport::puedeGenerarNotaCredito(
+                                    $r,
+                                    $ncVentaId,
+                                    $jornadas_abiertas_por_empresa ?? [],
+                                );
                             @endphp
                             <tr>
                                 @if ($colInsumos)

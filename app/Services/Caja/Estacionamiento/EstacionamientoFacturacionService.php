@@ -34,7 +34,6 @@ final class EstacionamientoFacturacionService
 
         $contextoDescuento = $this->evaluarDescuentoCabecera(
             $cuenta,
-            $payload['articulo_ids'] ?? [],
             $payload['cantidades'] ?? [],
             $payload['precios'] ?? [],
         );
@@ -98,7 +97,6 @@ final class EstacionamientoFacturacionService
 
         $contexto = $this->evaluarDescuentoCabecera(
             $cuenta,
-            $payload['articulo_ids'] ?? [],
             $payload['cantidades'] ?? [],
             $payload['precios'] ?? [],
         );
@@ -147,7 +145,6 @@ final class EstacionamientoFacturacionService
     }
 
     /**
-     * @param  list<int>  $articuloIds
      * @param  list<float|int|string>  $cantidades
      * @param  list<float|int|string>  $precios
      * @return array{
@@ -160,11 +157,10 @@ final class EstacionamientoFacturacionService
      */
     public function evaluarDescuentoCabecera(
         CuentaEstacionamiento $cuenta,
-        array $articuloIds,
         array $cantidades,
         array $precios,
     ): array {
-        $subtotal = $this->subtotalLineas($articuloIds, $cantidades, $precios);
+        $subtotal = $this->subtotalLineas($cantidades, $precios);
         $d = $cuenta->descuentoEstacionamiento;
 
         $descuentopie = 0.;
@@ -219,6 +215,92 @@ final class EstacionamientoFacturacionService
     }
 
     /**
+     * @param  array<string, mixed>  $anitaPendiente
+     */
+    public function ejecutarAnitaPendienteEstacionamiento(array $anitaPendiente): void
+    {
+        $this->facturacionService->ejecutarAnitaPendienteGastronomia($anitaPendiente);
+    }
+
+    /**
+     * Ejecuta o encola la réplica Anita diferida tras commit (factura o NC estacionamiento).
+     *
+     * @param  array<string, mixed>  $resultado
+     * @return array<string, mixed>
+     */
+    public function completarAnitaPendienteTrasEmision(array $resultado): array
+    {
+        if ($this->debeEncolarAnitaTrasRespuesta($resultado)) {
+            $this->encolarAnitaTrasRespuesta($resultado);
+            unset($resultado['anita_pendiente']);
+
+            return $resultado;
+        }
+
+        if (! empty($resultado['anita_pendiente']) && is_array($resultado['anita_pendiente'])) {
+            try {
+                $this->ejecutarAnitaPendienteEstacionamiento($resultado['anita_pendiente']);
+            } catch (Throwable $e) {
+                Log::error('estacionamiento.anita.post_commit.fallo', [
+                    'venta_id' => $resultado['venta_id'] ?? null,
+                    'msg' => $e->getMessage(),
+                ]);
+                $aviso = 'Comprobante emitido; falló la replicación en Anita.';
+                $warnPrevio = trim((string) ($resultado['warn'] ?? ''));
+                $resultado['warn'] = $warnPrevio !== '' ? $warnPrevio."\n\n".$aviso : $aviso;
+            }
+            unset($resultado['anita_pendiente']);
+        }
+
+        return $resultado;
+    }
+
+    /**
+     * @param  array<string, mixed>  $resultado
+     */
+    private function debeEncolarAnitaTrasRespuesta(array $resultado): bool
+    {
+        if (! filter_var(config('estacionamiento.anita_tras_respuesta', true), FILTER_VALIDATE_BOOLEAN)) {
+            return false;
+        }
+
+        if (! config('estacionamiento.sincronizar_anita_al_facturar', false)) {
+            return false;
+        }
+
+        $ventaId = (int) ($resultado['venta_id'] ?? 0);
+        if ($ventaId <= 0) {
+            return false;
+        }
+
+        return ! empty($resultado['anita_pendiente']) && is_array($resultado['anita_pendiente']);
+    }
+
+    /**
+     * @param  array<string, mixed>  $resultado
+     */
+    private function encolarAnitaTrasRespuesta(array $resultado): void
+    {
+        $anitaPendiente = $resultado['anita_pendiente'];
+        $ventaId = (int) ($resultado['venta_id'] ?? 0);
+
+        if (! is_array($anitaPendiente)) {
+            return;
+        }
+
+        app()->terminating(function () use ($anitaPendiente, $ventaId): void {
+            try {
+                $this->ejecutarAnitaPendienteEstacionamiento($anitaPendiente);
+            } catch (Throwable $e) {
+                Log::error('estacionamiento.anita.defer.fallo', [
+                    'venta_id' => $ventaId,
+                    'msg' => $e->getMessage(),
+                ]);
+            }
+        });
+    }
+
+    /**
      * @param  array<string, mixed>  $caePendiente
      * @return array<string, mixed>|null
      */
@@ -234,7 +316,7 @@ final class EstacionamientoFacturacionService
     private function aplicarReglasCortesiaEnPayload(array $payload): array
     {
         $impuestoExentoId = (int) config('estacionamiento.impuesto_exento_id', 1);
-        $n = count($payload['articulo_ids'] ?? []);
+        $n = count($payload['cantidades'] ?? []);
 
         if ($n > 0) {
             $payload['impuesto_ids'] = array_fill(0, $n, $impuestoExentoId);
@@ -255,11 +337,13 @@ final class EstacionamientoFacturacionService
     {
         return [
             'omitir_movimiento_stock' => true,
-            'omitir_contabilidad' => ! config('estacionamiento.genera_contabilidad_al_facturar', true),
+            'omitir_contabilidad' => ! config('estacionamiento.genera_contabilidad_al_facturar', false),
             'omitir_cuenta_corriente' => true,
             'omitir_sincronizacion_anita' => ! config('estacionamiento.sincronizar_anita_al_facturar', false),
             'anita_modo_minimo' => true,
             'omitir_solicitud_arca_cae' => true,
+            'omitir_stkmov_anita' => true,
+            'origen_estacionamiento' => true,
         ];
     }
 
@@ -341,18 +425,14 @@ final class EstacionamientoFacturacionService
     }
 
     /**
-     * @param  list<int>  $articuloIds
      * @param  list<float|int|string>  $cantidades
      * @param  list<float|int|string>  $precios
      */
-    private function subtotalLineas(array $articuloIds, array $cantidades, array $precios): float
+    private function subtotalLineas(array $cantidades, array $precios): float
     {
         $sub = 0.;
-        $n = min(count($articuloIds), count($cantidades), count($precios));
+        $n = min(count($cantidades), count($precios));
         for ($i = 0; $i < $n; $i++) {
-            if ((int) $articuloIds[$i] <= 0) {
-                continue;
-            }
             $sub += (float) $cantidades[$i] * (float) $precios[$i];
         }
 

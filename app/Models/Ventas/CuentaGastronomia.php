@@ -17,6 +17,10 @@ class CuentaGastronomia extends Model implements Auditable
 
     public const TIPO_CUENTA = 'cuenta';
 
+    public const ORIGEN_SALON = 'salon';
+
+    public const ORIGEN_CANJE_MARKETING = 'canje_marketing';
+
     public const ESTADO_ABIERTA = 'abierta';
 
     public const ESTADO_CERRADA = 'cerrada';
@@ -26,8 +30,9 @@ class CuentaGastronomia extends Model implements Auditable
     protected $table = 'cuenta_gastronomia';
 
     protected $fillable = [
-        'tipo', 'empresa_id', 'mesa_gastronomia_id', 'mozo_gastronomia_id', 'cubiertos',
+        'tipo', 'origen_pos', 'empresa_id', 'mesa_gastronomia_id', 'mozo_gastronomia_id', 'cubiertos',
         'estado', 'identificador_pc', 'cliente_id', 'descuento_gastronomia_id', 'cliente_interno_descuento_id',
+        'cliente_vip_gastronomia_id',
         'factura_receptor_nombre', 'factura_receptor_documento', 'factura_receptor_domicilio',
         'factura_receptor_tipodocumento_id',
         'configuracion_puntoventa_gastronomia_id', 'venta_id', 'waitry_order_id', 'waitry_display_id', 'waitry_cobro_totem', 'waitry_tipo_pago',
@@ -70,6 +75,17 @@ class CuentaGastronomia extends Model implements Auditable
     public function clienteInternoDescuento()
     {
         return $this->belongsTo(Cliente::class, 'cliente_interno_descuento_id');
+    }
+
+    /** Cliente VIP beneficiario del canje marketing (no es el cliente de la factura). */
+    public function clienteVip()
+    {
+        return $this->belongsTo(ClienteVipGastronomia::class, 'cliente_vip_gastronomia_id');
+    }
+
+    public function esCanjeMarketing(): bool
+    {
+        return (string) ($this->origen_pos ?? self::ORIGEN_SALON) === self::ORIGEN_CANJE_MARKETING;
     }
 
     public function configuracionPuntoventa()

@@ -11,7 +11,6 @@
                 </p>
                 <ul class="small mb-3 pl-3">
                     <li>La factura original no se borra: queda compensada fiscalmente por la NC.</li>
-                    <li>Se reintegran los movimientos de stock e insumos de Anita.</li>
                     <li>La NC se registra en el turno de esta terminal.</li>
                 </ul>
                 <div class="form-group mb-0">
@@ -41,6 +40,6 @@
     <div class="bg-white rounded shadow text-center px-4 py-3" style="max-width: 92vw; min-width: 18rem;">
         <i class="fa fa-spinner fa-spin fa-2x text-warning mb-2" aria-hidden="true"></i>
         <div><strong>Generando nota de crédito…</strong></div>
-        <div class="small text-muted mt-1">Por favor espere. No cierre ni recargue la página.</div>
+        <div id="fd-nc-procesando-detalle" class="small text-muted mt-1">Por favor espere. No cierre ni recargue la página.</div>
     </div>
 </div>

@@ -52,6 +52,16 @@ return [
     'anita_sync_categoria_fidelidad_gastronomia_index' => (bool) env('ANITA_SYNC_CATEGORIA_FIDELIDAD_GASTRONOMIA_INDEX', true),
 
     /*
+    | When true, the ventas "clientes VIP canjes gastronomía" index syncs from Anita on first load / shows sync button.
+    */
+    'anita_sync_cliente_vip_gastronomia_index' => (bool) env('ANITA_SYNC_CLIENTE_VIP_GASTRONOMIA_INDEX', true),
+
+    /*
+    | When true, create/update/delete in clientes VIP canjes replicates changes to Anita (base_admin.clivipg).
+    */
+    'anita_sync_cliente_vip_gastronomia_write' => (bool) env('ANITA_SYNC_CLIENTE_VIP_GASTRONOMIA_WRITE', true),
+
+    /*
     | When true, opening ventas/puntoventa with lista vacía dispara sync con Anita en la misma petición HTTP.
     */
     'anita_sync_puntoventa_index' => (bool) env('ANITA_SYNC_PUNTOVENTA_INDEX', false),

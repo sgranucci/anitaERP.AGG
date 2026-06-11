@@ -182,18 +182,20 @@ final class WaitryTotemJornadaResumenSupport
             if ($tipo === null) {
                 continue;
             }
-            $tipoCanon = WaitryMedioPagoCuentacajaSupport::tipoRepresentativoInformeZ($tipo, $gateway) ?? $tipo;
-            $medioKey = $empresaId > 0
-                ? WaitryMedioPagoCuentacajaSupport::claveMedioInformeZ($tipo, $empresaId, $gateway)
-                : $tipoCanon;
+            $categoria = WaitryMedioPagoCuentacajaSupport::categoriaInformeZDesglose($tipo, $gateway);
+            if ($categoria === null) {
+                continue;
+            }
+            $medioKey = WaitryMedioPagoCuentacajaSupport::claveMedioInformeZ($tipo, $empresaId, $gateway);
             if ($medioKey === '__excl__') {
                 continue;
             }
 
             if (! isset($buckets[$clave]['medios'][$medioKey])) {
                 $buckets[$clave]['medios'][$medioKey] = [
-                    'tipo' => $tipoCanon,
-                    'etiqueta' => (string) ($ln['waitry_medio_label'] ?? WaitryMedioPagoCuentacajaSupport::etiquetaTipo($tipoCanon, $gateway)),
+                    'tipo' => $categoria,
+                    'categoria' => $categoria,
+                    'etiqueta' => WaitryMedioPagoCuentacajaSupport::etiquetaCategoriaInformeZ($categoria),
                     'cuentacaja_label' => $ln['cuentacaja_esperada_label'] ?? null,
                     'cantidad' => 0,
                     'total' => 0.0,
@@ -207,7 +209,7 @@ final class WaitryTotemJornadaResumenSupport
             );
             $buckets[$clave]['cantidad_ordenes']++;
             $buckets[$clave]['total_ingreso'] = round($buckets[$clave]['total_ingreso'] + $monto, 2);
-            self::acumularDesglosePorTableId($buckets[$clave], $ln, $monto, $tipoCanon, $medioKey);
+            self::acumularDesglosePorTableId($buckets[$clave], $ln, $monto, $categoria, $medioKey);
         }
 
         ksort($buckets);
@@ -236,13 +238,13 @@ final class WaitryTotemJornadaResumenSupport
             $globalIngreso = round($globalIngreso + (float) $bucket['total_ingreso'], 2);
 
             foreach ($medios as $medio) {
-                $tipo = WaitryMedioPagoCuentacajaSupport::tipoRepresentativoInformeZ($medio['tipo'] ?? null);
-                if ($tipo === null) {
+                $categoria = $medio['categoria'] ?? $medio['tipo'] ?? null;
+                if ($categoria === null) {
                     continue;
                 }
-                $globalKey = $empresaId > 0
-                    ? WaitryMedioPagoCuentacajaSupport::claveMedioInformeZ($tipo, $empresaId)
-                    : $tipo;
+                $globalKey = WaitryMedioPagoCuentacajaSupport::esCategoriaInformeZDesglose($categoria)
+                    ? 'cat:'.$categoria
+                    : WaitryMedioPagoCuentacajaSupport::claveMedioInformeZ($categoria, $empresaId);
                 if ($globalKey === '__excl__') {
                     continue;
                 }
@@ -387,28 +389,32 @@ final class WaitryTotemJornadaResumenSupport
         $destino = $porTotem[$destinoIdx];
         $mediosDest = [];
         foreach ($destino['por_medio_pago'] ?? [] as $m) {
-            $tipo = WaitryMedioPagoCuentacajaSupport::tipoRepresentativoInformeZ($m['tipo'] ?? null);
-            if ($tipo === null) {
+            $clave = $m['categoria'] ?? $m['tipo'] ?? null;
+            if ($clave === null) {
                 continue;
             }
-            $mediosDest[$tipo] = $m;
+            $mediosDest[$clave] = $m;
         }
         foreach ($huerfano['por_medio_pago'] ?? [] as $m) {
-            $tipo = WaitryMedioPagoCuentacajaSupport::tipoRepresentativoInformeZ($m['tipo'] ?? null);
-            if ($tipo === null) {
+            $clave = $m['categoria'] ?? $m['tipo'] ?? null;
+            if ($clave === null) {
                 continue;
             }
-            if (! isset($mediosDest[$tipo])) {
-                $mediosDest[$tipo] = [
-                    'tipo' => $m['tipo'] ?? null,
-                    'etiqueta' => $m['etiqueta'] ?? WaitryMedioPagoCuentacajaSupport::etiquetaTipo($tipo),
+            if (! isset($mediosDest[$clave])) {
+                $etiqueta = $m['etiqueta'] ?? (WaitryMedioPagoCuentacajaSupport::esCategoriaInformeZDesglose($clave)
+                    ? WaitryMedioPagoCuentacajaSupport::etiquetaCategoriaInformeZ($clave)
+                    : WaitryMedioPagoCuentacajaSupport::etiquetaTipo($clave));
+                $mediosDest[$clave] = [
+                    'tipo' => $clave,
+                    'categoria' => $clave,
+                    'etiqueta' => $etiqueta,
                     'cuentacaja_label' => $m['cuentacaja_label'] ?? null,
                     'cantidad' => 0,
                     'total' => 0.0,
                 ];
             }
-            $mediosDest[$tipo]['cantidad'] += (int) ($m['cantidad'] ?? 0);
-            $mediosDest[$tipo]['total'] = round((float) $mediosDest[$tipo]['total'] + (float) ($m['total'] ?? 0), 2);
+            $mediosDest[$clave]['cantidad'] += (int) ($m['cantidad'] ?? 0);
+            $mediosDest[$clave]['total'] = round((float) $mediosDest[$clave]['total'] + (float) ($m['total'] ?? 0), 2);
         }
 
         $porTotem[$destinoIdx] = [
@@ -653,10 +659,14 @@ final class WaitryTotemJornadaResumenSupport
             return;
         }
 
+        $etiqueta = WaitryMedioPagoCuentacajaSupport::esCategoriaInformeZDesglose($tipo)
+            ? WaitryMedioPagoCuentacajaSupport::etiquetaCategoriaInformeZ($tipo)
+            : WaitryMedioPagoCuentacajaSupport::etiquetaTipo($tipo);
+
         if (! isset($bucket['por_table_id'][$tableId]['medios'][$medioKey])) {
             $bucket['por_table_id'][$tableId]['medios'][$medioKey] = [
                 'tipo' => $tipo,
-                'etiqueta' => WaitryMedioPagoCuentacajaSupport::etiquetaTipo($tipo),
+                'etiqueta' => $etiqueta,
                 'cantidad' => 0,
                 'total' => 0.0,
             ];
@@ -710,10 +720,16 @@ final class WaitryTotemJornadaResumenSupport
         }
 
         $porId = [];
+        $huerfanos = [];
         foreach ($resumen['por_totem'] ?? [] as $bloque) {
             $tid = (int) ($bloque['totem_id'] ?? 0);
             if ($tid > 0) {
                 $porId[$tid] = $bloque;
+
+                continue;
+            }
+            if ((float) ($bloque['total_ingreso'] ?? 0) > 0.0001 || ($bloque['por_medio_pago'] ?? []) !== []) {
+                $huerfanos[] = $bloque;
             }
         }
 
@@ -737,6 +753,10 @@ final class WaitryTotemJornadaResumenSupport
                 'por_medio_pago' => [],
                 'por_table_id' => [],
             ];
+        }
+
+        foreach ($huerfanos as $huerfano) {
+            $porTotem[] = $huerfano;
         }
 
         $resumen['por_totem'] = $porTotem;

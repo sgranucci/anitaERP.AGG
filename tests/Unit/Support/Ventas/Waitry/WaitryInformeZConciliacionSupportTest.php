@@ -271,4 +271,224 @@ final class WaitryInformeZConciliacionSupportTest extends TestCase
         $this->assertNotContains('cash', $tipos);
         $this->assertNotContains('totem', $tipos);
     }
+
+    public function test_plantilla_carga_unificada_por_medio_desde_total_general(): void
+    {
+        $resumen = [
+            'por_totem' => [
+                [
+                    'totem_id' => 2,
+                    'total_ingreso' => 447200.0,
+                    'por_medio_pago' => [
+                        ['categoria' => 'posnet_kiosco', 'tipo' => 'posnet_kiosco', 'etiqueta' => 'Posnet Kiosco', 'cantidad' => 10, 'total' => 189000.0],
+                        ['categoria' => 'qr_kiosco', 'tipo' => 'qr_kiosco', 'etiqueta' => 'QR Kiosco', 'cantidad' => 8, 'total' => 258200.0],
+                    ],
+                ],
+                [
+                    'totem_id' => 6,
+                    'total_ingreso' => 968300.0,
+                    'por_medio_pago' => [
+                        ['categoria' => 'posnet_kiosco', 'tipo' => 'posnet_kiosco', 'etiqueta' => 'Posnet Kiosco', 'cantidad' => 20, 'total' => 615700.0],
+                        ['categoria' => 'qr_kiosco', 'tipo' => 'qr_kiosco', 'etiqueta' => 'QR Kiosco', 'cantidad' => 12, 'total' => 352600.0],
+                    ],
+                ],
+            ],
+            'total_general' => [
+                'total_ingreso' => 1420900.0,
+                'cantidad_ordenes' => 89,
+                'por_medio_pago' => [
+                    ['categoria' => 'posnet_kiosco', 'tipo' => 'posnet_kiosco', 'etiqueta' => 'Posnet Kiosco', 'cantidad' => 30, 'total' => 804700.0],
+                    ['categoria' => 'qr_kiosco', 'tipo' => 'qr_kiosco', 'etiqueta' => 'QR Kiosco', 'cantidad' => 20, 'total' => 610800.0],
+                    ['categoria' => 'mercadopago', 'tipo' => 'mercadopago', 'etiqueta' => 'Mercado Pago', 'cantidad' => 1, 'total' => 5400.0],
+                ],
+            ],
+        ];
+
+        $plantilla = WaitryInformeZConciliacionSupport::plantillaCarga(1, $resumen);
+
+        $this->assertCount(1, $plantilla);
+        $this->assertTrue($plantilla[0]['plantilla_unificada'] ?? false);
+        $this->assertSame(WaitryInformeZConciliacionSupport::TOTEM_ID_PLANTILLA_UNIFICADA, $plantilla[0]['totem_id']);
+        $this->assertSame(1420900.0, $plantilla[0]['total_ingreso_sistema']);
+
+        $porEtiqueta = [];
+        foreach ($plantilla[0]['lineas'] as $ln) {
+            $porEtiqueta[$ln['etiqueta'] ?? ''] = (float) ($ln['monto_sistema'] ?? 0);
+        }
+        $this->assertSame(804700.0, $porEtiqueta['Posnet Kiosco'] ?? 0.0);
+        $this->assertSame(610800.0, $porEtiqueta['QR Kiosco'] ?? 0.0);
+        $this->assertSame(5400.0, $porEtiqueta['Mercado Pago'] ?? 0.0);
+    }
+
+    public function test_fusionar_informe_z_legacy_dos_totems_en_plantilla_unificada(): void
+    {
+        $plantilla = [
+            [
+                'totem_id' => WaitryInformeZConciliacionSupport::TOTEM_ID_PLANTILLA_UNIFICADA,
+                'plantilla_unificada' => true,
+                'lineas' => [
+                    [
+                        'tipo_waitry' => 'posnet_kiosco',
+                        'etiqueta' => 'Posnet Kiosco',
+                        'monto_sistema' => 804700.0,
+                        'monto_informe_z' => null,
+                    ],
+                    [
+                        'tipo_waitry' => 'qr_kiosco',
+                        'etiqueta' => 'QR Kiosco',
+                        'monto_sistema' => 610800.0,
+                        'monto_informe_z' => null,
+                    ],
+                ],
+            ],
+        ];
+
+        $informeZ = [
+            'totems' => [
+                [
+                    'totem_id' => 2,
+                    'lineas' => [
+                        ['tipo_waitry' => 'posnet_kiosco', 'monto' => 800000.0],
+                        ['tipo_waitry' => 'qr_kiosco', 'monto' => 250000.0],
+                    ],
+                ],
+                [
+                    'totem_id' => 6,
+                    'lineas' => [
+                        ['tipo_waitry' => 'posnet_kiosco', 'monto' => 4700.0],
+                        ['tipo_waitry' => 'qr_kiosco', 'monto' => 360800.0],
+                    ],
+                ],
+            ],
+        ];
+
+        $fusionada = WaitryInformeZConciliacionSupport::fusionarInformeZEnPlantilla($plantilla, $informeZ, 1);
+
+        $this->assertSame(804700.0, $fusionada[0]['lineas'][0]['monto_informe_z']);
+        $this->assertSame(610800.0, $fusionada[0]['lineas'][1]['monto_informe_z']);
+    }
+
+    public function test_precargar_montos_informe_z_desde_sistema_cuadra_conciliacion(): void
+    {
+        $plantilla = [
+            [
+                'totem_id' => 0,
+                'plantilla_unificada' => true,
+                'lineas' => [
+                    [
+                        'tipo_waitry' => 'posnet_kiosco',
+                        'etiqueta' => 'Posnet Kiosco',
+                        'monto_sistema' => 170100.0,
+                        'monto_informe_z' => null,
+                    ],
+                    [
+                        'tipo_waitry' => 'qr_kiosco',
+                        'etiqueta' => 'QR Kiosco',
+                        'monto_sistema' => 43600.0,
+                        'monto_informe_z' => null,
+                    ],
+                ],
+            ],
+        ];
+
+        $precargada = WaitryInformeZConciliacionSupport::precargarMontosInformeZDesdeSistema($plantilla);
+        $resultado = WaitryInformeZConciliacionSupport::conciliar($precargada);
+
+        $this->assertTrue($resultado['ok']);
+        $this->assertSame(170100.0, $precargada[0]['lineas'][0]['monto_informe_z']);
+        $this->assertSame(43600.0, $precargada[0]['lineas'][1]['monto_informe_z']);
+    }
+
+    public function test_fusionar_informe_z_plantilla_unificada_prioriza_categoria_sobre_cuenta_compartida(): void
+    {
+        $plantilla = [
+            [
+                'totem_id' => WaitryInformeZConciliacionSupport::TOTEM_ID_PLANTILLA_UNIFICADA,
+                'plantilla_unificada' => true,
+                'lineas' => [
+                    [
+                        'tipo_waitry' => WaitryMedioPagoCuentacajaSupport::CATEGORIA_POSNET_KIOSCO,
+                        'cuentacaja_id' => 201,
+                        'monto_sistema' => 443800.0,
+                        'monto_informe_z' => null,
+                    ],
+                    [
+                        'tipo_waitry' => WaitryMedioPagoCuentacajaSupport::CATEGORIA_QR_KIOSCO,
+                        'cuentacaja_id' => 201,
+                        'monto_sistema' => 968300.0,
+                        'monto_informe_z' => null,
+                    ],
+                ],
+            ],
+        ];
+
+        $informeZ = [
+            'totems' => [
+                [
+                    'totem_id' => 0,
+                    'lineas' => [
+                        [
+                            'tipo_waitry' => WaitryMedioPagoCuentacajaSupport::CATEGORIA_POSNET_KIOSCO,
+                            'cuentacaja_id' => 201,
+                            'monto_informe_z' => 443800.0,
+                        ],
+                        [
+                            'tipo_waitry' => WaitryMedioPagoCuentacajaSupport::CATEGORIA_QR_KIOSCO,
+                            'cuentacaja_id' => 201,
+                            'monto_informe_z' => 968300.0,
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $fusionada = WaitryInformeZConciliacionSupport::fusionarInformeZEnPlantilla($plantilla, $informeZ, 1);
+        $conciliacion = WaitryInformeZConciliacionSupport::conciliar($fusionada);
+
+        $this->assertSame(443800.0, $fusionada[0]['lineas'][0]['monto_informe_z']);
+        $this->assertSame(968300.0, $fusionada[0]['lineas'][1]['monto_informe_z']);
+        $this->assertTrue($conciliacion['ok']);
+        $this->assertSame(1412100.0, $conciliacion['totems'][0]['total_informe_z']);
+    }
+
+    public function test_reconstruir_resumen_legacy_desglosa_qr_y_posnet_en_total_general(): void
+    {
+        $legacy = [
+            'por_totem' => [
+                [
+                    'totem_id' => 2,
+                    'ubicacion_nombre' => 'Kiosco 1',
+                    'por_medio_pago' => [
+                        ['tipo' => 'totalcoin', 'cantidad' => 3, 'total' => 100.0],
+                    ],
+                ],
+                [
+                    'totem_id' => 6,
+                    'ubicacion_nombre' => 'Kiosco 2',
+                    'por_medio_pago' => [
+                        ['tipo' => 'credit_card', 'cantidad' => 2, 'total' => 200.0],
+                    ],
+                ],
+            ],
+            'total_general' => [
+                'cantidad_ordenes' => 5,
+                'total_ingreso' => 300.0,
+                'por_medio_pago' => [
+                    ['tipo' => 'mercadopago', 'categoria' => 'mercadopago', 'etiqueta' => 'Mercado Pago', 'total' => 300.0],
+                ],
+            ],
+        ];
+
+        $resumen = WaitryInformeZConciliacionSupport::reconstruirResumenInformeZConDesglose($legacy);
+
+        $porEtiqueta = [];
+        foreach ($resumen['total_general']['por_medio_pago'] as $m) {
+            $porEtiqueta[$m['etiqueta'] ?? ''] = (float) ($m['total'] ?? 0);
+        }
+
+        $this->assertSame(100.0, $porEtiqueta['QR Kiosco'] ?? 0.0);
+        $this->assertSame(200.0, $porEtiqueta['Posnet Kiosco'] ?? 0.0);
+        $this->assertArrayNotHasKey('Mercado Pago', $porEtiqueta);
+        $this->assertSame(300.0, $resumen['total_general']['total_ingreso']);
+    }
 }

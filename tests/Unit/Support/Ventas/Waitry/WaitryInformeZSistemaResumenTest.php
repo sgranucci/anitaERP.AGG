@@ -57,8 +57,54 @@ final class WaitryInformeZSistemaResumenTest extends TestCase
 
         $this->assertSame(430.0, $resumen['total_general']['total_ingreso']);
         $this->assertSame(3, $resumen['total_general']['cantidad_ordenes']);
-        $this->assertCount(1, $resumen['total_general']['por_medio_pago']);
-        $this->assertSame(430.0, $resumen['total_general']['por_medio_pago'][0]['total']);
+        $this->assertCount(3, $resumen['total_general']['por_medio_pago']);
+        $totalesPorEtiqueta = [];
+        foreach ($resumen['total_general']['por_medio_pago'] as $medio) {
+            $totalesPorEtiqueta[$medio['etiqueta'] ?? ''] = (float) ($medio['total'] ?? 0);
+        }
+        $this->assertSame(200.0, $totalesPorEtiqueta['Posnet Kiosco'] ?? 0.0);
+        $this->assertSame(150.0, $totalesPorEtiqueta['QR Kiosco'] ?? 0.0);
+        $this->assertSame(80.0, $totalesPorEtiqueta['Mercado Pago'] ?? 0.0);
+    }
+
+    public function test_armar_para_informe_z_desglosa_qr_y_posnet_misma_cuentacaja(): void
+    {
+        config(['waitry.tipo_pago_cuentacaja' => ['mercadopago' => 201, 'totalcoin' => 201]]);
+
+        $totem = new TotemWaitryGastronomia;
+        $totem->id = 2;
+        $totem->empresa_id = 1;
+        $totem->waitry_table_id = 103443;
+
+        $resumen = WaitryTotemJornadaResumenSupport::armarParaInformeZ(
+            new Collection([$totem]),
+            [
+                [
+                    'waitry_tipo_pago' => 'kioskmp',
+                    'waitry_payment_gateway' => 'KIOSK MP',
+                    'paid_waitry' => true,
+                    'monto_cobro_waitry' => 6600.0,
+                    'waitry_table_id' => 103443,
+                ],
+                [
+                    'waitry_tipo_pago' => 'kioskmpqr',
+                    'waitry_payment_gateway' => 'KIOSK MPQR',
+                    'paid_waitry' => true,
+                    'monto_cobro_waitry' => 9800.0,
+                    'waitry_table_id' => 103443,
+                ],
+            ],
+            1,
+        );
+
+        $this->assertSame(16400.0, $resumen['total_general']['total_ingreso']);
+        $this->assertCount(2, $resumen['por_totem'][0]['por_medio_pago']);
+        $porEtiqueta = [];
+        foreach ($resumen['por_totem'][0]['por_medio_pago'] as $m) {
+            $porEtiqueta[$m['etiqueta']] = (float) $m['total'];
+        }
+        $this->assertSame(6600.0, $porEtiqueta['Posnet Kiosco'] ?? 0.0);
+        $this->assertSame(9800.0, $porEtiqueta['QR Kiosco'] ?? 0.0);
     }
 
     public function test_facturada_anita_sin_cobro_totem_no_suma_en_informe_z(): void

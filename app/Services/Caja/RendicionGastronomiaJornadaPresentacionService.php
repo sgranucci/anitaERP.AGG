@@ -54,7 +54,7 @@ final class RendicionGastronomiaJornadaPresentacionService
             'cierre_totem_habilitado' => $totemHabilitado,
             'sin_cierre_totem_jornada' => $sinCierreTotem,
             'aviso_cierre_totem' => $sinCierreTotem
-                ? 'No hay cierre Waitry/tótem guardado para esta jornada. Cierre la jornada desde Ventas → Gastronomía (con Informe Z) antes de rendir en caja.'
+                ? 'No hay cierre Waitry/tótem guardado para esta jornada. Cierre la jornada desde Ventas → Gastronomía antes de rendir en caja.'
                 : null,
             'numeracion_comprobantes_json' => [
                 'jornada_id' => (int) $jornada->id,
@@ -106,6 +106,7 @@ final class RendicionGastronomiaJornadaPresentacionService
         $informeZ = null;
         $conciliacion = null;
         $informeZCargado = false;
+        $plantilla = null;
 
         $totemTotalGeneral = null;
         $tramoTotem = null;
@@ -113,28 +114,20 @@ final class RendicionGastronomiaJornadaPresentacionService
         if ($cierreTotem instanceof CierreTotemJornadaGastronomia) {
             $detalle = is_array($cierreTotem->detalle_json) ? $cierreTotem->detalle_json : [];
             $resumenOperativo = $detalle['resumen_totems'] ?? ['por_totem' => [], 'total_general' => []];
-            $resumenInformeZ = WaitryInformeZConciliacionSupport::resumenSistemaDesdeDetalleCierre($detalle);
             $totemTotalGeneral = is_array($resumenOperativo['total_general'] ?? null)
                 ? $resumenOperativo['total_general']
                 : null;
             $tramoTotem = is_array($resumenOperativo['tramo'] ?? null) ? $resumenOperativo['tramo'] : null;
-            $plantilla = WaitryInformeZConciliacionSupport::plantillaCarga(
-                (int) $cierreTotem->empresa_id,
-                $resumenInformeZ,
-            );
             $informeZ = is_array($cierreTotem->informe_z_json) ? $cierreTotem->informe_z_json : null;
-            $plantilla = WaitryInformeZConciliacionSupport::fusionarInformeZEnPlantilla(
-                $plantilla,
-                $informeZ,
-                (int) $cierreTotem->empresa_id,
-            );
-            if ($informeZ !== null && isset($informeZ['totems'])) {
+            $presentacion = WaitryInformeZConciliacionSupport::conciliacionPresentacionDesdeCierre($cierreTotem);
+            if ($presentacion !== null) {
+                $plantilla = $presentacion['plantilla'];
+                $conciliacion = $presentacion['conciliacion'];
                 $informeZCargado = true;
-                $conciliacion = is_array($informeZ['conciliacion'] ?? null)
-                    ? $informeZ['conciliacion']
-                    : WaitryInformeZConciliacionSupport::conciliar($plantilla);
             }
         }
+
+        $informeZPlantilla = $plantilla ?? null;
 
         return array_merge($marcadores, [
             'waitry_order_id_anterior' => $waitryAnterior,
@@ -146,6 +139,11 @@ final class RendicionGastronomiaJornadaPresentacionService
             'informe_z_cargado' => $informeZCargado,
             'informe_z_en' => $informeZ['informe_z_en'] ?? null,
             'usuario_informe_z' => $informeZ['usuario_nombre'] ?? null,
+            'informe_z_plantilla' => $informeZPlantilla,
+            'informe_z_precarga_automatica' => (bool) ($informeZ['precarga_automatica'] ?? false),
+            'informe_z_ajustado_en_caja' => (bool) ($informeZ['ajustado_en_caja'] ?? false),
+            'informe_z_ajuste_caja_en' => $informeZ['ajuste_caja_en'] ?? null,
+            'informe_z_ajuste_caja_usuario' => $informeZ['ajuste_caja_usuario_nombre'] ?? null,
             'conciliacion_informe_z' => $conciliacion,
             'tolerancia_informe_z' => WaitryInformeZConciliacionSupport::toleranciaMonto(),
             'sin_cierre_totem_jornada' => (bool) ($marcadores['sin_cierre_totem_jornada'] ?? false),

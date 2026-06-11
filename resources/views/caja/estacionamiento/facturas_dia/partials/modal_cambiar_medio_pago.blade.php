@@ -54,11 +54,12 @@
         word-break: break-word;
     }
     #modal-fd-cambiar-medio-pago #fd-cmp-medios-rapidos .fd-cmp-medio-rapido i,
-    #modal-fd-cambiar-medio-pago #fd-cmp-medios-rapidos .fd-cmp-medio-rapido .est-icon-mercadopago {
+    #modal-fd-cambiar-medio-pago #fd-cmp-medios-rapidos .fd-cmp-medio-rapido .gastro-icon-mercadopago {
         font-size: 1.15rem;
         margin-bottom: 0.15rem;
     }
-    #modal-fd-cambiar-medio-pago .est-icon-mercadopago {
+    #modal-fd-cambiar-medio-pago .gastro-icon-mercadopago,
+    #modal-fd-cambiar-medio-pago .fd-cmp-consulta .gastro-icon-mercadopago {
         display: inline-block;
         width: 1.15rem;
         height: 1.15rem;

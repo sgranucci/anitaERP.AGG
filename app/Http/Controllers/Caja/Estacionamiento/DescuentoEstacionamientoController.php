@@ -59,6 +59,13 @@ class DescuentoEstacionamientoController extends Controller
         return redirect('caja/estacionamiento/descuento')->with('mensaje', 'Descuento actualizado con éxito');
     }
 
+    public function consultaDescuento(Request $request)
+    {
+        can('usar-proceso-facturacion-estacionamiento');
+
+        return $this->repository->consultaDescuento((string) ($request->get('consulta') ?? ''));
+    }
+
     public function leeUnDescuentoPorCodigo(string $codigo)
     {
         can('usar-proceso-facturacion-estacionamiento');

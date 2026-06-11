@@ -428,12 +428,17 @@ class EstacionamientoProcesoFacturacionController extends Controller
 
         $request->validate([
             'item_estacionamiento_id' => 'required|integer|min:1',
+            'cantidad' => 'nullable|numeric|min:0.0001',
         ]);
 
         $cuenta = $this->cuentaService->cuentaConLineas($id);
 
         try {
-            $linea = $this->cuentaService->agregarLinea($cuenta, (int) $request->get('item_estacionamiento_id'));
+            $linea = $this->cuentaService->agregarLinea(
+                $cuenta,
+                (int) $request->get('item_estacionamiento_id'),
+                (float) ($request->input('cantidad', 1)),
+            );
             $cuentaActualizada = $this->cuentaService->cuentaConLineas($cuenta->id);
         } catch (\InvalidArgumentException $e) {
             return response()->json(['error' => $e->getMessage()], 422);
@@ -442,7 +447,7 @@ class EstacionamientoProcesoFacturacionController extends Controller
         }
 
         return response()->json([
-            'linea' => $linea->load(['itemEstacionamiento', 'articulo']),
+            'linea' => $linea->load(['itemEstacionamiento']),
             'cuenta' => $this->cuentaService->enriquecerCuentaParaApi($cuentaActualizada),
         ]);
     }
@@ -467,6 +472,31 @@ class EstacionamientoProcesoFacturacionController extends Controller
             'cuenta' => $this->cuentaService->enriquecerCuentaParaApi(
                 $this->cuentaService->cuentaConLineas($cuentaId)
             ),
+        ]);
+    }
+
+    public function apiActualizarCantidadLinea(Request $request, int $cuentaId, int $lineaId)
+    {
+        can('usar-proceso-facturacion-estacionamiento');
+
+        $request->validate([
+            'cantidad' => 'required|numeric|min:0.0001',
+        ]);
+
+        $linea = CuentaEstacionamientoLinea::query()
+            ->where('cuenta_estacionamiento_id', $cuentaId)
+            ->where('id', $lineaId)
+            ->firstOrFail();
+
+        try {
+            $cuenta = $this->cuentaService->actualizarCantidadLinea($linea, (float) $request->get('cantidad'));
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'cuenta' => $this->cuentaService->enriquecerCuentaParaApi($cuenta),
         ]);
     }
 

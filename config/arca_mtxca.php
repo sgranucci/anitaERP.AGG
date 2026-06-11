@@ -117,6 +117,9 @@ return [
 
     'soap_timeout' => (int) env('ARCA_MTXCA_SOAP_TIMEOUT', 60),
 
+    /** Timeout SOAP en POS; por defecto comparte ARCA_WSFE_SOAP_TIMEOUT_POS */
+    'soap_timeout_pos' => (int) env('ARCA_MTXCA_SOAP_TIMEOUT_POS', env('ARCA_WSFE_SOAP_TIMEOUT_POS', 18)),
+
     /**
      * Receptor (mismos criterios RG4444; compartido conceptualmente con WSFE).
      */

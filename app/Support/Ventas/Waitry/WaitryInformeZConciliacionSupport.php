@@ -2,16 +2,97 @@
 
 namespace App\Support\Ventas\Waitry;
 
+use App\Models\Ventas\CierreTotemJornadaGastronomia;
 use App\Models\Ventas\TotemWaitryGastronomia;
 
 /**
- * Concilia totales Sistema (cobros Waitry QR/MP/Posnet no cobrados en caja Anita real) vs Informe Z por tótem.
+ * Concilia totales Sistema (cobros Waitry QR/MP/Posnet no cobrados en caja Anita real) vs Informe Z.
+ *
+ * La plantilla de carga es un bloque unificado por jornada (Z Waitry sin discriminar tótem físico),
+ * con líneas por medio de cobro (QR kiosco, Posnet, MP, QR celular, etc.).
  */
 final class WaitryInformeZConciliacionSupport
 {
+    /** Identificador de bloque único en plantilla / payload cuando el Z no discrimina tótem. */
+    public const TOTEM_ID_PLANTILLA_UNIFICADA = 0;
+
     public static function toleranciaMonto(): float
     {
         return max(0.0, (float) config('gastronomia.cierre_totem_informe_z_tolerancia', 0.02));
+    }
+
+    /**
+     * Conciliación unificada para PDF/pantalla a partir del cierre persistido.
+     * Fusiona informe Z legacy (varios tótems) en un bloque por medio de pago.
+     *
+     * @return array{plantilla: list<array<string, mixed>>, conciliacion: array<string, mixed>}|null
+     */
+    public static function conciliacionPresentacionDesdeCierre(CierreTotemJornadaGastronomia $cierre): ?array
+    {
+        $informeZ = is_array($cierre->informe_z_json) ? $cierre->informe_z_json : null;
+        if ($informeZ === null || ! isset($informeZ['totems'])) {
+            return null;
+        }
+
+        $detalle = is_array($cierre->detalle_json) ? $cierre->detalle_json : [];
+        $empresaId = (int) $cierre->empresa_id;
+        $resumen = self::resumenSistemaDesdeDetalleCierre($detalle, $empresaId);
+        $plantilla = self::plantillaCarga($empresaId, $resumen);
+        $plantilla = self::fusionarInformeZEnPlantilla($plantilla, $informeZ, $empresaId);
+        $conciliacion = self::conciliar($plantilla);
+
+        return [
+            'plantilla' => $plantilla,
+            'conciliacion' => $conciliacion,
+        ];
+    }
+
+    /**
+     * Filas del Informe Z para comprobante PDF (bloque unificado o legacy ya conciliado).
+     *
+     * @param  array<string, mixed>  $conciliacion
+     * @return list<array<string, mixed>>
+     */
+    public static function bloquesInformeZConciliacionParaPdf(array $conciliacion): array
+    {
+        $totemsPdf = [];
+
+        foreach ($conciliacion['totems'] ?? [] as $ct) {
+            if (! is_array($ct)) {
+                continue;
+            }
+            $totemId = (int) ($ct['totem_id'] ?? 0);
+            $outLineas = [];
+            foreach ($ct['lineas'] ?? [] as $ln) {
+                if (! is_array($ln)) {
+                    continue;
+                }
+                $outLineas[] = [
+                    'etiqueta' => (string) ($ln['etiqueta'] ?? '—'),
+                    'monto_sistema' => round((float) ($ln['monto_sistema'] ?? 0), 2),
+                    'monto_informe_z' => round((float) ($ln['monto_informe_z'] ?? 0), 2),
+                    'diferencia' => round((float) ($ln['diferencia'] ?? 0), 2),
+                    'ok' => ! empty($ln['ok']),
+                ];
+            }
+
+            $totemsPdf[] = [
+                'totem_id' => $totemId,
+                'plantilla_unificada' => $totemId === self::TOTEM_ID_PLANTILLA_UNIFICADA,
+                'ubicacion_nombre' => (string) ($ct['ubicacion_nombre'] ?? 'Informe Z Waitry'),
+                'detalle' => (string) ($ct['detalle'] ?? ''),
+                'waitry_table_id' => $totemId === self::TOTEM_ID_PLANTILLA_UNIFICADA
+                    ? null
+                    : (isset($ct['waitry_table_id']) ? (int) $ct['waitry_table_id'] : null),
+                'ok' => ! empty($ct['ok']),
+                'lineas' => $outLineas,
+                'total_sistema' => round((float) ($ct['total_sistema'] ?? 0), 2),
+                'total_informe_z' => round((float) ($ct['total_informe_z'] ?? 0), 2),
+                'diferencia' => round((float) ($ct['diferencia_total'] ?? 0), 2),
+            ];
+        }
+
+        return $totemsPdf;
     }
 
     /**
@@ -20,16 +101,129 @@ final class WaitryInformeZConciliacionSupport
      * @param  array<string, mixed>  $detalle  detalle_json del cierre tótem
      * @return array{por_totem:list<array<string,mixed>>,total_general:array<string,mixed>}
      */
-    public static function resumenSistemaDesdeDetalleCierre(array $detalle): array
+    public static function resumenSistemaDesdeDetalleCierre(array $detalle, int $empresaId = 0): array
     {
         $informeZ = $detalle['resumen_informe_z'] ?? null;
         if (is_array($informeZ) && is_array($informeZ['por_totem'] ?? null)) {
-            return $informeZ;
+            return self::reconstruirResumenInformeZConDesglose($informeZ, $empresaId);
         }
 
-        return self::filtrarResumenSoloCreditCardPosnet(
+        $filtrado = self::filtrarResumenSoloCreditCardPosnet(
             is_array($detalle['resumen_totems'] ?? null) ? $detalle['resumen_totems'] : ['por_totem' => [], 'total_general' => []],
         );
+
+        return self::reconstruirResumenInformeZConDesglose($filtrado, $empresaId);
+    }
+
+    /**
+     * Repara resumen legacy: total_general fusionado (p. ej. todo en Mercado Pago) → categorías QR / Posnet / MP.
+     *
+     * @param  array{por_totem?:list<array<string,mixed>>,total_general?:array<string,mixed>}  $resumen
+     * @return array{por_totem:list<array<string,mixed>>,total_general:array<string,mixed>}
+     */
+    public static function reconstruirResumenInformeZConDesglose(array $resumen, int $empresaId = 0): array
+    {
+        $porTotem = [];
+        $globalMedios = [];
+        $globalCantidad = 0;
+        $globalIngreso = 0.0;
+
+        foreach ($resumen['por_totem'] ?? [] as $bloque) {
+            if (! is_array($bloque)) {
+                continue;
+            }
+
+            $mediosPorClave = [];
+            $totalBloque = 0.0;
+            $cantBloque = 0;
+
+            foreach ($bloque['por_medio_pago'] ?? [] as $m) {
+                if (! is_array($m)) {
+                    continue;
+                }
+                $categoria = WaitryMedioPagoCuentacajaSupport::categoriaInformeZDesglose(
+                    $m['categoria'] ?? $m['tipo'] ?? null,
+                    $m['gateway'] ?? null,
+                );
+                if ($categoria === null || ! WaitryMedioPagoCuentacajaSupport::medioInformeZValidoEnResumen($categoria)) {
+                    continue;
+                }
+
+                $total = round((float) ($m['total'] ?? 0), 2);
+                $cant = (int) ($m['cantidad'] ?? 0);
+                if ($total <= 0.0001 && $cant <= 0) {
+                    continue;
+                }
+
+                $clave = 'cat:'.$categoria;
+                if (! isset($mediosPorClave[$clave])) {
+                    $mediosPorClave[$clave] = [
+                        'tipo' => $categoria,
+                        'categoria' => $categoria,
+                        'etiqueta' => WaitryMedioPagoCuentacajaSupport::etiquetaCategoriaInformeZ($categoria),
+                        'cantidad' => $cant,
+                        'total' => $total,
+                        'cuentacaja_label' => $m['cuentacaja_label'] ?? null,
+                    ];
+                } else {
+                    $mediosPorClave[$clave]['cantidad'] += $cant;
+                    $mediosPorClave[$clave]['total'] = round($mediosPorClave[$clave]['total'] + $total, 2);
+                }
+
+                $totalBloque = round($totalBloque + $total, 2);
+                $cantBloque += $cant;
+            }
+
+            if ($mediosPorClave === []) {
+                continue;
+            }
+
+            $mediosOrdenados = array_values($mediosPorClave);
+            usort($mediosOrdenados, fn (array $a, array $b) => strcmp((string) ($a['etiqueta'] ?? ''), (string) ($b['etiqueta'] ?? '')));
+
+            $porTotem[] = [
+                'totem_id' => $bloque['totem_id'] ?? null,
+                'ubicacion_nombre' => $bloque['ubicacion_nombre'] ?? '',
+                'detalle' => $bloque['detalle'] ?? '',
+                'waitry_layout_id' => $bloque['waitry_layout_id'] ?? null,
+                'waitry_table_id' => $bloque['waitry_table_id'] ?? null,
+                'cantidad_ordenes' => $cantBloque > 0 ? $cantBloque : (int) ($bloque['cantidad_ordenes'] ?? 0),
+                'total_ingreso' => $totalBloque > 0.0001 ? $totalBloque : round((float) ($bloque['total_ingreso'] ?? 0), 2),
+                'por_medio_pago' => $mediosOrdenados,
+                'por_table_id' => self::filtrarPorTableIdInformeZ($bloque['por_table_id'] ?? []),
+            ];
+
+            $globalCantidad += (int) ($porTotem[array_key_last($porTotem)]['cantidad_ordenes'] ?? 0);
+            $globalIngreso = round($globalIngreso + (float) ($porTotem[array_key_last($porTotem)]['total_ingreso'] ?? 0), 2);
+
+            foreach ($mediosOrdenados as $medio) {
+                $globalKey = 'cat:'.($medio['categoria'] ?? $medio['tipo'] ?? '');
+                if ($globalKey === 'cat:') {
+                    continue;
+                }
+                if (! isset($globalMedios[$globalKey])) {
+                    $globalMedios[$globalKey] = $medio;
+                } else {
+                    $globalMedios[$globalKey]['cantidad'] += (int) ($medio['cantidad'] ?? 0);
+                    $globalMedios[$globalKey]['total'] = round(
+                        (float) ($globalMedios[$globalKey]['total'] ?? 0) + (float) ($medio['total'] ?? 0),
+                        2,
+                    );
+                }
+            }
+        }
+
+        $mediosGlobal = array_values($globalMedios);
+        usort($mediosGlobal, fn (array $a, array $b) => strcmp((string) ($a['etiqueta'] ?? ''), (string) ($b['etiqueta'] ?? '')));
+
+        return [
+            'por_totem' => $porTotem,
+            'total_general' => [
+                'cantidad_ordenes' => $globalCantidad,
+                'total_ingreso' => $globalIngreso,
+                'por_medio_pago' => $mediosGlobal,
+            ],
+        ];
     }
 
     /**
@@ -55,8 +249,8 @@ final class WaitryInformeZConciliacionSupport
                 if (! is_array($m)) {
                     continue;
                 }
-                $tipo = WaitryMedioPagoCuentacajaSupport::normalizarTipo($m['tipo'] ?? null);
-                if (! WaitryMedioPagoCuentacajaSupport::esTipoPagoInformeZSistema($tipo)) {
+                $tipoOCategoria = $m['categoria'] ?? $m['tipo'] ?? null;
+                if (! WaitryMedioPagoCuentacajaSupport::medioInformeZValidoEnResumen($tipoOCategoria)) {
                     continue;
                 }
                 $mediosFiltrados[] = $m;
@@ -80,16 +274,22 @@ final class WaitryInformeZConciliacionSupport
             $globalIngreso = round($globalIngreso + (float) ($porTotem[array_key_last($porTotem)]['total_ingreso'] ?? 0), 2);
 
             foreach ($mediosFiltrados as $medio) {
-                $tipo = WaitryMedioPagoCuentacajaSupport::tipoRepresentativoInformeZ($medio['tipo'] ?? null);
-                if ($tipo === null) {
+                $tipoOCategoria = $medio['categoria'] ?? $medio['tipo'] ?? null;
+                if ($tipoOCategoria === null) {
                     continue;
                 }
-                if (! isset($globalMedios[$tipo])) {
-                    $globalMedios[$tipo] = $medio;
+                $globalKey = WaitryMedioPagoCuentacajaSupport::esCategoriaInformeZDesglose($tipoOCategoria)
+                    ? 'cat:'.$tipoOCategoria
+                    : WaitryMedioPagoCuentacajaSupport::claveMedioInformeZ($tipoOCategoria, 0);
+                if ($globalKey === '__excl__') {
+                    continue;
+                }
+                if (! isset($globalMedios[$globalKey])) {
+                    $globalMedios[$globalKey] = $medio;
                 } else {
-                    $globalMedios[$tipo]['cantidad'] += (int) ($medio['cantidad'] ?? 0);
-                    $globalMedios[$tipo]['total'] = round(
-                        (float) ($globalMedios[$tipo]['total'] ?? 0) + (float) ($medio['total'] ?? 0),
+                    $globalMedios[$globalKey]['cantidad'] += (int) ($medio['cantidad'] ?? 0);
+                    $globalMedios[$globalKey]['total'] = round(
+                        (float) ($globalMedios[$globalKey]['total'] ?? 0) + (float) ($medio['total'] ?? 0),
                         2,
                     );
                 }
@@ -107,53 +307,169 @@ final class WaitryInformeZConciliacionSupport
     }
 
     /**
-     * Plantilla de carga: un bloque por tótem de la empresa y medios presentes en sistema + catálogo Waitry.
+     * Plantilla de carga: un bloque unificado por jornada, líneas por medio de cobro.
      *
      * @param  array{por_totem:list<array<string,mixed>>,total_general:array<string,mixed>}  $resumenSistema
      * @return list<array<string, mixed>>
      */
     public static function plantillaCarga(int $empresaId, array $resumenSistema): array
     {
-        $porTotemSistema = [];
-        foreach ($resumenSistema['por_totem'] ?? [] as $bloque) {
-            $tid = (int) ($bloque['totem_id'] ?? 0);
-            if ($tid > 0) {
-                $porTotemSistema[$tid] = $bloque;
-            }
-        }
-
-        $bloques = [];
-
-        $totems = TotemWaitryGastronomia::query()
-            ->with('ubicacion')
+        $tieneTotemsInformeZ = TotemWaitryGastronomia::query()
             ->where('empresa_id', $empresaId)
             ->where('informe_z_habilitado', true)
-            ->orderBy('ubicacion_id')
-            ->get();
+            ->exists();
 
-        $huerfano = null;
-        foreach ($resumenSistema['por_totem'] ?? [] as $bloque) {
-            if ((int) ($bloque['totem_id'] ?? 0) <= 0 && (float) ($bloque['total_ingreso'] ?? 0) > 0.0001) {
-                $huerfano = $bloque;
+        if (! $tieneTotemsInformeZ) {
+            return self::plantillaCargaFallbackPorTotem($empresaId, $resumenSistema);
+        }
+
+        $mediosSistema = self::mediosSistemaDesdeTotalGeneral($resumenSistema, $empresaId);
+        $lineas = self::lineasPlantillaDesdeMediosSistema($empresaId, $mediosSistema);
+        if ($lineas === [] && $mediosSistema === []) {
+            $lineas = self::lineasPlantillaDesdeTiposCatalogo($empresaId);
+        }
+
+        $totalSistema = self::totalIngresoSistemaDesdeMedios($mediosSistema);
+        if ($totalSistema <= 0.0001) {
+            $totalSistema = round((float) ($resumenSistema['total_general']['total_ingreso'] ?? 0), 2);
+        }
+
+        return [[
+            'totem_id' => self::TOTEM_ID_PLANTILLA_UNIFICADA,
+            'plantilla_unificada' => true,
+            'ubicacion_nombre' => 'Informe Z Waitry',
+            'detalle' => 'Salón / jornada',
+            'waitry_table_id' => null,
+            'total_ingreso_sistema' => $totalSistema,
+            'lineas' => $lineas,
+            'aviso_sin_table_id' => false,
+        ]];
+    }
+
+    /**
+     * @param  array{por_totem?:list<array<string,mixed>>,total_general?:array<string,mixed>}  $resumenSistema
+     * @return array<string, array<string, mixed>>
+     */
+    public static function mediosSistemaDesdeTotalGeneral(array $resumenSistema, int $empresaId): array
+    {
+        $mediosSistema = [];
+        foreach ($resumenSistema['total_general']['por_medio_pago'] ?? [] as $m) {
+            if (! is_array($m)) {
+                continue;
+            }
+            $tipoOCategoria = $m['categoria'] ?? $m['tipo'] ?? null;
+            if (! WaitryMedioPagoCuentacajaSupport::medioInformeZValidoEnResumen($tipoOCategoria)) {
+                continue;
+            }
+            $claveMedio = WaitryMedioPagoCuentacajaSupport::claveMedioInformeZ($tipoOCategoria, $empresaId);
+            if ($claveMedio === '__excl__') {
+                continue;
+            }
+            if (! isset($mediosSistema[$claveMedio])) {
+                $mediosSistema[$claveMedio] = $m;
+            } else {
+                $mediosSistema[$claveMedio]['cantidad'] = (int) ($mediosSistema[$claveMedio]['cantidad'] ?? 0)
+                    + (int) ($m['cantidad'] ?? 0);
+                $mediosSistema[$claveMedio]['total'] = round(
+                    (float) ($mediosSistema[$claveMedio]['total'] ?? 0) + (float) ($m['total'] ?? 0),
+                    2,
+                );
             }
         }
 
-        foreach ($totems as $totem) {
-            $tid = (int) $totem->id;
-            $sistema = $porTotemSistema[$tid] ?? null;
-            $mediosSistema = [];
-            foreach ($sistema['por_medio_pago'] ?? [] as $m) {
-                $tipo = WaitryMedioPagoCuentacajaSupport::normalizarTipo($m['tipo'] ?? null);
-                if ($tipo === null
-                    || WaitryMedioPagoCuentacajaSupport::esTipoExcluidoInformeZ($tipo)
-                    || ! WaitryMedioPagoCuentacajaSupport::esTipoPagoInformeZSistema($tipo)) {
+        return $mediosSistema;
+    }
+
+    /**
+     * Suma montos Z de payload legacy (varios tótems) o unificado (totem_id 0) por cuenta y tipo.
+     *
+     * @param  list<array<string, mixed>>  $totemsPayload
+     * @return array{cuentas: array<int, float>, tipos: array<string, float>}
+     */
+    public static function acumularMontosInformeZDesdePayload(array $totemsPayload, int $empresaId): array
+    {
+        $cuentas = [];
+        $tipos = [];
+
+        foreach ($totemsPayload as $t) {
+            if (! is_array($t)) {
+                continue;
+            }
+            foreach ($t['lineas'] ?? [] as $ln) {
+                if (! is_array($ln)) {
                     continue;
                 }
-                $claveMedio = WaitryMedioPagoCuentacajaSupport::claveMedioInformeZ($tipo, $empresaId);
+                $monto = round((float) ($ln['monto'] ?? $ln['monto_informe_z'] ?? 0), 2);
+                if ($monto <= 0.0001) {
+                    continue;
+                }
+                $ccId = (int) ($ln['cuentacaja_id'] ?? 0);
+                if ($ccId > 0 && ! WaitryMedioPagoCuentacajaSupport::esCuentacajaTotem($ccId, $empresaId)) {
+                    $cuentas[$ccId] = round(($cuentas[$ccId] ?? 0) + $monto, 2);
+                }
+                $tipo = WaitryMedioPagoCuentacajaSupport::tipoParaClaveMapaInformeZ($ln['tipo_waitry'] ?? null, $empresaId);
+                if ($tipo !== null) {
+                    $tipos[$tipo] = round(($tipos[$tipo] ?? 0) + $monto, 2);
+                }
+            }
+        }
+
+        return ['cuentas' => $cuentas, 'tipos' => $tipos];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $plantilla
+     */
+    public static function plantillaEsUnificada(array $plantilla): bool
+    {
+        return count($plantilla) === 1 && ! empty($plantilla[0]['plantilla_unificada']);
+    }
+
+    /**
+     * Precarga Informe Z = Sistema (conciliación en cero al cerrar desde Gastronomía).
+     *
+     * @param  list<array<string, mixed>>  $plantilla
+     * @return list<array<string, mixed>>
+     */
+    public static function precargarMontosInformeZDesdeSistema(array $plantilla): array
+    {
+        foreach ($plantilla as $bi => $bloque) {
+            $lineas = is_array($bloque['lineas'] ?? null) ? $bloque['lineas'] : [];
+            foreach ($lineas as $li => $ln) {
+                if (! is_array($ln)) {
+                    continue;
+                }
+                $lineas[$li]['monto_informe_z'] = round((float) ($ln['monto_sistema'] ?? 0), 2);
+            }
+            $plantilla[$bi]['lineas'] = $lineas;
+        }
+
+        return $plantilla;
+    }
+
+    /**
+     * Fallback si no hay tótems con Informe Z habilitado: un bloque por entrada en resumen.
+     *
+     * @param  array{por_totem:list<array<string,mixed>>,total_general:array<string,mixed>}  $resumenSistema
+     * @return list<array<string, mixed>>
+     */
+    private static function plantillaCargaFallbackPorTotem(int $empresaId, array $resumenSistema): array
+    {
+        $bloques = [];
+        foreach ($resumenSistema['por_totem'] ?? [] as $sistema) {
+            if (! is_array($sistema)) {
+                continue;
+            }
+            $mediosSistema = [];
+            foreach ($sistema['por_medio_pago'] ?? [] as $m) {
+                $tipoOCategoria = $m['categoria'] ?? $m['tipo'] ?? null;
+                if (! WaitryMedioPagoCuentacajaSupport::medioInformeZValidoEnResumen($tipoOCategoria)) {
+                    continue;
+                }
+                $claveMedio = WaitryMedioPagoCuentacajaSupport::claveMedioInformeZ($tipoOCategoria, $empresaId);
                 if ($claveMedio === '__excl__') {
                     continue;
                 }
-
                 if (! isset($mediosSistema[$claveMedio])) {
                     $mediosSistema[$claveMedio] = $m;
                 } else {
@@ -166,76 +482,18 @@ final class WaitryInformeZConciliacionSupport
                 }
             }
 
-            $lineas = self::lineasPlantillaDesdeMediosSistema($empresaId, $mediosSistema);
-            if ($lineas === [] && $mediosSistema === []) {
-                $lineas = self::lineasPlantillaDesdeTiposCatalogo($empresaId);
+            if ($mediosSistema === [] && (float) ($sistema['total_ingreso'] ?? 0) <= 0.0001) {
+                continue;
             }
 
             $bloques[] = [
-                'totem_id' => $tid,
-                'ubicacion_nombre' => (string) ($totem->ubicacion?->nombre ?? '—'),
-                'detalle' => trim((string) ($totem->detalle ?? '')),
-                'waitry_table_id' => $totem->waitry_table_id,
+                'totem_id' => $sistema['totem_id'] ?? null,
+                'ubicacion_nombre' => $sistema['ubicacion_nombre'] ?? 'Tótem',
+                'detalle' => $sistema['detalle'] ?? '',
+                'waitry_table_id' => $sistema['waitry_table_id'] ?? null,
                 'total_ingreso_sistema' => self::totalIngresoSistemaDesdeMedios($mediosSistema),
-                'lineas' => $lineas,
-                'aviso_sin_table_id' => $huerfano !== null && empty($totem->waitry_table_id),
+                'lineas' => self::lineasPlantillaDesdeMediosSistema($empresaId, $mediosSistema),
             ];
-        }
-
-        if ($huerfano !== null && $bloques !== []) {
-            $bloques = self::fusionarBloqueHuerfanoEnPlantilla($bloques, $huerfano, $empresaId);
-        }
-
-        $bloquesExpandidos = [];
-        foreach ($bloques as $bloque) {
-            $tid = (int) ($bloque['totem_id'] ?? 0);
-            $totem = $totems->firstWhere('id', $tid);
-            $sistema = $porTotemSistema[$tid] ?? null;
-            if ($totem !== null && count($totem->waitryTableIds()) > 1) {
-                foreach (self::expandirBloquePlantillaPorTableIds($empresaId, $totem, $bloque, $sistema) as $sub) {
-                    $bloquesExpandidos[] = $sub;
-                }
-            } else {
-                $bloquesExpandidos[] = $bloque;
-            }
-        }
-        $bloques = $bloquesExpandidos;
-
-        if ($bloques === [] && ($resumenSistema['por_totem'] ?? []) !== []) {
-            foreach ($resumenSistema['por_totem'] as $sistema) {
-                $mediosSistema = [];
-                foreach ($sistema['por_medio_pago'] ?? [] as $m) {
-                    $tipo = WaitryMedioPagoCuentacajaSupport::normalizarTipo($m['tipo'] ?? null);
-                    if ($tipo === null
-                        || WaitryMedioPagoCuentacajaSupport::esTipoExcluidoInformeZ($tipo)
-                        || ! WaitryMedioPagoCuentacajaSupport::esTipoPagoInformeZSistema($tipo)) {
-                        continue;
-                    }
-                    $claveMedio = WaitryMedioPagoCuentacajaSupport::claveMedioInformeZ($tipo, $empresaId);
-                    if ($claveMedio === '__excl__') {
-                        continue;
-                    }
-                    if (! isset($mediosSistema[$claveMedio])) {
-                        $mediosSistema[$claveMedio] = $m;
-                    } else {
-                        $mediosSistema[$claveMedio]['cantidad'] = (int) ($mediosSistema[$claveMedio]['cantidad'] ?? 0)
-                            + (int) ($m['cantidad'] ?? 0);
-                        $mediosSistema[$claveMedio]['total'] = round(
-                            (float) ($mediosSistema[$claveMedio]['total'] ?? 0) + (float) ($m['total'] ?? 0),
-                            2,
-                        );
-                    }
-                }
-
-                $bloques[] = [
-                    'totem_id' => $sistema['totem_id'] ?? null,
-                    'ubicacion_nombre' => $sistema['ubicacion_nombre'] ?? 'Tótem',
-                    'detalle' => $sistema['detalle'] ?? '',
-                    'waitry_table_id' => $sistema['waitry_table_id'] ?? null,
-                    'total_ingreso_sistema' => self::totalIngresoSistemaDesdeMedios($mediosSistema),
-                    'lineas' => self::lineasPlantillaDesdeMediosSistema($empresaId, $mediosSistema),
-                ];
-            }
         }
 
         return $bloques;
@@ -322,6 +580,28 @@ final class WaitryInformeZConciliacionSupport
             return $plantilla;
         }
 
+        if (self::plantillaEsUnificada($plantilla)) {
+            $acum = self::acumularMontosInformeZDesdePayload($informeZ['totems'] ?? [], $empresaId);
+            foreach ($plantilla as &$bloque) {
+                foreach ($bloque['lineas'] as &$ln) {
+                    $tipo = WaitryMedioPagoCuentacajaSupport::tipoParaClaveMapaInformeZ($ln['tipo_waitry'] ?? null, $empresaId);
+                    if ($tipo !== null && array_key_exists($tipo, $acum['tipos'])) {
+                        $ln['monto_informe_z'] = $acum['tipos'][$tipo];
+
+                        continue;
+                    }
+                    $ccId = (int) ($ln['cuentacaja_id'] ?? 0);
+                    if ($ccId > 0 && array_key_exists($ccId, $acum['cuentas'])) {
+                        $ln['monto_informe_z'] = $acum['cuentas'][$ccId];
+                    }
+                }
+                unset($ln);
+            }
+            unset($bloque);
+
+            return $plantilla;
+        }
+
         $mapZPorCuenta = [];
         $mapZPorTipo = [];
         $mapZPorTotemLegacy = [];
@@ -403,8 +683,8 @@ final class WaitryInformeZConciliacionSupport
                 if (! is_array($m)) {
                     continue;
                 }
-                $tipo = WaitryMedioPagoCuentacajaSupport::normalizarTipo($m['tipo'] ?? null);
-                if (! WaitryMedioPagoCuentacajaSupport::esTipoPagoInformeZSistema($tipo)) {
+                $tipoOCategoria = $m['categoria'] ?? $m['tipo'] ?? null;
+                if (! WaitryMedioPagoCuentacajaSupport::medioInformeZValidoEnResumen($tipoOCategoria)) {
                     continue;
                 }
                 $mediosFiltrados[] = $m;
@@ -485,13 +765,11 @@ final class WaitryInformeZConciliacionSupport
             if (! is_array($m)) {
                 continue;
             }
-            $tipo = WaitryMedioPagoCuentacajaSupport::normalizarTipo($m['tipo'] ?? null);
-            if ($tipo === null
-                || WaitryMedioPagoCuentacajaSupport::esTipoExcluidoInformeZ($tipo)
-                || ! WaitryMedioPagoCuentacajaSupport::esTipoPagoInformeZSistema($tipo)) {
+            $tipoOCategoria = $m['categoria'] ?? $m['tipo'] ?? null;
+            if (! WaitryMedioPagoCuentacajaSupport::medioInformeZValidoEnResumen($tipoOCategoria)) {
                 continue;
             }
-            $claveMedio = WaitryMedioPagoCuentacajaSupport::claveMedioInformeZ($tipo, $empresaId);
+            $claveMedio = WaitryMedioPagoCuentacajaSupport::claveMedioInformeZ($tipoOCategoria, $empresaId);
             if ($claveMedio === '__excl__') {
                 continue;
             }
@@ -528,21 +806,25 @@ final class WaitryInformeZConciliacionSupport
         return $total;
     }
 
-    private static function lineaPlantillaDesdeTipo(int $empresaId, string $tipo, ?array $medioSistema): array
+    private static function lineaPlantillaDesdeTipo(int $empresaId, string $tipoOCategoria, ?array $medioSistema): array
     {
-        $tipoCanon = WaitryMedioPagoCuentacajaSupport::tipoRepresentativoInformeZ($tipo) ?? $tipo;
-        $cuenta = WaitryMedioPagoCuentacajaSupport::cuentaParaTipoInformeZ($tipoCanon, $empresaId);
-        $etiquetaTipo = WaitryMedioPagoCuentacajaSupport::etiquetaTipo($tipoCanon);
+        $categoria = WaitryMedioPagoCuentacajaSupport::esCategoriaInformeZDesglose($tipoOCategoria)
+            ? $tipoOCategoria
+            : (WaitryMedioPagoCuentacajaSupport::categoriaInformeZDesglose($tipoOCategoria) ?? $tipoOCategoria);
+        $tipoCuenta = WaitryMedioPagoCuentacajaSupport::tipoWaitryDesdeCategoriaInformeZ($categoria);
+        $cuenta = WaitryMedioPagoCuentacajaSupport::cuentaParaTipoInformeZ($tipoCuenta, $empresaId);
+        $etiquetaMedio = WaitryMedioPagoCuentacajaSupport::etiquetaCategoriaInformeZ($categoria);
         $etiquetaCuenta = $cuenta !== null
             ? trim(($cuenta['codigo'] ?? '').' — '.($cuenta['nombre'] ?? ''))
-            : $etiquetaTipo;
+            : $etiquetaMedio;
 
         return [
-            'tipo_waitry' => $tipoCanon,
-            'etiqueta' => (string) ($medioSistema['etiqueta'] ?? $etiquetaCuenta),
+            'tipo_waitry' => $categoria,
+            'categoria_informe_z' => $categoria,
+            'etiqueta' => (string) ($medioSistema['etiqueta'] ?? $etiquetaMedio),
             'cuentacaja_id' => $cuenta['id'] ?? null,
             'cuentacaja_codigo' => $cuenta['codigo'] ?? '',
-            'cuentacaja_nombre' => $cuenta['nombre'] ?? '',
+            'cuentacaja_nombre' => $cuenta['nombre'] ?? $etiquetaMedio,
             'moneda_abreviatura' => $cuenta['moneda_abreviatura'] ?? 'ARS',
             'monto_sistema' => round((float) ($medioSistema['total'] ?? 0), 2),
             'cantidad_sistema' => (int) ($medioSistema['cantidad'] ?? 0),
@@ -560,11 +842,16 @@ final class WaitryInformeZConciliacionSupport
             return false;
         }
 
-        $tipo = WaitryMedioPagoCuentacajaSupport::normalizarTipo($linea['tipo_waitry'] ?? null);
+        $tipo = $linea['tipo_waitry'] ?? null;
+        if (WaitryMedioPagoCuentacajaSupport::esCategoriaInformeZDesglose($tipo)) {
+            return true;
+        }
 
-        return $tipo !== null
-            && ! WaitryMedioPagoCuentacajaSupport::esTipoExcluidoInformeZ($tipo)
-            && WaitryMedioPagoCuentacajaSupport::esTipoPagoInformeZSistema($tipo);
+        $tipoNorm = WaitryMedioPagoCuentacajaSupport::normalizarTipo($tipo);
+
+        return $tipoNorm !== null
+            && ! WaitryMedioPagoCuentacajaSupport::esTipoExcluidoInformeZ($tipoNorm)
+            && WaitryMedioPagoCuentacajaSupport::esTipoPagoInformeZSistema($tipoNorm);
     }
 
     /**
@@ -576,11 +863,17 @@ final class WaitryInformeZConciliacionSupport
         $lineasPorClave = [];
 
         foreach ($mediosSistema as $m) {
-            $tipoRaw = WaitryMedioPagoCuentacajaSupport::normalizarTipo($m['tipo'] ?? null);
-            if (! WaitryMedioPagoCuentacajaSupport::esTipoPagoInformeZSistema($tipoRaw)) {
+            $categoria = $m['categoria'] ?? $m['tipo'] ?? null;
+            if ($categoria === null) {
                 continue;
             }
-            $linea = self::lineaPlantillaDesdeTipo($empresaId, $tipoRaw, $m);
+            if (! WaitryMedioPagoCuentacajaSupport::esCategoriaInformeZDesglose($categoria)) {
+                $tipoRaw = WaitryMedioPagoCuentacajaSupport::normalizarTipo($categoria);
+                if ($tipoRaw === null || ! WaitryMedioPagoCuentacajaSupport::esTipoPagoInformeZSistema($tipoRaw)) {
+                    continue;
+                }
+            }
+            $linea = self::lineaPlantillaDesdeTipo($empresaId, (string) $categoria, $m);
             if (! self::lineaInformeZValida($linea, $empresaId)) {
                 continue;
             }
@@ -612,31 +905,31 @@ final class WaitryInformeZConciliacionSupport
     }
 
     /**
-     * Un tipo por cuenta de caja (Totalcoin + credit_card → una sola fila).
+     * Categorías por defecto en plantilla vacía (desglose QR / Posnet / MP).
      *
      * @param  array<string, string>  $tiposCatalogo
      * @return list<string>
      */
     private static function tiposRepresentativosCatalogo(int $empresaId, array $tiposCatalogo): array
     {
-        $porCuenta = [];
+        $categorias = [
+            WaitryMedioPagoCuentacajaSupport::CATEGORIA_QR_KIOSCO,
+            WaitryMedioPagoCuentacajaSupport::CATEGORIA_POSNET_KIOSCO,
+            WaitryMedioPagoCuentacajaSupport::CATEGORIA_MERCADOPAGO,
+            WaitryMedioPagoCuentacajaSupport::CATEGORIA_QR_CELULAR,
+            WaitryMedioPagoCuentacajaSupport::CATEGORIA_MP_CELULAR,
+        ];
 
         foreach (array_keys($tiposCatalogo) as $tipoRaw) {
-            $tipo = WaitryMedioPagoCuentacajaSupport::tipoRepresentativoInformeZ($tipoRaw);
-            if ($tipo === null) {
-                continue;
+            $cat = WaitryMedioPagoCuentacajaSupport::categoriaInformeZDesglose($tipoRaw);
+            if ($cat !== null && ! in_array($cat, $categorias, true)) {
+                $categorias[] = $cat;
             }
-            $ccId = WaitryMedioPagoCuentacajaSupport::cuentacajaIdPorTipo($tipo, $empresaId) ?? 0;
-            if ($ccId <= 0) {
-                continue;
-            }
-            $porCuenta[$ccId] = $tipo;
         }
 
-        $tipos = array_values($porCuenta);
-        sort($tipos);
+        sort($categorias);
 
-        return $tipos;
+        return $categorias;
     }
 
     /**
@@ -645,10 +938,18 @@ final class WaitryInformeZConciliacionSupport
      */
     private static function fusionarLineaEnMapa(array $lineasPorClave, array $linea, int $empresaId): array
     {
-        $ccId = (int) ($linea['cuentacaja_id'] ?? 0);
-        $clave = $ccId > 0
-            ? 'cc:'.$ccId
-            : WaitryMedioPagoCuentacajaSupport::claveMedioInformeZ($linea['tipo_waitry'] ?? null, $empresaId);
+        $categoria = $linea['categoria_informe_z']
+            ?? (WaitryMedioPagoCuentacajaSupport::esCategoriaInformeZDesglose($linea['tipo_waitry'] ?? null)
+                ? $linea['tipo_waitry']
+                : null);
+        if ($categoria !== null) {
+            $clave = 'cat:'.$categoria;
+        } else {
+            $ccId = (int) ($linea['cuentacaja_id'] ?? 0);
+            $clave = $ccId > 0
+                ? 'cc:'.$ccId
+                : WaitryMedioPagoCuentacajaSupport::claveMedioInformeZ($linea['tipo_waitry'] ?? null, $empresaId);
+        }
         if ($clave === '__excl__') {
             return $lineasPorClave;
         }
@@ -658,10 +959,6 @@ final class WaitryInformeZConciliacionSupport
 
             return $lineasPorClave;
         }
-
-        $lineasPorClave[$clave]['tipo_waitry'] = WaitryMedioPagoCuentacajaSupport::tipoRepresentativoInformeZ(
-            $lineasPorClave[$clave]['tipo_waitry'] ?? null,
-        ) ?? $lineasPorClave[$clave]['tipo_waitry'];
 
         $lineasPorClave[$clave]['monto_sistema'] = round(
             (float) ($lineasPorClave[$clave]['monto_sistema'] ?? 0) + (float) ($linea['monto_sistema'] ?? 0),
@@ -688,17 +985,17 @@ final class WaitryInformeZConciliacionSupport
         }
 
         foreach ($huerfano['por_medio_pago'] ?? [] as $medio) {
-            $tipo = WaitryMedioPagoCuentacajaSupport::normalizarTipo($medio['tipo'] ?? null);
-            if ($tipo === null
-                || WaitryMedioPagoCuentacajaSupport::esTipoExcluidoInformeZ($tipo)
-                || ! WaitryMedioPagoCuentacajaSupport::esTipoPagoInformeZSistema($tipo)) {
+            $tipoOCategoria = $medio['categoria'] ?? $medio['tipo'] ?? null;
+            if (! WaitryMedioPagoCuentacajaSupport::medioInformeZValidoEnResumen($tipoOCategoria)) {
                 continue;
             }
-            $claveMedio = WaitryMedioPagoCuentacajaSupport::claveMedioInformeZ($tipo, $empresaId);
+            $claveMedio = WaitryMedioPagoCuentacajaSupport::claveMedioInformeZ($tipoOCategoria, $empresaId);
             if ($claveMedio === '__excl__') {
                 continue;
             }
-            $tipoCanon = WaitryMedioPagoCuentacajaSupport::tipoRepresentativoInformeZ($tipo) ?? $tipo;
+            $tipoCanon = WaitryMedioPagoCuentacajaSupport::esCategoriaInformeZDesglose($tipoOCategoria)
+                ? $tipoOCategoria
+                : (WaitryMedioPagoCuentacajaSupport::tipoRepresentativoInformeZ($tipoOCategoria) ?? $tipoOCategoria);
             $total = round((float) ($medio['total'] ?? 0), 2);
             $cant = (int) ($medio['cantidad'] ?? 0);
             $parte = round($total / $n, 2);
@@ -725,9 +1022,13 @@ final class WaitryInformeZConciliacionSupport
                     $cantLinea = $cant - $parteCant * ($n - 1);
                 }
 
+                $etiqueta = $medio['etiqueta'] ?? (WaitryMedioPagoCuentacajaSupport::esCategoriaInformeZDesglose($tipoCanon)
+                    ? WaitryMedioPagoCuentacajaSupport::etiquetaCategoriaInformeZ($tipoCanon)
+                    : WaitryMedioPagoCuentacajaSupport::etiquetaTipo($tipoCanon));
                 $medioParcial = [
                     'tipo' => $tipoCanon,
-                    'etiqueta' => $medio['etiqueta'] ?? WaitryMedioPagoCuentacajaSupport::etiquetaTipo($tipoCanon),
+                    'categoria' => WaitryMedioPagoCuentacajaSupport::esCategoriaInformeZDesglose($tipoCanon) ? $tipoCanon : null,
+                    'etiqueta' => $etiqueta,
                     'cantidad' => $cantLinea,
                     'total' => $montoLinea,
                 ];

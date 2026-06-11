@@ -8,7 +8,7 @@
     @endif
     <tbody>
         <tr>
-            <td colspan="9"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Facturas gastronomía del día</h2></td>
+            <td colspan="9"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Facturas estacionamiento del día</h2></td>
         </tr>
     </tbody>
     <thead>
@@ -20,7 +20,7 @@
             <th>Ítem</th>
             <th>Punto de venta</th>
             <th>Total</th>
-            <th>Cuenta gastro.</th>
+            <th>Cuenta estac.</th>
             <th>PC emisión</th>
         </tr>
     </thead>

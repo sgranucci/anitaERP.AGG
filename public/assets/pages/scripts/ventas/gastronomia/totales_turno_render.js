@@ -106,6 +106,9 @@
             ? (parseInt(opcionesArqueo.cuentacaja_efectivo_id, 10) || 0)
             : 0;
         var arqueoSoloLectura = !!(opcionesArqueo && opcionesArqueo.solo_lectura);
+        if (opcionesArqueo && opcionesArqueo.modoEdicionArqueo) {
+            arqueoSoloLectura = false;
+        }
         var arqueoActivo = !!(opcionesArqueo && opcionesArqueo.habilitar
             && (ccEfectivoId > 0 || arqueoSoloLectura || opcionesArqueo.forzar));
         var totalFinal = totalCobradoRef != null ? Number(totalCobradoRef) : 0;
@@ -353,6 +356,7 @@
                 habilitar: true,
                 cuentacaja_efectivo_id: parseInt(opcionesRender.cuentacaja_efectivo_id, 10) || 0,
                 solo_lectura: !!opcionesRender.arqueoSoloLectura,
+                modoEdicionArqueo: !!opcionesRender.modoEdicionArqueo,
                 forzar: !!(opcionesRender.arqueoMediosCierre || totales.arqueo_medios_cierre),
             };
         }
@@ -781,5 +785,6 @@
         enlazarArqueoMediosCierre: enlazarArqueoMediosCierre,
         enlazarArqueoEfectivoCierre: enlazarArqueoEfectivoCierre,
         recolectarMediosContadoCierreDesdeRoot: recolectarMediosContadoCierreDesdeRoot,
+        renderTotalMediosPagoFinalHtml: renderTotalMediosPagoFinalHtml,
     };
 })();

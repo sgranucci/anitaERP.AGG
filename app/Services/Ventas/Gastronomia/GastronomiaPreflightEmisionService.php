@@ -59,7 +59,12 @@ final class GastronomiaPreflightEmisionService
             }
         }
 
-        if (GastronomiaTurnoOperativoService::requiereHabilitacionTurno()) {
+        $exigirTurnoOperativo = GastronomiaTurnoOperativoService::requiereHabilitacionTurno();
+        if ($cuenta->esCanjeMarketing() && ! config('gastronomia.canje_marketing_requiere_habilitacion_turno', false)) {
+            $exigirTurnoOperativo = false;
+        }
+
+        if ($exigirTurnoOperativo) {
             try {
                 $this->turnoOperativoService->exigirTurnoHabilitadoSiConfigurado(
                     GastronomiaIdentificadorPc::resolver(),
@@ -117,9 +122,15 @@ final class GastronomiaPreflightEmisionService
         }
 
         $cuenta->loadMissing('descuentoGastronomia');
-        if ((int) ($cuenta->descuento_gastronomia_id ?? 0) > 0 && (int) ($cuenta->cliente_interno_descuento_id ?? 0) <= 0) {
-            $errores[] = 'Indique el cliente interno del descuento (quien invita o centro de costos). '
-                .'Es independiente del cliente de la factura.';
+        if ((int) ($cuenta->descuento_gastronomia_id ?? 0) > 0) {
+            if ($cuenta->esCanjeMarketing()) {
+                if ((int) ($cuenta->cliente_vip_gastronomia_id ?? 0) <= 0) {
+                    $errores[] = 'Debe indicar el cliente del descuento (VIP) del canje marketing.';
+                }
+            } elseif ((int) ($cuenta->cliente_interno_descuento_id ?? 0) <= 0) {
+                $errores[] = 'Indique el cliente interno del descuento (quien invita o centro de costos). '
+                    .'Es independiente del cliente de la factura.';
+            }
         }
 
         try {

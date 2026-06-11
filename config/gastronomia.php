@@ -262,6 +262,21 @@ return [
     /** Base Informix donde está la tabla tickettarj (bridge Anita). */
     'ticket_tarjeta_anita_sistema' => env('GASTRONOMIA_TICKET_TARJETA_ANITA_SISTEMA', 'base_admin'),
 
+    /** Base Informix donde está clivipg (clientes VIP canjes). Reutiliza bridge por empresa de tickettarj. */
+    'cliente_vip_anita_sistema' => env('GASTRONOMIA_CLIENTE_VIP_ANITA_SISTEMA', 'base_admin'),
+    'cliente_vip_anita_tabla' => env('GASTRONOMIA_CLIENTE_VIP_ANITA_TABLA', 'clivipg'),
+    'cliente_vip_anita_campos_listado' => env(
+        'GASTRONOMIA_CLIENTE_VIP_ANITA_CAMPOS_LISTADO',
+        'inumeroid,cnrodocumento,capellido,cnombre,iusualtaid,ifechaalta,choraalta,iusuumodid,ifechaumod,choraumod,clivig_nickname,clivig_localidad'
+    ),
+
+    /**
+     * Orden de importación inicial desde Anita: 1=Biyemas, 2=Kandiko, 3=Rebisco.
+     *
+     * @var list<int>
+     */
+    'cliente_vip_anita_empresas_sync' => [1, 2, 3],
+
     /**
      * Bridge Anita por empresa para canje CTG (tickettarj). Clave = empresa_id.
      * Biyemas (1) usa ANITA_IP + IFX_SERVER global; Kandiko/Rebisco host e IFX propios.
@@ -408,6 +423,32 @@ return [
     'canje_fidelidad_descuento_codigo' => env('GASTRONOMIA_CANJE_FIDELIDAD_DESCUENTO_CODIGO', '10'),
 
     'canje_fidelidad_cliente_codigo' => env('GASTRONOMIA_CANJE_FIDELIDAD_CLIENTE_CODIGO', '500'),
+
+    /**
+     * Facturador canjes marketing (comandera en sala, menú Canjes).
+     * Descuento prefijado (código en descuento_gastronomia), cliente VIP beneficiario, sin medios de pago.
+     */
+    'canje_marketing_descuento_codigo' => env('GASTRONOMIA_CANJE_MARKETING_DESCUENTO_CODIGO', '40'),
+
+    /** Comandera marketing: sin habilitación de turno por PC (siempre activa con login mozo). */
+    'canje_marketing_requiere_habilitacion_turno' => filter_var(
+        env('GASTRONOMIA_CANJE_MARKETING_REQUIERE_HABILITACION_TURNO', false),
+        FILTER_VALIDATE_BOOLEAN
+    ),
+
+    /** Cubiertos al abrir cuenta en facturador marketing (típ. no aplica). */
+    'canje_marketing_cubiertos_obligatorio' => filter_var(
+        env('GASTRONOMIA_CANJE_MARKETING_CUBIERTOS_OBLIGATORIO', false),
+        FILTER_VALIDATE_BOOLEAN
+    ),
+
+    'canje_marketing_cubiertos_default' => max(0, (int) env('GASTRONOMIA_CANJE_MARKETING_CUBIERTOS_DEFAULT', 1)),
+
+    /** Canje marketing: nunca genera asiento contable al facturar. */
+    'canje_marketing_genera_contabilidad_al_facturar' => filter_var(
+        env('GASTRONOMIA_CANJE_MARKETING_GENERA_CONTABILIDAD_FACTURA', false),
+        FILTER_VALIDATE_BOOLEAN
+    ),
 
     /**
      * Base Informix para recepciones (recepmae / recepmov) en informe gerente.

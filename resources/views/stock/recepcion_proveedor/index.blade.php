@@ -9,6 +9,8 @@ Recepciones de proveedores
 <script src="{{ asset('assets/pages/scripts/stock/recepcion_proveedor/filtro.js') }}" type="text/javascript"></script>
 @endsection
 
+<?php use App\Support\Stock\RecepcionProveedorListadoFiltros; ?>
+
 @section('contenido')
 <div class="row">
     <div class="col-lg-12">
@@ -16,16 +18,27 @@ Recepciones de proveedores
         <div class="card card-primary">
             <div class="card-header">
                 <h3 class="card-title"><i class="fa fa-truck"></i> Recepciones de proveedores</h3>
-                <div class="card-tools">
+                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-recepcion',
+                        'filtroValor' => $filtros['filtro_valor'] ?? '',
+                        'tieneCriterios' => RecepcionProveedorListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
+                        'limpiarUrl' => route('recepcion_proveedor'),
+                        'placeholder' => 'Búsqueda rápida (tolera errores de tipeo)…',
+                        'toggleTarget' => '#panel-filtros-recepcion',
+                        'toggleId' => 'btn-toggle-filtros-recepcion',
+                        'inputId' => 'filtro_valor',
                         'nuevoRegistroUrl' => route('crear_recepcion_proveedor'),
                         'nuevoRegistroCan' => 'crear-recepcion-proveedor',
                     ])
                 </div>
             </div>
+            <form method="get" action="{{ route('recepcion_proveedor') }}" id="form-filtros-recepcion" class="mb-0">
+                @include('stock.recepcion_proveedor.partials.filtros_listado', [
+                    'limpiarUrl' => route('recepcion_proveedor'),
+                ])
+            </form>
             <div class="card-body table-responsive p-0">
-                @include('stock.recepcion_proveedor.partials.filtros_listado')
                 @include('includes.exportar-tabla-queryparams', ['ruta' => 'lista_recepcion_proveedor', 'queryparams' => $filtrosQuery ?? []])
                 <table id="tabla-paginada" class="table table-hover table-striped table-sm">
                     <thead>

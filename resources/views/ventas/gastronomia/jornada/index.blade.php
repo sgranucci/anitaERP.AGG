@@ -10,6 +10,10 @@
     .jornada-informe-z-cuenta-wrap .nombre { min-width: 0; flex: 1 1 auto; }
     .jornada-informe-z-monto { min-width: 120px; font-size: 1.05rem; font-weight: 600; text-align: right; }
     .jornada-informe-z-sistema { font-size: 1rem; font-weight: 600; }
+    .jornada-informe-z-resumen-totales { font-size: 1.05rem; }
+    .jornada-informe-z-resumen-totales .js-informe-z-gran-total-sistema,
+    .jornada-informe-z-resumen-totales .js-informe-z-gran-total-z { font-size: 1.15rem; }
+    .jornada-informe-z-totales-fila td { border-top: 2px solid #adb5bd !important; }
 </style>
 <script>
     window.GASTRONOMIA = {
@@ -105,6 +109,23 @@
                                 @if (! empty($estado['observacion_apertura']))
                                     <br><em>{{ $estado['observacion_apertura'] }}</em>
                                 @endif
+                                @if ($puede_eliminar ?? false)
+                                    @php $elimAbierta = $eliminacion_jornada_abierta ?? null; @endphp
+                                    @if (! empty($elimAbierta['puede_eliminar']))
+                                        <div class="mt-2">
+                                            <button type="button"
+                                                    class="btn btn-outline-secondary btn-sm js-eliminar-jornada"
+                                                    data-jornada-id="{{ (int) $estado['jornada_id'] }}"
+                                                    data-fecha-jornada="{{ $estado['fecha_jornada_fmt'] ?? $estado['fecha_jornada'] }}"
+                                                    title="Eliminar apertura errónea (sin movimientos)">
+                                                <i class="fa fa-trash"></i> Borrar apertura
+                                            </button>
+                                            <span class="small text-muted ml-1">Solo si no tiene turnos ni comprobantes.</span>
+                                        </div>
+                                    @elseif (! empty($elimAbierta['motivo_no_eliminar']))
+                                        <p class="small mb-0 mt-2 text-muted">{{ $elimAbierta['motivo_no_eliminar'] }}</p>
+                                    @endif
+                                @endif
                             </div>
                         @else
                             <div class="alert alert-warning">
@@ -128,6 +149,7 @@
                                             <input type="date" class="form-control" id="fecha_jornada_abrir"
                                                    value="{{ $fecha_hoy }}"
                                                    @if (! empty($fecha_jornada_minima)) min="{{ $fecha_jornada_minima }}" @endif
+                                                   max="{{ $fecha_maxima ?? ($estado['fecha_factura_hoy'] ?? now()->format('Y-m-d')) }}"
                                                    @disabled($estado['jornada_abierta'])>
                                         </div>
                                         <div class="form-group">
@@ -222,17 +244,12 @@
                                                     Actualizar lectura Waitry (congelar último ticket)
                                                 </button>
                                                 <span class="text-muted small ml-2">
-                                                    Use si hubo ventas en el tótem después de la carga inicial. Los montos Informe Z que ya cargó se mantienen; solo se actualizan los del sistema.
+                                                    Use si hubo ventas en el tótem después de la carga inicial. El Informe Z se precarga solo (igual al Sistema); no hace falta cargar montos aquí.
                                                 </span>
                                             </div>
                                             <div id="preview-cierre-totem-waitry" class="mb-3 border rounded p-2 bg-light small d-none">
                                             </div>
-                                            <div id="preview-informe-z-acciones" class="mb-3 d-none">
-                                                <button type="button" class="btn btn-primary btn-sm" id="btn-guardar-informe-z-preview">
-                                                    Guardar Informe Z
-                                                </button>
-                                                <span class="text-muted small ml-2">Columna Sistema = tótems (QR/MP/Posnet) + QR por celular, excluyendo lo ya cobrado en Anita. Una sola conciliación Z al cierre del día. Opcional: guardar borrador.</span>
-                                            </div>
+                                            <div id="preview-informe-z-acciones" class="mb-3 d-none" aria-hidden="true"></div>
                                         @endif
                                         <div id="jornada-cierre-en-progreso"
                                              class="alert alert-info py-2 mb-2 d-none"
@@ -240,7 +257,7 @@
                                              aria-live="polite">
                                             <i class="fa fa-spinner fa-spin"></i>
                                             <strong>Cerrando la jornada…</strong>
-                                            Grabación rápida (sin consultar Waitry de nuevo). Los totales sistema debieron cargarse antes en la vista previa del Informe Z.
+                                            Grabación rápida (sin consultar Waitry de nuevo). Se guarda el Informe Z automático igual al total Sistema.
                                         </div>
                                         <div class="form-group">
                                             <label for="observacion_cerrar">Observación de cierre</label>

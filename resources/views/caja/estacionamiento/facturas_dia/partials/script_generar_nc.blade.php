@@ -55,7 +55,48 @@
     var inputLeyenda = document.getElementById('fd-nc-leyenda');
     var textoCompro = document.getElementById('fd-nc-compro');
     var overlay = document.getElementById('fd-nc-procesando-overlay');
+    var overlayDetalle = document.getElementById('fd-nc-procesando-detalle');
     var estado = { ventaId: null, codigo: '', btnDisparador: null, procesando: false };
+    var rotacionOverlayTimer = null;
+    var mensajesOverlay = [
+        'Emitiendo nota de crédito…',
+        'Registrando devolución…',
+        'Finalizando comprobante…',
+    ];
+
+    function mensajeExitoNc(body) {
+        if (!body) return 'Nota de crédito generada.';
+        var factura = body.factura ? String(body.factura).trim() : '';
+        if (factura) return 'Nota de crédito ' + factura + ' generada.';
+        var m = body.mensaje ? String(body.mensaje).trim() : '';
+        if (m.length > 100) return m.substring(0, 97) + '…';
+        return m || 'Nota de crédito generada.';
+    }
+
+    function avisoCorto(body) {
+        if (!body || !body.warn) return '';
+        var w = String(body.warn).trim();
+        if (w.length > 140) return w.substring(0, 137) + '…';
+        return w;
+    }
+
+    function iniciarRotacionOverlay() {
+        if (!overlayDetalle) return;
+        var i = 0;
+        overlayDetalle.textContent = mensajesOverlay[0];
+        if (rotacionOverlayTimer) clearInterval(rotacionOverlayTimer);
+        rotacionOverlayTimer = setInterval(function () {
+            i = (i + 1) % mensajesOverlay.length;
+            overlayDetalle.textContent = mensajesOverlay[i];
+        }, 2200);
+    }
+
+    function detenerRotacionOverlay() {
+        if (rotacionOverlayTimer) {
+            clearInterval(rotacionOverlayTimer);
+            rotacionOverlayTimer = null;
+        }
+    }
 
     function mostrarOverlay(mostrar) {
         if (!overlay) return;
@@ -83,6 +124,11 @@
             btnConfirmarIcono.classList.toggle('fa-spin', activo);
         }
         mostrarOverlay(activo);
+        if (activo) {
+            iniciarRotacionOverlay();
+        } else {
+            detenerRotacionOverlay();
+        }
     }
 
     document.querySelectorAll('.js-fd-generar-nc').forEach(function (btn) {
@@ -132,14 +178,18 @@
                     if (typeof $ !== 'undefined' && modalEl) {
                         $('#modal-fd-generar-nc').modal('hide');
                     }
-                    var txt = res.body.mensaje || 'Nota de crédito generada.';
+                    var okMsg = mensajeExitoNc(res.body);
+                    var aviso = avisoCorto(res.body);
                     if (typeof toastr !== 'undefined') {
-                        if (res.body.warn) toastr.warning(res.body.warn);
-                        toastr.success(txt);
+                        toastr.clear();
+                        if (aviso) {
+                            toastr.warning(aviso, 'Aviso', { timeOut: 7000, extendedTimeOut: 2000 });
+                        }
+                        toastr.success(okMsg, '', { timeOut: 4500, extendedTimeOut: 1500 });
                     } else {
-                        alert((res.body.warn ? res.body.warn + '\n\n' : '') + txt);
+                        alert((aviso ? aviso + '\n\n' : '') + okMsg);
                     }
-                    setTimeout(function () { window.location.reload(); }, 900);
+                    setTimeout(function () { window.location.reload(); }, aviso ? 1400 : 900);
                 } else {
                     var err = '';
                     if (res.body) {

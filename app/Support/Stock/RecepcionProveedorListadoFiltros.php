@@ -18,9 +18,18 @@ class RecepcionProveedorListadoFiltros
         'tipo' => ['etiqueta' => 'Tipo', 'tipo' => 'texto'],
     ];
 
-    public const OPERADORES_TEXTO = ['contiene', 'igual', 'empieza', 'termina'];
+    public const OPERADORES_TEXTO = [
+        'contiene' => 'Contiene (en cualquier parte)',
+        'igual' => 'Igual a',
+        'empieza' => 'Empieza con',
+        'termina' => 'Termina con',
+    ];
 
-    public const OPERADORES_ENTERO = ['igual', 'mayor', 'menor'];
+    public const OPERADORES_ENTERO = [
+        'igual' => 'Igual a',
+        'mayor' => 'Mayor que',
+        'menor' => 'Menor que',
+    ];
 
     private const COLUMNAS_COINCIDENCIA_FLEXIBLE = [
         'numerorecepcion', 'numerofactura', 'nombreproveedor', 'nombreempresa',

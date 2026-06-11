@@ -1,5 +1,5 @@
 @php
-    $asientoEdicion = $data->asientos->first();
+    $asientoEdicion = ($data ?? null)?->asientos?->first();
     $lineasAsiento = $asientoEdicion?->asiento_movimientos ?? collect();
 @endphp
 <div class="card formasientoexterno" style="display: none">

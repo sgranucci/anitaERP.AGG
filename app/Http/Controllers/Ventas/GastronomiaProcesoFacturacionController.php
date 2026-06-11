@@ -1140,6 +1140,7 @@ class GastronomiaProcesoFacturacionController extends Controller
             'cuenta_id' => 'required|integer|min:1',
             'codigo_barras' => 'required|string|min:1|max:64',
             'opcionales_por_articulo' => 'nullable|array',
+            'comentarios_por_articulo' => 'nullable|array',
         ]);
 
         $cfg = $this->requireCfgPv($request);
@@ -1153,12 +1154,16 @@ class GastronomiaProcesoFacturacionController extends Controller
             $opcionalesPorArticulo = $this->normalizarOpcionalesPorArticuloDesdeRequest(
                 (array) ($request->get('opcionales_por_articulo') ?? [])
             );
+            $comentariosPorArticulo = $this->normalizarComentariosPorArticuloDesdeRequest(
+                (array) ($request->get('comentarios_por_articulo') ?? [])
+            );
 
             $resultado = $this->ticketCanjePremioService->aplicarACuenta(
                 $cuenta,
                 (string) $request->get('codigo_barras'),
                 $this->listaPrecioIdDesdeCfg($cfg),
                 $opcionalesPorArticulo,
+                $comentariosPorArticulo,
             );
         } catch (\InvalidArgumentException|\RuntimeException $e) {
             return response()->json([
@@ -1588,6 +1593,25 @@ class GastronomiaProcesoFacturacionController extends Controller
             }
             $norm = \App\Support\Ventas\GastronomiaFormulaOpcionalSeleccion::normalizarMapaDesdeRequest($mapa);
             if ($norm !== []) {
+                $out[(int) $articuloId] = $norm;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<int|string, mixed>  $raw
+     * @return array<int, string>
+     */
+    private function normalizarComentariosPorArticuloDesdeRequest(array $raw): array
+    {
+        $out = [];
+        foreach ($raw as $articuloId => $texto) {
+            $norm = \App\Support\Ventas\GastronomiaComentarioCocinaSupport::normalizar(
+                is_string($texto) ? $texto : null
+            );
+            if ($norm !== null) {
                 $out[(int) $articuloId] = $norm;
             }
         }

@@ -211,9 +211,12 @@ $(document).off('keydown.ocNoEnterSubmitArticulo', 'input').on('keydown.ocNoEnte
 	if ($(this).closest('#tabla-recuento-items').length && $(this).hasClass('input-cantidad-contada')) {
 		return;
 	}
-	if ($(this).closest('#tabla-recuento-items').length && $(this).hasClass('codigoarticulo')) {
-		return;
-	}
+    if ($(this).closest('#tabla-recuento-items').length && $(this).hasClass('codigoarticulo')) {
+        return;
+    }
+    if ($(this).closest('#tabla-items-recepcion').length && $(this).hasClass('codigoarticulo')) {
+        return;
+    }
 	if ($(this).closest('.tm-deposito-campo').length && $(this).hasClass('codigodeposito')) {
 		return;
 	}
@@ -248,6 +251,9 @@ function activa_eventos_consultaarticulo()
 
         var $ctxConsulta = $(this).closest('tr');
         if (!$ctxConsulta.length) {
+            $ctxConsulta = $(this).closest('.cm-campo-articulo-carga');
+        }
+        if (!$ctxConsulta.length) {
             $ctxConsulta = $(this).closest('.tm-articulo-campo');
         }
         ptrarticulo_id = $ctxConsulta.find('.articulo_id');
@@ -270,6 +276,9 @@ function activa_eventos_consultaarticulo()
         var valorInicial = '';
         if (prefijo) {
             var suf = $('#tr-gastro-linea-articulo .gastro-sku-sufijo').val();
+            if (!suf) {
+                suf = $('#cm-campo-articulo-carga .gastro-sku-sufijo').val();
+            }
             if (suf) {
                 valorInicial = String(suf).replace(/\D/g, '');
             }

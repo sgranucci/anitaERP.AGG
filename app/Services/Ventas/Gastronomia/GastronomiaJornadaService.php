@@ -97,6 +97,10 @@ final class GastronomiaJornadaService
 
         $ultimaJornada = $this->jornadaRepository->ultimaJornadaPorEmpresa($empresaId);
         $fechasApertura = $this->fechasSugeridasApertura($ultimaJornada);
+        $fechaJornadaMinimaAbrir = $abierta !== null ? null : $fechasApertura['minima'];
+        $fechaJornadaSugeridaAbrir = $abierta !== null && $abierta->fecha_jornada !== null
+            ? $abierta->fecha_jornada->format('Y-m-d')
+            : $fechasApertura['sugerida'];
 
         return [
             'empresa_id' => $empresaId,
@@ -109,8 +113,9 @@ final class GastronomiaJornadaService
             'fecha_factura_hoy' => $hoy,
             'fecha_factura_hoy_fmt' => $this->formatearFechaEncabezado($hoy),
             'apertura_en' => $abierta?->apertura_en?->format('d/m/Y H:i'),
-            'fecha_jornada_minima_abrir' => $fechasApertura['minima'],
-            'fecha_jornada_sugerida_abrir' => $fechasApertura['sugerida'],
+            'fecha_jornada_minima_abrir' => $fechaJornadaMinimaAbrir,
+            'fecha_jornada_maxima_abrir' => $hoy,
+            'fecha_jornada_sugerida_abrir' => $fechaJornadaSugeridaAbrir,
             'usuario_apertura' => $abierta?->usuarioApertura?->nombre,
             'observacion_apertura' => $abierta?->observacion_apertura,
             'puede_abrir' => $abierta === null,
@@ -154,6 +159,14 @@ final class GastronomiaJornadaService
 
         $fecha = $this->normalizarFecha($fechaJornada, 'fecha de jornada');
         $fechaFmt = $this->formatearFechaHumana($fecha);
+        $hoy = Carbon::today()->format('Y-m-d');
+
+        if ($fecha > $hoy) {
+            throw new InvalidArgumentException(
+                'No puede abrir la jornada del '.$fechaFmt.': la fecha no puede ser posterior a hoy ('
+                .$this->formatearFechaHumana($hoy).').'
+            );
+        }
 
         $abierta = $this->jornadaAbierta($empresaId);
         if ($abierta !== null) {
@@ -291,9 +304,18 @@ final class GastronomiaJornadaService
             }
         }
 
+        if ($this->cierreTotemJornadaService->habilitado()
+            && $informeZFinal === null
+            && $snapshotResumen !== null) {
+            $informeZFinal = $this->informeZService->construirInformeZAutomaticoDesdeSistema(
+                $empresaId,
+                $snapshotResumen,
+            );
+        }
+
         if ($this->cierreTotemJornadaService->habilitado() && $informeZFinal === null) {
             throw new InvalidArgumentException(
-                'Debe validar y cargar los montos del Informe Z (esperado sistema e ingresado por medio de pago en cada tótem) antes de cerrar la jornada.'
+                'Falta el snapshot del cierre tótem Waitry. Espere la vista previa del Informe Z antes de cerrar la jornada.'
             );
         }
 
@@ -785,11 +807,9 @@ final class GastronomiaJornadaService
             $minima = $ultimaJornada->fecha_jornada->copy()->addDay()->format('Y-m-d');
         }
 
-        $sugerida = $minima !== null && $minima > $hoy ? $minima : $hoy;
-
         return [
             'minima' => $minima,
-            'sugerida' => $sugerida,
+            'sugerida' => $hoy,
         ];
     }
 

@@ -46,6 +46,15 @@ return [
     ),
 
     /**
+     * true = bloquear cierre de turno/jornada si hay ticket_estacionamiento en estado ingreso.
+     * Requiere el flujo futuro de emisión de ticket de ingreso de autos. Mientras sea false, no se valida.
+     */
+    'validar_tickets_ingreso_al_cerrar' => filter_var(
+        env('ESTACIONAMIENTO_VALIDAR_TICKETS_INGRESO_AL_CERRAR', 'false'),
+        FILTER_VALIDATE_BOOLEAN
+    ),
+
+    /**
      * Uso de cuenta de caja para medios de cobro en el POS (tabla usocuentacaja).
      * Si no se define, se busca por nombre "Estacionamiento".
      */
@@ -120,7 +129,7 @@ return [
      * Si es false, no se graba asiento contable al facturar desde estacionamiento.
      */
     'genera_contabilidad_al_facturar' => filter_var(
-        env('ESTACIONAMIENTO_GENERA_CONTABILIDAD_FACTURA', true),
+        env('ESTACIONAMIENTO_GENERA_CONTABILIDAD_FACTURA', false),
         FILTER_VALIDATE_BOOLEAN
     ),
 
@@ -128,7 +137,7 @@ return [
      * Si es false, la cobranza registrada desde el POS no genera asiento contable de tesorería.
      */
     'genera_contabilidad_al_cobrar' => filter_var(
-        env('ESTACIONAMIENTO_GENERA_CONTABILIDAD_COBRANZA', true),
+        env('ESTACIONAMIENTO_GENERA_CONTABILIDAD_COBRANZA', false),
         FILTER_VALIDATE_BOOLEAN
     ),
 
@@ -136,7 +145,23 @@ return [
      * Replica la venta en Informix legacy vía bridge HTTP al facturar desde estacionamiento.
      */
     'sincronizar_anita_al_facturar' => filter_var(
-        env('ESTACIONAMIENTO_SINCRONIZAR_ANITA', false),
+        env('ESTACIONAMIENTO_SINCRONIZAR_ANITA', true),
+        FILTER_VALIDATE_BOOLEAN
+    ),
+
+    /**
+     * Tras commit de la emisión estacionamiento: replica venta en Informix sin bloquear cobranza/locks MySQL.
+     */
+    'anita_tras_commit_al_facturar' => filter_var(
+        env('ESTACIONAMIENTO_ANITA_TRAS_COMMIT_AL_FACTURAR', true),
+        FILTER_VALIDATE_BOOLEAN
+    ),
+
+    /**
+     * Anita (venta cabecera + renglones) después de responder al POS estacionamiento.
+     */
+    'anita_tras_respuesta' => filter_var(
+        env('ESTACIONAMIENTO_ANITA_TRAS_RESPUESTA', true),
         FILTER_VALIDATE_BOOLEAN
     ),
 

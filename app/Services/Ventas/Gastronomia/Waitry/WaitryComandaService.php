@@ -312,7 +312,8 @@ final class WaitryComandaService
             $pagada = false;
         }
 
-        $orderItems = WaitryComandaOrderItemsSupport::construirDesdeVenta($venta, $sinCobranza);
+        $cuenta->loadMissing('lineas');
+        $orderItems = WaitryComandaOrderItemsSupport::construirDesdeVenta($venta, $sinCobranza, $cuenta);
 
         $totalAmount = round((float) ($venta->total ?? 0), 2);
         if ($totalAmount <= 0.) {

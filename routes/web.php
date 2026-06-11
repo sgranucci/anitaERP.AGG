@@ -825,6 +825,9 @@ Route::get('contable/asiento/{id}/imprimir-pdf', 'Contable\AsientoController@imp
 Route::post('contable/copiar_asiento', 'Contable\AsientoController@copiarAsiento')->name('copiar_asiento');
 Route::post('contable/revertir_asiento', 'Contable\AsientoController@revertirAsiento')->name('revertir_asiento');
 
+Route::get('contable/mayor-concepto', 'Contable\MayorConceptoController@index')->name('mayor_concepto');
+Route::post('contable/mayor-concepto/generar', 'Contable\MayorConceptoController@generar')->name('generar_mayor_concepto');
+
 /*
 * Cuentas contables por usuario
 */
@@ -1284,6 +1287,42 @@ Route::get('ventas/mozo-gastronomia/{id}/editar', 'Ventas\MozoGastronomiaControl
 Route::put('ventas/mozo-gastronomia/{id}', 'Ventas\MozoGastronomiaController@actualizar')->name('actualizar_mozo_gastronomia');
 Route::delete('ventas/mozo-gastronomia/{id}', 'Ventas\MozoGastronomiaController@eliminar')->name('eliminar_mozo_gastronomia');
 
+Route::get('ventas/gastronomia/canjes/cliente-vip', 'Ventas\ClienteVipGastronomiaController@index')->name('consultar_cliente_vip_gastronomia');
+Route::get('ventas/listaclientevipgastronomia/{formato?}/{busqueda?}', 'Ventas\ClienteVipGastronomiaController@listar')->name('lista_cliente_vip_gastronomia');
+Route::get('ventas/gastronomia/canjes/cliente-vip/crear', 'Ventas\ClienteVipGastronomiaController@crear')->name('crear_cliente_vip_gastronomia');
+Route::post('ventas/gastronomia/canjes/cliente-vip', 'Ventas\ClienteVipGastronomiaController@guardar')->name('guardar_cliente_vip_gastronomia');
+Route::post('ventas/gastronomia/canjes/cliente-vip/sincronizar-anita', 'Ventas\ClienteVipGastronomiaController@sincronizarDesdeAnita')->name('sincronizar_cliente_vip_gastronomia_anita');
+Route::get('ventas/gastronomia/canjes/cliente-vip/{id}/editar', 'Ventas\ClienteVipGastronomiaController@editar')->name('editar_cliente_vip_gastronomia');
+Route::put('ventas/gastronomia/canjes/cliente-vip/{id}', 'Ventas\ClienteVipGastronomiaController@actualizar')->name('actualizar_cliente_vip_gastronomia');
+Route::delete('ventas/gastronomia/canjes/cliente-vip/{id}', 'Ventas\ClienteVipGastronomiaController@eliminar')->name('eliminar_cliente_vip_gastronomia');
+
+Route::get('ventas/gastronomia/canjes/proceso-facturacion', 'Ventas\CanjeMarketingProcesoFacturacionController@index')->name('canje_marketing_proceso_facturacion');
+Route::prefix('ventas/gastronomia/canjes/api')->group(function () {
+    Route::get('config', 'Ventas\CanjeMarketingProcesoFacturacionController@apiConfig')->name('canje_marketing_api_config');
+    Route::post('autenticar-mozo', 'Ventas\CanjeMarketingProcesoFacturacionController@apiAutenticarMozo')->name('canje_marketing_api_autenticar_mozo');
+    Route::get('cuentas-activas', 'Ventas\CanjeMarketingProcesoFacturacionController@apiCuentasActivas')->name('canje_marketing_api_cuentas_activas');
+    Route::post('abrir-cuenta', 'Ventas\CanjeMarketingProcesoFacturacionController@apiAbrirCuenta')->name('canje_marketing_api_abrir_cuenta');
+    Route::get('cuenta/{id}', 'Ventas\CanjeMarketingProcesoFacturacionController@apiCuentaVer')->name('canje_marketing_api_cuenta_ver');
+    Route::patch('cuenta/{id}', 'Ventas\CanjeMarketingProcesoFacturacionController@apiActualizarCuenta')->name('canje_marketing_api_cuenta_actualizar');
+    Route::post('cuenta/{id}/cerrar', 'Ventas\CanjeMarketingProcesoFacturacionController@apiCerrarCuenta')->name('canje_marketing_api_cerrar_cuenta');
+    Route::post('cuentas-activas/cerrar-todas', 'Ventas\CanjeMarketingProcesoFacturacionController@apiCerrarTodasCuentas')->name('canje_marketing_api_cerrar_todas_cuentas');
+    Route::post('cuenta/{id}/linea', 'Ventas\CanjeMarketingProcesoFacturacionController@apiAgregarLinea')->name('canje_marketing_api_agregar_linea');
+    Route::patch('cuenta/{cuentaId}/linea/{lineaId}', 'Ventas\CanjeMarketingProcesoFacturacionController@apiActualizarCantidadLinea')->name('canje_marketing_api_actualizar_linea');
+    Route::delete('cuenta/{cuentaId}/linea/{lineaId}', 'Ventas\CanjeMarketingProcesoFacturacionController@apiEliminarLinea')->name('canje_marketing_api_eliminar_linea');
+    Route::get('articulo-catalogo-por-sku', 'Ventas\CanjeMarketingProcesoFacturacionController@apiArticuloCatalogoPorSku')->name('canje_marketing_api_articulo_sku');
+    Route::get('articulos-catalogo', 'Ventas\CanjeMarketingProcesoFacturacionController@apiArticulosCatalogo')->name('canje_marketing_api_articulos_catalogo');
+    Route::get('opcionales-articulo/{articuloId}', 'Ventas\CanjeMarketingProcesoFacturacionController@apiOpcionalesArticulo')->name('canje_marketing_api_opcionales');
+    Route::post('validar-emision', 'Ventas\CanjeMarketingProcesoFacturacionController@apiValidarEmision')->name('canje_marketing_api_validar_emision');
+    Route::post('emitir-factura', 'Ventas\CanjeMarketingProcesoFacturacionController@apiEmitirFactura')->name('canje_marketing_api_emitir_factura');
+    Route::get('descuento-prefijado', 'Ventas\CanjeMarketingProcesoFacturacionController@apiDescuentoPrefijado')->name('canje_marketing_api_descuento_prefijado');
+    Route::post('consulta-mozo', 'Ventas\CanjeMarketingProcesoFacturacionController@apiConsultaMozo')->name('canje_marketing_api_consulta_mozo');
+    Route::get('mozo/leer-codigo/{codigo}', 'Ventas\CanjeMarketingProcesoFacturacionController@apiMozoPorCodigo')->name('canje_marketing_api_mozo_codigo');
+    Route::get('mozo/leer-id/{id}', 'Ventas\CanjeMarketingProcesoFacturacionController@apiMozoPorId')->name('canje_marketing_api_mozo_id');
+    Route::post('consulta-cliente-vip', 'Ventas\CanjeMarketingProcesoFacturacionController@apiConsultaClienteVip')->name('canje_marketing_api_consulta_cliente_vip');
+    Route::get('cliente-vip/leer/{codigo}', 'Ventas\CanjeMarketingProcesoFacturacionController@apiClienteVipPorCodigo')->name('canje_marketing_api_cliente_vip_codigo');
+    Route::post('cliente-vip/wigos', 'Ventas\CanjeMarketingProcesoFacturacionController@apiClienteVipWigos')->name('canje_marketing_api_cliente_vip_wigos');
+});
+
 Route::get('ventas/turno-gastronomia', 'Ventas\TurnoGastronomiaController@index')->name('consultar_turno_gastronomia');
 Route::get('ventas/turno-gastronomia/crear', 'Ventas\TurnoGastronomiaController@crear')->name('crear_turno_gastronomia');
 Route::post('ventas/turno-gastronomia', 'Ventas\TurnoGastronomiaController@guardar')->name('guardar_turno_gastronomia');
@@ -1349,6 +1388,8 @@ Route::get('ventas/gastronomia/cierres-turno/api/comprobantes', 'Ventas\CierreTu
 Route::get('ventas/gastronomia/cierres-turno/api/canjes-premio', 'Ventas\CierreTurnoGastronomiaController@apiCanjesPremio')->name('gastronomia_cierres_turno_api_canjes_premio');
 Route::get('ventas/gastronomia/cierres-turno/api/canjes-fidelidad', 'Ventas\CierreTurnoGastronomiaController@apiCanjesFidelidad')->name('gastronomia_cierres_turno_api_canjes_fidelidad');
 Route::get('ventas/gastronomia/cierres-turno/api/tickets-tarjeta', 'Ventas\CierreTurnoGastronomiaController@apiTicketsTarjeta')->name('gastronomia_cierres_turno_api_tickets_tarjeta');
+Route::get('ventas/gastronomia/cierres-turno/api/arqueo-cierre', 'Ventas\CierreTurnoGastronomiaController@apiArqueoCierre')->name('gastronomia_cierres_turno_api_arqueo_cierre');
+Route::post('ventas/gastronomia/cierres-turno/api/corregir-arqueo-cierre', 'Ventas\CierreTurnoGastronomiaController@apiCorregirArqueoCierre')->name('gastronomia_cierres_turno_api_corregir_arqueo_cierre');
 
 Route::get('ventas/gastronomia/habilitacion-turno', 'Ventas\HabilitacionTurnoGastronomiaController@index')->name('gastronomia_habilitacion_turno');
 Route::get('ventas/gastronomia/habilitacion-turno/api/estado', 'Ventas\HabilitacionTurnoGastronomiaController@apiEstado')->name('gastronomia_habilitacion_turno_api_estado');
@@ -1783,6 +1824,7 @@ Route::middleware('estacionamiento.habilitado')->group(function () {
     Route::post('caja/estacionamiento/jornada/api/cerrar', 'Caja\Estacionamiento\JornadaEstacionamientoController@apiCerrar')->name('estacionamiento_jornada_api_cerrar');
     Route::post('caja/estacionamiento/jornada/api/eliminar', 'Caja\Estacionamiento\JornadaEstacionamientoController@apiEliminar')->name('estacionamiento_jornada_api_eliminar');
     Route::post('caja/estacionamiento/jornada/api/anular-cierre', 'Caja\Estacionamiento\JornadaEstacionamientoController@apiAnularCierre')->name('estacionamiento_jornada_api_anular_cierre');
+    Route::get('caja/estacionamiento/jornada/{jornadaId}/comprobante-totales-z', 'Caja\Estacionamiento\JornadaEstacionamientoController@comprobanteTotalesZ')->name('estacionamiento_jornada_comprobante_totales_z');
 
     Route::get('caja/estacionamiento/turno', 'Caja\Estacionamiento\TurnoEstacionamientoController@index')->name('estacionamiento_turno');
     Route::get('caja/estacionamiento/turno/crear', 'Caja\Estacionamiento\TurnoEstacionamientoController@crear')->name('crear_estacionamiento_turno');
@@ -1818,6 +1860,16 @@ Route::middleware('estacionamiento.habilitado')->group(function () {
     Route::get('caja/estacionamiento/habilitacion-turno/api/conciliacion-notas-credito', 'Caja\Estacionamiento\HabilitacionTurnoEstacionamientoController@apiConciliacionNotasCredito')->name('estacionamiento_habilitacion_turno_api_conciliacion_notas_credito');
     Route::get('caja/estacionamiento/habilitacion-turno/api/conciliacion-invitaciones', 'Caja\Estacionamiento\HabilitacionTurnoEstacionamientoController@apiConciliacionInvitaciones')->name('estacionamiento_habilitacion_turno_api_conciliacion_invitaciones');
 
+    Route::get('caja/estacionamiento/saneamiento-turno', 'Caja\Estacionamiento\EstacionamientoSaneamientoTurnoController@index')->name('estacionamiento_saneamiento_turno');
+    Route::get('caja/estacionamiento/saneamiento-turno/api/diagnostico', 'Caja\Estacionamiento\EstacionamientoSaneamientoTurnoController@apiDiagnostico')->name('estacionamiento_saneamiento_turno_api_diagnostico');
+    Route::post('caja/estacionamiento/saneamiento-turno/api/extender-cierre', 'Caja\Estacionamiento\EstacionamientoSaneamientoTurnoController@apiExtenderCierre')->name('estacionamiento_saneamiento_turno_api_extender_cierre');
+    Route::post('caja/estacionamiento/saneamiento-turno/api/crear-retroactivo', 'Caja\Estacionamiento\EstacionamientoSaneamientoTurnoController@apiCrearRetroactivo')->name('estacionamiento_saneamiento_turno_api_crear_retroactivo');
+    Route::post('caja/estacionamiento/saneamiento-turno/api/cerrar-turno-remoto', 'Caja\Estacionamiento\EstacionamientoSaneamientoTurnoController@apiCerrarTurnoRemoto')->name('estacionamiento_saneamiento_turno_api_cerrar_turno_remoto');
+    Route::post('caja/estacionamiento/saneamiento-turno/api/recalcular-totales', 'Caja\Estacionamiento\EstacionamientoSaneamientoTurnoController@apiRecalcularTotales')->name('estacionamiento_saneamiento_turno_api_recalcular_totales');
+    Route::post('caja/estacionamiento/saneamiento-turno/api/cerrar-cuentas-pendientes', 'Caja\Estacionamiento\EstacionamientoSaneamientoTurnoController@apiCerrarCuentasPendientes')->name('estacionamiento_saneamiento_turno_api_cerrar_cuentas');
+    Route::post('caja/estacionamiento/saneamiento-turno/api/anular-tickets-pendientes', 'Caja\Estacionamiento\EstacionamientoSaneamientoTurnoController@apiAnularTicketsPendientes')->name('estacionamiento_saneamiento_turno_api_anular_tickets');
+    Route::get('caja/estacionamiento/saneamiento-turno/informe-pdf', 'Caja\Estacionamiento\EstacionamientoSaneamientoTurnoController@informePdf')->name('estacionamiento_saneamiento_turno_informe_pdf');
+
     Route::get('caja/estacionamiento/cierres-turno', 'Caja\Estacionamiento\CierreTurnoEstacionamientoController@index')->name('estacionamiento_cierres_turno')->middleware('modo.consulta');
     Route::get('caja/lista-estacionamiento-cierres-turno/{formato}', 'Caja\Estacionamiento\CierreTurnoEstacionamientoController@exportar')->name('listar_estacionamiento_cierres_turno');
     Route::get('caja/estacionamiento/cierres-turno/parcial/{id}/comprobante', 'Caja\Estacionamiento\CierreTurnoEstacionamientoController@comprobanteParcial')->name('estacionamiento_cierre_turno_comprobante_parcial');
@@ -1828,9 +1880,15 @@ Route::middleware('estacionamiento.habilitado')->group(function () {
     Route::get('caja/estacionamiento/facturas-dia', 'Caja\Estacionamiento\EstacionamientoFacturasDiaController@index')->name('estacionamiento_facturas_dia')->middleware('modo.consulta');
     Route::get('caja/lista-estacionamiento-facturas-dia/{formato}', 'Caja\Estacionamiento\EstacionamientoFacturasDiaController@exportar')->name('listar_estacionamiento_facturas_dia');
     Route::get('caja/estacionamiento/facturas-dia/{ventaId}/ver', 'Caja\Estacionamiento\EstacionamientoFacturasDiaController@ver')->name('estacionamiento_facturas_dia_ver')->middleware('modo.consulta');
+    Route::post('caja/estacionamiento/facturas-dia/{ventaId}/generar-nota-credito', 'Caja\Estacionamiento\EstacionamientoFacturasDiaController@generarNotaCredito')->name('estacionamiento_facturas_dia_generar_nota_credito');
+    Route::post('caja/estacionamiento/facturas-dia/{ventaId}/reimprimir-ticket', 'Caja\Estacionamiento\EstacionamientoFacturasDiaController@reimprimirTicket')->name('estacionamiento_facturas_dia_reimprimir_ticket');
+    Route::get('caja/estacionamiento/facturas-dia/{ventaId}/medios-pago', 'Caja\Estacionamiento\EstacionamientoFacturasDiaController@apiMediosPagoCambio')->name('estacionamiento_facturas_dia_medios_pago');
+    Route::get('caja/estacionamiento/facturas-dia/{ventaId}/cuentacaja-por-codigo/{codigo}', 'Caja\Estacionamiento\EstacionamientoFacturasDiaController@apiCuentacajaPorCodigo')->name('estacionamiento_facturas_dia_cuentacaja_por_codigo');
+    Route::put('caja/estacionamiento/facturas-dia/{ventaId}/medios-pago', 'Caja\Estacionamiento\EstacionamientoFacturasDiaController@actualizarMediosPago')->name('estacionamiento_facturas_dia_actualizar_medios_pago');
 
     Route::get('caja/estacionamiento/proceso-facturacion', 'Caja\Estacionamiento\EstacionamientoProcesoFacturacionController@index')->name('estacionamiento_proceso_facturacion');
     Route::get('caja/estacionamiento/descuento/leer/{codigo}', 'Caja\Estacionamiento\DescuentoEstacionamientoController@leeUnDescuentoPorCodigo')->name('leer_descuento_estacionamiento');
+    Route::post('caja/estacionamiento/descuento/consultadescuento', 'Caja\Estacionamiento\DescuentoEstacionamientoController@consultaDescuento')->name('consulta_descuento_estacionamiento');
 
     Route::prefix('caja/estacionamiento/api')->group(function () {
         Route::get('config', 'Caja\Estacionamiento\EstacionamientoProcesoFacturacionController@apiConfig')->name('estacionamiento_api_config');
@@ -1846,6 +1904,7 @@ Route::middleware('estacionamiento.habilitado')->group(function () {
         Route::get('cotizacion', 'Caja\Estacionamiento\EstacionamientoProcesoFacturacionController@apiCotizacion')->name('estacionamiento_api_cotizacion');
         Route::patch('cuenta/{id}', 'Caja\Estacionamiento\EstacionamientoProcesoFacturacionController@apiActualizarCuenta')->name('estacionamiento_api_actualizar_cuenta');
         Route::post('cuenta/{id}/linea', 'Caja\Estacionamiento\EstacionamientoProcesoFacturacionController@apiAgregarLinea')->name('estacionamiento_api_agregar_linea');
+        Route::patch('cuenta/{cuentaId}/linea/{lineaId}', 'Caja\Estacionamiento\EstacionamientoProcesoFacturacionController@apiActualizarCantidadLinea')->name('estacionamiento_api_actualizar_cantidad_linea');
         Route::delete('cuenta/{cuentaId}/linea/{lineaId}', 'Caja\Estacionamiento\EstacionamientoProcesoFacturacionController@apiEliminarLinea')->name('estacionamiento_api_eliminar_linea');
         Route::post('validar-emision', 'Caja\Estacionamiento\EstacionamientoProcesoFacturacionController@apiValidarEmision')->name('estacionamiento_api_validar_emision');
         Route::post('emitir-factura', 'Caja\Estacionamiento\EstacionamientoProcesoFacturacionController@apiEmitirFactura')->name('estacionamiento_api_emitir_factura');
@@ -1896,6 +1955,20 @@ Route::get('caja/rendiciongastronomia/api/jornada/{numero}', 'Caja\RendicionGast
 Route::get('caja/rendiciongastronomia/api/proponer-codigo', 'Caja\RendicionGastronomiaController@apiProponerCodigo')->name('api_rendicion_gastronomia_proponer_codigo');
 Route::post('caja/rendiciongastronomia/api/consulta-cierre', 'Caja\RendicionGastronomiaController@apiConsultaCierre')->name('api_rendicion_gastronomia_consulta_cierre');
 Route::get('caja/rendiciongastronomia/api/turno/{numero}', 'Caja\RendicionGastronomiaController@apiTurnoPorNumero')->name('api_rendicion_gastronomia_turno_numero');
+Route::get('caja/rendicionestacionamiento', 'Caja\RendicionEstacionamientoController@index')->name('rendicionestacionamiento');
+Route::get('caja/listarendicionestacionamiento/{formato?}/{busqueda?}', 'Caja\RendicionEstacionamientoController@listar')->name('listar_rendicionestacionamiento');
+Route::get('caja/rendicionestacionamiento/crear/{caja?}', 'Caja\RendicionEstacionamientoController@crear')->name('crear_rendicionestacionamiento');
+Route::post('caja/rendicionestacionamiento', 'Caja\RendicionEstacionamientoController@guardar')->name('guardar_rendicionestacionamiento');
+Route::get('caja/rendicionestacionamiento/{id}/imprimir', 'Caja\RendicionEstacionamientoController@imprimir')->name('imprimir_rendicion_estacionamiento');
+Route::get('caja/rendicionestacionamiento/{id}/editar', 'Caja\RendicionEstacionamientoController@editar')->name('editar_rendicionestacionamiento');
+Route::put('caja/rendicionestacionamiento/{id}', 'Caja\RendicionEstacionamientoController@actualizar')->name('actualizar_rendicionestacionamiento');
+Route::delete('caja/rendicionestacionamiento/{id}', 'Caja\RendicionEstacionamientoController@eliminar')->name('eliminar_rendicionestacionamiento');
+Route::post('caja/rendicionestacionamiento/api/datos-turno', 'Caja\RendicionEstacionamientoController@apiDatosTurno')->name('api_rendicion_estacionamiento_datos_turno');
+Route::post('caja/rendicionestacionamiento/api/datos-jornada', 'Caja\RendicionEstacionamientoController@apiDatosJornada')->name('api_rendicion_estacionamiento_datos_jornada');
+Route::get('caja/rendicionestacionamiento/api/jornada/{numero}', 'Caja\RendicionEstacionamientoController@apiJornadaPorNumero')->name('api_rendicion_estacionamiento_jornada_numero');
+Route::get('caja/rendicionestacionamiento/api/proponer-codigo', 'Caja\RendicionEstacionamientoController@apiProponerCodigo')->name('api_rendicion_estacionamiento_proponer_codigo');
+Route::post('caja/rendicionestacionamiento/api/consulta-cierre', 'Caja\RendicionEstacionamientoController@apiConsultaCierre')->name('api_rendicion_estacionamiento_consulta_cierre');
+Route::get('caja/rendicionestacionamiento/api/turno/{numero}', 'Caja\RendicionEstacionamientoController@apiTurnoPorNumero')->name('api_rendicion_estacionamiento_turno_numero');
 Route::get('caja/waitry-cierre-jornada', 'Caja\WaitryCierreJornadaController@index')->name('waitry_cierre_jornada');
 Route::get('caja/listarwaitrycierrejornada/{formato?}', 'Caja\WaitryCierreJornadaController@listar')->name('listar_waitry_cierre_jornada');
 Route::get('caja/waitry-cierre-jornada/api/proceso/analizar', 'Caja\WaitryCierreJornadaController@apiProcesoAnalizar')->name('waitry_cierre_jornada_api_proceso_analizar');

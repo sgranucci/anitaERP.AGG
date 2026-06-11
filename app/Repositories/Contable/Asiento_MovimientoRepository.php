@@ -66,6 +66,15 @@ class Asiento_MovimientoRepository implements Asiento_MovimientoRepositoryInterf
         return $asiento_movimiento;
     }
 
+	private function normalizarCentrocostoId($centrocostoId)
+	{
+		if ($centrocostoId === null || $centrocostoId === '' || $centrocostoId === 0 || $centrocostoId === '0') {
+			return null;
+		}
+
+		return $centrocostoId;
+	}
+
 	private function guardarAsiento_Movimiento($data, $funcion, $id = null)
 	{
 		if ($funcion == 'update')
@@ -112,7 +121,7 @@ class Asiento_MovimientoRepository implements Asiento_MovimientoRepositoryInterf
 						$asiento_movimiento = $this->model->findOrFail($_id[$i])->update([
 									"asiento_id" => $id,
 									"cuentacontable_id" => $cuentacontable_ids[$i],
-									"centrocosto_id" => $centrocosto_ids[$i] === '0' ? null : $centrocosto_ids[$i],
+									"centrocosto_id" => $this->normalizarCentrocostoId($centrocosto_ids[$i]),
 									"moneda_id" => $moneda_ids[$i],
 									"monto" => $monto,
 									"cotizacion" => $cotizaciones[$i],
@@ -141,7 +150,7 @@ class Asiento_MovimientoRepository implements Asiento_MovimientoRepositoryInterf
 					$asiento_movimiento = $this->model->create([
 									"asiento_id" => $id,
 									"cuentacontable_id" => $cuentacontable_ids[$i_movimiento],
-									"centrocosto_id" => $centrocosto_ids[$i_movimiento] === '0' ? null : $centrocosto_ids[$i_movimiento],
+									"centrocosto_id" => $this->normalizarCentrocostoId($centrocosto_ids[$i_movimiento]),
 									"moneda_id" => $moneda_ids[$i_movimiento],
 									"monto" => $monto,
 									"cotizacion" => $cotizaciones[$i_movimiento],

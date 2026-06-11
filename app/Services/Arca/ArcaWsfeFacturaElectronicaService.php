@@ -25,13 +25,13 @@ class ArcaWsfeFacturaElectronicaService
     /**
      * Último comprobante autorizado (equivalente a SolicitarUltimoCompEnviado para wsfev1).
      */
-    public function feCompUltimoAutorizado(int $empresaId, int $ptoVta, int $cbteTipo): int
+    public function feCompUltimoAutorizado(int $empresaId, int $ptoVta, int $cbteTipo, ?int $soapTimeoutSeconds = null): int
     {
         $this->assertTransporteSoap();
         $cuit = $this->cuitEmisor($empresaId);
         $ctx = $this->resolveWsaaContext($empresaId);
         $ts = $this->wsaa->getTokenSign((string) config('arca_wsfe.wsaa_service_id'), $ctx);
-        $client = $this->soapClient();
+        $client = $this->soapClient($soapTimeoutSeconds);
 
         try {
             $raw = $client->FECompUltimoAutorizado([
@@ -218,8 +218,13 @@ class ArcaWsfeFacturaElectronicaService
      *
      * @throws Exception mensajes listos para mostrar al usuario
      */
-    public function solicitaCaeDomestico(int $empresaId, object $puntoventa, int $cbteTipo, array $datos): array
-    {
+    public function solicitaCaeDomestico(
+        int $empresaId,
+        object $puntoventa,
+        int $cbteTipo,
+        array $datos,
+        ?int $soapTimeoutSeconds = null,
+    ): array {
         $this->assertTransporteSoap();
         if (($puntoventa->webservice ?? '') !== 'wsfev1') {
             throw new Exception('ARCA WSFE: solo aplica a webservice wsfev1 (comprobantes nacionales).');
@@ -228,7 +233,7 @@ class ArcaWsfeFacturaElectronicaService
         $cuit = $this->cuitEmisor($empresaId);
         $ctx = $this->resolveWsaaContext($empresaId);
         $ts = $this->wsaa->getTokenSign((string) config('arca_wsfe.wsaa_service_id'), $ctx);
-        $client = $this->soapClient();
+        $client = $this->soapClient($soapTimeoutSeconds);
 
         $ptoVta = (int) $puntoventa->codigo;
         $det = $this->buildFecaDetRequest($cbteTipo, $ptoVta, $datos);
@@ -518,11 +523,13 @@ class ArcaWsfeFacturaElectronicaService
         return ['cae' => $cae, 'fechavencimientocae' => $vto];
     }
 
-    private function soapClient(): SoapClient
+    private function soapClient(?int $timeoutOverrideSeconds = null): SoapClient
     {
         $env = (string) config('arca.env', 'homo');
         $wsdl = $this->resolveWsfeWsdl($env);
-        $timeout = max(10, (int) config('arca_wsfe.soap_timeout', 60));
+        $timeout = $timeoutOverrideSeconds !== null && $timeoutOverrideSeconds > 0
+            ? max(5, $timeoutOverrideSeconds)
+            : max(10, (int) config('arca_wsfe.soap_timeout', 60));
 
         return new SoapClient($wsdl, [
             'soap_version' => SOAP_1_2,

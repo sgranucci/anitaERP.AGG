@@ -33,20 +33,6 @@
     </style>
 </head>
 <body>
-    @if (!empty($d['']))
-    <table style="width:100%; margin-bottom:14px; border:3px solid #c0392b; background:#fdecea;">
-        <tr>
-            <td style="padding:10px 12px; text-align:center; font-size:13px; font-weight:bold; color:#922b21;">
-                INFORME INFORMATIVO — NO CIERRA EL TURNO
-                <br>
-                <span style="font-size:10px; font-weight:normal;">
-                    Solo totales por item. El turno permanece habilitado; no reemplaza un cierre parcial ni definitivo.
-                </span>
-            </td>
-        </tr>
-    </table>
-    @endif
-
     <table class="cabecera-doc">
         <tr>
             <td style="width: 35%;">
@@ -125,7 +111,6 @@
         $cantNcCab = (int) ($totalesTurno['cantidad_notas_credito'] ?? 0);
     @endphp
 
-    @if (empty($d['']))
     <h2>Facturación del turno (esta terminal)</h2>
     <table>
         <tr>
@@ -169,19 +154,8 @@
         </tr>
     </table>
 
-    @else
-    <h2>Totales por item (turno en curso)</h2>
-    <p class="muted" style="font-size:11px; margin:0 0 8px;">
-        Documento de consulta. No registra cierre parcial ni definitivo salvo que se indique en el sistema.
-    </p>
-    @endif
-
-    @if (!empty($d['']))
-    <p class="muted" style="font-size:11px; margin:0 0 8px;">Cobranzas por item desde la habilitación del turno.</p>
-    @else
     <p class="muted" style="font-size:11px; margin:0 0 8px;">Cobranzas leídas de cada comprobante emitido.</p>
-    @endif
-    @forelse ($totalesTurno['por_medio_pago'] ?? [] as $m)
+    @forelse ($totalesTurno['por_usuario_habilitado'] ?? [] as $m)
         @php
             $mNcTotal = (float) ($m['notas_credito']['total'] ?? 0);
             $mNcCant = (int) ($m['notas_credito']['cantidad'] ?? 0);
@@ -197,7 +171,7 @@
         @endphp
     <table style="margin-bottom:10px;">
         <tr class="total-grande">
-            <td class="lbl" colspan="2">{{ $m['item_nombre'] ?? 'Sin item' }}</td>
+            <td class="lbl" colspan="2">{{ $m['usuario_habilitado_nombre'] ?? 'Sin usuario habilitado' }}</td>
             <td class="num">{{ (int) ($m['cantidad'] ?? 0) }} comp.</td>
             <td class="num">
                 @if ($mHayNc)
@@ -216,7 +190,7 @@
         </tr>
         @empty
             @if (! $mHayNc && ! $mHayInv)
-        <tr><td colspan="4" class="muted" style="padding-left:16px;">Sin cobranzas en comprobantes de este item.</td></tr>
+        <tr><td colspan="4" class="muted" style="padding-left:16px;">Sin cobranzas en comprobantes de este usuario.</td></tr>
             @endif
         @endforelse
         @if ($mHayNc)
@@ -233,7 +207,7 @@
         @endif
     </table>
     @empty
-    <p class="muted">Sin comprobantes por item.</p>
+    <p class="muted">Sin comprobantes por usuario habilitado.</p>
     @endforelse
 
     @php
@@ -245,59 +219,6 @@
         $hayInv = $invCantGlobal > 0 || abs($invTotalGlobal) >= 0.005;
         $tieneMedios = ! empty($totalesTurno['por_medio_pago']);
     @endphp
-
-    @if (!empty($d['']))
-        @php
-            $totalFinalResumen = (float) ($totalesTurno['total_ventas'] ?? $totalesTurno['total_general'] ?? 0);
-            $facturasBrutoResumen = isset($totalesTurno['total_facturas'])
-                ? (float) $totalesTurno['total_facturas']
-                : ($totalFinalResumen - $ncTotalGlobal);
-        @endphp
-    <h2>Resumen general del turno (al momento del informe)</h2>
-    <p class="muted" style="font-size:11px; margin:0 0 8px;">
-        Totales acumulados de la terminal desde la habilitación, consolidados por medio de pago.
-    </p>
-    <table>
-        <tr>
-            <td class="lbl">Facturado bruto <em>(sin NC)</em></td>
-            <td class="num">${{ number_format($facturasBrutoResumen, 2, ',', '.') }}</td>
-            <td class="lbl">Facturas emitidas</td>
-            <td class="num">{{ (int) ($totalesTurno['cantidad_facturas'] ?? ((int) ($totalesTurno['cantidad_comprobantes'] ?? 0) - $ncCantGlobal)) }}</td>
-        </tr>
-        <tr>
-            <td class="lbl">Invitaciones $0,01 sin cobranza</td>
-            <td class="num">${{ number_format((float) ($totalesTurno['total_invitaciones'] ?? 0), 2, ',', '.') }} ({{ (int) ($totalesTurno['cantidad_invitaciones'] ?? 0) }} comp.)</td>
-            <td class="lbl">Notas de crédito (devoluciones)</td>
-            <td class="num" style="color:#922b21;">${{ number_format($ncTotalGlobal, 2, ',', '.') }} ({{ $ncCantGlobal }} comp.)</td>
-        </tr>
-        <tr class="total-grande">
-            <td class="lbl">Facturado final <em>(con NC restadas)</em></td>
-            <td class="num">${{ number_format($totalFinalResumen, 2, ',', '.') }}</td>
-            <td class="lbl">Comprobantes</td>
-            <td class="num">{{ (int) ($totalesTurno['cantidad_comprobantes'] ?? 0) }}</td>
-        </tr>
-        <tr>
-            <td class="lbl">Ventas con cobranza esperada <em>(final − invitaciones)</em></td>
-            <td class="num">${{ number_format((float) ($totalesTurno['total_ventas_cobrables'] ?? 0), 2, ',', '.') }}</td>
-            <td class="lbl">Cobrado neto <em>(cobranzas − devoluciones NC)</em></td>
-            <td class="num">${{ number_format((float) ($totalesTurno['total_cobrado'] ?? 0), 2, ',', '.') }}</td>
-        </tr>
-        <tr>
-            <td class="lbl">Conciliación</td>
-            <td class="num" colspan="3">
-                @if (!empty($totalesTurno['conciliacion_ok']))
-                    Cuadra
-                @else
-                    Diferencia: ${{ number_format(abs((float) ($totalesTurno['diferencia_cobranza'] ?? 0)), 2, ',', '.') }}
-                    @if ((float) ($totalesTurno['diferencia_cobranza'] ?? 0) > 0)
-                        (sobra en caja)
-                    @elseif ((float) ($totalesTurno['diferencia_cobranza'] ?? 0) < 0)
-                        (falta en caja)
-                    @endif
-                @endif
-            </td>
-        </tr>
-    </table>
 
     @if ($tieneMedios || $hayNc || $hayInv)
     <h2>Total general por medio de pago</h2>
@@ -336,9 +257,8 @@
         </tfoot>
     </table>
     @endif
-    @endif
 
-    @if (empty($d['']) && ($tieneMedios || $hayNc || $hayInv))
+    @if ($tieneMedios || $hayNc || $hayInv)
     @include('caja.estacionamiento.cierres_turno.partials.comprobante_medios_pago_cierre', [
         'totalesTurno' => $totalesTurno,
         'hayNc' => $hayNc,
@@ -352,7 +272,7 @@
     ])
     @endif
 
-    @if (empty($d['']) && $totalesDia !== null)
+    @if ($totalesDia !== null)
         @php
             $totalFinalDia = (float) ($totalesDia['total_ventas'] ?? $totalesDia['total_general'] ?? 0);
             $ncDia = (float) ($totalesDia['total_notas_credito'] ?? 0);

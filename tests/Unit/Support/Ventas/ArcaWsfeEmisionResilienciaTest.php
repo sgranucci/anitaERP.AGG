@@ -153,11 +153,65 @@ class ArcaWsfeEmisionResilienciaTest extends TestCase
         self::assertFalse(R::debeReintentarTransaccionConCaea('Connection timed out', yaUsaCaea: false));
     }
 
-    public function test_no_reintenta_si_forzar_modo_caea_ya_activo(): void
+    public function test_no_reintenta_si_ya_emitio_con_pv_caea(): void
     {
         config()->set('arca_wsfe.emision.forzar_modo_caea', true);
         config()->set('arca_wsfe.emision.reintentar_caea_si_falla_comunicacion', true);
-        self::assertFalse(R::debeReintentarTransaccionConCaea('Connection timed out', yaUsaCaea: false));
+        self::assertFalse(R::debeReintentarTransaccionConCaea('Connection timed out', yaUsaCaea: true));
+    }
+
+    public function test_reintenta_si_failover_se_activo_durante_emision_cae(): void
+    {
+        config()->set('arca_wsfe.emision.forzar_modo_caea', false);
+        config()->set('arca_wsfe.emision.reintentar_caea_si_falla_comunicacion', true);
+        config()->set('arca.monitor_conectividad.fallos_para_activar', 1);
+
+        try {
+            ArcaFailoverStore::reset(ArcaFailoverStore::WS_WSFE);
+            ArcaFailoverStore::registrarChequeo(ArcaFailoverStore::WS_WSFE, false, 'Service Unavailable');
+            self::assertTrue(R::forzarModoCaea());
+            self::assertTrue(
+                R::debeReintentarTransaccionConCaea('Service Unavailable 503', yaUsaCaea: false),
+                'La transacción sigue en PV CAE aunque el failover global ya esté activo'
+            );
+        } finally {
+            ArcaFailoverStore::reset(ArcaFailoverStore::WS_WSFE);
+        }
+    }
+
+    public function test_notificar_falla_transporte_incrementa_failover(): void
+    {
+        config()->set('arca_wsfe.emision.forzar_modo_caea', false);
+        config()->set('arca.monitor_conectividad.fallos_para_activar', 1);
+
+        try {
+            ArcaFailoverStore::reset(ArcaFailoverStore::WS_WSFE);
+            R::notificarFallaTransporteEmision('Connection timed out', 'wsfev1', ['probe' => 'test']);
+            self::assertTrue(ArcaFailoverStore::estaActivo(ArcaFailoverStore::WS_WSFE));
+        } finally {
+            ArcaFailoverStore::reset(ArcaFailoverStore::WS_WSFE);
+        }
+    }
+
+    public function test_notificar_falla_transporte_ignora_errores_de_datos(): void
+    {
+        try {
+            ArcaFailoverStore::reset(ArcaFailoverStore::WS_WSFE);
+            R::notificarFallaTransporteEmision('10015 Falta dato obligatorio', 'wsfev1');
+            self::assertFalse(ArcaFailoverStore::estaActivo(ArcaFailoverStore::WS_WSFE));
+        } finally {
+            ArcaFailoverStore::reset(ArcaFailoverStore::WS_WSFE);
+        }
+    }
+
+    public function test_soap_timeout_pos_para_opciones_gastronomia(): void
+    {
+        config()->set('arca_wsfe.soap_timeout_pos', 18);
+        self::assertSame(
+            18,
+            R::soapTimeoutPosParaOpciones(['emision_pos_arca' => true], 'wsfev1'),
+        );
+        self::assertNull(R::soapTimeoutPosParaOpciones([], 'wsfev1'));
     }
 
     public function test_forzar_modo_caea_por_failover_automatico(): void

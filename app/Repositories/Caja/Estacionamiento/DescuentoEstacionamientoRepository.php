@@ -67,4 +67,48 @@ class DescuentoEstacionamientoRepository implements DescuentoEstacionamientoRepo
 
         return null;
     }
+
+    public function consultaDescuento(string $consulta): string
+    {
+        $consulta = strtoupper(trim($consulta));
+
+        $query = $this->model->newQuery()->with('cliente');
+        if ($consulta !== '') {
+            $query->where(function ($q) use ($consulta) {
+                $q->where('descuento_estacionamiento.id', 'LIKE', '%'.$consulta.'%')
+                    ->orWhere('descuento_estacionamiento.nombre', 'LIKE', '%'.$consulta.'%')
+                    ->orWhere('descuento_estacionamiento.codigo', 'LIKE', '%'.$consulta.'%')
+                    ->orWhereHas('cliente', function ($cq) use ($consulta) {
+                        $cq->where('nombre', 'LIKE', '%'.$consulta.'%')
+                            ->orWhere('codigo', 'LIKE', '%'.$consulta.'%');
+                    });
+            });
+        }
+
+        $data = $query->orderBy('nombre')->limit(200)->get();
+
+        $output = ['data' => ''];
+        if ($data->isEmpty()) {
+            $output['data'] = '<tr><td colspan="7">Sin resultados</td></tr>';
+        } else {
+            foreach ($data as $row) {
+                $cli = $row->cliente;
+                $cliTxt = $cli
+                    ? e(trim((string) $cli->codigo).' — '.trim((string) $cli->nombre))
+                    : '';
+                $tipoTxt = e($row->etiquetaTipoValor().' ('.$row->tipovalor.')');
+                $output['data'] .= '<tr>';
+                $output['data'] .= '<td class="id">'.e($row->id).'</td>';
+                $output['data'] .= '<td class="nombre">'.e($row->nombre).'</td>';
+                $output['data'] .= '<td class="codigo">'.e($row->codigo).'</td>';
+                $output['data'] .= '<td class="tipovalor">'.$tipoTxt.'</td>';
+                $output['data'] .= '<td class="valor text-right">'.e(number_format((float) $row->valor, 4, ',', '.')).'</td>';
+                $output['data'] .= '<td class="cliente_descuento">'.$cliTxt.'</td>';
+                $output['data'] .= '<td><a class="btn btn-warning btn-sm eligeconsultadescuento">Elegir</a></td>';
+                $output['data'] .= '</tr>';
+            }
+        }
+
+        return json_encode($output, JSON_UNESCAPED_UNICODE);
+    }
 }

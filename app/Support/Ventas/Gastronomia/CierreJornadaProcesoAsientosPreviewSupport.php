@@ -314,20 +314,7 @@ final class CierreJornadaProcesoAsientosPreviewSupport
      */
     public static function ajustarMontosMediosCobroAlTotal(array $medios, float $totalEsperado): array
     {
-        if ($medios === [] || $totalEsperado <= 0.0001) {
-            return $medios;
-        }
-
-        $suma = round(array_sum(array_map(static fn (array $m) => (float) ($m['monto'] ?? 0), $medios)), 2);
-        if (abs($suma - $totalEsperado) <= 0.02) {
-            return $medios;
-        }
-
-        $delta = round($totalEsperado - $suma, 2);
-        $ultimo = count($medios) - 1;
-        $medios[$ultimo]['monto'] = round((float) $medios[$ultimo]['monto'] + $delta, 2);
-
-        return $medios;
+        return \App\Support\Caja\CobranzaMontosAjusteSupport::ajustarMediosPagoAlTotal($medios, $totalEsperado);
     }
 
     /**

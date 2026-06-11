@@ -150,6 +150,7 @@ Ver [`push-external-order-request-ejemplo.json`](push-external-order-request-eje
 | `table` | `WAITRY_TABLE_POR_EMPRESA` — ver [`table-por-empresa.json`](table-por-empresa.json) |
 | `external_id` | **`venta.id`** (string) — correlación con la venta interna |
 | `orderItems` | Líneas de `venta_emision` (SKU → `item.externalId`; `notes` = comentario cocina del ítem si existe) |
+| `orderItems[].orderItemVariations` | Opcionales/adicionales de la línea de cuenta (`opcionales_json` → `externalId` = SKU, `name` = descripción; si el SKU existe en carta Waitry se muestra como variación; si no, como nota en KDS) |
 | `paid` | `true` si hubo cobranza en el POS |
 | `totalPaid` | Monto pagado (junto con `paid` registra el cobro en Waitry como **interface**) |
 | `payment` | Si hubo cobranza: `type` = **`interface`**, `total_fee`, y `payments[]` con `gateway` + `amount` por medio (Control Z; ej. `MERCADOPAGO`, `CASH`) |

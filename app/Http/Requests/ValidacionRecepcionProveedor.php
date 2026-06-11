@@ -11,6 +11,28 @@ class ValidacionRecepcionProveedor extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        $items = $this->input('items', []);
+        if (! is_array($items)) {
+            return;
+        }
+
+        foreach ($items as $key => $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+            if (! isset($item['moneda_id']) || $item['moneda_id'] === '' || $item['moneda_id'] === null) {
+                $items[$key]['moneda_id'] = 1;
+            }
+            if (! isset($item['cotizacion']) || $item['cotizacion'] === '' || $item['cotizacion'] === null) {
+                $items[$key]['cotizacion'] = 1;
+            }
+        }
+
+        $this->merge(['items' => $items]);
+    }
+
     public function rules(): array
     {
         return [

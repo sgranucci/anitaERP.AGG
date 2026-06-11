@@ -52,7 +52,7 @@ final class WigosConfigResolver
         if ($urlA !== '' || $urlB !== '') {
             $map = ['A' => $urlA, 'B' => $urlB];
 
-            return self::urlsUnicas([
+            return self::urlsConFallbackGlobal([
                 $map[$curr] ?? '',
                 $map[$secundario] ?? '',
             ]);
@@ -69,12 +69,29 @@ final class WigosConfigResolver
             }
         }
         if ($urls !== []) {
-            return self::urlsUnicas($urls);
+            return self::urlsConFallbackGlobal($urls);
         }
 
         $global = trim((string) config('wigos.account_info_url', ''));
 
         return $global !== '' ? [$global] : [];
+    }
+
+    /**
+     * Tras las URLs por empresa, agrega WIGOS_ACCOUNT_INFO_URL global si es distinta
+     * (p. ej. Rebisco intenta serverwigosrsaa y cae en serverwigosws).
+     *
+     * @param  list<string>  $urls
+     * @return list<string>
+     */
+    private static function urlsConFallbackGlobal(array $urls): array
+    {
+        $global = trim((string) config('wigos.account_info_url', ''));
+        if ($global !== '') {
+            $urls[] = $global;
+        }
+
+        return self::urlsUnicas($urls);
     }
 
     public static function conexionConfigurada(string $alias, int $empresaId = 0): bool

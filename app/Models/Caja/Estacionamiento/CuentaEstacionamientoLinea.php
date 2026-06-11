@@ -2,7 +2,6 @@
 
 namespace App\Models\Caja\Estacionamiento;
 
-use App\Models\Stock\Articulo;
 use Illuminate\Database\Eloquent\Model;
 use OwenIt\Auditing\Contracts\Auditable;
 
@@ -16,7 +15,6 @@ class CuentaEstacionamientoLinea extends Model implements Auditable
         'cuenta_estacionamiento_id',
         'numero_linea',
         'item_estacionamiento_id',
-        'articulo_id',
         'cantidad',
         'precio_unitario',
         'descripcion',
@@ -40,11 +38,6 @@ class CuentaEstacionamientoLinea extends Model implements Auditable
     public function itemEstacionamiento()
     {
         return $this->belongsTo(ItemEstacionamiento::class, 'item_estacionamiento_id');
-    }
-
-    public function articulo()
-    {
-        return $this->belongsTo(Articulo::class, 'articulo_id');
     }
 
     public function listaPrecioItem()

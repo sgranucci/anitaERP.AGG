@@ -10,7 +10,9 @@ class MozoGastronomia extends Model implements Auditable
 {
     use \OwenIt\Auditing\Auditable;
 
-    protected $fillable = ['nombre', 'codigo', 'empresa_id'];
+    protected $fillable = ['nombre', 'codigo', 'clave', 'empresa_id'];
+
+    protected $hidden = ['clave'];
 
     protected $table = 'mozo_gastronomia';
 

@@ -18,6 +18,14 @@ class ValidacionRendicionGastronomiaCaja extends FormRequest
         if (! $this->has('movimientos') || ! is_array($this->input('movimientos'))) {
             $this->merge(['movimientos' => []]);
         }
+
+        $json = $this->input('informe_z_totems_json');
+        if (is_string($json) && trim($json) !== '') {
+            $decoded = json_decode($json, true);
+            if (is_array($decoded)) {
+                $this->merge(['informe_z_totems' => $decoded]);
+            }
+        }
     }
 
     public function rules(): array
@@ -74,6 +82,15 @@ class ValidacionRendicionGastronomiaCaja extends FormRequest
             'movimientos.*.cuentacaja_id' => ['required', 'integer', 'exists:cuentacaja,id'],
             'movimientos.*.monto' => ['required', 'numeric'],
             'movimientos.*.cotizacion' => ['nullable', 'numeric', 'min:0.0001'],
+            'informe_z_totems_json' => ['nullable', 'string'],
+            'informe_z_totems' => ['nullable', 'array'],
+            'informe_z_totems.*.totem_id' => ['nullable', 'integer'],
+            'informe_z_totems.*.waitry_table_id' => ['nullable', 'integer'],
+            'informe_z_totems.*.lineas' => ['nullable', 'array'],
+            'informe_z_totems.*.lineas.*.cuentacaja_id' => ['nullable', 'integer'],
+            'informe_z_totems.*.lineas.*.tipo_waitry' => ['nullable', 'string', 'max:50'],
+            'informe_z_totems.*.lineas.*.monto' => ['nullable', 'numeric'],
+            'informe_z_totems.*.lineas.*.monto_informe_z' => ['nullable', 'numeric'],
         ];
     }
 

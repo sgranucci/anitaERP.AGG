@@ -58,6 +58,12 @@ class Kernel extends ConsoleKernel
             ->runInBackground()
             ->withoutOverlapping(120)
             ->when(fn () => (bool) config('rendicion_gastronomia_anita.auditoria_diaria.habilitada', true));
+
+        $schedule->command('rendicion-estacionamiento:auditoria-anita')
+            ->dailyAt((string) config('rendicion_estacionamiento_anita.auditoria_diaria.hora', '07:30'))
+            ->runInBackground()
+            ->withoutOverlapping(120)
+            ->when(fn () => (bool) config('rendicion_estacionamiento_anita.auditoria_diaria.habilitada', false));
     }
 
     /**

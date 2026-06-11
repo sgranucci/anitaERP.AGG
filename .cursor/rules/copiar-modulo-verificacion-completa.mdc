@@ -1,0 +1,80 @@
+---
+description: Al copiar/adaptar un módulo desde otro, verificar partials, referencias y probar todas las herramientas
+alwaysApply: true
+---
+
+# Copiar módulo: partials, referencias y prueba integral
+
+Cuando se **copia, clona o adapta** un módulo/pantalla desde otro (ej. gastronomía → estacionamiento), no basta con mover controllers y rutas. El agente debe **completar el inventario de vistas parciales** y **probar cada herramienta** antes de dar el cambio por cerrado.
+
+Ver también **`modulo-menu-consistencia.mdc`** (prefijos y namespaces).
+
+## 1. Inventario de partials y assets (obligatorio)
+
+Tras copiar vistas Blade o JS:
+
+1. Listar **todos** los `@include`, `@component` y `@extends` del módulo destino.
+2. Confirmar que **cada archivo referenciado existe** bajo el namespace del módulo destino (`resources/views/{modulo}/…`), no solo el `index`/`comprobante` principal.
+3. Si el origen tenía partials en `partials/`, **copiarlos o reescribirlos** en la ruta destino; no dejar `@include('…modulo_destino…partials.X')` apuntando a archivos inexistentes.
+4. Repetir para JS: `asset('assets/pages/scripts/{modulo}/…')` — archivo debe existir y cargar sin error de sintaxis.
+5. Buscar restos del módulo origen en strings (`@include('ventas.gastronomia…')`, `Gastronomia*`, `mozo`, `Waitry`, rutas `gastronomia/…`) y adaptarlos al dominio destino.
+
+### Comprobación rápida (ejecutar el agente)
+
+```bash
+# Includes en vistas del módulo destino
+rg "@include\(" resources/views/{modulo_destino}/
+
+# Cada include debe resolver a un .blade.php existente (revisar manualmente los paths únicos)
+
+# Restos del módulo origen (ajustar origen y destino)
+rg "{ModuloOrigen}|{prefijo_url_origen}" resources/views/{modulo_destino}/ app/Http/Controllers/{ModuloDestino}/ public/assets/pages/scripts/{modulo_destino}/
+
+# Compilar vistas (falla si falta un partial)
+php artisan view:cache
+```
+
+**Prohibido** cerrar un copy-paste con `@include` sin verificar existencia del archivo (error típico: `View […partials.observacion_habilitacion_comprobante] not found` al imprimir PDF).
+
+## 2. Adaptar dominio, no pegar literal
+
+| Copiado de | Revisar en destino |
+|---|---|
+| `por_mozo` / `item_id` | Agrupación real del negocio (ej. estacionamiento: `por_usuario_habilitado`) |
+| `GastronomiaCuentacajaEfectivo` | Support/config del módulo destino |
+| Claves `$d['']` rotas o flags del origen | Claves válidas o eliminar bloques que no aplican |
+| Botones/modales del origen | Quitar lo que el destino no tiene (informe por mozo, Waitry, etc.) |
+
+## 3. Capas a alinear en el mismo cambio
+
+- Rutas + permisos + menú (`menu.url`)
+- Controllers + Services + Support/Exports
+- Vistas + **todos** los partials
+- JS de pantalla + render compartido (ej. `totales_turno_render.js`)
+- PDF/Excel/listados (`comprobante.blade.php`, exports, `listado.blade.php`)
+- APIs JSON usadas por la pantalla (`api/estado`, conciliación, cierre parcial/definitivo)
+
+## 4. Prueba integral de herramientas (obligatoria)
+
+No declarar terminado sin recorrer **cada acción expuesta en la UI** del módulo copiado. Como mínimo, según aplique la pantalla:
+
+| Herramienta | Qué validar |
+|---|---|
+| Index / listado | Carga, filtros, paginación, export PDF/Excel/CSV |
+| Alta / edición | Guardar, validaciones, permisos |
+| Pantalla principal del módulo | Estado inicial, APIs, modales |
+| Acciones secundarias | Cada botón, tab, modal y enlace del header/toolbar |
+| Cierre parcial | Registro + **apertura/impressión del comprobante PDF** |
+| Cierre definitivo | Formulario, arqueo medios, PDF |
+| Conciliación | Grilla, paginado, modales por medio / NC / invitaciones |
+| Anular cierre / saneamiento | Si existen en el origen y se copiaron |
+
+El agente debe **ejecutar** `php artisan view:cache` y, cuando haya cambios JS, comprobar sintaxis (`node -c` si está disponible). Preferir probar el flujo que falló en origen (ej. generar PDF) en la misma sesión.
+
+## 5. Criterio de cierre
+
+El cambio está listo solo si:
+
+1. **Cero** `@include`/`@component` rotos (verificado con `view:cache`).
+2. **Cero** referencias al módulo origen salvo las documentadas como excepción.
+3. **Todas** las herramientas visibles de la pantalla probadas o, si no se pudo probar en runtime, el agente documenta qué bloqueó la prueba y qué comando/ruta falta ejecutar.

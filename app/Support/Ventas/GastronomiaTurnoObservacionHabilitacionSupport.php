@@ -101,6 +101,28 @@ final class GastronomiaTurnoObservacionHabilitacionSupport
     }
 
     /**
+     * Nota compacta al corregir arqueo / ajustes de un cierre definitivo ya registrado.
+     */
+    public static function notaCorreccionArqueoCierre(
+        int $usuarioId,
+        string $usuarioNombre,
+        ?int $numeroCierre,
+        ?Carbon $cierreEn,
+        ?string $motivo,
+    ): string {
+        $motivoLimpio = trim((string) $motivo);
+        if ($motivoLimpio === '') {
+            $motivoLimpio = '(sin detalle)';
+        }
+
+        return '[Corrección arqueo '.now()->format('Y-m-d H:i')
+            .' user #'.$usuarioId.' '.$usuarioNombre
+            .'] Cierre #'.($numeroCierre ?? '—')
+            .' del '.($cierreEn?->format('d/m/Y H:i') ?? '—')
+            .'. Motivo: '.$motivoLimpio;
+    }
+
+    /**
      * @return list<array{
      *     fecha_anulacion: string,
      *     usuario: string,

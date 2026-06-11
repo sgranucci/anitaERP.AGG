@@ -7,6 +7,7 @@ use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
 use App\Models\Ventas\Venta;
 use App\Services\Caja\CobranzaService;
 use App\Services\Configuracion\CotizacionService;
+use App\Support\Caja\CobranzaMontosAjusteSupport;
 use InvalidArgumentException;
 
 /**
@@ -95,6 +96,13 @@ final class GastronomiaCobranzaService
             );
         }
 
+        $lineas = CobranzaMontosAjusteSupport::ajustarMediosPagoAlTotal(
+            $lineas,
+            $totalFacturaArs,
+            fn (int $monedaId, float $monto, float $cotizacion): float => $this->montoEnPesos($monedaId, $monto, $cotizacion),
+        );
+        $totalArs = $totalFacturaArs;
+
         $codigoVenta = trim((string) ($venta->codigo ?? ''));
         $detalle = $esDevolucion
             ? 'Devolución gastronomía'.($codigoVenta !== '' ? ' — '.$codigoVenta : '')
@@ -105,7 +113,7 @@ final class GastronomiaCobranzaService
             'empresa_id' => (int) $cfg->empresa_id,
             'tipotransaccion_caja_id' => $tipoCajaId,
             'lineas' => $lineas,
-            'totalfinalcobranza' => round($totalArs, 2),
+            'totalfinalcobranza' => round($totalFacturaArs, 2),
             'monedafinalcobranza_id' => self::MONEDA_PESOS_ID,
             'cotizacion_cobranza' => 1.,
             'genera_contabilidad' => (bool) config('gastronomia.genera_contabilidad_al_cobrar', true),

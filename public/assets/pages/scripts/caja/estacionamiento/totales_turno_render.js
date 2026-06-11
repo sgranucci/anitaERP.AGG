@@ -87,7 +87,7 @@
         return html;
     }
 
-    function renderMediosPagoTabla(medios, vacio, conTotalFinal, totalCobradoRef, opcionesConciliar, notasCredito, itemCtx, invitaciones, opcionesArqueo) {
+    function renderMediosPagoTabla(medios, vacio, conTotalFinal, totalCobradoRef, opcionesConciliar, notasCredito, usuarioCtx, invitaciones, opcionesArqueo) {
         var hayMedios = medios && medios.length;
         var nc = notasCredito || null;
         var ncCant = nc ? Number(nc.cantidad || 0) : 0;
@@ -116,8 +116,8 @@
             }
         }
 
-        var itemId = itemCtx && itemCtx.item_id != null ? itemCtx.item_id : '';
-        var itemNombre = itemCtx && itemCtx.item_nombre ? itemCtx.item_nombre : '';
+        var usuarioId = usuarioCtx && usuarioCtx.usuario_habilitado_id != null ? usuarioCtx.usuario_habilitado_id : '';
+        var usuarioNombre = usuarioCtx && usuarioCtx.usuario_habilitado_nombre ? usuarioCtx.usuario_habilitado_nombre : '';
 
         var html = '<table class="table table-bordered mb-0 est-totales-tabla">';
         html += '<thead class="thead-light"><tr><th>Medio de pago</th>';
@@ -173,13 +173,13 @@
                 html += '<td class="text-center">';
                 html += '<button type="button" class="btn btn-xs btn-outline-info js-conciliar-medio" data-cuentacaja-id="' + ccId + '" ';
                 html += 'data-medio-nombre="' + esc(p.nombre || p.codigo || '') + '"';
-                if (itemId !== '') {
-                    html += ' data-item-id="' + esc(itemId) + '"';
+                if (usuarioId !== '') {
+                    html += ' data-usuario-habilitado-id="' + esc(usuarioId) + '"';
                 }
-                if (itemNombre) {
-                    html += ' data-item-nombre="' + esc(itemNombre) + '"';
+                if (usuarioNombre) {
+                    html += ' data-usuario-habilitado-nombre="' + esc(usuarioNombre) + '"';
                 }
-                html += ' title="Ver facturas de este medio' + (itemNombre ? ' de ' + esc(itemNombre) : '') + '">';
+                html += ' title="Ver facturas de este medio' + (usuarioNombre ? ' de ' + esc(usuarioNombre) : '') + '">';
                 html += '<i class="fa fa-search"></i> Facturas</button></td>';
             } else if (conciliar) {
                 html += '<td></td>';
@@ -196,13 +196,13 @@
             if (conciliar) {
                 html += '<td class="text-center">';
                 html += '<button type="button" class="btn btn-xs btn-outline-danger js-conciliar-nc"';
-                if (itemId !== '') {
-                    html += ' data-item-id="' + esc(itemId) + '"';
+                if (usuarioId !== '') {
+                    html += ' data-usuario-habilitado-id="' + esc(usuarioId) + '"';
                 }
-                if (itemNombre) {
-                    html += ' data-item-nombre="' + esc(itemNombre) + '"';
+                if (usuarioNombre) {
+                    html += ' data-usuario-habilitado-nombre="' + esc(usuarioNombre) + '"';
                 }
-                html += ' title="Ver notas de crédito' + (itemNombre ? ' de ' + esc(itemNombre) : ' del turno') + '">';
+                html += ' title="Ver notas de crédito' + (usuarioNombre ? ' de ' + esc(usuarioNombre) : ' del turno') + '">';
                 html += '<i class="fa fa-search"></i> NC</button></td>';
             }
             html += '</tr>';
@@ -218,13 +218,13 @@
             if (conciliar) {
                 html += '<td class="text-center">';
                 html += '<button type="button" class="btn btn-xs btn-outline-warning js-conciliar-invitaciones"';
-                if (itemId !== '') {
-                    html += ' data-item-id="' + esc(itemId) + '"';
+                if (usuarioId !== '') {
+                    html += ' data-usuario-habilitado-id="' + esc(usuarioId) + '"';
                 }
-                if (itemNombre) {
-                    html += ' data-item-nombre="' + esc(itemNombre) + '"';
+                if (usuarioNombre) {
+                    html += ' data-usuario-habilitado-nombre="' + esc(usuarioNombre) + '"';
                 }
-                html += ' title="Ver facturas $0,01' + (itemNombre ? ' de ' + esc(itemNombre) : ' del turno') + '">';
+                html += ' title="Ver facturas $0,01' + (usuarioNombre ? ' de ' + esc(usuarioNombre) : ' del turno') + '">';
                 html += '<i class="fa fa-search"></i> Facturas</button></td>';
             }
             html += '</tr>';
@@ -373,21 +373,21 @@
         return html;
     }
 
-    function renderPorMedioPagoHtml(porMozo, opcionesConciliar) {
-        if (!porMozo || !porMozo.length) {
-            return '<p class="text-muted mb-0">Sin comprobantes por item.</p>';
+    function renderPorUsuarioHabilitadoHtml(porUsuario, opcionesConciliar) {
+        if (!porUsuario || !porUsuario.length) {
+            return '<p class="text-muted mb-0">Sin comprobantes por usuario habilitado.</p>';
         }
-        var html = '<div class="est-items-lista">';
-        porMozo.forEach(function (m) {
+        var html = '<div class="est-usuarios-lista">';
+        porUsuario.forEach(function (m) {
             var medios = m.por_medio_pago || [];
             var mnc = m.notas_credito || null;
             var mncCant = mnc ? Number(mnc.cantidad || 0) : 0;
             var mncTotal = mnc ? Number(mnc.total || 0) : 0;
-            var itemHayNc = mnc && (mncCant > 0 || Math.abs(mncTotal) >= 0.005);
+            var usuarioHayNc = mnc && (mncCant > 0 || Math.abs(mncTotal) >= 0.005);
             var minv = m.invitaciones || null;
             var minvCant = minv ? Number(minv.cantidad || 0) : 0;
             var minvTotal = minv ? Number(minv.total || 0) : 0;
-            var itemHayInv = minv && (minvCant > 0 || Math.abs(minvTotal) >= 0.005);
+            var usuarioHayInv = minv && (minvCant > 0 || Math.abs(minvTotal) >= 0.005);
             var mTotalFinal = Number(m.total != null ? m.total : 0);
             var mTotalFacturas = m.total_facturas != null
                 ? Number(m.total_facturas)
@@ -396,17 +396,17 @@
             html += '<div class="card mb-2 border">';
             html += '<div class="card-header py-2 bg-light">';
             html += '<div class="d-flex flex-wrap justify-content-between align-items-center">';
-            html += '<strong class="est-item-nombre">' + esc(m.item_nombre || 'Sin item') + '</strong>';
+            html += '<strong class="est-item-nombre">' + esc(m.usuario_habilitado_nombre || 'Sin usuario habilitado') + '</strong>';
             html += '<span class="small">';
             html += (m.cantidad || 0) + ' comp.';
-            if (itemHayNc) {
+            if (usuarioHayNc) {
                 html += ' · Fact. bruto <strong>$' + fmt(mTotalFacturas) + '</strong>';
                 html += ' · NC <strong style="color:#922b21;">$' + fmt(mncTotal) + '</strong>';
                 html += ' · <span title="Facturado bruto − NC">Fact. final <strong>$' + fmt(mTotalFinal) + '</strong></span>';
             } else {
                 html += ' · Facturado <strong>$' + fmt(mTotalFinal) + '</strong>';
             }
-            if (itemHayInv) {
+            if (usuarioHayInv) {
                 html += ' · Invitaciones <span class="text-muted">(' + minvCant + ' comp., $' + fmt(minvTotal) + ' fact., sin cobranza)</span>';
             }
             html += ' · Cobrado neto <strong>$' + fmt(cobradoNeto) + '</strong>';
@@ -417,13 +417,16 @@
             html += '<div class="font-weight-bold mb-2">Cobranzas por medio de pago</div>';
             html += renderMediosPagoTabla(
                 medios,
-                'Sin cobranzas en los comprobantes de este item.',
+                'Sin cobranzas en los comprobantes de este usuario.',
                 true,
                 cobradoNeto,
                 opcionesConciliar,
-                itemHayNc ? mnc : null,
-                { item_id: m.item_id != null ? m.item_id : '', item_nombre: m.item_nombre || '' },
-                itemHayInv ? minv : null
+                usuarioHayNc ? mnc : null,
+                {
+                    usuario_habilitado_id: m.usuario_habilitado_id != null ? m.usuario_habilitado_id : '',
+                    usuario_habilitado_nombre: m.usuario_habilitado_nombre || '',
+                },
+                usuarioHayInv ? minv : null
             );
             html += '</div>';
             html += '</div>';
@@ -500,7 +503,7 @@
 
         html += '<table class="table table-bordered table-sm mb-0 est-totales-tabla">';
         html += '<thead><tr>';
-        html += '<th>Comprobante</th><th>Hora</th><th>Cliente</th><th>Mozo</th>';
+        html += '<th>Comprobante</th><th>Hora</th><th>Cliente</th><th>Usuario habilitado</th>';
         html += '<th class="text-right">Facturado</th><th class="text-right">Cobrado</th><th class="text-right">Dif.</th>';
         columnas.forEach(function (c) {
             var med = etiquetaMedioColumna(c);
@@ -515,7 +518,7 @@
             html += '<td>' + esc(f.codigo) + (f.es_invitacion ? ' <span class="badge badge-secondary">Inv.</span>' : '') + '</td>';
             html += '<td>' + esc(f.hora) + '</td>';
             html += '<td>' + esc(f.cliente) + '</td>';
-            html += '<td>' + esc(f.item_nombre) + '</td>';
+            html += '<td>' + esc(f.usuario_habilitado_nombre || '—') + '</td>';
             html += '<td class="text-right">$' + fmt(f.total_facturado) + '</td>';
             html += '<td class="text-right">$' + fmt(f.total_cobrado) + '</td>';
             html += '<td class="text-right">$' + fmt(diff) + '</td>';
@@ -585,42 +588,18 @@
             html += '<div class="alert alert-success py-2 mb-2"><i class="fa fa-check"></i> ';
             html += 'Comprobantes y cobranzas del turno <strong>cuadran</strong>.</div>';
         }
-        var cuentasConItems = Number(estado.cuentas_abiertas_con_items || estado.tickets_pendientes_ingreso || 0);
-        var cuentasVacias = Number(estado.cuentas_abiertas_vacias || 0);
-        var urlSaneamiento = estado.url_saneamiento_turno || '';
-        if (window.ModoConsulta && urlSaneamiento) {
-            urlSaneamiento = window.ModoConsulta.url(urlSaneamiento);
-        }
-        if (cuentasConItems > 0) {
+        var ticketsPendientes = Number(estado.tickets_pendientes_ingreso || 0);
+        if (ticketsPendientes > 0) {
             if (estado.es_ultimo_turno_dia) {
                 html += '<div class="alert alert-danger py-2 mb-2">';
-                html += '<strong>' + cuentasConItems + ' cuenta(s) o mesa(s) ABIERTA(S) con consumos</strong> sin facturar en esta terminal. ';
-                html += 'Al cerrar el <strong>último turno del día</strong> deben quedar facturadas o cerradas sin facturar. ';
-                if (urlSaneamiento) {
-                    html += 'Resuélvalas en <a href="' + esc(urlSaneamiento) + '" class="alert-link" target="_blank" rel="noopener">Saneamiento de turnos</a>.';
-                }
+                html += '<strong>' + ticketsPendientes + ' ticket(s) pendiente(s) de ingreso</strong> en esta terminal. ';
+                html += 'Al cerrar el <strong>último turno del día</strong> deben quedar resueltos antes del cierre definitivo.';
                 html += '</div>';
             } else {
                 html += '<div class="alert alert-info py-2 mb-2">';
-                html += '<strong>' + cuentasConItems + ' cuenta(s) abierta(s) con consumos</strong> sin facturar: pueden continuar en el próximo turno del día. ';
-                html += 'Solo el último turno del día exige dejarlas resueltas.</div>';
+                html += '<strong>' + ticketsPendientes + ' ticket(s) pendiente(s) de ingreso</strong>: pueden continuar en el próximo turno del día. ';
+                html += 'Solo el último turno del día exige dejarlos resueltos.</div>';
             }
-        }
-        if (cuentasVacias > 0) {
-            html += '<div class="alert alert-info py-2 mb-2">';
-            html += '<strong>' + cuentasVacias + ' cuenta(s) abierta(s) sin ítems</strong> en esta terminal. ';
-            html += 'Se <strong>descartan automáticamente</strong> al cerrar el último turno del día o la jornada (no requieren saneamiento).';
-            html += '</div>';
-        }
-        var cerradasSinFacturar = Number(estado.cuentas_cerradas_sin_facturar || 0);
-        if (cerradasSinFacturar > 0) {
-            html += '<div class="alert alert-secondary py-2 mb-2">';
-            html += '<strong>' + cerradasSinFacturar + ' cuenta(s) cerrada(s) sin facturar</strong> (estado terminal por saneamiento). ';
-            html += 'Quedan registradas para auditoría y no bloquean el cierre del turno ni de la jornada. ';
-            if (urlSaneamiento) {
-                html += '<a href="' + esc(urlSaneamiento) + '" class="alert-link" target="_blank" rel="noopener">Ver en Saneamiento de turnos</a>.';
-            }
-            html += '</div>';
         }
         if (estado.url_facturas_dia) {
             var urlFacturasDia = estado.url_facturas_dia;
@@ -644,9 +623,6 @@
         lista.forEach(function (p) {
             html += '<li class="list-group-item d-flex justify-content-between align-items-center py-2">';
             html += '<span><strong>#' + esc(p.numero_parcial) + '</strong> — ' + esc(p.fecha || '');
-            if (p.) {
-                html += ' <span class="badge badge-info">Solo item</span>';
-            }
             html += ' · $' + fmt(p.total) + '</span>';
             if (p.id && base) {
                 html += '<a href="' + esc(base + '/' + p.id + '/comprobante?inline=1') + '" class="btn btn-xs btn-outline-secondary" target="_blank" rel="noopener">';
@@ -672,15 +648,15 @@
         html += '<span>' + labelFinal + ': <strong class="est-totales-monto">$' + fmt(totalFinal) + '</strong></span>';
         html += '</div>';
         var optsConc = (opciones && opciones.conciliarMedios) ? { habilitar: true } : null;
-        var compacto = opciones && opciones.soloMozo;
-        var ocultarMozo = opciones && opciones.ocultarDetalleMozo;
+        var compacto = opciones && opciones.soloUsuarioHabilitado;
+        var ocultarUsuario = opciones && opciones.ocultarDetalleUsuario;
 
         if (!compacto) {
             html += renderConciliacionHtml(totales);
         }
-        if (!ocultarMozo) {
-            html += '<h6 class="font-weight-bold mt-1 mb-2">Detalle por item</h6>';
-            html += renderPorMedioPagoHtml(totales.por_medio_pago, optsConc);
+        if (!ocultarUsuario) {
+            html += '<h6 class="font-weight-bold mt-1 mb-2">Detalle por usuario habilitado</h6>';
+            html += renderPorUsuarioHabilitadoHtml(totales.por_usuario_habilitado, optsConc);
         }
         if (!compacto) {
             html += renderTotalMediosPagoFinalHtml(totales, optsConc, opciones);

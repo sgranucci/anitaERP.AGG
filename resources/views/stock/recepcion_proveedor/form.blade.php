@@ -1,12 +1,60 @@
 @php
+    use App\Models\Configuracion\Moneda;
+    use App\Support\Stock\RecepcionProveedorFormItemsSupport;
+    use App\Support\Stock\RecepcionProveedorParteUnicaSupport;
+
+    $moneda_query = $moneda_query ?? Moneda::query()->orderBy('nombre')->get();
+
     $soloLectura = !($modoEdicion ?? false) || (($recepcion->estado ?? 'BORRADOR') !== 'BORRADOR');
     $empresaIdOc = old('empresa_id', optional(optional($recepcion)->ordencompras)->empresa_id ?? optional($recepcion)->empresa_id ?? '');
     $depositoCabeceraId = old('deposito_id', optional($recepcion)->deposito_id ?? '');
+    $depositoCabeceraIdInt = (int) $depositoCabeceraId ?: null;
     $depositoCabecera = optional(optional($recepcion)->depositos);
+    $depositoCabeceraResuelto = RecepcionProveedorFormItemsSupport::depositoCabeceraDesdeId($depositoCabeceraIdInt);
+    if ($depositoCabeceraResuelto !== null) {
+        $depositoCabeceraCodigo = $depositoCabeceraResuelto['codigo'];
+        $depositoCabeceraNombre = $depositoCabeceraResuelto['nombre'];
+    } else {
+        $depositoCabeceraCodigo = $depositoCabecera->codigo ?? '';
+        $depositoCabeceraNombre = $depositoCabecera->nombre ?? '';
+    }
+
+    $ordencompraIdForm = (int) old('ordencompra_id', $recepcion->ordencompra_id ?? 0) ?: null;
+    $cabeceraOld = RecepcionProveedorFormItemsSupport::datosCabeceraDesdeOrdencompra(
+        $ordencompraIdForm,
+        old('proveedor_nombre'),
+        old('numero_oc_buscar')
+    );
+    $numeroOcBuscar = $cabeceraOld['numero_oc'] ?? '';
+    $proveedorNombreForm = $cabeceraOld['proveedor_nombre'] ?? '';
+    if ($cabeceraOld['empresa_id'] ?? null) {
+        $empresaIdOc = $cabeceraOld['empresa_id'];
+    }
+
     $items = old('items');
-    if ($items === null && $recepcion) {
+    if (is_array($items) && $items !== []) {
+        foreach ($items as $idxItem => $itemOld) {
+            if (! is_array($itemOld)) {
+                continue;
+            }
+            if ($cabeceraOld['proveedor_id'] ?? null) {
+                $items[$idxItem]['_proveedor_id'] = $cabeceraOld['proveedor_id'];
+            }
+            if ($empresaIdOc) {
+                $items[$idxItem]['_empresa_id'] = (int) $empresaIdOc;
+            }
+        }
+        $items = RecepcionProveedorFormItemsSupport::enriquecerItemsParaVista(
+            $items,
+            $depositoCabeceraIdInt,
+            $cabeceraOld['proveedor_id'] ?? null,
+            $empresaIdOc ? (int) $empresaIdOc : null
+        );
+    } elseif ($items === null && $recepcion) {
         $items = $recepcion->recepcion_proveedor_articulos->map(function ($l) {
             return array_merge($l->toArray(), [
+                'moneda_id' => (int) ($l->moneda_id ?: 1),
+                'cotizacion' => (float) ($l->cotizacion ?: 1),
                 'sku' => optional($l->articulos)->sku ?? '',
                 'descripcion' => optional($l->articulos)->nombre ?? '',
                 'deposito_nombre' => optional($l->depositos)->nombre ?? '',
@@ -17,6 +65,7 @@
                 'articulo_stock_id' => $l->articulo_stock_id,
                 'articulo_stock_sku' => optional($l->articulo_stock)->sku ?? '',
                 'skualternativo' => optional($l->articulos)->skualternativo ?? '',
+                'maneja_parte_unica' => RecepcionProveedorParteUnicaSupport::articuloManejaParteUnica($l->articulos),
             ]);
         })->values()->all();
     }
@@ -32,19 +81,23 @@
             <input type="text" class="form-control" readonly value="{{ optional($recepcion->ordencompras)->numeroordencompra ?? '' }}">
             <input type="hidden" name="ordencompra_id" value="{{ $recepcion->ordencompra_id ?? '' }}">
         @else
-            <div class="input-group">
-                <input type="number" id="numero_oc_buscar" class="form-control" placeholder="Número OC" min="1">
-                <div class="input-group-append">
-                    <button type="button" class="btn btn-info" id="btn-cargar-oc"><i class="fa fa-search"></i> Cargar OC</button>
-                </div>
-            </div>
+            <input type="number"
+                   id="numero_oc_buscar"
+                   name="numero_oc_buscar"
+                   class="form-control"
+                   placeholder="Número OC"
+                   min="1"
+                   value="{{ old('numero_oc_buscar', $numeroOcBuscar) }}"
+                   autofocus
+                   title="Enter o Tab para cargar la orden de compra">
+            <small class="form-text text-muted">Enter o Tab para cargar la OC.</small>
             <input type="hidden" name="ordencompra_id" id="ordencompra_id" value="{{ old('ordencompra_id', $recepcion->ordencompra_id ?? '') }}">
         @endif
     </div>
     <label class="col-lg-2 col-form-label text-right">Proveedor</label>
     <div class="col-lg-4">
-        <input type="text" id="proveedor_nombre" class="form-control" readonly
-            value="{{ old('proveedor_nombre', optional(optional($recepcion)->proveedores)->nombre ?? '') }}">
+        <input type="text" id="proveedor_nombre" name="proveedor_nombre" class="form-control" readonly
+            value="{{ old('proveedor_nombre', $proveedorNombreForm ?: optional(optional($recepcion)->proveedores)->nombre ?? '') }}">
     </div>
 </div>
 
@@ -79,8 +132,8 @@
     'inputId' => 'recepcion_deposito_id',
     'inputName' => 'deposito_id',
     'depositoId' => $depositoCabeceraId,
-    'codigo' => $depositoCabecera->codigo ?? '',
-    'descripcion' => $depositoCabecera->nombre ?? '',
+    'codigo' => $depositoCabeceraCodigo,
+    'descripcion' => $depositoCabeceraNombre,
     'required' => false,
     'solo_lectura' => $soloLectura,
     'col_label' => 'col-lg-2 col-form-label text-right',
@@ -116,27 +169,99 @@
     @endif
 </div>
 <div class="table-responsive">
-    <table class="table table-sm table-bordered" id="tabla-items-recepcion">
+    <table class="table table-sm table-bordered table-recepcion-items-compact" id="tabla-items-recepcion">
         <thead class="thead-light">
             <tr>
-                <th>#</th>
-                <th>Artículo</th>
-                <th>Cant. OC</th>
-                <th>Cant. rec.</th>
-                <th>Coef.</th>
-                <th>Cant. stock</th>
-                <th>Precio OC</th>
-                <th>Precio rec.</th>
-                <th>Lista prov.</th>
-                <th>Depósito</th>
-                <th>Coment. precio</th>
-                <th></th>
+                <th class="col-num">#</th>
+                <th class="col-art">Art.</th>
+                <th class="col-desc">Descripci&oacute;n</th>
+                <th class="col-qty text-right" title="Cantidad OC">C.OC</th>
+                <th class="col-qty" title="Cantidad recibida">C.rec.</th>
+                <th class="col-coef text-right" title="Coeficiente">Coef.</th>
+                <th class="col-stk text-right" title="Cantidad stock">Stk.</th>
+                <th class="col-precio text-right" title="Precio OC">P.OC</th>
+                <th class="col-precio" title="Precio recibido">P.rec.</th>
+                <th class="col-mon" title="Moneda / cotizaci&oacute;n">Mon./Cot.</th>
+                <th class="col-dep" title="Dep&oacute;sito">Dep.</th>
+                <th class="col-acc"></th>
             </tr>
         </thead>
         <tbody id="tbody-items-recepcion">
         </tbody>
     </table>
 </div>
+
+<style>
+    #tabla-items-recepcion.table-recepcion-items-compact {
+        font-size: 0.8125rem;
+    }
+    #tabla-items-recepcion .col-num { width: 2.25rem; }
+    #tabla-items-recepcion .col-art { width: 11rem; min-width: 9rem; }
+    #tabla-items-recepcion .col-desc { min-width: 8rem; }
+    #tabla-items-recepcion .col-qty { width: 4.75rem; }
+    #tabla-items-recepcion .col-coef { width: 3.5rem; }
+    #tabla-items-recepcion .col-stk { width: 4.5rem; }
+    #tabla-items-recepcion .col-precio { width: 5.25rem; }
+    #tabla-items-recepcion .col-mon { width: 5rem; }
+    #tabla-items-recepcion .col-dep { width: 6.5rem; max-width: 8rem; }
+    #tabla-items-recepcion .col-acc { width: 2rem; }
+    #tabla-items-recepcion .input-coef-recepcion,
+    #tabla-items-recepcion .input-qty-recepcion,
+    #tabla-items-recepcion .input-precio-recepcion {
+        padding-left: 0.25rem;
+        padding-right: 0.25rem;
+    }
+    #tabla-items-recepcion .input-coef-recepcion {
+        width: 3.25rem;
+        min-width: 3.25rem;
+        max-width: 3.25rem;
+    }
+    #tabla-items-recepcion .input-qty-recepcion {
+        width: 4.5rem;
+        min-width: 4.5rem;
+        max-width: 4.5rem;
+    }
+    #tabla-items-recepcion .input-precio-recepcion {
+        width: 5rem;
+        min-width: 5rem;
+        max-width: 5rem;
+    }
+    #tabla-items-recepcion .celda-articulo-recepcion .codigoarticulo {
+        width: 6.5rem;
+        max-width: 12vw;
+    }
+    #tabla-items-recepcion .descripcionarticulo {
+        font-size: 0.78rem;
+    }
+    #tabla-items-recepcion .celda-moneda-cot-recepcion select,
+    #tabla-items-recepcion .celda-moneda-cot-recepcion .item-cotizacion {
+        width: 100%;
+        min-width: 0;
+        padding: 0.1rem 0.2rem;
+        font-size: 0.78rem;
+    }
+    #tabla-items-recepcion .celda-moneda-cot-recepcion .item-cotizacion {
+        margin-top: 0.15rem;
+    }
+    #tabla-items-recepcion .item-deposito-texto {
+        display: block;
+        font-size: 0.72rem;
+        line-height: 1.2;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 7.5rem;
+    }
+    #tabla-items-recepcion tr.item-recepcion-comentario-precio td {
+        border-top: none;
+        padding-top: 0;
+        padding-bottom: 0.35rem;
+    }
+    #tabla-items-recepcion tr.item-recepcion-comentario-precio .item-comentario-precio {
+        max-width: 28rem;
+        font-size: 0.8rem;
+    }
+</style>
 
 @if($recepcion && $recepcion->resumen_diferencias)
 <div class="alert alert-warning">
@@ -153,4 +278,8 @@
     window.recepcionProveedorSoloLectura = @json($soloLectura);
     window.recepcionProveedorId = @json($recepcion->id ?? null);
     window.recepcionProveedorDepositoCabeceraId = @json((int) $depositoCabeceraId ?: 0);
+    window.recepcionProveedorOrdencompraIdInicial = @json($ordencompraIdForm);
+    window.recepcionProveedorNumeroOcInicial = @json($numeroOcBuscar !== '' && $numeroOcBuscar !== null ? (int) $numeroOcBuscar : null);
+    window.recepcionProveedorMonedas = @json($moneda_query->map(static fn ($m) => ['id' => (int) $m->id, 'abreviatura' => (string) $m->abreviatura])->values());
 </script>
+@include('includes.stock.modalconsultaarticulo')

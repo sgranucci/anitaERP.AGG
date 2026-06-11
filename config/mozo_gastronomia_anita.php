@@ -17,6 +17,13 @@ return [
 
     'campos_listado' => 'vend_codigo, vend_nombre, vend_empresa',
 
+    'tabla_password' => 'mozopasswd',
+
+    'campos_password' => 'mozp_mozo, mozp_password',
+
+    /** Clave ERP cuando Anita no tiene fila en mozopasswd. */
+    'clave_default' => env('MOZO_GASTRONOMIA_CLAVE_DEFAULT', '12345'),
+
     'mapeo' => [
         ['origen' => 'vend_codigo', 'destino' => 'codigo', 'transform' => 'codigo_anita'],
         ['origen' => 'vend_nombre', 'destino' => 'nombre', 'transform' => 'trim'],

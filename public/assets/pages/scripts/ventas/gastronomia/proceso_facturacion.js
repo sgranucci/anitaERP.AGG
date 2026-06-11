@@ -384,6 +384,30 @@
         return false;
     }
 
+    /** Aviso informativo tras emisión exitosa (p. ej. contingencia CAEA): solo toast, sin modal Enter. */
+    function esAvisoInformativoPostEmision(msg) {
+        const s = String(msg || '').trim();
+        if (!s) return false;
+        return /modo caea|contingencia arca|no se consult[aó] el web service en línea/i.test(s);
+    }
+
+    /** Waitry: ítems con opcionales de fórmula — toast liviano; el modal de opcionales sigue el flujo normal. */
+    function esAvisoInformativoOpcionalesWaitry(msg) {
+        const s = String(msg || '').trim();
+        if (!s) return false;
+        return /opcionales|modal de opcionales|requiere opcionales de fórmula|complete los consumos con opcionales/i.test(
+            s,
+        );
+    }
+
+    function tieneOpcionalesPendientesWaitry(data) {
+        if (!data) return false;
+        if (Array.isArray(data.skus_opcionales_pendientes) && data.skus_opcionales_pendientes.length) {
+            return true;
+        }
+        return !!data.requiere_carga_opcionales_en_pos;
+    }
+
     function formatearTextoAviso(msg) {
         return String(msg || '')
             .replace(/\s{2,}/g, ' ')
@@ -474,20 +498,26 @@
 
     function toast(msg, type, opciones) {
         const t = type || 'info';
-        if (opciones && opciones.persistente) {
-            mostrarAvisoPersistente(msg, t, opciones);
+        const opts = opciones || {};
+        if (opts.persistente) {
+            mostrarAvisoPersistente(msg, t, opts);
             return;
         }
-        if (debeUsarAvisoPersistente(msg, t)) {
-            mostrarAvisoPersistente(msg, t, opciones);
+        if (!opts.soloToast && debeUsarAvisoPersistente(msg, t)) {
+            mostrarAvisoPersistente(msg, t, opts);
             return;
         }
         if (window.toastr) {
-            const opts =
+            const baseToastr =
                 t === 'warning' || t === 'error'
                     ? { timeOut: 8000, extendedTimeOut: 4000, closeButton: true, progressBar: true }
                     : {};
-            toastr[t](msg, '', opts);
+            const toastrOpts = { ...baseToastr, ...opts };
+            delete toastrOpts.soloToast;
+            delete toastrOpts.persistente;
+            delete toastrOpts.titulo;
+            delete toastrOpts.detalle;
+            toastr[t](msg, '', toastrOpts);
         } else {
             alert(msg);
         }
@@ -610,13 +640,14 @@
         }
         const warn = data && String(data.warn || '').trim();
         if (warn) {
-            if (debeUsarAvisoPersistente(warn, 'warning')) {
+            const soloToast = esAvisoInformativoPostEmision(warn);
+            if (!soloToast && debeUsarAvisoPersistente(warn, 'warning')) {
                 mostrarAvisoPersistente(warn, 'warning', {
                     titulo: 'Factura emitida — revisar avisos',
                     detalle: factura ? 'Comprobante: ' + factura : '',
                 });
             } else {
-                toast(warn, 'warning');
+                toast(warn, 'warning', soloToast ? { soloToast: true } : undefined);
             }
         }
         toast(txt, 'success');
@@ -628,8 +659,10 @@
             (data && String(data.mensaje || '').trim()) ||
             (id ? 'Cuenta Waitry #' + id + ' importada correctamente.' : 'Cuenta Waitry importada correctamente.');
         const warn = data && String(data.warn || '').trim();
-        if (warn) {
-            toast(warn, 'warning');
+        const opcionalesPendientes = tieneOpcionalesPendientesWaitry(data);
+        if (warn && !opcionalesPendientes) {
+            const soloToast = esAvisoInformativoOpcionalesWaitry(warn);
+            toast(warn, 'warning', soloToast ? { soloToast: true } : undefined);
         }
         toast(txt, 'success');
     }
@@ -670,12 +703,9 @@
         if (!skus.length || !cuentaId) return;
 
         toast(
-            'La orden Waitry incluye artículos con opcionales que deben cargarse en el POS (no vienen del tótem). ' +
-                'Complete: ' +
-                skus.join(', ') +
-                '.',
+            'Complete en el POS los opcionales de: ' + skus.join(', ') + '.',
             'warning',
-            { timeOut: 12000, extendedTimeOut: 6000, closeButton: true, progressBar: true },
+            { soloToast: true, timeOut: 10000, extendedTimeOut: 5000, closeButton: true, progressBar: true },
         );
 
         for (const sku of skus) {
@@ -2384,6 +2414,66 @@
 
     const TOLERANCIA_MONTO_COBRANZA = 0.02;
 
+    function ajustarMediosPagoAlTotal(medios, totalEsperado) {
+        if (!medios || !medios.length || !(totalEsperado > 0)) {
+            return medios || [];
+        }
+        let suma = 0;
+        medios.forEach((m) => {
+            const cot = m.cotizacion || cotizacionFilaCobranza(m.moneda_id);
+            suma += m.monto * coeficienteAPesos(m.moneda_id, cot);
+        });
+        suma = Math.round(suma * 100) / 100;
+        totalEsperado = Math.round(totalEsperado * 100) / 100;
+        const diff = Math.round((totalEsperado - suma) * 100) / 100;
+        if (Math.abs(diff) <= 0.001 || Math.abs(diff) > TOLERANCIA_MONTO_COBRANZA) {
+            return medios;
+        }
+        const copia = medios.map((m) => Object.assign({}, m));
+        const ultimo = copia.length - 1;
+        const monId = parseInt(copia[ultimo].moneda_id || MONEDA_PESOS_ID, 10);
+        const cot = copia[ultimo].cotizacion || cotizacionFilaCobranza(monId);
+        if (monId <= MONEDA_PESOS_ID) {
+            copia[ultimo].monto = Math.round((copia[ultimo].monto + diff) * 100) / 100;
+        } else if (monId > MONEDA_PESOS_ID) {
+            copia[ultimo].monto = Math.round((copia[ultimo].monto + diff / Math.max(cot, 0.0001)) * 100) / 100;
+        } else {
+            copia[ultimo].monto = Math.round((copia[ultimo].monto + diff * Math.max(cot, 0.0001)) * 100) / 100;
+        }
+        return copia;
+    }
+
+    function sincronizarUltimoMontoCobranzaConTotal(totalEsperado) {
+        const rows = document.querySelectorAll('#tbody-gastro-cuenta-table tr');
+        if (!rows.length || !(totalEsperado > 0)) {
+            return;
+        }
+        let totalFilas = 0;
+        rows.forEach((row) => {
+            totalFilas += montoCobranzaEnArs(row);
+        });
+        const diff = Math.round((totalEsperado - totalFilas) * 100) / 100;
+        if (Math.abs(diff) <= 0.001 || Math.abs(diff) > TOLERANCIA_MONTO_COBRANZA) {
+            return;
+        }
+        const tr = rows[rows.length - 1];
+        const montoInp = tr.querySelector('.monto');
+        if (!montoInp) {
+            return;
+        }
+        const monId = parseInt(tr.querySelector('.moneda_id')?.value || MONEDA_PESOS_ID, 10);
+        const val = parseFloat(montoInp.value || '0');
+        const coef = coeficienteAPesos(monId, cotizacionFilaCobranza(monId));
+        if (monId <= MONEDA_PESOS_ID) {
+            montoInp.value = (val + diff).toFixed(2);
+        } else if (monId > MONEDA_PESOS_ID) {
+            montoInp.value = (val + diff / Math.max(coef, 0.0001)).toFixed(2);
+        } else {
+            montoInp.value = (val + diff * Math.max(coef, 0.0001)).toFixed(2);
+        }
+        sumarMontosCobranza();
+    }
+
     function cotizacionFilaCobranza(monId) {
         return monId > MONEDA_PESOS_ID && cotizacionExtranjera.monedaId === monId
             ? cotizacionExtranjera.cotizacion
@@ -3003,6 +3093,8 @@
     }
 
     let canjePremioValidado = null;
+    /** Comentarios de cocina opcionales por artículo antes de aplicar el canje (articulo_id → texto). */
+    let canjePremioComentariosPorArticulo = {};
     /** Tras confirmar cupón: apertura de cuenta libre + aplicar automático al quedar abierta. */
     let canjePremioEsperaApertura = false;
     /** Oculto temporalmente mientras se eligen opcionales de fórmula (no resetear validación). */
@@ -3014,6 +3106,7 @@
     function resetModalCanjePremio(limpiarValidacion) {
         if (limpiarValidacion !== false) {
             canjePremioValidado = null;
+            canjePremioComentariosPorArticulo = {};
             canjePremioEsperaApertura = false;
             canjePremioUltimoCodigoValidado = '';
         }
@@ -3125,18 +3218,46 @@
         const itemsUl = document.getElementById('gastro-canje-premio-items');
         if (itemsUl && items.length) {
             itemsUl.innerHTML = items
-                .map(
-                    (it) =>
-                        '<li>' +
-                        (it.sku || '') +
-                        ' — ' +
-                        (it.descripcion || '') +
+                .map((it) => {
+                    const aid = String(parseInt(it.articulo_id, 10) || '');
+                    const comentarioCocina = (canjePremioComentariosPorArticulo[aid] || '').trim();
+                    const btnComentarioClass = comentarioCocina
+                        ? 'btn btn-sm btn-info py-0 px-2 ml-1 btn-gastro-comentario-cocina-canje-premio'
+                        : 'btn btn-sm btn-outline-info py-0 px-2 ml-1 btn-gastro-comentario-cocina-canje-premio';
+                    const btnComentarioTitle = comentarioCocina
+                        ? 'Comentario cocina: ' + comentarioCocina
+                        : 'Agregar comentario para cocina';
+                    const articuloTxt = (it.sku || '') + ' — ' + (it.descripcion || '');
+                    const comentarioHtml = comentarioCocina
+                        ? '<br><small class="text-info"><i class="fas fa-utensils"></i> ' +
+                          escaparHtmlOpcional(comentarioCocina) +
+                          '</small>'
+                        : '';
+                    return (
+                        '<li class="d-flex align-items-start flex-wrap mb-1">' +
+                        '<span class="flex-grow-1">' +
+                        escaparHtmlOpcional(articuloTxt) +
                         ' × ' +
                         (parseFloat(it.cantidad) || 0) +
                         ' (' +
                         (it.puntos || 0) +
-                        ' pts)</li>',
-                )
+                        ' pts)' +
+                        comentarioHtml +
+                        '</span>' +
+                        '<button type="button" class="' +
+                        btnComentarioClass +
+                        '" data-articulo-id="' +
+                        escaparHtmlOpcional(aid) +
+                        '" data-articulo-texto="' +
+                        escaparHtmlOpcional(articuloTxt) +
+                        '" data-comentario="' +
+                        escaparHtmlOpcional(comentarioCocina) +
+                        '" title="' +
+                        escaparHtmlOpcional(btnComentarioTitle) +
+                        '" aria-label="Comentario para cocina"><i class="fas fa-utensils"></i></button>' +
+                        '</li>'
+                    );
+                })
                 .join('');
             if (itemsWrap) itemsWrap.classList.remove('d-none');
         }
@@ -3424,6 +3545,9 @@
             if (opcionalesPorArticulo && Object.keys(opcionalesPorArticulo).length) {
                 payload.opcionales_por_articulo = opcionalesPorArticulo;
             }
+            if (canjePremioComentariosPorArticulo && Object.keys(canjePremioComentariosPorArticulo).length) {
+                payload.comentarios_por_articulo = canjePremioComentariosPorArticulo;
+            }
             const data = await api('/ventas/gastronomia/api/aplicar-ticket-canje-premio', {
                 method: 'POST',
                 headers: hdrJson(),
@@ -3595,6 +3719,17 @@
         if (btnConfirmar) {
             btnConfirmar.addEventListener('click', () => void confirmarCanjePremio());
             btnConfirmar.addEventListener('keydown', manejarEnterModalCanjePremio);
+        }
+
+        const prevCanjePremio = document.getElementById('gastro-canje-premio-preview');
+        if (prevCanjePremio) {
+            prevCanjePremio.addEventListener('click', (e) => {
+                const btn = e.target.closest('.btn-gastro-comentario-cocina-canje-premio');
+                if (btn) {
+                    e.preventDefault();
+                    abrirModalComentarioCocinaCanjePremio(btn);
+                }
+            });
         }
 
         if (typeof $ !== 'undefined') {
@@ -4545,7 +4680,7 @@
                 },
             );
             detenerRotacionMensajesProceso();
-            if (data.errores && data.errores.length) {
+            if (data.errores && data.errores.length && !tieneOpcionalesPendientesWaitry(data)) {
                 const detalleItems = data.errores.join(' · ');
                 if (!data.warn) {
                     data.warn = detalleItems;
@@ -4554,6 +4689,7 @@
                 }
             }
             await seleccionarCuenta(data.cuenta_id);
+            setFacturacionLoading(false);
             mostrarResultadoImportacionWaitry(data, identificadorImport);
             await cargarPendientesOpcionalesTrasImportWaitry(data);
             void cargarOrdenesWaitry({ refresh: true });
@@ -4562,11 +4698,10 @@
             const det = e.payload && e.payload.errores ? e.payload.errores.join(' · ') : '';
             const msg = (e.message || 'Error al importar') + (det ? ': ' + det : '');
             if (e.payload && e.payload.requiere_carga_opcionales_en_pos) {
-                mostrarAvisoPersistente(
-                    msg +
-                        ' Abra una cuenta libre (mozo/cubiertos) y cargue el artículo con el modal de opcionales del POS.',
+                toast(
+                    msg + ' Cargue el artículo con el modal de opcionales del POS.',
                     'warning',
-                    { titulo: 'Waitry: solo artículos con opcionales' },
+                    { soloToast: true, timeOut: 10000, extendedTimeOut: 5000, closeButton: true, progressBar: true },
                 );
             } else {
                 toast(msg, 'error');
@@ -5149,11 +5284,43 @@
     }
 
     let lineaComentarioCocinaId = null;
+    let canjePremioComentarioArticuloId = null;
+
+    function abrirModalComentarioCocinaCanjePremio(btn) {
+        if (bloquearOperacionPosPorJornadaTurno()) {
+            return;
+        }
+        const aid = (btn.getAttribute('data-articulo-id') || '').trim();
+        if (!aid) {
+            return;
+        }
+        lineaComentarioCocinaId = null;
+        canjePremioComentarioArticuloId = aid;
+        const articuloTxt = (btn.getAttribute('data-articulo-texto') || '').trim();
+        const fld = document.getElementById('fld-comentario-cocina');
+        const lbl = document.getElementById('modal-comentario-cocina-articulo');
+        if (lbl) {
+            lbl.textContent = articuloTxt || 'Artículo del canje';
+        }
+        if (fld) {
+            fld.value = btn.getAttribute('data-comentario') || '';
+        }
+        mostrarModalBootstrap('modal-comentario-cocina', {
+            onShown: function () {
+                if (fld) {
+                    fld.focus();
+                    fld.select();
+                }
+            },
+            apilar: true,
+        });
+    }
 
     function abrirModalComentarioCocina(btn) {
         if (bloquearOperacionPosPorJornadaTurno()) {
             return;
         }
+        canjePremioComentarioArticuloId = null;
         lineaComentarioCocinaId = btn.getAttribute('data-linea');
         const tr = btn.closest('tr');
         const articuloTxt = tr && tr.cells[1] ? tr.cells[1].textContent.trim().split('\n')[0] : '';
@@ -5180,11 +5347,28 @@
         if (bloquearOperacionPosPorJornadaTurno()) {
             return;
         }
+        const fld = document.getElementById('fld-comentario-cocina');
+        const comentario = fld ? String(fld.value || '').trim() : '';
+
+        if (canjePremioComentarioArticuloId) {
+            const aid = String(canjePremioComentarioArticuloId);
+            if (comentario) {
+                canjePremioComentariosPorArticulo[aid] = comentario;
+            } else {
+                delete canjePremioComentariosPorArticulo[aid];
+            }
+            canjePremioComentarioArticuloId = null;
+            $('#modal-comentario-cocina').modal('hide');
+            if (canjePremioValidado) {
+                pintarPreviewCanjePremio(canjePremioValidado);
+            }
+            toast(comentario ? 'Comentario de cocina guardado.' : 'Comentario de cocina quitado.', 'success');
+            return;
+        }
+
         if (!cuentaId || !lineaComentarioCocinaId) {
             return;
         }
-        const fld = document.getElementById('fld-comentario-cocina');
-        const comentario = fld ? String(fld.value || '').trim() : '';
         try {
             const data = await api(`/ventas/gastronomia/api/cuenta/${cuentaId}/linea/${lineaComentarioCocinaId}`, {
                 method: 'PATCH',
@@ -6048,6 +6232,11 @@
                     mediosPago = [];
                 }
                 setTotalFacturadoArs(montoArs > 0 ? montoArs : IMPORTE_MINIMO_FACTURA);
+            }
+            if (!esCortesia && mediosPago.length && montoArs > 0) {
+                mediosPago = ajustarMediosPagoAlTotal(mediosPago, montoArs);
+                sincronizarUltimoMontoCobranzaConTotal(montoArs);
+                mediosPago = recogerMediosPagoFromGrid();
             }
             iniciarRotacionMensajesProceso(mensajesProcesoEmision(cuenta));
             const tInicioEmisionMs = performance.now();

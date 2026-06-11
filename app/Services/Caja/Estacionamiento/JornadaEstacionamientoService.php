@@ -2,7 +2,11 @@
 
 namespace App\Services\Caja\Estacionamiento;
 
+use App\Models\Caja\Estacionamiento\CuentaEstacionamiento;
+use App\Models\Caja\RendicionEstacionamientoCaja;
+use App\Services\Caja\RendicionEstacionamientoAnitaSyncService;
 use App\Models\Caja\Estacionamiento\JornadaEstacionamiento;
+use App\Models\Caja\Estacionamiento\TurnoOperativoEstacionamiento;
 use App\Models\Caja\Estacionamiento\VentaEstacionamientoEmision;
 use App\Repositories\Caja\Estacionamiento\JornadaEstacionamientoRepositoryInterface;
 use Carbon\Carbon;
@@ -82,6 +86,19 @@ final class JornadaEstacionamientoService
 
         $ultimaJornada = $this->jornadaRepository->ultimaJornadaPorEmpresa($empresaId);
         $fechasApertura = $this->fechasSugeridasApertura($ultimaJornada);
+        $fechaJornadaMinimaAbrir = $abierta !== null ? null : $fechasApertura['minima'];
+        $fechaJornadaSugeridaAbrir = $abierta !== null && $abierta->fecha_jornada !== null
+            ? $abierta->fecha_jornada->format('Y-m-d')
+            : $fechasApertura['sugerida'];
+        $cuentasAbiertasConItems = $abierta !== null
+            ? $this->contarCuentasAbiertasConItemsPorEmpresa($empresaId)
+            : 0;
+        $cuentasAbiertasVacias = $abierta !== null
+            ? $this->contarCuentasAbiertasVaciasPorEmpresa($empresaId)
+            : 0;
+        $ticketsPendientesIngreso = $abierta !== null
+            ? app(EstacionamientoTurnoOperativoService::class)->contarTicketsPendientesIngresoJornada($empresaId, $abierta)
+            : 0;
 
         return [
             'empresa_id' => $empresaId,
@@ -94,8 +111,9 @@ final class JornadaEstacionamientoService
             'fecha_factura_hoy' => $hoy,
             'fecha_factura_hoy_fmt' => $this->formatearFechaEncabezado($hoy),
             'apertura_en' => $abierta?->apertura_en?->format('d/m/Y H:i'),
-            'fecha_jornada_minima_abrir' => $fechasApertura['minima'],
-            'fecha_jornada_sugerida_abrir' => $fechasApertura['sugerida'],
+            'fecha_jornada_minima_abrir' => $fechaJornadaMinimaAbrir,
+            'fecha_jornada_maxima_abrir' => $hoy,
+            'fecha_jornada_sugerida_abrir' => $fechaJornadaSugeridaAbrir,
             'usuario_apertura' => $abierta?->usuarioApertura?->nombre,
             'observacion_apertura' => $abierta?->observacion_apertura,
             'puede_abrir' => $abierta === null,
@@ -106,6 +124,18 @@ final class JornadaEstacionamientoService
             'errores_cierre' => $abierta !== null
                 ? $this->erroresAntesDeCerrar($empresaId)
                 : [],
+            'turnos_habilitados' => $abierta !== null
+                ? $this->detalleTurnosHabilitadosJornada($empresaId, $abierta)
+                : [],
+            'nota_politica_turnos' => EstacionamientoTurnoOperativoService::requiereHabilitacionTurno()
+                ? 'Cada turno que se habilitó en la jornada debe cerrarse antes de cerrar la jornada '
+                    .'(en su terminal o con cierre remoto en Saneamiento). '
+                    .'No es obligatorio que todas las PCs habiliten el último turno del día: '
+                    .'las terminales que operan solo algunos turnos no bloquean por no haber abierto los restantes.'
+                : null,
+            'cuentas_abiertas_con_items' => $cuentasAbiertasConItems,
+            'cuentas_abiertas_vacias' => $cuentasAbiertasVacias,
+            'tickets_pendientes_ingreso' => $ticketsPendientesIngreso,
         ];
     }
 
@@ -125,6 +155,14 @@ final class JornadaEstacionamientoService
 
         $fecha = $this->normalizarFecha($fechaJornada, 'fecha de jornada');
         $fechaFmt = $this->formatearFechaHumana($fecha);
+        $hoy = Carbon::today()->format('Y-m-d');
+
+        if ($fecha > $hoy) {
+            throw new InvalidArgumentException(
+                'No puede abrir la jornada del '.$fechaFmt.': la fecha no puede ser posterior a hoy ('
+                .$this->formatearFechaHumana($hoy).').'
+            );
+        }
 
         $abierta = $this->jornadaAbierta($empresaId);
         if ($abierta !== null) {
@@ -205,32 +243,151 @@ final class JornadaEstacionamientoService
             throw new InvalidArgumentException(implode(' ', $errores));
         }
 
+        $vaciasAutoDescartadas = $this->autoDescartarCuentasAbiertasVaciasPorEmpresa($empresaId);
+
         $this->jornadaRepository->update([
             'estado' => JornadaEstacionamiento::ESTADO_CERRADA,
             'usuario_cierre_id' => Auth::id(),
             'cierre_en' => now(),
-            'observacion_cierre' => $this->limpiarObservacion($observacion),
+            'observacion_cierre' => $this->componerObservacionCierreJornada($observacion, $vaciasAutoDescartadas),
         ], (int) $jornada->id);
 
         return $this->jornadaRepository->findOrFail((int) $jornada->id);
     }
 
     /**
-     * Bloqueantes para cerrar la jornada. Se ampliará cuando exista facturación de estacionamiento.
+     * Bloqueantes para cerrar la jornada (misma política que gastronomía).
      *
      * @return list<string>
      */
     public function erroresAntesDeCerrar(int $empresaId): array
     {
-        $ventas = $this->contarVentasEstacionamientoJornadaAbierta($empresaId);
-        if ($ventas > 0) {
-            return [
-                'Hay '.$ventas.' comprobante(s) de estacionamiento pendiente(s) de cierre. '
-                .'Complete la operación de facturación antes de cerrar la jornada.',
-            ];
+        $errores = [];
+        $turnoService = app(EstacionamientoTurnoOperativoService::class);
+
+        $cuentasAbiertasConItems = $this->contarCuentasAbiertasConItemsPorEmpresa($empresaId);
+        if ($cuentasAbiertasConItems > 0) {
+            $errores[] = 'Hay '.$cuentasAbiertasConItems.' cuenta(s) ABIERTA(S) con ítems sin facturar. '
+                .'Factúrelas o ciérrelas sin facturar desde Caja → Estacionamiento → '
+                .'Saneamiento de turnos antes de cerrar la jornada. '
+                .'Las cuentas abiertas sin ítems se descartan automáticamente al cerrar la jornada.';
         }
 
-        return [];
+        $ticketsPendientes = $turnoService->contarTicketsPendientesIngresoJornada($empresaId);
+        if (EstacionamientoTurnoOperativoService::validarTicketsIngresoAlCerrar() && $ticketsPendientes > 0) {
+            $errores[] = 'Hay '.$ticketsPendientes.' ticket(s) con ingreso pendiente de facturar o anular. '
+                .'Resuélvalos desde el facturador o desde Caja → Estacionamiento → Saneamiento de turnos '
+                .'antes de cerrar la jornada.';
+        }
+
+        if (EstacionamientoTurnoOperativoService::requiereHabilitacionTurno()) {
+            $habilitados = $this->detalleTurnosHabilitadosJornada($empresaId);
+            if ($habilitados !== []) {
+                $detalle = collect($habilitados)
+                    ->map(fn (array $t) => $t['identificador_pc'].' ('.$t['turno_nombre'].')')
+                    ->implode(', ');
+                $errores[] = 'Hay '.count($habilitados).' turno(s) habilitado(s) sin cerrar: '.$detalle.'. '
+                    .'Cada turno que se abrió debe cerrarse (en su terminal o cierre remoto en Saneamiento). '
+                    .'Las PCs que no habilitaron turno en esta jornada no bloquean el cierre.';
+            }
+        }
+
+        return $errores;
+    }
+
+    /**
+     * @return list<array{
+     *   turno_operativo_id:int,
+     *   identificador_pc:string,
+     *   turno_nombre:string,
+     *   habilitacion_en:string,
+     *   con_actividad:bool
+     * }>
+     */
+    public function detalleTurnosHabilitadosJornada(int $empresaId, ?JornadaEstacionamiento $jornada = null): array
+    {
+        $jornada ??= $this->jornadaAbierta($empresaId);
+        if ($jornada === null) {
+            return [];
+        }
+
+        $turnoService = app(EstacionamientoTurnoOperativoService::class);
+
+        return TurnoOperativoEstacionamiento::query()
+            ->with('turno')
+            ->where('empresa_id', $empresaId)
+            ->where('jornada_estacionamiento_id', (int) $jornada->id)
+            ->where('estado', TurnoOperativoEstacionamiento::ESTADO_HABILITADO)
+            ->orderBy('identificador_pc')
+            ->get()
+            ->map(fn (TurnoOperativoEstacionamiento $t) => [
+                'turno_operativo_id' => (int) $t->id,
+                'identificador_pc' => (string) $t->identificador_pc,
+                'turno_nombre' => (string) ($t->turno?->nombre ?? ''),
+                'habilitacion_en' => $t->habilitacion_en?->format('d/m/Y H:i') ?? '',
+                'con_actividad' => $turnoService->terminalTuvoActividadEnJornada($t),
+            ])
+            ->values()
+            ->all();
+    }
+
+    public function contarCuentasAbiertasConItemsPorEmpresa(int $empresaId): int
+    {
+        if ($empresaId <= 0) {
+            return 0;
+        }
+
+        return CuentaEstacionamiento::query()
+            ->where('empresa_id', $empresaId)
+            ->where('estado', CuentaEstacionamiento::ESTADO_ABIERTA)
+            ->whereHas('lineas')
+            ->count();
+    }
+
+    public function contarCuentasAbiertasVaciasPorEmpresa(int $empresaId): int
+    {
+        if ($empresaId <= 0) {
+            return 0;
+        }
+
+        return CuentaEstacionamiento::query()
+            ->where('empresa_id', $empresaId)
+            ->where('estado', CuentaEstacionamiento::ESTADO_ABIERTA)
+            ->whereDoesntHave('lineas')
+            ->count();
+    }
+
+    public function autoDescartarCuentasAbiertasVaciasPorEmpresa(int $empresaId): int
+    {
+        if ($empresaId <= 0) {
+            return 0;
+        }
+
+        return CuentaEstacionamiento::query()
+            ->where('empresa_id', $empresaId)
+            ->where('estado', CuentaEstacionamiento::ESTADO_ABIERTA)
+            ->whereDoesntHave('lineas')
+            ->update(['estado' => CuentaEstacionamiento::ESTADO_CERRADA]);
+    }
+
+    private function componerObservacionCierreJornada(?string $observacion, int $vaciasAutoDescartadas): ?string
+    {
+        $partes = [];
+        $base = $this->limpiarObservacion($observacion);
+        if ($base !== null) {
+            $partes[] = $base;
+        }
+
+        if ($vaciasAutoDescartadas > 0) {
+            $partes[] = '[Auto '.now()->format('Y-m-d H:i').'] '.$vaciasAutoDescartadas
+                .' cuenta(s) abierta(s) sin ítems descartada(s) automáticamente al cerrar la jornada.';
+        }
+
+        if ($partes === []) {
+            return null;
+        }
+
+        return mb_substr(implode("\n", $partes), 0, 2000);
     }
 
     /**
@@ -243,6 +400,18 @@ final class JornadaEstacionamientoService
     public function resumenEliminacion(JornadaEstacionamiento $jornada): array
     {
         $ventas = $this->contarVentasEstacionamientoJornada($jornada);
+        $rendicionCaja = RendicionEstacionamientoCaja::query()
+            ->where('tipo', RendicionEstacionamientoCaja::TIPO_JORNADA)
+            ->where('jornada_estacionamiento_id', (int) $jornada->id)
+            ->exists();
+
+        if ($rendicionCaja) {
+            return [
+                'puede_eliminar' => false,
+                'motivo_no_eliminar' => 'No se puede eliminar: la jornada fue presentada en caja (rendición de tesorería). Elimine primero la rendición en Caja → Rendiciones estacionamiento.',
+                'ventas_estacionamiento' => $ventas,
+            ];
+        }
 
         if ($this->existeJornadaPosterior((int) $jornada->empresa_id, $jornada)) {
             return [
@@ -331,6 +500,13 @@ final class JornadaEstacionamientoService
             $errores[] = 'Hay una jornada abierta para esta empresa. No puede anular el cierre mientras exista otra jornada activa.';
         }
 
+        if (RendicionEstacionamientoCaja::query()
+            ->where('tipo', RendicionEstacionamientoCaja::TIPO_JORNADA)
+            ->where('jornada_estacionamiento_id', (int) $jornada->id)
+            ->exists()) {
+            $errores[] = 'La jornada tiene una rendición de tesorería en caja. Elimine la rendición antes de anular el cierre.';
+        }
+
         if ($this->existeJornadaPosterior((int) $jornada->empresa_id, $jornada)) {
             $errores[] = 'Ya existe una jornada posterior para esta empresa. No puede anular este cierre.';
         }
@@ -369,6 +545,8 @@ final class JornadaEstacionamientoService
                 'observacion_cierre' => null,
                 'observacion_apertura' => mb_substr($obsApertura, 0, 2000),
             ], (int) $jornada->id);
+
+            app(RendicionEstacionamientoAnitaSyncService::class)->resetTotalZPorPcEnJornada((int) $jornada->id);
 
             return $this->jornadaRepository->findOrFail((int) $jornada->id);
         });
@@ -439,16 +617,6 @@ final class JornadaEstacionamientoService
         return 'Error al procesar la jornada: '.$detalle;
     }
 
-    private function contarVentasEstacionamientoJornadaAbierta(int $empresaId): int
-    {
-        $jornada = $this->jornadaAbierta($empresaId);
-        if ($jornada === null) {
-            return 0;
-        }
-
-        return $this->contarVentasEstacionamientoJornada($jornada);
-    }
-
     private function contarVentasEstacionamientoJornada(JornadaEstacionamiento $jornada): int
     {
         return (int) VentaEstacionamientoEmision::query()
@@ -488,11 +656,9 @@ final class JornadaEstacionamientoService
             $minima = $ultimaJornada->fecha_jornada->copy()->addDay()->format('Y-m-d');
         }
 
-        $sugerida = $minima !== null && $minima > $hoy ? $minima : $hoy;
-
         return [
             'minima' => $minima,
-            'sugerida' => $sugerida,
+            'sugerida' => $hoy,
         ];
     }
 

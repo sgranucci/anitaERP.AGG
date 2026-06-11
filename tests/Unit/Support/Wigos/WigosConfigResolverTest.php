@@ -32,6 +32,7 @@ class WigosConfigResolverTest extends TestCase
         $this->assertSame([
             'http://serverwigosksaa:7788/WIGOS/AccountInfoJSON?trackdata=%s',
             'http://serverwigosksab:7788/WIGOS/AccountInfoJSON?trackdata=%s',
+            'http://serverwigosws:7788/WIGOS/AccountInfoJSON?trackdata=%s',
         ], $urls);
     }
 
@@ -81,6 +82,27 @@ class WigosConfigResolverTest extends TestCase
         $this->assertSame([
             'http://serverwigosrsaa:7788/WIGOS/AccountInfoJSON?trackdata=%s',
             'http://serverwigosrsab:7788/WIGOS/AccountInfoJSON?trackdata=%s',
+            'http://serverwigosws:7788/WIGOS/AccountInfoJSON?trackdata=%s',
         ], $urls);
+    }
+
+    public function test_empresa_con_account_info_url_explicita_prioriza_http(): void
+    {
+        config([
+            'wigos.account_info_url' => 'http://serverwigosws:7788/WIGOS/AccountInfoJSON?trackdata=%s',
+            'wigos.por_empresa' => [
+                3 => [
+                    'account_info_url' => 'http://serverwigosws:7788/WIGOS/AccountInfoJSON?trackdata=%s',
+                    'connections' => [
+                        'A' => ['host' => 'serverwigosrsaa'],
+                        'B' => ['host' => 'serverwigosrsab'],
+                    ],
+                ],
+            ],
+        ]);
+
+        $this->assertSame([
+            'http://serverwigosws:7788/WIGOS/AccountInfoJSON?trackdata=%s',
+        ], WigosConfigResolver::accountInfoUrls(3));
     }
 }

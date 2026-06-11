@@ -715,6 +715,11 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Ventas\ClienteVipGastronomiaRepositoryInterface',
+            'App\Repositories\Ventas\ClienteVipGastronomiaRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Ventas\AreaComandaGastronomiaRepositoryInterface',
             'App\Repositories\Ventas\AreaComandaGastronomiaRepository',
         );

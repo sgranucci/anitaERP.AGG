@@ -7,6 +7,9 @@ use App\Http\Controllers\Controller;
 use App\Models\Caja\Estacionamiento\TurnoOperativoEstacionamiento;
 use App\Models\Caja\Estacionamiento\VentaEstacionamientoEmision;
 use App\Models\Ventas\Venta;
+use App\Services\Caja\Estacionamiento\EstacionamientoFacturaMedioPagoService;
+use App\Services\Caja\Estacionamiento\EstacionamientoFacturaTicketService;
+use App\Services\Caja\Estacionamiento\EstacionamientoNotaCreditoService;
 use App\Services\Caja\Estacionamiento\EstacionamientoPvService;
 use App\Services\Caja\Estacionamiento\JornadaEstacionamientoService;
 use App\Services\Caja\Estacionamiento\EstacionamientoTurnoOperativoService;
@@ -23,6 +26,9 @@ class EstacionamientoFacturasDiaController extends Controller
         private readonly EstacionamientoPvService $pvService,
         private readonly JornadaEstacionamientoService $jornadaService,
         private readonly EstacionamientoTurnoOperativoService $turnoOperativoService,
+        private readonly EstacionamientoNotaCreditoService $notaCreditoService,
+        private readonly EstacionamientoFacturaTicketService $facturaTicketService,
+        private readonly EstacionamientoFacturaMedioPagoService $facturaMedioPagoService,
     ) {}
 
     public function index(Request $request)
@@ -45,11 +51,19 @@ class EstacionamientoFacturasDiaController extends Controller
             : [];
 
         $todasPc = $request->boolean('todas_pc');
-        $articuloSku = trim((string) $request->get('item_nombre', ''));
+        $itemNombre = trim((string) $request->get('item_nombre', ''));
+        $itemEstacionamientoId = (int) $request->get('item_estacionamiento_id', 0);
+        if ($itemEstacionamientoId <= 0) {
+            $itemEstacionamientoId = (int) $request->get('item_id', 0);
+        }
         $itemFiltro = EstacionamientoVentaDetalleSupport::resolverItemFiltro(
-            (int) $request->get('item_id', 0),
-            $articuloSku,
+            $itemEstacionamientoId,
+            $itemNombre,
+            $empresaId > 0 ? $empresaId : null,
         );
+        if ($itemFiltro !== null && $itemEstacionamientoId <= 0) {
+            $itemEstacionamientoId = (int) $itemFiltro->id;
+        }
 
         $perPage = (int) $request->input('per_page', 50);
         $perPage = max(10, min(200, $perPage));
@@ -83,8 +97,10 @@ class EstacionamientoFacturasDiaController extends Controller
             'empresa_id' => $empresaId > 0 ? $empresaId : null,
             'empresa_nombre' => $cfgPv?->empresa?->nombre,
             'todas_pc' => $todasPc,
-            'item_nombre' => $articuloSku,
+            'item_nombre' => $itemNombre,
             'item_filtro' => $itemFiltro,
+            'item_estacionamiento_id' => $itemEstacionamientoId > 0 ? $itemEstacionamientoId : null,
+            'items_selector' => EstacionamientoVentaDetalleSupport::itemsSelectorParaEmpresa($empresaId > 0 ? $empresaId : null),
             'jornada' => $jornada,
             'requiere_habilitacion_turno' => $requiereTurno,
             'turno_habilitado' => $turnoHabilitado,
@@ -151,10 +167,58 @@ class EstacionamientoFacturasDiaController extends Controller
         abort(404);
     }
 
+    public function generarNotaCredito(Request $request, int $ventaId)
+    {
+        can('generar-nota-credito-estacionamiento-facturas-dia');
 
+        $leyenda = trim((string) $request->input('leyenda', ''));
+        if (mb_strlen($leyenda) > 255) {
+            $leyenda = mb_substr($leyenda, 0, 255);
+        }
 
+        $resultado = $this->notaCreditoService->generarDesdeFactura($ventaId, $request, $leyenda);
 
+        if ($request->expectsJson() || $request->ajax()) {
+            if (! empty($resultado['ok'])) {
+                return response()->json($resultado);
+            }
 
+            return response()->json([
+                'ok' => false,
+                'error' => $resultado['error'] ?? 'No se pudo generar la nota de crédito.',
+            ], 422);
+        }
+
+        if (! empty($resultado['ok'])) {
+            return redirect()
+                ->route('estacionamiento_facturas_dia')
+                ->with('mensaje', $resultado['mensaje'] ?? 'Nota de crédito generada.');
+        }
+
+        return redirect()
+            ->back()
+            ->with('mensaje-error', $resultado['error'] ?? 'No se pudo generar la nota de crédito.');
+    }
+
+    public function reimprimirTicket(int $ventaId)
+    {
+        can('ver-factura-estacionamiento');
+
+        if (! VentaEstacionamientoEmision::query()->where('venta_id', $ventaId)->exists()) {
+            return response()->json(['ok' => false, 'error' => 'La venta no corresponde a una emisión estacionamiento.'], 404);
+        }
+
+        $resultado = $this->facturaTicketService->reimprimirTicketVenta($ventaId);
+
+        if (! empty($resultado['ok'])) {
+            return response()->json(['ok' => true, 'mensaje' => 'Ticket enviado a la impresora.']);
+        }
+
+        return response()->json([
+            'ok' => false,
+            'error' => $resultado['mensaje'] ?? 'No se pudo reimprimir el ticket.',
+        ], 422);
+    }
 
     public function ver(int $ventaId, Request $request)
     {
@@ -168,13 +232,14 @@ class EstacionamientoFacturasDiaController extends Controller
         $venta = Venta::query()
             ->with([
                 'clientes',
-                'venta_emisiones.articulos',
+                'venta_emisiones',
                 'venta_impuestos',
                 'caja_movimientos.cobranzas',
                 'cobranzasDirectas',
                 'puntoventas',
                 'monedas',
                 'tipotransacciones',
+                'asientos.asiento_movimientos.cuentacontables',
             ])
             ->findOrFail($ventaId);
 
@@ -187,13 +252,13 @@ class EstacionamientoFacturasDiaController extends Controller
         $itemFiltroId = (int) request()->get('item_id', 0);
 
         $esComprobanteNc = $meta->venta_factura_origen_id !== null;
-        $ncVentaId = null;
-        if (! $esComprobanteNc) {
-            $ncVentaId = VentaEstacionamientoEmision::query()
-                ->where('venta_factura_origen_id', $ventaId)
-                ->value('venta_id');
-            $ncVentaId = $ncVentaId ? (int) $ncVentaId : null;
-        }
+        $ncVentaId = $esComprobanteNc
+            ? null
+            : EstacionamientoNotaCreditoService::notaCreditoExistenteParaFactura($ventaId);
+
+        $tipoFactura = $venta->tipotransacciones;
+        $esFacturaVenta = ! $esComprobanteNc
+            && (! $tipoFactura || $tipoFactura->signo === 'S');
 
         $pc = EstacionamientoIdentificadorPc::resolver($request);
         $requiereTurno = EstacionamientoTurnoOperativoService::requiereHabilitacionTurno();
@@ -203,6 +268,16 @@ class EstacionamientoFacturasDiaController extends Controller
             $turnoHabilitado = $this->turnoOperativoService->turnoHabilitadoEnPc($pc) !== null;
         }
 
+        $puedeNc = can('generar-nota-credito-estacionamiento-facturas-dia', false)
+            && $esFacturaVenta
+            && (float) ($venta->total ?? 0) >= 0.01
+            && $ncVentaId === null
+            && (! $requiereTurno || $turnoHabilitado);
+
+        $puedeCambiarMedioPago = can('cambiar-medio-pago-estacionamiento-facturas-dia', false)
+            && $cobranzas->isNotEmpty()
+            && ! $esComprobanteNc;
+
         return view('caja.estacionamiento.facturas_dia.ver', [
             'meta' => $meta,
             'venta' => $venta,
@@ -210,15 +285,69 @@ class EstacionamientoFacturasDiaController extends Controller
             'itemsFacturados' => $itemsFacturados,
             'cobranzaMedios' => $cobranzaMedios,
             'item_filtro_id' => $itemFiltroId,
-            'puede_nc' => false,
+            'puede_nc' => $puedeNc,
             'nc_venta_id' => $ncVentaId,
             'es_comprobante_nc' => $esComprobanteNc,
             'requiere_habilitacion_turno' => $requiereTurno,
             'turno_habilitado' => $turnoHabilitado,
             'url_habilitacion_turno' => route('estacionamiento_habilitacion_turno'),
             'identificador_pc' => $pc,
-            'puede_cambiar_medio_pago' => false,
+            'puede_cambiar_medio_pago' => $puedeCambiarMedioPago,
         ]);
+    }
+
+    public function apiMediosPagoCambio(int $ventaId)
+    {
+        can('cambiar-medio-pago-estacionamiento-facturas-dia');
+
+        $resultado = $this->facturaMedioPagoService->datosParaCambio($ventaId);
+
+        if (! ($resultado['ok'] ?? false)) {
+            return response()->json($resultado, 422);
+        }
+
+        return response()->json($resultado);
+    }
+
+    public function apiCuentacajaPorCodigo(int $ventaId, string $codigo)
+    {
+        can('cambiar-medio-pago-estacionamiento-facturas-dia');
+
+        $resultado = $this->facturaMedioPagoService->cuentaPorCodigo($ventaId, $codigo);
+        if ((int) ($resultado['id'] ?? 0) <= 0) {
+            return response()->json($resultado, 422);
+        }
+
+        return response()->json($resultado);
+    }
+
+    public function actualizarMediosPago(Request $request, int $ventaId)
+    {
+        can('cambiar-medio-pago-estacionamiento-facturas-dia');
+
+        $request->validate([
+            'cambios' => 'required|array|min:1',
+            'cambios.*.caja_movimiento_cuentacaja_id' => 'required|integer|min:1',
+            'cambios.*.cuentacaja_id' => 'required|integer|min:1',
+            'cambios.*.monto' => 'nullable|numeric',
+        ]);
+
+        $resultado = $this->facturaMedioPagoService->aplicarCambio(
+            $ventaId,
+            array_values($request->input('cambios', [])),
+        );
+
+        if (! ($resultado['ok'] ?? false)) {
+            return response()->json($resultado, 422);
+        }
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json($resultado);
+        }
+
+        return redirect()
+            ->route('estacionamiento_facturas_dia_ver', ['ventaId' => $ventaId])
+            ->with('mensaje', $resultado['mensaje'] ?? 'Medio de pago actualizado.');
     }
 
 
@@ -226,7 +355,7 @@ class EstacionamientoFacturasDiaController extends Controller
 
 
     /**
-     * @param  object{id:int,sku:string,descripcion:string}|null  $itemFiltro
+     * @param  object{id:int,nombre:string}|null  $itemFiltro
      */
     private function registrosFacturasDiaQuery(Request $request, ?object $itemFiltro = null): Builder
     {
@@ -294,14 +423,7 @@ class EstacionamientoFacturasDiaController extends Controller
         });
 
         if ($itemFiltro !== null) {
-            $q->whereHas('venta', function ($vq) use ($itemFiltro) {
-                $vq->whereHas('venta_emisiones', function ($e) use ($itemFiltro) {
-                    $nombre = (string) ($itemFiltro->nombre ?? '');
-                    if ($nombre !== '') {
-                        $e->where('detalle', 'like', '%'.addcslashes($nombre, '%_\\').'%');
-                    }
-                });
-            });
+            EstacionamientoVentaDetalleSupport::aplicarFiltroItemEnEmisionesQuery($q, $itemFiltro);
         }
 
         if ($busqueda !== '') {
@@ -322,7 +444,7 @@ class EstacionamientoFacturasDiaController extends Controller
     /**
      * Totales del listado filtrado (todos los registros, no solo la página visible).
      *
-     * @param  object{id:int,sku:string,descripcion:string}|null  $itemFiltro
+     * @param  object{id:int,nombre:string}|null  $itemFiltro
      * @return array{
      *   cantidad_comprobantes:int,
      *   cantidad_facturas:int,

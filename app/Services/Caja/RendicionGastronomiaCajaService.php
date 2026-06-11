@@ -14,6 +14,7 @@ use App\Support\Ventas\GastronomiaJornadaComprobantePermiso;
 use App\Support\Ventas\GastronomiaTurnoMediosContadoCierreSupport;
 use App\Support\Ventas\GastronomiaJornadaNumeracionComprobanteSupport;
 use App\Support\Ventas\GastronomiaTurnoObservacionHabilitacionSupport;
+use App\Services\Ventas\Gastronomia\GastronomiaCierreTotemInformeZService;
 use App\Support\Ventas\GastronomiaTurnoOperativoTotalesSupport;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -29,6 +30,7 @@ class RendicionGastronomiaCajaService
     public function __construct(
         private readonly RendicionGastronomiaAnitaSyncService $anitaSyncService,
         private readonly RendicionGastronomiaJornadaPresentacionService $jornadaPresentacionService,
+        private readonly GastronomiaCierreTotemInformeZService $informeZService,
     ) {
     }
 
@@ -318,6 +320,11 @@ class RendicionGastronomiaCajaService
             'informe_z_cargado' => (bool) ($marcadores['informe_z_cargado'] ?? false),
             'informe_z_en' => $marcadores['informe_z_en'] ?? null,
             'usuario_informe_z' => $marcadores['usuario_informe_z'] ?? null,
+            'informe_z_plantilla' => $marcadores['informe_z_plantilla'] ?? null,
+            'informe_z_precarga_automatica' => (bool) ($marcadores['informe_z_precarga_automatica'] ?? false),
+            'informe_z_ajustado_en_caja' => (bool) ($marcadores['informe_z_ajustado_en_caja'] ?? false),
+            'informe_z_ajuste_caja_en' => $marcadores['informe_z_ajuste_caja_en'] ?? null,
+            'informe_z_ajuste_caja_usuario' => $marcadores['informe_z_ajuste_caja_usuario'] ?? null,
             'conciliacion_informe_z' => $marcadores['conciliacion_informe_z'] ?? null,
             'tolerancia_informe_z' => (float) ($marcadores['tolerancia_informe_z'] ?? 0.02),
             'sin_cierre_totem_jornada' => (bool) ($marcadores['sin_cierre_totem_jornada'] ?? false),
@@ -623,9 +630,8 @@ class RendicionGastronomiaCajaService
             'medios_contado_cierre' => $mediosContado,
             'movimientos' => $movimientos,
             'movimientos_desde_contado_cierre' => $mediosContado !== null,
-            'turno_sin_actividad' => $movimientos === []
-                && round((float) ($totales['total_cobrado'] ?? 0), 2) <= self::TOLERANCIA
-                && round((float) ($totales['total_ventas'] ?? 0), 2) <= self::TOLERANCIA,
+            'turno_sin_actividad' => ! $this->tieneMovimientosMedioPago($movimientos)
+                && round((float) ($totales['total_cobrado'] ?? 0), 2) <= self::TOLERANCIA,
             'url_comprobante_cierre' => can('ver-comprobante-cierre-turno-gastronomia', false)
                 ? route('gastronomia_cierre_turno_comprobante_cierre', ['id' => $turno->id, 'inline' => 1])
                 : '',
@@ -960,6 +966,7 @@ class RendicionGastronomiaCajaService
 
         $rendicion = RendicionGastronomiaCaja::create($cabecera);
         $this->persistirMovimientos($rendicion, $movimientos);
+        $this->persistirInformeZAjustadoDesdeCaja($jornadaId, $cabecera['informe_z_totems'] ?? null);
 
         DB::afterCommit(function () use ($jornadaId) {
             $this->anitaSyncService->reaplicarTotalZPorPcEnJornada($jornadaId);
@@ -1021,6 +1028,7 @@ class RendicionGastronomiaCajaService
 
             if ($tipo === RendicionGastronomiaCaja::TIPO_JORNADA) {
                 $jornadaId = (int) ($cabecera['jornada_gastronomia_id'] ?? $rendicion->jornada_gastronomia_id ?? 0);
+                $this->persistirInformeZAjustadoDesdeCaja($jornadaId, $cabecera['informe_z_totems'] ?? null);
                 DB::afterCommit(function () use ($jornadaId) {
                     $this->anitaSyncService->reaplicarTotalZPorPcEnJornada($jornadaId);
                 });
@@ -1164,12 +1172,27 @@ class RendicionGastronomiaCajaService
         if ($tipo === RendicionGastronomiaCaja::TIPO_JORNADA) {
             $cabecera['jornada_gastronomia_id'] = (int) ($validated['jornada_gastronomia_id'] ?? 0);
             $cabecera['turno_operativo_gastronomia_id'] = null;
+            if (! empty($validated['informe_z_totems']) && is_array($validated['informe_z_totems'])) {
+                $cabecera['informe_z_totems'] = $validated['informe_z_totems'];
+            }
         } else {
             $cabecera['turno_operativo_gastronomia_id'] = (int) ($validated['turno_operativo_gastronomia_id'] ?? 0);
             $cabecera['jornada_gastronomia_id'] = null;
         }
 
         return $cabecera;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>|null  $totemsPayload
+     */
+    private function persistirInformeZAjustadoDesdeCaja(int $jornadaId, ?array $totemsPayload): void
+    {
+        if ($jornadaId <= 0 || $totemsPayload === null || $totemsPayload === []) {
+            return;
+        }
+
+        $this->informeZService->guardarInformeZAjustadoDesdeCaja($jornadaId, ['totems' => $totemsPayload]);
     }
 
     /**
@@ -1312,28 +1335,43 @@ class RendicionGastronomiaCajaService
     }
 
     /**
-     * Turnos sin facturación ni cobranzas (p. ej. habilitación sin ventas) pueden rendirse sin filas de medio.
+     * Turnos sin cobranzas (p. ej. solo invitaciones $0,01, habilitación sin ventas o solo NC) pueden rendirse sin filas de medio.
      *
      * @param  array<string, mixed>  $cabecera
-     * @param  list<array{cuentacaja_id:int, monto:float, cotizacion:float}>  $movimientos
+     * @param  list<array{cuentacaja_id?:int, es_nota_credito?:bool, monto?:float, cotizacion?:float}>  $movimientos
      */
     private function exigirMovimientosSiHayCobranzasEnTurno(array $cabecera, array $movimientos): void
     {
-        if ($movimientos !== []) {
+        if ($this->tieneMovimientosMedioPago($movimientos)) {
             return;
         }
 
         $totalCobrado = round((float) ($cabecera['totalcobrado'] ?? 0), 2);
-        $totalFactura = round((float) ($cabecera['totalfactura'] ?? 0), 2);
-        $totalNc = round((float) ($cabecera['totalnotacredito'] ?? 0), 2);
 
-        if ($totalCobrado > self::TOLERANCIA
-            || $totalFactura > self::TOLERANCIA
-            || $totalNc > self::TOLERANCIA) {
+        if ($totalCobrado > self::TOLERANCIA) {
             throw new InvalidArgumentException(
-                'El cierre de turno tiene totales distintos de cero pero no hay medios de pago en la rendición. '
+                'El cierre de turno tiene cobranzas registradas pero no hay medios de pago en la rendición. '
                 .'Vuelva a cargar el cierre (Consultar) o revise los importes.'
             );
         }
+    }
+
+    /**
+     * Filas reales de medio de cobro (excluye la fila virtual de notas de crédito).
+     *
+     * @param  list<array{cuentacaja_id?:int, es_nota_credito?:bool}>  $movimientos
+     */
+    private function tieneMovimientosMedioPago(array $movimientos): bool
+    {
+        foreach ($movimientos as $row) {
+            if (! empty($row['es_nota_credito'])) {
+                continue;
+            }
+            if ((int) ($row['cuentacaja_id'] ?? 0) > 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

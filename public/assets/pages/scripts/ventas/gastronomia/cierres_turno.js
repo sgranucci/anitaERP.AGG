@@ -4,10 +4,8 @@
     var cfg = window.CIERRES_TURNO_GASTRONOMIA || {};
     var apiUrl = cfg.urlApiComprobantes || '';
     var modalContext = { tipo: '', id: 0, page: 1 };
-
-    if (!apiUrl || typeof window.GastronomiaTotalesTurnoRender === 'undefined') {
-        return;
-    }
+    var tieneRender = typeof window.GastronomiaTotalesTurnoRender !== 'undefined';
+    var puedeComprobantes = !!(apiUrl && tieneRender);
 
     if (cfg.urlFacturaVerBase) {
         window.GASTRONOMIA_FACTURA_VER_BASE = cfg.urlFacturaVerBase;
@@ -154,6 +152,7 @@
         cargarPagina(1);
     }
 
+    if (puedeComprobantes) {
     document.querySelectorAll('.js-ver-comprobantes-cierre').forEach(function (btn) {
         btn.addEventListener('click', function () {
             var tipo = btn.getAttribute('data-tipo') || '';
@@ -641,7 +640,264 @@
         }
     }
 
-    if (window.CIERRE_TURNO_VER && parseInt(window.CIERRE_TURNO_VER.id, 10) > 0) {
+    if (window.CIERRE_TURNO_VER && parseInt(window.CIERRE_TURNO_VER.id, 10) > 0 && puedeComprobantes) {
         initPaginaVerCierre(window.CIERRE_TURNO_VER);
+    }
+
+    } // puedeComprobantes
+
+    var arqueoCtx = { turnoId: 0, referencia: '' };
+
+    function mostrarAlertaCorregirArqueo(el, mensaje) {
+        if (!el) {
+            return;
+        }
+        if (!mensaje) {
+            el.classList.add('d-none');
+            el.textContent = '';
+            return;
+        }
+        el.textContent = mensaje;
+        el.classList.remove('d-none');
+    }
+
+    function setCorregirArqueoFormHabilitado(habilitado) {
+        var btn = document.getElementById('btn-guardar-correccion-arqueo');
+        if (btn) {
+            btn.disabled = !habilitado;
+            btn.classList.toggle('d-none', !habilitado);
+        }
+        var cardAjustes = document.getElementById('corregir-arqueo-ajustes-card');
+        if (cardAjustes) {
+            cardAjustes.classList.toggle('d-none', !habilitado);
+        }
+        var motivoWrap = document.getElementById('corregir-arqueo-motivo-wrap');
+        if (motivoWrap) {
+            motivoWrap.classList.toggle('d-none', !habilitado);
+        }
+        ['corregir-redondeo-invitaciones', 'corregir-redondeo-turno', 'corregir-sobrante-faltante', 'corregir-arqueo-motivo']
+            .forEach(function (id) {
+                var el = document.getElementById(id);
+                if (el) {
+                    el.disabled = !habilitado;
+                }
+            });
+        var root = document.getElementById('modal-corregir-arqueo-medios');
+        if (root) {
+            root.querySelectorAll('.js-medio-contado-cierre').forEach(function (inp) {
+                inp.disabled = !habilitado;
+                inp.readOnly = !habilitado;
+            });
+        }
+    }
+
+    function pintarModalCorregirArqueo(data) {
+        var conc = document.getElementById('modal-corregir-arqueo-conciliacion');
+        var medios = document.getElementById('modal-corregir-arqueo-medios');
+        var errEl = document.getElementById('modal-corregir-arqueo-error');
+        var bloqEl = document.getElementById('modal-corregir-arqueo-bloqueo');
+        var tit = document.getElementById('modal-corregir-arqueo-titulo');
+        var sub = document.getElementById('modal-corregir-arqueo-subtitulo');
+        var puedeEditar = !!(cfg.puedeCorregirArqueo && data.puede_corregir);
+
+        mostrarAlertaCorregirArqueo(errEl, '');
+        if (puedeEditar) {
+            mostrarAlertaCorregirArqueo(bloqEl, '');
+        } else if (data.bloqueo_mensaje) {
+            mostrarAlertaCorregirArqueo(bloqEl, 'No se puede modificar: ' + data.bloqueo_mensaje);
+        } else {
+            mostrarAlertaCorregirArqueo(bloqEl, 'No se puede modificar el arqueo en este momento.');
+        }
+
+        if (tit) {
+            tit.textContent = (puedeEditar ? 'Corregir arqueo — ' : 'Arqueo (solo lectura) — ')
+                + (data.referencia || '');
+        }
+        if (sub) {
+            sub.textContent = data.referencia || '';
+        }
+
+        var inpRi = document.getElementById('corregir-redondeo-invitaciones');
+        var inpRt = document.getElementById('corregir-redondeo-turno');
+        var inpSf = document.getElementById('corregir-sobrante-faltante');
+        var inpMot = document.getElementById('corregir-arqueo-motivo');
+        if (inpRi) {
+            inpRi.value = String(data.redondeo_invitaciones != null ? data.redondeo_invitaciones : 0);
+        }
+        if (inpRt) {
+            inpRt.value = String(data.redondeo_turno != null ? data.redondeo_turno : 0);
+        }
+        if (inpSf) {
+            inpSf.value = String(data.sobrante_faltante != null ? data.sobrante_faltante : 0);
+        }
+        if (inpMot) {
+            inpMot.value = '';
+        }
+
+        if (tieneRender) {
+            var totales = data.totales_turno || {};
+            if (conc) {
+                conc.innerHTML = window.GastronomiaTotalesTurnoRender.renderConciliacionHtml(totales);
+            }
+            if (medios) {
+                medios.innerHTML = window.GastronomiaTotalesTurnoRender.renderTotalMediosPagoFinalHtml(
+                    totales,
+                    null,
+                    {
+                        arqueoMediosCierre: true,
+                        arqueoSoloLectura: !puedeEditar,
+                        modoEdicionArqueo: puedeEditar,
+                        cuentacaja_efectivo_id: data.cuentacaja_efectivo_id || 0,
+                    }
+                );
+                if (puedeEditar) {
+                    window.GastronomiaTotalesTurnoRender.enlazarArqueoMediosCierre(medios);
+                }
+            }
+        } else if (conc) {
+            conc.innerHTML = '<div class="alert alert-danger small mb-0">No se pudo renderizar el arqueo.</div>';
+        }
+
+        setCorregirArqueoFormHabilitado(puedeEditar);
+    }
+
+    function cargarModalCorregirArqueo(turnoId, referencia) {
+        if (!cfg.urlApiArqueoCierre || turnoId <= 0) {
+            return;
+        }
+
+        arqueoCtx.turnoId = turnoId;
+        arqueoCtx.referencia = referencia || '';
+
+        var conc = document.getElementById('modal-corregir-arqueo-conciliacion');
+        var medios = document.getElementById('modal-corregir-arqueo-medios');
+        if (conc) {
+            conc.innerHTML = '<p class="text-muted small"><i class="fa fa-spinner fa-spin"></i> Cargando…</p>';
+        }
+        if (medios) {
+            medios.innerHTML = '';
+        }
+        setCorregirArqueoFormHabilitado(false);
+
+        if (typeof jQuery !== 'undefined') {
+            jQuery('#modal-corregir-arqueo-cierre').modal('show');
+        }
+
+        getJson(cfg.urlApiArqueoCierre + '?id=' + encodeURIComponent(String(turnoId)))
+            .then(function (res) {
+                if (!res.ok || !res.data.ok) {
+                    pintarModalCorregirArqueo({
+                        referencia: referencia,
+                        puede_corregir: false,
+                        bloqueo_mensaje: (res.data && res.data.error) || 'No se pudo cargar el arqueo.',
+                        totales_turno: {},
+                    });
+                    return;
+                }
+                pintarModalCorregirArqueo(res.data);
+            })
+            .catch(function (err) {
+                pintarModalCorregirArqueo({
+                    referencia: referencia,
+                    puede_corregir: false,
+                    bloqueo_mensaje: err.message || 'Error de comunicación.',
+                    totales_turno: {},
+                });
+            });
+    }
+
+    function guardarCorreccionArqueo() {
+        if (!cfg.urlApiCorregirArqueoCierre || arqueoCtx.turnoId <= 0) {
+            return;
+        }
+
+        var errEl = document.getElementById('modal-corregir-arqueo-error');
+        mostrarAlertaCorregirArqueo(errEl, '');
+
+        var motivo = (document.getElementById('corregir-arqueo-motivo') || {}).value || '';
+        if (!String(motivo).trim()) {
+            mostrarAlertaCorregirArqueo(errEl, 'Indique el motivo de la corrección.');
+            return;
+        }
+
+        var root = document.getElementById('modal-corregir-arqueo-medios');
+        var medios = window.GastronomiaTotalesTurnoRender
+            ? window.GastronomiaTotalesTurnoRender.recolectarMediosContadoCierreDesdeRoot(root)
+            : [];
+
+        var payload = {
+            turno_operativo_id: arqueoCtx.turnoId,
+            redondeo_invitaciones: (document.getElementById('corregir-redondeo-invitaciones') || {}).value,
+            redondeo_turno: (document.getElementById('corregir-redondeo-turno') || {}).value,
+            sobrante_faltante: (document.getElementById('corregir-sobrante-faltante') || {}).value,
+            motivo: motivo,
+            medios_contado: medios,
+            _token: cfg.csrfToken || '',
+        };
+
+        var btn = document.getElementById('btn-guardar-correccion-arqueo');
+        if (btn) {
+            btn.disabled = true;
+        }
+
+        fetch(cfg.urlApiCorregirArqueoCierre, {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-TOKEN': cfg.csrfToken || '',
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify(payload),
+        })
+            .then(function (r) {
+                return r.json().then(function (j) {
+                    return { ok: r.ok, data: j };
+                });
+            })
+            .then(function (res) {
+                if (!res.ok || !res.data.ok) {
+                    mostrarAlertaCorregirArqueo(errEl, (res.data && res.data.error) || 'No se pudo guardar.');
+                    if (btn) {
+                        btn.disabled = false;
+                    }
+                    return;
+                }
+                if (typeof jQuery !== 'undefined') {
+                    jQuery('#modal-corregir-arqueo-cierre').modal('hide');
+                }
+                if (typeof window.toastr !== 'undefined') {
+                    window.toastr.success(res.data.mensaje || 'Corrección guardada.');
+                } else {
+                    alert(res.data.mensaje || 'Corrección guardada.');
+                }
+                if (window.location.pathname.indexOf('/cierres-turno/cierre/') >= 0) {
+                    window.location.reload();
+                }
+            })
+            .catch(function (err) {
+                mostrarAlertaCorregirArqueo(errEl, err.message || 'Error de comunicación.');
+                if (btn) {
+                    btn.disabled = false;
+                }
+            });
+    }
+
+    if (cfg.puedeCorregirArqueo) {
+        document.querySelectorAll('.js-corregir-arqueo-cierre').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var id = parseInt(btn.getAttribute('data-id'), 10);
+                if (id <= 0) {
+                    return;
+                }
+                cargarModalCorregirArqueo(id, btn.getAttribute('data-referencia') || '');
+            });
+        });
+
+        var btnGuardar = document.getElementById('btn-guardar-correccion-arqueo');
+        if (btnGuardar) {
+            btnGuardar.addEventListener('click', guardarCorreccionArqueo);
+        }
     }
 })();

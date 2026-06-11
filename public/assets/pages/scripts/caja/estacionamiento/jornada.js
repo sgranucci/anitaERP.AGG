@@ -111,10 +111,29 @@
         }
     }
 
+    function fechaMaximaJornadaAbrir() {
+        var fechaInput = document.getElementById('fecha_jornada_abrir');
+        if (fechaInput && fechaInput.max) {
+            return fechaInput.max;
+        }
+        var d = new Date();
+        var m = String(d.getMonth() + 1).padStart(2, '0');
+        var day = String(d.getDate()).padStart(2, '0');
+        return d.getFullYear() + '-' + m + '-' + day;
+    }
+
     if (puedeAbrir && btnAbrir) {
         btnAbrir.addEventListener('click', function () {
             var fechaInput = document.getElementById('fecha_jornada_abrir');
             var obsInput = document.getElementById('observacion_abrir');
+            var fechaVal = fechaInput ? fechaInput.value : '';
+            var fechaMax = fechaMaximaJornadaAbrir();
+
+            if (fechaVal && fechaVal > fechaMax) {
+                alertar('La fecha de jornada no puede ser posterior a hoy (' + fechaMax + ').', true);
+                return;
+            }
+
             btnAbrir.disabled = true;
 
             postJson(apiAbrir, {
@@ -282,7 +301,7 @@
                 if (jornadaId <= 0) {
                     return;
                 }
-                if (!window.confirm('¿Eliminar la jornada del ' + fecha + ' (#' + jornadaId + ')? Solo si no tiene movimientos.')) {
+                if (!window.confirm('¿Eliminar la apertura del ' + fecha + ' (#' + jornadaId + ')?\n\nSolo permitido si la jornada no tiene movimientos (comprobantes ni turnos).')) {
                     return;
                 }
 

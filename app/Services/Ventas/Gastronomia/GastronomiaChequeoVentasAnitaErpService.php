@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Services\Ventas\Gastronomia;
 
 use App\ApiAnita;
+use App\Models\Configuracion\Empresa;
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\Venta_Impuesto;
+use App\Support\Ventas\KandikoAnitaVentaTipoSupport;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 
@@ -45,7 +47,7 @@ final class GastronomiaChequeoVentasAnitaErpService
             throw new \InvalidArgumentException('Fecha de jornada inválida: '.$fechaJornada);
         }
 
-        $anitaPorClave = $this->listarCabecerasAnitaPorJornada($sucursal, $fechaEntera);
+        $anitaPorClave = $this->listarCabecerasAnitaPorJornada($sucursal, $fechaEntera, $puntoventa);
         $ventasErp = $this->listarVentasErpPorJornada($puntoventaId, $fechaJornada);
 
         $filas = [];
@@ -150,7 +152,7 @@ final class GastronomiaChequeoVentasAnitaErpService
     /**
      * @return array<string, object>
      */
-    private function listarCabecerasAnitaPorJornada(int $sucursal, int $fechaEntera): array
+    private function listarCabecerasAnitaPorJornada(int $sucursal, int $fechaEntera, ?Puntoventa $puntoventa = null): array
     {
         $api = new ApiAnita;
         $where = " WHERE ven_sucursal = '".$sucursal."'"
@@ -182,6 +184,16 @@ final class GastronomiaChequeoVentasAnitaErpService
         }
 
         $lista = $parsed['filas'];
+        $empresaCodigo = $puntoventa !== null
+            ? Empresa::query()->whereKey($puntoventa->empresa_id)->value('codigo')
+            : null;
+        $aliasFakAFac = $puntoventa !== null
+            && KandikoAnitaVentaTipoSupport::debeUsarTipoVentaAlterno(
+                KandikoAnitaVentaTipoSupport::TIPO_NUMERADOR,
+                (string) $puntoventa->codigo,
+                $empresaCodigo,
+                $puntoventa->modofacturacion ?? null,
+            );
 
         $map = [];
         foreach ($lista as $fila) {
@@ -191,6 +203,9 @@ final class GastronomiaChequeoVentasAnitaErpService
                 continue;
             }
             $map[$tipo.'-'.$nro] = $fila;
+            if ($aliasFakAFac && $tipo === KandikoAnitaVentaTipoSupport::TIPO_VENTA_BRIDGE) {
+                $map[KandikoAnitaVentaTipoSupport::TIPO_NUMERADOR.'-'.$nro] = $fila;
+            }
         }
 
         return $map;
@@ -244,7 +259,8 @@ final class GastronomiaChequeoVentasAnitaErpService
             }
 
             [$tipo, $nroStr] = explode('-', $clave, 2);
-            $consulta = $this->consultarCabeceraAnitaPorComprobante($sucursal, $tipo, (int) $nroStr);
+            $tipoAnita = $this->tipoAnitaConsultaDesdeErp($tipo, $puntoventa);
+            $consulta = $this->consultarCabeceraAnitaPorComprobante($sucursal, $tipoAnita, (int) $nroStr);
             if ($consulta['error_lectura'] !== null) {
                 $conteo['error']++;
                 $fila = $this->filaBase($venta, $clave, null);
@@ -418,7 +434,7 @@ final class GastronomiaChequeoVentasAnitaErpService
         $sucursal = $this->sucursalDesdeCodigoPuntoventa((string) $puntoventa->codigo);
         $fechaEntera = (int) str_replace('-', '', $fechaJornada);
 
-        $anitaPorClave = $this->listarCabecerasAnitaPorJornada($sucursal, $fechaEntera);
+        $anitaPorClave = $this->listarCabecerasAnitaPorJornada($sucursal, $fechaEntera, $puntoventa);
         $ventasErp = $this->listarVentasErpPorJornada($puntoventaId, $fechaJornada);
 
         return $ventasErp->filter(function (Venta $venta) use ($anitaPorClave): bool {
@@ -492,13 +508,14 @@ final class GastronomiaChequeoVentasAnitaErpService
         $sucursal = $this->sucursalDesdeCodigoPuntoventa((string) $puntoventa->codigo);
 
         return $this->listarVentasErpPorFechaCalendario($puntoventaId, $fechaCalendario)
-            ->filter(function (Venta $venta) use ($sucursal): bool {
+            ->filter(function (Venta $venta) use ($sucursal, $puntoventa): bool {
                 $clave = $this->claveComprobanteDesdeVenta($venta);
                 if ($clave === null) {
                     return false;
                 }
                 [$tipo, $nroStr] = explode('-', $clave, 2);
-                $consulta = $this->consultarCabeceraAnitaPorComprobante($sucursal, $tipo, (int) $nroStr);
+                $tipoAnita = $this->tipoAnitaConsultaDesdeErp($tipo, $puntoventa);
+                $consulta = $this->consultarCabeceraAnitaPorComprobante($sucursal, $tipoAnita, (int) $nroStr);
                 if ($consulta['error_lectura'] !== null) {
                     Log::warning('gastronomia.chequeo_anita.omitir_faltante_lectura_fallida', [
                         'venta_id' => $venta->id,
@@ -611,8 +628,21 @@ final class GastronomiaChequeoVentasAnitaErpService
 
         [$tipo, $nroStr] = explode('-', $clave, 2);
         $sucursal = $this->sucursalDesdeCodigoPuntoventa((string) $puntoventa->codigo);
+        $tipoAnita = $this->tipoAnitaConsultaDesdeErp($tipo, $puntoventa);
 
-        return $this->consultarCabeceraAnitaPorComprobante($sucursal, $tipo, (int) $nroStr, $letra);
+        return $this->consultarCabeceraAnitaPorComprobante($sucursal, $tipoAnita, (int) $nroStr, $letra);
+    }
+
+    private function tipoAnitaConsultaDesdeErp(string $tipoErp, Puntoventa $puntoventa): string
+    {
+        $empresaCodigo = Empresa::query()->whereKey($puntoventa->empresa_id)->value('codigo');
+
+        return KandikoAnitaVentaTipoSupport::tipoVentaAnitaBridge(
+            $tipoErp,
+            (string) $puntoventa->codigo,
+            $empresaCodigo,
+            $puntoventa->modofacturacion ?? null,
+        );
     }
 
     /**

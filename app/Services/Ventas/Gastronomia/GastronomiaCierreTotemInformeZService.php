@@ -49,9 +49,59 @@ final class GastronomiaCierreTotemInformeZService
     }
 
     /**
+     * Ajuste del Informe Z al presentar la jornada en caja (Z físico Waitry distinto al precargado).
+     *
      * @param  array<string, mixed>  $payload  totems: [{totem_id, lineas: [{tipo_waitry, monto}]}]
      * @return array<string, mixed>
      */
+    public function guardarInformeZAjustadoDesdeCaja(int $jornadaId, array $payload): array
+    {
+        $cierre = $this->cierrePorJornada($jornadaId);
+        $previo = is_array($cierre->informe_z_json) ? $cierre->informe_z_json : [];
+        $empresaId = (int) $cierre->empresa_id;
+
+        if (! $this->payloadDifiereMontosInformeZ($previo, $payload, $empresaId)) {
+            return [
+                'ok' => true,
+                'sin_cambios' => true,
+                'conciliacion' => $previo['conciliacion'] ?? null,
+            ];
+        }
+
+        $resultado = $this->guardarInformeZ($jornadaId, $payload);
+
+        $cierre->refresh();
+        $informeZ = is_array($cierre->informe_z_json) ? $cierre->informe_z_json : [];
+
+        if (! empty($previo['origen'])) {
+            $informeZ['origen'] = $previo['origen'];
+        }
+        if (array_key_exists('precarga_automatica', $previo)) {
+            $informeZ['precarga_automatica'] = $previo['precarga_automatica'];
+        }
+        if (! empty($previo['informe_z_en'])) {
+            $informeZ['informe_z_gastronomia_en'] = $previo['informe_z_en'];
+            if (! empty($previo['usuario_nombre'])) {
+                $informeZ['usuario_gastronomia_nombre'] = $previo['usuario_nombre'];
+            }
+            if (! empty($previo['usuario_id'])) {
+                $informeZ['usuario_gastronomia_id'] = (int) $previo['usuario_id'];
+            }
+        }
+
+        $informeZ['ajustado_en_caja'] = true;
+        $informeZ['ajuste_caja_en'] = now()->format('Y-m-d H:i:s');
+        $informeZ['ajuste_caja_usuario_id'] = Auth::id();
+        $informeZ['ajuste_caja_usuario_nombre'] = Auth::user()?->nombre ?? '';
+
+        $cierre->informe_z_json = $informeZ;
+        $cierre->save();
+
+        $resultado['conciliacion'] = $informeZ['conciliacion'] ?? $resultado['conciliacion'] ?? null;
+
+        return $resultado;
+    }
+
     public function guardarInformeZ(int $jornadaId, array $payload): array
     {
         $cierre = $this->cierrePorJornada($jornadaId);
@@ -157,6 +207,24 @@ final class GastronomiaCierreTotemInformeZService
     }
 
     /**
+     * Informe Z al cerrar jornada desde Gastronomía: cada medio con monto Z = monto Sistema.
+     *
+     * @param  array{por_totem:list<array<string,mixed>>,total_general:array<string,mixed>}  $resumenSistema
+     * @return array<string, mixed>
+     */
+    public function construirInformeZAutomaticoDesdeSistema(int $empresaId, array $resumenSistema): array
+    {
+        $plantilla = WaitryInformeZConciliacionSupport::plantillaCarga($empresaId, $resumenSistema);
+        $plantilla = WaitryInformeZConciliacionSupport::precargarMontosInformeZDesdeSistema($plantilla);
+        $conciliacion = WaitryInformeZConciliacionSupport::conciliar($plantilla);
+        $informeZ = $this->armarInformeZDesdePlantilla($plantilla, $conciliacion);
+        $informeZ['precarga_automatica'] = true;
+        $informeZ['origen'] = 'sistema_automatico';
+
+        return $informeZ;
+    }
+
+    /**
      * @param  list<array<string, mixed>>  $plantilla
      * @param  array<string, mixed>  $conciliacion
      * @return array<string, mixed>
@@ -193,13 +261,15 @@ final class GastronomiaCierreTotemInformeZService
      */
     private function aplicarPayloadEnPlantilla(array $plantilla, array $totemsPayload, int $empresaId): array
     {
+        $montosUnificados = WaitryInformeZConciliacionSupport::acumularMontosInformeZDesdePayload($totemsPayload, $empresaId);
+
         $porClave = [];
         foreach ($totemsPayload as $t) {
             if (! is_array($t)) {
                 continue;
             }
             $tid = (int) ($t['totem_id'] ?? 0);
-            if ($tid <= 0) {
+            if ($tid < 0) {
                 continue;
             }
             $tableId = (int) ($t['waitry_table_id'] ?? 0);
@@ -211,15 +281,45 @@ final class GastronomiaCierreTotemInformeZService
 
         $salida = [];
         foreach ($plantilla as $bloque) {
+            $esUnificada = ! empty($bloque['plantilla_unificada']);
             $tid = (int) ($bloque['totem_id'] ?? 0);
             $tableId = (int) ($bloque['waitry_table_id'] ?? 0);
-            $payload = $porClave[$tid.':'.$tableId] ?? $porClave[(string) $tid] ?? null;
+            $payload = $esUnificada
+                ? null
+                : ($porClave[$tid.':'.$tableId] ?? $porClave[(string) $tid] ?? null);
             $lineasBase = [];
             foreach ($bloque['lineas'] ?? [] as $ln) {
                 $ccId = (int) ($ln['cuentacaja_id'] ?? 0);
                 if ($ccId > 0) {
                     $lineasBase[$ccId] = $ln;
                 }
+            }
+
+            if ($esUnificada) {
+                $lineasUnificadas = [];
+                foreach ($bloque['lineas'] ?? [] as $ln) {
+                    if (! is_array($ln)) {
+                        continue;
+                    }
+                    $tipo = WaitryMedioPagoCuentacajaSupport::tipoParaClaveMapaInformeZ($ln['tipo_waitry'] ?? null, $empresaId);
+                    $ccId = (int) ($ln['cuentacaja_id'] ?? 0);
+                    $montoZ = null;
+                    if ($tipo !== null && array_key_exists($tipo, $montosUnificados['tipos'])) {
+                        $montoZ = $montosUnificados['tipos'][$tipo];
+                    } elseif ($ccId > 0 && array_key_exists($ccId, $montosUnificados['cuentas'])) {
+                        $montoZ = $montosUnificados['cuentas'][$ccId];
+                    }
+                    if ($montoZ !== null) {
+                        $ln['monto_informe_z'] = $montoZ;
+                    } elseif (! array_key_exists('monto_informe_z', $ln) || $ln['monto_informe_z'] === null) {
+                        $ln['monto_informe_z'] = 0.0;
+                    }
+                    $lineasUnificadas[] = $ln;
+                }
+                $bloque['lineas'] = $lineasUnificadas;
+                $salida[] = $bloque;
+
+                continue;
             }
 
             if ($payload !== null) {
@@ -348,6 +448,189 @@ final class GastronomiaCierreTotemInformeZService
                 'cantidad_ordenes' => (int) ($b['cantidad_ordenes'] ?? 0),
             ], $resumenInformeZ['por_totem'] ?? []),
         ];
+    }
+
+    /**
+     * Repara Informe Z histórico: plantilla unificada, Z = Sistema por medio, conciliación en cero.
+     *
+     * @return array<string, mixed>
+     */
+    public function igualarInformeZConSistemaEnCierre(int $jornadaId, bool $persistir = true): array
+    {
+        $cierre = $this->cierrePorJornada($jornadaId);
+        $previo = is_array($cierre->informe_z_json) ? $cierre->informe_z_json : [];
+
+        $detalle = is_array($cierre->detalle_json) ? $cierre->detalle_json : [];
+        $empresaId = (int) $cierre->empresa_id;
+        $resumen = WaitryInformeZConciliacionSupport::resumenSistemaDesdeDetalleCierre($detalle, $empresaId);
+
+        $zAnterior = $this->totalMontosInformeZEnJson($previo);
+        $bloquesConcAnterior = count($previo['conciliacion']['totems'] ?? []);
+
+        $informeZ = $this->construirInformeZAutomaticoDesdeSistema($empresaId, $resumen);
+
+        if (! empty($previo['informe_z_en'])) {
+            $informeZ['informe_z_gastronomia_en'] = $previo['informe_z_en'];
+            $informeZ['informe_z_en'] = $previo['informe_z_en'];
+        }
+        if (! empty($previo['usuario_nombre'])) {
+            $informeZ['usuario_gastronomia_nombre'] = $previo['usuario_nombre'];
+            $informeZ['usuario_nombre'] = $previo['usuario_nombre'];
+        }
+        if (! empty($previo['usuario_id'])) {
+            $informeZ['usuario_gastronomia_id'] = (int) $previo['usuario_id'];
+            $informeZ['usuario_id'] = (int) $previo['usuario_id'];
+        }
+
+        unset($informeZ['ajustado_en_caja'], $informeZ['ajuste_caja_en'], $informeZ['ajuste_caja_usuario_id'], $informeZ['ajuste_caja_usuario_nombre']);
+
+        $informeZ['reparado_igualacion_sistema_en'] = now()->format('Y-m-d H:i:s');
+        $informeZ['origen'] = 'reparacion_igualacion_sistema';
+
+        $zNuevo = $this->totalMontosInformeZEnJson($informeZ);
+        $sistemaTotal = round((float) ($resumen['total_general']['total_ingreso'] ?? 0), 2);
+        $conciliacionOk = (bool) ($informeZ['conciliacion']['ok'] ?? false);
+        $bloquesConcNuevo = count($informeZ['conciliacion']['totems'] ?? []);
+        $lineasAnterior = $this->contarLineasInformeZ($previo);
+        $lineasNuevo = $this->contarLineasInformeZ($informeZ);
+        $requierePersistir = abs($zAnterior - $zNuevo) > 0.01
+            || ! $conciliacionOk
+            || $bloquesConcAnterior !== $bloquesConcNuevo
+            || $bloquesConcAnterior > 1
+            || $lineasAnterior !== $lineasNuevo;
+
+        if ($persistir && $requierePersistir) {
+            $detalle['resumen_informe_z'] = $resumen;
+            $cierre->detalle_json = $detalle;
+            $cierre->informe_z_json = $informeZ;
+            $cierre->save();
+        }
+
+        return [
+            'jornada_id' => $jornadaId,
+            'cierre_totem_id' => (int) $cierre->id,
+            'fecha_jornada' => $cierre->jornada?->fecha_jornada?->format('Y-m-d') ?? '',
+            'z_anterior' => round($zAnterior, 2),
+            'z_nuevo' => round($zNuevo, 2),
+            'sistema_total' => $sistemaTotal,
+            'conciliacion_ok' => $conciliacionOk,
+            'bloques_conciliacion_anterior' => $bloquesConcAnterior,
+            'bloques_conciliacion_nuevo' => $bloquesConcNuevo,
+            'persistido' => $persistir && $requierePersistir,
+            'sin_cambios' => ! $requierePersistir,
+        ];
+    }
+
+    /**
+     * Solo cierres de jornada ({@see CierreTotemJornadaGastronomia}); no toca turnos operativos.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function igualarInformeZConSistemaTodasLasJornadas(bool $persistir = true): array
+    {
+        $jornadaIds = CierreTotemJornadaGastronomia::query()
+            ->whereNotNull('informe_z_json')
+            ->whereHas('jornada', function ($q) {
+                $q->where('estado', JornadaGastronomia::ESTADO_CERRADA)
+                    ->whereNotNull('cierre_en');
+            })
+            ->orderBy('jornada_gastronomia_id')
+            ->pluck('jornada_gastronomia_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        $resultados = [];
+        foreach ($jornadaIds as $jornadaId) {
+            if ($jornadaId <= 0) {
+                continue;
+            }
+            try {
+                $resultados[] = $this->igualarInformeZConSistemaEnCierre($jornadaId, $persistir);
+            } catch (InvalidArgumentException $e) {
+                $resultados[] = [
+                    'jornada_id' => $jornadaId,
+                    'error' => $e->getMessage(),
+                ];
+            }
+        }
+
+        return $resultados;
+    }
+
+    /**
+     * @param  array<string, mixed>  $informeZ
+     */
+    /**
+     * @param  array<string, mixed>  $informeZ
+     */
+    private function contarLineasInformeZ(array $informeZ): int
+    {
+        $n = 0;
+        foreach ($informeZ['totems'] ?? [] as $t) {
+            if (! is_array($t)) {
+                continue;
+            }
+            foreach ($t['lineas'] ?? [] as $ln) {
+                if (! is_array($ln)) {
+                    continue;
+                }
+                $monto = (float) ($ln['monto'] ?? $ln['monto_informe_z'] ?? $ln['monto_sistema'] ?? 0);
+                if ($monto > 0.0001) {
+                    $n++;
+                }
+            }
+        }
+
+        return $n;
+    }
+
+    private function totalMontosInformeZEnJson(array $informeZ): float
+    {
+        $total = 0.0;
+        foreach ($informeZ['totems'] ?? [] as $t) {
+            if (! is_array($t)) {
+                continue;
+            }
+            foreach ($t['lineas'] ?? [] as $ln) {
+                if (! is_array($ln)) {
+                    continue;
+                }
+                $total += (float) ($ln['monto'] ?? $ln['monto_informe_z'] ?? 0);
+            }
+        }
+
+        return round($total, 2);
+    }
+
+    /**
+     * @param  array<string, mixed>  $informeZGuardado
+     * @param  array<string, mixed>  $payload
+     */
+    private function payloadDifiereMontosInformeZ(array $informeZGuardado, array $payload, int $empresaId): bool
+    {
+        $montosNuevos = WaitryInformeZConciliacionSupport::acumularMontosInformeZDesdePayload(
+            $payload['totems'] ?? [],
+            $empresaId,
+        );
+        $montosPrevios = WaitryInformeZConciliacionSupport::acumularMontosInformeZDesdePayload(
+            $informeZGuardado['totems'] ?? [],
+            $empresaId,
+        );
+
+        foreach (['cuentas', 'tipos'] as $clave) {
+            $prev = $montosPrevios[$clave] ?? [];
+            $nuevo = $montosNuevos[$clave] ?? [];
+            $todas = array_unique(array_merge(array_keys($prev), array_keys($nuevo)));
+            foreach ($todas as $k) {
+                $a = round((float) ($prev[$k] ?? 0), 2);
+                $b = round((float) ($nuevo[$k] ?? 0), 2);
+                if (abs($a - $b) > 0.001) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private function cierrePorJornada(int $jornadaId): CierreTotemJornadaGastronomia

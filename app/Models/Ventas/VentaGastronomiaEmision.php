@@ -15,7 +15,8 @@ class VentaGastronomiaEmision extends Model
     public $incrementing = false;
 
     protected $fillable = [
-        'venta_id', 'cuenta_gastronomia_id', 'waitry_order_id', 'waitry_comandas_json',
+        'venta_id', 'cuenta_gastronomia_id', 'cliente_vip_gastronomia_id', 'origen_pos',
+        'waitry_order_id', 'waitry_comandas_json',
         'cierre_jornada_proceso_lote', 'identificador_pc',
         'configuracion_puntoventa_gastronomia_id', 'venta_factura_origen_id',
     ];
@@ -33,6 +34,11 @@ class VentaGastronomiaEmision extends Model
     public function cuenta()
     {
         return $this->belongsTo(CuentaGastronomia::class, 'cuenta_gastronomia_id');
+    }
+
+    public function clienteVip()
+    {
+        return $this->belongsTo(ClienteVipGastronomia::class, 'cliente_vip_gastronomia_id');
     }
 
     public function configuracionPuntoventa()

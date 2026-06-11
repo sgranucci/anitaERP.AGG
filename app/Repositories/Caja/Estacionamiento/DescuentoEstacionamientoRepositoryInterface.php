@@ -10,4 +10,6 @@ interface DescuentoEstacionamientoRepositoryInterface extends RepositoryInterfac
     public function all();
 
     public function findPorCodigo(string $codigo): ?DescuentoEstacionamiento;
+
+    public function consultaDescuento(string $consulta): string;
 }

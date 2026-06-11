@@ -6,8 +6,8 @@ var GASTRONOMIA_MODAL_Z_BASE = 1050;
 var GASTRONOMIA_MODAL_Z_STEP = 20;
 
 function modalPadreAbiertoParaConsultaMozo() {
-    var $padre = $('#modal-abrir-cuenta');
-    return $padre.length > 0 && $padre.hasClass('show');
+    var $padre = $('#modal-abrir-cuenta, #modal-cm-login-mozo');
+    return $padre.length > 0 && $padre.filter('.show').length > 0;
 }
 
 function apilarConsultaMozoSobreModalPadre() {
@@ -32,7 +32,7 @@ function desapilarConsultaMozoModal() {
     if ($('.modal-backdrop').length) {
         $('.modal-backdrop').last().css('z-index', '');
     }
-    if ($('#modal-abrir-cuenta').hasClass('show')) {
+    if ($('#modal-abrir-cuenta, #modal-cm-login-mozo').filter('.show').length) {
         $('body').addClass('modal-open');
     }
 }
@@ -62,14 +62,50 @@ function empresaIdFacturacionGastronomia() {
     return '';
 }
 
+function urlConsultaMozoCanjeMarketing() {
+    if (typeof window.CANJE_MARKETING !== 'undefined'
+        && window.CANJE_MARKETING.tieneCfgPv
+        && window.CANJE_MARKETING.rutas
+        && window.CANJE_MARKETING.rutas.apiBase) {
+        return window.CANJE_MARKETING.rutas.apiBase.replace(/\/$/, '') + '/consulta-mozo';
+    }
+
+    return '';
+}
+
+function urlLeerMozoPorCodigoCanjeMarketing(codigo) {
+    var cod = String(codigo || '').trim();
+    if (!cod) {
+        return '';
+    }
+    if (typeof window.CANJE_MARKETING !== 'undefined'
+        && window.CANJE_MARKETING.tieneCfgPv
+        && window.CANJE_MARKETING.rutas
+        && window.CANJE_MARKETING.rutas.apiBase) {
+        return window.CANJE_MARKETING.rutas.apiBase.replace(/\/$/, '')
+            + '/mozo/leer-codigo/'
+            + encodeURIComponent(cod);
+    }
+
+    return '';
+}
+
+function esLoginMozoCanjeMarketing(ptrrenglon) {
+    return typeof window.CANJE_MARKETING !== 'undefined'
+        && window.CANJE_MARKETING.tieneCfgPv
+        && ptrrenglon
+        && $(ptrrenglon).closest('#modal-cm-login-mozo-mozo-wrap').length > 0;
+}
+
 function buscar_datos_mozo(consulta) {
     var data = { consulta: consulta || '' };
-    if (typeof window.GASTRONOMIA !== 'undefined') {
+    var urlCanje = urlConsultaMozoCanjeMarketing();
+    if (!urlCanje && typeof window.GASTRONOMIA !== 'undefined') {
         data.empresa_id = empresaIdFacturacionGastronomia();
     }
 
     $.ajax({
-        url: carpetaBase + '/ventas/mozo-gastronomia/consultamozo',
+        url: urlCanje || (carpetaBase + '/ventas/mozo-gastronomia/consultamozo'),
         type: 'POST',
         dataType: 'HTML',
         headers: {
@@ -99,7 +135,7 @@ $(document).on('keydown', 'input', function (e) {
     if (e.which !== 13) {
         return;
     }
-    if ($(this).closest('#modal-abrir-cuenta, #consultamozoModal').length) {
+    if ($(this).closest('#modal-abrir-cuenta, #modal-cm-login-mozo, #consultamozoModal, #consultaclientevipModal, #modal-cm-wigos-vip, #modal-cm-f8-descuento, #cm-panel-descuento-vip').length) {
         return;
     }
     e.preventDefault();
@@ -120,6 +156,10 @@ function activa_eventos_consultamozo() {
                 ptrMozo_id = $('#abrir-mozo_gastronomia_id');
                 ptrCodigoMozo_id = $('#abrir-codigomozo');
                 ptrNombreMozo = $('#abrir-nombremozo');
+            } else if ($btn.closest('#modal-cm-login-mozo').length) {
+                ptrMozo_id = $('#cm-login-mozo_gastronomia_id');
+                ptrCodigoMozo_id = $('#cm-login-codigomozo');
+                ptrNombreMozo = $('#cm-login-nombremozo');
             } else {
                 ptrMozo_id = $btn.parents('tr').find('.mozo_gastronomia_id');
                 if (!ptrMozo_id || !ptrMozo_id.length) {
@@ -172,6 +212,10 @@ function activa_eventos_consultamozo() {
         .off('change.gastroMozoCod', '.codigomozo')
         .on('change.gastroMozoCod', '.codigomozo', function (event) {
             event.preventDefault();
+            // Login canjes marketing: Enter/blur lo resuelve proceso_facturacion.js (API canjes).
+            if (esLoginMozoCanjeMarketing(this)) {
+                return;
+            }
             leerMozoPorCodigo($(this).val(), this);
         });
 }
@@ -186,16 +230,20 @@ function leerMozoPorCodigo(codigo, ptrrenglon, onDone) {
         return;
     }
 
-    var url_res = carpetaBase + '/ventas/mozo-gastronomia/leer/' + encodeURIComponent(codigomozo);
-    if (empresaId) {
+    var urlCanje = urlLeerMozoPorCodigoCanjeMarketing(codigomozo);
+    var url_res = urlCanje || (carpetaBase + '/ventas/mozo-gastronomia/leer/' + encodeURIComponent(codigomozo));
+    if (!urlCanje && empresaId) {
         url_res += '?empresa_id=' + empresaId;
     }
 
     var $ctx = null;
     if (ptrrenglon) {
-        $ctx = $(ptrrenglon).closest('#modal-abrir-cuenta-mozo-wrap, tr').first();
+        $ctx = $(ptrrenglon).closest('#modal-abrir-cuenta-mozo-wrap, #modal-cm-login-mozo-mozo-wrap, tr').first();
         if (!$ctx.length && $(ptrrenglon).attr('id') === 'abrir-codigomozo') {
             $ctx = $('#modal-abrir-cuenta-mozo-wrap');
+        }
+        if (!$ctx.length && $(ptrrenglon).attr('id') === 'cm-login-codigomozo') {
+            $ctx = $('#modal-cm-login-mozo-mozo-wrap');
         }
         $ctx.find('.mozo_gastronomia_id').val('');
         $ctx.find('.codigomozo').val('');

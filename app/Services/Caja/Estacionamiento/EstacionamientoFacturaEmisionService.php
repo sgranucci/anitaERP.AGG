@@ -8,6 +8,7 @@ use App\Models\Caja\Estacionamiento\TicketEstacionamiento;
 use App\Models\Caja\Estacionamiento\VentaEstacionamientoEmision;
 use App\Models\Configuracion\Actividad_Arca;
 use App\Models\Ventas\Venta;
+use App\Support\Caja\Estacionamiento\EstacionamientoFacturaPayloadSupport;
 use App\Support\Caja\Estacionamiento\EstacionamientoIdentificadorPc;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
 use App\Support\Ventas\GastronomiaPuntoventaEmisionLock;
@@ -45,7 +46,6 @@ final class EstacionamientoFacturaEmisionService
         bool $facturacionConDescuento = false,
     ): array {
         $cuenta->loadMissing([
-            'lineas.articulo',
             'lineas.itemEstacionamiento',
             'cliente',
             'categoriaAutomovil',
@@ -87,7 +87,7 @@ final class EstacionamientoFacturaEmisionService
         $monedaId ??= (int) config('estacionamiento.moneda_factura_id', 1);
 
         $cuenta->loadMissing([
-            'lineas.articulo',
+            'lineas.itemEstacionamiento',
             'cliente',
             'descuentoEstacionamiento',
             'configuracionPuntoventa',
@@ -129,7 +129,6 @@ final class EstacionamientoFacturaEmisionService
         bool $facturacionConDescuento = false,
     ): array {
         $cuenta->loadMissing([
-            'lineas.articulo',
             'lineas.itemEstacionamiento',
             'cliente',
             'categoriaAutomovil',
@@ -199,6 +198,8 @@ final class EstacionamientoFacturaEmisionService
                         $puntoventaId,
                     );
                 });
+
+                $resultado = $this->facturacionService->completarAnitaPendienteTrasEmision($resultado);
 
                 $resultado = $this->aplicarImpresionTicketTrasEmision($resultado, $cfg, $cuenta);
                 $resultado['mensaje'] = 'Factura '.trim((string) ($resultado['factura'] ?? '')).' emitida correctamente.';
@@ -341,6 +342,9 @@ final class EstacionamientoFacturaEmisionService
                 'warn' => $warn,
                 'sin_cobranza' => $sinCobranza,
                 'cobranza_id' => $cobranzaId,
+                'anita_pendiente' => (! empty($resultado['anita_pendiente']) && is_array($resultado['anita_pendiente']))
+                    ? $resultado['anita_pendiente']
+                    : null,
             ], fn ($v) => $v !== null && $v !== '' && $v !== false);
         } catch (Throwable $e) {
             if ($ventaAnitaRevertir !== null) {
@@ -386,7 +390,8 @@ final class EstacionamientoFacturaEmisionService
             return ['error' => $e->getMessage()];
         }
 
-        [$articuloIds, $cantidades, $precios, $descripciones] = $this->construirArraysFactura($cuenta);
+        [$articuloIds, $cantidades, $precios, $descripciones] = EstacionamientoFacturaPayloadSupport::arraysDesdeCuenta($cuenta);
+        $nLineas = count($articuloIds);
 
         $payload = [
             'tipotransaccion_id' => $tipoFacturaId,
@@ -402,6 +407,10 @@ final class EstacionamientoFacturaEmisionService
             'cantidades' => $cantidades,
             'precios' => $precios,
             'descripcionarticulos' => $descripciones,
+            'impuesto_ids' => EstacionamientoFacturaPayloadSupport::impuestoIdsParaLineas($nLineas),
+            'incluyeimpuestos' => array_fill(0, $nLineas, 'N'),
+            // Sin artículos de stock: nunca stkmov en Anita aunque se reactive la sincronización.
+            'omitir_stkmov_anita_por_item' => array_fill(0, $nLineas, true),
         ];
 
         $this->receptorFacturacionService->aplicarReceptorAlPayloadFacturacion($payload, $receptor);
@@ -413,26 +422,6 @@ final class EstacionamientoFacturaEmisionService
         }
 
         return $payload;
-    }
-
-    /**
-     * @return array{0:list<int>,1:list<float>,2:list<float>,3:list<string>}
-     */
-    private function construirArraysFactura(CuentaEstacionamiento $cuenta): array
-    {
-        $articuloIds = [];
-        $cantidades = [];
-        $precios = [];
-        $descripciones = [];
-
-        foreach ($cuenta->lineas as $linea) {
-            $articuloIds[] = (int) $linea->articulo_id;
-            $cantidades[] = (float) $linea->cantidad;
-            $precios[] = (float) $linea->precio_unitario;
-            $descripciones[] = trim((string) ($linea->descripcion ?? ''));
-        }
-
-        return [$articuloIds, $cantidades, $precios, $descripciones];
     }
 
     private function leyendaCuenta(CuentaEstacionamiento $cuenta): string

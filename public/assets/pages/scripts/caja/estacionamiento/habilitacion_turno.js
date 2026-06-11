@@ -25,7 +25,6 @@
     var accion = app.getAttribute('data-accion') || '';
     var cfgGlobal = window.HABILITACION_TURNO_ESTACIONAMIENTO || {};
     var urlFacturaVerBase = cfgGlobal.urlFacturaVerBase || '';
-    var urlInformeMozoPdf = cfgGlobal.urlInformeMozoPdf || '';
     var urlPdfParcialBase = cfgGlobal.urlPdfParcialBase || '';
 
     if (!accion && cfgGlobal.accion) {
@@ -635,13 +634,13 @@
             }
             btn.dataset.boundConciliar = '1';
             btn.addEventListener('click', function () {
-                var rawMozoId = btn.getAttribute('data-item-id');
-                var itemId = rawMozoId !== null && rawMozoId !== '' ? parseInt(rawMozoId, 10) : null;
+                var rawUsuarioId = btn.getAttribute('data-usuario-habilitado-id');
+                var usuarioId = rawUsuarioId !== null && rawUsuarioId !== '' ? parseInt(rawUsuarioId, 10) : null;
                 abrirModalMedio(
                     parseInt(btn.getAttribute('data-cuentacaja-id'), 10),
                     btn.getAttribute('data-medio-nombre') || '',
-                    isNaN(itemId) ? null : itemId,
-                    btn.getAttribute('data-item-nombre') || ''
+                    isNaN(usuarioId) ? null : usuarioId,
+                    btn.getAttribute('data-usuario-habilitado-nombre') || ''
                 );
             });
         });
@@ -651,11 +650,11 @@
             }
             btn.dataset.boundConciliarNc = '1';
             btn.addEventListener('click', function () {
-                var rawMozoId = btn.getAttribute('data-item-id');
-                var itemId = rawMozoId !== null && rawMozoId !== '' ? parseInt(rawMozoId, 10) : null;
+                var rawUsuarioId = btn.getAttribute('data-usuario-habilitado-id');
+                var usuarioId = rawUsuarioId !== null && rawUsuarioId !== '' ? parseInt(rawUsuarioId, 10) : null;
                 abrirModalNotasCredito(
-                    isNaN(itemId) ? null : itemId,
-                    btn.getAttribute('data-item-nombre') || ''
+                    isNaN(usuarioId) ? null : usuarioId,
+                    btn.getAttribute('data-usuario-habilitado-nombre') || ''
                 );
             });
         });
@@ -665,11 +664,11 @@
             }
             btn.dataset.boundConciliarInv = '1';
             btn.addEventListener('click', function () {
-                var rawMozoId = btn.getAttribute('data-item-id');
-                var itemId = rawMozoId !== null && rawMozoId !== '' ? parseInt(rawMozoId, 10) : null;
+                var rawUsuarioId = btn.getAttribute('data-usuario-habilitado-id');
+                var usuarioId = rawUsuarioId !== null && rawUsuarioId !== '' ? parseInt(rawUsuarioId, 10) : null;
                 abrirModalInvitaciones(
-                    isNaN(itemId) ? null : itemId,
-                    btn.getAttribute('data-item-nombre') || ''
+                    isNaN(usuarioId) ? null : usuarioId,
+                    btn.getAttribute('data-usuario-habilitado-nombre') || ''
                 );
             });
         });
@@ -694,7 +693,7 @@
                 comprobante: 'Nota de crédito',
                 hora: 'Hora',
                 cliente: 'Cliente',
-                item: 'Mozo',
+                item: 'Usuario habilitado',
                 total: 'Total NC',
                 extra: 'Factura origen',
                 cobrado: 'Cobrado (devuelto)',
@@ -705,7 +704,7 @@
                 comprobante: 'Comprobante',
                 hora: 'Hora',
                 cliente: 'Cliente',
-                item: 'Mozo',
+                item: 'Usuario habilitado',
                 total: 'Total',
                 extra: 'Descuento',
                 cobrado: 'Cobrado',
@@ -715,7 +714,7 @@
                 comprobante: 'Comprobante',
                 hora: 'Hora',
                 cliente: 'Cliente',
-                item: 'Mozo',
+                item: 'Usuario habilitado',
                 total: 'Facturado',
                 extra: 'Este medio',
                 cobrado: 'Cobrado total',
@@ -739,7 +738,7 @@
         });
     }
 
-    function abrirModalMedio(cuentacajaId, medioNombre, itemId, itemNombre) {
+    function abrirModalMedio(cuentacajaId, medioNombre, usuarioHabilitadoId, usuarioHabilitadoNombre) {
         if (!cuentacajaId || !apiConciliacionMedio) {
             return;
         }
@@ -748,8 +747,8 @@
         setHeadersModalConciliacion('facturas');
         if (titulo) {
             var tit = 'Facturas — ' + (medioNombre || 'Medio de pago');
-            if (itemNombre) {
-                tit += ' · ' + itemNombre;
+            if (usuarioHabilitadoNombre) {
+                tit += ' · ' + usuarioHabilitadoNombre;
             }
             titulo.textContent = tit;
         }
@@ -761,8 +760,8 @@
         }
 
         var url = apiConciliacionMedio + '?cuentacaja_id=' + encodeURIComponent(cuentacajaId);
-        if (itemId && itemId > 0) {
-            url += '&item_id=' + encodeURIComponent(itemId);
+        if (usuarioHabilitadoId && usuarioHabilitadoId > 0) {
+            url += '&usuario_habilitado_id=' + encodeURIComponent(usuarioHabilitadoId);
         }
         getJson(url).then(function (res) {
             if (!body) {
@@ -776,8 +775,8 @@
             var baseVer = res.data.url_factura_ver_base || urlFacturaVerBase;
             if (!facturas.length) {
                 body.innerHTML = '<tr><td colspan="8" class="text-muted p-3">'
-                    + (itemNombre
-                        ? 'Sin facturas de ' + itemNombre + ' con este medio en el turno.'
+                    + (usuarioHabilitadoNombre
+                        ? 'Sin facturas de ' + usuarioHabilitadoNombre + ' con este medio en el turno.'
                         : 'Sin facturas con este medio en el turno.')
                     + '</td></tr>';
                 return;
@@ -788,7 +787,7 @@
                 html += '<td>' + (f.codigo || '—') + (f.es_invitacion ? ' <span class="badge badge-secondary">Inv.</span>' : '') + '</td>';
                 html += '<td>' + (f.hora || '') + '</td>';
                 html += '<td>' + (f.cliente || '') + '</td>';
-                html += '<td>' + (f.item_nombre || '') + '</td>';
+                html += '<td>' + (f.usuario_habilitado_nombre || '') + '</td>';
                 html += '<td class="text-right">$' + fmt(f.total_facturado) + '</td>';
                 html += '<td class="text-right font-weight-bold">$' + fmt(f.monto_medio) + '</td>';
                 html += '<td class="text-right">$' + fmt(f.total_cobrado) + '</td>';
@@ -804,7 +803,7 @@
         });
     }
 
-    function abrirModalNotasCredito(itemId, itemNombre) {
+    function abrirModalNotasCredito(usuarioHabilitadoId, usuarioHabilitadoNombre) {
         if (!apiConciliacionNotasCredito) {
             return;
         }
@@ -812,8 +811,8 @@
         var body = document.getElementById('modal-conciliacion-medio-body');
         setHeadersModalConciliacion('nc');
         if (titulo) {
-            titulo.textContent = itemNombre
-                ? 'Notas de crédito — ' + itemNombre
+            titulo.textContent = usuarioHabilitadoNombre
+                ? 'Notas de crédito — ' + usuarioHabilitadoNombre
                 : 'Notas de crédito del turno';
         }
         if (body) {
@@ -824,8 +823,8 @@
         }
 
         var url = apiConciliacionNotasCredito;
-        if (itemId && itemId > 0) {
-            url += '?item_id=' + encodeURIComponent(itemId);
+        if (usuarioHabilitadoId && usuarioHabilitadoId > 0) {
+            url += '?usuario_habilitado_id=' + encodeURIComponent(usuarioHabilitadoId);
         }
 
         getJson(url).then(function (res) {
@@ -840,7 +839,7 @@
             var baseVer = res.data.url_factura_ver_base || urlFacturaVerBase;
             if (!notas.length) {
                 body.innerHTML = '<tr><td colspan="8" class="text-muted p-3">'
-                    + (itemNombre ? 'Sin notas de crédito de ' + itemNombre + ' en el turno.' : 'Sin notas de crédito en el turno.')
+                    + (usuarioHabilitadoNombre ? 'Sin notas de crédito de ' + usuarioHabilitadoNombre + ' en el turno.' : 'Sin notas de crédito en el turno.')
                     + '</td></tr>';
                 return;
             }
@@ -850,7 +849,7 @@
                 html += '<td><span class="badge badge-danger">NC</span> ' + (n.codigo || '—') + '</td>';
                 html += '<td>' + (n.hora || '') + '</td>';
                 html += '<td>' + (n.cliente || '') + '</td>';
-                html += '<td>' + (n.item_nombre || '') + '</td>';
+                html += '<td>' + (n.usuario_habilitado_nombre || '') + '</td>';
                 html += '<td class="text-right font-weight-bold" style="color:#922b21;">$' + fmt(n.monto_nota_credito) + '</td>';
                 html += '<td class="text-right">';
                 if (n.factura_origen_id) {
@@ -879,7 +878,7 @@
         });
     }
 
-    function abrirModalInvitaciones(itemId, itemNombre) {
+    function abrirModalInvitaciones(usuarioHabilitadoId, usuarioHabilitadoNombre) {
         if (!apiConciliacionInvitaciones) {
             return;
         }
@@ -887,8 +886,8 @@
         var body = document.getElementById('modal-conciliacion-medio-body');
         setHeadersModalConciliacion('invitaciones');
         if (titulo) {
-            titulo.textContent = itemNombre
-                ? 'Invitaciones $0,01 — ' + itemNombre
+            titulo.textContent = usuarioHabilitadoNombre
+                ? 'Invitaciones $0,01 — ' + usuarioHabilitadoNombre
                 : 'Invitaciones $0,01 del turno';
         }
         if (body) {
@@ -899,8 +898,8 @@
         }
 
         var url = apiConciliacionInvitaciones;
-        if (itemId && itemId > 0) {
-            url += '?item_id=' + encodeURIComponent(itemId);
+        if (usuarioHabilitadoId && usuarioHabilitadoId > 0) {
+            url += '?usuario_habilitado_id=' + encodeURIComponent(usuarioHabilitadoId);
         }
 
         getJson(url).then(function (res) {
@@ -914,7 +913,7 @@
             var facturas = res.data.facturas || [];
             if (!facturas.length) {
                 body.innerHTML = '<tr><td colspan="8" class="text-muted p-3">'
-                    + (itemNombre ? 'Sin invitaciones $0,01 de ' + itemNombre + ' en el turno.' : 'Sin invitaciones $0,01 en el turno.')
+                    + (usuarioHabilitadoNombre ? 'Sin invitaciones $0,01 de ' + usuarioHabilitadoNombre + ' en el turno.' : 'Sin invitaciones $0,01 en el turno.')
                     + '</td></tr>';
                 return;
             }
@@ -928,7 +927,7 @@
                 html += '<td>' + (f.codigo || '—') + ' <span class="badge badge-warning text-dark">Inv.</span></td>';
                 html += '<td>' + (f.hora || '') + '</td>';
                 html += '<td>' + (f.cliente || '') + '</td>';
-                html += '<td>' + (f.item_nombre || '') + '</td>';
+                html += '<td>' + (f.usuario_habilitado_nombre || '') + '</td>';
                 html += '<td class="text-right font-weight-bold">$' + fmt(f.total_facturado) + '</td>';
                 html += '<td>' + descLabel + '</td>';
                 html += '<td class="text-right text-muted">—</td>';
@@ -1232,13 +1231,6 @@
                 });
             });
         }
-
-        var btnInformeMozo = document.getElementById('btn-informe-item-pdf');
-        if (btnInformeMozo && urlInformeMozoPdf) {
-            btnInformeMozo.addEventListener('click', function () {
-                window.open(urlConEmpresa(urlInformeMozoPdf + '?inline=1'), '_blank', 'noopener');
-            });
-        }
     }
 
     if (puedeCerrar) {
@@ -1340,200 +1332,6 @@
     }
 
     sincronizarUrlFacturaVerBase(urlFacturaVerBase);
-
-    var btnCanjesPremio = document.getElementById('btn-consultar-canjes-premio');
-    if (btnCanjesPremio && cfgGlobal.urlCanjesPremioTurno) {
-        btnCanjesPremio.addEventListener('click', function () {
-            var tbody = document.getElementById('ht-canjes-premio-body');
-            var errEl = document.getElementById('ht-canjes-premio-error');
-            if (!tbody) return;
-            tbody.innerHTML = '<tr><td colspan="9" class="text-muted small">Cargando…</td></tr>';
-            if (errEl) {
-                errEl.classList.add('d-none');
-                errEl.textContent = '';
-            }
-            if (typeof $ !== 'undefined') {
-                $('#modal-canjes-premio-turno').modal('show');
-            }
-            var url = cfgGlobal.urlCanjesPremioTurno;
-            var desde = '';
-            var hasta = '';
-            if (estadoActual && estadoActual.turno_habilitado && estadoActual.habilitacion_en) {
-                desde = estadoActual.habilitacion_en;
-            }
-            if (estadoActual && estadoActual.fecha_jornada) {
-                url += (url.indexOf('?') >= 0 ? '&' : '?') + 'fecha_jornada=' + encodeURIComponent(estadoActual.fecha_jornada);
-            }
-            if (desde) {
-                url += (url.indexOf('?') >= 0 ? '&' : '?') + 'desde=' + encodeURIComponent(desde);
-            }
-            if (hasta) {
-                url += (url.indexOf('?') >= 0 ? '&' : '?') + 'hasta=' + encodeURIComponent(hasta);
-            }
-            fetch(url, {
-                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-                credentials: 'same-origin',
-            })
-                .then(function (r) {
-                    return r.json().then(function (j) {
-                        return { ok: r.ok, body: j };
-                    });
-                })
-                .then(function (res) {
-                    if (!res.ok || !res.body.ok) {
-                        tbody.innerHTML = '';
-                        if (errEl) {
-                            errEl.textContent =
-                                (res.body && (res.body.error || res.body.mensaje)) ||
-                                'No se pudieron cargar los canjes.';
-                            errEl.classList.remove('d-none');
-                        }
-                        return;
-                    }
-                    var canjes = res.body.canjes || [];
-                    if (!canjes.length) {
-                        tbody.innerHTML =
-                            '<tr><td colspan="9" class="text-muted small">Sin canjes de premio en el turno.</td></tr>';
-                        return;
-                    }
-                    tbody.innerHTML = canjes
-                        .map(function (c) {
-                            return (
-                                '<tr>' +
-                                '<td>' +
-                                (c.numerocupon || '') +
-                                '</td>' +
-                                '<td>' +
-                                (c.venta_codigo || c.venta_id || '') +
-                                '</td>' +
-                                '<td>' +
-                                (c.sku || '') +
-                                '</td>' +
-                                '<td>' +
-                                (c.articulo || '—') +
-                                '</td>' +
-                                '<td class="text-right">' +
-                                (parseFloat(c.cantidad) || 0) +
-                                '</td>' +
-                                '<td class="text-right">' +
-                                (c.puntos || 0) +
-                                '</td>' +
-                                '<td>' +
-                                (c.item || '—') +
-                                '</td>' +
-                                '<td>' +
-                                (c.numerodocumento || '—') +
-                                '</td>' +
-                                '<td>' +
-                                (c.fechacanje || '—') +
-                                '</td>' +
-                                '</tr>'
-                            );
-                        })
-                        .join('');
-                })
-                .catch(function () {
-                    tbody.innerHTML = '';
-                    if (errEl) {
-                        errEl.textContent = 'Error de comunicación.';
-                        errEl.classList.remove('d-none');
-                    }
-                });
-        });
-    }
-
-    var btnTicketsTarjeta = document.getElementById('btn-consultar-tickets-tarjeta');
-    if (btnTicketsTarjeta && cfgGlobal.urlTicketsTarjetaTurno) {
-        btnTicketsTarjeta.addEventListener('click', function () {
-            var tbody = document.getElementById('ht-tickets-tarjeta-body');
-            var errEl = document.getElementById('ht-tickets-tarjeta-error');
-            if (!tbody) {
-                return;
-            }
-            tbody.innerHTML = '<tr><td colspan="7" class="text-muted small">Cargando…</td></tr>';
-            if (errEl) {
-                errEl.classList.add('d-none');
-                errEl.textContent = '';
-            }
-            if (typeof $ !== 'undefined') {
-                $('#modal-tickets-tarjeta-turno').modal('show');
-            }
-            var url = cfgGlobal.urlTicketsTarjetaTurno;
-            var desde = '';
-            if (estadoActual && estadoActual.turno_habilitado && estadoActual.habilitacion_en) {
-                desde = estadoActual.habilitacion_en;
-            }
-            if (estadoActual && estadoActual.fecha_jornada) {
-                url += (url.indexOf('?') >= 0 ? '&' : '?') + 'fecha_jornada=' + encodeURIComponent(estadoActual.fecha_jornada);
-            }
-            if (desde) {
-                url += (url.indexOf('?') >= 0 ? '&' : '?') + 'desde=' + encodeURIComponent(desde);
-            }
-            fetch(url, {
-                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-                credentials: 'same-origin',
-            })
-                .then(function (r) {
-                    return r.json().then(function (j) {
-                        return { ok: r.ok, body: j };
-                    });
-                })
-                .then(function (res) {
-                    if (!res.ok || !res.body.ok) {
-                        tbody.innerHTML = '';
-                        if (errEl) {
-                            errEl.textContent =
-                                (res.body && (res.body.error || res.body.mensaje)) ||
-                                'No se pudieron cargar los tickets.';
-                            errEl.classList.remove('d-none');
-                        }
-                        return;
-                    }
-                    var tickets = res.body.tickets || [];
-                    if (!tickets.length) {
-                        tbody.innerHTML =
-                            '<tr><td colspan="7" class="text-muted small">Sin tickets tarjeta en el turno.</td></tr>';
-                        return;
-                    }
-                    tbody.innerHTML = tickets
-                        .map(function (t) {
-                            return (
-                                '<tr>' +
-                                '<td>' +
-                                (t.ticket_id || '') +
-                                '</td>' +
-                                '<td>' +
-                                (t.numeroticket || '') +
-                                '</td>' +
-                                '<td>' +
-                                (t.venta_codigo || t.venta_id || '') +
-                                '</td>' +
-                                '<td>' +
-                                (t.numerodocumento || '—') +
-                                '</td>' +
-                                '<td class="text-right">' +
-                                (parseFloat(t.montoticket) || 0).toFixed(2) +
-                                '</td>' +
-                                '<td>' +
-                                (t.fecha_emision || '—') +
-                                '</td>' +
-                                '<td>' +
-                                (t.created_at || '—') +
-                                '</td>' +
-                                '</tr>'
-                            );
-                        })
-                        .join('');
-                })
-                .catch(function () {
-                    tbody.innerHTML = '';
-                    if (errEl) {
-                        errEl.textContent = 'Error de comunicación.';
-                        errEl.classList.remove('d-none');
-                    }
-                });
-        });
-    }
 
     var btnInvitaciones = document.getElementById('btn-consultar-invitaciones');
     if (btnInvitaciones) {

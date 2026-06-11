@@ -91,6 +91,7 @@ use Auth;
 use DB;
 use App\ApiAnita;
 use App\Support\Ventas\GastronomiaEmisionProfiler;
+use App\Support\Ventas\KandikoAnitaVentaTipoSupport;
 use Exception;
 use PDF;
 
@@ -1059,7 +1060,8 @@ class FacturacionService
 						$anita = $this->grabaAnitaConReintentoPorDuplicado($puntoventa->codigo, $letra, $puntoventaremito->codigo, $numeroremito,
 									$venta, $dataCAE, $conceptosTotales, $cuentaCorriente, $dataFactura, $signo,
 									$codigoTipoTransaccion, $pedido_id,
-									true, 0, 0, $referenciaFactura, $empresa->codigo);
+									true, 0, 0, $referenciaFactura, $empresa->codigo,
+									null, null, false, false, false, false, $puntoventa->modofacturacion ?? null);
 
 						if (isset($anita['error']))
 						{
@@ -1553,7 +1555,8 @@ class FacturacionService
 						$anita = $this->grabaAnitaConReintentoPorDuplicado($puntoventa->codigo, $letra, 0, 0,
 									$venta, $dataCAE, $conceptosTotales, $cuentacorriente, $dataFactura, $signo,
 									$codigoTipoTransaccion, null,
-									true, $numeroOrdenventa, $codigoCentrocosto, '', $empresa->codigo);
+									true, $numeroOrdenventa, $codigoCentrocosto, '', $empresa->codigo,
+									null, null, false, false, false, false, $puntoventa->modofacturacion ?? null);
 
 						if (isset($anita['error']))
 						{
@@ -2004,6 +2007,7 @@ class FacturacionService
 				$tipoAnita = $tipotransaccion->abreviatura;
 
 			$numeroForzado = (int) ($data['numerocomprobante_forzado'] ?? 0);
+			$opcionesEmisionNumeracion = is_array($data['opciones_emision'] ?? null) ? $data['opciones_emision'] : [];
 			switch($puntoventa->modofacturacion)
 			{
 				case 'C':
@@ -2016,15 +2020,23 @@ class FacturacionService
 					} else {
 						GastronomiaEmisionProfiler::activo()?->marcar('arca_ultimo_numero_inicio');
 						$numero = $this->facturaelectronicaService
-									->traeUltimoNumeroComprobante($empresa->nroinscripcion,
-																	$codigoTipoTransaccion,
-																	$puntoventa);
+									->traeUltimoNumeroComprobante(
+										$empresa->nroinscripcion,
+										$codigoTipoTransaccion,
+										$puntoventa,
+										$opcionesEmisionNumeracion,
+									);
 						GastronomiaEmisionProfiler::activo()?->marcar('arca_ultimo_numero_fin');
 					}
 					break;
 				case 'A':
 					if ($numeroForzado > 0) {
 						$numero = $numeroForzado - 1;
+					} elseif (! empty($opcionesEmisionNumeracion['anita_modo_minimo'])) {
+						GastronomiaEmisionProfiler::activo()?->marcar('erp_ultimo_numero_inicio');
+						$ultimaVenta = $this->ventaRepository->traeUltimoComprobanteVenta($tipoTransaccion_id, $puntoventa_id);
+						$numero = $ultimaVenta ? (int) $ultimaVenta->numerocomprobante : 0;
+						GastronomiaEmisionProfiler::activo()?->marcar('erp_ultimo_numero_fin');
 					} else {
 						GastronomiaEmisionProfiler::activo()?->marcar('anita_ultimo_numero_inicio');
 						$numero = Self::buscaUltimoNumeroComprobante($tipoAnita, $letra, $puntoventa);
@@ -2762,7 +2774,8 @@ class FacturacionService
 						$anita = $this->grabaAnitaConReintentoPorDuplicado($puntoventa->codigo, $letra, $puntoventaremito->codigo, $numeroremito,
 									$venta, $dataCAE, $conceptosTotales, $cuentacorriente, $dataFactura, $signo,
 									$codigoTipoTransaccion, null,
-									true, 0, 0, '', $empresa->codigo);
+									true, 0, 0, '', $empresa->codigo,
+									null, null, false, false, false, false, $puntoventa->modofacturacion ?? null);
 
 						if (isset($anita['error']))
 						{
@@ -2810,6 +2823,15 @@ class FacturacionService
 		$omitirCuentaCorriente = is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_cuenta_corriente']);
 		$omitirSolicitudArcaCae = is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_solicitud_arca_cae']);
 		$omitirSincronizacionAnita = is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_sincronizacion_anita']);
+		$omitirStkmovAnita = is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_stkmov_anita']);
+		$omitirNumeraAnitaFin = is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_numera_anita_fin']);
+		// CAE (PV C/E): el número fiscal lo asigna ARCA; la réplica Anita no debe avanzar compemis/numerador al cierre.
+		if (
+			! $omitirNumeraAnitaFin
+			&& in_array((string) ($puntoventa->modofacturacion ?? ''), ['C', 'E'], true)
+		) {
+			$omitirNumeraAnitaFin = true;
+		}
 		$transaccionExterna = DB::transactionLevel() > 0;
 
 		$numeroOrdenventa = 0;
@@ -3058,7 +3080,7 @@ class FacturacionService
 						&& ! empty($opcionesEmision['anita_modo_minimo']);
 					$deferAnitaTrasCommit = $transaccionExterna
 						&& $modoMinimoAnita
-						&& filter_var(config('gastronomia.anita_tras_commit_al_facturar', true), FILTER_VALIDATE_BOOLEAN);
+						&& $this->anitaTrasCommitAlFacturarHabilitado($opcionesEmision);
 
 					if ($deferAnitaTrasCommit) {
 						$ret['anita_pendiente'] = [
@@ -3077,6 +3099,9 @@ class FacturacionService
 							'empresa_codigo' => $empresa->codigo,
 							'modo_minimo_anita' => true,
 							'omitir_cuenta_corriente_anita' => $omitirCuentaCorriente,
+							'omitir_stkmov_anita' => $omitirStkmovAnita,
+							'omitir_numera_anita_fin' => $omitirNumeraAnitaFin,
+							'modo_facturacion_puntoventa' => $puntoventa->modofacturacion ?? null,
 						];
 					} else {
 						$replicacionAnitaIntentada = true;
@@ -3086,7 +3111,8 @@ class FacturacionService
 									$venta, $dataCAE, $conceptosTotales, $cuentacorriente, $dataFactura, $signo,
 									$codigoTipoTransaccion, null,
 									true, $numeroOrdenventa, $codigoCentrocosto, $referenciaFactura,
-									$empresa->codigo, null, null, $modoMinimoAnita, $omitirCuentaCorriente);
+									$empresa->codigo, null, null, $modoMinimoAnita, $omitirCuentaCorriente,
+									$omitirStkmovAnita, $omitirNumeraAnitaFin, $puntoventa->modofacturacion ?? null);
 
 						GastronomiaEmisionProfiler::activo()?->marcar('anita_graba_fin');
 
@@ -3113,6 +3139,7 @@ class FacturacionService
 						'fecha_factura' => $fechaFactura,
 						'data_cae' => $dataCAE,
 						'venta_id' => $vta->id,
+						'opciones_emision_arca' => is_array($opcionesEmision) ? $opcionesEmision : [],
 					];
 				} else {
 					// Solicita CAE/CAEA en ARCA (último paso del flujo estándar).
@@ -3191,6 +3218,7 @@ class FacturacionService
 			$ventaArray['numerocomprobante'],
 			$empresa->codigo,
 			$omitirContabilidadAnita,
+			$puntoventa->modofacturacion ?? null,
 		);
 	}
 
@@ -3229,6 +3257,7 @@ class FacturacionService
 			$venta->numerocomprobante,
 			$empresa->codigo,
 			$omitirContabilidadAnita,
+			$puntoventa->modofacturacion ?? null,
 		);
 	}
 
@@ -3254,6 +3283,7 @@ class FacturacionService
 		float $descuentoPie = 0.,
 		bool $modoMinimoAnita = true,
 		bool $sinCuentaCorrienteAnita = true,
+		bool $omitirStkmovAnita = false,
 	) {
 		$this->descuentoPie = $descuentoPie;
 
@@ -3285,6 +3315,9 @@ class FacturacionService
 			null,
 			$modoMinimoAnita,
 			$sinCuentaCorrienteAnita,
+			$omitirStkmovAnita,
+			false,
+			$puntoventa->modofacturacion ?? null,
 		);
 	}
 
@@ -3334,7 +3367,8 @@ class FacturacionService
 								$codigoTipoTransaccion, $pedido_id,
 								$flGrabaStock, $numeroOrdenventa, $codigoCentrocosto, $referenciaFactura, 
 								$servidor = null, $ifx_server = null, bool $modoMinimoAnita = false,
-								bool $sinCuentaCorrienteAnita = false)
+								bool $sinCuentaCorrienteAnita = false, bool $omitirStkmovAnita = false,
+								bool $omitirNumeraAnitaFin = false, ?string $modoFacturacionPuntoventa = null)
 	{
 		if ($numeroOrdenventa > 0)
 			$detalle = $dataCAE['items'][0]['detalle'];
@@ -3417,6 +3451,13 @@ class FacturacionService
         $apiAnita = new ApiAnita();
 
 		$empresa = $dataCAE['codigoempresa'];
+		$tipoErpVenta = substr((string) ($venta['codigo'] ?? ''), 0, 3);
+		$tipoVentaAnita = KandikoAnitaVentaTipoSupport::tipoVentaAnitaBridge(
+			$tipoErpVenta,
+			(string) $puntoventa,
+			$empresa,
+			$modoFacturacionPuntoventa,
+		);
 		$exento = $dataCAE['exento'] + $dataCAE['nogravado'];
 
 		if (!isset($cliente->localidades->nombre))
@@ -3475,7 +3516,7 @@ class FacturacionService
 							ven_empresa, ven_tasa_ibr1, ven_tasa_ibr2, ven_tipo_comp',
             			'valores' => " 
 							'".str_pad($codigoCliente, 6, "0", STR_PAD_LEFT)."', 
-							'".substr($venta['codigo'], 0, 3)."',
+							'".$tipoVentaAnita."',
 							'".$letra."', '".$puntoventa."', '".$venta['numerocomprobante']."',
 							'".date('Ymd', strtotime($venta['fecha']))."',
 							'".date('Ymd', strtotime($venta['fechajornada']))."',
@@ -3550,7 +3591,7 @@ class FacturacionService
 							ven_cod_entrega'.(config('app.empresa') == 'AGG' ? ', ven_empresa' : ''),
             			'valores' => " 
 							'".str_pad($codigoCliente, 6, "0", STR_PAD_LEFT)."', 
-							'".substr($venta['codigo'], 0, 3)."',
+							'".$tipoVentaAnita."',
 							'".$letra."',
 							'".$puntoventa."',
 							'".$venta['numerocomprobante']."',
@@ -3930,7 +3971,8 @@ class FacturacionService
 							'incluyeimpuesto' => $item['incluyeimpuesto'],
 							'pedido' => 0,
 							'sku' => 'texto',
-							'descripcion' => $item['detalle'] ?? $item['descripcion']
+							'descripcion' => $item['detalle'] ?? $item['descripcion'],
+							'omitir_stkmov_anita' => (bool) ($item['omitir_stkmov_anita'] ?? false),
 						];
 				}
 			}
@@ -4072,7 +4114,7 @@ class FacturacionService
 			// Omitir stkmov para renglones marcados (p. ej. opcionales gastronomía $0:
 			// se preservan en compaux como detalle visible, pero el stock se descuenta
 			// vía formula expansion en deposito de insumos por separado).
-			if ($flGrabaStock && empty($medida['omitir_stkmov_anita']))
+			if ($flGrabaStock && ! $omitirStkmovAnita && empty($medida['omitir_stkmov_anita']))
 			{
 				$data = array( 	'tabla' => 'stkmov', 
 							'acc' => 'insert',
@@ -4254,10 +4296,26 @@ class FacturacionService
 			}
 		}
 
-		// Numera la factura
-		if ($this->ventaRepository->numeraAnita(substr($venta['codigo'], 0, 3), $letra, $puntoventa,
-						($this->flGrabaComprobanteDividido ? '/usr2/villafranca' : null)) == 'Error')
-			return ['error' => 'Error numerador comprobante', 'mensaje' => 'No pudo numerar comprobante'];
+		// Omitido: reserva CAEA gastronomía, o PV electrónico (C/E) con numeración ARCA/CAE.
+		if (
+			! $omitirNumeraAnitaFin
+			&& in_array((string) ($modoFacturacionPuntoventa ?? ''), ['C', 'E'], true)
+		) {
+			$omitirNumeraAnitaFin = true;
+		}
+		if (! $omitirNumeraAnitaFin) {
+			$resultadoNumera = $this->ventaRepository->numeraAnita(
+				substr($venta['codigo'], 0, 3),
+				$letra,
+				$puntoventa,
+				($this->flGrabaComprobanteDividido ? '/usr2/villafranca' : null),
+			);
+			if (! is_int($resultadoNumera) || $resultadoNumera <= 0) {
+				$detalle = is_string($resultadoNumera) ? $resultadoNumera : 'respuesta inválida del numerador';
+
+				return ['error' => 'Error numerador comprobante', 'mensaje' => 'No pudo numerar comprobante: '.$detalle];
+			}
+		}
 
 		// Numera el remito
 		if (isset($puntoventaremito) && !$this->flGrabaComprobanteDividido)
@@ -4360,8 +4418,14 @@ class FacturacionService
 	 *
 	 * @param  array{error: string, mensaje?: string}|string  $resultadoGrabaAnita
 	 */
-	private function debeLiberarComprobanteHuerfanoEnAnita($resultadoGrabaAnita, array $venta, string $letra, $puntoventa): bool
-	{
+	private function debeLiberarComprobanteHuerfanoEnAnita(
+		$resultadoGrabaAnita,
+		array $venta,
+		string $letra,
+		$puntoventa,
+		$empresaCodigo = null,
+		?string $modoFacturacionPuntoventa = null,
+	): bool {
 		if (! is_array($resultadoGrabaAnita) || ! isset($resultadoGrabaAnita['error'])) {
 			return false;
 		}
@@ -4380,7 +4444,7 @@ class FacturacionService
 			return true;
 		}
 
-		return (int) self::buscaVentaAnita($tipo, $letra, $puntoventa, $numero) === (int) $numero;
+		return (int) self::buscaVentaAnita($tipo, $letra, $puntoventa, $numero, $empresaCodigo, $modoFacturacionPuntoventa) === (int) $numero;
 	}
 
 	/**
@@ -4411,6 +4475,9 @@ class FacturacionService
 		$ifx_server = null,
 		bool $modoMinimoAnita = false,
 		bool $sinCuentaCorrienteAnita = false,
+		bool $omitirStkmovAnita = false,
+		bool $omitirNumeraAnitaFin = false,
+		?string $modoFacturacionPuntoventa = null,
 	) {
 		$anita = self::grabaAnita(
 			$puntoventa,
@@ -4433,16 +4500,19 @@ class FacturacionService
 			$ifx_server,
 			$modoMinimoAnita,
 			$sinCuentaCorrienteAnita,
+			$omitirStkmovAnita,
+			$omitirNumeraAnitaFin,
+			$modoFacturacionPuntoventa,
 		);
 
-		if (! $this->debeLiberarComprobanteHuerfanoEnAnita($anita, $venta, $letra, $puntoventa)) {
+		if (! $this->debeLiberarComprobanteHuerfanoEnAnita($anita, $venta, $letra, $puntoventa, $empresaCodigo, $modoFacturacionPuntoventa)) {
 			return $anita;
 		}
 
 		$tipo = substr((string) ($venta['codigo'] ?? ''), 0, 3);
 		$numero = $venta['numerocomprobante'];
 
-		self::borraAnita($tipo, $letra, $puntoventa, $numero, $empresaCodigo, $modoMinimoAnita);
+		self::borraAnita($tipo, $letra, $puntoventa, $numero, $empresaCodigo, $modoMinimoAnita, $modoFacturacionPuntoventa);
 
 		return self::grabaAnita(
 			$puntoventa,
@@ -4465,19 +4535,29 @@ class FacturacionService
 			$ifx_server,
 			$modoMinimoAnita,
 			$sinCuentaCorrienteAnita,
+			$omitirStkmovAnita,
+			$omitirNumeraAnitaFin,
+			$modoFacturacionPuntoventa,
 		);
 	}
 
 	// Busca si existe la factura
-	private function buscaVentaAnita($tipo, $letra, $puntoventa, $numero)
+	private function buscaVentaAnita($tipo, $letra, $puntoventa, $numero, $empresaCodigo = null, ?string $modoFacturacionPuntoventa = null)
 	{
+		$tipoVenta = KandikoAnitaVentaTipoSupport::tipoVentaAnitaBridge(
+			(string) $tipo,
+			(string) $puntoventa,
+			$empresaCodigo,
+			$modoFacturacionPuntoventa,
+		);
+
 		$apiAnita = new ApiAnita();
         $data = array( 'acc' => 'list', 
 						'tabla' => 'venta', 
 						'campos' => '
 							ven_nro
 						' ,
-						'whereArmado' => " WHERE ven_tipo = '".$tipo."' AND
+						'whereArmado' => " WHERE ven_tipo = '".$tipoVenta."' AND
 												ven_letra = '".$letra."' AND
 												ven_sucursal = '".$puntoventa."' AND
 												ven_nro = '".$numero."'
@@ -4570,6 +4650,18 @@ class FacturacionService
 	}
 
 	/**
+	 * @param  array<string, mixed>|null  $opcionesEmision
+	 */
+	private function anitaTrasCommitAlFacturarHabilitado(?array $opcionesEmision): bool
+	{
+		$configKey = (is_array($opcionesEmision) && ! empty($opcionesEmision['origen_estacionamiento']))
+			? 'estacionamiento.anita_tras_commit_al_facturar'
+			: 'gastronomia.anita_tras_commit_al_facturar';
+
+		return filter_var(config($configKey, true), FILTER_VALIDATE_BOOLEAN);
+	}
+
+	/**
 	 * Replica en Informix una venta gastronomía diferida (post-commit de emitir-factura).
 	 *
 	 * @param  array<string, mixed>  $anitaPendiente
@@ -4604,6 +4696,9 @@ class FacturacionService
 			null,
 			! empty($anitaPendiente['modo_minimo_anita']),
 			! empty($anitaPendiente['omitir_cuenta_corriente_anita']),
+			! empty($anitaPendiente['omitir_stkmov_anita']),
+			! empty($anitaPendiente['omitir_numera_anita_fin']),
+			$anitaPendiente['modo_facturacion_puntoventa'] ?? null,
 		);
 		GastronomiaEmisionProfiler::activo()?->marcar('anita_graba_fin');
 
@@ -4625,7 +4720,7 @@ class FacturacionService
 	 *
 	 * @param  bool  $omitirContabilidadAnita  true en gastronomía modo mínimo: no toca subdiario/ctamov (nunca se insertaron).
 	 */
-	public function borraAnita($tipo, $letra, $puntoventa, $numero, $empresa, bool $omitirContabilidadAnita = false)
+	public function borraAnita($tipo, $letra, $puntoventa, $numero, $empresa, bool $omitirContabilidadAnita = false, ?string $modoFacturacionPuntoventa = null)
 	{
 		$tipo = (string) $tipo;
 		$letra = (string) $letra;
@@ -4699,8 +4794,10 @@ class FacturacionService
 				venc_nro = '".$numero."'
 		");
 
+		$tipoVentaAnita = KandikoAnitaVentaTipoSupport::tipoVentaAnitaBridge($tipo, $puntoventa, $empresa, $modoFacturacionPuntoventa);
+
 		$this->borraAnitaDeleteSeguro('venta', 'venta delete', 'ventas', "
-			WHERE ven_tipo = '".$tipo."' AND
+			WHERE ven_tipo = '".$tipoVentaAnita."' AND
 				ven_letra = '".$letra."' AND
 				ven_sucursal = '".$puntoventa."' AND
 				ven_nro = '".$numero."'
@@ -5401,6 +5498,10 @@ class FacturacionService
 	 */
 	public function completarSolicitudCaePendiente(array $caePendiente, bool $deferVencaeAnita = false): ?array
 	{
+		$opcionesArca = is_array($caePendiente['opciones_emision_arca'] ?? null)
+			? $caePendiente['opciones_emision_arca']
+			: [];
+
 		$this->solicitaComprobanteARCA(
 			$caePendiente['empresa'],
 			$caePendiente['codigo_tipo_transaccion'],
@@ -5412,6 +5513,7 @@ class FacturacionService
 			$caePendiente['data_cae'],
 			$caePendiente['venta_id'],
 			$deferVencaeAnita,
+			$opcionesArca,
 		);
 
 		if (! $deferVencaeAnita) {
@@ -5483,8 +5585,19 @@ class FacturacionService
 	}
 
 	// Solicita CAE o CAEA
-	private function solicitaComprobanteARCA($empresa, $codigoTipoTransaccion, $tipoAnita, $letra, $puntoventa, $numeroComprobante, $fechaFactura, $dataCAE, $venta_id, bool $deferVencaeAnita = false)
-	{
+	private function solicitaComprobanteARCA(
+		$empresa,
+		$codigoTipoTransaccion,
+		$tipoAnita,
+		$letra,
+		$puntoventa,
+		$numeroComprobante,
+		$fechaFactura,
+		$dataCAE,
+		$venta_id,
+		bool $deferVencaeAnita = false,
+		array $opcionesEmisionArca = [],
+	) {
 		// Solicita CAE o CAEA
 		$flGrabaCae = false;
 		switch($puntoventa->modofacturacion)
@@ -5497,7 +5610,9 @@ class FacturacionService
 						$empresa->nroinscripcion,
 						$codigoTipoTransaccion,
 						$puntoventa,
-						$dataCAE);
+						$dataCAE,
+						$opcionesEmisionArca,
+					);
 					GastronomiaEmisionProfiler::activo()?->marcar('arca_solicita_cae_fin');
 				} catch (\Throwable $e) {
 					GastronomiaEmisionProfiler::activo()?->marcar('arca_solicita_cae_fin');

@@ -71,23 +71,25 @@ class CierreTurnoGastronomiaController extends Controller
             }
         }
 
-        $filtros = GastronomiaCierresTurnoListadoFiltros::resolverDesdeRequest($request);
-
-        if ($filtros['fecha_desde'] === '') {
-            $filtros['fecha_desde'] = $fechaDesdeDefault;
-        }
-        if ($filtros['fecha_hasta'] === '') {
-            $filtros['fecha_hasta'] = $fechaHastaDefault;
-        }
-
-        if ($filtros['identificador_pc'] === '') {
-            $filtros['identificador_pc'] = $identificadorPc;
-        }
-        if ($empresaId > 0 && (int) $filtros['empresa_id'] <= 0) {
-            $filtros['empresa_id'] = $empresaId;
-        }
+        $puedeVerTodasTerminales = can('ver-cierres-turno-todas-terminales-gastronomia', false);
+        $filtros = $this->resolverFiltrosListado($request, $fechaDesdeDefault, $fechaHastaDefault);
 
         $filas = $this->reporteSupport->listadoConFiltros($filtros);
+
+        $puedeCorregirArqueo = can('corregir-arqueo-cierre-turno-gastronomia', false);
+        if ($puedeCorregirArqueo) {
+            $empresaIdJornadaTmp = $empresaId > 0
+                ? $empresaId
+                : (int) ($cfg?->empresa_id ?? 0);
+            $jornadaTmp = $empresaIdJornadaTmp > 0
+                ? $this->jornadaService->estadoParaEmpresa($empresaIdJornadaTmp)
+                : null;
+            $filas = $this->turnoOperativoService->enriquecerFilasListadoCorreccionArqueo(
+                $filas,
+                $empresaIdJornadaTmp,
+                $jornadaTmp,
+            );
+        }
 
         $empresaIdJornada = $empresaId > 0
             ? $empresaId
@@ -110,6 +112,9 @@ class CierreTurnoGastronomiaController extends Controller
             'requiere_habilitacion_turno' => GastronomiaTurnoOperativoService::requiereHabilitacionTurno(),
             'puede_ver_comprobante' => can('ver-comprobante-cierre-turno-gastronomia', false),
             'puede_ver_factura' => can('ver-factura-gastronomia', false),
+            'puede_corregir_arqueo' => $puedeCorregirArqueo,
+            'puede_ver_todas_terminales' => $puedeVerTodasTerminales,
+            'todas_terminales' => ! empty($filtros['todas_terminales']),
         ]);
     }
 
@@ -296,7 +301,7 @@ class CierreTurnoGastronomiaController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $filtros = GastronomiaCierresTurnoListadoFiltros::resolverDesdeRequest($request);
+        $filtros = $this->resolverFiltrosListado($request);
         $filas = $this->reporteSupport->listadoConFiltros($filtros);
 
         switch (strtoupper($formato)) {
@@ -361,14 +366,141 @@ class CierreTurnoGastronomiaController extends Controller
 
         $datos = $this->reporteSupport->datosComprobanteCierreDefinitivo($turno);
 
+        $correccionArqueo = can('corregir-arqueo-cierre-turno-gastronomia', false)
+            ? $this->turnoOperativoService->evaluarCorreccionArqueoCierre($turno)
+            : ['puede_corregir' => false, 'bloqueo_mensaje' => null];
+
         return view('ventas.gastronomia.cierres_turno.ver', [
             'turno' => $turno,
             'datos' => $datos,
             'referencia' => (string) ($datos['subtitulo'] ?? 'Op. #'.$turno->id),
             'puede_ver_comprobante' => can('ver-comprobante-cierre-turno-gastronomia', false),
             'puede_ver_factura' => can('ver-factura-gastronomia', false),
+            'puede_corregir_arqueo' => can('corregir-arqueo-cierre-turno-gastronomia', false),
+            'correccion_arqueo' => $correccionArqueo,
             'desde_modal' => $request->query('origen') === 'modal_consulta',
         ]);
+    }
+
+    public function apiArqueoCierre(Request $request)
+    {
+        can('corregir-arqueo-cierre-turno-gastronomia');
+
+        $id = (int) $request->input('id', 0);
+        if ($id <= 0) {
+            return response()->json(['ok' => false, 'error' => 'Registro de cierre inválido.'], 422);
+        }
+
+        $turno = TurnoOperativoGastronomia::query()
+            ->with(['turno', 'jornada', 'usuarioCierre'])
+            ->where('estado', TurnoOperativoGastronomia::ESTADO_CERRADO)
+            ->find($id);
+
+        if ($turno === null) {
+            return response()->json(['ok' => false, 'error' => 'Cierre definitivo no encontrado.'], 404);
+        }
+
+        $this->assertAccesoEmpresa((int) $turno->empresa_id);
+
+        $eval = $this->turnoOperativoService->evaluarCorreccionArqueoCierre($turno);
+        $datos = $this->reporteSupport->datosComprobanteCierreDefinitivo($turno);
+
+        return response()->json([
+            'ok' => true,
+            'turno_operativo_id' => (int) $turno->id,
+            'referencia' => GastronomiaCierreTurnoReporteSupport::referenciaCierreDefinitivo($turno),
+            'puede_corregir' => $eval['puede_corregir'],
+            'bloqueo_mensaje' => $eval['bloqueo_mensaje'],
+            'totales_turno' => $datos['totales_turno'] ?? [],
+            'redondeo_invitaciones' => $datos['redondeo_invitaciones'],
+            'redondeo_turno' => $datos['redondeo_turno'],
+            'sobrante_faltante' => $datos['sobrante_faltante'],
+            'cuentacaja_efectivo_id' => (int) ($datos['cuentacaja_efectivo_id'] ?? 0),
+            'conciliacion_ok' => ! empty(($datos['totales_turno'] ?? [])['conciliacion_ok']),
+            'diferencia_cobranza' => (float) (($datos['totales_turno'] ?? [])['diferencia_cobranza'] ?? 0),
+        ]);
+    }
+
+    public function apiCorregirArqueoCierre(Request $request)
+    {
+        can('corregir-arqueo-cierre-turno-gastronomia');
+
+        $id = (int) $request->input('turno_operativo_id', 0);
+        if ($id <= 0) {
+            return response()->json(['ok' => false, 'error' => 'Registro de cierre inválido.'], 422);
+        }
+
+        $turno = TurnoOperativoGastronomia::query()
+            ->where('estado', TurnoOperativoGastronomia::ESTADO_CERRADO)
+            ->find($id);
+
+        if ($turno === null) {
+            return response()->json(['ok' => false, 'error' => 'Cierre definitivo no encontrado.'], 404);
+        }
+
+        $this->assertAccesoEmpresa((int) $turno->empresa_id);
+
+        try {
+            $resultado = $this->turnoOperativoService->corregirArqueoCierreDefinitivo($turno, [
+                'medios_contado' => $request->input('medios_contado'),
+                'redondeo_invitaciones' => $request->input('redondeo_invitaciones'),
+                'redondeo_turno' => $request->input('redondeo_turno'),
+                'sobrante_faltante' => $request->input('sobrante_faltante'),
+                'motivo' => $request->input('motivo'),
+            ]);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        } catch (Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'error' => 'No se pudo guardar la corrección: '.$e->getMessage(),
+            ], 500);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'mensaje' => $resultado['mensaje'],
+            'totales_turno' => $resultado['totales_turno'],
+            'redondeo_invitaciones' => $resultado['turno']->redondeo_invitaciones,
+            'redondeo_turno' => $resultado['turno']->redondeo_turno,
+            'sobrante_faltante' => $resultado['turno']->sobrante_faltante,
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function resolverFiltrosListado(
+        Request $request,
+        ?string $fechaDesdeDefault = null,
+        ?string $fechaHastaDefault = null,
+    ): array {
+        $identificadorPc = GastronomiaIdentificadorPc::resolver($request);
+        $empresaQuery = $this->empresaRepository->allFiltrado();
+        $empresaId = (int) $request->input('empresa_id', 0);
+        if ($empresaId <= 0 && $empresaQuery->count() === 1) {
+            $empresaId = (int) $empresaQuery->first()->id;
+        }
+
+        $fechaDesdeDefault ??= Carbon::today()->subDays(7)->format('Y-m-d');
+        $fechaHastaDefault ??= Carbon::today()->format('Y-m-d');
+
+        $filtros = GastronomiaCierresTurnoListadoFiltros::resolverDesdeRequest($request);
+        if ($filtros['fecha_desde'] === '') {
+            $filtros['fecha_desde'] = $fechaDesdeDefault;
+        }
+        if ($filtros['fecha_hasta'] === '') {
+            $filtros['fecha_hasta'] = $fechaHastaDefault;
+        }
+        if ($empresaId > 0 && (int) $filtros['empresa_id'] <= 0) {
+            $filtros['empresa_id'] = $empresaId;
+        }
+
+        return GastronomiaCierresTurnoListadoFiltros::aplicarAlcanceTerminal(
+            $filtros,
+            $identificadorPc,
+            can('ver-cierres-turno-todas-terminales-gastronomia', false),
+        );
     }
 
     private function assertAccesoEmpresa(int $empresaId): void

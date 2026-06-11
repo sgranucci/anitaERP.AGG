@@ -109,11 +109,13 @@
     <div class="col-lg-12">
         @include('includes.mensaje')
 
-        @if (($requiere_habilitacion_turno ?? false) && ! ($turno_habilitado ?? false) && ($puede_nc ?? false) === false && ($nc_venta_id ?? null) === null && ! ($es_comprobante_nc ?? false))
+        @if (($puede_nc ?? false) === false && ($nc_venta_id ?? null) === null && ! ($es_comprobante_nc ?? false)
+            && can('generar-nota-credito-gastronomia-facturas-dia', false)
+            && \App\Support\Ventas\GastronomiaNotaCreditoUiSupport::esFacturaElegibleParaNc($meta, $nc_venta_id ?? null)
+            && ! ($jornada_abierta ?? false))
             <div class="alert alert-warning py-2 mb-2">
-                No hay turno habilitado en esta terminal (<strong>{{ $identificador_pc ?? '' }}</strong>).
-                Debe <a href="{{ $url_habilitacion_turno ?? route('gastronomia_habilitacion_turno') }}">habilitar el turno</a>
-                antes de generar la nota de crédito desde este comprobante.
+                No hay jornada abierta para la empresa de esta factura.
+                Debe abrir la jornada en Ventas → Gastronomía → Jornada antes de generar la nota de crédito.
             </div>
         @endif
         @if ($nc_venta_id ?? null)

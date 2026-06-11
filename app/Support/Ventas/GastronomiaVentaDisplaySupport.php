@@ -138,7 +138,12 @@ final class GastronomiaVentaDisplaySupport
     public static function waitryDisplayId(?Venta $venta): ?string
     {
         $emision = self::emisionWaitryDesdeVenta($venta);
-        $displayId = trim((string) ($emision?->cuenta?->waitry_display_id ?? ''));
+        $cuenta = $emision?->cuenta;
+        if ($cuenta instanceof CuentaGastronomia && $cuenta->esCanjeMarketing()) {
+            return null;
+        }
+
+        $displayId = trim((string) ($cuenta?->waitry_display_id ?? ''));
 
         return $displayId !== '' ? $displayId : null;
     }

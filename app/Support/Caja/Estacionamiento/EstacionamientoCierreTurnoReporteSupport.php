@@ -7,7 +7,7 @@ use App\Models\Caja\Estacionamiento\ConfiguracionPuntoventaEstacionamiento;
 use App\Models\Caja\Estacionamiento\TurnoOperativoEstacionamiento;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Configuracion\EmpresaLogoArchivo;
-use App\Support\Ventas\GastronomiaCuentacajaEfectivo;
+use App\Support\Caja\Estacionamiento\EstacionamientoCuentacajaEfectivo;
 use App\Support\Ventas\GastronomiaTurnoMediosContadoCierreSupport;
 use App\Support\Ventas\GastronomiaTurnoObservacionHabilitacionSupport;
 use Carbon\Carbon;
@@ -434,7 +434,7 @@ final class EstacionamientoCierreTurnoReporteSupport
         $logo = EmpresaLogoArchivo::dataUriDesdeNombre($empresaNombre);
         $obsHabilitacion = GastronomiaTurnoObservacionHabilitacionSupport::parse($turno?->observacion_habilitacion);
         $cuentacajaEfectivoId = $turno !== null
-            ? (int) (GastronomiaCuentacajaEfectivo::idParaEmpresa((int) $turno->empresa_id) ?? 0)
+            ? (int) (EstacionamientoCuentacajaEfectivo::idParaEmpresa((int) $turno->empresa_id) ?? 0)
             : 0;
 
         return [

@@ -20,8 +20,12 @@
         urlApiCanjesPremio: @json(route('gastronomia_cierres_turno_api_canjes_premio')),
         urlApiCanjesFidelidad: @json(route('gastronomia_cierres_turno_api_canjes_fidelidad')),
         urlApiTicketsTarjeta: @json(route('gastronomia_cierres_turno_api_tickets_tarjeta')),
+        urlApiArqueoCierre: @json(route('gastronomia_cierres_turno_api_arqueo_cierre')),
+        urlApiCorregirArqueoCierre: @json(route('gastronomia_cierres_turno_api_corregir_arqueo_cierre')),
         urlFacturaVerBase: @json(($puede_ver_factura ?? false) ? url('ventas/gastronomia/facturas-dia') : null),
         puedeVerFactura: @json($puede_ver_factura ?? false),
+        puedeCorregirArqueo: @json($puede_corregir_arqueo ?? false),
+        csrfToken: @json(csrf_token()),
     };
 </script>
 <script src="{{ asset('assets/pages/scripts/ventas/gastronomia/totales_turno_render.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/gastronomia/totales_turno_render.js')) }}"></script>
@@ -51,6 +55,22 @@
                         'toggleId' => 'btn-toggle-filtros-cierres-turno',
                         'inputId' => 'filtro_valor',
                     ])
+                    @if ($puede_ver_todas_terminales ?? false)
+                        <div class="custom-control custom-checkbox ml-2 mb-0 align-self-center">
+                            <input type="checkbox"
+                                   class="custom-control-input"
+                                   id="todas_terminales"
+                                   name="todas_terminales"
+                                   value="1"
+                                   form="form-filtros-cierres-turno"
+                                   @checked($todas_terminales ?? false)>
+                            <label class="custom-control-label small text-nowrap"
+                                   for="todas_terminales"
+                                   title="Incluye cierres de todas las PCs de la empresa seleccionada">
+                                Todas las terminales
+                            </label>
+                        </div>
+                    @endif
                     <a href="{{ route('gastronomia_habilitacion_turno') }}" class="btn btn-outline-secondary btn-sm ml-1">
                         <i class="fa fa-key"></i> Habilitación de turno
                     </a>
@@ -60,6 +80,22 @@
                 @include('ventas.gastronomia.cierres_turno.partials.filtros_listado')
             </form>
             <div class="card-body">
+                @if ($todas_terminales ?? false)
+                    <div class="alert alert-secondary py-2 mb-3 small">
+                        <i class="fa fa-desktop"></i>
+                        Mostrando cierres de <strong>todas las terminales</strong> de la empresa
+                        @if ((int) ($filtros['empresa_id'] ?? 0) > 0)
+                            seleccionada
+                        @endif
+                        en el rango de fechas indicado.
+                    </div>
+                @elseif (! ($puede_ver_todas_terminales ?? false))
+                    <div class="alert alert-light border py-2 mb-3 small text-muted">
+                        <i class="fa fa-desktop"></i>
+                        Mostrando cierres de esta terminal:
+                        <strong>{{ $filtros['identificador_pc'] ?? $identificador_pc_default }}</strong>
+                    </div>
+                @endif
                 @if (! empty($jornada['jornada_abierta']))
                     <div class="alert alert-info py-2 mb-3" id="alert-jornada-activa">
                         Jornada activa:
@@ -176,6 +212,22 @@
                                             title="Tickets tarjeta canjeados en este cierre">
                                         <i class="fa fa-barcode text-info"></i>
                                     </button>
+                                    @if (
+                                        ($puede_corregir_arqueo ?? false)
+                                        && ($f->mostrar_arqueo_cierre_fila ?? false)
+                                    )
+                                        <button type="button"
+                                                class="btn-accion-tabla tooltipsC js-corregir-arqueo-cierre mr-1"
+                                                data-id="{{ $f->id }}"
+                                                data-referencia="{{ $f->referencia }}"
+                                                data-puede-editar="{{ ($f->puede_corregir_arqueo_fila ?? false) ? '1' : '0' }}"
+                                                title="{{ ($f->puede_corregir_arqueo_fila ?? false)
+                                                    ? 'Corregir montos contados por medio de pago y ajustes (redondeo / faltante).'
+                                                    : ('Ver arqueo (solo lectura). ' . ($f->bloqueo_corregir_arqueo_fila ?? '')) }}">
+                                            <i class="fa {{ ($f->puede_corregir_arqueo_fila ?? false) ? 'fa-edit text-success' : 'fa-eye text-secondary' }}"></i>
+                                            <span class="small">{{ ($f->puede_corregir_arqueo_fila ?? false) ? 'Arqueo' : 'Ver arqueo' }}</span>
+                                        </button>
+                                    @endif
                                     @if ($puede_ver_comprobante ?? false)
                                         @if ($f->tipo === 'parcial')
                                             <a href="{{ route('gastronomia_cierre_turno_comprobante_parcial', ['id' => $f->id, 'inline' => 1]) }}"
@@ -359,4 +411,6 @@
         </div>
     </div>
 </div>
+
+@include('ventas.gastronomia.cierres_turno.partials.modal_corregir_arqueo')
 @endsection

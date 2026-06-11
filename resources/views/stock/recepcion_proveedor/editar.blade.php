@@ -4,6 +4,7 @@ Recepción {{ $recepcion->numerorecepcion }}
 @endsection
 
 @section("scripts")
+<script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/recepcion_proveedor/form.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/depmae/consulta.js') }}" type="text/javascript"></script>
 @endsection

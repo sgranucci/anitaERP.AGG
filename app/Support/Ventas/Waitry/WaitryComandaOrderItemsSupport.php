@@ -2,10 +2,18 @@
 
 namespace App\Support\Ventas\Waitry;
 
+use App\Models\Stock\Articulo;
+use App\Models\Stock\Formula_Articulo;
+use App\Models\Ventas\CuentaGastronomia;
+use App\Models\Ventas\CuentaGastronomiaLinea;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\Venta_Emision;
 use App\Services\Ventas\Gastronomia\GastronomiaFacturacionService;
+use App\Support\Stock\FormulaArticuloSubformulaPosSupport;
+use App\Support\Ventas\GastronomiaFormulaOpcionalSeleccion;
+use App\Support\Ventas\GastronomiaVentaEmisionMapSupport;
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
 use InvalidArgumentException;
 
 /**
@@ -42,8 +50,11 @@ final class WaitryComandaOrderItemsSupport
     /**
      * @return list<array<string, mixed>>
      */
-    public static function construirDesdeVenta(Venta $venta, bool $sinCobranza = false): array
-    {
+    public static function construirDesdeVenta(
+        Venta $venta,
+        bool $sinCobranza = false,
+        ?CuentaGastronomia $cuenta = null,
+    ): array {
         $preciosCortesia = self::requierePreciosCortesiaWaitry($venta, $sinCobranza);
 
         $venta->loadMissing(['venta_emisiones.articulos']);
@@ -60,6 +71,19 @@ final class WaitryComandaOrderItemsSupport
             throw new InvalidArgumentException('Waitry: la venta no tiene ítems para enviar a cocina.');
         }
 
+        $metaVariaciones = $cuenta !== null
+            ? self::resolverVariacionesDesdeCuenta($venta, $cuenta, $emisiones)
+            : ['variaciones_por_emision_id' => [], 'emision_ids_excluir' => []];
+        $excluirEmisionIds = array_flip($metaVariaciones['emision_ids_excluir']);
+
+        $emisionesActivas = $emisiones
+            ->filter(static fn (Venta_Emision $emision): bool => ! isset($excluirEmisionIds[(int) $emision->id]))
+            ->values();
+
+        if ($emisionesActivas->isEmpty()) {
+            throw new InvalidArgumentException('Waitry: la venta no tiene ítems válidos para enviar a cocina.');
+        }
+
         $tsItem = [
             'date' => Carbon::now('UTC')->format('Y-m-d\TH:i:sP'),
             'timezone_type' => 0,
@@ -67,9 +91,9 @@ final class WaitryComandaOrderItemsSupport
         ];
 
         $items = [];
-        $ultimoIndice = $emisiones->count() - 1;
+        $ultimoIndice = $emisionesActivas->count() - 1;
 
-        foreach ($emisiones as $indice => $emision) {
+        foreach ($emisionesActivas as $indice => $emision) {
             $cantidad = (float) $emision->cantidad;
             $count = (int) max(1, round($cantidad));
 
@@ -84,7 +108,12 @@ final class WaitryComandaOrderItemsSupport
                 }
             }
 
-            $items[] = self::armarOrderItem($emision, $precio, $count, $tsItem);
+            $item = self::armarOrderItem($emision, $precio, $count, $tsItem);
+            $variaciones = $metaVariaciones['variaciones_por_emision_id'][(int) $emision->id] ?? [];
+            if ($variaciones !== []) {
+                $item['orderItemVariations'] = $variaciones;
+            }
+            $items[] = $item;
         }
 
         if ($items === []) {
@@ -223,6 +252,250 @@ final class WaitryComandaOrderItemsSupport
             'orderItemVariations' => [],
             '_impuesto_id' => $impuestoId,
             '_incluyeimpuesto' => $incluyeImpuesto,
+        ];
+    }
+
+    /**
+     * @param  Collection<int, Venta_Emision>  $emisiones
+     * @return array{
+     *   variaciones_por_emision_id: array<int, list<array<string, mixed>>>,
+     *   emision_ids_excluir: list<int>
+     * }
+     */
+    private static function resolverVariacionesDesdeCuenta(
+        Venta $venta,
+        CuentaGastronomia $cuenta,
+        Collection $emisiones,
+    ): array {
+        $cuenta->loadMissing(['lineas']);
+
+        $lineas = $cuenta->lineas ?? collect();
+        if ($lineas->isEmpty()) {
+            return ['variaciones_por_emision_id' => [], 'emision_ids_excluir' => []];
+        }
+
+        $mapLineaEmision = GastronomiaVentaEmisionMapSupport::mapLineasCuentaAVentaEmision($venta, $lineas);
+        if ($mapLineaEmision === []) {
+            return ['variaciones_por_emision_id' => [], 'emision_ids_excluir' => []];
+        }
+
+        $cacheEtiquetas = self::precargarEtiquetasOpcionales($lineas, $emisiones);
+        $variacionesPorEmisionId = [];
+        $emisionIdsExcluir = [];
+        $emisionesUsadasExclusion = [];
+
+        foreach ($lineas->sortBy('id') as $linea) {
+            if (! $linea instanceof CuentaGastronomiaLinea) {
+                continue;
+            }
+
+            $emisionId = (int) ($mapLineaEmision[(int) $linea->id] ?? 0);
+            if ($emisionId <= 0) {
+                continue;
+            }
+
+            $opcionales = is_array($linea->opcionales_json) ? $linea->opcionales_json : [];
+            if ($opcionales === []) {
+                continue;
+            }
+
+            $variaciones = [];
+            foreach ($opcionales as $valor) {
+                $etiqueta = self::etiquetaOpcionalDesdeValor($valor, $cacheEtiquetas);
+                if ($etiqueta === null) {
+                    continue;
+                }
+
+                $variaciones[] = self::armarOrderItemVariation($etiqueta['sku'], $etiqueta['descripcion']);
+
+                $articuloOpcionalId = (int) ($etiqueta['articulo_id'] ?? 0);
+                if ($articuloOpcionalId <= 0) {
+                    continue;
+                }
+
+                $hijo = self::buscarEmisionOpcionalHija($emisiones, $emisionesUsadasExclusion, $articuloOpcionalId);
+                if ($hijo instanceof Venta_Emision) {
+                    $emisionIdsExcluir[] = (int) $hijo->id;
+                    $emisionesUsadasExclusion[] = (int) $hijo->id;
+                }
+            }
+
+            if ($variaciones !== []) {
+                $variacionesPorEmisionId[$emisionId] = $variaciones;
+            }
+        }
+
+        return [
+            'variaciones_por_emision_id' => $variacionesPorEmisionId,
+            'emision_ids_excluir' => $emisionIdsExcluir,
+        ];
+    }
+
+    /**
+     * @param  Collection<int, CuentaGastronomiaLinea>  $lineas
+     * @param  Collection<int, Venta_Emision>  $emisiones
+     * @return array{
+     *   articulos: array<int, Articulo>,
+     *   formulas: array<int, Formula_Articulo>
+     * }
+     */
+    private static function precargarEtiquetasOpcionales(Collection $lineas, Collection $emisiones): array
+    {
+        $idsArticulos = [];
+        $idsFormulas = [];
+
+        foreach ($lineas as $linea) {
+            $map = is_array($linea->opcionales_json) ? $linea->opcionales_json : [];
+            foreach ($map as $valor) {
+                $decoded = GastronomiaFormulaOpcionalSeleccion::decodificar($valor);
+                if ($decoded === null) {
+                    continue;
+                }
+                if ($decoded['tipo'] === 'articulo') {
+                    $idsArticulos[$decoded['id']] = true;
+                } else {
+                    $idsFormulas[$decoded['id']] = true;
+                }
+            }
+        }
+
+        $articulos = [];
+        foreach ($emisiones as $emision) {
+            if (! $emision instanceof Venta_Emision) {
+                continue;
+            }
+            $articuloId = (int) ($emision->articulo_id ?? 0);
+            if ($articuloId <= 0 || ! isset($idsArticulos[$articuloId])) {
+                continue;
+            }
+            $articulo = $emision->articulos;
+            if ($articulo instanceof Articulo) {
+                $articulos[$articuloId] = $articulo;
+            }
+        }
+
+        $faltantes = array_diff_key($idsArticulos, $articulos);
+        if ($faltantes !== []) {
+            foreach (Articulo::query()
+                ->whereIn('id', array_keys($faltantes))
+                ->get(['id', 'sku', 'descripcion']) as $articulo) {
+                $articulos[(int) $articulo->id] = $articulo;
+            }
+        }
+
+        $formulas = [];
+        if ($idsFormulas !== []) {
+            $formulas = Formula_Articulo::query()
+                ->with('articulos')
+                ->whereIn('id', array_keys($idsFormulas))
+                ->get()
+                ->keyBy('id')
+                ->all();
+        }
+
+        return ['articulos' => $articulos, 'formulas' => $formulas];
+    }
+
+    /**
+     * @param  array{articulos: array<int, Articulo>, formulas: array<int, Formula_Articulo>}  $cache
+     * @return array{sku: string, descripcion: string, articulo_id: ?int}|null
+     */
+    private static function etiquetaOpcionalDesdeValor(mixed $valor, array $cache): ?array
+    {
+        $decoded = GastronomiaFormulaOpcionalSeleccion::decodificar($valor);
+        if ($decoded === null) {
+            return null;
+        }
+
+        if ($decoded['tipo'] === 'articulo') {
+            $art = $cache['articulos'][$decoded['id']] ?? null;
+            if (! $art instanceof Articulo) {
+                return null;
+            }
+
+            $sku = trim((string) ($art->sku ?? ''));
+            if ($sku === '') {
+                $sku = 'ART-'.$decoded['id'];
+            }
+            $descripcion = trim((string) ($art->descripcion ?? ''));
+            if ($descripcion === '') {
+                $descripcion = $sku;
+            }
+
+            return [
+                'sku' => $sku,
+                'descripcion' => $descripcion,
+                'articulo_id' => $decoded['id'],
+            ];
+        }
+
+        $sub = $cache['formulas'][$decoded['id']] ?? null;
+        $etiqueta = FormulaArticuloSubformulaPosSupport::etiquetaOpcional(
+            $sub instanceof Formula_Articulo ? $sub : null,
+            $decoded['id'],
+        );
+        $articuloId = $sub instanceof Formula_Articulo ? (int) ($sub->articulo_id ?? 0) : 0;
+
+        return [
+            'sku' => $etiqueta['sku'],
+            'descripcion' => $etiqueta['descripcion'],
+            'articulo_id' => $articuloId > 0 ? $articuloId : null,
+        ];
+    }
+
+    /**
+     * @param  Collection<int, Venta_Emision>  $emisiones
+     * @param  list<int>  $usadas
+     */
+    private static function buscarEmisionOpcionalHija(
+        Collection $emisiones,
+        array $usadas,
+        int $articuloId,
+    ): ?Venta_Emision {
+        foreach ($emisiones as $emision) {
+            if (! $emision instanceof Venta_Emision) {
+                continue;
+            }
+            if (in_array((int) $emision->id, $usadas, true)) {
+                continue;
+            }
+            if ((int) ($emision->articulo_id ?? 0) !== $articuloId) {
+                continue;
+            }
+            if (abs((float) ($emision->precio ?? 0)) > 0.0001) {
+                continue;
+            }
+
+            return $emision;
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function armarOrderItemVariation(string $sku, string $nombre): array
+    {
+        $sku = trim($sku);
+        $nombre = trim($nombre);
+        if ($nombre === '') {
+            $nombre = $sku !== '' ? $sku : 'Adicional';
+        }
+        if ($sku === '') {
+            $sku = $nombre;
+        }
+
+        return [
+            'externalId' => $sku,
+            'name' => $nombre,
+            'itemVariation' => [
+                'item' => [
+                    'name' => $nombre,
+                    'externalId' => $sku,
+                    'externalCode' => $sku,
+                ],
+            ],
         ];
     }
 }

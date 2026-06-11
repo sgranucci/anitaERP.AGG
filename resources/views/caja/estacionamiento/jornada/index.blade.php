@@ -61,6 +61,23 @@
                                 @if (! empty($estado['observacion_apertura']))
                                     <br><em>{{ $estado['observacion_apertura'] }}</em>
                                 @endif
+                                @if ($puede_eliminar ?? false)
+                                    @php $elimAbierta = $eliminacion_jornada_abierta ?? null; @endphp
+                                    @if (! empty($elimAbierta['puede_eliminar']))
+                                        <div class="mt-2">
+                                            <button type="button"
+                                                    class="btn btn-outline-secondary btn-sm js-eliminar-jornada"
+                                                    data-jornada-id="{{ (int) $estado['jornada_id'] }}"
+                                                    data-fecha-jornada="{{ $estado['fecha_jornada_fmt'] ?? $estado['fecha_jornada'] }}"
+                                                    title="Eliminar apertura errónea (sin movimientos)">
+                                                <i class="fa fa-trash"></i> Borrar apertura
+                                            </button>
+                                            <span class="small text-muted ml-1">Solo si no tiene comprobantes ni turnos habilitados.</span>
+                                        </div>
+                                    @elseif (! empty($elimAbierta['motivo_no_eliminar']))
+                                        <p class="small mb-0 mt-2 text-muted">{{ $elimAbierta['motivo_no_eliminar'] }}</p>
+                                    @endif
+                                @endif
                             </div>
                         @else
                             <div class="alert alert-warning">
@@ -84,6 +101,7 @@
                                             <input type="date" class="form-control" id="fecha_jornada_abrir"
                                                    value="{{ $fecha_hoy }}"
                                                    @if (! empty($fecha_jornada_minima)) min="{{ $fecha_jornada_minima }}" @endif
+                                                   max="{{ $fecha_maxima ?? ($estado['fecha_factura_hoy'] ?? now()->format('Y-m-d')) }}"
                                                    @disabled($estado['jornada_abierta'])>
                                         </div>
                                         <div class="form-group">
@@ -106,11 +124,57 @@
                                     <div class="card-header">Cerrar jornada</div>
                                     <div class="card-body">
                                         @if (! empty($estado['errores_cierre']))
+                                            @php
+                                                $mostrarLinkSaneamiento = false;
+                                                foreach ($estado['errores_cierre'] as $err) {
+                                                    if (stripos($err, 'Saneamiento') !== false) {
+                                                        $mostrarLinkSaneamiento = true;
+                                                        break;
+                                                    }
+                                                }
+                                            @endphp
                                             <ul class="text-danger small" id="lista-errores-cierre">
                                                 @foreach ($estado['errores_cierre'] as $err)
                                                     <li>{{ $err }}</li>
                                                 @endforeach
                                             </ul>
+                                            @if ($mostrarLinkSaneamiento)
+                                                <div class="mb-2">
+                                                    <a href="{{ $url_saneamiento_turno ?? url('caja/estacionamiento/saneamiento-turno') }}?empresa_id={{ $empresa_id }}"
+                                                       class="btn btn-warning btn-sm"
+                                                       target="_blank" rel="noopener">
+                                                        <i class="fa fa-external-link"></i>
+                                                        Ir a Saneamiento de turnos
+                                                    </a>
+                                                </div>
+                                            @endif
+                                        @endif
+                                        @if (! empty($estado['nota_politica_turnos']))
+                                            <p class="text-muted small mb-2">{{ $estado['nota_politica_turnos'] }}</p>
+                                        @endif
+                                        @if (! empty($estado['turnos_habilitados']))
+                                            <div class="small mb-2">
+                                                <strong>Turnos habilitados sin cerrar:</strong>
+                                                <ul class="mb-1 pl-3">
+                                                    @foreach ($estado['turnos_habilitados'] as $th)
+                                                        <li>
+                                                            {{ $th['identificador_pc'] }} — {{ $th['turno_nombre'] }}
+                                                            <span class="badge badge-danger">sin cerrar</span>
+                                                        </li>
+                                                    @endforeach
+                                                </ul>
+                                                <a href="{{ $url_saneamiento_turno ?? url('caja/estacionamiento/saneamiento-turno') }}?empresa_id={{ $empresa_id }}"
+                                                   class="btn btn-outline-warning btn-sm" target="_blank" rel="noopener">
+                                                    Cierre remoto de turnos
+                                                </a>
+                                            </div>
+                                        @endif
+                                        @if (! empty($estado['cuentas_abiertas_vacias']))
+                                            <div class="alert alert-info small py-2 mb-2">
+                                                {{ $estado['cuentas_abiertas_vacias'] }} cuenta(s) abierta(s) sin ítems se
+                                                <strong>descartarán automáticamente</strong> al cerrar la jornada
+                                                (no requieren saneamiento).
+                                            </div>
                                         @endif
                                         <div class="form-group">
                                             <label for="observacion_cerrar">Observación de cierre</label>

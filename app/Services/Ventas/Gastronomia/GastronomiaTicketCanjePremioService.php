@@ -48,7 +48,7 @@ final class GastronomiaTicketCanjePremioService
         $items = $this->decodificarFilasWigos($filasWigos, $cupon, $empresaId, $listaprecioId);
 
         if ($items === []) {
-            throw new InvalidArgumentException('El ticket no contiene artículos válidos para canje.');
+            throw new InvalidArgumentException($this->mensajeSinArticulosValidosCanje($filasWigos));
         }
 
         $descuento = $this->resolverDescuentoConfigurado();
@@ -95,6 +95,7 @@ final class GastronomiaTicketCanjePremioService
      * Agrega ítems a la cuenta, aplica descuento/cliente y guarda datos pendientes para persistir al emitir.
      *
      * @param  array<int|string, array<string|int, int|null>>  $opcionalesPorArticulo  articulo_id => [orden => articulo_opcional_id]
+     * @param  array<int|string, string>  $comentariosPorArticulo  articulo_id => comentario cocina
      *
      * @return array{cuenta:CuentaGastronomia,validacion:array<string,mixed>}
      */
@@ -103,6 +104,7 @@ final class GastronomiaTicketCanjePremioService
         string $numerocupon,
         int $listaprecioId,
         array $opcionalesPorArticulo = [],
+        array $comentariosPorArticulo = [],
     ): array {
         if ($cuenta->estado !== CuentaGastronomia::ESTADO_ABIERTA) {
             throw new InvalidArgumentException('La cuenta no está abierta.');
@@ -136,6 +138,7 @@ final class GastronomiaTicketCanjePremioService
             $descuento,
             $clienteInternoId,
             $opcionalesPorArticulo,
+            $comentariosPorArticulo,
         ) {
             foreach ($itemsConOpcionales as $idx => $item) {
                 $articuloId = (int) $item['articulo_id'];
@@ -148,6 +151,8 @@ final class GastronomiaTicketCanjePremioService
                     (float) $item['cantidad'],
                     (float) $item['precio_unitario'],
                     $opcionales,
+                    0.,
+                    $this->resolverComentarioCocinaLineaCanje($articuloId, $comentariosPorArticulo),
                 );
             }
 
@@ -381,6 +386,50 @@ final class GastronomiaTicketCanjePremioService
         return $items;
     }
 
+    /**
+     * @param  list<object>  $filasWigos
+     */
+    private function mensajeSinArticulosValidosCanje(array $filasWigos): string
+    {
+        if ($filasWigos === []) {
+            return 'El ticket no contiene artículos válidos para canje.';
+        }
+
+        $detalle = array_map(
+            fn (object $fila): string => $this->describirFilaWigosPremio($fila),
+            $filasWigos,
+        );
+
+        return 'El ticket no contiene artículos válidos para canje. Wigos devolvió: '
+            .implode('; ', $detalle)
+            .'. Se espera al menos un GIFT_ID con prefijo «V» (premio canjeable en ERP).';
+    }
+
+    private function describirFilaWigosPremio(object $fila): string
+    {
+        $giftId = trim(str_replace(["\r", "\n"], '', (string) ($fila->GIFT_ID ?? '')));
+        $giftName = trim((string) ($fila->GIFT_NAME ?? ''));
+        $cantidad = trim((string) ($fila->QUANTITY ?? ''));
+
+        $partes = [];
+        if ($giftId === '') {
+            $partes[] = 'GIFT_ID vacío';
+        } else {
+            $partes[] = 'GIFT_ID='.$giftId;
+            if (strtoupper($giftId[0]) !== 'V') {
+                $partes[] = 'sin prefijo V';
+            }
+        }
+        if ($giftName !== '') {
+            $partes[] = '«'.$giftName.'»';
+        }
+        if ($cantidad !== '' && (float) $cantidad != 0.) {
+            $partes[] = 'cant='.$cantidad;
+        }
+
+        return implode(', ', $partes);
+    }
+
   /**
    * Busca artículo por GIFT_ID de Wigos (ERP: sku corto ej. V0277; legacy: 13 chars con dígito en pos. 12).
    * Catálogo compartido: empresa_id null/0 aplica a cualquier PV (igual que queryArticulosCatalogo).
@@ -491,6 +540,20 @@ final class GastronomiaTicketCanjePremioService
         }
 
         return $cliente;
+    }
+
+    /**
+     * @param  array<int|string, string>  $comentariosPorArticulo
+     */
+    private function resolverComentarioCocinaLineaCanje(int $articuloId, array $comentariosPorArticulo): ?string
+    {
+        $raw = $comentariosPorArticulo[$articuloId]
+            ?? $comentariosPorArticulo[(string) $articuloId]
+            ?? null;
+
+        return \App\Support\Ventas\GastronomiaComentarioCocinaSupport::normalizar(
+            is_string($raw) ? $raw : null
+        );
     }
 
     /**

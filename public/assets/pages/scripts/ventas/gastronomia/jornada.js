@@ -140,11 +140,15 @@
         scope = scope || 'modal';
         var ccId = ln.cuentacaja_id != null ? parseInt(ln.cuentacaja_id, 10) : 0;
         var codigo = escHtml(ln.cuentacaja_codigo || '');
-        var nombre = escHtml(ln.cuentacaja_nombre || ln.etiqueta || '');
+        var nombre = escHtml(ln.etiqueta || ln.cuentacaja_nombre || '');
         var tipo = escHtml(ln.tipo_waitry || 'totem');
         var mSis = Number(ln.monto_sistema || 0);
         var mZ = ln.monto_informe_z != null ? Number(ln.monto_informe_z) : null;
+        if (scope === 'preview' && (mZ == null || isNaN(mZ)) && mSis > 0) {
+            mZ = mSis;
+        }
         var inputVal = mZ != null && !isNaN(mZ) ? escHtml(formatMontoInformeZInput(mZ)) : '';
+        var soloLecturaPreview = scope === 'preview';
 
         var html = '<tr class="jornada-informe-z-linea" data-tipo-waitry="' + tipo + '" data-monto-sistema="' + formatearMonto(mSis) + '">';
         html += '<td><div class="jornada-informe-z-cuenta-wrap">';
@@ -158,6 +162,9 @@
         html += '<td class="text-right"><input type="text" inputmode="decimal" autocomplete="off"';
         html += ' class="form-control jornada-informe-z-monto js-monto-informe-z js-monto-informe-z-' + scope + '"';
         html += ' data-scope="' + scope + '" data-monto-sistema="' + formatearMonto(mSis) + '"';
+        if (soloLecturaPreview) {
+            html += ' readonly tabindex="-1" title="Precarga automática — ajuste solo en Caja al rendir"';
+        }
         html += ' value="' + inputVal + '" placeholder="0,00"></td>';
         html += '<td class="text-right js-diff-cell">—</td>';
         html += '<td class="text-center"><button type="button" title="Quitar línea" class="btn-accion-tabla js-informe-z-quitar-linea">';
@@ -174,7 +181,9 @@
         }
 
         var html = '<div class="jornada-informe-z-wrap">';
+        var granTotalSistema = 0;
         totems.forEach(function (bloque, idxTotem) {
+            granTotalSistema += Number(bloque.total_ingreso_sistema || 0);
             var maps = mapaSistemaDesdeLineas(bloque.lineas || []);
             var titulo = escHtml(bloque.ubicacion_nombre || 'Tótem');
             if (bloque.detalle) {
@@ -184,7 +193,14 @@
                 titulo += ' <span class="text-muted">(tableId ' + parseInt(bloque.waitry_table_id, 10) + ')</span>';
             }
 
-            html += '<div class="card mb-2 jornada-informe-z-totem" data-totem-idx="' + idxTotem + '" data-totem-id="' + parseInt(bloque.totem_id, 10) + '"';
+            var totemIdCard = parseInt(bloque.totem_id, 10);
+            if (isNaN(totemIdCard)) {
+                totemIdCard = 0;
+            }
+            html += '<div class="card mb-2 jornada-informe-z-totem" data-totem-idx="' + idxTotem + '" data-totem-id="' + totemIdCard + '"';
+            if (bloque.plantilla_unificada) {
+                html += ' data-plantilla-unificada="1"';
+            }
             if (bloque.waitry_table_id) {
                 html += ' data-waitry-table-id="' + parseInt(bloque.waitry_table_id, 10) + '"';
             }
@@ -206,12 +222,29 @@
                 });
             }
 
-            html += '</tbody></table>';
+            html += '</tbody>';
+            html += '<tfoot><tr class="jornada-informe-z-totales-fila bg-light font-weight-bold">';
+            html += '<td>Total</td>';
+            html += '<td class="text-right jornada-informe-z-sistema js-total-sistema">$' + formatearMonto(bloque.total_ingreso_sistema) + '</td>';
+            html += '<td class="text-right jornada-informe-z-sistema js-total-informe-z">$0,00</td>';
+            html += '<td class="text-right js-total-diferencia">—</td>';
+            html += '<td></td></tr></tfoot></table>';
             html += '<div class="px-2 py-1 border-top">';
             html += '<button type="button" class="btn btn-link btn-sm p-0 js-informe-z-agregar-linea" data-scope="' + scope + '">';
             html += '+ Agregar medio de pago</button></div>';
             html += '</div></div>';
         });
+        html += '<div class="jornada-informe-z-resumen-totales alert alert-secondary py-2 mb-0 mt-2">';
+        html += '<div class="d-flex flex-wrap justify-content-between align-items-center">';
+        html += '<span><strong>Total Informe Z</strong></span>';
+        html += '<span class="text-right">';
+        html += '<span class="mr-3"><span class="text-muted small">Sistema</span> ';
+        html += '<strong class="jornada-informe-z-sistema js-informe-z-gran-total-sistema">$' + formatearMonto(granTotalSistema) + '</strong></span>';
+        html += '<span class="mr-3"><span class="text-muted small">Informe Z</span> ';
+        html += '<strong class="js-informe-z-gran-total-z">$0,00</strong></span>';
+        html += '<span><span class="text-muted small">Diferencia</span> ';
+        html += '<strong class="js-informe-z-gran-total-diff">—</strong></span>';
+        html += '</span></div></div>';
         html += '</div>';
 
         return html;
@@ -317,12 +350,83 @@
         cell.className = 'text-right js-diff-cell ' + (ok ? 'text-success' : 'text-danger font-weight-bold');
     }
 
+    function actualizarTotalesInformeZTabla(tabla) {
+        if (!tabla) {
+            return { sistema: 0, informeZ: 0, diferencia: 0 };
+        }
+        var totalSis = 0;
+        var totalZ = 0;
+        tabla.querySelectorAll('.jornada-informe-z-linea').forEach(function (tr) {
+            var mSis = parseFloat(tr.getAttribute('data-monto-sistema') || '0') || 0;
+            var inp = tr.querySelector('.js-monto-informe-z');
+            var mZ = inp ? parseMontoInformeZ(inp.value) : 0;
+            totalSis += mSis;
+            totalZ += mZ;
+        });
+        totalSis = Math.round(totalSis * 100) / 100;
+        totalZ = Math.round(totalZ * 100) / 100;
+        var diff = Math.round((totalZ - totalSis) * 100) / 100;
+        var tol = toleranciaInformeZ();
+        var ok = Math.abs(diff) <= tol || (totalSis <= tol && totalZ <= tol);
+        var celSis = tabla.querySelector('.js-total-sistema');
+        var celZ = tabla.querySelector('.js-total-informe-z');
+        var celDiff = tabla.querySelector('.js-total-diferencia');
+        if (celSis) {
+            celSis.textContent = '$' + formatearMonto(totalSis);
+        }
+        if (celZ) {
+            celZ.textContent = '$' + formatearMonto(totalZ);
+        }
+        if (celDiff) {
+            celDiff.textContent = (diff >= 0 ? '+' : '') + formatearMonto(diff);
+            celDiff.className = 'text-right js-total-diferencia ' + (ok ? 'text-success' : 'text-danger');
+        }
+        return { sistema: totalSis, informeZ: totalZ, diferencia: diff };
+    }
+
+    function actualizarGranTotalInformeZ(wrap) {
+        if (!wrap) {
+            return;
+        }
+        var totalSis = 0;
+        var totalZ = 0;
+        wrap.querySelectorAll('.jornada-informe-z-tabla').forEach(function (tabla) {
+            var parcial = actualizarTotalesInformeZTabla(tabla);
+            totalSis += parcial.sistema;
+            totalZ += parcial.informeZ;
+        });
+        totalSis = Math.round(totalSis * 100) / 100;
+        totalZ = Math.round(totalZ * 100) / 100;
+        var diff = Math.round((totalZ - totalSis) * 100) / 100;
+        var tol = toleranciaInformeZ();
+        var ok = Math.abs(diff) <= tol || (totalSis <= tol && totalZ <= tol);
+        var celSis = wrap.querySelector('.js-informe-z-gran-total-sistema');
+        var celZ = wrap.querySelector('.js-informe-z-gran-total-z');
+        var celDiff = wrap.querySelector('.js-informe-z-gran-total-diff');
+        if (celSis) {
+            celSis.textContent = '$' + formatearMonto(totalSis);
+        }
+        if (celZ) {
+            celZ.textContent = '$' + formatearMonto(totalZ);
+        }
+        if (celDiff) {
+            celDiff.textContent = (diff >= 0 ? '+' : '') + formatearMonto(diff);
+            celDiff.className = 'js-informe-z-gran-total-diff ' + (ok ? 'text-success' : 'text-danger font-weight-bold');
+        }
+    }
+
     function actualizarDiferenciasEnContenedor(contenedor) {
         if (!contenedor) {
             return;
         }
         contenedor.querySelectorAll('.jornada-informe-z-linea').forEach(function (tr) {
             actualizarDiferenciaEnFilaInformeZ(tr);
+        });
+        var wraps = contenedor.classList.contains('jornada-informe-z-wrap')
+            ? [contenedor]
+            : Array.prototype.slice.call(contenedor.querySelectorAll('.jornada-informe-z-wrap'));
+        wraps.forEach(function (wrap) {
+            actualizarGranTotalInformeZ(wrap);
         });
     }
 
@@ -353,9 +457,10 @@
                     monto_sistema: Math.round(mSistema * 100) / 100,
                 });
             });
-            if (totemId > 0) {
-                var entry = { totem_id: totemId, lineas: lineas };
-                if (tableId > 0) {
+            var esUnificado = card.getAttribute('data-plantilla-unificada') === '1';
+            if (totemId > 0 || (esUnificado && lineas.length > 0)) {
+                var entry = { totem_id: esUnificado ? 0 : totemId, lineas: lineas };
+                if (tableId > 0 && !esUnificado) {
                     entry.waitry_table_id = tableId;
                 }
                 totemsOut.push(entry);
@@ -364,7 +469,10 @@
 
         if (totemsOut.length === 0 && totemsMeta && totemsMeta.length > 0) {
             (totemsMeta || []).forEach(function (bloque) {
-                totemsOut.push({ totem_id: bloque.totem_id, lineas: [] });
+                var tid = bloque.plantilla_unificada ? 0 : (parseInt(bloque.totem_id, 10) || 0);
+                if (tid > 0 || bloque.plantilla_unificada) {
+                    totemsOut.push({ totem_id: tid, lineas: [] });
+                }
             });
         }
 
@@ -445,7 +553,14 @@
 
         document.body.addEventListener('input', function (ev) {
             if (ev.target && ev.target.classList.contains('js-monto-informe-z')) {
-                actualizarDiferenciaEnFilaInformeZ(ev.target.closest('tr'));
+                var trInp = ev.target.closest('tr');
+                actualizarDiferenciaEnFilaInformeZ(trInp);
+                var contInp = trInp && (trInp.closest('#preview-informe-z-tablas')
+                    || trInp.closest('#informe-z-contenido')
+                    || trInp.closest('.jornada-informe-z-wrap'));
+                if (contInp) {
+                    actualizarDiferenciasEnContenedor(contInp);
+                }
             }
         });
 
@@ -453,7 +568,14 @@
             if (ev.target && ev.target.classList.contains('js-monto-informe-z')) {
                 var val = parseMontoInformeZ(ev.target.value);
                 ev.target.value = val > 0 ? formatMontoInformeZInput(val) : '';
-                actualizarDiferenciaEnFilaInformeZ(ev.target.closest('tr'));
+                var trBlur = ev.target.closest('tr');
+                actualizarDiferenciaEnFilaInformeZ(trBlur);
+                var contBlur = trBlur && (trBlur.closest('#preview-informe-z-tablas')
+                    || trBlur.closest('#informe-z-contenido')
+                    || trBlur.closest('.jornada-informe-z-wrap'));
+                if (contBlur) {
+                    actualizarDiferenciasEnContenedor(contBlur);
+                }
             }
         }, true);
 
@@ -534,30 +656,57 @@
         el.classList.remove('d-none');
     }
 
+    function acumularMontosInformeZEnMapa(destino, lineas) {
+        (lineas || []).forEach(function (ln) {
+            var monto = ln.monto_informe_z != null ? Number(ln.monto_informe_z) : Number(ln.monto || 0);
+            if (isNaN(monto)) {
+                monto = 0;
+            }
+            var ccId = parseInt(ln.cuentacaja_id, 10) || 0;
+            var tipo = String(ln.tipo_waitry || '').trim();
+            if (ccId > 0) {
+                destino.porCuenta[String(ccId)] = (destino.porCuenta[String(ccId)] || 0) + monto;
+            }
+            if (tipo) {
+                destino.porTipo[tipo] = (destino.porTipo[tipo] || 0) + monto;
+            }
+        });
+    }
+
     function mapaMontosInformeZPreservar(totemsPayload) {
         var mapa = {};
         (totemsPayload || []).forEach(function (t) {
-            var tid = parseInt(t.totem_id, 10) || 0;
-            if (tid <= 0) {
-                return;
+            var tid = parseInt(t.totem_id, 10);
+            if (isNaN(tid)) {
+                tid = 0;
             }
-            mapa[tid] = { porCuenta: {}, porTipo: {} };
-            (t.lineas || []).forEach(function (ln) {
-                var monto = ln.monto_informe_z != null ? Number(ln.monto_informe_z) : Number(ln.monto || 0);
-                if (isNaN(monto)) {
-                    monto = 0;
-                }
-                var ccId = parseInt(ln.cuentacaja_id, 10) || 0;
-                var tipo = String(ln.tipo_waitry || '').trim();
-                if (ccId > 0) {
-                    mapa[tid].porCuenta[String(ccId)] = monto;
-                }
-                if (tipo) {
-                    mapa[tid].porTipo[tipo] = monto;
-                }
-            });
+            if (!mapa[tid]) {
+                mapa[tid] = { porCuenta: {}, porTipo: {} };
+            }
+            acumularMontosInformeZEnMapa(mapa[tid], t.lineas || []);
         });
         return mapa;
+    }
+
+    function bloqueMapaInformeZPreservar(bloque, mapaPreservar) {
+        if (!mapaPreservar) {
+            return null;
+        }
+        if (bloque.plantilla_unificada) {
+            var agg = { porCuenta: {}, porTipo: {} };
+            Object.keys(mapaPreservar).forEach(function (key) {
+                var src = mapaPreservar[key];
+                Object.keys(src.porCuenta || {}).forEach(function (cc) {
+                    agg.porCuenta[cc] = (agg.porCuenta[cc] || 0) + Number(src.porCuenta[cc] || 0);
+                });
+                Object.keys(src.porTipo || {}).forEach(function (tp) {
+                    agg.porTipo[tp] = (agg.porTipo[tp] || 0) + Number(src.porTipo[tp] || 0);
+                });
+            });
+            return agg;
+        }
+        var tid = parseInt(bloque.totem_id, 10) || 0;
+        return mapaPreservar[tid] || null;
     }
 
     function fusionarMontosInformeZEnPlantilla(totems, mapaPreservar) {
@@ -565,8 +714,7 @@
             return totems;
         }
         return totems.map(function (bloque) {
-            var tid = parseInt(bloque.totem_id, 10) || 0;
-            var bloqueMapa = mapaPreservar[tid];
+            var bloqueMapa = bloqueMapaInformeZPreservar(bloque, mapaPreservar);
             if (!bloqueMapa) {
                 return bloque;
             }
@@ -707,32 +855,33 @@
             }
         }
 
-        if (preview.informe_z_cargado && preview.informe_z_en) {
-            html += '<p class="text-muted mb-2">Informe Z guardado: ' + escHtml(preview.informe_z_en);
-            if (preview.usuario_informe_z) {
-                html += ' (' + escHtml(preview.usuario_informe_z) + ')';
-            }
-            html += '</p>';
+        html += '<div class="alert alert-info py-2 mb-2 small">';
+        html += '<strong><i class="fa fa-info-circle"></i> Informe Z automático</strong> — ';
+        html += 'No hace falta cargar montos en Gastronomía. Al cerrar la jornada se graba el Informe Z ';
+        html += 'igual a la columna <strong>Sistema</strong> (totales Waitry por medio de pago). ';
+        html += 'Si el Z físico de Waitry difiere, <strong>Caja</strong> puede corregirlo al rendir la jornada.';
+        html += '</div>';
+
+        if (preview.conciliacion && preview.conciliacion.ok) {
+            html += '<div class="alert alert-success py-2 mb-2 small mb-2">';
+            html += '<i class="fa fa-check"></i> Precarga lista: Informe Z = Sistema (diferencia $0,00). Puede cerrar la jornada directamente.';
+            html += '</div>';
         }
 
         html += '<div id="preview-informe-z-resultado" class="d-none"></div>';
         html += '<div id="preview-informe-z-tablas">';
         html += construirHtmlTablasInformeZ(preview.totems || [], 'preview');
         html += '</div>';
-        html += '<p class="text-muted mb-0 mt-2 small">Los totales del sistema salen de la carga inicial o de «Actualizar lectura Waitry». '
-            + 'Al cerrar la jornada se congela el último ticket mostrado arriba y no se vuelve a consultar Waitry.</p>';
+        html += '<p class="text-muted mb-0 mt-2 small">Los totales Sistema salen de la carga inicial o de «Actualizar lectura Waitry». '
+            + 'Al cerrar se congela el último ticket Waitry y se guarda el Informe Z automático (sin volver a consultar Waitry).</p>';
 
         contenedor.innerHTML = html;
 
         var tablasEl = document.getElementById('preview-informe-z-tablas');
         actualizarDiferenciasEnContenedor(tablasEl || contenedor);
 
-        if (preview.conciliacion) {
-            renderResultadoConciliacionEn(document.getElementById('preview-informe-z-resultado'), preview.conciliacion);
-        }
-
         if (acciones) {
-            acciones.classList.toggle('d-none', (preview.totems || []).length === 0);
+            acciones.classList.add('d-none');
         }
 
         habilitarBotonRefrescoWaitry(true);
@@ -915,27 +1064,42 @@
     }
 
     function recolectarInformeZPreviewParaCierre() {
-        var tablasEl = document.getElementById('preview-informe-z-tablas');
-        if (!tablasEl || estadoPreviewInformeZ.totems.length === 0) {
+        if (!estadoPreviewInformeZ.totems || estadoPreviewInformeZ.totems.length === 0) {
             return null;
         }
 
-        var algunoIngresado = false;
-        tablasEl.querySelectorAll('.js-monto-informe-z').forEach(function (inp) {
-            if (String(inp.value || '').trim() !== '' && parseMontoInformeZ(inp.value) > 0) {
-                algunoIngresado = true;
+        var totemsOut = [];
+        estadoPreviewInformeZ.totems.forEach(function (bloque) {
+            var lineas = [];
+            (bloque.lineas || []).forEach(function (ln) {
+                var mSis = Math.round((Number(ln.monto_sistema || 0)) * 100) / 100;
+                if (mSis <= 0) {
+                    return;
+                }
+                lineas.push({
+                    cuentacaja_id: ln.cuentacaja_id > 0 ? ln.cuentacaja_id : null,
+                    cuentacaja_codigo: ln.cuentacaja_codigo || '',
+                    cuentacaja_nombre: ln.cuentacaja_nombre || ln.etiqueta || '',
+                    tipo_waitry: ln.tipo_waitry || '',
+                    monto: mSis,
+                    monto_informe_z: mSis,
+                    monto_sistema: mSis,
+                });
+            });
+            if (lineas.length === 0) {
+                return;
             }
+            var entry = {
+                totem_id: bloque.plantilla_unificada ? 0 : (parseInt(bloque.totem_id, 10) || 0),
+                lineas: lineas,
+            };
+            if (bloque.waitry_table_id) {
+                entry.waitry_table_id = parseInt(bloque.waitry_table_id, 10);
+            }
+            totemsOut.push(entry);
         });
-        if (!algunoIngresado) {
-            return null;
-        }
 
-        var payload = recolectarPayloadInformeZDesdeContenedor(
-            tablasEl,
-            estadoPreviewInformeZ.totems,
-            estadoPreviewInformeZ.jornadaId,
-        );
-        return payload.totems || null;
+        return totemsOut.length > 0 ? totemsOut : null;
     }
 
     function csrfToken() {
@@ -1113,10 +1277,29 @@
         window.location.reload();
     }
 
+    function fechaMaximaJornadaAbrir() {
+        var fechaInput = document.getElementById('fecha_jornada_abrir');
+        if (fechaInput && fechaInput.max) {
+            return fechaInput.max;
+        }
+        var d = new Date();
+        var m = String(d.getMonth() + 1).padStart(2, '0');
+        var day = String(d.getDate()).padStart(2, '0');
+        return d.getFullYear() + '-' + m + '-' + day;
+    }
+
     if (puedeAbrir && btnAbrir) {
         btnAbrir.addEventListener('click', function () {
             var fechaInput = document.getElementById('fecha_jornada_abrir');
             var obsInput = document.getElementById('observacion_abrir');
+            var fechaVal = fechaInput ? fechaInput.value : '';
+            var fechaMax = fechaMaximaJornadaAbrir();
+
+            if (fechaVal && fechaVal > fechaMax) {
+                alertar('La fecha de jornada no puede ser posterior a hoy (' + fechaMax + ').', true);
+                return;
+            }
+
             btnAbrir.disabled = true;
 
             postJson(apiAbrir, {
@@ -1163,14 +1346,6 @@
                     return;
                 }
 
-                if (!informeZYaCargado) {
-                    finalizarUiTrasCierreJornada(jornadaId, {
-                        abrirPdf: false,
-                        informeZPendiente: true,
-                    });
-                    return;
-                }
-
                 finalizarUiTrasCierreJornada(jornadaId, { abrirPdf: !!ct });
                 return;
             }
@@ -1190,12 +1365,11 @@
             return 'Espere a que termine la lectura Waitry antes de cerrar la jornada.';
         }
         if (!estadoPreviewInformeZ.snapshot) {
-            return 'Debe cargar la vista previa del cierre tótem (se actualiza al abrir la pantalla o con «Actualizar consulta Waitry»). '
+            return 'Debe cargar la vista previa del cierre tótem (se actualiza al abrir la pantalla o con «Actualizar lectura Waitry»). '
                 + 'El cierre de jornada no vuelve a consultar Waitry: la grabación usa ese snapshot.';
         }
-        var informeZTotems = recolectarInformeZPreviewParaCierre();
-        if (!informeZTotems || informeZTotems.length === 0) {
-            return 'Complete y valide los montos del Informe Z por tótem y medio de pago (columnas Sistema e Informe Z) antes de cerrar la jornada.';
+        if (!recolectarInformeZPreviewParaCierre()) {
+            return 'Espere a que carguen los totales Sistema del Informe Z (vista previa Waitry) antes de cerrar la jornada.';
         }
         return null;
     }
@@ -1395,8 +1569,8 @@
                 return;
             }
 
-            var msg = '¿Eliminar la jornada del ' + fechaJornada + ' (ID ' + jornadaId + ')?'
-                + '\n\nSolo se permite si no tiene turnos ni comprobantes.';
+            var msg = '¿Eliminar la apertura del ' + fechaJornada + ' (ID ' + jornadaId + ')?'
+                + '\n\nSolo permitido si la jornada no tiene movimientos (turnos operativos ni comprobantes).';
             if (!window.confirm(msg)) {
                 return;
             }

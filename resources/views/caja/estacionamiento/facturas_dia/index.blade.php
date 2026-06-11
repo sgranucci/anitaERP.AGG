@@ -54,187 +54,6 @@
             .catch(function () { return null; });
     }
 
-    document.querySelectorAll('.js-fd-').forEach(function (btn) {
-        btn.addEventListener('click', function (e) {
-            e.preventDefault();
-            e.stopPropagation();
-            var ventaId = btn.getAttribute('data-venta-id');
-            if (!ventaId || btn.disabled) return;
-            var modal = document.getElementById('modal-fd-');
-            var tbody = document.getElementById('fd--body');
-            var errEl = document.getElementById('fd--error');
-            if (!modal || !tbody) return;
-            tbody.innerHTML = '<tr><td colspan="6" class="text-muted small">Cargando…</td></tr>';
-            if (errEl) {
-                errEl.classList.add('d-none');
-                errEl.textContent = '';
-            }
-            if (typeof $ !== 'undefined') {
-                $('#modal-fd-').modal('show');
-            }
-            fetch('{{ url('caja/estacionamiento/facturas-dia') }}/' + ventaId + '/', {
-                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-                credentials: 'same-origin',
-            })
-                .then(leerRespuesta)
-                .then(function (res) {
-                    if (!res.ok || !res.body || !res.body.ok) {
-                        var msg = mensajeError(res, 'No se pudieron cargar los tickets.');
-                        tbody.innerHTML = '';
-                        if (errEl) {
-                            errEl.textContent = msg;
-                            errEl.classList.remove('d-none');
-                        }
-                        return;
-                    }
-                    var tickets = res.body.tickets || [];
-                    if (!tickets.length) {
-                        tbody.innerHTML = '<tr><td colspan="6" class="text-muted small">Sin tickets tarjeta canjeados en esta factura.</td></tr>';
-                        return;
-                    }
-                    tbody.innerHTML = tickets.map(function (t) {
-                        return '<tr>'
-                            + '<td>' + (t.ticket_id || '') + '</td>'
-                            + '<td>' + (t.numeroticket || '') + '</td>'
-                            + '<td>' + (t.numerodocumento || '—') + '</td>'
-                            + '<td class="text-right">' + (parseFloat(t.montoticket) || 0).toFixed(2) + '</td>'
-                            + '<td>' + (t.fecha_emision || '—') + '</td>'
-                            + '<td>' + (t.created_at || '—') + '</td>'
-                            + '</tr>';
-                    }).join('');
-                })
-                .catch(function () {
-                    tbody.innerHTML = '';
-                    if (errEl) {
-                        errEl.textContent = 'Error de comunicación al consultar tickets.';
-                        errEl.classList.remove('d-none');
-                    }
-                });
-        });
-    });
-
-    document.querySelectorAll('.js-fd-').forEach(function (btn) {
-        btn.addEventListener('click', function (e) {
-            e.preventDefault();
-            e.stopPropagation();
-            var ventaId = btn.getAttribute('data-venta-id');
-            if (!ventaId || btn.disabled) return;
-            var modal = document.getElementById('modal-fd-');
-            var tbody = document.getElementById('fd--body');
-            var errEl = document.getElementById('fd--error');
-            if (!modal || !tbody) return;
-            tbody.innerHTML = '<tr><td colspan="8" class="text-muted small">Cargando…</td></tr>';
-            if (errEl) {
-                errEl.classList.add('d-none');
-                errEl.textContent = '';
-            }
-            if (typeof $ !== 'undefined') {
-                $('#modal-fd-').modal('show');
-            }
-            fetch('{{ url('caja/estacionamiento/facturas-dia') }}/' + ventaId + '/', {
-                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-                credentials: 'same-origin',
-            })
-                .then(leerRespuesta)
-                .then(function (res) {
-                    if (!res.ok || !res.body || !res.body.ok) {
-                        var msg = mensajeError(res, 'No se pudieron cargar los canjes.');
-                        tbody.innerHTML = '';
-                        if (errEl) {
-                            errEl.textContent = msg;
-                            errEl.classList.remove('d-none');
-                        }
-                        return;
-                    }
-                    var canjes = res.body.canjes || [];
-                    if (!canjes.length) {
-                        tbody.innerHTML = '<tr><td colspan="8" class="text-muted small">Sin canjes de fidelidad en esta factura.</td></tr>';
-                        return;
-                    }
-                    tbody.innerHTML = canjes.map(function (c) {
-                        return '<tr>'
-                            + '<td>' + (c.tarjeta || '—') + '</td>'
-                            + '<td class="small">' + (c.trackdata || '—') + '</td>'
-                            + '<td>' + (c.documento || '—') + '</td>'
-                            + '<td>' + (c.titular || (c.apellido || '') + ' ' + (c.nombre || '')).trim() + '</td>'
-                            + '<td>' + (c.categoria_nombre || '') + (c.categoria_codigo ? ' [' + c.categoria_codigo + ']' : '') + '</td>'
-                            + '<td>' + (c.sku || '') + '</td>'
-                            + '<td>' + (c.articulo || '—') + '</td>'
-                            + '<td>' + (c.fechacanje || '—') + '</td>'
-                            + '</tr>';
-                    }).join('');
-                })
-                .catch(function () {
-                    tbody.innerHTML = '';
-                    if (errEl) {
-                        errEl.textContent = 'Error de comunicación al consultar canjes de fidelidad.';
-                        errEl.classList.remove('d-none');
-                    }
-                });
-        });
-    });
-
-    document.querySelectorAll('.js-fd-').forEach(function (btn) {
-        btn.addEventListener('click', function (e) {
-            e.preventDefault();
-            e.stopPropagation();
-            var ventaId = btn.getAttribute('data-venta-id');
-            if (!ventaId || btn.disabled) return;
-            var modal = document.getElementById('modal-fd-');
-            var tbody = document.getElementById('fd--body');
-            var errEl = document.getElementById('fd--error');
-            if (!modal || !tbody) return;
-            tbody.innerHTML = '<tr><td colspan="8" class="text-muted small">Cargando…</td></tr>';
-            if (errEl) {
-                errEl.classList.add('d-none');
-                errEl.textContent = '';
-            }
-            if (typeof $ !== 'undefined') {
-                $('#modal-fd-').modal('show');
-            }
-            fetch('{{ url('caja/estacionamiento/facturas-dia') }}/' + ventaId + '/', {
-                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-                credentials: 'same-origin',
-            })
-                .then(leerRespuesta)
-                .then(function (res) {
-                    if (!res.ok || !res.body || !res.body.ok) {
-                        var msg = mensajeError(res, 'No se pudieron cargar los canjes.');
-                        tbody.innerHTML = '';
-                        if (errEl) {
-                            errEl.textContent = msg;
-                            errEl.classList.remove('d-none');
-                        }
-                        return;
-                    }
-                    var canjes = res.body.canjes || [];
-                    if (!canjes.length) {
-                        tbody.innerHTML = '<tr><td colspan="8" class="text-muted small">Sin canjes de premio en esta factura.</td></tr>';
-                        return;
-                    }
-                    tbody.innerHTML = canjes.map(function (c) {
-                        return '<tr>'
-                            + '<td>' + (c.numerocupon || '') + '</td>'
-                            + '<td>' + (c.sku || '') + '</td>'
-                            + '<td>' + (c.articulo || '—') + '</td>'
-                            + '<td class="text-right">' + (parseFloat(c.cantidad) || 0) + '</td>'
-                            + '<td class="text-right">' + (c.puntos || 0) + '</td>'
-                            + '<td>' + (c.apellido || '') + ' ' + (c.nombre || '') + '</td>'
-                            + '<td>' + (c.numerodocumento || '—') + '</td>'
-                            + '<td>' + (c.fechacanje || '—') + '</td>'
-                            + '</tr>';
-                    }).join('');
-                })
-                .catch(function () {
-                    tbody.innerHTML = '';
-                    if (errEl) {
-                        errEl.textContent = 'Error de comunicación al consultar canjes.';
-                        errEl.classList.remove('d-none');
-                    }
-                });
-        });
-    });
-
     document.querySelectorAll('.js-fd-reimprimir-ticket').forEach(function (btn) {
         btn.addEventListener('click', function (e) {
             e.preventDefault();
@@ -277,23 +96,6 @@
                     else alert('Error de comunicación al reimprimir.');
                 })
                 .finally(function () { btn.disabled = false; });
-        });
-    });
-
-    document.querySelectorAll('.js-fd-toggle-insumos').forEach(function (btn) {
-        btn.addEventListener('click', function (e) {
-            e.preventDefault();
-            e.stopPropagation();
-            var targetId = btn.getAttribute('data-target');
-            if (!targetId) return;
-            var row = document.getElementById(targetId);
-            if (!row) return;
-            row.classList.toggle('d-none');
-            var icon = btn.querySelector('i.fa');
-            if (icon) {
-                icon.classList.toggle('fa-chevron-down');
-                icon.classList.toggle('fa-chevron-right');
-            }
         });
     });
 })();
@@ -375,12 +177,12 @@
                             <input type="date" id="fecha_fd" name="fecha" value="{{ $fecha }}" class="form-control form-control-sm">
                         </div>
                         <div class="form-group mb-0 mr-2">
-                            <label for="item_nombre_fd" class="small text-muted mb-0 d-block">Ítem facturado (SKU)</label>
+                            <label for="item_nombre_fd" class="small text-muted mb-0 d-block">Ítem estacionamiento</label>
                             <input type="text" id="item_nombre_fd" name="item_nombre" class="form-control form-control-sm" style="min-width:140px;"
-                                   placeholder="SKU o descripción" value="{{ $item_nombre ?? '' }}"
-                                   title="Filtra facturas que incluyan este artículo y muestra sus insumos">
-                            @if ($articulo_filtro ?? null)
-                                <input type="hidden" name="item_id" value="{{ $articulo_filtro->id }}">
+                                   placeholder="Nombre o ID de ítem" value="{{ $item_nombre ?? '' }}"
+                                   title="Filtra facturas que incluyan este ítem de estacionamiento">
+                            @if ($item_filtro ?? null)
+                                <input type="hidden" name="item_id" value="{{ $item_filtro->id }}">
                             @endif
                         </div>
                         <div class="form-group mb-0 mr-2">
@@ -431,7 +233,7 @@
                                 <span class="fa fa-search"></span>
                             </button>
                         </div>
-                        @if (($articulo_filtro ?? null) || ($busqueda ?? '') !== '' || ($item_estacionamiento_id ?? null))
+                        @if (($item_filtro ?? null) || ($busqueda ?? '') !== '' || ($item_estacionamiento_id ?? null))
                             <a href="{{ route('estacionamiento_facturas_dia', array_filter([
                                 'fecha' => $fecha,
                                 'todas_pc' => ($todas_pc ?? false) ? '1' : null,
@@ -442,21 +244,20 @@
                     </form>
                 </div>
             </div>
-            @if ($articulo_filtro ?? null)
+            @if ($item_filtro ?? null)
                 <div class="card-body py-2 border-bottom bg-light">
                     <span class="small">
                         <strong>Consulta por ítem:</strong>
-                        @include('caja.estacionamiento.facturas_dia.partials.link_sku_articulo', [
-                            'sku' => $articulo_filtro->sku,
-                            'articuloId' => $articulo_filtro->id,
+                        @include('caja.estacionamiento.facturas_dia.partials.link_item_estacionamiento', [
+                            'itemId' => $item_filtro->id,
+                            'nombre' => $item_filtro->nombre,
                         ])
-                        — {{ $articulo_filtro->descripcion }}
-                        <span class="text-muted">(facturas del día que incluyen este artículo; expandir fila para ver insumos descontados)</span>
+                        <span class="text-muted">(facturas del día que incluyen este ítem de estacionamiento)</span>
                     </span>
                 </div>
             @elseif (($item_nombre ?? '') !== '')
                 <div class="card-body py-2 border-bottom">
-                    <span class="text-warning small">No se encontró artículo para «{{ $item_nombre }}». Revise el SKU o use búsqueda parcial.</span>
+                    <span class="text-warning small">No se encontró ítem de estacionamiento para «{{ $item_nombre }}». Revise el nombre o el ID.</span>
                 </div>
             @endif
             <div class="card-body p-0">
@@ -475,7 +276,7 @@
                                     ? ($turno_filtro_val ?? '0')
                                     : null,
                                 'item_nombre' => $item_nombre ?? '',
-                                'item_id' => ($articulo_filtro ?? null) ? $articulo_filtro->id : null,
+                                'item_id' => ($item_filtro ?? null) ? $item_filtro->id : null,
                                 'item_estacionamiento_id' => $item_estacionamiento_id ?? null,
                             ], fn ($v) => $v !== null && $v !== ''),
                         ])
@@ -497,15 +298,12 @@
                 </div>
                 <div class="table-responsive">
                 @php
-                    $colInsumos = ($articulo_filtro ?? null) !== null;
-                    $colSpanEmpty = 11 + (($todas_pc ?? false) ? 1 : 0) + ($colInsumos ? 3 : 0);
+                    $colItemFiltro = ($item_filtro ?? null) !== null;
+                    $colSpanEmpty = 11 + (($todas_pc ?? false) ? 1 : 0) + ($colItemFiltro ? 1 : 0);
                 @endphp
                 <table class="table table-striped table-bordered table-hover mb-0" id="tabla-paginada">
                     <thead>
                         <tr>
-                            @if ($colInsumos)
-                                <th style="width:2rem;" data-orderable="false"></th>
-                            @endif
                             <th>Venta ID</th>
                             @if ($todas_pc ?? false)
                                 <th>PC emisión</th>
@@ -517,12 +315,11 @@
                             <th>Ítem</th>
                             <th>Punto de venta</th>
                             <th class="text-right">Total</th>
-                            @if ($colInsumos)
+                            @if ($colItemFiltro)
                                 <th class="text-right" title="Cantidad facturada del ítem filtrado">Cant. ítem</th>
-                                <th>Insumos</th>
                             @endif
                             <th>Cobranza</th>
-                            <th>Cuenta gastro.</th>
+                            <th>Cuenta estac.</th>
                             <th class="width40" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -540,32 +337,26 @@
                                         }
                                     }
                                 }
-                                $insumosVenta = ($items_por_venta ?? [])[$r->venta_id] ?? collect();
-                                $cantItem = ($articulo_filtro ?? null)
-                                    ? \App\Support\Caja\Estacionamiento\EstacionamientoVentaDetalleSupport::cantidadItemFacturadoEnVenta((int) $r->venta_id, (int) $articulo_filtro->id)
+                                $cantItem = ($item_filtro ?? null)
+                                    ? \App\Support\Caja\Estacionamiento\EstacionamientoVentaDetalleSupport::cantidadItemFacturadoEnVenta((int) $r->venta_id, (int) $item_filtro->id)
                                     : 0.;
                                 $verParams = ['ventaId' => $r->venta_id];
-                                if ($articulo_filtro ?? null) {
-                                    $verParams['item_id'] = $articulo_filtro->id;
+                                if ($item_filtro ?? null) {
+                                    $verParams['item_id'] = $item_filtro->id;
                                 }
                                 $ncVentaId = ($notas_credito_por_factura ?? [])[$r->venta_id] ?? null;
+                                $esComprobanteNc = ($r->venta_factura_origen_id ?? null) !== null;
+                                $tipoFactura = $v?->tipotransacciones;
+                                $esFacturaVenta = ! $esComprobanteNc
+                                    && (! $tipoFactura || $tipoFactura->signo === 'S');
                                 $puedeNc = can('generar-nota-credito-estacionamiento-facturas-dia', false)
+                                    && $esFacturaVenta
                                     && $v
                                     && (float) ($v->total ?? 0) >= 0.01
                                     && $ncVentaId === null
                                     && (! ($requiere_habilitacion_turno ?? false) || ($turno_habilitado ?? false));
                             @endphp
                             <tr>
-                                @if ($colInsumos)
-                                    <td class="text-center align-middle">
-                                        @if ($insumosVenta->isNotEmpty())
-                                            <button type="button" class="btn btn-link btn-sm p-0 js-fd-toggle-insumos"
-                                                    data-target="fd-insumos-{{ $r->venta_id }}" title="Ver insumos de este ítem">
-                                                <i class="fa fa-chevron-right text-muted"></i>
-                                            </button>
-                                        @endif
-                                    </td>
-                                @endif
                                 <td>{{ $r->venta_id }}</td>
                                 @if ($todas_pc ?? false)
                                     <td><small>{{ $r->identificador_pc ?? '—' }}</small></td>
@@ -607,15 +398,8 @@
                                 <td><small>{{ $r->cuenta?->item?->nombre ?? '—' }}</small></td>
                                 <td><small>{{ $pvTxt !== '' ? $pvTxt : '—' }}</small></td>
                                 <td class="text-right est-col-monto"><small>{{ number_format((float) ($v?->total ?? 0), 2, ',', '.') }}</small></td>
-                                @if ($colInsumos)
+                                @if ($colItemFiltro)
                                     <td class="text-right"><small>{{ number_format($cantItem, 3, ',', '.') }}</small></td>
-                                    <td>
-                                        @if ($insumosVenta->isEmpty())
-                                            <small class="text-muted">Sin insumos</small>
-                                        @else
-                                            <small>{{ $insumosVenta->count() }} insumo(s)</small>
-                                        @endif
-                                    </td>
                                 @endif
                                 <td>
                                     @if ($cobDirecta)
@@ -630,7 +414,7 @@
                                         <a href="{{ route('estacionamiento_facturas_dia_ver', $verParams) }}" class="btn-accion-tabla tooltipsC" title="Ver detalle">
                                             <i class="fas fa-eye"></i>
                                         </a>
-                                        <a href="{{ route('estacionamiento_facturas_dia_ver', $verParams).'#tab-detalle' }}" class="btn-accion-tabla tooltipsC" title="Ítems e insumos">
+                                        <a href="{{ route('estacionamiento_facturas_dia_ver', $verParams).'#tab-detalle' }}" class="btn-accion-tabla tooltipsC" title="Ítems facturados">
                                             <i class="fas fa-boxes text-info"></i>
                                         </a>
                                     @endif
@@ -660,33 +444,6 @@
                                         </a>
                                     @endif
                                     @if ($v)
-                                        @if ($v->tiene_canje_premio ?? false)
-                                            <button type="button"
-                                                class="btn-accion-tabla tooltipsC js-fd-"
-                                                data-venta-id="{{ $v->id }}"
-                                                data-placement="left"
-                                                title="Canjes de premios Wigos">
-                                                <i class="fa fa-gift text-warning"></i>
-                                            </button>
-                                        @endif
-                                        @if ($v->tiene_canje_fidelidad ?? false)
-                                            <button type="button"
-                                                class="btn-accion-tabla tooltipsC js-fd-"
-                                                data-venta-id="{{ $v->id }}"
-                                                data-placement="left"
-                                                title="Canje fidelidad (tarjeta Wigos)">
-                                                <i class="fa fa-id-card text-warning"></i>
-                                            </button>
-                                        @endif
-                                        @if ($v->tiene_ticket_tarjeta ?? false)
-                                            <button type="button"
-                                                class="btn-accion-tabla tooltipsC js-fd-"
-                                                data-venta-id="{{ $v->id }}"
-                                                data-placement="left"
-                                                title="Tickets tarjeta canjeados">
-                                                <i class="fa fa-barcode text-info"></i>
-                                            </button>
-                                        @endif
                                         <button type="button"
                                             class="btn-accion-tabla tooltipsC js-fd-reimprimir-ticket"
                                             data-venta-id="{{ $v->id }}"
@@ -700,48 +457,19 @@
                                     @endif
                                 </td>
                             </tr>
-                            @if ($colInsumos && $insumosVenta->isNotEmpty())
-                                <tr id="fd-insumos-{{ $r->venta_id }}" class="d-none bg-light">
-                                    <td colspan="{{ $colSpanEmpty }}" class="py-2">
-                                        @if ($articulo_filtro ?? null)
-                                            <p class="small mb-2">
-                                                <strong>Ítem facturado:</strong>
-                                                @include('caja.estacionamiento.facturas_dia.partials.item_facturado_insumos', [
-                                                    'sku' => $articulo_filtro->sku,
-                                                    'articuloId' => $articulo_filtro->id,
-                                                    'detalle' => $articulo_filtro->descripcion,
-                                                ])
-                                            </p>
-                                        @endif
-                                        <table class="table table-sm table-bordered mb-0 small" style="max-width:800px;">
-                                            <thead class="thead-light">
-                                                <tr>
-                                                    <th>SKU insumo</th>
-                                                    <th>Descripción insumo</th>
-                                                    <th class="text-right">Cant. descontada</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                @foreach ($insumosVenta as $mov)
-                                                    <tr>
-                                                        <td>@include('caja.estacionamiento.facturas_dia.partials.link_sku_articulo', ['sku' => $mov->articulos->sku ?? '—', 'articuloId' => $mov->item_id])</td>
-                                                        <td>{{ $mov->articulos->descripcion ?? '—' }}</td>
-                                                        <td class="text-right">{{ number_format((float) $mov->cantidad, 3, ',', '.') }}</td>
-                                                    </tr>
-                                                @endforeach
-                                            </tbody>
-                                        </table>
-                                    </td>
-                                </tr>
-                            @endif
                         @empty
                             <tr><td colspan="{{ $colSpanEmpty }}" class="text-center text-muted py-4">
                                 Sin registros para la fecha y filtros indicados.
                                 @if (! ($todas_pc ?? false))
                                     <br><span class="small">Si la facturó otra terminal de esta empresa, active <strong>Todas las terminales</strong> o busque por <strong>nº de venta</strong>.</span>
                                 @endif
-                                @if ($articulo_filtro ?? null)
-                                    <br><span class="small">Ninguna factura del día incluye el ítem <strong>{{ $articulo_filtro->sku }}</strong>.</span>
+                                @if ($item_filtro ?? null)
+                                    <br><span class="small">Ninguna factura del día incluye el ítem
+                                        @include('caja.estacionamiento.facturas_dia.partials.link_item_estacionamiento', [
+                                            'itemId' => $item_filtro->id,
+                                            'nombre' => $item_filtro->nombre,
+                                        ])
+                                    </span>
                                 @endif
                             </td></tr>
                         @endforelse
@@ -771,104 +499,4 @@
     @include('caja.estacionamiento.facturas_dia.partials.modal_cambiar_medio_pago')
     @include('includes.caja.modalconsultacuentacaja')
 @endif
-
-<div class="modal fade" id="modal-fd-" tabindex="-1" role="dialog" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
-        <div class="modal-content">
-            <div class="modal-header py-2">
-                <h6 class="modal-title">Tickets tarjeta canjados</h6>
-                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">&times;</button>
-            </div>
-            <div class="modal-body py-2">
-                <div id="fd--error" class="alert alert-danger py-2 small d-none" role="alert"></div>
-                <div class="table-responsive">
-                    <table class="table table-sm table-bordered mb-0">
-                        <thead class="thead-light">
-                            <tr>
-                                <th>Movimiento</th>
-                                <th>Nº ticket</th>
-                                <th>Documento</th>
-                                <th class="text-right">Importe</th>
-                                <th>Fecha emisión</th>
-                                <th>Canje ERP</th>
-                            </tr>
-                        </thead>
-                        <tbody id="fd--body"></tbody>
-                    </table>
-                </div>
-            </div>
-            <div class="modal-footer py-2">
-                <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cerrar</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="modal fade" id="modal-fd-" tabindex="-1" role="dialog" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
-        <div class="modal-content">
-            <div class="modal-header py-2">
-                <h6 class="modal-title">Canje fidelidad — tarjeta Wigos</h6>
-                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">&times;</button>
-            </div>
-            <div class="modal-body py-2">
-                <div id="fd--error" class="alert alert-danger py-2 small d-none" role="alert"></div>
-                <div class="table-responsive">
-                    <table class="table table-sm table-bordered mb-0">
-                        <thead class="thead-light">
-                            <tr>
-                                <th>Nro. tarjeta</th>
-                                <th>Trackdata</th>
-                                <th>DNI</th>
-                                <th>Titular</th>
-                                <th>Categoría</th>
-                                <th>SKU</th>
-                                <th>Artículo canjeado</th>
-                                <th>Fecha canje</th>
-                            </tr>
-                        </thead>
-                        <tbody id="fd--body"></tbody>
-                    </table>
-                </div>
-            </div>
-            <div class="modal-footer py-2">
-                <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cerrar</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="modal fade" id="modal-fd-" tabindex="-1" role="dialog" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
-        <div class="modal-content">
-            <div class="modal-header py-2">
-                <h6 class="modal-title">Canjes de premios Wigos</h6>
-                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">&times;</button>
-            </div>
-            <div class="modal-body py-2">
-                <div id="fd--error" class="alert alert-danger py-2 small d-none" role="alert"></div>
-                <div class="table-responsive">
-                    <table class="table table-sm table-bordered mb-0">
-                        <thead class="thead-light">
-                            <tr>
-                                <th>Cupón</th>
-                                <th>SKU</th>
-                                <th>Artículo</th>
-                                <th class="text-right">Cant.</th>
-                                <th class="text-right">Puntos</th>
-                                <th>Cliente Wigos</th>
-                                <th>Documento</th>
-                                <th>Fecha canje</th>
-                            </tr>
-                        </thead>
-                        <tbody id="fd--body"></tbody>
-                    </table>
-                </div>
-            </div>
-            <div class="modal-footer py-2">
-                <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cerrar</button>
-            </div>
-        </div>
-    </div>
-</div>
 @endsection

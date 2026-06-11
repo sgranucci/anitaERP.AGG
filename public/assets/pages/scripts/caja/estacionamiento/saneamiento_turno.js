@@ -1,0 +1,506 @@
+(function () {
+    'use strict';
+
+    var app = document.getElementById('saneamiento-turno-app');
+    if (!app) {
+        return;
+    }
+
+    var cfg = window.SANEAMIENTO_TURNO_ESTACIONAMIENTO || {};
+    var apiDiagnostico = app.getAttribute('data-api-diagnostico') || '';
+    var apiExtender = app.getAttribute('data-api-extender') || '';
+    var apiRetroactivo = app.getAttribute('data-api-retroactivo') || '';
+    var apiRecalcular = app.getAttribute('data-api-recalcular') || '';
+    var apiCerrarCuentas = app.getAttribute('data-api-cerrar-cuentas') || '';
+    var apiCerrarTurnoRemoto = app.getAttribute('data-api-cerrar-turno-remoto') || '';
+    var urlInformePdf = app.getAttribute('data-url-informe-pdf') || '';
+    var puedeEjecutar = app.getAttribute('data-puede-ejecutar') === '1' || cfg.puedeEjecutar;
+
+    function csrfToken() {
+        return cfg.csrf || '';
+    }
+
+    function postJson(url, body) {
+        return fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-CSRF-TOKEN': csrfToken(),
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify(Object.assign({}, body, { _token: csrfToken() })),
+        }).then(function (r) {
+            return r.json().then(function (data) {
+                return { ok: r.ok, data: data };
+            });
+        });
+    }
+
+    function getJson(url) {
+        return fetch(url, {
+            credentials: 'same-origin',
+            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        }).then(function (r) {
+            return r.json().then(function (data) {
+                return { ok: r.ok, data: data };
+            });
+        });
+    }
+
+    function fmt(n) {
+        return Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function esc(s) {
+        var d = document.createElement('div');
+        d.textContent = s == null ? '' : String(s);
+        return d.innerHTML;
+    }
+
+    function urlVerFactura(ventaId) {
+        var base = cfg.urlFacturasDia || '';
+        if (!base || !ventaId) {
+            return '#';
+        }
+        var url = base.replace(/\/$/, '') + '/' + ventaId + '/ver';
+        if (window.ModoConsulta) {
+            url = window.ModoConsulta.url(url);
+        }
+        return url;
+    }
+
+    function renderCuentasPendientes(term) {
+        if (!term.cuentas_pendientes_detalle || !term.cuentas_pendientes_detalle.length) {
+            return '';
+        }
+        var abiertasConItems = Number(term.cuentas_abiertas_con_items || 0);
+        var abiertasVacias = Number(term.cuentas_abiertas_vacias || 0);
+        var cerradas = Number(term.cuentas_cerradas_sin_facturar || 0);
+        var resumen = [];
+        if (abiertasConItems > 0) {
+            resumen.push('<strong class="text-warning">' + abiertasConItems + ' abierta(s) con consumos</strong> — bloquean el cierre del último turno.');
+        }
+        if (abiertasVacias > 0) {
+            resumen.push('<span class="text-info">' + abiertasVacias + ' abierta(s) sin ítems</span> — se descartan automáticamente al cerrar el último turno o la jornada.');
+        }
+        if (cerradas > 0) {
+            resumen.push('<span class="text-muted">' + cerradas + ' cerrada(s) sin facturar</span> — estado terminal del saneamiento; no bloquean el cierre.');
+        }
+        var html = '<h6 class="text-warning mt-2">Cuentas no facturadas en esta terminal (' + term.cuentas_pendientes + ')</h6>';
+        html += '<p class="small mb-2">' + resumen.join('<br>') + '</p>';
+        html += '<p class="small text-muted mb-2">Las cuentas <strong>cerradas sin facturar</strong> no se muestran como mesa ocupada en el facturador.</p>';
+        html += '<div class="table-responsive"><table class="table table-sm table-bordered">';
+        html += '<thead><tr><th>ID</th><th>Referencia</th><th>Apertura</th><th>Estado</th><th class="text-center">Ítems</th>';
+        html += '<th>Mozo</th><th class="text-right">Subtotal est.</th><th>Facturador</th></tr></thead><tbody>';
+        term.cuentas_pendientes_detalle.forEach(function (c) {
+            var estadoLbl = c.estado_etiqueta || c.estado || '—';
+            var badgeEstado = c.estado === 'cerrada' ? 'badge-secondary' : 'badge-warning';
+            var itemsLbl = c.tiene_items ? String(c.lineas || 0) : '0';
+            if (!c.tiene_items) {
+                itemsLbl += ' <span class="text-muted">(vacía)</span>';
+            }
+            html += '<tr>';
+            html += '<td>' + esc(c.id) + '</td>';
+            html += '<td>' + esc(c.etiqueta) + '</td>';
+            html += '<td>' + esc(c.apertura_en_fmt || c.apertura_en || '—') + '</td>';
+            html += '<td><span class="badge ' + badgeEstado + '">' + esc(estadoLbl) + '</span></td>';
+            html += '<td class="text-center">' + itemsLbl + '</td>';
+            html += '<td>' + esc(c.mozo || '—') + '</td>';
+            html += '<td class="text-right">$' + fmt(c.subtotal) + '</td>';
+            html += '<td class="small">' + esc(c.acceso_facturador || '—') + '</td>';
+            html += '</tr>';
+        });
+        html += '</tbody></table></div>';
+        return html;
+    }
+
+    function renderTerminal(term) {
+        var html = '<div class="card mb-3 border-secondary">';
+        html += '<div class="card-header py-2"><strong>Terminal: ' + esc(term.identificador_pc) + '</strong>';
+        if (term.es_bucket_huerfano) {
+            html += ' <span class="badge badge-dark ml-2" title="Cuentas con identificador_pc que no coincide con ninguna PV configurada">Bucket sin PV</span>';
+        } else if (term.turno_habilitado) {
+            html += ' <span class="badge badge-success ml-2">Turno habilitado #' + esc(term.turno_operativo_activo_id) + '</span>';
+        } else {
+            html += ' <span class="badge badge-secondary ml-2">Sin turno habilitado</span>';
+        }
+        if (!term.es_bucket_huerfano) {
+            if (term.cantidad_huerfanas > 0) {
+                html += ' <span class="badge badge-danger ml-1">' + term.cantidad_huerfanas + ' huérfana(s)</span>';
+            } else {
+                html += ' <span class="badge badge-success ml-1">Sin huérfanas</span>';
+            }
+        }
+        if (term.puede_habilitar_turno) {
+            html += ' <span class="badge badge-info ml-1">Puede habilitar turno</span>';
+        }
+        var abiertasConItems = Number(term.cuentas_abiertas_con_items || 0);
+        var abiertasVacias = Number(term.cuentas_abiertas_vacias || 0);
+        var cerradasInactivas = Number(term.cuentas_cerradas_sin_facturar || 0);
+        if (abiertasConItems > 0) {
+            html += ' <span class="badge badge-warning ml-1" title="Bloquean cierre del último turno del día">'
+                + abiertasConItems + ' abierta(s) con consumos</span>';
+        }
+        if (abiertasVacias > 0) {
+            html += ' <span class="badge badge-info ml-1" title="Sin ítems: se auto-descartan al cerrar turno/jornada">'
+                + abiertasVacias + ' abierta(s) sin ítems (auto-descartan)</span>';
+        }
+        if (cerradasInactivas > 0) {
+            html += ' <span class="badge badge-secondary ml-1" title="Estado terminal: no bloquean cierre">'
+                + cerradasInactivas + ' cerrada(s) sin facturar</span>';
+        }
+        html += '</div><div class="card-body">';
+
+        html += renderCuentasPendientes(term);
+
+        if (term.facturas_huerfanas && term.facturas_huerfanas.length) {
+            html += '<h6 class="text-danger">Facturas huérfanas</h6>';
+            html += '<div class="table-responsive"><table class="table table-sm table-bordered">';
+            html += '<thead><tr><th>Comprobante</th><th>Hora</th><th>Cliente</th><th class="text-right">Total</th><th></th></tr></thead><tbody>';
+            term.facturas_huerfanas.forEach(function (f) {
+                html += '<tr>';
+                html += '<td>' + esc(f.codigo || '#' + f.venta_id) + '</td>';
+                html += '<td>' + esc(f.emitido_en || f.hora) + '</td>';
+                html += '<td>' + esc(f.cliente) + '</td>';
+                html += '<td class="text-right">$' + fmt(f.total) + '</td>';
+                html += '<td><a href="' + esc(urlVerFactura(f.venta_id)) + '" target="_blank" rel="noopener" class="btn btn-xs btn-outline-secondary">Ver</a></td>';
+                html += '</tr>';
+            });
+            html += '</tbody></table></div>';
+        }
+
+        if (term.turnos && term.turnos.length) {
+            html += '<h6 class="mt-3">Turnos de la jornada</h6>';
+            html += '<ul class="list-group list-group-flush mb-2">';
+            term.turnos.forEach(function (t) {
+                html += '<li class="list-group-item py-2 d-flex justify-content-between align-items-center flex-wrap">';
+                html += '<span>#' + t.id + ' ' + esc(t.turno_nombre) + ' — ' + esc(t.habilitacion_en) + ' → ' + esc(t.cierre_en);
+                html += ' · $' + fmt(t.monto_facturacion_turno) + '</span>';
+                if (puedeEjecutar) {
+                    html += '<button type="button" class="btn btn-xs btn-outline-primary js-recalcular" data-id="' + t.id + '">Recalcular totales</button>';
+                }
+                html += '</li>';
+            });
+            html += '</ul>';
+        }
+
+        if (term.sugerencias && term.sugerencias.length && puedeEjecutar) {
+            html += '<h6>Acciones sugeridas</h6>';
+            term.sugerencias.forEach(function (s) {
+                html += '<div class="alert alert-light border py-2 mb-2">';
+                html += esc(s.detalle);
+                if (s.accion === 'extender_cierre' && s.turno_operativo_id) {
+                    html += ' <button type="button" class="btn btn-sm btn-warning ml-2 js-extender-cierre" data-id="' + s.turno_operativo_id + '">Extender cierre</button>';
+                }
+                if (s.accion === 'crear_retroactivo') {
+                    html += ' <button type="button" class="btn btn-sm btn-danger ml-2 js-crear-retroactivo" data-pc="' + esc(term.identificador_pc) + '">Crear turno retroactivo</button>';
+                }
+                if (s.accion === 'cerrar_turno_remoto' && s.turno_operativo_id) {
+                    html += ' <button type="button" class="btn btn-sm btn-warning ml-2 js-cerrar-turno-remoto"';
+                    html += ' data-id="' + s.turno_operativo_id + '"';
+                    html += ' data-pc="' + esc(s.identificador_pc || term.identificador_pc) + '"';
+                    html += ' data-turno="' + esc(s.turno_nombre || '') + '">Cerrar turno remoto</button>';
+                }
+                if (s.accion === 'cerrar_cuentas' && s.turno_operativo_id) {
+                    html += ' <button type="button" class="btn btn-sm btn-outline-danger ml-2 js-cerrar-cuentas"';
+                    html += ' data-turno-id="' + s.turno_operativo_id + '"';
+                    html += ' data-confirmacion="' + esc(s.confirmacion || '') + '"';
+                    html += ' data-cantidad="' + esc(s.cantidad_abiertas_con_items || s.cantidad || 0) + '">Cerrar sin facturar cuentas con consumos</button>';
+                }
+                if (s.accion === 'cerrar_cuentas_sin_turno_activo') {
+                    var cuentaIds = Array.isArray(s.cuenta_ids) ? s.cuenta_ids.join(',') : '';
+                    html += ' <button type="button" class="btn btn-sm btn-outline-danger ml-2 js-cerrar-cuentas-sin-turno"';
+                    html += ' data-empresa-id="' + esc(s.empresa_id || '') + '"';
+                    html += ' data-pc="' + esc(s.identificador_pc || '') + '"';
+                    html += ' data-cuenta-ids="' + esc(cuentaIds) + '"';
+                    html += ' data-confirmacion="' + esc(s.confirmacion || '') + '"';
+                    html += ' data-cantidad="' + esc(s.cantidad_abiertas_con_items || s.cantidad || 0) + '">Cerrar sin facturar (sin turno activo)</button>';
+                }
+                html += '</div>';
+            });
+        }
+
+        html += '</div></div>';
+        return html;
+    }
+
+    function cerrarTurnoRemoto(turnoId, pcTurno, turnoNombre) {
+        if (!apiCerrarTurnoRemoto) {
+            alert('API de cierre remoto no configurada.');
+            return;
+        }
+        var msg = 'Cerrar remotamente el turno #' + turnoId + ' (' + turnoNombre + ') en terminal ' + pcTurno + '?\n';
+        msg += 'Los totales se calculan sobre esa PC. Use esto si la terminal no responde.\n';
+        msg += 'Si hay diferencia de conciliación, se imputará automáticamente a sobrante/faltante; '
+            + 'luego puede corregirse anulando el cierre cuando la PC vuelva a operar.';
+        if (!confirm(msg)) {
+            return;
+        }
+        var obs = prompt('Observación de cierre (opcional):', 'Cierre remoto — PC inoperativa') || '';
+        postJson(apiCerrarTurnoRemoto, {
+            turno_operativo_id: turnoId,
+            observacion: obs,
+        }).then(function (res) {
+            if (res.ok && res.data.ok) {
+                alert(res.data.mensaje || 'Turno cerrado.');
+                if (res.data.url_comprobante_pdf) {
+                    window.open(res.data.url_comprobante_pdf, '_blank', 'noopener');
+                }
+                cargarDiagnostico();
+            } else {
+                alert(res.data.error || 'No se pudo cerrar el turno.');
+            }
+        });
+    }
+
+    function renderTurnosHabilitadosRemoto(lista) {
+        if (!lista || !lista.length || !puedeEjecutar) {
+            return '';
+        }
+        var html = '<div class="card border-warning mb-3">';
+        html += '<div class="card-header py-2 bg-warning"><strong>Cierre remoto de turnos (otra PC)</strong></div>';
+        html += '<div class="card-body py-2">';
+        html += '<p class="small text-muted mb-2">Turnos habilitados en la jornada. Puede cerrarlos desde esta terminal si la PC original no funciona.</p>';
+        html += '<div class="table-responsive"><table class="table table-sm table-bordered mb-0">';
+        html += '<thead><tr><th>PC turno</th><th>Turno</th><th>Habilitado</th><th>Actividad</th><th></th></tr></thead><tbody>';
+        lista.forEach(function (t) {
+            html += '<tr>';
+            html += '<td>' + esc(t.identificador_pc) + '</td>';
+            html += '<td>' + esc(t.turno_nombre) + ' <span class="text-muted">#' + esc(t.turno_operativo_id) + '</span></td>';
+            html += '<td>' + esc(t.habilitacion_en) + '</td>';
+            html += '<td>' + (t.con_actividad
+                ? '<span class="badge badge-danger">con comprobantes</span>'
+                : '<span class="badge badge-secondary">sin comprobantes</span>') + '</td>';
+            html += '<td><button type="button" class="btn btn-sm btn-warning js-cerrar-turno-remoto"';
+            html += ' data-id="' + esc(t.turno_operativo_id) + '"';
+            html += ' data-pc="' + esc(t.identificador_pc) + '"';
+            html += ' data-turno="' + esc(t.turno_nombre) + '">Cerrar remoto</button></td>';
+            html += '</tr>';
+        });
+        html += '</tbody></table></div></div></div>';
+        return html;
+    }
+
+    function renderDiagnostico(data) {
+        var panel = document.getElementById('panel-diagnostico');
+        if (!panel) {
+            return;
+        }
+        if (!data.ok) {
+            panel.innerHTML = '<div class="alert alert-danger">' + esc(data.error || 'Error') + '</div>';
+            return;
+        }
+
+        var j = data.jornada || {};
+        var html = '<div class="alert alert-info py-2">';
+        html += 'Jornada #' + esc(j.id) + ' — ' + esc(j.fecha_jornada_fmt || j.fecha_jornada);
+        html += j.abierta ? ' <span class="badge badge-success">Abierta</span>' : ' <span class="badge badge-secondary">Cerrada</span>';
+        html += '</div>';
+
+        html += renderTurnosHabilitadosRemoto(data.turnos_habilitados_remoto);
+
+        if (!data.terminales || !data.terminales.length) {
+            html += '<p class="text-muted">No hay terminales configuradas para esta empresa.</p>';
+        } else {
+            data.terminales.forEach(function (term) {
+                html += renderTerminal(term);
+            });
+        }
+
+        panel.innerHTML = html;
+        enlazarAcciones(panel);
+    }
+
+    function pedirConfirmacionYMotivo(confirmacionEsperada, cantidad, sufijoMensaje) {
+        var msg = 'Se cerrarán sin facturar las cuentas ABIERTAS con consumos de la terminal.\n';
+        msg += 'Cuentas con consumos a cerrar: ' + cantidad + '.\n';
+        msg += '(Las cuentas abiertas sin ítems se descartan automáticamente al cerrar turno/jornada.\n';
+        msg += ' Las cerradas sin facturar son estado terminal y no requieren acción.)\n';
+        if (sufijoMensaje) {
+            msg += sufijoMensaje + '\n';
+        }
+        msg += '\nPara confirmar escriba exactamente:\n' + confirmacionEsperada;
+        var ingresado = prompt(msg, '');
+        if (ingresado === null) {
+            return null;
+        }
+        if (ingresado.trim() !== confirmacionEsperada) {
+            alert('Confirmación incorrecta. Debe escribir: ' + confirmacionEsperada);
+            return null;
+        }
+        var motivo = prompt('Motivo u observación (opcional):', '') || '';
+        return { confirmacion: ingresado.trim(), motivo: motivo };
+    }
+
+    function cerrarCuentasConConfirmacion(turnoId, confirmacionEsperada, cantidad) {
+        var datos = pedirConfirmacionYMotivo(confirmacionEsperada, cantidad, null);
+        if (!datos) {
+            return;
+        }
+        postJson(apiCerrarCuentas, {
+            turno_operativo_id: turnoId,
+            confirmacion: datos.confirmacion,
+            motivo: datos.motivo,
+        }).then(function (res) {
+            alert(res.data.mensaje || res.data.error || 'Listo');
+            cargarDiagnostico();
+        });
+    }
+
+    function cerrarCuentasSinTurnoConConfirmacion(empresaId, pc, cuentaIds, confirmacionEsperada, cantidad) {
+        var tieneIds = Array.isArray(cuentaIds) && cuentaIds.length > 0;
+        var sufijo = tieneIds
+            ? 'Sin terminal identificable; se cerrarán las cuentas por id (' + cuentaIds.length + ').'
+            : 'No hay turno habilitado en la terminal; el cierre se hará por (empresa, PC).';
+        var datos = pedirConfirmacionYMotivo(confirmacionEsperada, cantidad, sufijo);
+        if (!datos) {
+            return;
+        }
+        var payload = {
+            empresa_id: empresaId,
+            confirmacion: datos.confirmacion,
+            motivo: datos.motivo,
+        };
+        if (tieneIds) {
+            payload.cuenta_ids = cuentaIds;
+        } else {
+            payload.identificador_pc = pc;
+        }
+        postJson(apiCerrarCuentas, payload).then(function (res) {
+            alert(res.data.mensaje || res.data.error || 'Listo');
+            cargarDiagnostico();
+        });
+    }
+
+    function enlazarAcciones(root) {
+        root.querySelectorAll('.js-extender-cierre').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var id = btn.getAttribute('data-id');
+                if (!confirm('¿Extender el cierre del turno #' + id + ' para cubrir facturas huérfanas?')) {
+                    return;
+                }
+                postJson(apiExtender, { turno_operativo_id: id }).then(function (res) {
+                    alert(res.data.mensaje || res.data.error || 'Listo');
+                    cargarDiagnostico();
+                });
+            });
+        });
+
+        root.querySelectorAll('.js-crear-retroactivo').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var pc = btn.getAttribute('data-pc');
+                var turnos = cfg.turnos || [];
+                if (!turnos.length) {
+                    alert('No hay turnos maestro configurados.');
+                    return;
+                }
+                var opts = turnos.map(function (t, i) {
+                    return (i + 1) + ') ' + t.nombre + ' (id ' + t.id + ')';
+                }).join('\n');
+                var sel = prompt('Indique número de turno maestro:\n' + opts, '1');
+                if (!sel) {
+                    return;
+                }
+                var idx = parseInt(sel, 10) - 1;
+                if (idx < 0 || idx >= turnos.length) {
+                    alert('Selección inválida.');
+                    return;
+                }
+                if (!confirm('¿Crear turno retroactivo cerrado en ' + pc + '?')) {
+                    return;
+                }
+                postJson(apiRetroactivo, {
+                    identificador_pc: pc,
+                    empresa_id: document.getElementById('empresa_id')?.value || '',
+                    turno_gastronomia_id: turnos[idx].id,
+                    monto_habilitacion: 0,
+                }).then(function (res) {
+                    alert(res.data.mensaje || res.data.error || 'Listo');
+                    cargarDiagnostico();
+                });
+            });
+        });
+
+        root.querySelectorAll('.js-recalcular').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var id = btn.getAttribute('data-id');
+                postJson(apiRecalcular, { turno_operativo_id: id }).then(function (res) {
+                    alert(res.data.mensaje || res.data.error || 'Listo');
+                    cargarDiagnostico();
+                });
+            });
+        });
+
+        root.querySelectorAll('.js-cerrar-cuentas').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                cerrarCuentasConConfirmacion(
+                    btn.getAttribute('data-turno-id'),
+                    btn.getAttribute('data-confirmacion') || '',
+                    btn.getAttribute('data-cantidad') || '0',
+                );
+            });
+        });
+
+        root.querySelectorAll('.js-cerrar-turno-remoto').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                cerrarTurnoRemoto(
+                    btn.getAttribute('data-id'),
+                    btn.getAttribute('data-pc') || '',
+                    btn.getAttribute('data-turno') || '',
+                );
+            });
+        });
+
+        root.querySelectorAll('.js-cerrar-cuentas-sin-turno').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var raw = btn.getAttribute('data-cuenta-ids') || '';
+                var ids = raw
+                    .split(',')
+                    .map(function (s) { return parseInt(s, 10); })
+                    .filter(function (n) { return Number.isFinite(n) && n > 0; });
+                cerrarCuentasSinTurnoConConfirmacion(
+                    btn.getAttribute('data-empresa-id') || '',
+                    btn.getAttribute('data-pc') || '',
+                    ids,
+                    btn.getAttribute('data-confirmacion') || '',
+                    btn.getAttribute('data-cantidad') || '0',
+                );
+            });
+        });
+    }
+
+    function cargarDiagnostico() {
+        var empresaId = document.getElementById('empresa_id')?.value || '';
+        var pc = document.getElementById('identificador_pc')?.value || '';
+        var url = apiDiagnostico + '?empresa_id=' + encodeURIComponent(empresaId);
+        if (pc) {
+            url += '&identificador_pc=' + encodeURIComponent(pc);
+        }
+        var panel = document.getElementById('panel-diagnostico');
+        if (panel) {
+            panel.innerHTML = '<p class="text-muted"><i class="fa fa-spinner fa-spin"></i> Analizando…</p>';
+        }
+        return getJson(url).then(function (res) {
+            renderDiagnostico(res.data);
+        });
+    }
+
+    var btnPdf = document.getElementById('btn-exportar-informe-pdf');
+    if (btnPdf && urlInformePdf) {
+        btnPdf.addEventListener('click', function () {
+            var empresaId = document.getElementById('empresa_id')?.value || '';
+            var pc = document.getElementById('identificador_pc')?.value || '';
+            var url = urlInformePdf + '?empresa_id=' + encodeURIComponent(empresaId) + '&inline=1';
+            if (pc) {
+                url += '&identificador_pc=' + encodeURIComponent(pc);
+            }
+            window.open(url, '_blank', 'noopener');
+        });
+    }
+
+    if (document.getElementById('empresa_id')) {
+        cargarDiagnostico();
+    }
+})();

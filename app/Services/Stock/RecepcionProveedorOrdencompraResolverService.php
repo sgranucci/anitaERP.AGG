@@ -9,6 +9,7 @@ use App\Support\Compras\ArticuloProveedorPrecioListaSupport;
 use App\Support\Stock\RecepcionProveedorDiferenciaSupport;
 use App\Support\Stock\RecepcionProveedorConversionSupport;
 use App\Support\Stock\RecepcionProveedorDepositoSupport;
+use App\Support\Stock\RecepcionProveedorParteUnicaSupport;
 use Illuminate\Support\Carbon;
 
 class RecepcionProveedorOrdencompraResolverService
@@ -136,7 +137,7 @@ class RecepcionProveedorOrdencompraResolverService
                 'precio' => (float) $ocArt->precio,
                 'precio_ordencompra' => (float) $ocArt->precio,
                 'precio_lista_proveedor' => $precioLista,
-                'moneda_id' => $ocArt->moneda_id,
+                'moneda_id' => (int) ($ocArt->moneda_id ?: 1),
                 'cotizacion' => (float) ($ocArt->cotizacion ?: 1),
                 'descuento' => (float) ($ocArt->descuento ?? 0),
                 'centrocosto_id' => $ocArt->centrocostodestino_id ?? $oc->centrocosto_id,

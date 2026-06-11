@@ -74,7 +74,7 @@ final class RendicionGastronomiaAnitaContextBuilder
             'fecha_rendicion' => $fechaRend,
             'fecha_jornada' => $fechaJornada,
             'fecha_entera' => (int) $fechaJornadaCarbon->format('Ymd'),
-            'fecha_alfa' => $fechaJornadaCarbon->format('Ymd'),
+            'fecha_alfa' => $fechaJornadaCarbon->format('d/m/y'),
             'hora' => $fechaRend->format('H:i:s'),
             'hora_carga' => now()->format('H:i:s'),
             'fecha_carga' => (int) now()->format('Ymd'),

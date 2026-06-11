@@ -30,6 +30,8 @@
     var panelInformeZJornada = document.getElementById('panel-informe-z-jornada');
     var contenidoInformeZJornada = document.getElementById('contenido-informe-z-jornada');
     var toleranciaInformeZ = parseFloat(app.getAttribute('data-tolerancia-informe-z')) || 0.02;
+    var estadoInformeZPlantilla = [];
+    var inpInformeZTotemsJson = document.getElementById('informe_z_totems_json');
     var chkVerificacionGastronomia = document.getElementById('chk_verificacion_gastronomia');
     var hintVerificacionFooter = document.getElementById('hint-verificacion-footer');
     var bloqueVerificacionFooter = document.getElementById('bloque-verificacion-footer');
@@ -617,16 +619,25 @@
 
     function renderMovimientos(movimientos) {
         if (!movimientos || !movimientos.length) {
-            tbody.innerHTML = '<tr><td colspan="4" class="text-muted text-center p-3">Sin medios de pago en el cierre.</td></tr>';
+            var cobradoCero = (parseFloat(val('totalcobrado')) || 0) <= 0.02;
+            tbody.innerHTML = '<tr><td colspan="4" class="text-muted text-center p-3">'
+                + (cobradoCero
+                    ? 'Sin medios de pago (turno sin cobranzas). Puede rendir igual.'
+                    : 'Sin medios de pago en el cierre.')
+                + '</td></tr>';
             recalcularDiferencias();
             return;
         }
 
         var html = '';
         var idxPersistido = 0;
+        var tieneMedioPago = false;
         movimientos.forEach(function (m) {
             var esNc = !!(m.es_nota_credito);
             var ccId = parseInt(m.cuentacaja_id, 10) || 0;
+            if (!esNc && ccId > 0) {
+                tieneMedioPago = true;
+            }
             var esEfectivo = !esNc && esFilaEfectivo(ccId);
             var montoFmt = fmt(parseFloat(m.monto) || 0);
             var cotFmt = fmt(parseFloat(m.cotizacion != null ? m.cotizacion : 1) || 1);
@@ -670,6 +681,11 @@
                 idxPersistido++;
             }
         });
+        if (!tieneMedioPago) {
+            html += '<tr><td colspan="4" class="text-info small text-center p-2">'
+                + 'Este cierre no tiene cobranzas (solo invitaciones u operación sin medios). No requiere filas de medio de pago.'
+                + '</td></tr>';
+        }
         tbody.innerHTML = html;
         bindRecalcula();
         capturarBaselineAjustes();
@@ -787,77 +803,285 @@
         return String(parseInt(v, 10));
     }
 
+    function formatearMontoInformeZInput(n) {
+        if (n == null || n === '' || isNaN(Number(n))) {
+            return '';
+        }
+        var num = Math.round(Number(n) * 100) / 100;
+        if (num === 0) {
+            return '';
+        }
+        var parts = num.toFixed(2).split('.');
+        parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        return parts.join(',');
+    }
+
+    function parseMontoInformeZ(val) {
+        if (val == null || val === '') {
+            return 0;
+        }
+        var s = String(val).trim().replace(/\./g, '').replace(',', '.');
+        var n = parseFloat(s);
+        return isNaN(n) ? 0 : Math.round(n * 100) / 100;
+    }
+
+    function actualizarDiferenciaFilaInformeZCaja(tr) {
+        if (!tr) {
+            return;
+        }
+        var inp = tr.querySelector('.js-monto-informe-z-caja');
+        var cell = tr.querySelector('.js-diff-cell-caja');
+        if (!inp || !cell) {
+            return;
+        }
+        var tol = parseFloat(toleranciaInformeZ) || 0.02;
+        var mSis = parseFloat(inp.getAttribute('data-monto-sistema') || tr.getAttribute('data-monto-sistema') || '0') || 0;
+        var mZ = parseMontoInformeZ(inp.value);
+        var diff = Math.round((mZ - mSis) * 100) / 100;
+        var ok = Math.abs(diff) <= tol || (mSis <= tol && mZ <= tol);
+        cell.textContent = (diff >= 0 ? '+' : '') + fmt(diff);
+        cell.className = 'text-right js-diff-cell-caja ' + (ok ? 'text-success' : 'text-danger font-weight-bold');
+        tr.classList.toggle('rendicion-informe-z-diff', !ok);
+    }
+
+    function actualizarTotalesInformeZCaja(wrap) {
+        if (!wrap) {
+            return { sistema: 0, informeZ: 0, diferencia: 0, ok: true };
+        }
+        var totalSis = 0;
+        var totalZ = 0;
+        wrap.querySelectorAll('.rendicion-informe-z-linea').forEach(function (tr) {
+            var mSis = parseFloat(tr.getAttribute('data-monto-sistema') || '0') || 0;
+            var inp = tr.querySelector('.js-monto-informe-z-caja');
+            totalSis += mSis;
+            totalZ += inp ? parseMontoInformeZ(inp.value) : 0;
+        });
+        totalSis = Math.round(totalSis * 100) / 100;
+        totalZ = Math.round(totalZ * 100) / 100;
+        var diff = Math.round((totalZ - totalSis) * 100) / 100;
+        var tol = parseFloat(toleranciaInformeZ) || 0.02;
+        var ok = Math.abs(diff) <= tol || (totalSis <= tol && totalZ <= tol);
+        var celSis = wrap.querySelector('.js-total-sistema-caja');
+        var celZ = wrap.querySelector('.js-total-informe-z-caja');
+        var celDiff = wrap.querySelector('.js-total-diferencia-caja');
+        if (celSis) {
+            celSis.textContent = '$' + fmt(totalSis);
+        }
+        if (celZ) {
+            celZ.textContent = '$' + fmt(totalZ);
+        }
+        if (celDiff) {
+            celDiff.textContent = (diff >= 0 ? '+' : '') + fmt(diff);
+            celDiff.className = 'text-right js-total-diferencia-caja ' + (ok ? 'text-success' : 'text-danger font-weight-bold');
+        }
+        return { sistema: totalSis, informeZ: totalZ, diferencia: diff, ok: ok };
+    }
+
+    function actualizarAlertaConciliacionInformeZCaja(wrap) {
+        var alerta = document.getElementById('rendicion-informe-z-alerta');
+        if (!alerta || !wrap) {
+            return;
+        }
+        var totales = actualizarTotalesInformeZCaja(wrap);
+        var tol = parseFloat(toleranciaInformeZ) || 0.02;
+        if (totales.ok) {
+            alerta.className = 'alert alert-success py-2 mb-2';
+            alerta.textContent = 'Informe Z cuadra con el sistema (tolerancia $' + fmt(tol) + ').';
+        } else {
+            alerta.className = 'alert alert-warning py-2 mb-2';
+            alerta.textContent = 'Hay diferencias entre Informe Z y totales del sistema (tolerancia $' + fmt(tol) + ').';
+        }
+    }
+
+    function htmlFilaInformeZCaja(ln) {
+        ln = ln || {};
+        var ccId = ln.cuentacaja_id != null ? parseInt(ln.cuentacaja_id, 10) : 0;
+        var etiqueta = escHtml(ln.etiqueta || ln.cuentacaja_nombre || '—');
+        var tipo = escHtml(ln.tipo_waitry || '');
+        var mSis = Number(ln.monto_sistema || 0);
+        var mZ = ln.monto_informe_z != null ? Number(ln.monto_informe_z) : mSis;
+        var inputVal = !isNaN(mZ) ? escHtml(formatearMontoInformeZInput(mZ)) : '';
+        var html = '<tr class="rendicion-informe-z-linea" data-tipo-waitry="' + tipo + '" data-monto-sistema="' + mSis + '">';
+        html += '<td>' + etiqueta;
+        if (ccId > 0) {
+            html += '<input type="hidden" class="cuentacaja_id" value="' + ccId + '">';
+        }
+        html += '</td>';
+        html += '<td class="text-right">$' + fmt(mSis) + '</td>';
+        html += '<td class="text-right"><input type="text" inputmode="decimal" autocomplete="off"';
+        html += ' class="form-control form-control-sm js-monto-informe-z-caja text-right"';
+        html += ' data-monto-sistema="' + mSis + '" value="' + inputVal + '" placeholder="0,00"></td>';
+        html += '<td class="text-right js-diff-cell-caja">—</td>';
+        html += '</tr>';
+        return html;
+    }
+
+    function construirHtmlInformeZCajaEditable(plantilla) {
+        if (!plantilla || !plantilla.length) {
+            return '<p class="text-muted mb-0">No hay medios de pago para conciliar en esta jornada.</p>';
+        }
+        var html = '<div id="rendicion-informe-z-alerta" class="alert alert-info py-2 mb-2"></div>';
+        html += '<div class="rendicion-informe-z-wrap">';
+        plantilla.forEach(function (bloque, idx) {
+            var titulo = escHtml(bloque.ubicacion_nombre || 'Informe Z Waitry');
+            if (bloque.detalle) {
+                titulo += ' — ' + escHtml(bloque.detalle);
+            }
+            var totemId = parseInt(bloque.totem_id, 10);
+            if (isNaN(totemId)) {
+                totemId = 0;
+            }
+            html += '<div class="mb-2 rendicion-informe-z-bloque" data-totem-idx="' + idx + '" data-totem-id="' + totemId + '"';
+            if (bloque.plantilla_unificada) {
+                html += ' data-plantilla-unificada="1"';
+            }
+            if (bloque.waitry_table_id) {
+                html += ' data-waitry-table-id="' + parseInt(bloque.waitry_table_id, 10) + '"';
+            }
+            html += '>';
+            html += '<table class="table table-sm table-bordered rendicion-informe-z-tabla mb-0">';
+            html += '<thead class="thead-light"><tr><th colspan="4">' + titulo + '</th></tr>';
+            html += '<tr><th>Medio</th><th class="text-right">Sistema</th><th class="text-right" style="min-width:130px">Informe Z</th>';
+            html += '<th class="text-right">Diferencia</th></tr></thead><tbody>';
+            (bloque.lineas || []).forEach(function (ln) {
+                html += htmlFilaInformeZCaja(ln);
+            });
+            html += '</tbody><tfoot><tr class="bg-light font-weight-bold">';
+            html += '<td>Total</td>';
+            html += '<td class="text-right js-total-sistema-caja">$' + fmt(bloque.total_ingreso_sistema || 0) + '</td>';
+            html += '<td class="text-right js-total-informe-z-caja">$0,00</td>';
+            html += '<td class="text-right js-total-diferencia-caja">—</td>';
+            html += '</tr></tfoot></table></div>';
+        });
+        html += '</div>';
+        return html;
+    }
+
+    function bindEventosInformeZCaja() {
+        if (!contenidoInformeZJornada) {
+            return;
+        }
+        contenidoInformeZJornada.querySelectorAll('.js-monto-informe-z-caja').forEach(function (inp) {
+            inp.addEventListener('input', function () {
+                actualizarDiferenciaFilaInformeZCaja(inp.closest('tr'));
+                var wrap = contenidoInformeZJornada.querySelector('.rendicion-informe-z-wrap');
+                actualizarAlertaConciliacionInformeZCaja(wrap);
+            });
+            inp.addEventListener('blur', function () {
+                var tr = inp.closest('tr');
+                var val = parseMontoInformeZ(inp.value);
+                inp.value = val > 0 ? formatearMontoInformeZInput(val) : '';
+                actualizarDiferenciaFilaInformeZCaja(tr);
+                var wrap = contenidoInformeZJornada.querySelector('.rendicion-informe-z-wrap');
+                actualizarAlertaConciliacionInformeZCaja(wrap);
+            });
+        });
+    }
+
+    function recolectarInformeZParaSubmit() {
+        if (!contenidoInformeZJornada) {
+            return [];
+        }
+        var totemsOut = [];
+        contenidoInformeZJornada.querySelectorAll('.rendicion-informe-z-bloque').forEach(function (card) {
+            var totemId = parseInt(card.getAttribute('data-totem-id'), 10) || 0;
+            var tableId = parseInt(card.getAttribute('data-waitry-table-id'), 10) || 0;
+            var esUnificado = card.getAttribute('data-plantilla-unificada') === '1';
+            var lineas = [];
+            card.querySelectorAll('.rendicion-informe-z-linea').forEach(function (tr) {
+                var ccInp = tr.querySelector('.cuentacaja_id');
+                var ccId = ccInp ? parseInt(ccInp.value, 10) || 0 : 0;
+                var inp = tr.querySelector('.js-monto-informe-z-caja');
+                var monto = inp ? parseMontoInformeZ(inp.value) : 0;
+                var mSistema = parseFloat(tr.getAttribute('data-monto-sistema') || '0') || 0;
+                if (ccId <= 0 && monto <= 0 && mSistema <= 0) {
+                    return;
+                }
+                lineas.push({
+                    cuentacaja_id: ccId > 0 ? ccId : null,
+                    tipo_waitry: tr.getAttribute('data-tipo-waitry') || null,
+                    monto: monto,
+                    monto_informe_z: monto,
+                });
+            });
+            if (totemId > 0 || (esUnificado && lineas.length > 0)) {
+                var entry = { totem_id: esUnificado ? 0 : totemId, lineas: lineas };
+                if (tableId > 0 && !esUnificado) {
+                    entry.waitry_table_id = tableId;
+                }
+                totemsOut.push(entry);
+            }
+        });
+        return totemsOut;
+    }
+
+    function sincronizarHiddenInformeZ() {
+        if (!inpInformeZTotemsJson) {
+            return;
+        }
+        if (!esJornada() || !estadoInformeZPlantilla.length) {
+            inpInformeZTotemsJson.value = '';
+            return;
+        }
+        inpInformeZTotemsJson.value = JSON.stringify(recolectarInformeZParaSubmit());
+    }
+
     function renderInformeZJornada(d) {
         if (!panelInformeZJornada || !contenidoInformeZJornada) {
             return;
         }
-        var conciliacion = d.conciliacion_informe_z;
+        var plantilla = d.informe_z_plantilla;
         var cargado = !!d.informe_z_cargado;
         var tol = parseFloat(d.tolerancia_informe_z) || toleranciaInformeZ;
+        toleranciaInformeZ = tol;
 
-        if (!cargado || !conciliacion || !conciliacion.totems || conciliacion.totems.length === 0) {
+        if (d.cierre_totem_habilitado === false) {
             panelInformeZJornada.classList.remove('d-none');
-            var msg = '<p class="text-muted mb-0">';
-            if (d.cierre_totem_habilitado === false) {
-                msg += 'Cierre Waitry/tótem deshabilitado en configuración. No hay Informe Z para esta jornada.';
-            } else {
-                msg += 'Informe Z no cargado. Regístrelo desde <strong>Ventas → Gastronomía → Jornada</strong> antes de cerrar la jornada.';
-            }
-            msg += '</p>';
-            contenidoInformeZJornada.innerHTML = msg;
+            contenidoInformeZJornada.innerHTML = '<p class="text-muted mb-0">Cierre Waitry/tótem deshabilitado en configuración. No hay Informe Z para esta jornada.</p>';
+            estadoInformeZPlantilla = [];
+            sincronizarHiddenInformeZ();
             return;
         }
 
-        panelInformeZJornada.classList.remove('d-none');
-        var html = '';
-        if (conciliacion.ok) {
-            html += '<div class="alert alert-success py-2 mb-2">Informe Z cuadra con el sistema (tolerancia $'
-                + esc(fmt(tol)) + ').</div>';
-        } else {
-            html += '<div class="alert alert-warning py-2 mb-2">Hay diferencias entre Informe Z y totales del sistema (tolerancia $'
-                + esc(fmt(tol)) + ').</div>';
+        if (!cargado || !plantilla || !plantilla.length) {
+            panelInformeZJornada.classList.remove('d-none');
+            contenidoInformeZJornada.innerHTML = '<p class="text-muted mb-0">Informe Z no disponible. Verifique que la jornada se haya cerrado correctamente desde Gastronomía.</p>';
+            estadoInformeZPlantilla = [];
+            sincronizarHiddenInformeZ();
+            return;
         }
+
+        estadoInformeZPlantilla = plantilla;
+        panelInformeZJornada.classList.remove('d-none');
+        var html = '<div class="alert alert-info py-2 mb-2">';
+        html += '<strong><i class="fa fa-info-circle"></i> Precarga automática</strong> — El Informe Z viene igual a la columna ';
+        html += '<strong>Sistema</strong> (cerrado desde Gastronomía). Si el Z físico de Waitry difiere, ';
+        html += 'modifique los montos en la columna <strong>Informe Z</strong> antes de guardar la rendición.';
+        html += '</div>';
         if (d.informe_z_en) {
-            html += '<p class="text-muted mb-2">Cargado: ' + escHtml(d.informe_z_en);
+            html += '<p class="text-muted mb-2">Registrado en Gastronomía: ' + escHtml(d.informe_z_en);
             if (d.usuario_informe_z) {
                 html += ' (' + escHtml(d.usuario_informe_z) + ')';
             }
             html += '</p>';
         }
-
-        (conciliacion.totems || []).forEach(function (bloque) {
-            html += '<div class="mb-3">';
-            html += '<table class="table table-sm table-bordered rendicion-informe-z-tabla mb-0">';
-            html += '<thead class="thead-light"><tr>';
-            html += '<th colspan="3">' + escHtml(bloque.ubicacion_nombre || 'Tótem');
-            if (bloque.detalle) {
-                html += ' — ' + escHtml(bloque.detalle);
+        if (d.informe_z_ajustado_en_caja && d.informe_z_ajuste_caja_en) {
+            html += '<p class="text-muted mb-2">Último ajuste en caja: ' + escHtml(d.informe_z_ajuste_caja_en);
+            if (d.informe_z_ajuste_caja_usuario) {
+                html += ' (' + escHtml(d.informe_z_ajuste_caja_usuario) + ')';
             }
-            if (bloque.waitry_table_id) {
-                html += ' <span class="text-muted">(tableId ' + escHtml(String(bloque.waitry_table_id)) + ')</span>';
-            }
-            if (!bloque.ok) {
-                html += ' <span class="text-danger font-weight-bold">— DIFERENCIA</span>';
-            }
-            html += '</th>';
-            html += '<th class="text-right">Sist. $' + esc(fmt(bloque.total_sistema || 0))
-                + ' / Z $' + esc(fmt(bloque.total_informe_z || 0)) + '</th>';
-            html += '</tr><tr>';
-            html += '<th>Medio</th><th class="text-right">Sistema</th><th class="text-right">Informe Z</th><th class="text-right">Diferencia</th>';
-            html += '</tr></thead><tbody>';
-            (bloque.lineas || []).forEach(function (ln) {
-                var trCls = ln.ok ? '' : ' class="rendicion-informe-z-diff"';
-                html += '<tr' + trCls + '>';
-                html += '<td>' + escHtml(ln.etiqueta || '—') + '</td>';
-                html += '<td class="text-right">$' + esc(fmt(ln.monto_sistema || 0)) + '</td>';
-                html += '<td class="text-right">$' + esc(fmt(ln.monto_informe_z || 0)) + '</td>';
-                html += '<td class="text-right">$' + esc(fmt(ln.diferencia || 0)) + '</td>';
-                html += '</tr>';
-            });
-            html += '</tbody></table></div>';
-        });
-
+            html += '</p>';
+        }
+        html += construirHtmlInformeZCajaEditable(plantilla);
         contenidoInformeZJornada.innerHTML = html;
+
+        contenidoInformeZJornada.querySelectorAll('.rendicion-informe-z-linea').forEach(function (tr) {
+            actualizarDiferenciaFilaInformeZCaja(tr);
+        });
+        var wrap = contenidoInformeZJornada.querySelector('.rendicion-informe-z-wrap');
+        actualizarAlertaConciliacionInformeZCaja(wrap);
+        bindEventosInformeZCaja();
+        sincronizarHiddenInformeZ();
     }
 
     function escHtml(s) {
@@ -1392,6 +1616,9 @@
 
         formEl.addEventListener('submit', function (ev) {
             normalizarDecimalesGrillaAntesDeEnviar();
+            if (esJornada() && estadoInformeZPlantilla.length > 0) {
+                sincronizarHiddenInformeZ();
+            }
             var cajaId = parseInt(val('caja_id'), 10) || 0;
             if (modo === 'crear' && cajaId <= 0) {
                 ev.preventDefault();

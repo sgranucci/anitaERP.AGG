@@ -33,6 +33,26 @@ final class WaitryMedioPagoCuentacajaSupport
     /** QR MP en kiosco (equivale a credit_card + gateway KIOSK MPQR). */
     public const TIPO_KIOSK_MPQR = 'kioskmpqr';
 
+    /** Categorías de desglose en Informe Z (columna Sistema / plantilla de carga). */
+    public const CATEGORIA_QR_KIOSCO = 'qr_kiosco';
+
+    public const CATEGORIA_POSNET_KIOSCO = 'posnet_kiosco';
+
+    public const CATEGORIA_MERCADOPAGO = 'mercadopago';
+
+    public const CATEGORIA_QR_CELULAR = 'qr_celular';
+
+    public const CATEGORIA_MP_CELULAR = 'mp_celular';
+
+    /** @var list<string> */
+    public const CATEGORIAS_INFORME_Z_DESGLOSE = [
+        self::CATEGORIA_QR_KIOSCO,
+        self::CATEGORIA_POSNET_KIOSCO,
+        self::CATEGORIA_MERCADOPAGO,
+        self::CATEGORIA_QR_CELULAR,
+        self::CATEGORIA_MP_CELULAR,
+    ];
+
     /** @var list<string> tipos Waitry siempre QR (credit_card QR se distingue por gateway KIOSK MPQR). */
     public const TIPOS_QR_WAITRY_NORMALIZADOS = [
         'totalcoin',
@@ -343,29 +363,127 @@ final class WaitryMedioPagoCuentacajaSupport
         return self::TIPO_MERCADOPAGO;
     }
 
+    public static function esCategoriaInformeZDesglose(?string $valor): bool
+    {
+        return in_array($valor, self::CATEGORIAS_INFORME_Z_DESGLOSE, true);
+    }
+
+    /**
+     * Medio del resumen Informe Z (categoría o tipo Waitry) válido para plantilla/conciliación.
+     */
+    public static function medioInformeZValidoEnResumen(?string $tipoOCategoria): bool
+    {
+        if (self::esCategoriaInformeZDesglose($tipoOCategoria)) {
+            return true;
+        }
+
+        $tipoNorm = self::normalizarTipo($tipoOCategoria);
+
+        return $tipoNorm !== null
+            && ! self::esTipoExcluidoInformeZ($tipoNorm)
+            && self::esTipoPagoInformeZSistema($tipoNorm);
+    }
+
+    /**
+     * Categoría visible del Informe Z (QR Kiosco / Posnet Kiosco / MP / QR celular).
+     */
+    public static function categoriaInformeZDesglose(?string $tipo, ?string $gateway = null): ?string
+    {
+        if (self::esCategoriaInformeZDesglose($tipo)) {
+            return $tipo;
+        }
+
+        $tipoNorm = self::normalizarTipo($tipo);
+        if ($tipoNorm === null || self::esTipoExcluidoInformeZ($tipoNorm)) {
+            return null;
+        }
+
+        if ($tipoNorm === 'interface') {
+            return match (WaitryPaymentGatewaySupport::normalizarGateway($gateway)) {
+                'totalcoin' => self::CATEGORIA_QR_CELULAR,
+                'mercadopago' => self::CATEGORIA_MP_CELULAR,
+                default => null,
+            };
+        }
+
+        if (self::esTipoQrWaitry($tipoNorm, $gateway)) {
+            return self::CATEGORIA_QR_KIOSCO;
+        }
+
+        if ($tipoNorm === self::normalizarTipo(self::TIPO_KIOSK_MP)
+            || self::esCreditCardPosnet($tipoNorm, $gateway)
+            || $tipoNorm === self::normalizarTipo(self::TIPO_CREDIT_CARD)) {
+            return self::CATEGORIA_POSNET_KIOSCO;
+        }
+
+        if ($tipoNorm === self::normalizarTipo(self::TIPO_MERCADOPAGO)) {
+            return self::CATEGORIA_MERCADOPAGO;
+        }
+
+        if (self::esTipoPagoInformeZSistema($tipoNorm)) {
+            return $tipoNorm;
+        }
+
+        return null;
+    }
+
+    public static function etiquetaCategoriaInformeZ(string $categoria): string
+    {
+        return match ($categoria) {
+            self::CATEGORIA_QR_KIOSCO => 'QR Kiosco',
+            self::CATEGORIA_POSNET_KIOSCO => 'Posnet Kiosco',
+            self::CATEGORIA_MERCADOPAGO => 'Mercado Pago',
+            self::CATEGORIA_QR_CELULAR => 'QR celular',
+            self::CATEGORIA_MP_CELULAR => 'MP celular',
+            default => self::etiquetaTipo($categoria),
+        };
+    }
+
+    /**
+     * Tipo Waitry para resolver cuenta de caja desde categoría de desglose.
+     */
+    public static function tipoWaitryDesdeCategoriaInformeZ(string $categoria): string
+    {
+        return match ($categoria) {
+            self::CATEGORIA_QR_KIOSCO, self::CATEGORIA_QR_CELULAR => self::TIPO_TOTALCOIN,
+            self::CATEGORIA_POSNET_KIOSCO => self::TIPO_CREDIT_CARD,
+            self::CATEGORIA_MERCADOPAGO, self::CATEGORIA_MP_CELULAR => self::TIPO_MERCADOPAGO,
+            default => $categoria,
+        };
+    }
+
     /**
      * Tipo canónico para índices de mapas (fusión borrador, resúmenes). Nunca devuelve cuenta puente.
      */
     public static function tipoParaClaveMapaInformeZ(?string $tipo, int $empresaId, ?string $gateway = null): ?string
     {
+        if (self::esCategoriaInformeZDesglose($tipo)) {
+            return $tipo;
+        }
+
+        $categoria = self::categoriaInformeZDesglose($tipo, $gateway);
+        if ($categoria !== null) {
+            return $categoria;
+        }
+
         $tipoCanon = self::tipoRepresentativoInformeZ($tipo, $gateway);
 
         return $tipoCanon ?? self::tipoPredefinidoFallbackInformeZ($empresaId);
     }
 
     /**
-     * Clave única de medio para Informe Z / resumen tótem (evita duplicar Totalcoin + credit_card en la misma cuenta).
+     * Clave única de medio para Informe Z: desglose por categoría (QR / Posnet / MP), no por cuenta de caja.
      */
     public static function claveMedioInformeZ(?string $tipo, int $empresaId, ?string $gateway = null): string
     {
+        $categoria = self::categoriaInformeZDesglose($tipo, $gateway);
+        if ($categoria !== null) {
+            return 'cat:'.$categoria;
+        }
+
         $tipoNorm = self::tipoRepresentativoInformeZ($tipo, $gateway);
         if ($tipoNorm === null) {
             return '__excl__';
-        }
-
-        $ccId = self::cuentacajaIdPorTipo($tipoNorm, $empresaId, $gateway);
-        if ($ccId !== null && $ccId > 0) {
-            return 'cc:'.$ccId;
         }
 
         return 'tipo:'.$tipoNorm;

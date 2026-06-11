@@ -79,6 +79,27 @@
             return;
         }
 
+        function syncTodasTerminalesPcSelect() {
+            var chk = document.getElementById('todas_terminales');
+            var sel = document.getElementById('identificador_pc');
+            if (!sel) {
+                return;
+            }
+            if (chk && chk.checked) {
+                sel.disabled = true;
+                sel.value = '';
+            } else {
+                sel.disabled = false;
+            }
+        }
+
+        $('#todas_terminales').on('change', function () {
+            syncTodasTerminalesPcSelect();
+            $('#form-filtros-cierres-turno').trigger('submit');
+        });
+
+        syncTodasTerminalesPcSelect();
+
         $desde = $('#fecha_desde');
         $hasta = $('#fecha_hasta');
         hastaTocado = ($hasta.val() || '').trim() !== '';

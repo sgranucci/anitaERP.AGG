@@ -164,8 +164,8 @@
                     <h3 class="card-title">Habilitación y cierres de turno</h3>
                     <div class="card-tools d-flex flex-wrap align-items-center" style="gap: 4px;">
                         @if (can('gestionar-saneamiento-turno-estacionamiento', false))
-                            <a href="{{ route('estacionamiento_habilitacion_turno', ['empresa_id' => $empresa_id ?? $cfg->empresa_id, 'identificador_pc' => $identificador_pc]) }}"
-                               class="btn btn-light btn-sm border-dark text-dark" title="Diagnóstico y corrección de facturas huérfanas / cuentas">
+                            <a href="{{ route('estacionamiento_saneamiento_turno', ['empresa_id' => $empresa_id ?? $cfg->empresa_id, 'identificador_pc' => $identificador_pc]) }}"
+                               class="btn btn-light btn-sm border-dark text-dark" title="Diagnóstico, cierre remoto de turnos y cuentas/tickets pendientes">
                                 <i class="fa fa-wrench"></i> Saneamiento turnos
                             </a>
                         @endif
@@ -322,16 +322,12 @@
                                     </div>
 
                                     <div class="d-flex flex-wrap gap-2 mb-3">
-                                        <button type="button" class="btn btn-outline-secondary" id="btn--pdf" title="PDF informativo sin registrar cierre">
-                                            <i class="fa fa-file-pdf"></i> Informe por item (PDF, sin cerrar)
-                                        </button>
                                         <button type="button" class="btn btn-warning" id="btn-submit-cierre-parcial">
                                             <i class="fa fa-list-alt"></i> Registrar cierre parcial completo
                                         </button>
                                     </div>
                                     <p class="small text-muted mb-2">
-                                        El <strong>informe por item</strong> muestra solo totales por item con leyenda
-                                        «NO CIERRA EL TURNO» en el PDF. El <strong>cierre parcial completo</strong> guarda el comprobante en el historial.
+                                        El <strong>cierre parcial completo</strong> guarda el comprobante en el historial con totales por usuario habilitado.
                                     </p>
                                     <h6 class="font-weight-bold">Cierres parciales emitidos en este turno</h6>
                                     <div id="lista-cierres-parciales">
@@ -343,7 +339,7 @@
                             <div class="tab-pane fade" id="tab-cierre-definitivo" role="tabpanel">
                                 <div class="alert alert-danger border-danger py-2 small mb-3">
                                     <strong>Cierre definitivo</strong> —
-                                    cierra el turno en esta terminal. Debe cuadrar caja y no quedar cuentas sin facturar.
+                                    cierra el turno en esta terminal. Debe cuadrar caja y no quedar tickets pendientes de ingreso.
                                 </div>
 
                                 <div id="alertas-control-definitivo" class="mb-3"></div>
@@ -437,7 +433,7 @@
                                 <th id="modal-conc-th-comprobante">Comprobante</th>
                                 <th id="modal-conc-th-hora">Hora</th>
                                 <th id="modal-conc-th-cliente">Cliente</th>
-                                <th id="modal-conc-th-item">Ítem</th>
+                                <th id="modal-conc-th-item">Usuario habilitado</th>
                                 <th id="modal-conc-th-total" class="text-right">Facturado</th>
                                 <th id="modal-conc-th-extra" class="text-right">Este medio</th>
                                 <th id="modal-conc-th-cobrado" class="text-right">Cobrado total</th>

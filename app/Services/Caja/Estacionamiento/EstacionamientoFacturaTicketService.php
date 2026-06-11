@@ -7,6 +7,7 @@ use App\Models\Caja\Estacionamiento\CuentaEstacionamiento;
 use App\Models\Caja\Estacionamiento\VentaEstacionamientoEmision;
 use App\Models\Configuracion\Salida;
 use App\Models\Ventas\Venta;
+use App\Support\Caja\Estacionamiento\EstacionamientoFacturaPayloadSupport;
 use App\Support\Caja\Estacionamiento\EstacionamientoVentaDisplaySupport;
 use App\Support\Ventas\ArcaFacturaQrSupport;
 use App\Support\Ventas\EscPosTicketWriter;
@@ -177,7 +178,9 @@ final class EstacionamientoFacturaTicketService
             $importeLinea = round($cant * $precio, 2);
             $subtotal += $importeLinea;
 
-            $desc = trim((string) ($item->articulos->descripcion ?? $item->detalle ?? 'Item'));
+            $desc = EstacionamientoFacturaPayloadSupport::etiquetaItemDesdeDetalle(
+                (string) ($item->detalle ?? '')
+            );
             $cantTxt = abs($cant - round($cant)) < 0.0001
                 ? (string) (int) round($cant)
                 : number_format($cant, 2, '.', '');
@@ -368,7 +371,7 @@ final class EstacionamientoFacturaTicketService
                 'clientes.condicionivas',
                 'clientes.tipodocumentos',
                 'monedas',
-                'venta_emisiones.articulos',
+                'venta_emisiones',
                 'venta_impuestos',
             ])
             ->find($ventaId);

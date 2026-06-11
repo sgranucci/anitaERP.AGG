@@ -172,10 +172,18 @@
         $informeZCargado = ! empty($d['informe_z_cargado']);
         $informeZMeta = is_array($d['informe_z'] ?? null) ? $d['informe_z'] : null;
     @endphp
-    <h2>Conciliación Informe Z (tótem físico)</h2>
+    <h2>Conciliación Informe Z (jornada)</h2>
     @if (! $informeZCargado || $conciliacionIz === null)
-        <p class="muted">Informe Z no cargado en el sistema. Regístrelo desde Gastronomía → Jornada para comparar con los totales anteriores.</p>
+        <p class="muted">Informe Z no disponible para esta jornada.</p>
     @else
+        @if (! empty($informeZMeta['precarga_automatica']))
+            <p class="muted" style="margin:0 0 6px;">
+                Precarga automática al cerrar (Z = Sistema por medio de pago).
+                @if (! empty($informeZMeta['ajustado_en_caja']))
+                    Ajustado en caja{{ ! empty($informeZMeta['ajuste_caja_en']) ? ' el '.$informeZMeta['ajuste_caja_en'] : '' }}{{ ! empty($informeZMeta['ajuste_caja_usuario_nombre']) ? ' — '.$informeZMeta['ajuste_caja_usuario_nombre'] : '' }}.
+                @endif
+            </p>
+        @endif
         @if (! empty($conciliacionIz['ok']))
             <div class="ok-box">Informe Z cuadra con el sistema (tolerancia $ {{ number_format((float) ($conciliacionIz['tolerancia'] ?? 0), 2, ',', '.') }}).</div>
         @else
@@ -185,22 +193,25 @@
         @endif
         @if ($informeZMeta && ! empty($informeZMeta['informe_z_en']))
             <p class="muted" style="margin:0 0 6px;">
-                Cargado: {{ $informeZMeta['informe_z_en'] }}
+                Registrado: {{ $informeZMeta['informe_z_en'] }}
                 @if (! empty($informeZMeta['usuario_nombre']))
                     — {{ $informeZMeta['usuario_nombre'] }}
                 @endif
             </p>
         @endif
         @foreach ($conciliacionIz['totems'] ?? [] as $bloqueIz)
+            @php
+                $esUnificadoIz = (int) ($bloqueIz['totem_id'] ?? -1) === 0;
+            @endphp
             <div class="bloque-totem">
                 <table>
                     <tr class="total-grande">
                         <td colspan="3">
-                            {{ $bloqueIz['ubicacion_nombre'] ?? 'Tótem' }}
-                            @if (!empty($bloqueIz['detalle']))
+                            {{ $bloqueIz['ubicacion_nombre'] ?? 'Informe Z Waitry' }}
+                            @if (! $esUnificadoIz && !empty($bloqueIz['detalle']))
                                 — {{ $bloqueIz['detalle'] }}
                             @endif
-                            @if (!empty($bloqueIz['waitry_table_id']))
+                            @if (! $esUnificadoIz && !empty($bloqueIz['waitry_table_id']))
                                 <span class="muted">(tableId {{ (int) $bloqueIz['waitry_table_id'] }})</span>
                             @endif
                             @if (empty($bloqueIz['ok']))

@@ -6,6 +6,7 @@ use App\Models\Caja\Estacionamiento\CuentaEstacionamiento;
 use App\Models\Caja\Estacionamiento\DescuentoEstacionamiento;
 use App\Models\Configuracion\Tipodocumento;
 use App\Models\Ventas\Cliente;
+use App\Support\Caja\Estacionamiento\EstacionamientoFacturaPayloadSupport;
 use InvalidArgumentException;
 
 /**
@@ -23,18 +24,10 @@ final class EstacionamientoReceptorFacturacionService
     {
         $cuenta->loadMissing(['lineas', 'descuentoEstacionamiento']);
 
-        $articuloIds = [];
-        $cantidades = [];
-        $precios = [];
-        foreach ($cuenta->lineas as $linea) {
-            $articuloIds[] = (int) $linea->articulo_id;
-            $cantidades[] = (float) $linea->cantidad;
-            $precios[] = (float) $linea->precio_unitario;
-        }
+        [, $cantidades, $precios] = EstacionamientoFacturaPayloadSupport::arraysDesdeCuenta($cuenta);
 
         $contexto = app(EstacionamientoFacturacionService::class)->evaluarDescuentoCabecera(
             $cuenta,
-            $articuloIds,
             $cantidades,
             $precios,
         );

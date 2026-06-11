@@ -7,78 +7,6 @@
 @section('styles')
 @include('caja.estacionamiento.facturas_dia.partials.estilos_acciones_tabla')
 <style>
-    .est-resumen-insumos-scroll {
-        max-height: 180px;
-        overflow-y: scroll;
-        overflow-x: hidden;
-        scrollbar-gutter: stable;
-        padding-right: 18px;
-        box-sizing: border-box;
-    }
-    .est-resumen-insumos-scroll table {
-        width: 100%;
-        margin-bottom: 0;
-        table-layout: fixed;
-    }
-    .est-resumen-insumos-scroll thead th {
-        position: sticky;
-        top: 0;
-        z-index: 1;
-        background: #f8f9fa;
-        box-shadow: 0 1px 0 #dee2e6;
-    }
-    .est-resumen-insumos-scroll th:nth-child(1),
-    .est-resumen-insumos-scroll td:nth-child(1) {
-        width: 42%;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-    .est-resumen-insumos-scroll th:nth-child(2),
-    .est-resumen-insumos-scroll td:nth-child(2) {
-        width: 13%;
-        white-space: nowrap;
-    }
-    .est-resumen-insumos-scroll th:nth-child(3),
-    .est-resumen-insumos-scroll td:nth-child(3) {
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-    .est-resumen-insumos-scroll .col-cant-insumo {
-        width: 7rem;
-        min-width: 7rem;
-        max-width: 7rem;
-        padding-left: 0.35rem;
-        padding-right: 0.35rem !important;
-        white-space: nowrap;
-        box-sizing: border-box;
-    }
-    .est-insumos-grid {
-        table-layout: fixed;
-        width: 100%;
-    }
-    .est-insumos-grid th:nth-child(1),
-    .est-insumos-grid td:nth-child(1) {
-        width: 42%;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-    .est-insumos-grid th:nth-child(2),
-    .est-insumos-grid td:nth-child(2) {
-        width: 13%;
-        white-space: nowrap;
-    }
-    .est-insumos-grid th:nth-child(3),
-    .est-insumos-grid td:nth-child(3) {
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-    .est-insumos-grid th:nth-child(4),
-    .est-insumos-grid td:nth-child(4) {
-        width: 7rem;
-        min-width: 7rem;
-        max-width: 7rem;
-        white-space: nowrap;
-    }
     .est-estacionamiento-comandas-grid {
         table-layout: fixed;
         width: 100%;
@@ -176,14 +104,6 @@
                             <span class="font-weight-bold text-primary">{{ $patenteTicket }}</span><br>
                         @endif
                         <strong>PC emisión:</strong> {{ $meta->identificador_pc }}<br>
-                        @if ($depositoVentaConfig)
-                            <strong>Depósito artículos facturados:</strong>
-                            {{ $depositoVentaConfig->codigo }} — {{ $depositoVentaConfig->nombre }}<br>
-                        @endif
-                        @if ($depositoInsumosConfig)
-                            <strong>Depósito descuento insumos:</strong>
-                            {{ $depositoInsumosConfig->codigo }} — {{ $depositoInsumosConfig->nombre }}
-                        @endif
                     </div>
                 </div>
             </div>
@@ -191,66 +111,23 @@
 
         @include('caja.estacionamiento.facturas_dia.partials.panel_estacionamiento_comandas')
 
-        @if ($cobranzas->isNotEmpty() || $movimientosInsumos->isNotEmpty())
+        @if ($cobranzas->isNotEmpty())
         <div class="card card-outline card-success mb-3">
             <div class="card-header py-2">
                 <strong>Resumen operativo</strong>
-                <span class="small text-muted ml-2">Cobranza e insumos de esta venta</span>
+                <span class="small text-muted ml-2">Cobranza de esta venta</span>
             </div>
             <div class="card-body py-2">
-                <div class="row">
-                    <div class="col-md-5 mb-2 mb-md-0">
-                        <h6 class="mb-1">Cobranzas ({{ $cobranzas->count() }})</h6>
-                        @if ($cobranzas->isEmpty())
-                            <p class="text-muted small mb-0">Sin cobranzas.</p>
-                        @else
-                            <ul class="list-unstyled small mb-0">
-                                @foreach ($cobranzas as $cob)
-                                    <li>
-                                        <a href="#tab-cobranzas" class="js-est-tab-link">#{{ $cob->id }}</a>
-                                        — {{ number_format((float) $cob->monto, 2, ',', '.') }}
-                                        <span class="text-muted">{{ $cob->estado ?? '' }}</span>
-                                    </li>
-                                @endforeach
-                            </ul>
-                        @endif
-                    </div>
-                    <div class="col-md-7">
-                        <h6 class="mb-1">Insumos descontados ({{ $movimientosInsumos->count() }})</h6>
-                        @if ($movimientosInsumos->isEmpty())
-                            <p class="text-muted small mb-0">Sin movimientos de insumos.</p>
-                        @else
-                            <div class="est-resumen-insumos-scroll">
-                                <table class="table table-sm table-bordered mb-0">
-                                    <thead class="thead-light">
-                                        <tr>
-                                            <th>SKU ítem</th>
-                                            <th>SKU insumo</th>
-                                            <th>Insumo</th>
-                                            <th class="text-right col-cant-insumo">Cant.</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        @foreach ($movimientosInsumos->take(8) as $mov)
-                                            <tr>
-                                                <td>@include('caja.estacionamiento.facturas_dia.partials.item_facturado_desde_movimiento', ['movimiento' => $mov])</td>
-                                                <td>@include('caja.estacionamiento.facturas_dia.partials.link_sku_articulo', ['sku' => $mov->articulos->sku ?? '—', 'articuloId' => $mov->item_id])</td>
-                                                <td>{{ $mov->articulos->descripcion ?? '—' }}</td>
-                                                <td class="text-right col-cant-insumo">{{ number_format((float) $mov->cantidad, 3, ',', '.') }}</td>
-                                            </tr>
-                                        @endforeach
-                                    </tbody>
-                                </table>
-                            </div>
-                            @if ($movimientosInsumos->count() > 8)
-                                <p class="small text-muted mb-0 mt-1">
-                                    y {{ $movimientosInsumos->count() - 8 }} más —
-                                    <a href="#tab-insumos" class="js-est-tab-link">ver todos</a>
-                                </p>
-                            @endif
-                        @endif
-                    </div>
-                </div>
+                <h6 class="mb-1">Cobranzas ({{ $cobranzas->count() }})</h6>
+                <ul class="list-unstyled small mb-0">
+                    @foreach ($cobranzas as $cob)
+                        <li>
+                            <a href="#tab-cobranzas" class="js-est-tab-link">#{{ $cob->id }}</a>
+                            — {{ number_format((float) $cob->monto, 2, ',', '.') }}
+                            <span class="text-muted">{{ $cob->estado ?? '' }}</span>
+                        </li>
+                    @endforeach
+                </ul>
             </div>
         </div>
         @endif
@@ -260,14 +137,6 @@
                 <ul class="nav nav-tabs" role="tablist">
                     <li class="nav-item">
                         <a class="nav-link active" data-toggle="tab" href="#tab-detalle">Ítems facturados</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" data-toggle="tab" href="#tab-insumos">
-                            Insumos descontados
-                            @if ($movimientosInsumos->isNotEmpty())
-                                <span class="badge badge-secondary">{{ $movimientosInsumos->count() }}</span>
-                            @endif
-                        </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" data-toggle="tab" href="#tab-cobranzas">
@@ -292,88 +161,7 @@
             </div>
             <div class="card-body tab-content">
                 <div class="tab-pane fade show active" id="tab-detalle">
-                    <p class="small text-muted">Productos y servicios incluidos en el comprobante fiscal. Expandir para ver insumos descontados por ítem.</p>
-                    <table class="table table-sm table-striped">
-                        <thead>
-                            <tr>
-                                <th style="width:2rem;"></th>
-                                <th>SKU</th>
-                                <th>Detalle</th>
-                                <th class="text-right">Cant.</th>
-                                <th class="text-right">Precio</th>
-                                @if ($puede_ver_formula ?? false)
-                                    <th class="text-nowrap" style="width:2rem;"></th>
-                                @endif
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @forelse ($itemsConInsumos as $item)
-                                @php
-                                    $tieneInsumos = $item->insumos->isNotEmpty();
-                                    $resaltarItem = ($articulo_filtro_id ?? 0) > 0
-                                        && (int) $item->item_id === (int) $articulo_filtro_id;
-                                    $expandirItem = $resaltarItem && $tieneInsumos;
-                                @endphp
-                                <tr class="{{ $tieneInsumos ? 'js-est-item-row' : '' }}{{ $resaltarItem ? ' table-info' : '' }}"
-                                    @if($tieneInsumos) data-target="insumos-item-{{ $item->venta_emision_id }}" style="cursor:pointer;" @endif>
-                                    <td class="text-center align-middle">
-                                        @if ($tieneInsumos)
-                                            <i class="fa {{ $expandirItem ? 'fa-chevron-down' : 'fa-chevron-right' }} js-est-item-toggle text-muted" aria-hidden="true"></i>
-                                        @endif
-                                    </td>
-                                    <td>@include('caja.estacionamiento.facturas_dia.partials.link_sku_articulo', ['sku' => $item->sku, 'articuloId' => $item->item_id])</td>
-                                    <td>
-                                        {{ $item->detalle }}
-                                        @if ($tieneInsumos)
-                                            <span class="badge badge-light ml-1">{{ $item->insumos->count() }} insumo(s)</span>
-                                        @endif
-                                    </td>
-                                    <td class="text-right">{{ number_format($item->cantidad, 3, ',', '.') }}</td>
-                                    <td class="text-right">{{ number_format($item->precio, 2, ',', '.') }}</td>
-                                    @if ($puede_ver_formula ?? false)
-                                        <td class="text-nowrap text-center align-middle facturas-dia-tabla-acciones">
-                                            @include('includes.btn_formula_articulo', ['articuloId' => $item->item_id])
-                                        </td>
-                                    @endif
-                                </tr>
-                                @if ($tieneInsumos)
-                                    <tr id="insumos-item-{{ $item->venta_emision_id }}" class="{{ $expandirItem ? '' : 'd-none' }} bg-light">
-                                        <td></td>
-                                        <td colspan="{{ ($puede_ver_formula ?? false) ? 5 : 4 }}" class="py-2">
-                                            <p class="small mb-2">
-                                                <strong>Ítem facturado:</strong>
-                                                @include('caja.estacionamiento.facturas_dia.partials.item_facturado_insumos', [
-                                                    'sku' => $item->sku,
-                                                    'articuloId' => $item->item_id,
-                                                    'detalle' => $item->detalle,
-                                                ])
-                                            </p>
-                                            <table class="table table-sm table-bordered mb-0 small">
-                                                <thead class="thead-light">
-                                                    <tr>
-                                                        <th>SKU insumo</th>
-                                                        <th>Descripción insumo</th>
-                                                        <th class="text-right">Cant. descontada</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    @foreach ($item->insumos as $mov)
-                                                        <tr>
-                                                            <td>@include('caja.estacionamiento.facturas_dia.partials.link_sku_articulo', ['sku' => $mov->articulos->sku ?? '—', 'articuloId' => $mov->item_id])</td>
-                                                            <td>{{ $mov->articulos->descripcion ?? '—' }}</td>
-                                                            <td class="text-right">{{ number_format((float) $mov->cantidad, 3, ',', '.') }}</td>
-                                                        </tr>
-                                                    @endforeach
-                                                </tbody>
-                                            </table>
-                                        </td>
-                                    </tr>
-                                @endif
-                            @empty
-                                <tr><td colspan="{{ ($puede_ver_formula ?? false) ? 6 : 5 }}" class="text-muted">Sin ítems de emisión.</td></tr>
-                            @endforelse
-                        </tbody>
-                    </table>
+                    @include('caja.estacionamiento.facturas_dia.partials.tabla_items_facturados')
                     @if ($cobranzas->isNotEmpty())
                         <h6 class="mt-3 mb-2">Cuentas de caja utilizadas</h6>
                         <table class="table table-sm table-bordered mb-0">
@@ -401,47 +189,6 @@
                                 @endforeach
                             </tbody>
                         </table>
-                    @endif
-                </div>
-
-                <div class="tab-pane fade" id="tab-insumos">
-                    <p class="small text-muted mb-2">
-                        Movimientos de stock al facturar (fórmulas / recetas). Cantidad negativa = salida del depósito.
-                        @if ($depositoInsumosConfig)
-                            Depósito insumos (PV): <strong>{{ $depositoInsumosConfig->codigo }} — {{ $depositoInsumosConfig->nombre }}</strong>.
-                        @endif
-                    </p>
-                    @if ($movimientosInsumos->isEmpty())
-                        <p class="text-muted mb-0">No hay insumos descontados para esta venta.</p>
-                    @else
-                        @foreach ($insumosPorDeposito as $grupo)
-                            <div class="mb-3">
-                                <h6 class="mb-2">
-                                    Depósito: {{ $grupo->deposito_codigo }} — {{ $grupo->deposito_nombre }}
-                                    <span class="text-muted small">(id {{ $grupo->deposito_id }})</span>
-                                </h6>
-                                <table class="table table-sm table-bordered est-insumos-grid">
-                                    <thead class="thead-light">
-                                        <tr>
-                                            <th>SKU ítem facturado</th>
-                                            <th>SKU insumo</th>
-                                            <th>Insumo</th>
-                                            <th class="text-right">Cantidad</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        @foreach ($grupo->movimientos as $mov)
-                                            <tr>
-                                                <td>@include('caja.estacionamiento.facturas_dia.partials.item_facturado_desde_movimiento', ['movimiento' => $mov])</td>
-                                                <td>@include('caja.estacionamiento.facturas_dia.partials.link_sku_articulo', ['sku' => $mov->articulos->sku ?? '—', 'articuloId' => $mov->item_id])</td>
-                                                <td>{{ $mov->articulos->descripcion ?? '—' }}</td>
-                                                <td class="text-right">{{ number_format((float) $mov->cantidad, 3, ',', '.') }}</td>
-                                            </tr>
-                                        @endforeach
-                                    </tbody>
-                                </table>
-                            </div>
-                        @endforeach
                     @endif
                 </div>
 
@@ -554,16 +301,6 @@
 
 @section('scripts')
 @include('caja.estacionamiento.facturas_dia.partials.script_generar_nc')
-@if ($puede_ver_formula ?? false)
-<script>
-    window.FORMULA_ARTICULO_ACCION = {
-        urlResolverFormulaBase: @json(url('stock/formula-articulo/resolver-por-articulo')),
-        urlFormulaBase: @json(url('stock/formula-articulo')),
-        puedeVerFormula: true,
-    };
-</script>
-<script src="{{ asset('assets/pages/scripts/includes/formula_articulo_accion.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/includes/formula_articulo_accion.js')) ?: time() }}" type="text/javascript"></script>
-@endif
 @if ($puede_cambiar_medio_pago ?? false)
     @include('caja.estacionamiento.facturas_dia.partials.script_cambiar_medio_pago')
 @endif
@@ -575,7 +312,7 @@
         }
     }
     var hash = window.location.hash || '';
-    if (!hash && {{ (int) ($articulo_filtro_id ?? 0) }} > 0) {
+    if (!hash && {{ (int) ($item_filtro_id ?? 0) }} > 0) {
         hash = '#tab-detalle';
     }
     activarTab(hash);
@@ -589,21 +326,6 @@
             }
         });
     });
-    document.querySelectorAll('.js-est-item-row').forEach(function (row) {
-        row.addEventListener('click', function () {
-            var targetId = row.getAttribute('data-target');
-            if (!targetId) return;
-            var detail = document.getElementById(targetId);
-            var icon = row.querySelector('.js-est-item-toggle');
-            if (!detail) return;
-            detail.classList.toggle('d-none');
-            if (icon) {
-                icon.classList.toggle('fa-chevron-right');
-                icon.classList.toggle('fa-chevron-down');
-            }
-        });
-    });
-
 })();
 </script>
 @endsection

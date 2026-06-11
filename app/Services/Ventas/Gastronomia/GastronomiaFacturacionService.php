@@ -58,6 +58,10 @@ final class GastronomiaFacturacionService
 
         $opciones = $this->opcionesEmisionGastronomia();
         $opciones['fechajornada'] = $payload['fechajornada'];
+        if (! empty($payload['_omitir_numera_anita_fin'])) {
+            $opciones['omitir_numera_anita_fin'] = true;
+            unset($payload['_omitir_numera_anita_fin']);
+        }
         $payload['opciones_emision'] = $opciones;
         $payload = $this->asegurarVentaReceptorSinClienteMaestro($payload, $cuenta);
         $payload = $this->aplicarReglasImpuestoConsumidorFinal($payload, $cuenta);
@@ -389,6 +393,9 @@ final class GastronomiaFacturacionService
             'anita_modo_minimo' => (bool) config('gastronomia.anita_modo_minimo', true),
             // CAE al final del proceso gastronómico (misma transacción que cobranza e ingredientes).
             'omitir_solicitud_arca_cae' => true,
+            // POS: timeout ARCA corto + failover/reintento CAEA coordinado en GastronomiaFacturaEmisionService.
+            'emision_pos_arca' => true,
+            'notificar_failover_transporte_en_capa_superior' => true,
         ];
     }
 

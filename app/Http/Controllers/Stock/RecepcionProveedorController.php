@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Exports\Stock\RecepcionProveedorListadoExport;
 use App\Http\Requests\ValidacionRecepcionProveedor;
 use App\Models\Stock\Configuracion_RecepcionProveedor;
+use App\Models\Configuracion\Moneda;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
@@ -47,8 +48,9 @@ class RecepcionProveedorController extends Controller
     {
         can('crear-recepcion-proveedor');
         $empresa_query = $this->empresaRepository->allFiltrado();
+        $moneda_query = Moneda::query()->orderBy('nombre')->get();
 
-        return view('stock.recepcion_proveedor.crear', compact('empresa_query'));
+        return view('stock.recepcion_proveedor.crear', compact('empresa_query', 'moneda_query'));
     }
 
     public function guardar(ValidacionRecepcionProveedor $request)
@@ -70,8 +72,9 @@ class RecepcionProveedorController extends Controller
         can('editar-recepcion-proveedor');
         $recepcion = $this->service->buscar($id);
         $empresa_query = $this->empresaRepository->allFiltrado();
+        $moneda_query = Moneda::query()->orderBy('nombre')->get();
 
-        return view('stock.recepcion_proveedor.editar', compact('recepcion', 'empresa_query'));
+        return view('stock.recepcion_proveedor.editar', compact('recepcion', 'empresa_query', 'moneda_query'));
     }
 
     public function actualizar(ValidacionRecepcionProveedor $request, int $id)
@@ -199,7 +202,10 @@ class RecepcionProveedorController extends Controller
                 ->with('mensaje', 'Solo se puede devolver contra una recepción confirmada.');
         }
 
-        return view('stock.recepcion_proveedor.devolucion', compact('recepcion'));
+        return view('stock.recepcion_proveedor.devolucion', [
+            'recepcion' => $recepcion,
+            'moneda_query' => Moneda::query()->orderBy('nombre')->get(),
+        ]);
     }
 
     public function guardarDevolucion(ValidacionRecepcionProveedor $request, int $id)

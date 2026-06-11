@@ -7,6 +7,11 @@ use App\Models\Caja\Estacionamiento\JornadaEstacionamiento;
 use App\Repositories\Caja\Estacionamiento\JornadaEstacionamientoRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Caja\Estacionamiento\JornadaEstacionamientoService;
+use App\Services\Caja\RendicionEstacionamientoAuditoriaAnitaService;
+use App\Support\Caja\Estacionamiento\EstacionamientoJornadaNumeracionComprobanteSupport;
+use App\Support\Caja\Estacionamiento\EstacionamientoTurnoOperativoTotalesSupport;
+use App\Support\Caja\EstacionamientoJornadaComprobantePermiso;
+use App\Support\Configuracion\EmpresaLogoArchivo;
 use Illuminate\Http\Request;
 use InvalidArgumentException;
 use Throwable;
@@ -44,6 +49,17 @@ class JornadaEstacionamientoController extends Controller
 
         $puedeAnularCierre = can('cerrar-jornada-estacionamiento', false);
 
+        $eliminacionJornadaAbierta = null;
+        if ($estado && ! empty($estado['jornada_id'])) {
+            $jornadaAbiertaId = (int) $estado['jornada_id'];
+            if (! isset($eliminacionPorJornada[$jornadaAbiertaId])) {
+                $eliminacionPorJornada[$jornadaAbiertaId] = $this->jornadaService->resumenEliminacion(
+                    $this->jornadaRepository->findOrFail($jornadaAbiertaId)
+                );
+            }
+            $eliminacionJornadaAbierta = $eliminacionPorJornada[$jornadaAbiertaId];
+        }
+
         return view('caja.estacionamiento.jornada.index', [
             'empresas' => $empresas,
             'empresa_id' => $empresaId,
@@ -57,9 +73,12 @@ class JornadaEstacionamientoController extends Controller
             'puede_anular_cierre' => $puedeAnularCierre,
             'fecha_hoy' => $estado['fecha_jornada_sugerida_abrir'] ?? now()->format('Y-m-d'),
             'fecha_jornada_minima' => $estado['fecha_jornada_minima_abrir'] ?? null,
+            'fecha_maxima' => $estado['fecha_jornada_maxima_abrir'] ?? now()->format('Y-m-d'),
+            'eliminacion_jornada_abierta' => $eliminacionJornadaAbierta,
             'puede_abrir' => can('abrir-jornada-estacionamiento', false),
             'puede_cerrar' => can('cerrar-jornada-estacionamiento', false),
             'puede_eliminar' => can('eliminar-jornada-estacionamiento', false),
+            'url_saneamiento_turno' => url('caja/estacionamiento/saneamiento-turno'),
         ]);
     }
 
@@ -269,6 +288,78 @@ class JornadaEstacionamientoController extends Controller
                 'motivo' => 'error',
             ], 422);
         }
+    }
+
+    public function comprobanteTotalesZ(Request $request, int $jornadaId)
+    {
+        if (! EstacionamientoJornadaComprobantePermiso::puedeVerComprobanteTotalesZ()) {
+            abort(403, 'No tiene permiso para ver el reporte Totales Z de la jornada.');
+        }
+
+        $jornada = JornadaEstacionamiento::query()
+            ->with(['empresa', 'usuarioApertura', 'usuarioCierre'])
+            ->findOrFail($jornadaId);
+
+        $this->assertAccesoEmpresa((int) $jornada->empresa_id);
+
+        if ($jornada->estado !== JornadaEstacionamiento::ESTADO_CERRADA || $jornada->cierre_en === null) {
+            abort(404, 'La jornada no está cerrada.');
+        }
+
+        $empresaNombre = (string) ($jornada->empresa?->nombre ?? '');
+        $fechaJornada = $jornada->fecha_jornada?->format('d/m/Y') ?? '';
+        $numeracion = EstacionamientoJornadaNumeracionComprobanteSupport::paraJornada($jornada);
+        $totales = EstacionamientoTurnoOperativoTotalesSupport::calcularPorJornada($jornada);
+
+        $filasZ = [];
+        $auditoriaOk = null;
+        $tolerancia = (float) config('rendicion_estacionamiento_anita.auditoria_diaria.tolerancia', 0.02);
+        $auditoriaDisponible = (bool) config('rendicion_estacionamiento_anita.sincronizar', false);
+
+        if ($auditoriaDisponible && $jornada->fecha_jornada !== null) {
+            try {
+                $auditoria = app(RendicionEstacionamientoAuditoriaAnitaService::class)->auditarFechaJornada(
+                    (int) $jornada->empresa_id,
+                    $jornada->fecha_jornada->format('Y-m-d'),
+                    $tolerancia,
+                );
+                $filasZ = is_array($auditoria['filas'] ?? null) ? $auditoria['filas'] : [];
+                $auditoriaOk = ! (bool) ($auditoria['resumen']['requiere_alerta'] ?? true);
+            } catch (Throwable) {
+                $auditoriaDisponible = false;
+            }
+        }
+
+        $datos = [
+            'titulo' => 'Totales Z — cierre de jornada estacionamiento',
+            'subtitulo' => $empresaNombre.' · Jornada #'.$jornadaId,
+            'logo' => EmpresaLogoArchivo::dataUriDesdeNombre($empresaNombre),
+            'empresa_nombre' => $empresaNombre,
+            'jornada_id' => $jornadaId,
+            'fecha_jornada' => $fechaJornada,
+            'fecha_emision_comprobante' => now()->format('d/m/Y H:i'),
+            'apertura_jornada_en' => $jornada->apertura_en?->format('d/m/Y H:i') ?? '',
+            'cierre_jornada_en' => $jornada->cierre_en?->format('d/m/Y H:i') ?? '',
+            'usuario_apertura' => (string) ($jornada->usuarioApertura?->nombre ?? ''),
+            'usuario_cierre' => (string) ($jornada->usuarioCierre?->nombre ?? ''),
+            'numeracion_resumen' => (string) ($numeracion['resumen_etiqueta'] ?? ''),
+            'numeracion_filas' => is_array($numeracion['filas'] ?? null) ? $numeracion['filas'] : [],
+            'totales_jornada' => $totales,
+            'filas_z' => $filasZ,
+            'auditoria_disponible' => $auditoriaDisponible,
+            'auditoria_ok' => $auditoriaOk,
+            'tolerancia' => $tolerancia,
+        ];
+
+        $nombre = 'totales_z_jornada_estacionamiento_'.$jornadaId.'.pdf';
+        $html = view('caja.estacionamiento.jornada.comprobante_totales_z', compact('datos'))->render();
+        $pdf = \App::make('dompdf.wrapper');
+        $pdf->setPaper('a4', 'landscape');
+        $pdf->loadHTML($html, 'UTF-8');
+
+        return $request->boolean('inline', true)
+            ? $pdf->stream($nombre)
+            : $pdf->download($nombre);
     }
 
     private function assertAccesoEmpresa(int $empresaId): void

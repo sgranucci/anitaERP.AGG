@@ -3,7 +3,10 @@
 namespace App\Services\Ventas\Gastronomia;
 
 use App\Models\Configuracion\Actividad_Arca;
+use App\Models\Configuracion\Condicioniva;
+use App\Models\Ventas\Cliente;
 use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
+use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\CuentaGastronomia;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Models\Ventas\Venta;
@@ -13,6 +16,7 @@ use App\Support\Ventas\GastronomiaEmisionProfiler;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
 use App\Support\Ventas\GastronomiaMovimientoStockSupport;
+use App\Support\Ventas\Gastronomia\GastronomiaEmisionNumeracionCaeaSupport;
 use App\Support\Ventas\GastronomiaPuntoventaEmisionLock;
 use App\Services\Ventas\Gastronomia\GastronomiaTicketTarjetaCanjeService;
 use App\Services\Ventas\Gastronomia\GastronomiaCategoriafidelidadCanjeService;
@@ -334,8 +338,27 @@ final class GastronomiaFacturaEmisionService
 
         $profiler?->marcar('preflight_ok');
 
+        $puntoventa = Puntoventa::query()->find($puntoventaId);
+        $emisionCaea = $puntoventa !== null && ($puntoventa->modofacturacion ?? '') === 'A';
+
+        if ($emisionCaea && empty($payload['numerocomprobante_forzado'])) {
+            $errorReserva = $this->reservarNumerocomprobanteCaeaRapido(
+                $payload,
+                $tipoFacturaId,
+                $puntoventa,
+                $profiler,
+            );
+            if ($errorReserva !== null) {
+                GastronomiaEmisionProfiler::finalizar($profiler, ['cuenta_id' => $cuenta->id, 'error' => 'numeracion_caea']);
+
+                return $this->adjuntarProfileEmision(['error' => $errorReserva], $profiler, $cuenta);
+            }
+        }
+
         $lockPv = null;
-        if (! $bloqueoPvYaAdquirido) {
+        $mantenerLockEmisionCompleta = ! $emisionCaea && ! $bloqueoPvYaAdquirido;
+
+        if ($mantenerLockEmisionCompleta) {
             try {
                 $profiler?->marcar('antes_lock_pv');
                 $lockPv = GastronomiaPuntoventaEmisionLock::adquirir($puntoventaId);
@@ -405,7 +428,8 @@ final class GastronomiaFacturaEmisionService
                 }
 
                 if (
-                    config('gastronomia.waitry_tras_respuesta', true)
+                    ! $cuenta->esCanjeMarketing()
+                    && config('gastronomia.waitry_tras_respuesta', true)
                     && $cfg->waitryHabilitadoEnTerminal()
                 ) {
                     $this->encolarWaitryTrasRespuesta(
@@ -437,6 +461,13 @@ final class GastronomiaFacturaEmisionService
             } catch (Throwable $e) {
                 $claseError = ArcaWsfeEmisionResiliencia::clasificarError($e->getMessage());
                 $reintentoHabilitado = ArcaWsfeEmisionResiliencia::reintentarCaeaSiFallaComunicacion();
+                if ($claseError === ArcaWsfeEmisionResiliencia::CLASE_TRANSPORTE) {
+                    ArcaWsfeEmisionResiliencia::notificarFallaTransporteEmision(
+                        $e->getMessage(),
+                        null,
+                        ['probe' => 'gastronomia.emitir_factura'],
+                    );
+                }
                 Log::error('gastronomia.emitir_factura.fallo', [
                     'cuenta_id' => $cuenta->id,
                     'pv_intentado' => $puntoventaId,
@@ -477,10 +508,76 @@ final class GastronomiaFacturaEmisionService
                 );
             }
         } finally {
-            if (! $bloqueoPvYaAdquirido) {
+            if ($mantenerLockEmisionCompleta) {
                 GastronomiaPuntoventaEmisionLock::liberar($lockPv);
             }
         }
+    }
+
+    /**
+     * CAEA: candado corto solo para reservar número en Anita (numerador); el resto de la emisión sigue sin lock.
+     */
+    private function reservarNumerocomprobanteCaeaRapido(
+        array &$payload,
+        int $tipoFacturaId,
+        Puntoventa $puntoventa,
+        ?GastronomiaEmisionProfiler $profiler = null,
+    ): ?string {
+        $lockPv = null;
+
+        try {
+            $profiler?->marcar('antes_lock_pv_numeracion');
+            $lockPv = GastronomiaPuntoventaEmisionLock::adquirir((int) $puntoventa->id);
+            $profiler?->marcar('despues_lock_pv_numeracion');
+
+            $tipo = Tipotransaccion::query()->find($tipoFacturaId);
+            if ($tipo === null) {
+                return 'Tipo de transacción de factura inexistente.';
+            }
+
+            $tipoAnita = GastronomiaEmisionNumeracionCaeaSupport::tipoAnitaDesdeTipotransaccion($tipo);
+            $letra = $this->letraComprobanteDesdePayload($payload);
+
+            try {
+                $numero = GastronomiaEmisionNumeracionCaeaSupport::reservarNumeroAnita(
+                    $tipoAnita,
+                    $letra,
+                    (string) $puntoventa->codigo,
+                );
+            } catch (InvalidArgumentException $e) {
+                return $e->getMessage();
+            }
+
+            $payload['numerocomprobante_forzado'] = $numero;
+            $payload['_omitir_numera_anita_fin'] = true;
+            $profiler?->marcar('numeracion_caea_reservada');
+
+            return null;
+        } catch (InvalidArgumentException $e) {
+            return $e->getMessage();
+        } finally {
+            GastronomiaPuntoventaEmisionLock::liberar($lockPv);
+            $profiler?->marcar('lock_pv_numeracion_liberado');
+        }
+    }
+
+    private function letraComprobanteDesdePayload(array $payload): string
+    {
+        $letra = 'B';
+        $clienteId = (int) ($payload['cliente_id'] ?? 0);
+
+        if ($clienteId > 0) {
+            $cliente = Cliente::query()->find($clienteId);
+            if ($cliente !== null && $cliente->condicioniva_id) {
+                $letra = (string) (Condicioniva::query()
+                    ->whereKey($cliente->condicioniva_id)
+                    ->value('letra') ?? 'B');
+            }
+        }
+
+        $letra = trim($letra);
+
+        return $letra !== '' ? $letra : 'B';
     }
 
     /**
@@ -604,6 +701,8 @@ final class GastronomiaFacturaEmisionService
                 ['venta_id' => $venta->id],
                 [
                     'cuenta_gastronomia_id' => $cuenta->id,
+                    'cliente_vip_gastronomia_id' => $cuenta->cliente_vip_gastronomia_id,
+                    'origen_pos' => $cuenta->origen_pos,
                     'waitry_order_id' => $waitryOrderIdEmision > 0 ? $waitryOrderIdEmision : null,
                     'identificador_pc' => GastronomiaIdentificadorPc::resolver(),
                     'configuracion_puntoventa_gastronomia_id' => $cfg->id,
@@ -791,6 +890,12 @@ final class GastronomiaFacturaEmisionService
     ): array {
         $facturaTxt = trim((string) ($resultado['factura'] ?? ''));
         if ($facturaTxt === '') {
+            return $resultado;
+        }
+
+        if ($cuenta->esCanjeMarketing()) {
+            $resultado['mensaje'] = 'Factura '.$facturaTxt.' emitida correctamente.';
+
             return $resultado;
         }
 
@@ -1094,6 +1199,10 @@ final class GastronomiaFacturaEmisionService
      */
     private function debeImprimirTicketTrasWaitry(CuentaGastronomia $cuenta, ConfiguracionPuntoventaGastronomia $cfg): bool
     {
+        if ($cuenta->esCanjeMarketing()) {
+            return false;
+        }
+
         if (! $cfg->waitryHabilitadoEnTerminal()) {
             return false;
         }
@@ -1183,6 +1292,10 @@ final class GastronomiaFacturaEmisionService
         CuentaGastronomia $cuenta,
         array $mediosPago,
     ): array {
+        if ($cuenta->esCanjeMarketing()) {
+            return $resultado;
+        }
+
         $ventaId = (int) ($resultado['venta_id'] ?? 0);
         if ($ventaId <= 0) {
             return $resultado;

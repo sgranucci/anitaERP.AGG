@@ -27,8 +27,12 @@
         urlApiCanjesPremio: @json(route('gastronomia_cierres_turno_api_canjes_premio')),
         urlApiCanjesFidelidad: @json(route('gastronomia_cierres_turno_api_canjes_fidelidad')),
         urlApiTicketsTarjeta: @json(route('gastronomia_cierres_turno_api_tickets_tarjeta')),
+        urlApiArqueoCierre: @json(route('gastronomia_cierres_turno_api_arqueo_cierre')),
+        urlApiCorregirArqueoCierre: @json(route('gastronomia_cierres_turno_api_corregir_arqueo_cierre')),
         urlFacturaVerBase: @json(($puede_ver_factura ?? false) ? url('ventas/gastronomia/facturas-dia') : null),
         puedeVerFactura: @json($puede_ver_factura ?? false),
+        puedeCorregirArqueo: @json($puede_corregir_arqueo ?? false),
+        csrfToken: @json(csrf_token()),
     };
     window.CIERRE_TURNO_VER = {
         tipo: 'cierre',
@@ -90,6 +94,23 @@
                     <span class="text-muted ml-1">— {{ $d['subtitulo'] ?? '' }}</span>
                 </span>
                 <div class="btn-group btn-group-sm mt-1 mt-md-0">
+                    @if (($puede_corregir_arqueo ?? false) && ($correccion_arqueo['puede_corregir'] ?? false))
+                        <button type="button"
+                                class="btn btn-outline-success js-corregir-arqueo-cierre"
+                                data-id="{{ $turno->id }}"
+                                data-referencia="{{ $referencia ?? '' }}"
+                                data-puede-editar="1">
+                            <i class="fa fa-edit"></i> Corregir arqueo
+                        </button>
+                    @elseif (($puede_corregir_arqueo ?? false) && ! empty($correccion_arqueo['bloqueo_mensaje']))
+                        <button type="button"
+                                class="btn btn-outline-secondary js-corregir-arqueo-cierre"
+                                data-id="{{ $turno->id }}"
+                                data-referencia="{{ $referencia ?? '' }}"
+                                data-puede-editar="0">
+                            <i class="fa fa-eye"></i> Ver arqueo
+                        </button>
+                    @endif
                     @if ($puede_ver_comprobante ?? false)
                         <a href="{{ route('gastronomia_cierre_turno_comprobante_cierre', ['id' => $turno->id, 'inline' => 1]) }}"
                            target="_blank"
@@ -110,6 +131,12 @@
                 </div>
             </div>
             <div class="card-body">
+                @if (($puede_corregir_arqueo ?? false) && ! ($correccion_arqueo['puede_corregir'] ?? false) && ! empty($correccion_arqueo['bloqueo_mensaje']))
+                    <div class="alert alert-secondary py-2 mb-3 small">
+                        <i class="fa fa-info-circle"></i>
+                        {{ $correccion_arqueo['bloqueo_mensaje'] }}
+                    </div>
+                @endif
                 <ul class="nav nav-tabs mb-3" id="cierre-turno-ver-tabs" role="tablist">
                     <li class="nav-item">
                         <a class="nav-link active" id="tab-ver-resumen-link" data-toggle="tab"
@@ -366,4 +393,6 @@
         </div>
     </div>
 </div>
+
+@include('ventas.gastronomia.cierres_turno.partials.modal_corregir_arqueo')
 @endsection

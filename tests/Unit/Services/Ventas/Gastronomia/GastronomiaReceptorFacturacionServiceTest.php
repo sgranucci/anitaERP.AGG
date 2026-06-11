@@ -67,4 +67,30 @@ class GastronomiaReceptorFacturacionServiceTest extends TestCase
         $this->assertNull($svc->normalizarClienteIdFacturacion(188, 188));
         $this->assertSame(42, $svc->normalizarClienteIdFacturacion(42, 188));
     }
+
+    public function test_maestro_sin_documento_usa_arca_consumidor_final(): void
+    {
+        $cliente = \App\Models\Ventas\Cliente::query()
+            ->with('tipodocumentos')
+            ->whereHas('tipodocumentos', fn ($q) => $q->where('codigoexterno', 80))
+            ->where(function ($q) {
+                $q->whereNull('numerodocumento')
+                    ->orWhere('numerodocumento', '')
+                    ->orWhere('numerodocumento', '0');
+            })
+            ->first();
+
+        if (! $cliente) {
+            $this->markTestSkipped('Sin cliente de prueba con tipo CUIT y documento vacío.');
+        }
+
+        $cuenta = new CuentaGastronomia(['cliente_id' => $cliente->id]);
+        $svc = app(GastronomiaReceptorFacturacionService::class);
+        $rec = $svc->resolverParaFacturar($cuenta, 100.);
+
+        $this->assertSame(GastronomiaReceptorFacturacionService::MODO_MAESTRO, $rec['modo']);
+        $this->assertSame(99, (int) $rec['arca_receptor']['tipodoc']);
+        $this->assertSame('0', (string) $rec['arca_receptor']['numerodocumento']);
+        $this->assertNotSame('', trim((string) ($rec['arca_receptor']['nombre'] ?? '')));
+    }
 }

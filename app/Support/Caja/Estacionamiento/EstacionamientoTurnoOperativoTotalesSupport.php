@@ -121,6 +121,7 @@ final class EstacionamientoTurnoOperativoTotalesSupport
     ): array {
         $emisiones = self::emisionesEnAlcance($identificadorPc, $empresaId, $fechaJornada, $desdeHabilitacion, $hastaInclusive);
 
+        $porUsuarioHabilitado = [];
         $porMedioGlobal = [];
         $totalVentas = 0.0;
         $totalFacturas = 0.0;
@@ -146,6 +147,7 @@ final class EstacionamientoTurnoOperativoTotalesSupport
 
             self::acumularEmisionEnTotales(
                 $em,
+                $porUsuarioHabilitado,
                 $porMedioGlobal,
                 $totalVentas,
                 $totalFacturas,
@@ -170,6 +172,7 @@ final class EstacionamientoTurnoOperativoTotalesSupport
             foreach ($ncExternas as $em) {
                 self::acumularEmisionEnTotales(
                     $em,
+                    $porUsuarioHabilitado,
                     $porMedioGlobal,
                     $totalVentas,
                     $totalFacturas,
@@ -183,33 +186,95 @@ final class EstacionamientoTurnoOperativoTotalesSupport
             }
         }
 
-        $totalVentas = round($totalVentas, 2);
-        $totalFacturas = round($totalFacturas, 2);
-        $totalInvitaciones = round($totalInvitaciones, 2);
-        $totalCobrado = round($totalCobrado, 2);
-        $totalNotasCredito = round($totalNotasCredito, 2);
-        $totalVentasCobrables = round($totalVentas - $totalInvitaciones, 2);
-        $diferencia = round($totalCobrado - $totalVentasCobrables, 2);
-        $redondeoInvitacionesSugerido = self::redondeoInvitacionesSugerido($totalInvitaciones, $diferencia);
+        return self::armarRespuestaTotales(
+            $emisiones->count(),
+            $porUsuarioHabilitado,
+            $porMedioGlobal,
+            $totalVentas,
+            $totalFacturas,
+            $totalInvitaciones,
+            $cantidadInvitaciones,
+            $totalCobrado,
+            $totalNotasCredito,
+            $cantidadNotasCredito,
+            $cantidadFacturas,
+        );
+    }
 
-        return [
-            'total_general' => $totalVentas,
-            'total_ventas' => $totalVentas,
-            'total_facturas' => $totalFacturas,
-            'total_cobrado' => $totalCobrado,
-            'total_invitaciones' => $totalInvitaciones,
-            'cantidad_invitaciones' => $cantidadInvitaciones,
-            'total_ventas_cobrables' => $totalVentasCobrables,
-            'diferencia_cobranza' => $diferencia,
-            'conciliacion_ok' => abs($diferencia) < self::TOLERANCIA_CONCILIACION,
-            'cantidad_comprobantes' => $emisiones->count(),
-            'cantidad_facturas' => $cantidadFacturas,
-            'cantidad_notas_credito' => $cantidadNotasCredito,
-            'total_notas_credito' => $totalNotasCredito,
-            'redondeo_invitaciones_sugerido' => $redondeoInvitacionesSugerido,
-            'por_mozo' => [],
-            'por_medio_pago' => self::normalizarMediosPago($porMedioGlobal),
-        ];
+    public static function totalFacturasSinNotasCredito(
+        string $identificadorPc,
+        int $empresaId,
+        string $fechaJornada,
+        ?Carbon $desdeHabilitacion = null,
+        ?Carbon $hastaInclusive = null,
+    ): float {
+        $totales = self::calcular($identificadorPc, $empresaId, $fechaJornada, $desdeHabilitacion, $hastaInclusive);
+
+        return round((float) ($totales['total_facturas'] ?? 0), 2);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function totalesDiaPorPuntoventa(
+        int $puntoventaId,
+        int $empresaId,
+        string $fechaJornada,
+    ): array {
+        $emisiones = self::emisionesDiaPorPuntoventa($puntoventaId, $empresaId, $fechaJornada);
+
+        return self::calcularDesdeColeccionEmisiones($emisiones);
+    }
+
+    public static function totalFacturasSinNotasCreditoPorPuntoventa(
+        int $puntoventaId,
+        int $empresaId,
+        string $fechaJornada,
+    ): float {
+        $totales = self::totalesDiaPorPuntoventa($puntoventaId, $empresaId, $fechaJornada);
+
+        return round((float) ($totales['total_facturas'] ?? 0), 2);
+    }
+
+    public static function totalNotasCreditoPorPuntoventa(
+        int $puntoventaId,
+        int $empresaId,
+        string $fechaJornada,
+    ): float {
+        $totales = self::totalesDiaPorPuntoventa($puntoventaId, $empresaId, $fechaJornada);
+
+        return round(abs((float) ($totales['total_notas_credito'] ?? 0)), 2);
+    }
+
+    /**
+     * @return Collection<int, VentaEstacionamientoEmision>
+     */
+    private static function emisionesDiaPorPuntoventa(
+        int $puntoventaId,
+        int $empresaId,
+        string $fechaJornada,
+    ): Collection {
+        if ($puntoventaId <= 0) {
+            return collect();
+        }
+
+        return VentaEstacionamientoEmision::query()
+            ->whereHas('venta', function ($v) use ($empresaId, $fechaJornada, $puntoventaId) {
+                $v->where('puntoventa_id', $puntoventaId)
+                    ->where(function ($fecha) use ($fechaJornada) {
+                        $fecha->whereDate('fechajornada', $fechaJornada)
+                            ->orWhere(function ($legacy) use ($fechaJornada) {
+                                $legacy->whereNull('fechajornada')
+                                    ->whereDate('fecha', $fechaJornada);
+                            });
+                    })
+                    ->whereHas('puntoventas', fn ($pv) => $pv->where('empresa_id', $empresaId));
+            })
+            ->with([
+                'venta.cobranzasDirectas',
+                'venta.caja_movimientos.cobranzas',
+            ])
+            ->get();
     }
 
     public static function calcularPorJornada(JornadaEstacionamiento $jornada): array
@@ -355,6 +420,7 @@ final class EstacionamientoTurnoOperativoTotalesSupport
                 ->with([
                     'venta.cobranzasDirectas',
                     'venta.caja_movimientos.cobranzas',
+                    'turnoOperativo.usuarioHabilitado',
                 ])
                 ->get();
             $filas = self::construirFilasConciliacion($emisiones);
@@ -408,6 +474,7 @@ final class EstacionamientoTurnoOperativoTotalesSupport
      */
     private static function calcularDesdeColeccionEmisiones(Collection $emisiones): array
     {
+        $porUsuarioHabilitado = [];
         $porMedioGlobal = [];
         $totalVentas = 0.0;
         $totalFacturas = 0.0;
@@ -424,6 +491,7 @@ final class EstacionamientoTurnoOperativoTotalesSupport
             }
             self::acumularEmisionEnTotales(
                 $em,
+                $porUsuarioHabilitado,
                 $porMedioGlobal,
                 $totalVentas,
                 $totalFacturas,
@@ -436,10 +504,43 @@ final class EstacionamientoTurnoOperativoTotalesSupport
             );
         }
 
+        return self::armarRespuestaTotales(
+            $emisiones->count(),
+            $porUsuarioHabilitado,
+            $porMedioGlobal,
+            $totalVentas,
+            $totalFacturas,
+            $totalInvitaciones,
+            $cantidadInvitaciones,
+            $totalCobrado,
+            $totalNotasCredito,
+            $cantidadNotasCredito,
+            $cantidadFacturas,
+        );
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $porUsuarioHabilitado
+     * @param  array<int, array{cuentacaja_id:int, codigo:string, nombre:string, total:float}>  $porMedioGlobal
+     * @return array<string, mixed>
+     */
+    private static function armarRespuestaTotales(
+        int $cantidadComprobantes,
+        array $porUsuarioHabilitado,
+        array $porMedioGlobal,
+        float $totalVentas,
+        float $totalFacturas,
+        float $totalInvitaciones,
+        int $cantidadInvitaciones,
+        float $totalCobrado,
+        float $totalNotasCredito,
+        int $cantidadNotasCredito,
+        int $cantidadFacturas,
+    ): array {
         $totalVentas = round($totalVentas, 2);
         $totalFacturas = round($totalFacturas, 2);
-        $totalCobrado = round($totalCobrado, 2);
         $totalInvitaciones = round($totalInvitaciones, 2);
+        $totalCobrado = round($totalCobrado, 2);
         $totalNotasCredito = round($totalNotasCredito, 2);
         $totalVentasCobrables = round($totalVentas - $totalInvitaciones, 2);
         $diferencia = round($totalCobrado - $totalVentasCobrables, 2);
@@ -454,14 +555,43 @@ final class EstacionamientoTurnoOperativoTotalesSupport
             'total_ventas_cobrables' => $totalVentasCobrables,
             'diferencia_cobranza' => $diferencia,
             'conciliacion_ok' => abs($diferencia) < self::TOLERANCIA_CONCILIACION,
-            'cantidad_comprobantes' => $emisiones->count(),
+            'cantidad_comprobantes' => $cantidadComprobantes,
             'cantidad_facturas' => $cantidadFacturas,
             'cantidad_notas_credito' => $cantidadNotasCredito,
             'total_notas_credito' => $totalNotasCredito,
             'redondeo_invitaciones_sugerido' => self::redondeoInvitacionesSugerido($totalInvitaciones, $diferencia),
-            'por_mozo' => [],
+            'por_usuario_habilitado' => self::normalizarPorUsuarioHabilitado($porUsuarioHabilitado),
             'por_medio_pago' => self::normalizarMediosPago($porMedioGlobal),
         ];
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $porUsuarioHabilitado
+     * @return list<array<string, mixed>>
+     */
+    private static function normalizarPorUsuarioHabilitado(array $porUsuarioHabilitado): array
+    {
+        foreach ($porUsuarioHabilitado as &$row) {
+            $row['total'] = round((float) ($row['total'] ?? 0), 2);
+            $row['total_facturas'] = round((float) ($row['total_facturas'] ?? 0), 2);
+            $row['total_cobrado'] = round((float) ($row['total_cobrado'] ?? 0), 2);
+            $row['por_medio_pago'] = self::normalizarMediosPago($row['por_medio_pago'] ?? []);
+            $row['notas_credito']['total'] = round((float) ($row['notas_credito']['total'] ?? 0), 2);
+            if (isset($row['invitaciones'])) {
+                $row['invitaciones']['total'] = round((float) ($row['invitaciones']['total'] ?? 0), 2);
+            }
+        }
+        unset($row);
+
+        usort(
+            $porUsuarioHabilitado,
+            fn (array $a, array $b) => strcmp(
+                (string) ($a['usuario_habilitado_nombre'] ?? ''),
+                (string) ($b['usuario_habilitado_nombre'] ?? ''),
+            ),
+        );
+
+        return array_values($porUsuarioHabilitado);
     }
 
     /**
@@ -502,15 +632,18 @@ final class EstacionamientoTurnoOperativoTotalesSupport
             ->with([
                 'venta.cobranzasDirectas',
                 'venta.caja_movimientos.cobranzas',
+                'turnoOperativo.usuarioHabilitado',
             ])
             ->get();
     }
 
     /**
+     * @param  array<string, array<string, mixed>>  $porUsuarioHabilitado
      * @param  array<int, array{cuentacaja_id:int, codigo:string, nombre:string, total:float}>  $porMedioGlobal
      */
     private static function acumularEmisionEnTotales(
         VentaEstacionamientoEmision $em,
+        array &$porUsuarioHabilitado,
         array &$porMedioGlobal,
         float &$totalVentas,
         float &$totalFacturas,
@@ -547,6 +680,45 @@ final class EstacionamientoTurnoOperativoTotalesSupport
             }
             self::acumularMediosPago($medios, $porMedioGlobal);
         }
+
+        $usuarioId = $em->turnoOperativo?->usuario_habilitado_id;
+        $key = $usuarioId !== null ? (string) $usuarioId : '0';
+        if (! isset($porUsuarioHabilitado[$key])) {
+            $usuario = $em->turnoOperativo?->usuarioHabilitado;
+            $porUsuarioHabilitado[$key] = [
+                'usuario_habilitado_id' => $usuarioId !== null ? (int) $usuarioId : null,
+                'usuario_habilitado_nombre' => trim((string) ($usuario?->nombre ?? '')) ?: 'Sin usuario habilitado',
+                'total' => 0.0,
+                'total_facturas' => 0.0,
+                'total_cobrado' => 0.0,
+                'cantidad' => 0,
+                'por_medio_pago' => [],
+                'notas_credito' => [
+                    'total' => 0.0,
+                    'cantidad' => 0,
+                ],
+                'invitaciones' => [
+                    'total' => 0.0,
+                    'cantidad' => 0,
+                ],
+            ];
+        }
+
+        $porUsuarioHabilitado[$key]['total'] += $montoVenta;
+        $porUsuarioHabilitado[$key]['total_cobrado'] += $totalCobradoVenta;
+        $porUsuarioHabilitado[$key]['cantidad']++;
+
+        if ($esNotaCredito) {
+            $porUsuarioHabilitado[$key]['notas_credito']['total'] += $montoVenta;
+            $porUsuarioHabilitado[$key]['notas_credito']['cantidad']++;
+        } else {
+            $porUsuarioHabilitado[$key]['total_facturas'] += $montoVenta;
+            if (self::esInvitacionSinCobranza($montoVenta, $totalCobradoVenta)) {
+                $porUsuarioHabilitado[$key]['invitaciones']['total'] += $montoVenta;
+                $porUsuarioHabilitado[$key]['invitaciones']['cantidad']++;
+            }
+            self::acumularMediosPago($medios, $porUsuarioHabilitado[$key]['por_medio_pago']);
+        }
     }
 
     /**
@@ -563,6 +735,7 @@ final class EstacionamientoTurnoOperativoTotalesSupport
             ->with([
                 'venta.cobranzasDirectas',
                 'venta.caja_movimientos.cobranzas',
+                'turnoOperativo.usuarioHabilitado',
             ])
             ->get();
     }
@@ -668,7 +841,11 @@ final class EstacionamientoTurnoOperativoTotalesSupport
         $conDiferencia = 0;
 
         self::queryEmisionesEnAlcance($identificadorPc, $empresaId, $fechaJornada, $desdeHabilitacion, $hastaInclusive)
-            ->with(['venta.cobranzasDirectas', 'venta.caja_movimientos.cobranzas'])
+            ->with([
+                'venta.cobranzasDirectas',
+                'venta.caja_movimientos.cobranzas',
+                'turnoOperativo.usuarioHabilitado',
+            ])
             ->chunk(80, function ($emisiones) use (&$conDiferencia) {
                 foreach ($emisiones as $em) {
                     $venta = $em->venta;
@@ -752,10 +929,16 @@ final class EstacionamientoTurnoOperativoTotalesSupport
                 }
             }
 
+            $usuarioId = $em->turnoOperativo?->usuario_habilitado_id;
+            $usuarioNombre = trim((string) ($em->turnoOperativo?->usuarioHabilitado?->nombre ?? ''))
+                ?: 'Sin usuario habilitado';
+
             $filas[] = [
                 'venta_id' => (int) $venta->id,
                 'codigo' => (string) ($venta->codigo ?? ''),
                 'cliente' => (string) ($venta->nombre ?? ''),
+                'usuario_habilitado_id' => $usuarioId !== null ? (int) $usuarioId : null,
+                'usuario_habilitado_nombre' => $usuarioNombre,
                 'hora' => $venta->created_at?->format('H:i') ?? '',
                 'total_facturado' => $montoVenta,
                 'total_cobrado' => $totalCobradoVenta,
@@ -779,6 +962,7 @@ final class EstacionamientoTurnoOperativoTotalesSupport
         string $fechaJornada,
         int $cuentacajaId,
         ?Carbon $desdeHabilitacion = null,
+        ?int $usuarioHabilitadoId = null,
     ): array {
         if ($cuentacajaId <= 0) {
             return [];
@@ -792,6 +976,9 @@ final class EstacionamientoTurnoOperativoTotalesSupport
             if (! empty($fila['es_nota_credito'])) {
                 continue;
             }
+            if ($usuarioHabilitadoId !== null && (int) ($fila['usuario_habilitado_id'] ?? 0) !== $usuarioHabilitadoId) {
+                continue;
+            }
             $montoMedio = (float) ($fila['medios'][$cuentacajaId] ?? 0);
             if ($montoMedio < 0.001) {
                 continue;
@@ -800,6 +987,8 @@ final class EstacionamientoTurnoOperativoTotalesSupport
                 'venta_id' => $fila['venta_id'],
                 'codigo' => $fila['codigo'],
                 'cliente' => $fila['cliente'],
+                'usuario_habilitado_id' => $fila['usuario_habilitado_id'] ?? null,
+                'usuario_habilitado_nombre' => $fila['usuario_habilitado_nombre'] ?? '',
                 'hora' => $fila['hora'],
                 'total_facturado' => $fila['total_facturado'],
                 'monto_medio' => $montoMedio,
@@ -819,12 +1008,22 @@ final class EstacionamientoTurnoOperativoTotalesSupport
         int $empresaId,
         string $fechaJornada,
         ?Carbon $desdeHabilitacion = null,
+        ?int $usuarioHabilitadoId = null,
         ?Carbon $hastaInclusive = null,
     ): array {
         $emisiones = self::emisionesEnAlcance($identificadorPc, $empresaId, $fechaJornada, $desdeHabilitacion, $hastaInclusive);
         $filas = self::construirFilasConciliacion($emisiones);
 
-        $ncFilas = array_values(array_filter($filas, fn (array $f) => ! empty($f['es_nota_credito'])));
+        $ncFilas = array_values(array_filter($filas, function (array $f) use ($usuarioHabilitadoId) {
+            if (empty($f['es_nota_credito'])) {
+                return false;
+            }
+            if ($usuarioHabilitadoId !== null && (int) ($f['usuario_habilitado_id'] ?? 0) !== $usuarioHabilitadoId) {
+                return false;
+            }
+
+            return true;
+        }));
 
         if ($ncFilas === []) {
             return [];
@@ -849,6 +1048,8 @@ final class EstacionamientoTurnoOperativoTotalesSupport
                 'venta_id' => $fila['venta_id'],
                 'codigo' => $fila['codigo'],
                 'cliente' => $fila['cliente'],
+                'usuario_habilitado_id' => $fila['usuario_habilitado_id'] ?? null,
+                'usuario_habilitado_nombre' => $fila['usuario_habilitado_nombre'] ?? '',
                 'hora' => $fila['hora'],
                 'total_facturado' => $fila['total_facturado'],
                 'monto_nota_credito' => $fila['total_facturado'],
@@ -879,6 +1080,7 @@ final class EstacionamientoTurnoOperativoTotalesSupport
         int $empresaId,
         string $fechaJornada,
         ?Carbon $desdeHabilitacion = null,
+        ?int $usuarioHabilitadoId = null,
         ?Carbon $hastaInclusive = null,
     ): array {
         $emisiones = self::emisionesEnAlcance(
@@ -890,7 +1092,16 @@ final class EstacionamientoTurnoOperativoTotalesSupport
         );
 
         $filas = self::construirFilasConciliacion($emisiones);
-        $invFilas = array_values(array_filter($filas, fn (array $f) => ! empty($f['es_invitacion'])));
+        $invFilas = array_values(array_filter($filas, function (array $f) use ($usuarioHabilitadoId) {
+            if (empty($f['es_invitacion'])) {
+                return false;
+            }
+            if ($usuarioHabilitadoId !== null && (int) ($f['usuario_habilitado_id'] ?? 0) !== $usuarioHabilitadoId) {
+                return false;
+            }
+
+            return true;
+        }));
 
         if ($invFilas === []) {
             return [];
@@ -902,6 +1113,8 @@ final class EstacionamientoTurnoOperativoTotalesSupport
                 'venta_id' => $fila['venta_id'],
                 'codigo' => $fila['codigo'],
                 'cliente' => $fila['cliente'],
+                'usuario_habilitado_id' => $fila['usuario_habilitado_id'] ?? null,
+                'usuario_habilitado_nombre' => $fila['usuario_habilitado_nombre'] ?? '',
                 'hora' => $fila['hora'],
                 'total_facturado' => $fila['total_facturado'],
                 'descuento_pct' => 0.0,

@@ -78,7 +78,34 @@ class GastronomiaCierresTurnoListadoFiltros
             'fecha_desde' => trim((string) $request->input('fecha_desde', '')),
             'fecha_hasta' => trim((string) $request->input('fecha_hasta', '')),
             'tipo' => trim((string) $request->input('tipo', '')),
+            'todas_terminales' => $request->boolean('todas_terminales'),
         ];
+    }
+
+    /**
+     * Aplica alcance por terminal: operadores solo ven su PC; encargado/supervisor pueden incluir todas.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public static function aplicarAlcanceTerminal(array $filtros, string $pcSesion, bool $puedeVerTodasTerminales): array
+    {
+        $pcSesion = trim($pcSesion);
+
+        if ($puedeVerTodasTerminales && ! empty($filtros['todas_terminales'])) {
+            $filtros['identificador_pc'] = '';
+
+            return $filtros;
+        }
+
+        $pcFiltro = trim((string) ($filtros['identificador_pc'] ?? ''));
+        if ($pcFiltro === '') {
+            $filtros['identificador_pc'] = $pcSesion;
+        }
+
+        $filtros['todas_terminales'] = false;
+
+        return $filtros;
     }
 
     public static function tieneCriteriosAplicados(array $filtros): bool
@@ -90,6 +117,9 @@ class GastronomiaCierresTurnoListadoFiltros
             return true;
         }
         if (trim((string) ($filtros['tipo'] ?? '')) !== '') {
+            return true;
+        }
+        if (! empty($filtros['todas_terminales'])) {
             return true;
         }
         if (trim((string) ($filtros['fecha_desde'] ?? '')) !== ''
@@ -129,6 +159,7 @@ class GastronomiaCierresTurnoListadoFiltros
             'fecha_desde' => '',
             'fecha_hasta' => '',
             'tipo' => '',
+            'todas_terminales' => false,
         ];
     }
 
@@ -164,6 +195,9 @@ class GastronomiaCierresTurnoListadoFiltros
         }
         if (! empty($filtros['tipo'])) {
             $params['tipo'] = $filtros['tipo'];
+        }
+        if (! empty($filtros['todas_terminales'])) {
+            $params['todas_terminales'] = '1';
         }
 
         return $params;

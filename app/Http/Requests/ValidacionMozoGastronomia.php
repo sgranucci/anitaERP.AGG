@@ -27,6 +27,7 @@ class ValidacionMozoGastronomia extends FormRequest
                     ->where(fn ($q) => $q->where('empresa_id', $empresaId)),
             ],
             'empresa_id' => 'required|exists:empresa,id',
+            'clave' => 'nullable|string|min:4|max:60',
         ];
     }
 

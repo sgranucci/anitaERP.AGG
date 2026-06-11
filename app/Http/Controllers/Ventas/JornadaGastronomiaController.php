@@ -12,6 +12,7 @@ use App\Services\Ventas\Gastronomia\GastronomiaCierreTotemInformeZService;
 use App\Services\Ventas\Gastronomia\GastronomiaCierreTotemJornadaService;
 use App\Services\Ventas\Gastronomia\GastronomiaJornadaService;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Ventas\Waitry\WaitryInformeZConciliacionSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -53,6 +54,17 @@ class JornadaGastronomiaController extends Controller
 
         $puedeAnularCierre = can('cerrar-jornada-gastronomia', false);
 
+        $eliminacionJornadaAbierta = null;
+        if ($estado && ! empty($estado['jornada_id'])) {
+            $jornadaAbiertaId = (int) $estado['jornada_id'];
+            if (! isset($eliminacionPorJornada[$jornadaAbiertaId])) {
+                $eliminacionPorJornada[$jornadaAbiertaId] = $this->jornadaService->resumenEliminacion(
+                    $this->jornadaRepository->findOrFail($jornadaAbiertaId)
+                );
+            }
+            $eliminacionJornadaAbierta = $eliminacionPorJornada[$jornadaAbiertaId];
+        }
+
         return view('ventas.gastronomia.jornada.index', [
             'empresas' => $empresas,
             'empresa_id' => $empresaId,
@@ -66,6 +78,8 @@ class JornadaGastronomiaController extends Controller
             'puede_anular_cierre' => $puedeAnularCierre,
             'fecha_hoy' => $estado['fecha_jornada_sugerida_abrir'] ?? now()->format('Y-m-d'),
             'fecha_jornada_minima' => $estado['fecha_jornada_minima_abrir'] ?? null,
+            'fecha_maxima' => $estado['fecha_jornada_maxima_abrir'] ?? now()->format('Y-m-d'),
+            'eliminacion_jornada_abierta' => $eliminacionJornadaAbierta,
             'puede_abrir' => can('abrir-jornada-gastronomia', false),
             'puede_cerrar' => can('cerrar-jornada-gastronomia', false),
             'puede_eliminar' => can('eliminar-jornada-gastronomia', false),
@@ -240,88 +254,11 @@ class JornadaGastronomiaController extends Controller
             $cierre->waitry_order_id_desde !== null ? (int) $cierre->waitry_order_id_desde : null,
             $cierre->waitry_order_id_hasta !== null ? (int) $cierre->waitry_order_id_hasta : null,
         );
-        $totems = \App\Models\Ventas\TotemWaitryGastronomia::query()
-            ->with('ubicacion')
-            ->where('empresa_id', $empresaId)
-            ->orderBy('ubicacion_id')
-            ->get()
-            ->keyBy(fn ($t) => (int) $t->id);
-
-        $conciliacion = is_array($informeZ['conciliacion'] ?? null) ? $informeZ['conciliacion'] : null;
-        $bloquesConc = is_array($conciliacion['totems'] ?? null) ? $conciliacion['totems'] : [];
-
-        $totemsPdf = [];
-        if ($bloquesConc !== []) {
-            foreach ($bloquesConc as $ct) {
-                if (! is_array($ct)) {
-                    continue;
-                }
-                $totemId = (int) ($ct['totem_id'] ?? 0);
-                $modelo = $totems->get($totemId);
-                $outLineas = [];
-                foreach ($ct['lineas'] ?? [] as $ln) {
-                    if (! is_array($ln)) {
-                        continue;
-                    }
-                    $outLineas[] = [
-                        'etiqueta' => (string) ($ln['etiqueta'] ?? '—'),
-                        'monto_sistema' => round((float) ($ln['monto_sistema'] ?? 0), 2),
-                        'monto_informe_z' => round((float) ($ln['monto_informe_z'] ?? 0), 2),
-                        'diferencia' => round((float) ($ln['diferencia'] ?? 0), 2),
-                        'ok' => ! empty($ln['ok']),
-                    ];
-                }
-
-                $totemsPdf[] = [
-                    'totem_id' => $totemId,
-                    'ubicacion_nombre' => (string) ($ct['ubicacion_nombre'] ?? $modelo?->ubicacion?->nombre ?? 'Tótem'),
-                    'detalle' => (string) ($ct['detalle'] ?? $modelo?->detalle ?? ''),
-                    'waitry_table_id' => (int) ($ct['waitry_table_id'] ?? $modelo?->waitry_table_id ?? 0),
-                    'ok' => ! empty($ct['ok']),
-                    'lineas' => $outLineas,
-                    'total_sistema' => round((float) ($ct['total_sistema'] ?? 0), 2),
-                    'total_informe_z' => round((float) ($ct['total_informe_z'] ?? 0), 2),
-                    'diferencia' => round((float) ($ct['diferencia_total'] ?? 0), 2),
-                ];
-            }
-        } else {
-            foreach (($informeZ['totems'] ?? []) as $t) {
-                if (! is_array($t)) {
-                    continue;
-                }
-                $totemId = (int) ($t['totem_id'] ?? 0);
-                $modelo = $totems->get($totemId);
-                $lineas = is_array($t['lineas'] ?? null) ? $t['lineas'] : [];
-                $outLineas = [];
-                $totalZ = 0.0;
-                foreach ($lineas as $ln) {
-                    if (! is_array($ln)) {
-                        continue;
-                    }
-                    $montoZ = round((float) ($ln['monto'] ?? $ln['monto_informe_z'] ?? 0), 2);
-                    $totalZ = round($totalZ + $montoZ, 2);
-                    $outLineas[] = [
-                        'etiqueta' => \App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport::etiquetaTipo($ln['tipo_waitry'] ?? null),
-                        'monto_sistema' => 0.0,
-                        'monto_informe_z' => $montoZ,
-                        'diferencia' => $montoZ,
-                        'ok' => true,
-                    ];
-                }
-
-                $totemsPdf[] = [
-                    'totem_id' => $totemId,
-                    'ubicacion_nombre' => (string) ($modelo?->ubicacion?->nombre ?? 'Tótem'),
-                    'detalle' => (string) ($modelo?->detalle ?? ''),
-                    'waitry_table_id' => (int) ($modelo?->waitry_table_id ?? 0),
-                    'ok' => true,
-                    'lineas' => $outLineas,
-                    'total_sistema' => 0.0,
-                    'total_informe_z' => $totalZ,
-                    'diferencia' => $totalZ,
-                ];
-            }
-        }
+        $presentacion = WaitryInformeZConciliacionSupport::conciliacionPresentacionDesdeCierre($cierre);
+        $conciliacion = $presentacion['conciliacion'] ?? null;
+        $totemsPdf = is_array($conciliacion)
+            ? WaitryInformeZConciliacionSupport::bloquesInformeZConciliacionParaPdf($conciliacion)
+            : [];
 
         $empresaNombre = (string) ($cierre->empresa?->nombre ?? '');
         $fechaJornadaFmt = $cierre->jornada?->fecha_jornada?->format('d/m/Y') ?? '';
@@ -329,7 +266,7 @@ class JornadaGastronomiaController extends Controller
 
         $datos = [
             'titulo' => 'Cierre de jornada — '.$fechaJornadaFmt,
-            'subtitulo' => $empresaNombre.' · Jornada #'.$jornadaIdComprobante.' · Informe Z tótem Waitry',
+            'subtitulo' => $empresaNombre.' · Jornada #'.$jornadaIdComprobante.' · Informe Z Waitry (por medio de pago)',
             'logo' => EmpresaLogoArchivo::dataUriDesdeNombre($empresaNombre),
             'empresa_nombre' => $empresaNombre,
             'jornada_id' => $jornadaIdComprobante,

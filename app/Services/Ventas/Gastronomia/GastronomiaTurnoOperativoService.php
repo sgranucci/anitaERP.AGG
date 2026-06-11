@@ -15,6 +15,7 @@ use App\Support\Ventas\GastronomiaTurnoNumeracionComprobanteSupport;
 use App\Support\Ventas\GastronomiaTurnoObservacionHabilitacionSupport;
 use App\Support\Ventas\GastronomiaTurnoOperativoTotalesSupport;
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -1126,6 +1127,298 @@ final class GastronomiaTurnoOperativoService
 
         if (Auth::id() === null) {
             $errores[] = 'No hay usuario autenticado.';
+        }
+
+        return $errores;
+    }
+
+    /**
+     * @return array{puede_corregir: bool, bloqueo_mensaje: string|null}
+     */
+    public function evaluarCorreccionArqueoCierre(TurnoOperativoGastronomia $turno): array
+    {
+        $errores = $this->erroresAntesDeCorregirArqueoCierre($turno);
+
+        return [
+            'puede_corregir' => $errores === [],
+            'bloqueo_mensaje' => $errores !== [] ? implode(' ', $errores) : null,
+        ];
+    }
+
+    /**
+     * Marca cada fila del listado de cierres con flags de corrección de arqueo
+     * (evita mostrar «Corregir» cuando ya hay rendición en caja).
+     *
+     * @param  Collection<int, object>  $filas
+     * @param  array<string, mixed>|null  $jornadaEstado
+     * @return Collection<int, object>
+     */
+    public function enriquecerFilasListadoCorreccionArqueo(
+        Collection $filas,
+        int $empresaIdJornada,
+        ?array $jornadaEstado,
+    ): Collection {
+        $jornadaAbierta = ! empty($jornadaEstado['jornada_abierta']);
+        $jornadaId = (int) ($jornadaEstado['jornada_id'] ?? 0);
+
+        $cierreIds = $filas
+            ->filter(fn ($f) => ($f->tipo ?? '') === 'cierre')
+            ->filter(fn ($f) => (int) ($f->empresa_id ?? 0) === $empresaIdJornada
+                && (int) ($f->jornada_gastronomia_id ?? 0) === $jornadaId)
+            ->pluck('id');
+
+        $rendTurnoIds = $cierreIds->isEmpty()
+            ? collect()
+            : RendicionGastronomiaCaja::query()
+                ->whereIn('turno_operativo_gastronomia_id', $cierreIds->all())
+                ->pluck('turno_operativo_gastronomia_id')
+                ->flip();
+
+        $jornadaIds = $filas
+            ->filter(fn ($f) => ($f->tipo ?? '') === 'cierre')
+            ->pluck('jornada_gastronomia_id')
+            ->unique()
+            ->filter(fn ($id) => (int) $id > 0);
+
+        $rendJornadaIds = $jornadaIds->isEmpty()
+            ? collect()
+            : RendicionGastronomiaCaja::query()
+                ->where('tipo', RendicionGastronomiaCaja::TIPO_JORNADA)
+                ->whereIn('jornada_gastronomia_id', $jornadaIds->all())
+                ->pluck('jornada_gastronomia_id')
+                ->flip();
+
+        return $filas->map(function ($f) use (
+            $empresaIdJornada,
+            $jornadaId,
+            $jornadaAbierta,
+            $rendTurnoIds,
+            $rendJornadaIds,
+        ) {
+            $f->puede_corregir_arqueo_fila = false;
+            $f->bloqueo_corregir_arqueo_fila = null;
+            $f->mostrar_arqueo_cierre_fila = false;
+
+            if (($f->tipo ?? '') !== 'cierre') {
+                return $f;
+            }
+
+            if (! $jornadaAbierta) {
+                return $f;
+            }
+
+            if ((int) ($f->empresa_id ?? 0) !== $empresaIdJornada) {
+                return $f;
+            }
+
+            if ((int) ($f->jornada_gastronomia_id ?? 0) !== $jornadaId) {
+                $f->bloqueo_corregir_arqueo_fila = 'El cierre pertenece a otra jornada.';
+
+                return $f;
+            }
+
+            $f->mostrar_arqueo_cierre_fila = true;
+            $errores = [];
+
+            if ($rendTurnoIds->has((int) ($f->id ?? 0))) {
+                $errores[] = 'El turno ya fue presentado en caja (rendición de turno). '
+                    .'Elimine o ajuste esa rendición antes de modificar el arqueo.';
+            }
+
+            if ($rendJornadaIds->has((int) ($f->jornada_gastronomia_id ?? 0))) {
+                $errores[] = 'La jornada ya fue presentada en caja (rendición de jornada). '
+                    .'Elimine esa rendición antes de modificar el arqueo.';
+            }
+
+            if ($errores === []) {
+                $f->puede_corregir_arqueo_fila = true;
+            } else {
+                $f->bloqueo_corregir_arqueo_fila = implode(' ', $errores);
+            }
+
+            return $f;
+        });
+    }
+
+    /**
+     * @return array{
+     *   turno: TurnoOperativoGastronomia,
+     *   totales_turno: array<string, mixed>,
+     *   mensaje: string
+     * }
+     */
+    public function corregirArqueoCierreDefinitivo(
+        TurnoOperativoGastronomia $turno,
+        array $datosCorreccion,
+    ): array {
+        $errores = $this->erroresAntesDeCorregirArqueoCierre($turno);
+        if ($errores !== []) {
+            throw new InvalidArgumentException(implode(' ', $errores));
+        }
+
+        $motivo = $this->limpiarObservacion($datosCorreccion['motivo'] ?? null);
+        if ($motivo === '') {
+            throw new InvalidArgumentException('Debe indicar el motivo de la corrección.');
+        }
+
+        $fechaJornada = $turno->jornada?->fecha_jornada?->format('Y-m-d')
+            ?? ($turno->cierre_en?->format('Y-m-d') ?? Carbon::today()->format('Y-m-d'));
+
+        $totalesTurno = GastronomiaTurnoOperativoTotalesSupport::calcular(
+            (string) $turno->identificador_pc,
+            (int) $turno->empresa_id,
+            $fechaJornada,
+            $turno->habilitacion_en,
+            $turno->cierre_en,
+        );
+
+        $redondeoInvitaciones = round((float) ($datosCorreccion['redondeo_invitaciones'] ?? $turno->redondeo_invitaciones ?? 0), 2);
+        $redondeoTurno = round((float) ($datosCorreccion['redondeo_turno'] ?? $turno->redondeo_turno ?? 0), 2);
+        $sobranteFaltante = round((float) ($datosCorreccion['sobrante_faltante'] ?? $turno->sobrante_faltante ?? 0), 2);
+
+        $mediosContadoCierre = GastronomiaTurnoMediosContadoCierreSupport::normalizarParaGuardar(
+            $datosCorreccion['medios_contado'] ?? null,
+            $totalesTurno,
+            (int) $turno->empresa_id,
+        );
+
+        if (! GastronomiaTurnoOperativoTotalesSupport::cierreCuadraConAjustesManuales(
+            $totalesTurno,
+            $redondeoInvitaciones,
+            $redondeoTurno,
+            $sobranteFaltante,
+        )) {
+            $diff = round((float) ($totalesTurno['diferencia_cobranza'] ?? 0), 2);
+            throw new InvalidArgumentException(
+                'Los ajustes no absorben la diferencia de conciliación del turno ($ '
+                .number_format(abs($diff), 2, ',', '.').'). '
+                .'Revise redondeo invitaciones, redondeo turno y sobrante/faltante.'
+            );
+        }
+
+        $usuario = Auth::user();
+        $usuarioId = (int) ($usuario?->id ?? 0);
+        $usuarioNombre = (string) ($usuario?->nombre ?? 'usuario');
+
+        $snapshotAnterior = [
+            'redondeo_invitaciones' => $turno->redondeo_invitaciones,
+            'redondeo_turno' => $turno->redondeo_turno,
+            'sobrante_faltante' => $turno->sobrante_faltante,
+            'medios_contado_cierre_json' => $turno->medios_contado_cierre_json,
+        ];
+
+        $nota = GastronomiaTurnoObservacionHabilitacionSupport::notaCorreccionArqueoCierre(
+            $usuarioId,
+            $usuarioNombre,
+            $turno->numero_cierre !== null ? (int) $turno->numero_cierre : null,
+            $turno->cierre_en,
+            $motivo,
+        );
+
+        return DB::transaction(function () use (
+            $turno,
+            $redondeoInvitaciones,
+            $redondeoTurno,
+            $sobranteFaltante,
+            $mediosContadoCierre,
+            $nota,
+            $usuarioId,
+            $usuarioNombre,
+            $snapshotAnterior,
+            $totalesTurno,
+        ) {
+            $obsCierre = trim((string) $turno->observacion_cierre);
+            $obsCierre = $obsCierre === '' ? $nota : $obsCierre."\n".$nota;
+
+            $turno->update([
+                'redondeo_invitaciones' => $redondeoInvitaciones,
+                'redondeo_turno' => $redondeoTurno,
+                'sobrante_faltante' => $sobranteFaltante,
+                'medios_contado_cierre_json' => $mediosContadoCierre,
+                'observacion_cierre' => $obsCierre,
+            ]);
+
+            Log::info('gastronomia.turno.corregir_arqueo_cierre', [
+                'turno_operativo_id' => (int) $turno->id,
+                'usuario_id' => $usuarioId,
+                'usuario_nombre' => $usuarioNombre,
+                'anterior' => $snapshotAnterior,
+                'nuevo' => [
+                    'redondeo_invitaciones' => $redondeoInvitaciones,
+                    'redondeo_turno' => $redondeoTurno,
+                    'sobrante_faltante' => $sobranteFaltante,
+                    'medios_contado_cierre_json' => $mediosContadoCierre,
+                ],
+            ]);
+
+            $totalesEnriquecidos = GastronomiaTurnoMediosContadoCierreSupport::enriquecerTotalesConContado(
+                $totalesTurno,
+                $mediosContadoCierre,
+            );
+
+            return [
+                'turno' => $turno->fresh(['turno', 'jornada', 'usuarioCierre']),
+                'totales_turno' => $totalesEnriquecidos,
+                'mensaje' => 'Arqueo y ajustes del cierre actualizados correctamente.',
+            ];
+        });
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function erroresAntesDeCorregirArqueoCierre(TurnoOperativoGastronomia $turno): array
+    {
+        $errores = [];
+
+        if ($turno->estado !== TurnoOperativoGastronomia::ESTADO_CERRADO) {
+            $errores[] = 'Solo puede corregir el arqueo de un cierre definitivo ya registrado.';
+
+            return $errores;
+        }
+
+        if ($turno->cierre_en === null) {
+            $errores[] = 'El turno no tiene fecha de cierre registrada.';
+        }
+
+        $jornadaAbierta = $this->jornadaService->jornadaAbierta((int) $turno->empresa_id);
+        if ($jornadaAbierta === null) {
+            $errores[] = 'No hay jornada abierta. Solo puede corregir arqueos de cierres del día operativo en curso.';
+        } elseif ((int) $turno->jornada_gastronomia_id !== (int) $jornadaAbierta->id) {
+            $errores[] = 'El cierre pertenece a otra jornada. Solo puede corregir cierres del día operativo actual.';
+        }
+
+        $errores = array_merge($errores, $this->erroresSiTurnoPresentadoEnCaja($turno));
+
+        if (Auth::id() === null) {
+            $errores[] = 'No hay usuario autenticado.';
+        }
+
+        return $errores;
+    }
+
+    /**
+     * Bloquea corrección/anulación si el turno o su jornada ya tienen rendición en caja.
+     *
+     * @return list<string>
+     */
+    public function erroresSiTurnoPresentadoEnCaja(TurnoOperativoGastronomia $turno): array
+    {
+        $errores = [];
+
+        if (RendicionGastronomiaCaja::query()
+            ->where('turno_operativo_gastronomia_id', (int) $turno->id)
+            ->exists()) {
+            $errores[] = 'El turno ya fue presentado en caja (rendición de turno). '
+                .'Elimine o ajuste esa rendición antes de modificar el arqueo.';
+        }
+
+        if (RendicionGastronomiaCaja::query()
+            ->where('tipo', RendicionGastronomiaCaja::TIPO_JORNADA)
+            ->where('jornada_gastronomia_id', (int) $turno->jornada_gastronomia_id)
+            ->exists()) {
+            $errores[] = 'La jornada ya fue presentada en caja (rendición de jornada). '
+                .'Elimine esa rendición antes de modificar el arqueo del cierre.';
         }
 
         return $errores;

@@ -247,7 +247,11 @@ class GastronomiaCuentaService
 
     public function validarCabeceraOperativa(CuentaGastronomia $cuenta): void
     {
-        $cubiertosObligatorio = (bool) config('gastronomia.cubiertos_obligatorio_al_abrir', true);
+        if ($cuenta->esCanjeMarketing()) {
+            $cubiertosObligatorio = (bool) config('gastronomia.canje_marketing_cubiertos_obligatorio', false);
+        } else {
+            $cubiertosObligatorio = (bool) config('gastronomia.cubiertos_obligatorio_al_abrir', true);
+        }
         $mozoObligatorio = (bool) config('gastronomia.mozo_obligatorio_al_abrir', true);
 
         if ($cubiertosObligatorio && (int) $cuenta->cubiertos <= 0) {
@@ -321,6 +325,7 @@ class GastronomiaCuentaService
                 'cliente',
                 'descuentoGastronomia.cliente',
                 'clienteInternoDescuento',
+                'clienteVip',
                 'configuracionPuntoventa',
             ])
             ->findOrFail($id);
@@ -471,6 +476,7 @@ class GastronomiaCuentaService
                 'cliente',
                 'descuentoGastronomia.cliente',
                 'clienteInternoDescuento',
+                'clienteVip',
                 'configuracionPuntoventa',
             ])
             ->findOrFail($id);
@@ -549,7 +555,8 @@ class GastronomiaCuentaService
         float $cantidad,
         float $precioUnitario,
         array $opcionalesPorOrden = [],
-        float $descuentoLineaPct = 0.
+        float $descuentoLineaPct = 0.,
+        ?string $comentarioCocina = null,
     ): CuentaGastronomiaLinea {
         if ($cuenta->estado !== CuentaGastronomia::ESTADO_ABIERTA) {
             throw new InvalidArgumentException('La cuenta no está abierta.');
@@ -592,6 +599,7 @@ class GastronomiaCuentaService
             'descuento_linea_pct' => $descuentoLineaPct,
             'opcionales_json' => $opcionalesPorOrden === [] ? null : $opcionalesPorOrden,
             'numero_linea' => $maxNum + 1,
+            'comentario_cocina' => \App\Support\Ventas\GastronomiaComentarioCocinaSupport::normalizar($comentarioCocina),
         ]);
     }
 

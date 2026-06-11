@@ -162,6 +162,8 @@ final class GastronomiaReceptorFacturacionService
         $modo = (string) ($receptor['modo'] ?? '');
         if ($modo === self::MODO_CONSUMIDOR_FINAL) {
             $payload['venta_receptor'] = $this->datosVentaReceptorConsumidorFinal();
+        } elseif ($modo === self::MODO_MAESTRO && ! empty($receptor['venta_receptor']) && is_array($receptor['venta_receptor'])) {
+            $payload['venta_receptor'] = $receptor['venta_receptor'];
         } elseif ($modo === self::MODO_MANUAL && ! empty($receptor['arca_receptor'])) {
             $ar = $receptor['arca_receptor'];
             $payload['venta_receptor'] = [
@@ -232,7 +234,14 @@ final class GastronomiaReceptorFacturacionService
     }
 
     /**
-     * @return array{cliente_id:int,modo:string}
+     * @return array{
+     *   cliente_id:int,
+     *   modo:string,
+     *   arca_receptor:array{tipodoc:int,numerodocumento:string,nombre:string,domicilio:string},
+     *   venta_receptor:array{nombre:string,numerodocumento:string,domicilio:string},
+     *   subtotal_estimado:float,
+     *   tope_consumidor_final:float
+     * }
      */
     private function resolverModoMaestro(CuentaGastronomia $cuenta, int $clienteMaestroId, float $total, float $tope): array
     {
@@ -242,10 +251,15 @@ final class GastronomiaReceptorFacturacionService
         }
 
         $doc = trim((string) ($cliente->numerodocumento ?? ''));
+        $docDigitos = preg_replace('/\D/', '', $doc) ?? '';
         $tipodocExt = (int) ($cliente->tipodocumentos->codigoexterno ?? 0);
+        $nombre = trim((string) ($cliente->nombre ?? ''));
+        $domicilio = trim((string) ($cliente->domicilio ?? ''));
+
+        $documentoArcaValido = $docDigitos !== '' && (int) $docDigitos > 0 && $tipodocExt !== 99;
 
         if ($tope > 0 && $total >= $tope) {
-            if ($doc === '' || $doc === '0') {
+            if (! $documentoArcaValido) {
                 throw new InvalidArgumentException(
                     'El total supera $'.number_format($tope, 2, ',', '.')
                     .': el cliente del maestro debe tener documento válido (ARCA: DocTipo distinto de 99 y DocNro > 0).'
@@ -259,9 +273,39 @@ final class GastronomiaReceptorFacturacionService
             }
         }
 
+        if ($documentoArcaValido) {
+            $arcaReceptor = [
+                'tipodoc' => $tipodocExt,
+                'numerodocumento' => $docDigitos,
+                'nombre' => $nombre,
+                'domicilio' => $domicilio,
+            ];
+            $ventaReceptor = [
+                'nombre' => $nombre,
+                'numerodocumento' => $docDigitos,
+                'domicilio' => $domicilio,
+            ];
+        } else {
+            // Maestro sin documento (ej. empleado con tipo CUIT 80 vacío): ARCA exige 99/0 bajo el tope.
+            $cf = $this->datosVentaReceptorConsumidorFinal();
+            $arcaReceptor = [
+                'tipodoc' => (int) config('arca_wsfe.receptor.consumidor_final_tipo_documento', 99),
+                'numerodocumento' => (string) $cf['numerodocumento'],
+                'nombre' => $nombre !== '' ? $nombre : $cf['nombre'],
+                'domicilio' => $domicilio,
+            ];
+            $ventaReceptor = [
+                'nombre' => $nombre !== '' ? $nombre : $cf['nombre'],
+                'numerodocumento' => (string) $cf['numerodocumento'],
+                'domicilio' => $domicilio,
+            ];
+        }
+
         return [
             'cliente_id' => (int) $cliente->id,
             'modo' => self::MODO_MAESTRO,
+            'arca_receptor' => $arcaReceptor,
+            'venta_receptor' => $ventaReceptor,
             'subtotal_estimado' => $total,
             'tope_consumidor_final' => $tope,
         ];

@@ -26,11 +26,23 @@ class MozoGastronomiaRepository implements MozoGastronomiaRepositoryInterface
 
     public function create(array $data)
     {
+        if (! empty($data['clave'])) {
+            $data['clave'] = \Illuminate\Support\Facades\Hash::make((string) $data['clave']);
+        }
+
         return $this->model->create($data);
     }
 
     public function update(array $data, $id)
     {
+        if (array_key_exists('clave', $data)) {
+            if ($data['clave'] === null || $data['clave'] === '') {
+                unset($data['clave']);
+            } else {
+                $data['clave'] = \Illuminate\Support\Facades\Hash::make((string) $data['clave']);
+            }
+        }
+
         return $this->model->findOrFail($id)->update($data);
     }
 
@@ -124,5 +136,17 @@ class MozoGastronomiaRepository implements MozoGastronomiaRepositoryInterface
         }
 
         return $query;
+    }
+
+    public function findPorId(int $id, int $empresaId): ?MozoGastronomia
+    {
+        if ($id <= 0) {
+            return null;
+        }
+
+        return $this->model->newQuery()
+            ->where('id', $id)
+            ->where('empresa_id', $empresaId)
+            ->first();
     }
 }

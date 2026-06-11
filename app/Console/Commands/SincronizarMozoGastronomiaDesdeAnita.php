@@ -8,6 +8,7 @@ use Illuminate\Console\Command;
 class SincronizarMozoGastronomiaDesdeAnita extends Command
 {
     protected $signature = 'mozo-gastronomia:sincronizar-anita
+                            {--empresa= : ID empresa ERP (usa bridge Anita de esa empresa y mozopasswd)}
                             {--codigo= : Importar solo un mozo por vend_codigo Anita}';
 
     protected $description = 'Importa mozos de gastronomía desde Anita (tabla vendedor) con mapeo campo a campo.';
@@ -15,6 +16,7 @@ class SincronizarMozoGastronomiaDesdeAnita extends Command
     public function handle(MozoGastronomiaAnitaSyncService $sync): int
     {
         $codigo = $this->option('codigo');
+        $empresa = $this->option('empresa');
 
         try {
             if ($codigo !== null && $codigo !== '') {
@@ -25,8 +27,14 @@ class SincronizarMozoGastronomiaDesdeAnita extends Command
                 return self::SUCCESS;
             }
 
-            $this->info('Sincronizando mozos desde Anita…');
-            $ret = $sync->sincronizarConAnita();
+            if ($empresa !== null && $empresa !== '') {
+                $empresaId = (int) $empresa;
+                $this->info("Sincronizando mozos desde Anita para empresa_id={$empresaId}…");
+                $ret = $sync->sincronizarEmpresaDesdeAnita($empresaId);
+            } else {
+                $this->info('Sincronizando mozos desde Anita…');
+                $ret = $sync->sincronizarConAnita();
+            }
         } catch (\Throwable $e) {
             $this->error($e->getMessage());
 

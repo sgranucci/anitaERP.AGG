@@ -231,7 +231,8 @@ class HabilitacionTurnoEstacionamientoController extends Controller
         $fechaJornada = $activo->jornada?->fecha_jornada?->format('Y-m-d')
             ?? Carbon::today()->format('Y-m-d');
 
-        $mozoId = null;
+        $usuarioHabilitadoId = (int) $request->input('usuario_habilitado_id', 0);
+        $usuarioHabilitadoId = $usuarioHabilitadoId > 0 ? $usuarioHabilitadoId : null;
 
         $facturas = EstacionamientoTurnoOperativoTotalesSupport::facturasPorMedioPago(
             $pc,
@@ -239,7 +240,7 @@ class HabilitacionTurnoEstacionamientoController extends Controller
             $fechaJornada,
             $cuentacajaId,
             $activo->habilitacion_en,
-            $mozoId,
+            $usuarioHabilitadoId,
         );
 
         $totales = EstacionamientoTurnoOperativoTotalesSupport::calcular(
@@ -288,14 +289,15 @@ class HabilitacionTurnoEstacionamientoController extends Controller
         $fechaJornada = $activo->jornada?->fecha_jornada?->format('Y-m-d')
             ?? Carbon::today()->format('Y-m-d');
 
-        $mozoId = null;
+        $usuarioHabilitadoId = (int) $request->input('usuario_habilitado_id', 0);
+        $usuarioHabilitadoId = $usuarioHabilitadoId > 0 ? $usuarioHabilitadoId : null;
 
         $notas = EstacionamientoTurnoOperativoTotalesSupport::notasCreditoDelTurno(
             $pc,
             (int) $cfg->empresa_id,
             $fechaJornada,
             $activo->habilitacion_en,
-            $mozoId,
+            $usuarioHabilitadoId,
         );
 
         return response()->json([
@@ -332,11 +334,15 @@ class HabilitacionTurnoEstacionamientoController extends Controller
         $fechaJornada = $activo->jornada?->fecha_jornada?->format('Y-m-d')
             ?? Carbon::today()->format('Y-m-d');
 
+        $usuarioHabilitadoId = (int) $request->input('usuario_habilitado_id', 0);
+        $usuarioHabilitadoId = $usuarioHabilitadoId > 0 ? $usuarioHabilitadoId : null;
+
         $facturas = EstacionamientoTurnoOperativoTotalesSupport::invitacionesDelTurno(
             $pc,
             (int) $cfg->empresa_id,
             $fechaJornada,
             $activo->habilitacion_en,
+            $usuarioHabilitadoId,
         );
 
         return response()->json([

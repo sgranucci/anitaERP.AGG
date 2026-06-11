@@ -130,6 +130,13 @@ return [
     'soap_timeout' => (int) env('ARCA_WSFE_SOAP_TIMEOUT', 60),
 
     /**
+     * Timeout SOAP en POS (gastronomía / emisión en tiempo real).
+     * Más corto que soap_timeout para no bloquear al cajero si ARCA está lento o caído.
+     * 0 = no aplicar (usar soap_timeout en POS también).
+     */
+    'soap_timeout_pos' => (int) env('ARCA_WSFE_SOAP_TIMEOUT_POS', 18),
+
+    /**
      * Receptor en comprobantes (RG4444 / manual WSFEv1). Compartido entre unidades de negocio.
      */
     'receptor' => [

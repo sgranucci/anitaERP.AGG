@@ -18,13 +18,15 @@
                 <label class="small mb-1" for="identificador_pc">PC</label>
                 @php
                     $pcSeleccionada = (string) ($f['identificador_pc'] ?? '');
+                    $todasTerminalesActivo = ! empty($f['todas_terminales']);
                     $pcsConfiguradas = collect($pc_query ?? [])->pluck('identificador_pc')->map(fn ($v) => (string) $v);
-                    $pcExtra = $pcSeleccionada !== '' && ! $pcsConfiguradas->contains($pcSeleccionada)
+                    $pcExtra = $pcSeleccionada !== '' && ! $todasTerminalesActivo && ! $pcsConfiguradas->contains($pcSeleccionada)
                         ? $pcSeleccionada
                         : null;
                 @endphp
-                <select name="identificador_pc" id="identificador_pc" class="form-control form-control-sm">
-                    <option value="" @selected($pcSeleccionada === '')>Todas</option>
+                <select name="identificador_pc" id="identificador_pc" class="form-control form-control-sm"
+                        @disabled($todasTerminalesActivo)>
+                    <option value="" @selected($pcSeleccionada === '' || $todasTerminalesActivo)>Todas</option>
                     @foreach ($pc_query ?? [] as $pc)
                         @php
                             $etiquetaPc = (string) $pc->identificador_pc

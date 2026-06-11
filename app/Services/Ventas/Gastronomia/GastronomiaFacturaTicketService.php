@@ -4,6 +4,7 @@ namespace App\Services\Ventas\Gastronomia;
 
 use App\Models\Configuracion\Salida;
 use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
+use App\Models\Ventas\ClienteVipGastronomia;
 use App\Models\Ventas\CuentaGastronomia;
 use App\Models\Ventas\MozoGastronomia;
 use App\Models\Ventas\Venta;
@@ -81,7 +82,7 @@ final class GastronomiaFacturaTicketService
                 }
 
                 $cuentaDefer = $cuentaId !== null
-                    ? CuentaGastronomia::query()->find($cuentaId)
+                    ? CuentaGastronomia::query()->with(['mozo', 'clienteVip'])->find($cuentaId)
                     : null;
 
                 $this->imprimirTicketVenta($ventaId, $cfgDefer, $cuentaDefer);
@@ -145,11 +146,11 @@ final class GastronomiaFacturaTicketService
             $t0Total = microtime(true);
             $venta = $this->cargarVenta($ventaId);
             if ($cuenta !== null) {
-                $cuenta->loadMissing('mozo');
+                $cuenta->loadMissing(['mozo', 'clienteVip']);
             } else {
                 $cuenta = CuentaGastronomia::query()
                     ->where('venta_id', $ventaId)
-                    ->with('mozo')
+                    ->with(['mozo', 'clienteVip'])
                     ->first();
             }
 
@@ -332,6 +333,11 @@ final class GastronomiaFacturaTicketService
         $mozoLinea = $this->lineaMozo($cuenta);
         if ($mozoLinea !== '') {
             $w->linea($mozoLinea);
+        }
+
+        $vipCanjeLinea = $this->lineaClienteVipCanje($cuenta);
+        if ($vipCanjeLinea !== '') {
+            $w->linea($vipCanjeLinea);
         }
 
         if (trim((string) ($venta->leyenda ?? '')) !== '') {
@@ -601,5 +607,25 @@ final class GastronomiaFacturaTicketService
         $id = str_pad($codigo !== '' ? $codigo : (string) $mozo->id, 6, '0', STR_PAD_LEFT);
 
         return 'Atendio: (0) '.$id.' '.$nombre;
+    }
+
+    private function lineaClienteVipCanje(?CuentaGastronomia $cuenta): string
+    {
+        if ($cuenta === null || ! $cuenta->esCanjeMarketing()) {
+            return '';
+        }
+
+        $cuenta->loadMissing('clienteVip');
+        $vip = $cuenta->clienteVip;
+        if (! $vip instanceof ClienteVipGastronomia) {
+            return '';
+        }
+
+        $nombre = trim($vip->nombreCompleto());
+        if ($nombre === '') {
+            return '';
+        }
+
+        return 'Cliente VIP canje: '.$nombre;
     }
 }

@@ -15,8 +15,6 @@ final class EstacionamientoItemCatalogoSupport
      * @return Collection<int, object{
      *   id:int,
      *   nombre:string,
-     *   articulo_id:?int,
-     *   sku:?string,
      *   precio:?float,
      *   lista_precio_estacionamiento_item_id:?int
      * }>
@@ -65,7 +63,6 @@ final class EstacionamientoItemCatalogoSupport
         $items = ItemEstacionamiento::query()
             ->where('empresa_id', $empresaId)
             ->where('estado', ItemEstacionamiento::ESTADO_ACTIVO)
-            ->with('articulo:id,sku,descripcion')
             ->orderBy('nombre')
             ->get();
 
@@ -75,8 +72,6 @@ final class EstacionamientoItemCatalogoSupport
             return (object) [
                 'id' => (int) $item->id,
                 'nombre' => (string) $item->nombre,
-                'articulo_id' => $item->articulo_id ? (int) $item->articulo_id : null,
-                'sku' => $item->articulo->sku ?? null,
                 'precio' => $precioRow ? (float) $precioRow->precio : null,
                 'lista_precio_estacionamiento_item_id' => $precioRow
                     ? (int) $precioRow->lista_precio_item_id
@@ -101,8 +96,7 @@ final class EstacionamientoItemCatalogoSupport
                     return true;
                 }
 
-                return str_contains(mb_strtolower((string) $row->nombre), $t)
-                    || ($row->sku && str_contains(mb_strtolower((string) $row->sku), $t));
+                return str_contains(mb_strtolower((string) $row->nombre), $t);
             });
         }
 
