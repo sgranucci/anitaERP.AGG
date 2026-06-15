@@ -76,15 +76,23 @@ class CapexController extends Controller
         $filtros = CapexListadoFiltros::resolverDesdeRequest($request);
 
         $capex = $this->capexQuery->leeCapex($filtros, true);
+        $filtrosQuery = CapexListadoFiltros::paraQueryString($filtros);
+        if ($capex instanceof \Illuminate\Contracts\Pagination\LengthAwarePaginator) {
+            $capex->appends($filtrosQuery);
+        }
         $estado_enum = Capex_Estado::$enumEstado;
 
         return view('presupuesto.capex.index', [
             'capex' => $capex,
             'busqueda' => $filtros['busqueda'],
             'filtros' => $filtros,
-            'filtrosQuery' => CapexListadoFiltros::paraQueryString($filtros),
+            'filtrosQuery' => $filtrosQuery,
             'camposFiltro' => CapexListadoFiltros::CAMPOS,
             'estado_enum' => $estado_enum,
+            'puede_ver_capex' => can('editar-capex', false) || can('listar-capex', false),
+            'puede_ver_empresa' => can('editar-empresas', false) || can('listar-empresas', false),
+            'puede_ver_presupuesto' => can('editar-presupuesto', false) || can('listar-presupuesto', false),
+            'puede_ver_centrocosto' => can('editar-centro-costo', false) || can('listar-centro-costo', false),
         ]);
     }
 
@@ -175,7 +183,12 @@ class CapexController extends Controller
      */
     public function editar($id)
     {
-        can('editar-capex');
+        $soloConsulta = request()->query('origen') === 'modal_consulta';
+        if ($soloConsulta) {
+            can('listar-capex');
+        } else {
+            can('editar-capex');
+        }
 
 		$data = $this->capexRepository->find($id);
         $empresa_query = $this->empresaRepository->allFiltrado();
@@ -183,9 +196,20 @@ class CapexController extends Controller
         $presupuesto_query = $this->presupuestoRepository->all();
         $moneda_query = $this->monedaRepository->all();
         $estado_enum = Capex_Estado::$enumEstado;
+        $puedeActualizarCapex = can('actualizar-capex', false);
+        $ocultarVolver = $soloConsulta;
 
-        return view('presupuesto.capex.editar', compact('data', 'empresa_query', 'centrocosto_query', 'presupuesto_query',
-                                                            'moneda_query','estado_enum'));
+        return view('presupuesto.capex.editar', compact(
+            'data',
+            'empresa_query',
+            'centrocosto_query',
+            'presupuesto_query',
+            'moneda_query',
+            'estado_enum',
+            'soloConsulta',
+            'puedeActualizarCapex',
+            'ocultarVolver',
+        ));
     }
 
     /**

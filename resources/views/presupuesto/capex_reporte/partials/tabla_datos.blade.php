@@ -41,16 +41,72 @@
 <tbody>
     @forelse ($filas as $fila)
         <tr>
-            <td>{{ $fila['id'] ?? '' }}</td>
-            <td>{{ $fila['empresa'] ?? '' }}</td>
-            <td>{{ $fila['presupuesto'] ?? '' }}</td>
-            <td>{{ $fila['centrocosto'] ?? '' }}</td>
-            <td>{{ $fila['nombre'] ?? '' }}</td>
+            <td>
+                @include('presupuesto.partials.celda_link_consulta', [
+                    'mostrarLinks' => $mostrarLinks ?? false,
+                    'puede' => $puede_ver_capex ?? false,
+                    'id' => $fila['id'] ?? 0,
+                    'routeName' => 'editar_capex',
+                    'texto' => $fila['id'] ?? '',
+                ])
+            </td>
+            <td>
+                @include('presupuesto.partials.celda_link_consulta', [
+                    'mostrarLinks' => $mostrarLinks ?? false,
+                    'puede' => $puede_ver_empresa ?? false,
+                    'id' => $fila['empresa_id'] ?? 0,
+                    'routeName' => 'editar_empresa',
+                    'texto' => $fila['empresa'] ?? '',
+                ])
+            </td>
+            <td>
+                @include('presupuesto.partials.celda_link_consulta', [
+                    'mostrarLinks' => $mostrarLinks ?? false,
+                    'puede' => $puede_ver_presupuesto ?? false,
+                    'id' => $fila['presupuesto_id'] ?? 0,
+                    'routeName' => 'editar_presupuesto',
+                    'texto' => $fila['presupuesto'] ?? '',
+                ])
+            </td>
+            <td>
+                @include('presupuesto.partials.celda_link_consulta', [
+                    'mostrarLinks' => $mostrarLinks ?? false,
+                    'puede' => $puede_ver_centrocosto ?? false,
+                    'id' => $fila['centrocosto_id'] ?? 0,
+                    'routeName' => 'editar_centrocosto',
+                    'texto' => $fila['centrocosto'] ?? '',
+                ])
+            </td>
+            <td>
+                @include('presupuesto.partials.celda_link_consulta', [
+                    'mostrarLinks' => $mostrarLinks ?? false,
+                    'puede' => $puede_ver_capex ?? false,
+                    'id' => $fila['id'] ?? 0,
+                    'routeName' => 'editar_capex',
+                    'texto' => $fila['nombre'] ?? '',
+                ])
+            </td>
             <td>{{ $fila['detalle'] ?? '' }}</td>
-            <td>{{ $fila['codigoproyecto'] ?? '' }}</td>
+            <td>
+                @include('presupuesto.partials.celda_link_consulta', [
+                    'mostrarLinks' => $mostrarLinks ?? false,
+                    'puede' => $puede_ver_capex ?? false,
+                    'id' => $fila['id'] ?? 0,
+                    'routeName' => 'editar_capex',
+                    'texto' => $fila['codigoproyecto'] ?? '',
+                ])
+            </td>
             <td>{{ $fila['anio'] ?? '' }}</td>
             <td>{{ $fila['mes'] ?? '' }}</td>
-            <td>{{ $fila['nro_proyecto'] ?? '' }}</td>
+            <td>
+                @include('presupuesto.partials.celda_link_consulta', [
+                    'mostrarLinks' => $mostrarLinks ?? false,
+                    'puede' => $puede_ver_capex ?? false,
+                    'id' => $fila['id'] ?? 0,
+                    'routeName' => 'editar_capex',
+                    'texto' => $fila['nro_proyecto'] ?? '',
+                ])
+            </td>
             <td>{{ $fila['estado'] ?? '' }}</td>
             <td>{{ $fila['moneda'] ?? '' }}</td>
             <td class="num">{{ $formatearMonto($fila['monto_capex'] ?? null) }}</td>

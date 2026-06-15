@@ -3,6 +3,7 @@
 namespace App\Console;
 
 use App\Support\Interbanking\InterbankingCalendarioSync;
+use Carbon\Carbon;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
 
@@ -64,6 +65,22 @@ class Kernel extends ConsoleKernel
             ->runInBackground()
             ->withoutOverlapping(120)
             ->when(fn () => (bool) config('rendicion_estacionamiento_anita.auditoria_diaria.habilitada', false));
+
+        $schedule->command('gastronomia:conciliacion-diaria-reporte', [
+            '--fecha-desde' => Carbon::yesterday()->toDateString(),
+            '--fecha-hasta' => Carbon::yesterday()->toDateString(),
+            '--enviar-mail',
+            '--requiere-jornada-cerrada',
+        ])
+            ->dailyAt((string) config('gastronomia.conciliacion_diaria_reporte.hora', '08:00'))
+            ->runInBackground()
+            ->withoutOverlapping(120)
+            ->when(fn () => (bool) config('gastronomia.conciliacion_diaria_reporte.habilitada', true));
+
+        $intervaloMin = max(5, (int) config('contable_cierre.job_intervalo_minutos', 15));
+        $schedule->command('contable:procesar-aperturas-periodo')
+            ->cron('*/'.$intervaloMin.' * * * *')
+            ->withoutOverlapping(10);
     }
 
     /**

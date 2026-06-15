@@ -427,9 +427,10 @@ final class EstacionamientoFacturaMedioPagoService
                     continue;
                 }
 
-                Asiento_Movimiento::query()
-                    ->whereKey((int) $mov->id)
-                    ->update(['cuentacontable_id' => $contableNuevo]);
+                $movimiento = Asiento_Movimiento::query()->find((int) $mov->id);
+                if ($movimiento !== null) {
+                    $movimiento->update(['cuentacontable_id' => $contableNuevo]);
+                }
             }
         }
     }

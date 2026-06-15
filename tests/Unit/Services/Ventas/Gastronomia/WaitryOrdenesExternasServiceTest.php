@@ -189,6 +189,54 @@ class WaitryOrdenesExternasServiceTest extends TestCase
         $this->assertSame(5400.0, $lineas[0]['precio_unitario']);
     }
 
+    /**
+     * Regresión cierre jornada Kandiko 13/06/2026: getordersdetails trae externalCode numérico
+     * en el ítem padre (1440341) y el SKU Anita en la variación (V0942).
+     */
+    public function test_extraer_lineas_ignora_external_code_numerico_waitry_y_usa_variacion(): void
+    {
+        $svc = $this->app->make(WaitryOrdenesExternasService::class);
+        $orden = [
+            'orderId' => 17707446,
+            'paid' => true,
+            'orderItems' => [
+                [
+                    'count' => 2,
+                    'price' => 5400.0,
+                    'paid' => true,
+                    'item' => [
+                        'itemId' => 1456141,
+                        'name' => 'Cerveza Goyeneche',
+                        'price' => 5400.0,
+                        'externalId' => null,
+                        'externalCode' => '1440341',
+                    ],
+                    'orderItemVariations' => [
+                        [
+                            'itemVariation' => [
+                                'itemVariationId' => 943256,
+                                'externalCode' => '937435',
+                                'item' => [
+                                    'itemId' => 1456157,
+                                    'name' => 'Goyeneche Blonde',
+                                    'externalId' => 'V0942',
+                                    'externalCode' => 'V0942',
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $lineas = $svc->extraerLineasDesdeOrden($orden, true);
+
+        $this->assertCount(1, $lineas);
+        $this->assertSame('V0942', $lineas[0]['sku']);
+        $this->assertSame('Goyeneche Blonde', $lineas[0]['titulo']);
+        $this->assertSame(2.0, $lineas[0]['cantidad']);
+    }
+
     /** Regresión POS: importación sigue omitiendo ítems ya pagados en orderItems (default). */
     public function test_extraer_lineas_pos_omite_items_pagados_en_order_items_por_defecto(): void
     {

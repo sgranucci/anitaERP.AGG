@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Storage;
 use OwenIt\Auditing\Contracts\Auditable;
 use Illuminate\Support\Str;
 use App\Models\Configuracion\Empresa;
+use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Ventas\Venta;
 use App\Models\Stock\MovimientoStock;
 use App\Models\Caja\Cobranza;
@@ -17,7 +18,8 @@ class Asiento extends Model implements Auditable
     use \OwenIt\Auditing\Auditable;
     protected $fillable = ['empresa_id', 'tipoasiento_id', 'numeroasiento', 'fecha', 'venta_id', 'movimientostock_id',
                             'cobranza_id',
-                            'compra_id', 'caja_movimiento_id', 'ordencompra_id', 'recepcionproveedor_id', 'observacion', 
+                            'compra_id', 'caja_movimiento_id', 'ordencompra_id', 'recepcionproveedor_id',
+                            'comprobante_proveedor_id', 'observacion',
                             'usuario_id'];
     protected $table = 'asiento';
 
@@ -62,6 +64,11 @@ class Asiento extends Model implements Auditable
     public function usuarios()
     {
         return $this->belongsTo(Usuario::class, 'usuario_id');
+    }
+
+    public function comprobante_proveedores()
+    {
+        return $this->belongsTo(Comprobante_Proveedor::class, 'comprobante_proveedor_id');
     }
 
 

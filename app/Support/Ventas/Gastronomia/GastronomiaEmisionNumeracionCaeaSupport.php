@@ -2,6 +2,7 @@
 
 namespace App\Support\Ventas\Gastronomia;
 
+use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Tipotransaccion;
 use App\Repositories\Ventas\VentaRepository;
 use InvalidArgumentException;
@@ -53,5 +54,45 @@ final class GastronomiaEmisionNumeracionCaeaSupport
         }
 
         return $resultado;
+    }
+
+    /**
+     * Reserva número CAEA (compemis) y lo aplica al payload, igual que el POS gastronomía.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return null si ok; mensaje de error si falla la reserva (solo PV mod A)
+     */
+    public static function aplicarReservaNumeracionAlPayload(
+        array &$payload,
+        Puntoventa $puntoventa,
+        Tipotransaccion $tipotransaccion,
+        string $letraComprobante = 'B',
+    ): ?string {
+        if (($puntoventa->modofacturacion ?? '') !== 'A') {
+            return null;
+        }
+
+        if (! empty($payload['numerocomprobante_forzado'])) {
+            $payload['_omitir_numera_anita_fin'] = true;
+
+            return null;
+        }
+
+        $tipoAnita = self::tipoAnitaDesdeTipotransaccion($tipotransaccion);
+        $letra = trim($letraComprobante);
+        if ($letra === '') {
+            $letra = 'B';
+        }
+
+        try {
+            $numero = self::reservarNumeroAnita($tipoAnita, $letra, (string) $puntoventa->codigo);
+        } catch (InvalidArgumentException $e) {
+            return $e->getMessage();
+        }
+
+        $payload['numerocomprobante_forzado'] = $numero;
+        $payload['_omitir_numera_anita_fin'] = true;
+
+        return null;
     }
 }

@@ -1,0 +1,67 @@
+---
+description: Reportes de consulta con filtros GET, paginación en pantalla, links azules y export PDF/Excel/CSV con logos
+globs: resources/views/**/*reporte*/**,resources/views/**/listado*/**,resources/views/exports/**/*.blade.php,app/Exports/**/*.php,app/Http/Controllers/**/*Reporte*Controller.php,app/Http/Controllers/**/*Listado*Controller.php,app/Services/**/*Reporte*.php,app/Queries/**/*Listado*.php,app/Support/**/*ListadoFiltros.php,routes/web.php
+alwaysApply: true
+---
+
+# Reportes de consulta (patrón obligatorio)
+
+Todo **reporte nuevo** o migrado debe seguir el stack de consulta con exportación. Referencias canónicas:
+
+| Módulo | Reporte | Export | PDF |
+|---|---|---|---|
+| Presupuesto | `presupuesto/capex-reporte` | `CapexReporteExport` | `presupuesto/capex_reporte/listado` |
+| Ventas gastronomía | `ventas/gastronomia/canjes/listado-marketing` | `CanjeMarketingListadoExport` | `ventas/gastronomia/canjes/listado_marketing/listado` |
+| Contable | `contable/mayor-concepto` | `MayorConceptoExport` | `contable/mayor_concepto/listado` |
+
+Ver también `index-listado-paginado-export.mdc` (CRUD index) y `listado-filtros-crud.mdc` (filtros inteligentes en ABM).
+
+## UX obligatoria (pantalla)
+
+| Elemento | Patrón |
+|---|---|
+| Formulario | `method="get"` con filtros; botón **Consultar** (`consultar=1` hidden) |
+| Tabla | `id="tabla-paginada"` o `id="tabla-{recurso}"`; thead `#85C1E9`, color texto `#17202A` |
+| Paginación | `LengthAwarePaginator` server-side; footer con `firstItem–lastItem` + `->appends($filtrosQuery)->links()` |
+| Export toolbar | `@include('includes.exportar-tabla-queryparams', ['ruta' => 'listar_{recurso}', 'queryparams' => $filtrosQuery])` |
+| Logos | `EmpresaLogoArchivo::logosCabeceraDesdeColeccion($filas)` sobre la tabla en pantalla |
+| Links azules | `class="text-primary"`, `target="_blank" rel="noopener"`, `origen=modal_consulta&vista=consulta` al ABM cuando hay permiso e ID |
+| Totales | Resumen del filtro completo (no solo la página visible): contador + totales numéricos relevantes |
+
+## Backend
+
+1. **Filtros**: clase `App\Support\{Modulo}\{Recurso}ListadoFiltros` con `resolverDesdeRequest()`, `paraQueryString()`, `tieneCriteriosAplicados()`.
+2. **Controller `index`**: `Request $request`, permiso listar; si `consultar=1` genera datos; paginar en memoria o query según origen.
+3. **Cache sesión** (reportes costosos): guardar resultado con firma de filtros; paginación lee cache sin reprocesar.
+4. **Ruta export**: `Route::get('{modulo}/listar-{recurso}/{formato}', …@exportar)->name('listar_{recurso}');`
+5. **Controller `exportar`**: `ini_set` memoria/tiempo; switch `PDF` / `EXCEL` / `CSV`; redirect al index con filtros si falta formato.
+6. **Export Excel/CSV**: `FromView` + logos fila 1 (`EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion`), título fusionado, thead `#85C1E9`, `freezePane`, `columnWidths`, `columnFormats` en IDs/texto.
+
+## PDF listado
+
+- Vista `{modulo}/{recurso}/listado.blade.php` o `{modulo}/{recurso}_reporte/listado.blade.php`
+- Cabecera: logos, título, `Generado d/m/Y H:i`, subtítulo con filtros activos, contador registros
+- Tabla `.data`: thead `#85C1E9`, filas pares `#f5f5f5`, bordes `#cccccc`, DejaVu Sans 7–8px
+- DomPDF: `legal` + `landscape` salvo excepción documentada
+
+## Partial compartido
+
+- Tabla reutilizable en pantalla, PDF y Excel: `{modulo}/{recurso}/partials/tabla_datos.blade.php`
+- En pantalla: `puede_ver_*` + links azules; en export: links desactivados (`puede_ver_* = false`)
+
+## Prohibido en reportes nuevos
+
+- Form POST que renderiza otra vista (`resultado.blade.php`) sin paginación ni export
+- Tabla con todos los registros en pantalla sin paginar (salvo volumen trivial documentado)
+- Export que ignore filtros activos o exporte solo la página visible
+- PDF/Excel sin cabecera de título, logos ni estilo `#85C1E9` en thead
+
+## Comprobación rápida
+
+```bash
+rg 'exportar-tabla-queryparams' resources/views/{modulo}/{recurso}*/index.blade.php
+rg 'function exportar|function listar' app/Http/Controllers/{Modulo}/*Reporte*Controller.php app/Http/Controllers/{Modulo}/*Listado*Controller.php
+rg 'listar_{recurso}' routes/web.php
+rg '85C1E9' app/Exports resources/views/{modulo}
+php artisan view:cache
+```

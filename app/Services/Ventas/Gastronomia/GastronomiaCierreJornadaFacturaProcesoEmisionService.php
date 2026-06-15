@@ -4,6 +4,8 @@ namespace App\Services\Ventas\Gastronomia;
 
 use App\Models\Stock\MovimientoStock;
 use App\Models\Configuracion\Actividad_Arca;
+use App\Models\Configuracion\Condicioniva;
+use App\Models\Ventas\Cliente;
 use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
 use App\Models\Ventas\GastronomiaCierreJornadaProcesoSnapshot;
 use App\Models\Ventas\JornadaGastronomia;
@@ -23,6 +25,7 @@ use App\Support\Ventas\Gastronomia\CierreJornadaProcesoFacturaRecuperacionSuppor
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoInsumoAjusteSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoJornadaSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoPuntoventaSupport;
+use App\Support\Ventas\Gastronomia\GastronomiaEmisionNumeracionCaeaSupport;
 use App\Support\Ventas\GastronomiaDepositoConfigSupport;
 use App\Support\Ventas\GastronomiaMovimientoStockSupport;
 use App\Support\Ventas\GastronomiaPuntoventaEmisionLock;
@@ -136,8 +139,12 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
         $lotes = $plan['lotes'];
 
         if ($lotes === [] && ($plan['comandas_ajuste'] ?? []) === []) {
-            throw new InvalidArgumentException(
-                'No hay comandas Waitry para facturar ni ajustar con el porcentaje indicado.',
+            return $this->registrarEmisionOmitidaSinComandas(
+                $jornada,
+                $snapshot,
+                $porcentaje,
+                $fechaFactura,
+                $fechaJornada,
             );
         }
 
@@ -171,6 +178,10 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
         $receptor = $this->receptorFacturacionService->datosVentaReceptorConsumidorFinal();
         $receptor['cliente_id'] = (int) config('facturacion.CLIENTE_CONSUMIDOR_FINAL_ID', 1);
 
+        $puntoventaModel = Puntoventa::query()->findOrFail($puntoventaEmisionId);
+        $letraComprobante = $this->letraComprobanteDesdeReceptor($receptor);
+        $emisionCaea = ($puntoventaModel->modofacturacion ?? '') === 'A';
+
         $lockPv = null;
         try {
             $lockPv = GastronomiaPuntoventaEmisionLock::adquirir($puntoventaEmisionId);
@@ -190,21 +201,27 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
                 $puntoventaEmisionId,
                 $receptor,
                 $monedaId,
+                $puntoventaModel,
+                $tipo,
+                $letraComprobante,
+                $emisionCaea,
             ) {
                 $facturasEmitidas = [];
                 $anitaPendientes = [];
                 $vencaePendientes = [];
-                $pisoNumeracionAnita = $this->facturacionGastronomiaService->ultimoNumerocomprobanteAnitaCaeaParaProceso(
-                    Puntoventa::query()->findOrFail($puntoventaEmisionId),
-                    $tipoFacturaId,
-                );
-                $secuenciaNumeracion = count($lotes) > 1
-                    ? new CierreJornadaProcesoFacturaNumeracionSupport(
+                $secuenciaNumeracion = null;
+                if (! $emisionCaea && count($lotes) > 1 && $tipo !== null) {
+                    $pisoNumeracionAnita = $this->facturacionGastronomiaService->ultimoNumerocomprobanteAnitaCaeaParaProceso(
+                        $puntoventaModel,
+                        $tipoFacturaId,
+                    );
+                    $secuenciaNumeracion = new CierreJornadaProcesoFacturaNumeracionSupport(
                         $puntoventaEmisionId,
                         $tipoFacturaId,
                         $pisoNumeracionAnita,
-                    )
-                    : null;
+                        (int) $jornada->empresa_id,
+                    );
+                }
 
                 foreach ($lotes as $lote) {
                     $comandas = $lote['comandas'];
@@ -256,7 +273,17 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
                         'descripcionarticulos' => $items['descripciones'],
                         'omitir_percepciones' => true,
                     ];
-                    if ($secuenciaNumeracion !== null) {
+                    if ($emisionCaea && $tipo !== null) {
+                        $errorNumeracion = GastronomiaEmisionNumeracionCaeaSupport::aplicarReservaNumeracionAlPayload(
+                            $payload,
+                            $puntoventaModel,
+                            $tipo,
+                            $letraComprobante,
+                        );
+                        if ($errorNumeracion !== null) {
+                            throw new InvalidArgumentException($errorNumeracion);
+                        }
+                    } elseif ($secuenciaNumeracion !== null) {
                         $payload['numerocomprobante_forzado'] = $secuenciaNumeracion->siguiente();
                     }
                     $this->receptorFacturacionService->aplicarReceptorAlPayloadFacturacion($payload, $receptor);
@@ -498,6 +525,10 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
         $receptor = $this->receptorFacturacionService->datosVentaReceptorConsumidorFinal();
         $receptor['cliente_id'] = (int) config('facturacion.CLIENTE_CONSUMIDOR_FINAL_ID', 1);
 
+        $puntoventaModel = Puntoventa::query()->findOrFail($puntoventaEmisionId);
+        $letraComprobante = $this->letraComprobanteDesdeReceptor($receptor);
+        $emisionCaea = ($puntoventaModel->modofacturacion ?? '') === 'A';
+
         $ajustePrevio = is_array($recuperacion['ajuste_insumos'] ?? null) ? $recuperacion['ajuste_insumos'] : null;
         $ajusteMovId = (int) ($ajustePrevio['movimientostock_id'] ?? 0);
         $conservarAjuste = $ajusteMovId > 0 && MovimientoStock::query()->whereKey($ajusteMovId)->exists();
@@ -523,6 +554,10 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
                 $monedaId,
                 $conservarAjuste,
                 $ajustePrevio,
+                $puntoventaModel,
+                $tipo,
+                $letraComprobante,
+                $emisionCaea,
             ) {
                 $facturasEmitidas = [];
                 $anitaPendientes = [];
@@ -581,6 +616,17 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
                         'omitir_percepciones' => true,
                         'numerocomprobante_forzado' => $numeroForzado,
                     ];
+                    if ($emisionCaea && $tipo !== null) {
+                        $errorNumeracion = GastronomiaEmisionNumeracionCaeaSupport::aplicarReservaNumeracionAlPayload(
+                            $payload,
+                            $puntoventaModel,
+                            $tipo,
+                            $letraComprobante,
+                        );
+                        if ($errorNumeracion !== null) {
+                            throw new InvalidArgumentException($errorNumeracion);
+                        }
+                    }
                     $this->receptorFacturacionService->aplicarReceptorAlPayloadFacturacion($payload, $receptor);
 
                     $resultadoFactura = $this->facturacionGastronomiaService->emitirComprobanteProcesoCierre($payload);
@@ -783,11 +829,42 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
             return false;
         }
 
+        if (! empty($emision['omitida'])) {
+            return true;
+        }
+
         if (! empty($emision['facturas']) && is_array($emision['facturas'])) {
             return true;
         }
 
         return ! empty($emision['venta_id']);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function registrarEmisionOmitidaSinComandas(
+        JornadaGastronomia $jornada,
+        ?GastronomiaCierreJornadaProcesoSnapshot $snapshot,
+        float $porcentaje,
+        string $fechaFactura,
+        string $fechaJornada,
+    ): array {
+        $emision = CierreJornadaProcesoJornadaSupport::emisionOmitidaPayload($porcentaje);
+        $emision['fecha_factura'] = $fechaFactura;
+        $emision['fecha_jornada'] = $fechaJornada;
+        $this->persistirEmisionEnSnapshot($snapshot, $emision, true);
+
+        return [
+            'ok' => true,
+            'mensaje' => 'No hay comandas Waitry sin facturar ni ajuste de insumos. '
+                .'Se omitió la facturación del proceso; ya puede grabar los asientos contables.',
+            'emision_omitida' => true,
+            'facturas' => [],
+            'total_factura' => 0.,
+            'total_ajuste' => 0.,
+            'jornada_proceso' => $this->contextoJornadaProcesoTrasEmision((int) $jornada->id),
+        ];
     }
 
     /**
@@ -1080,5 +1157,27 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
             ->first();
 
         return CierreJornadaProcesoJornadaSupport::contexto($jornada, $snapshot);
+    }
+
+    /**
+     * @param  array<string, mixed>  $receptor
+     */
+    private function letraComprobanteDesdeReceptor(array $receptor): string
+    {
+        $letra = 'B';
+        $clienteId = (int) ($receptor['cliente_id'] ?? 0);
+
+        if ($clienteId > 0) {
+            $cliente = Cliente::query()->find($clienteId);
+            if ($cliente !== null && $cliente->condicioniva_id) {
+                $letra = (string) (Condicioniva::query()
+                    ->whereKey($cliente->condicioniva_id)
+                    ->value('letra') ?? 'B');
+            }
+        }
+
+        $letra = trim($letra);
+
+        return $letra !== '' ? $letra : 'B';
     }
 }

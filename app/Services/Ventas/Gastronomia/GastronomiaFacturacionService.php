@@ -332,6 +332,10 @@ final class GastronomiaFacturacionService
         $payload['omitir_percepciones'] = true;
 
         $opciones = $this->opcionesEmisionGastronomia();
+        if (! empty($payload['_omitir_numera_anita_fin'])) {
+            $opciones['omitir_numera_anita_fin'] = true;
+            unset($payload['_omitir_numera_anita_fin']);
+        }
         $payload['opciones_emision'] = $opciones;
 
         $resultado = $this->facturacionService->generaComprobanteGeneral($payload);

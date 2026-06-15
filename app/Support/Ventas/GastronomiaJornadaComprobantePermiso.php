@@ -9,7 +9,8 @@ final class GastronomiaJornadaComprobantePermiso
 {
     public static function puedeVerComprobanteCierreTotem(): bool
     {
-        return can('ver-pdf-waitry-gastronomia-caja', false)
+        return can('ver-comprobante-cierre-totem-gastronomia-caja', false)
+            || can('ver-pdf-waitry-gastronomia-caja', false)
             || can('gestionar-jornada-gastronomia', false);
     }
 }

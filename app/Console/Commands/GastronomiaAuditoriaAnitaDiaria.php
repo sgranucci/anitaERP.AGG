@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\ApiAnita;
 use App\Services\Ventas\Gastronomia\GastronomiaAnitaAuditoriaDiariaService;
+use App\Support\Caja\RendicionGastronomiaAuditoriaEmpresasSupport;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 
@@ -27,55 +28,65 @@ class GastronomiaAuditoriaAnitaDiaria extends Command
 
         $fechaOpt = trim((string) ($this->option('fecha') ?? ''));
         $fecha = $fechaOpt !== '' ? $fechaOpt : Carbon::yesterday()->toDateString();
-        $empresaId = $this->option('empresa') !== null ? (int) $this->option('empresa') : null;
+        $empresaOverride = $this->option('empresa') !== null ? (int) $this->option('empresa') : null;
+        $empresas = RendicionGastronomiaAuditoriaEmpresasSupport::empresasVentasAnitaDiaria($empresaOverride);
         $dryRun = (bool) $this->option('dry-run');
         $enviarMail = ! (bool) $this->option('sin-mail');
 
         $this->line('Bridge: '.ApiAnita::urlBridge());
         $this->line(sprintf(
-            'Fecha calendario %s%s%s',
+            'Fecha calendario %s | empresas: %s%s%s',
             $fecha,
+            implode(', ', $empresas),
             $dryRun ? ' | MODO SIMULACIÓN' : '',
             $enviarMail ? '' : ' | sin mail',
         ));
 
-        try {
-            $informe = $service->ejecutar($fecha, $dryRun, $enviarMail, $empresaId);
-        } catch (\Throwable $e) {
-            $this->error($e->getMessage());
+        $hayProblemas = false;
 
-            return self::FAILURE;
+        foreach ($empresas as $empresaId) {
+            $this->newLine();
+            $this->info('Empresa '.$empresaId);
+
+            try {
+                $informe = $service->ejecutar($fecha, $dryRun, $enviarMail, $empresaId);
+            } catch (\Throwable $e) {
+                $this->error($e->getMessage());
+                $hayProblemas = true;
+
+                continue;
+            }
+
+            $pre = $informe['pre']['resumen_global'] ?? [];
+            $post = $informe['post']['resumen_global'] ?? [];
+            $rep = $informe['replicacion'] ?? [];
+
+            $this->table(
+                ['Concepto', 'Antes', 'Después'],
+                [
+                    ['Sin cabecera Anita', (string) ($pre['conteo']['solo_erp'] ?? 0), (string) ($post['conteo']['solo_erp'] ?? 0)],
+                    ['Diferencia importes', (string) ($pre['conteo']['diferencia'] ?? 0), (string) ($post['conteo']['diferencia'] ?? 0)],
+                    ['Replicadas', '—', (string) ($rep['replicadas'] ?? 0)],
+                    ['Delta total ERP−Anita', (string) ($pre['delta_totales']['total'] ?? 0), (string) ($post['delta_totales']['total'] ?? 0)],
+                ],
+            );
+
+            if (! empty($informe['mail_enviado'])) {
+                $this->info('Correo enviado a '.$informe['mail_destino']);
+            } elseif (! empty($informe['mail_error'])) {
+                $this->error('Fallo al enviar correo: '.$informe['mail_error']);
+            } elseif ($informe['requiere_alerta'] ?? false) {
+                $this->comment('Alerta detectada; revise mail o ejecute sin --sin-mail.');
+            } else {
+                $this->info('Sin alertas para empresa '.$empresaId.'.');
+            }
+
+            if ((int) ($post['conteo']['solo_erp'] ?? 0) > 0
+                || (int) ($post['conteo']['diferencia'] ?? 0) > 0
+                || ($rep['errores'] ?? []) !== []) {
+                $hayProblemas = true;
+            }
         }
-
-        $pre = $informe['pre']['resumen_global'] ?? [];
-        $post = $informe['post']['resumen_global'] ?? [];
-        $rep = $informe['replicacion'] ?? [];
-
-        $this->newLine();
-        $this->info('Resumen');
-        $this->table(
-            ['Concepto', 'Antes', 'Después'],
-            [
-                ['Sin cabecera Anita', (string) ($pre['conteo']['solo_erp'] ?? 0), (string) ($post['conteo']['solo_erp'] ?? 0)],
-                ['Diferencia importes', (string) ($pre['conteo']['diferencia'] ?? 0), (string) ($post['conteo']['diferencia'] ?? 0)],
-                ['Replicadas', '—', (string) ($rep['replicadas'] ?? 0)],
-                ['Delta total ERP−Anita', (string) ($pre['delta_totales']['total'] ?? 0), (string) ($post['delta_totales']['total'] ?? 0)],
-            ],
-        );
-
-        if (! empty($informe['mail_enviado'])) {
-            $this->info('Correo enviado a '.$informe['mail_destino']);
-        } elseif (! empty($informe['mail_error'])) {
-            $this->error('Fallo al enviar correo: '.$informe['mail_error']);
-        } elseif ($informe['requiere_alerta'] ?? false) {
-            $this->comment('Alerta detectada; revise mail o ejecute sin --sin-mail.');
-        } else {
-            $this->info('Sin alertas; no se envió correo.');
-        }
-
-        $hayProblemas = (int) ($post['conteo']['solo_erp'] ?? 0) > 0
-            || (int) ($post['conteo']['diferencia'] ?? 0) > 0
-            || ($rep['errores'] ?? []) !== [];
 
         return $hayProblemas ? self::FAILURE : self::SUCCESS;
     }

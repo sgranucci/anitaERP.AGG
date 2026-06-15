@@ -23,6 +23,14 @@ final class KandikoAnitaVentaTipoSupport
 
     public const MODO_FACTURACION_CAEA = 'A';
 
+    /** Tipos Anita de gastronomía Kandiko (excluye FSL = slots). */
+    public const TIPOS_GASTRONOMIA_ANITA = ['FAC', 'FAK', 'NCD', 'NCK'];
+
+    public static function esTipoGastronomiaAnita(string $tipoAnita): bool
+    {
+        return in_array(strtoupper(trim($tipoAnita)), self::TIPOS_GASTRONOMIA_ANITA, true);
+    }
+
     public static function debeUsarTipoVentaAlterno(
         string $tipoErp,
         string $puntoventaCodigo,
@@ -64,6 +72,68 @@ final class KandikoAnitaVentaTipoSupport
         }
 
         return trim($tipoErp);
+    }
+
+    public static function esPvCaeaKandiko(
+        string $puntoventaCodigo,
+        string|int|null $empresaCodigo,
+        ?string $modoFacturacionPuntoventa = null,
+    ): bool {
+        return self::debeUsarTipoVentaAlterno(
+            self::TIPO_NUMERADOR,
+            $puntoventaCodigo,
+            $empresaCodigo,
+            $modoFacturacionPuntoventa,
+        );
+    }
+
+    /**
+     * Clave ERP (FAC-n) para conciliar con cabecera Anita FAK-n o FAC-n en PV CAEA Kandiko.
+     */
+    public static function claveConciliacionDesdeNumero(int $numero): string
+    {
+        return self::TIPO_NUMERADOR.'-'.$numero;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function tiposAnitaEquivalentesFacErp(): array
+    {
+        return [self::TIPO_VENTA_BRIDGE, self::TIPO_NUMERADOR];
+    }
+
+    /**
+     * Indica si una cabecera Anita debe participar de la conciliación del PV indicado.
+     * En sucursal 00031: Kandiko CAEA usa FAK (o FAC legacy); Rebisco ignora FAK.
+     */
+    public static function cabeceraAnitaCorrespondeAlPv(
+        string $tipoAnita,
+        string $puntoventaCodigo,
+        string|int|null $empresaCodigo,
+        ?string $modoFacturacionPuntoventa = null,
+    ): bool {
+        $tipo = strtoupper(trim($tipoAnita));
+        if ($tipo === '') {
+            return false;
+        }
+
+        if (trim((string) $empresaCodigo) === self::EMPRESA_CODIGO && ! self::esTipoGastronomiaAnita($tipo)) {
+            return false;
+        }
+
+        if (self::esPvCaeaKandiko($puntoventaCodigo, $empresaCodigo, $modoFacturacionPuntoventa)) {
+            return in_array($tipo, array_merge(self::tiposAnitaEquivalentesFacErp(), ['NCD', 'NCK']), true);
+        }
+
+        if (
+            self::normalizarSucursal($puntoventaCodigo) === self::SUCURSAL_CAEA
+            && $tipo === self::TIPO_VENTA_BRIDGE
+        ) {
+            return false;
+        }
+
+        return true;
     }
 
     public static function normalizarSucursal(string $codigo): string

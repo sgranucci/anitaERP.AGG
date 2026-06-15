@@ -19,7 +19,7 @@
     $labelText = $label ?? 'Empresas';
     $colLabel = $col_label ?? 'col-lg-3';
     $colInput = $col_input ?? 'col-lg-8';
-    $seleccionados = collect(old('empresa_ids', isset($data) ? $data->usuario_empresas->pluck('id')->all() : []))
+    $seleccionados = collect(old('empresa_ids', $empresa_ids_seleccionados ?? (isset($data) ? $data->usuario_empresas->pluck('id')->all() : [])))
         ->map(fn ($id) => (int) $id)
         ->all();
     if ($empresaUnica && empty($seleccionados) && $empresaUnicaRegistro) {

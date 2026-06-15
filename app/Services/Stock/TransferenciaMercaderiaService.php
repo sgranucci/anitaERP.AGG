@@ -7,6 +7,7 @@ use App\Models\Stock\Tipotransaccion_Stock;
 use App\Repositories\Stock\Tipotransaccion_StockRepositoryInterface;
 use Illuminate\Support\Facades\DB;
 use App\Support\Stock\TransferenciaMercaderiaSignoSupport;
+use App\Support\Contable\PeriodoContableCierreSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -88,6 +89,13 @@ class TransferenciaMercaderiaService
 
         $ahora = Carbon::now();
         $fecha = $ahora->format('Y-m-d');
+
+        PeriodoContableCierreSupport::assertOperacionPermitida(
+            (int) ($depositoSalida->empresa_id ?? 0),
+            $fecha,
+            PeriodoContableCierreSupport::ALCANCE_TRANSFERENCIA
+        );
+
         $lote = (int) $ahora->format('ymdHis');
         $codigoBase = 'TR-'.$ahora->format('YmdHis');
 

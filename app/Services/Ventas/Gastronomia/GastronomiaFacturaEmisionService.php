@@ -535,21 +535,16 @@ final class GastronomiaFacturaEmisionService
                 return 'Tipo de transacción de factura inexistente.';
             }
 
-            $tipoAnita = GastronomiaEmisionNumeracionCaeaSupport::tipoAnitaDesdeTipotransaccion($tipo);
-            $letra = $this->letraComprobanteDesdePayload($payload);
-
-            try {
-                $numero = GastronomiaEmisionNumeracionCaeaSupport::reservarNumeroAnita(
-                    $tipoAnita,
-                    $letra,
-                    (string) $puntoventa->codigo,
-                );
-            } catch (InvalidArgumentException $e) {
-                return $e->getMessage();
+            $errorReserva = GastronomiaEmisionNumeracionCaeaSupport::aplicarReservaNumeracionAlPayload(
+                $payload,
+                $puntoventa,
+                $tipo,
+                $this->letraComprobanteDesdePayload($payload),
+            );
+            if ($errorReserva !== null) {
+                return $errorReserva;
             }
 
-            $payload['numerocomprobante_forzado'] = $numero;
-            $payload['_omitir_numera_anita_fin'] = true;
             $profiler?->marcar('numeracion_caea_reservada');
 
             return null;

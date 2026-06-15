@@ -8,6 +8,7 @@ use App\Models\Caja\InterbankingMovimiento;
 use App\Repositories\Caja\BancoRepositoryInterface;
 use App\Services\Caja\InterbankingMovimientoPersistenciaService;
 use App\Services\Caja\InterbankingService;
+use App\Exceptions\Contable\PeriodoContableCerradoException;
 use Auth;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -159,19 +160,30 @@ class InterbankingMovimientoHistoricoController extends Controller
             ));
         }
 
-        $resultado = $this->movimientoPersistenciaService->sincronizarDesdeApi(
-            $this->interbankingService,
-            $empresaId,
-            trim($validated['account_number']),
-            $bankNumber,
-            $validated['account_type'] ?? 'CC',
-            $validated['currency'] ?? 'ARS',
-            $validated['movement_type'],
-            $validated['date_since'] ?? null,
-            $validated['date_until'] ?? null,
-            200,
-            80
-        );
+        try {
+            $resultado = $this->movimientoPersistenciaService->sincronizarDesdeApi(
+                $this->interbankingService,
+                $empresaId,
+                trim($validated['account_number']),
+                $bankNumber,
+                $validated['account_type'] ?? 'CC',
+                $validated['currency'] ?? 'ARS',
+                $validated['movement_type'],
+                $validated['date_since'] ?? null,
+                $validated['date_until'] ?? null,
+                200,
+                80
+            );
+        } catch (PeriodoContableCerradoException $e) {
+            Session::flash('errores', [$e->getMessage()]);
+
+            return redirect()->route('interbanking_movimientos_persistidos', array_merge(
+                $request->only([
+                    'empresa_id', 'fecha_desde', 'fecha_hasta', 'currency', 'account_number', 'bank_number', 'movement_type',
+                ]),
+                ['abrir_sincronizacion' => 1]
+            ));
+        }
 
         $abrirSincronizacion = false;
         if (! $resultado['ok']) {

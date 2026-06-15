@@ -7,7 +7,9 @@ use App\Services\Stock\Articulo_MovimientoService;
 use App\Repositories\Stock\Tipotransaccion_StockRepositoryInterface;
 use App\Repositories\Ventas\PedidoRepositoryInterface;
 use App\Repositories\Ventas\Pedido_ArticuloRepositoryInterface;
+use App\Models\Stock\Depmae;
 use App\Models\Stock\Talle;
+use App\Support\Contable\PeriodoContableCierreSupport;
 use Auth;
 use DB;
 
@@ -69,6 +71,8 @@ class MovimientoStockService
 		DB::beginTransaction();
 		try 
 		{
+			$this->assertPeriodoContableStock($data);
+
 			$tipotransaccionStockId = $this->resolveTipotransaccionStockId($data);
 			$data['tipotransaccion_stock_id'] = $tipotransaccionStockId;
 
@@ -271,6 +275,24 @@ class MovimientoStockService
 		$this->articulo_movimientoService->deletePorMovimientoStockId($id);
 
 		return $movimientostock;
+	}
+
+	private function assertPeriodoContableStock(array $data): void
+	{
+		$empresaId = (int) ($data['empresa_id'] ?? 0);
+		if ($empresaId <= 0 && ! empty($data['deposito_id'])) {
+			$empresaId = (int) (Depmae::query()->whereKey((int) $data['deposito_id'])->value('empresa_id') ?? 0);
+		}
+
+		if ($empresaId <= 0 || empty($data['fecha'])) {
+			return;
+		}
+
+		PeriodoContableCierreSupport::assertOperacionPermitida(
+			$empresaId,
+			(string) $data['fecha'],
+			PeriodoContableCierreSupport::ALCANCE_STOCK
+		);
 	}
 
 

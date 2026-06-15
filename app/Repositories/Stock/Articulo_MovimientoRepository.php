@@ -56,7 +56,13 @@ class Articulo_MovimientoRepository implements Articulo_MovimientoRepositoryInte
     
     public function updatePorPedidoCombinacionId($pedido_combinacion_id, $data)
     {
-        return $this->model->where('pedido_combinacion_id', $pedido_combinacion_id)->update($data);
+        $actualizados = 0;
+        foreach ($this->model->where('pedido_combinacion_id', $pedido_combinacion_id)->get() as $movimiento) {
+            $movimiento->update($data);
+            $actualizados++;
+        }
+
+        return $actualizados;
     }
 
     public function create(array $data)
@@ -86,24 +92,35 @@ class Articulo_MovimientoRepository implements Articulo_MovimientoRepositoryInte
 
     public function deletePorMovimientoStockId($movimientostock_id)
     {
-        $articulo_movimiento = $this->model->where('movimientostock_id', $movimientostock_id)->delete();
-//        $articulo_movimiento->articulo_movimiento_talles()->forceDelete();
+        $eliminados = 0;
+        foreach ($this->model->where('movimientostock_id', $movimientostock_id)->get() as $movimiento) {
+            $movimiento->delete();
+            $eliminados++;
+        }
 
-  //      return $articulo_movimiento->delete();
+        return $eliminados;
     }
 
     public function deletePorOrdentrabajoId($ordentrabajo_id)
     {
-        $articulo_movimiento = $this->model->where('ordentrabajo_id', $ordentrabajo_id)->delete();
+        $eliminados = 0;
+        foreach ($this->model->where('ordentrabajo_id', $ordentrabajo_id)->get() as $movimiento) {
+            $movimiento->delete();
+            $eliminados++;
+        }
 
-        return ($articulo_movimiento);
+        return $eliminados;
     }
     
     public function deletePorPedido_combinacionId($pedido_combinacion_id)
     {
-        $articulo_movimiento = $this->model->where('pedido_combinacion_id', $pedido_combinacion_id)->delete();
+        $eliminados = 0;
+        foreach ($this->model->where('pedido_combinacion_id', $pedido_combinacion_id)->get() as $movimiento) {
+            $movimiento->delete();
+            $eliminados++;
+        }
 
-        return ($articulo_movimiento);
+        return $eliminados;
     }
 
     private function grabaAnita($medida)

@@ -158,10 +158,11 @@ class Venta extends Model implements Auditable
 
 		static::deleting(function ($venta) {
 			$venta->venta_impuestos()->delete();
-			$venta->venta_emisiones()->delete();
+			foreach ($venta->venta_emisiones as $emision) {
+				$emision->delete();
+			}
 			$venta->venta_exportaciones()->delete();
             $venta->cliente_cuentacorrientes()->delete();
-			$venta->asientos()->delete();
 		});
 	}    
 }

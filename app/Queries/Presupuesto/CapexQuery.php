@@ -65,6 +65,8 @@ class CapexQuery implements CapexQueryInterface
         $empresas = $this->empresaRepository->traeEmpresasAsignadas();
 
         $select = [ 'capex.id as id',
+                    'capex.empresa_id as empresa_id',
+                    'capex.centrocosto_id as centrocosto_id',
                     'capex.codigoproyecto as codigoproyecto',
                     'capex.codigo as codigo',
                     'capex.presupuesto_id as presupuesto_id',

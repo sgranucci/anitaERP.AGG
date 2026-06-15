@@ -30,10 +30,17 @@ class ArticuloProveedorLineasSupport
             ->get()
             ->map(fn (Articulo_Proveedor $linea) => ArticuloProveedorPrecioListaSupport::enriquecerLinea($linea));
 
-        $proveedoresGuardados = $guardados->pluck('proveedor_id')->filter()->map(fn ($id) => (int) $id)->all();
+        $clavesGuardadas = $guardados
+            ->map(static fn (Articulo_Proveedor $linea): string => (int) ($linea->proveedor_id ?? 0).'|'.trim((string) ($linea->codigo_articulo_proveedor ?? '')))
+            ->filter(static fn (string $clave): bool => ! str_ends_with($clave, '|'))
+            ->all();
 
         $precarga = self::precargaDesdeListaPrecio((int) $producto->id, $producto)
-            ->filter(fn (Articulo_Proveedor $linea) => ! in_array((int) $linea->proveedor_id, $proveedoresGuardados, true));
+            ->filter(static function (Articulo_Proveedor $linea) use ($clavesGuardadas): bool {
+                $clave = (int) ($linea->proveedor_id ?? 0).'|'.trim((string) ($linea->codigo_articulo_proveedor ?? ''));
+
+                return $clave === '|' || ! in_array($clave, $clavesGuardadas, true);
+            });
 
         return $guardados->concat($precarga)->values();
     }
@@ -90,10 +97,12 @@ class ArticuloProveedorLineasSupport
         $nombreDefault = $articulo ? (string) ($articulo->descripcion ?? '') : '';
         $barraDefault = $articulo ? (string) ($articulo->codigobarra ?? '') : '';
 
-        $porProveedor = [];
+        $porClave = [];
         foreach ($filas as $r) {
             $provId = (int) $r->proveedor_id;
-            if (isset($porProveedor[$provId])) {
+            $codigo = trim((string) ($r->codigo_articulo_proveedor ?? ''));
+            $clave = $codigo !== '' ? $provId.'|'.$codigo : $provId.'|lista:'.$r->lista_id;
+            if (isset($porClave[$clave])) {
                 continue;
             }
 
@@ -115,9 +124,9 @@ class ArticuloProveedorLineasSupport
                 'nombre' => $r->proveedor_nombre,
             ]);
 
-            $porProveedor[$provId] = ArticuloProveedorPrecioListaSupport::enriquecerLinea($linea, $fechaRef);
+            $porClave[$clave] = ArticuloProveedorPrecioListaSupport::enriquecerLinea($linea, $fechaRef);
         }
 
-        return collect(array_values($porProveedor));
+        return collect(array_values($porClave));
     }
 }

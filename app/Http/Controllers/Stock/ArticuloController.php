@@ -385,47 +385,49 @@ class ArticuloController extends Controller
         // Arma nombre de archivo
         $nombreEtiqueta = 'tmp/eti-'.Str::random(10).'.txt';
 
-        // Agrega programa enviado a la url completa
-        $programa = request()->header('referer');
         $usuario_id = Auth()->id();
-        $modeloetiqueta = $this->seteoModeloetiquetaRepository->buscaSeteoModeloetiqueta($usuario_id, $programa);
+        $modeloetiqueta = $this->seteoModeloetiquetaRepository->buscaSeteoModeloetiqueta(
+            $usuario_id,
+            SeteoSalidaProgramaSupport::STOCK_ARTICULO
+        );
 
-        $etiqueta = '';
-        if ($modeloetiqueta) {
-            $etiqueta = $modeloetiqueta->modeloetiquetas->codigoetiqueta;
-
-            // Busca tags para reemplazar
-            $etiqueta = Str::replace('@sku@', $articulo->sku, $etiqueta, caseSensitive: false);
-            $etiqueta = Str::replace('@npu@', $articulo->numeroparte, $etiqueta, caseSensitive: false);
-            $etiqueta = Str::replace('@codigoproveedor@', ' ', $etiqueta, caseSensitive: false);
-            $etiqueta = Str::replace('@numerorecepcion@', ' ', $etiqueta, caseSensitive: false);
-
-            Storage::disk('local')->put($nombreEtiqueta, $etiqueta);
-            $path = Storage::path($nombreEtiqueta);
-
-            // Trae la impresora
-            $seteosalida = $this->seteoSalidaRepository->buscaSeteo($usuario_id, SeteoSalidaProgramaSupport::STOCK_ARTICULO);
-            if (! $seteosalida || ! $seteosalida->salidas) {
-                Storage::disk('local')->delete($nombreEtiqueta);
-
-                return redirect()->back()->with('errores', [
-                    'No hay impresora configurada para artículos. Use «Configura salida» en el listado.',
-                ]);
-            }
-
-            $comando = trim((string) $seteosalida->salidas->comando);
-            if ($comando === '' || ! str_contains($comando, '%s')) {
-                Storage::disk('local')->delete($nombreEtiqueta);
-
-                return redirect()->back()->with('errores', [
-                    'El comando de la impresora configurada debe incluir %s (ruta del archivo de etiqueta).',
-                ]);
-            }
-
-            system(sprintf($comando, $path));
-
-            Storage::disk('local')->delete($nombreEtiqueta);
+        if (! $modeloetiqueta || ! $modeloetiqueta->modeloetiquetas) {
+            return redirect()->back()->with('errores', [
+                'No hay modelo de etiqueta configurado. Use «Configura etiqueta» en el listado.',
+            ]);
         }
+
+        $etiqueta = $modeloetiqueta->modeloetiquetas->codigoetiqueta;
+
+        $etiqueta = Str::replace('@sku@', $articulo->sku, $etiqueta, caseSensitive: false);
+        $etiqueta = Str::replace('@npu@', $articulo->numeroparte, $etiqueta, caseSensitive: false);
+        $etiqueta = Str::replace('@codigoproveedor@', ' ', $etiqueta, caseSensitive: false);
+        $etiqueta = Str::replace('@numerorecepcion@', ' ', $etiqueta, caseSensitive: false);
+
+        Storage::disk('local')->put($nombreEtiqueta, $etiqueta);
+        $path = Storage::path($nombreEtiqueta);
+
+        $seteosalida = $this->seteoSalidaRepository->buscaSeteo($usuario_id, SeteoSalidaProgramaSupport::STOCK_ARTICULO);
+        if (! $seteosalida || ! $seteosalida->salidas) {
+            Storage::disk('local')->delete($nombreEtiqueta);
+
+            return redirect()->back()->with('errores', [
+                'No hay impresora configurada para artículos. Use «Configura salida» en el listado.',
+            ]);
+        }
+
+        $comando = trim((string) $seteosalida->salidas->comando);
+        if ($comando === '' || ! str_contains($comando, '%s')) {
+            Storage::disk('local')->delete($nombreEtiqueta);
+
+            return redirect()->back()->with('errores', [
+                'El comando de la impresora configurada debe incluir %s (ruta del archivo de etiqueta).',
+            ]);
+        }
+
+        system(sprintf($comando, $path));
+
+        Storage::disk('local')->delete($nombreEtiqueta);
 
         return redirect()->back()->with('mensaje', 'El producto seleccionado se imprimió con éxito.');
     }

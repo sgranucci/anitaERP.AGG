@@ -59,7 +59,8 @@ class MayorConceptoMonedaConverter
     }
 
     /**
-     * Filtro equivalente a fl_mon_origen en l-mayorconc.c.
+     * Filtro equivalente a fl_mon_origen en l-mayorconc.c / l-mayor.c:
+     * moneda del reporte siempre visible (aunque cotización 0); otra moneda solo con cotización.
      */
     public function movimientoVisible(
         string $codMonMovimiento,
@@ -74,7 +75,11 @@ class MayorConceptoMonedaConverter
             return $codMov === $codReporte;
         }
 
-        return $codMov !== $codReporte || $cotizacionMovimiento >= 0.01;
+        if ($codMov === $codReporte) {
+            return true;
+        }
+
+        return $cotizacionMovimiento >= 0.01;
     }
 
     public function convertirImporte(

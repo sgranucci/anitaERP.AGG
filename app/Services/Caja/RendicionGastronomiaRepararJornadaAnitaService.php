@@ -3,18 +3,18 @@
 namespace App\Services\Caja;
 
 use App\Models\Caja\RendicionGastronomiaCaja;
+use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
 use App\Models\Ventas\JornadaGastronomia;
-use App\Models\Ventas\Puntoventa;
 use App\Support\Caja\AnitaSync\RendicionGastronomiaAnitaRendgastroSupport;
+use App\Support\Ventas\Gastronomia\CierreJornadaProcesoRendicionAnitaSupport;
 use App\Support\Ventas\GastronomiaTurnoOperativoTotalesSupport;
 use Carbon\Carbon;
-use Illuminate\Support\Collection;
 
 /**
- * Repara rendg_total_z y rendg_tot_nc en Anita por fecha de jornada, empresa y PV CAE.
+ * Repara rendg_total_z y rendg_tot_nc en Anita por fecha de jornada, empresa y PC (rendg_host).
  *
- * Portadora del Z/NC del día: secuencia de turno N → T → M (no depende del orden de carga en caja).
- * Si hay varias cabeceras del mismo turno, desempate por hora y nro_oper.
+ * Z del día = facturación bruta CAE + CAEA de la PC (sin NC). Los campos rendg_tot_fc_caea
+ * por turno se mantienen; solo se actualiza la portadora (turno N → T → M).
  */
 final class RendicionGastronomiaRepararJornadaAnitaService
 {
@@ -29,7 +29,7 @@ final class RendicionGastronomiaRepararJornadaAnitaService
      */
     public function reparar(
         JornadaGastronomia $jornada,
-        ?string $codigoPuntoventaFiltro = null,
+        ?string $identificadorPcFiltro = null,
         bool $dryRun = false,
     ): array {
         if (! $this->anitaSyncService->sincronizacionHabilitada()) {
@@ -45,20 +45,19 @@ final class RendicionGastronomiaRepararJornadaAnitaService
         }
 
         $fechaEntera = (int) Carbon::parse($fechaJornada)->format('Ymd');
-        $puntosVenta = $this->puntosVentaEnJornada($jornada, $codigoPuntoventaFiltro);
+        $cabecerasDia = $this->rendgastroSupport->listarCabecerasEmpresaFechaDetalle($empresaId, $fechaEntera);
+        $pcs = $this->identificadoresPcEnJornada($jornada, $identificadorPcFiltro);
         $resultados = [];
 
-        foreach ($puntosVenta as $pv) {
-            $sucursal = $this->rendgastroSupport->codigoPuntoventaEntero($pv->codigo);
-            if ($sucursal <= 0) {
-                continue;
-            }
+        foreach ($pcs as $identificadorPc) {
+            $cabeceras = array_values(array_filter(
+                $this->rendgastroSupport->filtrarCabecerasPorHost($cabecerasDia, $identificadorPc),
+                fn (object $fila): bool => ! $this->rendgastroSupport->esCabeceraPostCierreWaitry($fila),
+            ));
 
-            $cabeceras = $this->rendgastroSupport->listarCabecerasPorSucursal($empresaId, $fechaEntera, $sucursal);
             if ($cabeceras === []) {
                 $resultados[] = [
-                    'puntoventa' => $pv->codigo,
-                    'sucursal' => $sucursal,
+                    'identificador_pc' => $identificadorPc,
                     'estado' => 'sin_registros_anita',
                     'total_z' => null,
                     'tot_nc' => null,
@@ -69,13 +68,13 @@ final class RendicionGastronomiaRepararJornadaAnitaService
                 continue;
             }
 
-            $totalZ = GastronomiaTurnoOperativoTotalesSupport::totalFacturasSinNotasCreditoPorPuntoventa(
-                (int) $pv->id,
+            $totalZ = GastronomiaTurnoOperativoTotalesSupport::totalFacturasSinNotasCredito(
+                $identificadorPc,
                 $empresaId,
                 $fechaJornada,
             );
-            $totNc = GastronomiaTurnoOperativoTotalesSupport::totalNotasCreditoPorPuntoventa(
-                (int) $pv->id,
+            $totNc = GastronomiaTurnoOperativoTotalesSupport::totalNotasCreditoPorPc(
+                $identificadorPc,
                 $empresaId,
                 $fechaJornada,
             );
@@ -89,14 +88,22 @@ final class RendicionGastronomiaRepararJornadaAnitaService
                 $esPortadora = ! empty($d['portadora']);
                 $z = $esPortadora ? $totalZ : 0.0;
                 $nc = $esPortadora ? $totNc : 0.0;
+                $totFcCaea = null;
+                if ($esPortadora && $z > 0.02) {
+                    $fcCaeaPortadora = round((float) ($portadora->rendg_tot_fc_caea ?? 0), 2);
+                    if ($fcCaeaPortadora > 0.02) {
+                        $totFcCaea = 0.0;
+                    }
+                }
 
                 if (! $dryRun) {
-                    $this->anitaSyncService->actualizarTotalZYNcPorNroOper($nroOper, $z, $nc);
+                    $this->anitaSyncService->actualizarTotalesReparacionPorNroOper($nroOper, $z, $nc, $totFcCaea);
                 }
 
                 $detalle[] = array_merge($d, [
                     'z' => $z,
                     'tot_nc' => $nc,
+                    'fc_caea_limpio' => $totFcCaea,
                 ]);
             }
 
@@ -109,8 +116,8 @@ final class RendicionGastronomiaRepararJornadaAnitaService
             }
 
             $resultados[] = [
-                'puntoventa' => $pv->codigo,
-                'sucursal' => $sucursal,
+                'identificador_pc' => $identificadorPc,
+                'puntoventa' => $identificadorPc,
                 'estado' => $dryRun ? 'simulado' : 'actualizado',
                 'total_z' => $totalZ,
                 'tot_nc' => $totNc,
@@ -122,34 +129,200 @@ final class RendicionGastronomiaRepararJornadaAnitaService
             ];
         }
 
+        if ($identificadorPcFiltro === null) {
+            $legacy = $this->limpiarCabecerasHuérfanas($empresaId, $fechaEntera, $cabecerasDia, $dryRun);
+            if ($legacy !== []) {
+                $resultados[] = $legacy;
+            }
+            $caea = $this->normalizarCamposCaeaSalonYPostCierre($empresaId, $fechaEntera, $cabecerasDia, $dryRun);
+            if ($caea !== []) {
+                $resultados[] = $caea;
+            }
+        }
+
         return $resultados;
     }
 
     /**
-     * @return Collection<int, Puntoventa>
+     * PV CAEA (30/31) en Anita: CIERRE-WAITRY con Z = total_x = post-cierre Waitry solamente.
+     * CAEA de salón no debe quedar en rendg_tot_fc_caea de turnos (ya está en Z de la PC CAE).
+     *
+     * @param  list<object>  $cabecerasDia
+     * @return array<string, mixed>
      */
-    private function puntosVentaEnJornada(JornadaGastronomia $jornada, ?string $codigoFiltro): Collection
+    public function normalizarCamposCaeaSalonYPostCierre(
+        int $empresaId,
+        int $fechaEntera,
+        array $cabecerasDia,
+        bool $dryRun = false,
+    ): array {
+        $detalle = [];
+
+        foreach ($cabecerasDia as $fila) {
+            $nroOper = (int) ($fila->rendg_nro_oper ?? 0);
+            if ($nroOper <= 0) {
+                continue;
+            }
+
+            if ($this->rendgastroSupport->esCabeceraPostCierreWaitry($fila)) {
+                $totalX = round((float) ($fila->rendg_total_x ?? 0), 2);
+                $fcCaea = round((float) ($fila->rendg_tot_fc_caea ?? 0), 2);
+                $z = round((float) ($fila->rendg_total_z ?? 0), 2);
+                $importePostCierre = $totalX > 0 ? $totalX : $fcCaea;
+                if ($importePostCierre <= 0.02) {
+                    continue;
+                }
+                if (abs($z - $importePostCierre) <= 0.02 && abs($fcCaea - $importePostCierre) <= 0.02) {
+                    continue;
+                }
+                if (! $dryRun) {
+                    $this->anitaSyncService->actualizarTotalesReparacionPorNroOper(
+                        $nroOper,
+                        $importePostCierre,
+                        round((float) ($fila->rendg_tot_nc ?? 0), 2),
+                        $importePostCierre,
+                        round((float) ($fila->rendg_tot_nc_caea ?? 0), 2),
+                    );
+                }
+                $detalle[] = [
+                    'nro_oper' => $nroOper,
+                    'host' => CierreJornadaProcesoRendicionAnitaSupport::HOST,
+                    'z_antes' => $z,
+                    'z_esperado' => $importePostCierre,
+                    'fc_caea' => $importePostCierre,
+                ];
+
+                continue;
+            }
+
+            if ($this->rendgastroSupport->esCabeceraEstacionamiento($fila)) {
+                continue;
+            }
+
+            $fcCaea = round((float) ($fila->rendg_tot_fc_caea ?? 0), 2);
+            $ncCaea = round((float) ($fila->rendg_tot_nc_caea ?? 0), 2);
+            if ($fcCaea <= 0.02 && $ncCaea <= 0.02) {
+                continue;
+            }
+
+            if (! $dryRun) {
+                $this->anitaSyncService->actualizarTotalesReparacionPorNroOper(
+                    $nroOper,
+                    round((float) ($fila->rendg_total_z ?? 0), 2),
+                    round((float) ($fila->rendg_tot_nc ?? 0), 2),
+                    0.0,
+                    0.0,
+                );
+            }
+
+            $detalle[] = [
+                'nro_oper' => $nroOper,
+                'host' => trim((string) ($fila->rendg_host ?? '')),
+                'fc_caea_antes' => $fcCaea,
+                'nc_caea_antes' => $ncCaea,
+            ];
+        }
+
+        if ($detalle === []) {
+            return [];
+        }
+
+        return [
+            'identificador_pc' => 'NORMALIZAR-CAEA',
+            'puntoventa' => 'PV-CAEA-SALON',
+            'estado' => $dryRun ? 'caea_simulado' : 'caea_normalizado',
+            'total_z' => null,
+            'tot_nc' => null,
+            'portadora_nro_oper' => null,
+            'portadora_turno' => '—',
+            'portadora_hora' => '—',
+            'cabeceras' => count($detalle),
+            'detalle' => $detalle,
+        ];
+    }
+
+    /**
+     * Anula Z/NC/fc_caea en cabeceras con host legacy (pc-caja*, bingo…) no registradas en configuración.
+     *
+     * @param  list<object>  $cabecerasDia
+     * @return array<string, mixed>
+     */
+    public function limpiarCabecerasHuérfanas(
+        int $empresaId,
+        int $fechaEntera,
+        array $cabecerasDia,
+        bool $dryRun = false,
+    ): array {
+        $hostsConfig = ConfiguracionPuntoventaGastronomia::query()
+            ->where('empresa_id', $empresaId)
+            ->pluck('identificador_pc')
+            ->map(static fn ($host): string => trim((string) $host))
+            ->filter()
+            ->values()
+            ->all();
+
+        $audit = $this->rendgastroSupport->auditarCabecerasHuérfanasLegacy($empresaId, $fechaEntera, $hostsConfig);
+        $detalle = [];
+
+        foreach ($audit['filas_legacy'] as $fila) {
+            $nroOper = (int) ($fila['nro_oper'] ?? 0);
+            if ($nroOper <= 0) {
+                continue;
+            }
+
+            if (! $dryRun) {
+                $this->anitaSyncService->actualizarTotalesReparacionPorNroOper($nroOper, 0.0, 0.0, 0.0);
+            }
+
+            $detalle[] = $fila;
+        }
+
+        if ($detalle === []) {
+            return [];
+        }
+
+        return [
+            'identificador_pc' => 'LEGACY-HUERFANAS',
+            'puntoventa' => 'LEGACY-HUERFANAS',
+            'estado' => $dryRun ? 'legacy_simulado' : 'legacy_limpiado',
+            'total_z' => $audit['rendg_legacy_z'],
+            'tot_nc' => null,
+            'portadora_nro_oper' => null,
+            'portadora_turno' => '—',
+            'portadora_hora' => '—',
+            'cabeceras' => count($detalle),
+            'detalle' => $detalle,
+        ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function identificadoresPcEnJornada(JornadaGastronomia $jornada, ?string $pcFiltro): array
     {
         $rendiciones = RendicionGastronomiaCaja::query()
             ->where('tipo', RendicionGastronomiaCaja::TIPO_TURNO)
             ->where('empresa_id', (int) $jornada->empresa_id)
             ->whereHas('turnoOperativo', fn ($q) => $q->where('jornada_gastronomia_id', (int) $jornada->id))
-            ->with('puntoventaCae')
+            ->with('turnoOperativo')
             ->get();
 
-        $porId = [];
+        /** @var array<string, string> $porPc */
+        $porPc = [];
         foreach ($rendiciones as $rendicion) {
-            $pv = $rendicion->puntoventaCae;
-            if ($pv === null) {
+            $pc = trim((string) ($rendicion->turnoOperativo?->identificador_pc ?? ''));
+            if ($pc === '' || ! preg_match('/^\d{1,3}(?:\.\d{1,3}){3}$/', $pc)) {
                 continue;
             }
-            if ($codigoFiltro !== null && trim($codigoFiltro) !== ''
-                && trim((string) $pv->codigo) !== trim($codigoFiltro)) {
+            if ($pcFiltro !== null && trim($pcFiltro) !== '' && $pc !== trim($pcFiltro)) {
                 continue;
             }
-            $porId[(int) $pv->id] = $pv;
+            $porPc[$pc] = $pc;
         }
 
-        return collect($porId)->sortBy('codigo')->values();
+        $lista = array_values($porPc);
+        sort($lista);
+
+        return $lista;
     }
 }

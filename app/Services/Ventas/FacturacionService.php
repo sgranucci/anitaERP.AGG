@@ -91,6 +91,7 @@ use Auth;
 use DB;
 use App\ApiAnita;
 use App\Support\Ventas\GastronomiaEmisionProfiler;
+use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Ventas\KandikoAnitaVentaTipoSupport;
 use Exception;
 use PDF;
@@ -774,7 +775,11 @@ class FacturacionService
 				$numero = Self::buscaUltimoNumeroComprobante($tipoAnita, $letra, $puntoventa);
 				break;
 			case 'M':
-				$venta = $this->ventaRepository->traeUltimoComprobanteVenta($tipoTransaccion_id, $puntoventa_id);
+				$venta = $this->ventaRepository->traeUltimoComprobanteVenta(
+					$tipoTransaccion_id,
+					$puntoventa_id,
+					(int) ($puntoventa->empresa_id ?? 0) ?: null,
+				);
 				if ($venta)
 					$numero = $venta->numerocomprobante;
 				else	
@@ -1049,7 +1054,8 @@ class FacturacionService
 					// Graba contabilidad
 					Self::grabaAsientoContable($asientoContable, $empresa_id, $fechaFactura, $vta->id, $detalleContable, $centrocosto_id,
 											$moneda_id, $cotizacion, $signo, $cliente->cuentacontable_id,
-											substr($venta['codigo'],0,3), $letra, $puntoventa->codigo, $venta['numerocomprobante']);
+											substr($venta['codigo'],0,3), $letra, $puntoventa->codigo, $venta['numerocomprobante'],
+											$puntoventa->modofacturacion ?? null);
 					
 					// Marca Pedido como facturado
 					$pedido = $this->pedidoRepository->update(['estadopedido' => 'Facturado'], $pedido_id);
@@ -1333,7 +1339,11 @@ class FacturacionService
 					
 					break;
 				case 'M':
-					$venta = $this->ventaRepository->traeUltimoComprobanteVenta($tipoTransaccion_id, $puntoventa_id);
+					$venta = $this->ventaRepository->traeUltimoComprobanteVenta(
+						$tipoTransaccion_id,
+						$puntoventa_id,
+						(int) ($puntoventa->empresa_id ?? 0) ?: null,
+					);
 					if ($venta)
 						$numero = $venta->numerocomprobante;
 					else	
@@ -1541,7 +1551,8 @@ class FacturacionService
 					Self::grabaAsientoContable($asientoContable, $puntoventa->empresa_id, $fechaFactura, $vta->id, 
 											$detalleContable, $centrocosto_id,
 											$moneda_id, $cotizacion, $signo, $cliente->cuentacontable_id,
-											substr($venta['codigo'],0,3), $letra, $puntoventa->codigo, $venta['numerocomprobante']);
+											substr($venta['codigo'],0,3), $letra, $puntoventa->codigo, $venta['numerocomprobante'],
+											$puntoventa->modofacturacion ?? null);
 
 					// Marca Orden de venta como facturada
 					$ordenventa_cuota_id = 0;
@@ -2034,7 +2045,11 @@ class FacturacionService
 						$numero = $numeroForzado - 1;
 					} elseif (! empty($opcionesEmisionNumeracion['anita_modo_minimo'])) {
 						GastronomiaEmisionProfiler::activo()?->marcar('erp_ultimo_numero_inicio');
-						$ultimaVenta = $this->ventaRepository->traeUltimoComprobanteVenta($tipoTransaccion_id, $puntoventa_id);
+						$ultimaVenta = $this->ventaRepository->traeUltimoComprobanteVenta(
+							$tipoTransaccion_id,
+							$puntoventa_id,
+							(int) ($puntoventa->empresa_id ?? 0) ?: null,
+						);
 						$numero = $ultimaVenta ? (int) $ultimaVenta->numerocomprobante : 0;
 						GastronomiaEmisionProfiler::activo()?->marcar('erp_ultimo_numero_fin');
 					} else {
@@ -2047,7 +2062,11 @@ class FacturacionService
 					if ($numeroForzado > 0) {
 						$numero = $numeroForzado - 1;
 					} else {
-						$venta = $this->ventaRepository->traeUltimoComprobanteVenta($tipoTransaccion_id, $puntoventa_id);
+						$venta = $this->ventaRepository->traeUltimoComprobanteVenta(
+							$tipoTransaccion_id,
+							$puntoventa_id,
+							(int) ($puntoventa->empresa_id ?? 0) ?: null,
+						);
 						if ($venta) {
 							$numero = $venta->numerocomprobante;
 						} else {
@@ -2488,7 +2507,11 @@ class FacturacionService
 			}
 			else // Numera manualmente
 			{
-				$venta = $this->ventaRepository->traeUltimoComprobanteVenta($tipoTransaccion_id, $puntoventa_id);
+				$venta = $this->ventaRepository->traeUltimoComprobanteVenta(
+					$tipoTransaccion_id,
+					$puntoventa_id,
+					(int) ($puntoventa->empresa_id ?? 0) ?: null,
+				);
 				if ($venta)
 					$numero = $venta->numerocomprobante;
 				else	
@@ -3064,7 +3087,8 @@ class FacturacionService
 			Self::grabaAsientoContable($asientoContable, $puntoventa->empresa_id, $fechaFactura, $vta->id, 
 									$detalleContable, $centrocosto_id,
 									$moneda_id, $cotizacion, $signo, $cliente->cuentacontable_id,
-									substr($venta['codigo'],0,3), $letra, $puntoventa->codigo, $venta['numerocomprobante']);
+									substr($venta['codigo'],0,3), $letra, $puntoventa->codigo, $venta['numerocomprobante'],
+									$puntoventa->modofacturacion ?? null);
 			}
 
 			$ret = [
@@ -4602,39 +4626,32 @@ class FacturacionService
 		return max(0, (int) $this->buscaUltimoNumeroComprobante($tipoAnita, $letra, $puntoventa));
 	}
 
-	// Busca el ultimo numero de comprobante
-	private function buscaUltimoNumeroComprobante($tipo, $letra, $puntoventa)
+	// Busca el ultimo numero de comprobante (Anita venta, acotado por tipo bridge de la empresa).
+	private function buscaUltimoNumeroComprobante($tipo, $letra, $puntoventa, ?string $empresaCodigo = null, ?string $modoFacturacion = null)
 	{
-		// Primero saca el tipo de comprobante
-		$apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'list', 
-						'tabla' => 't_comp', 
-						'campos' => '
-							tcomp_tipo_comp
-						' ,
-						'whereArmado' => " WHERE tcomp_clave = '".$tipo."'
-						" );
-		if ($this->flGrabaComprobanteDividido)
-		{
-			$data['path_sistema'] = '/usr2/villafranca';
-		}							
-		$filaTipo = ApiAnita::primeraFilaLista($apiAnita->apiCall($data));
+		$sucursal = is_object($puntoventa) ? (string) ($puntoventa->codigo ?? '') : (string) $puntoventa;
+		$modo = $modoFacturacion ?? (is_object($puntoventa) ? ($puntoventa->modofacturacion ?? null) : null);
 
-		$tipoComp = '01';
-		if ($filaTipo !== null && isset($filaTipo->tcomp_tipo_comp)) {
-			$tipoComp = $filaTipo->tcomp_tipo_comp;
+		if ($empresaCodigo === null && is_object($puntoventa) && ! empty($puntoventa->empresa_id)) {
+			$empresaCodigo = Empresa::query()->whereKey((int) $puntoventa->empresa_id)->value('codigo');
 		}
 
+		$tipoVenta = KandikoAnitaVentaTipoSupport::tipoVentaAnitaBridge(
+			(string) $tipo,
+			$sucursal,
+			$empresaCodigo,
+			$modo,
+		);
+
 		$apiAnita = new ApiAnita();
         $data = array( 'acc' => 'list', 
-						'tabla' => 'venta, t_comp', 
+						'tabla' => 'venta', 
 						'campos' => '
 							max(ven_nro) as ultimonumero
 						' ,
-						'whereArmado' => " WHERE ven_tipo = tcomp_clave AND
-												tcomp_tipo_comp = '".$tipoComp."' AND
+						'whereArmado' => " WHERE ven_tipo = '".$tipoVenta."' AND
 												ven_letra = '".$letra."' AND
-												ven_sucursal = '".$puntoventa->codigo."'
+												ven_sucursal = '".$sucursal."'
 						" );
 		if ($this->flGrabaComprobanteDividido)
 		{
@@ -5121,8 +5138,17 @@ class FacturacionService
 	}
 
 	private function grabaAsientoContable($asientocontable, $empresa_id, $fecha, $venta_id, $observacion, $centrocosto_id,
-											$moneda_id, $cotizacion, $signo, $contrapartida_id, $tipo, $letra, $sucursal, $nro)
+											$moneda_id, $cotizacion, $signo, $contrapartida_id, $tipo, $letra, $sucursal, $nro,
+											?string $modoFacturacionPv = null)
 	{
+		PeriodoContableCierreSupport::assertOperacionPermitida(
+			(int) $empresa_id,
+			(string) $fecha,
+			PeriodoContableCierreSupport::ALCANCE_FACTURACION,
+			null,
+			['modofacturacion_pv' => $modoFacturacionPv]
+		);
+
 		// Busca tipo de asiento de ventas
 		$tipoasiento = $this->tipoasientoRepository->findPorAbreviatura('VTA');
 
@@ -5225,6 +5251,8 @@ class FacturacionService
 			$data['path_sistema'] = '/usr2/villafranca';
 		else
 			$data['path_sistema'] = null;
+
+		$data['modofacturacion_pv'] = $modoFacturacionPv;
 
 		$asiento = $this->asientoRepository->create($data);
 

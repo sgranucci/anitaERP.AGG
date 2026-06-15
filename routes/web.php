@@ -826,7 +826,20 @@ Route::post('contable/copiar_asiento', 'Contable\AsientoController@copiarAsiento
 Route::post('contable/revertir_asiento', 'Contable\AsientoController@revertirAsiento')->name('revertir_asiento');
 
 Route::get('contable/mayor-concepto', 'Contable\MayorConceptoController@index')->name('mayor_concepto');
-Route::post('contable/mayor-concepto/generar', 'Contable\MayorConceptoController@generar')->name('generar_mayor_concepto');
+Route::get('contable/listar-mayor-concepto/{formato}', 'Contable\MayorConceptoController@exportar')->name('listar_mayor_concepto');
+
+Route::get('contable/mayor-plano-cuenta', 'Contable\MayorPlanoCuentaController@index')->name('mayor_plano_cuenta');
+Route::get('contable/listar-mayor-plano-cuenta/{formato}', 'Contable\MayorPlanoCuentaController@exportar')->name('listar_mayor_plano_cuenta');
+
+Route::get('contable/cierre-periodo', 'Contable\PeriodoCierreContableController@index')->name('cierre_periodo_contable');
+Route::post('contable/cierre-periodo/cerrar', 'Contable\PeriodoCierreContableController@cerrar')->name('ejecutar_cierre_periodo_contable');
+
+Route::get('contable/apertura-periodo', 'Contable\AperturaPeriodoContableController@index')->name('apertura_periodo_contable');
+Route::post('contable/apertura-periodo/solicitar', 'Contable\AperturaPeriodoContableController@solicitar')->name('solicitar_apertura_periodo_contable');
+Route::post('contable/apertura-periodo/{id}/aprobar', 'Contable\AperturaPeriodoContableController@aprobar')->name('aprobar_apertura_periodo_contable');
+Route::get('contable/apertura-periodo/{id}/habilitar', 'Contable\AperturaPeriodoContableController@habilitarDesdeAviso')->name('habilitar_apertura_periodo_contable_desde_aviso');
+Route::post('contable/apertura-periodo/{id}/rechazar', 'Contable\AperturaPeriodoContableController@rechazar')->name('rechazar_apertura_periodo_contable');
+Route::post('contable/apertura-periodo/{id}/revocar', 'Contable\AperturaPeriodoContableController@revocar')->name('revocar_apertura_periodo_contable');
 
 /*
 * Cuentas contables por usuario
@@ -981,11 +994,14 @@ Route::get('stock/recepcion-proveedor/{id}/editar', 'Stock\RecepcionProveedorCon
 Route::put('stock/recepcion-proveedor/{id}', 'Stock\RecepcionProveedorController@actualizar')->name('actualizar_recepcion_proveedor');
 Route::post('stock/recepcion-proveedor/{id}/confirmar', 'Stock\RecepcionProveedorController@confirmar')->name('confirmar_recepcion_proveedor');
 Route::get('stock/recepcion-proveedor/api/precarga-oc', 'Stock\RecepcionProveedorController@apiPrecargaOc')->name('recepcion_proveedor_precarga_oc');
+Route::get('stock/recepcion-proveedor/api/buscar-oc-pendientes', 'Stock\RecepcionProveedorController@apiBuscarOcPendientes')->name('recepcion_proveedor_buscar_oc_pendientes');
 Route::get('stock/listarecepcionproveedor/{formato?}/{busqueda?}', 'Stock\RecepcionProveedorController@listar')->name('lista_recepcion_proveedor');
 Route::get('stock/recepcion-proveedor/{id}/com-pdf', 'Stock\RecepcionProveedorController@imprimirCom')->name('recepcion_proveedor_com_pdf');
 Route::get('stock/recepcion-proveedor/{id}/devolucion', 'Stock\RecepcionProveedorController@crearDevolucion')->name('crear_devolucion_recepcion_proveedor');
 Route::post('stock/recepcion-proveedor/{id}/devolucion', 'Stock\RecepcionProveedorController@guardarDevolucion')->name('guardar_devolucion_recepcion_proveedor');
 Route::post('stock/recepcion-proveedor/{id}/anular', 'Stock\RecepcionProveedorController@anular')->name('anular_recepcion_proveedor');
+Route::delete('stock/recepcion-proveedor/{id}', 'Stock\RecepcionProveedorController@eliminar')->name('eliminar_recepcion_proveedor');
+Route::post('stock/recepcion-proveedor/ocr-preview', 'Stock\RecepcionProveedorController@procesarOcrPreview')->name('recepcion_proveedor_ocr_preview');
 Route::post('stock/recepcion-proveedor/{id}/ocr', 'Stock\RecepcionProveedorController@subirOcr')->name('recepcion_proveedor_ocr');
 Route::get('configuracion/recepcion-proveedor', 'Configuracion\ConfiguracionRecepcionProveedorController@index')->name('configuracion_recepcion_proveedor');
 Route::put('configuracion/recepcion-proveedor', 'Configuracion\ConfiguracionRecepcionProveedorController@actualizar')->name('actualizar_configuracion_recepcion_proveedor');
@@ -1295,6 +1311,9 @@ Route::post('ventas/gastronomia/canjes/cliente-vip/sincronizar-anita', 'Ventas\C
 Route::get('ventas/gastronomia/canjes/cliente-vip/{id}/editar', 'Ventas\ClienteVipGastronomiaController@editar')->name('editar_cliente_vip_gastronomia');
 Route::put('ventas/gastronomia/canjes/cliente-vip/{id}', 'Ventas\ClienteVipGastronomiaController@actualizar')->name('actualizar_cliente_vip_gastronomia');
 Route::delete('ventas/gastronomia/canjes/cliente-vip/{id}', 'Ventas\ClienteVipGastronomiaController@eliminar')->name('eliminar_cliente_vip_gastronomia');
+
+Route::get('ventas/gastronomia/canjes/listado-marketing', 'Ventas\CanjeMarketingListadoController@index')->name('canje_marketing_listado')->middleware('modo.consulta');
+Route::get('ventas/lista-canje-marketing-gastronomia/{formato}', 'Ventas\CanjeMarketingListadoController@exportar')->name('lista_canje_marketing_gastronomia');
 
 Route::get('ventas/gastronomia/canjes/proceso-facturacion', 'Ventas\CanjeMarketingProcesoFacturacionController@index')->name('canje_marketing_proceso_facturacion');
 Route::prefix('ventas/gastronomia/canjes/api')->group(function () {
@@ -3083,8 +3102,8 @@ Route::get('presupuesto/leerescenario/{escenario_id}', 'Presupuesto\PresupuestoC
 Route::get('presupuesto/capex', 'Presupuesto\CapexController@index')->name('consultar_capex');
 Route::get('presupuesto/capex/crear', 'Presupuesto\CapexController@crear')->name('crear_capex');
 Route::post('presupuesto/capex', 'Presupuesto\CapexController@guardar')->name('guardar_capex');
-Route::get('presupuesto/capex/{id}/editar', 'Presupuesto\CapexController@editar')->name('editar_capex');
-Route::put('presupuesto/capex/{id}', 'Presupuesto\CapexController@actualizar')->name('actualizar_capex');
+Route::get('presupuesto/capex/{id}/editar', 'Presupuesto\CapexController@editar')->name('editar_capex')->middleware('modo.consulta');
+Route::put('presupuesto/capex/{id}', 'Presupuesto\CapexController@actualizar')->name('actualizar_capex')->middleware('modo.consulta');
 Route::delete('presupuesto/capex/{id}', 'Presupuesto\CapexController@eliminar')->name('eliminar_capex');
 
 Route::get('presupuesto/actualizaestadocapex/{estadocapex}/{capex_id}', 'Presupuesto\CapexController@actualizaEstadoCapex')->name('actualiza_solo_capex');

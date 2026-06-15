@@ -1,0 +1,48 @@
+---
+description: Gastronomía POS — "fichar" = facturar; diagnóstico vía log de emisión ARCA (no turnos)
+globs: app/Services/Ventas/Gastronomia/**,app/Http/Controllers/Ventas/Gastronomia*,storage/logs/**,config/gastronomia.php
+alwaysApply: false
+---
+
+# Diagnóstico facturación gastronomía (ARCA)
+
+Cuando el operador reporta que **no puede fichar** en un PV gastronomía, interpretar **fichar = emitir factura/comprobante en el POS**, no habilitar turno ni jornada.
+
+## Orden de investigación
+
+1. **Log de emisión**: buscar `gastronomia.emitir_factura.fallo` en `storage/logs/laravel.log`.
+2. Campos clave del contexto: `pv_intentado`, `usa_caea`, `clase_error`, `msg`, IP/host del POS.
+3. **PV**: distinguir `puntoventa.id` (BD) vs **código ARCA** (`00003`, `00008`, etc.). No confundir id 12 con “PV 12”.
+4. Config por local: `configuracion_puntoventa_gastronomia` → `puntoventa_cae_id` / `puntoventa_caea_id`.
+5. Failover CAEA: `ArcaFailoverStore` + monitor (`arca-failover-monitor.mdc`), no turnos huérfanos.
+
+## No usar como causa principal (sin evidencia en log)
+
+- Turnos operativos / habilitación de mozo (`turno_operativo_gastronomia`).
+- Facturas huérfanas de cierre de jornada.
+- Bloqueos de cubiertos o apertura de mesa.
+
+Esos flujos aplican a **apertura de cuenta** o **cierre**, no al rechazo de `FECAESolicitar`.
+
+## Mensajes típicos y significado
+
+| Log / mensaje | Causa real |
+|---|---|
+| `[500] Error interno de aplicación` | Caída/intermitencia WSFE → **transporte**, reintento CAEA |
+| `[501] Error interno de base de datos` | Idem |
+| `10015 Falta dato obligatorio` | Datos del comprobante → **datos**, corregir payload |
+| `No pudo numerar comprobate` | Numeración WSFE; revisar secuencia/PV; puede reintentar CAEA según clasificación |
+
+## Prohibido
+
+- Diagnosticar “datos inválidos” si `clase_error` debería ser transporte por `[500]`/`[501]`.
+- Mezclar PV por id interno sin verificar código ARCA y nombre del local.
+- Proponer fix de turnos cuando el log apunta a `emitir_factura.fallo`.
+
+## Comprobación rápida
+
+```bash
+rg "gastronomia.emitir_factura.fallo" storage/logs/laravel.log | tail -20
+rg "pv_intentado|usa_caea|clase_error" storage/logs/laravel.log
+php artisan tinker --execute="echo json_encode(\\App\\Support\\Arca\\ArcaFailoverStore::leerEstado());"
+```

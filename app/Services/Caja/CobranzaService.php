@@ -30,6 +30,7 @@ use App\Repositories\Configuracion\Retencion_CobranzaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Caja\CobranzaNumeracionTransaccion;
+use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Services\Caja\CobranzaDescuentoNotaCreditoService;
 use App\Services\Ordenventa\OrdenventaService;
 use App\Models\Configuracion\Empresa;
@@ -143,6 +144,12 @@ class CobranzaService
 	{
 		session(['empresa_id' => $request->empresa_id]);
 		$data = $request->all();
+
+		PeriodoContableCierreSupport::assertOperacionPermitida(
+			(int) ($data['empresa_id'] ?? 0),
+			(string) ($data['fecha'] ?? date('Y-m-d')),
+			PeriodoContableCierreSupport::ALCANCE_COBRANZA
+		);
 
    		// Crea estado
 	   	$data['fechas'][] = Carbon::now();
@@ -332,6 +339,12 @@ class CobranzaService
     {
         session(['empresa_id' => $request->empresa_id]);
 		$data = $request->all();
+
+		PeriodoContableCierreSupport::assertOperacionPermitida(
+			(int) ($data['empresa_id'] ?? 0),
+			(string) ($data['fecha'] ?? date('Y-m-d')),
+			PeriodoContableCierreSupport::ALCANCE_COBRANZA
+		);
 
 		// Crea estado
 		$data['fechas'][] = Carbon::now();

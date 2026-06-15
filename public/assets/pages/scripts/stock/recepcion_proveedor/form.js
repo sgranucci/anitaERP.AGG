@@ -229,6 +229,18 @@
         html += '<input type="hidden" name="items[' + idx + '][descuento]" value="' + (item.descuento || 0) + '">';
         html += '<input type="hidden" name="items[' + idx + '][centrocosto_id]" value="' + (item.centrocosto_id || '') + '">';
         html += '<input type="hidden" name="items[' + idx + '][penvp_orden]" value="' + (item.orden || idx + 1) + '">';
+        if (item.ocr_codigo_proveedor) {
+            html += '<input type="hidden" name="items[' + idx + '][ocr_codigo_proveedor]" value="' + escHtml(item.ocr_codigo_proveedor) + '">';
+        }
+        if (item.ocr_descripcion_proveedor) {
+            html += '<input type="hidden" name="items[' + idx + '][ocr_descripcion_proveedor]" value="' + escHtml(item.ocr_descripcion_proveedor) + '">';
+        }
+        if (item.ocr_codigobarra) {
+            html += '<input type="hidden" name="items[' + idx + '][ocr_codigobarra]" value="' + escHtml(item.ocr_codigobarra) + '">';
+        }
+        if (item.ocr_unidad_compra) {
+            html += '<input type="hidden" name="items[' + idx + '][ocr_unidad_compra]" value="' + escHtml(item.ocr_unidad_compra) + '">';
+        }
 
         return html;
     }
@@ -286,25 +298,32 @@
         actualizarLinksArticuloGrilla();
     }
 
-    function cargarOc(mostrarAlertaSiVacio) {
+    function cargarOc(mostrarAlertaSiVacio, opciones) {
+        opciones = opciones || {};
         var numeroOc = parseInt($('#numero_oc_buscar').val(), 10);
-        if (!numeroOc) {
+        var ocId = parseInt(opciones.ordencompra_id || $('#ordencompra_id').val(), 10) || 0;
+        var forzar = !!opciones.forzar;
+
+        if (!ocId && !numeroOc) {
             if (mostrarAlertaSiVacio !== false) {
-                alert('Ingrese número de OC');
+                alert('Ingrese número de OC o elíjala desde la búsqueda');
             }
             return;
         }
         if (cargandoOc) {
             return;
         }
-        if (ultimoNumeroOcCargado === numeroOc && $('#ordencompra_id').val()) {
+        if (!forzar && ultimoNumeroOcCargado === numeroOc && $('#ordencompra_id').val()) {
             return;
         }
         cargandoOc = true;
-        $.getJSON(carpetaBase + '/stock/recepcion-proveedor/api/precarga-oc', { numero_oc: numeroOc })
+        var params = ocId ? { ordencompra_id: ocId } : { numero_oc: numeroOc };
+        $.getJSON(carpetaBase + '/stock/recepcion-proveedor/api/precarga-oc', params)
             .done(function (data) {
-                ultimoNumeroOcCargado = numeroOc;
+                ultimoNumeroOcCargado = data.numeroordencompra || numeroOc;
                 $('#ordencompra_id').val(data.ordencompra_id);
+                $('#numero_oc_buscar').val(data.numeroordencompra || numeroOc);
+                $('#proveedor_id').val(data.proveedor_id || '');
                 $('#proveedor_nombre').val(data.proveedor_nombre);
                 if (data.empresa_id) {
                     $('#empresa_id').val(data.empresa_id);
@@ -319,6 +338,8 @@
                 cargandoOc = false;
             });
     }
+
+    window.recepcionProveedorCargarOc = cargarOc;
 
     function initCargaOcPorTeclado() {
         var $numeroOc = $('#numero_oc_buscar');
@@ -499,24 +520,142 @@
             item.cotizacion = cot > 0 ? cot : 1;
         });
 
-        $('#archivo_ocr').on('change', function () {
-            if (!window.recepcionProveedorId) {
-                alert('Guarde la recepción en borrador antes de subir OCR.');
-                return;
+        function comprimirImagenParaOcr(file) {
+            return new Promise(function (resolve) {
+                if (!file || !file.type || file.type.indexOf('image/') !== 0) {
+                    resolve(file);
+                    return;
+                }
+                var maxAncho = 2400;
+                var calidad = 0.88;
+                var reader = new FileReader();
+                reader.onload = function (ev) {
+                    var img = new Image();
+                    img.onload = function () {
+                        var ancho = img.width;
+                        var alto = img.height;
+                        if (ancho > maxAncho) {
+                            alto = Math.round(alto * (maxAncho / ancho));
+                            ancho = maxAncho;
+                        }
+                        var canvas = document.createElement('canvas');
+                        canvas.width = ancho;
+                        canvas.height = alto;
+                        var ctx = canvas.getContext('2d');
+                        if (!ctx) {
+                            resolve(file);
+                            return;
+                        }
+                        ctx.drawImage(img, 0, 0, ancho, alto);
+                        canvas.toBlob(function (blob) {
+                            if (!blob) {
+                                resolve(file);
+                                return;
+                            }
+                            var nombre = (file.name || 'ocr.jpg').replace(/\.[^.]+$/, '') + '.jpg';
+                            resolve(new File([blob], nombre, { type: 'image/jpeg', lastModified: Date.now() }));
+                        }, 'image/jpeg', calidad);
+                    };
+                    img.onerror = function () {
+                        resolve(file);
+                    };
+                    img.src = ev.target.result;
+                };
+                reader.onerror = function () {
+                    resolve(file);
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function aplicarResultadoOcr(res) {
+            if (res.numero_oc_detectado) {
+                $('#numero_oc_buscar').val(res.numero_oc_detectado);
+                ultimoNumeroOcCargado = res.numero_oc_detectado;
+            } else if (res.numeroordencompra) {
+                $('#numero_oc_buscar').val(res.numeroordencompra);
+                ultimoNumeroOcCargado = res.numeroordencompra;
             }
+            if (res.ordencompra_id) {
+                $('#ordencompra_id').val(res.ordencompra_id);
+            }
+            if (res.proveedor_nombre) {
+                $('#proveedor_nombre').val(res.proveedor_nombre);
+            }
+            if (res.proveedor_id) {
+                $('#proveedor_id').val(res.proveedor_id);
+            }
+            if (res.empresa_id) {
+                $('#empresa_id').val(res.empresa_id);
+            }
+            if (res.lineas && res.lineas.length) {
+                renderItems(res.lineas);
+            }
+            var msg = 'OCR ' + (res.ocr_estado || 'OK');
+            if (res.numero_oc_detectado) {
+                msg += '\nOC detectada: ' + res.numero_oc_detectado;
+            }
+            if (res.ocr_lineas_detectadas) {
+                msg += '\nLíneas detectadas en documento: ' + res.ocr_lineas_detectadas;
+            }
+            if (res.resumen) {
+                msg += '\n' + res.resumen;
+            }
+            alert(msg);
+        }
+
+        function enviarArchivoOcr($input, file) {
             var fd = new FormData();
-            fd.append('archivo', this.files[0]);
+            fd.append('archivo', file);
             fd.append('_token', $('input[name=_token]').val());
+
+            var url;
+            if (window.recepcionProveedorId) {
+                url = carpetaBase + '/stock/recepcion-proveedor/' + window.recepcionProveedorId + '/ocr';
+            } else {
+                url = carpetaBase + '/stock/recepcion-proveedor/ocr-preview';
+                var ocId = parseInt($('#ordencompra_id').val(), 10) || 0;
+                var numeroOc = parseInt($('#numero_oc_buscar').val(), 10) || 0;
+                if (ocId) {
+                    fd.append('ordencompra_id', ocId);
+                }
+                if (numeroOc) {
+                    fd.append('numero_oc', numeroOc);
+                }
+            }
+
+            $input.prop('disabled', true);
             $.ajax({
-                url: carpetaBase + '/stock/recepcion-proveedor/' + window.recepcionProveedorId + '/ocr',
+                url: url,
                 method: 'POST',
                 data: fd,
                 processData: false,
                 contentType: false,
+                timeout: 180000,
             }).done(function (res) {
-                alert('Archivo OCR registrado. Estado: ' + res.ocr_estado);
+                aplicarResultadoOcr(res);
             }).fail(function (xhr) {
-                alert(xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'Error OCR');
+                var err = xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'Error OCR';
+                if (xhr.status === 413) {
+                    err = 'El archivo es demasiado grande para el servidor. Intente de nuevo; la imagen se comprime automáticamente.';
+                }
+                alert(err);
+            }).always(function () {
+                $input.prop('disabled', false).val('');
+            });
+        }
+
+        $('#archivo_ocr').on('change', function () {
+            if (!this.files || !this.files[0]) {
+                return;
+            }
+            var $input = $(this);
+            var fileOriginal = this.files[0];
+            comprimirImagenParaOcr(fileOriginal).then(function (file) {
+                if (file !== fileOriginal && file.size) {
+                    console.log('OCR: imagen comprimida ' + Math.round(fileOriginal.size / 1024) + 'KB → ' + Math.round(file.size / 1024) + 'KB');
+                }
+                enviarArchivoOcr($input, file);
             });
         });
 

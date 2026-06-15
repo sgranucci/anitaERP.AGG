@@ -3,7 +3,8 @@
 namespace App\Support\Caja;
 
 /**
- * PDF de rendición gastronomía (comprobante de caja) vs PDF Waitry (cierre tótem / Z / conciliación).
+ * PDF de rendición gastronomía (comprobante de caja) vs PDF Waitry (export módulo Waitry).
+ * Comprobante cierre tótem en rendiciones: {@see \App\Support\Ventas\GastronomiaJornadaComprobantePermiso}.
  */
 final class RendicionGastronomiaPdfPermiso
 {

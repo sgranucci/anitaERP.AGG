@@ -4,6 +4,7 @@ namespace App\Observers\Ventas;
 
 use App\Models\Ventas\Pedido_Combinacion;
 use App\Services\Ventas\PedidoService;
+use App\Support\Stock\ArticuloMovimientoEliminacionSupport;
 
 class Pedido_CombinacionObserver
 {
@@ -36,6 +37,14 @@ class Pedido_CombinacionObserver
     {
         // Ejecuta cambio de estado del pedido
         $this->pedidoService->estadoPedido($pedidoCombinacion->pedido_id, "update");
+    }
+
+    /**
+     * Handle the pedido_ combinacion "deleting" event.
+     */
+    public function deleting(Pedido_Combinacion $pedidoCombinacion): void
+    {
+        ArticuloMovimientoEliminacionSupport::eliminarPorPedidoCombinacionId((int) $pedidoCombinacion->id);
     }
 
     /**

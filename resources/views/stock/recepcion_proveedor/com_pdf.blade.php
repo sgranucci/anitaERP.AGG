@@ -92,7 +92,7 @@
             <td>{{ $linea->orden }}</td>
             <td><span class="badge">{{ $linea->tipo_linea }}</span></td>
             <td>{{ optional($linea->articulos)->sku }}</td>
-            <td>{{ optional($linea->articulos)->nombre }}</td>
+            <td>{{ optional($linea->articulos)->descripcion }}</td>
             <td class="num">{{ $linea->cantidad_oc !== null ? number_format((float)$linea->cantidad_oc, 4, ',', '.') : '—' }}</td>
             <td class="num">{{ number_format((float)$linea->cantidad, 4, ',', '.') }}</td>
             <td class="num">{{ $linea->precio_ordencompra !== null ? number_format((float)$linea->precio_ordencompra, 4, ',', '.') : '—' }}</td>

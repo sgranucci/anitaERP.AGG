@@ -34,7 +34,7 @@ return new class extends Migration
             'leyenda' => null,
             'modofacturacion' => 'A',
             'estado' => 'A',
-            'webservice' => 'wsfe_v1',
+            'webservice' => 'wsfev1',
             'pathafip' => 'afip.rsa',
             'actividad_arca_id' => null,
             'division' => null,

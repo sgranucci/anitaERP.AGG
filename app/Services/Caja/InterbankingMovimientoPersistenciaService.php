@@ -3,6 +3,7 @@
 namespace App\Services\Caja;
 
 use App\Models\Caja\InterbankingMovimiento;
+use App\Support\Contable\PeriodoContableCierreSupport;
 use Carbon\Carbon;
 use Throwable;
 
@@ -55,7 +56,8 @@ class InterbankingMovimientoPersistenciaService
         string $currency,
         string $movementType,
         array $filasApi,
-        ?Carbon $syncedAt = null
+        ?Carbon $syncedAt = null,
+        bool $omitirValidacionCierre = false
     ): int {
         $syncedAt = $syncedAt ?? now();
         $guardados = 0;
@@ -65,8 +67,6 @@ class InterbankingMovimientoPersistenciaService
                 continue;
             }
 
-            $hash = $this->dedupeHash($empresaId, $accountNumber, $bankNumber, $currency, $movementType, $m);
-
             $processDate = null;
             if (! empty($m['process_date'])) {
                 try {
@@ -75,6 +75,16 @@ class InterbankingMovimientoPersistenciaService
                     $processDate = null;
                 }
             }
+
+            if (! $omitirValidacionCierre && $processDate !== null) {
+                PeriodoContableCierreSupport::assertOperacionPermitida(
+                    $empresaId,
+                    $processDate->format('Y-m-d'),
+                    PeriodoContableCierreSupport::ALCANCE_INTERBANKING
+                );
+            }
+
+            $hash = $this->dedupeHash($empresaId, $accountNumber, $bankNumber, $currency, $movementType, $m);
 
             InterbankingMovimiento::updateOrCreate(
                 ['dedupe_hash' => $hash],
@@ -124,8 +134,18 @@ class InterbankingMovimientoPersistenciaService
         ?string $dateSince,
         ?string $dateUntil,
         int $pageSize = 200,
-        int $maxPaginas = 80
+        int $maxPaginas = 80,
+        bool $omitirValidacionCierre = false
     ): array {
+        if (! $omitirValidacionCierre) {
+            PeriodoContableCierreSupport::assertRangoOperacionPermitido(
+                $empresaId,
+                $dateSince,
+                $dateUntil,
+                PeriodoContableCierreSupport::ALCANCE_INTERBANKING
+            );
+        }
+
         $pageSize = max(1, min(500, $pageSize));
         $filasTotales = 0;
         $paginas = 0;
@@ -164,7 +184,8 @@ class InterbankingMovimientoPersistenciaService
                 $currency,
                 $movementType,
                 $filas,
-                $syncedAt
+                $syncedAt,
+                $omitirValidacionCierre
             );
             $paginas++;
 

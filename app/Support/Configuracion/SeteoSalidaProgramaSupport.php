@@ -189,7 +189,7 @@ class SeteoSalidaProgramaSupport
 
     private static function legacyDesdeReferer(?string $referer, ?string $opcion = null): string
     {
-        $programa = (string) $referer;
+        $programa = self::refererSinQuery((string) $referer);
 
         if (Str::contains($programa, 'pedido')) {
             $programa = 'http://160.132.0.209/anitaERP/public/ventas/repemisionot';
@@ -202,5 +202,17 @@ class SeteoSalidaProgramaSupport
         $urlCompleta = str_replace('/', '_', $programa);
 
         return $urlCompleta.($opcion ? '_'.self::slug($opcion) : '');
+    }
+
+    private static function refererSinQuery(string $referer): string
+    {
+        if ($referer === '') {
+            return '';
+        }
+
+        $referer = Str::before($referer, '?');
+        $referer = Str::before($referer, '#');
+
+        return trim($referer);
     }
 }

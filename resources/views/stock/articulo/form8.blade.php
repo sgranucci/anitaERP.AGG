@@ -8,7 +8,9 @@
 <div id="tab8" class="card form8 tab-content" style="display: none">
     <div class="card-body">
         <p class="text-muted small mb-2">
-            Cat&aacute;logo de compra por proveedor (c&oacute;digos, UM de compra, conversi&oacute;n). El precio y la moneda se consultan de la lista de precios activa y vigente del proveedor; no se guardan en esta tabla.
+            Cat&aacute;logo de compra por proveedor (c&oacute;digos, UM de compra, conversi&oacute;n). Puede cargar varias l&iacute;neas del mismo proveedor con distinto c&oacute;digo de art&iacute;culo (marcas distintas que resuelven al mismo art&iacute;culo ERP).
+            La clave del cat&aacute;logo es <strong>proveedor + c&oacute;digo art&iacute;culo proveedor</strong>.
+            El precio y la moneda se consultan de la lista de precios activa y vigente del proveedor; no se guardan en esta tabla.
             El c&oacute;digo de art&iacute;culo proveedor se sincroniza con la l&iacute;nea vigente de la lista activa cuando existe en ambos lados.
         </p>
         @if ($soloLecturaProveedores && can('editar-compras-articulos', false))

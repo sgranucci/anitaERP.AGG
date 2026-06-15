@@ -10,7 +10,10 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Asigna rendg_total_z en Anita por PC al cierre de jornada (facturación bruta del día, sin NC).
+ * Asigna rendg_total_z en Anita por PC al cierre de jornada.
+ *
+ * Z portadora = facturación bruta del día CAE + CAEA en la PC (sin NC).
+ * Los campos rendg_tot_fc_caea por turno se conservan como desglose.
  *
  * Mientras la jornada no fue presentada en caja, las rendiciones de turno van con Z=0 en Anita.
  * El recálculo (facturación bruta del día por PC → Z solo en la última rendición de esa PC

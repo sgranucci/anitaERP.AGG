@@ -16,8 +16,10 @@ use App\Services\Stock\RecepcionProveedorOrdencompraResolverService;
 use App\Services\Stock\RecepcionProveedorPdfService;
 use App\Services\Stock\RecepcionProveedorService;
 use App\Support\Stock\RecepcionProveedorListadoFiltros;
+use App\Support\Stock\RecepcionProveedorOcPendienteSupport;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 
 class RecepcionProveedorController extends Controller
 {
@@ -69,8 +71,15 @@ class RecepcionProveedorController extends Controller
 
     public function editar(int $id)
     {
-        can('editar-recepcion-proveedor');
         $recepcion = $this->service->buscar($id);
+
+        if ($recepcion->estado === 'BORRADOR') {
+            if (! can('editar-recepcion-proveedor', false) && ! can('actualizar-recepcion-proveedor', false)) {
+                can('editar-recepcion-proveedor');
+            }
+        } else {
+            can('editar-recepcion-proveedor');
+        }
         $empresa_query = $this->empresaRepository->allFiltrado();
         $moneda_query = Moneda::query()->orderBy('nombre')->get();
 
@@ -109,13 +118,17 @@ class RecepcionProveedorController extends Controller
     {
         can('crear-recepcion-proveedor');
 
+        $ordencompraId = (int) $request->input('ordencompra_id', 0);
         $numeroOc = (int) $request->input('numero_oc', 0);
-        if ($numeroOc <= 0) {
-            return response()->json(['error' => 'Número de OC inválido'], 422);
-        }
 
         try {
-            $data = $this->service->precargaDesdeOc($numeroOc);
+            if ($ordencompraId > 0) {
+                $data = $this->ocResolver->resolverPorId($ordencompraId);
+            } elseif ($numeroOc > 0) {
+                $data = $this->service->precargaDesdeOc($numeroOc);
+            } else {
+                return response()->json(['error' => 'Indique número de OC o seleccione una desde AnitaERP'], 422);
+            }
         } catch (\Throwable $e) {
             return response()->json(['error' => $e->getMessage()], 422);
         }
@@ -134,21 +147,79 @@ class RecepcionProveedorController extends Controller
         ]);
     }
 
+    public function apiBuscarOcPendientes(Request $request): JsonResponse
+    {
+        if (! can('crear-recepcion-proveedor', false) && ! can('editar-recepcion-proveedor', false)) {
+            can('crear-recepcion-proveedor');
+        }
+
+        $proveedorId = (int) $request->query('proveedor_id', 0) ?: null;
+        $consulta = $request->query('q');
+        $consulta = is_string($consulta) ? trim($consulta) : null;
+
+        return response()->json(
+            RecepcionProveedorOcPendienteSupport::buscar($proveedorId, $consulta !== '' ? $consulta : null)
+        );
+    }
+
     public function subirOcr(Request $request, int $id): JsonResponse
     {
         can('ocr-recepcion-proveedor');
+
+        return $this->responderOcr($request, fn (UploadedFile $archivo) => $this->ocrService->procesarArchivo($id, $archivo));
+    }
+
+    public function procesarOcrPreview(Request $request): JsonResponse
+    {
+        can('ocr-recepcion-proveedor');
+
+        $ordencompraId = (int) $request->input('ordencompra_id', 0) ?: null;
+        $numeroOc = (int) $request->input('numero_oc', 0) ?: null;
+
+        return $this->responderOcr(
+            $request,
+            fn (UploadedFile $archivo) => $this->ocrService->procesarArchivoPreview($archivo, $ordencompraId, $numeroOc)
+        );
+    }
+
+    /**
+     * @param  callable(UploadedFile): array<string, mixed>  $procesar
+     */
+    private function responderOcr(Request $request, callable $procesar): JsonResponse
+    {
+        /** @var UploadedFile|null $archivo */
+        $archivo = $request->file('archivo');
+        if ($archivo === null || ! $archivo->isValid()) {
+            return response()->json(['error' => $this->mensajeErrorSubidaOcr($archivo)], 422);
+        }
 
         $request->validate([
             'archivo' => 'required|file|mimes:pdf,jpg,jpeg,png|max:10240',
         ]);
 
         try {
-            $resultado = $this->ocrService->procesarArchivo($id, $request->file('archivo'));
+            $resultado = $procesar($archivo);
         } catch (\Throwable $e) {
             return response()->json(['error' => $e->getMessage()], 422);
         }
 
         return response()->json($resultado);
+    }
+
+    private function mensajeErrorSubidaOcr(?UploadedFile $archivo): string
+    {
+        if ($archivo === null) {
+            return 'No se recibió el archivo. Si la foto pesa varios MB, el servidor puede rechazarla '
+                .'(límite PHP: '.ini_get('upload_max_filesize').'). Recargue la página e intente de nuevo.';
+        }
+
+        return match ($archivo->getError()) {
+            UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'El archivo supera el límite de subida del servidor ('
+                .ini_get('upload_max_filesize').'). La imagen debería comprimirse automáticamente; recargue la página (Ctrl+F5) e intente otra vez.',
+            UPLOAD_ERR_PARTIAL => 'La subida se interrumpió. Intente nuevamente.',
+            UPLOAD_ERR_NO_FILE => 'No se seleccionó ningún archivo.',
+            default => 'No se pudo subir el archivo (código '.$archivo->getError().').',
+        };
     }
 
     public function listar(Request $request, $formato = null, $busqueda = null)
@@ -234,5 +305,30 @@ class RecepcionProveedorController extends Controller
 
         return redirect('stock/recepcion-proveedor/'.$id.'/editar')
             ->with('mensaje', 'Recepción anulada. Se revirtió stock, asiento y sincronización Anita.');
+    }
+
+    public function eliminar(Request $request, int $id)
+    {
+        can('actualizar-recepcion-proveedor');
+
+        if ($request->ajax()) {
+            try {
+                $this->service->eliminarBorrador($id);
+
+                return response()->json(['mensaje' => 'ok']);
+            } catch (\Throwable $e) {
+                return response()->json(['error' => $e->getMessage()], 422);
+            }
+        }
+
+        try {
+            $this->service->eliminarBorrador($id);
+        } catch (\Throwable $e) {
+            return redirect('stock/recepcion-proveedor')
+                ->with('mensaje', 'Error al eliminar: '.$e->getMessage());
+        }
+
+        return redirect('stock/recepcion-proveedor')
+            ->with('mensaje', 'Borrador de recepción eliminado.');
     }
 }

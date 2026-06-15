@@ -129,7 +129,14 @@
                     </style>
                     <div class="table-responsive">
                         <table id="tabla-capex-reporte" class="table table-bordered table-hover table-sm mb-0" style="font-size: 0.8rem;">
-                            @include('presupuesto.capex_reporte.partials.tabla_datos', ['filas' => $filasVista])
+                            @include('presupuesto.capex_reporte.partials.tabla_datos', [
+                                'filas' => $filasVista,
+                                'mostrarLinks' => $mostrarLinks ?? true,
+                                'puede_ver_capex' => $puede_ver_capex ?? false,
+                                'puede_ver_empresa' => $puede_ver_empresa ?? false,
+                                'puede_ver_presupuesto' => $puede_ver_presupuesto ?? false,
+                                'puede_ver_centrocosto' => $puede_ver_centrocosto ?? false,
+                            ])
                         </table>
                     </div>
                 @endif

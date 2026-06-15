@@ -81,11 +81,20 @@ Recepciones de proveedores
                                     <i class="fa fa-file-pdf-o text-danger"></i>
                                 </a>
                                 @endcan
-                                @can('editar-recepcion-proveedor')
-                                <a href="{{ url('stock/recepcion-proveedor/'.$row->id.'/editar') }}" class="btn-accion-tabla tooltipsC" title="Editar">
+                                @if (can('editar-recepcion-proveedor', false) || can('actualizar-recepcion-proveedor', false))
+                                <a href="{{ url('stock/recepcion-proveedor/'.$row->id.'/editar') }}" class="btn-accion-tabla tooltipsC" title="{{ $row->estado === 'BORRADOR' ? 'Editar borrador' : 'Ver recepción' }}">
                                     <i class="fa fa-edit"></i>
                                 </a>
-                                @endcan
+                                @endif
+                                @if($row->estado === 'BORRADOR' && can('actualizar-recepcion-proveedor', false))
+                                <form action="{{ route('eliminar_recepcion_proveedor', ['id' => $row->id]) }}" class="d-inline form-eliminar" method="POST">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar borrador">
+                                        <i class="fa fa-trash text-danger"></i>
+                                    </button>
+                                </form>
+                                @endif
                             </td>
                         </tr>
                         @endforeach

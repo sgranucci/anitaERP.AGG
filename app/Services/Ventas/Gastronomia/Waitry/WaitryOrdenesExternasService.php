@@ -1479,19 +1479,54 @@ final class WaitryOrdenesExternasService
         $sku = trim((string) (
             $fila['external_id']
             ?? $fila['externalId']
-            ?? $fila['externalCode']
-            ?? $fila['external_code']
             ?? $item['externalId']
             ?? $item['external_id']
-            ?? $item['externalCode']
-            ?? $item['external_code']
             ?? ''
         ));
         if ($sku !== '') {
             return $sku;
         }
 
-        return $this->extraerSkuDesdeVariacionesWaitry($fila);
+        $skuVariacion = $this->extraerSkuDesdeVariacionesWaitry($fila);
+        if ($skuVariacion !== '') {
+            return $skuVariacion;
+        }
+
+        foreach ([
+            $fila['externalCode'] ?? null,
+            $fila['external_code'] ?? null,
+            $item['externalCode'] ?? null,
+            $item['external_code'] ?? null,
+        ] as $codigo) {
+            $codigo = trim((string) $codigo);
+            if ($codigo !== '' && $this->externalCodeEsSkuCatalogoWaitry($codigo)) {
+                return $codigo;
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * externalCode en getordersdetails suele ser ID interno Waitry (solo dígitos); externalId es el SKU Anita.
+     */
+    private function externalCodeEsSkuCatalogoWaitry(string $codigo): bool
+    {
+        $codigo = mb_strtoupper(trim($codigo), 'UTF-8');
+        if ($codigo === '') {
+            return false;
+        }
+
+        if (GastronomiaSkuCatalogoSupport::skuPermitido($codigo)) {
+            return true;
+        }
+
+        $prefijo = GastronomiaSkuCatalogoSupport::prefijo();
+        if ($prefijo !== '' && str_starts_with($codigo, $prefijo)) {
+            return true;
+        }
+
+        return ! preg_match('/^\d+$/', $codigo);
     }
 
     /**

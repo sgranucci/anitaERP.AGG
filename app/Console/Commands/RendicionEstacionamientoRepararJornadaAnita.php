@@ -14,32 +14,54 @@ class RendicionEstacionamientoRepararJornadaAnita extends Command
                             {--fecha= : Fecha de jornada Y-m-d}
                             {--empresa=1 : empresa_id}
                             {--puntoventa= : Código PV CAE opcional (ej. 00013)}
+                            {--solo-fecha : Repara por fecha sin exigir jornada en ERP (Anita-only)}
                             {--dry-run : Simula sin escribir en Anita}';
 
     protected $description = 'Repara rendg_total_z y rendg_tot_nc en Anita por fecha de jornada, empresa y PV estacionamiento (portadora: turno N, si no T, si no M)';
 
     public function handle(RendicionEstacionamientoRepararJornadaAnitaService $service): int
     {
-        $jornada = $this->resolverJornada();
-        if ($jornada === null) {
-            return self::FAILURE;
-        }
-
         $dryRun = (bool) $this->option('dry-run');
         $pvFiltro = $this->option('puntoventa');
         $pvFiltro = is_string($pvFiltro) && trim($pvFiltro) !== '' ? trim($pvFiltro) : null;
+        $soloFecha = (bool) $this->option('solo-fecha');
 
         $this->line('Bridge: '.ApiAnita::urlBridge());
-        $this->line(sprintf(
-            'Jornada #%d | empresa %d | fecha jornada %s%s',
-            $jornada->id,
-            $jornada->empresa_id,
-            $jornada->fecha_jornada?->format('Y-m-d') ?? '—',
-            $dryRun ? ' | MODO SIMULACIÓN' : '',
-        ));
 
         try {
-            $resultados = $service->reparar($jornada, $pvFiltro, $dryRun);
+            if ($soloFecha) {
+                $empresaId = (int) $this->option('empresa');
+                $fecha = trim((string) $this->option('fecha'));
+                if ($fecha === '') {
+                    $this->error('Con --solo-fecha indique --fecha=Y-m-d.');
+
+                    return self::FAILURE;
+                }
+
+                $this->line(sprintf(
+                    'Modo solo-fecha | empresa %d | fecha %s%s',
+                    $empresaId,
+                    $fecha,
+                    $dryRun ? ' | MODO SIMULACIÓN' : '',
+                ));
+
+                $resultados = $service->repararPorFechaEmpresa($empresaId, $fecha, $pvFiltro, $dryRun);
+            } else {
+                $jornada = $this->resolverJornada();
+                if ($jornada === null) {
+                    return self::FAILURE;
+                }
+
+                $this->line(sprintf(
+                    'Jornada #%d | empresa %d | fecha jornada %s%s',
+                    $jornada->id,
+                    $jornada->empresa_id,
+                    $jornada->fecha_jornada?->format('Y-m-d') ?? '—',
+                    $dryRun ? ' | MODO SIMULACIÓN' : '',
+                ));
+
+                $resultados = $service->reparar($jornada, $pvFiltro, $dryRun);
+            }
         } catch (\Throwable $e) {
             $this->error($e->getMessage());
 

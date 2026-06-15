@@ -96,13 +96,17 @@ class ArticuloProveedorCodigoSyncSupport
     private static function haciaCatalogo(int $articuloId, int $proveedorId, string $codigo): void
     {
         $fila = Articulo_Proveedor::query()
-            ->where('articulo_id', $articuloId)
             ->where('proveedor_id', $proveedorId)
+            ->where('codigo_articulo_proveedor', $codigo)
             ->first();
 
         if (! $fila) {
             self::crearFilaCatalogoDesdeLista($articuloId, $proveedorId, $codigo);
 
+            return;
+        }
+
+        if ((int) $fila->articulo_id !== $articuloId) {
             return;
         }
 
@@ -119,6 +123,15 @@ class ArticuloProveedorCodigoSyncSupport
     {
         $articulo = Articulo::query()->find($articuloId);
         $umId = $articulo ? (int) ($articulo->unidadmedida_id ?? 0) : 0;
+
+        $fila = Articulo_Proveedor::query()
+            ->where('proveedor_id', $proveedorId)
+            ->where('codigo_articulo_proveedor', $codigo)
+            ->first();
+
+        if ($fila) {
+            return;
+        }
 
         Articulo_Proveedor::query()->create([
             'articulo_id' => $articuloId,

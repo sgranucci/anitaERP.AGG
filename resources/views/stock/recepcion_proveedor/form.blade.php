@@ -27,6 +27,7 @@
     );
     $numeroOcBuscar = $cabeceraOld['numero_oc'] ?? '';
     $proveedorNombreForm = $cabeceraOld['proveedor_nombre'] ?? '';
+    $proveedorIdForm = (int) old('proveedor_id', $cabeceraOld['proveedor_id'] ?? optional(optional($recepcion)->proveedores)->id ?? 0) ?: '';
     if ($cabeceraOld['empresa_id'] ?? null) {
         $empresaIdOc = $cabeceraOld['empresa_id'];
     }
@@ -56,7 +57,10 @@
                 'moneda_id' => (int) ($l->moneda_id ?: 1),
                 'cotizacion' => (float) ($l->cotizacion ?: 1),
                 'sku' => optional($l->articulos)->sku ?? '',
-                'descripcion' => optional($l->articulos)->nombre ?? '',
+                'descripcion' => optional($l->articulos)->descripcion
+                    ?? $l->detalle
+                    ?? optional($l->ordencompra_articulos)->detalle
+                    ?? '',
                 'deposito_nombre' => optional($l->depositos)->nombre ?? '',
                 'depositoentrega_id' => optional($l->articulos)->depositoentrega_id ?? null,
                 'coeficiente_articulo' => (float) (optional($l->articulos)->coeficienteconversion ?? 1) ?: 1,
@@ -73,6 +77,7 @@
 @endphp
 
 <input type="hidden" id="empresa_id" name="empresa_id" value="{{ $empresaIdOc }}">
+<input type="hidden" id="proveedor_id" name="proveedor_id" value="{{ $proveedorIdForm }}">
 
 <div class="form-group row">
     <label class="col-lg-2 col-form-label text-right">Nº OC</label>
@@ -81,16 +86,24 @@
             <input type="text" class="form-control" readonly value="{{ optional($recepcion->ordencompras)->numeroordencompra ?? '' }}">
             <input type="hidden" name="ordencompra_id" value="{{ $recepcion->ordencompra_id ?? '' }}">
         @else
-            <input type="number"
-                   id="numero_oc_buscar"
-                   name="numero_oc_buscar"
-                   class="form-control"
-                   placeholder="Número OC"
-                   min="1"
-                   value="{{ old('numero_oc_buscar', $numeroOcBuscar) }}"
-                   autofocus
-                   title="Enter o Tab para cargar la orden de compra">
-            <small class="form-text text-muted">Enter o Tab para cargar la OC.</small>
+            <div class="d-flex flex-nowrap align-items-center" style="gap: 4px;">
+                <button type="button" id="btn-consulta-oc-recepcion-modal" class="btn btn-sm btn-outline-primary flex-shrink-0" title="Buscar OC pendientes en AnitaERP">
+                    <i class="fa fa-search"></i>
+                </button>
+                <input type="number"
+                       id="numero_oc_buscar"
+                       name="numero_oc_buscar"
+                       class="form-control"
+                       placeholder="Número OC"
+                       min="1"
+                       value="{{ old('numero_oc_buscar', $numeroOcBuscar) }}"
+                       autofocus
+                       title="Enter o Tab para cargar la orden de compra"
+                       style="min-width: 0;">
+            </div>
+            <small class="form-text text-muted">
+                Enter o Tab para cargar. Si el remito no trae OC legible, ingrese el número o búsquela con la lupa, cargue la OC y luego suba el OCR para aplicar cantidades.
+            </small>
             <input type="hidden" name="ordencompra_id" id="ordencompra_id" value="{{ old('ordencompra_id', $recepcion->ordencompra_id ?? '') }}">
         @endif
     </div>
@@ -154,7 +167,7 @@
     <label class="col-lg-2 col-form-label text-right">OCR (foto/PDF)</label>
     <div class="col-lg-9">
         <input type="file" id="archivo_ocr" accept=".pdf,.jpg,.jpeg,.png" class="form-control-file">
-        <small class="text-muted">Preparado para carga automatizada por OCR (requiere permiso y variable de entorno).</small>
+        <small class="text-muted">Suba remito o factura (PDF/JPG/PNG). Detecta la OC si es legible; si no, cargue primero la OC y el OCR aplicará cantidades sobre los ítems ya cargados.</small>
     </div>
 </div>
 @endif

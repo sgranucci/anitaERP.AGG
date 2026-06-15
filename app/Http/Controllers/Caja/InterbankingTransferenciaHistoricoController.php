@@ -9,6 +9,7 @@ use App\Repositories\Caja\BancoRepositoryInterface;
 use App\Services\Caja\InterbankingService;
 use App\Services\Caja\InterbankingTransferenciaPersistenciaService;
 use App\Support\Caja\InterbankingTransferenciaComprobanteSupport;
+use App\Exceptions\Contable\PeriodoContableCerradoException;
 use Auth;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -245,15 +246,26 @@ class InterbankingTransferenciaHistoricoController extends Controller
             'credit_currency' => $validated['credit_currency'] ?? null,
         ], fn ($v) => $v !== null && $v !== '');
 
-        $resultado = $this->transferenciaPersistenciaService->sincronizarDesdeApi(
-            $this->interbankingService,
-            $empresaId,
-            $filtrosApi,
-            $validated['date_since'] ?? null,
-            $validated['date_until'] ?? null,
-            100,
-            80
-        );
+        try {
+            $resultado = $this->transferenciaPersistenciaService->sincronizarDesdeApi(
+                $this->interbankingService,
+                $empresaId,
+                $filtrosApi,
+                $validated['date_since'] ?? null,
+                $validated['date_until'] ?? null,
+                100,
+                80
+            );
+        } catch (PeriodoContableCerradoException $e) {
+            Session::flash('errores', [$e->getMessage()]);
+
+            return redirect()->route('interbanking_transferencias_persistidas', array_merge(
+                $request->only([
+                    'empresa_id', 'fecha_desde', 'fecha_hasta', 'debit_currency', 'debit_account_number', 'debit_bank_number',
+                ]),
+                ['abrir_sincronizacion' => 1]
+            ));
+        }
 
         $abrirSincronizacion = false;
         if (! $resultado['ok']) {

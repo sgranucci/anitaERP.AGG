@@ -2,6 +2,7 @@
 
 namespace App\Services\Stock;
 
+use App\Models\Stock\Articulo_Movimiento;
 use App\Support\Stock\ArticuloMovimientoCantidadSignoSupport;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -112,12 +113,10 @@ final class CorregirSignoArticuloMovimientoService
 
             DB::transaction(function () use ($updates) {
                 foreach ($updates as $id => $cantidad) {
-                    DB::table('articulo_movimiento')
-                        ->where('id', $id)
-                        ->update([
-                            'cantidad' => $cantidad,
-                            'updated_at' => now(),
-                        ]);
+                    $movimiento = Articulo_Movimiento::query()->find((int) $id);
+                    if ($movimiento !== null) {
+                        $movimiento->update(['cantidad' => $cantidad]);
+                    }
                 }
             });
 

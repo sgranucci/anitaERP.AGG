@@ -250,7 +250,7 @@ class RecepcionProveedorAnitaBridgeService
                     'recv_nro' => $clave['nro'],
                     'recv_orden' => $orden,
                     'recv_articulo' => $sku,
-                    'recv_desc' => substr((string) ($articulo->nombre ?? ''), 0, 30),
+                    'recv_desc' => substr((string) ($articulo->descripcion ?? ''), 0, 30),
                     'recv_cantidad' => (float) $linea->cantidad * $signo,
                     'recv_precio' => (float) $linea->precio,
                     'recv_dto_art' => (float) ($linea->descuento ?? 0),

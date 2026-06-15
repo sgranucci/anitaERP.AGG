@@ -9,6 +9,7 @@ use App\Support\Compras\ArticuloProveedorPrecioListaSupport;
 use App\Support\Stock\RecepcionProveedorDiferenciaSupport;
 use App\Support\Stock\RecepcionProveedorConversionSupport;
 use App\Support\Stock\RecepcionProveedorDepositoSupport;
+use App\Support\Stock\RecepcionProveedorOcPendienteSupport;
 use App\Support\Stock\RecepcionProveedorParteUnicaSupport;
 use Illuminate\Support\Carbon;
 
@@ -25,27 +26,16 @@ class RecepcionProveedorOrdencompraResolverService
      */
     public function resolverPorNumeroOc(int $numeroOc, int $usuarioId): array
     {
-        $oc = Ordencompra::query()
-            ->with([
-                'empresas', 'proveedores', 'centrocostos',
-                'ordencompra_articulos.articulos', 'ordencompra_articulos.monedas',
-                'ordencompra_articulos.centrocostos_destino',
-            ])
-            ->where('numeroordencompra', $numeroOc)
-            ->first();
+        $oc = $this->buscarOcConRelaciones($numeroOc);
 
         if (! $oc) {
             $resultado = $this->ordencompraAnitaSyncService->traerRegistroDeAnita($numeroOc);
-            if ($resultado === 'importado' || $resultado === 'omitido') {
-                $oc = Ordencompra::query()
-                    ->with([
-                        'empresas', 'proveedores', 'centrocostos',
-                        'ordencompra_articulos.articulos', 'ordencompra_articulos.monedas',
-                        'ordencompra_articulos.centrocostos_destino',
-                    ])
-                    ->where('numeroordencompra', $numeroOc)
-                    ->first();
+            if (in_array($resultado, ['importado', 'omitido', 'lineas_completadas'], true)) {
+                $oc = $this->buscarOcConRelaciones($numeroOc);
             }
+        } elseif ($oc->ordencompra_articulos->isEmpty()) {
+            $this->ordencompraAnitaSyncService->completarLineasFaltantesDesdeAnita($numeroOc);
+            $oc = $this->buscarOcConRelaciones($numeroOc);
         }
 
         if (! $oc) {
@@ -75,6 +65,8 @@ class RecepcionProveedorOrdencompraResolverService
         $orden = 1;
         $proveedorId = (int) $oc->proveedor_id;
         $empresaId = (int) $oc->empresa_id;
+        $recibidosPorLinea = RecepcionProveedorOcPendienteSupport::cantidadesRecibidasPorLineaOc((int) $oc->id);
+
         RecepcionProveedorDepositoSupport::reiniciarCache();
         $depositoIds = [];
         foreach ($oc->ordencompra_articulos as $ocArt) {
@@ -112,7 +104,9 @@ class RecepcionProveedorOrdencompraResolverService
                 );
             }
 
-            $cantidadPendiente = max(0, (float) $ocArt->cantidad);
+            $cantidadOc = (float) $ocArt->cantidad;
+            $recibido = (float) ($recibidosPorLinea[$ocArt->id] ?? 0);
+            $cantidadPendiente = max(0, $cantidadOc - $recibido);
 
             $lineas[] = [
                 'orden' => $orden++,
@@ -120,8 +114,9 @@ class RecepcionProveedorOrdencompraResolverService
                 'ordencompra_articulo_id' => $ocArt->id,
                 'articulo_id' => $ocArt->articulo_id,
                 'sku' => $articulo->sku ?? '',
-                'descripcion' => $articulo->nombre ?? ($ocArt->detalle ?? ''),
-                'cantidad_oc' => (float) $ocArt->cantidad,
+                'descripcion' => $articulo->descripcion ?? ($ocArt->detalle ?? ''),
+                'cantidad_oc' => $cantidadOc,
+                'cantidad_recibida' => $recibido,
                 'cantidad' => $cantidadPendiente,
                 'cantidad_stock' => RecepcionProveedorConversionSupport::cantidadStock($cantidadPendiente, $coefEfectivo),
                 'coeficienteconversion' => $coefEfectivo,
@@ -149,5 +144,17 @@ class RecepcionProveedorOrdencompraResolverService
         }
 
         return $lineas;
+    }
+
+    private function buscarOcConRelaciones(int $numeroOc): ?Ordencompra
+    {
+        return Ordencompra::query()
+            ->with([
+                'empresas', 'proveedores', 'centrocostos',
+                'ordencompra_articulos.articulos', 'ordencompra_articulos.monedas',
+                'ordencompra_articulos.centrocostos_destino',
+            ])
+            ->where('numeroordencompra', $numeroOc)
+            ->first();
     }
 }

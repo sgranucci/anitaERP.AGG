@@ -3,6 +3,7 @@
 namespace App\Services\Compras;
 
 use App\ApiAnita;
+use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Ordencompra_Comprobante;
 use App\Models\Compras\Ordencompra_Comprobante_Cuota;
 use App\Models\Compras\Ordencompra_Historia;
@@ -108,14 +109,84 @@ class OrdencompraAnitaSyncService
     }
 
     /**
-     * @return 'importado'|'omitido'|'sin_datos'
+     * Completa ítems faltantes cuando la cabecera ya está en ERP pero sin líneas en ordencompra_articulo.
+     *
+     * @return int Cantidad de líneas importadas
+     */
+    public function completarLineasFaltantesDesdeAnita(int $numeroOc, ?OrdencompraAnitaSyncContext $ctx = null): int
+    {
+        $ctx ??= $this->nuevoContexto((int) (Auth::id() ?? 1));
+
+        $oc = Ordencompra::query()->where('numeroordencompra', $numeroOc)->first();
+        if (! $oc || $oc->ordencompra_articulos()->exists()) {
+            return 0;
+        }
+
+        $cabecera = $this->leerPendmaep($numeroOc);
+        if ($cabecera === null) {
+            Log::warning('OrdencompraAnitaSync: OC sin ítems en ERP y pendmaep inexistente en Anita', [
+                'numero_oc' => $numeroOc,
+            ]);
+
+            return 0;
+        }
+
+        $clave = AnitaOcClave::desdePendmaep($cabecera);
+        $lineas = $this->leerPendmovp($clave);
+        if ($lineas === []) {
+            Log::warning('OrdencompraAnitaSync: OC sin ítems en ERP y pendmovp vacío en Anita', [
+                'numero_oc' => $numeroOc,
+            ]);
+
+            return 0;
+        }
+
+        $payload = CabeceraFieldMapper::mapAll($cabecera, $ctx);
+        $monedaDefault = $ctx->fkMoneda($cabecera->penmp_cod_mon ?? '1') ?? 1;
+        $movpresupPorInterno = $this->indexarMovpresup($clave);
+        $leyendasPorOrden = $this->indexarOcvley($clave);
+
+        DB::beginTransaction();
+        try {
+            $importadas = $this->importarLineasPendmovp(
+                (int) $oc->id,
+                $lineas,
+                $cabecera,
+                $payload,
+                $movpresupPorInterno,
+                $leyendasPorOrden,
+                $ctx,
+                $monedaDefault,
+            );
+            $this->regenerarCondicionesContratacion((int) $oc->id);
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            throw $e;
+        }
+
+        if ($importadas > 0) {
+            Log::info('OrdencompraAnitaSync: líneas completadas desde Anita', [
+                'numero_oc' => $numeroOc,
+                'ordencompra_id' => $oc->id,
+                'lineas' => $importadas,
+            ]);
+        }
+
+        return $importadas;
+    }
+
+    /**
+     * @return 'importado'|'omitido'|'lineas_completadas'|'sin_datos'
      */
     public function traerRegistroDeAnita(int $numeroOc, ?OrdencompraAnitaSyncContext $ctx = null): string
     {
         $ctx ??= $this->nuevoContexto((int) (Auth::id() ?? 1));
 
         if ($ctx->existeOrdencompraPorNumero($numeroOc)) {
-            return 'omitido';
+            $completadas = $this->completarLineasFaltantesDesdeAnita($numeroOc, $ctx);
+
+            return $completadas > 0 ? 'lineas_completadas' : 'omitido';
         }
 
         $cabecera = $this->leerPendmaep($numeroOc);
@@ -128,6 +199,11 @@ class OrdencompraAnitaSyncService
 
         $clave = AnitaOcClave::desdePendmaep($cabecera);
         $lineas = $this->leerPendmovp($clave);
+        if ($lineas === []) {
+            Log::warning('OrdencompraAnitaSync: importación OC sin líneas pendmovp (posible fallo del bridge Anita)', [
+                'numero_oc' => $numeroOc,
+            ]);
+        }
         $movpresupPorInterno = $this->indexarMovpresup($clave);
         $leyendasPorOrden = $this->indexarOcvley($clave);
         $cuotas = $this->leerOccuota($clave);
@@ -147,33 +223,16 @@ class OrdencompraAnitaSyncService
 
             $monedaDefault = $ctx->fkMoneda($cabecera->penmp_cod_mon ?? '1') ?? 1;
 
-            foreach ($lineas as $linea) {
-                $nroInterno = (int) ($linea->penvp_nro_interno ?? 0);
-                $orden = (int) ($linea->penvp_orden ?? 0);
-                $movp = $movpresupPorInterno[$nroInterno] ?? null;
-                $leyenda = $leyendasPorOrden[$orden] ?? null;
-
-                $lineaPayload = ArticuloLineaFieldMapper::mapAll(
-                    $linea,
-                    $cabecera,
-                    $movp,
-                    $leyenda,
-                    $ctx,
-                    $oc->id,
-                );
-
-                if (empty($lineaPayload['moneda_id'])) {
-                    $lineaPayload['moneda_id'] = $monedaDefault;
-                }
-                if (empty($lineaPayload['centrocostodestino_id'])) {
-                    $lineaPayload['centrocostodestino_id'] = $payload['centrocosto_id'];
-                }
-                if (empty($lineaPayload['fechaentrega'])) {
-                    $lineaPayload['fechaentrega'] = $payload['fechaentrega'] ?? $payload['fecha'];
-                }
-
-                $this->ordencompraArticuloRepository->createDesdeAnita($lineaPayload);
-            }
+            $this->importarLineasPendmovp(
+                (int) $oc->id,
+                $lineas,
+                $cabecera,
+                $payload,
+                $movpresupPorInterno,
+                $leyendasPorOrden,
+                $ctx,
+                $monedaDefault,
+            );
 
             $this->importarComprobantesCuotas($cuotas, $cabecera, $ctx, $oc->id);
             $this->importarHistorias($historias, $ctx, $oc->id, $payload['sector_legajocompra_id'] ?? null);
@@ -432,5 +491,55 @@ class OrdencompraAnitaSyncService
         $oc = $this->ordencompraRepository->find($ordencompraId);
         $texto = OrdencompraCondicionesContratacionGenerator::desdeModelo($oc);
         $this->ordencompraRepository->update(['condiciones_contratacion' => $texto], $ordencompraId);
+    }
+
+    /**
+     * @param  list<object>  $lineas
+     * @param  array<string, mixed>  $payloadCabecera
+     * @param  array<int, object>  $movpresupPorInterno
+     * @param  array<int, object>  $leyendasPorOrden
+     */
+    private function importarLineasPendmovp(
+        int $ordencompraId,
+        array $lineas,
+        object $cabecera,
+        array $payloadCabecera,
+        array $movpresupPorInterno,
+        array $leyendasPorOrden,
+        OrdencompraAnitaSyncContext $ctx,
+        int $monedaDefault,
+    ): int {
+        $importadas = 0;
+
+        foreach ($lineas as $linea) {
+            $nroInterno = (int) ($linea->penvp_nro_interno ?? 0);
+            $orden = (int) ($linea->penvp_orden ?? 0);
+            $movp = $movpresupPorInterno[$nroInterno] ?? null;
+            $leyenda = $leyendasPorOrden[$orden] ?? null;
+
+            $lineaPayload = ArticuloLineaFieldMapper::mapAll(
+                $linea,
+                $cabecera,
+                $movp,
+                $leyenda,
+                $ctx,
+                $ordencompraId,
+            );
+
+            if (empty($lineaPayload['moneda_id'])) {
+                $lineaPayload['moneda_id'] = $monedaDefault;
+            }
+            if (empty($lineaPayload['centrocostodestino_id'])) {
+                $lineaPayload['centrocostodestino_id'] = $payloadCabecera['centrocosto_id'];
+            }
+            if (empty($lineaPayload['fechaentrega'])) {
+                $lineaPayload['fechaentrega'] = $payloadCabecera['fechaentrega'] ?? $payloadCabecera['fecha'];
+            }
+
+            $this->ordencompraArticuloRepository->createDesdeAnita($lineaPayload);
+            $importadas++;
+        }
+
+        return $importadas;
     }
 }

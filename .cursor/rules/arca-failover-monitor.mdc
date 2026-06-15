@@ -1,0 +1,50 @@
+---
+description: Failover CAEA automático ARCA — monitor, store runtime y diagnóstico (no .env manual)
+globs: app/Support/Arca/**,app/Services/Arca/**,app/Support/Ventas/ArcaWsfeEmisionResiliencia.php,config/arca.php,config/arca_wsfe.php,app/Console/Commands/MonitorearConectividadArca.php
+alwaysApply: false
+---
+
+# Failover CAEA ARCA (monitor automático)
+
+En **producción**, el modo CAEA forzado por caída de WSFE **no** se activa editando `.env` (`ARCA_WSFE_FORZAR_MODO_CAEA`). Lo maneja el **monitor automático** vía estado en runtime.
+
+## Fuente de verdad operativa
+
+| Componente | Ubicación |
+|---|---|
+| Estado failover | `storage/app/arca/failover/state.json` (`ArcaFailoverStore`) |
+| Comando cron | `php artisan arca:monitorear-conectividad` |
+| Servicio | `ArcaConectividadMonitorService` |
+| Clasificación errores | `ArcaWsfeEmisionResiliencia::clasificarError()` |
+| Resolución emisión | `ArcaWsfeEmisionResiliencia::forzarModoCaea()` lee store + env manual |
+
+Comentario explícito en `ArcaFailoverStore`: **no modifica `.env`**.
+
+## Probe del monitor
+
+- Método probe: `FECompUltimoAutorizado` (WSFE) o equivalente MTXCA.
+- Histéresis: `ARCA_MONITOR_FALLOS_PARA_ACTIVAR` / `ARCA_MONITOR_OK_PARA_DESACTIVAR` en `config/arca.php`.
+- Si el probe falla por **transporte** → incrementa contador y puede activar failover CAEA.
+- Si el probe responde OK pero `FECAESolicitar` sigue fallando → el POS debe reintentar con CAEA vía `debeReintentarTransaccionConCaea()` (no depende solo del probe).
+
+## Errores internos ARCA = transporte (no datos)
+
+`[500] Error interno de aplicación` y `[501] Error interno de base de datos` son **caída/intermitencia del servicio**, no rechazo del comprobante.
+
+- Clasificar como `CLASE_TRANSPORTE` **antes** de patrones de datos (p. ej. `"no pudo asignar cae"`).
+- Permiten reintento CAEA y notificación al failover store.
+
+## Prohibido al diagnosticar
+
+- Sugerir `ARCA_WSFE_FORZAR_MODO_CAEA=true` en `.env` como solución operativa habitual en producción.
+- Concluir “datos inválidos del comprobante” cuando el log muestra `[500]` / `[501]` error interno.
+- Ignorar `storage/app/arca/failover/state.json` al explicar por qué `usa_caea: false` en emisiones.
+
+## Comprobación rápida
+
+```bash
+cat storage/app/arca/failover/state.json
+rg "arca:monitorear-conectividad" app/Console/Kernel.php
+rg "gastronomia.emitir_factura.fallo" storage/logs/laravel.log
+php artisan test --filter=ArcaWsfeEmisionResilienciaTest
+```

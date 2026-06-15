@@ -330,6 +330,12 @@ class AsientoController extends Controller
         // Modifica la observacion
         $data['observacion'] = ($flRevierte ? 'Revierte asiento ' : 'Copiado de ').$data['numeroasiento'].' '.$data['observacion'];
 
+        if (! empty($fechacopia)) {
+            $data['fecha'] = $fechacopia;
+        }
+
+        $data['alcance_cierre_contable'] = \App\Support\Contable\PeriodoContableCierreSupport::ALCANCE_CONTABLE;
+
         // Graba el asiento
         DB::beginTransaction();
         try

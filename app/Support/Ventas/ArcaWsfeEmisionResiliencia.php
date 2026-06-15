@@ -176,7 +176,6 @@ final class ArcaWsfeEmisionResiliencia
             'rg 4540',
             'rg 4291',
             'wsfe — comprobante no autorizado',
-            'wsfe — fecaesolicitar:',
             'cae denegado',
             'resultado: r',
         ];
@@ -243,12 +242,34 @@ final class ArcaWsfeEmisionResiliencia
             'respuesta vac',
             'respuesta vacía del bridge',
             'no hubo respuesta',
+            // AFIP/ARCA indisponible (error interno del servicio, no rechazo de comprobante)
+            'error interno de base de datos',
+            'error interno de aplicación',
+            '[500]',
+            '[501]',
+        ];
+    }
+
+    /**
+     * Errores HTTP/capa interna de ARCA (caída o intermitencia WSFE/WSAA).
+     * Se evalúan antes de patrones de datos porque suelen venir envueltos en
+     * "No pudo asignar CAE. WSFE — FECAESolicitar: …".
+     *
+     * @return list<string>
+     */
+    private static function patronesErrorInternoArca(): array
+    {
+        return [
+            '[500]',
+            '[501]',
+            'error interno de aplicación',
+            'error interno de base de datos',
         ];
     }
 
     /**
      * Clasifica un mensaje de error en una de las constantes CLASE_*.
-     * Prioridad: sistema > datos > transporte > sin_clasificar.
+     * Prioridad: sistema > error interno ARCA (transporte) > datos > transporte > sin_clasificar.
      */
     public static function clasificarError(?string $mensaje): string
     {
@@ -261,6 +282,12 @@ final class ArcaWsfeEmisionResiliencia
         foreach (self::patronesSistema() as $needle) {
             if (str_contains($m, $needle)) {
                 return self::CLASE_SISTEMA;
+            }
+        }
+
+        foreach (self::patronesErrorInternoArca() as $needle) {
+            if (str_contains($m, $needle)) {
+                return self::CLASE_TRANSPORTE;
             }
         }
 
@@ -360,6 +387,11 @@ final class ArcaWsfeEmisionResiliencia
 
         if (! self::reintentarCaeaSiFallaComunicacion($webservice)) {
             return false;
+        }
+
+        $m = strtolower(trim((string) $mensaje));
+        if ($m !== '' && str_contains($m, 'no pudo numerar comprobate')) {
+            return true;
         }
 
         return self::esErrorTransporte($mensaje);

@@ -1,43 +1,51 @@
-    var nombreModeloEtiqueta;
+function codigoSeteoModeloEtiqueta()
+{
+    if (typeof window.resolverSeteoModeloEtiquetaPrograma === 'function') {
+        return String(window.resolverSeteoModeloEtiquetaPrograma());
+    }
 
-    $(function () {
+    if (typeof window.seteoModeloEtiquetaPrograma !== 'undefined' && window.seteoModeloEtiquetaPrograma !== null) {
+        return String(window.seteoModeloEtiquetaPrograma);
+    }
 
-        //setInterval(imprimirModeloEtiqueta, 2000);
+    return '';
+}
 
+function urlConfigurarModeloEtiqueta()
+{
+    return carpetaBase + '/configuracion/configurarmodeloetiqueta/:programa';
+}
+
+$(function () {
+    imprimirModeloEtiqueta();
+    setTimeout(function () {
         imprimirModeloEtiqueta();
+    }, 300);
+});
 
-    });
+function imprimirModeloEtiqueta()
+{
+    buscarModeloEtiqueta(codigoSeteoModeloEtiqueta());
 
-    function imprimirModeloEtiqueta()
-    {
-        buscarModeloEtiqueta("");
+    setTimeout(function () {
+        var texto = nombreModeloEtiqueta || 'Sin modelo de etiqueta seteado';
+        $('#nombremodeloetiqueta').text(' - Usa etiqueta: ' + texto);
+    }, 300);
+}
 
-        setTimeout(() => {
-            $("#nombremodeloetiqueta").text(" - Usa etiqueta: "+nombreModeloEtiqueta);
-        }, 300);
+function configurarModeloEtiqueta()
+{
+    var programa = codigoSeteoModeloEtiqueta();
+    if (!programa) {
+        alert('No se pudo determinar el programa de etiqueta para esta pantalla.');
+        return false;
     }
-    
-    function configurarModeloEtiqueta()
-    {
-        var programa = "";
 
-        let urlConfigurarModeloetiqueta = route('configurar_modeloetiqueta', ':programa');
-        let url = urlConfigurarModeloetiqueta;
-        url = url.replace(':programa', programa);
-        document.location.href=url;        
-    }
+    var url = urlConfigurarModeloEtiqueta().replace(':programa', encodeURIComponent(programa));
+    var retorno = encodeURIComponent(window.location.href);
 
-    
-    function buscarModeloEtiqueta(programa)
-    {
-        // Actualiza configuracion de salida
-        var listarUri = carpetaBase+"/configuracion/buscarmodeloetiqueta/"+programa;
+    window.location.href = url + '?retorno=' + retorno;
 
-        $.get(listarUri, function(data){
-            if (data.id > 0)
-            {
-                nombreModeloEtiqueta = data.modeloetiquetas.nombre;
-            }
+    return false;
+}
 
-        });
-    }

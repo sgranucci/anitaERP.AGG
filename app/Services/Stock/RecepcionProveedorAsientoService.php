@@ -148,7 +148,6 @@ class RecepcionProveedorAsientoService
             return;
         }
 
-        \DB::table('asiento_movimiento')->where('asiento_id', $asientoId)->delete();
         $this->asientoRepository->delete($asientoId);
     }
 

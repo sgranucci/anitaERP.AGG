@@ -4,14 +4,26 @@ namespace App\Providers;
 
 use App;
 use App\Models\Admin\Menu;
+use App\Models\Contable\Asiento;
+use App\Models\Contable\Asiento_Movimiento;
 use App\Models\Stock\Articulo_Movimiento;
+use App\Models\Stock\MovimientoStock;
+use App\Models\Ventas\Ordentrabajo;
 use App\Models\Ventas\Ordentrabajo_Tarea;
 use App\Models\Ventas\Pedido_Combinacion;
 use App\Models\Ventas\Pedido_Combinacion_Estado;
+use App\Models\Ventas\Venta;
+use App\Models\Ventas\Venta_Emision;
+use App\Observers\Contable\AsientoObserver;
+use App\Observers\Contable\Asiento_MovimientoObserver;
 use App\Observers\Stock\Articulo_MovimientoObserver;
+use App\Observers\Stock\MovimientoStockObserver;
+use App\Observers\Ventas\OrdentrabajoObserver;
 use App\Observers\Ventas\Ordentrabajo_TareaObserver;
 use App\Observers\Ventas\Pedido_Combinacion_EstadoObserver;
 use App\Observers\Ventas\Pedido_CombinacionObserver;
+use App\Observers\Ventas\VentaObserver;
+use App\Observers\Ventas\Venta_EmisionObserver;
 use App\Support\AyudaManuales;
 use App\Support\Console\ProteccionComandosDestructivosProduccion;
 use Carbon\Carbon;
@@ -54,6 +66,12 @@ class AppServiceProvider extends ServiceProvider
         Ordentrabajo_Tarea::observe(Ordentrabajo_TareaObserver::class);
         Pedido_Combinacion_Estado::observe(Pedido_Combinacion_EstadoObserver::class);
         Articulo_Movimiento::observe(Articulo_MovimientoObserver::class);
+        MovimientoStock::observe(MovimientoStockObserver::class);
+        Venta::observe(VentaObserver::class);
+        Venta_Emision::observe(Venta_EmisionObserver::class);
+        Ordentrabajo::observe(OrdentrabajoObserver::class);
+        Asiento_Movimiento::observe(Asiento_MovimientoObserver::class);
+        Asiento::observe(AsientoObserver::class);
 
         $url = env('APP_URL');
         if (str_contains($url, 'https')) {
@@ -927,6 +945,11 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             'App\Repositories\Stock\Articulo_Saldo_DepositoRepositoryInterface',
             'App\Repositories\Stock\Articulo_Saldo_DepositoRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Contable\Cuentacontable_Saldo_MesRepositoryInterface',
+            'App\Repositories\Contable\Cuentacontable_Saldo_MesRepository',
         );
 
         $this->app->bind(

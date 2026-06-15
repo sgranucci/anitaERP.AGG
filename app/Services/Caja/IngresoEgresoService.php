@@ -23,6 +23,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
+use App\Support\Contable\PeriodoContableCierreSupport;
 use App;
 use Auth;
 use DB;
@@ -76,6 +77,13 @@ class IngresoEgresoService
 	public function guardaIngresoEgreso($request, $origen = null)
 	{
 		session(['empresa_id' => $request->empresa_id]);
+
+		PeriodoContableCierreSupport::assertOperacionPermitida(
+			(int) $request->input('empresa_id'),
+			(string) ($request->input('fecha') ?? date('Y-m-d')),
+			PeriodoContableCierreSupport::ALCANCE_CAJA
+		);
+
 		$data = $request->all();
 
    		// Crea estado
@@ -161,6 +169,13 @@ class IngresoEgresoService
     public function actualizaIngresoEgreso($request, $id, $origen = null)
     {
         session(['empresa_id' => $request->empresa_id]);
+
+		PeriodoContableCierreSupport::assertOperacionPermitida(
+			(int) $request->input('empresa_id'),
+			(string) ($request->input('fecha') ?? date('Y-m-d')),
+			PeriodoContableCierreSupport::ALCANCE_CAJA
+		);
+
 		$data = $request->all();
 
 		// Crea estado

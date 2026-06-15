@@ -270,4 +270,63 @@ final class CierreJornadaProcesoJornadaSupportTest extends TestCase
         $this->assertSame(99, $resultado['facturas'][0]['venta_id']);
         $this->assertSame('FAC B 00020-100', $resultado['facturas'][0]['factura']);
     }
+
+    public function test_contexto_sin_comandas_waitry_permite_grabar_asientos_sin_factura(): void
+    {
+        $jornada = new JornadaGastronomia([
+            'estado' => JornadaGastronomia::ESTADO_CERRADA,
+            'cierre_en' => Carbon::parse('2026-06-08 22:00:00'),
+        ]);
+
+        $snapshot = new GastronomiaCierreJornadaProcesoSnapshot([
+            'payload' => [
+                'jornada_estado' => JornadaGastronomia::ESTADO_CERRADA,
+                'snapshot_provisional' => false,
+                'requiere_emision_proceso' => false,
+                'factura_proceso_emision' => CierreJornadaProcesoJornadaSupport::emisionOmitidaPayload(0.),
+            ],
+        ]);
+
+        $ctx = CierreJornadaProcesoJornadaSupport::contexto($jornada, $snapshot);
+
+        $this->assertFalse($ctx['requiere_emision_proceso']);
+        $this->assertTrue($ctx['factura_proceso_omitida']);
+        $this->assertFalse($ctx['puede_facturar_proceso']);
+        $this->assertTrue($ctx['puede_grabar_asientos_proceso']);
+        $this->assertStringContainsString('asientos contables', (string) $ctx['motivo_factura_bloqueada']);
+    }
+
+    public function test_requiere_emision_proceso_false_sin_movimientos_facturables(): void
+    {
+        $this->assertFalse(CierreJornadaProcesoJornadaSupport::requiereEmisionProcesoDesdeMovimientos([]));
+    }
+
+    public function test_resolver_porcentaje_no_exige_recalculo_si_no_requiere_emision(): void
+    {
+        $snapshot = new GastronomiaCierreJornadaProcesoSnapshot([
+            'payload' => [
+                'requiere_emision_proceso' => false,
+            ],
+        ]);
+
+        $pct = CierreJornadaProcesoJornadaSupport::resolverPorcentajeOperacion($snapshot, 0., true);
+
+        $this->assertSame(0., $pct);
+    }
+
+    public function test_resolver_porcentaje_acepta_cero_tras_recalculo_aplicado(): void
+    {
+        $snapshot = new GastronomiaCierreJornadaProcesoSnapshot([
+            'porcentaje' => 0.,
+            'payload' => [
+                'requiere_emision_proceso' => true,
+                'porcentaje' => 0.,
+                'recalculo_aplicado_en' => '2026-06-08T10:00:00+00:00',
+            ],
+        ]);
+
+        $pct = CierreJornadaProcesoJornadaSupport::resolverPorcentajeOperacion($snapshot, 0., true);
+
+        $this->assertSame(0., $pct);
+    }
 }

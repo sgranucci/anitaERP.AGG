@@ -147,11 +147,37 @@ return [
         'habilitada' => filter_var(env('GASTRONOMIA_AUDITORIA_ANITA_DIARIA', true), FILTER_VALIDATE_BOOLEAN),
         'hora' => env('GASTRONOMIA_AUDITORIA_ANITA_HORA', '06:30'),
         'empresa_id' => (int) env('GASTRONOMIA_AUDITORIA_ANITA_EMPRESA_ID', 1),
+        'empresas_ids' => array_values(array_filter(array_map(
+            'intval',
+            explode(',', (string) env('GASTRONOMIA_AUDITORIA_ANITA_EMPRESAS_IDS', '1,2,3')),
+        ))),
         'usuario_id' => (int) env('GASTRONOMIA_AUDITORIA_ANITA_USUARIO_ID', 1),
         'email' => env('GASTRONOMIA_AUDITORIA_ANITA_EMAIL', 'sergiogranucci@gmail.com'),
         'tolerancia' => (float) env('GASTRONOMIA_AUDITORIA_ANITA_TOLERANCIA', 0.02),
         'replicar_insumos' => filter_var(env('GASTRONOMIA_AUDITORIA_ANITA_REPLICAR_INSUMOS', true), FILTER_VALIDATE_BOOLEAN),
         'email_si_ok' => filter_var(env('GASTRONOMIA_AUDITORIA_ANITA_EMAIL_SI_OK', false), FILTER_VALIDATE_BOOLEAN),
+    ],
+
+    /**
+     * Reporte conciliación jornada: ventas ERP vs Anita vs rendgastro Z por PV (CSV por mail).
+     * Schedule después de auditorías nocturnas (@ GASTRONOMIA_CONCILIACION_DIARIA_HORA).
+     */
+    'conciliacion_diaria_reporte' => [
+        'habilitada' => filter_var(env('GASTRONOMIA_CONCILIACION_DIARIA_HABILITADA', true), FILTER_VALIDATE_BOOLEAN),
+        'hora' => env('GASTRONOMIA_CONCILIACION_DIARIA_HORA', '08:00'),
+        'empresas_ids' => array_values(array_filter(array_map(
+            'intval',
+            explode(',', (string) env('GASTRONOMIA_CONCILIACION_DIARIA_EMPRESAS_IDS', '1,2,3')),
+        ))),
+        'email' => env('GASTRONOMIA_CONCILIACION_DIARIA_EMAIL', env('GASTRONOMIA_AUDITORIA_ANITA_EMAIL', 'sergiogranucci@gmail.com')),
+        'tolerancia' => (float) env('GASTRONOMIA_CONCILIACION_DIARIA_TOLERANCIA', 0.02),
+        /**
+         * Jornada mínima por empresa_id (Y-m-d). Anterior = pre-migración ERP; no conciliar ni alertar.
+         * Rebisco gastronomía ERP desde 2026-06-10.
+         */
+        'fecha_jornada_desde_por_empresa' => [
+            3 => env('GASTRONOMIA_CONCILIACION_REBISCO_JORNADA_DESDE', '2026-06-10'),
+        ],
     ],
 
     /**
@@ -449,6 +475,12 @@ return [
         env('GASTRONOMIA_CANJE_MARKETING_GENERA_CONTABILIDAD_FACTURA', false),
         FILTER_VALIDATE_BOOLEAN
     ),
+
+    /** Listado marketing: código de lista de precios para CMV provisorio (Anita prem_lista; no confundir con id ERP). */
+    'canje_marketing_listado_listaprecio_cmv_codigo' => max(1, (int) env(
+        'GASTRONOMIA_CANJE_MARKETING_LISTADO_LISTAPRECIO_CMV_CODIGO',
+        env('GASTRONOMIA_CANJE_MARKETING_LISTADO_LISTAPRECIO_CMV_ID', 50)
+    )),
 
     /**
      * Base Informix para recepciones (recepmae / recepmov) en informe gerente.

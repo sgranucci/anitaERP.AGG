@@ -6,6 +6,7 @@ Recepción {{ $recepcion->numerorecepcion }}
 @section("scripts")
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/recepcion_proveedor/form.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/recepcion_proveedor/consulta_oc.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/depmae/consulta.js') }}" type="text/javascript"></script>
 @endsection
 
@@ -38,7 +39,7 @@ Recepción {{ $recepcion->numerorecepcion }}
                 </div>
                 <div class="card-footer">
                     @can('actualizar-recepcion-proveedor')
-                    <button type="submit" class="btn btn-primary"><i class="fa fa-save"></i> Guardar</button>
+                    <button type="submit" class="btn btn-primary" form="form-recepcion-proveedor"><i class="fa fa-save"></i> Guardar</button>
                     @endcan
                     @can('confirmar-recepcion-proveedor')
                     <form action="{{ route('confirmar_recepcion_proveedor', $recepcion->id) }}" method="POST" class="d-inline"
@@ -46,6 +47,16 @@ Recepción {{ $recepcion->numerorecepcion }}
                         @csrf
                         <button type="submit" class="btn btn-success">
                             <i class="fa fa-check"></i> Confirmar recepción
+                        </button>
+                    </form>
+                    @endcan
+                    @can('actualizar-recepcion-proveedor')
+                    <form action="{{ route('eliminar_recepcion_proveedor', ['id' => $recepcion->id]) }}" method="POST" class="d-inline"
+                          onsubmit="return confirm('¿Eliminar este borrador? Esta acción no se puede deshacer.');">
+                        @csrf
+                        @method('DELETE')
+                        <button type="submit" class="btn btn-outline-danger">
+                            <i class="fa fa-trash"></i> Eliminar borrador
                         </button>
                     </form>
                     @endcan
@@ -86,4 +97,5 @@ Recepción {{ $recepcion->numerorecepcion }}
     </div>
 </div>
 @include('includes.stock.modalconsultadeposito')
+@include('includes.stock.modalconsultaordencompra_recepcion')
 @endsection

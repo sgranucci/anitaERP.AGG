@@ -1,6 +1,6 @@
 @extends("theme.$theme.layout")
 @section('titulo')
-    Configurar Salidas
+    Configurar modelo de etiqueta
 @endsection
 
 @section("scripts")
@@ -9,19 +9,17 @@
 <script>
 
     $(function () {
-        var programa = $("#programa").val();
+        buscarModeloetiqueta($("#programa").val());
 
-        buscarModeloetiqueta(programa);
+        setTimeout(function () {
+            if (!nombreModeloEtiqueta) {
+                return;
+            }
 
-        setTimeout(() => {
-
-            $('#modeloetiqueta_id option').filter(function() {
-                // Use .text() and possibly .trim() to handle extra whitespace
-                return $(this).text().trim() === nombreSalida;
+            $('#modeloetiqueta_id option').filter(function () {
+                return $(this).text().trim() === nombreModeloEtiqueta;
             }).prop('selected', true);
-
         }, 300);
-
     });
 
 	function actualizar()
@@ -30,18 +28,24 @@
         var modeloetiqueta_id = $("#modeloetiqueta_id").val();
         var urlRetorno = $("#urlretorno").val();
 
-        if (programa == '')
-            programa = 'xx';
+        if (!modeloetiqueta_id) {
+            alert('Seleccione un modelo de etiqueta.');
+            return;
+        }
 
-        // Actualiza configuracion de modeloetiqueta
-        var listarUri = "/anitaERP/public/configuracion/setearmodeloetiqueta/"+programa+"/"+modeloetiqueta_id;
+        var listarUri = carpetaBase + '/configuracion/setearmodeloetiqueta/'
+            + encodeURIComponent(programa)
+            + '/'
+            + encodeURIComponent(modeloetiqueta_id);
 
-        $.get(listarUri, function(data){
-            setTimeout(() => {
-                //window.history.back();
-                document.location.href=urlRetorno; 
-            }, 300);	
-		});
+        $.get(listarUri, function () {
+            if (urlRetorno) {
+                window.location.href = urlRetorno;
+                return;
+            }
+
+            window.history.back();
+        });
     }
 
 </script>
@@ -54,7 +58,7 @@
         @include('includes.mensaje')
         <div class="card card-danger">
             <div class="card-header">
-                <h3 class="card-title">Configurar Modelo de Etiqueta {{$programa}}</h3>
+                <h3 class="card-title">Configurar modelo de etiqueta — {{ $programaEtiqueta ?? $programa }}</h3>
                 <div class="card-tools">
                     <a href="javascript:history.back()" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver atrás

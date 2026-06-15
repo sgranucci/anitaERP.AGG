@@ -6,10 +6,13 @@ use App\Models\Ventas\GastronomiaCierreJornadaProcesoSnapshot;
 use App\Models\Ventas\JornadaGastronomia;
 use App\Queries\Caja\Caja_AsignacionQueryInterface;
 use App\Services\Caja\RendicionGastronomiaAnitaSyncService;
-use App\Support\Caja\AnitaSync\RendicionGastronomiaAnitaTotalZPorPuntoventaService;
+use App\Support\Caja\AnitaSync\RendicionGastronomiaAnitaRendgastroSupport;
+use App\Support\Caja\RendicionGastronomiaNroOperPisoSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoFacturaRecuperacionSupport;
+use App\Support\Ventas\Gastronomia\CierreJornadaProcesoJornadaSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoPuntoventaSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoRendicionAnitaSupport;
+use App\Support\Ventas\Gastronomia\GastronomiaConciliacionPostCierreCaeaSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -24,7 +27,7 @@ final class GastronomiaCierreJornadaProcesoRendicionAnitaService
 {
     public function __construct(
         private readonly RendicionGastronomiaAnitaSyncService $anitaSyncService,
-        private readonly RendicionGastronomiaAnitaTotalZPorPuntoventaService $totalZPorPuntoventaService,
+        private readonly RendicionGastronomiaAnitaRendgastroSupport $rendgastroSupport,
         private readonly Caja_AsignacionQueryInterface $cajaAsignacionQuery,
     ) {
     }
@@ -49,20 +52,29 @@ final class GastronomiaCierreJornadaProcesoRendicionAnitaService
             throw new InvalidArgumentException('Debe grabar los asientos del proceso antes de la rendición Anita.');
         }
 
-        if (! empty($payload['rendicion_proceso_anita']['nro_oper'])) {
-            return [
-                'ok' => true,
-                'mensaje' => 'La rendición Anita del proceso ya fue registrada.',
-                'ya_existia' => true,
-                'rendicion' => $payload['rendicion_proceso_anita'],
-            ];
+        $rendSnap = is_array($payload['rendicion_proceso_anita'] ?? null)
+            ? $payload['rendicion_proceso_anita']
+            : null;
+
+        if ($rendSnap !== null && ! empty($rendSnap['nro_oper'])) {
+            if ($this->rendicionPostCierreValidaEnAnita((int) $jornada->empresa_id, (int) $jornada->id, $rendSnap)) {
+                return [
+                    'ok' => true,
+                    'mensaje' => 'La rendición Anita del proceso ya fue registrada.',
+                    'ya_existia' => true,
+                    'rendicion' => $rendSnap,
+                ];
+            }
+
+            $payload = $this->quitarRendicionSnapshot($snapshot, $payload);
         }
 
         $emision = is_array($payload['factura_proceso_emision'] ?? null)
             ? $payload['factura_proceso_emision']
             : [];
+        $emisionOmitida = CierreJornadaProcesoJornadaSupport::emisionProcesoOmitida($emision);
         $ventaIds = CierreJornadaProcesoFacturaRecuperacionSupport::ventaIdsDesdeRecuperacion($emision);
-        if ($ventaIds === []) {
+        if ($ventaIds === [] && ! $emisionOmitida) {
             throw new InvalidArgumentException('No hay facturas del proceso para rendir en Anita.');
         }
 
@@ -79,6 +91,8 @@ final class GastronomiaCierreJornadaProcesoRendicionAnitaService
             throw new RuntimeException('No se pudo obtener numeración rendgastro para Anita.');
         }
 
+        $this->assertNroOperEnRangoEmpresa($empresaId, $nroOper);
+
         [$cajaId] = $this->resolverCajaId();
 
         $ctx = CierreJornadaProcesoRendicionAnitaSupport::armarContextoAnita(
@@ -91,12 +105,14 @@ final class GastronomiaCierreJornadaProcesoRendicionAnitaService
         );
 
         $totalFacturado = round((float) ($ctx['total_x'] ?? 0), 2);
-        $totalCobrado = CierreJornadaProcesoRendicionAnitaSupport::totalCobradoProceso($ventaIds);
-        if (abs($totalFacturado - $totalCobrado) > 0.05) {
-            throw new InvalidArgumentException(
-                'Los medios de cobro de las facturas CF ('.number_format($totalCobrado, 2, ',', '.')
-                .') no coinciden con el total facturado ('.number_format($totalFacturado, 2, ',', '.').').',
-            );
+        if ($ventaIds !== []) {
+            $totalCobrado = CierreJornadaProcesoRendicionAnitaSupport::totalCobradoProceso($ventaIds);
+            if (abs($totalFacturado - $totalCobrado) > 0.05) {
+                throw new InvalidArgumentException(
+                    'Los medios de cobro de las facturas CF ('.number_format($totalCobrado, 2, ',', '.')
+                    .') no coinciden con el total facturado ('.number_format($totalFacturado, 2, ',', '.').').',
+                );
+            }
         }
 
         try {
@@ -109,26 +125,39 @@ final class GastronomiaCierreJornadaProcesoRendicionAnitaService
             );
         }
 
-        $fechaJornada = $jornada->fecha_jornada?->format('Y-m-d')
-            ?? $jornada->cierre_en?->format('Y-m-d')
-            ?? now()->format('Y-m-d');
+        $this->assertCabeceraPostCierreInsertada($empresaId, (int) $jornada->id, $nroOper, $totalFacturado);
 
-        $recalcZ = $this->totalZPorPuntoventaService->aplicar($empresaId, $fechaJornada, $puntoventaId);
+        // Z en CIERRE-WAITRY = post-cierre únicamente (mismo importe que total_x / tot_fc_caea).
+        try {
+            $this->anitaSyncService->actualizarTotalesReparacionPorNroOper(
+                $nroOper,
+                $totalFacturado,
+                0.0,
+                $totalFacturado,
+            );
+        } catch (Throwable $e) {
+            throw new RuntimeException(
+                'Rendición insertada pero no se pudo normalizar cabecera post-cierre #'.$nroOper.': '.$e->getMessage(),
+                0,
+                $e,
+            );
+        }
+
+        $this->anitaSyncService->reaplicarTotalZPorPcEnJornada($jornadaId);
 
         $registro = [
             'nro_oper' => $nroOper,
             'tipo_oper' => (string) ($ctx['tipo_oper'] ?? config('rendicion_gastronomia_anita.tipo_oper', 'F')),
             'puntoventa_id' => $puntoventaId,
             'puntoventa_codigo' => (string) ($ctx['puntoventa_caea_codigo'] ?? ''),
-            'total_x' => round((float) ($ctx['total_x'] ?? 0), 2),
-            'total_z' => round((float) ($recalcZ['total_z'] ?? 0), 2),
-            'tot_nc' => round((float) ($recalcZ['tot_nc'] ?? 0), 2),
-            'portadora_nro_oper' => $recalcZ['portadora_nro_oper'] ?? null,
+            'total_x' => $totalFacturado,
+            'total_z' => $totalFacturado,
+            'tot_nc' => 0.0,
+            'portadora_nro_oper' => $nroOper,
             'turno' => CierreJornadaProcesoRendicionAnitaSupport::TURNO_LETRA,
             'movimientos' => $ctx['movimientos_filas'] ?? [],
             'fuente_nro_oper' => (string) ($numeracion['fuente'] ?? ''),
             'grabado_en' => now()->toIso8601String(),
-            'recalc_z' => $recalcZ,
         ];
 
         DB::transaction(function () use ($snapshot, $registro) {
@@ -140,9 +169,8 @@ final class GastronomiaCierreJornadaProcesoRendicionAnitaService
 
         return [
             'ok' => true,
-            'mensaje' => 'Rendición Anita registrada (rendgastro #'.$nroOper.', X '
-                .number_format((float) $registro['total_x'], 2, ',', '.').', Z PV '
-                .number_format((float) $registro['total_z'], 2, ',', '.').').',
+            'mensaje' => 'Rendición Anita registrada (rendgastro #'.$nroOper.', CIERRE-WAITRY $ '
+                .number_format($totalFacturado, 2, ',', '.').').',
             'rendicion' => $registro,
         ];
     }
@@ -162,36 +190,32 @@ final class GastronomiaCierreJornadaProcesoRendicionAnitaService
 
         $nroOper = (int) $rendicion['nro_oper'];
         $tipoOper = (string) ($rendicion['tipo_oper'] ?? config('rendicion_gastronomia_anita.tipo_oper', 'F'));
-        $puntoventaId = (int) ($rendicion['puntoventa_id'] ?? 0);
 
-        try {
-            $this->anitaSyncService->eliminarEnAnita($nroOper, $tipoOper);
-        } catch (Throwable $e) {
-            throw new RuntimeException(
-                'No se pudo borrar rendgastro/rendvalor #'.$nroOper.' en Anita: '.$e->getMessage(),
-                0,
-                $e,
-            );
+        $cab = $this->rendgastroSupport->listarCabeceraPorNroOper(
+            (int) ($jornada?->empresa_id ?? 0),
+            $nroOper,
+        );
+        if ($cab !== null && $this->rendgastroSupport->esCabeceraPostCierreWaitry($cab)) {
+            try {
+                $this->anitaSyncService->eliminarEnAnita($nroOper, $tipoOper);
+            } catch (Throwable $e) {
+                throw new RuntimeException(
+                    'No se pudo borrar rendgastro/rendvalor #'.$nroOper.' en Anita: '.$e->getMessage(),
+                    0,
+                    $e,
+                );
+            }
         }
 
-        $recalcZ = null;
-        if ($jornada !== null && $puntoventaId > 0) {
-            $fechaJornada = $jornada->fecha_jornada?->format('Y-m-d')
-                ?? $jornada->cierre_en?->format('Y-m-d');
-            if ($fechaJornada !== null && $fechaJornada !== '') {
-                try {
-                    $recalcZ = $this->totalZPorPuntoventaService->aplicar(
-                        (int) $jornada->empresa_id,
-                        $fechaJornada,
-                        $puntoventaId,
-                    );
-                } catch (Throwable $e) {
-                    throw new RuntimeException(
-                        'Rendición eliminada pero falló el recálculo de Z del PV: '.$e->getMessage(),
-                        0,
-                        $e,
-                    );
-                }
+        if ($jornada !== null) {
+            try {
+                $this->anitaSyncService->reaplicarTotalZPorPcEnJornada((int) $jornada->id);
+            } catch (Throwable $e) {
+                throw new RuntimeException(
+                    'Rendición eliminada pero falló el recálculo de Z por PC: '.$e->getMessage(),
+                    0,
+                    $e,
+                );
             }
         }
 
@@ -199,8 +223,89 @@ final class GastronomiaCierreJornadaProcesoRendicionAnitaService
             'eliminada' => true,
             'nro_oper' => $nroOper,
             'tipo_oper' => $tipoOper,
-            'recalc_z' => $recalcZ,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $rendSnap
+     */
+    public function rendicionPostCierreValidaEnAnita(int $empresaId, int $jornadaId, array $rendSnap): bool
+    {
+        $cabeceras = $this->rendgastroSupport->listarCabecerasPostCierrePorJornada($empresaId, $jornadaId);
+        if ($cabeceras !== []) {
+            return true;
+        }
+
+        $nroOper = (int) ($rendSnap['nro_oper'] ?? 0);
+        if ($nroOper <= 0) {
+            return false;
+        }
+
+        $cab = $this->rendgastroSupport->listarCabeceraPorNroOper($empresaId, $nroOper);
+        if ($cab === null || ! $this->rendgastroSupport->esCabeceraPostCierreWaitry($cab)) {
+            return false;
+        }
+
+        return (int) ($cab->rendg_nro_rend_vta ?? 0) === $jornadaId;
+    }
+
+    private function assertNroOperEnRangoEmpresa(int $empresaId, int $nroOper): void
+    {
+        $piso = RendicionGastronomiaNroOperPisoSupport::pisoParaEmpresa($empresaId);
+        if ($piso <= 0) {
+            return;
+        }
+
+        if (! RendicionGastronomiaNroOperPisoSupport::enRangoEmpresa($empresaId, $nroOper)) {
+            throw new RuntimeException(
+                'nro_oper '.$nroOper.' fuera del rango dedicado de la empresa '.$empresaId
+                .' (piso '.$piso.'). Revise numeración Anita/ERP.',
+            );
+        }
+    }
+
+    private function assertCabeceraPostCierreInsertada(
+        int $empresaId,
+        int $jornadaId,
+        int $nroOper,
+        float $totalEsperado,
+    ): void {
+        $cab = $this->rendgastroSupport->listarCabeceraPorNroOper($empresaId, $nroOper);
+        if ($cab === null || ! $this->rendgastroSupport->esCabeceraPostCierreWaitry($cab)) {
+            throw new RuntimeException(
+                'Tras insertar rendición #'.$nroOper.' no se encontró cabecera CIERRE-WAITRY en Anita.',
+            );
+        }
+
+        if ((int) ($cab->rendg_nro_rend_vta ?? 0) !== $jornadaId) {
+            throw new RuntimeException(
+                'Cabecera CIERRE-WAITRY #'.$nroOper.' no corresponde a la jornada #'.$jornadaId.'.',
+            );
+        }
+
+        $totalX = round((float) ($cab->rendg_total_x ?? 0), 2);
+        if ($totalEsperado > 0 && abs($totalX - $totalEsperado) > 0.05) {
+            throw new RuntimeException(
+                'Cabecera CIERRE-WAITRY #'.$nroOper.' total_x '.$totalX.' ≠ esperado '.$totalEsperado.'.',
+            );
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function quitarRendicionSnapshot(
+        GastronomiaCierreJornadaProcesoSnapshot $snapshot,
+        array $payload,
+    ): array {
+        unset($payload['rendicion_proceso_anita']);
+        DB::transaction(function () use ($snapshot, $payload) {
+            $snapshot->payload = $payload;
+            $snapshot->save();
+        });
+
+        return $payload;
     }
 
     /**

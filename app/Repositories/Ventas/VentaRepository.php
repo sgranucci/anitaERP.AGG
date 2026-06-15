@@ -227,15 +227,73 @@ class VentaRepository implements VentaRepositoryInterface
         return $numero;
     }
 
-    public function traeUltimoComprobanteVenta($tipotransaccion_id, $puntoventa_id)
+    public function traeUltimoComprobanteVenta($tipotransaccion_id, $puntoventa_id, ?int $empresa_id = null)
     {
-        $venta = $this->model->select('numerocomprobante')
-                                ->where('tipotransaccion_id', $tipotransaccion_id)
-                                ->where('puntoventa_id', $puntoventa_id)
-                                ->where('deleted_at', null)
-                                ->orderBy('numerocomprobante','desc')->first();
+        $query = $this->model->select('venta.numerocomprobante')
+            ->where('venta.tipotransaccion_id', $tipotransaccion_id)
+            ->where('venta.puntoventa_id', $puntoventa_id)
+            ->whereNull('venta.deleted_at');
 
-        return $venta;
+        if ($empresa_id !== null && $empresa_id > 0) {
+            $query->whereHas('puntoventas', static function ($q) use ($empresa_id): void {
+                $q->where('empresa_id', $empresa_id);
+            });
+        }
+
+        return $query->orderBy('venta.numerocomprobante', 'desc')->first();
+    }
+
+    /**
+     * Último número reservado en compemis/numerador Anita (sin incrementar).
+     */
+    public function leerUltimoNumeradorCompemis(string $tipo, string $letra, string $sucursal, $path_sistema = null): int
+    {
+        $apiAnita = new ApiAnita();
+        $data = [
+            'acc' => 'list',
+            'tabla' => 'compemis',
+            'campos' => 'compe_numero',
+            'whereArmado' => " WHERE compe_tipo='".$tipo."' and compe_letra='".$letra."'
+                                    and compe_sucursal='".$sucursal."' ",
+        ];
+        if (isset($path_sistema)) {
+            $data['path_sistema'] = $path_sistema;
+        }
+        $rawCompe = $apiAnita->apiCallEscritura($data);
+        $errCompe = ApiAnita::extraerMensajeError($rawCompe);
+        if ($errCompe !== null) {
+            return 0;
+        }
+
+        $filaCompe = ApiAnita::primeraFilaLista((string) $rawCompe);
+        if ($filaCompe === null || ! isset($filaCompe->compe_numero)) {
+            return 0;
+        }
+
+        $claveNumero = $filaCompe->compe_numero;
+
+        $apiAnita = new ApiAnita();
+        $data = [
+            'acc' => 'list',
+            'tabla' => 'numerador',
+            'campos' => 'num_ult_numero',
+            'whereArmado' => " WHERE num_clave='".$claveNumero."' ",
+        ];
+        if (isset($path_sistema)) {
+            $data['path_sistema'] = $path_sistema;
+        }
+
+        $rawNumerador = $apiAnita->apiCallEscritura($data);
+        if (ApiAnita::extraerMensajeError($rawNumerador) !== null) {
+            return 0;
+        }
+
+        $filaNumerador = ApiAnita::primeraFilaLista((string) $rawNumerador);
+        if ($filaNumerador === null || ! isset($filaNumerador->num_ult_numero)) {
+            return 0;
+        }
+
+        return max(0, (int) $filaNumerador->num_ult_numero);
     }
 
     public function leeComprobantePorOrdenVenta($ordenventa_id)

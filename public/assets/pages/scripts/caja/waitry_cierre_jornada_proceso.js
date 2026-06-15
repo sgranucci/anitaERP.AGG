@@ -1404,6 +1404,7 @@
         actualizarBotonGrabarAsientos(jp);
         actualizarBotonRevertirProceso(jp);
         renderProcesoResultadoGrabado(jp);
+        renderAlertaJornadaProceso(jp);
     }
 
     function formatearFechaIsoLegible(iso) {
@@ -1734,6 +1735,16 @@
             btnEmitir.title = 'La factura del proceso ya fue emitida para esta jornada.';
             return;
         }
+        if (jp.factura_proceso_omitida) {
+            btnEmitir.disabled = true;
+            btnEmitir.title = 'No hay comandas Waitry sin facturar; la facturación del proceso no aplica.';
+            return;
+        }
+        if (jp.requiere_emision_proceso === false) {
+            btnEmitir.disabled = true;
+            btnEmitir.title = 'No hay comandas Waitry sin facturar ni ajuste de insumos. Grabar asientos directamente.';
+            return;
+        }
         var puede = !!jp.puede_facturar_proceso;
         btnEmitir.disabled = !puede;
         if (puede) {
@@ -1947,11 +1958,15 @@
                     window.jQuery('#modal-emitir-factura-proceso').modal('hide');
                 }
                 var msg = data.mensaje || 'Facturas del proceso emitidas correctamente.';
+                if (data.emision_omitida) {
+                    msg += '\n\nYa puede usar «Grabar asientos contables».';
+                } else {
                 if (data.ajuste_insumos && data.ajuste_insumos.movimientostock_id) {
                     msg += '\nAjuste de insumos: movimiento #' + data.ajuste_insumos.movimientostock_id + '.';
                 }
                 msg += '\n\nYa puede usar «Grabar asientos contables». El botón «Emitir facturas» queda deshabilitado (emisión completada).';
                 msg += '\n\nPara imprimir los comprobantes, use «Imprimir PDFs» o la columna Acciones del panel de resultado.';
+                }
                 alert(msg);
                 analizar({
                     titulo: 'Actualizando tras emisión de facturas…',
@@ -2698,8 +2713,16 @@
         if (jp.proceso_cierre_completado) {
             alertJp.classList.add('alert-success');
             alertJp.innerHTML = '<i class="fa fa-check-circle"></i> <strong>Proceso de cierre completado.</strong> '
-                + 'Facturas emitidas y asientos contables grabados. Use <strong>Revertir proceso</strong> '
-                + 'si necesita rehacer emisión o asientos; revise el panel de resultado más abajo.';
+                + (jp.factura_proceso_omitida
+                    ? 'Asientos contables grabados (sin facturas del proceso). '
+                    : 'Facturas emitidas y asientos contables grabados. ')
+                + 'Use <strong>Revertir proceso</strong> si necesita rehacer emisión o asientos; '
+                + 'revise el panel de resultado más abajo.';
+        } else if (jp.factura_proceso_omitida && !jp.asientos_grabados) {
+            alertJp.classList.add('alert-info');
+            alertJp.innerHTML = '<i class="fa fa-info-circle"></i> <strong>Sin comandas Waitry sin facturar.</strong> '
+                + 'No corresponde emitir facturas del proceso. Puede grabar los asientos contables directamente '
+                + '(no hace falta indicar porcentaje ni recalcular).';
         } else if (jp.factura_proceso_emitida && !jp.asientos_grabados) {
             alertJp.classList.add('alert-info');
             alertJp.innerHTML = '<i class="fa fa-file-invoice"></i> <strong>Facturas emitidas.</strong> '
@@ -2712,10 +2735,14 @@
             alertJp.classList.add('alert-warning');
             alertJp.innerHTML = '<i class="fa fa-exclamation-triangle"></i> <strong>Snapshot provisional.</strong> '
                 + (jp.motivo_factura_bloqueada || 'Vuelva a analizar tras cerrar la jornada.');
-        } else if (jp.cerrada && jp.snapshot_definitivo) {
+        } else if (jp.cerrada && jp.snapshot_definitivo && jp.requiere_emision_proceso === false) {
+            alertJp.classList.add('alert-info');
+            alertJp.innerHTML = '<i class="fa fa-info-circle"></i> <strong>Sin comandas Waitry sin facturar.</strong> '
+                + 'Tramo definitivo congelado. Puede grabar asientos contables sin emitir facturas del proceso.';
+        } else if (jp.cerrada && jp.snapshot_definitivo && jp.requiere_emision_proceso !== false) {
             alertJp.classList.add('alert-success');
             alertJp.innerHTML = '<i class="fa fa-check"></i> Jornada cerrada y tramo Waitry definitivo. '
-                + 'Listo para facturación del proceso (cuando esté habilitada).';
+                + 'Listo para emitir facturas del proceso (0 % aplicado al analizar; use Recalcular si necesita otro %).';
         } else {
             alertJp.classList.add('alert-info');
             alertJp.innerHTML = '<i class="fa fa-info-circle"></i> ' + (jp.motivo_factura_bloqueada || '');

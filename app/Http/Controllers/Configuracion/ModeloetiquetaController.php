@@ -9,7 +9,7 @@ use App\Http\Requests\ValidacionModeloetiqueta;
 use App\Repositories\Configuracion\ModeloetiquetaRepositoryInterface;
 use App\Repositories\Configuracion\SeteoModeloetiquetaRepositoryInterface;
 use App\Models\Configuracion\Modeloetiqueta;
-use Illuminate\Support\Str;
+use App\Support\Configuracion\SeteoSalidaProgramaSupport;
 use Auth;
 
 class ModeloetiquetaController extends Controller
@@ -120,92 +120,58 @@ class ModeloetiquetaController extends Controller
         return $this->repository->update(['estado' => $estadomodeloetiqueta], $modeloetiqueta_id);
     }
 
-    public function configurarModeloetiqueta(Request $request, $opcion=null)
+    public function configurarModeloetiqueta(Request $request, $opcion = null)
     {
-        //can('configurar-modeloetiquetas');
-
-        // Agrega programa enviado a la url completa
-        $urlRetorno = $request->server('HTTP_REFERER');
-        $programa = Self::armaNombrePrograma($request, $opcion);
-
-        // Extrae programa para retornar desde la URL completa
-        $string = explode('/',$urlRetorno);
-        $pgmretorno = $string[count($string)-1];
+        $urlRetorno = $request->query('retorno', $request->server('HTTP_REFERER'));
+        $programa = $this->seteoModeloetiquetaRepository->armaNombrePrograma($opcion);
+        $programaEtiqueta = SeteoSalidaProgramaSupport::etiqueta($programa);
         $modeloetiquetas_query = $this->repository->all();
-
-        // Lee configuracion de modeloetiqueta
         $usuario_id = $request->session()->get('usuario_id');
-        
-        // Busca configuracion
         $seteomodeloetiqueta = $this->seteoModeloetiquetaRepository->buscaSeteoModeloetiqueta($usuario_id, $opcion);
 
-        if ($seteomodeloetiqueta)
-            $datas['modeloetiqueta_id'] = $seteomodeloetiqueta->modeloetiqueta_id;
-        else
-            $datas['modeloetiqueta_id'] = 1;
-        return view('configuracion.modeloetiqueta.configurar', compact('datas', 'modeloetiquetas_query', 'programa', 'pgmretorno', 'urlRetorno'));
+        $datas['modeloetiqueta_id'] = $seteomodeloetiqueta?->modeloetiqueta_id ?? '';
+
+        return view('configuracion.modeloetiqueta.configurar', compact(
+            'datas',
+            'modeloetiquetas_query',
+            'programa',
+            'programaEtiqueta',
+            'urlRetorno'
+        ));
     }
 
     public function setearModeloetiqueta(Request $request, $opcion, $modeloetiqueta_id)
     {
         $usuario_id = $request->session()->get('usuario_id');
+        $programa = $this->seteoModeloetiquetaRepository->armaNombrePrograma($opcion);
+        $seteomodeloetiqueta = $this->seteoModeloetiquetaRepository->leeSeteo($usuario_id, $programa);
 
-        // Busca configuracion pre-grabada
-        $seteomodeloetiqueta = $this->seteoModeloetiquetaRepository->leeSeteo($usuario_id, $opcion);
-
-        // Graba configuracion
-        if ($seteomodeloetiqueta)
-        {
-            $programa = $seteomodeloetiqueta->programa;
-            $seteomodeloetiqueta = $this->seteoModeloetiquetaRepository->update(['usuario_id' => $usuario_id, 
-                                                                'modeloetiqueta_id' => $modeloetiqueta_id,
-                                                                'programa' => $programa], 
-                                                                $seteomodeloetiqueta->id);
+        if ($seteomodeloetiqueta) {
+            $seteomodeloetiqueta = $this->seteoModeloetiquetaRepository->update([
+                'usuario_id' => $usuario_id,
+                'modeloetiqueta_id' => $modeloetiqueta_id,
+                'programa' => $programa,
+            ], $seteomodeloetiqueta->id);
+        } else {
+            $seteomodeloetiqueta = $this->seteoModeloetiquetaRepository->create([
+                'usuario_id' => $usuario_id,
+                'modeloetiqueta_id' => $modeloetiqueta_id,
+                'programa' => $programa,
+            ]);
         }
-        else
-        {
-            $programa = $opcion;
 
-            $seteomodeloetiqueta = $this->seteoModeloetiquetaRepository->create(['usuario_id' => $usuario_id, 
-                                                                'modeloetiqueta_id' => $modeloetiqueta_id,
-                                                                'programa' => $programa]);
-        }
         return ['retorno' => $seteomodeloetiqueta];
     }
 
-    public function buscarModeloetiqueta(Request $request, $programa = null)
+    public function buscarModeloetiqueta(Request $request, $opcion = null)
     {
         $usuario_id = Auth()->id();
+        $seteomodeloetiqueta = $this->seteoModeloetiquetaRepository->buscaSeteoModeloetiqueta($usuario_id, $opcion);
 
-        if ($programa == null)
-        {
-            $programa = request()->header('referer');
-
-            // Agrega programa enviado a la url completa
-            $urlCompleta = str_replace('/', '_', $programa);
-            $programa = $urlCompleta;            
+        if ($seteomodeloetiqueta) {
+            return $seteomodeloetiqueta;
         }
 
-        // Busca configuracion
-        $seteomodeloetiqueta = $this->seteoModeloetiquetaRepository->buscaSeteoModeloetiqueta($usuario_id, $programa);
-
-        if ($seteomodeloetiqueta)        
-            return $seteomodeloetiqueta;
-        else    
-            return ['id' => 999999, 'modeloetiquetas' => ['nombre' => 'Sin modelo de etiqueta seteado']];
+        return ['id' => 999999, 'modeloetiquetas' => ['nombre' => 'Sin modelo de etiqueta seteado']];
     }
-
-    public function armaNombrePrograma(Request $request, $opcion = null)
-    {
-        if ($opcion == 'xx')
-            $opcion = null;
-
-        $programa = request()->header('referer');
-
-        // Agrega programa enviado a la url completa
-        $urlCompleta = str_replace('/', '_', $programa);
-        $programa = $urlCompleta.($opcion ? '_'.Str::slug($opcion, '_'): '');
-
-        return $programa;
-    }    
 }

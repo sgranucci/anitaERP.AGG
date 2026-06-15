@@ -33,7 +33,22 @@ return [
 
     'ocr' => [
         'habilitado' => filter_var(env('RECEPCION_PROVEEDOR_OCR_HABILITADO', false), FILTER_VALIDATE_BOOLEAN),
-        'driver' => env('RECEPCION_PROVEEDOR_OCR_DRIVER', 'stub'),
+        'driver' => env('RECEPCION_PROVEEDOR_OCR_DRIVER', 'tesseract'),
+        'tesseract_bin' => env('RECEPCION_PROVEEDOR_OCR_TESSERACT_BIN', 'tesseract'),
+        'tesseract_lang' => env('RECEPCION_PROVEEDOR_OCR_TESSERACT_LANG', 'spa'),
+        'tesseract_psm' => (int) env('RECEPCION_PROVEEDOR_OCR_TESSERACT_PSM', 6),
+        'tesseract_psm_extra' => env('RECEPCION_PROVEEDOR_OCR_TESSERACT_PSM_EXTRA', '11'),
+        'pdftotext_bin' => env('RECEPCION_PROVEEDOR_OCR_PDFTOTEXT_BIN', 'pdftotext'),
+        'pdftoppm_bin' => env('RECEPCION_PROVEEDOR_OCR_PDFTOPPM_BIN', 'pdftoppm'),
+        'pdf_min_chars_texto' => (int) env('RECEPCION_PROVEEDOR_OCR_PDF_MIN_CHARS', 40),
+        'pdf_max_paginas' => (int) env('RECEPCION_PROVEEDOR_OCR_PDF_MAX_PAGINAS', 3),
+        'dpi_pdf' => (int) env('RECEPCION_PROVEEDOR_OCR_DPI_PDF', 300),
+        'timeout_segundos' => (int) env('RECEPCION_PROVEEDOR_OCR_TIMEOUT', 120),
+        'tmp_dir' => env('RECEPCION_PROVEEDOR_OCR_TMP_DIR', ''),
+        'imagen_max_ancho' => (int) env('RECEPCION_PROVEEDOR_OCR_IMAGEN_MAX_ANCHO', 2400),
+        'imagen_jpeg_calidad' => (int) env('RECEPCION_PROVEEDOR_OCR_IMAGEN_JPEG_CALIDAD', 88),
+        // Prefijos de OC de 6 dígitos separados por coma (ej. 2 → 221067)
+        'oc_prefijos' => env('RECEPCION_PROVEEDOR_OCR_OC_PREFIJOS', '2'),
     ],
 
     'sku_prefijo_laboratorio' => env('RECEPCION_PROVEEDOR_SKU_PREFIJO_LAB', 'LAB'),

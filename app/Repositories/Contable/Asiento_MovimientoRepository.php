@@ -38,7 +38,13 @@ class Asiento_MovimientoRepository implements Asiento_MovimientoRepositoryInterf
 
     public function delete($asiento_id, $codigo)
     {
-        return $this->model->where('asiento_id', $asiento_id)->delete();
+        $eliminados = 0;
+        foreach ($this->model->where('asiento_id', $asiento_id)->get() as $movimiento) {
+            $movimiento->delete();
+            $eliminados++;
+        }
+
+        return $eliminados;
     }
 
     public function find($id)
@@ -161,7 +167,9 @@ class Asiento_MovimientoRepository implements Asiento_MovimientoRepositoryInterf
 		}
 		else
 		{
-			$asiento_movimiento = $this->model->where('asiento_id', $id)->delete();
+			foreach ($this->model->where('asiento_id', $id)->get() as $movimiento) {
+				$movimiento->delete();
+			}
 		}
 
 		return $asiento_movimiento;

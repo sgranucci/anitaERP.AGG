@@ -29,37 +29,47 @@ $(function () {
             + '/editar?origen=modal_consulta&vista=consulta';
     }
 
+    function claveCatalogoFila($row) {
+        var provId = parseInt($row.find('.proveedor_id').val() || '0', 10);
+        var codigo = ($row.find('input[name="ap_codigos_articulo_proveedor[]"]').val() || '').trim();
+        if (!provId || codigo === '') {
+            return null;
+        }
+
+        return provId + '|' + codigo;
+    }
+
     function marcarDuplicadosEnGrilla() {
         var conteo = {};
         $('#tbody-articulo-proveedor tr.item-articulo-proveedor').each(function () {
-            var id = parseInt($(this).find('.proveedor_id').val() || '0', 10);
-            if (id > 0) {
-                conteo[id] = (conteo[id] || 0) + 1;
+            var clave = claveCatalogoFila($(this));
+            if (clave) {
+                conteo[clave] = (conteo[clave] || 0) + 1;
             }
         });
 
         $('#tbody-articulo-proveedor tr.item-articulo-proveedor').each(function () {
             var $row = $(this);
-            var id = parseInt($row.find('.proveedor_id').val() || '0', 10);
-            var duplicado = id > 0 && conteo[id] > 1;
+            var clave = claveCatalogoFila($row);
+            var duplicado = clave && conteo[clave] > 1;
             $row.toggleClass('table-danger', duplicado);
-            $row.find('.codigoproveedor').toggleClass('is-invalid', duplicado);
+            $row.find('input[name="ap_codigos_articulo_proveedor[]"]').toggleClass('is-invalid', duplicado);
+            $row.find('.codigoproveedor').toggleClass('is-invalid', duplicado && !$row.find('input[name="ap_codigos_articulo_proveedor[]"]').hasClass('is-invalid'));
         });
     }
 
-    function filaConProveedor(proveedorId, $exceptRow) {
-        var encontrada = null;
-        var id = parseInt(proveedorId || '0', 10);
-        if (!id) {
+    function filaConClaveCatalogo(clave, $exceptRow) {
+        if (!clave) {
             return null;
         }
 
+        var encontrada = null;
         $('#tbody-articulo-proveedor tr.item-articulo-proveedor').each(function () {
             var $row = $(this);
             if ($exceptRow && $row.is($exceptRow)) {
                 return;
             }
-            if (parseInt($row.find('.proveedor_id').val() || '0', 10) === id) {
+            if (claveCatalogoFila($row) === clave) {
                 encontrada = $row;
                 return false;
             }
@@ -78,21 +88,13 @@ $(function () {
         marcarDuplicadosEnGrilla();
     }
 
-    function avisarProveedorDuplicado(nombre) {
-        alert('El proveedor "' + (nombre || '') + '" ya está en la grilla. Cada proveedor puede figurar una sola vez por artículo.');
+    function avisarCodigoDuplicado(codigo, nombreProveedor) {
+        alert('El código de artículo proveedor "' + (codigo || '') + '" ya está cargado para el proveedor "' + (nombreProveedor || '') + '".');
     }
 
     function asignarProveedorFila($row, proveedor) {
         if (!proveedor || !proveedor.id) {
             limpiarProveedorFila($row);
-            return false;
-        }
-
-        var duplicado = filaConProveedor(proveedor.id, $row);
-        if (duplicado) {
-            avisarProveedorDuplicado(proveedor.nombre || '');
-            limpiarProveedorFila($row);
-            $row.find('.codigoproveedor').focus();
             return false;
         }
 
@@ -108,24 +110,25 @@ $(function () {
         return true;
     }
 
-    function validarProveedoresUnicosEnGrilla() {
+    function validarCodigosUnicosEnGrilla() {
         var vistos = {};
         var duplicado = null;
 
         $('#tbody-articulo-proveedor tr.item-articulo-proveedor').each(function () {
             var $row = $(this);
-            var id = parseInt($row.find('.proveedor_id').val() || '0', 10);
-            if (!id) {
+            var clave = claveCatalogoFila($row);
+            if (!clave) {
                 return;
             }
-            if (vistos[id]) {
+            if (vistos[clave]) {
                 duplicado = {
                     $row: $row,
+                    codigo: ($row.find('input[name="ap_codigos_articulo_proveedor[]"]').val() || '').trim(),
                     nombre: $row.find('.nombreproveedor').val() || ''
                 };
                 return false;
             }
-            vistos[id] = true;
+            vistos[clave] = true;
         });
 
         marcarDuplicadosEnGrilla();
@@ -284,6 +287,10 @@ $(function () {
         $('#consultaproveedorModal').modal('show');
     });
 
+    $(document).on('input change', '#tbody-articulo-proveedor input[name="ap_codigos_articulo_proveedor[]"]', function () {
+        marcarDuplicadosEnGrilla();
+    });
+
     $(document).on('hidden.bs.modal', '#consultaproveedorModal', function () {
         if (!$filaProveedorModal || !$filaProveedorModal.length) {
             return;
@@ -296,28 +303,22 @@ $(function () {
             return;
         }
 
-        var duplicado = filaConProveedor(provId, $row);
-        if (duplicado) {
-            avisarProveedorDuplicado($row.find('.nombreproveedor').val() || '');
-            limpiarProveedorFila($row);
-        } else {
-            $row.find('.ap-preferido').val(provId);
-            marcarDuplicadosEnGrilla();
-            actualizarPrecioVigenteFila($row);
-        }
+        $row.find('.ap-preferido').val(provId);
+        marcarDuplicadosEnGrilla();
+        actualizarPrecioVigenteFila($row);
 
         $filaProveedorModal = null;
     });
 
     $('#form-general').on('submit', function (event) {
-        var duplicado = validarProveedoresUnicosEnGrilla();
+        var duplicado = validarCodigosUnicosEnGrilla();
         if (duplicado) {
             event.preventDefault();
-            avisarProveedorDuplicado(duplicado.nombre);
+            avisarCodigoDuplicado(duplicado.codigo, duplicado.nombre);
             if (typeof mostrarSolapaArticulo === 'function') {
                 mostrarSolapaArticulo(8);
             }
-            duplicado.$row.find('.codigoproveedor').focus();
+            duplicado.$row.find('input[name="ap_codigos_articulo_proveedor[]"]').focus();
             return false;
         }
     });

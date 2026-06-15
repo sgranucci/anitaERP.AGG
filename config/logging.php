@@ -117,6 +117,13 @@ return [
         'emergency' => [
             'path' => storage_path('logs/laravel.log'),
         ],
+
+        'precarga_proveedor_api' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/precarga_proveedor_api.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => 30,
+        ],
     ],
 
 ];

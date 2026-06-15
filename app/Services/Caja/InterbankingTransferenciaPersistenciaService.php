@@ -3,6 +3,7 @@
 namespace App\Services\Caja;
 
 use App\Models\Caja\InterbankingTransferencia;
+use App\Support\Contable\PeriodoContableCierreSupport;
 use Carbon\Carbon;
 use Throwable;
 
@@ -133,7 +134,8 @@ class InterbankingTransferenciaPersistenciaService
         int $empresaId,
         array $filtroDebito,
         array $filasApi,
-        ?Carbon $syncedAt = null
+        ?Carbon $syncedAt = null,
+        bool $omitirValidacionCierre = false
     ): int {
         $syncedAt = $syncedAt ?? now();
         $guardados = 0;
@@ -143,8 +145,6 @@ class InterbankingTransferenciaPersistenciaService
                 continue;
             }
 
-            $hash = $this->dedupeHash($empresaId, $t);
-
             $requestDate = null;
             if (! empty($t['request_date'])) {
                 try {
@@ -153,6 +153,16 @@ class InterbankingTransferenciaPersistenciaService
                     $requestDate = null;
                 }
             }
+
+            if (! $omitirValidacionCierre && $requestDate !== null) {
+                PeriodoContableCierreSupport::assertOperacionPermitida(
+                    $empresaId,
+                    $requestDate->format('Y-m-d'),
+                    PeriodoContableCierreSupport::ALCANCE_INTERBANKING
+                );
+            }
+
+            $hash = $this->dedupeHash($empresaId, $t);
 
             $afip = $t['afip'] ?? null;
             if ($afip !== null && ! is_array($afip)) {
@@ -209,8 +219,18 @@ class InterbankingTransferenciaPersistenciaService
         ?string $dateSince,
         ?string $dateUntil,
         int $pageSize = 100,
-        int $maxPaginas = 80
+        int $maxPaginas = 80,
+        bool $omitirValidacionCierre = false
     ): array {
+        if (! $omitirValidacionCierre) {
+            PeriodoContableCierreSupport::assertRangoOperacionPermitido(
+                $empresaId,
+                $dateSince,
+                $dateUntil,
+                PeriodoContableCierreSupport::ALCANCE_INTERBANKING
+            );
+        }
+
         $pageSize = max(1, min(500, $pageSize));
         $filasTotales = 0;
         $paginas = 0;
@@ -248,7 +268,7 @@ class InterbankingTransferenciaPersistenciaService
                 break;
             }
 
-            $filasTotales += $this->persistirLote($empresaId, $filtroDebito, $filas, $syncedAt);
+            $filasTotales += $this->persistirLote($empresaId, $filtroDebito, $filas, $syncedAt, $omitirValidacionCierre);
             $paginas++;
 
             $gen = $res['general_data'] ?? null;
@@ -303,7 +323,10 @@ class InterbankingTransferenciaPersistenciaService
                 $empresaId,
                 [],
                 $dateSince,
-                $dateUntil
+                $dateUntil,
+                100,
+                80,
+                true
             );
 
             if (empty($resultado['ok'])) {

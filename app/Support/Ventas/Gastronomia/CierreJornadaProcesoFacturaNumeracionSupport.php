@@ -2,7 +2,7 @@
 
 namespace App\Support\Ventas\Gastronomia;
 
-use App\Models\Ventas\Venta;
+use App\Support\Ventas\VentaNumeracionEmpresaSupport;
 
 /**
  * Numeración secuencial ERP para emisión multi-factura del cierre Waitry (una transacción).
@@ -17,9 +17,13 @@ final class CierreJornadaProcesoFacturaNumeracionSupport
 {
     private int $ultimoNumero;
 
-    public function __construct(int $puntoventaId, int $tipotransaccionId, int $pisoNumeracionExterno = 0)
-    {
-        $erpMax = self::maxNumerocomprobanteErp($puntoventaId, $tipotransaccionId);
+    public function __construct(
+        int $puntoventaId,
+        int $tipotransaccionId,
+        int $pisoNumeracionExterno = 0,
+        ?int $empresaId = null,
+    ) {
+        $erpMax = self::maxNumerocomprobanteErp($puntoventaId, $tipotransaccionId, $empresaId);
         $this->ultimoNumero = max($erpMax, max(0, $pisoNumeracionExterno));
     }
 
@@ -28,15 +32,15 @@ final class CierreJornadaProcesoFacturaNumeracionSupport
         return ++$this->ultimoNumero;
     }
 
-    public static function maxNumerocomprobanteErp(int $puntoventaId, int $tipotransaccionId): int
-    {
-        if ($puntoventaId <= 0 || $tipotransaccionId <= 0) {
-            return 0;
-        }
-
-        return (int) (Venta::query()
-            ->where('puntoventa_id', $puntoventaId)
-            ->where('tipotransaccion_id', $tipotransaccionId)
-            ->max('numerocomprobante') ?? 0);
+    public static function maxNumerocomprobanteErp(
+        int $puntoventaId,
+        int $tipotransaccionId,
+        ?int $empresaId = null,
+    ): int {
+        return VentaNumeracionEmpresaSupport::maxNumerocomprobanteErp(
+            $puntoventaId,
+            $tipotransaccionId,
+            $empresaId,
+        );
     }
 }

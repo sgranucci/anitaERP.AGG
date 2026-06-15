@@ -20,6 +20,21 @@ return [
     'tipo_oper' => env('RENDICION_GASTRONOMIA_ANITA_TIPO_OPER', 'F'),
 
     /**
+     * Piso de rendg_nro_oper por empresa (solo cuenta / asigna números >= piso).
+     * Evita colisión con legacy Anita / estacionamiento en secuencia baja.
+     */
+    'nro_oper_piso_por_empresa' => [
+        2 => (int) env('RENDICION_GASTRONOMIA_NRO_OPER_PISO_KANDIKO', 200001),
+        3 => (int) env('RENDICION_GASTRONOMIA_NRO_OPER_PISO_REBISCO', 300001),
+    ],
+
+    /** Techo exclusivo del rango por empresa (siguiente debe ser < techo). */
+    'nro_oper_techo_por_empresa' => [
+        2 => (int) env('RENDICION_GASTRONOMIA_NRO_OPER_TECHO_KANDIKO', 300000),
+        3 => (int) env('RENDICION_GASTRONOMIA_NRO_OPER_TECHO_REBISCO', 400000),
+    ],
+
+    /**
      * INSERT: columnas numéricas extra del DDL (además de RendicionGastronomiaRendgastroEsquema::COLUMNAS_NUMERICAS_SIN_MAPEO).
      * La lista canónica ccig/ccignc está en código según docs/rendgastro.sql; aquí solo ampliaciones futuras.
      */
@@ -39,6 +54,10 @@ return [
         'habilitada' => filter_var(env('RENDICION_GASTRONOMIA_AUDITORIA_DIARIA', true), FILTER_VALIDATE_BOOLEAN),
         'hora' => env('RENDICION_GASTRONOMIA_AUDITORIA_HORA', '07:00'),
         'empresa_id' => (int) env('RENDICION_GASTRONOMIA_AUDITORIA_EMPRESA_ID', 1),
+        'empresas_ids' => array_values(array_filter(array_map(
+            'intval',
+            explode(',', (string) env('RENDICION_GASTRONOMIA_AUDITORIA_EMPRESAS_IDS', '1,2,3')),
+        ))),
         'tolerancia' => (float) env('RENDICION_GASTRONOMIA_AUDITORIA_TOLERANCIA', 0.02),
         /** PV que facturan solo en Anita (estacionamiento); no alertar si ERP=0 y Anita tiene Z. */
         'puntoventa_codigos_solo_anita' => array_values(array_filter(array_map(

@@ -96,7 +96,7 @@ class RecepcionProveedorFormItemsSupport
                 'moneda_id' => (int) ($item['moneda_id'] ?? 1) ?: 1,
                 'cotizacion' => (float) ($item['cotizacion'] ?? 1) ?: 1,
                 'sku' => $item['sku'] ?? ($articulo->sku ?? ''),
-                'descripcion' => $item['descripcion'] ?? ($articulo->nombre ?? ''),
+                'descripcion' => $item['descripcion'] ?? ($articulo->descripcion ?? ''),
                 'deposito_id' => $depositoLineaId > 0 ? $depositoLineaId : ($item['deposito_id'] ?? null),
                 'deposito_nombre' => $item['deposito_nombre'] ?? ($deposito->nombre ?? ''),
                 'depositoentrega_id' => $item['depositoentrega_id'] ?? ($articulo->depositoentrega_id ?? null),

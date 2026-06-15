@@ -13,10 +13,11 @@ class RendicionGastronomiaRepararJornadaAnita extends Command
                             {--jornada= : ID jornada_gastronomia (si no, se busca por --fecha)}
                             {--fecha=2026-06-01 : Fecha de jornada Y-m-d}
                             {--empresa=1 : empresa_id}
-                            {--puntoventa= : Código PV CAE opcional (ej. 00004)}
+                            {--pc= : IP de la PC opcional (ej. 192.168.20.152)}
+                            {--puntoventa= : Alias legacy de --pc}
                             {--dry-run : Simula sin escribir en Anita}';
 
-    protected $description = 'Repara rendg_total_z y rendg_tot_nc en Anita por fecha de jornada, empresa y PV (portadora: turno N, si no T, si no M)';
+    protected $description = 'Repara rendg_total_z y rendg_tot_nc en Anita por PC (rendg_host): Z = CAE+CAEA del día';
 
     public function handle(RendicionGastronomiaRepararJornadaAnitaService $service): int
     {
@@ -26,8 +27,8 @@ class RendicionGastronomiaRepararJornadaAnita extends Command
         }
 
         $dryRun = (bool) $this->option('dry-run');
-        $pvFiltro = $this->option('puntoventa');
-        $pvFiltro = is_string($pvFiltro) && trim($pvFiltro) !== '' ? trim($pvFiltro) : null;
+        $pcFiltro = $this->option('pc') ?? $this->option('puntoventa');
+        $pcFiltro = is_string($pcFiltro) && trim($pcFiltro) !== '' ? trim($pcFiltro) : null;
 
         $this->line('Bridge: '.ApiAnita::urlBridge());
         $this->line(sprintf(
@@ -39,7 +40,7 @@ class RendicionGastronomiaRepararJornadaAnita extends Command
         ));
 
         try {
-            $resultados = $service->reparar($jornada, $pvFiltro, $dryRun);
+            $resultados = $service->reparar($jornada, $pcFiltro, $dryRun);
         } catch (\Throwable $e) {
             $this->error($e->getMessage());
 
@@ -47,7 +48,7 @@ class RendicionGastronomiaRepararJornadaAnita extends Command
         }
 
         if ($resultados === []) {
-            $this->warn('No hay puntos de venta con rendiciones de turno en esta jornada.');
+            $this->warn('No hay PCs con rendiciones de turno en esta jornada.');
 
             return self::SUCCESS;
         }
@@ -67,25 +68,59 @@ class RendicionGastronomiaRepararJornadaAnita extends Command
 
             if (! empty($r['detalle'])) {
                 $this->newLine();
-                $this->comment('PV '.$r['puntoventa'].' (sucursal '.$r['sucursal'].') — portadora turno '.($r['portadora_turno'] ?? '—'));
-                $this->table(
-                    ['nro_oper', 'turno', 'hora', 'turno ERP', 'Z', 'NC', 'portadora'],
-                    array_map(fn (array $d) => [
-                        $d['nro_oper'],
-                        $d['turno'],
-                        $d['hora'],
-                        $d['turno_erp'],
-                        number_format((float) $d['z'], 2, '.', ''),
-                        number_format((float) $d['tot_nc'], 2, '.', ''),
-                        $d['portadora'] ? 'sí' : 'no',
-                    ], $r['detalle']),
-                );
+                $this->comment('PC '.$r['identificador_pc'].' — portadora turno '.($r['portadora_turno'] ?? '—'));
+                if (($r['identificador_pc'] ?? '') === 'LEGACY-HUERFANAS') {
+                    $this->table(
+                        ['nro_oper', 'host', 'suc', 'Z legacy', 'fc_caea'],
+                        array_map(fn (array $d) => [
+                            $d['nro_oper'] ?? '—',
+                            $d['host'] ?? '—',
+                            $d['suc'] ?? '—',
+                            number_format((float) ($d['z'] ?? 0), 2, '.', ''),
+                            number_format((float) ($d['fc_caea'] ?? 0), 2, '.', ''),
+                        ], $r['detalle']),
+                    );
+                } elseif (($r['identificador_pc'] ?? '') === 'NORMALIZAR-CAEA') {
+                    $this->table(
+                        ['nro_oper', 'host', 'Z antes / fc_caea antes', 'valor'],
+                        array_map(function (array $d): array {
+                            if (isset($d['z_antes'])) {
+                                return [
+                                    $d['nro_oper'] ?? '—',
+                                    $d['host'] ?? '—',
+                                    'Z→0',
+                                    number_format((float) ($d['z_antes'] ?? 0), 2, '.', ''),
+                                ];
+                            }
+
+                            return [
+                                $d['nro_oper'] ?? '—',
+                                $d['host'] ?? '—',
+                                'fc_caea→0',
+                                number_format((float) ($d['fc_caea_antes'] ?? 0), 2, '.', ''),
+                            ];
+                        }, $r['detalle']),
+                    );
+                } else {
+                    $this->table(
+                        ['nro_oper', 'turno', 'hora', 'turno ERP', 'Z', 'NC', 'portadora'],
+                        array_map(fn (array $d) => [
+                            $d['nro_oper'],
+                            $d['turno'],
+                            $d['hora'],
+                            $d['turno_erp'],
+                            number_format((float) $d['z'], 2, '.', ''),
+                            number_format((float) $d['tot_nc'], 2, '.', ''),
+                            ! empty($d['portadora']) ? 'sí' : 'no',
+                        ], $r['detalle']),
+                    );
+                }
             }
         }
 
         $this->newLine();
         $this->table(
-            ['PV', 'Estado', 'Cabeceras', 'Turno Z', 'Portadora nro_oper', 'Hora', 'Z día', 'NC día'],
+            ['PC', 'Estado', 'Cabeceras', 'Turno Z', 'Portadora nro_oper', 'Hora', 'Z día (CAE+CAEA)', 'NC día'],
             $filasResumen,
         );
 

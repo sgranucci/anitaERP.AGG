@@ -13,7 +13,9 @@ use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Services\Compras\OrdencompraService;
 use App\Services\Compras\ComprobanteService;
 use App\Services\Compras\PrecargaComprobanteAnitaSyncService;
+use App\Support\Compras\ApiPrecargaProveedorLogger;
 use DB;
+use Illuminate\Validation\ValidationException;
 
 class ApiController extends Controller
 {
@@ -53,9 +55,18 @@ class ApiController extends Controller
 
     public function listaConcepto($cuitProveedor, $numeroOc, $tipoComprobante)
     {
+        $log = ApiPrecargaProveedorLogger::trace();
+        $log->info('lista_concepto.inicio', [
+            'cuit_proveedor' => $cuitProveedor,
+            'numero_oc' => $numeroOc,
+            'tipo_comprobante' => $tipoComprobante,
+        ]);
+
         $respuesta = [];
         $conceptos = [];
         $flError = false;
+        $status = 500;
+        $message = 'Error interno';
 
         // Busca la orden de compra 
         $ordencompra = $this->ordencompraService->leeOrdenCompra($numeroOc);
@@ -65,10 +76,16 @@ class ApiController extends Controller
             $status = 404;
             $message = $ordencompra;
             $flError = true;
+            $log->warning('lista_concepto.oc_inexistente', [
+                'numero_oc' => $numeroOc,
+                'status' => $status,
+            ]);
         }
 
         if (!$flError)
         {
+            $log->info('lista_concepto.oc_encontrada', ['numero_oc' => $numeroOc]);
+
             $datosOrdenCompra = $ordencompra['ordencompra'];
             $itemsOrdenCompra = $ordencompra['item'];
 
@@ -81,6 +98,11 @@ class ApiController extends Controller
                 $status = 404;
                 $message = "OC no corresponde con el CUIT indicado";
                 $flError = true;
+                $log->warning('lista_concepto.cuit_no_coincide', [
+                    'cuit_proveedor' => $cuitProveedor,
+                    'cuit_orden_compra' => $cuitOrdenCompra,
+                    'status' => $status,
+                ]);
             }
 
             if (!$flError)
@@ -99,7 +121,12 @@ class ApiController extends Controller
                     {
                         $status = 404;
                         $message = "No existe centro de costo de la OC";
-                        $flError = true; 
+                        $flError = true;
+                        $log->warning('lista_concepto.tipo_iva_centro_costo_invalido', [
+                            'centro_costo_destino' => $centroCostoDestino,
+                            'tipo_iva' => $tipoIva,
+                            'status' => $status,
+                        ]);
                     }
 
                     if (!$flError)
@@ -152,6 +179,13 @@ class ApiController extends Controller
                         else
                             $abreviatura = $tipoComprobante;
 
+                        $log->info('lista_concepto.tipo_resuelto', [
+                            'abreviatura' => $abreviatura,
+                            'tipo_item' => $tipoItem,
+                            'centro_costo_destino' => $centroCostoDestino,
+                            'letra_proveedor' => $letraProveedor,
+                        ]);
+
                         // Busca los conceptos en base al tipo de comprobante
                         $comprobante = $this->comprobanteService->leeTipoTransaccionCompraPorAbreviatura($abreviatura); 
 
@@ -175,36 +209,109 @@ class ApiController extends Controller
 
                         $status = 200;
                         $message = "devuelve lista de conceptos";
+                        $log->info('lista_concepto.ok', [
+                            'status' => $status,
+                            'cantidad_conceptos' => count($conceptos),
+                            'tipocomprobante' => $abreviatura,
+                        ]);
                     }
                 }
                 else
                 {
                     $status = 404;
                     $message = "No existe centro de costo de la OC";
-                    $flError = true;                    
+                    $flError = true;
+                    $log->warning('lista_concepto.centro_costo_inexistente', [
+                        'centro_costo_destino' => $centroCostoDestino,
+                        'status' => $status,
+                    ]);
                 }
             }
         }
 
-        if ($status == 200)
+        if ($status == 200) {
             return response()->json([
                 "respuesta" => $respuesta], $status);
-        else
-            return response()->json([
-                "message" => $message,
-                ], $status);
+        }
+
+        $log->warning('lista_concepto.respuesta_error', [
+            'status' => $status,
+            'message' => $message,
+        ]);
+
+        return response()->json([
+            "message" => $message,
+            ], $status);
     }
 
     public function recibeComprobante(Request $request)
     {
-        $request->validate([
-            'cuit_proveedor' => 'required|string|max:15',
-            'cuit_empresa' => 'required|string|max:15',
-            'tipo' => 'required|string|max:10',
-            'conceptos' => 'required|array|min:1',
-            'conceptos.*.id_concepto' => 'required',
-            'conceptos.*.importe' => 'required|numeric',
+        $log = ApiPrecargaProveedorLogger::trace();
+        $log->info('recibe_comprobante.inicio', [
+            'payload' => $log->requestPayload($request),
+            'ip' => $request->ip(),
         ]);
+
+        $sucursalRaw = $request->input('sucursal');
+        $numeroFacturaRaw = $request->input('numero_factura');
+        $sucursal = $this->normalizarEnteroComprobante($sucursalRaw);
+        $numeroFactura = $this->normalizarEnteroComprobante($numeroFacturaRaw);
+
+        if ($sucursal === null) {
+            $log->warning('recibe_comprobante.sucursal_invalida', [
+                'sucursal_raw' => $sucursalRaw,
+                'status' => 422,
+            ]);
+
+            return response()->json([
+                'message' => 'El campo sucursal debe ser un número válido.',
+            ], 422);
+        }
+
+        if ($numeroFactura === null || $numeroFactura < 1) {
+            $log->warning('recibe_comprobante.numero_factura_invalido', [
+                'numero_factura_raw' => $numeroFacturaRaw,
+                'status' => 422,
+            ]);
+
+            return response()->json([
+                'message' => 'El campo numero_factura debe ser un número válido mayor a cero.',
+            ], 422);
+        }
+
+        $request->merge([
+            'sucursal' => $sucursal,
+            'numero_factura' => $numeroFactura,
+        ]);
+
+        $log->info('recibe_comprobante.numeros_normalizados', [
+            'sucursal_raw' => $sucursalRaw,
+            'sucursal' => $sucursal,
+            'numero_factura_raw' => $numeroFacturaRaw,
+            'numero_factura' => $numeroFactura,
+        ]);
+
+        try {
+            $request->validate([
+                'cuit_proveedor' => 'required|string|max:15',
+                'cuit_empresa' => 'required|string|max:15',
+                'tipo' => 'required|string|max:10',
+                'letra' => 'required|string|size:1',
+                'sucursal' => 'required|integer|min:0',
+                'numero_factura' => 'required|integer|min:1',
+                'conceptos' => 'required|array|min:1',
+                'conceptos.*.id_concepto' => 'required',
+                'conceptos.*.importe' => 'required|numeric',
+            ]);
+        } catch (ValidationException $e) {
+            $log->warning('recibe_comprobante.validacion_fallida', [
+                'errores' => $e->errors(),
+                'status' => 422,
+            ]);
+            throw $e;
+        }
+
+        $log->info('recibe_comprobante.validacion_ok');
 
         $numeroOc = trim((string) $request->input('numero_oc', ''));
         try {
@@ -213,9 +320,29 @@ class ApiController extends Controller
                 : null;
 
             if ($resueltoProveedor === null) {
+                $log->info('recibe_comprobante.proveedor_fallback_cuit', [
+                    'numero_oc' => $numeroOc,
+                    'cuit_proveedor' => $request->cuit_proveedor,
+                ]);
                 $resueltoProveedor = $this->resolverProveedorDesdeCuit($request->cuit_proveedor);
+                $log->info('recibe_comprobante.proveedor_resuelto_cuit', [
+                    'proveedor_id' => $resueltoProveedor['proveedor_id'],
+                    'codigo_proveedor' => $resueltoProveedor['codigoProveedor'],
+                ]);
+            } else {
+                $log->info('recibe_comprobante.proveedor_resuelto_oc', [
+                    'numero_oc' => $numeroOc,
+                    'proveedor_id' => $resueltoProveedor['proveedor_id'],
+                    'codigo_proveedor' => $resueltoProveedor['codigoProveedor'],
+                ]);
             }
         } catch (\RuntimeException $e) {
+            $log->warning('recibe_comprobante.proveedor_error', [
+                'message' => $e->getMessage(),
+                'numero_oc' => $numeroOc,
+                'status' => 422,
+            ]);
+
             return response()->json(['message' => $e->getMessage()], 422);
         }
 
@@ -256,12 +383,23 @@ class ApiController extends Controller
                     }
                 }
             }
-        }        
+        }
+
+        $log->info('recibe_comprobante.empresa_resuelta', [
+            'empresa_id' => $empresa_id,
+            'codigo_empresa' => $codigoEmpresa,
+            'cuit_empresa' => $request->cuit_empresa,
+        ]);
 
         // Busca tipo de transaccion por tipo de comprobante (abreviatura = prec_tipo en Anita)
         $comprobante = $this->comprobanteService->leeTipoTransaccionCompraPorAbreviatura($request->tipo);
 
         if (! $comprobante) {
+            $log->warning('recibe_comprobante.tipo_comprobante_invalido', [
+                'tipo' => $request->tipo,
+                'status' => 422,
+            ]);
+
             return response()->json([
                 'message' => 'Tipo de comprobante no válido: '.$request->tipo,
             ], 422);
@@ -270,11 +408,24 @@ class ApiController extends Controller
         $tipotransaccion_compra_id = $comprobante->id;
         $tipoAbreviatura = $comprobante->abreviatura ?? $request->tipo;
 
+        $log->info('recibe_comprobante.tipo_comprobante_ok', [
+            'tipo_solicitado' => $request->tipo,
+            'tipotransaccion_compra_id' => $tipotransaccion_compra_id,
+            'tipo_abreviatura' => $tipoAbreviatura,
+        ]);
+
         $lineasConcepto = [];
-        foreach ($request->conceptos as $concepto) {
+        foreach ($request->conceptos as $indice => $concepto) {
             try {
                 $this->precargaAnitaSync->resolverCodigoConceptoAnita(null, $concepto['id_concepto']);
             } catch (\RuntimeException $e) {
+                $log->warning('recibe_comprobante.concepto_anita_error', [
+                    'indice' => $indice,
+                    'id_concepto' => $concepto['id_concepto'],
+                    'message' => $e->getMessage(),
+                    'status' => 422,
+                ]);
+
                 return response()->json(['message' => $e->getMessage()], 422);
             }
 
@@ -286,6 +437,12 @@ class ApiController extends Controller
                 }
             }
             if (! $concepto_ivacompra) {
+                $log->warning('recibe_comprobante.concepto_erp_inexistente', [
+                    'indice' => $indice,
+                    'id_concepto' => $concepto['id_concepto'],
+                    'status' => 422,
+                ]);
+
                 return response()->json([
                     'message' => 'Concepto IVA compra con código Anita «'.$concepto['id_concepto'].'» no existe en el ERP.',
                 ], 422);
@@ -297,6 +454,11 @@ class ApiController extends Controller
                 'monto' => $concepto['importe'],
             ];
         }
+
+        $log->info('recibe_comprobante.conceptos_ok', [
+            'cantidad' => count($lineasConcepto),
+            'lineas' => $lineasConcepto,
+        ]);
 
         $moneda_id = 1;
         switch(strtoupper($request->moneda))
@@ -337,9 +499,39 @@ class ApiController extends Controller
             'estado' => 'PENDIENTE'
         ];
 
+        $duplicado = $this->precarga_comprobante_proveedorRepository->findDuplicadoPrecarga(
+            $empresa_id,
+            $proveedor_id,
+            $tipotransaccion_compra_id,
+            (string) $request->letra,
+            $request->sucursal,
+            $request->numero_factura,
+        );
+        if ($duplicado !== null) {
+            $mensajeDuplicado = $this->precarga_comprobante_proveedorRepository->mensajeFacturaDuplicada(
+                $duplicado,
+                $tipoAbreviatura
+            );
+            $log->warning('recibe_comprobante.factura_duplicada', [
+                'message' => $mensajeDuplicado,
+                'precarga_existente_id' => $duplicado->id,
+                'status' => 422,
+            ]);
+
+            return response()->json([
+                'message' => $mensajeDuplicado,
+            ], 422);
+        }
+
+        $log->info('recibe_comprobante.grabar_inicio', ['data' => $data]);
+
         DB::beginTransaction();
         try {
             $precarga_comprobante_proveedor = $this->precarga_comprobante_proveedorRepository->create($data);
+
+            $log->info('recibe_comprobante.cabecera_creada', [
+                'precarga_id' => $precarga_comprobante_proveedor->id,
+            ]);
 
             foreach ($lineasConcepto as $linea) {
                 $this->precarga_comprobante_proveedor_conceptoRepository->create([
@@ -352,12 +544,21 @@ class ApiController extends Controller
 
             DB::commit();
 
+            $log->info('recibe_comprobante.ok', [
+                'precarga_id' => $precarga_comprobante_proveedor->id,
+                'status' => 201,
+            ]);
+
             return response()->json([
                 'id' => $precarga_comprobante_proveedor->id,
                 'message' => 'Precarga registrada en ERP y sincronizada con Anita (compras).',
             ], 201);
         } catch (\Throwable $e) {
             DB::rollBack();
+
+            $log->error('recibe_comprobante.grabar_fallo', [
+                'status' => 422,
+            ], $e);
 
             return response()->json([
                 'errores' => $e->getMessage(),
@@ -439,7 +640,7 @@ class ApiController extends Controller
 
     private function proveedorEstaActivo(object $proveedor): bool
     {
-        return in_array($proveedor->estado, ['0', 'Activo'], true);
+        return in_array($proveedor->estado, ['0', 'Activo', '3', 'Regularizado'], true);
     }
 
     /**
@@ -463,5 +664,31 @@ class ApiController extends Controller
         }
 
         return array_values(array_unique($variantes));
+    }
+
+    /**
+     * Convierte sucursal / número de factura leídos literal de la factura
+     * (ej. "0014", "00037186") a entero para grabar en el ERP.
+     */
+    private function normalizarEnteroComprobante(mixed $valor): ?int
+    {
+        if (is_int($valor)) {
+            return $valor;
+        }
+
+        if (is_float($valor)) {
+            return (int) $valor;
+        }
+
+        $texto = trim((string) $valor);
+        if ($texto === '') {
+            return null;
+        }
+
+        if (! preg_match('/^\d+$/', $texto)) {
+            return null;
+        }
+
+        return (int) $texto;
     }
 }

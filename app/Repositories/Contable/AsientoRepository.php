@@ -9,6 +9,7 @@ use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Contable\PeriodoContableCierreSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Exception;
 use App\ApiAnita;
@@ -58,6 +59,8 @@ class AsientoRepository implements AsientoRepositoryInterface
 
     public function create(array $data)
     {
+		$this->assertPeriodoContablePermitido($data);
+
 		//$data['numeroasiento'] = self::ultimoAsiento($data['empresa_id']);
 		if (array_key_exists('path_sistema', $data))
 			$this->path_sistema = $data['path_sistema'];
@@ -92,6 +95,12 @@ class AsientoRepository implements AsientoRepositoryInterface
     {
 		$data['usuario_id'] = Auth::user()->id;
 
+		$asientoExistente = $this->model->find($id);
+		if ($asientoExistente) {
+			$dataParaValidar = array_merge($asientoExistente->toArray(), $data);
+			$this->assertPeriodoContablePermitido($dataParaValidar);
+		}
+
 		$asiento = $this->model->findOrFail($id)->update($data);
 
 		// Actualiza anita
@@ -104,6 +113,10 @@ class AsientoRepository implements AsientoRepositoryInterface
     public function delete($id)
     {
     	$asiento = Asiento::find($id);
+
+		if ($asiento) {
+			$this->assertPeriodoContablePermitido($asiento->toArray());
+		}
 
 		// Elimina anita
 		if ($asiento)
@@ -753,5 +766,68 @@ class AsientoRepository implements AsientoRepositoryInterface
 		}
 
 		return $numeroOperacion;		
-	}	
+	}
+
+	private function assertPeriodoContablePermitido(array $data): void
+	{
+		if (empty($data['empresa_id']) || empty($data['fecha'])) {
+			return;
+		}
+
+		$alcance = (string) ($data['alcance_cierre_contable'] ?? $this->inferirAlcanceCierre($data));
+		$opciones = [];
+
+		if ($alcance === PeriodoContableCierreSupport::ALCANCE_FACTURACION) {
+			$opciones['modofacturacion_pv'] = $data['modofacturacion_pv'] ?? null;
+		}
+
+		PeriodoContableCierreSupport::assertOperacionPermitida(
+			(int) $data['empresa_id'],
+			(string) $data['fecha'],
+			$alcance,
+			null,
+			$opciones
+		);
+	}
+
+	private function inferirAlcanceCierre(array $data): string
+	{
+		if (! empty($data['cobranza_id'])) {
+			return PeriodoContableCierreSupport::ALCANCE_COBRANZA;
+		}
+
+		if (! empty($data['caja_movimiento_id'])) {
+			return PeriodoContableCierreSupport::ALCANCE_CAJA;
+		}
+
+		if (! empty($data['movimientostock_id'])) {
+			return PeriodoContableCierreSupport::ALCANCE_STOCK;
+		}
+
+		if (! empty($data['venta_id'])) {
+			return PeriodoContableCierreSupport::ALCANCE_FACTURACION;
+		}
+
+		if (! empty($data['recepcionproveedor_id'])) {
+			return PeriodoContableCierreSupport::ALCANCE_RECEPCION_PROVEEDOR;
+		}
+
+		if (! empty($data['comprobante_proveedor_id'])) {
+			return PeriodoContableCierreSupport::ALCANCE_STOCK;
+		}
+
+		if (! empty($data['tipoasiento_id'])) {
+			$tipoasiento = $this->tipoasientoRepository->find($data['tipoasiento_id']);
+			if ($tipoasiento) {
+				return match (strtoupper((string) ($tipoasiento->abreviatura ?? ''))) {
+					'VTA' => PeriodoContableCierreSupport::ALCANCE_FACTURACION,
+					'TES' => PeriodoContableCierreSupport::ALCANCE_CAJA,
+					'COM', 'STK' => PeriodoContableCierreSupport::ALCANCE_STOCK,
+					default => PeriodoContableCierreSupport::ALCANCE_CONTABLE,
+				};
+			}
+		}
+
+		return PeriodoContableCierreSupport::ALCANCE_CONTABLE;
+	}
 }

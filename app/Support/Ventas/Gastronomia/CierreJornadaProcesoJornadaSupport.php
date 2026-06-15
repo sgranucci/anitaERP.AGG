@@ -62,19 +62,26 @@ final class CierreJornadaProcesoJornadaSupport
         $emisionSnap = is_array($payloadSnap['factura_proceso_emision'] ?? null)
             ? $payloadSnap['factura_proceso_emision']
             : [];
-        $facturaEmitida = ! empty($emisionSnap['emitido_en'])
-            || ! empty($emisionSnap['facturas'])
-            || ! empty($emisionSnap['venta_id']);
+        $requiereEmisionProceso = (bool) ($payloadSnap['requiere_emision_proceso'] ?? true);
+        $facturaOmitida = self::emisionProcesoOmitida($emisionSnap);
+        $facturaEmitida = self::facturaProcesoConsideradaEmitida($emisionSnap);
         $asientosGrabados = ! empty($payloadSnap['asientos_proceso_grabacion']['asientos']);
         $rendicionAnitaGrabada = ! empty($payloadSnap['rendicion_proceso_anita']['nro_oper']);
         $rendicionAnitaPendiente = $asientosGrabados && ! $rendicionAnitaGrabada;
+
+        if ($puedeFacturar && ! $requiereEmisionProceso && ! $facturaEmitida) {
+            $motivoBloqueo = 'No hay comandas Waitry sin facturar ni ajuste de insumos. '
+                .'No corresponde emitir facturas del proceso; puede grabar los asientos contables directamente.';
+        }
 
         $motivoBloqueoAsientos = null;
         $puedeGrabarAsientos = false;
         if (! $puedeFacturar) {
             $motivoBloqueoAsientos = $motivoBloqueo;
-        } elseif (! $facturaEmitida) {
+        } elseif (! $facturaEmitida && $requiereEmisionProceso) {
             $motivoBloqueoAsientos = 'Debe emitir las facturas del proceso (o el ajuste de insumos) antes de grabar los asientos contables.';
+        } elseif (! $facturaEmitida && ! $requiereEmisionProceso) {
+            $motivoBloqueoAsientos = 'Pulse «Analizar tramo» con la jornada cerrada para confirmar que no hay comandas Waitry a facturar.';
         } elseif ($asientosGrabados && $rendicionAnitaGrabada) {
             $motivoBloqueoAsientos = 'Ya se grabaron los asientos del proceso para esta jornada.';
         } elseif ($rendicionAnitaPendiente) {
@@ -83,8 +90,11 @@ final class CierreJornadaProcesoJornadaSupport
             $puedeGrabarAsientos = true;
         }
 
-        if ($facturaEmitida && $motivoBloqueo === null) {
+        if ($facturaEmitida && $motivoBloqueo === null && ! $facturaOmitida) {
             $motivoBloqueo = 'Ya se emitió la facturación del proceso para esta jornada.';
+        } elseif ($facturaOmitida && $motivoBloqueo === null) {
+            $motivoBloqueo = 'No hay comandas Waitry sin facturar; la facturación del proceso no aplica. '
+                .'Puede grabar los asientos contables.';
         }
 
         $resultadoGrabado = self::resultadoGrabadoDesdePayload($payloadSnap);
@@ -96,10 +106,12 @@ final class CierreJornadaProcesoJornadaSupport
             'abierta' => $abierta,
             'cerrada' => $cerrada,
             'puede_auditar' => true,
-            'puede_facturar_proceso' => $puedeFacturar && ! $facturaEmitida,
-            'factura_bloqueada' => ! $puedeFacturar || $facturaEmitida,
+            'puede_facturar_proceso' => $puedeFacturar && ! $facturaEmitida && $requiereEmisionProceso,
+            'factura_bloqueada' => ! $puedeFacturar || $facturaEmitida || ! $requiereEmisionProceso,
             'motivo_factura_bloqueada' => $motivoBloqueo,
-            'factura_proceso_emitida' => $facturaEmitida,
+            'factura_proceso_emitida' => $facturaEmitida && ! $facturaOmitida,
+            'factura_proceso_omitida' => $facturaOmitida,
+            'requiere_emision_proceso' => $requiereEmisionProceso,
             'recuperacion_emision_archivada' => $recuperacionArchivada !== null,
             'recuperacion_emision_resumen' => $recuperacionArchivada !== null
                 ? [
@@ -339,6 +351,10 @@ final class CierreJornadaProcesoJornadaSupport
         }
 
         $payload = is_array($snapshot?->payload) ? $snapshot->payload : [];
+        if (self::recalculoAplicadoEnSnapshot($payload)) {
+            return round((float) ($payload['porcentaje'] ?? $pctSnapshot), 4);
+        }
+
         foreach (['factura_proceso_emision_recuperacion', 'factura_proceso_emision'] as $clave) {
             $bloque = $payload[$clave] ?? null;
             if (is_array($bloque) && isset($bloque['porcentaje'])) {
@@ -350,12 +366,79 @@ final class CierreJornadaProcesoJornadaSupport
         }
 
         if ($exigirRecalculado) {
+            $payload = is_array($snapshot?->payload) ? $snapshot->payload : [];
+            if (! (bool) ($payload['requiere_emision_proceso'] ?? true)) {
+                return 0.;
+            }
+
             throw new \InvalidArgumentException(
                 'Debe indicar el porcentaje y pulsar «Recalcular medios» antes de emitir las facturas del proceso.',
             );
         }
 
         return 0.;
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $payload
+     */
+    public static function recalculoAplicadoEnSnapshot(?array $payload): bool
+    {
+        return is_array($payload) && ! empty($payload['recalculo_aplicado_en']);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $movimientos
+     */
+    public static function requiereEmisionProcesoDesdeMovimientos(array $movimientos): bool
+    {
+        $plan = CierreJornadaProcesoFacturaLotesSupport::armarPlanDesdeMovimientos($movimientos);
+
+        return ($plan['lotes'] ?? []) !== [] || ($plan['comandas_ajuste'] ?? []) !== [];
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $emision
+     */
+    public static function emisionProcesoOmitida(?array $emision): bool
+    {
+        return is_array($emision) && ! empty($emision['omitida']);
+    }
+
+    /**
+     * Emisión real o marcada como omitida (sin comandas Waitry sin facturar).
+     *
+     * @param  array<string, mixed>|null  $emision
+     */
+    public static function facturaProcesoConsideradaEmitida(?array $emision): bool
+    {
+        if (! is_array($emision)) {
+            return false;
+        }
+
+        if (! empty($emision['omitida'])) {
+            return true;
+        }
+
+        return ! empty($emision['emitido_en'])
+            || ! empty($emision['facturas'])
+            || ! empty($emision['venta_id']);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function emisionOmitidaPayload(float $porcentaje = 0.): array
+    {
+        return [
+            'omitida' => true,
+            'sin_comandas_waitry' => true,
+            'emitido_en' => now()->toIso8601String(),
+            'porcentaje' => round($porcentaje, 4),
+            'facturas' => [],
+            'total_factura' => 0.,
+            'total_ajuste' => 0.,
+        ];
     }
 
     /**

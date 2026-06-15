@@ -677,6 +677,9 @@ class CapexReporteService
 
         $base = [
             'id' => $capex->id,
+            'empresa_id' => $capex->empresa_id,
+            'presupuesto_id' => $capex->presupuesto_id,
+            'centrocosto_id' => $capex->centrocosto_id,
             'nombreempresa' => $capex->nombreempresa ?? '',
             'empresa' => $capex->nombreempresa ?? '',
             'presupuesto' => $capex->nombrepresupuesto ?? '',

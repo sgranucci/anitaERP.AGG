@@ -190,11 +190,23 @@ final class GastronomiaCierreJornadaProcesoService
      */
     public function grabarAsientosProceso(int $jornadaId, float $porcentaje, ?string $fechaAsiento = null): array
     {
+        $this->asegurarEmisionOmitidaSiCorresponde($jornadaId, $porcentaje);
+
         return app(GastronomiaCierreJornadaAsientosGrabacionService::class)->grabar(
             $jornadaId,
             $porcentaje,
             $fechaAsiento,
         );
+    }
+
+    /**
+     * Marca la emisión como omitida cuando no hay comandas Waitry sin facturar (solo asientos).
+     */
+    public function asegurarEmisionOmitidaSiCorresponde(int $jornadaId, ?float $porcentaje = null): void
+    {
+        $jornada = $this->resolverJornada($jornadaId);
+        $clasificacion = $this->clasificacionParaJornada($jornada, $porcentaje);
+        $this->sincronizarMetadatosEmisionSnapshot($jornada, $clasificacion, $porcentaje);
     }
 
     /**
@@ -296,8 +308,13 @@ final class GastronomiaCierreJornadaProcesoService
 
         $cargado = $this->obtenerCargadoParaProceso($jornada, $refrescarWaitry);
         $clasificacion = $this->clasificacionParaJornada($jornada);
+        $this->sincronizarMetadatosEmisionSnapshot($jornada, $clasificacion);
+        $this->autoAplicarRecalculoInicialSiCorresponde($jornada, $clasificacion);
         $config = CierreJornadaProcesoConfigSupport::paraEmpresaConDetalle($empresaId);
         $snapshot = $this->snapshotDeJornada($jornadaId);
+        if ($snapshot !== null) {
+            $clasificacion = $this->clasificacionParaJornada($jornada, (float) ($snapshot->porcentaje ?? 0));
+        }
 
         return [
             'ok' => true,
@@ -356,6 +373,7 @@ final class GastronomiaCierreJornadaProcesoService
 
         $clasificacion = $this->clasificacionConRedistribucion($jornada, $porcentaje);
         $this->persistirPorcentajeEnSnapshot($jornadaId, $porcentaje, $clasificacion);
+        $this->sincronizarMetadatosEmisionSnapshot($jornada, $clasificacion, $porcentaje);
 
         return [
             'ok' => true,
@@ -780,9 +798,96 @@ final class GastronomiaCierreJornadaProcesoService
         }
         $payload['porcentaje'] = round($porcentaje, 4);
         $payload['redistribucion'] = $clasificacion['redistribucion'] ?? null;
+        $payload['recalculo_aplicado_en'] = now()->toIso8601String();
 
         $snapshot->porcentaje = round($porcentaje, 4);
         $snapshot->payload = $payload;
+        $snapshot->save();
+    }
+
+    /**
+     * Con comandas Waitry a facturar, aplica 0 % al analizar (tramo definitivo) para poder emitir
+     * sin exigir «Recalcular medios» cuando no hay redistribución. Si necesita otro %, recalcule manualmente.
+     *
+     * @param  array<string, mixed>  $clasificacion
+     */
+    private function autoAplicarRecalculoInicialSiCorresponde(JornadaGastronomia $jornada, array $clasificacion): void
+    {
+        $snapshot = $this->snapshotDeJornada((int) $jornada->id);
+        if ($snapshot === null) {
+            return;
+        }
+
+        $payload = is_array($snapshot->payload) ? $snapshot->payload : [];
+        if (! (bool) ($payload['requiere_emision_proceso'] ?? false)) {
+            return;
+        }
+
+        if (CierreJornadaProcesoJornadaSupport::recalculoAplicadoEnSnapshot($payload)) {
+            return;
+        }
+
+        $emision = is_array($payload['factura_proceso_emision'] ?? null)
+            ? $payload['factura_proceso_emision']
+            : null;
+        if (CierreJornadaProcesoJornadaSupport::emisionProcesoOmitida($emision)) {
+            return;
+        }
+        if (is_array($emision) && (
+            ! empty($emision['facturas']) || ! empty($emision['venta_id']) || ! empty($emision['emitido_en'])
+        )) {
+            return;
+        }
+
+        $ctx = CierreJornadaProcesoJornadaSupport::contexto($jornada, $snapshot);
+        if (! $ctx['cerrada'] || ! $ctx['snapshot_definitivo']) {
+            return;
+        }
+
+        $this->persistirPorcentajeEnSnapshot((int) $jornada->id, 0., $clasificacion);
+    }
+
+    /**
+     * @param  array<string, mixed>  $clasificacion
+     */
+    private function sincronizarMetadatosEmisionSnapshot(
+        JornadaGastronomia $jornada,
+        array $clasificacion,
+        ?float $porcentaje = null,
+    ): void {
+        $snapshot = $this->snapshotDeJornada((int) $jornada->id);
+        if ($snapshot === null) {
+            return;
+        }
+
+        $movimientos = is_array($clasificacion['movimientos'] ?? null) ? $clasificacion['movimientos'] : [];
+        $requiereEmision = CierreJornadaProcesoJornadaSupport::requiereEmisionProcesoDesdeMovimientos($movimientos);
+        $pct = $porcentaje ?? (float) ($clasificacion['porcentaje'] ?? $snapshot->porcentaje ?? 0);
+
+        $payload = is_array($snapshot->payload) ? $snapshot->payload : [];
+        $payload['requiere_emision_proceso'] = $requiereEmision;
+        $payload['total_pendiente_facturar_proceso'] = round((float) ($clasificacion['total_pendiente_facturar'] ?? 0), 2);
+
+        $emisionActual = is_array($payload['factura_proceso_emision'] ?? null)
+            ? $payload['factura_proceso_emision']
+            : null;
+        $yaTieneEmisionReal = is_array($emisionActual)
+            && ! CierreJornadaProcesoJornadaSupport::emisionProcesoOmitida($emisionActual)
+            && CierreJornadaProcesoJornadaSupport::facturaProcesoConsideradaEmitida($emisionActual);
+
+        if (! $requiereEmision && ! $yaTieneEmisionReal) {
+            $ctx = CierreJornadaProcesoJornadaSupport::contexto($jornada, $snapshot);
+            if ($ctx['cerrada'] && $ctx['snapshot_definitivo']) {
+                $payload['factura_proceso_emision'] = CierreJornadaProcesoJornadaSupport::emisionOmitidaPayload($pct);
+            }
+        } elseif ($requiereEmision && CierreJornadaProcesoJornadaSupport::emisionProcesoOmitida($emisionActual)) {
+            unset($payload['factura_proceso_emision']);
+        }
+
+        $snapshot->payload = $payload;
+        if (! $requiereEmision && ($snapshot->porcentaje === null || abs((float) $snapshot->porcentaje) <= 0.0001)) {
+            $snapshot->porcentaje = 0.;
+        }
         $snapshot->save();
     }
 

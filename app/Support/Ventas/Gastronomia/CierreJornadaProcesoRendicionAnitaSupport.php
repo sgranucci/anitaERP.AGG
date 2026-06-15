@@ -104,7 +104,8 @@ final class CierreJornadaProcesoRendicionAnitaSupport
             throw new \InvalidArgumentException('Punto de venta CAEA #'.$puntoventaCaeaId.' inexistente.');
         }
 
-        // X / tot_fc_caea: solo el batch CF del proceso. Z se recalcula post-insert por PV (caja).
+        // Z / total_x / tot_fc_caea = solo post-cierre Waitry (sin CAEA de salón).
+        // Z de las PCs (rendg_host) se recalcula aparte con CAE+CAEA del día.
         $totalFacturadoProceso = self::totalFacturasProceso($ventaIds);
         $totNcProceso = self::totalNotasCreditoProceso($ventaIds);
         $sucursalPv = self::codigoPuntoventaEntero($pvCaea->codigo);
@@ -126,7 +127,7 @@ final class CierreJornadaProcesoRendicionAnitaSupport
             'hora_carga' => now()->format('H:i:s'),
             'fecha_carga' => (int) now()->format('Ymd'),
             'total_x' => $totalFacturadoProceso,
-            'total_z' => 0.0,
+            'total_z' => $totalFacturadoProceso,
             'invitacion' => 0.0,
             'tot_nc' => 0.0,
             'tot_redondeo' => 0.0,

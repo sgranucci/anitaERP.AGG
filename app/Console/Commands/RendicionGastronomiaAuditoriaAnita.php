@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\ApiAnita;
 use App\Services\Caja\RendicionGastronomiaAuditoriaAnitaService;
+use App\Support\Caja\RendicionGastronomiaAuditoriaEmpresasSupport;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
@@ -27,9 +28,10 @@ class RendicionGastronomiaAuditoriaAnita extends Command
             return self::SUCCESS;
         }
 
-        $empresaId = $this->option('empresa') !== null
+        $empresaOverride = $this->option('empresa') !== null
             ? (int) $this->option('empresa')
-            : (int) config('rendicion_gastronomia_anita.auditoria_diaria.empresa_id', 1);
+            : null;
+        $empresas = RendicionGastronomiaAuditoriaEmpresasSupport::empresasParaAuditoria($empresaOverride);
 
         $toleranciaOpt = $this->option('tolerancia');
         $tolerancia = $toleranciaOpt !== null && $toleranciaOpt !== ''
@@ -47,31 +49,32 @@ class RendicionGastronomiaAuditoriaAnita extends Command
 
         $this->line('Bridge: '.ApiAnita::urlBridge());
         $this->line(sprintf(
-            'Empresa %d | tolerancia %.2f | fechas: %s',
-            $empresaId,
+            'Empresas %s | tolerancia %.2f | fechas: %s',
+            implode(', ', $empresas),
             $tolerancia,
             implode(', ', $fechas),
         ));
 
         $hayProblemas = false;
 
-        foreach ($fechas as $fecha) {
-            try {
-                $informe = $service->auditarFechaJornada($empresaId, $fecha, $tolerancia, $pvFiltro);
-            } catch (\Throwable $e) {
-                $this->error($fecha.': '.$e->getMessage());
-                Log::error('rendicion_gastronomia.auditoria_anita.fallo', [
-                    'fecha' => $fecha,
-                    'empresa_id' => $empresaId,
-                    'exception' => $e,
-                ]);
-                $hayProblemas = true;
+        foreach ($empresas as $empresaId) {
+            foreach ($fechas as $fecha) {
+                try {
+                    $informe = $service->auditarFechaJornada($empresaId, $fecha, $tolerancia, $pvFiltro);
+                } catch (\Throwable $e) {
+                    $this->error('Empresa '.$empresaId.' '.$fecha.': '.$e->getMessage());
+                    Log::error('rendicion_gastronomia.auditoria_anita.fallo', [
+                        'fecha' => $fecha,
+                        'empresa_id' => $empresaId,
+                        'exception' => $e,
+                    ]);
+                    $hayProblemas = true;
 
-                continue;
-            }
+                    continue;
+                }
 
-            $this->newLine();
-            $this->info('Fecha jornada '.$fecha);
+                $this->newLine();
+                $this->info('Empresa '.$empresaId.' — fecha jornada '.$fecha);
             $conteo = $informe['resumen']['conteo'] ?? [];
             $this->table(
                 ['Estado', 'Cantidad'],
@@ -151,6 +154,7 @@ class RendicionGastronomiaAuditoriaAnita extends Command
                 'empresa_id' => $empresaId,
                 'resumen' => $informe['resumen'],
             ]);
+            }
         }
 
         return $hayProblemas ? self::FAILURE : self::SUCCESS;

@@ -15,7 +15,12 @@ return [
      */
     'identificador_pc_por_sucursal' => [
         3 => env('GASTRONOMIA_ANITA_IMPORT_PC_SUCURSAL_3', '10.20.30.98'),
+        5 => env('GASTRONOMIA_ANITA_IMPORT_PC_SUCURSAL_5', '10.20.29.40'),
         8 => env('GASTRONOMIA_ANITA_IMPORT_PC_SUCURSAL_8', '10.20.30.92'),
+        15 => env('GASTRONOMIA_ANITA_IMPORT_PC_SUCURSAL_15', '192.168.20.152'),
+        20 => env('GASTRONOMIA_ANITA_IMPORT_PC_SUCURSAL_20', '10.20.30.92'),
+        31 => env('GASTRONOMIA_ANITA_IMPORT_PC_SUCURSAL_31', '192.168.20.152'),
+        34 => env('GASTRONOMIA_ANITA_IMPORT_PC_SUCURSAL_34', '192.168.40.142'),
     ],
 
     'cliente_consumidor_final_id' => (int) env('GASTRONOMIA_ANITA_IMPORT_CLIENTE_ID', 1),

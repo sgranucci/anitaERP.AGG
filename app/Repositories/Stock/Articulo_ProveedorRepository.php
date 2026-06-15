@@ -27,7 +27,10 @@ class Articulo_ProveedorRepository implements Articulo_ProveedorRepositoryInterf
             return;
         }
 
-        self::validarProveedoresUnicosEnRequest($data['ap_proveedor_ids']);
+        self::validarCodigosProveedorUnicosEnRequest(
+            $data['ap_proveedor_ids'] ?? [],
+            $data['ap_codigos_articulo_proveedor'] ?? []
+        );
 
         $n = count($data['ap_proveedor_ids']);
         $idsGuardados = [];
@@ -67,19 +70,28 @@ class Articulo_ProveedorRepository implements Articulo_ProveedorRepositoryInterf
             ];
 
             $lineaId = $lineaIdRaw;
+            $codigo = $payload['codigo_articulo_proveedor'];
+
             if ($lineaId !== null && $lineaId !== '') {
                 $this->model->where('id', (int) $lineaId)
                     ->where('articulo_id', $articuloId)
                     ->update($payload);
                 $idsGuardados[] = (int) $lineaId;
+            } elseif ($codigo !== null && $codigo !== '') {
+                $existente = $this->model->query()
+                    ->where('proveedor_id', $proveedorIdInt)
+                    ->where('codigo_articulo_proveedor', $codigo)
+                    ->first();
+
+                if ($existente !== null) {
+                    $existente->update($payload);
+                    $idsGuardados[] = (int) $existente->id;
+                } else {
+                    $row = $this->model->create($payload);
+                    $idsGuardados[] = (int) $row->id;
+                }
             } else {
-                $row = $this->model->updateOrCreate(
-                    [
-                        'articulo_id' => $articuloId,
-                        'proveedor_id' => $proveedorIdInt,
-                    ],
-                    $payload
-                );
+                $row = $this->model->create($payload);
                 $idsGuardados[] = (int) $row->id;
             }
 
@@ -105,26 +117,44 @@ class Articulo_ProveedorRepository implements Articulo_ProveedorRepositoryInterf
 
     /**
      * @param  array<int, mixed>  $proveedorIds
+     * @param  array<int, mixed>  $codigosArticuloProveedor
      */
-    public static function validarProveedoresUnicosEnRequest(array $proveedorIds): void
+    public static function validarCodigosProveedorUnicosEnRequest(array $proveedorIds, array $codigosArticuloProveedor): void
     {
         $vistos = [];
 
-        foreach ($proveedorIds as $proveedorId) {
+        foreach ($proveedorIds as $i => $proveedorId) {
             if ($proveedorId === null || $proveedorId === '') {
                 continue;
             }
 
-            $id = (int) $proveedorId;
-            if ($id <= 0) {
+            $provId = (int) $proveedorId;
+            if ($provId <= 0) {
                 continue;
             }
 
-            if (isset($vistos[$id])) {
-                throw new InvalidArgumentException('El proveedor está repetido en la solapa Proveedores. Cada proveedor puede figurar una sola vez por artículo.');
+            $codigo = trim((string) ($codigosArticuloProveedor[$i] ?? ''));
+            if ($codigo === '') {
+                continue;
             }
 
-            $vistos[$id] = true;
+            $clave = $provId.'|'.$codigo;
+            if (isset($vistos[$clave])) {
+                throw new InvalidArgumentException(
+                    'El código de artículo proveedor "'.$codigo.'" está repetido para el mismo proveedor en la solapa Proveedores.'
+                );
+            }
+
+            $vistos[$clave] = true;
         }
+    }
+
+    /**
+     * @deprecated Use validarCodigosProveedorUnicosEnRequest
+     * @param  array<int, mixed>  $proveedorIds
+     */
+    public static function validarProveedoresUnicosEnRequest(array $proveedorIds): void
+    {
+        self::validarCodigosProveedorUnicosEnRequest($proveedorIds, []);
     }
 }

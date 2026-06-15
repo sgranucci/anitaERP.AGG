@@ -40,6 +40,9 @@ class SincronizarOrdencompraDesdeAnita extends Command
                 $this->info("Importando OC {$nro}…");
                 $estado = $sync->traerRegistroDeAnita((int) $nro);
                 $this->info("Resultado: {$estado}");
+                if ($estado === 'lineas_completadas') {
+                    $this->info('Se completaron ítems faltantes desde Anita (pendmovp).');
+                }
 
                 return self::SUCCESS;
             }

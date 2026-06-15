@@ -51,6 +51,11 @@ class CapexReporteController extends Controller
             'filtros' => $filtros,
             'consultado' => $consultado,
             'resultado' => $resultado,
+            'mostrarLinks' => true,
+            'puede_ver_capex' => can('editar-capex', false) || can('listar-capex', false),
+            'puede_ver_empresa' => can('editar-empresas', false) || can('listar-empresas', false),
+            'puede_ver_presupuesto' => can('editar-presupuesto', false) || can('listar-presupuesto', false),
+            'puede_ver_centrocosto' => can('editar-centro-costo', false) || can('listar-centro-costo', false),
         ]);
     }
 

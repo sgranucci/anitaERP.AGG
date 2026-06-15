@@ -87,6 +87,11 @@ class Ordencompra extends Model
         return $this->hasMany(Ordencompra_Archivo::class, 'ordencompra_id');
     }
 
+    public function comprobante_proveedores()
+    {
+        return $this->hasMany(Comprobante_Proveedor::class, 'ordencompra_id');
+    }
+
     public function condicioncompras()
     {
         return $this->belongsTo(Condicioncompra::class, 'condicioncompra_id');

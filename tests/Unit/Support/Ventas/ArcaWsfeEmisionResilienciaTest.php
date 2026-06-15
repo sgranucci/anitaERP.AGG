@@ -40,6 +40,14 @@ class ArcaWsfeEmisionResilienciaTest extends TestCase
             'broken pipe' => ['Connection broken pipe to AFIP', R::CLASE_TRANSPORTE],
             'tls handshake' => ['SSL handshake failed', R::CLASE_TRANSPORTE],
             'no route' => ['Network is unreachable', R::CLASE_TRANSPORTE],
+            'afip error interno 501' => [
+                'WSFE — FECompUltimoAutorizado: [501] Error interno de base de datos: - Metodo FECompUltimoAutorizado',
+                R::CLASE_TRANSPORTE,
+            ],
+            'afip error interno 500 fecaesolicitar' => [
+                'No pudo asignar CAE. WSFE — FECAESolicitar: [500] Error interno de aplicación',
+                R::CLASE_TRANSPORTE,
+            ],
 
             // ===== DATOS (ARCA respondió: NO reintentar) =====
             'falta dato obligatorio' => ['WSFE — FECAESolicitar: 10015 Falta dato obligatorio: DocTipo', R::CLASE_DATOS],
@@ -104,6 +112,15 @@ class ArcaWsfeEmisionResilienciaTest extends TestCase
     {
         return [
             'timeout reintenta' => ['Connection timed out', true],
+            'afip 501 reintenta' => [
+                'WSFE — FECompUltimoAutorizado: [501] Error interno de base de datos: - Metodo FECompUltimoAutorizado',
+                true,
+            ],
+            'afip 500 fecaesolicitar reintenta' => [
+                'No pudo asignar CAE. WSFE — FECAESolicitar: [500] Error interno de aplicación',
+                true,
+            ],
+            'no pudo numerar comprobate reintenta' => ['No pudo numerar comprobate', true],
             'wsdl no carga reintenta' => [
                 "Couldn't load from 'https://servicios1.afip.gov.ar/wsfev1/service.asmx?WSDL'",
                 true,

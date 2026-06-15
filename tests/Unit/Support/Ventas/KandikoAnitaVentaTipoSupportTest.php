@@ -36,4 +36,23 @@ class KandikoAnitaVentaTipoSupportTest extends TestCase
     {
         $this->assertSame('FAC', KandikoAnitaVentaTipoSupport::tipoVentaAnitaBridge('FAC', '00014', '2', 'A'));
     }
+
+    public function test_conciliacion_caea_kandiko_acepta_fak_y_fac_en_anita(): void
+    {
+        $this->assertTrue(KandikoAnitaVentaTipoSupport::esPvCaeaKandiko('00031', '2', 'A'));
+        $this->assertSame('FAC-14041', KandikoAnitaVentaTipoSupport::claveConciliacionDesdeNumero(14041));
+        $this->assertTrue(KandikoAnitaVentaTipoSupport::cabeceraAnitaCorrespondeAlPv('FAK', '00031', '2', 'A'));
+        $this->assertTrue(KandikoAnitaVentaTipoSupport::cabeceraAnitaCorrespondeAlPv('FAC', '00031', '2', 'A'));
+        $this->assertTrue(KandikoAnitaVentaTipoSupport::cabeceraAnitaCorrespondeAlPv('NCD', '00031', '2', 'A'));
+        $this->assertFalse(KandikoAnitaVentaTipoSupport::cabeceraAnitaCorrespondeAlPv('FAK', '00031', '3', 'C'));
+        $this->assertTrue(KandikoAnitaVentaTipoSupport::cabeceraAnitaCorrespondeAlPv('FAC', '00031', '3', 'C'));
+    }
+
+    public function test_kandiko_excluye_fsl_slots_y_acepta_tipos_gastronomia(): void
+    {
+        $this->assertFalse(KandikoAnitaVentaTipoSupport::cabeceraAnitaCorrespondeAlPv('FSL', '00014', '2', 'A'));
+        $this->assertTrue(KandikoAnitaVentaTipoSupport::cabeceraAnitaCorrespondeAlPv('FAC', '00014', '2', 'A'));
+        $this->assertTrue(KandikoAnitaVentaTipoSupport::cabeceraAnitaCorrespondeAlPv('NCD', '00014', '2', 'A'));
+        $this->assertTrue(KandikoAnitaVentaTipoSupport::cabeceraAnitaCorrespondeAlPv('NCK', '00015', '2', 'C'));
+    }
 }

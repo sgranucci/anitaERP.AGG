@@ -347,7 +347,8 @@ final class RendicionGastronomiaAuditoriaAnitaService
 
         $nombre = mb_strtolower(trim((string) $pv->nombre));
 
-        return str_contains($nombre, 'estacionamiento');
+        return str_contains($nombre, 'estacionamiento')
+            || str_contains($nombre, 'estac.');
     }
 
     public function resolverJornada(int $empresaId, string $fechaJornada): ?JornadaGastronomia

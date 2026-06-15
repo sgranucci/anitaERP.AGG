@@ -2,99 +2,303 @@
 
 namespace App\Http\Controllers\Contable;
 
+use App\Exports\Contable\MayorConceptoExport;
 use App\Http\Controllers\Controller;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Services\Contable\MayorConceptoReporteService;
-use Carbon\Carbon;
+use App\Support\Contable\MayorConcepto\MayorConceptoRuntimeSupport;
+use App\Support\Contable\MayorConceptoListadoFiltros;
 use Illuminate\Http\Request;
+use Maatwebsite\Excel\Excel;
 
 class MayorConceptoController extends Controller
 {
+    private const SESSION_CACHE_KEY = 'mayor_concepto_resultado_cache';
+
     public function __construct(
         private readonly MayorConceptoReporteService $reporteService,
         private readonly EmpresaRepositoryInterface $empresaRepository,
         private readonly MonedaRepositoryInterface $monedaRepository,
     ) {
+        $this->middleware('auth');
     }
 
-    public function index()
+    public function index(Request $request)
     {
         can('listar-asiento');
 
-        $empresa_query = $this->empresaRepository->allFiltrado();
-        $moneda_query = $this->monedaRepository->all();
+        $empresaQuery = $this->empresaRepository->allFiltrado();
+        $monedaQuery = $this->monedaRepository->all();
+
+        $empresaId = (int) $request->input('empresa_id', 0);
+        if ($empresaId <= 0 && $empresaQuery->count() === 1) {
+            $empresaId = (int) $empresaQuery->first()->id;
+        }
+
+        $filtros = MayorConceptoListadoFiltros::resolverDesdeRequest($request);
+        if ($empresaId > 0 && (int) ($filtros['empresa_id'] ?? 0) <= 0) {
+            $filtros['empresa_id'] = $empresaId;
+        }
+
+        $this->assertAccesoEmpresa((int) ($filtros['empresa_id'] ?? 0));
+
+        $consultado = false;
+        $filas = null;
+        $resumen = [];
+        $resumenPorCuenta = [];
+        $auditoria = null;
+        $auditoriaPanel = null;
+        $totales = null;
+        $erroresBridge = [];
+
+        if ($request->boolean('consultar') && MayorConceptoListadoFiltros::tieneCriteriosAplicados($filtros)) {
+            $resultado = $this->generarYCachear($filtros);
+            $consultado = true;
+            $totales = $this->armarTotalesDesdeResultado($resultado);
+            $resumen = $this->reporteService->resumenSegunAgrupacion($resultado, $filtros);
+            $resumenPorCuenta = $this->reporteService->resumenAgrupadoPorCuenta($resultado);
+            $auditoriaPanel = $this->reporteService->armarAuditoriaPanel($resultado);
+            $auditoria = $auditoriaPanel['disponibilidad'] ?? null;
+            $erroresBridge = $resultado['errores_bridge'] ?? [];
+            $perPage = max(10, min(200, (int) $request->input('per_page', 50)));
+            $filas = $this->paginarFilas($this->reporteService->aplanarFilas($resultado), $perPage, $request);
+        } elseif (MayorConceptoListadoFiltros::tieneCriteriosAplicados($filtros)) {
+            $resultado = $this->leerCache($filtros);
+            if ($resultado !== null) {
+                $consultado = true;
+                $totales = $this->armarTotalesDesdeResultado($resultado);
+                $resumen = $this->reporteService->resumenSegunAgrupacion($resultado, $filtros);
+                $resumenPorCuenta = $this->reporteService->resumenAgrupadoPorCuenta($resultado);
+                $auditoriaPanel = $this->reporteService->armarAuditoriaPanel($resultado);
+                $auditoria = $auditoriaPanel['disponibilidad'] ?? null;
+                $erroresBridge = $resultado['errores_bridge'] ?? [];
+                $perPage = max(10, min(200, (int) $request->input('per_page', 50)));
+                $filas = $this->paginarFilas($this->reporteService->aplanarFilas($resultado), $perPage, $request);
+            }
+        }
+
+        $filtrosQuery = MayorConceptoListadoFiltros::paraQueryString($filtros);
+        if ($request->has('per_page')) {
+            $filtrosQuery['per_page'] = max(10, min(200, (int) $request->input('per_page', 50)));
+        }
+        if ($filas instanceof \Illuminate\Contracts\Pagination\LengthAwarePaginator) {
+            $filas->appends($filtrosQuery);
+        }
+
+        $empresa = (int) ($filtros['empresa_id'] ?? 0) > 0
+            ? $this->empresaRepository->find((int) $filtros['empresa_id'])
+            : null;
+        $moneda = $this->monedaRepository->find((int) ($filtros['moneda_id'] ?? 1));
 
         return view('contable.mayor_concepto.index', [
-            'empresa_query' => $empresa_query,
-            'moneda_query' => $moneda_query,
+            'empresa_query' => $empresaQuery,
+            'moneda_query' => $monedaQuery,
+            'filtros' => $filtros,
+            'filtrosQuery' => $filtrosQuery,
+            'consultado' => $consultado,
+            'filas' => $filas,
+            'resumen' => $resumen,
+            'resumen_por_cuenta' => $resumenPorCuenta,
+            'auditoria' => $auditoria,
+            'auditoria_panel' => $auditoriaPanel,
+            'agrupacion_resumen' => $filtros['agrupacion_resumen'] ?? 'concepto_cuenta',
+            'totales' => $totales,
+            'errores_bridge' => $erroresBridge,
+            'empresa' => $empresa,
+            'moneda' => $moneda,
+            'periodo_texto' => $this->reporteService->formatearPeriodoTexto($filtros),
             'mes_actual' => (int) date('n'),
             'anio_actual' => (int) date('Y'),
+            'puede_ver_asiento' => can('listar-asiento', false) || can('editar-asiento', false),
+            'puede_ver_cuenta' => can('listar-cuentas-contables', false) || can('editar-cuentas-contables', false),
+            'puede_ver_concepto' => can('listar-conceptos-de-gastos', false) || can('editar-conceptos-de-gastos', false),
         ]);
     }
 
-    public function generar(Request $request)
+    public function exportar(Request $request, string $formato)
     {
         can('listar-asiento');
 
-        $rules = [
-            'empresa_id' => 'required|integer',
-            'moneda_id' => 'required|integer',
-            'modo_periodo' => 'required|in:rango,mes',
-            'solo_moneda_origen' => 'nullable|boolean',
-        ];
+        MayorConceptoRuntimeSupport::elevarLimites();
 
-        if ($request->modo_periodo === 'mes') {
-            $rules['mes'] = 'required|integer|min:1|max:12';
-            $rules['anio'] = 'required|integer|min:2000|max:2100';
-        } else {
-            $rules['fecha_desde'] = 'required|date';
-            $rules['fecha_hasta'] = 'required|date|after_or_equal:fecha_desde';
+        $filtros = MayorConceptoListadoFiltros::resolverDesdeRequest($request);
+        $this->assertAccesoEmpresa((int) ($filtros['empresa_id'] ?? 0));
+
+        if (! MayorConceptoListadoFiltros::tieneCriteriosAplicados($filtros)) {
+            return redirect()->route('mayor_concepto');
         }
 
-        $request->validate($rules);
+        $resultado = $this->reporteService->generarDesdeFiltros($filtros);
+        $filas = $this->reporteService->aplanarFilasConTotales($resultado);
+        $resumen = $this->reporteService->resumenSegunAgrupacion($resultado, $filtros);
+        $resumenPorCuenta = $this->reporteService->resumenAgrupadoPorCuenta($resultado);
+        $totales = $this->armarTotalesDesdeResultado($resultado);
+        $auditoriaPanel = $this->reporteService->armarAuditoriaPanel($resultado);
+        $auditoria = $auditoriaPanel['disponibilidad'] ?? null;
+        $auditoriaContrapartidas = $auditoriaPanel['contrapartidas'] ?? null;
+        $agrupacionResumen = $filtros['agrupacion_resumen'] ?? 'concepto_cuenta';
+        $titulo = 'Mayor por concepto';
+        $subtitulo = $this->armarSubtituloExport($filtros);
 
-        if (! $this->empresaRepository->empresaIdPermitida((int) $request->empresa_id)) {
-            abort(403);
+        switch (strtoupper($formato)) {
+            case 'PDF':
+                $view = \View::make('contable.mayor_concepto.listado', compact(
+                    'filas',
+                    'resumen',
+                    'resumenPorCuenta',
+                    'filtros',
+                    'totales',
+                    'titulo',
+                    'subtitulo',
+                    'auditoria',
+                    'auditoriaPanel',
+                    'auditoriaContrapartidas',
+                    'agrupacionResumen',
+                ))->render();
+
+                return $this->descargarPdf($view, 'mayor_por_concepto', 'legal', 'landscape');
+
+            case 'EXCEL':
+                return (new MayorConceptoExport($this->reporteService))
+                    ->parametros($filtros)
+                    ->download('mayor_por_concepto.xlsx');
+
+            case 'CSV':
+                return (new MayorConceptoExport($this->reporteService))
+                    ->parametros($filtros)
+                    ->download('mayor_por_concepto.csv', Excel::CSV);
         }
 
-        $usarMesCompleto = $request->modo_periodo === 'mes';
-        $soloMonedaOrigen = (bool) $request->boolean('solo_moneda_origen');
-
-        ini_set('memory_limit', '512M');
-        ini_set('max_execution_time', '600');
-
-        $resultado = $this->reporteService->generar(
-            (int) $request->empresa_id,
-            $request->fecha_desde,
-            $request->fecha_hasta,
-            $usarMesCompleto ? (int) $request->mes : null,
-            $usarMesCompleto ? (int) $request->anio : null,
-            $usarMesCompleto,
-            (int) $request->moneda_id,
-            $soloMonedaOrigen,
-        );
-
-        $empresa = $this->empresaRepository->find((int) $request->empresa_id);
-        $moneda = $this->monedaRepository->find((int) $request->moneda_id);
-
-        $fd = $resultado['parametros']['fecha_desde'];
-        $fh = $resultado['parametros']['fecha_hasta'];
-
-        return view('contable.mayor_concepto.resultado', [
-            'resultado' => $resultado,
-            'empresa' => $empresa,
-            'moneda' => $moneda,
-            'periodo_texto' => $this->formatearPeriodo($fd, $fh),
-            'solo_moneda_origen' => $soloMonedaOrigen,
-        ]);
+        return redirect()->route('mayor_concepto', array_merge(
+            MayorConceptoListadoFiltros::paraQueryString($filtros),
+            ['consultar' => 1],
+        ));
     }
 
-    private function formatearPeriodo(int $desdeYmd, int $hastaYmd): string
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    private function generarYCachear(array $filtros): array
     {
-        $d = Carbon::createFromFormat('Ymd', str_pad((string) $desdeYmd, 8, '0', STR_PAD_LEFT));
-        $h = Carbon::createFromFormat('Ymd', str_pad((string) $hastaYmd, 8, '0', STR_PAD_LEFT));
+        $resultado = $this->reporteService->generarDesdeFiltros($filtros);
+        unset($resultado['mayor_plano_analitico']);
+        session([
+            self::SESSION_CACHE_KEY => [
+                'firma' => MayorConceptoListadoFiltros::firma($filtros),
+                'resultado' => $resultado,
+            ],
+        ]);
 
-        return $d->format('d/m/Y').' — '.$h->format('d/m/Y');
+        return $resultado;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>|null
+     */
+    private function leerCache(array $filtros): ?array
+    {
+        $cache = session(self::SESSION_CACHE_KEY);
+        if (! is_array($cache)) {
+            return null;
+        }
+
+        if (($cache['firma'] ?? '') !== MayorConceptoListadoFiltros::firma($filtros)) {
+            return null;
+        }
+
+        return is_array($cache['resultado'] ?? null) ? $cache['resultado'] : null;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $filas
+     */
+    private function paginarFilas(array $filas, int $perPage, Request $request): \Illuminate\Contracts\Pagination\LengthAwarePaginator
+    {
+        $coleccion = collect($filas);
+        $currentPage = \Illuminate\Pagination\Paginator::resolveCurrentPage();
+        $items = $coleccion->slice(($currentPage - 1) * $perPage, $perPage)->values();
+
+        return new \Illuminate\Pagination\LengthAwarePaginator(
+            $items,
+            $coleccion->count(),
+            $perPage,
+            $currentPage,
+            ['path' => \Illuminate\Pagination\Paginator::resolveCurrentPath()],
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $resultado
+     * @return array<string, mixed>
+     */
+    private function armarTotalesDesdeResultado(array $resultado): array
+    {
+        return [
+            'cantidad_filas' => (int) ($resultado['totales']['lineas'] ?? 0),
+            'total_debe' => (float) ($resultado['totales']['debe'] ?? 0),
+            'total_haber' => (float) ($resultado['totales']['haber'] ?? 0),
+            'stats' => $resultado['stats'] ?? [],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    private function armarSubtituloExport(array $filtros): string
+    {
+        $partes = [];
+
+        $empresaId = (int) ($filtros['empresa_id'] ?? 0);
+        if ($empresaId > 0) {
+            $nombre = $this->empresaRepository->find($empresaId)?->nombre;
+            if ($nombre) {
+                $partes[] = 'Empresa: '.$nombre;
+            }
+        }
+
+        $periodo = $this->reporteService->formatearPeriodoTexto($filtros);
+        if ($periodo !== '') {
+            $partes[] = 'Período: '.$periodo;
+        }
+
+        $moneda = $this->monedaRepository->find((int) ($filtros['moneda_id'] ?? 1));
+        if ($moneda) {
+            $partes[] = 'Expresado en: '.$moneda->nombre.' ('.$moneda->abreviatura.')';
+        }
+
+        if (! empty($filtros['solo_moneda_origen'])) {
+            $partes[] = 'Solo moneda origen';
+        }
+
+        return implode(' · ', $partes);
+    }
+
+    private function assertAccesoEmpresa(int $empresaId): void
+    {
+        if ($empresaId <= 0) {
+            return;
+        }
+
+        if (! $this->empresaRepository->empresaIdPermitida($empresaId)) {
+            abort(403, 'No tiene acceso a la empresa seleccionada.');
+        }
+    }
+
+    private function descargarPdf(string $view, string $nombreBase, string $paper, string $orientation)
+    {
+        $path = storage_path('pdf/listados');
+        if (! is_dir($path)) {
+            mkdir($path, 0775, true);
+        }
+
+        $nombrePdf = $nombreBase.'_'.date('Ymd_His');
+        $pdf = \App::make('dompdf.wrapper');
+        $pdf->setPaper($paper, $orientation);
+        $pdf->loadHTML($view, 'UTF-8')->save($path.'/'.$nombrePdf.'.pdf');
+
+        return response()->download($path.'/'.$nombrePdf.'.pdf');
     }
 }

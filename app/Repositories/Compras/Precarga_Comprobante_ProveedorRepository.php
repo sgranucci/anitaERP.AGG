@@ -33,6 +33,21 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
     {
         $data['pararevisar'] = $this->normalizarParaRevisar($data);
 
+        $duplicado = $this->findDuplicadoPrecarga(
+            (int) $data['empresa_id'],
+            (int) $data['proveedor_id'],
+            (int) $data['tipotransaccion_compra_id'],
+            (string) ($data['letra'] ?? ''),
+            $data['sucursal'] ?? 0,
+            $data['numerocomprobante'] ?? 0,
+        );
+        if ($duplicado !== null) {
+            throw new \RuntimeException($this->mensajeFacturaDuplicada(
+                $duplicado,
+                (string) ($data['tipo'] ?? '')
+            ));
+        }
+
         $precarga_comprobante_proveedor = $this->model->create($data);
 
         $payloadAnita = $this->anitaSync->enriquecerPayloadParaAnita($data);
@@ -44,6 +59,22 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
     public function update(array $data, $id)
     {
         $data['pararevisar'] = $this->normalizarParaRevisar($data);
+
+        $duplicado = $this->findDuplicadoPrecarga(
+            (int) $data['empresa_id'],
+            (int) $data['proveedor_id'],
+            (int) $data['tipotransaccion_compra_id'],
+            (string) ($data['letra'] ?? ''),
+            $data['sucursal'] ?? 0,
+            $data['numerocomprobante'] ?? 0,
+            (int) $id,
+        );
+        if ($duplicado !== null) {
+            throw new \RuntimeException($this->mensajeFacturaDuplicada(
+                $duplicado,
+                (string) ($data['tipo'] ?? '')
+            ));
+        }
 
         $precarga_comprobante_proveedor = $this->model->findOrFail($id)
             ->update($data);
@@ -170,6 +201,52 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
         }
 
         return $precarga_comprobante_proveedors;
+    }
+
+    public function findDuplicadoPrecarga(
+        int $empresaId,
+        int $proveedorId,
+        int $tipotransaccionCompraId,
+        string $letra,
+        $sucursal,
+        $numerocomprobante,
+        ?int $excluirId = null
+    ) {
+        $query = $this->model->newQuery()
+            ->where('empresa_id', $empresaId)
+            ->where('proveedor_id', $proveedorId)
+            ->where('tipotransaccion_compra_id', $tipotransaccionCompraId)
+            ->where('letra', strtoupper(trim($letra)))
+            ->where('sucursal', (int) $sucursal)
+            ->where('numerocomprobante', (int) $numerocomprobante);
+
+        if ($excluirId !== null) {
+            $query->where('id', '!=', $excluirId);
+        }
+
+        return $query->first();
+    }
+
+    public function mensajeFacturaDuplicada(
+        Precarga_Comprobante_Proveedor $existente,
+        string $tipoAbreviatura
+    ): string {
+        $comprobante = trim(sprintf(
+            '%s %s %s-%s',
+            $tipoAbreviatura,
+            strtoupper((string) $existente->letra),
+            $existente->sucursal,
+            $existente->numerocomprobante
+        ));
+        $oc = trim((string) ($existente->numeroordencompra ?? ''));
+        $detalleOc = $oc !== '' ? ', OC '.$oc : '';
+
+        return sprintf(
+            'Factura duplicada: ya existe una precarga %s (id %d%s).',
+            $comprobante,
+            $existente->id,
+            $detalleOc
+        );
     }
 
     private function normalizarParaRevisar(array $data): int

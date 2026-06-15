@@ -53,10 +53,6 @@ final class RendicionGastronomiaAnitaContextBuilder
 
         $ultimoTicketCae = self::ultimoTicketDesdeNumeracion($numeracion['filas'] ?? [], 'cae', $pvCaeId);
 
-        $totalesCaea = $pvCaeaId > 0
-            ? self::totalesFacturacionPuntoventaEnTurno($turno, $fechaJornada, $pvCaeaId)
-            : ['total_fc' => 0.0, 'total_nc' => 0.0];
-
         $nroOper = (int) ($rendicion->nro_oper_anita
             ?? RendicionGastronomiaCabeceraAnitaMapper::nroOperDesdeCodigo($rendicion->codigo));
 
@@ -91,8 +87,10 @@ final class RendicionGastronomiaAnitaContextBuilder
             'suc_caea' => self::codigoPuntoventaEntero($rendicion->puntoventaCaea?->codigo),
             'nro_rend_vta' => (int) $rendicion->turno_operativo_gastronomia_id,
             'host' => substr((string) ($turno->identificador_pc ?? ''), 0, 15),
-            'tot_fc_caea' => $totalesCaea['total_fc'],
-            'tot_nc_caea' => $totalesCaea['total_nc'],
+            // CAEA de salón va en Z portadora (CAE+CAEA por PC). PV CAEA (30/31) en rendgastro
+            // solo debe reflejar post-cierre Waitry (CIERRE-WAITRY), no fc_caea por turno.
+            'tot_fc_caea' => 0.0,
+            'tot_nc_caea' => 0.0,
             'movimientos' => $rendicion->movimientos,
         ];
     }

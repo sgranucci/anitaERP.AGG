@@ -19,6 +19,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Base de datos operativa protegida
+    |--------------------------------------------------------------------------
+    |
+    | Nombre de la BD de producción/operación. Los comandos destructivos de
+    | Artisan (migrate:fresh, db:wipe, etc.) quedan bloqueados aunque APP_ENV
+    | sea testing (p. ej. PHPUnit con RefreshDatabase).
+    |
+    */
+
+    'protegida' => env('DB_DATABASE_PROTEGIDA', ''),
+
+    /*
+    |--------------------------------------------------------------------------
     | Database Connections
     |--------------------------------------------------------------------------
     |

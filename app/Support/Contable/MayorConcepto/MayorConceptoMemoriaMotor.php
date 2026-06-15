@@ -11,8 +11,22 @@ use Illuminate\Support\Facades\DB;
  */
 class MayorConceptoMemoriaMotor
 {
-    /** Cuentas de caja/bancos y equivalentes (parámetro limite caja/banco Anita). */
+    /**
+     * Límite cuenta caja/banco en mayor por concepto (Anita argv[13], ej. 112010-008).
+     * Cuentas con código mayor a este valor se imputan como contrapartida, no como ancla.
+     */
+    public const LIMITE_CAJA_BANCO = 112010008;
+
+    /** Hasta dónde se construye el mayor plano / cuadre con l_mayor (incluye 113, 114). */
     public const LIMITE_DISPONIBILIDAD = 114000000;
+
+    /** Cuentas de variación de capital de trabajo (tcta_var en l-mayorconc.c). */
+    public const CUENTAS_VARIACION_CAPITAL = [
+        214010013,
+        214010027,
+        214010014,
+        214010015,
+    ];
 
     /** Responsable inscripto IVA en prom_cond_iva. */
     private const COND_IVA_INSCRIPTO = '1';
@@ -20,12 +34,37 @@ class MayorConceptoMemoriaMotor
     /** Tipos auxpag que representan facturas / NC compras aplicadas al pago. */
     public const TIPOS_FACTURA_APLICADA = [
         'FIA', 'FIB', 'FIC', 'FID', 'FIE', 'FIF', 'FIG', 'FIH',
-        'NDC', 'NDB', 'REC', 'FAC', 'FAD', 'FAE',
+        'NDC', 'NDB', 'REC', 'FAC', 'FAD', 'FAE', 'FIS', 'FGA', 'FNB',
+    ];
+
+    /**
+     * Medios de pago en auxpag (tctes): no son facturas; el gasto viene del COM/FGA/subdiario.
+     *
+     * @see App\Repositories\Caja\MediopagoRepository tabla tctes
+     */
+    public const TIPOS_MEDIO_PAGO_AUXPAG = [
+        'CHP', 'TMB', 'TMK', 'TMR', 'GPB', 'IBP', 'IBI', 'MEP', 'TC1', 'TCM',
+        'BBB', 'BIY', 'CO1', 'CO2', 'CO3', 'CQR', 'CTG', 'EFE', 'EPY',
+    ];
+
+    /** Comprobantes automáticos o duplicados que no imputan al mayor por concepto. */
+    public const TIPOS_AUXPAG_IGNORAR = [
+        'FIN',
     ];
 
     /** Tipos auxpag de retenciones / impuestos descontados en el pago. */
     private const TIPOS_RETENCION_APLICADA = [
         'RTP', 'RGP', 'RSP', 'RIV', 'RGU', 'RLP', 'RSU',
+    ];
+
+    /**
+     * Cuentas reimputadas al mayor gasto de la misma operación (l-mayorconc.c reimputa_cuentas / tcta_conc).
+     */
+    public const CUENTAS_REIMPUTA_CONCEPTO = [
+        114010002,
+        114010009,
+        114010011,
+        521130001,
     ];
 
     /** @var array<int, array<int, int>> empresa => [cuenta => concepto] */
@@ -335,9 +374,47 @@ class MayorConceptoMemoriaMotor
         return $this->conceptoPorCuenta[$empresaId][$cuenta] ?? 0;
     }
 
+    /** Concepto Anita/ERP de la cuenta; 0 solo si la cuenta no tiene concepto asignado. */
+    public function conceptoImputacionCuenta(int $empresaId, int $cuenta): int
+    {
+        $concepto = $this->conceptoDeCuenta($empresaId, $cuenta);
+
+        return $concepto > 0 ? $concepto : 0;
+    }
+
+    /** Caja/banco ancla e imputación mayor por concepto (Anita in_limite_caja_banco). */
     public function esDisponibilidad(int $cuenta): bool
     {
+        return $cuenta > 0 && $cuenta <= self::LIMITE_CAJA_BANCO;
+    }
+
+    /** Disponibilidad ampliada para cuadre con mayor analítico plano (l_mayor). */
+    public function esDisponibilidadPlano(int $cuenta): bool
+    {
         return $cuenta > 0 && $cuenta <= self::LIMITE_DISPONIBILIDAD;
+    }
+
+    public function esCuentaVariacionCapital(int $cuenta): bool
+    {
+        return in_array($cuenta, self::CUENTAS_VARIACION_CAPITAL, true);
+    }
+
+    /** Caja y bancos (111xxx), distinto de otros activos de disponibilidad (112, 113…). */
+    public function esCuentaBancoCaja(int $cuenta): bool
+    {
+        return $cuenta >= 111000000 && $cuenta < 112000000;
+    }
+
+    /** FCI y similares (112xxx). */
+    public function esCuentaInversionDisp(int $cuenta): bool
+    {
+        return $cuenta >= 112000000 && $cuenta < 113000000;
+    }
+
+    /** Créditos comerciales / TOTAL COIN (113xxx) — imputación simple por contrapartida. */
+    public function esCuentaCreditoComercialDisp(int $cuenta): bool
+    {
+        return $cuenta >= 113000000 && $cuenta < 114000000;
     }
 
     public function esProveedor(int $cuenta): bool
@@ -369,6 +446,11 @@ class MayorConceptoMemoriaMotor
     private function esAplicacionFactura(object $fila): bool
     {
         $tipoAp = strtoupper(trim((string) ($fila->axp_tipo_ap ?? '')));
+
+        if (in_array($tipoAp, self::TIPOS_AUXPAG_IGNORAR, true)
+            || in_array($tipoAp, self::TIPOS_MEDIO_PAGO_AUXPAG, true)) {
+            return false;
+        }
 
         return in_array($tipoAp, self::TIPOS_FACTURA_APLICADA, true);
     }

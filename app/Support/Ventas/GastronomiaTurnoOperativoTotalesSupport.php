@@ -299,6 +299,19 @@ final class GastronomiaTurnoOperativoTotalesSupport
     }
 
     /**
+     * Notas de crédito del día por PC (valor positivo para rendg_tot_nc).
+     */
+    public static function totalNotasCreditoPorPc(
+        string $identificadorPc,
+        int $empresaId,
+        string $fechaJornada,
+    ): float {
+        $totales = self::calcular($identificadorPc, $empresaId, $fechaJornada, null, null);
+
+        return round(abs((float) ($totales['total_notas_credito'] ?? 0)), 2);
+    }
+
+    /**
      * Totales del día contable por punto de venta CAE (fecha de jornada, sin ventana de turno).
      *
      * @return array<string, mixed>

@@ -9,16 +9,23 @@ class RecepcionProveedorConversionSupport
     /**
      * Resuelve coeficiente de conversión UM compra proveedor → UM stock ERP.
      */
-    public static function resolverCoeficiente(int $articuloId, int $proveedorId): float
+    public static function resolverCoeficiente(int $articuloId, int $proveedorId, ?string $codigoArticuloProveedor = null): float
     {
         if ($articuloId <= 0 || $proveedorId <= 0) {
             return 1.0;
         }
 
-        $fila = Articulo_Proveedor::query()
+        $query = Articulo_Proveedor::query()
             ->where('articulo_id', $articuloId)
             ->where('proveedor_id', $proveedorId)
-            ->where('activo', true)
+            ->where('activo', true);
+
+        $codigo = trim((string) ($codigoArticuloProveedor ?? ''));
+        if ($codigo !== '') {
+            $query->where('codigo_articulo_proveedor', $codigo);
+        }
+
+        $fila = $query
             ->orderByDesc('preferido')
             ->orderBy('id')
             ->first();

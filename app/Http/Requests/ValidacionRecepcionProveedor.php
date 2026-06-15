@@ -59,6 +59,10 @@ class ValidacionRecepcionProveedor extends FormRequest
             'items.*.cantidad_oc' => 'nullable|numeric|min:0',
             'items.*.ordencompra_articulo_sustituido_id' => 'nullable|integer|exists:ordencompra_articulo,id',
             'items.*.comentario_diferencia' => 'nullable|string|max:500',
+            'items.*.ocr_codigo_proveedor' => 'nullable|string|max:100',
+            'items.*.ocr_descripcion_proveedor' => 'nullable|string|max:255',
+            'items.*.ocr_codigobarra' => 'nullable|string|max:50',
+            'items.*.ocr_unidad_compra' => 'nullable|string|max:30',
         ];
     }
 }

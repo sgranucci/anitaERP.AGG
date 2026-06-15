@@ -2,6 +2,8 @@
 
 namespace App\Console\Commands;
 
+use App\Models\Contable\Asiento;
+use App\Models\Stock\Articulo_Movimiento;
 use App\Models\Ventas\Venta;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
@@ -142,7 +144,7 @@ class LimpiarVentasPruebaGastronomia extends Command
         $articuloMovimientoIds = DB::table('articulo_movimiento')->where('venta_id', $ventaId)->pluck('id');
         foreach ($articuloMovimientoIds as $amId) {
             DB::table('articulo_movimiento_talle')->where('articulo_movimiento_id', $amId)->delete();
-            DB::table('articulo_movimiento')->where('id', $amId)->delete();
+            Articulo_Movimiento::query()->find((int) $amId)?->delete();
         }
 
         $ccVentaIds = DB::table('cliente_cuentacorriente')->where('venta_id', $ventaId)->pluck('id');
@@ -211,9 +213,8 @@ class LimpiarVentasPruebaGastronomia extends Command
     {
         $asientoIds = DB::table('asiento')->where($columna, $valor)->pluck('id');
         foreach ($asientoIds as $asientoId) {
-            DB::table('asiento_movimiento')->where('asiento_id', $asientoId)->delete();
             DB::table('asiento_archivo')->where('asiento_id', $asientoId)->delete();
-            DB::table('asiento')->where('id', $asientoId)->delete();
+            Asiento::query()->find((int) $asientoId)?->delete();
         }
     }
 

@@ -214,7 +214,6 @@ final class GastronomiaCierreJornadaProcesoReversionService
 
     private function eliminarAsientoProceso(int $asientoId): void
     {
-        DB::table('asiento_movimiento')->where('asiento_id', $asientoId)->delete();
         DB::table('asiento_archivo')->where('asiento_id', $asientoId)->delete();
         $this->asientoRepository->delete($asientoId);
     }

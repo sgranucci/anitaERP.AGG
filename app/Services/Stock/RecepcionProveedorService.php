@@ -15,10 +15,13 @@ use App\Repositories\Stock\Recepcion_ProveedorRepositoryInterface;
 use App\Support\Compras\ArticuloProveedorPrecioListaSupport;
 use App\Support\Stock\RecepcionProveedorDiferenciaSupport;
 use App\Support\Stock\RecepcionProveedorDepositoSupport;
+use App\Support\Stock\RecepcionProveedorArticuloProveedorSyncSupport;
+use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Stock\RecepcionProveedorEstados;
 use App\Services\Configuracion\ModuloAvisoService;
 use Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class RecepcionProveedorService
 {
@@ -48,6 +51,7 @@ class RecepcionProveedorService
     {
         return DB::transaction(function () use ($data) {
             $ocData = $this->ocResolver->resolverPorId((int) $data['ordencompra_id']);
+            $this->assertPeriodoContableRecepcion((int) $ocData['cabecera']->empresa_id, (string) ($data['fecha'] ?? ''));
             $oc = $ocData['cabecera'];
             $items = $data['items'] ?? [];
             $tipo = $data['tipo'] ?? Recepcion_Proveedor::TIPO_RECEPCION;
@@ -88,8 +92,10 @@ class RecepcionProveedorService
 
             $this->reemplazarItems($recepcion, $items);
             $this->logEstado($recepcion, null, RecepcionProveedorEstados::BORRADOR, 'Alta de recepción');
+            $recepcion = $recepcion->fresh(['recepcion_proveedor_articulos.articulos']);
+            RecepcionProveedorArticuloProveedorSyncSupport::sincronizarDesdeRecepcion($recepcion, $items);
 
-            return $recepcion->fresh(['recepcion_proveedor_articulos']);
+            return $recepcion;
         });
     }
 
@@ -104,6 +110,11 @@ class RecepcionProveedorService
         $data['ordencompra_id'] = $recepcion->ordencompra_id;
 
         return DB::transaction(function () use ($recepcion, $data) {
+            $this->assertPeriodoContableRecepcion(
+                (int) $recepcion->empresa_id,
+                (string) ($data['fecha'] ?? $recepcion->fecha?->format('Y-m-d') ?? '')
+            );
+
             $ocData = $this->ocResolver->resolverPorId((int) $data['ordencompra_id']);
             $oc = $ocData['cabecera'];
             $items = $data['items'] ?? [];
@@ -134,7 +145,10 @@ class RecepcionProveedorService
 
             $this->reemplazarItems($recepcion, $items);
 
-            return $recepcion->fresh(['recepcion_proveedor_articulos']);
+            $recepcion = $recepcion->fresh(['recepcion_proveedor_articulos.articulos']);
+            RecepcionProveedorArticuloProveedorSyncSupport::sincronizarDesdeRecepcion($recepcion, $items);
+
+            return $recepcion;
         });
     }
 
@@ -150,6 +164,11 @@ class RecepcionProveedorService
         }
 
         return DB::transaction(function () use ($recepcion) {
+            $this->assertPeriodoContableRecepcion(
+                (int) $recepcion->empresa_id,
+                (string) ($recepcion->fecha?->format('Y-m-d') ?? '')
+            );
+
             $movId = $this->generarMovimientoStock($recepcion);
             $asientoId = $this->asientoService->generarAsiento($recepcion);
 
@@ -186,7 +205,35 @@ class RecepcionProveedorService
                 $this->moduloAvisoService->enviar('stock', 'recepcion_proveedor_laboratorio', $recepcion->id);
             }
 
+            RecepcionProveedorArticuloProveedorSyncSupport::sincronizarDesdeRecepcion(
+                $recepcion->fresh(['recepcion_proveedor_articulos.articulos'])
+            );
+
             return $recepcion->fresh();
+        });
+    }
+
+    public function eliminarBorrador(int $id): void
+    {
+        $recepcion = $this->repository->find($id);
+
+        if ($recepcion->estado !== RecepcionProveedorEstados::BORRADOR) {
+            throw new \RuntimeException('Solo se puede eliminar una recepción en BORRADOR.');
+        }
+
+        if (DB::table('comprobante_proveedor_recepcion')->where('recepcion_proveedor_id', $id)->exists()) {
+            throw new \RuntimeException('No se puede eliminar: la recepción está vinculada a un comprobante de proveedor.');
+        }
+
+        DB::transaction(function () use ($recepcion) {
+            foreach ($recepcion->recepcion_proveedor_archivos as $archivo) {
+                $ruta = (string) ($archivo->ruta ?? '');
+                if ($ruta !== '' && Storage::disk('local')->exists($ruta)) {
+                    Storage::disk('local')->delete($ruta);
+                }
+            }
+
+            $recepcion->delete();
         });
     }
 
@@ -208,6 +255,11 @@ class RecepcionProveedorService
         }
 
         return DB::transaction(function () use ($recepcion, $motivo) {
+            $this->assertPeriodoContableRecepcion(
+                (int) $recepcion->empresa_id,
+                (string) ($recepcion->fecha?->format('Y-m-d') ?? '')
+            );
+
             $estadoAnterior = $recepcion->estado;
 
             if ($recepcion->movimientostock_id) {
@@ -380,6 +432,7 @@ class RecepcionProveedorService
             $item['articulo_stock_id'] = $conversion['articulo_stock_id'];
             $item['articulo_stock_sku'] = $conversion['articulo_stock_sku'];
             $item['deposito_nombre'] = $deposito->nombre ?? '';
+            $item['unidadmedida_id'] = (int) ($item['unidadmedida_id'] ?? $articulo->unidadmedida_id ?? 1) ?: 1;
         }
         unset($item);
 
@@ -521,6 +574,19 @@ class RecepcionProveedorService
         }
 
         return (int) $mov->id;
+    }
+
+    private function assertPeriodoContableRecepcion(int $empresaId, string $fecha): void
+    {
+        if ($empresaId <= 0 || $fecha === '') {
+            return;
+        }
+
+        PeriodoContableCierreSupport::assertOperacionPermitida(
+            $empresaId,
+            $fecha,
+            PeriodoContableCierreSupport::ALCANCE_RECEPCION_PROVEEDOR
+        );
     }
 
     private function logEstado(
