@@ -57,7 +57,7 @@
                     </a>
                 </div>
             </div>
-            <form action="{{route('guardar_factura')}}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off">
+            <form action="{{route('guardar_factura')}}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-articulo-solo-facturable="1">
                 @csrf
                 <div class="card-body">
                     @php $datos = ["funcion" => "crear", "layoutItemsPedido" => $layoutItemsPedido]; @endphp

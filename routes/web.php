@@ -26,6 +26,14 @@ Route::post('seguridad/login', 'Seguridad\LoginController@login')->name('login_p
 Route::get('seguridad/logout', 'Seguridad\LoginController@logout')->name('logout');
 Route::post('ajax-sesion', 'AjaxController@setSession')->name('ajax')->middleware('auth');
 
+Route::middleware('auth')->group(function () {
+    Route::get('seguridad/barra-tareas', 'Seguridad\BarraTareasController@index')->name('barra_tareas_index');
+    Route::get('seguridad/barra-tareas/menus', 'Seguridad\BarraTareasController@menusDisponibles')->name('barra_tareas_menus');
+    Route::post('seguridad/barra-tareas/anclar', 'Seguridad\BarraTareasController@anclar')->name('barra_tareas_anclar');
+    Route::post('seguridad/barra-tareas/desanclar', 'Seguridad\BarraTareasController@desanclar')->name('barra_tareas_desanclar');
+    Route::post('seguridad/barra-tareas/reordenar', 'Seguridad\BarraTareasController@reordenar')->name('barra_tareas_reordenar');
+});
+
 Route::get('csrf-token', function () {
     return response()->json(['token' => csrf_token()]);
 })->middleware('auth')->name('csrf_token_refresh');
@@ -1081,7 +1089,10 @@ Route::post('ventas/crearreppedido', 'Ventas\PedidoController@crearReportePedido
 
 // Kilos Pedidos
 Route::get('ventas/repkilopedido', 'Ventas\PedidoController@indexReporteKiloPedido')->name('rep_kilopedido');
+Route::get('ventas/listar-repkilopedido/{formato}', 'Ventas\PedidoController@listarReporteKiloPedido')->name('listar_rep_kilopedido');
 Route::post('ventas/crearrepkilopedido', 'Ventas\PedidoController@crearReporteKiloPedido')->name('crear_rep_kilopedido');
+Route::get('ventas/repkilocategoria', 'Ventas\PedidoController@indexReporteKiloCategoria')->name('rep_kilocategoria');
+Route::get('ventas/listar-repkilocategoria/{formato}', 'Ventas\PedidoController@listarReporteKiloCategoria')->name('listar_rep_kilocategoria');
 
 // Totales de Pedidos
 Route::get('ventas/reptotalpedido', 'Ventas\PedidoController@indexReporteTotalPedido')->name('rep_totalpedido');
@@ -1500,6 +1511,7 @@ Route::get('ventas/cliente/crear/{tipoalta?}', 'Ventas\ClienteController@crear')
 Route::post('ventas/cliente', 'Ventas\ClienteController@guardar')->name('guardar_cliente');
 Route::post('ventas/clienteprovisorio', 'Ventas\ClienteController@guardarClienteProvisorio')->name('guardar_cliente_provisorio');
 Route::get('ventas/cliente/{id}/editar', 'Ventas\ClienteController@editar')->name('editar_cliente');
+Route::post('ventas/cliente/{id}/validar-arca-padron', 'Ventas\ClienteController@validarArcaPadron')->name('validar_cliente_arca_padron');
 Route::get('ventas/cliente/{cliente_id}/suitecrm-cuenta', 'Ventas\ClienteSuitecrmCuentaController@show')->name('cliente_suitecrm_cuenta');
 Route::post('ventas/cliente/{cliente_id}/suitecrm-cuenta/sincronizar', 'Ventas\ClienteSuitecrmCuentaController@sincronizar')->name('sincronizar_cliente_suitecrm_cuenta');
 Route::get('ventas/cliente/{cliente_id}/suitecrm-notas', 'Ventas\ClienteSuitecrmNotaController@index')->name('cliente_suitecrm_notas');
@@ -1531,8 +1543,8 @@ Route::get('ventas/pedido', 'Ventas\PedidoController@indexp')->name('pedido');
 // Route::get('ventas/pedidop', 'Ventas\PedidoController@indexp')->name('pedidop');
 Route::get('ventas/pedido/crear', 'Ventas\PedidoController@crear')->name('crear_pedido');
 Route::post('ventas/pedido', 'Ventas\PedidoController@guardar')->name('guardar_pedido');
-Route::get('ventas/pedido/{id}/editar', 'Ventas\PedidoController@editar')->name('editar_pedido');
-Route::put('ventas/pedido/{id}', 'Ventas\PedidoController@actualizar')->name('actualizar_pedido');
+Route::get('ventas/pedido/{id}/editar', 'Ventas\PedidoController@editar')->name('editar_pedido')->middleware('modo.consulta');
+Route::put('ventas/pedido/{id}', 'Ventas\PedidoController@actualizar')->name('actualizar_pedido')->middleware('modo.consulta');
 Route::delete('ventas/pedido/{id}', 'Ventas\PedidoController@eliminar')->name('eliminar_pedido');
 Route::get('ventas/listarpedido/{id}/{cliente_id?}', 'Ventas\PedidoController@listarPedido')->name('listar_pedido');
 Route::get('ventas/listarpedidopdf/{id}/{cliente_id?}', 'Ventas\PedidoController@listarPedidoPdf')->name('listar_pedido_pdf');

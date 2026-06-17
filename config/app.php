@@ -72,6 +72,16 @@ return [
     'anita_sync_puntoventa_write' => (bool) env('ANITA_SYNC_PUNTOVENTA_WRITE', false),
 
     /*
+    | When true, create/update/delete in ventas/vendedor replicates changes to Anita (tabla vendedor).
+    */
+    'anita_sync_vendedor_write' => (bool) env('ANITA_SYNC_VENDEDOR_WRITE', true),
+
+    /*
+    | When true, create/update/delete in ventas/cliente replicates changes to Anita (tabla climae).
+    */
+    'anita_sync_cliente_write' => (bool) env('ANITA_SYNC_CLIENTE_WRITE', false),
+
+    /*
     |--------------------------------------------------------------------------
     | Application Environment
     |--------------------------------------------------------------------------

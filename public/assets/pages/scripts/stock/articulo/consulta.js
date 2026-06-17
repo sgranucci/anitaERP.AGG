@@ -12,6 +12,57 @@ var CONSULTA_ARTICULO_DEBOUNCE_MS = 280;
 var CONSULTA_ARTICULO_MIN_LEN = 2;
 var CONSULTA_ARTICULO_URL_EDITAR_QUERY = '?origen=modal_consulta&vista=consulta';
 
+window.listaprecioIdEsValidoLineaVentas = function (listaprecioId) {
+    if (listaprecioId == null || listaprecioId === '') {
+        return false;
+    }
+
+    return parseInt(listaprecioId, 10) > 0;
+};
+
+window.mensajeErrorListaprecioArticuloVentas = function (sku, numeroItem) {
+    var etiqueta = (sku || '').trim() || 'seleccionado';
+    var sufijo = numeroItem ? ' (ítem ' + numeroItem + ')' : '';
+
+    return 'El artículo ' + etiqueta + sufijo + ' no tiene lista de precios asignada.';
+};
+
+window.limpiarLineaArticuloSinListaprecio = function ($tr, sku, numeroItem) {
+    alert(window.mensajeErrorListaprecioArticuloVentas(sku, numeroItem));
+    $tr.find('.articulo_id').val('');
+    $tr.find('.codigoarticulo, .codigoarticulolocal').val('');
+    $tr.find('.codigo_previo_articulo').val('');
+    $tr.find('.descripcionarticulo').val('');
+    $tr.find('.listaprecio_id').val('');
+    $tr.find('.precio').val('');
+    $tr.find('.incluyeimpuesto').val('');
+    $tr.find('.moneda_id').val('');
+    actualizarLinkEditarArticulo($tr, '');
+};
+
+window.validarListaprecioLineasFormularioVentas = function (selectorRenglones) {
+    var flError = false;
+
+    $(selectorRenglones || '#tbody-tabla tr').each(function (index) {
+        var $tr = $(this);
+        var articuloId = ($tr.find('.articulo_id').val() || '').trim();
+        if (!articuloId) {
+            return;
+        }
+
+        var listaprecioId = $tr.find('.listaprecio_id').val();
+        if (!window.listaprecioIdEsValidoLineaVentas(listaprecioId)) {
+            var sku = ($tr.find('.codigoarticulo, .codigoarticulolocal').first().val() || '').trim();
+            alert(window.mensajeErrorListaprecioArticuloVentas(sku, index + 1));
+            flError = true;
+
+            return false;
+        }
+    });
+
+    return !flError;
+};
+
 function urlEditarArticuloConsulta(articuloId) {
     var id = parseInt(articuloId, 10) || 0;
     if (id <= 0) {
@@ -160,6 +211,16 @@ function aplicarRespuestaConsultaArticulo(respuesta) {
     $("#datos").html(html);
 }
 
+function consultaArticuloRequiereSoloFacturable($ctx) {
+    if ($('#consultaarticuloModal').data('articuloSoloFacturable')) {
+        return true;
+    }
+    if ($ctx && $ctx.length && $ctx.closest('[data-articulo-solo-facturable="1"]').length) {
+        return true;
+    }
+    return false;
+}
+
 function buscar_datos_articulo(consulta) {
     if (consultaArticuloAjax && consultaArticuloAjax.readyState !== 4) {
         consultaArticuloAjax.abort();
@@ -176,6 +237,9 @@ function buscar_datos_articulo(consulta) {
     var listaPrecio = consultaArticuloResolverListaprecio();
     if (listaPrecio.id > 0) {
         postData.listaprecio_id = listaPrecio.id;
+    }
+    if ($('#consultaarticuloModal').data('articuloSoloFacturable')) {
+        postData.solo_facturable = 1;
     }
     consultaArticuloAjax = $.ajax({
         url: carpetaBase+'/stock/articulo/consultaarticulo',
@@ -249,6 +313,12 @@ function activa_eventos_consultaarticulo()
             $('#consultaarticuloModal').removeData('articuloListaprecioNombre');
         }
 
+        if ($(this).attr('data-solo-facturable') === '1') {
+            $('#consultaarticuloModal').data('articuloSoloFacturable', 1);
+        } else {
+            $('#consultaarticuloModal').removeData('articuloSoloFacturable');
+        }
+
         var $ctxConsulta = $(this).closest('tr');
         if (!$ctxConsulta.length) {
             $ctxConsulta = $(this).closest('.cm-campo-articulo-carga');
@@ -301,6 +371,7 @@ function activa_eventos_consultaarticulo()
         $('#consultaarticuloModal').removeData('articuloSkuDigitosFiltro');
         $('#consultaarticuloModal').removeData('articuloListaprecioId');
         $('#consultaarticuloModal').removeData('articuloListaprecioNombre');
+        $('#consultaarticuloModal').removeData('articuloSoloFacturable');
     });
 
     $('#consultaarticuloModal').off('shown.bs.modal.consultaArt').on('shown.bs.modal.consultaArt', function () {
@@ -399,7 +470,15 @@ function activa_eventos_consultaarticulo()
         // Si es salamin tira saca opciones que no van del descuento
         if (window.armaSelectDescuentoVenta) {
             armaSelectDescuentoVenta(ptrarticulo_id);
-        }        
+        }
+
+        if (window.asignaPrecio && ptrarticulo_id && ptrarticulo_id.length) {
+            var articuloIdElige = $(this).parents('tr').find('td.articulo_id').first().text().trim();
+            if (!articuloIdElige) {
+                articuloIdElige = String(seleccion).trim();
+            }
+            asignaPrecio(ptrarticulo_id[0], articuloIdElige, '');
+        }
     });
 
     $('#articulo_id').on('change', function (event) {
@@ -471,12 +550,17 @@ function activa_eventos_consultaarticulo()
         }
 
         let url_res = carpetaBase + '/stock/leerunarticuloporsku/' + encodeURIComponent(sku);
+        if (consultaArticuloRequiereSoloFacturable($tr)) {
+            url_res += '?solo_facturable=1';
+        }
 
         $.get(url_res, function (data) {
             if (!data || !data.id) {
                 $tr.find('.articulo_id').val('');
                 $tr.find('.descripcionarticulo').val('');
-                alert('No se encontró artículo con ese SKU.');
+                alert(consultaArticuloRequiereSoloFacturable($tr)
+                    ? 'No se encontró artículo facturable con ese SKU.'
+                    : 'No se encontró artículo con ese SKU.');
                 return;
             }
 

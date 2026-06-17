@@ -25,6 +25,7 @@ use App\Observers\Ventas\Pedido_CombinacionObserver;
 use App\Observers\Ventas\VentaObserver;
 use App\Observers\Ventas\Venta_EmisionObserver;
 use App\Support\AyudaManuales;
+use App\Support\Seguridad\BarraTareasSupport;
 use App\Support\Console\ProteccionComandosDestructivosProduccion;
 use Carbon\Carbon;
 use Illuminate\Pagination\Paginator;
@@ -50,6 +51,21 @@ class AppServiceProvider extends ServiceProvider
             $menus = Menu::getMenu(true, $nivelActual);
             $menus = \App\Support\Caja\Estacionamiento\EstacionamientoModuloSupport::filtrarMenuAside($menus);
             $view->with('menusComposer', $menus);
+
+            if (auth()->check()) {
+                $barraTareas = app(BarraTareasSupport::class);
+                $view->with('barraTareasMenuIds', $barraTareas->idsAnclados());
+            } else {
+                $view->with('barraTareasMenuIds', []);
+            }
+        });
+        View::composer('theme.lte.footer', function ($view) {
+            if (auth()->check()) {
+                $barraTareas = app(BarraTareasSupport::class);
+                $view->with('barraTareasAnclados', $barraTareas->ancladosResueltos());
+            } else {
+                $view->with('barraTareasAnclados', []);
+            }
         });
         View::composer('theme.lte.header', function ($view) {
             $view->with('urlCentroAyuda', AyudaManuales::urlCentroAyuda());

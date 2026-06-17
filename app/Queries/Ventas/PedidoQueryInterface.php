@@ -35,5 +35,18 @@ interface PedidoQueryInterface
                               $desdelinea_id, $hastalinea_id,
                               $desdecolor_id, $hastacolor_id,
                               $desdematerialavio_id, $hastamaterialavio_id);
+
+    public function findPorKiloPedido($tipolistado, $estado, $desdefecha, $hastafecha,
+        $codigodesdetransporte, $codigohastatransporte);
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public function findPorKiloPedidoFiltros(array $filtros);
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public function findPorKiloCategoriaFiltros(array $filtros);
 }
 

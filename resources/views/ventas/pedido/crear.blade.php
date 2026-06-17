@@ -22,13 +22,18 @@
             cantidadArticulo = cantidadArticulo + 1;
         });
 
-        if (cantidadArticulo > 42)
-        {
-            alert("No puede generar pedidos con mas de 42 ítems");
+        if (typeof validarLugarEntregaAntesGuardar === 'function' && !validarLugarEntregaAntesGuardar()) {
             return false;
         }
 
-        if (typeof validarLugarEntregaAntesGuardar === 'function' && !validarLugarEntregaAntesGuardar()) {
+        if (typeof validarListaprecioLineasFormularioVentas === 'function'
+            && !validarListaprecioLineasFormularioVentas('#tbody-tabla tr')) {
+            return false;
+        }
+
+        if (cantidadArticulo > 42)
+        {
+            alert("No puede generar pedidos con mas de 42 ítems");
             return false;
         }
 
@@ -70,7 +75,7 @@
                     </a>
                 </div>
             </div>
-            <form action="{{route('guardar_pedido')}}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off">
+            <form action="{{route('guardar_pedido')}}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-articulo-solo-facturable="1" onsubmit="return typeof validarLugarEntregaAntesGuardar !== 'function' || validarLugarEntregaAntesGuardar();">
                 @csrf
                 <div class="card-body">
                     @php $datos = ["funcion" => "crear"]; @endphp

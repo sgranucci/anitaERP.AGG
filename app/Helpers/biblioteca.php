@@ -38,6 +38,29 @@ if (!function_exists('menuItemEsActivoOAncestro')) {
     }
 }
 
+if (!function_exists('clasesIconoMenu')) {
+    /**
+     * Clases CSS Font Awesome para un ícono de menú (mismo criterio que admin/menu y sidebar).
+     */
+    function clasesIconoMenu(?string $icono, string $default = 'fa-circle'): string
+    {
+        $icono = trim((string) $icono);
+        if ($icono === '') {
+            $icono = $default;
+        }
+
+        if (preg_match('/^(fa|fas|far|fab|fal|fad)\s+/', $icono)) {
+            return $icono;
+        }
+
+        if (str_contains($icono, 'fa-')) {
+            return 'fa '.$icono;
+        }
+
+        return 'fa fa-'.ltrim($icono, '-');
+    }
+}
+
 if (!function_exists('canUser')) {
     function can($permiso, $redirect = true)
     {

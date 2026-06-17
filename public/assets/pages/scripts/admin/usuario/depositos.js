@@ -48,11 +48,23 @@ $(function () {
 });
 
 function empresasUsuarioSeleccionadas() {
+    if (typeof window.empresasUsuarioSeleccionadas === 'function') {
+        return window.empresasUsuarioSeleccionadas();
+    }
     var ids = $('#empresa_id').val();
+    if (!ids) {
+        $('#empresas_asignadas_hidden input[name="empresa_ids[]"]').each(function () {
+            ids = ids || [];
+            if (!Array.isArray(ids)) {
+                ids = [ids];
+            }
+            ids.push(String($(this).val()));
+        });
+    }
     if (!ids) {
         return [];
     }
-    return Array.isArray(ids) ? ids : [ids];
+    return Array.isArray(ids) ? ids : [String(ids)];
 }
 
 function agregaRenglonDeposito(event) {

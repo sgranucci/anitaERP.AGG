@@ -19,6 +19,10 @@ use App\Repositories\Ventas\DescuentoventaRepositoryInterface;
 use App\Repositories\Configuracion\Actividad_ArcaRepositoryInterface;
 use App\Services\Ventas\PedidoService;
 use App\Services\Ventas\PedidoListadoPdfService;
+use App\Services\Ventas\KiloPedidoReporteService;
+use App\Services\Ventas\KiloCategoriaReporteService;
+use App\Support\Ventas\KiloPedidoListadoFiltros;
+use App\Support\Ventas\KiloCategoriaListadoFiltros;
 use App\Models\Configuracion\Moneda;
 use App\Models\Ventas\Cliente;
 use App\Models\Stock\Articulo;
@@ -36,10 +40,13 @@ use App\Models\Ventas\Condicionventa;
 use App\Exports\Ventas\PedidoExport;
 use App\Exports\Ventas\PedidoListadoExport;
 use App\Exports\Ventas\KiloPedidoExport;
+use App\Exports\Ventas\KiloPedidoListadoExport;
+use App\Exports\Ventas\KiloCategoriaListadoExport;
 use App\Exports\Ventas\TotalPedidoExport;
 use App\Exports\Ventas\GeneralPedidoExport;
 use App\Exports\Ventas\ConsumoMaterialExport;
 use Illuminate\Pagination\Paginator;
+use Maatwebsite\Excel\Excel;
 use DB;
 use Carbon\Carbon;
 
@@ -47,6 +54,8 @@ class PedidoController extends Controller
 {
 	private $pedidoService;
 	private $pedidoListadoPdfService;
+	private $kiloPedidoReporteService;
+	private $kiloCategoriaReporteService;
 	private $clienteQuery;
 	private $transporteRepository;
 	private $tiposuspensionclienteRepository;
@@ -61,6 +70,8 @@ class PedidoController extends Controller
 
     public function __construct(PedidoService $pedidoservice,
     							PedidoListadoPdfService $pedidoListadoPdfService,
+    							KiloPedidoReporteService $kiloPedidoReporteService,
+    							KiloCategoriaReporteService $kiloCategoriaReporteService,
     							TransporteRepositoryInterface $transporterepository,
 								TiposuspensionclienteRepositoryInterface $tiposuspensionclienteRepository,
 								MotivocierrepedidoRepositoryInterface $motivocierrepedidoRepository,
@@ -75,6 +86,8 @@ class PedidoController extends Controller
     {
         $this->pedidoService = $pedidoservice;
         $this->pedidoListadoPdfService = $pedidoListadoPdfService;
+        $this->kiloPedidoReporteService = $kiloPedidoReporteService;
+        $this->kiloCategoriaReporteService = $kiloCategoriaReporteService;
         $this->transporteRepository = $transporterepository;
 		$this->tiposuspencionclienteRepository = $tiposuspensionclienteRepository;
 		$this->motivocierrepedidoRepository = $motivocierrepedidoRepository;
@@ -299,43 +312,237 @@ class PedidoController extends Controller
     }
 
 	// Reporte de pedidos por vendedor
-    public function indexReporteKiloPedido()
+    public function indexReporteKiloPedido(Request $request)
     {
-		$transporte_query = $this->transporteRepository->all();
-		$transporte_query->prepend((object) ['id'=>'0','nombre'=>'Primero']);
-		$transporte_query->push((object) ['id'=>'999999','nombre'=>'Ultimo']);
+        can('listar-pedidos');
 
-		$tipolistado_enum = [
-			'ABRE' => 'Abre items de pedidos',
-			'TOTAL' => 'Totales de pedidos'
-		];
+        $filtros = KiloPedidoListadoFiltros::resolverDesdeRequest($request);
+        $filtrosQuery = KiloPedidoListadoFiltros::paraQueryString($filtros);
 
-		$estado_enum = [
-			'PENDIENTE' => 'Lista pedidos pendientes de facturar',
-			'TODO' => 'Lista todos los pedidos'
-		];
+        $tipolistado_enum = KiloPedidoListadoFiltros::TIPOS_LISTADO;
+        $estado_enum = KiloPedidoListadoFiltros::ESTADOS;
 
-        return view('ventas.repkilopedido.crear', compact('transporte_query', 'tipolistado_enum', 'estado_enum'));
+        $consultado = false;
+        $filas = null;
+        $filasVista = [];
+        $totales = null;
+
+        if ($request->boolean('consultar') && KiloPedidoListadoFiltros::tieneCriteriosAplicados($filtros)) {
+            ini_set('memory_limit', '-1');
+            ini_set('max_execution_time', '0');
+
+            $datos = $this->kiloPedidoReporteService->generarDatos($filtros);
+            $filasAplanadas = $this->kiloPedidoReporteService->aplanarFilas($datos, $filtros);
+            $totales = $this->kiloPedidoReporteService->totalesGenerales($filasAplanadas);
+            $perPage = max(10, min(200, (int) $request->input('per_page', 50)));
+            $filas = $this->kiloPedidoReporteService->paginarFilas(
+                $filasAplanadas,
+                $perPage,
+                max(1, (int) $request->input('page', 1)),
+            );
+            $filasVista = $filas->items();
+            $consultado = true;
+        }
+
+        if ($filas instanceof \Illuminate\Contracts\Pagination\LengthAwarePaginator) {
+            $filas->appends($filtrosQuery);
+        }
+
+        return view('ventas.repkilopedido.index', [
+            'filtros' => $filtros,
+            'filtrosQuery' => $filtrosQuery,
+            'tipolistado_enum' => $tipolistado_enum,
+            'estado_enum' => $estado_enum,
+            'consultado' => $consultado,
+            'filas' => $filas,
+            'filasVista' => $filasVista,
+            'totales' => $totales,
+            'reparto_texto' => KiloPedidoListadoFiltros::formatearRepartoTexto($filtros),
+            'periodo_texto' => KiloPedidoListadoFiltros::formatearPeriodoTexto($filtros),
+            'meta_reparto_desde' => $this->metaRepartoFiltro((string) ($filtros['reparto_desde'] ?? '')),
+            'meta_reparto_hasta' => $this->metaRepartoFiltro((string) ($filtros['reparto_hasta'] ?? '')),
+            'puede_ver_pedido' => can('editar-pedidos', false) || can('listar-pedidos', false),
+            'puede_ver_cliente' => can('editar-clientes', false) || can('listar-clientes', false),
+            'puede_ver_articulo' => can('editar-articulos', false) || can('listar-articulos', false),
+            'puede_ver_transporte' => can('editar-transportes', false) || can('listar-transportes', false),
+        ]);
+    }
+
+    public function listarReporteKiloPedido(Request $request, string $formato)
+    {
+        can('listar-pedidos');
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $filtros = KiloPedidoListadoFiltros::resolverDesdeRequest($request);
+
+        if (! KiloPedidoListadoFiltros::tieneCriteriosAplicados($filtros)) {
+            return redirect()->route('rep_kilopedido');
+        }
+
+        $datos = $this->kiloPedidoReporteService->generarDatos($filtros);
+        $filas = $this->kiloPedidoReporteService->aplanarFilas($datos, $filtros);
+
+        switch (strtoupper($formato)) {
+            case 'PDF':
+                $view = \View::make('ventas.repkilopedido.listado', compact('filas', 'filtros'))->render();
+
+                return $this->descargarPdfListado($view, 'kilos_pedidos', 'legal', 'landscape');
+
+            case 'EXCEL':
+                return (new KiloPedidoListadoExport($this->kiloPedidoReporteService))
+                    ->parametros($filtros)
+                    ->download('kilos_pedidos.xlsx');
+
+            case 'CSV':
+                return (new KiloPedidoListadoExport($this->kiloPedidoReporteService))
+                    ->parametros($filtros)
+                    ->download('kilos_pedidos.csv', Excel::CSV);
+        }
+
+        return redirect()->route('rep_kilopedido', KiloPedidoListadoFiltros::paraQueryString($filtros));
+    }
+
+    public function indexReporteKiloCategoria(Request $request)
+    {
+        can('listar-pedidos');
+
+        $filtros = KiloCategoriaListadoFiltros::resolverDesdeRequest($request);
+        $filtrosQuery = KiloCategoriaListadoFiltros::paraQueryString($filtros);
+        $estado_enum = KiloCategoriaListadoFiltros::ESTADOS;
+
+        $consultado = false;
+        $filas = null;
+        $filasVista = [];
+        $totales = null;
+
+        if ($request->boolean('consultar') && KiloCategoriaListadoFiltros::tieneCriteriosAplicados($filtros)) {
+            ini_set('memory_limit', '-1');
+            ini_set('max_execution_time', '0');
+
+            $datos = $this->kiloCategoriaReporteService->generarDatos($filtros);
+            $filasAplanadas = $this->kiloCategoriaReporteService->aplanarFilas($datos, $filtros);
+            $totales = $this->kiloCategoriaReporteService->totalesGenerales($filasAplanadas);
+            $perPage = max(10, min(200, (int) $request->input('per_page', 50)));
+            $filas = $this->kiloCategoriaReporteService->paginarFilas(
+                $filasAplanadas,
+                $perPage,
+                max(1, (int) $request->input('page', 1)),
+            );
+            $filasVista = $filas->items();
+            $consultado = true;
+        }
+
+        if ($filas instanceof \Illuminate\Contracts\Pagination\LengthAwarePaginator) {
+            $filas->appends($filtrosQuery);
+        }
+
+        return view('ventas.repkilocategoria.index', [
+            'filtros' => $filtros,
+            'filtrosQuery' => $filtrosQuery,
+            'estado_enum' => $estado_enum,
+            'consultado' => $consultado,
+            'filas' => $filas,
+            'filasVista' => $filasVista,
+            'totales' => $totales,
+            'reparto_texto' => KiloCategoriaListadoFiltros::formatearRepartoTexto($filtros),
+            'periodo_texto' => KiloCategoriaListadoFiltros::formatearPeriodoTexto($filtros),
+            'meta_reparto_desde' => $this->metaRepartoFiltro((string) ($filtros['reparto_desde'] ?? '')),
+            'meta_reparto_hasta' => $this->metaRepartoFiltro((string) ($filtros['reparto_hasta'] ?? '')),
+            'puede_ver_articulo' => can('editar-articulos', false) || can('listar-articulos', false),
+            'puede_ver_categoria' => can('editar-categorias', false) || can('listar-categorias', false),
+        ]);
+    }
+
+    public function listarReporteKiloCategoria(Request $request, string $formato)
+    {
+        can('listar-pedidos');
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $filtros = KiloCategoriaListadoFiltros::resolverDesdeRequest($request);
+
+        if (! KiloCategoriaListadoFiltros::tieneCriteriosAplicados($filtros)) {
+            return redirect()->route('rep_kilocategoria');
+        }
+
+        $datos = $this->kiloCategoriaReporteService->generarDatos($filtros);
+        $filas = $this->kiloCategoriaReporteService->aplanarFilas($datos, $filtros);
+
+        switch (strtoupper($formato)) {
+            case 'PDF':
+                $view = \View::make('ventas.repkilocategoria.listado', compact('filas', 'filtros'))->render();
+
+                return $this->descargarPdfListado($view, 'kilos_por_categoria', 'legal', 'landscape');
+
+            case 'EXCEL':
+                return (new KiloCategoriaListadoExport($this->kiloCategoriaReporteService))
+                    ->parametros($filtros)
+                    ->download('kilos_por_categoria.xlsx');
+
+            case 'CSV':
+                return (new KiloCategoriaListadoExport($this->kiloCategoriaReporteService))
+                    ->parametros($filtros)
+                    ->download('kilos_por_categoria.csv', Excel::CSV);
+        }
+
+        return redirect()->route('rep_kilocategoria', KiloCategoriaListadoFiltros::paraQueryString($filtros));
     }
 
     public function crearReporteKiloPedido(Request $request)
     {
-		switch($request->extension)
-		{
-		case "Genera Reporte en Excel":
-			$extension = "xlsx";
-			break;
-		case "Genera Reporte en PDF":
-			$extension = "pdf";
-			break;
-		case "Genera Reporte en CSV":
-			$extension = "csv";
-			break;
-		}
-		return (new KiloPedidoExport($this->pedidoService))->rangoFecha($request->desdefecha, $request->hastafecha)
-								->asignaRangoTransporte($request->codigodesdetransporte, $request->codigohastatransporte)
-								->asignaTipoListado($request->tipolistado, $request->estado)
-								->download('kilopedido.'.$extension);
+        $filtros = KiloPedidoListadoFiltros::resolverDesdeRequest($request);
+
+        return redirect()->route('rep_kilopedido', array_merge(
+            KiloPedidoListadoFiltros::paraQueryString($filtros),
+            ['consultar' => 1],
+        ));
+    }
+
+    /**
+     * @return array{nombre: string}
+     */
+    private function metaRepartoFiltro(string $codigo): array
+    {
+        $codigo = trim($codigo);
+        if ($codigo === '') {
+            return ['nombre' => ''];
+        }
+
+        if (KiloPedidoListadoFiltros::esListaRepartos($codigo)) {
+            return ['nombre' => 'Lista de repartos'];
+        }
+
+        if (str_contains($codigo, '/')) {
+            $partes = array_map('trim', explode('/', $codigo, 2));
+
+            return ['nombre' => 'Rango '.($partes[0] ?? '').' al '.($partes[1] ?? '')];
+        }
+
+        if (KiloPedidoListadoFiltros::esRepartoHastaAbierto($codigo)) {
+            return ['nombre' => ''];
+        }
+
+        $transporte = $this->transporteRepository->findPorCodigo($codigo);
+
+        return ['nombre' => $transporte->nombre ?? ''];
+    }
+
+    private function descargarPdfListado(string $view, string $nombreBase, string $paper, string $orientation)
+    {
+        $path = storage_path('pdf/listados');
+        if (! is_dir($path) && ! mkdir($path, 0775, true) && ! is_dir($path)) {
+            abort(500, 'No se pudo crear el directorio para el PDF.');
+        }
+
+        $nombrePdf = $nombreBase.'_'.date('Ymd_His').'_'.uniqid('', true);
+        $pdf = \App::make('dompdf.wrapper');
+        $pdf->setPaper($paper, $orientation);
+        $pdf->loadHTML($view, 'UTF-8')->save($path.'/'.$nombrePdf.'.pdf');
+
+        return response()->download($path.'/'.$nombrePdf.'.pdf')->deleteFileAfterSend(true);
     }
 
 	// Reporte total de pedidos por vendedor
@@ -656,7 +863,14 @@ class PedidoController extends Controller
      */
     public function editar($id)
     {
-        can('editar-pedidos');
+        $soloConsulta = request()->query('origen') === 'modal_consulta';
+        if ($soloConsulta) {
+            if (! can('editar-pedidos', false) && ! can('listar-pedidos', false)) {
+                can('listar-pedidos');
+            }
+        } else {
+            can('editar-pedidos');
+        }
 
     	$pedido = $this->pedidoService->leePedido($id);
 
@@ -691,13 +905,16 @@ class PedidoController extends Controller
 		if (!$puntoventaremitodefault_id)
 			$puntoventaremitodefault_id = config('facturacion.PUNTOVENTA_REMITO');
 
+		$ocultarVolver = $soloConsulta;
+		$puedeActualizarPedido = can('actualizar-pedidos', false);
+
 		return view('ventas.pedido.editar', compact('pedido', 'cliente_query', 'condicionventa_query', 
 			'vendedor_query', 
 			'listaprecio_query', 'moneda_query', 
 			'tiposuspensioncliente_query', 'motivocierrepedido_query', 'lote_query',
 			'puntoventa_query', 'puntoventadefault_id', 'tipotransaccion_query', 'descuentoventa_query',
 			'tipotransacciondefault_id', 'puntoventaremitodefault_id', 'formapago_query', 'incoterm_query',
-			'unidadmedida_query', 'actividad_arca_query'));
+			'unidadmedida_query', 'actividad_arca_query', 'soloConsulta', 'ocultarVolver', 'puedeActualizarPedido'));
     }
 
     /**
@@ -712,10 +929,32 @@ class PedidoController extends Controller
         can('actualizar-pedidos');
 		$pedido = $this->pedidoService->guardaPedido($request->all(), 'update', $id);
 
-		if (isset($pedido['error']))
+		if (isset($pedido['error'])) {
+			if ($request->input('origen') === 'modal_consulta') {
+				return redirect()
+					->route('editar_pedido', [
+						'id' => $id,
+						'origen' => 'modal_consulta',
+						'vista' => 'consulta',
+					])
+					->withInput()
+					->with('errores', [$pedido['error']]);
+			}
+
 			return back()->with('errores', [$pedido['error']]);
+		}
 
 		$mensaje = "Pedido ".$request->codigo." actualizado con exito";
+
+		if ($request->input('origen') === 'modal_consulta') {
+			return redirect()
+				->route('editar_pedido', [
+					'id' => $id,
+					'origen' => 'modal_consulta',
+					'vista' => 'consulta',
+				])
+				->with('mensaje', $mensaje);
+		}
 
         return redirect('ventas/pedido')->with('mensaje', $mensaje);
     }

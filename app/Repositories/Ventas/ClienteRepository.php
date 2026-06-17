@@ -30,6 +30,7 @@ use App\Repositories\Ventas\DescuentoventaRepositoryInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
 use App\Support\Ventas\ClienteListadoFiltros;
+use App\Services\Ventas\ClienteAnitaSyncService;
 use App\Traits\AnitaBridgeEscritura;
 use Carbon\Carbon;
 use Auth;
@@ -57,7 +58,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 		$this->vendedorRepository = $vendedorRepository;
     }
 
-    public function create(array $data)
+    public function create(array $data, ?bool $syncAnita = null)
     {
 		if (config('app.empresa') !== 'INTERFORMING')
 		{
@@ -78,18 +79,22 @@ class ClienteRepository implements ClienteRepositoryInterface
 
         $cliente = $this->model->create($data);
 
-		self::guardarAnita($data);
+		if ($syncAnita ?? config('app.anita_sync_cliente_write', true)) {
+			self::guardarAnita($data);
+		}
 
 		return $cliente;
     }
 
-    public function update(array $data, $id)
+    public function update(array $data, $id, ?bool $syncAnita = null)
     {
         $cliente = $this->model->findOrFail($id)
             ->update($data);
 
 		$data['tiene_cm05'] = $this->model->find($id)?->cliente_cm05s()->exists() ?? false;
-		self::actualizarAnita($data, $data['codigo']);
+		if ($syncAnita ?? config('app.anita_sync_cliente_write', true)) {
+			self::actualizarAnita($data, $data['codigo']);
+		}
 
 		return $cliente;
 
@@ -268,53 +273,20 @@ class ClienteRepository implements ClienteRepositoryInterface
 		return $this->queryClientePorCodigo($codigo)->exists();
 	}
 
-    public function sincronizarConAnita(){
-		ini_set('max_execution_time', '300');
-	  	ini_set('memory_limit', '512M');
-
-        $apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'list', 
-						'sistema' => 'ventas',
-						'campos' => "$this->keyFieldAnita as $this->keyField, $this->keyFieldAnita", 
-						'tabla' => $this->tableAnita[0] );
-        $rawAnita = $apiAnita->apiCall($data);
-        $dataAnita = json_decode($rawAnita);
-        if (is_object($dataAnita) && isset($dataAnita->Error)) {
-            throw new \RuntimeException((string) $dataAnita->Error);
-        }
-        if (! is_array($dataAnita)) {
-            throw new \RuntimeException(
-                'Respuesta inválida de Anita al listar clientes (climae). Revise ANITA_IP / bridge HTTP.'
-            );
-        }
-
-		/*for ($ii = 994; $ii < count($dataAnita); $ii++)
-		{
-        	$this->traerRegistroDeAnita($dataAnita[$ii]->clim_cliente, true);
-		}*/
-
-        $datosLocal = Cliente::all();
-        $datosLocalArray = [];
-        foreach ($datosLocal as $value) {
-            $datosLocalArray[] = $this->normalizarCodigoCliente($value->{$this->keyField});
-        }
-		$datosLocalArray = array_values(array_unique($datosLocalArray));
-
-        foreach ($dataAnita as $value) {
-			$codigoNorm = $this->normalizarCodigoCliente($value->{$this->keyField});
-            if (! in_array($codigoNorm, $datosLocalArray, true)) {
-                $this->traerRegistroDeAnita($value->{$this->keyFieldAnita}, true);
-				$datosLocalArray[] = $codigoNorm;
-            }
-			else
-			{
-                $this->traerRegistroDeAnita($value->{$this->keyFieldAnita}, false);
-			}
-        }
+    public function sincronizarConAnita()
+    {
+        app(ClienteAnitaSyncService::class)->sincronizarConAnita();
     }
 
-    public function traerRegistroDeAnita($key, $fl_crea_registro){
+    /**
+     * @return 'importado'|'actualizado'|'omitido'
+     */
+    public function traerRegistroDeAnita($key, $fl_crea_registro = null)
+    {
         $apiAnita = new ApiAnita();
+        $clienteRecienCreado = false;
+        $estado = 'omitido';
+        $keyAnita = $this->codigoParaConsultaAnita((string) $key);
         $data = array( 
             'acc' => 'list', 'tabla' => $this->tableAnita[0], 
 			'sistema' => 'ventas',
@@ -395,9 +367,13 @@ class ClienteRepository implements ClienteRepositoryInterface
 					clim_url,
 					clim_hs_atencion2' : '')
 			,
-            'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
+            'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$keyAnita."' " 
         );
         $dataAnita = json_decode($apiAnita->apiCall($data));
+
+        if (! is_array($dataAnita) || count($dataAnita) === 0) {
+            return 'omitido';
+        }
 
 		$data = array( 
             'acc' => 'list', 'tabla' => $this->tableAnita[1], 
@@ -406,7 +382,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 			clil_cliente,
     		clil_leyenda
 			',
-            'whereArmado' => " WHERE clil_cliente = '".$key."' " 
+            'whereArmado' => " WHERE clil_cliente = '".$keyAnita."' " 
         );
         $dataleyAnita = json_decode($apiAnita->apiCall($data));
 
@@ -425,7 +401,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 				movsc_usuario,
 				movsc_hora_ult_tra
 				',
-				'whereArmado' => " WHERE movsc_cliente = '".$key."' " 
+				'whereArmado' => " WHERE movsc_cliente = '".$keyAnita."' " 
 			);
 			$dataseguimientoAnita = json_decode($apiAnita->apiCall($data));
 
@@ -436,7 +412,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 				stksc_cliente,
 				stksc_articulo
 				',
-				'whereArmado' => " WHERE stksc_cliente = '".$key."' " 
+				'whereArmado' => " WHERE stksc_cliente = '".$keyAnita."' " 
 			);
 			$dataarticulo_suspendidoAnita = json_decode($apiAnita->apiCall($data));
 		}
@@ -606,6 +582,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 			foreach (is_array($dataleyAnita) ? $dataleyAnita : [] as $ley) {
 				$leyenda .= $ley->clil_leyenda;
 			}
+			$leyenda = trim($leyenda);
 
 			if (config('app.empresa') == 'EL BIERZO')
 			{
@@ -633,14 +610,14 @@ class ClienteRepository implements ClienteRepositoryInterface
 				$modoFacturacion = 'N';
 
 			if (config('app.empresa') == 'EL BIERZO')
-				$email = rtrim($data->clim_e_mail, ' ').rtrim($data->clim_e_mail2);
+				$email = trim(rtrim((string) ($data->clim_e_mail ?? ''), ' ').rtrim((string) ($data->clim_e_mail2 ?? ''), ' '));
 			else
-				$email = rtrim($data->clim_e_mail, ' ');
+				$email = trim(rtrim((string) ($data->clim_e_mail ?? ''), ' '));
 
 			if (config('app.empresa') == 'INTERFORMING')
-				$horarioAtencion = $data->clim_hs_atencion.' '.$data->clim_hs_atencion2;
+				$horarioAtencion = trim((string) ($data->clim_hs_atencion ?? '').' '.(string) ($data->clim_hs_atencion2 ?? ''));
 			else
-				$horarioAtencion = $data->clim_hs_atencion;
+				$horarioAtencion = trim((string) ($data->clim_hs_atencion ?? ''));
 
 			$codigoCliente = $this->normalizarCodigoCliente($data->clim_cliente);
 
@@ -674,7 +651,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 					"descuento" => $data->clim_descuento,
 					"cuentacontable_id" => $cuentacontable_id,
 					"vaweb" => 'N',
-					"estado" => $data->clim_estado_cli,
+					"estado" => $this->mapEstadoClienteDesdeAnita($data->clim_estado_cli ?? null),
 					"leyenda" => $leyenda,
 					"modofacturacion" => $modoFacturacion,
 					"usuario_id" => $usuario_id,
@@ -724,25 +701,44 @@ class ClienteRepository implements ClienteRepositoryInterface
 					"descuento" => $data->clim_descuento,
 					"cuentacontable_id" => $cuentacontable_id,
 					"vaweb" => 'N',
-					"estado" => $data->clim_estado_cli,
+					"estado" => $this->mapEstadoClienteDesdeAnita($data->clim_estado_cli ?? null),
 					"leyenda" => $leyenda,
 					"modofacturacion" => $modoFacturacion,
 					"usuario_id" => $usuario_id,
 					'horarioatencion' => $horarioAtencion
 					];
 			}
+
+			$arr_campos = $this->normalizarCamposClienteSync($arr_campos);
+			foreach (['desdefecha_exclusionpercepcioniva', 'hastafecha_exclusionpercepcioniva'] as $campoFecha) {
+				if (array_key_exists($campoFecha, $arr_campos) && $this->fechaSyncCliente($arr_campos[$campoFecha]) === '') {
+					$arr_campos[$campoFecha] = null;
+				}
+			}
 		
 			$clienteExistente = $this->queryClientePorCodigo((string) $data->clim_cliente)->first();
+			$estado = 'omitido';
 
 			if ($clienteExistente !== null) {
+				unset($arr_campos['usuario_id']);
+				if (! $this->hayCambiosCliente($clienteExistente, $arr_campos)) {
+					return 'omitido';
+				}
 				$clienteExistente->update($arr_campos);
 				$cliente = $clienteExistente->fresh();
-			} elseif ($fl_crea_registro) {
+				$estado = 'actualizado';
+			} elseif ($fl_crea_registro !== false) {
             	$cliente = Cliente::create($arr_campos);
+				$clienteRecienCreado = true;
+				$estado = 'importado';
+			} else {
+				return 'omitido';
 			}
-        }
+        } else {
+			return 'omitido';
+		}
 
-		if (isset($cliente) && $cliente instanceof Cliente) {
+		if ($clienteRecienCreado && isset($cliente) && $cliente instanceof Cliente) {
 			if (isset($dataseguimientoAnita) && is_array($dataseguimientoAnita) && count($dataseguimientoAnita) > 0) {
 				foreach ($dataseguimientoAnita as $dataSeg) {
 					Cliente_Seguimiento::create([
@@ -773,7 +769,144 @@ class ClienteRepository implements ClienteRepositoryInterface
 				$this->importarCm05DesdeAnita($apiAnita, trim((string) $data->clim_cuit), $cliente->id);
 			}
 		}
+
+		return $estado ?? 'omitido';
     }
+
+	/**
+	 * @param  array<string, mixed>  $datos
+	 */
+	private function hayCambiosCliente(Cliente $existente, array $datos): bool
+	{
+		$floats = ['descuento', 'porcentajelogistica', 'coeficienteextra'];
+		$enteros = [
+			'localidad_id', 'provincia_id', 'pais_id', 'zonavta_id', 'subzonavta_id',
+			'vendedor_id', 'transporte_id', 'condicioniva_id', 'condicioniibb_id',
+			'tipoempresa_cliente_id', 'condicionventa_id', 'listaprecio_id', 'cuentacontable_id',
+			'abasto_id', 'coeficiente_id', 'distribuidor_id', 'descuentoventa_id', 'tipodocumento_id',
+		];
+
+		$fechas = ['desdefecha_exclusionpercepcioniva', 'hastafecha_exclusionpercepcioniva'];
+		$flags = ['estado', 'retieneiva', 'modofacturacion', 'vaweb'];
+
+		foreach ($datos as $campo => $nuevo) {
+			$actual = $existente->{$campo};
+
+			if (in_array($campo, $fechas, true)) {
+				if ($this->fechaSyncCliente($actual) !== $this->fechaSyncCliente($nuevo)) {
+					return true;
+				}
+
+				continue;
+			}
+
+			if (in_array($campo, $flags, true)) {
+				if (trim((string) ($actual ?? '')) !== trim((string) ($nuevo ?? ''))) {
+					return true;
+				}
+
+				continue;
+			}
+
+			if (in_array($campo, $floats, true)) {
+				if (round((float) $actual, 4) !== round((float) $nuevo, 4)) {
+					return true;
+				}
+
+				continue;
+			}
+
+			if (in_array($campo, $enteros, true)) {
+				if ((int) ($actual ?? 0) !== (int) ($nuevo ?? 0)) {
+					return true;
+				}
+
+				continue;
+			}
+
+			if ($this->textoSyncCliente($actual) !== $this->textoSyncCliente($nuevo)) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	private function fechaSyncCliente(mixed $valor): string
+	{
+		$texto = $this->textoSyncCliente($valor);
+		if ($texto === '' || $texto === '0' || $texto === '0000-00-00' || $texto === '00000000') {
+			return '';
+		}
+
+		return $texto;
+	}
+
+	private function textoSyncCliente(mixed $valor): string
+	{
+		return trim((string) ($valor ?? ''));
+	}
+
+	/**
+	 * Código Informix para WHERE (clim_cliente suele estar con 6 dígitos: 010348).
+	 */
+	private function codigoParaConsultaAnita(string $codigo): string
+	{
+		$codigo = trim($codigo);
+		if ($codigo === '') {
+			return $codigo;
+		}
+		if (ctype_digit($codigo)) {
+			$norm = ltrim($codigo, '0');
+
+			return str_pad($norm !== '' ? $norm : '0', 6, '0', STR_PAD_LEFT);
+		}
+
+		return $codigo;
+	}
+
+	/**
+	 * Anita clim_estado_cli: 0 = Activo, 1 = Suspendido (mismo enum que cliente.estado en ERP).
+	 */
+	private function mapEstadoClienteDesdeAnita(mixed $climEstado): string
+	{
+		return trim((string) ($climEstado ?? '')) === '1' ? '1' : '0';
+	}
+
+	/**
+	 * @param  array<string, mixed>  $datos
+	 * @return array<string, mixed>
+	 */
+	private function normalizarCamposClienteSync(array $datos): array
+	{
+		$texto = [
+			'nombre', 'codigo', 'contacto', 'fantasia', 'email', 'telefono', 'urlweb', 'domicilio',
+			'codigopostal', 'numerodocumento', 'nroiibb', 'leyenda',
+			'emitecertificado', 'emitenotadecredito', 'agregabonificacion',
+			'lugarentrega', 'horarioatencion',
+			'desdefecha_exclusionpercepcioniva', 'hastafecha_exclusionpercepcioniva',
+		];
+
+		foreach ($texto as $campo) {
+			if (array_key_exists($campo, $datos)) {
+				if (in_array($campo, ['desdefecha_exclusionpercepcioniva', 'hastafecha_exclusionpercepcioniva'], true)) {
+					$datos[$campo] = $this->fechaSyncCliente($datos[$campo]);
+				} else {
+					$datos[$campo] = $this->textoSyncCliente($datos[$campo]);
+				}
+			}
+		}
+
+		if (array_key_exists('email', $datos) && config('app.empresa') == 'EL BIERZO') {
+			$datos['email'] = trim((string) $datos['email']);
+		}
+
+		if (array_key_exists('telefono', $datos)) {
+			$datos['telefono'] = trim(preg_replace('/\s+/', ' ', (string) $datos['telefono']));
+		}
+
+		return $datos;
+	}
 
 	/**
 	 * Escapa comillas simples para literales SQL Informix ('' dentro de '...').
@@ -1059,6 +1192,10 @@ class ClienteRepository implements ClienteRepositoryInterface
 	 */
 	public function sincronizarAnitaDespuesDeGrabado(int $clienteId): void
 	{
+		if (! config('app.anita_sync_cliente_write', false)) {
+			return;
+		}
+
 		$cliente = $this->model->findOrFail($clienteId);
 		$datos = $this->datosRequestDesdeCliente($cliente);
 		self::actualizarAnita($datos, $datos['codigo']);

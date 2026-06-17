@@ -111,6 +111,37 @@ class ConstanciaInscripcionService
     {
         $dg = $personaReturn->datosGenerales ?? null;
 
+        if ($dg === null) {
+            $err = $personaReturn->errorConstancia ?? null;
+
+            return [
+                'idPersona' => null,
+                'tipoPersona' => null,
+                'estadoClave' => null,
+                'nombre' => null,
+                'apellido' => null,
+                'nombrePersona' => null,
+                'razonSocial' => null,
+                'domicilioFiscal' => [
+                    'direccion' => null,
+                    'localidad' => null,
+                    'provincia' => null,
+                    'codPostal' => null,
+                    'texto' => null,
+                    'provincia_id' => null,
+                    'localidad_id' => null,
+                ],
+                'metadata' => [
+                    'fechaHora' => isset($personaReturn->metadata->fechaHora) ? (string) $personaReturn->metadata->fechaHora : null,
+                    'servidor' => isset($personaReturn->metadata->servidor) ? (string) $personaReturn->metadata->servidor : null,
+                ],
+                'impuestos' => $this->extraerImpuestos($personaReturn),
+                'datosMonotributo' => $this->normalizarDatosMonotributo($personaReturn->datosMonotributo ?? null),
+                'error' => $this->extraerMensajeErrorConstancia($err),
+                'raw' => $personaReturn,
+            ];
+        }
+
         $dom = $dg->domicilioFiscal ?? null;
 
         $direccion = $dom->direccion ?? null;
@@ -147,7 +178,7 @@ class ConstanciaInscripcionService
 
         // Errores por CUIT inexistente u otras validaciones pueden venir en errorConstancia
         $err = $personaReturn->errorConstancia ?? null;
-        $errorMsg = $err->error ?? null;
+        $errorMsg = $this->extraerMensajeErrorConstancia($err);
 
         return [
             'idPersona' => isset($dg->idPersona) ? (string) $dg->idPersona : null,
@@ -170,9 +201,120 @@ class ConstanciaInscripcionService
                 'fechaHora' => isset($personaReturn->metadata->fechaHora) ? (string) $personaReturn->metadata->fechaHora : null,
                 'servidor' => isset($personaReturn->metadata->servidor) ? (string) $personaReturn->metadata->servidor : null,
             ],
-            'error' => $errorMsg ? (string) $errorMsg : null,
+            'impuestos' => $this->extraerImpuestos($personaReturn),
+            'datosMonotributo' => $this->normalizarDatosMonotributo($personaReturn->datosMonotributo ?? null),
+            'error' => $errorMsg,
             'raw' => $personaReturn,
         ];
+    }
+
+    /**
+     * @return list<array{idImpuesto: int, descripcionImpuesto: string|null, estadoImpuesto: string|null, periodo: string|null, fuente: string}>
+     */
+    private function extraerImpuestos(object $personaReturn): array
+    {
+        $impuestos = [];
+
+        $rg = $personaReturn->datosRegimenGeneral ?? null;
+        if ($rg !== null && isset($rg->impuesto)) {
+            foreach ($this->comoLista($rg->impuesto) as $imp) {
+                $normalizado = $this->normalizarImpuesto($imp, 'regimen_general');
+                if ($normalizado !== null) {
+                    $impuestos[] = $normalizado;
+                }
+            }
+        }
+
+        $dm = $personaReturn->datosMonotributo ?? null;
+        if ($dm !== null && isset($dm->impuesto)) {
+            foreach ($this->comoLista($dm->impuesto) as $imp) {
+                $normalizado = $this->normalizarImpuesto($imp, 'monotributo');
+                if ($normalizado !== null) {
+                    $impuestos[] = $normalizado;
+                }
+            }
+        }
+
+        return $impuestos;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function normalizarDatosMonotributo(?object $datosMonotributo): ?array
+    {
+        if ($datosMonotributo === null) {
+            return null;
+        }
+
+        $categoria = $datosMonotributo->categoriaMonotributo ?? null;
+        $actividad = $datosMonotributo->actividadMonotributista ?? null;
+
+        return [
+            'categoriaMonotributo' => $categoria ? [
+                'idCategoria' => isset($categoria->idCategoria) ? (int) $categoria->idCategoria : null,
+                'descripcionCategoria' => isset($categoria->descripcionCategoria) ? (string) $categoria->descripcionCategoria : null,
+                'idImpuesto' => isset($categoria->idImpuesto) ? (int) $categoria->idImpuesto : null,
+                'periodo' => isset($categoria->periodo) ? (string) $categoria->periodo : null,
+            ] : null,
+            'actividadMonotributista' => $actividad ? [
+                'idActividad' => isset($actividad->idActividad) ? (int) $actividad->idActividad : null,
+                'descripcionActividad' => isset($actividad->descripcionActividad) ? (string) $actividad->descripcionActividad : null,
+                'periodo' => isset($actividad->periodo) ? (string) $actividad->periodo : null,
+            ] : null,
+        ];
+    }
+
+    /**
+     * @return array{idImpuesto: int, descripcionImpuesto: string|null, estadoImpuesto: string|null, periodo: string|null, fuente: string}|null
+     */
+    private function normalizarImpuesto(mixed $imp, string $fuente): ?array
+    {
+        if (! is_object($imp)) {
+            return null;
+        }
+
+        if (! isset($imp->idImpuesto)) {
+            return null;
+        }
+
+        return [
+            'idImpuesto' => (int) $imp->idImpuesto,
+            'descripcionImpuesto' => isset($imp->descripcionImpuesto) ? (string) $imp->descripcionImpuesto : null,
+            'estadoImpuesto' => isset($imp->estadoImpuesto) ? (string) $imp->estadoImpuesto : null,
+            'periodo' => isset($imp->periodo) ? (string) $imp->periodo : null,
+            'fuente' => $fuente,
+        ];
+    }
+
+    /**
+     * @return list<mixed>
+     */
+    private function comoLista(mixed $valor): array
+    {
+        if ($valor === null) {
+            return [];
+        }
+
+        return is_array($valor) ? $valor : [$valor];
+    }
+
+    private function extraerMensajeErrorConstancia(?object $err): ?string
+    {
+        if ($err === null || ! isset($err->error)) {
+            return null;
+        }
+
+        $error = $err->error;
+        if (is_array($error)) {
+            $partes = array_filter(array_map(static fn ($v) => trim((string) $v), $error));
+
+            return $partes !== [] ? implode('; ', $partes) : null;
+        }
+
+        $texto = trim((string) $error);
+
+        return $texto !== '' ? $texto : null;
     }
 
     private function resolverProvinciaId(string $descripcionProvincia): ?int

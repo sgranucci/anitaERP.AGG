@@ -119,14 +119,20 @@
 
 			var cantidad = $tr.find('.cantidad').val();
 			if (window.FL_FACTURA_LAYOUT_PEDIDO) {
-				var kilo = $tr.find('.kilo').val();
-				var pesada = $tr.find('.pesada').val();
-				cantidad = (kilo !== '' && kilo != null) ? kilo : pesada;
+				cantidad = $tr.find('.kilo').val();
 			}
 
 			if (cantidad == null || cantidad === '')
 			{
 				alert('Cantidad nula en ítem ' + item);
+				flError = true;
+				return false;
+			}
+
+			var listaprecioId = $tr.find('.listaprecio_id').val();
+			if (articulo_id && typeof window.listaprecioIdEsValidoLineaVentas === 'function'
+				&& !window.listaprecioIdEsValidoLineaVentas(listaprecioId)) {
+				alert(window.mensajeErrorListaprecioArticuloVentas(codigo, item));
 				flError = true;
 				return false;
 			}
@@ -1652,6 +1658,11 @@
 			contentType: false, //importante enviar este parametro en false
 			processData: false, //importante enviar este parametro en false
 			success: function (data) {
+				if (data && data.error) {
+					alert(data.error);
+					return;
+				}
+
 				$.each(data.conceptostotales, function(index, item) {
 					// index es la posición del elemento en el array
 					// item es el elemento en sí

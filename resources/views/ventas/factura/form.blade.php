@@ -191,7 +191,6 @@
     				<th style="width: 9%;">Cajas</th>
     				<th style="width: 9%;">Piezas</th>
     				<th style="width: 9%;">Kilos</th>
-					<th style="width: 9%;">Pesada</th>
 					<th>Descuento</th>
 					@else
 					<th style="width: 50%;">Detalle</th>
@@ -221,7 +220,7 @@
                                     <input type="hidden" class="articulo_id_previo" name="articulo_id_previo[]" value="{{$item->articulo_id ?? ''}}" >
 									<input type="hidden" class="categoria_id" name="categoria_ids[]" value="{{$item->articulos->categoria_id ?? ''}}" >
 									<input type="hidden" class="subcategoria_id" name="subcategoria_ids[]" value="{{$item->articulos->subcategoria_id ?? ''}}" >
-                                    <button type="button" title="Consulta articulos" style="padding:1;" class="btn-accion-tabla consultaarticulo tooltipsC">
+                                    <button type="button" title="Consulta articulos" style="padding:1;" class="btn-accion-tabla consultaarticulo tooltipsC" data-solo-facturable="1">
                                             <i class="fa fa-search text-primary"></i>
                                     </button>
                                     <input type="text" style="WIDTH: 120px;HEIGHT: 38px" class="codigoarticulo codigoarticulolocal form-control" name="codigoarticulos[]" value="{{$item->articulos->sku ?? ''}}" >
@@ -236,7 +235,6 @@
 							<td><input type="text" name="cajas[]" class="form-control caja" value="" /></td>
 							<td><input type="text" name="piezas[]" class="form-control pieza" value="" /></td>
 							<td><input type="text" name="kilos[]" class="form-control kilo" value="{{number_format(old('cantidades.'.$loop->index, optional($item)->cantidad),2)}}" /></td>
-							<td><input type="text" name="pesadas[]" class="form-control pesada" value="" /></td>
 							<td></td>
 							@else
 							<td>

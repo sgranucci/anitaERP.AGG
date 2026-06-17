@@ -462,15 +462,31 @@ class PedidoQuery implements PedidoQueryInterface
     }
 
     // Lee para reporte de kilos pedidos
-    
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public function findPorKiloPedidoFiltros(array $filtros)
+    {
+        return $this->findPorKiloPedido(
+            (string) ($filtros['tipolistado'] ?? 'TOTAL'),
+            (string) ($filtros['estado'] ?? 'PENDIENTE'),
+            (string) ($filtros['fecha_desde'] ?? ''),
+            (string) ($filtros['fecha_hasta'] ?? ''),
+            (string) ($filtros['reparto_desde'] ?? ''),
+            (string) ($filtros['reparto_hasta'] ?? ''),
+        );
+    }
+
     public function findPorKiloPedido($tipolistado, $estado, $desdefecha, $hastafecha,
                                     $codigodesdetransporte, $codigohastatransporte)
     {
-        if ($tipolistado == 'TOTAL')
-        {
+        if ($tipolistado == 'TOTAL') {
             $pedido = $this->model
-                        ->select('pedido.fechaentrega as fechaentrega',
+                        ->select('pedido.id as pedido_id',
+                                'pedido.fechaentrega as fechaentrega',
                                 'pedido.codigo as codigopedido',
+                                'cliente.id as cliente_id',
                                 'cliente.nombre as nombrecliente',
                                 'cliente.codigo as codigocliente',
                                 'localidad.nombre as nombrelocalidad',
@@ -480,14 +496,13 @@ class PedidoQuery implements PedidoQueryInterface
                                 DB::raw('SUM(pedido_articulo.kilo) as total_kilo'),
                                 DB::raw('SUM(pedido_articulo.pesada) as total_pesada'),
                                 'pedido.estado as estado',
+                                'transporte.id as transporte_id',
                                 'transporte.codigo as codigotransporte',
                                 'transporte.nombre as nombretransporte');
-        }
-        else
-        {
+        } else {
             $pedido = $this->model
                         ->select('pedido.fechaentrega as fechaentrega',
-                                'pedido.codigo as codigopedido',
+                                'articulo.id as articulo_id',
                                 'articulo.sku as sku',
                                 'articulo.descripcion as descripcion',
                                 'categoria.codigo as codigocategoria',
@@ -495,6 +510,7 @@ class PedidoQuery implements PedidoQueryInterface
                                 DB::raw('SUM(pedido_articulo.pieza) as total_pieza'),
                                 DB::raw('SUM(pedido_articulo.kilo) as total_kilo'),
                                 DB::raw('SUM(pedido_articulo.pesada) as total_pesada'),
+                                'transporte.id as transporte_id',
                                 'transporte.codigo as codigotransporte',
                                 'transporte.nombre as nombretransporte');
         }
@@ -508,37 +524,117 @@ class PedidoQuery implements PedidoQueryInterface
                         ->leftjoin('transporte', 'transporte.id', '=', 'pedido.transporte_id')
                         ->whereBetween('pedido.fechaentrega', [$desdefecha, $hastafecha]);
 
-        switch($estado)
-        {
+        switch ($estado) {
             case 'PENDIENTE':
                 $pedido = $pedido->where('pedido.estadopedido', 'Pendiente');
                 break;
         }
 
-        // Verifica si ingreso repartos en particular
-        if (strpos($codigodesdetransporte, ',') !== false)
-        {
-            $transportes = explode(",", $codigodesdetransporte);
+        $codigodesdetransporte = trim((string) $codigodesdetransporte);
+        $codigohastatransporte = trim((string) $codigohastatransporte);
 
-            $pedido = $pedido->whereIn('transporte.codigo', $transportes);
-        }
-        else
-        {
-            if ($codigodesdetransporte > 0)
-                $pedido = $pedido->whereBetween('transporte.codigo', [$codigodesdetransporte, $codigohastatransporte]);
-        }
+        \App\Support\Ventas\KiloPedidoListadoFiltros::aplicarFiltroRepartoEnQuery(
+            $pedido,
+            $codigodesdetransporte,
+            $codigohastatransporte,
+        );
 
-        if ($tipolistado == 'TOTAL')
-            $pedido = $pedido->orderBy('transporte.codigo')
+        \App\Support\Ventas\KiloPedidoListadoFiltros::aplicarFiltroVendedorUsuarioEnQuery(
+            $pedido,
+            $this->vendedorRepository->leeVendedoresAsociados(),
+        );
+
+        if ($tipolistado == 'TOTAL') {
+            return $pedido->orderByRaw('CAST(transporte.codigo AS UNSIGNED)')
                     ->orderBy('pedido.codigo')
-                    ->groupBy('pedido.codigo')
+                    ->groupBy(
+                        'pedido.id',
+                        'pedido.fechaentrega',
+                        'pedido.codigo',
+                        'cliente.id',
+                        'cliente.nombre',
+                        'cliente.codigo',
+                        'localidad.nombre',
+                        'provincia.nombre',
+                        'pedido.estado',
+                        'transporte.id',
+                        'transporte.codigo',
+                        'transporte.nombre',
+                    )
                     ->get();
-        else
-            $pedido = $pedido->orderBy('transporte.codigo')
-                    ->orderBy('articulo.sku')
-                    ->groupBy('transporte.codigo', 'articulo.sku')
-                    ->get();
+        }
 
-        return $pedido;    
+        return $pedido->orderByRaw('CAST(transporte.codigo AS UNSIGNED)')
+                ->orderBy('articulo.sku')
+                ->groupBy(
+                    'transporte.id',
+                    'transporte.codigo',
+                    'transporte.nombre',
+                    'articulo.id',
+                    'articulo.sku',
+                    'articulo.descripcion',
+                    'categoria.codigo',
+                    'pedido.fechaentrega',
+                )
+                ->get();
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public function findPorKiloCategoriaFiltros(array $filtros)
+    {
+        $desdefecha = (string) ($filtros['fecha_desde'] ?? '');
+        $hastafecha = (string) ($filtros['fecha_hasta'] ?? '');
+        $estado = (string) ($filtros['estado'] ?? 'PENDIENTE');
+        $codigodesdetransporte = trim((string) ($filtros['reparto_desde'] ?? ''));
+        $codigohastatransporte = trim((string) ($filtros['reparto_hasta'] ?? ''));
+
+        $pedido = $this->model
+            ->select(
+                'categoria.id as categoria_id',
+                'categoria.codigo as codigocategoria',
+                'categoria.nombre as nombrecategoria',
+                'articulo.id as articulo_id',
+                'articulo.sku as sku',
+                'articulo.descripcion as descripcion',
+                DB::raw('SUM(pedido_articulo.caja) as total_caja'),
+                DB::raw('SUM(pedido_articulo.pieza) as total_pieza'),
+                DB::raw('SUM(pedido_articulo.kilo) as total_kilo'),
+            )
+            ->join('pedido_articulo', 'pedido_articulo.pedido_id', '=', 'pedido.id')
+            ->join('articulo', 'articulo.id', '=', 'pedido_articulo.articulo_id')
+            ->join('cliente', 'cliente.id', '=', 'pedido.cliente_id')
+            ->leftJoin('categoria', 'categoria.id', '=', 'articulo.categoria_id')
+            ->leftJoin('transporte', 'transporte.id', '=', 'pedido.transporte_id')
+            ->whereBetween('pedido.fechaentrega', [$desdefecha, $hastafecha]);
+
+        if ($estado === 'PENDIENTE') {
+            $pedido = $pedido->where('pedido.estadopedido', 'Pendiente');
+        }
+
+        \App\Support\Ventas\KiloPedidoListadoFiltros::aplicarFiltroRepartoEnQuery(
+            $pedido,
+            $codigodesdetransporte,
+            $codigohastatransporte,
+        );
+
+        \App\Support\Ventas\KiloPedidoListadoFiltros::aplicarFiltroVendedorUsuarioEnQuery(
+            $pedido,
+            $this->vendedorRepository->leeVendedoresAsociados(),
+        );
+
+        return $pedido
+            ->orderBy('categoria.codigo')
+            ->orderBy('articulo.sku')
+            ->groupBy(
+                'categoria.id',
+                'categoria.codigo',
+                'categoria.nombre',
+                'articulo.id',
+                'articulo.sku',
+                'articulo.descripcion',
+            )
+            ->get();
     }
 }

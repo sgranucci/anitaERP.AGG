@@ -11,10 +11,7 @@
 
 	function sincronizarCantidadRenglon($tr) {
 		var kilo = ($tr.find('.kilo').val() || '').toString().replace(',', '.');
-		var pesada = ($tr.find('.pesada').val() || '').toString().replace(',', '.');
-		var cantidad = kilo !== '' ? kilo : pesada;
-
-		$tr.find('.cantidad').val(cantidad);
+		$tr.find('.cantidad').val(kilo);
 	}
 
 	function sincronizarCantidadesItemsFactura() {
@@ -45,6 +42,14 @@
 				incluyeimpuesto = value.incluyeimpuesto;
 				moneda_id = value.moneda_id;
 			});
+
+			if (!window.listaprecioIdEsValidoLineaVentas(listaprecio_id)) {
+				var $trPrecio = $(ptr).parents('tr');
+				var skuPrecio = ($trPrecio.find('.codigoarticulo, .codigoarticulolocal').first().val() || '').trim();
+				window.limpiarLineaArticuloSinListaprecio($trPrecio, skuPrecio);
+
+				return;
+			}
 
 			if (typeof precio !== 'string') {
 				$(ptr).parents('tr').find('.precio').val(redondearDecimales(precio, 2));
@@ -135,7 +140,6 @@
 			$('.caja').off('change');
 			$('.pieza').off('change');
 			$('.kilo').off('change');
-			$('.pesada').off('change');
 			$('.descuentoventa_id').off('change');
 			$('.precio').off('change');
 			$('#puntoventa_id').off('change.facturaBierzo');
@@ -153,7 +157,6 @@
 				$(this).parents('tr').find('.caja').val('');
 				$(this).parents('tr').find('.pieza').val('');
 				$(this).parents('tr').find('.kilo').val('');
-				$(this).parents('tr').find('.pesada').val('');
 				$(this).parents('tr').find('.descuentoventa_id').val('');
 				$(this).parents('tr').find('.articulo_id_previa').val(articulo_nuevo);
 			}
@@ -163,7 +166,6 @@
 			$(this).parents('tr').find('.caja').val('');
 			$(this).parents('tr').find('.pieza').val('');
 			$(this).parents('tr').find('.kilo').val('');
-			$(this).parents('tr').find('.pesada').val('');
 			$(this).parents('tr').find('.descuentoventa_id').val('');
 
 			var unidadmedida = $(this).find('option:selected').text();
@@ -188,13 +190,6 @@
 
 		$('.kilo').on('change', function () {
 			redondeaCajaFactura(this, 3);
-		});
-
-		$('.pesada').on('change', function () {
-			sincronizarCantidadRenglon($(this).parents('tr'));
-			if (typeof calculaFactura === 'function') {
-				calculaFactura();
-			}
 		});
 
 		$('.descuentoventa_id').on('change', function () {
@@ -313,13 +308,6 @@
 			}
 			if (actual.classList.contains('kilo')) {
 				return 'redondea:descuento';
-			}
-			if (actual.classList.contains('pesada')) {
-				var $descuento = $tr.find('.descuentoventa_id');
-				if ($descuento.length && esCampoFacturaEnfocable($descuento[0])) {
-					return $descuento[0];
-				}
-				return codigoArticuloSiguienteRenglonFactura($tr);
 			}
 			if (actual.classList.contains('descuentoventa_id')) {
 				return codigoArticuloSiguienteRenglonFactura($tr);

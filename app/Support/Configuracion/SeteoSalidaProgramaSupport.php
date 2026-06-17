@@ -135,7 +135,7 @@ class SeteoSalidaProgramaSupport
         }
 
         if ($etiquetas === []) {
-            return 'Todos los programas';
+            return 'Sin programa asignado';
         }
 
         return implode(', ', $etiquetas);

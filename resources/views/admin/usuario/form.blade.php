@@ -53,21 +53,10 @@
         <strong class="text-dark"><i class="far fa-building mr-1"></i> Empresa y roles</strong>
     </div>
     <div class="card-body">
-        @include('includes.form-empresa-asignada-multiple', [
+        @include('admin.usuario.partials.asignacion_empresas_roles', [
             'empresa_query' => $empresa_query,
+            'rols' => $rols,
         ])
-        <div class="form-group row mb-0">
-            <label for="rol_id" class="col-lg-3 col-form-label requerido">Roles</label>
-            <div class="col-lg-8">
-                <select name="rol_id[]" id="rol_id" class="form-control" multiple required>
-                    @foreach ($rols as $id => $nombre)
-                        <option value="{{ $id }}" {{ is_array(old('rol_id')) ? (in_array($id, old('rol_id')) ? 'selected' : '') : (isset($data) ? ($data->roles->firstWhere('id', $id) ? 'selected' : '') : '') }}>
-                            {{ $nombre }}
-                        </option>
-                    @endforeach
-                </select>
-            </div>
-        </div>
     </div>
 </div>
 

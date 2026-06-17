@@ -41,6 +41,7 @@
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
+        @include('ventas.cliente.partials.arca_impuestos_alerta')
         <div class="card card-danger">
             <div class="card-header">
                 <h3 class="card-title">Editar Cliente </h3>&nbsp;ID:&nbsp;{{$data->id }}&nbsp;{{$data->nombre}}
@@ -83,7 +84,10 @@
                     @endif
                 </div>
             </div>
-            <form action="{{route('actualizar_cliente', ['id' => $data->id])}}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off">
+            <form action="{{route('actualizar_cliente', ['id' => $data->id])}}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off"
+                data-cliente-id="{{ $data->id }}"
+                data-arca-validar-url="{{ route('validar_cliente_arca_padron', ['id' => $data->id]) }}"
+            >
                 @csrf @method("put")
                 <div align="center" style="margin: 5px;">
                     <input type="hidden" id="emitenotadecredito" name="emitenotadecredito" value="{{old('emitenotadecredito', $data->emitenotadecredito ?? '')}}" >

@@ -48,6 +48,11 @@
 			white-space: nowrap;
 			width: 1%;
 		}
+		.pedido-entrega {
+			font-size: 15px;
+			text-align: right;
+			line-height: 1.5;
+		}
 		table.pedido-items {
 			font-family: DejaVu Sans, Helvetica, Arial, sans-serif;
 			border-collapse: collapse;
@@ -118,24 +123,32 @@
 	<tr>
 		<td class="pedido-cliente">
 			<strong>Cliente: {{ $pedido->clientes->nombre ?? '' }}</strong><br>
-			<strong>Reparto: {{ $pedido->transportes->nombre ?? '' }}</strong><br>
-			<strong>Zona de Vta.: {{ $pedido->zonavtas->nombre ?? '' }}</strong><br>
-			<strong>Lugar de entrega: {{ $pedido->lugarentrega ?? '' }}</strong>
+			<strong>Zona de Vta.: {{ $pedido->zonavtas->nombre ?? '' }}</strong>
 		</td>
-		<td class="pedido-totales-division">
-			{{ number_format($totalNetoDivision, 2) }}<br>
-			{{ number_format($ajusteDivision, 2) }}<br>
-			{{ number_format($totalDivision, 2) }}
+		<td class="pedido-entrega">
+			<strong>Reparto: {{ $pedido->transportes->nombre ?? '' }}</strong><br>
+			<strong>Lugar de entrega: {{ $pedido->lugarentrega ?? '' }}</strong>
+			<div class="pedido-totales-division">
+				{{ number_format($totalNetoDivision, 2) }}<br>
+				{{ number_format($ajusteDivision, 2) }}<br>
+				{{ number_format($totalDivision, 2) }}
+			</div>
 		</td>
 	</tr>
 </table>
 @else
-<div class="pedido-cliente">
-	<strong>Cliente: {{ $pedido->clientes->nombre ?? '' }}</strong><br>
-	<strong>Reparto: {{ $pedido->transportes->nombre ?? '' }}</strong><br>
-	<strong>Zona de Vta.: {{ $pedido->zonavtas->nombre ?? '' }}</strong><br>
-	<strong>Lugar de entrega: {{ $pedido->lugarentrega ?? '' }}</strong>
-</div>
+<table class="pedido-cliente-block">
+	<tr>
+		<td class="pedido-cliente">
+			<strong>Cliente: {{ $pedido->clientes->nombre ?? '' }}</strong><br>
+			<strong>Zona de Vta.: {{ $pedido->zonavtas->nombre ?? '' }}</strong>
+		</td>
+		<td class="pedido-entrega">
+			<strong>Reparto: {{ $pedido->transportes->nombre ?? '' }}</strong><br>
+			<strong>Lugar de entrega: {{ $pedido->lugarentrega ?? '' }}</strong>
+		</td>
+	</tr>
+</table>
 @endif
 <table class="pedido-items">
 	<thead>

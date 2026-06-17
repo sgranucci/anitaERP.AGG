@@ -3,10 +3,9 @@
 namespace App\Console\Commands;
 
 use App\Models\Seguridad\Usuario;
-use App\Repositories\Ventas\ClienteRepository;
-use App\Repositories\Ventas\ClienteRepositoryInterface;
 use App\Repositories\Ventas\Cliente_ArchivoRepositoryInterface;
 use App\Repositories\Ventas\Cliente_EntregaRepositoryInterface;
+use App\Services\Ventas\ClienteAnitaSyncService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Auth;
 
@@ -18,10 +17,10 @@ class SincronizarClienteDesdeAnita extends Command
                             {--sin-entregas : No sincronizar domicilios de entrega}
                             {--sin-archivos : No sincronizar archivos adjuntos}';
 
-    protected $description = 'Importa clientes desde Anita (climae) que no existen en el ERP y actualiza los ya existentes.';
+    protected $description = 'Importa/actualiza clientes en anitaERP desde Anita (climae). Anita es la fuente de verdad; no modifica Informix.';
 
     public function handle(
-        ClienteRepositoryInterface $clienteRepository,
+        ClienteAnitaSyncService $sync,
         Cliente_EntregaRepositoryInterface $clienteEntregaRepository,
         Cliente_ArchivoRepositoryInterface $clienteArchivoRepository
     ): int {
@@ -47,19 +46,28 @@ class SincronizarClienteDesdeAnita extends Command
 
         try {
             if ($codigo !== '') {
-                $crear = ! $clienteRepository->existeClientePorCodigo($codigo);
-                $accion = $crear ? 'Importando' : 'Actualizando';
-                $this->info("{$accion} cliente Anita clim_cliente={$codigo}…");
-                /** @var ClienteRepository $clienteRepository */
-                $clienteRepository->traerRegistroDeAnita($codigo, $crear);
-                $this->info($crear ? 'Cliente importado.' : 'Cliente actualizado.');
+                $this->info("Sincronizando cliente Anita clim_cliente={$codigo}…");
+                $estado = $sync->traerRegistroDeAnita($codigo);
+                $this->info("Resultado: {$estado}");
 
                 return self::SUCCESS;
             }
 
             $this->info('Sincronizando clientes desde Anita (climae). Puede tardar varios minutos…');
 
-            $clienteRepository->sincronizarConAnita();
+            $ret = $sync->sincronizarConAnita();
+
+            $this->info(
+                "En Anita: {$ret['en_anita']}; importados: {$ret['importados']}; actualizados: {$ret['actualizados']}; omitidos: {$ret['omitidos']}."
+            );
+
+            if ($ret['en_anita'] === 0) {
+                $this->warn('Anita devolvió 0 clientes. Revise ANITA_* y CLIENTE_SYNC_ANITA_CAMPOS_LISTADO en .env.');
+            }
+
+            foreach ($ret['errores'] as $err) {
+                $this->warn($err);
+            }
 
             if (! $this->option('sin-entregas')) {
                 $this->info('Sincronizando domicilios de entrega…');

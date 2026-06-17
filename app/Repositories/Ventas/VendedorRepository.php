@@ -4,6 +4,7 @@ namespace App\Repositories\Ventas;
 
 use App\Models\Ventas\Vendedor;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Services\Ventas\VendedorAnitaSyncService;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
 use Auth;
@@ -39,25 +40,27 @@ class VendedorRepository implements VendedorRepositoryInterface
         return $query->get();
     }
 
-    public function create(array $data)
+    public function create(array $data, ?bool $syncAnita = null)
     {
         $vendedor = $this->model->create($data);
 
-        // Graba anita
-		Self::guardarAnita($data, $data['codigo']);
+        if ($syncAnita ?? config('app.anita_sync_vendedor_write', true)) {
+            self::guardarAnita($data, $data['codigo']);
+        }
 
         return $vendedor;
     }
 
-    public function update(array $data, $id)
+    public function update(array $data, $id, ?bool $syncAnita = null)
     {
         $vendedor = $this->model->findOrFail($id)
             ->update($data);
 
-        // Actualiza anita
-		Self::actualizarAnita($data, $data['codigo']);
+        if ($syncAnita ?? config('app.anita_sync_vendedor_write', true)) {
+            self::actualizarAnita($data, $data['codigo']);
+        }
 
-		return $vendedor;
+        return $vendedor;
     }
 
     public function delete($id)
@@ -202,98 +205,14 @@ class VendedorRepository implements VendedorRepositoryInterface
         return $vendedores;
     }
 
-    public function sincronizarConAnita(){
-        $apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'list', 'campos' => $this->keyField, 
-                        'sistema' => 'ventas',
-						'tabla' => $this->table, 
-						'orderBy' => 'vend_codigo' );
-        $dataAnita = json_decode($apiAnita->apiCall($data));
-
-        $datosLocal = Vendedor::all();
-        $datosLocalArray = [];
-        foreach ($datosLocal as $value) {
-            $datosLocalArray[] = $value->{$this->keyField};
-        }
-        
-        foreach ($dataAnita as $value) {
-            if (!in_array($value->{$this->keyField}, $datosLocalArray)) {
-                $this->traerRegistroDeAnita($value->{$this->keyField});
-            }
-        }
+    public function sincronizarConAnita()
+    {
+        app(VendedorAnitaSyncService::class)->sincronizarConAnita();
     }
 
-    public function traerRegistroDeAnita($key){
-        $apiAnita = new ApiAnita();
-
-        if (config('app.empresa') == 'EL BIERZO')
-            $data = array( 
-                'acc' => 'list', 'tabla' => $this->table, 
-                'sistema' => 'ventas',
-                'campos' => '
-                    vend_codigo,
-                    vend_nombre,
-                    vend_comision_vta,
-                    vend_comision_cob,
-                    vend_aplicacion,
-                    vend_empresa,
-                    vend_legajo,
-                    vend_email,
-                    vend_estado
-                ' , 
-                'whereArmado' => " WHERE ".$this->keyField." = '".$key."' " 
-            );
-        else
-            $data = array( 
-                'acc' => 'list', 'tabla' => $this->table, 
-                'sistema' => 'ventas',
-                'campos' => '
-                    vend_codigo,
-                    vend_nombre,
-                    vend_comision_vta,
-                    vend_comision_cob,
-                    vend_aplicacion,
-                    vend_empresa,
-                    vend_legajo,
-                    vend_mercaderia
-                ' , 
-                'whereArmado' => " WHERE ".$this->keyField." = '".$key."' " 
-            );           
-        $dataAnita = json_decode($apiAnita->apiCall($data));
-
-        if (count($dataAnita) > 0) {
-            $data = $dataAnita[0];
-
-            if ($data->vend_aplicacion == 'B')
-                $aplicaSobre = "Sobre Bruto";
-            else
-                $aplicaSobre = "Sobre Neto";
-
-            if ($data->vend_empresa == 0)
-                $data->vend_empresa = '1';
-
-            $estado = "Activo";
-            if (isset($data->vend_estado))
-                if ($data->vend_estado == 'N')
-                    $estado = "No Carga Clientes";
-
-            $email = null;
-            if (isset($data->vend_email))
-                $email = $data->vend_email;
-
-            Vendedor::create([
-                "id" => $key,
-                "nombre" => $data->vend_nombre,
-                "comisionventa" => $data->vend_comision_vta,
-                "comisioncobranza" => $data->vend_comision_cob,
-                "aplicasobre" => $aplicaSobre,
-                "empresa_id" => $data->vend_empresa,
-                "legajo_id" => $data->vend_legajo,
-                "email" => $email,
-                "codigo" => $data->vend_codigo,
-                "estado" => $estado
-            ]);
-        }
+    public function traerRegistroDeAnita($key)
+    {
+        return app(VendedorAnitaSyncService::class)->traerRegistroDeAnita((string) $key);
     }
 
 	public function guardarAnita($data, $id) {

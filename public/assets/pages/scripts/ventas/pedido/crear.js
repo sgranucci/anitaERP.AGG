@@ -509,6 +509,15 @@
 		form.addEventListener('keydown', avanzarCampoPedidoConEnter, true);
 	}
 	
+	function actualizarEstadoRequeridoLugarEntrega() {
+		var obligatorio = $('#fl_cliente_tiene_entrega').val() === '1';
+		var seleccionado = !!$('#cliente_entrega_id').val();
+
+		$('#label-lugarentrega').toggleClass('requerido', obligatorio);
+		$('#aviso-lugarentrega-obligatorio').toggle(obligatorio && !seleccionado);
+		$('#lugarentrega').toggleClass('is-invalid', obligatorio && !seleccionado);
+	}
+
 	function completarCliente_Entrega(cliente_id){
 		window._entregasClienteActual = [];
 
@@ -525,7 +534,7 @@
 				$('#cliente_entrega_id').val('');
 				$('#entrega_nombre').val('');
 				$('#div-cambiar-lugarentrega').hide();
-				$('#lugarentrega').prop('readonly', false);
+				$('#lugarentrega').prop('readonly', false).attr('placeholder', '');
 
 				$.get(carpetaBase+'/ventas/leercliente/'+cliente_id, function(clienteData){
 					var datoscli = $.map(clienteData, function(value){
@@ -533,14 +542,16 @@
 					});
 					$('#lugarentrega').val(datoscli[6] || '');
 				});
+				actualizarEstadoRequeridoLugarEntrega();
 				return;
 			}
 
-			$('#lugarentrega').prop('readonly', true);
+			$('#lugarentrega').prop('readonly', true).attr('placeholder', 'Seleccione un lugar de entrega del cliente');
 
 			if (entr.length === 1) {
 				aplicarLugarEntregaCliente(entr[0]);
 				$('#div-cambiar-lugarentrega').hide();
+				actualizarEstadoRequeridoLugarEntrega();
 				return;
 			}
 
@@ -557,11 +568,13 @@
 
 				if (entregaPrevia) {
 					aplicarLugarEntregaCliente(entregaPrevia);
+					actualizarEstadoRequeridoLugarEntrega();
 					return;
 				}
 			}
 
 			limpiarLugarEntregaCliente();
+			actualizarEstadoRequeridoLugarEntrega();
 			mostrarModalSeleccionEntrega(entr);
 		});
 	}
@@ -570,6 +583,7 @@
 		$('#cliente_entrega_id').val('');
 		$('#entrega_nombre').val('');
 		$('#lugarentrega').val('');
+		actualizarEstadoRequeridoLugarEntrega();
 	}
 
 	function aplicarLugarEntregaCliente(entrega) {
@@ -581,6 +595,7 @@
 		$('#cliente_entrega_id_previa').val(entrega.id);
 		$('#entrega_nombre').val(entrega.nombre);
 		$('#lugarentrega').val(entrega.nombre).prop('readonly', true);
+		actualizarEstadoRequeridoLugarEntrega();
 	}
 
 	function renderFilasModalEntrega(entregas) {
@@ -610,8 +625,14 @@
 
 	function validarLugarEntregaAntesGuardar() {
 		if ($('#fl_cliente_tiene_entrega').val() === '1' && !$('#cliente_entrega_id').val()) {
-			alert('Debe seleccionar un lugar de entrega del cliente.');
+			actualizarEstadoRequeridoLugarEntrega();
+			if (window.toastr) {
+				toastr.error('Debe seleccionar un lugar de entrega del cliente.', '', { timeOut: 8000, closeButton: true });
+			} else {
+				alert('Debe seleccionar un lugar de entrega del cliente.');
+			}
 			mostrarModalSeleccionEntrega(window._entregasClienteActual || []);
+			$('#lugarentrega').focus();
 			return false;
 		}
 
@@ -820,6 +841,14 @@
 				incluyeimpuesto = value.incluyeimpuesto;
 				moneda_id = value.moneda_id;
 			});
+
+			if (!window.listaprecioIdEsValidoLineaVentas(listaprecio_id)) {
+				var $trPrecio = $(ptr).parents('tr');
+				var skuPrecio = ($trPrecio.find('.codigoarticulo, .codigoarticulolocal').first().val() || '').trim();
+				window.limpiarLineaArticuloSinListaprecio($trPrecio, skuPrecio);
+
+				return;
+			}
 
 			if (typeof precio != 'string')
 			{
@@ -1566,6 +1595,10 @@
 
 	function generaFactura()
 	{
+		if (typeof validarLugarEntregaAntesGuardar === 'function' && !validarLugarEntregaAntesGuardar()) {
+			return;
+		}
+
 		let itemId, otId;
 		
 		preciosfactura_txt = [];

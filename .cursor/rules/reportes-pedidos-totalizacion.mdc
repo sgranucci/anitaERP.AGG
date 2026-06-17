@@ -1,0 +1,78 @@
+---
+description: Reportes de pedidos con totalización por grupo (reparto/categoría) y stack de consulta paginado
+globs: resources/views/ventas/rep*/**,resources/views/exports/ventas/*pedido*,resources/views/exports/ventas/*categoria*,app/Exports/Ventas/*Pedido*,app/Exports/Ventas/*Categoria*,app/Services/Ventas/*Pedido*Reporte*,app/Services/Ventas/*Categoria*Reporte*,app/Support/Ventas/Kilo*ListadoFiltros.php,app/Queries/Ventas/PedidoQuery.php
+alwaysApply: false
+---
+
+# Reportes de pedidos con totalización (kilos)
+
+Patrón obligatorio para reportes de pedidos que agrupan y totalizan cantidades. Referencias canónicas:
+
+| Reporte | Index | Servicio aplanado | Agrupación detalle | Subtotal |
+|---|---|---|---|---|
+| Kilos pedidos | `ventas/repkilopedido` | `KiloPedidoReporteService` | Por reparto (+ pedido o ítem) | Subtotal reparto |
+| Kilos por categoría | `ventas/repkilocategoria` | `KiloCategoriaReporteService` | Por categoría + artículo | Subtotal categoría |
+
+Ver también `reportes-consulta-paginado-export.mdc`.
+
+## Filtros comunes
+
+| Filtro | Implementación |
+|---|---|
+| Fecha entrega | `fecha_desde`, `fecha_hasta` (obligatorios para consultar) |
+| Rango repartos | `reparto_desde`, `reparto_hasta`; reutilizar `KiloPedidoListadoFiltros::normalizarRangoRepartos` y `aplicarFiltroRepartoEnQuery` |
+| Vendedor usuario (El Bierzo) | Automático: `leeVendedoresAsociados()` + `aplicarFiltroVendedorUsuarioEnQuery` sobre `cliente.vendedor_id` (ver `bierzo-reportes-kilos-pedidos-vendedor.mdc`) |
+| Estado pedido | `PENDIENTE` (default) / `TODO` |
+
+Clase filtros propia: `App\Support\Ventas\{Recurso}ListadoFiltros` con `resolverDesdeRequest()`, `paraQueryString()`, `tieneCriteriosAplicados()`.
+
+## Query (PedidoQuery)
+
+- Join: `pedido` → `pedido_articulo` → `articulo` → `cliente` → `categoria` (left) → `transporte` (left, si filtra reparto).
+- `whereBetween('pedido.fechaentrega', …)` + filtro reparto + estado + **filtro vendedor usuario** (si aplica).
+- **Totalizar por artículo** en el rango: `SUM(pieza)`, `SUM(kilo)`, `SUM(caja)` con `groupBy` categoría + artículo.
+- Orden: categoría, luego SKU.
+
+## Servicio de aplanado
+
+`{Recurso}ReporteService::aplanarFilas()`:
+
+1. Filas `tipo_fila = detalle` (columnas vacías en grupo padre, como reparto en kilos pedidos).
+2. Al cambiar grupo → `subtotal_{grupo}` con totales acumulados.
+3. Al final → `total_final`.
+4. `paginarFilas()` en memoria sobre filas aplanadas (incluye subtotales).
+5. `totalesGenerales()` solo desde filas `detalle`.
+
+## Pantalla y export
+
+| Capa | Archivo |
+|---|---|
+| Index GET | `resources/views/ventas/rep{recurso}/index.blade.php` — `consultar=1`, export `exportar-tabla-queryparams` |
+| Tabla compartida | `partials/tabla_datos.blade.php` (pantalla + PDF + Excel) |
+| PDF | `listado.blade.php` — logos, título, thead `#85C1E9`, DomPDF legal landscape |
+| Excel/CSV | `app/Exports/Ventas/{Recurso}ListadoExport.php` + `exports/ventas/{recurso}index.blade.php` |
+| JS reparto | `public/assets/pages/scripts/ventas/rep{recurso}/filtro.js` (modal transporte) |
+| Rutas | `rep_{recurso}` + `listar_rep_{recurso}/{formato}` |
+
+Controller: `index` + `listar`; permiso `listar-pedidos`; `ini_set` memoria/tiempo en consulta y export.
+
+## Columnas kilos por categoría
+
+Artículo, descripción, piezas, kilos, cajas (+ categoría/nombre en subtotal). Sin kilos pesados salvo requisito explícito del módulo.
+
+## Prohibido
+
+- Duplicar lógica de rango repartos fuera de `KiloPedidoListadoFiltros`.
+- Duplicar filtro vendedor usuario fuera de `aplicarFiltroVendedorUsuarioEnQuery` / `leeVendedoresAsociados`.
+- Exportar solo la página visible sin filtros activos.
+- Subtotales calculados en Blade en lugar del servicio de aplanado.
+
+## Comprobación rápida
+
+```bash
+rg 'exportar-tabla-queryparams' resources/views/ventas/repkilocategoria/index.blade.php
+rg 'findPorKiloCategoriaFiltros|aplanarFilas' app/
+rg 'listar_rep_kilocategoria' routes/web.php
+rg '85C1E9' resources/views/ventas/repkilocategoria app/Exports/Ventas/KiloCategoriaListadoExport.php
+php artisan view:cache
+```

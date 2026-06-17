@@ -1,0 +1,464 @@
+/**
+ * Anita ERP — barra de tareas (footer / dock)
+ */
+
+.anita-footer-taskbar {
+    padding: 0;
+    border-top: 1px solid #d5dde8;
+    background: linear-gradient(180deg, #ffffff 0%, #f4f7fb 100%);
+    box-shadow: 0 -2px 10px rgba(15, 23, 42, 0.05);
+    min-height: 0;
+}
+
+.anita-footer-inner {
+    display: flex;
+    align-items: stretch;
+    justify-content: space-between;
+    gap: 0;
+    min-height: 62px;
+    position: relative;
+}
+
+.anita-footer-inner::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #85c1e9 0%, #2f7ec4 55%, #85c1e9 100%);
+    opacity: 0.85;
+    z-index: 1;
+}
+
+.anita-footer-brand {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    min-width: 88px;
+    max-width: 140px;
+    padding: 0.45rem 0.9rem;
+    margin-top: 3px;
+    border-right: 1px solid #e2e8f0;
+    text-decoration: none;
+    transition: background-color 0.15s ease;
+}
+
+.anita-footer-brand:hover,
+.anita-footer-brand:focus {
+    background: rgba(133, 193, 233, 0.08);
+    text-decoration: none;
+    outline: none;
+}
+
+.anita-footer-logo {
+    display: block;
+    max-height: 38px;
+    max-width: 120px;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+}
+
+.anita-footer-brand-text {
+    display: block;
+    max-width: 110px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1.2;
+    text-align: center;
+    color: #2f7ec4;
+    letter-spacing: 0.02em;
+}
+
+.anita-taskbar {
+    display: flex;
+    align-items: stretch;
+    flex: 1 1 auto;
+    min-width: 0;
+    position: relative;
+}
+
+.anita-taskbar::before {
+    display: none;
+}
+
+.anita-taskbar-track {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: #c5d3e3 transparent;
+    padding-top: 3px;
+}
+
+.anita-taskbar-track::-webkit-scrollbar {
+    height: 5px;
+}
+
+.anita-taskbar-track::-webkit-scrollbar-thumb {
+    background: #c5d3e3;
+    border-radius: 4px;
+}
+
+.anita-taskbar-pins {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.25rem;
+    padding: 0.4rem 0.65rem 0.3rem;
+    min-height: 59px;
+}
+
+.anita-taskbar-pin {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.25rem;
+    min-width: 68px;
+    max-width: 92px;
+    padding: 0.35rem 0.5rem 0.28rem;
+    border-radius: 0.5rem;
+    border: 1px solid transparent;
+    background: transparent;
+    color: #4a5568;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
+    flex: 0 0 auto;
+}
+
+.anita-taskbar-pin:hover,
+.anita-taskbar-pin:focus {
+    color: #1a365d;
+    background: #ffffff;
+    border-color: #c5dff0;
+    box-shadow: 0 2px 8px rgba(47, 126, 196, 0.12);
+    text-decoration: none;
+    outline: none;
+    transform: translateY(-1px);
+}
+
+.anita-taskbar-pin.is-active {
+    color: #1a5f9e;
+    background: #eaf4fc;
+    border-color: #85c1e9;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 2px 6px rgba(47, 126, 196, 0.14);
+}
+
+.anita-taskbar-pin.is-active .anita-taskbar-pin-icon {
+    background: linear-gradient(180deg, #3d8fd4 0%, #2f7ec4 100%);
+    border-color: #2a6fad;
+    color: #ffffff;
+    box-shadow: 0 2px 6px rgba(47, 126, 196, 0.35);
+}
+
+.anita-taskbar-pin-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 0.6rem;
+    background: linear-gradient(160deg, #ffffff 0%, #f3f8fc 100%);
+    border: 1px solid #d5dde8;
+    color: #2f7ec4;
+    box-shadow: 0 1px 3px rgba(47, 126, 196, 0.1);
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
+}
+
+.anita-taskbar-pin:hover .anita-taskbar-pin-icon,
+.anita-taskbar-pin:focus .anita-taskbar-pin-icon {
+    background: linear-gradient(160deg, #ffffff 0%, #e8f4fc 100%);
+    border-color: #85c1e9;
+    color: #1a5f9e;
+    box-shadow: 0 3px 8px rgba(47, 126, 196, 0.18);
+    transform: scale(1.04);
+}
+
+.anita-taskbar-pin-icon i {
+    font-size: 1.28rem;
+    line-height: 1;
+    width: 1.25em;
+    text-align: center;
+}
+
+.anita-taskbar-pin-label {
+    display: block;
+    width: 100%;
+    font-size: 0.7rem;
+    line-height: 1.15;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: inherit;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+
+.anita-taskbar-add {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.22rem;
+    min-width: 76px;
+    padding: 0.4rem 0.85rem 0.3rem;
+    margin: 0;
+    margin-top: 3px;
+    border: none;
+    border-left: 1px solid #e2e8f0;
+    border-radius: 0;
+    background: rgba(255, 255, 255, 0.65);
+    color: #2f7ec4;
+    cursor: pointer;
+    flex: 0 0 auto;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.anita-taskbar-add:hover,
+.anita-taskbar-add:focus {
+    background: #eef7fd;
+    color: #1a5f9e;
+    outline: none;
+}
+
+.anita-taskbar-add-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    border-radius: 0.55rem;
+    border: 2px dashed #a8cce8;
+    background: #ffffff;
+    transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.anita-taskbar-add:hover .anita-taskbar-add-icon,
+.anita-taskbar-add:focus .anita-taskbar-add-icon {
+    border-color: #2f7ec4;
+    background: #f8fbff;
+    box-shadow: 0 2px 6px rgba(47, 126, 196, 0.12);
+}
+
+.anita-taskbar-add-icon i {
+    font-size: 1.15rem;
+    line-height: 1;
+}
+
+.anita-taskbar-add-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: #5a6c7d;
+}
+
+.anita-taskbar-add:hover .anita-taskbar-add-label,
+.anita-taskbar-add:focus .anita-taskbar-add-label {
+    color: #1a5f9e;
+}
+
+.anita-footer-meta {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.65rem;
+    flex: 0 0 auto;
+    white-space: nowrap;
+    color: #6c7a89;
+    font-size: 0.8rem;
+    padding: 0 0.9rem;
+    background: transparent;
+    min-width: 0;
+    border-left: 1px solid #e2e8f0;
+}
+
+.anita-footer-version {
+    color: #6c7a89;
+}
+
+.anita-footer-copy {
+    color: #4a5568;
+    font-weight: 600;
+}
+
+/* Pin en ítems del menú lateral */
+.anita-menu-leaf {
+    position: relative;
+}
+
+.anita-menu-leaf > .nav-link {
+    padding-right: 2rem;
+}
+
+.anita-menu-pin-btn {
+    position: absolute;
+    right: 0.45rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: none;
+    border-radius: 0.3rem;
+    background: transparent;
+    color: rgba(184, 197, 214, 0.45);
+    opacity: 0;
+    transition: opacity 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+    z-index: 2;
+    cursor: pointer;
+}
+
+.anita-menu-leaf:hover .anita-menu-pin-btn,
+.anita-menu-pin-btn:focus {
+    opacity: 1;
+}
+
+.anita-menu-pin-btn:hover,
+.anita-menu-pin-btn.is-pinned {
+    opacity: 1;
+    color: var(--anita-sidebar-accent, #85c1e9);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.anita-menu-pin-btn.is-pinned {
+    color: #f6c453;
+}
+
+.anita-menu-pin-btn i {
+    font-size: 0.78rem;
+    transform: rotate(45deg);
+}
+
+/* Modal selector */
+.anita-taskbar-picker-list {
+    max-height: 52vh;
+    overflow-y: auto;
+    border: 1px solid #dee2e6;
+    border-radius: 0.35rem;
+}
+
+.anita-taskbar-picker-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.55rem 0.85rem;
+    border-bottom: 1px solid #edf2f7;
+    cursor: pointer;
+    transition: background-color 0.12s ease;
+}
+
+.anita-taskbar-picker-item:last-child {
+    border-bottom: none;
+}
+
+.anita-taskbar-picker-item:hover {
+    background: #f8fbff;
+}
+
+.anita-taskbar-picker-item.is-pinned {
+    background: #eef7fd;
+}
+
+.anita-taskbar-picker-icon {
+    width: 40px;
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.45rem;
+    background: #ffffff;
+    border: 1px solid #d5dde8;
+    color: #2f7ec4;
+    flex: 0 0 40px;
+}
+
+.anita-taskbar-picker-icon i {
+    font-size: 1.1rem;
+}
+
+.anita-taskbar-picker-text {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.anita-taskbar-picker-text strong {
+    display: block;
+    font-size: 0.92rem;
+    color: #1f2937;
+}
+
+.anita-taskbar-picker-text small {
+    display: block;
+    color: #6b7280;
+    font-size: 0.78rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.anita-taskbar-picker-action {
+    flex: 0 0 auto;
+    font-size: 0.8rem;
+    color: #2f7ec4;
+    font-weight: 600;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    background: rgba(47, 126, 196, 0.08);
+}
+
+.anita-taskbar-picker-empty {
+    padding: 1.25rem;
+    text-align: center;
+    color: #6b7280;
+}
+
+@media (max-width: 767.98px) {
+    .anita-footer-inner {
+        flex-direction: column;
+    }
+
+    .anita-footer-brand {
+        justify-content: flex-start;
+        max-width: none;
+        border-right: none;
+        border-bottom: 1px solid #e2e8f0;
+        padding: 0.4rem 0.75rem;
+    }
+
+    .anita-taskbar {
+        border-right: none;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .anita-footer-meta {
+        border-left: none;
+        border-top: 1px solid #e2e8f0;
+    }
+
+    .anita-taskbar-pin {
+        min-width: 56px;
+        max-width: 72px;
+    }
+
+    .anita-taskbar-pin-icon,
+    .anita-taskbar-add-icon {
+        width: 38px;
+        height: 38px;
+    }
+
+    .anita-taskbar-pin-icon i {
+        font-size: 1.05rem;
+    }
+
+    .anita-footer-meta {
+        justify-content: center;
+        padding: 0.35rem 0.75rem;
+        font-size: 0.75rem;
+    }
+}

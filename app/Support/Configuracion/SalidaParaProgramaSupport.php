@@ -14,17 +14,17 @@ class SalidaParaProgramaSupport
     {
         $programa = SeteoSalidaProgramaSupport::resolver($programa);
 
-        return $query->whereHas('usoSalidaImpresoras', function (Builder $uq) use ($programa) {
-            self::aplicarFiltroUsoParaPrograma($uq, $programa);
+        return $query->where(function (Builder $q) use ($programa) {
+            $q->whereDoesntHave('usoSalidaImpresoras')
+                ->orWhereHas('usoSalidaImpresoras', function (Builder $uq) use ($programa) {
+                    self::aplicarFiltroUsoParaPrograma($uq, $programa);
+                });
         });
     }
 
     public static function aplicarFiltroUsoParaPrograma(Builder $query, string $programa): Builder
     {
         return $query->where(function (Builder $pq) use ($programa) {
-            $pq->whereNull('programas_destino')
-                ->orWhereJsonLength('programas_destino', 0);
-
             foreach (self::codigosCoincidentesPrograma($programa) as $codigo) {
                 $pq->orWhereJsonContains('programas_destino', $codigo);
             }

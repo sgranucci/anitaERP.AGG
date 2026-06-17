@@ -34,6 +34,7 @@ $( "#botonform0" ).click(function() {
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
+        @include('ventas.cliente.partials.arca_impuestos_alerta')
         <div class="card card-danger">
             <div class="card-header">
                 <h3 class="card-title">Crear Cliente @if ($tipoalta == 'P') Provisorio @endif</h3>

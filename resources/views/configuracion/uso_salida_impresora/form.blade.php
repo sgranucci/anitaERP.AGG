@@ -30,7 +30,8 @@
         </select>
         <small class="form-text text-muted">
             Define en qu&eacute; pantallas del ERP se ofrecen impresoras con este uso al configurar salida.
-            Sin selecci&oacute;n el uso queda disponible en <strong>todos</strong> los programas.
+            Sin selecci&oacute;n el uso <strong>no</strong> aparece en esas pantallas (asigne los programas expl&iacute;citamente).
+            Las impresoras sin ning&uacute;n uso siguen disponibles en todos los programas.
         </small>
     </div>
 </div>

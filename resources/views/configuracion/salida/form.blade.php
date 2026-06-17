@@ -23,6 +23,10 @@
     <label for="comando" class="col-lg-3 col-form-label requerido">Comando de salida</label>
     <div class="col-lg-8">
     <input type="text" name="comando" id="comando" class="form-control" value="{{old('comando', $data->comando ?? '')}}" required/>
+        <small class="form-text text-muted">
+            Pedidos PDF (CUPS): <code>{{ config('pedido.imprimir_script', base_path('bin/imprimir-pedido.sh')) }} "%s" NOMBRE_COLA</code>.
+            Tickets térmicos: <code>{{ base_path('bin/gastronomia-print-ticket.sh') }} "%s" IP_IMPRESORA 9100</code>.
+        </small>
     </div>
 </div>
 <div class="form-group row">

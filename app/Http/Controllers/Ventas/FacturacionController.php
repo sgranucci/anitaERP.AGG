@@ -197,7 +197,6 @@ class FacturacionController extends Controller
      */
     public function guardar(Request $request)
     {
-		$mensaje = '';
 		try
 		{
             if (config('app.empresa') == 'CALZADOS FERLI')
@@ -205,19 +204,19 @@ class FacturacionController extends Controller
             else
                 $data = $this->facturacionService->generaComprobanteGeneral($request->all());
 
-			if (is_array($data))
-				$mensaje = "Comprobante creado con exito";
-			else
-				if ($data)
-					$mensaje = $data;
+			if (is_array($data) && ! empty($data['error'])) {
+				return back()->withInput()->with('errores', [$data['error']]);
+			}
+
+			if (is_array($data) && ! empty($data['factura'])) {
+				return redirect('ventas/factura')->with('mensaje', 'Comprobante '.$data['factura'].' generado con éxito');
+			}
+
+			return back()->withInput()->with('errores', ['No se pudo generar el comprobante']);
 		} catch (\Exception $e)
 		{
-			$mensaje = $e->getMessage();
-
-            dd($mensaje);
+			return back()->withInput()->with('errores', [$e->getMessage()]);
 		}
-
-        return redirect('ventas/factura')->with('mensaje', 'Comprobante actualizado con exito');		
     }
 
 
@@ -338,10 +337,11 @@ class FacturacionController extends Controller
     {
         $comprobante = $this->facturacionService->generaComprobanteGeneral($request->all());
 
-        if ($comprobante['error'] != '')
-            return redirect()->back()->with('mensaje', 'No pudo generar Comprobante'); 
-        else
-            return redirect()->back()->with('mensaje', 'Comprobante '.$comprobante['factura'].' generado con éxito'); 
+        if (! empty($comprobante['error'])) {
+            return redirect()->back()->withInput()->with('errores', [$comprobante['error']]);
+        }
+
+        return redirect()->back()->with('mensaje', 'Comprobante '.$comprobante['factura'].' generado con éxito');
     }
 
 }

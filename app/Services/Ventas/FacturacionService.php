@@ -310,8 +310,7 @@ class FacturacionService
 
 	private function validarLugarEntregaPedido($cliente, $pedido): ?array
 	{
-		// Sin lugar de entrega asignado: se factura con null (no bloquear).
-		return null;
+		return \App\Support\Ventas\ClienteEntregaPedidoSupport::validarPedido($cliente, $pedido);
 	}
 
 	// Calcula la factura por pedido
@@ -376,6 +375,16 @@ class FacturacionService
 
 				if (!$articulo)
 					return ['error' => 'Artículo inexistente'];
+
+				$numeroItem = (int) ($pedido_articulo->numeroitem ?? ($offItem + 1));
+				$errorListaprecio = \App\Support\Ventas\ArticuloListaprecioLineaVentasSupport::validarPedidoArticuloPersistido(
+					$pedido_articulo->listaprecio_id,
+					$numeroItem,
+					trim((string) ($articulo->sku ?? '')) !== '' ? (string) $articulo->sku : (string) $articulo->descripcion,
+				);
+				if ($errorListaprecio !== null) {
+					return $errorListaprecio;
+				}
 
 				if ($pedido_articulo->pesada == 0)
 					return ['error' => 'Artículo '.$articulo->sku.' sin pesar'];
@@ -1602,7 +1611,7 @@ class FacturacionService
 	}
 
 	/**
-	 * Convierte kilos/pesada y descuentoventa_ids (grilla pedido) al formato de calculaFacturaGeneral.
+	 * Convierte kilos y descuentoventa_ids (grilla estilo pedido en factura directa) al formato de calculaFacturaGeneral.
 	 */
 	protected function normalizaItemsFacturaGeneralDesdePedido(array $data): array
 	{
@@ -1615,15 +1624,12 @@ class FacturacionService
 			return $data;
 		}
 
-		$pesadas = $data['pesadas'] ?? [];
 		$descuentoventaIds = $data['descuentoventa_ids'] ?? [];
 		$cantidades = [];
 		$descuentosLinea = [];
 
 		foreach ($kilos as $i => $kilo) {
-			$pesada = $pesadas[$i] ?? '';
-			$valor = ($kilo !== '' && $kilo !== null) ? $kilo : $pesada;
-			$cantidades[] = $valor;
+			$cantidades[] = $kilo;
 
 			$descPct = 0.;
 			if (! empty($descuentoventaIds[$i])) {
@@ -1742,6 +1748,18 @@ class FacturacionService
 				$cuentaContable_id = null;
 				if ($cuentacontable)
 					$cuentaContable_id = $cuentacontable->id;
+			}
+
+			$listaprecioLinea = is_array($listaspreciosIds) && array_key_exists($offItem, $listaspreciosIds)
+				? $listaspreciosIds[$offItem]
+				: null;
+
+			if ($articulo_id && ! \App\Support\Ventas\ArticuloListaprecioLineaVentasSupport::listaprecioIdValido($listaprecioLinea)) {
+				$etiqueta = $sku ?? (string) ($articulos[$offItem] ?? $offItem + 1);
+
+				return [
+					'error' => \App\Support\Ventas\ArticuloListaprecioLineaVentasSupport::mensajeError($offItem + 1, $etiqueta),
+				];
 			}
 
 			$listaprecio_id = 1;

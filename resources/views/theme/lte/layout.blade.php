@@ -7,6 +7,7 @@
 <head>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ $modoConsulta ? '[Consulta] ' : '' }}@yield('titulo', 'Anita ERP') | Anita ERP</title>
     <!-- Tell the browser to be responsive to screen width -->
     <!-- Font Awesome -->
@@ -31,6 +32,7 @@
 
     <link rel="stylesheet" href="{{asset("assets/css/custom.css")}}">
     <link rel="stylesheet" href="{{asset("assets/css/sidebar.css")}}">
+    <link rel="stylesheet" href="{{asset("assets/css/barra-tareas.css")}}">
 
     @routes
     <!-- HTML5 Shim and Respond.js IE8 support of HTML5 elements and media queries -->
@@ -155,6 +157,9 @@
     <script src="{{asset("assets/js/scripts.js")}}"></script>
     <script src="{{asset("assets/js/funciones.js")}}"></script>
     <script src="{{asset('assets/js/modo-consulta.js')}}"></script>
+    @auth
+        <script src="{{ asset('assets/js/barra-tareas.js') }}"></script>
+    @endauth
     @yield("scripts")
 </body>
 

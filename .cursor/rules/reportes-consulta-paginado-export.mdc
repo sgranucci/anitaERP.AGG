@@ -13,8 +13,9 @@ Todo **reporte nuevo** o migrado debe seguir el stack de consulta con exportaci�
 | Presupuesto | `presupuesto/capex-reporte` | `CapexReporteExport` | `presupuesto/capex_reporte/listado` |
 | Ventas gastronomía | `ventas/gastronomia/canjes/listado-marketing` | `CanjeMarketingListadoExport` | `ventas/gastronomia/canjes/listado_marketing/listado` |
 | Contable | `contable/mayor-concepto` | `MayorConceptoExport` | `contable/mayor_concepto/listado` |
+| Ventas pedidos | `ventas/repkilocategoria` | `KiloCategoriaListadoExport` | `ventas/repkilocategoria/listado` |
 
-Ver también `index-listado-paginado-export.mdc` (CRUD index) y `listado-filtros-crud.mdc` (filtros inteligentes en ABM).
+Ver también `index-listado-paginado-export.mdc` (CRUD index), `listado-filtros-crud.mdc` (filtros inteligentes en ABM) y `reportes-pedidos-totalizacion.mdc` (kilos pedidos / kilos por categoría).
 
 ## UX obligatoria (pantalla)
 

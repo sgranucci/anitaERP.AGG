@@ -205,12 +205,28 @@ return [
             ],
             'items' => [
                 'Reporte de pedidos',
+                'Kilos pedidos (totalizado por reparto o abierto por ítem)',
+                'Kilos por categoría (totalizado por categoría y artículo)',
                 'Reporte de kilos por pedido',
                 'Reporte total de pedidos',
                 'Reporte general de pedidos',
                 'Reporte de consumo de material',
                 'El listado principal también exporta a PDF, Excel y CSV con columnas de cajas, piezas, kilos, pesada, reparto y estado.',
             ],
+            'parrafos2' => [
+                'Varios reportes de Ventas permiten acotar los pedidos por reparto (transporte). La misma regla aplica en todos los que muestran los campos Desde y Hasta reparto:',
+            ],
+            'tabla' => [
+                'caption' => 'Filtro de repartos en reportes (regla general)',
+                'headers' => ['Modo', 'Cómo cargarlo', 'Ejemplo'],
+                'rows' => [
+                    ['Todos los repartos', 'Deje vacíos Desde y Hasta.', 'Sin valor en ninguno de los dos campos'],
+                    ['Repartos puntuales', 'En Desde escriba los códigos separados por coma (sin usar Hasta).', '1,4,6 (incluye reparto 1, 4 y 6)'],
+                    ['Rango', 'Complete Desde y Hasta, o escriba desde/hasta en Desde con barra (/).', 'Desde 1 · Hasta 10, o 1/10 en Desde'],
+                    ['Un solo reparto', 'Solo en Desde, deje Hasta vacío.', '5 (solo reparto 5)'],
+                ],
+            ],
+            'nota' => 'Al consultar, el encabezado del reporte y las exportaciones PDF/Excel muestran el criterio aplicado (por ejemplo «Todos», «Repartos 1, 4, 6» o «1 al 10»). Pulse Enter en el código para validar un reparto individual; si cargó una lista separada por comas, el sistema la interpreta como varios repartos y no busca un código único.',
         ],
         [
             'titulo' => '11. Cierre de pedidos y anulaciones',

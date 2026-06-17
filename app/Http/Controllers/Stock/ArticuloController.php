@@ -755,6 +755,10 @@ class ArticuloController extends Controller
             ->leftJoin('categoria', 'articulo.categoria_id', '=', 'categoria.id')
             ->leftJoin('linea', 'articulo.linea_id', '=', 'linea.id');
 
+        if (filter_var($request->input('solo_facturable'), FILTER_VALIDATE_BOOLEAN)) {
+            $query->where('articulo.nofactura', '0');
+        }
+
         $cont = count($columns);
 
         $skuPrefijoRaw = $request->input('sku_prefijo');
@@ -900,9 +904,16 @@ class ArticuloController extends Controller
         return response()->json(array_merge($match, ['encontrado' => true]));
     }
 
-    public function leeUnArticuloPorSku($sku)
+    public function leeUnArticuloPorSku($sku, Request $request)
     {
-        return $this->articuloRepository->findPorSku($sku);
+        $articulo = $this->articuloRepository->findPorSku($sku);
+
+        if ($articulo && filter_var($request->query('solo_facturable'), FILTER_VALIDATE_BOOLEAN)
+            && (string) $articulo->nofactura === '1') {
+            return response()->json(null);
+        }
+
+        return $articulo;
     }
 
     public function redondeaCaja($articulo_id, $unidadmedida, $caja, $pieza, $kilo, $descuentoventa_id, $opcion)

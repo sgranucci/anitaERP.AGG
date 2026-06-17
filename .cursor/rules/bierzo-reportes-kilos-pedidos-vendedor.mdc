@@ -1,0 +1,58 @@
+---
+description: El Bierzo — filtro automático por vendedor del usuario en reportes de kilos pedidos
+globs: app/Queries/Ventas/PedidoQuery.php,app/Support/Ventas/Kilo*ListadoFiltros.php,app/Services/Ventas/Kilo*Reporte*.php,resources/views/ventas/repkilopedido/**,resources/views/ventas/repkilocategoria/**,app/Http/Controllers/Ventas/PedidoController.php
+alwaysApply: false
+---
+
+# El Bierzo: filtro vendedor en kilos pedidos
+
+En **El Bierzo**, los reportes de kilos deben respetar la cartera del vendedor logueado (igual que el listado de pedidos y clientes).
+
+## Reportes afectados
+
+| Reporte | Query | Ruta |
+|---|---|---|
+| Kilos pedidos (TOTAL / ABRE) | `PedidoQuery::findPorKiloPedido` | `rep_kilopedido` |
+| Kilos por categoría | `PedidoQuery::findPorKiloCategoriaFiltros` | `rep_kilocategoria` |
+
+## Regla de negocio
+
+1. Obtener IDs con `VendedorRepository::leeVendedoresAsociados()`:
+   - Solo si el usuario tiene permiso **`listar-clientes-vendedor`**.
+   - Solo si `session('vendedor_id') > 0`.
+   - Incluye el vendedor del usuario **y** los de `vendedorasociados`.
+2. Si la lista **no está vacía**, filtrar con `whereIn('cliente.vendedor_id', $vendedorIds)`.
+3. Si la lista está vacía (admin / sin vendedor en usuario), **no** aplicar filtro (ve todos los clientes).
+
+## Implementación obligatoria
+
+Centralizar en `KiloPedidoListadoFiltros::aplicarFiltroVendedorUsuarioEnQuery($query, $vendedorIds)` — **no** duplicar `whereIn` en cada reporte.
+
+```php
+KiloPedidoListadoFiltros::aplicarFiltroVendedorUsuarioEnQuery(
+    $pedido,
+    $this->vendedorRepository->leeVendedoresAsociados(),
+);
+```
+
+- Join **`cliente`** obligatorio antes del filtro (kilos por categoría lo requiere explícitamente).
+- Aplica a pantalla, PDF, Excel y CSV (misma query vía `KiloPedidoReporteService` / `KiloCategoriaReporteService`).
+- **No** exponer el filtro en el formulario: es automático por sesión/permiso.
+
+## Referencia canónica
+
+Mismo criterio que `PedidoQuery::queryPedidoIndexListado` (listado paginado de pedidos).
+
+## Prohibido
+
+- Omitir el filtro en export o en uno de los dos reportes de kilos.
+- Filtrar por `pedido.vendedor_id` si el resto del módulo Ventas usa `cliente.vendedor_id`.
+- Reimplementar la lógica de asociados fuera de `leeVendedoresAsociados()`.
+
+## Comprobación rápida
+
+```bash
+rg 'aplicarFiltroVendedorUsuarioEnQuery' app/Queries/Ventas/PedidoQuery.php app/Support/Ventas/KiloPedidoListadoFiltros.php
+rg 'findPorKiloPedido|findPorKiloCategoriaFiltros' app/Queries/Ventas/PedidoQuery.php
+rg "join\('cliente'" app/Queries/Ventas/PedidoQuery.php
+```

@@ -15,6 +15,7 @@
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/stock/depmae/consulta.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/admin/usuario/empresas_roles.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/usuario/depositos.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/usuario/crear.js")}}" type="text/javascript"></script>
 @endsection

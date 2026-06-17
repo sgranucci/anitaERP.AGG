@@ -52,6 +52,8 @@ use App\Mail\Ventas\ClienteDefinitivo;
 use App\Exports\Ventas\ClienteExport;
 use App\Exports\Ventas\ClienteListadoExport;
 use App\Support\Ventas\ClienteListadoFiltros;
+use App\Support\Ventas\ArcaPadronImpuestosClienteValidacion;
+use App\Services\Arca\ConstanciaInscripcionService;
 use Carbon\Carbon;
 use Mail;
 use DB;
@@ -428,6 +430,61 @@ class ClienteController extends Controller
             'tipodocumento_query', 'tipopercepcion_enum', 'certificadonoretencion_enum', 'condicioniibb_query',
             'tipoempresa_cliente_query',
             'suitecrmHabilitado', 'suitecrmPuedeEditar', 'suitecrmPuedeSincronizarCuenta'));
+    }
+
+    /**
+     * Consulta ARCA al ingresar al ABM y suspende el cliente si los impuestos no son válidos.
+     */
+    public function validarArcaPadron(Request $request, $id): \Illuminate\Http\JsonResponse
+    {
+        can('editar-clientes');
+
+        if (! filter_var(config('arca.padron_validacion_cliente.habilitado', true), FILTER_VALIDATE_BOOLEAN)) {
+            return response()->json([
+                'ok' => true,
+                'skipped' => true,
+                'validacion' => null,
+            ]);
+        }
+
+        $cliente = $this->clienteRepository->findOrFail($id);
+        $cuit = preg_replace('/\D+/', '', (string) $cliente->numerodocumento);
+        if (strlen($cuit) !== 11) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'El cliente no tiene una CUIT válida (11 dígitos) para consultar ARCA.',
+            ], 422);
+        }
+
+        $condicionivaId = (int) $request->input('condicioniva_id', $cliente->condicioniva_id);
+
+        try {
+            $data = app(ConstanciaInscripcionService::class)->getPersonaV2($cuit);
+            $validacion = ArcaPadronImpuestosClienteValidacion::validar($condicionivaId, $data);
+            $suspendido = false;
+
+            if (($validacion['debe_suspender'] ?? false) && ($validacion['aplica'] ?? false)) {
+                Cliente::query()->whereKey($id)->update(['estado' => '1']);
+                $suspendido = true;
+            }
+
+            $httpOk = ! ($validacion['aplica'] ?? false) || ($validacion['ok'] ?? false);
+
+            return response()->json([
+                'ok' => $httpOk,
+                'message' => $validacion['mensaje'] ?? null,
+                'data' => $data,
+                'validacion' => $validacion,
+                'suspendido' => $suspendido,
+                'estado' => $suspendido ? '1' : (string) $cliente->estado,
+                'soap' => $data['soap'] ?? null,
+            ], $httpOk ? 200 : 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'ok' => false,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
     }
 
     /**

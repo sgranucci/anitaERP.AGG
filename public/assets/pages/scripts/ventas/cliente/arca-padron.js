@@ -404,11 +404,156 @@
 		}
 	}
 
+	function arcaValidacionImpuestosHabilitada() {
+		const tab = byId('tab2');
+		return !!(tab && tab.getAttribute('data-arca-validar-impuestos') === '1');
+	}
+
+	function getCondicionivaIdForm() {
+		const el = byId('condicioniva_id');
+		if (!el || !el.value) return null;
+		const n = parseInt(el.value, 10);
+		return Number.isFinite(n) && n > 0 ? n : null;
+	}
+
+	function condicionivaRequiereValidacionArca(condicionivaId) {
+		const tab = byId('tab2');
+		if (!tab || !condicionivaId) return false;
+		const ri = parseInt(tab.getAttribute('data-condicioniva-ri-id') || '1', 10);
+		const mono = parseInt(tab.getAttribute('data-condicioniva-monotributo-id') || '4', 10);
+		return condicionivaId === ri || condicionivaId === mono;
+	}
+
+	function mostrarAlertaArcaImpuestos(validacion) {
+		const box = byId('arca-impuestos-alerta');
+		const msg = byId('arca-impuestos-alerta-mensaje');
+		const det = byId('arca-impuestos-alerta-detalles');
+		if (!box || !msg) return;
+
+		if (!validacion || validacion.ok || !validacion.aplica) {
+			box.style.display = 'none';
+			msg.textContent = '';
+			if (det) {
+				det.innerHTML = '';
+				det.style.display = 'none';
+			}
+			return;
+		}
+
+		box.style.display = 'block';
+		msg.textContent = validacion.mensaje || 'Problemas en ARCA: el cliente no tiene impuestos activos.';
+		if (det) {
+			det.innerHTML = '';
+			const detalles = validacion.detalles || [];
+			if (detalles.length) {
+				det.style.display = 'block';
+				detalles.forEach(function (texto) {
+					const li = document.createElement('li');
+					li.textContent = texto;
+					det.appendChild(li);
+				});
+			} else {
+				det.style.display = 'none';
+			}
+		}
+	}
+
+	function aplicarSuspensionClienteArca() {
+		const estado = byId('estado');
+		if (estado) estado.value = '1';
+		const btn = byId('botonestado');
+		if (btn) btn.innerHTML = "<i class='fa fa-bell'></i>&nbsp;Estado Suspendido";
+	}
+
+	function procesarValidacionImpuestosArca(validacion, json) {
+		if (!validacion || !validacion.aplica) {
+			mostrarAlertaArcaImpuestos({ ok: true, aplica: false });
+			return;
+		}
+		mostrarAlertaArcaImpuestos(validacion);
+		if (validacion.debe_suspender) {
+			aplicarSuspensionClienteArca();
+			if (json && json.suspendido) {
+				console.info('Cliente suspendido en base de datos por validación ARCA.');
+			}
+		}
+	}
+
+	function getArcaValidarClienteUrl() {
+		const form = byId('form-general');
+		const u = form && form.getAttribute('data-arca-validar-url');
+		return u ? String(u).trim() : '';
+	}
+
+	async function consultarArcaConValidacionImpuestos(options) {
+		options = options || {};
+		if (!arcaValidacionImpuestosHabilitada()) return null;
+
+		const condicionivaId = getCondicionivaIdForm();
+		if (!condicionivaRequiereValidacionArca(condicionivaId)) {
+			mostrarAlertaArcaImpuestos({ ok: true, aplica: false });
+			return null;
+		}
+
+		const cuit = soloDigitos(getVal('numerodocumento'));
+		if (cuit.length !== 11) return null;
+
+		const validarUrl = getArcaValidarClienteUrl();
+		const endpoint = validarUrl || getArcaEndpointUrl();
+		if (!endpoint) return null;
+
+		const setLoading = options.silent ? function () {} : setArcaLoadingCliente;
+
+		try {
+			setLoading(true);
+			const resp = await fetch(endpoint, {
+				method: 'POST',
+				credentials: 'same-origin',
+				headers: {
+					'Content-Type': 'application/json',
+					Accept: 'application/json',
+					'X-Requested-With': 'XMLHttpRequest',
+					'X-CSRF-TOKEN': getCsrfToken(),
+				},
+				body: JSON.stringify({ cuit: cuit, condicioniva_id: condicionivaId }),
+			});
+
+			const contentType = (resp.headers.get('content-type') || '').toLowerCase();
+			if (!contentType.includes('application/json')) {
+				console.error('Validación ARCA: respuesta no JSON', resp.status);
+				return null;
+			}
+
+			const json = await resp.json();
+			storeArcaSoap(pickSoapFromJson(json));
+			if (json.validacion) {
+				procesarValidacionImpuestosArca(json.validacion, json);
+			} else if (!json.ok && json.message) {
+				mostrarAlertaArcaImpuestos({
+					aplica: true,
+					ok: false,
+					mensaje: json.message,
+					detalles: [],
+					debe_suspender: true,
+				});
+				aplicarSuspensionClienteArca();
+			}
+
+			return json;
+		} catch (err) {
+			if (!options.silent) alert('Error de red consultando padrón ARCA.');
+			return null;
+		} finally {
+			setLoading(false);
+		}
+	}
+
 	/**
 	 * @param {'tab'|'modal'} loadingUi — modal: overlay de CUIT (alta cliente); tab: badge junto al ícono en datos facturación
 	 * @returns {Promise<boolean|'aborted'>}
 	 */
-	async function ejecutarConsultaArcaCliente(loadingUi) {
+	async function ejecutarConsultaArcaCliente(loadingUi, options) {
+		options = options || {};
 		const endpoint = getArcaEndpointUrl();
 		if (!endpoint) {
 			alert('No está configurada la URL de consulta ARCA en el formulario.');
@@ -422,6 +567,11 @@
 		}
 
 		const setLoading = loadingUi === 'modal' ? setArcaCuitModalLoading : setArcaLoadingCliente;
+		const condicionivaId = getCondicionivaIdForm();
+		const payload = { cuit: cuit };
+		if (arcaValidacionImpuestosHabilitada() && condicionivaId) {
+			payload.condicioniva_id = condicionivaId;
+		}
 
 		try {
 			setLoading(true);
@@ -434,7 +584,7 @@
 					'X-Requested-With': 'XMLHttpRequest',
 					'X-CSRF-TOKEN': getCsrfToken(),
 				},
-				body: JSON.stringify({ cuit: cuit }),
+				body: JSON.stringify(payload),
 			});
 
 			const contentType = (resp.headers.get('content-type') || '').toLowerCase();
@@ -448,6 +598,10 @@
 			const json = await resp.json();
 			storeArcaSoap(pickSoapFromJson(json));
 
+			if (json.validacion) {
+				procesarValidacionImpuestosArca(json.validacion, json);
+			}
+
 			if (!resp.ok || !json.ok) {
 				promptOpenSoapAfterError(json.message || 'Error consultando padrón ARCA.');
 				return false;
@@ -455,7 +609,9 @@
 
 			const data = json.data || {};
 			if (!data.soap && json.soap) data.soap = json.soap;
-			openArcaPreview({ cuit: cuit, data: data });
+			if (!options.skipPreview) {
+				openArcaPreview({ cuit: cuit, data: data });
+			}
 			return true;
 		} catch (err) {
 			alert('Error de red consultando padrón ARCA.');
@@ -592,5 +748,21 @@
 		byId('arca-full-overlay') && byId('arca-full-overlay').addEventListener('click', function (ev) {
 			if (ev.target && ev.target.id === 'arca-full-overlay') closeArcaFullView();
 		});
+
+		if (arcaValidacionImpuestosHabilitada()) {
+			consultarArcaConValidacionImpuestos({ silent: true });
+			const condIva = byId('condicioniva_id');
+			if (condIva) {
+				condIva.addEventListener('change', function () {
+					consultarArcaConValidacionImpuestos({ silent: true });
+				});
+			}
+			const nroDoc = byId('numerodocumento');
+			if (nroDoc) {
+				nroDoc.addEventListener('change', function () {
+					consultarArcaConValidacionImpuestos({ silent: true });
+				});
+			}
+		}
 	});
 })();

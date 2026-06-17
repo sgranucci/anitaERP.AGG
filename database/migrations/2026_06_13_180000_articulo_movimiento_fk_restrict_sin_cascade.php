@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -12,13 +13,13 @@ use Illuminate\Support\Facades\Schema;
  */
 return new class extends Migration
 {
-    /** @var list<array{constraint: string, column: string}> */
+    /** @var list<array{constraint: string, column: string, table: string}> */
     private const FOREIGN_KEYS = [
-        ['constraint' => 'fk_articulo_movimiento_venta', 'column' => 'venta_id'],
-        ['constraint' => 'fk_articulo_movimiento_movimientostock', 'column' => 'movimientostock_id'],
-        ['constraint' => 'fk_articulo_movimiento_pedido_combinacion', 'column' => 'pedido_combinacion_id'],
-        ['constraint' => 'fk_articulo_movimiento_ordentrabajo', 'column' => 'ordentrabajo_id'],
-        ['constraint' => 'fk_articulo_movimiento_venta_emision', 'column' => 'venta_emision_id'],
+        ['constraint' => 'fk_articulo_movimiento_venta', 'column' => 'venta_id', 'table' => 'venta'],
+        ['constraint' => 'fk_articulo_movimiento_movimientostock', 'column' => 'movimientostock_id', 'table' => 'movimientostock'],
+        ['constraint' => 'fk_articulo_movimiento_pedido_combinacion', 'column' => 'pedido_combinacion_id', 'table' => 'pedido_combinacion'],
+        ['constraint' => 'fk_articulo_movimiento_ordentrabajo', 'column' => 'ordentrabajo_id', 'table' => 'ordentrabajo'],
+        ['constraint' => 'fk_articulo_movimiento_venta_emision', 'column' => 'venta_emision_id', 'table' => 'venta_emision'],
     ];
 
     public function up(): void
@@ -28,13 +29,17 @@ return new class extends Migration
         }
 
         foreach (self::FOREIGN_KEYS as $fk) {
-            if (! $this->foreignKeyExists($fk['constraint'])) {
+            if (! Schema::hasColumn('articulo_movimiento', $fk['column'])) {
                 continue;
             }
 
-            Schema::table('articulo_movimiento', function (Blueprint $table) use ($fk) {
-                $table->dropForeign($fk['constraint']);
-            });
+            $this->limpiarReferenciasHuerfanas($fk['column'], $fk['table']);
+
+            if ($this->foreignKeyExists($fk['constraint'])) {
+                Schema::table('articulo_movimiento', function (Blueprint $table) use ($fk) {
+                    $table->dropForeign($fk['constraint']);
+                });
+            }
 
             Schema::table('articulo_movimiento', function (Blueprint $table) use ($fk) {
                 $this->addRestrictForeign($table, $fk['constraint'], $fk['column']);
@@ -61,6 +66,20 @@ return new class extends Migration
                 $this->addCascadeForeign($table, $fk['constraint'], $fk['column']);
             });
         }
+    }
+
+    private function limpiarReferenciasHuerfanas(string $column, string $parentTable): void
+    {
+        if (! Schema::hasTable($parentTable)) {
+            return;
+        }
+
+        DB::statement(
+            'UPDATE articulo_movimiento am
+             LEFT JOIN '.$parentTable.' p ON p.id = am.'.$column.'
+             SET am.'.$column.' = NULL
+             WHERE am.'.$column.' IS NOT NULL AND p.id IS NULL'
+        );
     }
 
     private function foreignKeyExists(string $constraint): bool

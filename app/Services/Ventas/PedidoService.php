@@ -2,7 +2,6 @@
 namespace App\Services\Ventas;
 
 use Symfony\Component\Process\Process;
-use Symfony\Component\Process\Exception\ProcessFailedException;
 use App\Repositories\Ventas\PedidoRepositoryInterface;
 use App\Repositories\Ventas\Pedido_CombinacionRepositoryInterface;
 use App\Repositories\Ventas\Pedido_ArticuloRepositoryInterface;
@@ -13,6 +12,8 @@ use App\Repositories\Ventas\Ordentrabajo_Combinacion_TalleRepositoryInterface;
 use App\Repositories\Ventas\Ordentrabajo_TareaRepositoryInterface;
 use App\Repositories\Ventas\OrdentrabajoRepositoryInterface;
 use App\Repositories\Configuracion\SeteosalidaRepositoryInterface;
+use App\Models\Configuracion\Salida;
+use App\Support\Configuracion\SalidaImpresionFallbackSupport;
 use App\Support\Configuracion\SeteoSalidaProgramaSupport;
 use App\Services\Configuracion\ImpuestoService;
 use App\Services\Stock\Articulo_MovimientoService;
@@ -213,7 +214,8 @@ class PedidoService
 	  	ini_set('memory_limit', '512M');
 
 		$usuario_id = Auth::user()->id;
-        $seteosalida = $this->seteosalidaRepository->buscaSeteo($usuario_id, SeteoSalidaProgramaSupport::VENTAS_PEDIDO);
+		$programa = SeteoSalidaProgramaSupport::VENTAS_PEDIDO;
+        $seteosalida = $this->seteosalidaRepository->buscaSeteo($usuario_id, $programa);
 
 		if (! $seteosalida || ! $seteosalida->salidas) {
 			return [
@@ -222,8 +224,8 @@ class PedidoService
 			];
 		}
 
-		$comandoRaw = trim((string) $seteosalida->salidas->comando);
-		if ($comandoRaw === '' || ! str_contains($comandoRaw, '%s')) {
+		$salidaPrincipal = $seteosalida->salidas;
+		if (! SalidaImpresionFallbackSupport::comandoImpresionValido($salidaPrincipal)) {
 			return [
 				'ok' => false,
 				'mensaje' => 'El comando de la impresora configurada debe incluir %s (ruta del PDF).',
@@ -250,23 +252,41 @@ class PedidoService
 
 			$nombreReporte = $path.'/'.$nombre_pdf.'.pdf';
 
-			$comandos = explode(' ', $comandoRaw);
-			$indiceMarcador = array_search('%s', $comandos, true);
-			if ($indiceMarcador === false) {
-				throw new Exception('Comando de impresora inválido (%s no encontrado).');
+			$salidasIntentar = collect([$salidaPrincipal]);
+			if (config('pedido.imprimir_fallback_habilitado', true)) {
+				$salidasIntentar = $salidasIntentar->merge(
+					SalidaImpresionFallbackSupport::alternativasPorMismoUso($salidaPrincipal, $programa)
+						->filter(fn (Salida $salida) => SalidaImpresionFallbackSupport::comandoImpresionValido($salida))
+				)->unique('id')->values();
 			}
 
-			$comandos[$indiceMarcador] = $nombreReporte;
-			$process = new Process($comandos);
-			$process->run();
+			$errores = [];
+			$nombrePrincipal = (string) $salidaPrincipal->nombre;
 
-			if (! $process->isSuccessful()) {
-		   		throw new ProcessFailedException($process);
+			foreach ($salidasIntentar as $salida) {
+				$errorImpresion = $this->ejecutarImpresionPedidoEnSalida($salida, $nombreReporte);
+				if ($errorImpresion === null) {
+					$mensaje = 'Impresión exitosa.';
+					if ((int) $salida->id !== (int) $salidaPrincipal->id) {
+						$mensaje = sprintf(
+							'Impresión exitosa en %s (impresora alternativa; falló %s).',
+							$salida->nombre,
+							$nombrePrincipal
+						);
+					}
+
+					return [
+						'ok' => true,
+						'mensaje' => $mensaje,
+					];
+				}
+
+				$errores[] = $salida->nombre.': '.$errorImpresion;
 			}
 
 			return [
-				'ok' => true,
-				'mensaje' => 'Impresión exitosa.',
+				'ok' => false,
+				'mensaje' => 'No se pudo imprimir el pedido. '.implode(' · ', $errores),
 			];
 		} catch (Exception $e) {
 			return [
@@ -278,6 +298,32 @@ class PedidoService
 				@unlink($nombreReporte);
 			}
 		}
+	}
+
+	private function ejecutarImpresionPedidoEnSalida(Salida $salida, string $rutaPdf): ?string
+	{
+		$comando = sprintf(trim((string) $salida->comando), $rutaPdf);
+		if (trim($comando) === '') {
+			return 'comando de impresora vacío';
+		}
+
+		$process = Process::fromShellCommandline($comando);
+		$process->setTimeout((int) config('pedido.imprimir_timeout_segundos', 60));
+		$process->setEnv([
+			'IMPRESION_PEDIDO_TIMEOUT' => (string) config('pedido.imprimir_esperar_job_segundos', 60),
+		]);
+		$process->run();
+
+		if ($process->isSuccessful()) {
+			return null;
+		}
+
+		$detalle = trim($process->getErrorOutput());
+		if ($detalle === '') {
+			$detalle = trim($process->getOutput());
+		}
+
+		return $detalle !== '' ? $detalle : 'el comando de impresión falló';
 	}
 
 	public function listarPedidoPdf($id)
@@ -475,18 +521,26 @@ class PedidoService
 		if (!$cliente)
 			return ['error' => 'Cliente inexistente'];
 
+		$errorEntrega = \App\Support\Ventas\ClienteEntregaPedidoSupport::validarSeleccionParaCliente(
+			(int) $data['cliente_id'],
+			(int) ($data['cliente_entrega_id'] ?? 0) ?: null
+		);
+		if ($errorEntrega !== null) {
+			return $errorEntrega;
+		}
+
+		$errorListaprecio = \App\Support\Ventas\ArticuloListaprecioLineaVentasSupport::validarLineas(
+			$data['articulo_ids'] ?? null,
+			$data['listasprecios_id'] ?? null,
+			$data['codigoarticulos'] ?? null,
+		);
+		if ($errorListaprecio !== null) {
+			return $errorListaprecio;
+		}
+
 		$entregasCliente = $this->cliente_entregaRepository->leeClienteEntrega($data['cliente_id']);
 		if ($entregasCliente->count() > 0) {
-			$clienteEntregaId = (int) ($data['cliente_entrega_id'] ?? 0);
-			if ($clienteEntregaId <= 0) {
-				return ['error' => 'Debe seleccionar un lugar de entrega del cliente'];
-			}
-
-			$entrega = $entregasCliente->firstWhere('id', $clienteEntregaId);
-			if (!$entrega) {
-				return ['error' => 'El lugar de entrega seleccionado no pertenece al cliente'];
-			}
-
+			$entrega = $entregasCliente->firstWhere('id', (int) $data['cliente_entrega_id']);
 			$data['lugarentrega'] = $entrega->nombre;
 		} else {
 			$data['cliente_entrega_id'] = null;
@@ -960,10 +1014,13 @@ class PedidoService
 	{
 		ini_set('memory_limit', '512M');
 
-		$data = $this->pedidoQuery->findPorKiloPedido($tipolistado, $estado, 
-												$desdefecha, $hastafecha, 
-												$codigodesdetransporte, $codigohastatransporte);
-		
-		return $data;
+		return $this->pedidoQuery->findPorKiloPedido(
+			$tipolistado,
+			$estado,
+			$desdefecha,
+			$hastafecha,
+			$codigodesdetransporte,
+			$codigohastatransporte,
+		);
 	}
 }

@@ -1,0 +1,154 @@
+<?php
+
+namespace App\Exports\Ventas;
+
+use App\Services\Ventas\KiloCategoriaReporteService;
+use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Ventas\KiloCategoriaListadoFiltros;
+use Illuminate\Contracts\View\View;
+use Maatwebsite\Excel\Concerns\Exportable;
+use Maatwebsite\Excel\Concerns\FromView;
+use Maatwebsite\Excel\Concerns\ShouldAutoSize;
+use Maatwebsite\Excel\Concerns\WithColumnFormatting;
+use Maatwebsite\Excel\Concerns\WithColumnWidths;
+use Maatwebsite\Excel\Concerns\WithEvents;
+use Maatwebsite\Excel\Concerns\WithStyles;
+use Maatwebsite\Excel\Concerns\WithTitle;
+use Maatwebsite\Excel\Events\AfterSheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
+use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
+
+class KiloCategoriaListadoExport implements FromView, ShouldAutoSize, WithColumnFormatting, WithColumnWidths, WithEvents, WithStyles, WithTitle
+{
+    use Exportable;
+
+    /** @var array<string, mixed> */
+    private array $filtros = [];
+
+    private bool $hayFilaLogos = false;
+
+    private int $filaCabecerasExcel = 3;
+
+    private int $filaPrimeraDatosExcel = 4;
+
+    private int $filaTituloExcel = 2;
+
+    /** @var list<string> */
+    private array $rutasLogosExcel = [];
+
+    private string $colUltima = 'G';
+
+    public function __construct(
+        private readonly KiloCategoriaReporteService $reporteService,
+    ) {
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public function parametros(array $filtros): self
+    {
+        $this->filtros = $filtros;
+
+        return $this;
+    }
+
+    public function view(): View
+    {
+        $datos = $this->reporteService->generarDatos($this->filtros);
+        $filas = $this->reporteService->aplanarFilas($datos, $this->filtros);
+        $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion(collect());
+        $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
+        $this->filaTituloExcel = $this->hayFilaLogos ? 2 : 1;
+        $this->filaCabecerasExcel = $this->hayFilaLogos ? 4 : 3;
+        $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
+
+        return view('exports.ventas.kilocategoriaindex', [
+            'filas' => $filas,
+            'filtros' => $this->filtros,
+            'titulo' => 'Kilos por categoría',
+            'subtitulo' => 'Reparto: '.KiloCategoriaListadoFiltros::formatearRepartoTexto($this->filtros)
+                .' · Período: '.KiloCategoriaListadoFiltros::formatearPeriodoTexto($this->filtros),
+            'reservarFilaLogoExcel' => $this->hayFilaLogos,
+        ]);
+    }
+
+    public function columnFormats(): array
+    {
+        $cols = [];
+        foreach (range('A', $this->colUltima) as $c) {
+            $cols[$c] = NumberFormat::FORMAT_TEXT;
+        }
+
+        return $cols;
+    }
+
+    public function styles(Worksheet $sheet)
+    {
+        return [
+            $this->filaCabecerasExcel => [
+                'font' => [
+                    'bold' => true,
+                    'color' => ['rgb' => '17202A'],
+                    'size' => 11,
+                    'name' => 'Arial',
+                ],
+                'fill' => [
+                    'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+                    'color' => ['rgb' => '85C1E9'],
+                ],
+            ],
+        ];
+    }
+
+    public function columnWidths(): array
+    {
+        return [
+            'A' => 10, 'B' => 24, 'C' => 14, 'D' => 32, 'E' => 10, 'F' => 12, 'G' => 10,
+        ];
+    }
+
+    public function registerEvents(): array
+    {
+        return [
+            AfterSheet::class => function (AfterSheet $event) {
+                $sheet = $event->sheet->getDelegate();
+                $colUltima = $this->colUltima;
+
+                if ($this->hayFilaLogos && count($this->rutasLogosExcel) > 0) {
+                    $sheet->getRowDimension(1)->setRowHeight(54);
+                    $offsetXp = 6;
+                    foreach ($this->rutasLogosExcel as $idx => $ruta) {
+                        if (! is_string($ruta) || ! is_readable($ruta)) {
+                            continue;
+                        }
+                        $drawing = new Drawing;
+                        $drawing->setPath($ruta);
+                        $drawing->setResizeProportional(true);
+                        $drawing->setHeight(46);
+                        $drawing->setCoordinates('A1');
+                        $drawing->setOffsetX($offsetXp + $idx * 160);
+                        $drawing->setOffsetY(4);
+                        $drawing->setWorksheet($sheet);
+                    }
+                }
+
+                $filaTit = $this->filaTituloExcel;
+                $sheet->mergeCells('A'.$filaTit.':'.$colUltima.$filaTit);
+                $sheet->getStyle('A'.$filaTit.':'.$colUltima.$filaTit)->applyFromArray([
+                    'font' => ['bold' => true, 'size' => 14, 'name' => 'Arial', 'color' => ['rgb' => '17202A']],
+                    'alignment' => ['vertical' => Alignment::VERTICAL_CENTER],
+                ]);
+
+                $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
+            },
+        ];
+    }
+
+    public function title(): string
+    {
+        return 'Kilos por categoría';
+    }
+}

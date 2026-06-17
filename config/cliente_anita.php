@@ -1,9 +1,22 @@
 <?php
 
+/**
+ * Importación Anita (Informix) → cliente del ERP.
+ * Dirección: Anita es la fuente de verdad; el comando cliente:sincronizar-anita actualiza anitaERP.
+ * No escribe en Anita (ver ANITA_SYNC_CLIENTE_WRITE=false para el ABM).
+ *
+ * Tabla origen: climae (sistema ventas).
+ */
 return [
+    'tabla' => 'climae',
+
+    'sistema' => env('CLIENTE_SYNC_ANITA_SISTEMA', 'ventas'),
+
+    'key_field_anita' => 'clim_cliente',
+
     /**
-     * Tabla Informix de jurisdicciones CM05 / percepción IIBB por CUIT (cliibr).
-     * Vacío = no replica filas CM05 a Anita.
+     * Columnas del listado masivo (solo código para recorrer todos los clientes).
      */
-    'cm05_tabla' => env('CLIENTE_ANITA_CM05_TABLA', 'cliibr'),
+    'campos_listado' => env('CLIENTE_SYNC_ANITA_CAMPOS_LISTADO')
+        ?: 'clim_cliente as codigo, clim_cliente',
 ];

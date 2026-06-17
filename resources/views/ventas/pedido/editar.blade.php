@@ -24,6 +24,11 @@
             return false;
         }
 
+        if (typeof validarListaprecioLineasFormularioVentas === 'function'
+            && !validarListaprecioLineasFormularioVentas('#tbody-tabla tr')) {
+            return false;
+        }
+
         $('#formgeneral').submit();
     }
 
@@ -64,9 +69,11 @@
                 <h3 class="card-title">Editar Pedidos de clientes</h3>
 				&nbsp;- ID: {{ $pedido->id }} - Pedido: {{$pedido->codigo}}
                 <div class="card-tools">
+                    @if (empty($ocultarVolver))
                     <a href="{{route('pedido')}}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
+                    @endif
 					<button type="submit" onclick="pesada()" class="btn btn-success">
                     	<i class="fa fa-fw fa-check"></i>
 						Pesada
@@ -102,8 +109,12 @@
                     @endif                                  
                 </div>
             </div>
-            <form action="{{route('actualizar_pedido', ['id' => $pedido->id])}}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off">
+            <form action="{{route('actualizar_pedido', ['id' => $pedido->id])}}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-articulo-solo-facturable="1" onsubmit="return typeof validarLugarEntregaAntesGuardar !== 'function' || validarLugarEntregaAntesGuardar();">
                 @csrf @method("put")
+                @if (!empty($soloConsulta))
+                    <input type="hidden" name="origen" value="modal_consulta">
+                    <input type="hidden" name="vista" value="consulta">
+                @endif
                 <div class="card-body">
         			<input type="hidden" id="codigo" name="codigo" value="{{$pedido->codigo}}" >
         			<input type="hidden" id="pedido_id" name="pedido_id" value="{{$pedido->id}}" >
@@ -114,8 +125,17 @@
                     @if ($pedido->estadopedido != "Facturado")
                         <div class="row">
                             <div class="col-lg-6">
-                                <button type="submit" onclick="sub()" class="btn btn-success">Guardar</button>
+                                @if (!empty($puedeActualizarPedido))
+                                    <button type="submit" onclick="sub()" class="btn btn-success">Guardar</button>
+                                @endif
+                                @if (!empty($soloConsulta))
+                                    <button type="button" class="btn btn-secondary @if(!empty($puedeActualizarPedido)) ml-2 @endif" onclick="window.close()">Cerrar solapa</button>
+                                @endif
                             </div>
+                        </div>
+                    @elseif (!empty($soloConsulta))
+                        <div class="text-center">
+                            <button type="button" class="btn btn-secondary" onclick="window.close()">Cerrar solapa</button>
                         </div>
                     @endif
                 </div>

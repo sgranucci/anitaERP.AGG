@@ -18,8 +18,11 @@ return new class extends Migration
             $parentMenuId = (int) (DB::table('menu')->where('url', 'ventas/mesa-gastronomia')->value('menu_id') ?? 10);
         }
 
-        $canjesMenuId = (int) (DB::table('menu')->where('url', self::MENU_CANJES_URL)->value('id') ?? 0);
         $ordenCanjes = (int) (DB::table('menu')->where('menu_id', $parentMenuId)->max('orden') ?? 0) + 1;
+        $canjesMenuId = (int) (DB::table('menu')
+            ->where('menu_id', $parentMenuId)
+            ->where('nombre', 'Canjes')
+            ->value('id') ?? 0);
 
         if ($canjesMenuId === 0) {
             $canjesMenuId = (int) DB::table('menu')->insertGetId([
@@ -33,8 +36,6 @@ return new class extends Migration
             ]);
         } else {
             DB::table('menu')->where('id', $canjesMenuId)->update([
-                'menu_id' => $parentMenuId,
-                'nombre' => 'Canjes',
                 'orden' => $ordenCanjes,
                 'icono' => 'fa-gift',
                 'updated_at' => now(),

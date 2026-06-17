@@ -10,7 +10,7 @@
 @endphp
 
 @if (! $tieneSubmenu)
-    <li class="nav-item nav-menu-level-{{ $nivel }}">
+    <li class="nav-item nav-menu-level-{{ $nivel }} anita-menu-leaf">
         <a href="{{ url($url) }}" class="nav-link {{ $claseLink }}">
             @if ($nivel === 0)
                 <i class="nav-icon fa {{ $icono }}"></i>
@@ -19,6 +19,20 @@
             @endif
             <p>{{ $item['nombre'] }}</p>
         </a>
+        @auth
+            @if ($url !== '')
+                @php
+                    $menuAnclado = in_array((int) $item['id'], $barraTareasMenuIds ?? [], true);
+                @endphp
+                <button type="button"
+                    class="anita-menu-pin-btn{{ $menuAnclado ? ' is-pinned' : '' }}"
+                    data-menu-id="{{ $item['id'] }}"
+                    title="{{ $menuAnclado ? 'Quitar de la barra de tareas' : 'Anclar en la barra de tareas' }}"
+                    aria-label="{{ $menuAnclado ? 'Desanclar' : 'Anclar' }}">
+                    <i class="fas fa-thumbtack"></i>
+                </button>
+            @endif
+        @endauth
     </li>
 @else
     <li class="nav-item has-treeview nav-menu-level-{{ $nivel }}{{ $ramaActiva ? ' menu-open' : '' }}">
