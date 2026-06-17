@@ -1,0 +1,63 @@
+---
+description: Producción — prohibir tests/destructivos sobre anitaERP; pedir confirmación al operador
+alwaysApply: true
+---
+
+# Producción: base de datos y tests
+
+Este proyecto corre en **producción** (`APP_ENV=production`, `DB_DATABASE=anitaERP`). Un `migrate:fresh` o un test con `RefreshDatabase` contra MySQL **vacía la operación**.
+
+## Prohibido sin pedido explícito del operador
+
+| Acción | Motivo |
+|--------|--------|
+| `migrate:fresh`, `migrate:refresh`, `migrate:reset`, `db:wipe`, `db:seed`, `schema:drop` | Destructivo sobre BD operativa |
+| Simular esos comandos “para verificar la protección” | Ya provocó un segundo borrado |
+| `DROP DATABASE`, restore que haga `DROP DATABASE anitaERP` | Solo el operador decide restore |
+| Crear tests con `RefreshDatabase` / `DatabaseMigrations` salvo BD aislada documentada | Equivale a `migrate:fresh` |
+| `php artisan test` / `phpunit` con MySQL apuntando a `DB_DATABASE_PROTEGIDA` o `anitaERP` | Incidente 14/jun/2026 |
+| Sobrescribir `DB_DATABASE` / `DB_CONNECTION` en la línea de comando para tests | Bypass de `phpunit.xml` |
+
+## Antes de CUALQUIER test (obligatorio)
+
+1. **Preguntar al operador en el chat** y esperar confirmación explícita. No asumir silencio = OK.
+2. Verificar `phpunit.xml` **sin modificarlo**:
+   - `DB_CONNECTION` = `sqlite`
+   - `DB_DATABASE` = `:memory:`
+   - Si no cumple → **abortar** y avisar; no “arreglar” y correr.
+3. Ejecutar tests **solo** vía wrapper:
+   ```bash
+   ALLOW_TEST_EXECUTION=1 ./scripts/guard-artisan-test.sh [args php artisan test]
+   ```
+   El agente **no** pone `ALLOW_TEST_EXECUTION=1` hasta que el operador autorice en el chat.
+4. Si el test nuevo toca BD: informar **qué BD usará** (debe ser SQLite `:memory:`) antes de crear el archivo.
+
+## Antes de crear archivos en `tests/`
+
+- **No** usar `RefreshDatabase` ni `DatabaseMigrations` por defecto.
+- Preferir tests puros (sin BD) o SQLite en memoria vía `phpunit.xml`.
+- Si el operador pide test de integración MySQL: proponer BD separada (`anitaERP_testing`), nunca `anitaERP`.
+
+## Comandos Artisan seguros vs pedir permiso
+
+| Seguro sin preguntar | Pedir permiso al operador |
+|----------------------|---------------------------|
+| `php artisan route:list`, `view:cache`, `config:clear` | Cualquier `php artisan test` / `phpunit` |
+| `php -r` **solo lectura** (SELECT, `config()`) | Scripts en `backups/` que INSERT/UPDATE/DELETE |
+| Migraciones **puntuales** `--path=...` (sin fresh) | Restore, PITR, `DROP DATABASE`, fusión desde `anitaERP_gap` |
+
+## Si el operador pide restore o limpieza masiva
+
+1. Confirmar backup disponible y nombre de BD destino.
+2. **Nunca** `DROP DATABASE anitaERP` sin confirmación textual explícita.
+3. Preferir BD paralela (`anitaERP_gap`, `anitaERP_recuperado`) para análisis; producción solo con OK del operador.
+
+## Comprobación rápida (agente, read-only)
+
+```bash
+grep -E 'DB_CONNECTION|DB_DATABASE' phpunit.xml
+grep -E '^APP_ENV=|^DB_DATABASE=|^DB_DATABASE_PROTEGIDA=' .env
+rg 'RefreshDatabase|DatabaseMigrations' tests/
+```
+
+`DB_DATABASE_PROTEGIDA=anitaERP` y `ProteccionComandosDestructivosProduccion` son red de seguridad; **no sustituyen** esta regla.

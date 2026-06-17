@@ -15,7 +15,7 @@ Recepciones de proveedores
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
-        <div class="card card-primary">
+        <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title"><i class="fa fa-truck"></i> Recepciones de proveedores</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
@@ -63,7 +63,16 @@ Recepciones de proveedores
                             <td>{{ $row->numerorecepcion }}</td>
                             <td>{{ $row->fecha ? date('d/m/Y', strtotime($row->fecha)) : '' }}</td>
                             <td>{{ $row->tipo }}</td>
-                            <td>{{ $row->numeroordencompra }}</td>
+                            <td>
+                                @if($row->ordencompra_id && (can('editar-ordencompra', false) || can('listar-ordencompra', false)))
+                                <a href="{{ route('editar_ordencompra', ['id' => $row->ordencompra_id]) }}"
+                                   class="text-primary" target="_blank" rel="noopener" title="Abrir orden de compra">
+                                    {{ $row->numeroordencompra }}
+                                </a>
+                                @else
+                                {{ $row->numeroordencompra }}
+                                @endif
+                            </td>
                             <td>{{ $row->nombreproveedor }}</td>
                             <td>{{ $row->nombreempresa }}</td>
                             <td>{{ $row->estado }}</td>
@@ -76,15 +85,29 @@ Recepciones de proveedores
                                 @if(!$tieneDiff && !$row->fl_laboratorio)—@endif
                             </td>
                             <td class="text-nowrap">
-                                @can('listar-recepcion-proveedor')
-                                <a href="{{ route('recepcion_proveedor_com_pdf', $row->id) }}" class="btn-accion-tabla tooltipsC" title="Imprimir COM PDF" target="_blank">
-                                    <i class="fa fa-file-pdf-o text-danger"></i>
-                                </a>
-                                @endcan
+                                @include('stock.recepcion_proveedor.partials.boton_imprimir_com_pdf', [
+                                    'recepcionId' => $row->id,
+                                    'modo' => 'tabla',
+                                ])
                                 @if (can('editar-recepcion-proveedor', false) || can('actualizar-recepcion-proveedor', false))
                                 <a href="{{ url('stock/recepcion-proveedor/'.$row->id.'/editar') }}" class="btn-accion-tabla tooltipsC" title="{{ $row->estado === 'BORRADOR' ? 'Editar borrador' : 'Ver recepción' }}">
                                     <i class="fa fa-edit"></i>
                                 </a>
+                                @endif
+                                @if($row->estado === 'BORRADOR' && can('actualizar-recepcion-proveedor', false))
+                                <a href="{{ route('editar_recepcion_proveedor', ['id' => $row->id, 'enfocar_oc' => 1]) }}"
+                                   class="btn-accion-tabla tooltipsC" title="Cambiar orden de compra">
+                                    <i class="fa fa-exchange text-warning"></i>
+                                </a>
+                                @endif
+                                @if($row->estado === 'BORRADOR' && can('confirmar-recepcion-proveedor', false))
+                                <form action="{{ route('confirmar_recepcion_proveedor', $row->id) }}" class="d-inline form-confirmar" method="POST"
+                                      onsubmit="return confirm('¿Confirmar recepción {{ $row->numerorecepcion }}? Generará movimiento de stock y asiento contable.');">
+                                    @csrf
+                                    <button type="submit" class="btn-accion-tabla tooltipsC" title="Confirmar recepción">
+                                        <i class="fa fa-check text-success"></i>
+                                    </button>
+                                </form>
                                 @endif
                                 @if($row->estado === 'BORRADOR' && can('actualizar-recepcion-proveedor', false))
                                 <form action="{{ route('eliminar_recepcion_proveedor', ['id' => $row->id]) }}" class="d-inline form-eliminar" method="POST">

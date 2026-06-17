@@ -40,7 +40,8 @@ class RecepcionProveedorOcrService
      *   ordencompra_id: ?int,
      *   numeroordencompra: ?int,
      *   proveedor_nombre: ?string,
-     *   empresa_id: ?int
+     *   empresa_id: ?int,
+     *   ocr_texto_puro: ?string
      * }
      */
     public function procesarArchivoPreview(
@@ -80,7 +81,8 @@ class RecepcionProveedorOcrService
      *   ordencompra_id: ?int,
      *   numeroordencompra: ?int,
      *   proveedor_nombre: ?string,
-     *   empresa_id: ?int
+     *   empresa_id: ?int,
+     *   ocr_texto_puro: ?string
      * }
      */
     public function procesarArchivo(int $recepcionId, UploadedFile $archivo): array
@@ -118,6 +120,7 @@ class RecepcionProveedorOcrService
                 'numeroordencompra' => null,
                 'proveedor_nombre' => null,
                 'empresa_id' => null,
+                'ocr_texto_puro' => null,
             ];
         }
 
@@ -269,6 +272,13 @@ class RecepcionProveedorOcrService
 
     private function sinMetadatosInternos(array $resultado): array
     {
+        if (isset($resultado['_ocr_texto'])) {
+            $resultado['ocr_texto_puro'] = (string) $resultado['_ocr_texto'];
+        }
+        if (isset($resultado['_lineas_ocr'])) {
+            $resultado['ocr_lineas_parseadas'] = $resultado['_lineas_ocr'];
+        }
+
         unset($resultado['_ocr_texto'], $resultado['_lineas_ocr'], $resultado['_numero_oc_info'], $resultado['_resumen_arr']);
 
         return $resultado;

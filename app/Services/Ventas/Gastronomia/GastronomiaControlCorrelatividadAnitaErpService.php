@@ -6,6 +6,7 @@ namespace App\Services\Ventas\Gastronomia;
 
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Venta;
+use App\Support\Ventas\GastronomiaAnitaImport\GastronomiaAnitaImportEstacionamientoSupport;
 use Illuminate\Support\Collection;
 
 /**
@@ -45,6 +46,7 @@ final class GastronomiaControlCorrelatividadAnitaErpService
             'pares_ok' => 0,
             'solo_erp' => 0,
             'solo_anita' => 0,
+            'excluido_estacionamiento' => 0,
             'dif_monto' => 0,
             'huecos_corr_erp' => 0,
             'erp_corte_inicio' => 0,
@@ -67,6 +69,13 @@ final class GastronomiaControlCorrelatividadAnitaErpService
             $erpPorNumero = $this->indexarErpPorNumero($ventasErp);
             $anitaPorNumero = $this->indexarAnitaPorNumero($anitaOrdenadas);
             $numeros = $this->unionNumeros($erpPorNumero, $anitaPorNumero);
+            $sucursal = (int) preg_replace('/\D+/', '', trim($pvCodigo));
+            $empresaCodigo = $puntoventa->empresas?->codigo ?? $empresaId;
+            $numerosEstacionamiento = GastronomiaAnitaImportEstacionamientoSupport::numerosEstacionamientoEnSucursal(
+                $sucursal,
+                $empresaCodigo,
+                $numeros,
+            );
 
             $ordenadas = $ventasErp->sortBy(fn (Venta $v) => (string) $v->codigo)->values();
             $huecosPv = $this->detectarHuecosCorrelativos($ordenadas);
@@ -81,6 +90,7 @@ final class GastronomiaControlCorrelatividadAnitaErpService
                 'pares_ok' => 0,
                 'solo_erp' => 0,
                 'solo_anita' => 0,
+                'excluido_estacionamiento' => 0,
                 'dif_monto' => 0,
             ];
 
@@ -96,6 +106,7 @@ final class GastronomiaControlCorrelatividadAnitaErpService
                     $corteInicio,
                     $corteFin,
                     $huecosPv,
+                    $numerosEstacionamiento,
                 );
                 $filas[] = $fila;
 
@@ -106,6 +117,8 @@ final class GastronomiaControlCorrelatividadAnitaErpService
                     $statsPv['solo_erp']++;
                 } elseif ($estado === 'solo_anita') {
                     $statsPv['solo_anita']++;
+                } elseif ($estado === 'excluido_estacionamiento') {
+                    $statsPv['excluido_estacionamiento']++;
                 } elseif ($estado === 'dif_monto') {
                     $statsPv['dif_monto']++;
                 }
@@ -123,6 +136,7 @@ final class GastronomiaControlCorrelatividadAnitaErpService
             $resumen['pares_ok'] += $statsPv['pares_ok'];
             $resumen['solo_erp'] += $statsPv['solo_erp'];
             $resumen['solo_anita'] += $statsPv['solo_anita'];
+            $resumen['excluido_estacionamiento'] += $statsPv['excluido_estacionamiento'];
             $resumen['dif_monto'] += $statsPv['dif_monto'];
 
             $porPuntoventa[] = [
@@ -133,6 +147,7 @@ final class GastronomiaControlCorrelatividadAnitaErpService
                 'pares_ok' => $statsPv['pares_ok'],
                 'solo_erp' => $statsPv['solo_erp'],
                 'solo_anita' => $statsPv['solo_anita'],
+                'excluido_estacionamiento' => $statsPv['excluido_estacionamiento'],
                 'dif_monto' => $statsPv['dif_monto'],
                 'huecos_corr' => count($huecosPv),
                 'min_numero' => $numeros === [] ? null : min($numeros),
@@ -291,14 +306,20 @@ final class GastronomiaControlCorrelatividadAnitaErpService
         ?string $corteInicio,
         ?string $corteFin,
         array $huecosPv,
+        array $numerosEstacionamiento = [],
     ): array {
         $estado = 'ok';
         $obs = [];
         $clave = $venta !== null ? $this->chequeoService->claveComprobanteDesdeVentaErp($venta) : null;
 
         if ($venta === null && $cab !== null) {
-            $estado = 'solo_anita';
-            $obs[] = 'Cabecera Anita sin venta ERP en jornada';
+            if (isset($numerosEstacionamiento[$numero])) {
+                $estado = 'excluido_estacionamiento';
+                $obs[] = 'Cabecera Anita de estacionamiento (resv_host); no se importa a gastronomía';
+            } else {
+                $estado = 'solo_anita';
+                $obs[] = 'Cabecera Anita sin venta ERP en jornada';
+            }
         } elseif ($venta !== null && $cab === null) {
             $estado = 'solo_erp';
             $obs[] = 'Venta ERP sin cabecera Anita en jornada';

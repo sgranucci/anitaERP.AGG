@@ -60,9 +60,11 @@ cp deploy/backup/backup.local.conf.example deploy/backup/backup.local.conf
 
 El `.211` es réplica del `.210`. Los backups diarios (06:00 y 18:00) se copian por rsync a:
 
-`/var/www/html/anitaERP/backups/` en el **.211**.
+`/var/www/html/anitaERP/backups/` en el **.211** (solo `.sql.gz`; los archivos `binlog.*` **no** se sincronizan — el PITR se ejecuta en `.210`).
 
 La prueba mensual de restore debe hacerse en **`anitaERP_test` en el .211**, no en el .210.
+
+**¿Binlogs en .211?** No hacen falta para test. MySQL en `.210` guarda los binlogs; en `.211` alcanza con el dump + `anitaERP_test`. Los `binlog.0000xx` viejos en `.211/backups/binlog/` se pueden borrar.
 
 ---
 
@@ -89,6 +91,36 @@ mysql -u sergio -p "${DB_TEST}" -e "
 Si el dump ya trae `USE anitaERP` y `CREATE DATABASE`, el `sed` reemplaza nombres para no pisar la réplica en producción (`anitaERP` en .211).
 
 **Validación mínima:** conteos similares al dump del .210 del mismo horario, última `venta.created_at` coherente, menús `ventas/*` en gastronomía.
+
+### Prueba PITR completa (dump + binlog hasta incidente)
+
+Script automatizado (corre desde **.210**, aplica en **.211**):
+
+```bash
+# En .210 — una vez en .211 instalar privilegio binlog:
+# ssh sergio@10.20.30.211 'sudo mysql < /var/www/html/anitaERP/deploy/backup/grant-binlog-applier-211.sql'
+
+chmod +x deploy/backup/test-pitr-211.sh
+./deploy/backup/test-pitr-211.sh
+```
+
+Qué hace:
+
+1. Restaura `anitaERP_20260614_180001.sql.gz` en `anitaERP_test` del .211 (sin `padron_iibb_arba`).
+2. Lee binlog del .210 (`binlog.000027` pos `542096112`) hasta **2026-06-14 23:51:54** (antes del `migrate:fresh`).
+3. Valida conteos: ~**15.564 ventas**, ~**653** en ventana 18:00–23:51, última venta ~**23:51:33**.
+
+**Referencia validada (15/jun/2026):**
+
+| Métrica | Post-dump | Post-PITR |
+|---|---:|---:|
+| Ventas | 14.911 | 15.564 |
+| Ventas gap 18–23:51 | 0 | 653 |
+| Max venta id | 15.474 | 16.130 |
+| Última venta | 14/jun 17:58 | 14/jun 23:51:33 |
+| Menú (anti-wipe) | 220 | 220 |
+
+El usuario `anitaERP` en .211 **no puede** aplicar binlog sin `REPLICATION_APPLIER` (ver `grant-binlog-applier-211.sql`). Alternativa de verificación: PITR en `.210` → `anitaERP_pitr_test` y `mysqldump` a `.211`.
 
 ```bash
 # Al terminar (opcional)

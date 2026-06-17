@@ -5,6 +5,7 @@ namespace App\Services\Configuracion\Handlers;
 use App\Contracts\Configuracion\ModuloAvisoHandlerInterface;
 use App\Repositories\Stock\Recepcion_ProveedorRepositoryInterface;
 use App\Services\Stock\RecepcionProveedorPdfService;
+use App\Support\Stock\RecepcionProveedorEncuestaSupport;
 
 class StockRecepcionProveedorAvisoHandler implements ModuloAvisoHandlerInterface
 {
@@ -30,6 +31,8 @@ class StockRecepcionProveedorAvisoHandler implements ModuloAvisoHandlerInterface
         $oc = $rec->ordencompras;
         $prov = $rec->proveedores;
 
+        $rec->loadMissing('recepcion_proveedor_partes_unicas');
+
         return [
             'numero_recepcion' => (string) ($rec->numerorecepcion ?? $entityId),
             'numero_oc' => (string) (optional($oc)->numeroordencompra ?? '—'),
@@ -38,12 +41,15 @@ class StockRecepcionProveedorAvisoHandler implements ModuloAvisoHandlerInterface
             'resumen_diferencias' => (string) ($rec->resumen_diferencias ?? '—'),
             'fecha' => $rec->fecha ? $rec->fecha->format('d/m/Y') : '—',
             'estado' => (string) ($rec->estado ?? '—'),
+            'com_anita' => RecepcionProveedorEncuestaSupport::etiquetaComAnita($rec),
+            'cantidad_partes_unicas' => (string) $rec->recepcion_proveedor_partes_unicas->count(),
+            'resumen_rechazos' => (string) ($rec->resumen_rechazos ?? '—'),
         ];
     }
 
     public function linkConsulta(int $entityId): ?string
     {
-        return url('stock/recepcion-proveedor/'.$entityId.'/editar');
+        return urlAppAbsoluta('stock/recepcion-proveedor/'.$entityId.'/editar');
     }
 
     public function generarPdf(int $entityId): ?array

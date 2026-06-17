@@ -112,9 +112,19 @@ class OrdencompraController extends Controller
 
     public function editar($id)
     {
-        can('editar-ordencompra');
+        $soloConsulta = request()->query('origen') === 'modal_consulta';
+        if ($soloConsulta) {
+            if (! can('listar-ordencompra', false) && ! can('editar-ordencompra', false)) {
+                can('listar-ordencompra');
+            }
+        } else {
+            can('editar-ordencompra');
+        }
 
-        return $this->formularioOrdencompra((int) $id, false, null);
+        $puedeActualizar = can('actualizar-ordencompra', false);
+        $soloLectura = $soloConsulta && ! $puedeActualizar;
+
+        return $this->formularioOrdencompra((int) $id, $soloLectura, null);
     }
 
     public function actualizar(Request $request, $id)
@@ -124,10 +134,26 @@ class OrdencompraController extends Controller
         $ret = $this->ordencompraGestionService->actualizar($request, (int) $id);
 
         if (($ret['mensaje'] ?? '') === 'ok') {
+            if ($request->input('origen') === 'modal_consulta') {
+                return redirect()
+                    ->route('editar_ordencompra', [
+                        'id' => $id,
+                        'origen' => 'modal_consulta',
+                        'vista' => 'consulta',
+                    ])
+                    ->with('mensaje', 'Orden de compra actualizada con éxito');
+            }
+
             return redirect()->route('consultar_ordencompra')->with('mensaje', 'Orden de compra actualizada con éxito');
         }
 
-        return redirect()->route('editar_ordencompra', ['id' => $id])->withInput()->with('mensaje', $ret['errores'] ?? 'Error');
+        $params = ['id' => $id];
+        if ($request->input('origen') === 'modal_consulta') {
+            $params['origen'] = 'modal_consulta';
+            $params['vista'] = 'consulta';
+        }
+
+        return redirect()->route('editar_ordencompra', $params)->withInput()->with('mensaje', $ret['errores'] ?? 'Error');
     }
 
     public function eliminar(Request $request, $id)
@@ -699,6 +725,9 @@ class OrdencompraController extends Controller
         ];
         $visualizar = $soloLectura;
         $acceso_visualizacion_por_hash = $soloLectura;
+        $soloConsulta = request()->query('origen') === 'modal_consulta';
+        $ocultarVolver = $soloConsulta;
+        $puedeActualizarOrdencompra = can('actualizar-ordencompra', false);
         $proximoNumeroordencompra = $id === null
             ? $this->ordencompraRepository->proximoNumeroOrdencompra()
             : null;
@@ -731,7 +760,10 @@ class OrdencompraController extends Controller
             'acceso_visualizacion_por_hash',
             'proximoNumeroordencompra',
             'oc_totales_resumen',
-            'wizardRequisicionId'
+            'wizardRequisicionId',
+            'soloConsulta',
+            'ocultarVolver',
+            'puedeActualizarOrdencompra',
         ));
     }
 }

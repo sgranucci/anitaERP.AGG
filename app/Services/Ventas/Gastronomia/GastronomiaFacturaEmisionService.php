@@ -428,8 +428,7 @@ final class GastronomiaFacturaEmisionService
                 }
 
                 if (
-                    ! $cuenta->esCanjeMarketing()
-                    && config('gastronomia.waitry_tras_respuesta', true)
+                    config('gastronomia.waitry_tras_respuesta', true)
                     && $cfg->waitryHabilitadoEnTerminal()
                 ) {
                     $this->encolarWaitryTrasRespuesta(
@@ -888,12 +887,6 @@ final class GastronomiaFacturaEmisionService
             return $resultado;
         }
 
-        if ($cuenta->esCanjeMarketing()) {
-            $resultado['mensaje'] = 'Factura '.$facturaTxt.' emitida correctamente.';
-
-            return $resultado;
-        }
-
         $mensaje = 'Factura '.$facturaTxt.' emitida correctamente.';
         $cuenta->refresh();
         $displayId = trim((string) ($resultado['waitry_display_id'] ?? $cuenta->waitry_display_id ?? ''));
@@ -1194,10 +1187,6 @@ final class GastronomiaFacturaEmisionService
      */
     private function debeImprimirTicketTrasWaitry(CuentaGastronomia $cuenta, ConfiguracionPuntoventaGastronomia $cfg): bool
     {
-        if ($cuenta->esCanjeMarketing()) {
-            return false;
-        }
-
         if (! $cfg->waitryHabilitadoEnTerminal()) {
             return false;
         }
@@ -1287,10 +1276,6 @@ final class GastronomiaFacturaEmisionService
         CuentaGastronomia $cuenta,
         array $mediosPago,
     ): array {
-        if ($cuenta->esCanjeMarketing()) {
-            return $resultado;
-        }
-
         $ventaId = (int) ($resultado['venta_id'] ?? 0);
         if ($ventaId <= 0) {
             return $resultado;

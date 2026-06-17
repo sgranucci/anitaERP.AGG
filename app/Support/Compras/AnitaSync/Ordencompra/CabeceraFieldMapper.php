@@ -39,7 +39,14 @@ final class CabeceraFieldMapper
 
     public static function mapDetalle(object $row): string
     {
-        return trim((string) ($row->penmp_leyenda ?? ''));
+        $detalle = trim((string) ($row->penmp_leyenda ?? ''));
+        if ($detalle !== '') {
+            return $detalle;
+        }
+
+        $nro = (int) ($row->penmp_nro ?? 0);
+
+        return $nro > 0 ? "OC {$nro}" : 'Importada desde Anita';
     }
 
     public static function mapComentario(object $row): string

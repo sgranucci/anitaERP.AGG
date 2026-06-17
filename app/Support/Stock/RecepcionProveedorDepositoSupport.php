@@ -83,6 +83,21 @@ class RecepcionProveedorDepositoSupport
         return $insumo;
     }
 
+    public static function depositoPermitidoUsuario(int $depositoId, int $empresaId): bool
+    {
+        return $depositoId > 0 && Depmae::autorizadoParaUsuarioYEmpresa($depositoId, $empresaId);
+    }
+
+    /** ID del depósito si el usuario puede operarlo; null si no está autorizado o no hay restricción aplicable. */
+    public static function depositoEntregaVisible(?int $depositoId, int $empresaId): ?int
+    {
+        if ($depositoId === null || $depositoId <= 0) {
+            return null;
+        }
+
+        return self::depositoPermitidoUsuario($depositoId, $empresaId) ? $depositoId : null;
+    }
+
     public static function esDepositoFormula(?Depmae $deposito): bool
     {
         if ($deposito === null) {
@@ -152,7 +167,7 @@ class RecepcionProveedorDepositoSupport
         $coefArt = $coefArt > 0 ? $coefArt : 1.0;
         $esFormula = self::esDepositoFormula($deposito);
 
-        if ($usaDepositoArticulo && $esFormula) {
+        if ($esFormula) {
             $insumo = self::resolverArticuloInsumo($articulo, $empresaId);
             if ($insumo === null) {
                 throw new \RuntimeException(

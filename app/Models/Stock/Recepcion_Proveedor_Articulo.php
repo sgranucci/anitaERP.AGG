@@ -14,8 +14,8 @@ class Recepcion_Proveedor_Articulo extends Model
 
     protected $fillable = [
         'recepcion_proveedor_id', 'ordencompra_articulo_id', 'ordencompra_articulo_sustituido_id', 'tipo_linea',
-        'orden', 'penvp_orden',
-        'articulo_id', 'articulo_stock_id', 'cantidad', 'cantidad_oc', 'cantidad_stock', 'unidadmedida_id', 'coeficienteconversion',
+        'orden', 'penvp_orden', 'penvp_nro_interno',
+        'articulo_id', 'articulo_stock_id', 'cantidad', 'cantidad_oc', 'cantidad_stock', 'cantidad_rechazada', 'unidadmedida_id', 'coeficienteconversion',
         'precio', 'precio_ordencompra', 'precio_stock', 'fl_precio_diferencia', 'fl_cantidad_diferencia', 'fl_articulo_distinto',
         'comentario_precio', 'comentario_diferencia', 'precio_lista_proveedor',
         'moneda_id', 'cotizacion', 'descuento', 'deposito_id', 'detalle', 'motivorechazo', 'estado',

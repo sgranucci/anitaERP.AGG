@@ -38,7 +38,7 @@ class Tipotransaccion_StockController extends Controller
     {
         can('crear-tipos-transaccion-stock');
 
-        $this->repository->create($request->all());
+        $this->repository->create($this->datosNormalizados($request));
 
         return redirect('stock/tipotransaccion_stock')->with('mensaje', 'Tipo de transacción de stock creado con éxito');
     }
@@ -57,7 +57,7 @@ class Tipotransaccion_StockController extends Controller
     {
         can('actualizar-tipos-transaccion-stock');
 
-        $this->repository->update($request->all(), $id);
+        $this->repository->update($this->datosNormalizados($request), $id);
 
         return redirect('stock/tipotransaccion_stock')->with('mensaje', 'Tipo de transacción de stock actualizado con éxito');
     }
@@ -89,5 +89,15 @@ class Tipotransaccion_StockController extends Controller
             'signoEnum' => Tipotransaccion_Stock::$enumSigno,
             'estadoEnum' => Tipotransaccion_Stock::$enumEstado,
         ];
+    }
+
+    /** @return array<string, mixed> */
+    private function datosNormalizados(ValidacionTipotransaccion_Stock $request): array
+    {
+        $data = $request->validated();
+        $data['requiere_aprobacion'] = $request->boolean('requiere_aprobacion');
+        $data['maneja_contabilidad'] = $request->boolean('maneja_contabilidad');
+
+        return $data;
     }
 }

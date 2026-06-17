@@ -145,8 +145,8 @@ class Listaprecio_ProveedorController extends Controller
         $moneda_query = $this->monedaRepository->all();
         $estado_enum = Listaprecio_Proveedor_Estado::$enumEstado;
         $ocultarVolver = $soloConsulta;
-        $puedeActualizarLista = can('actualizar-listaprecio-proveedor', false);
-        $visualizar = $soloConsulta && ! $puedeActualizarLista;
+        $puedeModificarLista = $this->puedeModificarLista();
+        $visualizar = $soloConsulta && ! $puedeModificarLista;
 
         return view('compras.listaprecio_proveedor.editar', compact(
             'data',
@@ -158,14 +158,14 @@ class Listaprecio_ProveedorController extends Controller
             'estado_enum',
             'soloConsulta',
             'ocultarVolver',
-            'puedeActualizarLista',
+            'puedeModificarLista',
             'visualizar'
         ));
     }
 
     public function actualizar(ValidacionListaprecio_Proveedor $request, $id)
     {
-        can('actualizar-listaprecio-proveedor');
+        $this->autorizarModificarLista();
 
         $ret = $this->service->actualiza($request, (int) $id);
         if ($ret['mensaje'] === 'ok') {
@@ -262,5 +262,18 @@ class Listaprecio_ProveedorController extends Controller
         }
 
         return redirect()->route('editar_listaprecio_proveedor', ['id' => $id])->with('mensaje', $msg);
+    }
+
+    private function puedeModificarLista(): bool
+    {
+        return can('actualizar-listaprecio-proveedor', false)
+            || can('editar-listaprecio-proveedor', false);
+    }
+
+    private function autorizarModificarLista(): void
+    {
+        if (! $this->puedeModificarLista()) {
+            abort(403);
+        }
     }
 }

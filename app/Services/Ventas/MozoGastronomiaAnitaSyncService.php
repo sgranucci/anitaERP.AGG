@@ -9,6 +9,7 @@ use App\Repositories\Ventas\MozoGastronomiaRepositoryInterface;
 use App\Support\Stock\AnitaSync\Mozo\MozoFieldMapper;
 use App\Support\Ventas\GastronomiaTicketTarjetaAnitaBridgeSupport;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 
 class MozoGastronomiaAnitaSyncService
@@ -57,6 +58,45 @@ class MozoGastronomiaAnitaSyncService
                 }
             } catch (\Throwable $e) {
                 $msg = "Mozo Anita {$codigoAnita} (empresa {$empresaId}): ".$e->getMessage();
+                $ret['errores'][] = $msg;
+                Log::warning('MozoGastronomiaAnitaSync: '.$msg, ['exception' => $e]);
+            }
+        }
+
+        return $ret;
+    }
+
+    /**
+     * Actualiza solo la columna clave en mozo_gastronomia desde mozopasswd (Anita).
+     * Mapeo: mozp_mozo → codigo, mozp_password → clave.
+     *
+     * @return array{en_anita:int, actualizados:int, omitidos:int, sin_mozo_erp:int, errores:list<string>}
+     */
+    public function actualizarClavesEmpresaDesdeAnita(int $empresaId): array
+    {
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        if ($empresaId <= 0 || ! Empresa::query()->where('id', $empresaId)->exists()) {
+            throw new \InvalidArgumentException("empresa_id {$empresaId} inexistente.");
+        }
+
+        $ret = ['en_anita' => 0, 'actualizados' => 0, 'omitidos' => 0, 'sin_mozo_erp' => 0, 'errores' => []];
+        $claves = $this->listarClavesDesdeAnitaEmpresa($empresaId);
+        $ret['en_anita'] = count($claves);
+
+        foreach ($claves as $codigoAnita => $claveAnita) {
+            try {
+                $estado = $this->actualizarClaveMozoExistente($empresaId, $codigoAnita, $claveAnita);
+                if ($estado === 'actualizado') {
+                    $ret['actualizados']++;
+                } elseif ($estado === 'sin_mozo_erp') {
+                    $ret['sin_mozo_erp']++;
+                } else {
+                    $ret['omitidos']++;
+                }
+            } catch (\Throwable $e) {
+                $msg = "Clave mozo Anita {$codigoAnita} (empresa {$empresaId}): ".$e->getMessage();
                 $ret['errores'][] = $msg;
                 Log::warning('MozoGastronomiaAnitaSync: '.$msg, ['exception' => $e]);
             }
@@ -275,18 +315,23 @@ class MozoGastronomiaAnitaSyncService
         DB::beginTransaction();
         try {
             if ($existente) {
-                $cambios = $datos;
-                if ($claveNueva !== null) {
-                    $cambios['clave'] = $claveNueva;
-                }
-                $huboCambio = $existente->nombre !== $datos['nombre']
-                    || ($claveNueva !== null && (string) $existente->clave !== $claveNueva);
-                if (! $huboCambio) {
+                $huboCambioNombre = $existente->nombre !== $datos['nombre'];
+                $huboCambioClave = $claveNueva !== null && ! $this->claveCoincide($existente->clave, $claveNueva);
+                if (! $huboCambioNombre && ! $huboCambioClave) {
                     DB::commit();
 
                     return 'omitido';
                 }
-                $existente->update($cambios);
+                if ($huboCambioNombre) {
+                    $existente->update([
+                        'nombre' => $datos['nombre'],
+                        'codigo' => $datos['codigo'],
+                        'empresa_id' => $datos['empresa_id'],
+                    ]);
+                }
+                if ($huboCambioClave && $claveNueva !== null) {
+                    $this->mozoGastronomiaRepository->update(['clave' => $claveNueva], $existente->id);
+                }
                 DB::commit();
 
                 return 'actualizado';
@@ -303,6 +348,48 @@ class MozoGastronomiaAnitaSyncService
             DB::rollBack();
             throw $e;
         }
+    }
+
+    /**
+     * @return 'actualizado'|'omitido'|'sin_mozo_erp'
+     */
+    private function actualizarClaveMozoExistente(int $empresaId, string $codigoAnita, string $claveAnita): string
+    {
+        $claveAnita = trim($claveAnita);
+        if ($claveAnita === '') {
+            return 'omitido';
+        }
+
+        $existente = MozoGastronomia::query()
+            ->where('empresa_id', $empresaId)
+            ->where('codigo', $codigoAnita)
+            ->first();
+
+        if ($existente === null) {
+            return 'sin_mozo_erp';
+        }
+
+        if ($this->claveCoincide($existente->clave, $claveAnita)) {
+            return 'omitido';
+        }
+
+        $this->mozoGastronomiaRepository->update(['clave' => $claveAnita], $existente->id);
+
+        return 'actualizado';
+    }
+
+    private function claveCoincide(?string $almacenada, string $clavePlana): bool
+    {
+        $almacenada = (string) ($almacenada ?? '');
+        if ($almacenada === '') {
+            return false;
+        }
+
+        if (str_starts_with($almacenada, '$2y$')) {
+            return Hash::check($clavePlana, $almacenada);
+        }
+
+        return hash_equals($almacenada, $clavePlana);
     }
 
     private function resolverClaveDestino(?string $claveAnita, ?MozoGastronomia $existente): ?string

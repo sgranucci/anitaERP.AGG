@@ -14,6 +14,49 @@ class ClienteVipGastronomiaAnitaSyncService
     /**
      * @return array{en_anita:int, importados:int, actualizados:int, omitidos:int, errores:list<string>}
      */
+    public function sincronizarEmpresaDesdeAnita(int $empresaId): array
+    {
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        if ($empresaId <= 0 || ! Empresa::query()->whereKey($empresaId)->exists()) {
+            throw new \InvalidArgumentException("empresa_id {$empresaId} inexistente.");
+        }
+
+        $ret = ['en_anita' => 0, 'importados' => 0, 'actualizados' => 0, 'omitidos' => 0, 'errores' => []];
+        $lista = ClivipgAnitaBridgeSupport::listar($empresaId);
+        $ret['en_anita'] = count($lista);
+
+        foreach ($lista as $row) {
+            $numeroid = ClivipgFieldMapper::mapNumeroid($row);
+            if ($numeroid === null) {
+                $ret['omitidos']++;
+
+                continue;
+            }
+
+            try {
+                $estado = $this->importarFila($row, $empresaId, $numeroid);
+                if ($estado === 'importado') {
+                    $ret['importados']++;
+                } elseif ($estado === 'actualizado') {
+                    $ret['actualizados']++;
+                } else {
+                    $ret['omitidos']++;
+                }
+            } catch (\Throwable $e) {
+                $msg = "Cliente VIP Anita empresa {$empresaId} numeroid={$numeroid}: ".$e->getMessage();
+                $ret['errores'][] = $msg;
+                Log::warning('ClienteVipGastronomiaAnitaSync: '.$msg, ['exception' => $e]);
+            }
+        }
+
+        return $ret;
+    }
+
+    /**
+     * @return array{en_anita:int, importados:int, actualizados:int, omitidos:int, errores:list<string>}
+     */
     public function sincronizarConAnita(): array
     {
         ini_set('memory_limit', '-1');

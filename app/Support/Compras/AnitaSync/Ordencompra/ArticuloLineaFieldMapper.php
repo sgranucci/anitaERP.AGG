@@ -17,6 +17,20 @@ final class ArticuloLineaFieldMapper
         return $ctx->fkArticuloSku($linea->penvp_articulo ?? null);
     }
 
+    public static function mapPenvpNroInterno(object $linea): ?int
+    {
+        $nro = (int) ($linea->penvp_nro_interno ?? 0);
+
+        return $nro > 0 ? $nro : null;
+    }
+
+    public static function mapPenvpOrden(object $linea): ?int
+    {
+        $orden = (int) ($linea->penvp_orden ?? 0);
+
+        return $orden > 0 ? $orden : null;
+    }
+
     public static function mapCantidad(object $linea): float
     {
         return (float) ($linea->penvp_cantidad ?? 0);
@@ -104,6 +118,8 @@ final class ArticuloLineaFieldMapper
     ): array {
         return [
             'ordencompra_id' => $ordencompraId,
+            'penvp_orden' => self::mapPenvpOrden($linea),
+            'penvp_nro_interno' => self::mapPenvpNroInterno($linea),
             'fechaentrega' => self::mapFechaentrega($linea, $ctx),
             'articulo_id' => self::mapArticuloId($linea, $ctx),
             'cantidad' => self::mapCantidad($linea),

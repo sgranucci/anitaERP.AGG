@@ -45,14 +45,27 @@ class RecepcionProveedorConversionSupport
     /**
      * Importe neto de línea sin IVA (recepción no lleva impuestos en inscriptos).
      */
-    public static function importeLinea(float $cantidad, float $precio, float $descuento = 0): float
+    public static function importeLinea(float $cantidad, float $precio, float $descuento = 0, float $descuentoCabeceraOc = 0): float
     {
         $base = $cantidad * $precio;
         if ($descuento > 0) {
             $base -= $base * ($descuento / 100);
         }
+        if ($descuentoCabeceraOc > 0) {
+            $base *= self::factorDescuentoCabeceraOc($descuentoCabeceraOc);
+        }
 
         return round($base, 2);
+    }
+
+    /** Coeficiente legacy in_dto_final / penmp_dto sobre el neto de línea. */
+    public static function factorDescuentoCabeceraOc(float $descuentoCabeceraOc): float
+    {
+        if ($descuentoCabeceraOc <= 0) {
+            return 1.0;
+        }
+
+        return 1.0 - ($descuentoCabeceraOc / 100.0);
     }
 
     public static function convertirMoneda(float $monto, float $cotizacionOrigen, float $cotizacionDestino): float

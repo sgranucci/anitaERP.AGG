@@ -41,16 +41,34 @@
                     </div>
                 </form>
 
+                @if ($empresa_id <= 0 && $empresa_query->count() > 1 && ($puede_ejecutar_cierre || $puede_borrar_ultimo_cierre))
+                    <div class="alert alert-info">
+                        Seleccione una empresa y pulse <strong>Consultar</strong> para registrar un cierre
+                        o borrar el último. También puede usar la columna <strong>Acciones</strong> del listado.
+                    </div>
+                @endif
+
                 @if ($empresa_id > 0)
-                    <div class="alert alert-secondary">
-                        <strong>Cierre vigente:</strong>
-                        @if ($resumen_vigente)
-                            hasta {{ \Carbon\Carbon::parse($resumen_vigente['fecha_hasta'])->format('d/m/Y') }}
-                            @if (!empty($resumen_vigente['observacion']))
-                                — {{ $resumen_vigente['observacion'] }}
+                    <div class="alert alert-secondary d-flex flex-wrap justify-content-between align-items-center">
+                        <div class="mb-1">
+                            <strong>Cierre vigente:</strong>
+                            @if ($resumen_vigente)
+                                hasta {{ \Carbon\Carbon::parse($resumen_vigente['fecha_hasta'])->format('d/m/Y') }}
+                                @if (!empty($resumen_vigente['observacion']))
+                                    — {{ $resumen_vigente['observacion'] }}
+                                @endif
+                            @else
+                                sin cierre registrado para esta empresa.
                             @endif
-                        @else
-                            sin cierre registrado para esta empresa.
+                        </div>
+                        @if ($puede_borrar_ultimo_cierre && $ultimo_cierre)
+                            <div class="mb-1">
+                                @include('contable.cierre_periodo.partials.boton_borrar_ultimo', [
+                                    'empresa_id' => $empresa_id,
+                                    'fecha_hasta' => $ultimo_cierre->fecha_hasta,
+                                    'btn_class' => 'btn-sm',
+                                ])
+                            </div>
                         @endif
                     </div>
 
@@ -102,6 +120,9 @@
                                 <th>Observación</th>
                                 <th>Usuario</th>
                                 <th>Registrado</th>
+                                @if ($puede_borrar_ultimo_cierre)
+                                    <th>Acciones</th>
+                                @endif
                             </tr>
                         </thead>
                         <tbody>
@@ -113,10 +134,21 @@
                                     <td>{{ $cierre->observacion }}</td>
                                     <td>{{ $cierre->usuario?->nombre }}</td>
                                     <td>{{ optional($cierre->created_at)->format('d/m/Y H:i') }}</td>
+                                    @if ($puede_borrar_ultimo_cierre)
+                                        <td class="text-nowrap">
+                                            @if (($ultimos_cierre_ids[$cierre->empresa_id] ?? null) === $cierre->id)
+                                                @include('contable.cierre_periodo.partials.boton_borrar_ultimo', [
+                                                    'empresa_id' => $cierre->empresa_id,
+                                                    'fecha_hasta' => $cierre->fecha_hasta,
+                                                    'btn_class' => 'btn-sm',
+                                                ])
+                                            @endif
+                                        </td>
+                                    @endif
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="6" class="text-center text-muted">Sin registros de cierre.</td>
+                                    <td colspan="{{ $puede_borrar_ultimo_cierre ? 7 : 6 }}" class="text-center text-muted">Sin registros de cierre.</td>
                                 </tr>
                             @endforelse
                         </tbody>

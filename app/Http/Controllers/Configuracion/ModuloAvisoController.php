@@ -149,6 +149,14 @@ class ModuloAvisoController extends Controller
             ]);
         }
 
+        if ($modulo === 'stock' && str_starts_with($codigo, 'recepcion_proveedor_')) {
+            return array_merge($comunes, [
+                '{numero_recepcion}', '{numero_oc}', '{proveedor}', '{fecha}', '{estado}', '{com_anita}',
+                '{comentario_precio}', '{resumen_diferencias}', '{resumen_rechazos}',
+                '{usuario_recepcion}', '{detalle_lineas}',
+            ]);
+        }
+
         return array_merge($comunes, ['{numero}', '{solicitante}', '{empresa}', '{centro_costo}', '{fecha}']);
     }
 }

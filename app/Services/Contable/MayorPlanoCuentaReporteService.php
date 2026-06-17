@@ -7,6 +7,7 @@ use App\Support\Contable\MayorConcepto\MayorConceptoMonedaConverter;
 use App\Support\Contable\MayorConceptoListadoFiltros;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaOrdencompraEnricher;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaProcesador;
+use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaProveedorEnricher;
 use App\Support\Contable\MayorPlanoCuentaListadoFiltros;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -21,6 +22,7 @@ class MayorPlanoCuentaReporteService
         private readonly MayorConceptoMonedaConverter $monedaConverter,
         private readonly EmpresaRepositoryInterface $empresaRepository,
         private readonly MayorPlanoCuentaOrdencompraEnricher $ordencompraEnricher,
+        private readonly MayorPlanoCuentaProveedorEnricher $proveedorEnricher,
     ) {
     }
 
@@ -65,7 +67,10 @@ class MayorPlanoCuentaReporteService
             ];
         }
 
-        return $resumen;
+        return $this->enriquecerResumenCuentas(
+            $resumen,
+            $resultado['parametros']['empresa_ids'] ?? [],
+        );
     }
 
     /**
@@ -122,6 +127,7 @@ class MayorPlanoCuentaReporteService
 
         $filas = $this->enriquecerEnlaces($filas, $empresaIds);
         $filas = $this->ordencompraEnricher->enriquecer($filas);
+        $filas = $this->proveedorEnricher->enriquecer($filas);
 
         if ($filtros !== []) {
             $filas = MayorPlanoCuentaListadoFiltros::aplicarFiltroTexto(
@@ -263,6 +269,52 @@ class MayorPlanoCuentaReporteService
         }
 
         return $filas;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $resumen
+     * @param  list<int>  $empresaIds
+     * @return list<array<string, mixed>>
+     */
+    private function enriquecerResumenCuentas(array $resumen, array $empresaIds): array
+    {
+        if ($resumen === []) {
+            return $resumen;
+        }
+
+        $codigosCuenta = array_values(array_unique(array_filter(array_map(
+            fn (array $row) => (int) ($row['cuenta'] ?? 0),
+            $resumen,
+        ), fn (int $c) => $c > 0)));
+
+        $cuentasPorEmpresaCodigo = [];
+        foreach ($empresaIds as $empresaId) {
+            $empresaId = (int) $empresaId;
+            if ($empresaId <= 0 || $codigosCuenta === []) {
+                continue;
+            }
+
+            $mapa = DB::table('cuentacontable')
+                ->where('empresa_id', $empresaId)
+                ->whereIn('codigo', $codigosCuenta)
+                ->pluck('id', 'codigo')
+                ->all();
+
+            foreach ($mapa as $codigo => $id) {
+                $cuentasPorEmpresaCodigo[(int) $empresaId.'|'.(int) $codigo] = (int) $id;
+            }
+        }
+
+        $empresaRefId = (int) ($empresaIds[0] ?? 0);
+
+        foreach ($resumen as $idx => $row) {
+            $codigo = (int) ($row['cuenta'] ?? 0);
+            $resumen[$idx]['cuentacontable_id'] = ($empresaRefId > 0 && $codigo > 0)
+                ? (int) ($cuentasPorEmpresaCodigo[$empresaRefId.'|'.$codigo] ?? 0)
+                : 0;
+        }
+
+        return $resumen;
     }
 
     /**

@@ -105,6 +105,7 @@ class RecepcionProveedorOcrMatcher
     {
         $skuOc = RecepcionProveedorOcrNumeroSupport::normalizarSku((string) ($lineaOc['sku'] ?? ''));
         $skuAlt = RecepcionProveedorOcrNumeroSupport::normalizarSku((string) ($lineaOc['skualternativo'] ?? ''));
+        $codigoProvOc = $this->normalizarCodigoProveedor((string) ($lineaOc['codigo_proveedor'] ?? ''));
         $descOc = mb_strtoupper(trim((string) ($lineaOc['descripcion'] ?? '')));
 
         $mejorIdx = null;
@@ -113,8 +114,17 @@ class RecepcionProveedorOcrMatcher
         foreach ($ocrPendientes as $idx => $ocr) {
             $puntaje = 0;
             $codigo = RecepcionProveedorOcrNumeroSupport::normalizarSku($ocr['codigo'] ?? '');
+            $codigoOcrNorm = $this->normalizarCodigoProveedor((string) ($ocr['codigo'] ?? ''));
 
-            if ($codigo !== '' && ($codigo === $skuOc || $codigo === $skuAlt)) {
+            if ($codigoProvOc !== '' && $codigoOcrNorm !== '') {
+                if ($codigoProvOc === $codigoOcrNorm) {
+                    $puntaje = 100;
+                } elseif (str_contains($codigoProvOc, $codigoOcrNorm) || str_contains($codigoOcrNorm, $codigoProvOc)) {
+                    $puntaje = 95;
+                } elseif ($puntaje < 55) {
+                    continue;
+                }
+            } elseif ($codigo !== '' && ($codigo === $skuOc || $codigo === $skuAlt)) {
                 $puntaje = 100;
             } elseif ($codigo !== '' && $skuOc !== '' && (str_contains($codigo, $skuOc) || str_contains($skuOc, $codigo))) {
                 $puntaje = 85;
@@ -124,6 +134,8 @@ class RecepcionProveedorOcrMatcher
                 $puntaje = 55;
             }
 
+            $puntaje += $this->bonusCalidadLineaOcr($ocr);
+
             if ($puntaje > $mejorPuntaje) {
                 $mejorPuntaje = $puntaje;
                 $mejorIdx = $idx;
@@ -131,6 +143,60 @@ class RecepcionProveedorOcrMatcher
         }
 
         return $mejorPuntaje >= 55 ? $mejorIdx : null;
+    }
+
+    private function normalizarCodigoProveedor(string $codigo): string
+    {
+        $codigo = mb_strtoupper(trim($codigo));
+        $codigo = preg_replace('/[oO]/u', '0', $codigo) ?? $codigo;
+
+        return preg_replace('/[^0-9.]/', '', $codigo) ?? $codigo;
+    }
+
+    /**
+     * @param  array<string, mixed>  $ocr
+     */
+    private function bonusCalidadLineaOcr(array $ocr): int
+    {
+        $bonus = 0;
+
+        if (! empty($ocr['unidad_compra'])) {
+            $bonus += 20;
+        }
+
+        $codigo = trim((string) ($ocr['codigo'] ?? ''));
+        if ($codigo !== '' && preg_match('/^\d+(?:\.\d+)+$/u', $codigo)) {
+            $bonus += 15;
+        }
+
+        if (! empty($ocr['codigobarra']) && self::completarEanHabilitado()) {
+            $bonus += 10;
+        }
+
+        foreach ($ocr['cantidades_candidatas'] ?? [] as $candidato) {
+            if (($candidato['tipo'] ?? '') === 'cantidad_columna') {
+                $bonus += 10;
+                break;
+            }
+        }
+
+        return $bonus;
+    }
+
+    private function completarEanHabilitado(): bool
+    {
+        static $habilitado = null;
+        if ($habilitado !== null) {
+            return $habilitado;
+        }
+
+        try {
+            $habilitado = filter_var(config('recepcion_proveedor.ocr.completar_ean', false), FILTER_VALIDATE_BOOLEAN);
+        } catch (\Throwable) {
+            $habilitado = false;
+        }
+
+        return $habilitado;
     }
 
     private function descripcionCoincide(string $descOc, string $descOcr): bool

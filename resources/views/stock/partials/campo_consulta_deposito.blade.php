@@ -33,7 +33,7 @@
 
 @if ($layout === 'form_row')
     <div class="form-group row tm-deposito-campo mb-2" id="tm_deposito_{{ $prefix }}">
-        <label for="{{ $inputId }}_codigo" class="{{ $colLabel }} control-label text-right pr-2 {{ $required ? 'requerido' : '' }}">{{ $label }}</label>
+        <label for="{{ $inputId }}_codigo" class="{{ $colLabel }} control-label text-right pr-2 {{ $required ? 'requerido' : '' }}">{{ $label }}@if(!empty($ayuda_tooltip)) <i class="fa fa-question-circle text-muted tooltipsC ml-1" title="{{ $ayuda_tooltip }}"></i>@endif</label>
         <div class="{{ $colInput }}">
             <div class="d-flex flex-nowrap align-items-center tm-deposito-campo-inputs w-100" style="gap: 4px;">
                 <input type="hidden" name="{{ $inputName }}" id="{{ $inputId }}" class="deposito_id"

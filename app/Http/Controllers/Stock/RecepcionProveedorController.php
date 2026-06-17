@@ -11,10 +11,12 @@ use App\Models\Stock\Recepcion_Proveedor;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Stock\Recepcion_ProveedorRepositoryInterface;
+use App\Services\Stock\RecepcionProveedorAsientoService;
 use App\Services\Stock\RecepcionProveedorOcrService;
 use App\Services\Stock\RecepcionProveedorOrdencompraResolverService;
 use App\Services\Stock\RecepcionProveedorPdfService;
 use App\Services\Stock\RecepcionProveedorService;
+use App\Support\Stock\RecepcionProveedorArticuloProveedorSyncSupport;
 use App\Support\Stock\RecepcionProveedorListadoFiltros;
 use App\Support\Stock\RecepcionProveedorOcPendienteSupport;
 use Illuminate\Http\JsonResponse;
@@ -28,6 +30,7 @@ class RecepcionProveedorController extends Controller
         private readonly RecepcionProveedorOrdencompraResolverService $ocResolver,
         private readonly RecepcionProveedorOcrService $ocrService,
         private readonly RecepcionProveedorPdfService $pdfService,
+        private readonly RecepcionProveedorAsientoService $asientoService,
         private readonly Recepcion_ProveedorRepositoryInterface $repository,
         private readonly EmpresaRepositoryInterface $empresaRepository,
     ) {}
@@ -62,7 +65,7 @@ class RecepcionProveedorController extends Controller
         try {
             $recepcion = $this->service->guardar($request->validated());
         } catch (\Throwable $e) {
-            return back()->withInput()->with('mensaje', 'Error: '.$e->getMessage());
+            return back()->withInput()->withErrors(['general' => $e->getMessage()]);
         }
 
         return redirect('stock/recepcion-proveedor/'.$recepcion->id.'/editar')
@@ -82,8 +85,11 @@ class RecepcionProveedorController extends Controller
         }
         $empresa_query = $this->empresaRepository->allFiltrado();
         $moneda_query = Moneda::query()->orderBy('nombre')->get();
+        $asientoPreview = $this->asientoService->previewParaVista($recepcion);
 
-        return view('stock.recepcion_proveedor.editar', compact('recepcion', 'empresa_query', 'moneda_query'));
+        return view('stock.recepcion_proveedor.editar', compact(
+            'recepcion', 'empresa_query', 'moneda_query', 'asientoPreview'
+        ));
     }
 
     public function actualizar(ValidacionRecepcionProveedor $request, int $id)
@@ -91,9 +97,9 @@ class RecepcionProveedorController extends Controller
         can('actualizar-recepcion-proveedor');
 
         try {
-            $this->service->actualizar($id, $request->validated());
+            $this->service->actualizar($id, $request->validated(), $request);
         } catch (\Throwable $e) {
-            return back()->withInput()->with('mensaje', 'Error: '.$e->getMessage());
+            return back()->withInput()->withErrors(['general' => $e->getMessage()]);
         }
 
         return redirect('stock/recepcion-proveedor/'.$id.'/editar')
@@ -112,6 +118,37 @@ class RecepcionProveedorController extends Controller
 
         return redirect('stock/recepcion-proveedor/'.$id.'/editar')
             ->with('mensaje', 'Recepción confirmada. Stock y contabilidad generados.');
+    }
+
+    public function apiPreviewArticuloProveedor(Request $request): JsonResponse
+    {
+        if (! config('recepcion_proveedor.modal_articulo_proveedor_habilitado')) {
+            return response()->json(['requiere_modal' => false, 'lineas' => []]);
+        }
+
+        if (! can('crear-recepcion-proveedor', false) && ! can('actualizar-recepcion-proveedor', false)) {
+            can('crear-recepcion-proveedor');
+        }
+
+        $request->validate([
+            'proveedor_id' => 'required|integer|min:1',
+            'fecha' => 'nullable|date',
+            'items' => 'required|array|min:1',
+        ]);
+
+        try {
+            $preview = RecepcionProveedorArticuloProveedorSyncSupport::previewDesdeItems(
+                (int) $request->input('proveedor_id'),
+                $request->input('items', []),
+                (string) ($request->input('fecha') ?: date('Y-m-d'))
+            );
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
+
+        return response()->json(array_merge($preview, [
+            'unidades' => RecepcionProveedorArticuloProveedorSyncSupport::unidadesMedidaParaModal(),
+        ]));
     }
 
     public function apiPrecargaOc(Request $request): JsonResponse
@@ -167,6 +204,32 @@ class RecepcionProveedorController extends Controller
         can('ocr-recepcion-proveedor');
 
         return $this->responderOcr($request, fn (UploadedFile $archivo) => $this->ocrService->procesarArchivo($id, $archivo));
+    }
+
+    public function descargarArchivo(Request $request, int $id, int $archivo)
+    {
+        if (! can('listar-recepcion-proveedor', false) && ! can('editar-recepcion-proveedor', false)) {
+            can('listar-recepcion-proveedor');
+        }
+
+        $recepcion = $this->repository->find($id);
+        $registro = $recepcion->recepcion_proveedor_archivos->firstWhere('id', $archivo);
+        if ($registro === null) {
+            abort(404);
+        }
+
+        $ruta = $this->ocrService->rutaAbsoluta($registro);
+        if (! is_file($ruta)) {
+            abort(404, 'Archivo no encontrado en el servidor.');
+        }
+
+        if ($request->query('inline') === '1') {
+            return response()->file($ruta, [
+                'Content-Disposition' => 'inline; filename="'.addslashes($registro->nombre).'"',
+            ]);
+        }
+
+        return response()->download($ruta, $registro->nombre);
     }
 
     public function procesarOcrPreview(Request $request): JsonResponse
@@ -257,11 +320,11 @@ class RecepcionProveedorController extends Controller
         return redirect()->route('recepcion_proveedor', RecepcionProveedorListadoFiltros::paraQueryString($filtros));
     }
 
-    public function imprimirCom(int $id)
+    public function imprimirCom(Request $request, int $id)
     {
         can('listar-recepcion-proveedor');
 
-        return $this->pdfService->descargarCom($id);
+        return $this->pdfService->descargarCom($id, $request->boolean('inline'));
     }
 
     public function crearDevolucion(int $id)

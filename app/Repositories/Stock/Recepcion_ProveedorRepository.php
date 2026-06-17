@@ -3,9 +3,12 @@
 namespace App\Repositories\Stock;
 
 use App\Models\Stock\Recepcion_Proveedor;
+use App\Support\Stock\RecepcionProveedorAnitaColisionSupport;
+use App\Support\Stock\RecepcionProveedorAnitaNumeracionSupport;
 use App\Support\Stock\RecepcionProveedorListadoFiltros;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class Recepcion_ProveedorRepository implements Recepcion_ProveedorRepositoryInterface
 {
@@ -93,10 +96,75 @@ class Recepcion_ProveedorRepository implements Recepcion_ProveedorRepositoryInte
             throw new \InvalidArgumentException('empresa_id requerido para numerorecepcion.');
         }
 
-        $max = (int) DB::table('recepcion_proveedor')
+        $empresaCodigo = (int) (DB::table('empresa')->where('id', $empresaId)->value('codigo') ?: $empresaId);
+        $ultimoErp = (int) DB::table('recepcion_proveedor')
             ->where('empresa_id', $empresaId)
             ->max('numerorecepcion');
 
-        return $max + 1;
+        $ultimoAnita = 0;
+        try {
+            $ultimoAnita = RecepcionProveedorAnitaColisionSupport::maxNumeroRecepmaeSucursal($empresaCodigo);
+        } catch (\Throwable $e) {
+            Log::warning('RecepcionProveedor: no se pudo leer máximo COM en Anita', [
+                'empresa_id' => $empresaId,
+                'sucursal' => $empresaCodigo,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        $baseErp = max($ultimoErp, $ultimoAnita);
+
+        try {
+            $numero = RecepcionProveedorAnitaNumeracionSupport::reservarSiguienteNumero(
+                $baseErp > 0 ? $baseErp : null
+            );
+        } catch (\Throwable $e) {
+            Log::warning('RecepcionProveedor: numeración Anita COM no disponible, se usa secuencial ERP', [
+                'empresa_id' => $empresaId,
+                'ultimo_erp' => $ultimoErp,
+                'ultimo_anita' => $ultimoAnita,
+                'error' => $e->getMessage(),
+            ]);
+
+            $numero = $baseErp + 1;
+        }
+
+        return $this->asegurarNumeroLibreEnAnita($empresaCodigo, $numero);
+    }
+
+    private function asegurarNumeroLibreEnAnita(int $sucursal, int $numero): int
+    {
+        $cfg = config('recepcion_proveedor.anita');
+        $clave = [
+            'tipo' => (string) $cfg['recepcion_tipo'],
+            'letra' => (string) $cfg['recepcion_letra'],
+            'sucursal' => $sucursal,
+            'nro' => $numero,
+        ];
+
+        $intentos = 0;
+        while (RecepcionProveedorAnitaColisionSupport::numeroOcupadoEnAnita($clave) && $intentos < 25) {
+            $numero++;
+            $clave['nro'] = $numero;
+            $intentos++;
+
+            try {
+                $claveNumerador = RecepcionProveedorAnitaNumeracionSupport::resolverClaveNumeradorDesdeTComp();
+                RecepcionProveedorAnitaNumeracionSupport::actualizarNumerador($claveNumerador, $numero);
+            } catch (\Throwable $e) {
+                Log::warning('RecepcionProveedor: no se pudo actualizar numerador Anita al evitar colisión', [
+                    'numero' => $numero,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        if (RecepcionProveedorAnitaColisionSupport::numeroOcupadoEnAnita($clave)) {
+            throw new \RuntimeException(
+                'No se pudo asignar un número de recepción COM libre en Anita (último intento: '.$numero.').'
+            );
+        }
+
+        return $numero;
     }
 }

@@ -46,7 +46,7 @@ window.consultaFormulaArticuloConfig = {
                     @else
                         Editar
                     @endif
-                    Art&iacute;culo Id: {{$producto->id}}
+                    Art&iacute;culo Id: {{ $producto->id }}&nbsp;{{ $producto->descripcion ?? '' }}
                 </h3>
                 <div class="card-tools">
                     @if (can('listar-precios', false) || can('listar-articulos', false))

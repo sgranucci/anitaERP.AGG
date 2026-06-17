@@ -18,7 +18,11 @@ final class GastronomiaCierreTotemInformeZService
     {
         $cierre = $this->cierrePorJornada($jornadaId);
         $detalle = is_array($cierre->detalle_json) ? $cierre->detalle_json : [];
-        $resumen = WaitryInformeZConciliacionSupport::resumenSistemaDesdeDetalleCierre($detalle);
+        $resumen = WaitryInformeZConciliacionSupport::resumenSistemaDesdeDetalleCierre(
+            $detalle,
+            (int) $cierre->empresa_id,
+            $jornadaId,
+        );
 
         $plantilla = WaitryInformeZConciliacionSupport::plantillaCarga(
             (int) $cierre->empresa_id,
@@ -106,7 +110,11 @@ final class GastronomiaCierreTotemInformeZService
     {
         $cierre = $this->cierrePorJornada($jornadaId);
         $detalle = is_array($cierre->detalle_json) ? $cierre->detalle_json : [];
-        $resumen = WaitryInformeZConciliacionSupport::resumenSistemaDesdeDetalleCierre($detalle);
+        $resumen = WaitryInformeZConciliacionSupport::resumenSistemaDesdeDetalleCierre(
+            $detalle,
+            (int) $cierre->empresa_id,
+            $jornadaId,
+        );
 
         $plantilla = WaitryInformeZConciliacionSupport::plantillaCarga(
             (int) $cierre->empresa_id,
@@ -462,7 +470,7 @@ final class GastronomiaCierreTotemInformeZService
 
         $detalle = is_array($cierre->detalle_json) ? $cierre->detalle_json : [];
         $empresaId = (int) $cierre->empresa_id;
-        $resumen = WaitryInformeZConciliacionSupport::resumenSistemaDesdeDetalleCierre($detalle, $empresaId);
+        $resumen = WaitryInformeZConciliacionSupport::resumenSistemaDesdeDetalleCierre($detalle, $empresaId, $jornadaId);
 
         $zAnterior = $this->totalMontosInformeZEnJson($previo);
         $bloquesConcAnterior = count($previo['conciliacion']['totems'] ?? []);

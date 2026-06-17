@@ -12,6 +12,7 @@
     $puedeVerAsiento = $puede_ver_asiento ?? false;
     $puedeVerCuenta = $puede_ver_cuenta ?? false;
     $puedeVerOc = $puede_ver_ordencompra ?? false;
+    $puedeVerProveedor = $puede_ver_proveedor ?? false;
     $mostrarEmpresa = $multiempresa ?? false;
     $colSpanBase = $mostrarEmpresa ? 12 : 11;
 @endphp
@@ -70,7 +71,15 @@
         @elseif ($tipoFila === 'total_cuenta')
             <tr class="font-weight-bold" style="background-color: #e9ecef; border-top: 1px solid #adb5bd;">
                 <td colspan="{{ $colSpanBase }}" class="text-right">
-                    Total cuenta {{ $fila['cuenta_codigo'] ?? '' }}
+                    Total cuenta
+                    @if ($puedeVerCuenta && (int) ($fila['cuentacontable_id'] ?? 0) > 0)
+                        <a href="{{ route('editar_cuentacontable', ['id' => $fila['cuentacontable_id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
+                           target="_blank" rel="noopener" class="text-primary">
+                            {{ $fila['cuenta_codigo'] ?? '' }}
+                        </a>
+                    @else
+                        {{ $fila['cuenta_codigo'] ?? '' }}
+                    @endif
                     @if (! empty($fila['cuenta_nombre']))
                         — {{ $fila['cuenta_nombre'] }}
                     @endif
@@ -98,7 +107,16 @@
                 </td>
                 <td>{{ $fila['tipo_comp'] ?? '' }}</td>
                 <td>{{ $fila['comprobante'] ?? '' }}</td>
-                <td>{{ $fila['emisor'] ?? '' }}</td>
+                <td>
+                    @if ($puedeVerProveedor && (int) ($fila['proveedor_id'] ?? 0) > 0)
+                        <a href="{{ route('editar_proveedor', ['id' => $fila['proveedor_id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
+                           target="_blank" rel="noopener" class="text-primary">
+                            {{ $fila['emisor'] ?? '' }}
+                        </a>
+                    @else
+                        {{ $fila['emisor'] ?? '' }}
+                    @endif
+                </td>
                 <td>{{ $fila['cuit'] ?? '' }}</td>
                 <td>{{ $fila['descripcion'] ?? '' }}</td>
                 <td>

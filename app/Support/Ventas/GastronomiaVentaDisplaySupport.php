@@ -139,9 +139,6 @@ final class GastronomiaVentaDisplaySupport
     {
         $emision = self::emisionWaitryDesdeVenta($venta);
         $cuenta = $emision?->cuenta;
-        if ($cuenta instanceof CuentaGastronomia && $cuenta->esCanjeMarketing()) {
-            return null;
-        }
 
         $displayId = trim((string) ($cuenta?->waitry_display_id ?? ''));
 

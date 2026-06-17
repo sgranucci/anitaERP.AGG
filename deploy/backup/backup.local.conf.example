@@ -6,6 +6,7 @@
 # REMOTE_USER="sergio"
 # REMOTE_DIR="/var/www/html/anitaERP/backups"
 # REMOTE_SSH_KEY="/home/sergio/.ssh/id_rsa"
+# REMOTE_SYNC_BINLOG_FILES=0
 # MIN_BACKUP_BYTES=50000000
 # LOG_FILE="/var/www/html/anitaERP/storage/logs/backup-db.log"
 #

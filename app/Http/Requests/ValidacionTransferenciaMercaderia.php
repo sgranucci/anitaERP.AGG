@@ -24,6 +24,8 @@ class ValidacionTransferenciaMercaderia extends FormRequest
             'lineas' => 'required|array|min:1',
             'lineas.*.articulo_id' => 'required|integer|exists:articulo,id',
             'lineas.*.cantidad' => 'required|numeric|gt:0',
+            'usuario_destino_id' => 'nullable|integer|exists:usuario,id',
+            'observacion' => 'nullable|string|max:2000',
         ];
     }
 

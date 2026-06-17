@@ -4,7 +4,10 @@ Devolución — {{ $recepcion->numerorecepcion }}
 @endsection
 
 @section("scripts")
-<script src="{{ asset('assets/pages/scripts/stock/recepcion_proveedor/form.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/recepcion_proveedor/form.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/recepcion_proveedor/form.js')) ?: time() }}" type="text/javascript"></script>
+@if (config('recepcion_proveedor.modal_articulo_proveedor_habilitado'))
+<script src="{{ asset('assets/pages/scripts/stock/recepcion_proveedor/modal_articulo_proveedor.js') }}" type="text/javascript"></script>
+@endif
 @endsection
 
 @section('contenido')
@@ -33,7 +36,7 @@ Devolución — {{ $recepcion->numerorecepcion }}
                     @include('stock.recepcion_proveedor.form', ['modoEdicion' => true, 'recepcion' => $recepcion, 'modoDevolucion' => true])
                 </div>
                 <div class="card-footer">
-                    <button type="submit" class="btn btn-warning" onclick="return confirm('¿Confirmar devolución? Generará salida de stock.');">
+                    <button type="submit" class="btn btn-warning">
                         <i class="fa fa-undo"></i> Registrar devolución
                     </button>
                 </div>

@@ -15,12 +15,14 @@ class Deposito_Administrador extends Model
         'principal',
         'recibe_avisos',
         'aprueba_recepcion',
+        'aprueba_transferencia',
     ];
 
     protected $casts = [
         'principal' => 'boolean',
         'recibe_avisos' => 'boolean',
         'aprueba_recepcion' => 'boolean',
+        'aprueba_transferencia' => 'boolean',
     ];
 
     public function depositos()

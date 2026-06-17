@@ -32,6 +32,8 @@
                             <th>Abreviatura</th>
                             <th>Signo</th>
                             <th>Estado</th>
+                            <th>Aprobaci&oacute;n</th>
+                            <th>Contab.</th>
                             <th class="width80" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -44,6 +46,8 @@
                             <td>{{$data->abreviatura}}</td>
                             <td>{{$signoEnum[$data->signo] ?? $data->signo}}</td>
                             <td>{{$estadoEnum[$data->estado] ?? $data->estado}}</td>
+                            <td>{{ $data->requiere_aprobacion ? 'Sí' : 'No' }}</td>
+                            <td>{{ $data->maneja_contabilidad ? 'Sí' : 'No' }}</td>
                             <td>
                        			@if (can('editar-tipos-transaccion-stock', false))
                                 	<a href="{{route('editar_tipotransaccion_stock', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">

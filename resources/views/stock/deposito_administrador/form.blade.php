@@ -43,7 +43,12 @@
         <div class="form-check">
             <input type="checkbox" class="form-check-input" name="aprueba_recepcion" id="aprueba_recepcion" value="1"
                 @if (old('aprueba_recepcion', $data->aprueba_recepcion ?? true)) checked @endif>
-            <label class="form-check-label" for="aprueba_recepcion">Puede aprobar recepción de préstamos</label>
+            <label class="form-check-label" for="aprueba_recepcion">Puede aprobar recepci&oacute;n de pr&eacute;stamos</label>
+        </div>
+        <div class="form-check">
+            <input type="checkbox" class="form-check-input" name="aprueba_transferencia" id="aprueba_transferencia" value="1"
+                @if (old('aprueba_transferencia', $data->aprueba_transferencia ?? true)) checked @endif>
+            <label class="form-check-label" for="aprueba_transferencia">Puede aprobar transferencias de mercader&iacute;a</label>
         </div>
     </div>
 </div>

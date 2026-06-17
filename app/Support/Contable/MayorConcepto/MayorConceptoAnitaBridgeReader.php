@@ -42,7 +42,7 @@ class MayorConceptoAnitaBridgeReader
         $ctamov = $this->listar(
             'contab',
             'ctamov',
-            'ctav_empresa,ctav_nro_asiento,ctav_nro_linea,ctav_d_h,ctav_cuenta,ctav_fecha,ctav_tipo,ctav_letra,ctav_sucursal,ctav_nro,ctav_importe,ctav_desc_mov,ctav_cotizacion,ctav_cod_mon,ctav_sistema,ctav_tipo_asiento,ctav_ccosto',
+            'ctav_empresa,ctav_nro_asiento,ctav_nro_linea,ctav_d_h,ctav_cuenta,ctav_fecha,ctav_tipo,ctav_letra,ctav_sucursal,ctav_nro,ctav_importe,ctav_desc_mov,ctav_cotizacion,ctav_cod_mon,ctav_sistema,ctav_tipo_asiento,ctav_ccosto,ctav_o_compra',
             ' WHERE ctav_empresa='.$empresaId
             .' AND ctav_fecha>='.$fechaDesde
             .' AND ctav_fecha<='.$fechaHasta,

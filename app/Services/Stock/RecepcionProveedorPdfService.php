@@ -42,13 +42,14 @@ class RecepcionProveedorPdfService
         return ['bytes' => $pdf->output(), 'filename' => $filename];
     }
 
-    public function descargarCom(int $recepcionId)
+    public function descargarCom(int $recepcionId, bool $inline = false)
     {
         $doc = $this->generarComPdf($recepcionId);
+        $disposition = $inline ? 'inline' : 'attachment';
 
         return response($doc['bytes'], 200, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'attachment; filename="'.$doc['filename'].'"',
+            'Content-Disposition' => $disposition.'; filename="'.$doc['filename'].'"',
         ]);
     }
 }

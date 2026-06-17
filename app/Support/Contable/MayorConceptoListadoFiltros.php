@@ -94,7 +94,10 @@ class MayorConceptoListadoFiltros
 
     public static function firma(array $filtros): string
     {
-        return md5(json_encode(self::paraQueryString($filtros)));
+        $filtrosConsulta = $filtros;
+        unset($filtrosConsulta['agrupacion_resumen']);
+
+        return md5(json_encode(self::paraQueryString($filtrosConsulta)));
     }
 
     /**

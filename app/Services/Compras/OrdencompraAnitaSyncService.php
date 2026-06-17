@@ -4,6 +4,7 @@ namespace App\Services\Compras;
 
 use App\ApiAnita;
 use App\Models\Compras\Ordencompra;
+use App\Models\Compras\Ordencompra_Articulo;
 use App\Models\Compras\Ordencompra_Comprobante;
 use App\Models\Compras\Ordencompra_Comprobante_Cuota;
 use App\Models\Compras\Ordencompra_Historia;
@@ -541,5 +542,205 @@ class OrdencompraAnitaSyncService
         }
 
         return $importadas;
+    }
+
+    /**
+     * Alinea penvp_nro_interno y penvp_orden de cada línea ERP con pendmovp Anita (SKU + cantidad).
+     */
+    public function reconciliarLineasOcDesdeAnita(int $numeroOc): int
+    {
+        $oc = Ordencompra::query()->where('numeroordencompra', $numeroOc)->first();
+        if (! $oc || $oc->ordencompra_articulos()->count() === 0) {
+            return 0;
+        }
+
+        $cabecera = $this->leerPendmaep($numeroOc);
+        if ($cabecera === null) {
+            return 0;
+        }
+
+        $lineasAnita = $this->leerPendmovp(AnitaOcClave::desdePendmaep($cabecera));
+        if ($lineasAnita === []) {
+            return 0;
+        }
+
+        $oc->load('ordencompra_articulos.articulos');
+        $actualizadas = 0;
+        $usadosNroInterno = [];
+
+        foreach ($oc->ordencompra_articulos as $ocArt) {
+            $lineaAnita = $this->resolverLineaAnitaParaOcArticulo($ocArt, $lineasAnita, $usadosNroInterno);
+            if ($lineaAnita === null) {
+                continue;
+            }
+
+            $penvpOrden = (int) ($lineaAnita->penvp_orden ?? 0);
+            $nroInterno = (int) ($lineaAnita->penvp_nro_interno ?? 0);
+            if ($nroInterno > 0) {
+                $usadosNroInterno[$nroInterno] = true;
+            }
+            $cambios = [];
+
+            if ($penvpOrden > 0 && (int) ($ocArt->penvp_orden ?? 0) !== $penvpOrden) {
+                $cambios['penvp_orden'] = $penvpOrden;
+            }
+            if ($nroInterno > 0 && (int) ($ocArt->penvp_nro_interno ?? 0) !== $nroInterno) {
+                $cambios['penvp_nro_interno'] = $nroInterno;
+            }
+
+            if ($cambios !== []) {
+                $ocArt->update($cambios);
+                $actualizadas++;
+            }
+        }
+
+        return $actualizadas;
+    }
+
+    /** @deprecated Use reconciliarLineasOcDesdeAnita */
+    public function reconciliarPenvpOrdenOcDesdeAnita(int $numeroOc): int
+    {
+        return $this->reconciliarLineasOcDesdeAnita($numeroOc);
+    }
+
+    /**
+     * @param  list<object>  $lineasAnita
+     * @param  array<int, true>  $usadosNroInterno
+     */
+    private function resolverLineaAnitaParaOcArticulo(
+        Ordencompra_Articulo $ocArt,
+        array $lineasAnita,
+        array $usadosNroInterno = []
+    ): ?object {
+        $nroInterno = (int) ($ocArt->penvp_nro_interno ?? 0);
+        if ($nroInterno > 0) {
+            foreach ($lineasAnita as $lineaAnita) {
+                if ((int) ($lineaAnita->penvp_nro_interno ?? 0) === $nroInterno) {
+                    return $lineaAnita;
+                }
+            }
+        }
+
+        $sku = self::skuComparable(optional($ocArt->articulos)->sku);
+        if ($sku === '') {
+            return null;
+        }
+
+        $lineaAnita = null;
+        foreach ($lineasAnita as $candidata) {
+            $nroCandidato = (int) ($candidata->penvp_nro_interno ?? 0);
+            if ($nroCandidato > 0 && isset($usadosNroInterno[$nroCandidato])) {
+                continue;
+            }
+            if (self::skuComparable($candidata->penvp_articulo ?? null) !== $sku) {
+                continue;
+            }
+            if (abs((float) ($candidata->penvp_cantidad ?? 0) - (float) $ocArt->cantidad) < 0.0001) {
+                return $candidata;
+            }
+            if ($lineaAnita === null) {
+                $lineaAnita = $candidata;
+            }
+        }
+
+        return $lineaAnita;
+    }
+
+    private static function skuComparable(mixed $sku): string
+    {
+        return ltrim(trim((string) $sku), '0');
+    }
+
+    /**
+     * Completa penvp_orden en líneas ERP existentes leyendo pendmovp de Anita.
+     */
+    public function sincronizarPenvpOrdenDesdeAnita(int $numeroOc, ?OrdencompraAnitaSyncContext $ctx = null): int
+    {
+        $oc = Ordencompra::query()->where('numeroordencompra', $numeroOc)->first();
+        if (! $oc || $oc->ordencompra_articulos()->count() === 0) {
+            return 0;
+        }
+
+        $sinOrden = $oc->ordencompra_articulos()
+            ->where(function ($q) {
+                $q->whereNull('penvp_orden')->orWhere('penvp_orden', '<=', 0)
+                    ->orWhereNull('penvp_nro_interno')->orWhere('penvp_nro_interno', '<=', 0);
+            })
+            ->exists();
+
+        if (! $sinOrden) {
+            return 0;
+        }
+
+        $ctx ??= $this->nuevoContexto((int) (Auth::id() ?? 1));
+        $cabecera = $this->leerPendmaep($numeroOc);
+        if ($cabecera === null) {
+            return 0;
+        }
+
+        $clave = AnitaOcClave::desdePendmaep($cabecera);
+        $lineas = $this->leerPendmovp($clave);
+        if ($lineas === []) {
+            return 0;
+        }
+
+        $actualizadas = 0;
+        $oc->load('ordencompra_articulos.articulos');
+
+        foreach ($lineas as $lineaAnita) {
+            $penvpOrden = (int) ($lineaAnita->penvp_orden ?? 0);
+            $nroInterno = (int) ($lineaAnita->penvp_nro_interno ?? 0);
+            if ($penvpOrden <= 0 && $nroInterno <= 0) {
+                continue;
+            }
+
+            $articuloId = $ctx->fkArticuloSku($lineaAnita->penvp_articulo ?? null);
+            if (! $articuloId) {
+                continue;
+            }
+
+            $candidatos = $oc->ordencompra_articulos->filter(function ($ocArt) use ($articuloId, $penvpOrden, $nroInterno) {
+                if ((int) $ocArt->articulo_id !== (int) $articuloId) {
+                    return false;
+                }
+                if ($nroInterno > 0 && (int) ($ocArt->penvp_nro_interno ?? 0) === $nroInterno) {
+                    return false;
+                }
+                if ($penvpOrden > 0 && (int) ($ocArt->penvp_orden ?? 0) === $penvpOrden) {
+                    return false;
+                }
+
+                return (empty($ocArt->penvp_orden) || (int) $ocArt->penvp_orden <= 0)
+                    || (empty($ocArt->penvp_nro_interno) || (int) $ocArt->penvp_nro_interno <= 0);
+            });
+
+            if ($candidatos->isEmpty()) {
+                continue;
+            }
+
+            $cantidadAnita = (float) ($lineaAnita->penvp_cantidad ?? 0);
+            $ocArt = $candidatos->first(function ($ocArt) use ($cantidadAnita) {
+                return abs((float) $ocArt->cantidad - $cantidadAnita) < 0.0001;
+            }) ?? $candidatos->first();
+
+            if (! $ocArt) {
+                continue;
+            }
+
+            $cambios = [];
+            if ($penvpOrden > 0) {
+                $cambios['penvp_orden'] = $penvpOrden;
+            }
+            if ($nroInterno > 0) {
+                $cambios['penvp_nro_interno'] = $nroInterno;
+            }
+            $ocArt->update($cambios);
+            foreach ($cambios as $k => $v) {
+                $ocArt->{$k} = $v;
+            }
+            $actualizadas++;
+        }
+
+        return $actualizadas;
     }
 }

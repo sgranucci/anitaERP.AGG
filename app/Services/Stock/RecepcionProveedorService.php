@@ -3,6 +3,7 @@
 namespace App\Services\Stock;
 
 use App\Models\Compras\Ordencompra;
+use App\Models\Compras\Ordencompra_Articulo;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Articulo_Movimiento;
 use App\Models\Stock\Depmae;
@@ -15,13 +16,18 @@ use App\Repositories\Stock\Recepcion_ProveedorRepositoryInterface;
 use App\Support\Compras\ArticuloProveedorPrecioListaSupport;
 use App\Support\Stock\RecepcionProveedorDiferenciaSupport;
 use App\Support\Stock\RecepcionProveedorDepositoSupport;
+use App\Support\Stock\RecepcionProveedorAnitaColisionSupport;
+use App\Support\Stock\RecepcionProveedorAnitaOrdenLineaSupport;
+use App\Support\Stock\RecepcionProveedorArchivoSupport;
 use App\Support\Stock\RecepcionProveedorArticuloProveedorSyncSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Stock\RecepcionProveedorEstados;
+use App\Support\Stock\RecepcionProveedorLineaEstados;
+use App\Support\Stock\RecepcionProveedorParteUnicaSupport;
 use App\Services\Configuracion\ModuloAvisoService;
 use Auth;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 
 class RecepcionProveedorService
 {
@@ -83,8 +89,10 @@ class RecepcionProveedorService
                 'fl_articulo_extra' => $analisis['fl_articulo_extra'],
                 'fl_faltante_oc' => $analisis['fl_faltante_oc'],
                 'fl_laboratorio' => $analisis['fl_laboratorio'],
+                'fl_linea_rechazada' => $analisis['fl_linea_rechazada'],
                 'comentario_precio' => $this->extraerComentariosPrecio($items),
                 'resumen_diferencias' => $analisis['resumen_diferencias'] ?: null,
+                'resumen_rechazos' => $analisis['resumen_rechazos'] ?: null,
                 'observacion' => $data['observacion'] ?? null,
                 'origen_carga' => $data['origen_carga'] ?? 'MANUAL',
                 'creousuario_id' => Auth::id(),
@@ -100,7 +108,7 @@ class RecepcionProveedorService
     }
 
     /** @param array<string, mixed> $data */
-    public function actualizar(int $id, array $data): Recepcion_Proveedor
+    public function actualizar(int $id, array $data, ?Request $request = null): Recepcion_Proveedor
     {
         $recepcion = $this->repository->find($id);
         if ($recepcion->estado !== RecepcionProveedorEstados::BORRADOR) {
@@ -109,7 +117,7 @@ class RecepcionProveedorService
 
         $data['ordencompra_id'] = $recepcion->ordencompra_id;
 
-        return DB::transaction(function () use ($recepcion, $data) {
+        return DB::transaction(function () use ($recepcion, $data, $request) {
             $this->assertPeriodoContableRecepcion(
                 (int) $recepcion->empresa_id,
                 (string) ($data['fecha'] ?? $recepcion->fecha?->format('Y-m-d') ?? '')
@@ -138,8 +146,10 @@ class RecepcionProveedorService
                 'fl_articulo_extra' => $analisis['fl_articulo_extra'],
                 'fl_faltante_oc' => $analisis['fl_faltante_oc'],
                 'fl_laboratorio' => $analisis['fl_laboratorio'],
+                'fl_linea_rechazada' => $analisis['fl_linea_rechazada'],
                 'comentario_precio' => $this->extraerComentariosPrecio($items),
                 'resumen_diferencias' => $analisis['resumen_diferencias'] ?: null,
+                'resumen_rechazos' => $analisis['resumen_rechazos'] ?: null,
                 'observacion' => $data['observacion'] ?? null,
             ]);
 
@@ -148,7 +158,11 @@ class RecepcionProveedorService
             $recepcion = $recepcion->fresh(['recepcion_proveedor_articulos.articulos']);
             RecepcionProveedorArticuloProveedorSyncSupport::sincronizarDesdeRecepcion($recepcion, $items);
 
-            return $recepcion;
+            if ($request !== null) {
+                RecepcionProveedorArchivoSupport::sincronizarAdjuntosDesdeRequest((int) $recepcion->id, $request);
+            }
+
+            return $recepcion->fresh();
         });
     }
 
@@ -163,34 +177,89 @@ class RecepcionProveedorService
             throw new \RuntimeException('La recepción no tiene ítems.');
         }
 
+        $tieneCantidad = $recepcion->recepcion_proveedor_articulos->contains(
+            static fn ($linea) => (float) $linea->cantidad > 0.000001
+                || (float) ($linea->cantidad_rechazada ?? 0) > 0.000001
+        );
+        if (! $tieneCantidad) {
+            throw new \RuntimeException('Todas las líneas tienen cantidad cero.');
+        }
+
         return DB::transaction(function () use ($recepcion) {
             $this->assertPeriodoContableRecepcion(
                 (int) $recepcion->empresa_id,
                 (string) ($recepcion->fecha?->format('Y-m-d') ?? '')
             );
 
-            $movId = $this->generarMovimientoStock($recepcion);
-            $asientoId = $this->asientoService->generarAsiento($recepcion);
-
-            $estadoAnterior = $recepcion->estado;
-            $recepcion->update([
-                'estado' => RecepcionProveedorEstados::CONFIRMADA,
-                'movimientostock_id' => $movId,
-                'asiento_id' => $asientoId,
-            ]);
-
-            $this->logEstado($recepcion, $estadoAnterior, RecepcionProveedorEstados::CONFIRMADA, 'Confirmación de recepción');
+            $movId = null;
+            $asientoId = null;
+            $estadoAnita = ['cabecera_nueva' => false, 'pendmov_aplicado' => false];
+            $relacionesAnita = [
+                'proveedores', 'empresas', 'ordencompras',
+                'recepcion_proveedor_articulos.articulos',
+                'recepcion_proveedor_articulos.centrocostos',
+                'recepcion_proveedor_partes_unicas.recepcion_proveedor_articulos.articulos',
+            ];
 
             try {
-                $recepcion = $recepcion->fresh();
-                $this->anitaBridge->sincronizarRecepcion($recepcion);
-                $this->parteUnicaService->generarYSincronizar($recepcion->fresh());
+                $this->asientoService->assertCuadreRecepcion($recepcion);
+                RecepcionProveedorAnitaColisionSupport::assertConfirmacionSegura($recepcion);
+                $movId = $this->generarMovimientoStock($recepcion);
+                $asientoId = $this->asientoService->generarAsiento($recepcion);
+
+                $recepcionAnita = $recepcion->fresh($relacionesAnita);
+                $estadoAnita = $this->anitaBridge->sincronizarRecepcion($recepcionAnita);
+                $this->parteUnicaService->generarYSincronizar($recepcionAnita->fresh($relacionesAnita));
+
+                $estadoAnterior = $recepcion->estado;
+                $recepcion->update([
+                    'estado' => RecepcionProveedorEstados::CONFIRMADA,
+                    'movimientostock_id' => $movId,
+                    'asiento_id' => $asientoId,
+                ]);
+
+                $this->logEstado($recepcion, $estadoAnterior, RecepcionProveedorEstados::CONFIRMADA, 'Confirmación de recepción');
             } catch (\Throwable $e) {
-                report($e);
+                if ($movId) {
+                    try {
+                        $this->movimientoStockService->borraMovimientoStock($movId);
+                    } catch (\Throwable $rollbackMov) {
+                        report($rollbackMov);
+                    }
+                }
+
+                if ($asientoId) {
+                    try {
+                        $recepcion->asiento_id = $asientoId;
+                        $this->asientoService->anularAsiento($recepcion);
+                    } catch (\Throwable $rollbackAsiento) {
+                        report($rollbackAsiento);
+                    }
+                }
+
+                try {
+                    $this->parteUnicaService->revertirSincronizacionAnita($recepcion->fresh($relacionesAnita));
+                } catch (\Throwable $rollbackNpu) {
+                    report($rollbackNpu);
+                }
+
+                try {
+                    $this->anitaBridge->revertirSincronizacionConfirmacion(
+                        $recepcion->fresh($relacionesAnita),
+                        $estadoAnita
+                    );
+                } catch (\Throwable $rollbackAnita) {
+                    report($rollbackAnita);
+                }
+
+                throw $e;
             }
 
-            if ($recepcion->fl_precio_diferencia) {
-                $this->moduloAvisoService->enviar('stock', 'recepcion_proveedor_precio_diferencia', $recepcion->id);
+            $recepcionConfirmada = $recepcion->fresh(['recepcion_proveedor_articulos']);
+
+            if ($recepcionConfirmada->fl_precio_diferencia
+                || RecepcionProveedorDiferenciaSupport::recepcionTieneDiferenciaPrecioEstricta($recepcionConfirmada)) {
+                $this->moduloAvisoService->enviar('stock', 'recepcion_proveedor_precio_diferencia', $recepcionConfirmada->id);
             }
             if ($recepcion->fl_diferencia_cantidad) {
                 $this->moduloAvisoService->enviar('stock', 'recepcion_proveedor_cantidad_diferencia', $recepcion->id);
@@ -204,9 +273,79 @@ class RecepcionProveedorService
             if ($recepcion->fl_laboratorio) {
                 $this->moduloAvisoService->enviar('stock', 'recepcion_proveedor_laboratorio', $recepcion->id);
             }
+            if ($recepcion->fl_linea_rechazada) {
+                $this->moduloAvisoService->enviar('stock', 'recepcion_proveedor_linea_rechazada', $recepcion->id);
+            }
+            if ($this->recepcionTienePartesUnicas($recepcion)) {
+                $this->moduloAvisoService->enviar('stock', 'recepcion_proveedor_parte_unica', $recepcion->id);
+            }
+            if ($recepcion->tipo === Recepcion_Proveedor::TIPO_RECEPCION) {
+                $this->moduloAvisoService->enviar('stock', 'recepcion_proveedor_ingresada', $recepcion->id);
+                $this->moduloAvisoService->enviar('stock', 'recepcion_proveedor_encuesta', $recepcion->id);
+            }
 
             RecepcionProveedorArticuloProveedorSyncSupport::sincronizarDesdeRecepcion(
                 $recepcion->fresh(['recepcion_proveedor_articulos.articulos'])
+            );
+
+            return $recepcion->fresh();
+        });
+    }
+
+    /**
+     * Vuelve a BORRADOR revirtiendo stock y asiento en ERP. No llama Anita.
+     * Uso: COM borrada o inconsistente en Anita; numerador/replicación pendiente de corrección.
+     */
+    public function revertirConfirmacionSoloErp(int $id, ?string $motivo = null): Recepcion_Proveedor
+    {
+        $recepcion = $this->repository->find($id);
+
+        if ($recepcion->estado !== RecepcionProveedorEstados::CONFIRMADA) {
+            throw new \RuntimeException('Solo se puede revertir a borrador una recepción CONFIRMADA.');
+        }
+
+        $tieneDevoluciones = Recepcion_Proveedor::query()
+            ->where('recepcion_referencia_id', $recepcion->id)
+            ->where('estado', RecepcionProveedorEstados::CONFIRMADA)
+            ->exists();
+
+        if ($tieneDevoluciones) {
+            throw new \RuntimeException('No se puede revertir: existen devoluciones confirmadas contra esta recepción.');
+        }
+
+        return DB::transaction(function () use ($recepcion, $motivo) {
+            $this->assertPeriodoContableRecepcion(
+                (int) $recepcion->empresa_id,
+                (string) ($recepcion->fecha?->format('Y-m-d') ?? '')
+            );
+
+            $estadoAnterior = $recepcion->estado;
+
+            $recepcion->recepcion_proveedor_articulos()->update(['articulo_movimiento_id' => null]);
+
+            $movId = (int) ($recepcion->movimientostock_id ?? 0);
+            if ($movId > 0) {
+                $this->movimientoStockService->borraMovimientoStock($movId);
+            }
+
+            $asientoId = (int) ($recepcion->asiento_id ?? 0);
+            if ($asientoId > 0) {
+                $this->asientoService->anularAsiento($recepcion);
+                $recepcion->update(['asiento_id' => null]);
+                $recepcion->asiento_id = null;
+            }
+
+            $recepcion->update([
+                'estado' => RecepcionProveedorEstados::BORRADOR,
+                'movimientostock_id' => null,
+                'asiento_id' => null,
+            ]);
+
+            $this->logEstado(
+                $recepcion,
+                $estadoAnterior,
+                RecepcionProveedorEstados::BORRADOR,
+                $motivo ?: 'Revertida a borrador (solo ERP, sin Anita)'
             );
 
             return $recepcion->fresh();
@@ -227,10 +366,7 @@ class RecepcionProveedorService
 
         DB::transaction(function () use ($recepcion) {
             foreach ($recepcion->recepcion_proveedor_archivos as $archivo) {
-                $ruta = (string) ($archivo->ruta ?? '');
-                if ($ruta !== '' && Storage::disk('local')->exists($ruta)) {
-                    Storage::disk('local')->delete($ruta);
-                }
+                RecepcionProveedorArchivoSupport::eliminarFisico($archivo);
             }
 
             $recepcion->delete();
@@ -268,15 +404,11 @@ class RecepcionProveedorService
 
             $this->asientoService->anularAsiento($recepcion);
 
-            try {
-                $this->anitaBridge->anularRecepcion($recepcion->fresh([
-                    'proveedores', 'empresas', 'ordencompras',
-                    'recepcion_proveedor_articulos.articulos',
-                    'recepcion_proveedor_partes_unicas.recepcion_proveedor_articulos.articulos',
-                ]));
-            } catch (\Throwable $e) {
-                report($e);
-            }
+            $this->anitaBridge->anularRecepcion($recepcion->fresh([
+                'proveedores', 'empresas', 'ordencompras',
+                'recepcion_proveedor_articulos.articulos',
+                'recepcion_proveedor_partes_unicas.recepcion_proveedor_articulos.articulos',
+            ]));
 
             $recepcion->recepcion_proveedor_partes_unicas()->delete();
 
@@ -385,11 +517,24 @@ class RecepcionProveedorService
                 $depositoIds[] = $depArt;
             }
         }
-        $depositos = Depmae::query()->whereIn('id', array_unique($depositoIds))->get()->keyBy('id');
+        $depositos = Depmae::query()
+            ->whereIn('id', array_unique($depositoIds))
+            ->paraUsuarioAutorizado()
+            ->get()
+            ->keyBy('id');
 
         foreach ($items as $idx => &$item) {
-            if ((float) ($item['cantidad'] ?? 0) <= 0) {
-                throw new \RuntimeException('Línea '.($idx + 1).': cantidad inválida.');
+            $cantidad = (float) ($item['cantidad'] ?? 0);
+            $cantRechazada = (float) ($item['cantidad_rechazada'] ?? 0);
+
+            if ($cantidad <= 0 && $cantRechazada <= 0) {
+                throw new \RuntimeException('Línea '.($idx + 1).': indique cantidad recibida o rechazada.');
+            }
+            if ($cantRechazada > 0 && trim((string) ($item['motivorechazo'] ?? '')) === '') {
+                throw new \RuntimeException('Línea '.($idx + 1).': indique motivo de rechazo.');
+            }
+            if ($cantidad < 0 || $cantRechazada < 0) {
+                throw new \RuntimeException('Línea '.($idx + 1).': cantidades inválidas.');
             }
 
             $articuloId = (int) ($item['articulo_id'] ?? 0);
@@ -416,7 +561,7 @@ class RecepcionProveedorService
             $conversion = RecepcionProveedorDepositoSupport::calcularConversionStock(
                 $articulo,
                 $deposito,
-                (float) $item['cantidad'],
+                $cantidad,
                 (float) $item['precio'],
                 $coefProveedor,
                 $usaDepositoArticulo,
@@ -450,8 +595,12 @@ class RecepcionProveedorService
 
     private function validarDepositoAutorizado(int $depositoId, int $empresaId, string $contexto): void
     {
-        if (! Depmae::autorizadoParaUsuarioYEmpresa($depositoId, $empresaId)) {
-            throw new \RuntimeException("{$contexto}: depósito {$depositoId} no autorizado para su usuario o empresa.");
+        if (! Depmae::existeParaEmpresa($depositoId, $empresaId)) {
+            throw new \RuntimeException("{$contexto}: depósito no autorizado para la empresa de la orden de compra.");
+        }
+
+        if (! Depmae::autorizadoParaUsuario($depositoId)) {
+            throw new \RuntimeException("{$contexto}: no tiene permiso para operar sobre este depósito.");
         }
     }
 
@@ -460,8 +609,10 @@ class RecepcionProveedorService
     {
         $comentarios = [];
         foreach ($items as $item) {
-            if (! empty($item['fl_precio_diferencia']) && ! empty($item['comentario_precio'])) {
-                $comentarios[] = $item['comentario_precio'];
+            $tieneDiffEstricta = ! empty($item['fl_precio_diferencia']);
+            $coment = trim((string) ($item['comentario_precio'] ?? ''));
+            if ($tieneDiffEstricta && $coment !== '') {
+                $comentarios[] = $coment;
             }
         }
 
@@ -473,10 +624,31 @@ class RecepcionProveedorService
     {
         Recepcion_Proveedor_Articulo::where('recepcion_proveedor_id', $recepcion->id)->delete();
 
+        $penvpPorOcArticulo = $this->datosAnitaLineaPorOcArticuloIds($items);
+        $items = RecepcionProveedorAnitaOrdenLineaSupport::normalizarPenvpOrdenEnItems($items, $penvpPorOcArticulo);
+
         $orden = 1;
         foreach ($items as $item) {
-            if ((float) ($item['cantidad'] ?? 0) <= 0) {
+            $cantidad = (float) ($item['cantidad'] ?? 0);
+            $cantRechazada = (float) ($item['cantidad_rechazada'] ?? 0);
+            if ($cantidad <= 0 && $cantRechazada <= 0) {
                 continue;
+            }
+
+            $ocArtId = (int) ($item['ordencompra_articulo_id'] ?? 0);
+            $datosOc = is_array($penvpPorOcArticulo[$ocArtId] ?? null)
+                ? $penvpPorOcArticulo[$ocArtId]
+                : ['penvp_orden' => (int) ($penvpPorOcArticulo[$ocArtId] ?? 0), 'penvp_nro_interno' => 0];
+            $penvpOrden = (int) ($item['penvp_orden'] ?? 0);
+            if ($penvpOrden <= 0 && $ocArtId > 0) {
+                $penvpOrden = (int) ($datosOc['penvp_orden'] ?? 0);
+            }
+            if ($penvpOrden <= 0) {
+                $penvpOrden = $orden;
+            }
+            $penvpNroInterno = (int) ($item['penvp_nro_interno'] ?? 0);
+            if ($penvpNroInterno <= 0 && $ocArtId > 0) {
+                $penvpNroInterno = (int) ($datosOc['penvp_nro_interno'] ?? 0);
             }
 
             Recepcion_Proveedor_Articulo::create([
@@ -485,12 +657,14 @@ class RecepcionProveedorService
                 'ordencompra_articulo_sustituido_id' => $item['ordencompra_articulo_sustituido_id'] ?? null,
                 'tipo_linea' => $item['tipo_linea'] ?? RecepcionProveedorDiferenciaSupport::TIPO_OC,
                 'orden' => $orden,
-                'penvp_orden' => $item['penvp_orden'] ?? $orden,
+                'penvp_orden' => $penvpOrden,
+                'penvp_nro_interno' => $penvpNroInterno > 0 ? $penvpNroInterno : null,
                 'articulo_id' => $item['articulo_id'],
                 'articulo_stock_id' => $item['articulo_stock_id'] ?? null,
-                'cantidad' => $item['cantidad'],
+                'cantidad' => $cantidad,
                 'cantidad_oc' => $item['cantidad_oc'] ?? null,
-                'cantidad_stock' => $item['cantidad_stock'] ?? $item['cantidad'],
+                'cantidad_stock' => $item['cantidad_stock'] ?? $cantidad,
+                'cantidad_rechazada' => $cantRechazada,
                 'unidadmedida_id' => $item['unidadmedida_id'] ?? 1,
                 'coeficienteconversion' => $item['coeficienteconversion'] ?? 1,
                 'precio' => $item['precio'],
@@ -507,7 +681,8 @@ class RecepcionProveedorService
                 'descuento' => $item['descuento'] ?? 0,
                 'deposito_id' => $item['deposito_id'],
                 'detalle' => $item['detalle'] ?? null,
-                'estado' => 'ACTIVO',
+                'motivorechazo' => $item['motivorechazo'] ?? null,
+                'estado' => RecepcionProveedorLineaEstados::resolverDesdeCantidades($item),
                 'impuesto_id' => $item['impuesto_id'] ?? null,
                 'incluyeimpuesto' => 'N',
                 'centrocosto_id' => $item['centrocosto_id'],
@@ -515,6 +690,39 @@ class RecepcionProveedorService
             ]);
             $orden++;
         }
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $items
+     * @return array<int, array{penvp_orden: int, penvp_nro_interno: int}>
+     */
+    private function datosAnitaLineaPorOcArticuloIds(array $items): array
+    {
+        $ids = [];
+        foreach ($items as $item) {
+            $id = (int) ($item['ordencompra_articulo_id'] ?? 0);
+            if ($id > 0) {
+                $ids[] = $id;
+            }
+            $sust = (int) ($item['ordencompra_articulo_sustituido_id'] ?? 0);
+            if ($sust > 0) {
+                $ids[] = $sust;
+            }
+        }
+
+        if ($ids === []) {
+            return [];
+        }
+
+        $out = [];
+        foreach (Ordencompra_Articulo::query()->whereIn('id', array_unique($ids))->get(['id', 'penvp_orden', 'penvp_nro_interno']) as $row) {
+            $out[(int) $row->id] = [
+                'penvp_orden' => (int) ($row->penvp_orden ?? 0),
+                'penvp_nro_interno' => (int) ($row->penvp_nro_interno ?? 0),
+            ];
+        }
+
+        return $out;
     }
 
     private function generarMovimientoStock(Recepcion_Proveedor $recepcion): int
@@ -541,7 +749,12 @@ class RecepcionProveedorService
         ]);
 
         foreach ($recepcion->recepcion_proveedor_articulos as $linea) {
-            $cantidadStock = (float) ($linea->cantidad_stock ?: $linea->cantidad);
+            $cantidad = (float) $linea->cantidad;
+            if ($cantidad <= 0.000001) {
+                continue;
+            }
+
+            $cantidadStock = (float) ($linea->cantidad_stock ?: $cantidad);
             $cantidadFirmada = abs($cantidadStock) * $signo;
 
             $precioMovimiento = (float) ($linea->precio_stock ?? 0);
@@ -574,6 +787,22 @@ class RecepcionProveedorService
         }
 
         return (int) $mov->id;
+    }
+
+    private function recepcionTienePartesUnicas(Recepcion_Proveedor $recepcion): bool
+    {
+        $recepcion->loadMissing('recepcion_proveedor_articulos.articulos');
+
+        foreach ($recepcion->recepcion_proveedor_articulos as $linea) {
+            if ((float) $linea->cantidad <= 0) {
+                continue;
+            }
+            if (RecepcionProveedorParteUnicaSupport::articuloManejaParteUnica($linea->articulos)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function assertPeriodoContableRecepcion(int $empresaId, string $fecha): void

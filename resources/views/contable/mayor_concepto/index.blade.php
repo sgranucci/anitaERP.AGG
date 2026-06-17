@@ -27,18 +27,60 @@
         });
     }
 
+    function actualizarQueryParamEnlace(enlace, modo) {
+        if (! enlace || ! enlace.href) {
+            return;
+        }
+        try {
+            var url = new URL(enlace.href, window.location.origin);
+            if (modo === 'cuenta_concepto') {
+                url.searchParams.set('agrupacion_resumen', modo);
+            } else {
+                url.searchParams.delete('agrupacion_resumen');
+            }
+            enlace.href = url.toString();
+        } catch (e) {
+            // ignorar enlaces mal formados
+        }
+    }
+
     window.cambiarAgrupacionResumen = function (modo) {
         var input = document.getElementById('agrupacion_resumen');
-        var formConsulta = document.getElementById('form-mayor-concepto');
-        if (! input || ! formConsulta) {
+        if (! input) {
             return;
         }
         input.value = modo;
-        var consultar = formConsulta.querySelector('input[name="consultar"]');
-        if (consultar) {
-            consultar.remove();
+
+        var tablaConcepto = document.getElementById('resumen-tabla-concepto-cuenta');
+        var tablaCuenta = document.getElementById('resumen-tabla-cuenta-concepto');
+        if (tablaConcepto) {
+            tablaConcepto.style.display = modo === 'concepto_cuenta' ? '' : 'none';
         }
-        formConsulta.submit();
+        if (tablaCuenta) {
+            tablaCuenta.style.display = modo === 'cuenta_concepto' ? '' : 'none';
+        }
+
+        document.querySelectorAll('[onclick*="cambiarAgrupacionResumen"]').forEach(function (btn) {
+            var esActivo = btn.getAttribute('onclick').indexOf("'" + modo + "'") !== -1;
+            btn.classList.toggle('btn-primary', esActivo);
+            btn.classList.toggle('btn-outline-primary', !esActivo);
+        });
+
+        document.querySelectorAll('#mayor-concepto-exportar a, .pagination a').forEach(function (enlace) {
+            actualizarQueryParamEnlace(enlace, modo);
+        });
+
+        try {
+            var urlActual = new URL(window.location.href);
+            if (modo === 'cuenta_concepto') {
+                urlActual.searchParams.set('agrupacion_resumen', modo);
+            } else {
+                urlActual.searchParams.delete('agrupacion_resumen');
+            }
+            window.history.replaceState({}, '', urlActual.toString());
+        } catch (e) {
+            // ignorar
+        }
     };
 })();
 </script>
@@ -199,7 +241,7 @@
                     </div>
 
                     <div class="d-flex flex-wrap align-items-center justify-content-between px-3 py-2 border-bottom bg-light">
-                        <div class="mb-1 mb-md-0">
+                        <div class="mb-1 mb-md-0" id="mayor-concepto-exportar">
                             @include('includes.exportar-tabla-queryparams', [
                                 'ruta' => 'listar_mayor_concepto',
                                 'queryparams' => $filtrosQuery ?? [],

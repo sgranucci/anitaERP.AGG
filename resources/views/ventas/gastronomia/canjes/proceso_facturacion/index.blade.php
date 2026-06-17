@@ -133,6 +133,297 @@
     .gastro-campo-consulta .gastro-campo-codigo { width: 88px; flex: 0 0 88px; }
     .gastro-campo-consulta .gastro-campo-nombre { flex: 1 1 auto; min-width: 0; }
     .gastro-campo-consulta .btn-accion-tabla { flex: 0 0 auto; }
+
+    #modal-opcionales .modal-body {
+        padding: 0;
+        background: #f7f9fc;
+    }
+    #modal-opcionales .gastro-opc-progreso {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.75rem 1rem;
+        background: #fff;
+        border-bottom: 1px solid #e3e6ea;
+    }
+    #modal-opcionales .gastro-opc-progreso-info {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+    }
+    #modal-opcionales .gastro-opc-progreso-titulo {
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+    }
+    #modal-opcionales .gastro-opc-progreso-subtitulo {
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: #1f2937;
+        line-height: 1.2;
+        margin-top: 0.1rem;
+    }
+    #modal-opcionales .gastro-opc-progreso-pasos {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+    #modal-opcionales .gastro-opc-paso {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        padding: 0.2rem 0.55rem 0.2rem 0.35rem;
+        background: #eef1f5;
+        color: #6c757d;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        border: 1px solid transparent;
+        cursor: pointer;
+        user-select: none;
+        transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+    }
+    #modal-opcionales .gastro-opc-paso .gastro-opc-paso-num {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.3rem;
+        height: 1.3rem;
+        border-radius: 50%;
+        background: #d6dbe2;
+        color: #495057;
+        font-size: 0.72rem;
+        font-weight: 700;
+    }
+    #modal-opcionales .gastro-opc-paso.completado {
+        background: #e6f4ea;
+        color: #1e7e34;
+        border-color: #c3e6cb;
+    }
+    #modal-opcionales .gastro-opc-paso.completado .gastro-opc-paso-num {
+        background: #28a745;
+        color: #fff;
+    }
+    #modal-opcionales .gastro-opc-paso.actual {
+        background: #007bff;
+        color: #fff;
+        border-color: #0069d9;
+        box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.18);
+    }
+    #modal-opcionales .gastro-opc-paso.actual .gastro-opc-paso-num {
+        background: #fff;
+        color: #0056b3;
+    }
+    #modal-opcionales .gastro-opc-paso.faltante {
+        animation: gastroOpcShake 0.45s linear;
+        background: #fdecea;
+        color: #b02a37;
+        border-color: #f5c6cb;
+    }
+    #modal-opcionales .gastro-opc-paso.faltante .gastro-opc-paso-num {
+        background: #dc3545;
+        color: #fff;
+    }
+    @keyframes gastroOpcShake {
+        0%,100% { transform: translateX(0); }
+        25% { transform: translateX(-3px); }
+        75% { transform: translateX(3px); }
+    }
+    #modal-opcionales .gastro-opc-pasos-wrap {
+        position: relative;
+        padding: 1rem 1rem 0.5rem;
+    }
+    #modal-opcionales .gastro-opc-grupo {
+        display: none;
+        animation: gastroOpcFadeIn 0.18s ease-out;
+    }
+    #modal-opcionales .gastro-opc-grupo.activo {
+        display: block;
+    }
+    @keyframes gastroOpcFadeIn {
+        from { opacity: 0; transform: translateY(4px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    #modal-opcionales .gastro-opc-grupo-titulo {
+        font-size: 1rem;
+        font-weight: 600;
+        color: #1f2937;
+        margin-bottom: 0.6rem;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+    #modal-opcionales .gastro-opc-grupo-titulo .gastro-opc-pill {
+        font-size: 0.7rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 0.15rem 0.5rem;
+        background: #007bff;
+        color: #fff;
+        border-radius: 999px;
+    }
+    #modal-opcionales .gastro-opc-grupo-titulo small {
+        font-size: 0.78rem;
+        font-weight: 500;
+        color: #6c757d;
+        text-transform: none;
+        letter-spacing: 0;
+    }
+    #modal-opcionales .gastro-opc-grilla {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+        gap: 0.6rem;
+    }
+    #modal-opcionales .gastro-opc-tarjeta {
+        position: relative;
+        border: 2px solid #dee2e6;
+        border-radius: 0.5rem;
+        background: #fff;
+        padding: 0.7rem 0.75rem 0.7rem 2.1rem;
+        cursor: pointer;
+        transition: border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease, transform 0.08s ease;
+        display: flex;
+        flex-direction: column;
+        min-height: 76px;
+        user-select: none;
+    }
+    #modal-opcionales .gastro-opc-tarjeta:focus {
+        outline: none;
+        border-color: #80bdff;
+        box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+    }
+    #modal-opcionales .gastro-opc-atajo {
+        position: absolute;
+        top: 6px;
+        left: 6px;
+        min-width: 1.4rem;
+        height: 1.4rem;
+        line-height: 1.4rem;
+        text-align: center;
+        font-size: 0.74rem;
+        font-weight: 700;
+        color: #495057;
+        background: #f1f3f5;
+        border: 1px solid #ced4da;
+        border-radius: 0.25rem;
+        padding: 0 0.3rem;
+    }
+    #modal-opcionales .gastro-opc-tarjeta.seleccionada .gastro-opc-atajo {
+        color: #fff;
+        background: #007bff;
+        border-color: #0069d9;
+    }
+    #modal-opcionales .gastro-opc-tarjeta:hover {
+        border-color: #80bdff;
+        background: #f6fbff;
+        transform: translateY(-1px);
+    }
+    #modal-opcionales .gastro-opc-tarjeta.seleccionada {
+        border-color: #007bff;
+        background: #e7f1ff;
+        box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+    }
+    #modal-opcionales .gastro-opc-tarjeta.seleccionada::after {
+        content: '\f00c';
+        font-family: FontAwesome, 'Font Awesome 5 Free', sans-serif;
+        font-weight: 900;
+        position: absolute;
+        top: 6px;
+        right: 8px;
+        color: #007bff;
+        font-size: 0.85rem;
+    }
+    #modal-opcionales .gastro-opc-sku {
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: #6c757d;
+        margin-bottom: 0.15rem;
+    }
+    #modal-opcionales .gastro-opc-tarjeta.seleccionada .gastro-opc-sku {
+        color: #0056b3;
+    }
+    #modal-opcionales .gastro-opc-descripcion {
+        font-size: 0.95rem;
+        color: #212529;
+        line-height: 1.25;
+        word-break: break-word;
+    }
+    #modal-opcionales .gastro-opc-resumen {
+        margin: 0.75rem 1rem 0;
+        background: #fff;
+        border: 1px solid #e3e6ea;
+        border-radius: 0.4rem;
+        padding: 0.5rem 0.75rem;
+    }
+    #modal-opcionales .gastro-opc-resumen-titulo {
+        font-size: 0.7rem;
+        font-weight: 700;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 0.35rem;
+    }
+    #modal-opcionales .gastro-opc-resumen-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+    }
+    #modal-opcionales .gastro-opc-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.2rem 0.6rem;
+        background: #f1f3f5;
+        color: #495057;
+        border-radius: 999px;
+        font-size: 0.78rem;
+        line-height: 1.2;
+    }
+    #modal-opcionales .gastro-opc-chip.completado {
+        background: #e6f4ea;
+        color: #1e7e34;
+    }
+    #modal-opcionales .gastro-opc-chip .gastro-opc-chip-num {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.05rem;
+        height: 1.05rem;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.08);
+        color: inherit;
+        font-size: 0.65rem;
+        font-weight: 700;
+    }
+    #modal-opcionales .gastro-opc-chip.completado .gastro-opc-chip-num {
+        background: #28a745;
+        color: #fff;
+    }
+    #modal-opcionales .gastro-opc-leyenda {
+        padding: 0.4rem 1rem 0.6rem;
+        font-size: 0.75rem;
+        color: #6c757d;
+        text-align: center;
+    }
+    #modal-opcionales .gastro-opc-leyenda kbd {
+        font-size: 0.7rem;
+        padding: 0.05rem 0.3rem;
+    }
+    #modal-opcionales .modal-footer {
+        background: #fff;
+    }
+    #modal-opcionales .gastro-opc-grupo.gastro-opc-faltante .gastro-opc-grilla {
+        outline: 2px dashed #dc3545;
+        outline-offset: 6px;
+        border-radius: 0.5rem;
+        animation: gastroOpcShake 0.45s linear;
+    }
 </style>
 @endsection
 
@@ -237,6 +528,7 @@
                             @else
                                 Ingrese el SKU; <kbd>Enter</kbd> agrega cantidad <strong>1</strong>.
                             @endif
+                            <kbd>F1</kbd> o la lupa abren la consulta de artículos.
                             <kbd>+</kbd> o botón <strong>Agregar</strong> abren el modal de cantidad (opcionales primero si aplican).
                             <kbd>Tab</kbd> en SKU resuelve el artículo y enfoca Agregar.
                             Factura siempre a <strong>Consumidor final</strong>. Descuento código <strong>{{ $descuento_codigo }}</strong>.
@@ -248,7 +540,7 @@
                             <input type="hidden" class="subcategoria_id" value="">
                             <input type="hidden" class="unidadmedida" value="">
                             <button type="button"
-                                    title="Consulta artículos (catálogo SKU {{ $sku_catalogo_prefijo }})"
+                                    title="Consulta artículos — F1 (catálogo SKU {{ $sku_catalogo_prefijo }})"
                                     class="btn-accion-tabla consultaarticulo tooltipsC"
                                     data-sku-prefijo-filtro="{{ $sku_catalogo_prefijo }}"
                                     data-sku-digitos-filtro="{{ (int) $sku_catalogo_digitos_sufijo }}"
@@ -384,11 +676,31 @@
     </div>
 </div></div></div>
 
-<div class="modal fade" id="modal-cm-opcionales" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content">
-    <div class="modal-header py-2"><h6 class="modal-title">Opcionales</h6><button type="button" class="close" data-dismiss="modal"><span>&times;</span></button></div>
-    <div class="modal-body" id="cm-opcionales-body"></div>
-    <div class="modal-footer py-2"><button type="button" class="btn btn-sm btn-primary" id="cm-opcionales-ok">Confirmar</button></div>
-</div></div></div>
+<div class="modal fade" id="modal-opcionales" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title">
+                    Opcionales del artículo
+                    <small class="text-muted ml-2" id="modal-opcionales-articulo-info"></small>
+                </h6>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar"><span>&times;</span></button>
+            </div>
+            <div class="modal-body" id="modal-opcionales-body"></div>
+            <div class="modal-footer py-2 d-flex justify-content-between">
+                <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cancelar</button>
+                <div class="d-flex" style="gap: 0.4rem;">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="modal-opcionales-atras" disabled>
+                        <i class="fa fa-arrow-left"></i> Atrás
+                    </button>
+                    <button type="button" class="btn btn-sm btn-primary" id="modal-opcionales-confirmar">
+                        Siguiente <i class="fa fa-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
 @if ($wigos_account_info_habilitado)
 <div class="modal fade" id="modal-cm-wigos-vip" tabindex="-1" role="dialog" aria-labelledby="modal-cm-wigos-vip-title" aria-hidden="true">
@@ -427,6 +739,28 @@
 @include('includes.ventas.modalconsultaclientevip')
 @include('includes.stock.modalconsultamozo')
 @include('includes.stock.modalconsultaarticulo')
+
+<!-- Modal comentario cocina (KDS Waitry) -->
+<div class="modal fade" id="modal-comentario-cocina" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title">Comentario para cocina</h6>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body py-2">
+                <p class="small text-muted mb-2" id="modal-comentario-cocina-articulo"></p>
+                <label class="small mb-1" for="fld-comentario-cocina">Indicaciones para la comanda (KDS)</label>
+                <textarea class="form-control form-control-sm" id="fld-comentario-cocina" rows="3" maxlength="255" placeholder="Ej. sin cebolla, bien cocido…"></textarea>
+                <small class="form-text text-muted">Se envía a Waitry en el ítem al facturar.</small>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-sm btn-primary" id="modal-comentario-cocina-guardar">Guardar</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <div id="cm-facturacion-procesando-overlay"
      class="d-none"

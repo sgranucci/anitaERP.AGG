@@ -68,6 +68,10 @@ class MayorPlanoCuentaProcesador
             $incluyeSubdiario,
         );
 
+        $erroresBridge = $datos['errores'] ?? [];
+        $resolverOc = new MayorPlanoCuentaOrdencompraResolver();
+        $statsOc = $resolverOc->preparar($datos['auxpag'] ?? [], $erroresBridge);
+
         $leyendasPago = MayorPlanoCuentaPagoLeyendaIndex::desdeFilas($datos['pago'] ?? []);
 
         $movimientos = $this->normalizarMovimientos(
@@ -82,6 +86,9 @@ class MayorPlanoCuentaProcesador
             $cuentaDesde,
             $cuentaHasta,
         );
+
+        $movimientos = $resolverOc->aplicarAMovimientos($movimientos);
+        $statsOc['movimientos_oc_resueltos'] = $resolverOc->cantidadMovimientosResueltos();
 
         $cuentas = $this->cuentasEnRango($movimientos, $cuentaDesde, $cuentaHasta);
         $secciones = [];
@@ -135,13 +142,13 @@ class MayorPlanoCuentaProcesador
                 'lineas' => $totalLineas,
                 'cuentas' => count($secciones),
             ],
-            'errores_bridge' => $datos['errores'] ?? [],
-            'stats' => [
+            'errores_bridge' => $erroresBridge,
+            'stats' => array_merge([
                 'ctamov_filas' => count($datos['ctamov'] ?? []),
                 'subdiario_filas' => count($datos['subdiario'] ?? []),
                 'pago_filas' => count($datos['pago'] ?? []),
                 'pago_leyendas_indexadas' => $leyendasPago->cantidadClaves(),
-            ],
+            ], $statsOc),
         ];
     }
 

@@ -337,6 +337,7 @@ class CanjeMarketingProcesoFacturacionController extends Controller
 
         $request->validate([
             'cantidad' => 'sometimes|required|numeric|min:0.0001',
+            'comentario_cocina' => 'sometimes|nullable|string|max:255',
         ]);
 
         $this->canjeMarketingCuentaService->exigirCuentaCanjeMarketing($cuentaId);
@@ -347,12 +348,21 @@ class CanjeMarketingProcesoFacturacionController extends Controller
             ->firstOrFail();
 
         try {
-            $this->cuentaService->actualizarCantidadLinea($linea, (float) $request->get('cantidad'));
+            if ($request->has('comentario_cocina')) {
+                $cuenta = $this->cuentaService->actualizarComentarioCocinaLinea(
+                    $linea,
+                    $request->input('comentario_cocina'),
+                );
+            } elseif ($request->has('cantidad')) {
+                $cuenta = $this->cuentaService->actualizarCantidadLinea($linea, (float) $request->get('cantidad'));
+            } else {
+                return response()->json(['error' => 'Indique cantidad o comentario de cocina.'], 422);
+            }
         } catch (\Throwable $e) {
             return response()->json(['error' => $e->getMessage()], 422);
         }
 
-        return response()->json(['cuenta' => $this->cuentaService->cuentaConLineas($cuentaId)]);
+        return response()->json(['cuenta' => $cuenta]);
     }
 
     public function apiArticuloCatalogoPorSku(Request $request)

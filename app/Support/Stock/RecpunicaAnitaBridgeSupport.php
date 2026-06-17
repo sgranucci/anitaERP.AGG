@@ -37,23 +37,25 @@ class RecpunicaAnitaBridgeSupport
         }
 
         $clave = RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
-        $lineaAnita = (int) ($linea->penvp_orden ?? $linea->orden);
+        $lineaAnita = (int) ($linea->orden ?? 0);
+        if ($lineaAnita <= 0) {
+            $lineaAnita = (int) ($linea->penvp_orden ?? 1);
+        }
         $skuAnita = RecepcionProveedorParteUnicaSupport::skuAnita13($linea->articulos);
 
         $api = new ApiAnita;
+        $insert = RecepcionProveedorAnitaEscrituraSupport::recpunicaInsert(
+            $clave,
+            $lineaAnita,
+            $skuAnita,
+            $numeroparte,
+        );
         $payload = [
             'acc' => 'insert',
             'sistema' => config('recepcion_proveedor.anita.sistema_compras'),
             'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_parte_unica', 'recpunica'),
-            'campos' => [
-                'recpu_tipo' => $clave['tipo'],
-                'recpu_letra' => $clave['letra'],
-                'recpu_sucursal' => $clave['sucursal'],
-                'recpu_nro' => $clave['nro'],
-                'recpu_linea' => $lineaAnita,
-                'recpu_articulo' => $skuAnita,
-                'recpu_id' => $numeroparte,
-            ],
+            'campos' => $insert['campos'],
+            'valores' => $insert['valores'],
         ];
 
         $raw = (string) $api->apiCallEscritura($payload);
@@ -115,7 +117,10 @@ class RecpunicaAnitaBridgeSupport
             return false;
         }
 
-        $lineaAnita = (int) ($linea->penvp_orden ?? $linea->orden);
+        $lineaAnita = (int) ($linea->orden ?? 0);
+        if ($lineaAnita <= 0) {
+            $lineaAnita = (int) ($linea->penvp_orden ?? 1);
+        }
         $skuAnita = RecepcionProveedorParteUnicaSupport::skuAnita13($linea->articulos);
 
         $where = RecepcionProveedorAnitaWhereSupport::recpunicaCabecera($clave)

@@ -760,6 +760,22 @@ class MayorConceptoPeriodoProcesador
             return [];
         }
 
+        if ($this->debeProcesarAsientoComRecepcionCtamov($lineasAsiento)) {
+            $lineas = $this->procesarAsientoComRecepcionCtamov(
+                $empresaId,
+                $lineasAsiento,
+                $lineasOp,
+                $monedaConverter,
+                $monedaReporteId,
+            );
+            if ($lineas !== []) {
+                $opsProcesadas[$this->claveOperacionCtamov($nroAsiento, $fecha)] = true;
+                $opsProcesadas[$this->claveAsientoContable($nroAsiento, $fecha)] = true;
+            }
+
+            return $lineas;
+        }
+
         $tieneDisponibilidad = false;
         foreach ($lineasOp as $linea) {
             if ($this->resolverCuentaDisponibilidad($linea) > 0) {
@@ -841,7 +857,134 @@ class MayorConceptoPeriodoProcesador
             'subd_cotizacion' => (float) ($lineaCtamov->ctav_cotizacion ?? 0),
             'subd_importe' => (float) ($lineaCtamov->ctav_importe ?? 0),
             'subd_tipo_mov' => strtoupper(trim((string) ($lineaCtamov->ctav_d_h ?? 'D'))),
+            'subd_o_compra' => (int) ($lineaCtamov->ctav_o_compra ?? 0),
         ];
+    }
+
+    /**
+     * @param  list<object>  $lineasAsiento
+     */
+    private function debeProcesarAsientoComRecepcionCtamov(array $lineasAsiento): bool
+    {
+        if ($lineasAsiento === []) {
+            return false;
+        }
+
+        $ref = $lineasAsiento[0];
+
+        return trim((string) ($ref->ctav_tipo ?? '')) === 'COM'
+            && (int) ($ref->ctav_o_compra ?? 0) > 0;
+    }
+
+    /**
+     * Recepción COM en ctamov (AnitaERP): imputa gasto 521xxx con ancla 117010 y PEP en ctav_o_compra.
+     *
+     * @param  list<object>  $lineasAsiento
+     * @param  list<object>  $lineasOp
+     * @return list<array<string, mixed>>
+     */
+    private function procesarAsientoComRecepcionCtamov(
+        int $empresaId,
+        array $lineasAsiento,
+        array $lineasOp,
+        MayorConceptoMonedaConverter $monedaConverter,
+        int $monedaReporteId,
+    ): array {
+        $nroOc = (int) ($lineasAsiento[0]->ctav_o_compra ?? $lineasOp[0]->subd_o_compra ?? 0);
+        $cuentaAncla = $this->resolverCuentaAnclaComRecepcion($lineasOp);
+        if ($cuentaAncla <= 0) {
+            return [];
+        }
+
+        $lineasGasto = $this->filtrarComGastoRecepcion($lineasOp);
+        if ($lineasGasto === []) {
+            return [];
+        }
+
+        $lineas = [];
+
+        foreach ($lineasGasto as $lineaGasto) {
+            $cuenta = (int) ($lineaGasto->subd_cuenta ?? 0);
+            $importe = (float) ($lineaGasto->subd_importe ?? 0);
+            if ($cuenta <= 0 || $importe <= 0) {
+                continue;
+            }
+
+            $dh = strtoupper(trim((string) ($lineaGasto->subd_tipo_mov ?? 'D')));
+            if (! in_array($dh, ['D', 'H'], true)) {
+                $dh = 'D';
+            }
+
+            $concepto = $this->motor->conceptoImputacionCuenta($empresaId, $cuenta);
+            if ($concepto <= 0 && $nroOc > 0) {
+                $concepto = $this->resolverConceptoDesdeOrdenCompra($empresaId, $nroOc);
+            }
+
+            $lineas[] = $this->lineaReporte(
+                $lineaGasto,
+                $cuenta,
+                $concepto,
+                $importe,
+                $dh,
+                $monedaConverter,
+                $monedaReporteId,
+                'COM recepción ctamov',
+                [
+                    'cuenta_disponibilidad' => $cuentaAncla,
+                    'nro_oc' => $nroOc,
+                ],
+            );
+        }
+
+        return $lineas;
+    }
+
+    /**
+     * @param  list<object>  $lineasOp
+     */
+    private function resolverCuentaAnclaComRecepcion(array $lineasOp): int
+    {
+        foreach ($lineasOp as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            if ($cuenta >= 117010000 && $cuenta < 118000000) {
+                return $cuenta;
+            }
+        }
+
+        foreach ($lineasOp as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            if ($this->motor->esProveedor($cuenta)) {
+                return $cuenta;
+            }
+        }
+
+        return 0;
+    }
+
+    /**
+     * @param  list<object>  $lineasOp
+     * @return list<object>
+     */
+    private function filtrarComGastoRecepcion(array $lineasOp): array
+    {
+        return array_values(array_filter($lineasOp, function ($linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+
+            if ($cuenta <= 0 || ! in_array($mov, ['D', 'H'], true)) {
+                return false;
+            }
+
+            if ($cuenta >= 117010000 && $cuenta < 118000000) {
+                return false;
+            }
+
+            if ($this->motor->esProveedor($cuenta) || $this->motor->esDisponibilidad($cuenta)) {
+                return false;
+            }
+
+            return $cuenta !== 521130001;
+        }));
     }
 
     /**

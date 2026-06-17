@@ -119,7 +119,7 @@ if [[ "${REMOTE_SYNC_ENABLED}" == "1" && -n "${REMOTE_HOST}" ]]; then
     if ssh "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}" "mkdir -p '${REMOTE_DIR}/binlog'"; then
         sync_with_rsync_or_scp "dump" "${REMOTE}" "${OUTPUT}" || true
 
-        if [[ -d "${BINLOG_DIR}" ]] && compgen -G "${BINLOG_DIR}/binlog.[0-9]*" >/dev/null; then
+        if [[ "${REMOTE_SYNC_BINLOG_FILES}" == "1" ]] && [[ -d "${BINLOG_DIR}" ]] && compgen -G "${BINLOG_DIR}/binlog.[0-9]*" >/dev/null; then
             sync_with_rsync_or_scp "binlog files" "${REMOTE_BINLOG}" "${BINLOG_DIR}"/binlog.[0-9]* || true
         fi
 

@@ -17,8 +17,7 @@ class ListaprecioProveedorConsultaDesdeModal
 
     public static function urlEditar(int $id): string
     {
-        return route('editar_listaprecio_proveedor', [
-            'id' => $id,
+        return urlAppCarpeta('compras/listaprecio_proveedor/'.$id.'/editar').'?'.http_build_query([
             'origen' => 'modal_consulta',
             'vista' => 'consulta',
         ]);

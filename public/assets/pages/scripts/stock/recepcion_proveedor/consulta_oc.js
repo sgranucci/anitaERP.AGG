@@ -45,7 +45,7 @@
                     $tr.append('<td><span class="badge badge-' + (r.estado_com === 'SIN COM' ? 'warning' : 'info') + '">' + escHtml(r.estado_com) + '</span></td>');
                     $tr.append('<td class="text-right">' + escHtml(r.cantidad_pendiente != null ? Number(r.cantidad_pendiente).toLocaleString('es-AR', { maximumFractionDigits: 3 }) : '') + '</td>');
                     $tr.append('<td><a href="#" class="btn btn-warning btn-sm eligeconsultaocrecepcion">Elegir</a></td>');
-                    $tr.append('<td><a href="#" class="btn btn-outline-primary btn-sm consultaocrecepciontabla">Consultar</a></td>');
+                    $tr.append('<td><a href="#" class="btn btn-info btn-sm consultaocrecepciontabla">Consultar</a></td>');
                     $body.append($tr);
                 });
             })
@@ -64,6 +64,7 @@
         $('#proveedor_nombre').val(r.proveedor_nombre || '');
         if (r.empresa_id) {
             $('#empresa_id').val(r.empresa_id);
+            window.recepcionProveedorEmpresaDesdeOc = true;
         }
         $('#consultaocrecepcionModal').modal('hide');
 

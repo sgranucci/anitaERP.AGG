@@ -53,7 +53,7 @@ Excepción admin usuario: enviar `empresa_ids[]` vía `window.payloadExtraConsul
 
 ## Permisos consulta modal
 
-Además de depósitos/TM/admin usuarios, permitir consulta a quien pueda: `crear-recuento`, `editar-recuento`, `actualizar-recuento`, `ver-recuento` (y equivalentes del módulo que se agregue).
+Además de depósitos/TM/admin usuarios, permitir consulta a quien pueda: `crear-recuento`, `editar-recuento`, `actualizar-recuento`, `ver-recuento`, `crear-recepcion-proveedor`, `editar-recepcion-proveedor`, `actualizar-recepcion-proveedor`, `listar-recepcion-proveedor`, `confirmar-recepcion-proveedor` (y equivalentes del módulo que se agregue).
 
 ## Ejemplo (CRUD recuento)
 

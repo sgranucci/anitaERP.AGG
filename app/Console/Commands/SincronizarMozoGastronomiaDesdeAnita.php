@@ -9,9 +9,10 @@ class SincronizarMozoGastronomiaDesdeAnita extends Command
 {
     protected $signature = 'mozo-gastronomia:sincronizar-anita
                             {--empresa= : ID empresa ERP (usa bridge Anita de esa empresa y mozopasswd)}
-                            {--codigo= : Importar solo un mozo por vend_codigo Anita}';
+                            {--codigo= : Importar solo un mozo por vend_codigo Anita}
+                            {--solo-claves : Solo actualiza mozo_gastronomia.clave desde mozopasswd (mozp_mozo → codigo)}';
 
-    protected $description = 'Importa mozos de gastronomía desde Anita (tabla vendedor) con mapeo campo a campo.';
+    protected $description = 'Importa mozos de gastronomía desde Anita (vendedor + mozopasswd) hacia mozo_gastronomia.';
 
     public function handle(MozoGastronomiaAnitaSyncService $sync): int
     {
@@ -29,6 +30,19 @@ class SincronizarMozoGastronomiaDesdeAnita extends Command
 
             if ($empresa !== null && $empresa !== '') {
                 $empresaId = (int) $empresa;
+                if ($this->option('solo-claves')) {
+                    $this->info("Actualizando claves mozo_gastronomia desde mozopasswd (empresa_id={$empresaId})…");
+                    $retClaves = $sync->actualizarClavesEmpresaDesdeAnita($empresaId);
+                    $this->info(
+                        "En mozopasswd: {$retClaves['en_anita']}; actualizados: {$retClaves['actualizados']}; "
+                        ."omitidos: {$retClaves['omitidos']}; sin mozo en ERP: {$retClaves['sin_mozo_erp']}."
+                    );
+                    foreach ($retClaves['errores'] as $w) {
+                        $this->warn($w);
+                    }
+
+                    return self::SUCCESS;
+                }
                 $this->info("Sincronizando mozos desde Anita para empresa_id={$empresaId}…");
                 $ret = $sync->sincronizarEmpresaDesdeAnita($empresaId);
             } else {

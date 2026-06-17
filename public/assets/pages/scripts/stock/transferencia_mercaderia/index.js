@@ -14,6 +14,7 @@
 
     function notificarCambioDeposito() {
         guardarPreferencias();
+        cargarDestinatarios();
         if (depositoSalidaId()) {
             cargarInventario();
         } else {
@@ -26,6 +27,39 @@
 
     function tipotransaccionStockId() {
         return parseInt($('#tipotransaccion_stock_id').val(), 10) || 0;
+    }
+
+    function tipoRequiereAprobacion() {
+        var $opt = $('#tipotransaccion_stock_id option:selected');
+        return $opt.data('requiere-aprobacion') === 1 || $opt.data('requiereAprobacion') === 1;
+    }
+
+    function actualizarPanelDestinatario() {
+        var show = tipoRequiereAprobacion() && depositoEntradaId() > 0;
+        $('#tm_panel_destinatario').toggle(show);
+        if (show) {
+            cargarDestinatarios();
+        }
+    }
+
+    function cargarDestinatarios() {
+        var dep = depositoEntradaId();
+        var $sel = $('#usuario_destino_id');
+        if (!dep || !window.TM_URLS.destinatarios) {
+            $sel.find('option:not(:first)').remove();
+            return;
+        }
+        $.get(window.TM_URLS.destinatarios, { deposito_entrada_id: dep })
+            .done(function (resp) {
+                $sel.find('option:not(:first)').remove();
+                (resp.opciones || []).forEach(function (o) {
+                    var label = o.nombre + (o.principal ? ' (principal)' : '');
+                    if (o.email) {
+                        label += ' — ' + o.email;
+                    }
+                    $sel.append($('<option/>').val(o.id).text(label));
+                });
+            });
     }
 
     function guardarPreferencias() {
@@ -73,7 +107,15 @@
         var n = lineasConCantidad().length;
         var $btn = $('#tm_btn_transferir');
         $btn.prop('disabled', n === 0 || cargando);
-        $btn.text('Transferir (' + n + ')');
+        var label = tipoRequiereAprobacion() ? 'Enviar (' + n + ')' : 'Transferir (' + n + ')';
+        $btn.text(label);
+    }
+
+    function urlConsultaArticulo(id) {
+        if (!window.TM_URLS.articuloConsultaUrl) {
+            return '#';
+        }
+        return String(window.TM_URLS.articuloConsultaUrl).replace('__ID__', String(id));
     }
 
     function focarFiltroSku() {
@@ -100,14 +142,27 @@
         actualizarBotonTransferir();
     }
 
+    function agregarFilaManual(f) {
+        var existe = filas.some(function (x) {
+            return parseInt(x.articulo_id, 10) === parseInt(f.articulo_id, 10);
+        });
+        if (!existe) {
+            filas.push(f);
+        }
+        renderLista(filas);
+        var $card = $('#tm_lista .tm-item[data-articulo-id="' + f.articulo_id + '"]');
+        if ($card.length) {
+            $card.find('.tm-cant').trigger('focus');
+        }
+    }
+
     function renderLista(data) {
         filas = data || [];
         var $lista = $('#tm_lista').empty();
 
         if (!filas.length) {
             $lista.html(
-                '<div class="tm-vacio">No hay artículos con saldo en este depósito ' +
-                    '(o ninguno tiene depósito de entrega igual al de salida).</div>'
+                '<div class="tm-vacio">No hay artículos cargados. Use «Cargar stock» o «Agregar artículo».</div>'
             );
             $('#tm_panel_filtro').hide();
             actualizarBotonTransferir();
@@ -138,12 +193,12 @@
                 )
             );
 
-            if (articuloId && window.TM_URLS.articuloEditar) {
+            if (articuloId && window.TM_URLS.articuloConsultaUrl) {
                 $top.append(
                     $('<a class="btn btn-outline-secondary btn-sm" target="_blank" rel="noopener"/>')
-                        .attr('href', window.TM_URLS.articuloEditar + articuloId + '/editar')
-                        .attr('title', 'Ver artículo')
-                        .html('<i class="fa fa-external-link"></i>')
+                        .attr('href', urlConsultaArticulo(articuloId))
+                        .attr('title', 'Consultar artículo')
+                        .html('<i class="fa fa-edit"></i>')
                 );
             }
 
@@ -157,12 +212,12 @@
             var $cantRow = $('<div class="d-flex justify-content-between align-items-center mt-2"/>');
             $cantRow.append($('<span class="tm-meta"/>').text('A transferir'));
             var $input = $('<input type="number" class="form-control tm-cant" min="0" step="any" inputmode="decimal"/>')
-                .attr('max', saldo)
+                .attr('max', saldo > 0 ? saldo : null)
                 .prop('disabled', sinErp)
                 .attr('placeholder', '0');
             var $btnTodo = $('<button type="button" class="btn btn-outline-primary btn-sm ml-2"/>')
                 .text('Todo')
-                .prop('disabled', sinErp)
+                .prop('disabled', sinErp || saldo <= 0)
                 .on('click', function () {
                     $input.val(saldo).trigger('change');
                 });
@@ -257,7 +312,7 @@
                 return;
             }
             var saldo = parseFloat($row.data('saldo')) || 0;
-            if (cant > saldo + 0.000001) {
+            if (saldo > 0 && cant > saldo + 0.000001) {
                 invalido = true;
             }
         });
@@ -266,7 +321,10 @@
             return;
         }
 
-        if (!confirm('¿Confirma la transferencia de ' + lineas.length + ' artículo(s)?')) {
+        var msgConfirm = tipoRequiereAprobacion()
+            ? '¿Confirma el envío de ' + lineas.length + ' artículo(s)? Quedará pendiente de aprobación.'
+            : '¿Confirma la transferencia de ' + lineas.length + ' artículo(s)?';
+        if (!confirm(msgConfirm)) {
             return;
         }
 
@@ -283,6 +341,7 @@
                 deposito_salida_id: depSal,
                 deposito_entrada_id: depEnt,
                 tipotransaccion_stock_id: tipo,
+                usuario_destino_id: parseInt($('#usuario_destino_id').val(), 10) || '',
                 lineas: lineas,
             },
             dataType: 'json',
@@ -291,6 +350,10 @@
                 if (resp.ok) {
                     setEstado(resp.mensaje || 'Transferencia registrada.');
                     alert(resp.mensaje || 'Listo.');
+                    if (resp.requiere_aprobacion) {
+                        window.location.href = $('a[href*="pendientes"]').attr('href') || window.location.href;
+                        return;
+                    }
                     cargarInventario();
                 } else {
                     setEstado(resp.mensaje || 'No se pudo grabar.', true);
@@ -317,15 +380,21 @@
         $('#tm_filtro_desc').on('input', aplicarFiltro);
         $(document).on('input change', '.tm-cant', actualizarBotonTransferir);
 
-        $('#tipotransaccion_stock_id').on('change', guardarPreferencias);
-
-        $('#deposito_salida_id').on('change', function () {
-            if ($(this).closest('#tm_deposito_salida').length) {
-                notificarCambioDeposito();
-            }
+        $('#tipotransaccion_stock_id').on('change', function () {
+            guardarPreferencias();
+            actualizarPanelDestinatario();
+            actualizarBotonTransferir();
         });
 
-        $('#deposito_entrada_id').on('change', guardarPreferencias);
+        $('#deposito_salida_id').on('change', function () {
+            notificarCambioDeposito();
+        });
+
+        $('#deposito_entrada_id').on('change', function () {
+            guardarPreferencias();
+            cargarDestinatarios();
+            actualizarPanelDestinatario();
+        });
 
         $('#empresa_id').on('change', function () {
             $('.tm-deposito-campo').each(function () {
@@ -339,9 +408,30 @@
             actualizarBotonTransferir();
         });
 
+        $('#tm_btn_agregar_articulo').on('click', function () {
+            if (typeof activa_eventos_consultaarticulo === 'function') {
+                activa_eventos_consultaarticulo();
+            }
+            $('#consultaarticuloModal').modal('show');
+        });
+
+        window.onArticuloSeleccionado = function (dataArticulo) {
+            if (!dataArticulo || !dataArticulo.id) {
+                return;
+            }
+            agregarFilaManual({
+                articulo_id: parseInt(dataArticulo.id, 10),
+                sku: dataArticulo.sku || '',
+                descripcion: dataArticulo.descripcion || '',
+                saldo: 0,
+            });
+        };
+
         if (typeof activa_eventos_consultadeposito === 'function') {
             activa_eventos_consultadeposito();
         }
+
+        actualizarPanelDestinatario();
 
         if (depositoSalidaId()) {
             cargarInventario();

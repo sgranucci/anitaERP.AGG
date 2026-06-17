@@ -8,6 +8,8 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 
 class PeriodoCierreContableService
@@ -62,6 +64,66 @@ class PeriodoCierreContableService
         ]);
 
         $this->saldoCierreService->congelarParaCierre($cierre);
+
+        return $cierre;
+    }
+
+    public function obtenerUltimoCierre(int $empresaId): ?PeriodoCierreContable
+    {
+        if ($empresaId <= 0) {
+            return null;
+        }
+
+        return PeriodoCierreContable::query()
+            ->where('empresa_id', $empresaId)
+            ->orderByDesc('fecha_hasta')
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    /** @return array<int, int> empresa_id => periodo_cierre.id del último cierre */
+    public function mapUltimoCierreIdPorEmpresa(): array
+    {
+        $query = PeriodoCierreContable::query()
+            ->select(['id', 'empresa_id', 'fecha_hasta'])
+            ->orderByDesc('fecha_hasta')
+            ->orderByDesc('id');
+
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'empresa_id');
+
+        $map = [];
+        foreach ($query->get() as $cierre) {
+            $empresaId = (int) $cierre->empresa_id;
+            if (! isset($map[$empresaId])) {
+                $map[$empresaId] = (int) $cierre->id;
+            }
+        }
+
+        return $map;
+    }
+
+    public function borrarUltimoCierre(int $empresaId): PeriodoCierreContable
+    {
+        if (! $this->empresaRepository->empresaIdPermitida($empresaId)) {
+            throw new InvalidArgumentException('No tiene acceso a la empresa seleccionada.');
+        }
+
+        $cierre = $this->obtenerUltimoCierre($empresaId);
+
+        if ($cierre === null) {
+            throw new InvalidArgumentException('No hay cierres registrados para esta empresa.');
+        }
+
+        DB::transaction(function () use ($cierre) {
+            $cierre->delete();
+        });
+
+        Log::info('contable_periodo_cierre: último cierre eliminado', [
+            'periodo_cierre_id' => $cierre->id,
+            'empresa_id' => $cierre->empresa_id,
+            'fecha_hasta' => $cierre->fecha_hasta?->format('Y-m-d'),
+            'usuario_eliminacion_id' => auth()->id(),
+        ]);
 
         return $cierre;
     }

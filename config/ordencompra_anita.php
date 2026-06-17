@@ -48,6 +48,7 @@ return [
     ],
 
     'linea' => [
+        ['origen' => 'penvp_orden', 'destino' => 'penvp_orden'],
         ['origen' => 'penvp_fecha_ent', 'destino' => 'fechaentrega', 'transform' => 'fechaYmd'],
         ['origen' => 'penvp_articulo', 'destino' => 'articulo_id', 'transform' => 'fk_articulo_sku'],
         ['origen' => 'penvp_cantidad', 'destino' => 'cantidad'],

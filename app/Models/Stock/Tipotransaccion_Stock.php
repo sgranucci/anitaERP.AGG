@@ -11,7 +11,12 @@ class Tipotransaccion_Stock extends Model
     use SoftDeletes;
     use Tipotransaccion_StockTrait;
 
-    protected $fillable = ['nombre', 'operacion', 'abreviatura', 'signo', 'estado'];
+    protected $fillable = ['nombre', 'operacion', 'abreviatura', 'signo', 'estado', 'requiere_aprobacion', 'maneja_contabilidad'];
+
+    protected $casts = [
+        'requiere_aprobacion' => 'boolean',
+        'maneja_contabilidad' => 'boolean',
+    ];
 
     protected $table = 'tipotransaccion_stock';
 

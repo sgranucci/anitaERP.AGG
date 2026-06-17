@@ -137,7 +137,12 @@ class ModuloAvisoService
             return $this->handlersResueltos[$clave];
         }
 
-        $clase = config('modulo_aviso.handlers.'.$clave);
+        $handlers = config('modulo_aviso.handlers', []);
+        if (! is_array($handlers)) {
+            return null;
+        }
+
+        $clase = $handlers[$clave] ?? null;
         if (! $clase || ! class_exists($clase)) {
             return null;
         }

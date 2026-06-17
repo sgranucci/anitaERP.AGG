@@ -18,6 +18,9 @@ class MayorPlanoCuentaAnitaBridgeReader
         .'subd_ref_sucursal,subd_ref_nro,subd_importe,subd_cod_mon,subd_cotizacion,subd_desc_mov,subd_nro_asiento,'
         .'subd_nro_interno,subd_ccosto_cta,subd_ccosto_con';
 
+    private const AUXPAG_CAMPOS = 'axp_pro,axp_fecha,axp_rec,axp_tipo,axp_nro,axp_tipo_ap,axp_monto_ap,axp_cod_mon_co,'
+        .'axp_sucursal,axp_empresa,axp_letra_comp,axp_nro_interno,axp_banco,axp_concepto';
+
     public function __construct(
         private readonly ApiAnita $api = new ApiAnita(),
     ) {
@@ -128,6 +131,7 @@ class MayorPlanoCuentaAnitaBridgeReader
      *   ctamov: list<object>,
      *   subdiario: list<object>,
      *   pago: list<object>,
+     *   auxpag: list<object>,
      *   errores: list<string>
      * }
      */
@@ -142,6 +146,7 @@ class MayorPlanoCuentaAnitaBridgeReader
         $ctamov = [];
         $subdiario = [];
         $pago = [];
+        $auxpag = [];
 
         foreach ($empresaIds as $empresaId) {
             $empresaId = (int) $empresaId;
@@ -217,12 +222,26 @@ class MayorPlanoCuentaAnitaBridgeReader
                     ),
                 );
             }
+
+            $auxpag = array_merge(
+                $auxpag,
+                $this->listar(
+                    'che_ban',
+                    'auxpag',
+                    self::AUXPAG_CAMPOS,
+                    ' WHERE axp_empresa='.$empresaId
+                    .' AND axp_fecha BETWEEN '.$fechaSaldoDesde.' AND '.$fechaHasta,
+                    $errores,
+                    'auxpag-empresa-'.$empresaId,
+                ),
+            );
         }
 
         return [
             'ctamov' => $ctamov,
             'subdiario' => $subdiario,
             'pago' => $pago,
+            'auxpag' => $auxpag,
             'errores' => $errores,
         ];
     }

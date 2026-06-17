@@ -18,4 +18,12 @@ return [
         'memory_limit' => env('MAYOR_CONCEPTO_MEMORY_LIMIT', '1024M'),
         'max_execution_time' => (int) env('MAYOR_CONCEPTO_MAX_EXECUTION_TIME', 900),
     ],
+
+    /*
+    | Mayor plano por cuenta (l-mayor). Bridge ctamov + subdiario; volúmenes altos en cierre mensual.
+    */
+    'mayor_plano_cuenta' => [
+        'memory_limit' => env('MAYOR_PLANO_CUENTA_MEMORY_LIMIT', '1024M'),
+        'max_execution_time' => (int) env('MAYOR_PLANO_CUENTA_MAX_EXECUTION_TIME', 900),
+    ],
 ];

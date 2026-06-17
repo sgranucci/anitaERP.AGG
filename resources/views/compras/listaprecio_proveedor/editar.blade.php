@@ -17,7 +17,7 @@ Editar lista de precios proveedor
         <div class="card card-danger">
             <div class="card-header">
                 <h3 class="card-title">
-                    @if (! empty($soloConsulta) && empty($puedeActualizarLista))
+                    @if (! empty($soloConsulta) && empty($puedeModificarLista))
                         Consultar
                     @else
                         Editar
@@ -32,7 +32,7 @@ Editar lista de precios proveedor
                     @endif
                 </div>
             </div>
-            <form action="{{ route('actualizar_listaprecio_proveedor', ['id' => $data->id]) }}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off" @if(!empty($soloConsulta) && empty($puedeActualizarLista)) onsubmit="return false;" @endif>
+            <form action="{{ route('actualizar_listaprecio_proveedor', ['id' => $data->id]) }}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off" @if(!empty($soloConsulta) && empty($puedeModificarLista)) onsubmit="return false;" @endif>
                 @csrf @method('put')
                 @if (! empty($soloConsulta))
                     <input type="hidden" name="origen" value="modal_consulta">
@@ -47,7 +47,7 @@ Editar lista de precios proveedor
                     </button>
                     @endif
                 </div>
-                <div class="@if(!empty($soloConsulta) && empty($puedeActualizarLista)) pe-none @endif" @if(!empty($soloConsulta) && empty($puedeActualizarLista)) style="opacity:.92" @endif>
+                <div class="@if(!empty($soloConsulta) && empty($puedeModificarLista)) pe-none @endif" @if(!empty($soloConsulta) && empty($puedeModificarLista)) style="opacity:.92" @endif>
                 <div class="card-body">
                     @include('compras.listaprecio_proveedor.form', ['visualizar' => $visualizar ?? false])
                     <div class="form3" style="display:none;">
@@ -64,10 +64,10 @@ Editar lista de precios proveedor
                     <div class="row">
                         <div class="col-lg-12 text-center">
                             @if (! empty($soloConsulta))
-                                @if (! empty($puedeActualizarLista))
+                                @if (! empty($puedeModificarLista))
                                     @include('includes.boton-form-editar')
                                 @endif
-                                <button type="button" class="btn btn-secondary @if(!empty($puedeActualizarLista)) ml-2 @endif" onclick="window.close()">Cerrar solapa</button>
+                                <button type="button" class="btn btn-secondary @if(!empty($puedeModificarLista)) ml-2 @endif" onclick="window.close()">Cerrar solapa</button>
                             @else
                                 @include('includes.boton-form-editar')
                             @endif

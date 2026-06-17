@@ -74,10 +74,8 @@ class AppServiceProvider extends ServiceProvider
         Asiento::observe(AsientoObserver::class);
 
         $url = env('APP_URL');
-        if (str_contains($url, 'https')) {
-            if (App::environment('production')) {
-                URL::forceScheme('https');
-            }
+        if (is_string($url) && str_contains($url, 'https')) {
+            URL::forceScheme('https');
         }
     }
 

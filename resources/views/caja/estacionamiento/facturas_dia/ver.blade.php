@@ -74,6 +74,9 @@
                             <i class="fa fa-exchange-alt"></i> Cambiar medio de pago
                         </button>
                     @endif
+                    <button type="button" class="btn btn-outline-dark" id="btn-reimprimir-ticket" data-venta-id="{{ $venta->id }}">
+                        <i class="fas fa-receipt"></i> Reimprimir ticket
+                    </button>
                     @if ($puede_nc ?? false)
                         <button type="button"
                                 class="btn btn-outline-warning js-fd-generar-nc"
@@ -326,6 +329,42 @@
             }
         });
     });
+
+    var btnTicket = document.getElementById('btn-reimprimir-ticket');
+    if (btnTicket) {
+        var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+        var csrf = csrfMeta ? csrfMeta.getAttribute('content') : '';
+        btnTicket.addEventListener('click', function () {
+            var ventaId = btnTicket.getAttribute('data-venta-id');
+            if (!ventaId || btnTicket.disabled) return;
+            btnTicket.disabled = true;
+            fetch('{{ route('estacionamiento_facturas_dia_reimprimir_ticket', ['ventaId' => $venta->id]) }}', {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': csrf,
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+            })
+                .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+                .then(function (res) {
+                    if (res.ok && res.body.ok) {
+                        if (typeof toastr !== 'undefined') toastr.success(res.body.mensaje || 'Ticket enviado.');
+                        else alert(res.body.mensaje || 'Ticket enviado.');
+                    } else {
+                        var msg = (res.body && (res.body.error || res.body.mensaje)) || 'Error al reimprimir.';
+                        if (typeof toastr !== 'undefined') toastr.error(msg);
+                        else alert(msg);
+                    }
+                })
+                .catch(function () {
+                    if (typeof toastr !== 'undefined') toastr.error('Error de comunicación.');
+                    else alert('Error de comunicación.');
+                })
+                .finally(function () { btnTicket.disabled = false; });
+        });
+    }
 })();
 </script>
 @endsection

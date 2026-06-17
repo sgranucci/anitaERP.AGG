@@ -833,6 +833,7 @@ Route::get('contable/listar-mayor-plano-cuenta/{formato}', 'Contable\MayorPlanoC
 
 Route::get('contable/cierre-periodo', 'Contable\PeriodoCierreContableController@index')->name('cierre_periodo_contable');
 Route::post('contable/cierre-periodo/cerrar', 'Contable\PeriodoCierreContableController@cerrar')->name('ejecutar_cierre_periodo_contable');
+Route::post('contable/cierre-periodo/borrar-ultimo', 'Contable\PeriodoCierreContableController@borrarUltimo')->name('borrar_ultimo_cierre_periodo_contable');
 
 Route::get('contable/apertura-periodo', 'Contable\AperturaPeriodoContableController@index')->name('apertura_periodo_contable');
 Route::post('contable/apertura-periodo/solicitar', 'Contable\AperturaPeriodoContableController@solicitar')->name('solicitar_apertura_periodo_contable');
@@ -962,9 +963,16 @@ Route::get('stock/leertipotransaccion_stock/{id}', 'Stock\Tipotransaccion_StockC
  * Transferencia ágil de mercadería (móvil / tablet)
  */
 Route::get('stock/transferencia-mercaderia', 'Stock\TransferenciaMercaderiaController@index')->name('transferencia_mercaderia');
+Route::get('stock/transferencia-mercaderia/pendientes', 'Stock\TransferenciaMercaderiaController@pendientes')->name('transferencia_mercaderia_pendientes');
+Route::get('stock/transferencia-mercaderia/destinatarios', 'Stock\TransferenciaMercaderiaController@destinatarios')->name('transferencia_mercaderia_destinatarios');
 Route::post('stock/transferencia-mercaderia/preferencias', 'Stock\TransferenciaMercaderiaController@preferencias')->name('transferencia_mercaderia_preferencias');
 Route::get('stock/transferencia-mercaderia/inventario', 'Stock\TransferenciaMercaderiaController@inventario')->name('transferencia_mercaderia_inventario');
 Route::post('stock/transferencia-mercaderia', 'Stock\TransferenciaMercaderiaController@guardar')->name('transferencia_mercaderia_guardar');
+Route::post('stock/transferencia-mercaderia/{id}/aprobar', 'Stock\TransferenciaMercaderiaController@aprobar')->name('transferencia_mercaderia_aprobar');
+Route::post('stock/transferencia-mercaderia/{id}/rechazar', 'Stock\TransferenciaMercaderiaController@rechazar')->name('transferencia_mercaderia_rechazar');
+Route::get('stock/transferencia-mercaderia/publico/{token}/aprobar', 'Stock\TransferenciaMercaderiaController@aprobarPublico')->name('transferencia_mercaderia_aprobar_publico');
+Route::match(['get', 'post'], 'stock/transferencia-mercaderia/publico/{token}/rechazar', 'Stock\TransferenciaMercaderiaController@rechazarPublico')->name('transferencia_mercaderia_rechazar_publico');
+Route::get('stock/transferencia-mercaderia/publico/{token}/ver', 'Stock\TransferenciaMercaderiaController@verPublico')->name('transferencia_mercaderia_ver_publico');
 
 /*
  * Préstamos de materiales
@@ -993,6 +1001,7 @@ Route::post('stock/recepcion-proveedor', 'Stock\RecepcionProveedorController@gua
 Route::get('stock/recepcion-proveedor/{id}/editar', 'Stock\RecepcionProveedorController@editar')->name('editar_recepcion_proveedor');
 Route::put('stock/recepcion-proveedor/{id}', 'Stock\RecepcionProveedorController@actualizar')->name('actualizar_recepcion_proveedor');
 Route::post('stock/recepcion-proveedor/{id}/confirmar', 'Stock\RecepcionProveedorController@confirmar')->name('confirmar_recepcion_proveedor');
+Route::post('stock/recepcion-proveedor/api/preview-articulo-proveedor', 'Stock\RecepcionProveedorController@apiPreviewArticuloProveedor')->name('recepcion_proveedor_preview_articulo_proveedor');
 Route::get('stock/recepcion-proveedor/api/precarga-oc', 'Stock\RecepcionProveedorController@apiPrecargaOc')->name('recepcion_proveedor_precarga_oc');
 Route::get('stock/recepcion-proveedor/api/buscar-oc-pendientes', 'Stock\RecepcionProveedorController@apiBuscarOcPendientes')->name('recepcion_proveedor_buscar_oc_pendientes');
 Route::get('stock/listarecepcionproveedor/{formato?}/{busqueda?}', 'Stock\RecepcionProveedorController@listar')->name('lista_recepcion_proveedor');
@@ -1003,6 +1012,7 @@ Route::post('stock/recepcion-proveedor/{id}/anular', 'Stock\RecepcionProveedorCo
 Route::delete('stock/recepcion-proveedor/{id}', 'Stock\RecepcionProveedorController@eliminar')->name('eliminar_recepcion_proveedor');
 Route::post('stock/recepcion-proveedor/ocr-preview', 'Stock\RecepcionProveedorController@procesarOcrPreview')->name('recepcion_proveedor_ocr_preview');
 Route::post('stock/recepcion-proveedor/{id}/ocr', 'Stock\RecepcionProveedorController@subirOcr')->name('recepcion_proveedor_ocr');
+Route::get('stock/recepcion-proveedor/{id}/archivo/{archivo}', 'Stock\RecepcionProveedorController@descargarArchivo')->name('recepcion_proveedor_archivo');
 Route::get('configuracion/recepcion-proveedor', 'Configuracion\ConfiguracionRecepcionProveedorController@index')->name('configuracion_recepcion_proveedor');
 Route::put('configuracion/recepcion-proveedor', 'Configuracion\ConfiguracionRecepcionProveedorController@actualizar')->name('actualizar_configuracion_recepcion_proveedor');
 Route::post('configuracion/recepcion-proveedor/tolerancias', 'Configuracion\ConfiguracionRecepcionProveedorController@guardarTolerancias')->name('guardar_tolerancias_recepcion_proveedor');
@@ -2360,8 +2370,8 @@ Route::post('compras/listaprecio_proveedor/{id}/importar_excel', 'Compras\Listap
 Route::get('compras/ordencompra', 'Compras\OrdencompraController@index')->name('consultar_ordencompra');
 Route::get('compras/ordencompra/crear', 'Compras\OrdencompraController@crear')->name('crear_ordencompra');
 Route::post('compras/ordencompra', 'Compras\OrdencompraController@guardar')->name('guardar_ordencompra');
-Route::get('compras/ordencompra/{id}/editar', 'Compras\OrdencompraController@editar')->name('editar_ordencompra');
-Route::put('compras/ordencompra/{id}', 'Compras\OrdencompraController@actualizar')->name('actualizar_ordencompra');
+Route::get('compras/ordencompra/{id}/editar', 'Compras\OrdencompraController@editar')->name('editar_ordencompra')->middleware('modo.consulta');
+Route::put('compras/ordencompra/{id}', 'Compras\OrdencompraController@actualizar')->name('actualizar_ordencompra')->middleware('modo.consulta');
 Route::delete('compras/ordencompra/{id}', 'Compras\OrdencompraController@eliminar')->name('eliminar_ordencompra');
 Route::get('compras/listaordencompra/{formato?}/{busqueda?}', 'Compras\OrdencompraController@listar')->name('listar_ordencompra');
 Route::get('compras/ordencompra/requisiciones-aprobadas', 'Compras\OrdencompraController@buscarRequisicionesAprobadas')->name('ordencompra_buscar_requisiciones');

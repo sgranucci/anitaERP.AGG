@@ -28,6 +28,24 @@ label.requerido:after{
 .pl-40{
     padding-left:40px !important;
 }
+
+/* Menú-Rol: resaltar módulos de nivel 1 (raíz del árbol) */
+.tabla-menu-rol tr.menu-rol-fila-modulo > td {
+    background-color: #d6eaf8 !important;
+    border-top: 2px solid #85c1e9;
+    color: #17202a;
+    font-weight: 600;
+}
+.tabla-menu-rol tbody > tr.menu-rol-fila-modulo:first-child > td {
+    border-top: none;
+}
+.tabla-menu-rol tr.menu-rol-fila-modulo-cierre > td {
+    border-bottom: 2px solid #85c1e9;
+}
+.tabla-menu-rol tr.menu-rol-fila-modulo > td.menu-rol-celda-modulo {
+    padding-top: 0.65rem;
+    padding-bottom: 0.65rem;
+}
 .pl-50{
     padding-left:50px !important;
 }

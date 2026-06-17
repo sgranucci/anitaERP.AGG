@@ -36,13 +36,19 @@ class PeriodoCierreContableController extends Controller
         $cierres->appends(['empresa_id' => $empresaId > 0 ? $empresaId : null]);
 
         $resumenVigente = $empresaId > 0 ? $this->cierreService->resumenCierreVigente($empresaId) : null;
+        $ultimoCierre = $empresaId > 0 ? $this->cierreService->obtenerUltimoCierre($empresaId) : null;
+        $puedeBorrarUltimo = can('borrar-ultimo-cierre-periodo-contable', false)
+            || can('ejecutar-cierre-periodo-contable', false);
 
         return view('contable.cierre_periodo.index', [
             'empresa_query' => $empresaQuery,
             'empresa_id' => $empresaId,
             'cierres' => $cierres,
             'resumen_vigente' => $resumenVigente,
+            'ultimo_cierre' => $ultimoCierre,
+            'ultimos_cierre_ids' => $puedeBorrarUltimo ? $this->cierreService->mapUltimoCierreIdPorEmpresa() : [],
             'puede_ejecutar_cierre' => can('ejecutar-cierre-periodo-contable', false),
+            'puede_borrar_ultimo_cierre' => $puedeBorrarUltimo,
         ]);
     }
 
@@ -72,5 +78,31 @@ class PeriodoCierreContableController extends Controller
         return redirect()
             ->route('cierre_periodo_contable', ['empresa_id' => $request->input('empresa_id')])
             ->with('mensaje', 'Cierre contable registrado correctamente.');
+    }
+
+    public function borrarUltimo(Request $request)
+    {
+        if (! can('borrar-ultimo-cierre-periodo-contable', false)
+            && ! can('ejecutar-cierre-periodo-contable', false)) {
+            abort(403);
+        }
+
+        $request->validate([
+            'empresa_id' => 'required|integer|min:1',
+        ]);
+
+        try {
+            $cierre = $this->cierreService->borrarUltimoCierre((int) $request->input('empresa_id'));
+        } catch (InvalidArgumentException $e) {
+            return redirect()
+                ->route('cierre_periodo_contable', ['empresa_id' => $request->input('empresa_id')])
+                ->with('error', $e->getMessage());
+        }
+
+        $fecha = optional($cierre->fecha_hasta)->format('d/m/Y');
+
+        return redirect()
+            ->route('cierre_periodo_contable', ['empresa_id' => $request->input('empresa_id')])
+            ->with('mensaje', 'Se eliminó el último cierre contable (hasta '.$fecha.').');
     }
 }

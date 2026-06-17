@@ -113,6 +113,7 @@ final class GastronomiaCategoriafidelidadCanjeService
         int $articuloId,
         int $listaprecioId,
         array $opcionalesPorOrden = [],
+        ?string $comentarioCocina = null,
     ): array {
         if ($cuenta->estado !== CuentaGastronomia::ESTADO_ABIERTA) {
             throw new InvalidArgumentException('La cuenta no está abierta.');
@@ -167,13 +168,15 @@ final class GastronomiaCategoriafidelidadCanjeService
             }
         }
 
-        DB::transaction(function () use ($cuenta, $validacion, $item, $descuento, $clienteInternoId, $opcionalesPorOrden) {
+        DB::transaction(function () use ($cuenta, $validacion, $item, $descuento, $clienteInternoId, $opcionalesPorOrden, $comentarioCocina) {
             $this->cuentaService->agregarLinea(
                 $cuenta->fresh(['lineas']),
                 (int) $item['articulo_id'],
                 1.,
                 (float) $item['precio_unitario'],
                 $opcionalesPorOrden,
+                0.,
+                $comentarioCocina,
             );
 
             $this->cuentaService->actualizarCabecera($cuenta->fresh(), [

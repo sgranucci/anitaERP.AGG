@@ -56,6 +56,75 @@ final class RecepcionProveedorArticuloProveedorSyncSupport
     }
 
     /**
+     * Vista previa de líneas que impactarán articulo_proveedor al guardar la recepción.
+     *
+     * @param  list<array<string, mixed>>  $itemsRequest
+     * @return array{requiere_modal: bool, lineas: list<array<string, mixed>>}
+     */
+    public static function previewDesdeItems(int $proveedorId, array $itemsRequest, string $fechaRef): array
+    {
+        if ($proveedorId <= 0) {
+            return ['requiere_modal' => false, 'lineas' => []];
+        }
+
+        $lineas = [];
+
+        foreach (array_values($itemsRequest) as $formIdx => $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+
+            if ((float) ($item['cantidad'] ?? 0) <= 0) {
+                continue;
+            }
+
+            $articuloId = (int) ($item['articulo_id'] ?? 0);
+            if ($articuloId <= 0) {
+                continue;
+            }
+
+            $articulo = Articulo::query()->with('unidadesdemedidas')->find($articuloId);
+            if ($articulo === null) {
+                continue;
+            }
+
+            $evaluacion = self::evaluarLineaCatalogoPreview(
+                $proveedorId,
+                $articulo,
+                $item,
+                self::metaDesdeItem($item),
+                $fechaRef,
+                $formIdx
+            );
+
+            if ($evaluacion !== null) {
+                $lineas[] = $evaluacion;
+            }
+        }
+
+        return [
+            'requiere_modal' => $lineas !== [],
+            'lineas' => $lineas,
+        ];
+    }
+
+    /** @return list<array{id: int, abreviatura: string, nombre: string}> */
+    public static function unidadesMedidaParaModal(): array
+    {
+        return Unidadmedida::query()
+            ->select(['id', 'abreviatura', 'nombre'])
+            ->orderBy('nombre')
+            ->get()
+            ->map(static fn (Unidadmedida $um): array => [
+                'id' => (int) $um->id,
+                'abreviatura' => (string) ($um->abreviatura ?? ''),
+                'nombre' => (string) ($um->nombre ?? ''),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
      * @param  list<array<string, mixed>>  $itemsRequest
      * @return array<int, array<string, mixed>>
      */
@@ -73,19 +142,193 @@ final class RecepcionProveedorArticuloProveedorSyncSupport
                 continue;
             }
 
-            $out[$articuloId] = [
-                'ocr_codigo_proveedor' => self::texto($item['ocr_codigo_proveedor'] ?? null),
-                'ocr_descripcion_proveedor' => self::texto($item['ocr_descripcion_proveedor'] ?? null, 255),
-                'ocr_codigobarra' => self::texto($item['ocr_codigobarra'] ?? null, 50),
-                'ocr_unidad_compra' => self::texto($item['ocr_unidad_compra'] ?? null, 30),
-                'coeficienteconversion' => isset($item['coeficienteconversion'])
-                    ? (float) $item['coeficienteconversion']
-                    : null,
-                'unidadmedida_id' => isset($item['unidadmedida_id']) ? (int) $item['unidadmedida_id'] : null,
-            ];
+            $out[$articuloId] = self::metaDesdeItem($item);
         }
 
         return $out;
+    }
+
+    /** @param  array<string, mixed>  $item */
+    private static function metaDesdeItem(array $item): array
+    {
+        return [
+            'ocr_codigo_proveedor' => self::texto($item['ocr_codigo_proveedor'] ?? null),
+            'ocr_descripcion_proveedor' => self::texto($item['ocr_descripcion_proveedor'] ?? null, 255),
+            'ocr_codigobarra' => self::texto($item['ocr_codigobarra'] ?? null, 50),
+            'ocr_unidad_compra' => self::texto($item['ocr_unidad_compra'] ?? null, 30),
+            'coeficienteconversion' => isset($item['coeficienteconversion'])
+                ? (float) $item['coeficienteconversion']
+                : null,
+            'unidadmedida_id' => isset($item['unidadmedida_id']) ? (int) $item['unidadmedida_id'] : null,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     * @param  array<string, mixed>  $meta
+     * @return array<string, mixed>|null
+     */
+    private static function evaluarLineaCatalogoPreview(
+        int $proveedorId,
+        Articulo $articulo,
+        array $item,
+        array $meta,
+        string $fechaRef,
+        int $formIdx
+    ): ?array {
+        $lineaStub = self::lineaStubDesdeItem($item);
+        $datos = self::armarDatosCatalogo($articulo, $lineaStub, $meta, $proveedorId, $fechaRef);
+        $codigo = $datos['codigo_articulo_proveedor'];
+        $articuloId = (int) $articulo->id;
+
+        $filaExistente = null;
+        if ($codigo !== null) {
+            $filaExistente = Articulo_Proveedor::query()
+                ->where('proveedor_id', $proveedorId)
+                ->where('codigo_articulo_proveedor', $codigo)
+                ->first();
+        }
+
+        if ($codigo !== null && $filaExistente !== null && (int) $filaExistente->articulo_id !== $articuloId) {
+            return self::filaPreviewRespuesta(
+                $formIdx,
+                $articulo,
+                'conflicto',
+                'Conflicto',
+                false,
+                $datos,
+                $meta,
+                $filaExistente,
+                'El código ya está asociado a otro artículo en el catálogo proveedor.'
+            );
+        }
+
+        if ($codigo === null) {
+            return self::filaPreviewRespuesta(
+                $formIdx,
+                $articulo,
+                'sin_codigo',
+                'Falta código',
+                true,
+                $datos,
+                $meta,
+                null,
+                'Indique el código del proveedor leído en el remito.'
+            );
+        }
+
+        if ($filaExistente === null) {
+            if (! self::tieneDatosMinimos($datos)) {
+                return null;
+            }
+
+            return self::filaPreviewRespuesta(
+                $formIdx,
+                $articulo,
+                'crear',
+                'Alta catálogo',
+                true,
+                $datos,
+                $meta,
+                null,
+                null
+            );
+        }
+
+        if (self::filaCatalogoVacia($filaExistente)) {
+            return self::filaPreviewRespuesta(
+                $formIdx,
+                $articulo,
+                'completar',
+                'Completar catálogo',
+                true,
+                $datos,
+                $meta,
+                $filaExistente,
+                null
+            );
+        }
+
+        if (self::calcularPayloadComplemento($filaExistente, $datos) === []) {
+            return null;
+        }
+
+        return self::filaPreviewRespuesta(
+            $formIdx,
+            $articulo,
+            'complementar',
+            'Complementar catálogo',
+            true,
+            $datos,
+            $meta,
+            $filaExistente,
+            null
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $datos
+     * @param  array<string, mixed>  $meta
+     * @return array<string, mixed>
+     */
+    private static function filaPreviewRespuesta(
+        int $formIdx,
+        Articulo $articulo,
+        string $accion,
+        string $accionLabel,
+        bool $editable,
+        array $datos,
+        array $meta,
+        ?Articulo_Proveedor $filaExistente,
+        ?string $mensaje
+    ): array {
+        $umId = (int) ($datos['unidadmedida_compra_id'] ?? 0);
+        $umLabel = '';
+        if ($umId > 0) {
+            $um = Unidadmedida::query()->find($umId);
+            $umLabel = trim((string) ($um->abreviatura ?? $um->nombre ?? ''));
+        }
+
+        return [
+            'form_idx' => $formIdx,
+            'articulo_id' => (int) $articulo->id,
+            'sku' => (string) ($articulo->sku ?? ''),
+            'descripcion_erp' => (string) ($articulo->descripcion ?? ''),
+            'accion' => $accion,
+            'accion_label' => $accionLabel,
+            'editable' => $editable,
+            'mensaje' => $mensaje,
+            'codigo_articulo_proveedor' => $datos['codigo_articulo_proveedor'],
+            'nombre_articulo_proveedor' => $datos['nombre_articulo_proveedor'],
+            'codigobarra' => $datos['codigobarra'],
+            'unidadmedida_compra_id' => $umId > 0 ? $umId : null,
+            'unidadmedida_compra_label' => $umLabel !== '' ? $umLabel : ($meta['ocr_unidad_compra'] ?? null),
+            'unidadmedida_stock_label' => self::labelUnidadmedidaStock($articulo),
+            'coeficiente_conversion' => (float) ($datos['coeficiente_conversion'] ?? 1),
+            'ocr_codigo_proveedor' => $meta['ocr_codigo_proveedor'] ?? null,
+            'ocr_descripcion_proveedor' => $meta['ocr_descripcion_proveedor'] ?? null,
+            'ocr_codigobarra' => $meta['ocr_codigobarra'] ?? null,
+            'ocr_unidad_compra' => $meta['ocr_unidad_compra'] ?? null,
+            'catalogo_existente' => $filaExistente !== null ? [
+                'nombre_articulo_proveedor' => $filaExistente->nombre_articulo_proveedor,
+                'codigobarra' => $filaExistente->codigobarra,
+                'unidadmedida_compra_id' => $filaExistente->unidadmedida_compra_id,
+                'coeficiente_conversion' => $filaExistente->coeficiente_conversion,
+            ] : null,
+        ];
+    }
+
+    /** @param  array<string, mixed>  $item */
+    private static function lineaStubDesdeItem(array $item): Recepcion_Proveedor_Articulo
+    {
+        $linea = new Recepcion_Proveedor_Articulo;
+        $linea->forceFill([
+            'articulo_id' => (int) ($item['articulo_id'] ?? 0),
+            'coeficienteconversion' => (float) ($item['coeficienteconversion'] ?? 0),
+            'unidadmedida_id' => (int) ($item['unidadmedida_id'] ?? 0),
+        ]);
+
+        return $linea;
     }
 
     /**
@@ -359,6 +602,19 @@ final class RecepcionProveedorArticuloProveedorSyncSupport
      */
     private static function complementarFilaExistente(Articulo_Proveedor $fila, array $datos): void
     {
+        $payload = self::calcularPayloadComplemento($fila, $datos);
+
+        if ($payload !== []) {
+            $fila->update($payload);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $datos
+     * @return array<string, mixed>
+     */
+    private static function calcularPayloadComplemento(Articulo_Proveedor $fila, array $datos): array
+    {
         $payload = [];
 
         if (self::normalizarCodigo($fila->codigobarra) === null && $datos['codigobarra'] !== null) {
@@ -378,9 +634,23 @@ final class RecepcionProveedorArticuloProveedorSyncSupport
             $payload['coeficiente_conversion'] = (float) $datos['coeficiente_conversion'];
         }
 
-        if ($payload !== []) {
-            $fila->update($payload);
+        return $payload;
+    }
+
+    private static function labelUnidadmedidaStock(Articulo $articulo): string
+    {
+        $articulo->loadMissing('unidadesdemedidas');
+        $um = $articulo->unidadesdemedidas;
+        if ($um === null) {
+            return '—';
         }
+
+        $label = trim((string) ($um->abreviatura ?? ''));
+        if ($label === '') {
+            $label = trim((string) ($um->nombre ?? ''));
+        }
+
+        return $label !== '' ? $label : '—';
     }
 
     private static function normalizarCodigo(?string $codigo): ?string

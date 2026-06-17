@@ -42,6 +42,7 @@ class DepositoAdministradorController extends Controller
             'principal' => (bool) $request->input('principal', false),
             'recibe_avisos' => (bool) $request->input('recibe_avisos', true),
             'aprueba_recepcion' => (bool) $request->input('aprueba_recepcion', true),
+            'aprueba_transferencia' => (bool) $request->input('aprueba_transferencia', true),
         ]);
 
         return redirect('stock/deposito-administrador')
@@ -68,6 +69,7 @@ class DepositoAdministradorController extends Controller
             'principal' => (bool) $request->input('principal', false),
             'recibe_avisos' => (bool) $request->input('recibe_avisos', true),
             'aprueba_recepcion' => (bool) $request->input('aprueba_recepcion', true),
+            'aprueba_transferencia' => (bool) $request->input('aprueba_transferencia', true),
         ]);
 
         return redirect('stock/deposito-administrador')

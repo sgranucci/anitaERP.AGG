@@ -20,6 +20,8 @@ final class RecepcionProveedorOcrNumeroOcExtractor
         $candidatos = [];
 
         $patronesEtiquetados = [
+            ['patron' => '/\bSegún\s+OC\s+X?\s*\d*\s*[-–]?\s*(?<num>0*\d{6,11})\b/iu', 'origen' => 'segun_oc_factura'],
+            ['patron' => '/\bOC\s+X\s+\d+\s*[-–]\s*(?<num>0*\d{6,11})\b/iu', 'origen' => 'oc_x_factura'],
             ['patron' => '/\bNro\.?\s*(?:de\s+)?O\.?\s*C\.?\s*:?\s*(?<num>\d{4,8})\b/iu', 'origen' => 'nro_de_oc'],
             ['patron' => '/\bNro\.?\s*(?:de\s+)?O\.?C\.?\s*:?\s*(?<num>\d{4,8})\b/iu', 'origen' => 'nro_de_oc'],
             ['patron' => '/\bNro\.?\s*(?:de\s+)?O\s*\/\s*C\.?\s*:?\s*(?<num>\d{4,8})\b/iu', 'origen' => 'nro_de_oc'],

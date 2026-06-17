@@ -122,10 +122,12 @@
         inventario: @json(route('transferencia_mercaderia_inventario')),
         preferencias: @json(route('transferencia_mercaderia_preferencias')),
         guardar: @json(route('transferencia_mercaderia_guardar')),
-        articuloEditar: @json(url('stock/articulo')).replace(/\/$/, '') + '/',
+        destinatarios: @json(route('transferencia_mercaderia_destinatarios')),
+        articuloConsultaUrl: @json(route('editar_articulo', ['id' => '__ID__', 'origen' => 'modal_consulta', 'vista' => 'consulta'])),
     };
 </script>
 <script src="{{ asset('assets/pages/scripts/stock/depmae/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/transferencia_mercaderia/index.js') }}" type="text/javascript"></script>
 @endsection
 
@@ -136,10 +138,18 @@
         @include('includes.mensaje')
 
         <div class="card card-outline card-primary mb-2">
-            <div class="card-header py-2">
+            <div class="card-header py-2 d-flex justify-content-between align-items-center">
                 <h3 class="card-title mb-0" style="font-size: 1.1rem;">
                     Transferencia entre depósitos
                 </h3>
+                @if (can('listar-transferencias-pendientes', false))
+                    <a href="{{ route('transferencia_mercaderia_pendientes') }}" class="btn btn-warning btn-sm">
+                        Pendientes
+                        @if (($pendientesCount ?? 0) > 0)
+                            <span class="badge badge-light">{{ $pendientesCount }}</span>
+                        @endif
+                    </a>
+                @endif
             </div>
             <div class="card-body py-2">
                 <div class="tm-cabecera">
@@ -172,11 +182,27 @@
                                 <option value="">— Seleccionar —</option>
                                 @foreach ($tipotransacciones as $t)
                                     <option value="{{ $t->id }}"
+                                        data-requiere-aprobacion="{{ $t->requiere_aprobacion ? '1' : '0' }}"
                                         @if ((int) ($defaults['tipotransaccion_stock_id'] ?? 0) === (int) $t->id) selected @endif>
                                         {{ $t->nombre }}
+                                        @if ($t->requiere_aprobacion)
+                                            (requiere aprobación)
+                                        @endif
                                     </option>
                                 @endforeach
                             </select>
+                        </div>
+                        <div class="form-group col-12 mb-2" id="tm_panel_destinatario" style="display:none;">
+                            <label for="usuario_destino_id">Usuario que recibe / aprueba</label>
+                            <select id="usuario_destino_id" class="form-control">
+                                <option value="">— Encargado del depósito destino —</option>
+                            </select>
+                            <small class="text-muted">Por defecto se usa el administrador principal del depósito de entrada.</small>
+                        </div>
+                        <div class="form-group col-12 mb-2">
+                            <button type="button" id="tm_btn_agregar_articulo" class="btn btn-outline-primary btn-block">
+                                <i class="fa fa-search"></i> Agregar artículo (modal)
+                            </button>
                         </div>
                         <div class="form-group col-12 mb-0">
                             <button type="button" id="tm_btn_cargar" class="btn btn-info btn-block">
@@ -205,4 +231,5 @@
 </div>
 
 @include('includes.stock.modalconsultadeposito')
+@include('includes.stock.modalconsultaarticulo')
 @endsection

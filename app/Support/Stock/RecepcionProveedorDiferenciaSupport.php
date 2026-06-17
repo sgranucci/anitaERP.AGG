@@ -22,7 +22,9 @@ class RecepcionProveedorDiferenciaSupport
      *   fl_articulo_extra: bool,
      *   fl_faltante_oc: bool,
      *   fl_laboratorio: bool,
+     *   fl_linea_rechazada: bool,
      *   resumen_diferencias: string,
+     *   resumen_rechazos: string,
      *   faltantes: list<string>
      * }
      */
@@ -34,8 +36,9 @@ class RecepcionProveedorDiferenciaSupport
 
         $ocPorId = $oc->ordencompra_articulos->keyBy('id');
         $recibidosPorOcArt = [];
-        $flPrecio = $flCant = $flExtra = $flLab = false;
+        $flPrecio = $flCant = $flExtra = $flLab = $flRechazo = false;
         $resumenes = [];
+        $resumenesRechazo = [];
         $enriquecidos = [];
 
         foreach ($items as $idx => $item) {
@@ -61,7 +64,9 @@ class RecepcionProveedorDiferenciaSupport
 
             $ocArt = $ocArtId > 0 ? $ocPorId->get($ocArtId) : ($sustituidoId > 0 ? $ocPorId->get($sustituidoId) : null);
             $cantOc = (float) ($item['cantidad_oc'] ?? ($ocArt->cantidad ?? 0));
-            $cantRec = (float) ($item['cantidad'] ?? 0);
+            $cantRec = (float) ($item['cantidad'] ?? 0) + (float) ($item['cantidad_rechazada'] ?? 0);
+            $cantRechazada = (float) ($item['cantidad_rechazada'] ?? 0);
+            $cantAceptada = (float) ($item['cantidad'] ?? 0);
             $precioOc = (float) ($item['precio_ordencompra'] ?? ($ocArt->precio ?? $item['precio'] ?? 0));
             $precioRec = (float) ($item['precio'] ?? 0);
 
@@ -84,15 +89,21 @@ class RecepcionProveedorDiferenciaSupport
             $flCantDiff = $tipoLinea !== self::TIPO_EXTRA
                 && $cantOc > 0
                 && ! RecepcionProveedorToleranciaSupport::cantidadDentroTolerancia($cantOc, $cantRec, $tol);
-            $flPrecioDiff = $precioOc > 0
+            $precioDistintoOc = $tipoLinea !== self::TIPO_EXTRA
+                && $precioOc > 0
+                && abs($precioRec - $precioOc) >= 0.0001;
+            $precioFueraTolerancia = $precioOc > 0
                 && ! RecepcionProveedorToleranciaSupport::precioDentroTolerancia($precioOc, $precioRec, $tol);
 
             if ($flCantDiff) {
                 $flCant = true;
                 $resumenes[] = "{$sku}: cant. OC {$cantOc} vs rec. {$cantRec}";
             }
-            if ($flPrecioDiff) {
+            if ($precioDistintoOc) {
                 $flPrecio = true;
+                $resumenes[] = "{$sku}: precio OC {$precioOc} vs rec. {$precioRec}";
+            }
+            if ($precioFueraTolerancia) {
                 $coment = trim((string) ($item['comentario_precio'] ?? $item['comentario_diferencia'] ?? ''));
                 if ($coment === '') {
                     throw new \RuntimeException(
@@ -105,6 +116,16 @@ class RecepcionProveedorDiferenciaSupport
                 $flLab = true;
             }
 
+            if ($cantRechazada > 0.000001) {
+                $flRechazo = true;
+                $motivoRechazo = trim((string) ($item['motivorechazo'] ?? ''));
+                $lineaRechazo = "{$sku}: acept. {$cantAceptada}, rech. {$cantRechazada}";
+                if ($motivoRechazo !== '') {
+                    $lineaRechazo .= " — {$motivoRechazo}";
+                }
+                $resumenesRechazo[] = $lineaRechazo;
+            }
+
             $enriquecidos[] = array_merge($item, [
                 'tipo_linea' => $tipoLinea,
                 'ordencompra_articulo_id' => $ocArtId > 0 ? $ocArtId : null,
@@ -112,7 +133,7 @@ class RecepcionProveedorDiferenciaSupport
                 'cantidad_oc' => $cantOc,
                 'precio_ordencompra' => $precioOc,
                 'fl_cantidad_diferencia' => $flCantDiff,
-                'fl_precio_diferencia' => $flPrecioDiff,
+                'fl_precio_diferencia' => $precioDistintoOc,
                 'fl_articulo_distinto' => in_array($tipoLinea, [self::TIPO_EXTRA, self::TIPO_SUSTITUTO], true),
             ]);
         }
@@ -147,7 +168,9 @@ class RecepcionProveedorDiferenciaSupport
             'fl_articulo_extra' => $flExtra,
             'fl_faltante_oc' => $flFaltante,
             'fl_laboratorio' => $flLab,
+            'fl_linea_rechazada' => $flRechazo,
             'resumen_diferencias' => implode("\n", array_unique($resumenes)),
+            'resumen_rechazos' => implode("\n", array_unique($resumenesRechazo)),
             'faltantes' => $faltantes,
         ];
     }
@@ -159,5 +182,25 @@ class RecepcionProveedorDiferenciaSupport
         }
 
         return (int) $ocArt->articulo_id !== $articuloId;
+    }
+
+    /**
+     * Diferencia estricta precio recepción vs OC (independiente de tolerancias configuradas).
+     */
+    public static function recepcionTieneDiferenciaPrecioEstricta(object $recepcion): bool
+    {
+        $lineas = $recepcion->recepcion_proveedor_articulos ?? collect();
+        foreach ($lineas as $linea) {
+            if ((string) ($linea->tipo_linea ?? 'OC') === self::TIPO_EXTRA) {
+                continue;
+            }
+            $precioOc = (float) ($linea->precio_ordencompra ?? 0);
+            $precioRec = (float) ($linea->precio ?? 0);
+            if ($precioOc > 0 && abs($precioRec - $precioOc) >= 0.0001) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

@@ -9,6 +9,7 @@ use App\Support\Compras\ArticuloProveedorPrecioListaSupport;
 use App\Support\Stock\RecepcionProveedorDiferenciaSupport;
 use App\Support\Stock\RecepcionProveedorConversionSupport;
 use App\Support\Stock\RecepcionProveedorDepositoSupport;
+use App\Support\Stock\RecepcionProveedorFormItemsSupport;
 use App\Support\Stock\RecepcionProveedorOcPendienteSupport;
 use App\Support\Stock\RecepcionProveedorParteUnicaSupport;
 use Illuminate\Support\Carbon;
@@ -42,6 +43,8 @@ class RecepcionProveedorOrdencompraResolverService
             throw new \RuntimeException("Orden de compra {$numeroOc} inexistente en AnitaERP y en Anita.");
         }
 
+        $this->ensurePenvpOrdenEnLineasOc($oc);
+
         return [
             'cabecera' => $oc,
             'lineas' => $this->armarLineasPrecarga($oc),
@@ -51,6 +54,7 @@ class RecepcionProveedorOrdencompraResolverService
     public function resolverPorId(int $ordencompraId): array
     {
         $oc = $this->ordencompraRepository->find($ordencompraId);
+        $this->ensurePenvpOrdenEnLineasOc($oc);
 
         return [
             'cabecera' => $oc,
@@ -69,30 +73,67 @@ class RecepcionProveedorOrdencompraResolverService
 
         RecepcionProveedorDepositoSupport::reiniciarCache();
         $depositoIds = [];
-        foreach ($oc->ordencompra_articulos as $ocArt) {
+        $articulosOc = $oc->ordencompra_articulos
+            ->sortBy([['penvp_orden', 'asc'], ['id', 'asc']])
+            ->values();
+
+        foreach ($articulosOc as $ocArt) {
             $depArt = (int) ($ocArt->articulos->depositoentrega_id ?? 0);
             if ($depArt > 0) {
                 $depositoIds[] = $depArt;
             }
         }
+        $depositosQuery = \App\Models\Stock\Depmae::query()
+            ->whereIn('id', array_unique($depositoIds))
+            ->paraUsuarioAutorizado();
+        if ($empresaId > 0) {
+            $depositosQuery->paraEmpresa($empresaId);
+        }
         $depositos = $depositoIds !== []
-            ? \App\Models\Stock\Depmae::query()->whereIn('id', array_unique($depositoIds))->get()->keyBy('id')
+            ? $depositosQuery->get()->keyBy('id')
             : collect();
 
-        foreach ($oc->ordencompra_articulos as $ocArt) {
+        $articuloIdsOc = $articulosOc->pluck('articulo_id')->filter()->unique()->values()->all();
+        $articulosProveedor = ($proveedorId > 0 && $articuloIdsOc !== [])
+            ? \App\Models\Stock\Articulo_Proveedor::query()
+                ->with('unidadesmedidacompra')
+                ->where('proveedor_id', $proveedorId)
+                ->whereIn('articulo_id', $articuloIdsOc)
+                ->where('activo', true)
+                ->orderByDesc('preferido')
+                ->orderBy('id')
+                ->get()
+                ->unique('articulo_id')
+                ->keyBy('articulo_id')
+            : collect();
+
+        foreach ($articulosOc as $ocArt) {
             $articulo = $ocArt->articulos;
             $coefProveedor = RecepcionProveedorDepositoSupport::coeficienteProveedor(
                 (int) $ocArt->articulo_id,
                 $proveedorId
             );
-            $depositoEntregaId = (int) ($articulo->depositoentrega_id ?? 0);
+            $depositoEntregaId = RecepcionProveedorDepositoSupport::depositoEntregaVisible(
+                (int) ($articulo->depositoentrega_id ?? 0) ?: null,
+                $empresaId
+            ) ?? 0;
             $depositoEntrega = $depositoEntregaId > 0 ? $depositos->get($depositoEntregaId) : null;
             $coefArticulo = (float) ($articulo->coeficienteconversion ?? 0);
             $esFormula = RecepcionProveedorDepositoSupport::esDepositoFormula($depositoEntrega);
             $insumo = ($esFormula && $depositoEntrega !== null)
                 ? RecepcionProveedorDepositoSupport::resolverArticuloInsumo($articulo, $empresaId)
                 : null;
+            if ($insumo !== null && ! $insumo->relationLoaded('unidadesdemedidas')) {
+                $insumo->load('unidadesdemedidas');
+            }
             $coefEfectivo = ($esFormula && $coefArticulo > 0) ? $coefArticulo : $coefProveedor;
+
+            $etiquetasUm = RecepcionProveedorFormItemsSupport::resolverEtiquetasUnidadLinea(
+                [],
+                $articulo,
+                $insumo,
+                $articulosProveedor->get((int) $ocArt->articulo_id)
+            );
 
             $precioLista = null;
             if ($proveedorId > 0 && $ocArt->articulo_id) {
@@ -107,9 +148,14 @@ class RecepcionProveedorOrdencompraResolverService
             $cantidadOc = (float) $ocArt->cantidad;
             $recibido = (float) ($recibidosPorLinea[$ocArt->id] ?? 0);
             $cantidadPendiente = max(0, $cantidadOc - $recibido);
+            $penvpOrden = (int) ($ocArt->penvp_orden ?? 0);
+            $penvpNroInterno = (int) ($ocArt->penvp_nro_interno ?? 0);
 
             $lineas[] = [
+                '_empresa_id' => $empresaId,
                 'orden' => $orden++,
+                'penvp_orden' => $penvpOrden > 0 ? $penvpOrden : null,
+                'penvp_nro_interno' => $penvpNroInterno > 0 ? $penvpNroInterno : null,
                 'tipo_linea' => RecepcionProveedorDiferenciaSupport::TIPO_OC,
                 'ordencompra_articulo_id' => $ocArt->id,
                 'articulo_id' => $ocArt->articulo_id,
@@ -118,10 +164,14 @@ class RecepcionProveedorOrdencompraResolverService
                 'cantidad_oc' => $cantidadOc,
                 'cantidad_recibida' => $recibido,
                 'cantidad' => $cantidadPendiente,
+                'cantidad_rechazada' => 0,
+                'motivorechazo' => '',
                 'cantidad_stock' => RecepcionProveedorConversionSupport::cantidadStock($cantidadPendiente, $coefEfectivo),
                 'coeficienteconversion' => $coefEfectivo,
                 'coeficiente_proveedor' => $coefProveedor,
                 'coeficiente_articulo' => $coefArticulo > 0 ? $coefArticulo : 1,
+                'um_compra' => $etiquetasUm['um_compra'],
+                'um_stock' => $etiquetasUm['um_stock'],
                 'depositoentrega_id' => $depositoEntregaId > 0 ? $depositoEntregaId : null,
                 'deposito_id' => $depositoEntregaId > 0 ? $depositoEntregaId : null,
                 'deposito_nombre' => $depositoEntrega->nombre ?? '',
@@ -132,6 +182,7 @@ class RecepcionProveedorOrdencompraResolverService
                 'precio' => (float) $ocArt->precio,
                 'precio_ordencompra' => (float) $ocArt->precio,
                 'precio_lista_proveedor' => $precioLista,
+                'codigo_proveedor' => trim((string) ($precioLista['codigo_articulo_proveedor'] ?? $articulo->skuproveedor ?? '')),
                 'moneda_id' => (int) ($ocArt->moneda_id ?: 1),
                 'cotizacion' => (float) ($ocArt->cotizacion ?: 1),
                 'descuento' => (float) ($ocArt->descuento ?? 0),
@@ -146,12 +197,31 @@ class RecepcionProveedorOrdencompraResolverService
         return $lineas;
     }
 
+    private function ensurePenvpOrdenEnLineasOc(Ordencompra $oc): void
+    {
+        $oc->loadMissing('ordencompra_articulos');
+        $this->ordencompraAnitaSyncService->reconciliarLineasOcDesdeAnita((int) $oc->numeroordencompra);
+
+        $tieneSinDatosAnita = $oc->ordencompra_articulos->contains(
+            static fn ($ocArt) => empty($ocArt->penvp_nro_interno) || (int) $ocArt->penvp_nro_interno <= 0
+                || empty($ocArt->penvp_orden) || (int) $ocArt->penvp_orden <= 0
+        );
+
+        if ($tieneSinDatosAnita) {
+            $this->ordencompraAnitaSyncService->sincronizarPenvpOrdenDesdeAnita((int) $oc->numeroordencompra);
+        }
+
+        $oc->load('ordencompra_articulos.articulos');
+    }
+
     private function buscarOcConRelaciones(int $numeroOc): ?Ordencompra
     {
         return Ordencompra::query()
             ->with([
                 'empresas', 'proveedores', 'centrocostos',
-                'ordencompra_articulos.articulos', 'ordencompra_articulos.monedas',
+                'ordencompra_articulos' => static fn ($q) => $q->orderBy('penvp_orden')->orderBy('id'),
+                'ordencompra_articulos.articulos.unidadesdemedidas',
+                'ordencompra_articulos.monedas',
                 'ordencompra_articulos.centrocostos_destino',
             ])
             ->where('numeroordencompra', $numeroOc)

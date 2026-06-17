@@ -306,6 +306,7 @@
 
                     @include('contable.mayor_plano_cuenta.partials.resumen_totales', [
                         'resumen' => $resumen ?? [],
+                        'puede_ver_cuenta' => $puede_ver_cuenta ?? false,
                     ])
 
                     <div class="px-3 pt-2 pb-1">
@@ -324,6 +325,7 @@
                                 'puede_ver_asiento' => $puede_ver_asiento ?? false,
                                 'puede_ver_cuenta' => $puede_ver_cuenta ?? false,
                                 'puede_ver_ordencompra' => $puede_ver_ordencompra ?? false,
+                                'puede_ver_proveedor' => $puede_ver_proveedor ?? false,
                                 'multiempresa' => $multiempresa ?? false,
                             ])
                         </table>

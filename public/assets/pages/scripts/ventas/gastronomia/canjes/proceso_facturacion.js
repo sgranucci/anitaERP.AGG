@@ -8,8 +8,8 @@
     let mozoActual = null;
     let emitiendo = false;
     let pendingArticulo = null;
-    let pendingOpcionalesResolver = null;
-    let cmPendingAltaPostOpcionales = null;
+    let pendingOpcionalesCtx = null;
+    let pendingOpcionalesSeleccion = null;
     let cmModalCantidadResolver = null;
     let cmWigosInputTimer = null;
     let cmWigosProcesando = false;
@@ -19,6 +19,7 @@
     let cmFacturacionLoadingTimer = null;
     let cmFacturacionLoadingGen = 0;
     let cmDocumentEnterModalF8Activo = false;
+    let cmLineaComentarioCocinaId = null;
 
     function detenerRotacionMensajesCm() {
         cmFacturacionLoadingGen += 1;
@@ -165,7 +166,9 @@
         const res = await fetch(apiBase + path, opts);
         const data = await res.json().catch(function () { return {}; });
         if (!res.ok) {
-            throw new Error(data.error || data.mensaje || ('Error HTTP ' + res.status));
+            const err = new Error(data.error || data.mensaje || ('Error HTTP ' + res.status));
+            err.payload = data;
+            throw err;
         }
         return data;
     }
@@ -233,7 +236,7 @@
     }
 
     function wireApiladoConsultasSobreCmF8() {
-        ['#consultaclientevipModal', '#modal-cm-wigos-vip'].forEach(function (sel) {
+        ['#consultaclientevipModal', '#modal-cm-wigos-vip', '#modal-comentario-cocina'].forEach(function (sel) {
             const $m = $(sel);
             if (!$m.length) {
                 return;
@@ -315,6 +318,21 @@
         el.focus();
         if (typeof el.select === 'function') {
             el.select();
+        }
+    }
+
+    function esTeclaF1Cm(e) {
+        return e && (e.key === 'F1' || e.code === 'F1' || e.keyCode === 112);
+    }
+
+    function abrirConsultaArticuloCm() {
+        if (!cuenta || !cuenta.id) {
+            toast('Abra una cuenta con el login de mozo.', 'warning');
+            return;
+        }
+        const btn = document.querySelector('#cm-campo-articulo-carga .consultaarticulo');
+        if (btn && typeof btn.click === 'function') {
+            btn.click();
         }
     }
 
@@ -635,13 +653,25 @@
                 const art = l.articulo || {};
                 const imp = (Number(l.cantidad) || 0) * (Number(l.precio_unitario) || 0);
                 const cant = Number(l.cantidad) || 0;
+                const comentarioCocina = String(l.comentario_cocina || '').trim();
+                const btnComentarioClass = comentarioCocina
+                    ? 'btn btn-xs btn-info py-0 px-1 ml-1 btn-cm-comentario-cocina'
+                    : 'btn btn-xs btn-outline-info py-0 px-1 ml-1 btn-cm-comentario-cocina';
+                const btnComentarioTitle = comentarioCocina
+                    ? 'Comentario cocina: ' + comentarioCocina
+                    : 'Comentario para cocina (KDS)';
                 html += '<tr>';
-                html += '<td>' + (art.sku || '') + '</td>';
-                html += '<td>' + (art.descripcion || l.descripcion || '') + '</td>';
+                html += '<td>' + escaparHtmlOpcional(art.sku || '') + '</td>';
+                html += '<td>' + escaparHtmlOpcional(art.descripcion || l.descripcion || '') + htmlOpcionalesDetalleLinea(l);
+                if (comentarioCocina) {
+                    html += '<br><small class="text-info"><i class="fas fa-utensils"></i> ' + escaparHtmlOpcional(comentarioCocina) + '</small>';
+                }
+                html += '</td>';
                 html += '<td class="text-right text-nowrap align-middle cm-cantidad-linea">';
                 html += '<button type="button" class="btn btn-xs btn-outline-secondary btn-cm-qty" data-dir="-1" data-id="' + l.id + '" data-cant="' + cant + '" title="Menos"><i class="fa fa-minus"></i></button>';
                 html += '<span class="mx-1">' + cant + '</span>';
                 html += '<button type="button" class="btn btn-xs btn-outline-secondary btn-cm-qty" data-dir="1" data-id="' + l.id + '" data-cant="' + cant + '" title="Más"><i class="fa fa-plus"></i></button>';
+                html += '<button type="button" class="' + btnComentarioClass + '" data-id="' + l.id + '" data-comentario="' + escaparHtmlOpcional(comentarioCocina) + '" title="' + escaparHtmlOpcional(btnComentarioTitle) + '" aria-label="Comentario para cocina"><i class="fas fa-utensils"></i></button>';
                 html += '</td>';
                 html += '<td class="text-right">' + fmtMoney(imp) + '</td>';
                 html += '<td><button type="button" class="btn btn-xs btn-outline-danger cm-del-linea" data-id="' + l.id + '" title="Quitar"><i class="fa fa-trash"></i></button></td>';
@@ -654,6 +684,9 @@
                 const dir = parseInt($(this).data('dir'), 10);
                 const next = cur + dir;
                 void patchCantidadLineaCm(lineaId, next);
+            });
+            $('#cm-tbody-lineas .btn-cm-comentario-cocina').on('click', function () {
+                abrirModalComentarioCocinaCm(this);
             });
         }
         $('#cm-total-estimado').text(fmtMoney(cuenta.total_facturar_ars || cuenta.subtotal_estimado || 0));
@@ -816,6 +849,58 @@
         }
     }
 
+    function abrirModalComentarioCocinaCm(btn) {
+        if (!cuenta || !cuenta.id) {
+            return;
+        }
+        const lineaId = btn.getAttribute('data-id');
+        if (!lineaId) {
+            return;
+        }
+        cmLineaComentarioCocinaId = lineaId;
+        const tr = btn.closest('tr');
+        const articuloTxt = tr && tr.cells[1] ? tr.cells[1].textContent.trim().split('\n')[0] : '';
+        const fld = document.getElementById('fld-comentario-cocina');
+        const lbl = document.getElementById('modal-comentario-cocina-articulo');
+        if (lbl) {
+            lbl.textContent = articuloTxt || 'Ítem de la cuenta';
+        }
+        if (fld) {
+            fld.value = btn.getAttribute('data-comentario') || '';
+        }
+        const $modal = $('#modal-comentario-cocina');
+        $modal.off('shown.bs.modal.cmComentario').on('shown.bs.modal.cmComentario', function () {
+            if (fld) {
+                fld.focus();
+                if (typeof fld.select === 'function') {
+                    fld.select();
+                }
+            }
+        });
+        $modal.modal('show');
+    }
+
+    async function guardarComentarioCocinaLineaCm() {
+        if (!cuenta || !cuenta.id || !cmLineaComentarioCocinaId) {
+            return;
+        }
+        const fld = document.getElementById('fld-comentario-cocina');
+        const comentario = fld ? String(fld.value || '').trim() : '';
+        try {
+            const data = await api('PATCH', '/cuenta/' + cuenta.id + '/linea/' + cmLineaComentarioCocinaId, {
+                comentario_cocina: comentario,
+            });
+            $('#modal-comentario-cocina').modal('hide');
+            cmLineaComentarioCocinaId = null;
+            cuenta = data.cuenta;
+            renderCuenta();
+            toast(comentario ? 'Comentario de cocina guardado.' : 'Comentario de cocina quitado.', 'success');
+            focusSkuInput();
+        } catch (e) {
+            toast(e.message, 'error');
+        }
+    }
+
     function mostrarModalCantidadCm() {
         return new Promise(function (resolve, reject) {
             cmModalCantidadResolver = { resolve: resolve, reject: reject };
@@ -844,6 +929,677 @@
             cmModalCantidadResolver = null;
             fn(new Error('Operación cancelada.'));
         }
+    }
+
+    function esCampoTextoEditable(el) {
+        if (!el || !el.tagName) {
+            return false;
+        }
+        const tag = el.tagName.toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || tag === 'select') {
+            if (el.disabled || el.readOnly) {
+                return false;
+            }
+            const type = (el.type || '').toLowerCase();
+            if (type === 'checkbox' || type === 'radio' || type === 'button' || type === 'submit') {
+                return false;
+            }
+            return true;
+        }
+        return !!el.isContentEditable;
+    }
+
+    function debeIgnorarAtajoCm() {
+        const ids = [
+            'modal-cm-cantidad',
+            'modal-opcionales',
+            'modal-cm-login-mozo',
+            'modal-cm-f8-descuento',
+            'consultamozoModal',
+            'consultaarticuloModal',
+            'consultaclientevipModal',
+            'modal-cm-wigos-vip',
+        ];
+        for (let i = 0; i < ids.length; i++) {
+            const el = document.getElementById(ids[i]);
+            if (el && el.classList.contains('show')) {
+                return true;
+            }
+        }
+        const overlay = document.getElementById('cm-facturacion-procesando-overlay');
+        if (overlay && overlay.getAttribute('aria-hidden') === 'false') {
+            return true;
+        }
+        return false;
+    }
+
+    function escaparHtmlOpcional(valor) {
+        return String(valor == null ? '' : valor)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function htmlOpcionalesDetalleLinea(linea) {
+        const detalle = (linea && Array.isArray(linea.opcionales_detalle)) ? linea.opcionales_detalle : [];
+        if (!detalle.length) {
+            return '';
+        }
+        const partes = detalle.map(function (d) {
+            const desc = (d && d.descripcion) ? String(d.descripcion) : '';
+            const sku = (d && d.sku) ? String(d.sku) : '';
+            const texto = desc || sku || ('Artículo #' + (d && d.articulo_id ? d.articulo_id : '?'));
+            return escaparHtmlOpcional(texto);
+        });
+        return '<br><small class="text-muted">+ ' + partes.join(' · ') + '</small>';
+    }
+
+    function totalGruposOpcionales() {
+        return document.querySelectorAll('#modal-opcionales-body .gastro-opc-grupo').length;
+    }
+
+    function pasoActualOpcionales() {
+        const body = document.getElementById('modal-opcionales-body');
+        if (!body) {
+            return 0;
+        }
+        const n = parseInt(String(body.dataset.pasoActual || '0'), 10);
+        return Number.isFinite(n) && n >= 0 ? n : 0;
+    }
+
+    function setPasoActualOpcionales(idx) {
+        const body = document.getElementById('modal-opcionales-body');
+        if (!body) {
+            return;
+        }
+        const total = totalGruposOpcionales();
+        const safe = Math.max(0, Math.min(idx, Math.max(0, total - 1)));
+        body.dataset.pasoActual = String(safe);
+        sincronizarVistaPasoOpcional();
+    }
+
+    function sincronizarVistaPasoOpcional() {
+        const body = document.getElementById('modal-opcionales-body');
+        if (!body) {
+            return;
+        }
+        const grupos = body.querySelectorAll('.gastro-opc-grupo');
+        const total = grupos.length;
+        const actual = pasoActualOpcionales();
+
+        grupos.forEach(function (g, i) {
+            g.classList.toggle('activo', i === actual);
+        });
+
+        const pasos = body.querySelectorAll('.gastro-opc-progreso-pasos .gastro-opc-paso');
+        pasos.forEach(function (p, i) {
+            const tieneSel = !!grupos[i] && !!grupos[i].querySelector('.gastro-opc-tarjeta.seleccionada');
+            p.classList.toggle('completado', tieneSel && i !== actual);
+            p.classList.toggle('actual', i === actual);
+            if (i !== actual) {
+                p.classList.remove('faltante');
+            }
+        });
+
+        actualizarChipsResumenOpcionales();
+
+        const subtit = body.querySelector('.gastro-opc-progreso-subtitulo');
+        if (subtit) {
+            const grupoActual = grupos[actual];
+            const ordenActual = grupoActual ? grupoActual.dataset.orden : '';
+            const cantOpts = grupoActual ? grupoActual.querySelectorAll('.gastro-opc-tarjeta').length : 0;
+            subtit.textContent = ordenActual
+                ? 'Paso ' + (actual + 1) + ' de ' + total + ' · Elegí 1 de ' + cantOpts
+                : '';
+        }
+
+        const btnAtras = document.getElementById('modal-opcionales-atras');
+        const btnNext = document.getElementById('modal-opcionales-confirmar');
+        if (btnAtras) {
+            btnAtras.disabled = actual <= 0;
+        }
+        if (btnNext) {
+            const esUltimo = actual >= total - 1;
+            btnNext.innerHTML = esUltimo
+                ? '<i class="fa fa-check"></i> Aceptar'
+                : 'Siguiente <i class="fa fa-arrow-right"></i>';
+            btnNext.classList.toggle('btn-success', esUltimo);
+            btnNext.classList.toggle('btn-primary', !esUltimo);
+        }
+
+        const grupoActual = grupos[actual];
+        if (grupoActual) {
+            const yaElegida = grupoActual.querySelector('.gastro-opc-tarjeta.seleccionada');
+            const focoCandidato = yaElegida || grupoActual.querySelector('.gastro-opc-tarjeta');
+            if (focoCandidato && typeof focoCandidato.focus === 'function') {
+                try {
+                    focoCandidato.focus({ preventScroll: false });
+                } catch (e) {
+                    focoCandidato.focus();
+                }
+            }
+        }
+    }
+
+    function actualizarChipsResumenOpcionales() {
+        const body = document.getElementById('modal-opcionales-body');
+        if (!body) {
+            return;
+        }
+        const cont = body.querySelector('.gastro-opc-resumen-chips');
+        if (!cont) {
+            return;
+        }
+        cont.innerHTML = '';
+        const grupos = body.querySelectorAll('.gastro-opc-grupo');
+        grupos.forEach(function (g, i) {
+            const sel = g.querySelector('.gastro-opc-tarjeta.seleccionada');
+            const sku = sel ? (sel.querySelector('.gastro-opc-sku') || {}).textContent || '' : '';
+            const desc = sel ? (sel.querySelector('.gastro-opc-descripcion') || {}).textContent || '' : '';
+            const chip = document.createElement('span');
+            chip.className = 'gastro-opc-chip' + (sel ? ' completado' : '');
+            chip.dataset.paso = String(i);
+            chip.title = sel ? (sku + (desc ? ' — ' + desc : '')) : 'Sin elegir';
+            const num = document.createElement('span');
+            num.className = 'gastro-opc-chip-num';
+            num.textContent = String(i + 1);
+            chip.appendChild(num);
+            const txt = document.createElement('span');
+            txt.textContent = sel ? (desc || sku || 'Elegido') : 'Sin elegir';
+            chip.appendChild(txt);
+            chip.style.cursor = 'pointer';
+            chip.addEventListener('click', function () {
+                setPasoActualOpcionales(i);
+            });
+            cont.appendChild(chip);
+        });
+    }
+
+    function renderGrillaOpcionales(grupos, articulo) {
+        const body = document.getElementById('modal-opcionales-body');
+        if (!body) {
+            return;
+        }
+        body.innerHTML = '';
+        body.dataset.pasoActual = '0';
+
+        const info = document.getElementById('modal-opcionales-articulo-info');
+        if (info && articulo) {
+            const sku = escaparHtmlOpcional(articulo.sku || '');
+            const desc = escaparHtmlOpcional(articulo.descripcion || '');
+            info.innerHTML = sku || desc ? (sku + (sku && desc ? ' · ' : '') + desc) : '';
+        } else if (info) {
+            info.innerHTML = '';
+        }
+
+        const totalPasos = grupos.length;
+        const cabecera = document.createElement('div');
+        cabecera.className = 'gastro-opc-progreso';
+        const cabeceraInfo = document.createElement('div');
+        cabeceraInfo.className = 'gastro-opc-progreso-info';
+        const cabTit = document.createElement('span');
+        cabTit.className = 'gastro-opc-progreso-titulo';
+        cabTit.textContent = 'Personalizá el pedido';
+        const cabSub = document.createElement('span');
+        cabSub.className = 'gastro-opc-progreso-subtitulo';
+        cabeceraInfo.appendChild(cabTit);
+        cabeceraInfo.appendChild(cabSub);
+        cabecera.appendChild(cabeceraInfo);
+
+        const pasosWrap = document.createElement('div');
+        pasosWrap.className = 'gastro-opc-progreso-pasos';
+        grupos.forEach(function (g, i) {
+            const paso = document.createElement('span');
+            paso.className = 'gastro-opc-paso';
+            paso.dataset.paso = String(i);
+            paso.title = 'Ir al paso ' + (i + 1);
+            paso.addEventListener('click', function () {
+                setPasoActualOpcionales(i);
+            });
+            const num = document.createElement('span');
+            num.className = 'gastro-opc-paso-num';
+            num.textContent = String(i + 1);
+            paso.appendChild(num);
+            const lbl = document.createElement('span');
+            lbl.textContent = 'Orden ' + String(g.orden);
+            paso.appendChild(lbl);
+            pasosWrap.appendChild(paso);
+        });
+        cabecera.appendChild(pasosWrap);
+        body.appendChild(cabecera);
+
+        if (totalPasos > 1) {
+            const resumen = document.createElement('div');
+            resumen.className = 'gastro-opc-resumen';
+            const tit = document.createElement('div');
+            tit.className = 'gastro-opc-resumen-titulo';
+            tit.textContent = 'Tu selección';
+            const chips = document.createElement('div');
+            chips.className = 'gastro-opc-resumen-chips';
+            resumen.appendChild(tit);
+            resumen.appendChild(chips);
+            body.appendChild(resumen);
+        }
+
+        const pasosCont = document.createElement('div');
+        pasosCont.className = 'gastro-opc-pasos-wrap';
+        grupos.forEach(function (g, i) {
+            const orden = String(g.orden);
+            const grupo = document.createElement('div');
+            grupo.className = 'gastro-opc-grupo';
+            grupo.dataset.orden = orden;
+            grupo.dataset.paso = String(i);
+
+            const titulo = document.createElement('div');
+            titulo.className = 'gastro-opc-grupo-titulo';
+            const pill = document.createElement('span');
+            pill.className = 'gastro-opc-pill';
+            pill.textContent = 'Paso ' + (i + 1) + '/' + totalPasos;
+            const tituloTxt = document.createElement('span');
+            tituloTxt.textContent = 'Elegí una opción';
+            const small = document.createElement('small');
+            small.textContent = '· Orden ' + orden;
+            titulo.appendChild(pill);
+            titulo.appendChild(tituloTxt);
+            titulo.appendChild(small);
+            grupo.appendChild(titulo);
+
+            const grilla = document.createElement('div');
+            grilla.className = 'gastro-opc-grilla';
+            (g.opciones || []).forEach(function (o, idx) {
+                const tarjeta = document.createElement('div');
+                tarjeta.className = 'gastro-opc-tarjeta';
+                tarjeta.setAttribute('role', 'button');
+                tarjeta.setAttribute('tabindex', '0');
+                if (o.formula_hija_id) {
+                    tarjeta.dataset.formulaHijaId = String(o.formula_hija_id);
+                } else if (o.articulo_id) {
+                    tarjeta.dataset.articuloId = String(o.articulo_id);
+                }
+                tarjeta.dataset.orden = orden;
+                tarjeta.dataset.posicion = String(idx + 1);
+                tarjeta.title = (o.sku || '') + (o.descripcion ? ' — ' + o.descripcion : '');
+
+                if (idx < 9) {
+                    const atajo = document.createElement('span');
+                    atajo.className = 'gastro-opc-atajo';
+                    atajo.textContent = String(idx + 1);
+                    atajo.setAttribute('aria-hidden', 'true');
+                    tarjeta.appendChild(atajo);
+                }
+
+                const skuEl = document.createElement('div');
+                skuEl.className = 'gastro-opc-sku';
+                skuEl.textContent = o.sku || '';
+                const descEl = document.createElement('div');
+                descEl.className = 'gastro-opc-descripcion';
+                descEl.textContent = o.descripcion || '';
+                tarjeta.appendChild(skuEl);
+                tarjeta.appendChild(descEl);
+                grilla.appendChild(tarjeta);
+            });
+            grupo.appendChild(grilla);
+            pasosCont.appendChild(grupo);
+        });
+        body.appendChild(pasosCont);
+
+        const leyenda = document.createElement('div');
+        leyenda.className = 'gastro-opc-leyenda';
+        leyenda.innerHTML =
+            '<kbd>1</kbd>–<kbd>9</kbd> elegir · <kbd>Enter</kbd> siguiente / aceptar · <kbd>←</kbd> volver · <kbd>Esc</kbd> cancelar';
+        body.appendChild(leyenda);
+
+        sincronizarVistaPasoOpcional();
+    }
+
+    function onClickTarjetaOpcional(ev) {
+        const t = ev.target.closest('.gastro-opc-tarjeta');
+        if (!t) {
+            return;
+        }
+        const grupo = t.closest('.gastro-opc-grupo');
+        if (!grupo) {
+            return;
+        }
+        grupo.classList.remove('gastro-opc-faltante');
+        grupo.querySelectorAll('.gastro-opc-tarjeta.seleccionada').forEach(function (el) {
+            if (el !== t) {
+                el.classList.remove('seleccionada');
+            }
+        });
+        t.classList.add('seleccionada');
+        actualizarChipsResumenOpcionales();
+
+        const total = totalGruposOpcionales();
+        const actual = pasoActualOpcionales();
+        if (actual < total - 1) {
+            window.setTimeout(function () {
+                setPasoActualOpcionales(actual + 1);
+            }, 220);
+        } else {
+            sincronizarVistaPasoOpcional();
+        }
+    }
+
+    function onKeyTarjetaOpcional(ev) {
+        if (ev.key !== 'Enter' && ev.key !== ' ' && ev.key !== 'Spacebar') {
+            return;
+        }
+        const t = ev.target.closest('.gastro-opc-tarjeta');
+        if (!t) {
+            return;
+        }
+        ev.preventDefault();
+        ev.stopPropagation();
+        onClickTarjetaOpcional({ target: t });
+        if (ev.key !== 'Enter') {
+            return;
+        }
+        const total = totalGruposOpcionales();
+        const actual = pasoActualOpcionales();
+        if (actual >= total - 1) {
+            void avanzarOConfirmarOpcionales();
+        }
+    }
+
+    function onKeyModalOpcionales(ev) {
+        const modal = document.getElementById('modal-opcionales');
+        if (!modal || !modal.classList.contains('show')) {
+            return;
+        }
+        if (ev.ctrlKey || ev.altKey || ev.metaKey) {
+            return;
+        }
+        if (esCampoTextoEditable(ev.target)) {
+            return;
+        }
+
+        if (ev.key === 'Enter') {
+            const enTarjeta = ev.target && ev.target.closest && ev.target.closest('.gastro-opc-tarjeta');
+            if (enTarjeta) {
+                return;
+            }
+            ev.preventDefault();
+            ev.stopPropagation();
+            void avanzarOConfirmarOpcionales();
+            return;
+        }
+
+        if (ev.key === 'Backspace' || ev.key === 'ArrowLeft') {
+            const actual = pasoActualOpcionales();
+            if (actual > 0) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                setPasoActualOpcionales(actual - 1);
+            }
+            return;
+        }
+
+        if (ev.key === 'ArrowRight') {
+            const actual = pasoActualOpcionales();
+            const total = totalGruposOpcionales();
+            if (actual < total - 1) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                setPasoActualOpcionales(actual + 1);
+            }
+            return;
+        }
+
+        if (ev.shiftKey) {
+            return;
+        }
+
+        const num = parseInt(ev.key, 10);
+        if (!(num >= 1 && num <= 9)) {
+            return;
+        }
+
+        const grupos = modal.querySelectorAll('#modal-opcionales-body .gastro-opc-grupo');
+        if (!grupos.length) {
+            return;
+        }
+
+        const target = grupos[pasoActualOpcionales()] || grupos[0];
+        if (!target) {
+            return;
+        }
+
+        const tarjetas = target.querySelectorAll('.gastro-opc-tarjeta');
+        if (num > tarjetas.length) {
+            return;
+        }
+
+        ev.preventDefault();
+        ev.stopPropagation();
+        onClickTarjetaOpcional({ target: tarjetas[num - 1] });
+    }
+
+    function leerSeleccionOpcionalesGrilla() {
+        const map = {};
+        const faltantes = [];
+        const grupos = document.querySelectorAll('#modal-opcionales-body .gastro-opc-grupo');
+        let primerFaltante = -1;
+        grupos.forEach(function (g, i) {
+            const orden = g.dataset.orden;
+            const sel = g.querySelector('.gastro-opc-tarjeta.seleccionada');
+            if (sel && sel.dataset.formulaHijaId) {
+                map[orden] = { formula_hija_id: parseInt(sel.dataset.formulaHijaId, 10) };
+                g.classList.remove('gastro-opc-faltante');
+            } else if (sel && sel.dataset.articuloId) {
+                map[orden] = parseInt(sel.dataset.articuloId, 10);
+                g.classList.remove('gastro-opc-faltante');
+            } else {
+                map[orden] = null;
+                faltantes.push(orden);
+                g.classList.add('gastro-opc-faltante');
+                if (primerFaltante < 0) {
+                    primerFaltante = i;
+                }
+            }
+        });
+        if (primerFaltante >= 0) {
+            setPasoActualOpcionales(primerFaltante);
+        }
+        return { map: map, faltantes: faltantes };
+    }
+
+    async function avanzarOConfirmarOpcionales() {
+        const body = document.getElementById('modal-opcionales-body');
+        if (!body) {
+            return;
+        }
+        const grupos = body.querySelectorAll('.gastro-opc-grupo');
+        const total = grupos.length;
+        const actual = pasoActualOpcionales();
+        const grupoActual = grupos[actual];
+        if (grupoActual && !grupoActual.querySelector('.gastro-opc-tarjeta.seleccionada')) {
+            grupoActual.classList.add('gastro-opc-faltante');
+            const paso = body.querySelector('.gastro-opc-progreso-pasos .gastro-opc-paso[data-paso="' + actual + '"]');
+            if (paso) {
+                paso.classList.remove('faltante');
+                void paso.offsetWidth;
+                paso.classList.add('faltante');
+            }
+            toast('Elegí una opción para continuar.', 'warning');
+            return;
+        }
+        if (actual < total - 1) {
+            setPasoActualOpcionales(actual + 1);
+            return;
+        }
+        await confirmarOpcionales();
+    }
+
+    async function confirmarOpcionales() {
+        const seleccion = leerSeleccionOpcionalesGrilla();
+        if (seleccion.faltantes.length) {
+            toast('Seleccione un opcional para cada grupo: ' + seleccion.faltantes.join(', '), 'warning');
+            return;
+        }
+
+        const ctx = pendingOpcionalesCtx;
+        if (!ctx) {
+            $('#modal-opcionales').modal('hide');
+            return;
+        }
+
+        if (ctx.modo === 'cantidad-despues') {
+            pendingOpcionalesSeleccion = seleccion.map;
+            pendingArticulo = ctx.articulo;
+            pendingOpcionalesCtx = null;
+            const $opc = $('#modal-opcionales');
+            $opc.off('hidden.bs.modal.cmAbrirCantidad');
+            $opc.one('hidden.bs.modal.cmAbrirCantidad', function () {
+                void mostrarModalCantidadCm().then(function (q) {
+                    void agregarLinea(ctx.articulo, q, seleccion.map);
+                }).catch(function (e) {
+                    if (e && e.message !== 'Operación cancelada.') {
+                        toast(e.message, 'error');
+                    }
+                });
+            });
+            $opc.modal('hide');
+            return;
+        }
+
+        pendingOpcionalesCtx = null;
+        pendingOpcionalesSeleccion = null;
+        $('#modal-opcionales').modal('hide');
+        await agregarLinea(ctx.articulo, ctx.cantidad, seleccion.map);
+    }
+
+    function mostrarModalOpcionalesCm(onShown) {
+        return new Promise(function (resolve) {
+            const $m = $('#modal-opcionales');
+            $m.off('shown.bs.modal.cmOpcOnce');
+            $m.one('shown.bs.modal.cmOpcOnce', function () {
+                if (typeof onShown === 'function') {
+                    onShown();
+                }
+                resolve();
+            });
+            $m.modal('show');
+        });
+    }
+
+    async function fetchGruposOpcionalesCm(articuloId) {
+        const opData = await api('GET', '/opcionales-articulo/' + articuloId);
+        return opData && Array.isArray(opData.grupos) ? opData.grupos : [];
+    }
+
+    async function iniciarAltaArticuloCm(articulo, opciones) {
+        if (!articulo || !articulo.id) {
+            return;
+        }
+        const pedirCantidad = !!(opciones && opciones.pedirCantidad);
+        pendingArticulo = null;
+        pendingOpcionalesSeleccion = null;
+        pendingOpcionalesCtx = null;
+
+        const grupos = await fetchGruposOpcionalesCm(articulo.id);
+        if (grupos.length) {
+            pendingOpcionalesCtx = {
+                articulo: articulo,
+                cantidad: 1,
+                modo: pedirCantidad ? 'cantidad-despues' : 'agregar-directo',
+                grupos: grupos,
+            };
+            renderGrillaOpcionales(grupos, articulo);
+            await mostrarModalOpcionalesCm(function () {
+                sincronizarVistaPasoOpcional();
+            });
+            return;
+        }
+
+        try {
+            const q = await mostrarModalCantidadCm();
+            await agregarLinea(articulo, q, {});
+        } catch (e) {
+            if (e && e.message !== 'Operación cancelada.') {
+                toast(e.message, 'error');
+            }
+        }
+    }
+
+    async function procesarAltaArticuloCm(articulo, cantidad) {
+        if (!articulo || !articulo.id) {
+            return;
+        }
+        const grupos = await fetchGruposOpcionalesCm(articulo.id);
+        if (grupos.length) {
+            pendingOpcionalesCtx = {
+                articulo: articulo,
+                cantidad: cantidad,
+                modo: 'agregar-directo',
+                grupos: grupos,
+            };
+            pendingOpcionalesSeleccion = null;
+            renderGrillaOpcionales(grupos, articulo);
+            await mostrarModalOpcionalesCm(function () {
+                sincronizarVistaPasoOpcional();
+            });
+            return;
+        }
+        await agregarLinea(articulo, cantidad, {});
+    }
+
+    async function agregarLinea(articulo, cantidad, opcionales) {
+        const articuloId = typeof articulo === 'object' ? articulo.id : articulo;
+        if (!cuenta || !cuenta.id) {
+            toast('Abra una cuenta con el login de mozo.', 'warning');
+            return;
+        }
+        const payload = { articulo_id: articuloId, cantidad: cantidad, opcionales: opcionales || {} };
+        try {
+            const data = await api('POST', '/cuenta/' + cuenta.id + '/linea', payload);
+            cuenta = data.cuenta || cuenta;
+            if (data.cuenta) {
+                renderCuenta();
+            } else if (data.linea) {
+                if (!Array.isArray(cuenta.lineas)) {
+                    cuenta.lineas = lineasDesdeCuenta(cuenta);
+                }
+                cuenta.lineas.push(data.linea);
+                renderCuenta();
+            } else {
+                await cargarCuenta(cuenta.id);
+            }
+            limpiarCampoCargaArticuloCm();
+            focusSkuInput();
+        } catch (e) {
+            const articuloObj = typeof articulo === 'object' ? articulo : { id: articuloId };
+            if (e.payload && e.payload.requiere_opcionales && Array.isArray(e.payload.grupos) && e.payload.grupos.length) {
+                pendingOpcionalesCtx = {
+                    articulo: articuloObj,
+                    cantidad: cantidad,
+                    modo: 'agregar-directo',
+                    grupos: e.payload.grupos,
+                };
+                pendingOpcionalesSeleccion = null;
+                renderGrillaOpcionales(e.payload.grupos, articuloObj);
+                await mostrarModalOpcionalesCm(function () {
+                    sincronizarVistaPasoOpcional();
+                });
+                return;
+            }
+            toast(e.message, 'error');
+        }
+    }
+
+    async function procesarSku(opciones) {
+        const pedirCantidad = !!(opciones && opciones.pedirCantidad);
+        const art = await resolverArticuloDesdeSkuInput();
+        if (!art) {
+            return;
+        }
+        if (pedirCantidad) {
+            await iniciarAltaArticuloCm(art, { pedirCantidad: true });
+            return;
+        }
+        await procesarAltaArticuloCm(art, 1);
     }
 
     async function resolverSkuPorTabYEnfocarAgregarCm() {
@@ -885,92 +1641,6 @@
             focusSkuInput();
             return null;
         }
-    }
-
-    async function iniciarAltaArticuloCm(articulo, opciones) {
-        if (!articulo || !articulo.id) {
-            return;
-        }
-        const pedirCantidad = !!(opciones && opciones.pedirCantidad);
-        let opcionales = {};
-        try {
-            const opResp = await api('GET', '/opcionales-articulo/' + articulo.id);
-            if (opResp.grupos && opResp.grupos.length) {
-                opcionales = await new Promise(function (resolve) {
-                    cmPendingAltaPostOpcionales = {
-                        resolve: resolve,
-                        pedirCantidad: pedirCantidad,
-                        articulo: articulo,
-                    };
-                    pedirOpcionales(opResp.grupos);
-                });
-                cmPendingAltaPostOpcionales = null;
-            }
-        } catch (e) { /* sin opcionales */ }
-
-        if (pedirCantidad) {
-            try {
-                const q = await mostrarModalCantidadCm();
-                await agregarLinea(articulo.id, q, opcionales);
-            } catch (e) {
-                if (e && e.message !== 'Operación cancelada.') {
-                    toast(e.message, 'error');
-                }
-            }
-            return;
-        }
-        await agregarLinea(articulo.id, 1, opcionales);
-    }
-
-    function pedirOpcionales(grupos) {
-        let html = '';
-        (grupos || []).forEach(function (g, gi) {
-            html += '<div class="mb-2"><strong>' + (g.nombre || g.grupo || ('Grupo ' + (gi + 1))) + '</strong>';
-            (g.opciones || g.items || []).forEach(function (op) {
-                const id = op.id || op.articulo_id;
-                html += '<div class="custom-control custom-radio"><input class="custom-control-input cm-op-radio" type="radio" name="cm_op_' + gi + '" id="cm_op_' + gi + '_' + id + '" value="' + id + '" data-grupo="' + (g.grupo_id || gi) + '">';
-                html += '<label class="custom-control-label" for="cm_op_' + gi + '_' + id + '">' + (op.nombre || op.descripcion || id) + '</label></div>';
-            });
-            html += '</div>';
-        });
-        $('#cm-opcionales-body').html(html);
-        $('#modal-cm-opcionales').modal('show');
-    }
-
-    async function agregarLinea(articuloId, cantidad, opcionales) {
-        if (!cuenta || !cuenta.id) {
-            toast('Abra una cuenta con el login de mozo.', 'warning');
-            return;
-        }
-        const payload = { articulo_id: articuloId, cantidad: cantidad, opcionales: opcionales || {} };
-        try {
-            const data = await api('POST', '/cuenta/' + cuenta.id + '/linea', payload);
-            cuenta = data.cuenta || cuenta;
-            if (data.cuenta) {
-                renderCuenta();
-            } else if (data.linea) {
-                if (!Array.isArray(cuenta.lineas)) {
-                    cuenta.lineas = lineasDesdeCuenta(cuenta);
-                }
-                cuenta.lineas.push(data.linea);
-                renderCuenta();
-            } else {
-                await cargarCuenta(cuenta.id);
-            }
-            limpiarCampoCargaArticuloCm();
-            focusSkuInput();
-        } catch (e) {
-            toast(e.message, 'error');
-        }
-    }
-
-    async function procesarSku(opciones) {
-        const pedirCantidad = !!(opciones && opciones.pedirCantidad);
-        const art = await resolverArticuloDesdeSkuInput();
-        if (!art) {
-            return;
-        }
-        await iniciarAltaArticuloCm(art, { pedirCantidad: pedirCantidad });
     }
 
     async function guardarCabeceraFacturacion() {
@@ -1520,6 +2190,26 @@
                 void resolverSkuPorTabYEnfocarAgregarCm();
             }
         });
+        document.addEventListener('keydown', function (e) {
+            if (!esTeclaF1Cm(e)) {
+                return;
+            }
+            const t = e.target;
+            const zona = t && t.closest ? t.closest('#cm-campo-articulo-carga') : null;
+            if (!zona) {
+                return;
+            }
+            const consultaModal = document.getElementById('consultaarticuloModal');
+            if (consultaModal && consultaModal.classList.contains('show')) {
+                return;
+            }
+            if (debeIgnorarAtajoCm()) {
+                return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            abrirConsultaArticuloCm();
+        }, true);
         $('#cm-btn-agregar-sku').on('click', function () { void procesarSku({ pedirCantidad: true }); });
         $('#cm-btn-agregar-cantidad').on('click', function () { void procesarSku({ pedirCantidad: true }); });
         $('#cm-modal-cantidad-ok').on('click', function () { confirmarModalCantidadCm(); });
@@ -1551,6 +2241,19 @@
                 renderCuenta();
                 focusSkuInput();
             }).catch(function (e) { toast(e.message, 'error'); });
+        });
+
+        $('#modal-comentario-cocina-guardar').on('click', function () {
+            void guardarComentarioCocinaLineaCm();
+        });
+        $('#fld-comentario-cocina').on('keydown', function (e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                void guardarComentarioCocinaLineaCm();
+            }
+        });
+        $('#modal-comentario-cocina').on('hidden.bs.modal.cmComentarioReset', function () {
+            cmLineaComentarioCocinaId = null;
         });
 
         $('#cm-btn-nueva-cuenta').on('click', function () {
@@ -1635,23 +2338,42 @@
             }
         });
 
-        $('#cm-opcionales-ok').on('click', function () {
-            const sel = {};
-            $('#cm-opcionales-body .cm-op-radio:checked').each(function () {
-                sel[$(this).data('grupo')] = parseInt($(this).val(), 10);
+        const btnOpcConfirmar = document.getElementById('modal-opcionales-confirmar');
+        if (btnOpcConfirmar) {
+            btnOpcConfirmar.addEventListener('click', function () {
+                void avanzarOConfirmarOpcionales();
             });
-            if (cmPendingAltaPostOpcionales && typeof cmPendingAltaPostOpcionales.resolve === 'function') {
-                const ctx = cmPendingAltaPostOpcionales;
-                cmPendingAltaPostOpcionales = null;
-                $('#modal-cm-opcionales').modal('hide');
-                ctx.resolve(sel);
-                return;
-            }
-            if (!pendingOpcionalesResolver) { return; }
-            $('#modal-cm-opcionales').modal('hide');
-            pendingOpcionalesResolver.resolve(sel);
-            pendingOpcionalesResolver = null;
-        });
+        }
+        const btnOpcAtras = document.getElementById('modal-opcionales-atras');
+        if (btnOpcAtras) {
+            btnOpcAtras.addEventListener('click', function () {
+                setPasoActualOpcionales(pasoActualOpcionales() - 1);
+            });
+        }
+        const opcBody = document.getElementById('modal-opcionales-body');
+        if (opcBody) {
+            opcBody.addEventListener('click', onClickTarjetaOpcional);
+            opcBody.addEventListener('keydown', onKeyTarjetaOpcional);
+        }
+        const opcModal = document.getElementById('modal-opcionales');
+        if (opcModal) {
+            opcModal.addEventListener('keydown', onKeyModalOpcionales);
+        }
+        if (typeof $ !== 'undefined') {
+            $('#modal-opcionales').on('hidden.bs.modal.cmOpcReset', function () {
+                if (pendingOpcionalesCtx) {
+                    pendingOpcionalesCtx = null;
+                    pendingOpcionalesSeleccion = null;
+                    pendingArticulo = null;
+                    setTimeout(function () {
+                        focusSkuInput();
+                    }, 80);
+                }
+            });
+            $('#modal-opcionales').on('shown.bs.modal.cmOpcShown', function () {
+                sincronizarVistaPasoOpcional();
+            });
+        }
 
         $(document).on('keydown.cmF8', function (e) {
             if (e.key === 'F8' || e.keyCode === 119) {

@@ -10,14 +10,17 @@ use App\Models\Stock\Articulo;
 use App\Models\Configuracion\Impuesto;
 use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
 use App\Models\Ventas\CuentaGastronomia;
+use App\Models\Ventas\JornadaGastronomia;
 use App\Models\Ventas\MozoGastronomia;
 use App\Models\Ventas\Puntoventa;
+use App\Models\Ventas\TurnoOperativoGastronomia;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Models\Ventas\Venta_Emision;
 use App\Models\Ventas\Venta_Impuesto;
 use App\Repositories\Ventas\MozoGastronomiaRepositoryInterface;
 use App\Support\Caja\CobranzaNumeracionTransaccion;
+use App\Support\Ventas\GastronomiaAnitaImport\GastronomiaAnitaImportEstacionamientoSupport;
 use App\Support\Ventas\GastronomiaAnitaImport\GastronomiaAnitaImportMediosPagoSupport;
 use App\Support\Ventas\GastronomiaAnitaImportEmpresaSupport;
 use App\Support\Ventas\KandikoAnitaVentaTipoSupport;
@@ -135,10 +138,14 @@ final class GastronomiaFacturaImportacionAnitaService
         $vencae = $this->leerVencae($sucursal, $nro, $tipoAnita, $empresaCodigo);
         $resvta = $this->leerResvta($sucursal, $nro, $tipoAnita, $empresaCodigo);
 
+        if (GastronomiaAnitaImportEstacionamientoSupport::esResvtaEstacionamiento($resvta)) {
+            return 'omitido';
+        }
+
         $fecha = $this->parseFechaAnita((string) ($cab->ven_fecha ?? ''));
         $fechaJornada = $this->parseFechaJornadaAnita($cab, $fecha);
 
-        $mozo = $this->resolverMozo($resvta, $cab, (int) $ctx['empresa_id']);
+        $mozo = $this->resolverMozo($cab, (int) $ctx['empresa_id']);
         $medios = $this->resolverMediosPago($resvta, $total, (int) $ctx['empresa_id']);
         $sinCobranza = GastronomiaAnitaImportMediosPagoSupport::esCortesiaSinCobranza($total, $medios);
 
@@ -146,7 +153,13 @@ final class GastronomiaFacturaImportacionAnitaService
             return 'importado';
         }
 
-        $timestamp = $this->resolverTimestamp($fecha, $resvta);
+        $timestamp = $this->resolverTimestampImport(
+            $nro,
+            $fechaJornada,
+            $resvta,
+            (string) $ctx['identificador_pc'],
+            (int) $ctx['empresa_id'],
+        );
 
         DB::transaction(function () use (
             $cab,
@@ -218,7 +231,7 @@ final class GastronomiaFacturaImportacionAnitaService
                 'empresa_id' => (int) $ctx['empresa_id'],
                 'mesa_gastronomia_id' => null,
                 'mozo_gastronomia_id' => $mozo?->id,
-                'cubiertos' => max(1, (int) ($resvta->resv_cubierto ?? 1)),
+                'cubiertos' => 1,
                 'estado' => CuentaGastronomia::ESTADO_FACTURADA,
                 'identificador_pc' => (string) $ctx['identificador_pc'],
                 'cliente_id' => (int) config('gastronomia_anita_import.cliente_consumidor_final_id', 1),
@@ -266,16 +279,16 @@ final class GastronomiaFacturaImportacionAnitaService
         $puntoventa = Puntoventa::query()
             ->with('empresas')
             ->where('codigo', $sucursal)
-            ->whereHas('empresas', fn ($q) => $q->where('empresa_id', $empresaId))
+            ->where('empresa_id', $empresaId)
             ->first();
 
         if ($puntoventa === null) {
-            $puntoventa = Puntoventa::query()->with('empresas')->where('codigo', $sucursal)->first();
+            throw new InvalidArgumentException(
+                'Punto de venta ERP código '.$sucursal.' no encontrado para empresa '.$empresaId.'.',
+            );
         }
 
-        if ($puntoventa === null) {
-            throw new InvalidArgumentException('Punto de venta ERP código '.$sucursal.' no encontrado.');
-        }
+        $empresaId = (int) $puntoventa->empresa_id;
 
         $pc = $identificadorPc
             ?? (string) (config('gastronomia_anita_import.identificador_pc_por_sucursal')[$sucursal] ?? '');
@@ -470,7 +483,7 @@ final class GastronomiaFacturaImportacionAnitaService
                 'acc' => 'list',
                 'tabla' => 'resvta',
                 'campos' => implode(',', [
-                    'resv_fecha', 'resv_hora', 'resv_cubierto', 'resv_mozo', 'resv_total',
+                    'resv_fecha', 'resv_hora', 'resv_host', 'resv_cubierto', 'resv_mozo', 'resv_total',
                     'resv_tot_efectivo', 'resv_tot_fiserv', 'resv_tot_qr', 'resv_tot_ctacte', 'resv_tot_tarjeta',
                 ]),
                 'whereArmado' => $this->whereComprobante($sucursal, $nro, $nro, 'resv', $tipo, $empresaCodigo),
@@ -685,16 +698,9 @@ final class GastronomiaFacturaImportacionAnitaService
         ]];
     }
 
-    private function resolverMozo(?stdClass $resvta, stdClass $cab, int $empresaId): ?MozoGastronomia
+    private function resolverMozo(stdClass $cab, int $empresaId): ?MozoGastronomia
     {
-        $codigo = '';
-        if ($resvta !== null && isset($resvta->resv_mozo)) {
-            $codigo = (string) $resvta->resv_mozo;
-        } elseif (isset($cab->ven_vendedor)) {
-            $codigo = (string) $cab->ven_vendedor;
-        }
-
-        $codigo = trim($codigo);
+        $codigo = isset($cab->ven_vendedor) ? trim((string) $cab->ven_vendedor) : '';
         if ($codigo === '' || $codigo === '0') {
             return null;
         }
@@ -758,20 +764,97 @@ final class GastronomiaFacturaImportacionAnitaService
         return $this->parseFechaAnita((string) $yyyymmdd);
     }
 
-    private function resolverTimestamp(string $fecha, ?stdClass $resvta): Carbon
-    {
-        $fechaBase = $fecha;
-        if ($resvta !== null && ! empty($resvta->resv_fecha)) {
-            $fechaBase = $this->parseFechaAnita((string) $resvta->resv_fecha);
+    /**
+     * Marca temporal ERP para imports históricos: cae en la jornada (fechajornada), no en now()
+     * ni en ven_fecha calendario. Se reparte entre apertura de jornada y el turno habilitado
+     * abierto en la misma PC (si existe), para no inflar el cierre de turno activo.
+     */
+    private function resolverTimestampImport(
+        int $numeroComprobante,
+        string $fechaJornada,
+        ?stdClass $resvta,
+        string $identificadorPc,
+        int $empresaId,
+    ): Carbon {
+        if ($resvta !== null && ! empty($resvta->resv_hora)) {
+            $fechaBase = ! empty($resvta->resv_fecha)
+                ? $this->parseFechaAnita((string) $resvta->resv_fecha)
+                : $fechaJornada;
+
+            try {
+                return Carbon::parse($fechaBase.' '.$this->parseHoraAnita($resvta->resv_hora));
+            } catch (\Throwable) {
+                // continúa con ventana de jornada
+            }
         }
 
-        $hora = $this->parseHoraAnita($resvta?->resv_hora ?? null);
+        $jornada = JornadaGastronomia::query()
+            ->where('empresa_id', $empresaId)
+            ->whereDate('fecha_jornada', $fechaJornada)
+            ->first();
 
-        try {
-            return Carbon::parse($fechaBase.' '.$hora);
-        } catch (\Throwable) {
-            return Carbon::parse($fechaBase.' 12:00:00');
+        $desde = $jornada?->apertura_en !== null
+            ? Carbon::parse((string) $jornada->apertura_en)
+            : Carbon::parse($fechaJornada.' 18:00:00');
+
+        if ($desde->format('Y-m-d') !== $fechaJornada) {
+            $desde = Carbon::parse($fechaJornada.' 05:00:00');
         }
+
+        $turnoAbierto = TurnoOperativoGastronomia::query()
+            ->where('identificador_pc', $identificadorPc)
+            ->where('empresa_id', $empresaId)
+            ->where('estado', TurnoOperativoGastronomia::ESTADO_HABILITADO)
+            ->when($jornada !== null, fn ($q) => $q->where('jornada_gastronomia_id', (int) $jornada->id))
+            ->when($jornada === null, fn ($q) => $q->whereHas('jornada', fn ($jq) => $jq->whereDate('fecha_jornada', $fechaJornada)))
+            ->orderByDesc('habilitacion_en')
+            ->first();
+
+        $hasta = $turnoAbierto !== null
+            ? Carbon::parse((string) $turnoAbierto->habilitacion_en)->subSecond()
+            : Carbon::parse($fechaJornada.' 23:59:59');
+
+        // Último turno cerrado de la misma jornada/PC: tope para no caer en hueco ni en turno noche abierto.
+        $ultimoCerrado = TurnoOperativoGastronomia::query()
+            ->where('identificador_pc', $identificadorPc)
+            ->where('empresa_id', $empresaId)
+            ->where('estado', TurnoOperativoGastronomia::ESTADO_CERRADO)
+            ->when($jornada !== null, fn ($q) => $q->where('jornada_gastronomia_id', (int) $jornada->id))
+            ->when($jornada === null, fn ($q) => $q->whereHas('jornada', fn ($jq) => $jq->whereDate('fecha_jornada', $fechaJornada)))
+            ->whereNotNull('cierre_en')
+            ->orderByDesc('cierre_en')
+            ->first();
+
+        if ($ultimoCerrado?->cierre_en !== null) {
+            $cierreUltimo = Carbon::parse((string) $ultimoCerrado->cierre_en);
+            if ($turnoAbierto !== null) {
+                $aperturaAbierto = Carbon::parse((string) $turnoAbierto->habilitacion_en);
+                if ($cierreUltimo->lt($aperturaAbierto) && $hasta->gt($cierreUltimo)) {
+                    $hasta = $cierreUltimo;
+                }
+            } elseif ($hasta->gt($cierreUltimo)) {
+                $hasta = $cierreUltimo;
+            }
+        }
+
+        if ($jornada !== null
+            && $jornada->estado === JornadaGastronomia::ESTADO_CERRADA
+            && $jornada->cierre_en !== null) {
+            $cierreJornada = Carbon::parse((string) $jornada->cierre_en);
+            if ($hasta->gt($cierreJornada)) {
+                $hasta = $cierreJornada;
+            }
+        }
+
+        if ($hasta->lte($desde)) {
+            $desde = Carbon::parse($fechaJornada.' 18:00:00');
+            $hasta = Carbon::parse($fechaJornada.' 18:59:59');
+        }
+
+        $ventanaSeg = max(60, (int) $desde->diffInSeconds($hasta));
+        $offset = $numeroComprobante > 0 ? ($numeroComprobante % $ventanaSeg) : 0;
+
+        return $desde->copy()->addSeconds($offset);
     }
 
     private function parseHoraAnita(mixed $raw): string

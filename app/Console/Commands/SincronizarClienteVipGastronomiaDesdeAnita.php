@@ -15,20 +15,26 @@ class SincronizarClienteVipGastronomiaDesdeAnita extends Command
 
     public function handle(ClienteVipGastronomiaAnitaSyncService $sync): int
     {
-        $empresaId = $this->option('empresa');
+        $empresaOpt = $this->option('empresa');
         $numeroid = $this->option('numeroid');
 
         try {
-            if ($empresaId !== null && $empresaId !== '' && $numeroid !== null && $numeroid !== '') {
-                $this->info("Importando cliente VIP Anita empresa {$empresaId} numeroid {$numeroid}…");
-                $estado = $sync->traerRegistroDeAnita((int) $empresaId, (int) $numeroid);
+            if ($empresaOpt !== null && $empresaOpt !== '' && $numeroid !== null && $numeroid !== '') {
+                $this->info("Importando cliente VIP Anita empresa {$empresaOpt} numeroid {$numeroid}…");
+                $estado = $sync->traerRegistroDeAnita((int) $empresaOpt, (int) $numeroid);
                 $this->info("Resultado: {$estado}");
 
                 return self::SUCCESS;
             }
 
-            $this->info('Sincronizando clientes VIP desde Anita (Biyemas → Kandiko → Rebisco)…');
-            $ret = $sync->sincronizarConAnita();
+            if ($empresaOpt !== null && $empresaOpt !== '') {
+                $empresaId = (int) $empresaOpt;
+                $this->info("Sincronizando clientes VIP desde Anita (base_admin.clivipg) para empresa_id={$empresaId}…");
+                $ret = $sync->sincronizarEmpresaDesdeAnita($empresaId);
+            } else {
+                $this->info('Sincronizando clientes VIP desde Anita (Biyemas → Kandiko → Rebisco)…');
+                $ret = $sync->sincronizarConAnita();
+            }
         } catch (\Throwable $e) {
             $this->error($e->getMessage());
 

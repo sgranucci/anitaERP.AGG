@@ -101,7 +101,7 @@
                     @endif
                 </h3>
                 <div class="card-tools">
-                    @if (empty($acceso_visualizacion_por_hash))
+                    @if (empty($acceso_visualizacion_por_hash) && empty($ocultarVolver))
                         <a href="{{ route('consultar_ordencompra') }}" class="btn btn-outline-info btn-sm">
                             <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                         </a>
@@ -144,6 +144,10 @@
                 @if (isset($data) && $data)
                     @method('PUT')
                 @endif
+                @if (!empty($soloConsulta))
+                    <input type="hidden" name="origen" value="modal_consulta">
+                    <input type="hidden" name="vista" value="consulta">
+                @endif
 
                 <div class="text-center py-2 border-bottom rounded-top bg-white">
                     <button type="button" id="oc-boton-principal" class="btn btn-primary btn-sm mx-1 oc-tab-solapa font-weight-bold">Datos principales</button>
@@ -175,6 +179,13 @@
                             <i class="fa fa-save"></i>
                             {{ isset($data) && $data ? 'Actualizar' : 'Guardar' }}
                         </button>
+                        @if (!empty($soloConsulta))
+                        <button type="button" class="btn btn-secondary ml-2" onclick="window.close()">Cerrar solapa</button>
+                        @endif
+                    </div>
+                @elseif (!empty($soloConsulta))
+                    <div class="card-footer text-center">
+                        <button type="button" class="btn btn-secondary" onclick="window.close()">Cerrar solapa</button>
                     </div>
                 @endif
             </form>

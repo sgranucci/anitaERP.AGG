@@ -3093,8 +3093,12 @@
     }
 
     let canjePremioValidado = null;
-    /** Comentarios de cocina opcionales por artículo antes de aplicar el canje (articulo_id → texto). */
+    /** Comentarios de cocina opcionales por artículo (articulo_id → texto). */
     let canjePremioComentariosPorArticulo = {};
+    /** Comentario de cocina opcional ingresado antes de escanear el cupón (aplica a todos los ítems salvo override). */
+    let canjePremioComentarioCocinaPreEscaneo = '';
+    /** Modal comentario cocina abierto desde canje premio (pre-escaneo). */
+    let canjePremioModoComentarioPreEscaneo = false;
     /** Tras confirmar cupón: apertura de cuenta libre + aplicar automático al quedar abierta. */
     let canjePremioEsperaApertura = false;
     /** Oculto temporalmente mientras se eligen opcionales de fórmula (no resetear validación). */
@@ -3107,6 +3111,8 @@
         if (limpiarValidacion !== false) {
             canjePremioValidado = null;
             canjePremioComentariosPorArticulo = {};
+            canjePremioComentarioCocinaPreEscaneo = '';
+            canjePremioModoComentarioPreEscaneo = false;
             canjePremioEsperaApertura = false;
             canjePremioUltimoCodigoValidado = '';
         }
@@ -3130,6 +3136,71 @@
         if (itemsUl) itemsUl.innerHTML = '';
         if (btn) btn.disabled = true;
         actualizarBtnConfirmarCanjePremio();
+        actualizarBtnComentarioCocinaCanjePremioPreEscaneo();
+    }
+
+    function comentarioCocinaCanjePremioPorArticulo(aid) {
+        const especifico = (canjePremioComentariosPorArticulo[aid] || '').trim();
+        if (especifico) {
+            return especifico;
+        }
+        return (canjePremioComentarioCocinaPreEscaneo || '').trim();
+    }
+
+    function comentariosCanjePremioParaAplicar() {
+        const items = (canjePremioValidado && canjePremioValidado.items) || [];
+        const out = {};
+        items.forEach((it) => {
+            const aid = String(parseInt(it.articulo_id, 10) || '');
+            if (!aid) {
+                return;
+            }
+            const com = comentarioCocinaCanjePremioPorArticulo(aid);
+            if (com) {
+                out[aid] = com;
+            }
+        });
+        return out;
+    }
+
+    function actualizarBtnComentarioCocinaCanjePremioPreEscaneo() {
+        const btn = document.getElementById('gastro-canje-premio-btn-comentario-cocina');
+        if (!btn) {
+            return;
+        }
+        const comentario = (canjePremioComentarioCocinaPreEscaneo || '').trim();
+        btn.classList.toggle('btn-info', !!comentario);
+        btn.classList.toggle('btn-outline-info', !comentario);
+        btn.title = comentario
+            ? 'Comentario cocina: ' + comentario
+            : 'Indicaciones para la comanda (opcional, antes de escanear el cupón)';
+    }
+
+    function abrirModalComentarioCocinaCanjePremioPreEscaneo() {
+        if (bloquearOperacionPosPorJornadaTurno()) {
+            return;
+        }
+        lineaComentarioCocinaId = null;
+        canjePremioComentarioArticuloId = null;
+        canjeFidelidadModoComentario = false;
+        canjePremioModoComentarioPreEscaneo = true;
+        const fld = document.getElementById('fld-comentario-cocina');
+        const lbl = document.getElementById('modal-comentario-cocina-articulo');
+        if (lbl) {
+            lbl.textContent = 'Canje premio — artículos del cupón';
+        }
+        if (fld) {
+            fld.value = canjePremioComentarioCocinaPreEscaneo || '';
+        }
+        mostrarModalBootstrap('modal-comentario-cocina', {
+            onShown: function () {
+                if (fld) {
+                    fld.focus();
+                    fld.select();
+                }
+            },
+            apilar: true,
+        });
     }
 
     function cuentaGastronomiaEsLibre(cuenta) {
@@ -3220,7 +3291,7 @@
             itemsUl.innerHTML = items
                 .map((it) => {
                     const aid = String(parseInt(it.articulo_id, 10) || '');
-                    const comentarioCocina = (canjePremioComentariosPorArticulo[aid] || '').trim();
+                    const comentarioCocina = comentarioCocinaCanjePremioPorArticulo(aid);
                     const btnComentarioClass = comentarioCocina
                         ? 'btn btn-sm btn-info py-0 px-2 ml-1 btn-gastro-comentario-cocina-canje-premio'
                         : 'btn btn-sm btn-outline-info py-0 px-2 ml-1 btn-gastro-comentario-cocina-canje-premio';
@@ -3545,8 +3616,9 @@
             if (opcionalesPorArticulo && Object.keys(opcionalesPorArticulo).length) {
                 payload.opcionales_por_articulo = opcionalesPorArticulo;
             }
-            if (canjePremioComentariosPorArticulo && Object.keys(canjePremioComentariosPorArticulo).length) {
-                payload.comentarios_por_articulo = canjePremioComentariosPorArticulo;
+            const comentariosPremio = comentariosCanjePremioParaAplicar();
+            if (comentariosPremio && Object.keys(comentariosPremio).length) {
+                payload.comentarios_por_articulo = comentariosPremio;
             }
             const data = await api('/ventas/gastronomia/api/aplicar-ticket-canje-premio', {
                 method: 'POST',
@@ -3732,8 +3804,21 @@
             });
         }
 
+        const btnComentarioPremio = document.getElementById('gastro-canje-premio-btn-comentario-cocina');
+        if (btnComentarioPremio) {
+            btnComentarioPremio.addEventListener('click', (e) => {
+                e.preventDefault();
+                abrirModalComentarioCocinaCanjePremioPreEscaneo();
+            });
+        }
+
         if (typeof $ !== 'undefined') {
             $('#modal-gastro-canje-premio').on('keydown.gastroCanjePremio', manejarEnterModalCanjePremio);
+            $('#modal-comentario-cocina').on('hidden.bs.modal.gastroPremioComentario', function () {
+                if (canjePremioModoComentarioPreEscaneo) {
+                    canjePremioModoComentarioPreEscaneo = false;
+                }
+            });
             $('#modal-gastro-canje-premio').on('hidden.bs.modal', function () {
                 if (!canjePremioEsperaApertura && !canjePremioEsperaOpcionales) {
                     resetModalCanjePremio(true);
@@ -3744,6 +3829,10 @@
 
     let canjeFidelidadValidado = null;
     let canjeFidelidadArticuloId = null;
+    /** Comentario de cocina opcional ingresado antes de pasar la tarjeta. */
+    let canjeFidelidadComentarioCocina = '';
+    /** Modal comentario cocina abierto desde canje fidelidad (pre-escaneo). */
+    let canjeFidelidadModoComentario = false;
     /** Tras confirmar tarjeta: apertura de cuenta libre + aplicar automático al quedar abierta. */
     let canjeFidelidadEsperaApertura = false;
     let canjeFidelidadEsperaOpcionales = false;
@@ -3770,6 +3859,8 @@
         if (limpiarValidacion !== false) {
             canjeFidelidadValidado = null;
             canjeFidelidadArticuloId = null;
+            canjeFidelidadComentarioCocina = '';
+            canjeFidelidadModoComentario = false;
             canjeFidelidadEsperaApertura = false;
             canjeFidelidadUltimoTrackdataValidado = '';
         }
@@ -3793,6 +3884,47 @@
         if (artBox) artBox.innerHTML = '';
         if (btn) btn.disabled = true;
         actualizarBotonConfirmarCanjeFidelidad();
+        actualizarBtnComentarioCocinaCanjeFidelidad();
+    }
+
+    function actualizarBtnComentarioCocinaCanjeFidelidad() {
+        const btn = document.getElementById('gastro-canje-fidelidad-btn-comentario-cocina');
+        if (!btn) {
+            return;
+        }
+        const comentario = (canjeFidelidadComentarioCocina || '').trim();
+        btn.classList.toggle('btn-info', !!comentario);
+        btn.classList.toggle('btn-outline-info', !comentario);
+        btn.title = comentario
+            ? 'Comentario cocina: ' + comentario
+            : 'Indicaciones para la comanda (opcional, antes de pasar la tarjeta)';
+    }
+
+    function abrirModalComentarioCocinaCanjeFidelidad() {
+        if (bloquearOperacionPosPorJornadaTurno()) {
+            return;
+        }
+        lineaComentarioCocinaId = null;
+        canjePremioComentarioArticuloId = null;
+        canjeFidelidadModoComentario = true;
+        canjePremioModoComentarioPreEscaneo = false;
+        const fld = document.getElementById('fld-comentario-cocina');
+        const lbl = document.getElementById('modal-comentario-cocina-articulo');
+        if (lbl) {
+            lbl.textContent = 'Canje fidelidad — artículo a canjear';
+        }
+        if (fld) {
+            fld.value = canjeFidelidadComentarioCocina || '';
+        }
+        mostrarModalBootstrap('modal-comentario-cocina', {
+            onShown: function () {
+                if (fld) {
+                    fld.focus();
+                    fld.select();
+                }
+            },
+            apilar: true,
+        });
     }
 
     function puedeAplicarCanjeFidelidadEnCuentaActual() {
@@ -3839,6 +3971,21 @@
         }, 120);
     }
 
+    function seleccionarArticuloCanjeFidelidadPorNumero(num) {
+        const box = document.getElementById('gastro-canje-fidelidad-articulos');
+        if (!box) return false;
+        const radios = box.querySelectorAll('.gastro-canje-fidelidad-art-radio');
+        if (!radios.length || num < 1 || num > 9 || num > radios.length) {
+            return false;
+        }
+        const radio = radios[num - 1];
+        if (!radio) return false;
+        radio.checked = true;
+        canjeFidelidadArticuloId = parseInt(radio.value, 10);
+        actualizarBotonConfirmarCanjeFidelidad();
+        return true;
+    }
+
     function pintarArticulosCanjeFidelidad(articulos, seleccionadoId) {
         const wrap = document.getElementById('gastro-canje-fidelidad-articulos-wrap');
         const box = document.getElementById('gastro-canje-fidelidad-articulos');
@@ -3855,6 +4002,11 @@
 
         if (arts.length === 1) {
             canjeFidelidadArticuloId = parseInt(arts[0].articulo_id, 10);
+            const comentarioHtml = (canjeFidelidadComentarioCocina || '').trim()
+                ? '<br><small class="text-info"><i class="fas fa-utensils"></i> ' +
+                  escaparHtmlOpcional(canjeFidelidadComentarioCocina) +
+                  '</small>'
+                : '';
             box.innerHTML =
                 '<div class="pl-1">' +
                 (arts[0].sku || '') +
@@ -3862,39 +4014,59 @@
                 (arts[0].descripcion || '') +
                 ' · $' +
                 (parseFloat(arts[0].precio_unitario) || 0).toFixed(2) +
+                comentarioHtml +
                 '</div>';
         } else {
-            box.innerHTML = arts
-                .map((it) => {
-                    const id = parseInt(it.articulo_id, 10);
-                    const checked = seleccionadoId === id ? ' checked' : '';
-                    return (
-                        '<div class="custom-control custom-radio mb-1">' +
-                        '<input type="radio" class="custom-control-input gastro-canje-fidelidad-art-radio" ' +
-                        'name="gastro_canje_fidelidad_art" id="gastro-canje-fidelidad-art-' +
-                        id +
-                        '" value="' +
-                        id +
-                        '"' +
-                        checked +
-                        '>' +
-                        '<label class="custom-control-label" for="gastro-canje-fidelidad-art-' +
-                        id +
-                        '">' +
-                        (it.sku || '') +
-                        ' — ' +
-                        (it.descripcion || '') +
-                        ' · $' +
-                        (parseFloat(it.precio_unitario) || 0).toFixed(2) +
-                        '</label></div>'
-                    );
-                })
-                .join('');
+            box.innerHTML =
+                arts
+                    .map((it, idx) => {
+                        const id = parseInt(it.articulo_id, 10);
+                        const checked = seleccionadoId === id ? ' checked' : '';
+                        const comentarioHtml =
+                            seleccionadoId === id && (canjeFidelidadComentarioCocina || '').trim()
+                                ? '<br><small class="text-info"><i class="fas fa-utensils"></i> ' +
+                                  escaparHtmlOpcional(canjeFidelidadComentarioCocina) +
+                                  '</small>'
+                                : '';
+                        const atajo =
+                            idx < 9
+                                ? '<span class="gastro-canje-fidelidad-art-atajo" aria-hidden="true">' +
+                                  String(idx + 1) +
+                                  '</span>'
+                                : '';
+                        return (
+                            '<div class="custom-control custom-radio mb-1">' +
+                            '<input type="radio" class="custom-control-input gastro-canje-fidelidad-art-radio" ' +
+                            'name="gastro_canje_fidelidad_art" id="gastro-canje-fidelidad-art-' +
+                            id +
+                            '" value="' +
+                            id +
+                            '" data-opcion="' +
+                            String(idx + 1) +
+                            '"' +
+                            checked +
+                            '>' +
+                            '<label class="custom-control-label" for="gastro-canje-fidelidad-art-' +
+                            id +
+                            '">' +
+                            atajo +
+                            (it.sku || '') +
+                            ' — ' +
+                            (it.descripcion || '') +
+                            ' · $' +
+                            (parseFloat(it.precio_unitario) || 0).toFixed(2) +
+                            comentarioHtml +
+                            '</label></div>'
+                        );
+                    })
+                    .join('') +
+                '<p class="small text-muted mb-0 mt-1"><kbd>1</kbd>–<kbd>9</kbd> elegir artículo · <kbd>Enter</kbd> confirmar</p>';
             box.querySelectorAll('.gastro-canje-fidelidad-art-radio').forEach((radio) => {
                 radio.addEventListener('change', () => {
                     if (radio.checked) {
                         canjeFidelidadArticuloId = parseInt(radio.value, 10);
                         actualizarBotonConfirmarCanjeFidelidad();
+                        pintarArticulosCanjeFidelidad(arts, canjeFidelidadArticuloId);
                     }
                 });
             });
@@ -4135,6 +4307,11 @@
                 payloadFid.opcionales_por_articulo = {};
                 payloadFid.opcionales_por_articulo[String(canjeFidelidadArticuloId)] = mapOpcFid;
             }
+            const comentarioFid = (canjeFidelidadComentarioCocina || '').trim();
+            if (comentarioFid) {
+                payloadFid.comentarios_por_articulo = {};
+                payloadFid.comentarios_por_articulo[String(canjeFidelidadArticuloId)] = comentarioFid;
+            }
             const data = await api('/ventas/gastronomia/api/aplicar-canje-fidelidad', {
                 method: 'POST',
                 headers: hdrJson(),
@@ -4218,10 +4395,40 @@
         );
     }
 
-    function manejarEnterModalCanjeFidelidad(e) {
-        if (!e || e.key !== 'Enter' || e.ctrlKey || e.metaKey || e.altKey) {
+    function manejarTecladoModalCanjeFidelidad(e) {
+        if (!e || e.ctrlKey || e.metaKey || e.altKey) {
             return;
         }
+
+        const modal = document.getElementById('modal-gastro-canje-fidelidad');
+        const modalVisible = modal && modal.classList.contains('show');
+        const artWrap = document.getElementById('gastro-canje-fidelidad-articulos-wrap');
+        const hayVariosArticulos =
+            modalVisible &&
+            artWrap &&
+            !artWrap.classList.contains('d-none') &&
+            document.querySelectorAll('#gastro-canje-fidelidad-articulos .gastro-canje-fidelidad-art-radio')
+                .length > 1;
+
+        if (!e.shiftKey && hayVariosArticulos && !esCampoTextoEditable(e.target)) {
+            const num = parseInt(e.key, 10);
+            if (num >= 1 && num <= 9) {
+                if (seleccionarArticuloCanjeFidelidadPorNumero(num)) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const btnConf = document.getElementById('gastro-canje-fidelidad-confirmar');
+                    if (btnConf && !btnConf.disabled && typeof btnConf.focus === 'function') {
+                        setTimeout(() => btnConf.focus(), 0);
+                    }
+                }
+                return;
+            }
+        }
+
+        if (e.key !== 'Enter') {
+            return;
+        }
+
         const t = e.target;
         if (puedeConfirmarCanjeFidelidadDesdeTeclado()) {
             e.preventDefault();
@@ -4316,16 +4523,29 @@
 
         if (inp) {
             inp.addEventListener('input', () => programarValidacionCanjeFidelidadTrasLectura());
-            inp.addEventListener('keydown', manejarEnterModalCanjeFidelidad);
+            inp.addEventListener('keydown', manejarTecladoModalCanjeFidelidad);
         }
 
         if (btnConfirmar) {
             btnConfirmar.addEventListener('click', () => void confirmarCanjeFidelidad());
-            btnConfirmar.addEventListener('keydown', manejarEnterModalCanjeFidelidad);
+            btnConfirmar.addEventListener('keydown', manejarTecladoModalCanjeFidelidad);
+        }
+
+        const btnComentarioFid = document.getElementById('gastro-canje-fidelidad-btn-comentario-cocina');
+        if (btnComentarioFid) {
+            btnComentarioFid.addEventListener('click', (e) => {
+                e.preventDefault();
+                abrirModalComentarioCocinaCanjeFidelidad();
+            });
         }
 
         if (typeof $ !== 'undefined') {
-            $('#modal-gastro-canje-fidelidad').on('keydown.gastroCanjeFid', manejarEnterModalCanjeFidelidad);
+            $('#modal-gastro-canje-fidelidad').on('keydown.gastroCanjeFid', manejarTecladoModalCanjeFidelidad);
+            $('#modal-comentario-cocina').on('hidden.bs.modal.gastroFidComentario', function () {
+                if (canjeFidelidadModoComentario) {
+                    canjeFidelidadModoComentario = false;
+                }
+            });
             $('#modal-gastro-canje-fidelidad').on('hidden.bs.modal', function () {
                 if (!canjeFidelidadEsperaApertura && !canjeFidelidadEsperaOpcionales) {
                     resetModalCanjeFidelidad(true);
@@ -5296,6 +5516,8 @@
         }
         lineaComentarioCocinaId = null;
         canjePremioComentarioArticuloId = aid;
+        canjePremioModoComentarioPreEscaneo = false;
+        canjeFidelidadModoComentario = false;
         const articuloTxt = (btn.getAttribute('data-articulo-texto') || '').trim();
         const fld = document.getElementById('fld-comentario-cocina');
         const lbl = document.getElementById('modal-comentario-cocina-articulo');
@@ -5349,6 +5571,38 @@
         }
         const fld = document.getElementById('fld-comentario-cocina');
         const comentario = fld ? String(fld.value || '').trim() : '';
+
+        if (canjeFidelidadModoComentario) {
+            canjeFidelidadComentarioCocina = comentario;
+            canjeFidelidadModoComentario = false;
+            $('#modal-comentario-cocina').modal('hide');
+            actualizarBtnComentarioCocinaCanjeFidelidad();
+            if (canjeFidelidadValidado) {
+                pintarPreviewCanjeFidelidad(canjeFidelidadValidado);
+            }
+            toast(comentario ? 'Comentario de cocina guardado.' : 'Comentario de cocina quitado.', 'success');
+            const inpFid = document.getElementById('gastro-canje-fidelidad-trackdata');
+            if (inpFid && typeof inpFid.focus === 'function') {
+                setTimeout(() => inpFid.focus(), 0);
+            }
+            return;
+        }
+
+        if (canjePremioModoComentarioPreEscaneo) {
+            canjePremioComentarioCocinaPreEscaneo = comentario;
+            canjePremioModoComentarioPreEscaneo = false;
+            $('#modal-comentario-cocina').modal('hide');
+            actualizarBtnComentarioCocinaCanjePremioPreEscaneo();
+            if (canjePremioValidado) {
+                pintarPreviewCanjePremio(canjePremioValidado);
+            }
+            toast(comentario ? 'Comentario de cocina guardado.' : 'Comentario de cocina quitado.', 'success');
+            const inpPremio = document.getElementById('gastro-canje-premio-codigo');
+            if (inpPremio && typeof inpPremio.focus === 'function') {
+                setTimeout(() => inpPremio.focus(), 0);
+            }
+            return;
+        }
 
         if (canjePremioComentarioArticuloId) {
             const aid = String(canjePremioComentarioArticuloId);
@@ -6377,15 +6631,19 @@
                 limpiarFormularioArticuloLinea();
                 return;
             }
-            const tr = document.getElementById('tr-gastro-linea-articulo');
-            if (tr) {
-                tr.querySelector('.articulo_id').value = dataArticulo.id;
-                const cod = tr.querySelector('.codigoarticulo');
-                if (cod) cod.value = dataArticulo.sku || '';
-                tr.querySelector('.descripcionarticulo').value = dataArticulo.descripcion || '';
-                syncSufijoDesdeSkuCompleto(dataArticulo.sku || '');
-            }
+            aplicarArticuloResueltoEnFila({
+                id: dataArticulo.id,
+                sku: dataArticulo.sku || '',
+                descripcion: dataArticulo.descripcion || '',
+            });
+            setTimeout(function () {
+                focusSkuConsumo();
+            }, 80);
         };
+    }
+
+    function esTeclaF1(e) {
+        return e.key === 'F1' || e.code === 'F1' || e.keyCode === 112;
     }
 
     function esTeclaF5(e) {
@@ -6394,6 +6652,24 @@
 
     function esTeclaF8(e) {
         return e.key === 'F8' || e.code === 'F8' || e.keyCode === 119;
+    }
+
+    function abrirConsultaArticuloPos() {
+        if (bloquearOperacionPosPorJornadaTurno()) {
+            return;
+        }
+        if (!cuentaId) {
+            toast('Seleccione mesa o cuenta.', 'warning');
+            return;
+        }
+        const tr = getTrLineaArticulo();
+        if (!tr) {
+            return;
+        }
+        const btn = tr.querySelector('.consultaarticulo');
+        if (btn && typeof btn.click === 'function') {
+            btn.click();
+        }
     }
 
     function wireCamposDescuentoTeclado() {
@@ -6718,6 +6994,25 @@
         document.addEventListener(
             'keydown',
             function (e) {
+                if (esTeclaF1(e)) {
+                    const t = e.target;
+                    const trArt = t && t.closest ? t.closest('#tr-gastro-linea-articulo') : null;
+                    if (!trArt) {
+                        return;
+                    }
+                    const consultaModal = document.getElementById('consultaarticuloModal');
+                    if (consultaModal && consultaModal.classList.contains('show')) {
+                        return;
+                    }
+                    if (debeIgnorarAtajoPos()) {
+                        return;
+                    }
+                    e.preventDefault();
+                    e.stopPropagation();
+                    abrirConsultaArticuloPos();
+                    return;
+                }
+
                 const t = e.target;
                 if (!t || !t.classList || !t.classList.contains('gastro-carga-sku')) return;
                 if (!t.closest('#tr-gastro-linea-articulo')) return;

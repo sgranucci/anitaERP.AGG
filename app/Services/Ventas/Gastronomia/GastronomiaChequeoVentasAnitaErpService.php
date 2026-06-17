@@ -9,6 +9,7 @@ use App\Models\Configuracion\Empresa;
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\Venta_Impuesto;
+use App\Support\Ventas\GastronomiaAnitaImport\GastronomiaAnitaImportEstacionamientoSupport;
 use App\Support\Ventas\GastronomiaAnitaImportEmpresaSupport;
 use App\Support\Ventas\KandikoAnitaVentaTipoSupport;
 use Illuminate\Support\Collection;
@@ -37,7 +38,7 @@ final class GastronomiaChequeoVentasAnitaErpService
         bool $soloDiferencias = true,
         int $limite = 0,
     ): array {
-        $puntoventa = Puntoventa::query()->findOrFail($puntoventaId);
+        $puntoventa = Puntoventa::query()->with('empresas')->findOrFail($puntoventaId);
         $sucursal = $this->sucursalDesdeCodigoPuntoventa((string) $puntoventa->codigo);
         if ($sucursal <= 0) {
             throw new \InvalidArgumentException('Código de punto de venta inválido: '.$puntoventa->codigo);
@@ -49,6 +50,16 @@ final class GastronomiaChequeoVentasAnitaErpService
         }
 
         $anitaPorClave = $this->listarCabecerasAnitaPorJornada($sucursal, $fechaEntera, $puntoventa);
+        $empresaCodigo = $puntoventa->empresas?->codigo ?? $puntoventa->empresa_id;
+        $numerosAnitaJornada = array_values(array_unique(array_filter(array_map(
+            static fn (object $cab): int => (int) ($cab->ven_nro ?? 0),
+            $anitaPorClave,
+        ), static fn (int $n): bool => $n > 0)));
+        $numerosEstacionamiento = GastronomiaAnitaImportEstacionamientoSupport::numerosEstacionamientoEnSucursal(
+            $sucursal,
+            $empresaCodigo,
+            $numerosAnitaJornada,
+        );
         $ventasErp = $this->listarVentasErpPorJornada($puntoventaId, $fechaJornada);
 
         $filas = [];
@@ -58,6 +69,7 @@ final class GastronomiaChequeoVentasAnitaErpService
             'diferencia' => 0,
             'solo_erp' => 0,
             'solo_anita' => 0,
+            'excluido_estacionamiento' => 0,
             'error' => 0,
         ];
 
@@ -112,6 +124,12 @@ final class GastronomiaChequeoVentasAnitaErpService
                 continue;
             }
 
+            $numeroAnita = (int) ($anita->ven_nro ?? 0);
+            if ($numeroAnita > 0 && isset($numerosEstacionamiento[$numeroAnita])) {
+                $conteo['excluido_estacionamiento']++;
+                continue;
+            }
+
             $conteo['solo_anita']++;
             $filas[] = [
                 'estado' => 'solo_anita',
@@ -145,7 +163,7 @@ final class GastronomiaChequeoVentasAnitaErpService
             'puntoventa' => (string) $puntoventa->codigo,
             'sucursal' => $sucursal,
             'fecha_jornada' => $fechaJornada,
-            'resumen' => $this->armarResumen($ventasErp, $anitaPorClave, $conteo, $tolerancia),
+            'resumen' => $this->armarResumen($ventasErp, $anitaPorClave, $conteo, $tolerancia, $numerosEstacionamiento),
             'filas' => $filas,
         ];
     }
@@ -877,6 +895,7 @@ final class GastronomiaChequeoVentasAnitaErpService
         array $anitaPorClave,
         array $conteo,
         float $tolerancia,
+        array $numerosEstacionamiento = [],
     ): array {
         $totalesErp = ['total' => 0.0, 'gravado' => 0.0, 'iva' => 0.0, 'exento' => 0.0];
         foreach ($ventasErp as $venta) {
@@ -892,6 +911,10 @@ final class GastronomiaChequeoVentasAnitaErpService
         $totalesAnitaBruto = ['total' => 0.0, 'gravado' => 0.0, 'iva' => 0.0, 'exento' => 0.0];
         $totalesAnitaSignoErp = ['total' => 0.0, 'gravado' => 0.0, 'iva' => 0.0, 'exento' => 0.0];
         foreach ($anitaPorClave as $cab) {
+            $numeroAnita = (int) ($cab->ven_nro ?? 0);
+            if ($numeroAnita > 0 && isset($numerosEstacionamiento[$numeroAnita])) {
+                continue;
+            }
             $m = $this->montosDesdeCabeceraAnita($cab);
             $esNc = $this->esNotaCreditoAnita($cab);
             foreach (self::CAMPOS_MONETARIOS as $c) {

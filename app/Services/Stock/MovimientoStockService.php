@@ -248,8 +248,7 @@ class MovimientoStockService
 		} catch (\Exception $e) 
 		{
 			DB::rollback();
-			dd($e->getMessage());
-			return $e->getMessage();
+			throw $e;
 		}
 		
 		return ['id'=>$movimientostock_id, 'codigo'=>$data['codigo']];

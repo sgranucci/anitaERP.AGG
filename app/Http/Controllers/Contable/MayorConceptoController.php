@@ -56,7 +56,7 @@ class MayorConceptoController extends Controller
             $resultado = $this->generarYCachear($filtros);
             $consultado = true;
             $totales = $this->armarTotalesDesdeResultado($resultado);
-            $resumen = $this->reporteService->resumenSegunAgrupacion($resultado, $filtros);
+            $resumen = $this->reporteService->resumenAgrupado($resultado);
             $resumenPorCuenta = $this->reporteService->resumenAgrupadoPorCuenta($resultado);
             $auditoriaPanel = $this->reporteService->armarAuditoriaPanel($resultado);
             $auditoria = $auditoriaPanel['disponibilidad'] ?? null;
@@ -68,7 +68,7 @@ class MayorConceptoController extends Controller
             if ($resultado !== null) {
                 $consultado = true;
                 $totales = $this->armarTotalesDesdeResultado($resultado);
-                $resumen = $this->reporteService->resumenSegunAgrupacion($resultado, $filtros);
+                $resumen = $this->reporteService->resumenAgrupado($resultado);
                 $resumenPorCuenta = $this->reporteService->resumenAgrupadoPorCuenta($resultado);
                 $auditoriaPanel = $this->reporteService->armarAuditoriaPanel($resultado);
                 $auditoria = $auditoriaPanel['disponibilidad'] ?? null;

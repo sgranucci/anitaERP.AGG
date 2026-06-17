@@ -65,6 +65,47 @@ class RecepcionProveedorParteUnicaService
     }
 
     /**
+     * Revierte NPUs locales y en Anita (stk_parte_unica + recpunica) tras fallo en confirmación.
+     */
+    public function revertirSincronizacionAnita(Recepcion_Proveedor $recepcion): void
+    {
+        $partes = Recepcion_Proveedor_ParteUnica::query()
+            ->where('recepcion_proveedor_id', $recepcion->id)
+            ->get();
+
+        if ($partes->isEmpty()) {
+            return;
+        }
+
+        $recepcion->loadMissing([
+            'empresas',
+            'recepcion_proveedor_partes_unicas.recepcion_proveedor_articulos.articulos',
+        ]);
+
+        $clave = \App\Support\Stock\RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
+
+        foreach ($partes as $parte) {
+            RecpunicaAnitaBridgeSupport::eliminarDesdeParte($parte, $clave);
+            $apu = Articulo_ParteUnica::query()
+                ->where('numeroparte', $parte->numeroparte)
+                ->first();
+
+            if ($apu) {
+                StkParteUnicaAnitaBridgeSupport::eliminar($apu);
+            }
+        }
+
+        $numeros = $partes->pluck('numeroparte')->filter()->unique()->values()->all();
+        Recepcion_Proveedor_ParteUnica::query()
+            ->where('recepcion_proveedor_id', $recepcion->id)
+            ->delete();
+
+        if ($numeros !== []) {
+            Articulo_ParteUnica::query()->whereIn('numeroparte', $numeros)->delete();
+        }
+    }
+
+    /**
      * Graba el mismo numeroparte en articulo_parte_unica (maestro) y recepcion_proveedor_parte_unica (vínculo).
      */
     public function persistirParteUnicaEnRecepcion(
@@ -101,8 +142,10 @@ class RecepcionProveedorParteUnicaService
                 ->where('numeroparte', $parte->numeroparte)
                 ->first();
 
-            if ($apu) {
-                StkParteUnicaAnitaBridgeSupport::insertar($apu);
+            if ($apu && ! StkParteUnicaAnitaBridgeSupport::insertar($apu)) {
+                throw new \RuntimeException(
+                    'Error al sincronizar stk_parte_unica en Anita (NPU '.$parte->numeroparte.').'
+                );
             }
         }
     }
@@ -115,7 +158,11 @@ class RecepcionProveedorParteUnicaService
             ->get();
 
         foreach ($partes as $parte) {
-            RecpunicaAnitaBridgeSupport::insertarDesdeParte($parte);
+            if (! RecpunicaAnitaBridgeSupport::insertarDesdeParte($parte)) {
+                throw new \RuntimeException(
+                    'Error al sincronizar recpunica en Anita (NPU '.$parte->numeroparte.').'
+                );
+            }
         }
     }
 }

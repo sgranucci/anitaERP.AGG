@@ -47,6 +47,9 @@ function limpiarCamposDepositoEnFormulario($ctx) {
  * Si el formulario tiene select #empresa_id vacío, precarga la empresa del depósito elegido.
  */
 function aplicarEmpresaDesdeDeposito(empresaId) {
+    if (window.recepcionProveedorEmpresaDesdeOc) {
+        return;
+    }
     var $emp = $('#empresa_id');
     if (!$emp.length || !$emp.is('select')) {
         return;
@@ -246,7 +249,13 @@ function activa_eventos_consultadeposito() {
                 ptrDeposito_id.closest('tr').find('.empresa-deposito-nombre').val($tr.find('.empresa-nombre').html() || '');
             }
 
-            var payloadDep = { id: id, codigo: codigo, descripcion: descripcion };
+            var payloadDep = {
+                id: id,
+                codigo: codigo,
+                descripcion: descripcion,
+                tipodeposito: tipodeposito,
+                empresa_id: parseInt(empresaIdDep, 10) || 0,
+            };
             $('#consultadepositoModal').one('hidden.bs.modal.depAplicadoRecuento', function () {
                 notificarDepositoAplicado($ctxDep, payloadDep);
             });

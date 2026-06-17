@@ -44,7 +44,7 @@ class RecepcionProveedorAnitaImportSupport
             'acc' => 'list',
             'sistema' => self::sistemaCompras(),
             'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_cabecera', 'recepmae'),
-            'campos' => 'recm_proveedor,recm_tipo,recm_letra,recm_sucursal,recm_nro,recm_fecha,recm_estado,recm_observacion,recm_empresa,recm_com_tipo,recm_com_letra,recm_com_sucursal,recm_com_nro',
+            'campos' => 'recm_proveedor,recm_tipo,recm_letra,recm_sucursal,recm_nro,recm_fecha,recm_estado,recm_observacion,recm_empresa,recm_com_tipo,recm_com_letra,recm_com_sucursal,recm_com_nro,recm_tipo_fac,recm_letra_fac,recm_sucursal_fac,recm_nro_fac',
             'orderBy' => 'recm_fecha, recm_sucursal, recm_nro',
             'whereArmado' => $where,
         ];

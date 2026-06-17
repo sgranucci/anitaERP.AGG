@@ -514,10 +514,15 @@ class AsientoRepository implements AsientoRepositoryInterface
 			else
 				$codigoTipoAsiento = 1;
 
-			if ($codigoTipoAsiento == 'VTA')
+			if (isset($request['sistema_ctav']) && $request['sistema_ctav'] !== '') {
+				$sistema = $request['sistema_ctav'];
+			} elseif ($codigoTipoAsiento == 'VTA') {
 				$sistema = 'V';
-			else
+			} else {
 				$sistema = 'B';
+			}
+
+			$numeroOrdenCompra = (int) ($request['ctav_o_compra'] ?? 0);
 
 			if (isset($request['tipo']))
 			{
@@ -626,7 +631,7 @@ class AsientoRepository implements AsientoRepositoryInterface
 						'".' '."',
 						'".'0'."',
 						'".' '."',
-						".'0'." ")
+						".$numeroOrdenCompra." ")
       			);
 				if (isset($this->path_sistema))
 					$data['path_sistema'] = $this->path_sistema;	

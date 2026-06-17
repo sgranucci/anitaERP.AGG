@@ -378,8 +378,20 @@ function activa_eventos_consultaarticulo()
             });
         }
 
-        var $trElegida = ptrarticulo_id && ptrarticulo_id.length ? $(ptrarticulo_id).closest('tr') : $();
+        var $trElegida = $();
+        if (ptrarticulo_id && ptrarticulo_id.length) {
+            $trElegida = $(ptrarticulo_id).closest('tr');
+            if (!$trElegida.length) {
+                $trElegida = $(ptrarticulo_id).closest('.cm-campo-articulo-carga, #cm-campo-articulo-carga');
+            }
+        }
+        var esPosGastronomia = $trElegida.is('#tr-gastro-linea-articulo')
+            || $trElegida.closest('#tr-gastro-linea-articulo').length > 0
+            || $trElegida.closest('.cm-campo-articulo-carga, #cm-campo-articulo-carga').length > 0;
         $('#consultaarticuloModal').off('hidden.bs.modal.consultaArtFocusCant').one('hidden.bs.modal.consultaArtFocusCant', function () {
+            if (esPosGastronomia) {
+                return;
+            }
             enfocarCantidadLineaArticulo($trElegida, unidadmedida);
         });
         $('#consultaarticuloModal').modal('hide');

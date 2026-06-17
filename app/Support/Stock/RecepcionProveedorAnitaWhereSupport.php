@@ -12,10 +12,16 @@ class RecepcionProveedorAnitaWhereSupport
     /** @param array{tipo: string, letra: string, sucursal: int, nro: int} $clave */
     public static function recepmae(string $codigoProveedor, array $clave): string
     {
-        $codigoProveedor = str_pad(substr(trim($codigoProveedor), 0, 6), 6, ' ', STR_PAD_RIGHT);
+        $codigoProveedor = RecepcionProveedorAnitaReferenciaSupport::proveedorAnita6($codigoProveedor);
 
-        return " WHERE recm_proveedor = '".addslashes($codigoProveedor)."'"
-            ." AND recm_tipo = '".addslashes($clave['tipo'])."'"
+        return self::recepmaePorClave($clave)
+            ." AND recm_proveedor = '".addslashes($codigoProveedor)."'";
+    }
+
+    /** @param array{tipo: string, letra: string, sucursal: int, nro: int} $clave */
+    public static function recepmaePorClave(array $clave): string
+    {
+        return " WHERE recm_tipo = '".addslashes($clave['tipo'])."'"
             ." AND recm_letra = '".addslashes($clave['letra'])."'"
             .' AND recm_sucursal = '.(int) $clave['sucursal']
             .' AND recm_nro = '.(int) $clave['nro'];
@@ -36,6 +42,49 @@ class RecepcionProveedorAnitaWhereSupport
         return self::recepmovCabecera($clave).' AND recv_orden = '.(int) $orden;
     }
 
+    /** @param array{tipo: string, letra: string, sucursal: int, nro: int} $claveCom */
+    public static function stkmovCabecera(array $claveCom): string
+    {
+        return " WHERE stkv_tipo = '".addslashes($claveCom['tipo'])."'"
+            ." AND stkv_letra = '".addslashes($claveCom['letra'])."'"
+            .' AND stkv_sucursal = '.(int) $claveCom['sucursal']
+            .' AND stkv_nro = '.(int) $claveCom['nro'];
+    }
+
+    public static function aplicpedCom(string $codigoProveedor, array $claveCom): string
+    {
+        $codigoProveedor = RecepcionProveedorAnitaReferenciaSupport::proveedorAnita6($codigoProveedor);
+
+        return " WHERE aplp_proveedor = '".addslashes($codigoProveedor)."'"
+            ." AND aplp_tipo = '".addslashes($claveCom['tipo'])."'"
+            ." AND aplp_letra = '".addslashes($claveCom['letra'])."'"
+            .' AND aplp_sucursal = '.(int) $claveCom['sucursal']
+            .' AND aplp_nro = '.(int) $claveCom['nro'];
+    }
+
+    /** @param array{tipo: string, letra: string, sucursal: int, nro: int} $claveOc */
+    public static function pendmovpLinea(
+        array $claveOc,
+        int $numeroOc,
+        int $nroInterno,
+        int $penvpOrden,
+        string $sku
+    ): string {
+        $base = " WHERE
+            penvp_tipo='".addslashes($claveOc['tipo'])."' and
+            penvp_letra='".addslashes($claveOc['letra'])."' and
+            penvp_sucursal=".(int) $claveOc['sucursal']." and
+            penvp_nro=".(int) $numeroOc;
+
+        if ($nroInterno > 0) {
+            return $base." and penvp_nro_interno={$nroInterno}";
+        }
+
+        return $base." and
+            penvp_orden={$penvpOrden} and
+            penvp_articulo='".addslashes($sku)."'";
+    }
+
     /** @param array{tipo: string, letra: string, sucursal: int, nro: int} $clave */
     public static function recpunicaCabecera(array $clave): string
     {
@@ -50,6 +99,8 @@ class RecepcionProveedorAnitaWhereSupport
         $recepcion->loadMissing('proveedores');
         $proveedor = $recepcion->proveedores;
 
-        return str_pad(substr((string) ($proveedor->codigo ?? $proveedor->id ?? ''), 0, 6), 6, ' ', STR_PAD_RIGHT);
+        return RecepcionProveedorAnitaReferenciaSupport::proveedorAnita6(
+            (string) ($proveedor->codigo ?? $proveedor->id ?? '')
+        );
     }
 }

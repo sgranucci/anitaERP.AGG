@@ -72,14 +72,16 @@ class StkParteUnicaAnitaBridgeSupport
         }
 
         $api = new ApiAnita;
+        $insert = RecepcionProveedorAnitaEscrituraSupport::stkParteUnicaInsert(
+            self::skuAnita13($parte->articulos),
+            $numeroparte,
+        );
         $payload = [
             'acc' => 'insert',
             'sistema' => self::sistema(),
             'tabla' => self::tabla(),
-            'campos' => [
-                'stkpu_articulo' => self::skuAnita13($parte->articulos),
-                'stkpu_id' => $numeroparte,
-            ],
+            'campos' => $insert['campos'],
+            'valores' => $insert['valores'],
         ];
 
         $raw = (string) $api->apiCallEscritura($payload);

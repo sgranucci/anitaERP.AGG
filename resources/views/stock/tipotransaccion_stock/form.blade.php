@@ -49,3 +49,21 @@
         @endforeach
     </select>
 </div>
+<div class="form-group row">
+    <div class="col-lg-3"></div>
+    <div class="col-lg-8">
+        <div class="form-check">
+            <input type="checkbox" class="form-check-input" name="requiere_aprobacion" id="requiere_aprobacion" value="1"
+                @if (old('requiere_aprobacion', $data->requiere_aprobacion ?? false)) checked @endif>
+            <label class="form-check-label" for="requiere_aprobacion">Requiere aprobaci&oacute;n del dep&oacute;sito destino</label>
+        </div>
+        <div class="form-check">
+            <input type="checkbox" class="form-check-input" name="maneja_contabilidad" id="maneja_contabilidad" value="1"
+                @if (old('maneja_contabilidad', $data->maneja_contabilidad ?? false)) checked @endif>
+            <label class="form-check-label" for="maneja_contabilidad">Genera asiento contable al confirmar</label>
+        </div>
+        <small class="form-text text-muted">
+            La aprobaci&oacute;n aplica si <code>STOCK_TRANSFERENCIA_MODO_APROBACION=tipo_transaccion</code> en .env.
+        </small>
+    </div>
+</div>

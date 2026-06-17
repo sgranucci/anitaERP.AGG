@@ -1,0 +1,72 @@
+---
+description: Blade — prohibido anidar formularios HTML (forms dentro de forms)
+globs: resources/views/**/*.blade.php
+alwaysApply: false
+---
+
+# Formularios en Blade: no anidar `<form>`
+
+En HTML **no puede haber un `<form>` dentro de otro `<form>`**. Los navegadores ignoran o rompen el formulario interno: botones que no aparecen, submits que van a la ruta equivocada, acciones de confirmar/eliminar que desaparecen.
+
+Referencia del incidente: `resources/views/stock/recepcion_proveedor/editar.blade.php` (Confirmar/Eliminar dentro del form de Guardar).
+
+## Prohibido
+
+```blade
+<form action="{{ route('actualizar_recurso', $id) }}" id="form-recurso" method="POST">
+    @csrf
+    @method('PUT')
+    <div class="card-body">…</div>
+    <div class="card-footer">
+        <button type="submit">Guardar</button>
+        {{-- ❌ form hijo: el navegador no lo renderiza de forma fiable --}}
+        <form action="{{ route('confirmar_recurso', $id) }}" method="POST" class="d-inline">
+            @csrf
+            <button type="submit">Confirmar</button>
+        </form>
+    </div>
+</form>
+```
+
+Tampoco anidar forms en partials incluidos dentro de un form padre (`@include` con otro `<form>`).
+
+## Correcto
+
+Un form por acción. Botones fuera del form principal usando el atributo HTML `form`:
+
+```blade
+<form action="{{ route('actualizar_recurso', $id) }}" id="form-recurso" method="POST">
+    @csrf
+    @method('PUT')
+    <div class="card-body">…</div>
+</form>
+<div class="card-footer">
+    <button type="submit" class="btn btn-primary" form="form-recurso">
+        <i class="fa fa-save"></i> Guardar
+    </button>
+    <form action="{{ route('confirmar_recurso', $id) }}" method="POST" class="d-inline"
+          onsubmit="return confirm('¿Confirmar?');">
+        @csrf
+        <button type="submit" class="btn btn-success">Confirmar</button>
+    </form>
+</div>
+```
+
+## Alternativas válidas
+
+| Caso | Patrón |
+|------|--------|
+| Varios submits al mismo endpoint | Un solo `<form>`, varios `type="submit"` o `name` distintos |
+| Acción distinta (confirmar, anular, eliminar) | Form hermano separado en footer/toolbar |
+| Botón fuera del `<form>` por layout | `form="id-del-form"` en el `<button>` |
+| Listado con acciones por fila | Cada fila: forms independientes `class="d-inline"` (como en `index.blade.php`) |
+
+## Comprobación rápida
+
+Tras crear o editar vistas con acciones POST/DELETE:
+
+```bash
+rg '<form' resources/views/{modulo}/ -n
+# Revisar que ningún </form> cierre después de otro <form> abierto en el mismo bloque
+php artisan view:cache
+```

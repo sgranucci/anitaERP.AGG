@@ -461,6 +461,28 @@
         word-break: break-word;
     }
 
+    #modal-gastro-canje-fidelidad .gastro-canje-fidelidad-art-atajo {
+        display: inline-block;
+        min-width: 1.4rem;
+        height: 1.4rem;
+        line-height: 1.4rem;
+        text-align: center;
+        font-size: 0.74rem;
+        font-weight: 700;
+        color: #495057;
+        background: #f1f3f5;
+        border: 1px solid #ced4da;
+        border-radius: 0.25rem;
+        padding: 0 0.3rem;
+        margin-right: 0.35rem;
+        vertical-align: middle;
+    }
+    #modal-gastro-canje-fidelidad .custom-control-input:checked ~ .custom-control-label .gastro-canje-fidelidad-art-atajo {
+        color: #fff;
+        background: #007bff;
+        border-color: #0069d9;
+    }
+
     #modal-opcionales .gastro-opc-resumen {
         margin: 0.75rem 1rem 0;
         background: #fff;
@@ -777,6 +799,7 @@
                                 <kbd>Tab</kbd> busca el artículo y pasa al botón <strong>Agregar</strong> para cargar la cantidad.
                             @else
                                 Use la lupa o el SKU;
+                                <kbd>F1</kbd> o la lupa abren la consulta de artículos;
                                 <kbd>Enter</kbd> en el campo SKU agrega con cantidad <strong>1</strong>;
                                 <kbd>+</kbd> abre el modal de cantidad antes de agregar;
                                 <kbd>Tab</kbd> busca y enfoca <strong>Agregar</strong> para ingresar cantidad.
@@ -790,7 +813,7 @@
                                     <input type="hidden" class="categoria_id" value="">
                                     <input type="hidden" class="subcategoria_id" value="">
                                     <input type="hidden" class="unidadmedida_id" value="">
-                                    <button type="button" title="Consulta artículos (catálogo SKU {{ $prefijo_sku }})" class="btn-accion-tabla consultaarticulo tooltipsC" data-sku-prefijo-filtro="{{ $prefijo_sku }}" data-sku-digitos-filtro="{{ (int) $sku_catalogo_digitos_sufijo }}" data-listaprecio-id="{{ (int) ($listaprecio_id ?? config('precio.listaprecio_default_id', 1)) }}" data-listaprecio-nombre="{{ $listaprecio_nombre ?? '' }}">
+                                    <button type="button" title="Consulta artículos — F1 (catálogo SKU {{ $prefijo_sku }})" class="btn-accion-tabla consultaarticulo tooltipsC" data-sku-prefijo-filtro="{{ $prefijo_sku }}" data-sku-digitos-filtro="{{ (int) $sku_catalogo_digitos_sufijo }}" data-listaprecio-id="{{ (int) ($listaprecio_id ?? config('precio.listaprecio_default_id', 1)) }}" data-listaprecio-nombre="{{ $listaprecio_nombre ?? '' }}">
                                         <i class="fa fa-search text-primary"></i>
                                     </button>
                                     @if ((int) $sku_catalogo_digitos_sufijo > 0)
@@ -1217,12 +1240,20 @@
             </div>
             <div class="modal-body py-2">
                 <p class="small text-muted mb-2">
+                    Opcional: use el botón <i class="fas fa-utensils"></i> para indicaciones de comanda antes de escanear el cupón.
                     Escanee el cupón Wigos (se valida automáticamente). Tras la validación, <kbd>Enter</kbd> confirma igual que el botón.
                     Solo cuentas libres: al confirmar se abre una cuenta libre con mozo y se carga el premio con descuento.
                 </p>
                 <div class="form-group mb-2">
                     <label for="gastro-canje-premio-codigo" class="small mb-1">Nro. de cupón</label>
-                    <input type="text" class="form-control form-control-sm" id="gastro-canje-premio-codigo" autocomplete="off">
+                    <div class="input-group input-group-sm">
+                        <input type="text" class="form-control form-control-sm" id="gastro-canje-premio-codigo" autocomplete="off">
+                        <div class="input-group-append">
+                            <button type="button" class="btn btn-outline-info py-0 px-2" id="gastro-canje-premio-btn-comentario-cocina" title="Indicaciones para la comanda (opcional, antes de escanear el cupón)" aria-label="Comentario para cocina">
+                                <i class="fas fa-utensils"></i>
+                            </button>
+                        </div>
+                    </div>
                 </div>
                 <div id="gastro-canje-premio-error" class="alert alert-danger py-2 small d-none" role="alert"></div>
                 <div id="gastro-canje-premio-preview" class="d-none border rounded p-2 bg-light small">
@@ -1265,13 +1296,22 @@
             </div>
             <div class="modal-body py-2">
                 <p class="small text-muted mb-2">
-                    Pase la tarjeta por el lector (se valida con <kbd>Enter</kbd> o automáticamente). Elija el artículo si hay varios;
-                    con el canje listo, <kbd>Enter</kbd> confirma igual que el botón. Solo cuentas libres: al confirmar se abre una cuenta libre
-                    con mozo, se aplica el canje y se abre el flujo F8 para facturar con descuento ($0,01).
+                    Opcional: use el botón <i class="fas fa-utensils"></i> para indicaciones de comanda antes de pasar la tarjeta.
+                    Pase la tarjeta por el lector (se valida con <kbd>Enter</kbd> o automáticamente). Si hay varios artículos, elija con el
+                    check o con <kbd>1</kbd>–<kbd>9</kbd> (igual que los adicionales). Con el canje listo, <kbd>Enter</kbd> confirma igual que
+                    el botón. Solo cuentas libres: al confirmar se abre una cuenta libre con mozo, se aplica el canje y se abre el flujo F8
+                    para facturar con descuento ($0,01).
                 </p>
                 <div class="form-group mb-2">
                     <label for="gastro-canje-fidelidad-trackdata" class="small mb-1">Tarjeta / trackdata</label>
-                    <input type="text" class="form-control form-control-sm" id="gastro-canje-fidelidad-trackdata" autocomplete="off">
+                    <div class="input-group input-group-sm">
+                        <input type="text" class="form-control form-control-sm" id="gastro-canje-fidelidad-trackdata" autocomplete="off">
+                        <div class="input-group-append">
+                            <button type="button" class="btn btn-outline-info py-0 px-2" id="gastro-canje-fidelidad-btn-comentario-cocina" title="Indicaciones para la comanda (opcional, antes de pasar la tarjeta)" aria-label="Comentario para cocina">
+                                <i class="fas fa-utensils"></i>
+                            </button>
+                        </div>
+                    </div>
                 </div>
                 <div id="gastro-canje-fidelidad-error" class="alert alert-danger py-2 small d-none" role="alert"></div>
                 <div id="gastro-canje-fidelidad-preview" class="d-none border rounded p-2 bg-light small">

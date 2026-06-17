@@ -41,6 +41,7 @@ Menú - Rol
                 <p class="text-muted small mb-2">
                     Use el ícono <i class="fa fa-key"></i> junto a cada menú para abrir los permisos vinculados a esa opción.
                     Las columnas de roles respetan el filtro por centro de costo (si no filtra, se listan todos los roles).
+                    Las filas resaltadas en azul marcan el inicio de cada módulo del sistema; el borde inferior indica dónde termina ese bloque.
                 </p>
             </div>
             <div class="card-body table-responsive p-0">

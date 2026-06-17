@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Services\Contable\MayorPlanoCuentaReporteService;
+use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaRuntimeSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
 use App\Support\Contable\MayorPlanoCuentaListadoFiltros;
 use Illuminate\Http\Request;
@@ -49,6 +50,7 @@ class MayorPlanoCuentaController extends Controller
         $resultado = null;
 
         if ($request->boolean('consultar') && MayorPlanoCuentaListadoFiltros::tieneCriteriosAplicados($filtros)) {
+            MayorPlanoCuentaRuntimeSupport::elevarLimites();
             $resultado = $this->generarYCachear($filtros);
             $consultado = true;
         } elseif (MayorPlanoCuentaListadoFiltros::tieneCriteriosAplicados($filtros)) {
@@ -99,6 +101,7 @@ class MayorPlanoCuentaController extends Controller
             'puede_ver_asiento' => can('listar-asiento', false) || can('editar-asiento', false),
             'puede_ver_cuenta' => can('listar-cuentas-contables', false) || can('editar-cuentas-contables', false),
             'puede_ver_ordencompra' => can('listar-ordencompra', false) || can('editar-ordencompra', false),
+            'puede_ver_proveedor' => can('listar-proveedor', false) || can('editar-proveedor', false),
             'multiempresa' => count($filtros['empresa_ids'] ?? []) > 1,
         ]);
     }
@@ -107,8 +110,7 @@ class MayorPlanoCuentaController extends Controller
     {
         can('listar-mayor-plano-cuenta');
 
-        ini_set('memory_limit', '512M');
-        ini_set('max_execution_time', '600');
+        MayorPlanoCuentaRuntimeSupport::elevarLimites();
 
         $filtros = MayorPlanoCuentaListadoFiltros::resolverDesdeRequest($request);
         $this->assertAccesoEmpresas($filtros['empresa_ids'] ?? []);

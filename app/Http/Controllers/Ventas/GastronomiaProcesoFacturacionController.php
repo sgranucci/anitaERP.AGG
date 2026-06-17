@@ -1228,6 +1228,8 @@ class GastronomiaProcesoFacturacionController extends Controller
             'articulo_id' => 'required|integer|min:1',
             'opcionales_por_articulo' => 'nullable|array',
             'opcionales' => 'nullable|array',
+            'comentarios_por_articulo' => 'nullable|array',
+            'comentario_cocina' => 'nullable|string|max:255',
         ]);
 
         $cfg = $this->requireCfgPv($request);
@@ -1245,6 +1247,14 @@ class GastronomiaProcesoFacturacionController extends Controller
             $opcionalesLinea = $opcionalesPorArticulo[$articuloId]
                 ?? $opcionalesPorArticulo[(string) $articuloId]
                 ?? [];
+            $comentariosPorArticulo = $this->normalizarComentariosPorArticuloDesdeRequest(
+                (array) ($request->get('comentarios_por_articulo') ?? [])
+            );
+            $comentarioCocina = $comentariosPorArticulo[$articuloId]
+                ?? $comentariosPorArticulo[(string) $articuloId]
+                ?? \App\Support\Ventas\GastronomiaComentarioCocinaSupport::normalizar(
+                    $request->input('comentario_cocina')
+                );
 
             $resultado = $this->categoriafidelidadCanjeService->aplicarACuenta(
                 $cuenta,
@@ -1252,6 +1262,7 @@ class GastronomiaProcesoFacturacionController extends Controller
                 $articuloId,
                 $this->listaPrecioIdDesdeCfg($cfg),
                 $opcionalesLinea,
+                $comentarioCocina,
             );
         } catch (\InvalidArgumentException|\RuntimeException $e) {
             return $this->respuestaErrorCanjeFidelidad($e);

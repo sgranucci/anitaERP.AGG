@@ -3,6 +3,7 @@
 namespace App\Support\Ventas\Waitry;
 
 use App\Models\Ventas\CierreTotemJornadaGastronomia;
+use App\Models\Ventas\GastronomiaCierreJornadaProcesoSnapshot;
 use App\Models\Ventas\TotemWaitryGastronomia;
 
 /**
@@ -36,7 +37,11 @@ final class WaitryInformeZConciliacionSupport
 
         $detalle = is_array($cierre->detalle_json) ? $cierre->detalle_json : [];
         $empresaId = (int) $cierre->empresa_id;
-        $resumen = self::resumenSistemaDesdeDetalleCierre($detalle, $empresaId);
+        $resumen = self::resumenSistemaDesdeDetalleCierre(
+            $detalle,
+            $empresaId,
+            (int) $cierre->jornada_gastronomia_id,
+        );
         $plantilla = self::plantillaCarga($empresaId, $resumen);
         $plantilla = self::fusionarInformeZEnPlantilla($plantilla, $informeZ, $empresaId);
         $conciliacion = self::conciliar($plantilla);
@@ -101,8 +106,15 @@ final class WaitryInformeZConciliacionSupport
      * @param  array<string, mixed>  $detalle  detalle_json del cierre tótem
      * @return array{por_totem:list<array<string,mixed>>,total_general:array<string,mixed>}
      */
-    public static function resumenSistemaDesdeDetalleCierre(array $detalle, int $empresaId = 0): array
+    public static function resumenSistemaDesdeDetalleCierre(array $detalle, int $empresaId = 0, ?int $jornadaId = null): array
     {
+        if ($jornadaId !== null && $jornadaId > 0 && $empresaId > 0) {
+            $desdeProceso = self::resumenInformeZDesdeProcesoSnapshot($jornadaId, $empresaId);
+            if ($desdeProceso !== null && is_array($desdeProceso['por_totem'] ?? null)) {
+                return self::reconstruirResumenInformeZConDesglose($desdeProceso, $empresaId);
+            }
+        }
+
         $informeZ = $detalle['resumen_informe_z'] ?? null;
         if (is_array($informeZ) && is_array($informeZ['por_totem'] ?? null)) {
             return self::reconstruirResumenInformeZConDesglose($informeZ, $empresaId);
@@ -224,6 +236,51 @@ final class WaitryInformeZConciliacionSupport
                 'por_medio_pago' => $mediosGlobal,
             ],
         ];
+    }
+
+    /**
+     * Resumen Informe Z desde snapshot del proceso Caja (misma base que el cuadro «Waitry pagado sin facturar»).
+     *
+     * @return array{por_totem:list<array<string,mixed>>,total_general:array<string,mixed>}|null
+     */
+    public static function resumenInformeZDesdeProcesoSnapshot(int $jornadaId, int $empresaId): ?array
+    {
+        if ($jornadaId <= 0 || $empresaId <= 0) {
+            return null;
+        }
+
+        $snapshot = GastronomiaCierreJornadaProcesoSnapshot::query()
+            ->where('jornada_gastronomia_id', $jornadaId)
+            ->first();
+
+        if ($snapshot === null || $snapshot->lineas() === []) {
+            return null;
+        }
+
+        $totems = TotemWaitryGastronomia::query()
+            ->where('empresa_id', $empresaId)
+            ->get()
+            ->filter(static fn (TotemWaitryGastronomia $t) => $t->participaInformeZ());
+
+        $lineas = [];
+        foreach ($snapshot->lineas() as $ln) {
+            if (! is_array($ln)) {
+                continue;
+            }
+            if (! empty($ln['discrepancia_gap'])) {
+                continue;
+            }
+            if (WaitryOrdenEstadoSupport::esAnuladaPorDescuentoTotalLinea($ln)) {
+                continue;
+            }
+            $lineas[] = $ln;
+        }
+
+        if ($lineas === []) {
+            return null;
+        }
+
+        return WaitryTotemJornadaResumenSupport::armarParaInformeZ($totems, $lineas, $empresaId);
     }
 
     /**

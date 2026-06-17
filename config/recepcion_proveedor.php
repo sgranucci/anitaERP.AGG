@@ -9,6 +9,10 @@ return [
 
     'anita' => [
         'sistema_compras' => env('RECEPCION_PROVEEDOR_ANITA_SISTEMA', 'compras'),
+        // stkmov vive en Informix ventas (mismo bridge que facturación), no en compras.
+        'sistema_ventas' => env('RECEPCION_PROVEEDOR_ANITA_SISTEMA_VENTAS', 'ventas'),
+        // Clave t_comp (ventas) para resolver tcomp_refer → numerador COM
+        't_comp_clave_numerador' => env('RECEPCION_PROVEEDOR_ANITA_T_COMP_CLAVE', 'COM'),
         'sistema_contab' => env('RECEPCION_PROVEEDOR_ANITA_CONTAB', 'contab'),
         'sistema_stk_parte_unica' => env('RECEPCION_PROVEEDOR_STK_PARTE_UNICA_SISTEMA', 'base_admin'),
         'tablas' => [
@@ -21,6 +25,7 @@ return [
             'cuenta' => 'ctamae',
             'recepcion_parte_unica' => 'recpunica',
             'articulo_parte_unica' => 'stk_parte_unica',
+            'stock_movimiento' => 'stkmov',
         ],
         'oc_tipo' => 'PEP',
         'oc_letra' => 'X',
@@ -47,6 +52,8 @@ return [
         'tmp_dir' => env('RECEPCION_PROVEEDOR_OCR_TMP_DIR', ''),
         'imagen_max_ancho' => (int) env('RECEPCION_PROVEEDOR_OCR_IMAGEN_MAX_ANCHO', 2400),
         'imagen_jpeg_calidad' => (int) env('RECEPCION_PROVEEDOR_OCR_IMAGEN_JPEG_CALIDAD', 88),
+        // Completar EAN-13 truncado por OCR (prioriza cantidad; dejar false si el barcode incompleto confunde)
+        'completar_ean' => filter_var(env('RECEPCION_PROVEEDOR_OCR_COMPLETAR_EAN', false), FILTER_VALIDATE_BOOLEAN),
         // Prefijos de OC de 6 dígitos separados por coma (ej. 2 → 221067)
         'oc_prefijos' => env('RECEPCION_PROVEEDOR_OCR_OC_PREFIJOS', '2'),
     ],
@@ -55,10 +62,26 @@ return [
 
     'usoarticulo_laboratorio_ids' => array_map('intval', array_filter(explode(',', env('RECEPCION_PROVEEDOR_USOARTICULO_LAB_IDS', '3')))),
 
+    'encuesta_habilitada' => filter_var(env('RECEPCION_PROVEEDOR_ENCUESTA_HABILITADA', true), FILTER_VALIDATE_BOOLEAN),
+
+    'encuesta_id' => (int) env('RECEPCION_PROVEEDOR_ENCUESTA_ID', 1),
+
+    /*
+    | Modal previo al guardar: validar/completar datos que se grabarán en articulo_proveedor.
+    | AGG: true. Otros sitios pueden desactivarlo si no usan catálogo por recepción.
+    */
+    'modal_articulo_proveedor_habilitado' => filter_var(
+        env('RECEPCION_PROVEEDOR_MODAL_ARTICULO_PROVEEDOR', false),
+        FILTER_VALIDATE_BOOLEAN
+    ),
+
     'tolerancia_default' => [
         'cantidad_pct' => (float) env('RECEPCION_PROVEEDOR_TOL_CANTIDAD_PCT', 0),
         'precio_pct' => (float) env('RECEPCION_PROVEEDOR_TOL_PRECIO_PCT', 0),
         'precio_absoluto' => (float) env('RECEPCION_PROVEEDOR_TOL_PRECIO_ABS', 0),
     ],
+
+    // Diferencia máxima (moneda recepción) entre total ítems y asiento debe/haber al confirmar
+    'tolerancia_cuadre_contable' => (float) env('RECEPCION_PROVEEDOR_TOL_CUADRE_CONTABLE', 0.02),
 
 ];

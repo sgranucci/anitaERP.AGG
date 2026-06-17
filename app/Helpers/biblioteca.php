@@ -385,6 +385,16 @@ if (! function_exists('urlAppCarpeta')) {
     }
 }
 
+if (! function_exists('urlAppAbsoluta')) {
+    /**
+     * URL absoluta con host y APP_CARPETA (para mails y enlaces externos).
+     */
+    function urlAppAbsoluta(string $path = ''): string
+    {
+        return rtrim((string) config('app.url'), '/').urlAppCarpeta($path);
+    }
+}
+
 if (! function_exists('puedeVerPrecargaFacturaPdf')) {
     function puedeVerPrecargaFacturaPdf(): bool
     {

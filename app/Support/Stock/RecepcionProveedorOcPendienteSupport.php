@@ -28,7 +28,7 @@ final class RecepcionProveedorOcPendienteSupport
             ->where('rp.tipo', Recepcion_Proveedor::TIPO_RECEPCION)
             ->whereNotNull('rpa.ordencompra_articulo_id')
             ->groupBy('rpa.ordencompra_articulo_id')
-            ->selectRaw('rpa.ordencompra_articulo_id as linea_id, SUM(rpa.cantidad) as cantidad_recibida')
+            ->selectRaw('rpa.ordencompra_articulo_id as linea_id, SUM(rpa.cantidad + COALESCE(rpa.cantidad_rechazada, 0)) as cantidad_recibida')
             ->get();
 
         $out = [];
@@ -67,7 +67,7 @@ final class RecepcionProveedorOcPendienteSupport
             ->where('rp.tipo', Recepcion_Proveedor::TIPO_RECEPCION)
             ->whereNotNull('rpa.ordencompra_articulo_id')
             ->groupBy('rpa.ordencompra_articulo_id')
-            ->selectRaw('rpa.ordencompra_articulo_id as linea_id, SUM(rpa.cantidad) as cantidad_recibida');
+            ->selectRaw('rpa.ordencompra_articulo_id as linea_id, SUM(rpa.cantidad + COALESCE(rpa.cantidad_rechazada, 0)) as cantidad_recibida');
 
         $query = DB::table('ordencompra as oc')
             ->join('proveedor as p', 'p.id', '=', 'oc.proveedor_id')
@@ -133,7 +133,11 @@ final class RecepcionProveedorOcPendienteSupport
                 'cantidad_pedida' => $pedida,
                 'cantidad_recibida' => $recibida,
                 'cantidad_pendiente' => $pendiente,
-                'url_consulta' => route('editar_ordencompra', ['id' => (int) $fila->id]),
+                'url_consulta' => route('editar_ordencompra', [
+                    'id' => (int) $fila->id,
+                    'origen' => 'modal_consulta',
+                    'vista' => 'consulta',
+                ]),
             ];
         }
 
