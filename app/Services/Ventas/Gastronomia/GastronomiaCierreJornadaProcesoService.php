@@ -1458,4 +1458,104 @@ final class GastronomiaCierreJornadaProcesoService
 
         return $ref;
     }
+
+    /**
+     * Waitry pagado sin facturar en Anita para informe gerente (solo jornada abierta).
+     * Consulta Waitry en vivo; no persiste snapshot.
+     *
+     * @return array{
+     *   empresa_id:int,
+     *   total:float,
+     *   cantidad_ordenes:int,
+     *   puntoventa_id:int,
+     *   codigo:string,
+     *   nombre:string
+     * }|null
+     */
+    public function waitryPagadoSinFacturarParaInformeGerente(int $empresaId, string $fechaJornada): ?array
+    {
+        if (! $this->habilitado() || $empresaId <= 0) {
+            return null;
+        }
+
+        $fecha = $this->normalizarFecha($fechaJornada);
+        $jornada = JornadaGastronomia::query()
+            ->where('empresa_id', $empresaId)
+            ->whereDate('fecha_jornada', $fecha)
+            ->orderByDesc('id')
+            ->first();
+
+        if ($jornada === null || (string) ($jornada->estado ?? '') !== JornadaGastronomia::ESTADO_ABIERTA) {
+            return null;
+        }
+
+        $cargado = $this->cierreTotemJornadaService->movimientosParaProcesoCaja($jornada);
+        $lineas = $this->filtrarLineasOperativasWaitry($cargado['lineas']);
+        $lineas = $this->enriquecerLineasConCobranzaAnita($lineas, $empresaId);
+
+        $totalesAnita = CierreJornadaFacturadoAnitaSupport::totalesJornadaEmpresa($empresaId, $fecha);
+        $clasificacion = CierreJornadaProcesoClasificacionSupport::clasificar($lineas, $empresaId, $totalesAnita);
+        $total = round((float) ($clasificacion['total_pendiente_facturar'] ?? 0), 2);
+        if ($total <= 0.0001) {
+            return null;
+        }
+
+        $pv = CierreJornadaProcesoPuntoventaSupport::resolverParaEmpresa($empresaId);
+
+        return [
+            'empresa_id' => $empresaId,
+            'total' => $total,
+            'cantidad_ordenes' => $this->contarWaitryPagadoSinFacturar($clasificacion['movimientos'] ?? []),
+            'puntoventa_id' => (int) ($pv['id'] ?? 0),
+            'codigo' => trim((string) ($pv['codigo'] ?? '')),
+            'nombre' => trim((string) ($pv['nombre'] ?? '')),
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $movimientos
+     */
+    private function contarWaitryPagadoSinFacturar(array $movimientos): int
+    {
+        $cantidad = 0;
+        foreach ($movimientos as $mov) {
+            if (! empty($mov['discrepancia_gap'])) {
+                continue;
+            }
+            if (! empty($mov['facturada_erp'])) {
+                continue;
+            }
+            if (WaitryOrdenEstadoSupport::esAnuladaPorDescuentoTotalLinea($mov)) {
+                continue;
+            }
+            $total = round((float) ($mov['total'] ?? 0), 2);
+            if ($total <= 0.0001) {
+                continue;
+            }
+            if (CierreJornadaProcesoMedioSupport::esWaitryCash($mov['waitry_tipo_pago'] ?? null)) {
+                continue;
+            }
+            if (! $this->movimientoCobradoEnWaitry($mov)) {
+                continue;
+            }
+            $cantidad++;
+        }
+
+        return $cantidad;
+    }
+
+    /**
+     * @param  array<string, mixed>  $mov
+     */
+    private function movimientoCobradoEnWaitry(array $mov): bool
+    {
+        if (! empty($mov['waitry_cobro_totem'])) {
+            return true;
+        }
+        if (($mov['paid_waitry'] ?? null) === true) {
+            return true;
+        }
+
+        return (float) ($mov['monto_cobro_waitry'] ?? 0) > 0.0001;
+    }
 }

@@ -493,6 +493,11 @@ return [
      */
     'recepciones_centro_costo_codigo' => env('GASTRONOMIA_RECEPCIONES_CENTRO_COSTO_CODIGO', '85'),
 
+    /**
+     * Informe gerente: base de listas Anita stkpre para costo (5000 + mes). Ej. junio → 5006, mayo → 5005.
+     */
+    'informe_gerente_costo_lista_base' => (int) env('GASTRONOMIA_INFORME_GERENTE_COSTO_LISTA_BASE', 5000),
+
     'cuentacaja_efectivo_por_empresa' => (static function (): array {
         $raw = env('GASTRONOMIA_CUENTACAJA_EFECTIVO_POR_EMPRESA');
         if ($raw === null || $raw === '') {

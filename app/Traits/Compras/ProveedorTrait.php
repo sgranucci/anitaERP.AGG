@@ -13,6 +13,12 @@ trait ProveedorTrait {
 		'3' => 'Regularizado'
 		];
 
+	/** Estados de proveedor habilitados para elegir en compras (requisición, OC, modales). */
+	public static $estadosHabilitadosOperacion = [
+		'Activo',
+		'Regularizado',
+	];
+
 	public static $enumTipoAlta = [
 		['id' => '1', 'valor' => 'D', 'nombre'  => 'DEFINITIVO'],
 		['id' => '2', 'valor' => 'P', 'nombre'  => 'PROVISORIO'],

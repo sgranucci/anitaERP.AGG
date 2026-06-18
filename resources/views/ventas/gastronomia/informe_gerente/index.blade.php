@@ -54,6 +54,15 @@
                         @if ($jornada_registro)
                             — Estado jornada: {{ $jornada_registro->estado }}
                         @endif
+                        @if (!empty($informe['waitry_sin_facturar']['total']))
+                            <br>
+                            <span class="small">
+                                Incluye Waitry pagado sin facturar en Anita:
+                                <strong>${{ number_format($informe['waitry_sin_facturar']['total'], 2, ',', '.') }}</strong>
+                                ({{ (int) ($informe['waitry_sin_facturar']['cantidad_ordenes'] ?? 0) }} comanda(s);
+                                jornada abierta).
+                            </span>
+                        @endif
                     </div>
 
                     <div class="row">
@@ -246,6 +255,31 @@
                                         'error' => $informe['recepciones']['error'] ?? null,
                                         'solo_si_error' => true,
                                         'recepciones_meta' => $informe['recepciones'],
+                                    ])
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    @php
+                        $top20Costos = $informe['top20_articulos_costo'] ?? ['filas' => [], 'listas' => [], 'error' => null];
+                        $top20Listas = $top20Costos['listas'] ?? [];
+                    @endphp
+                    <div class="row">
+                        <div class="col-12 mb-3">
+                            <div class="card card-outline card-info">
+                                <div class="card-header py-2">
+                                    <strong>Top 20 artículos más vendidos del día — precio y costo Anita</strong>
+                                    @if (!empty($top20Listas['lista_anterior']) && !empty($top20Listas['lista_actual']))
+                                        <span class="float-right small text-muted">
+                                            stkpre · listas {{ $top20Listas['lista_anterior'] }} ({{ $top20Listas['mes_anterior_label'] ?? '' }})
+                                            y {{ $top20Listas['lista_actual'] }} ({{ $top20Listas['mes_actual_label'] ?? '' }})
+                                        </span>
+                                    @endif
+                                </div>
+                                <div class="card-body p-0 informe-gerente-tabla-scroll">
+                                    @include('ventas.gastronomia.informe_gerente.partials.tabla_top20_costos', [
+                                        'bloque' => $top20Costos,
                                     ])
                                 </div>
                             </div>

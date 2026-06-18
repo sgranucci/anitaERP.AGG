@@ -935,7 +935,11 @@
     function totalFacturarDesdeCuenta(cuenta) {
         const c = cuenta || cuentaActivaConLineas;
         if (c && c.total_facturar_ars != null && !Number.isNaN(Number(c.total_facturar_ars))) {
-            return Number(c.total_facturar_ars);
+            const totalFiscal = Number(c.total_facturar_ars);
+            const brutoLineas = subtotalBrutoLineasCuenta(c);
+            if (totalFiscal > 0 || brutoLineas <= 0) {
+                return totalFiscal;
+            }
         }
         return subtotalEstimadoDesdeCuenta(c);
     }
@@ -5399,8 +5403,13 @@
     }
 
     function subtotalEstimadoDesdeCuenta(cuenta) {
+        const brutoLineas = subtotalBrutoLineasCuenta(cuenta);
         if (cuenta && cuenta.total_facturar_ars != null && !Number.isNaN(Number(cuenta.total_facturar_ars))) {
-            return Number(cuenta.total_facturar_ars);
+            const totalFiscal = Number(cuenta.total_facturar_ars);
+            // Preview fiscal fallido devuelve 0 aunque haya líneas; no tapar subtotal_estimado.
+            if (totalFiscal > 0 || brutoLineas <= 0) {
+                return totalFiscal;
+            }
         }
         if (cuenta && cuenta.subtotal_estimado != null && !Number.isNaN(Number(cuenta.subtotal_estimado))) {
             return Number(cuenta.subtotal_estimado);

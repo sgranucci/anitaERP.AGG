@@ -299,6 +299,8 @@ class ApiController extends Controller
                 'letra' => 'required|string|size:1',
                 'sucursal' => 'required|integer|min:0',
                 'numero_factura' => 'required|integer|min:1',
+                'numero_cae' => 'nullable|string|max:50',
+                'fecha_vto_cai_cae' => 'nullable|date',
                 'conceptos' => 'required|array|min:1',
                 'conceptos.*.id_concepto' => 'required',
                 'conceptos.*.importe' => 'required|numeric',
@@ -474,6 +476,9 @@ class ApiController extends Controller
                 break;
         }
 
+        $numeroCae = $this->normalizarTextoOpcional($request->input('numero_cae'));
+        $fechaVtoCaiCae = $this->normalizarTextoOpcional($request->input('fecha_vto_cai_cae'));
+
         $data = [
 			'empresa_id' => $empresa_id,
             'codigoempresa' => $codigoEmpresa,
@@ -486,8 +491,8 @@ class ApiController extends Controller
             'numerocomprobante' => $request->numero_factura,
             'fechafactura' => $request->fecha_factura,
             'fecharecepcionemail' => $request->fecha_recepcion_email,
-            'fechavencimientocaicae' => $request->fecha_vto_cai_cae,
-            'numerocae' => $request->numero_cae,
+            'fechavencimientocaicae' => $fechaVtoCaiCae,
+            'numerocae' => $numeroCae,
             'numeroordencompra' => $request->numero_oc,
             'rutaalmacenamiento' => $request->ruta_almacenamiento,
             'pararevisar' => $request->para_revisar,
@@ -664,6 +669,17 @@ class ApiController extends Controller
         }
 
         return array_values(array_unique($variantes));
+    }
+
+    private function normalizarTextoOpcional(mixed $valor): ?string
+    {
+        if ($valor === null) {
+            return null;
+        }
+
+        $texto = trim((string) $valor);
+
+        return $texto === '' ? null : $texto;
     }
 
     /**

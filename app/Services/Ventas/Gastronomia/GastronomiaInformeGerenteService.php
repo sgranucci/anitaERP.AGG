@@ -3,6 +3,8 @@
 namespace App\Services\Ventas\Gastronomia;
 
 use App\Queries\Ventas\GastronomiaInformeGerenteQuery;
+use App\Services\Ventas\Gastronomia\GastronomiaCierreJornadaProcesoService;
+use App\Support\Ventas\Gastronomia\GastronomiaInformeGerenteWaitrySupport;
 use Carbon\Carbon;
 
 /**
@@ -13,6 +15,8 @@ final class GastronomiaInformeGerenteService
     public function __construct(
         private readonly GastronomiaInformeGerenteQuery $query,
         private readonly GastronomiaRecepcionesAnitaService $recepcionesAnita,
+        private readonly GastronomiaCierreJornadaProcesoService $cierreJornadaProcesoService,
+        private readonly GastronomiaInformeGerenteTopArticulosService $topArticulosService,
     ) {}
 
     /**
@@ -27,10 +31,19 @@ final class GastronomiaInformeGerenteService
         $topMesCantidad = $this->query->top10MesPorCantidad($empresaId, $fecha);
         $porTurno = $this->query->ventasPorTurno($empresaId, $fecha);
         $porPv = $this->query->ventasPorPuntoVenta($empresaId, $fecha);
+        $waitrySinFacturar = $this->cierreJornadaProcesoService
+            ->waitryPagadoSinFacturarParaInformeGerente($empresaId, $fecha);
+        if ($waitrySinFacturar !== null) {
+            $porPv = GastronomiaInformeGerenteWaitrySupport::aplicarAVentasPorPuntoventa($porPv, $waitrySinFacturar);
+        }
         $descuentos = $this->query->facturasPorDescuento($empresaId, $fecha);
+        $top20ArticulosCosto = $this->topArticulosService->top20DelDiaConCostos($empresaId, $fecha);
         $recepciones = $this->recepcionesAnita->resumen($empresaId, $fecha);
 
         $totalJornada = $this->query->totalVentasJornada($empresaId, $fecha);
+        if ($waitrySinFacturar !== null) {
+            $totalJornada = round($totalJornada + (float) ($waitrySinFacturar['total'] ?? 0), 2);
+        }
         $fechaCarbon = Carbon::parse($fecha);
 
         return [
@@ -39,12 +52,14 @@ final class GastronomiaInformeGerenteService
             'fecha_jornada_label' => $fechaCarbon->format('d/m/Y'),
             'mes_jornada_label' => $this->etiquetaMes($fechaCarbon),
             'total_ventas_jornada' => $totalJornada,
+            'waitry_sin_facturar' => $waitrySinFacturar,
             'top10_cantidad' => $topCantidad,
             'top10_valor' => $topValor,
             'top10_mes_cantidad' => $topMesCantidad,
             'ventas_por_turno' => $porTurno,
             'ventas_por_puntoventa' => $porPv,
             'facturas_por_descuento' => $descuentos,
+            'top20_articulos_costo' => $top20ArticulosCosto,
             'recepciones' => $recepciones,
             'recepciones_resumen' => $this->resumenRecepciones($recepciones),
             'charts' => [

@@ -21,7 +21,8 @@
                         @foreach ($barraTareasAnclados ?? [] as $pin)
                             <a href="{{ url($pin['url']) }}"
                                 class="anita-taskbar-pin{{ $pin['activo'] ? ' is-active' : '' }}"
-                                data-menu-id="{{ $pin['menu_id'] }}">
+                                data-menu-id="{{ $pin['menu_id'] }}"
+                                title="{{ $pin['nombre'] }} — clic derecho para quitar de la barra">
                                 <span class="anita-taskbar-pin-icon">
                                     <i class="{{ $pin['icono_clases'] }} fa-fw"></i>
                                 </span>
@@ -72,6 +73,7 @@
                     </div>
                     <p class="text-muted small mb-2">
                         Seleccione los programas que desea tener como acceso directo en la barra inferior (máx. {{ \App\Support\Seguridad\BarraTareasSupport::MAX_ANCLADOS }}).
+                        Para quitar uno ya anclado: clic derecho sobre el ícono en la barra inferior, o use «Quitar» en esta lista.
                     </p>
                     <div class="anita-taskbar-picker-list" id="barra-tareas-lista"></div>
                 </div>

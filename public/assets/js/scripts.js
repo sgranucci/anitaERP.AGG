@@ -26,14 +26,25 @@ $(document).ready(function () {
         modal.modal('show');
     }
 
+    function urlAjaxSesion() {
+        if (window.Laravel && window.Laravel.baseUrl) {
+            return window.Laravel.baseUrl.replace(/\/$/, '') + '/ajax-sesion';
+        }
+        if (typeof carpetaBase !== 'undefined' && carpetaBase) {
+            return String(carpetaBase).replace(/\/$/, '') + '/ajax-sesion';
+        }
+
+        return '/ajax-sesion';
+    }
+
     $('.asignar-rol').on('click', function (event) {
         event.preventDefault();
         const data = {
             rol_id: $(this).data('rolid'),
             rol_nombre: $(this).data('rolnombre'),
-            _token: $('input[name=_token]').val()
-        }
-        ajaxRequest(data, '/ajax-sesion', 'asignar-rol');
+            _token: $('meta[name="csrf-token"]').attr('content') || $('input[name=_token]').first().val()
+        };
+        ajaxRequest(data, urlAjaxSesion(), 'asignar-rol');
     });
 
     $('.cambiar-rol').on('click', function (event) {
@@ -48,8 +59,21 @@ $(document).ready(function () {
             data: data,
             success: function (respuesta) {
                 if (funcion == 'asignar-rol' && respuesta.mensaje == 'ok') {
-                    $('#modal-seleccionar-rol').hide();
+                    $('#modal-seleccionar-rol').modal('hide');
                     location.reload();
+                }
+            },
+            error: function (xhr) {
+                if (funcion !== 'asignar-rol') {
+                    return;
+                }
+                const msg = (xhr.responseJSON && xhr.responseJSON.mensaje)
+                    ? xhr.responseJSON.mensaje
+                    : 'No se pudo asignar el rol. Cierre sesión e intente de nuevo.';
+                if (typeof swal === 'function') {
+                    swal('Error', msg, 'error');
+                } else {
+                    alert(msg);
                 }
             }
         });

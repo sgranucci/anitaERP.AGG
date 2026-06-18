@@ -1750,23 +1750,19 @@ class FacturacionService
 					$cuentaContable_id = $cuentacontable->id;
 			}
 
-			$listaprecioLinea = is_array($listaspreciosIds) && array_key_exists($offItem, $listaspreciosIds)
-				? $listaspreciosIds[$offItem]
-				: null;
-
-			if ($articulo_id && ! \App\Support\Ventas\ArticuloListaprecioLineaVentasSupport::listaprecioIdValido($listaprecioLinea)) {
-				$etiqueta = $sku ?? (string) ($articulos[$offItem] ?? $offItem + 1);
-
-				return [
-					'error' => \App\Support\Ventas\ArticuloListaprecioLineaVentasSupport::mensajeError($offItem + 1, $etiqueta),
-				];
-			}
-
 			$listaprecio_id = 1;
 			if (is_array($listaspreciosIds) && isset($listaspreciosIds[$offItem]) && (string) $listaspreciosIds[$offItem] !== '') {
 				$listaprecio_id = (int) $listaspreciosIds[$offItem];
 			} elseif ($listaprecioGlobalId) {
 				$listaprecio_id = $listaprecioGlobalId;
+			}
+
+			if ($articulo_id && ! \App\Support\Ventas\ArticuloListaprecioLineaVentasSupport::listaprecioIdValido($listaprecio_id)) {
+				$etiqueta = $sku ?? (string) ($articulos[$offItem] ?? $offItem + 1);
+
+				return [
+					'error' => \App\Support\Ventas\ArticuloListaprecioLineaVentasSupport::mensajeError($offItem + 1, $etiqueta),
+				];
 			}
 
 			if (is_array($impuestosIdsInput) && isset($impuestosIdsInput[$offItem]) && (string) $impuestosIdsInput[$offItem] !== '') {

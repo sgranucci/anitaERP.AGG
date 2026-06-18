@@ -89,6 +89,7 @@ class Usuario extends Authenticatable implements Auditable
             'foto_usuario' => $this->foto,
         ]);
         if (count($roles) == 1) {
+            Session::forget('roles');
             Session::put(
                 [
                     'rol_id' => $roles[0]['id'],
@@ -96,6 +97,7 @@ class Usuario extends Authenticatable implements Auditable
                 ]
             );
         } else {
+            Session::forget(['rol_id', 'rol_nombre']);
             Session::put('roles', $roles);
         }
         Session::put('usuario_empresas', $empresas);

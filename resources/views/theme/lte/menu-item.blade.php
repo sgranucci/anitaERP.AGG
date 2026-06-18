@@ -27,8 +27,9 @@
                 <button type="button"
                     class="anita-menu-pin-btn{{ $menuAnclado ? ' is-pinned' : '' }}"
                     data-menu-id="{{ $item['id'] }}"
-                    title="{{ $menuAnclado ? 'Quitar de la barra de tareas' : 'Anclar en la barra de tareas' }}"
-                    aria-label="{{ $menuAnclado ? 'Desanclar' : 'Anclar' }}">
+                    data-menu-nombre="{{ $item['nombre'] }}"
+                    title="{{ $menuAnclado ? 'Quitar de la barra de tareas (clic para confirmar)' : 'Anclar en la barra de tareas (clic para confirmar). También: clic derecho sobre el programa.' }}"
+                    aria-label="{{ $menuAnclado ? 'Desanclar de la barra de tareas' : 'Anclar en la barra de tareas' }}">
                     <i class="fas fa-thumbtack"></i>
                 </button>
             @endif

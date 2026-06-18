@@ -3,6 +3,7 @@
 namespace App\Queries\Compras;
 
 use App\Models\Compras\Proveedor;
+use App\Traits\Compras\ProveedorTrait;
 
 class ProveedorQuery implements ProveedorQueryInterface
 {
@@ -116,34 +117,39 @@ class ProveedorQuery implements ProveedorQueryInterface
 		$columnsOut = ['proveedor_id', 'codigoproveedor', 'nombreproveedor', 'domicilio', 'localidad', 'telefono'];
 
         $count = count($columns);
+        $consulta = trim((string) $consulta);
 
-        $query = $this->model->select('proveedor.id as proveedor_id', 'proveedor.codigo as codigoproveedor', 
-                'proveedor.nombre as nombreproveedor', 'proveedor.domicilio as domicilio', 'localidad.nombre as localidad', 
+        $query = $this->model->select('proveedor.id as proveedor_id', 'proveedor.codigo as codigoproveedor',
+                'proveedor.nombre as nombreproveedor', 'proveedor.domicilio as domicilio', 'localidad.nombre as localidad',
                 'proveedor.telefono as telefono', 'proveedor.estado as estado')
-				->leftJoin('localidad','proveedor.localidad_id','=','localidad.id')
-                ->orWhere(function ($query) use ($count, $consulta, $columns) {
-                        for ($i = 0; $i < $count; $i++)
-                            $query->orWhere($columns[$i], "LIKE", '%'. $consulta . '%');
-                })
-                ->get();
+				->leftJoin('localidad', 'proveedor.localidad_id', '=', 'localidad.id')
+                ->whereIn('proveedor.estado', ProveedorTrait::$estadosHabilitadosOperacion);
+
+        if ($consulta !== '') {
+            $query->where(function ($q) use ($count, $consulta, $columns) {
+                for ($i = 0; $i < $count; $i++) {
+                    $q->orWhere($columns[$i], 'LIKE', '%'.$consulta.'%');
+                }
+            });
+        }
+
+        $rows = $query->get();
 
         $output = [];
-		$output['data'] = '';	
+		$output['data'] = '';
         $flSinDatos = true;
-		if (count($query) > 0)
+		if (count($rows) > 0)
 		{
-			foreach ($query as $row)
+			foreach ($rows as $row)
 			{
-                if ($row['estado'] == 'Activo')
-                {
-                    $flSinDatos = false;
-                    $output['data'] .= '<tr>';
-                    for ($i = 0; $i < $count; $i++)
-                        $output['data'] .= '<td class="'.$columnsOut[$i].'">' . $row[$columnsOut[$i]] . '</td>';	
-                    $output['data'] .= '<td><a class="btn btn-warning btn-sm eligeconsultaproveedor">Elegir</a></td>';
-                    $output['data'] .= '<td><a class="btn btn-warning btn-sm consultaproveedor">Consultar</a></td>';
-                    $output['data'] .= '</tr>';
+                $flSinDatos = false;
+                $output['data'] .= '<tr>';
+                for ($i = 0; $i < $count; $i++) {
+                    $output['data'] .= '<td class="'.$columnsOut[$i].'">' . $row[$columnsOut[$i]] . '</td>';
                 }
+                $output['data'] .= '<td><a class="btn btn-warning btn-sm eligeconsultaproveedor">Elegir</a></td>';
+                $output['data'] .= '<td><a class="btn btn-warning btn-sm consultaproveedor">Consultar</a></td>';
+                $output['data'] .= '</tr>';
 			}
 		}
 

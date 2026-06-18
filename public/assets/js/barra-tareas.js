@@ -64,11 +64,63 @@
         });
     }
 
+    function tituloPinMenu(anclado) {
+        return anclado
+            ? 'Quitar de la barra de tareas (clic para confirmar)'
+            : 'Anclar en la barra de tareas (clic para confirmar). También: clic derecho sobre el programa.';
+    }
+
     function syncSidebarPin(menuId, anclado) {
         var $btn = $('.anita-menu-pin-btn[data-menu-id="' + menuId + '"]');
         $btn.toggleClass('is-pinned', !!anclado);
-        $btn.attr('title', anclado ? 'Quitar de la barra de tareas' : 'Anclar en la barra de tareas');
-        $btn.attr('aria-label', anclado ? 'Desanclar' : 'Anclar');
+        $btn.attr('title', tituloPinMenu(!!anclado));
+        $btn.attr('aria-label', anclado ? 'Desanclar de la barra de tareas' : 'Anclar en la barra de tareas');
+    }
+
+    function confirmarAccionPin(nombre, anclar) {
+        var deferred = $.Deferred();
+        var titulo = anclar
+            ? '¿Anclar en la barra de tareas?'
+            : '¿Quitar de la barra de tareas?';
+        var texto = anclar
+            ? '«' + nombre + '» quedará como acceso directo en la barra inferior.'
+            : '«' + nombre + '» dejará de mostrarse en la barra inferior.';
+        var etiquetaConfirmar = anclar ? 'Anclar' : 'Quitar';
+
+        if (typeof swal !== 'function') {
+            if (window.confirm(titulo + '\n\n' + texto)) {
+                deferred.resolve();
+            } else {
+                deferred.reject();
+            }
+            return deferred.promise();
+        }
+
+        swal({
+            title: titulo,
+            text: texto,
+            icon: 'warning',
+            buttons: {
+                cancel: 'Cancelar',
+                confirm: etiquetaConfirmar,
+            },
+        }).then(function (value) {
+            if (value) {
+                deferred.resolve();
+            } else {
+                deferred.reject();
+            }
+        });
+
+        return deferred.promise();
+    }
+
+    function solicitarTogglePin(menuId, anclar, nombre) {
+        var etiqueta = String(nombre || '').trim() || 'este programa';
+
+        return confirmarAccionPin(etiqueta, anclar).then(function () {
+            return togglePin(menuId, anclar);
+        });
     }
 
     function syncSidebarPins(anclados) {
@@ -188,17 +240,41 @@
             e.preventDefault();
             e.stopPropagation();
 
-            var menuId = Number($(this).data('menu-id'));
-            var anclar = !$(this).hasClass('is-pinned');
-            togglePin(menuId, anclar);
+            var $btn = $(this);
+            solicitarTogglePin(
+                Number($btn.data('menu-id')),
+                !$btn.hasClass('is-pinned'),
+                $btn.data('menu-nombre')
+            );
+        });
+
+        $(document).on('contextmenu', '.anita-menu-leaf > .nav-link', function (e) {
+            var $btn = $(this).closest('.anita-menu-leaf').find('.anita-menu-pin-btn');
+            if (!$btn.length) {
+                return;
+            }
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            solicitarTogglePin(
+                Number($btn.data('menu-id')),
+                !$btn.hasClass('is-pinned'),
+                $btn.data('menu-nombre')
+            );
         });
 
         $(document).on('contextmenu', '.anita-taskbar-pin', function (e) {
             e.preventDefault();
-            var menuId = Number($(this).data('menu-id'));
-            if (menuId > 0) {
-                togglePin(menuId, false);
+
+            var $pin = $(this);
+            var menuId = Number($pin.data('menu-id'));
+            if (menuId <= 0) {
+                return;
             }
+
+            var nombre = String($pin.find('.anita-taskbar-pin-label').text() || '').trim();
+            solicitarTogglePin(menuId, false, nombre);
         });
 
         $('#barra-tareas-buscar').on('input', function () {

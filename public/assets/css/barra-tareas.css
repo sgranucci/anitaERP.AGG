@@ -301,8 +301,8 @@
     right: 0.45rem;
     top: 50%;
     transform: translateY(-50%);
-    width: 26px;
-    height: 26px;
+    width: 22px;
+    height: 22px;
     padding: 0;
     border: none;
     border-radius: 0.3rem;
@@ -311,7 +311,7 @@
     opacity: 0;
     transition: opacity 0.15s ease, color 0.15s ease, background-color 0.15s ease;
     z-index: 2;
-    cursor: pointer;
+    cursor: help;
 }
 
 .anita-menu-leaf:hover .anita-menu-pin-btn,
