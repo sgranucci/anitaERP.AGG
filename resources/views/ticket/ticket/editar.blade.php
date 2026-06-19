@@ -6,8 +6,8 @@
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ticket/ticket/crear.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/ticket/ticket/comentario_tarea.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ticket/categoria_ticket/consulta.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/ticket/subcategoria_ticket/consulta.js")}}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')

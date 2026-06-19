@@ -51,19 +51,11 @@
         <div class="col-sm-6">
             <div class="form-group row" id="div-categoria_ticket">
                 <label for="categoria_ticket" class="col-lg-3 col-form-label">Categoría</label>
-                <input type="text" class="col-lg-2" id="categoria_ticket_id" name="categoria_ticket_id" value="{{$data->subcategoria_tickets->categoria_ticket_id??''}}" >
+                <input type="text" class="col-lg-2" id="categoria_ticket_id" name="categoria_ticket_id" value="{{ $data->subcategoria_tickets?->categoria_ticket_id ?? '' }}" >
                 <button type="button" title="Consulta categorías" style="padding:1;" class="btn-accion-tabla consultacategoria_ticket tooltipsC">
                         <i class="fa fa-search text-primary"></i>
                 </button>
-                <input type="text" class="col-lg-6 form-control" id="nombrecategoria_ticket" name="nombrecategoria_ticket" value="{{$data->subcategoria_tickets->categoria_tickets->nombre??''}}" >
-            </div>
-            <div class="form-group row" id="div-subcategoria_ticket">
-                <label for="subcategoria_ticket" class="col-lg-3 col-form-label">Subcategoría</label>
-                <input type="text" class="col-lg-2" id="subcategoria_ticket_id" name="subcategoria_ticket_id" value="{{$data->subcategoria_ticket_id??''}}" >
-                <button type="button" title="Consulta subcategorías" style="padding:1;" class="btn-accion-tabla consultasubcategoria_ticket tooltipsC">
-                        <i class="fa fa-search text-primary"></i>
-                </button>
-                <input type="text" class="col-lg-6 nombresubcategoria_ticket form-control" id="nombresubcategoria_ticket" name="nombresubcategoria_ticket" value="{{$data->subcategoria_tickets->nombre??''}}" >
+                <input type="text" class="col-lg-6 form-control" id="nombrecategoria_ticket" name="nombrecategoria_ticket" value="{{ $data->subcategoria_tickets?->categoria_tickets?->nombre ?? '' }}" >
             </div>
             <div class="form-group row">
                 <label for="estado_ticket" class="col-lg-3 col-form-label">Estado del ticket</label>
@@ -71,18 +63,21 @@
             </div>       
         </div>        
     </div>
-    <div class="col-md-6">
-        <!-- textarea -->
+    <div class="col-md-12">
         <div class="form-group">
-            <label>Detalle</label>
-            <textarea name="detalle" class="form-control" rows="3" placeholder="Detalle ...">{{old('detalle', $data->detalle ?? '')}}</textarea>
+            <label for="titulo">Título</label>
+            <input type="text" name="titulo" id="titulo" class="form-control" maxlength="255" placeholder="Resumen breve del motivo del ticket" value="{{ old('titulo', $data->titulo ?? '') }}" required>
+        </div>
+        <div class="form-group">
+            <label for="comentario">Comentario</label>
+            <textarea name="comentario" id="comentario" class="form-control" rows="3" maxlength="255" placeholder="Comentario ..." required>{{ old('comentario', $data->comentario ?? '') }}</textarea>
         </div>
     </div>
+    @include('ticket.ticket.partials.tareas_solo_lectura')
     <input type="hidden" id="id" name="id" value="{{ $data->id ?? '' }}" />
     <input type="hidden" id="usuario_id" name="usuario_id" value="{{ $data->usuario_id ?? '' }}" />
 </div>
 <input type="hidden" id="csrf_token" class="form-control" value="{{csrf_token()}}" />
 @include('includes.ticket.modalconsultacategoria')
-@include('includes.ticket.modalconsultasubcategoria')
 
 

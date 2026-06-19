@@ -81,17 +81,32 @@ final class WaitryOrdenEstadoSupportTest extends TestCase
         $this->assertSame(50.0, $split['resumen']['total']);
     }
 
-    public function test_es_anulada_por_descuento_total_desde_getordersdetails(): void
+    public function test_es_anulada_por_descuento_total_cortesia_impaga(): void
     {
         $orden = [
             'orderId' => 17573854,
             'totalAmount' => 7800,
-            'totalDiscount' => 7800,
+            'totalDiscount' => 0,
             'paid' => false,
         ];
 
         $this->assertTrue(WaitryOrdenEstadoSupport::esAnuladaPorDescuentoTotal($orden));
         $this->assertSame(0.0, WaitryOrdenEstadoSupport::montoNetoOperativo($orden));
+        $this->assertSame(7800.0, WaitryOrdenEstadoSupport::montoDescuentoWaitry($orden));
+    }
+
+    public function test_total_discount_igual_total_amount_es_precio_pleno_sin_descuento(): void
+    {
+        $orden = [
+            'orderId' => 17752108,
+            'totalAmount' => 1300,
+            'totalDiscount' => 1300,
+            'paid' => false,
+        ];
+
+        $this->assertFalse(WaitryOrdenEstadoSupport::esAnuladaPorDescuentoTotal($orden));
+        $this->assertSame(1300.0, WaitryOrdenEstadoSupport::montoNetoOperativo($orden));
+        $this->assertSame(0.0, WaitryOrdenEstadoSupport::montoDescuentoWaitry($orden));
     }
 
     public function test_es_anulada_por_descuento_total_no_aplica_si_esta_cobrada(): void
@@ -114,7 +129,8 @@ final class WaitryOrdenEstadoSupportTest extends TestCase
 
         $this->assertCount(1, $filtro['activas']);
         $this->assertSame(1, $filtro['cantidad_anuladas_descuento_excluidas']);
-        $this->assertSame(7800.0, $filtro['waitry_anuladas_descuento']['total']);
+        $this->assertSame(100.0, $filtro['waitry_anuladas_descuento']['total']);
+        $this->assertArrayHasKey(2, $filtro['activas']);
     }
 
     public function test_separar_canceladas_excluye_anuladas_descuento(): void
@@ -165,10 +181,26 @@ final class WaitryOrdenEstadoSupportTest extends TestCase
 
         $enriquecidas = WaitryOrdenEstadoSupport::enriquecerLineasImpagasConOrdenes($lineas, $ordenes);
 
-        $this->assertTrue($enriquecidas[0]['waitry_anulada_descuento']);
-        $this->assertSame(7800.0, $enriquecidas[0]['total_discount_waitry']);
-        $this->assertSame(0.0, $enriquecidas[0]['total_neto_waitry']);
+        $this->assertFalse($enriquecidas[0]['waitry_anulada_descuento']);
+        $this->assertSame(0.0, $enriquecidas[0]['total_discount_waitry']);
+        $this->assertSame(7800.0, $enriquecidas[0]['total_neto_waitry']);
         $this->assertFalse($enriquecidas[1]['waitry_anulada_descuento']);
+    }
+
+    public function test_linea_impaga_legacy_snapshot_sin_descuento_no_es_anulada(): void
+    {
+        $linea = [
+            'waitry_order_id' => 17752108,
+            'total' => 1300.0,
+            'total_amount_waitry' => 1300.0,
+            'total_discount_waitry' => 1300.0,
+            'total_neto_waitry' => 0.0,
+            'paid_waitry' => false,
+            'monto_cobro_waitry' => 0.0,
+            'waitry_anulada_descuento' => false,
+        ];
+
+        $this->assertFalse(WaitryOrdenEstadoSupport::esAnuladaPorDescuentoTotalLinea($linea));
     }
 
     public function test_linea_cobrada_con_descuento_total_no_es_anulada_por_descuento(): void
@@ -191,7 +223,8 @@ final class WaitryOrdenEstadoSupportTest extends TestCase
         $linea = [
             'waitry_order_id' => 17573854,
             'total' => 7800.0,
-            'total_discount_waitry' => 7800.0,
+            'total_amount_waitry' => 7800.0,
+            'total_discount_waitry' => 0.0,
             'total_neto_waitry' => 0.0,
             'paid_waitry' => false,
             'monto_cobro_waitry' => 0.0,

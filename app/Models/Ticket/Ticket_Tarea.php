@@ -26,6 +26,11 @@ class Ticket_Tarea extends Model implements Auditable
     	return $this->hasMany(Ticket_Tarea_Novedad::class, 'ticket_tarea_id')->with('usuarios');
 	}
 
+    public function ticket_tarea_comentarios_usuario()
+    {
+        return $this->hasMany(Ticket_Tarea_Comentario_Usuario::class, 'ticket_tarea_id')->with('usuarios');
+    }
+
 	public function tareas()
 	{
     	return $this->belongsTo(Tarea_Ticket::class, 'tarea_id', 'id');
@@ -44,6 +49,29 @@ class Ticket_Tarea extends Model implements Auditable
 	public function usuarios()
 	{
         return $this->belongsTo(Usuario::class, 'creousuario_id');
+	}
+
+	public function estadoVisual(): string
+	{
+		if (! empty($this->fechafinalizacion) && $this->fechafinalizacion >= '2000-01-01') {
+			return 'Finalizada';
+		}
+
+		$ultimaNovedad = $this->ticket_tarea_novedades->sortByDesc('id')->first();
+		if ($ultimaNovedad && ! empty($ultimaNovedad->estado)) {
+			return $ultimaNovedad->estado;
+		}
+
+		return 'Pendiente';
+	}
+
+	public function fechaTicketLegible(?string $fecha): string
+	{
+		if (empty($fecha) || $fecha < '2000-01-01') {
+			return '';
+		}
+
+		return date('d/m/Y', strtotime($fecha));
 	}
 
 }

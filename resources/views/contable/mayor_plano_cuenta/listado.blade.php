@@ -4,7 +4,8 @@
     $totalFilas = is_countable($filas) ? count($filas) : 0;
     $tot = $totales ?? [];
     $tituloReporte = $titulo ?? 'Mayor analítico por cuenta contable';
-    $multiempresa = count($filtros['empresa_ids'] ?? []) > 1;
+    $multiempresa = count($filtros['empresa_ids'] ?? []) > 1
+        || empty($filtros['consolidar_empresas']);
 @endphp
 <!DOCTYPE html>
 <html lang="es">

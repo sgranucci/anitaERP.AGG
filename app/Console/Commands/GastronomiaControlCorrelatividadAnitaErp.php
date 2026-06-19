@@ -52,6 +52,7 @@ class GastronomiaControlCorrelatividadAnitaErp extends Command
             ['Pares OK', (string) ($res['pares_ok'] ?? 0)],
             ['Solo ERP', (string) ($res['solo_erp'] ?? 0)],
             ['Solo Anita', (string) ($res['solo_anita'] ?? 0)],
+            ['Excl. Anita legacy (resvta)', (string) ($res['excluido_resvta_legacy'] ?? 0)],
             ['Dif. monto', (string) ($res['dif_monto'] ?? 0)],
             ['Huecos correlativos ERP', (string) ($res['huecos_corr_erp'] ?? 0)],
             ['ERP en corte inicio', (string) ($res['erp_corte_inicio'] ?? 0)],

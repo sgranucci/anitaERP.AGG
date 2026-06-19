@@ -4,6 +4,7 @@ namespace App\Services\Stock;
 
 use App\ApiAnita;
 use App\Models\Stock\Articulo;
+use App\Support\Stock\ArticuloSeleccionOperativaSupport;
 use App\Models\Stock\Depmae;
 use Illuminate\Support\Facades\Log;
 
@@ -151,11 +152,12 @@ class StkdepSaldoAnitaService
      */
     private function codigosAnitaPorDepositoEntrega(int $depositoId): array
     {
-        $skus = Articulo::query()
-            ->where('depositoentrega_id', $depositoId)
-            ->whereNotNull('sku')
-            ->where('sku', '!=', '')
-            ->pluck('sku');
+        $skus = ArticuloSeleccionOperativaSupport::aplicarSoloActivosTablaArticulo(
+            Articulo::query()
+                ->where('depositoentrega_id', $depositoId)
+                ->whereNotNull('sku')
+                ->where('sku', '!=', '')
+        )->pluck('sku');
 
         $codigos = [];
         foreach ($skus as $sku) {
@@ -263,11 +265,12 @@ class StkdepSaldoAnitaService
             return [];
         }
 
-        $articulos = Articulo::query()
-            ->select('id', 'sku', 'descripcion', 'mventa_id')
-            ->where('depositoentrega_id', $depositoEntregaId)
-            ->whereIn('sku', $skusBuscar)
-            ->get();
+        $articulos = ArticuloSeleccionOperativaSupport::aplicarSoloActivosTablaArticulo(
+            Articulo::query()
+                ->select('id', 'sku', 'descripcion', 'mventa_id')
+                ->where('depositoentrega_id', $depositoEntregaId)
+                ->whereIn('sku', $skusBuscar)
+        )->get();
 
         $porSku = [];
         foreach ($articulos as $articulo) {

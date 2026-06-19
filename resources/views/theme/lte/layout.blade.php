@@ -127,7 +127,19 @@
             baseUrl: '{{ url('/') }}',
             usuario: @json($laravelUsuario),
         };
-        var carpetaBase = '{{ config('app.app_carpeta') }}';
+        var carpetaBase = @json(rtrim((string) config('app.app_carpeta', ''), '/'));
+        function resolverCarpetaBaseApp() {
+            if (typeof carpetaBase !== 'undefined' && carpetaBase != null && String(carpetaBase).trim() !== '') {
+                return String(carpetaBase).replace(/\/$/, '');
+            }
+            var loc = window.location.pathname || '';
+            var m = loc.match(/^(.+)\/(ventas|caja|stock|compras|contable|seguridad|presupuesto|ticket|admin|uif)\//);
+            if (m && m[1]) {
+                return m[1];
+            }
+            return '';
+        }
+        carpetaBase = resolverCarpetaBaseApp();
     </script>
     <script src="{{asset("assets/$theme/plugins/jquery/jquery.min.js")}}"></script>
     <!-- Bootstrap 4 -->

@@ -15,6 +15,9 @@ class Ticket_TareaRepository implements Ticket_TareaRepositoryInterface
 	private $ticket_estadoRepository;
 	public $ticket_tarea_ids = [];
 
+	/** @var array<int, array<string, mixed>> */
+	public $tareasRecienCreadas = [];
+
     /**
      * PostRepository constructor.
      *
@@ -176,6 +179,7 @@ class Ticket_TareaRepository implements Ticket_TareaRepositoryInterface
 			$q_ticket_tarea = count($array_ticket_tarea_id);
 		}
 		$this->ticket_tarea_ids = [];
+		$this->tareasRecienCreadas = [];
 
 		// Graba tareas
 		if (isset($data))
@@ -220,6 +224,7 @@ class Ticket_TareaRepository implements Ticket_TareaRepositoryInterface
 
 							// Asigna tabla de ids de tareas
 							$this->ticket_tarea_ids[] = $ticket_tarea->id;
+							$this->registrarTareaRecienCreada($i, $nombretarea_tickets, $fechacargas, $fechaprogramaciones, $tecnico_ids, $turno_ids);
 
 							// Agrega estado de tarea asignada
 							// Crea estado
@@ -271,6 +276,7 @@ class Ticket_TareaRepository implements Ticket_TareaRepositoryInterface
 
 							// Asigna tabla de ids de tareas
 							$this->ticket_tarea_ids[] = $ticket_tarea->id;
+							$this->registrarTareaRecienCreada($i, $nombretarea_tickets, $fechacargas, $fechaprogramaciones, $tecnico_ids, $turno_ids);
 
 							// Agrega estado de tarea asignada
 							// Crea estado
@@ -302,6 +308,33 @@ class Ticket_TareaRepository implements Ticket_TareaRepositoryInterface
 			$ticket_tarea = $this->model->where('ticket_id', $id)->delete();
 		}
 
-		return ['ticket_tarea_ids' => $this->ticket_tarea_ids];
-	}	
+		return [
+			'ticket_tarea_ids' => $this->ticket_tarea_ids,
+			'tareas_recien_creadas' => $this->tareasRecienCreadas,
+		];
+	}
+
+	/**
+	 * @param  array<int, string|null>  $nombretarea_tickets
+	 * @param  array<int, string|null>  $fechacargas
+	 * @param  array<int, string|null>  $fechaprogramaciones
+	 * @param  array<int, int|string|null>  $tecnico_ids
+	 * @param  array<int, int|string|null>  $turno_ids
+	 */
+	private function registrarTareaRecienCreada(
+		int $i,
+		array $nombretarea_tickets,
+		array $fechacargas,
+		array $fechaprogramaciones,
+		array $tecnico_ids,
+		array $turno_ids
+	): void {
+		$this->tareasRecienCreadas[] = [
+			'nombre_tarea' => $nombretarea_tickets[$i] ?? '',
+			'fechacarga' => $fechacargas[$i] ?? null,
+			'fechaprogramacion' => $fechaprogramaciones[$i] ?? null,
+			'tecnico_id' => $tecnico_ids[$i] ?? null,
+			'turno_id' => $turno_ids[$i] ?? null,
+		];
+	}
 }

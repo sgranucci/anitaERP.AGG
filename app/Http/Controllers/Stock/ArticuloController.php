@@ -46,11 +46,13 @@ use App\Services\Stock\PrecioService;
 use App\Services\Stock\StkdepSaldoAnitaService;
 use App\Services\Stock\ArticuloParteUnicaService;
 use App\Support\Stock\ArticuloConsultaDesdeModal;
+use App\Support\Stock\ArticuloEtiquetaNpuSupport;
 use App\Support\Stock\ArticuloListadoFiltros;
 use App\Support\Compras\ArticuloProveedorMatchSupport;
 use App\Support\Compras\ArticuloProveedorPrecioListaSupport;
 use App\Support\Stock\ArticuloProveedorLineasSupport;
 use App\Support\Stock\ArticuloUltimoCreatePrefill;
+use App\Support\Stock\RecepcionProveedorParteUnicaSupport;
 use Auth;
 use Carbon\Carbon;
 use Exception;
@@ -377,10 +379,57 @@ class ArticuloController extends Controller
 
     // Lista etiqueta QR
 
+    public function consultarNpuEtiqueta(Request $request, int $id)
+    {
+        can('imprimir-articulos-qr');
+
+        $articulo = Articulo::query()->findOrFail($id);
+        if (! RecepcionProveedorParteUnicaSupport::articuloManejaParteUnica($articulo)) {
+            return response()->json(['mensaje' => 'El artículo no lleva número de parte única.'], 422);
+        }
+
+        $numeroparte = (int) $request->query('npu', 0);
+        if ($numeroparte <= 0) {
+            return response()->json(['mensaje' => 'Indique un NPU válido.'], 422);
+        }
+
+        try {
+            $datos = ArticuloEtiquetaNpuSupport::resolver($id, $numeroparte);
+        } catch (\Throwable $e) {
+            return response()->json(['mensaje' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'datos' => $datos,
+            'imprimir_url' => route('listar_etiqueta_articulo', [
+                'id' => $id,
+                'npu' => $numeroparte,
+            ]),
+        ]);
+    }
+
     public function download(Request $request, $id)
     {
+        can('imprimir-articulos-qr');
 
-        $articulo = Articulo::where('id', $id)->first();
+        $articulo = Articulo::query()->findOrFail($id);
+
+        $datosNpu = null;
+        if (RecepcionProveedorParteUnicaSupport::articuloManejaParteUnica($articulo)) {
+            $numeroparte = (int) $request->query('npu', 0);
+            if ($numeroparte <= 0) {
+                return redirect()->back()->with('errores', [
+                    'Indique el número de parte única (NPU) a imprimir.',
+                ]);
+            }
+
+            try {
+                $datosNpu = ArticuloEtiquetaNpuSupport::resolver((int) $id, $numeroparte);
+            } catch (\Throwable $e) {
+                return redirect()->back()->with('errores', [$e->getMessage()]);
+            }
+        }
 
         // Arma nombre de archivo
         $nombreEtiqueta = 'tmp/eti-'.Str::random(10).'.txt';
@@ -400,9 +449,15 @@ class ArticuloController extends Controller
         $etiqueta = $modeloetiqueta->modeloetiquetas->codigoetiqueta;
 
         $etiqueta = Str::replace('@sku@', $articulo->sku, $etiqueta, caseSensitive: false);
-        $etiqueta = Str::replace('@npu@', $articulo->numeroparte, $etiqueta, caseSensitive: false);
-        $etiqueta = Str::replace('@codigoproveedor@', ' ', $etiqueta, caseSensitive: false);
-        $etiqueta = Str::replace('@numerorecepcion@', ' ', $etiqueta, caseSensitive: false);
+        if ($datosNpu !== null) {
+            $etiqueta = Str::replace('@npu@', (string) $datosNpu['numeroparte'], $etiqueta, caseSensitive: false);
+            $etiqueta = Str::replace('@codigoproveedor@', (string) $datosNpu['codigoproveedor'], $etiqueta, caseSensitive: false);
+            $etiqueta = Str::replace('@numerorecepcion@', (string) $datosNpu['numerorecepcion'], $etiqueta, caseSensitive: false);
+        } else {
+            $etiqueta = Str::replace('@npu@', ' ', $etiqueta, caseSensitive: false);
+            $etiqueta = Str::replace('@codigoproveedor@', ' ', $etiqueta, caseSensitive: false);
+            $etiqueta = Str::replace('@numerorecepcion@', ' ', $etiqueta, caseSensitive: false);
+        }
 
         Storage::disk('local')->put($nombreEtiqueta, $etiqueta);
         $path = Storage::path($nombreEtiqueta);
@@ -682,7 +737,7 @@ class ArticuloController extends Controller
             return redirect()
                 ->back()
                 ->withInput()
-                ->with('errores', $e->getMessage());
+                ->with('errores', [$e->getMessage()]);
         }
 
         if ($request->input('origen') === 'modal_consulta') {
@@ -758,6 +813,8 @@ class ArticuloController extends Controller
         if (filter_var($request->input('solo_facturable'), FILTER_VALIDATE_BOOLEAN)) {
             $query->where('articulo.nofactura', '0');
         }
+
+        \App\Support\Stock\ArticuloSeleccionOperativaSupport::aplicarSoloActivos($query);
 
         $cont = count($columns);
 
@@ -907,6 +964,10 @@ class ArticuloController extends Controller
     public function leeUnArticuloPorSku($sku, Request $request)
     {
         $articulo = $this->articuloRepository->findPorSku($sku);
+
+        if (! \App\Support\Stock\ArticuloSeleccionOperativaSupport::esSeleccionable($articulo)) {
+            return response()->json(null);
+        }
 
         if ($articulo && filter_var($request->query('solo_facturable'), FILTER_VALIDATE_BOOLEAN)
             && (string) $articulo->nofactura === '1') {

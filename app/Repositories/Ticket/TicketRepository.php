@@ -27,16 +27,27 @@ class TicketRepository implements TicketRepositoryInterface
     public function create(array $data)
     {
 		$data['usuario_id'] = Auth::user()->id;
-		
+		$data = $this->normalizarSubcategoriaTicketId($data);
+
 		return $this->model->create($data);
     }
 
     public function update(array $data, $id)
     {
+		$data = $this->normalizarSubcategoriaTicketId($data);
 		$ticket = $this->model->findOrFail($id)->update($data);
 
 		return $ticket;
     }
+
+	private function normalizarSubcategoriaTicketId(array $data): array
+	{
+		if (! array_key_exists('subcategoria_ticket_id', $data) || $data['subcategoria_ticket_id'] === '' || $data['subcategoria_ticket_id'] === null) {
+			$data['subcategoria_ticket_id'] = null;
+		}
+
+		return $data;
+	}
 
     public function delete($id)
     {

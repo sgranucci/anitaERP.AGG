@@ -349,6 +349,13 @@ final class RecepcionProveedorAnitaEscrituraSupport
         ]);
     }
 
+    public static function pendmovpPrecioUpdateSet(float $precio): string
+    {
+        return self::updateSet([
+            'penvp_precio' => self::decimalSql($precio),
+        ]);
+    }
+
     public static function penmpEstadoUpdateSet(string $estadoCabecera): string
     {
         return self::updateSet([

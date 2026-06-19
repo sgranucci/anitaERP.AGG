@@ -202,25 +202,28 @@ class MovimientoStockController extends Controller
             $articulo_ids[] = 0;
 
         $articulo_query = Articulo::select('id', 'sku', 'descripcion', 'mventa_id')
-                                ->orderBy('descripcion','ASC')
-                                ->whereExists(function($query) 
-                                {
-                                    $query->select(DB::raw(1))
-                                        ->from("combinacion")
-                                        ->whereRaw("combinacion.articulo_id=articulo.id and combinacion.estado = 'A'");
-                                })
-                                ->orWhereIn('id', $articulo_ids)
-                                ->get();
+            ->orderBy('descripcion', 'ASC')
+            ->where(function ($q) use ($articulo_ids) {
+                $q->where(function ($qActivos) {
+                    \App\Support\Stock\ArticuloSeleccionOperativaSupport::aplicarSoloActivosTablaArticulo($qActivos)
+                        ->whereExists(function ($query) {
+                            $query->select(DB::raw(1))
+                                ->from('combinacion')
+                                ->whereRaw("combinacion.articulo_id=articulo.id and combinacion.estado = 'A'");
+                        });
+                })->orWhereIn('id', $articulo_ids);
+            })
+            ->get();
 
-        $articuloall_query = Articulo::select('id', 'sku', 'descripcion', 'mventa_id')
-                                ->orderBy('descripcion','ASC')
-                                ->whereExists(function($query) 
-                                {
-                                    $query->select(DB::raw(1))
-                                        ->from("combinacion")
-                                        ->whereRaw("combinacion.articulo_id=articulo.id");
-                                })
-                                ->get();
+        $articuloall_query = \App\Support\Stock\ArticuloSeleccionOperativaSupport::aplicarSoloActivosTablaArticulo(
+            Articulo::select('id', 'sku', 'descripcion', 'mventa_id')
+                ->orderBy('descripcion', 'ASC')
+                ->whereExists(function ($query) {
+                    $query->select(DB::raw(1))
+                        ->from('combinacion')
+                        ->whereRaw('combinacion.articulo_id=articulo.id');
+                })
+        )->get();
 
         $articuloxsku_query = $articulo_query->sortBy('sku');
 

@@ -11,6 +11,15 @@ var ptrAbreNovedad;
         $(document).on('click', '.eliminararchivo', borraRenglonArchivo);
 		$('#agrega_renglon_tarea_novedad').on('click', agregaRenglonTareaNovedad);
         $(document).on('click', '.eliminar_tarea_novedad', borraRenglonTareaNovedad);
+		$(document).on('click', '.btn-agregar-comentario-tarea', guardarComentarioInline);
+
+		$(document).on('show.bs.collapse hide.bs.collapse', '.panel-comentarios-tarea', function (event) {
+			let $panel = $(this);
+			let $toggle = $('[data-target="#' + $panel.attr('id') + '"]');
+			$toggle.find('.toggle-icon')
+				.toggleClass('fa-chevron-down', event.type === 'show')
+				.toggleClass('fa-chevron-right', event.type === 'hide');
+		});
 
 		activa_eventos(true);
 		leeEstadoTarea();
@@ -238,7 +247,9 @@ var ptrAbreNovedad;
 
 	function borraRenglonTarea_Ticket(event) {
     	event.preventDefault();
-    	$(this).parents('tr').remove();
+		let $tr = $(this).closest('tr.item-tarea-ticket');
+		$tr.next('.fila-comentarios-tarea-admin').remove();
+    	$tr.remove();
     	actualizaRenglonesTarea_Ticket();
     }
 
@@ -516,6 +527,102 @@ var ptrAbreNovedad;
 			$('#estado_ticket').val(estadoTicket);
 		}
 	}
-		
+
+	function actualizarContadorComentarios(ticketTareaId, total) {
+		let $fila = $('.fila-comentarios-tarea-admin[data-ticket-tarea-id="' + ticketTareaId + '"]');
+		$fila.find('.contador-comentarios').text(total);
+	}
+
+	function mostrarBannerEnviandoComentario() {
+		$('#ticket-comentario-enviando-overlay')
+			.removeClass('d-none')
+			.css('display', 'flex')
+			.attr('aria-hidden', 'false');
+		$('body').css('overflow', 'hidden');
+	}
+
+	function ocultarBannerEnviandoComentario() {
+		$('#ticket-comentario-enviando-overlay')
+			.addClass('d-none')
+			.css('display', '')
+			.attr('aria-hidden', 'true');
+		$('body').css('overflow', '');
+	}
+
+	function guardarComentarioInline(event) {
+		event.preventDefault();
+
+		let urlBase = $('#url_guarda_comentario_tarea_admin').val();
+		if (!urlBase) {
+			alert('Guarde el ticket antes de agregar comentarios.');
+			return;
+		}
+
+		let $btn = $(this);
+		let ticketTareaId = $btn.data('ticket-tarea-id');
+		let $panel = $btn.closest('.panel-comentarios-tarea');
+		let $textarea = $panel.find('.comentario-tarea-texto');
+		let comentario = $.trim($textarea.val());
+
+		if (!comentario) {
+			alert('Ingrese un comentario.');
+			$textarea.focus();
+			return;
+		}
+
+		$btn.prop('disabled', true);
+		mostrarBannerEnviandoComentario();
+
+		$.ajaxSetup({
+			headers: {
+				'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') || $('#csrf_token').val()
+			}
+		});
+
+		$.ajax({
+			url: urlBase + '/' + ticketTareaId + '/comentario',
+			method: 'POST',
+			data: {
+				_token: $('#csrf_token').val(),
+				comentario: comentario
+			},
+			success: function (resp) {
+				if (resp.mensaje !== 'ok' || !resp.comentario) {
+					alert(resp.error || 'No se pudo enviar el comentario.');
+					return;
+				}
+
+				let $lista = $panel.find('.lista-comentarios-tarea[data-ticket-tarea-id="' + ticketTareaId + '"]');
+				$lista.find('.sin-comentarios').remove();
+
+				let html = '<div class="comentario-item small border rounded bg-white p-2 mb-1">' +
+					'<div class="d-flex justify-content-between flex-wrap">' +
+						'<strong>' + $('<div>').text(resp.comentario.usuario || '').html() + '</strong>' +
+						'<span class="text-muted">' + (resp.comentario.fecha || '') + '</span>' +
+					'</div>' +
+					'<div class="mt-1" style="white-space: pre-wrap;">' +
+						$('<div>').text(resp.comentario.comentario || '').html() +
+					'</div>' +
+				'</div>';
+				$lista.append(html);
+
+				$textarea.val('');
+				actualizarContadorComentarios(ticketTareaId, $lista.find('.comentario-item').length);
+				alert('Comentario enviado. Se notificó por correo al usuario que generó el ticket.');
+			},
+			error: function (xhr) {
+				let msg = 'No se pudo enviar el comentario.';
+				if (xhr.responseJSON && xhr.responseJSON.error) {
+					msg = xhr.responseJSON.error;
+				}
+				alert(msg);
+			},
+			complete: function () {
+				ocultarBannerEnviandoComentario();
+				$btn.prop('disabled', false);
+			}
+		});
+	}
+
 
 

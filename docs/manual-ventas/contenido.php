@@ -63,6 +63,7 @@ return [
         ],
         [
             'titulo' => '3. Circuito completo del pedido',
+            'captura_id' => 'flujo_pedidos',
             'parrafos' => [
                 'El flujo operativo estándar en EL BIERZO es el siguiente:',
             ],
@@ -80,6 +81,7 @@ return [
         ],
         [
             'titulo' => '4. Listado de pedidos en la empresa',
+            'captura_id' => 'pedido_listado',
             'herramientas_clave' => 'listado_pedidos',
             'herramientas_incluir_listado' => true,
             'parrafos' => [
@@ -91,6 +93,7 @@ return [
         ],
         [
             'titulo' => '5. Carga de pedido (vendedores remotos)',
+            'captura_id' => 'pedido_crear',
             'parrafos' => [
                 'Esta sección está orientada a vendedores que cargan pedidos desde fuera de la planta. El objetivo es registrar con precisión qué pide el cliente y cuánto (en cajas/piezas/kilos teóricos), sin necesidad de pesar.',
                 'Acceso: menú Ventas → Pedidos de clientes → Nuevo registro, o ruta ventas/pedido/crear.',
@@ -122,6 +125,7 @@ return [
         ],
         [
             'titulo' => '6. Edición, guardado y estados',
+            'captura_id' => 'pedido_editar',
             'herramientas_clave' => 'edicion_pedido',
             'parrafos' => [
                 'Desde ventas/pedido/{id}/editar se puede modificar un pedido pendiente, registrar pesada y facturar.',
@@ -230,6 +234,7 @@ return [
         ],
         [
             'titulo' => '11. Cierre de pedidos y anulaciones',
+            'captura_id' => 'pedido_cerrar',
             'parrafos' => [
                 'Cierre masivo (ventas/pedido/cerrar): permite cerrar pedidos hasta una fecha con un motivo de cierre. Uso administrativo para pedidos vencidos o no concretados.',
                 'Anulación de ítems: desde la edición, ícono de anulación por renglón. Registra historial con cliente y motivo.',

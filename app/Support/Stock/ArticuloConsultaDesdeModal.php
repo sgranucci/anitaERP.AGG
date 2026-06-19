@@ -42,7 +42,11 @@ class ArticuloConsultaDesdeModal
             || can('usar-proceso-facturacion-gastronomia', false)
             || can('crear-precios', false)
             || can('editar-precios', false)
-            || can('listar-precios', false);
+            || can('listar-precios', false)
+            || can('crear-prestamo', false)
+            || can('editar-prestamo', false)
+            || can('actualizar-prestamo', false)
+            || can('listar-prestamo', false);
     }
 
     public static function urlEditar(int $id): string

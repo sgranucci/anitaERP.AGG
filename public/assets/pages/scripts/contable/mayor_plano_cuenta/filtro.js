@@ -17,7 +17,12 @@ function mayorPlanoFormatearCodigoCuenta(codigo) {
 }
 
 function mayorPlanoEmpresaIdParaConsultaCuenta() {
-    var $empresa = $('#empresa_id');
+    var $hiddenEmpresas = $('#mpc_empresas_asignadas_hidden input[name="empresa_ids[]"]');
+    if ($hiddenEmpresas.length) {
+        return parseInt($hiddenEmpresas.first().val(), 10) || 0;
+    }
+
+    var $empresa = $('#mpc_empresa_id, #empresa_id');
     if (!$empresa.length) {
         return 0;
     }
@@ -175,9 +180,9 @@ function activaEventosMayorPlanoCuentaFiltro() {
             $('#consultacuentaModal').modal('hide');
         });
 
-    $('#empresa_id')
-        .off('change.mpc')
-        .on('change.mpc', function () {
+    $('#mpc-empresas-dual, #empresa_id')
+        .off('change.mpc reporte-empresas-cambiadas.mpc')
+        .on('change.mpc reporte-empresas-cambiadas.mpc', function () {
             $('.mpc-cuenta-campo').each(function () {
                 var $campo = $(this);
                 if (mayorPlanoNormalizarCodigoCuenta($campo.find('.codigocuentacontable').val())) {

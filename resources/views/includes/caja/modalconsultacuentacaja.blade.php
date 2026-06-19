@@ -14,7 +14,7 @@
         <form action="" method="post">
 			      <div class="form-group row">
    				    <label for="consulta_cuentacaja" class="col-form-label">Buscar:</label>
-              <input type="text" name="consultacuentacaja" id="consultacuentacaja" autofocus>
+              <input type="text" name="consultacuentacaja" id="consultacuentacaja" class="form-control" autofocus>
               <input type="hidden" name="consultacuentacaja" id="consultacuentacaja_id">
               <input type="hidden" name="consultaempresacaja" id="consultaempresacaja_id">
 			      </div>

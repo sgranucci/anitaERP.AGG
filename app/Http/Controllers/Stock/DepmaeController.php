@@ -34,7 +34,11 @@ class DepmaeController extends Controller
             || can('editar-recepcion-proveedor', false)
             || can('actualizar-recepcion-proveedor', false)
             || can('listar-recepcion-proveedor', false)
-            || can('confirmar-recepcion-proveedor', false);
+            || can('confirmar-recepcion-proveedor', false)
+            || can('crear-prestamo', false)
+            || can('editar-prestamo', false)
+            || can('actualizar-prestamo', false)
+            || can('listar-prestamo', false);
     }
 
     /**

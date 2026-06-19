@@ -25,9 +25,11 @@ use App\Support\Stock\RecepcionProveedorEstados;
 use App\Support\Stock\RecepcionProveedorLineaEstados;
 use App\Support\Stock\RecepcionProveedorParteUnicaSupport;
 use App\Services\Configuracion\ModuloAvisoService;
+use App\Services\Compras\OrdencompraRecepcionPrecioSyncService;
 use Auth;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class RecepcionProveedorService
 {
@@ -39,6 +41,7 @@ class RecepcionProveedorService
         private readonly RecepcionProveedorParteUnicaService $parteUnicaService,
         private readonly ModuloAvisoService $moduloAvisoService,
         private readonly MovimientoStockService $movimientoStockService,
+        private readonly OrdencompraRecepcionPrecioSyncService $ordencompraRecepcionPrecioSyncService,
     ) {
     }
 
@@ -255,7 +258,19 @@ class RecepcionProveedorService
                 throw $e;
             }
 
-            $recepcionConfirmada = $recepcion->fresh(['recepcion_proveedor_articulos']);
+            $recepcionConfirmada = $recepcion->fresh(['recepcion_proveedor_articulos', 'ordencompras']);
+
+            try {
+                $this->ordencompraRecepcionPrecioSyncService->actualizarPreciosDesdeRecepcion(
+                    $recepcionConfirmada,
+                    soloPendientes: false
+                );
+            } catch (\Throwable $syncPrecioOc) {
+                Log::warning('RecepcionProveedor: no se actualizaron precios OC desde recepción', [
+                    'recepcion_id' => $recepcionConfirmada->id,
+                    'exception' => $syncPrecioOc->getMessage(),
+                ]);
+            }
 
             if ($recepcionConfirmada->fl_precio_diferencia
                 || RecepcionProveedorDiferenciaSupport::recepcionTieneDiferenciaPrecioEstricta($recepcionConfirmada)) {

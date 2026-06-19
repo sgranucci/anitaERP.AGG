@@ -439,6 +439,7 @@
     <a href="{{ route('inicio') }}" class="btn btn-sm btn-outline-secondary" id="cm-btn-salir-pantalla" title="Volver al menú principal">
         <i class="fa fa-sign-out"></i> Salir
     </a>
+    @include('includes.ventas.boton-manual-canjes')
 </div>
 
 <div id="cm-pos-shell" class="cm-bloqueado">

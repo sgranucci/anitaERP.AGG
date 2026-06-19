@@ -4,6 +4,12 @@ namespace App\Support\Ventas\Waitry;
 
 /**
  * Estado operativo de órdenes Waitry (getordersdetails / getOrdersPOS).
+ *
+ * Semántica API Waitry (confirmada por proveedor):
+ * - {@code totalAmount}: bruto de la cuenta (lista).
+ * - {@code totalDiscount}: total final con descuentos aplicados (importe a pagar / neto).
+ * - Sin descuento: {@code totalDiscount === totalAmount}.
+ * - Cortesía / 100 % descuento impaga: {@code totalDiscount <= 0} con {@code totalAmount > 0}.
  */
 final class WaitryOrdenEstadoSupport
 {
@@ -169,11 +175,7 @@ final class WaitryOrdenEstadoSupport
             return false;
         }
 
-        if (array_key_exists('total_neto_waitry', $linea)) {
-            return round((float) $linea['total_neto_waitry'], 2) <= self::TOLERANCIA_NETO;
-        }
-
-        return self::esAnuladaPorDescuentoTotal($linea);
+        return self::montoNetoOperativo($linea) <= self::TOLERANCIA_NETO;
     }
 
     /**
@@ -232,16 +234,20 @@ final class WaitryOrdenEstadoSupport
     }
 
     /**
+     * Importe descontado (bruto − neto Waitry), no confundir con {@code totalDiscount} de la API.
+     *
      * @param  array<string, mixed>  $orden
      */
     public static function montoDescuentoWaitry(array $orden): float
     {
         if (isset($orden['totalDiscount']) && is_numeric($orden['totalDiscount'])) {
-            return round((float) $orden['totalDiscount'], 2);
+            return round(max(0.0, self::montoBrutoWaitry($orden) - (float) $orden['totalDiscount']), 2);
         }
 
-        if (isset($orden['total_discount_waitry']) && is_numeric($orden['total_discount_waitry'])) {
-            return round((float) $orden['total_discount_waitry'], 2);
+        if (isset($orden['total_amount_waitry'], $orden['total_neto_waitry'])
+            && is_numeric($orden['total_amount_waitry'])
+            && is_numeric($orden['total_neto_waitry'])) {
+            return round(max(0.0, (float) $orden['total_amount_waitry'] - (float) $orden['total_neto_waitry']), 2);
         }
 
         if (isset($orden['total_discount']) && is_numeric($orden['total_discount'])) {
@@ -257,14 +263,30 @@ final class WaitryOrdenEstadoSupport
     }
 
     /**
+     * Neto operativo Waitry (importe a pagar según API).
+     *
      * @param  array<string, mixed>  $orden
      */
     public static function montoNetoOperativo(array $orden): float
     {
-        $bruto = self::montoBrutoWaitry($orden);
-        $descuento = self::montoDescuentoWaitry($orden);
+        if (isset($orden['totalDiscount']) && is_numeric($orden['totalDiscount'])) {
+            return round((float) $orden['totalDiscount'], 2);
+        }
 
-        return round(max(0.0, $bruto - $descuento), 2);
+        if (isset($orden['total_neto_waitry']) && is_numeric($orden['total_neto_waitry'])) {
+            $neto = round((float) $orden['total_neto_waitry'], 2);
+            $bruto = self::montoBrutoWaitry($orden);
+
+            return self::corregirNetoLegacySnapshot($neto, $bruto, $orden);
+        }
+
+        $bruto = self::montoBrutoWaitry($orden);
+        $descuentoCart = self::descuentoDesdeCart($orden);
+        if ($descuentoCart !== null) {
+            return round(max(0.0, $bruto - $descuentoCart), 2);
+        }
+
+        return $bruto;
     }
 
     /**
@@ -434,6 +456,29 @@ final class WaitryOrdenEstadoSupport
         }
 
         return false;
+    }
+
+    /**
+     * Snapshots congelados antes del fix guardaban {@code totalDiscount} API en {@code total_discount_waitry}
+     * y calculaban {@code total_neto_waitry = bruto − totalDiscount} (neto erróneo $0 cuando no hay descuento).
+     *
+     * @param  array<string, mixed>  $orden
+     */
+    private static function corregirNetoLegacySnapshot(float $neto, float $bruto, array $orden): float
+    {
+        if ($neto > self::TOLERANCIA_NETO || $bruto <= self::TOLERANCIA_NETO) {
+            return $neto;
+        }
+
+        if (! isset($orden['total_discount_waitry']) || ! is_numeric($orden['total_discount_waitry'])) {
+            return $neto;
+        }
+
+        if (abs((float) $orden['total_discount_waitry'] - $bruto) <= 0.01) {
+            return round($bruto, 2);
+        }
+
+        return $neto;
     }
 
     /**

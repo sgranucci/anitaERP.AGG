@@ -12,6 +12,9 @@ Art&iacute;culos
 <script src="{{asset("assets/pages/scripts/configuracion/modeloetiqueta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/configuracion/configurar_modeloetiqueta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/articulo/consulta-precios.js")}}" type="text/javascript"></script>
+@if (can('imprimir-articulos-qr', false))
+<script src="{{ asset('assets/pages/scripts/stock/articulo/etiqueta-npu.js') }}" type="text/javascript"></script>
+@endif
 @if (\App\Support\Stock\MovimientosArticuloDepositoSupport::puedeConsultar())
 <script src="{{ asset('assets/pages/scripts/stock/recuento/movimientos_articulo.js') }}" type="text/javascript"></script>
 @endif
@@ -131,9 +134,20 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
                                 	</a>
 								@endif
                        			@if (can('imprimir-articulos-qr', false))
+          							@if((string)($articulo->numeroparte ?? '0') === '1')
+                                	<button type="button"
+                                	    class="btn-accion-tabla btn-imprimir-etiqueta-npu tooltipsC"
+                                	    title="Imprimir etiqueta NPU"
+                                	    data-articulo-id="{{ $articulo->id }}"
+                                	    data-articulo-sku="{{ $articulo->codigoarticulo ?? $articulo->sku ?? '' }}"
+                                	    data-articulo-descripcion="{{ $articulo->descripcion ?? '' }}">
+                                        <i class="fa fa-qrcode"></i>
+                                	</button>
+          							@else
           							<a href="{{route('listar_etiqueta_articulo', ['id' => $articulo->id])}}" class="btn-accion-tabla tooltipsC" title="Imprimir QR">
                                    		<i class="fa fa-qrcode"></i>
 									</a>
+          							@endif
 								@endif
                        			@if (can('listar-precios', false) || can('listar-articulos', false))
                                 	<button type="button"
@@ -175,6 +189,9 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
 </div>
 {{ $articulos->appends($filtrosQuery ?? [])->links() }}
 @include('includes.stock.modalconsultaprecioarticulo')
+@if (can('imprimir-articulos-qr', false))
+@include('includes.stock.modaletiquetanpuarticulo')
+@endif
 @if (\App\Support\Stock\MovimientosArticuloDepositoSupport::puedeConsultar())
 <input type="hidden" id="recuento-movimientos-articulo-url" value="{{ route('recuento_movimientos_articulo') }}">
 @endif

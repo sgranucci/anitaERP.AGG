@@ -8,10 +8,13 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Presupuesto\PresupuestoRepositoryInterface;
 use App\Services\Presupuesto\CapexReporteService;
+use App\Support\Reportes\ReportePreferenciasUsuario;
 use Illuminate\Http\Request;
 
 class CapexReporteController extends Controller
 {
+    private const PREFERENCIAS_CLAVE = 'capex_reporte';
+
     public function __construct(
         private readonly CapexReporteService $capexReporteService,
         private readonly EmpresaRepositoryInterface $empresaRepository,
@@ -28,11 +31,14 @@ class CapexReporteController extends Controller
         $presupuestoQuery = $this->presupuestoRepository->all();
         $centrocostoQuery = $this->centrocostoRepository->all();
 
-        $filtros = $this->filtrosDesdeRequest($request);
+        $filtros = $this->filtrosDesdeRequest($request, $empresaQuery);
         $consultado = $request->boolean('consultar');
         $resultado = null;
 
         if ($consultado) {
+            ReportePreferenciasUsuario::persistir(self::PREFERENCIAS_CLAVE, [
+                'empresa_id' => $filtros['empresa_id'],
+            ]);
             $resultado = $this->capexReporteService->generar($filtros);
         }
 
@@ -66,7 +72,7 @@ class CapexReporteController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $filtros = $this->filtrosDesdeRequest($request);
+        $filtros = $this->filtrosDesdeRequest($request, $this->empresaRepository->allFiltrado());
         $resultado = $this->capexReporteService->generar($filtros);
         $filas = $resultado['filas'] ?? [];
         $titulo = 'Reporte CAPEX';
@@ -103,12 +109,25 @@ class CapexReporteController extends Controller
     }
 
     /**
+     * @param  \Illuminate\Support\Collection<int, mixed>|null  $empresaQuery
      * @return array{empresa_id:?int, presupuesto_id:?int, centrocosto_id:?int, capex_id:?int}
      */
-    private function filtrosDesdeRequest(Request $request): array
+    private function filtrosDesdeRequest(Request $request, $empresaQuery = null): array
     {
+        $empresaId = $this->enteroOpcional($request->input('empresa_id'));
+
+        if ($empresaId === null && $empresaQuery !== null) {
+            $permitidos = $empresaQuery->pluck('id')->map(fn ($id) => (int) $id)->all();
+            $cached = ReportePreferenciasUsuario::leerEmpresaId(self::PREFERENCIAS_CLAVE);
+            if ($cached !== null && in_array($cached, $permitidos, true)) {
+                $empresaId = $cached;
+            } elseif ($empresaQuery->count() === 1) {
+                $empresaId = (int) $empresaQuery->first()->id;
+            }
+        }
+
         return [
-            'empresa_id' => $this->enteroOpcional($request->input('empresa_id')),
+            'empresa_id' => $empresaId,
             'presupuesto_id' => $this->enteroOpcional($request->input('presupuesto_id')),
             'centrocosto_id' => $this->enteroOpcional($request->input('centrocosto_id')),
             'capex_id' => $this->enteroOpcional($request->input('capex_id')),

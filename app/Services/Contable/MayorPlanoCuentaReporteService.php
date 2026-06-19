@@ -33,9 +33,10 @@ class MayorPlanoCuentaReporteService
     public function generarDesdeFiltros(array $filtros): array
     {
         [$fechaDesde, $fechaHasta] = $this->resolverRangoYmd($filtros);
+        $empresaIds = array_values(array_filter(array_map('intval', $filtros['empresa_ids'] ?? []), fn (int $id) => $id > 0));
+        $consolidar = (bool) ($filtros['consolidar_empresas'] ?? true);
 
-        return $this->procesador->generar(
-            $filtros['empresa_ids'] ?? [],
+        $parametrosComunes = [
             $fechaDesde,
             $fechaHasta,
             (int) ($filtros['cuenta_desde'] ?? 0),
@@ -45,7 +46,80 @@ class MayorPlanoCuentaReporteService
             (bool) ($filtros['incluye_subdiario'] ?? true),
             (string) ($filtros['modo_inclusion_asientos'] ?? 'sin_cierre_ni_inflacion'),
             $this->monedaConverter,
-        );
+        ];
+
+        if ($consolidar || count($empresaIds) <= 1) {
+            $resultado = $this->procesador->generar($empresaIds, ...$parametrosComunes);
+            $resultado['parametros']['consolidar_empresas'] = $consolidar || count($empresaIds) <= 1;
+
+            return $resultado;
+        }
+
+        $bloques = [];
+        foreach ($empresaIds as $empresaId) {
+            $bloques[] = $this->procesador->generar([(int) $empresaId], ...$parametrosComunes);
+        }
+
+        return $this->fusionarResultadosDesconsolidados($bloques, $empresaIds);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $bloques
+     * @param  list<int>  $empresaIds
+     * @return array<string, mixed>
+     */
+    private function fusionarResultadosDesconsolidados(array $bloques, array $empresaIds): array
+    {
+        $secciones = [];
+        $totalDebe = 0.0;
+        $totalHaber = 0.0;
+        $totalLineas = 0;
+        $erroresBridge = [];
+        $stats = [
+            'ctamov_filas' => 0,
+            'subdiario_filas' => 0,
+            'pago_filas' => 0,
+            'pago_leyendas_indexadas' => 0,
+        ];
+
+        foreach ($bloques as $idx => $bloque) {
+            $empresaId = (int) ($empresaIds[$idx] ?? 0);
+            foreach ($bloque['secciones'] ?? [] as $seccion) {
+                $seccion['empresa_id'] = $empresaId;
+                $secciones[] = $seccion;
+            }
+
+            $totalDebe += (float) ($bloque['totales']['debe'] ?? 0);
+            $totalHaber += (float) ($bloque['totales']['haber'] ?? 0);
+            $totalLineas += (int) ($bloque['totales']['lineas'] ?? 0);
+
+            foreach ($bloque['errores_bridge'] ?? [] as $err) {
+                $erroresBridge[] = $err;
+            }
+
+            foreach ($bloque['stats'] ?? [] as $clave => $valor) {
+                if (is_numeric($valor)) {
+                    $stats[$clave] = (int) ($stats[$clave] ?? 0) + (int) $valor;
+                }
+            }
+        }
+
+        $parametrosBase = $bloques[0]['parametros'] ?? [];
+        $parametrosBase['empresa_ids'] = $empresaIds;
+        $parametrosBase['consolidar_empresas'] = false;
+
+        return [
+            'parametros' => $parametrosBase,
+            'secciones' => $secciones,
+            'totales' => [
+                'debe' => round($totalDebe, 2),
+                'haber' => round($totalHaber, 2),
+                'lineas' => $totalLineas,
+                'cuentas' => count($secciones),
+            ],
+            'errores_bridge' => array_values(array_unique($erroresBridge)),
+            'stats' => $stats,
+        ];
     }
 
     /**
@@ -82,12 +156,22 @@ class MayorPlanoCuentaReporteService
     {
         $filas = [];
         $empresaIds = $resultado['parametros']['empresa_ids'] ?? [];
+        $consolidar = (bool) ($filtros['consolidar_empresas'] ?? $resultado['parametros']['consolidar_empresas'] ?? true);
+        $empresaHeaderActual = 0;
 
         foreach ($resultado['secciones'] ?? [] as $seccion) {
+            $empresaSeccion = (int) ($seccion['empresa_id'] ?? 0);
+            if (! $consolidar && $empresaSeccion > 0 && $empresaSeccion !== $empresaHeaderActual) {
+                $empresaHeaderActual = $empresaSeccion;
+                $filas[] = [
+                    'tipo_fila' => 'header_empresa',
+                    'empresa_id' => $empresaSeccion,
+                    'nombreempresa' => $this->empresaRepository->find($empresaSeccion)?->nombre ?? '',
+                ];
+            }
+
             $cuenta = (int) ($seccion['cuenta'] ?? 0);
-            $nombreEmpresa = count($empresaIds) === 1
-                ? ($this->empresaRepository->find((int) $empresaIds[0])?->nombre ?? '')
-                : 'Consolidado';
+            $nombreEmpresa = $this->resolverNombreEmpresaFila($empresaIds, $empresaSeccion, $consolidar);
 
             $filas[] = [
                 'tipo_fila' => 'header_cuenta',
@@ -193,6 +277,22 @@ class MayorPlanoCuentaReporteService
             'sin_inflacion' => 'No incluye asiento de aj. x inflación',
             default => 'No incluye asientos de cierre ni de aj. x inflación',
         };
+    }
+
+    /**
+     * @param  list<int>  $empresaIds
+     */
+    private function resolverNombreEmpresaFila(array $empresaIds, int $empresaSeccion, bool $consolidar): string
+    {
+        if (count($empresaIds) === 1) {
+            return $this->empresaRepository->find((int) $empresaIds[0])?->nombre ?? '';
+        }
+
+        if (! $consolidar && $empresaSeccion > 0) {
+            return $this->empresaRepository->find($empresaSeccion)?->nombre ?? '';
+        }
+
+        return 'Consolidado';
     }
 
     /**

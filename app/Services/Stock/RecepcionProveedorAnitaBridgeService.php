@@ -11,6 +11,7 @@ use App\Support\Stock\RecepcionProveedorAnitaEscrituraSupport;
 use App\Support\Stock\RecepcionProveedorAnitaOrdenLineaSupport;
 use App\Support\Stock\RecepcionProveedorAnitaReferenciaSupport;
 use App\Support\Stock\RecepcionProveedorAnitaWhereSupport;
+use App\Support\Stock\StkmaePrecioCompraAnitaBridgeSupport;
 use App\Support\Stock\RecpunicaAnitaBridgeSupport;
 use App\Support\Stock\StkParteUnicaAnitaBridgeSupport;
 use Auth;
@@ -73,6 +74,8 @@ class RecepcionProveedorAnitaBridgeService
             $this->eliminarStkmov($clave);
             $this->grabarRecepmov($recepcion, $codigoProveedor, $clave, $fechaAnita, $empresaCodigo, $ordenesAnita);
             $this->grabarAplicped($recepcion, $codigoProveedor, $clave, $ordenesAnita);
+            StkmaePrecioCompraAnitaBridgeSupport::actualizarDesdeRecepcion($recepcion);
+            $recepcion->forceFill(['stkmae_precio_anita_sync_at' => now()])->save();
             $this->grabarStkmov($recepcion, $codigoProveedor, $clave, $fechaAnita, $empresaCodigo, $ordenesAnita, $usuario);
             $this->actualizarPendmovp($recepcion, 1);
             $estado['pendmov_aplicado'] = true;

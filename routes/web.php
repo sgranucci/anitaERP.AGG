@@ -839,6 +839,11 @@ Route::get('contable/listar-mayor-concepto/{formato}', 'Contable\MayorConceptoCo
 Route::get('contable/mayor-plano-cuenta', 'Contable\MayorPlanoCuentaController@index')->name('mayor_plano_cuenta');
 Route::get('contable/listar-mayor-plano-cuenta/{formato}', 'Contable\MayorPlanoCuentaController@exportar')->name('listar_mayor_plano_cuenta');
 
+Route::get('contable/conciliacion-bancaria', 'Contable\ConciliacionBancariaController@index')->name('conciliacion_bancaria');
+Route::get('contable/conciliacion-bancaria/api/enganche-cuentacaja', 'Contable\ConciliacionBancariaController@apiEngancheCuentacaja')->name('conciliacion_bancaria_api_enganche');
+Route::get('contable/conciliacion-bancaria/api/cuentacaja-por-codigo/{codigo}', 'Contable\ConciliacionBancariaController@apiCuentacajaPorCodigo')->name('conciliacion_bancaria_api_cuentacaja_por_codigo');
+Route::get('contable/exportar-conciliacion-bancaria/{formato}', 'Contable\ConciliacionBancariaController@exportar')->name('exportar_conciliacion_bancaria');
+
 Route::get('contable/cierre-periodo', 'Contable\PeriodoCierreContableController@index')->name('cierre_periodo_contable');
 Route::post('contable/cierre-periodo/cerrar', 'Contable\PeriodoCierreContableController@cerrar')->name('ejecutar_cierre_periodo_contable');
 Route::post('contable/cierre-periodo/borrar-ultimo', 'Contable\PeriodoCierreContableController@borrarUltimo')->name('borrar_ultimo_cierre_periodo_contable');
@@ -891,6 +896,7 @@ Route::delete('stock/articulo/parte-unica/{id}', 'Stock\ArticuloParteUnicaContro
 Route::put('stock/articulo/{id}', 'Stock\ArticuloController@actualizar')->name('actualizar_articulo')->middleware('modo.consulta');
 Route::delete('stock/articulo/{id}', 'Stock\ArticuloController@eliminar')->name('eliminar_articulo');
 Route::get('stock/download_articulo/{sku}', 'Stock\ArticuloController@download')->name('download_articulo');
+Route::get('stock/articulo/{id}/consultar-npu-etiqueta', 'Stock\ArticuloController@consultarNpuEtiqueta')->name('consultar_npu_etiqueta_articulo');
 Route::get('stock/listar_etiqueta_articulo/{id}', 'Stock\ArticuloController@download')->name('listar_etiqueta_articulo');
 
 Route::get('stock/leer_historia_articulo/{articulo_id}', 'Stock\ArticuloController@leerHistoriaArticulo')->name('leer_historia_articulo');
@@ -2398,6 +2404,8 @@ Route::get('compras/ordencompra/{id}/imprimir-pdf', 'Compras\OrdencompraControll
 Route::get('compras/ordencompra/{id}/archivo/{archivo}', 'Compras\OrdencompraController@descargarArchivo')->name('ordencompra_archivo');
 Route::get('compras/ordencompra/{id}/historia-legajo', 'Compras\OrdencompraController@leerHistoriaLegajo')->name('ordencompra_historia_legajo');
 Route::get('compras/ordencompra/{id}/historia-estados', 'Compras\OrdencompraController@leerHistoriaEstados')->name('ordencompra_historia_estados');
+Route::get('compras/ordencompra/{id}/recepciones', 'Compras\OrdencompraController@leerRecepciones')->name('ordencompra_recepciones');
+Route::post('compras/ordencompra/{id}/aplicar-precios-recepcion/{recepcion_id}', 'Compras\OrdencompraController@aplicarPreciosRecepcion')->name('ordencompra_aplicar_precios_recepcion');
 Route::get('compras/ordencompra/{id}/movimiento-aprobacion', 'Compras\OrdencompraController@leerMovimientoAprobacion')->name('ordencompra_movimiento_aprobacion');
 Route::post('compras/ordencompra/{id}/cambiar-estado', 'Compras\OrdencompraController@cambiarEstado')->name('ordencompra_cambiar_estado');
 Route::post('compras/ordencompra/{id}/reactivar', 'Compras\OrdencompraController@reactivarSuspendida')->name('ordencompra_reactivar');
@@ -2420,6 +2428,10 @@ Route::get('compras/manual/descargar-word', 'Compras\ManualComprasController@des
 Route::get('ventas/gastronomia/manual', 'Ventas\ManualGastronomiaController@index')->name('manual_gastronomia');
 Route::get('ventas/gastronomia/manual/descargar-pdf', 'Ventas\ManualGastronomiaController@descargarPdf')->name('manual_gastronomia_pdf');
 Route::get('ventas/gastronomia/manual/descargar-word', 'Ventas\ManualGastronomiaController@descargarWord')->name('manual_gastronomia_word');
+
+Route::get('ventas/gastronomia/canjes/manual', 'Ventas\ManualCanjesMarketingController@index')->name('manual_canjes_marketing');
+Route::get('ventas/gastronomia/canjes/manual/descargar-pdf', 'Ventas\ManualCanjesMarketingController@descargarPdf')->name('manual_canjes_marketing_pdf');
+Route::get('ventas/gastronomia/canjes/manual/descargar-word', 'Ventas\ManualCanjesMarketingController@descargarWord')->name('manual_canjes_marketing_word');
 
 Route::get('ventas/manual', 'Ventas\ManualVentasController@index')->name('manual_ventas');
 Route::get('ventas/manual/descargar-pdf', 'Ventas\ManualVentasController@descargarPdf')->name('manual_ventas_pdf');
@@ -2625,6 +2637,7 @@ Route::post('ticket/ticket', 'Ticket\TicketController@guardar')->name('guarda_ti
 Route::get('ticket/ticket/{id}/editar', 'Ticket\TicketController@editar')->name('edita_ticket');
 Route::put('ticket/ticket/{id}', 'Ticket\TicketController@actualizar')->name('actualiza_ticket');
 Route::delete('ticket/ticket/{id}', 'Ticket\TicketController@eliminar')->name('elimina_ticket');
+Route::post('ticket/ticket/{ticketId}/tarea/{ticketTareaId}/comentario', 'Ticket\TicketController@guardarComentarioTarea')->name('guarda_comentario_tarea_ticket');
 Route::get('ticket/listaticket/{formato?}/{busqueda?}', 'Ticket\TicketController@listar')->name('lista_ticket');
 
 /*

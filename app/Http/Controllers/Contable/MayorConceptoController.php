@@ -9,12 +9,15 @@ use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Services\Contable\MayorConceptoReporteService;
 use App\Support\Contable\MayorConcepto\MayorConceptoRuntimeSupport;
 use App\Support\Contable\MayorConceptoListadoFiltros;
+use App\Support\Reportes\ReportePreferenciasUsuario;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Excel;
 
 class MayorConceptoController extends Controller
 {
     private const SESSION_CACHE_KEY = 'mayor_concepto_resultado_cache';
+
+    private const PREFERENCIAS_CLAVE = 'mayor_concepto';
 
     public function __construct(
         private readonly MayorConceptoReporteService $reporteService,
@@ -31,17 +34,16 @@ class MayorConceptoController extends Controller
         $empresaQuery = $this->empresaRepository->allFiltrado();
         $monedaQuery = $this->monedaRepository->all();
 
-        $empresaId = (int) $request->input('empresa_id', 0);
-        if ($empresaId <= 0 && $empresaQuery->count() === 1) {
-            $empresaId = (int) $empresaQuery->first()->id;
-        }
-
         $filtros = MayorConceptoListadoFiltros::resolverDesdeRequest($request);
-        if ($empresaId > 0 && (int) ($filtros['empresa_id'] ?? 0) <= 0) {
-            $filtros['empresa_id'] = $empresaId;
-        }
+        $filtros = $this->aplicarPreferenciasEmpresa($request, $filtros, $empresaQuery);
 
         $this->assertAccesoEmpresa((int) ($filtros['empresa_id'] ?? 0));
+
+        if ($request->boolean('consultar')) {
+            ReportePreferenciasUsuario::persistir(self::PREFERENCIAS_CLAVE, [
+                'empresa_id' => (int) ($filtros['empresa_id'] ?? 0),
+            ]);
+        }
 
         $consultado = false;
         $filas = null;
@@ -274,6 +276,29 @@ class MayorConceptoController extends Controller
         }
 
         return implode(' · ', $partes);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @param  \Illuminate\Support\Collection<int, mixed>  $empresaQuery
+     * @return array<string, mixed>
+     */
+    private function aplicarPreferenciasEmpresa(Request $request, array $filtros, $empresaQuery): array
+    {
+        $permitidos = $empresaQuery->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+        if ((int) ($filtros['empresa_id'] ?? 0) <= 0) {
+            $cached = ReportePreferenciasUsuario::leerEmpresaId(self::PREFERENCIAS_CLAVE);
+            if ($cached !== null && in_array($cached, $permitidos, true)) {
+                $filtros['empresa_id'] = $cached;
+            }
+        }
+
+        if ((int) ($filtros['empresa_id'] ?? 0) <= 0 && $empresaQuery->count() === 1) {
+            $filtros['empresa_id'] = (int) $empresaQuery->first()->id;
+        }
+
+        return $filtros;
     }
 
     private function assertAccesoEmpresa(int $empresaId): void

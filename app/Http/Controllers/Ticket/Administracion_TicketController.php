@@ -16,7 +16,8 @@ use App\Services\Ticket\TicketService;
 use App\Models\Ticket\Ticket_Estado;
 use App\Models\Ticket\Ticket_Tarea_Novedad;
 use App\Queries\Ticket\TicketQueryInterface;
-use App\Exports\Ticket\TicketExport;
+use App\Exports\Ticket\AdministracionTicketListadoExport;
+use App\Support\Ticket\AdministracionTicketListadoFiltros;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
@@ -69,75 +70,65 @@ class Administracion_TicketController extends Controller
     {
         can('listar-ticket');
 
-        if (session('filtrosTickets') == null)
-        {
-            $filtros = [];
-            if ($request->url() != $request->fullUrl())
-            {
-                $url = urldecode($request->fullUrl());
-                $components = parse_url($url);
-                parse_str($components['query'], $filtros);
+        $filtros = $this->resolverFiltrosListado($request);
 
-                if ($filtros != '' && isset($filtros['filter_column']))
-                    session(['filtrosTickets' => $filtros]);
-                else
-                    $filtros = [];
-            }
-        }
-		else
-		{
-			$filtros = session('filtrosTickets');
-		}
-        $busqueda = $request->busqueda;
+        $ticket = $this->ticketQuery->leeTicketAdministracion($filtros, true);
 
-        $ticket = $this->ticketQuery->leeTicketAdministracion($busqueda, $filtros, true);
-        $estado_enum = Ticket_Estado::$enumEstado;
-        $datas = ['ticket' => $ticket, 'busqueda' => $busqueda, 'estado_enum' => $estado_enum];
-
-        return view('ticket.administracion_ticket.index', $datas);
+        return view('ticket.administracion_ticket.index', [
+            'ticket' => $ticket,
+            'filtros' => $filtros,
+            'filtrosQuery' => AdministracionTicketListadoFiltros::paraQueryString($filtros),
+            'camposFiltro' => AdministracionTicketListadoFiltros::CAMPOS,
+            'ver_todos_tickets' => ! empty($filtros['ver_todos_tickets']),
+        ]);
     }
 
     public function listar(Request $request, $formato = null, $busqueda = null)
     {
-        can('listar-ticket'); 
+        can('listar-ticket');
 
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $filtros = [];
-        switch($formato)
-        {
-        case 'PDF':
-            $ticket = $this->ticketQuery->leeTicketAdministracion($busqueda, $filtros, false);
+        $filtros = $this->resolverFiltrosListado($request, $busqueda);
 
-            $view =  \View::make('ticket.administracion.listado', compact('ticket'))
-                        ->render();
+        switch ($formato) {
+        case 'PDF':
+            $ticket = $this->ticketQuery->leeTicketAdministracion($filtros, false);
+
+            $view = \View::make('ticket.administracion_ticket.listado', compact('ticket', 'filtros'))
+                ->render();
             $path = storage_path('pdf/listados');
+            if (! is_dir($path)) {
+                mkdir($path, 0775, true);
+            }
             $nombre_pdf = 'listado_administracion_ticket';
 
             $pdf = \App::make('dompdf.wrapper');
-            $pdf->setPaper('legal','landscape');
-            $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
+            $pdf->setPaper('legal', 'landscape');
+            $pdf->loadHTML($view, 'UTF-8')->save($path.'/'.$nombre_pdf.'.pdf');
 
             return response()->download($path.'/'.$nombre_pdf.'.pdf');
-            break;
 
         case 'EXCEL':
-            return (new administracionTicketExport($this->ticketQuery))
-                        ->parametros($busqueda)
-                        ->download('administracion_ticket.xlsx');
-            break;
+            return (new AdministracionTicketListadoExport($this->ticketQuery))
+                ->parametros($filtros)
+                ->download('administracion_ticket.xlsx');
 
         case 'CSV':
-            return (new administracionTicketExport($this->ticketQuery))
-                        ->parametros($busqueda)
-                        ->download('administracion_ticket.csv', \Maatwebsite\Excel\Excel::CSV);
-            break;            
-        }   
+            return (new AdministracionTicketListadoExport($this->ticketQuery))
+                ->parametros($filtros)
+                ->download('administracion_ticket.csv', \Maatwebsite\Excel\Excel::CSV);
+        }
 
-        $datas = ['ticket' => $caja_movimiento, 'busqueda' => $busqueda];
+        return redirect()->route('consulta_administracion_ticket', AdministracionTicketListadoFiltros::paraQueryString($filtros));
+    }
 
-		return view('ticket.administracion_ticket.indexp', $datas);       
+    private function resolverFiltrosListado(Request $request, ?string $busquedaRuta = null): array
+    {
+        $filtros = AdministracionTicketListadoFiltros::resolverDesdeRequest($request, $busquedaRuta);
+
+        return AdministracionTicketListadoFiltros::aplicarAlcanceUsuario($filtros, (int) auth()->id());
     }
 
     /**
@@ -170,7 +161,7 @@ class Administracion_TicketController extends Controller
      */
     public function guardar(ValidacionTicket $request)
     {
-        $this->ticketService->guardaTicket($request);
+        $this->ticketService->guardaTicket($request, 'administracion');
 
         return redirect('ticket/administracion_ticket')->with('mensaje', 'Ticket creado con éxito');
 	}
@@ -210,7 +201,7 @@ class Administracion_TicketController extends Controller
     {
         can('actualizar-ticket');
 
-        $this->ticketService->actualizaTicket($request, $id);
+        $this->ticketService->actualizaTicket($request, $id, 'administracion');
 
         return redirect('ticket/administracion_ticket')->with('mensaje', 'Ticket actualizado con éxito');
     }
@@ -268,9 +259,7 @@ class Administracion_TicketController extends Controller
     }
 
     public function limpiafiltro(Request $request) {
-		session()->forget('filtrosTickets');
-
-        return json_encode(["ok"]);
+        return redirect()->route('consulta_administracion_ticket');
 	}
 
 }

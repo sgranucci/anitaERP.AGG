@@ -44,6 +44,7 @@ class RecepcionProveedorConversionSupport
 
     /**
      * Importe neto de línea sin IVA (recepción no lleva impuestos en inscriptos).
+     * No aplica descuento de pie de OC: la contabilidad usa Σ(cant × precio) de la recepción.
      */
     public static function importeLinea(float $cantidad, float $precio, float $descuento = 0, float $descuentoCabeceraOc = 0): float
     {

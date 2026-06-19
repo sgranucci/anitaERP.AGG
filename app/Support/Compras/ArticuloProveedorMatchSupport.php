@@ -4,6 +4,7 @@ namespace App\Support\Compras;
 
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Articulo_Proveedor;
+use App\Support\Stock\ArticuloSeleccionOperativaSupport;
 use Illuminate\Support\Facades\DB;
 
 class ArticuloProveedorMatchSupport
@@ -118,8 +119,9 @@ class ArticuloProveedorMatchSupport
      */
     private static function matchPorArticuloCodigobarra(string $barra): ?array
     {
-        $articulo = Articulo::query()
-            ->where('codigobarra', $barra)
+        $articulo = ArticuloSeleccionOperativaSupport::aplicarSoloActivosTablaArticulo(
+            Articulo::query()->where('codigobarra', $barra)
+        )
             ->orderBy('id')
             ->first();
 
@@ -210,6 +212,9 @@ class ArticuloProveedorMatchSupport
         }
 
         $articulo = Articulo::query()->find($mejor['articulo_id']);
+        if (! ArticuloSeleccionOperativaSupport::esSeleccionable($articulo)) {
+            return null;
+        }
 
         return [
             'articulo_id' => $mejor['articulo_id'],
@@ -230,15 +235,18 @@ class ArticuloProveedorMatchSupport
 
     /**
      * @param  array<string, mixed>|null  $vigente
-     * @return array<string, mixed>
+     * @return array<string, mixed>|null
      */
     private static function armarResultado(
         string $metodo,
         int $articuloId,
         Articulo_Proveedor $fila,
         ?array $vigente = null
-    ): array {
+    ): ?array {
         $articulo = $fila->articulos;
+        if (! ArticuloSeleccionOperativaSupport::esSeleccionable($articulo)) {
+            return null;
+        }
 
         $resultado = [
             'articulo_id' => $articuloId,

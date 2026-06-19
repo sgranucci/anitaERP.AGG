@@ -118,8 +118,12 @@
         if (/^https?:\/\//i.test(path)) {
             return path;
         }
-        const raw = typeof carpetaBase !== 'undefined' && carpetaBase != null ? String(carpetaBase) : '';
-        const base = raw.replace(/\/$/, '');
+        let base = '';
+        if (typeof resolverCarpetaBaseApp === 'function') {
+            base = resolverCarpetaBaseApp();
+        } else if (typeof carpetaBase !== 'undefined' && carpetaBase != null) {
+            base = String(carpetaBase).replace(/\/$/, '');
+        }
         const p = path.startsWith('/') ? path : '/' + path;
         return base + p;
     }
@@ -234,6 +238,23 @@
     G.exigirJornadaTurnoParaOperar = exigirJornadaTurnoParaOperar;
     G.mensajeBloqueoJornadaTurno = mensajeBloqueoJornadaTurno;
 
+    function mensajeErrorApiSesion(res, data) {
+        if (res.status === 401 || res.status === 419) {
+            return 'Sesión expirada o token inválido. Cierre sesión, vuelva a entrar y recargue la página (Ctrl+F5).';
+        }
+        if (res.status === 403) {
+            return (
+                (data && (data.message || data.error)) ||
+                'Sin permiso para esta operación. Verifique el rol activo (Cambiar rol en el menú de usuario).'
+            );
+        }
+        return (
+            (data && (data.error || data.mensaje || data.message)) ||
+            (data && data.errors ? JSON.stringify(data.errors) : '') ||
+            'HTTP ' + res.status
+        );
+    }
+
     async function api(path, opts) {
         if (apiRequiereJornadaTurno(path, opts)) {
             const ok = await asegurarJornadaTurnoAntesDeOperar();
@@ -245,16 +266,29 @@
         }
         const url = appPath(path);
         const sep = url.includes('?') ? '&' : '?';
-        const res = await fetch(url + sep + '_=' + Date.now(), opts);
-        const data = await res.json().catch(() => ({}));
+        const fetchOpts = Object.assign({ credentials: 'same-origin' }, opts || {});
+        const res = await fetch(url + sep + '_=' + Date.now(), fetchOpts);
+        const contentType = (res.headers.get('content-type') || '').toLowerCase();
+        let data = {};
+        if (contentType.includes('application/json')) {
+            data = await res.json().catch(() => ({}));
+        } else {
+            const raw = await res.text().catch(() => '');
+            if (/login|seguridad|csrf/i.test(raw) || (res.redirected && !contentType.includes('json'))) {
+                const err = new Error(
+                    'Sesión expirada o respuesta inválida del servidor. Vuelva a iniciar sesión y recargue la página.',
+                );
+                err.httpStatus = res.status;
+                throw err;
+            }
+            try {
+                data = raw ? JSON.parse(raw) : {};
+            } catch (e) {
+                data = {};
+            }
+        }
         if (!res.ok) {
-            const detail =
-                data.error ||
-                data.mensaje ||
-                data.message ||
-                (data.errors ? JSON.stringify(data.errors) : '') ||
-                '';
-            const err = new Error(detail || 'HTTP ' + res.status);
+            const err = new Error(mensajeErrorApiSesion(res, data));
             err.payload = data;
             err.httpStatus = res.status;
             throw err;
@@ -7236,7 +7270,9 @@
         try {
             await cargarConfigPv();
         } catch (e) {
-            toast(e.message, 'warning');
+            const msg = e.message || String(e);
+            const esSesion = e.httpStatus === 401 || e.httpStatus === 419 || e.httpStatus === 403;
+            toast(msg, esSesion ? 'error' : 'warning', esSesion ? { persistente: true } : undefined);
         }
 
         if (typeof window.gastroRefrescarEstadoTurno === 'function') {

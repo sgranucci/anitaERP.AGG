@@ -13,7 +13,7 @@ fi
 DEST="/etc/apache2/sites-available/anitaERP.conf"
 
 sudo cp "${SCRIPT_DIR}/anitaERP-prod-210.conf" "${DEST}"
-sudo a2enmod headers 2>/dev/null || true
+sudo a2enmod rewrite headers 2>/dev/null || true
 sudo a2dissite 000-default 2>/dev/null || true
 sudo a2ensite anitaERP
 sudo apache2ctl configtest

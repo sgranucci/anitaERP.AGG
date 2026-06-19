@@ -10,13 +10,17 @@ use App\Services\Contable\MayorPlanoCuentaReporteService;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaRuntimeSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
 use App\Support\Contable\MayorPlanoCuentaListadoFiltros;
+use App\Support\Reportes\ReportePreferenciasUsuario;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Jurosh\PDFMerge\PDFMerger;
 use Maatwebsite\Excel\Excel;
 
 class MayorPlanoCuentaController extends Controller
 {
     private const SESSION_CACHE_KEY = 'mayor_plano_cuenta_resultado_cache';
+
+    private const PREFERENCIAS_CLAVE = 'mayor_plano_cuenta';
 
     public function __construct(
         private readonly MayorPlanoCuentaReporteService $reporteService,
@@ -33,14 +37,16 @@ class MayorPlanoCuentaController extends Controller
         $empresaQuery = $this->empresaRepository->allFiltrado();
         $monedaQuery = $this->monedaRepository->all();
         $filtros = MayorPlanoCuentaListadoFiltros::resolverDesdeRequest($request);
-
-        if (($filtros['empresa_ids'] ?? []) === [] && $empresaQuery->count() >= 1) {
-            $filtros['empresa_ids'] = $empresaQuery->count() === 1
-                ? [(int) $empresaQuery->first()->id]
-                : $empresaQuery->pluck('id')->map(fn ($id) => (int) $id)->all();
-        }
+        $filtros = $this->aplicarPreferenciasYDefaultsEmpresas($request, $filtros, $empresaQuery);
 
         $this->assertAccesoEmpresas($filtros['empresa_ids'] ?? []);
+
+        if ($request->boolean('consultar')) {
+            ReportePreferenciasUsuario::persistir(self::PREFERENCIAS_CLAVE, [
+                'empresa_ids' => $filtros['empresa_ids'] ?? [],
+                'consolidar_empresas' => (bool) ($filtros['consolidar_empresas'] ?? true),
+            ]);
+        }
 
         $consultado = false;
         $filas = null;
@@ -102,7 +108,8 @@ class MayorPlanoCuentaController extends Controller
             'puede_ver_cuenta' => can('listar-cuentas-contables', false) || can('editar-cuentas-contables', false),
             'puede_ver_ordencompra' => can('listar-ordencompra', false) || can('editar-ordencompra', false),
             'puede_ver_proveedor' => can('listar-proveedor', false) || can('editar-proveedor', false),
-            'multiempresa' => count($filtros['empresa_ids'] ?? []) > 1,
+            'multiempresa' => count($filtros['empresa_ids'] ?? []) > 1
+                || empty($filtros['consolidar_empresas']),
         ]);
     }
 
@@ -128,6 +135,10 @@ class MayorPlanoCuentaController extends Controller
 
         switch (strtoupper($formato)) {
             case 'PDF':
+                if (count($filtros['empresa_ids'] ?? []) > 1 && empty($filtros['consolidar_empresas'])) {
+                    return $this->descargarPdfPorEmpresa($filtros);
+                }
+
                 $view = \View::make('contable.mayor_plano_cuenta.listado', compact(
                     'filas',
                     'resumen',
@@ -272,6 +283,104 @@ class MayorPlanoCuentaController extends Controller
             'codigo' => $codigoFmt,
             'nombre' => $nombre ? (string) $nombre : '',
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @param  \Illuminate\Support\Collection<int, mixed>  $empresaQuery
+     * @return array<string, mixed>
+     */
+    private function aplicarPreferenciasYDefaultsEmpresas(Request $request, array $filtros, $empresaQuery): array
+    {
+        $permitidos = $empresaQuery->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+        if (! $request->has('consolidar_empresas')) {
+            $filtros['consolidar_empresas'] = ReportePreferenciasUsuario::leerBool(
+                self::PREFERENCIAS_CLAVE,
+                'consolidar_empresas',
+                true,
+            );
+        }
+
+        if (($filtros['empresa_ids'] ?? []) === []) {
+            $cached = ReportePreferenciasUsuario::leerEmpresaIds(self::PREFERENCIAS_CLAVE);
+            if ($cached !== null && $cached !== []) {
+                $filtros['empresa_ids'] = ReportePreferenciasUsuario::filtrarEmpresaIdsPermitidas($cached, $permitidos);
+            }
+        }
+
+        if (($filtros['empresa_ids'] ?? []) === [] && $empresaQuery->count() >= 1) {
+            $filtros['empresa_ids'] = $empresaQuery->count() === 1
+                ? [(int) $empresaQuery->first()->id]
+                : $empresaQuery->pluck('id')->map(fn ($id) => (int) $id)->all();
+        }
+
+        return $filtros;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    private function descargarPdfPorEmpresa(array $filtros)
+    {
+        $dir = storage_path('pdf/listados');
+        if (! is_dir($dir)) {
+            mkdir($dir, 0775, true);
+        }
+
+        $temporales = [];
+        $titulo = 'Mayor analítico por cuenta contable';
+
+        try {
+            foreach ($filtros['empresa_ids'] ?? [] as $empresaId) {
+                $filtrosEmpresa = array_merge($filtros, [
+                    'empresa_ids' => [(int) $empresaId],
+                    'consolidar_empresas' => true,
+                ]);
+
+                $resultado = $this->reporteService->generarDesdeFiltros($filtrosEmpresa);
+                $filas = $this->reporteService->aplanarFilas($resultado, $filtrosEmpresa, true);
+                $resumen = $this->reporteService->resumenPorCuenta($resultado);
+                $totales = $this->armarTotalesDesdeResultado($resultado);
+                $subtitulo = $this->armarSubtituloExport($filtrosEmpresa);
+
+                $view = \View::make('contable.mayor_plano_cuenta.listado', [
+                    'filas' => $filas,
+                    'resumen' => $resumen,
+                    'filtros' => $filtrosEmpresa,
+                    'totales' => $totales,
+                    'titulo' => $titulo,
+                    'subtitulo' => $subtitulo,
+                ])->render();
+
+                $temp = $dir.'/mayor_plano_tmp_'.uniqid('', true).'.pdf';
+                $pdf = \App::make('dompdf.wrapper');
+                $pdf->setPaper('legal', 'landscape');
+                $pdf->loadHTML($view, 'UTF-8')->save($temp);
+                $temporales[] = $temp;
+            }
+
+            $nombrePdf = 'mayor_plano_cuenta_'.date('Ymd_His');
+            $destino = $dir.'/'.$nombrePdf.'.pdf';
+
+            if (count($temporales) === 1) {
+                rename($temporales[0], $destino);
+            } else {
+                $merger = new PDFMerger;
+                foreach ($temporales as $ruta) {
+                    $merger->addPDF($ruta, 'all', 'horizontal');
+                }
+                $merger->merge('file', $destino);
+            }
+
+            return response()->download($destino);
+        } finally {
+            foreach ($temporales as $ruta) {
+                if (is_file($ruta)) {
+                    @unlink($ruta);
+                }
+            }
+        }
     }
 
     private function descargarPdf(string $view, string $nombreBase, string $paper, string $orientation)

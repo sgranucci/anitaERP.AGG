@@ -647,6 +647,10 @@ final class WaitryInformeZConciliacionSupport
 
                         continue;
                     }
+                    // Varios medios (Posnet, QR, MP) comparten GMEP: no usar suma por cuenta en otra categoría.
+                    if (WaitryMedioPagoCuentacajaSupport::esCategoriaInformeZDesglose($ln['tipo_waitry'] ?? null)) {
+                        continue;
+                    }
                     $ccId = (int) ($ln['cuentacaja_id'] ?? 0);
                     if ($ccId > 0 && array_key_exists($ccId, $acum['cuentas'])) {
                         $ln['monto_informe_z'] = $acum['cuentas'][$ccId];

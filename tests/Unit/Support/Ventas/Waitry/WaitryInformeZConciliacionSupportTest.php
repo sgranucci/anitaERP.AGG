@@ -143,6 +143,67 @@ final class WaitryInformeZConciliacionSupportTest extends TestCase
         $this->assertSame(48.0, $fusionada[1]['lineas'][0]['monto_informe_z']);
     }
 
+    public function test_fusionar_plantilla_unificada_no_asigna_suma_cuenta_a_otra_categoria(): void
+    {
+        $cuentaGmep = 201;
+        $plantilla = [
+            [
+                'totem_id' => WaitryInformeZConciliacionSupport::TOTEM_ID_PLANTILLA_UNIFICADA,
+                'plantilla_unificada' => true,
+                'lineas' => [
+                    [
+                        'tipo_waitry' => WaitryMedioPagoCuentacajaSupport::CATEGORIA_MERCADOPAGO,
+                        'cuentacaja_id' => $cuentaGmep,
+                        'monto_sistema' => 2600.0,
+                        'monto_informe_z' => null,
+                    ],
+                    [
+                        'tipo_waitry' => WaitryMedioPagoCuentacajaSupport::CATEGORIA_POSNET_KIOSCO,
+                        'cuentacaja_id' => $cuentaGmep,
+                        'monto_sistema' => 540900.0,
+                        'monto_informe_z' => null,
+                    ],
+                    [
+                        'tipo_waitry' => WaitryMedioPagoCuentacajaSupport::CATEGORIA_QR_KIOSCO,
+                        'cuentacaja_id' => $cuentaGmep,
+                        'monto_sistema' => 214100.0,
+                        'monto_informe_z' => null,
+                    ],
+                ],
+            ],
+        ];
+
+        $informeZ = [
+            'totems' => [
+                [
+                    'totem_id' => 0,
+                    'lineas' => [
+                        [
+                            'tipo_waitry' => WaitryMedioPagoCuentacajaSupport::CATEGORIA_POSNET_KIOSCO,
+                            'cuentacaja_id' => $cuentaGmep,
+                            'monto' => 540900.0,
+                        ],
+                        [
+                            'tipo_waitry' => WaitryMedioPagoCuentacajaSupport::CATEGORIA_QR_KIOSCO,
+                            'cuentacaja_id' => $cuentaGmep,
+                            'monto' => 214100.0,
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $fusionada = WaitryInformeZConciliacionSupport::fusionarInformeZEnPlantilla($plantilla, $informeZ, 1);
+
+        $this->assertNull($fusionada[0]['lineas'][0]['monto_informe_z']);
+        $this->assertSame(540900.0, $fusionada[0]['lineas'][1]['monto_informe_z']);
+        $this->assertSame(214100.0, $fusionada[0]['lineas'][2]['monto_informe_z']);
+
+        $conciliacion = WaitryInformeZConciliacionSupport::conciliar($fusionada);
+        $this->assertSame(540900.0, $conciliacion['totems'][0]['lineas'][1]['monto_informe_z']);
+        $this->assertNotSame(755000.0, $conciliacion['totems'][0]['lineas'][0]['monto_informe_z']);
+    }
+
     public function test_expandir_bloque_plantilla_por_table_ids(): void
     {
         config(['waitry.tipo_pago_cuentacaja' => ['credit_card' => 226]]);

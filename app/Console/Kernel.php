@@ -25,6 +25,12 @@ class Kernel extends ConsoleKernel
         $schedule->command('cotizacion:leeapi')->daily()->at('06:00');
         $schedule->command('interbanking:persistir-saldos-diarios')->daily()->at('07:15');
 
+        $diasMovimientos = max(1, min(60, (int) config('interbanking.movimientos_sync_dias_ventana', 14)));
+        $schedule->command('interbanking:persistir-movimientos', ['--dias' => $diasMovimientos])
+            ->dailyAt('07:30')
+            ->runInBackground()
+            ->withoutOverlapping(120);
+
         $schedule->command('interbanking:persistir-transferencias', ['--dias' => 14])
             ->hourly()
             ->weekdays()

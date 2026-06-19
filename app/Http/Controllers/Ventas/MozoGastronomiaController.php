@@ -89,9 +89,9 @@ class MozoGastronomiaController extends Controller
      */
     public function consultaMozo(Request $request)
     {
-        if ($request->has('empresa_id')) {
+        if ($request->filled('empresa_id')) {
             can('usar-proceso-facturacion-gastronomia');
-            $empresaId = (int) ($request->get('empresa_id') ?: config('cliente.EMPRESA_DEFAULT_ID'));
+            $empresaId = (int) $request->get('empresa_id');
 
             return $this->repository->consultaMozo(
                 (string) ($request->get('consulta') ?? ''),

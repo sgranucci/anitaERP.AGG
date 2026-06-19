@@ -16,7 +16,7 @@ class Ticket extends Model implements Auditable
 {
     use \OwenIt\Auditing\Auditable;
     use SoftDeletes;
-    protected $fillable = ['fecha', 'sala_id', 'subcategoria_ticket_id', 'areadestino_id', 'sector_id', 'detalle', 
+    protected $fillable = ['fecha', 'sala_id', 'subcategoria_ticket_id', 'areadestino_id', 'sector_id', 'titulo', 'comentario',
 							'usuario_id', 'bienuso_id', 'observacion', 'estado_ticket'];
     protected $table = 'ticket';
 
@@ -27,7 +27,14 @@ class Ticket extends Model implements Auditable
 
     public function ticket_tareas()
 	{
-    	return $this->hasMany(Ticket_Tarea::class, 'ticket_id')->with('ticket_tarea_novedades')->with('tecnicos');
+    	return $this->hasMany(Ticket_Tarea::class, 'ticket_id')
+			->with([
+                'ticket_tarea_novedades.usuarios',
+                'ticket_tarea_comentarios_usuario.usuarios',
+                'tecnicos',
+                'tareas',
+                'turnos',
+            ]);
 	}
 
     public function ticket_articulos()

@@ -48,6 +48,7 @@ class MayorPlanoCuentaListadoFiltros
 
         return [
             'empresa_ids' => $empresaIds,
+            'consolidar_empresas' => $request->boolean('consolidar_empresas', true),
             'moneda_id' => max(1, (int) $request->input('moneda_id', 1)),
             'modo_periodo' => $modo,
             'mes' => max(1, min(12, (int) $request->input('mes', (int) date('n')))),
@@ -97,6 +98,10 @@ class MayorPlanoCuentaListadoFiltros
         if (($filtros['modo_periodo'] ?? 'mes') === 'rango') {
             $out['fecha_desde'] = trim((string) ($filtros['fecha_desde'] ?? ''));
             $out['fecha_hasta'] = trim((string) ($filtros['fecha_hasta'] ?? ''));
+        }
+
+        if (empty($filtros['consolidar_empresas'])) {
+            $out['consolidar_empresas'] = 0;
         }
 
         if (! empty($filtros['solo_moneda_origen'])) {

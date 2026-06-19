@@ -30,7 +30,7 @@ class Recepcion_Proveedor extends Model
         'fl_precio_diferencia', 'comentario_precio', 'observacion', 'asiento_id', 'movimientostock_id',
         'fl_diferencia_cantidad', 'fl_articulo_extra', 'fl_faltante_oc', 'fl_laboratorio', 'fl_linea_rechazada',
         'resumen_diferencias', 'resumen_rechazos',
-        'anita_tipo', 'anita_letra', 'anita_sucursal', 'anita_nro', 'origen_carga', 'creousuario_id',
+        'anita_tipo', 'anita_letra', 'anita_sucursal', 'anita_nro', 'origen_carga', 'stkmae_precio_anita_sync_at', 'creousuario_id',
     ];
 
     protected $casts = [
@@ -38,6 +38,7 @@ class Recepcion_Proveedor extends Model
         'fl_linea_rechazada' => 'boolean',
         'fecha' => 'date',
         'numerorecepcion' => 'integer',
+        'stkmae_precio_anita_sync_at' => 'datetime',
     ];
 
     public function ordencompras()

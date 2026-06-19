@@ -44,7 +44,14 @@
             $fila = is_array($f) ? $f : (array) $f;
             $tipoFila = $fila['tipo_fila'] ?? 'detalle';
         @endphp
-        @if ($tipoFila === 'header_cuenta')
+        @if ($tipoFila === 'header_empresa')
+            <tr class="font-weight-bold" style="background-color: #fff3cd;">
+                <td colspan="{{ $mostrarEmpresa ? 16 : 15 }}">
+                    <i class="far fa-building mr-1"></i>
+                    Empresa: {{ $fila['nombreempresa'] ?? '' }}
+                </td>
+            </tr>
+        @elseif ($tipoFila === 'header_cuenta')
             <tr class="font-weight-bold" style="background-color: #d6eaf8;">
                 <td colspan="{{ $mostrarEmpresa ? 16 : 15 }}">
                     Cuenta:

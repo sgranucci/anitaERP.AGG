@@ -51,19 +51,19 @@
         <div class="col-sm-6">
             <div class="form-group row" id="div-categoria_ticket">
                 <label for="categoria_ticket" class="col-lg-3 col-form-label">Categoría</label>
-                <input type="text" class="col-lg-2" id="categoria_ticket_id" name="categoria_ticket_id" value="{{$data->subcategoria_tickets->categoria_ticket_id??''}}" >
+                <input type="text" class="col-lg-2" id="categoria_ticket_id" name="categoria_ticket_id" value="{{ $data->subcategoria_tickets?->categoria_ticket_id ?? '' }}" >
                 <button type="button" title="Consulta categorías" style="padding:1;" class="btn-accion-tabla consultacategoria_ticket tooltipsC">
                         <i class="fa fa-search text-primary"></i>
                 </button>
-                <input type="text" class="col-lg-6 form-control" id="nombrecategoria_ticket" name="nombrecategoria_ticket" value="{{$data->subcategoria_tickets->categoria_tickets->nombre??''}}" >
+                <input type="text" class="col-lg-6 form-control" id="nombrecategoria_ticket" name="nombrecategoria_ticket" value="{{ $data->subcategoria_tickets?->categoria_tickets?->nombre ?? '' }}" >
             </div>
             <div class="form-group row" id="div-subcategoria_ticket">
                 <label for="subcategoria_ticket" class="col-lg-3 col-form-label">Subcategoría</label>
-                <input type="text" class="col-lg-2" id="subcategoria_ticket_id" name="subcategoria_ticket_id" value="{{$data->subcategoria_ticket_id??''}}" >
+                <input type="text" class="col-lg-2" id="subcategoria_ticket_id" name="subcategoria_ticket_id" value="{{ $data->subcategoria_ticket_id ?? '' }}" >
                 <button type="button" title="Consulta subcategorías" style="padding:1;" class="btn-accion-tabla consultasubcategoria_ticket tooltipsC">
                         <i class="fa fa-search text-primary"></i>
                 </button>
-                <input type="text" class="col-lg-6 nombresubcategoria_ticket form-control" id="nombresubcategoria_ticket" name="nombresubcategoria_ticket" value="{{$data->subcategoria_tickets->nombre??''}}" >
+                <input type="text" class="col-lg-6 nombresubcategoria_ticket form-control" id="nombresubcategoria_ticket" name="nombresubcategoria_ticket" value="{{ $data->subcategoria_tickets?->nombre ?? '' }}" >
             </div>
             <div class="form-group row" id="div-subcategoria_ticket">
                 <label for="bienuso" class="col-lg-3 col-form-label">Bien de uso intervenido</label>
@@ -84,11 +84,14 @@
             </div>            
         </div>        
     </div>
-    <div class="col-md-6">
-        <!-- textarea -->
+    <div class="col-md-12">
         <div class="form-group">
-            <label>Detalle</label>
-            <textarea name="detalle" class="form-control" rows="3" placeholder="Detalle ...">{{old('detalle', $data->detalle ?? '')}}</textarea>
+            <label for="titulo">Título</label>
+            <input type="text" name="titulo" id="titulo" class="form-control" maxlength="255" placeholder="Resumen breve del motivo del ticket" value="{{ old('titulo', $data->titulo ?? '') }}" required>
+        </div>
+        <div class="form-group">
+            <label for="comentario">Comentario</label>
+            <textarea name="comentario" id="comentario" class="form-control" rows="3" maxlength="255" placeholder="Comentario ..." required>{{ old('comentario', $data->comentario ?? '') }}</textarea>
         </div>
     </div>
     <h4>Tareas</h4>
@@ -155,7 +158,7 @@
                             <input type="date" name="fechafinalizaciones[]" class="form-control fechafinalizacion requerido" value="{{old('fechafinalizaciones', $tarea->fechafinalizacion ?? '')}}" readonly>
                         </td>          
                         <td>
-                            <input type="number" style="font-size: 12px;" name="tiempoinsumidos[]" class="form-control tiempoinsumido" value="{{old('tiempoinsumido', $tarea->tiempoinsumido ?? '')}}" readonly>
+                            <input type="text" style="font-size: 12px;" name="tiempoinsumidos[]" class="form-control tiempoinsumido" value="{{old('tiempoinsumido', $tarea->tiempoinsumido ?? '')}}" readonly>
                         </td>   
                         <td>
                             <input type="text" name="estadotareas[]" class="form-control estadotarea" value="" readonly>
@@ -177,6 +180,7 @@
                             <input type="hidden" name="creousuario_ids[]" class="form-control creousuario_id" value="{{ $tarea->creousuario_id ?? ''}}" />
                         </td>
                     </tr>
+                    @include('ticket.administracion_ticket.partials.comentarios_tarea_inline', ['tarea' => $tarea])
                 @endif
             @endforeach
         @endif
@@ -192,6 +196,13 @@
     <input type="hidden" id="usuario_id" name="usuario_id" value="{{ $data->usuario_id ?? '' }}" />
     <input type="hidden" id="estado_novedad_enum" name="estado_novedad_enum" value="{{ $estado_novedad_json ?? '' }}" />
     <input type="hidden" id="permiso_usuario" name="permiso_usuario" value="{{ can('supervisor-ticket', false) }}" />
+    @if (! empty($data->id))
+        <input type="hidden" id="url_guarda_comentario_tarea_admin" value="{{ url('ticket/ticket/'.$data->id.'/tarea') }}" />
+        @include('ticket.partials.comentario_enviando_overlay', [
+            'titulo' => 'Enviando comentario y notificando al usuario…',
+            'subtitulo' => 'Por favor espere. Se está guardando el comentario y enviando el correo al usuario que generó el ticket.',
+        ])
+    @endif
 </div>
 <input type="hidden" id="csrf_token" class="form-control" value="{{csrf_token()}}" />
 

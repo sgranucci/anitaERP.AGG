@@ -76,6 +76,25 @@ class RecepcionProveedorAnitaImportSupport
         ]));
     }
 
+    public static function listarRecepmaePorClave(string $tipo, string $letra, int $sucursal, int $nro): ?object
+    {
+        $where = " WHERE recm_tipo = '".addslashes($tipo)."'"
+            ." AND recm_letra = '".addslashes($letra)."'"
+            .' AND recm_sucursal = '.(int) $sucursal
+            .' AND recm_nro = '.(int) $nro;
+
+        $api = new ApiAnita;
+
+        return ApiAnita::primeraFilaLista($api->apiCall([
+            'acc' => 'list',
+            'sistema' => self::sistemaCompras(),
+            'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_cabecera', 'recepmae'),
+            'campos' => 'recm_proveedor,recm_tipo,recm_letra,recm_sucursal,recm_nro,recm_fecha',
+            'whereArmado' => $where,
+            'limit' => 'FIRST 1',
+        ]));
+    }
+
     /**
      * @return list<object>
      */

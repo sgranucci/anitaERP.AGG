@@ -30,6 +30,7 @@ class TicketService
 	private $ticket_tarea_novedadRepository;
 	private $ticket_articuloRepository;
 	private $tecnico_ticketRepository;
+	private $ticketTareaAsignadaNotificacionService;
 
     public function __construct(TicketRepositoryInterface $ticketrepository,
                                 Ticket_EstadoRepositoryInterface $ticket_estadorepository,
@@ -37,7 +38,8 @@ class TicketService
 								Ticket_TareaRepositoryInterface $ticket_tarearepository,
 								Ticket_Tarea_NovedadRepositoryInterface $ticket_tarea_novedadrepository,
 								Tecnico_TicketRepositoryInterface $tecnico_ticketrepository,
-								Ticket_ArticuloRepositoryInterface $ticket_articulorepository
+								Ticket_ArticuloRepositoryInterface $ticket_articulorepository,
+								TicketTareaAsignadaNotificacionService $ticketTareaAsignadaNotificacionService
 								)
     {
 		$this->ticketRepository = $ticketrepository;
@@ -47,11 +49,13 @@ class TicketService
 		$this->ticket_tarea_novedadRepository = $ticket_tarea_novedadrepository;
 		$this->ticket_articuloRepository = $ticket_articulorepository;
 		$this->tecnico_ticketRepository = $tecnico_ticketrepository;
+		$this->ticketTareaAsignadaNotificacionService = $ticketTareaAsignadaNotificacionService;
     }
 
 	public function guardaTicket($request, $origen = null)
 	{
 		$data = $request->all();
+		$tareasNotificar = [];
 
    		// Crea estado
 	   	$data['fechas'][] = Carbon::now();
@@ -71,9 +75,13 @@ class TicketService
 
 			// Guarda tablas asociadas
 			if ($ticket)
-				Self::agrega($data, $ticket, $request);
+				$tareasNotificar = Self::agrega($data, $ticket, $request);
 
 			DB::commit();
+
+			if ($origen === 'administracion') {
+				$this->ticketTareaAsignadaNotificacionService->notificar($ticket->id, $tareasNotificar);
+			}
 		} catch (\Exception $e) {
 			DB::rollback();
 
@@ -90,17 +98,23 @@ class TicketService
 		$ticket_estado = $this->ticket_estadoRepository->create($data, $ticket->id);
 		$ticket_archivo = $this->ticket_archivoRepository->create($request, $ticket->id);
 
+		$tareasNotificar = [];
 		// Si existen las tareas asume que graba desde administracion de tickets
-		if (isset($data['tarea_ids']))
-			$ticket_tarea = $this->ticket_TareaRepository->create($data, $ticket->id);
+		if (isset($data['tarea_ticket_ids'])) {
+			$result = $this->ticket_tareaRepository->create($data, $ticket->id);
+			$tareasNotificar = $result['tareas_recien_creadas'] ?? [];
+		}
 
 		if (isset($data['articulo_ids']))			
 			$ticket_articulo = $this->ticket_ArticuloRepository->create($data, $ticket->id);
+
+		return $tareasNotificar;
 	}
 
     public function actualizaTicket($request, $id, $origen = null)
     {
 		$data = $request->all();
+		$tareasNotificar = [];
 
 		// Crea estado
 		$data['fechas'][] = Carbon::now();
@@ -111,9 +125,13 @@ class TicketService
 		DB::beginTransaction();
 		try
 		{
-			Self::actualiza($data, $id, $request);
+			$tareasNotificar = Self::actualiza($data, $id, $request);
 
 			DB::commit();
+
+			if ($origen === 'administracion') {
+				$this->ticketTareaAsignadaNotificacionService->notificar($id, $tareasNotificar);
+			}
 		} catch (\Exception $e) {
 			DB::rollback();
 
@@ -135,8 +153,10 @@ class TicketService
 		// Graba movimientos de estados y archivos
 		$this->ticket_archivoRepository->update($request, $id);
 
-		$ticket_tarea = $this->ticket_tareaRepository->update($data, $id);
+		$result = $this->ticket_tareaRepository->update($data, $id);
 		$ticket_articulo = $this->ticket_articuloRepository->update($data, $id);
+
+		return $result['tareas_recien_creadas'] ?? [];
 	}
 
 	public function grabaTicketTareaNovedad($data)

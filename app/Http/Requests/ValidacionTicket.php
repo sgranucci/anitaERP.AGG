@@ -16,6 +16,13 @@ class ValidacionTicket extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation()
+    {
+        if (! $this->filled('subcategoria_ticket_id')) {
+            $this->merge(['subcategoria_ticket_id' => null]);
+        }
+    }
+
     /**
      * Get the validation rules that apply to the request.
      *
@@ -27,8 +34,10 @@ class ValidacionTicket extends FormRequest
             'sector_id' => 'required',
             'sala_id' => 'required',
             'categoria_ticket_id' => 'required',
-            'subcategoria_ticket_id' => 'required',
-            'areadestino_id' => 'required'
+            'subcategoria_ticket_id' => 'nullable|integer|exists:subcategoria_ticket,id',
+            'areadestino_id' => 'required',
+            'titulo' => 'required|string|max:255',
+            'comentario' => 'required|string|max:255',
         ];
     }
 }

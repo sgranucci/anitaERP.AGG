@@ -1,19 +1,32 @@
 @php
     $modoVer = ! ($modoEdicion ?? true);
-    $items = old('items', isset($prestamo) ? $prestamo->items->map(fn ($i) => [
-        'articulo_id' => $i->articulo_id,
-        'cantidad' => $i->cantidad,
-        'observaciones' => $i->observaciones,
-    ])->all() : []);
-    if (empty($items)) {
-        $items = [['articulo_id' => '', 'cantidad' => '', 'observaciones' => '']];
+    $depOrigenId = old('deposito_origen_id', isset($prestamo) ? $prestamo->deposito_origen_id : '');
+    $depDestinoId = old('deposito_destino_id', isset($prestamo) ? $prestamo->deposito_destino_id : '');
+    $depOrigenModel = (int) $depOrigenId > 0
+        ? (isset($prestamo) && (int) ($prestamo->deposito_origen_id ?? 0) === (int) $depOrigenId
+            ? $prestamo->depositoOrigen
+            : \App\Models\Stock\Depmae::find((int) $depOrigenId))
+        : null;
+    $depDestinoModel = (int) $depDestinoId > 0
+        ? (isset($prestamo) && (int) ($prestamo->deposito_destino_id ?? 0) === (int) $depDestinoId
+            ? $prestamo->depositoDestino
+            : \App\Models\Stock\Depmae::find((int) $depDestinoId))
+        : null;
+
+    $items = old('items');
+    if ($items === null && isset($prestamo)) {
+        $items = $prestamo->items->map(fn ($i) => [
+            'articulo_id' => $i->articulo_id,
+            'sku' => optional($i->articulos)->sku,
+            'descripcion' => optional($i->articulos)->descripcion,
+            'cantidad' => $i->cantidad,
+            'observaciones' => $i->observaciones,
+        ])->all();
     }
-    $articulosJson = $articulos->map(fn ($a) => [
-        'id' => $a->id,
-        'sku' => $a->sku,
-        'descripcion' => $a->descripcion,
-        'label' => trim(($a->sku ?? '').' - '.($a->descripcion ?? '')),
-    ])->values()->toJson(JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT);
+    if (empty($items)) {
+        $items = [['articulo_id' => '', 'sku' => '', 'descripcion' => '', 'cantidad' => '', 'observaciones' => '']];
+    }
+
     $saldosOrigenJson = json_encode($saldosOrigen ?? [], JSON_UNESCAPED_UNICODE);
     $saldosDestinoJson = json_encode($saldosDestino ?? [], JSON_UNESCAPED_UNICODE);
 @endphp
@@ -43,32 +56,30 @@
         </div>
     </div>
     <div class="col-md-3">
-        <div class="form-group">
-            <label class="requerido">Depósito origen</label>
-            <select name="deposito_origen_id" id="deposito_origen_id" class="form-control" required>
-                <option value="">-- Seleccionar --</option>
-                @foreach ($depositos as $d)
-                    <option value="{{ $d->id }}" data-empresa-id="{{ $d->empresa_id }}"
-                        @if ((int) old('deposito_origen_id', $prestamo->deposito_origen_id ?? 0) === (int) $d->id) selected @endif>
-                        {{ $d->nombre }}
-                    </option>
-                @endforeach
-            </select>
-        </div>
+        @include('stock.partials.campo_consulta_deposito', [
+            'prefix' => 'prestamo_origen',
+            'layout' => 'inline',
+            'label' => 'Depósito origen',
+            'inputName' => 'deposito_origen_id',
+            'inputId' => 'prestamo_deposito_origen_id',
+            'depositoId' => $depOrigenId,
+            'codigo' => old('deposito_origen_codigo', optional($depOrigenModel)->codigo ?? ''),
+            'descripcion' => old('deposito_origen_descripcion', optional($depOrigenModel)->nombre ?? ''),
+            'required' => true,
+        ])
     </div>
     <div class="col-md-3">
-        <div class="form-group">
-            <label class="requerido">Depósito destino</label>
-            <select name="deposito_destino_id" id="deposito_destino_id" class="form-control" required>
-                <option value="">-- Seleccionar --</option>
-                @foreach ($depositos as $d)
-                    <option value="{{ $d->id }}" data-empresa-id="{{ $d->empresa_id }}"
-                        @if ((int) old('deposito_destino_id', $prestamo->deposito_destino_id ?? 0) === (int) $d->id) selected @endif>
-                        {{ $d->nombre }}
-                    </option>
-                @endforeach
-            </select>
-        </div>
+        @include('stock.partials.campo_consulta_deposito', [
+            'prefix' => 'prestamo_destino',
+            'layout' => 'inline',
+            'label' => 'Depósito destino',
+            'inputName' => 'deposito_destino_id',
+            'inputId' => 'prestamo_deposito_destino_id',
+            'depositoId' => $depDestinoId,
+            'codigo' => old('deposito_destino_codigo', optional($depDestinoModel)->codigo ?? ''),
+            'descripcion' => old('deposito_destino_descripcion', optional($depDestinoModel)->nombre ?? ''),
+            'required' => true,
+        ])
     </div>
 </div>
 
@@ -93,7 +104,8 @@
         <table class="table table-striped table-hover" id="tabla-prestamo-items">
             <thead>
                 <tr>
-                    <th style="width:35%">Artículo</th>
+                    <th style="width:12%">Artículo</th>
+                    <th style="width:23%">Descripción</th>
                     <th style="width:12%">Cantidad</th>
                     <th style="width:12%">Saldo origen</th>
                     <th style="width:12%">Saldo destino</th>
@@ -105,27 +117,32 @@
                 @foreach ($items as $idx => $item)
                     <tr class="prestamo-item-row">
                         <td>
-                            <select name="items[{{ $idx }}][articulo_id]" class="form-control select-articulo" required>
-                                <option value="">-- Elegir artículo --</option>
-                                @foreach ($articulos as $a)
-                                    <option value="{{ $a->id }}"
-                                        @if ((int) ($item['articulo_id'] ?? 0) === (int) $a->id) selected @endif>
-                                        {{ $a->sku }} - {{ $a->descripcion }}
-                                    </option>
-                                @endforeach
-                            </select>
+                            <input type="hidden" class="articulo_id" name="items[{{ $idx }}][articulo_id]"
+                                value="{{ old('items.'.$idx.'.articulo_id', $item['articulo_id'] ?? '') }}" required>
+                            <div class="d-flex align-items-center flex-nowrap">
+                                <button type="button" title="Consulta art&iacute;culos" class="btn-accion-tabla consultaarticulo tooltipsC flex-shrink-0">
+                                    <i class="fa fa-search text-primary"></i>
+                                </button>
+                                <input type="text" class="codigoarticulo form-control form-control-sm ml-1"
+                                    style="width:120px; min-width:120px;"
+                                    value="{{ old('items.'.$idx.'.sku', $item['sku'] ?? '') }}" autocomplete="off">
+                            </div>
+                        </td>
+                        <td>
+                            <input type="text" class="descripcionarticulo form-control form-control-sm" readonly
+                                value="{{ old('items.'.$idx.'.descripcion', $item['descripcion'] ?? '') }}">
                         </td>
                         <td>
                             <input type="number" step="0.000001" min="0.000001"
                                 name="items[{{ $idx }}][cantidad]"
                                 class="form-control input-cantidad"
-                                value="{{ $item['cantidad'] ?? '' }}" required>
+                                value="{{ old('items.'.$idx.'.cantidad', $item['cantidad'] ?? '') }}" required>
                         </td>
                         <td><span class="saldo-origen text-monospace">—</span></td>
                         <td><span class="saldo-destino text-monospace">—</span></td>
                         <td>
                             <input type="text" name="items[{{ $idx }}][observaciones]" class="form-control"
-                                value="{{ $item['observaciones'] ?? '' }}" maxlength="255">
+                                value="{{ old('items.'.$idx.'.observaciones', $item['observaciones'] ?? '') }}" maxlength="255">
                         </td>
                         <td>
                             <button type="button" class="btn btn-link text-danger btn-eliminar-item" title="Eliminar">
@@ -144,7 +161,34 @@
     </div>
 </div>
 
-<input type="hidden" id="prestamo-articulos-data" data-articulos='{!! $articulosJson !!}'>
 <input type="hidden" id="prestamo-saldos-origen" value='{!! $saldosOrigenJson !!}'>
 <input type="hidden" id="prestamo-saldos-destino" value='{!! $saldosDestinoJson !!}'>
 <input type="hidden" id="prestamo-saldo-articulo-url" value="{{ route('prestamo_saldo_articulo') }}">
+
+<template id="template-prestamo-item-row">
+    <tr class="prestamo-item-row">
+        <td>
+            <input type="hidden" class="articulo_id" name="items[0][articulo_id]" value="" required>
+            <div class="d-flex align-items-center flex-nowrap">
+                <button type="button" title="Consulta art&iacute;culos" class="btn-accion-tabla consultaarticulo tooltipsC flex-shrink-0">
+                    <i class="fa fa-search text-primary"></i>
+                </button>
+                <input type="text" class="codigoarticulo form-control form-control-sm ml-1"
+                    style="width:120px; min-width:120px;" autocomplete="off">
+            </div>
+        </td>
+        <td><input type="text" class="descripcionarticulo form-control form-control-sm" readonly></td>
+        <td>
+            <input type="number" step="0.000001" min="0.000001" name="items[0][cantidad]"
+                class="form-control input-cantidad" required>
+        </td>
+        <td><span class="saldo-origen text-monospace">—</span></td>
+        <td><span class="saldo-destino text-monospace">—</span></td>
+        <td><input type="text" name="items[0][observaciones]" class="form-control" maxlength="255"></td>
+        <td>
+            <button type="button" class="btn btn-link text-danger btn-eliminar-item" title="Eliminar">
+                <i class="fa fa-trash"></i>
+            </button>
+        </td>
+    </tr>
+</template>

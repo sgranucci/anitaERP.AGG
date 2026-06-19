@@ -4,13 +4,11 @@ namespace App\Http\Controllers\Stock;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionPrestamo;
-use App\Models\Stock\Articulo;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Prestamo;
 use App\Models\Stock\Prestamo_Token;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Stock\Articulo_Saldo_DepositoRepositoryInterface;
-use App\Repositories\Stock\DepmaeRepositoryInterface;
 use App\Services\Stock\PrestamoService;
 use Auth;
 use Illuminate\Http\JsonResponse;
@@ -21,7 +19,6 @@ class PrestamoController extends Controller
     public function __construct(
         private readonly PrestamoService $service,
         private readonly Articulo_Saldo_DepositoRepositoryInterface $saldoRepository,
-        private readonly DepmaeRepositoryInterface $depmaeRepository,
         private readonly EmpresaRepositoryInterface $empresaRepository,
     ) {}
 
@@ -36,12 +33,10 @@ class PrestamoController extends Controller
     public function crear()
     {
         can('crear-prestamo');
-        $depositos = $this->depmaeRepository->allFiltrado();
         $empresa_query = $this->empresaRepository->allFiltrado();
         $empresa_id = old('empresa_id', $empresa_query->first()->id ?? null);
-        $articulos = $this->articulosParaSelect();
 
-        return view('stock.prestamo.crear', compact('depositos', 'articulos', 'empresa_query', 'empresa_id'));
+        return view('stock.prestamo.crear', compact('empresa_query', 'empresa_id'));
     }
 
     public function guardar(ValidacionPrestamo $request)
@@ -62,19 +57,17 @@ class PrestamoController extends Controller
     {
         can('editar-prestamo');
         $prestamo = $this->service->buscar($id);
-        $depositos = $this->depmaeRepository->allFiltrado();
         $empresa_query = $this->empresaRepository->allFiltrado();
         $empresa_id = old(
             'empresa_id',
             (int) (Depmae::query()->whereKey((int) $prestamo->deposito_origen_id)->value('empresa_id')
                 ?? $empresa_query->first()->id)
         );
-        $articulos = $this->articulosParaSelect();
         $saldosOrigen = $this->saldosArticulosDelPrestamo($prestamo, (int) $prestamo->deposito_origen_id);
         $saldosDestino = $this->saldosArticulosDelPrestamo($prestamo, (int) $prestamo->deposito_destino_id);
 
         return view('stock.prestamo.editar', compact(
-            'prestamo', 'depositos', 'articulos', 'saldosOrigen', 'saldosDestino', 'empresa_query', 'empresa_id'
+            'prestamo', 'saldosOrigen', 'saldosDestino', 'empresa_query', 'empresa_id'
         ));
     }
 
@@ -313,12 +306,4 @@ class PrestamoController extends Controller
         return $resultado;
     }
 
-    private function articulosParaSelect()
-    {
-        return Articulo::query()
-            ->select('id', 'sku', 'descripcion', 'estado')
-            ->orderBy('descripcion')
-            ->limit(2000)
-            ->get();
-    }
 }

@@ -46,6 +46,12 @@
  *   - Lunes a viernes (no feriados): cada hora, ventana 14 días incluyendo hoy.
  *   - Sábados, domingos y feriados: una vez al día (08:00), ventana 60 días incluyendo hoy.
  *   - Feriados: tabla `feriado` (configuración). Requiere `php artisan schedule:run` en cron.
+ *
+ * Movimientos persistidos — sincronización automática:
+ * - Automático (scheduler): `php artisan interbanking:persistir-movimientos`
+ *   - Diario 07:30, ventana configurable (`INTERBANKING_MOVIMIENTOS_SYNC_DIAS`, default 14).
+ *   - Por cada cuenta de caja con `cuenta_interbanking` en empresas con `customer_id` configurado.
+ *   - Consulta API `anteriores` (rango) + `dia` (movimientos del día).
  */
 
 // Constantes de arbol de aprobacion
@@ -56,6 +62,7 @@ switch (strtoupper(config('app.empresa'))) {
             'client_id' => ['Qvj6P92Oi9Oyq1GGrCRftf4yXcheLmiigHUB', '6UyawCF9sxlI07NIjbUJded2333ULKtGiDUW', 'ohLciTIWzAgaNui7XbRH1wznR50PqepBYfhp'],
             'client_secret' => ['IKIybgzcoOIteljkZJBvl9YER2ihPBeq06ms', 'Rf13czG6uDolPtN60dSZHZUldaPk7MGICL36', 'QCOOkdzAzwUgLB1esv5XmDCrlG7DSrjJVoMF'],
             'customer_id' => ['X36888A', 'X36688A', 'C25656A'],
+            'movimientos_sync_dias_ventana' => (int) env('INTERBANKING_MOVIMIENTOS_SYNC_DIAS', 14),
         ];
         break;
 }

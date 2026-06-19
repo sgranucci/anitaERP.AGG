@@ -955,6 +955,43 @@
         }
 
         var $formRecepcion = $('#form-recepcion-proveedor');
+
+        function fechaRecepcionValida() {
+            var $fecha = $formRecepcion.find('[name="fecha"]');
+            if (!$fecha.length || $fecha.prop('readonly')) {
+                return true;
+            }
+            var val = String($fecha.val() || '').trim();
+            if (val === '') {
+                return true;
+            }
+            var hoy = new Date();
+            hoy.setHours(0, 0, 0, 0);
+            var partes = val.split('-');
+            if (partes.length !== 3) {
+                return true;
+            }
+            var ingresada = new Date(
+                parseInt(partes[0], 10),
+                parseInt(partes[1], 10) - 1,
+                parseInt(partes[2], 10)
+            );
+            if (ingresada > hoy) {
+                window.alert('La fecha de recepción no puede ser posterior a hoy.');
+                $fecha.focus();
+                return false;
+            }
+            return true;
+        }
+
+        if ($formRecepcion.length) {
+            $formRecepcion.on('submit.recepcionFecha', function (e) {
+                if (!fechaRecepcionValida()) {
+                    e.preventDefault();
+                }
+            });
+        }
+
         if ($formRecepcion.length && $formRecepcion.find('[name="tipo"]').val() === 'DEVOLUCION') {
             $formRecepcion.on('submit.recepcionDevolucionConfirm', function (e) {
                 if (window.recepcionProveedorEnviandoTrasModal) {

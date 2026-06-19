@@ -94,6 +94,92 @@ class RecepcionProveedorAsientoService
     }
 
     /**
+     * Preview contable (cantidad × precio de línea; sin descuento de pie de OC).
+     *
+     * @return array{
+     *   total_recepcion: float,
+     *   total_debe: float,
+     *   total_haber: float,
+     *   numerorecepcion: string,
+     *   payload_asiento: array<string, mixed>
+     * }
+     */
+    public function previewAsientoContable(Recepcion_Proveedor $recepcion): array
+    {
+        return $this->armarPreviewAsiento($recepcion);
+    }
+
+    /**
+     * Regraba movimientos del asiento existente para cuadrar con Σ(cant × precio) de la recepción.
+     */
+    public function recuadrarAsientoExistente(Recepcion_Proveedor $recepcion): void
+    {
+        $asientoId = (int) ($recepcion->asiento_id ?? 0);
+        if ($asientoId <= 0) {
+            throw new \RuntimeException('La recepción no tiene asiento contable asociado.');
+        }
+
+        if (! $this->debeGenerarAsiento((int) $recepcion->empresa_id)) {
+            return;
+        }
+
+        $preview = $this->armarPreviewAsiento($recepcion);
+        RecepcionProveedorCuadreContableSupport::assertPreview($preview);
+
+        $this->asientoMovimientoRepository->update($preview['payload_asiento'], $asientoId);
+
+        RecepcionProveedorCuadreContableSupport::assertPersistido(
+            $asientoId,
+            $preview,
+            $this->asientoMovimientoRepository
+        );
+
+        $this->sincronizarCtamovAnitaRecepcion($recepcion, $preview);
+    }
+
+    /**
+     * Empuja a Anita contab.ctamov el asiento de la recepción (delete + insert por numeroasiento).
+     *
+     * @param  array{payload_asiento: array<string, mixed>}|null  $preview
+     */
+    public function sincronizarCtamovAnitaRecepcion(Recepcion_Proveedor $recepcion, ?array $preview = null): void
+    {
+        if (! $this->debeGenerarAsiento((int) $recepcion->empresa_id)) {
+            return;
+        }
+
+        $asientoId = (int) ($recepcion->asiento_id ?? 0);
+        if ($asientoId <= 0) {
+            throw new \RuntimeException('La recepción no tiene asiento contable asociado.');
+        }
+
+        $recepcion->loadMissing('asientos');
+        $asiento = $recepcion->asientos;
+        if (! $asiento) {
+            throw new \RuntimeException('No se encontró el asiento id '.$asientoId.' de la recepción.');
+        }
+
+        $preview ??= $this->armarPreviewAsiento($recepcion);
+        $payload = $preview['payload_asiento'];
+
+        $fechaAsiento = $asiento->fecha;
+        if ($fechaAsiento instanceof \DateTimeInterface) {
+            $fechaAsiento = $fechaAsiento->format('Y-m-d');
+        } else {
+            $fechaAsiento = \Carbon\Carbon::parse((string) $fechaAsiento)->format('Y-m-d');
+        }
+
+        $dataAnita = array_merge($payload, [
+            'numeroasiento' => $asiento->numeroasiento,
+            'empresa_id' => (int) $asiento->empresa_id,
+            'tipoasiento_id' => (int) $asiento->tipoasiento_id,
+            'fecha' => $fechaAsiento,
+        ]);
+
+        $this->asientoRepository->sincronizarCtamovAnita($dataAnita);
+    }
+
+    /**
      * Vista previa del asiento (borrador) o datos del asiento ya grabado.
      *
      * @return array{
@@ -210,13 +296,12 @@ class RecepcionProveedorAsientoService
         $claveAnita = RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
         $oc = $recepcion->ordencompras;
         $numeroOrdenCompra = (int) ($oc->numeroordencompra ?? 0);
-        $descuentoCabeceraOc = (float) ($oc->descuento ?? 0);
         $esDevolucion = $recepcion->tipo === Recepcion_Proveedor::TIPO_DEVOLUCION;
         $cotizacionRecepcion = (float) ($recepcion->cotizacion ?: 1);
 
-        $lineasDebe = $this->armarLineasDebeArticulos($recepcion, $cotizacionRecepcion, $descuentoCabeceraOc);
+        $lineasDebe = $this->armarLineasDebeArticulos($recepcion, $cotizacionRecepcion);
         $totalDebe = round(array_sum(array_column($lineasDebe, 'importe')), 2);
-        $totalRecepcion = $this->totalRecepcionContable($recepcion, $cotizacionRecepcion, $descuentoCabeceraOc);
+        $totalRecepcion = $this->totalRecepcionContable($recepcion, $cotizacionRecepcion);
 
         $lineasHaber = [];
         $esAnticipada = $oc && strtoupper((string) $oc->tratamiento) === 'ANTICIPADA';
@@ -355,7 +440,6 @@ class RecepcionProveedorAsientoService
     private function totalRecepcionContable(
         Recepcion_Proveedor $recepcion,
         float $cotizacionRecepcion,
-        float $descuentoCabeceraOc = 0,
     ): float {
         $total = 0.0;
 
@@ -365,7 +449,6 @@ class RecepcionProveedorAsientoService
                 (float) $linea->cantidad,
                 (float) $linea->precio,
                 (float) ($linea->descuento ?? 0),
-                $descuentoCabeceraOc,
             );
             $total += RecepcionProveedorConversionSupport::convertirMoneda($importe, $cotLinea, $cotizacionRecepcion);
         }
@@ -377,7 +460,6 @@ class RecepcionProveedorAsientoService
     private function armarLineasDebeArticulos(
         Recepcion_Proveedor $recepcion,
         float $cotizacionRecepcion,
-        float $descuentoCabeceraOc = 0,
     ): array {
         $agrupado = [];
 
@@ -393,7 +475,6 @@ class RecepcionProveedorAsientoService
                 (float) $linea->cantidad,
                 (float) $linea->precio,
                 (float) ($linea->descuento ?? 0),
-                $descuentoCabeceraOc,
             );
             $importe = RecepcionProveedorConversionSupport::convertirMoneda($importe, $cotLinea, $cotizacionRecepcion);
 

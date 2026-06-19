@@ -110,7 +110,6 @@ class ValidacionFormulaArticulo extends FormRequest
                 return;
             }
             $n = count($articulo_ids);
-            $ordenesUsados = [];
             for ($i = 0; $i < $n; $i++) {
                 $aid = $articulo_ids[$i] ?? null;
                 $fid = $formula_hija_ids[$i] ?? null;
@@ -133,16 +132,7 @@ class ValidacionFormulaArticulo extends FormRequest
                 $ord = (int) $ord;
                 if ($ord < 1) {
                     $validator->errors()->add('ordenopcionales.'.$i, 'El orden opcional debe ser mayor o igual a 1.');
-
-                    continue;
                 }
-                if (isset($ordenesUsados[$ord])) {
-                    $validator->errors()->add(
-                        'ordenopcionales',
-                        'No puede repetirse el mismo orden opcional en dos ítems opcionales de la misma fórmula.'
-                    );
-                }
-                $ordenesUsados[$ord] = true;
             }
         });
     }

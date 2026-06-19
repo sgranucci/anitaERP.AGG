@@ -44,7 +44,7 @@ class ValidacionRecepcionProveedor extends FormRequest
     {
         return [
             'ordencompra_id' => 'required|integer|exists:ordencompra,id',
-            'fecha' => 'required|date',
+            'fecha' => 'required|date|before_or_equal:today',
             'numerofactura' => 'nullable|string|max:50',
             'observacion' => 'nullable|string|max:255',
             'deposito_id' => 'nullable|integer|exists:depmae,id',
@@ -74,6 +74,13 @@ class ValidacionRecepcionProveedor extends FormRequest
             'items.*.ocr_descripcion_proveedor' => 'nullable|string|max:255',
             'items.*.ocr_codigobarra' => 'nullable|string|max:50',
             'items.*.ocr_unidad_compra' => 'nullable|string|max:30',
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'fecha.before_or_equal' => 'La fecha de recepción no puede ser posterior a hoy.',
         ];
     }
 

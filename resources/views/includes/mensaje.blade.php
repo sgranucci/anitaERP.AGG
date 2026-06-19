@@ -10,7 +10,7 @@
 @if (session("errores"))
     <div class="alert alert-danger">
         <ul>
-            @foreach (session("errores") as $error)
+            @foreach (\Illuminate\Support\Arr::wrap(session("errores")) as $error)
                 <li>{{ $error }}</li>
             @endforeach
         </ul>

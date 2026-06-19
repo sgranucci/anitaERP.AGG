@@ -1584,6 +1584,172 @@ $(function () {
 			});
 		});
 	});
+
+	function ocEsc(texto) {
+		return $('<div>').text(texto == null ? '' : String(texto)).html();
+	}
+
+	function ocFmtNumero(valor) {
+		if (valor == null || valor === '') return '';
+		var n = parseFloat(valor);
+		if (isNaN(n)) return ocEsc(valor);
+		return n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+	}
+
+	function ocBadgesDiferencias(flags, resumen) {
+		var badges = [];
+		if (flags && flags.fl_precio_diferencia) badges.push('<span class="badge badge-warning mr-1">Precio</span>');
+		if (flags && flags.fl_diferencia_cantidad) badges.push('<span class="badge badge-info mr-1">Cantidad</span>');
+		if (flags && flags.fl_articulo_extra) badges.push('<span class="badge badge-secondary mr-1">Extra</span>');
+		if (flags && flags.fl_faltante_oc) badges.push('<span class="badge badge-danger mr-1">Faltante</span>');
+		if (flags && flags.fl_laboratorio) badges.push('<span class="badge badge-primary mr-1">Lab.</span>');
+		if (flags && flags.fl_linea_rechazada) badges.push('<span class="badge badge-dark mr-1">Rechazo</span>');
+		if (!badges.length && resumen) {
+			return '<span class="small text-muted">' + ocEsc(resumen) + '</span>';
+		}
+		return badges.join('');
+	}
+
+	function ocRenderLineasRecepcion(lineas) {
+		if (!lineas || !lineas.length) {
+			return '<p class="small text-muted mb-0">Sin líneas.</p>';
+		}
+		var html = '<table class="table table-sm table-bordered mb-0 bg-white"><thead class="thead-light"><tr>'
+			+ '<th>SKU</th><th>Descripción</th><th class="text-right">Cant.</th>'
+			+ '<th class="text-right">Precio OC (snap.)</th><th class="text-right">Precio OC actual</th>'
+			+ '<th class="text-right">Precio recep.</th><th>Obs. precio</th></tr></thead><tbody>';
+		lineas.forEach(function (l) {
+			var rowClass = l.fl_precio_diferencia ? 'table-warning' : '';
+			html += '<tr class="' + rowClass + '">'
+				+ '<td>' + ocEsc(l.sku) + '</td>'
+				+ '<td>' + ocEsc(l.descripcion) + '</td>'
+				+ '<td class="text-right">' + ocFmtNumero(l.cantidad) + '</td>'
+				+ '<td class="text-right">' + ocFmtNumero(l.precio_ordencompra_snapshot) + '</td>'
+				+ '<td class="text-right">' + ocFmtNumero(l.precio_oc_actual) + '</td>'
+				+ '<td class="text-right font-weight-bold">' + ocFmtNumero(l.precio_recepcion) + '</td>'
+				+ '<td class="small">' + ocEsc(l.comentario_precio) + '</td>'
+				+ '</tr>';
+		});
+		html += '</tbody></table>';
+		return html;
+	}
+
+	function ocCargarRecepciones() {
+		var id = $('#ordencompra_id_actual').val();
+		if (!id) return;
+		var $tb = $('#tabla-recepciones-oc tbody').empty();
+		$('#oc-recepciones-vacio').addClass('d-none');
+		$('#oc-recepciones-resumen').addClass('d-none').empty();
+		$tb.append('<tr><td colspan="9" class="text-center text-muted">Cargando…</td></tr>');
+
+		$.get(carpetaBase + '/compras/ordencompra/' + id + '/recepciones').done(function (data) {
+			$tb.empty();
+			var recepciones = (data && data.recepciones) ? data.recepciones : [];
+			var resumen = (data && data.resumen) ? data.resumen : {};
+
+			if (!recepciones.length) {
+				$('#oc-recepciones-vacio').removeClass('d-none');
+				return;
+			}
+
+			var txtResumen = recepciones.length + ' documento(s)';
+			if (resumen.con_precio_diferencia) {
+				txtResumen += ' · ' + resumen.con_precio_diferencia + ' con diferencia de precio';
+			}
+			if (resumen.pendientes_aplicar_precio) {
+				txtResumen += ' · ' + resumen.pendientes_aplicar_precio + ' con precios OC pendientes de aplicar';
+			}
+			$('#oc-recepciones-resumen').removeClass('d-none').text(txtResumen);
+
+			recepciones.forEach(function (r) {
+				var detalleId = 'oc-rec-detalle-' + r.id;
+				var acciones = '<div class="btn-group btn-group-sm flex-wrap" role="group">';
+				if (r.urls && r.urls.editar) {
+					var tituloEditar = r.es_devolucion ? 'Editar devolución' : 'Editar recepción';
+					acciones += '<a href="' + ocEsc(r.urls.editar) + '" class="btn btn-outline-primary btn-xs" target="_blank" rel="noopener" title="' + ocEsc(tituloEditar) + '">'
+						+ '<i class="fa fa-pencil"></i> Editar</a>';
+				}
+				if (r.urls && r.urls.pdf) {
+					var tituloPdf = r.es_devolucion
+						? 'Ver comprobante de devolución en PDF'
+						: 'Ver comprobante de recepción (COM) en PDF';
+					acciones += '<a href="' + ocEsc(r.urls.pdf) + '" class="btn btn-outline-danger btn-xs" target="_blank" rel="noopener" title="' + ocEsc(tituloPdf) + '">'
+						+ '<i class="fa fa-file-pdf-o"></i> PDF</a>';
+				}
+				if (r.pendiente_aplicar_precio_oc) {
+					acciones += '<button type="button" class="btn btn-warning btn-xs oc-aplicar-precios-rec" data-recepcion-id="' + r.id + '" title="Aplicar precios de recepción a la OC">'
+						+ '<i class="fa fa-refresh"></i> Precios OC</button>';
+				}
+				acciones += '</div>';
+
+				$tb.append(
+					'<tr class="oc-rec-fila-cabecera" data-target="#' + detalleId + '">'
+					+ '<td class="text-center align-middle">'
+					+ '<button type="button" class="btn btn-link btn-sm p-0 oc-toggle-rec-detalle" aria-expanded="false" data-target="#' + detalleId + '" title="Ver detalle de líneas">'
+					+ '<i class="fa fa-plus-square-o"></i></button></td>'
+					+ '<td>' + ocEsc(r.documento) + (r.anita_ref ? ' <span class="small text-muted">(' + ocEsc(r.anita_ref) + ')</span>' : '') + '</td>'
+					+ '<td>' + ocEsc(r.fecha) + '</td>'
+					+ '<td>' + ocEsc(r.estado) + '</td>'
+					+ '<td class="text-right">' + ocFmtNumero(r.total) + '</td>'
+					+ '<td>' + ocEsc(r.moneda) + '</td>'
+					+ '<td>' + ocEsc(r.usuario) + '</td>'
+					+ '<td>' + ocBadgesDiferencias(r.flags, r.resumen_diferencias) + '</td>'
+					+ '<td class="text-nowrap">' + acciones + '</td>'
+					+ '</tr>'
+					+ '<tr id="' + detalleId + '" class="oc-rec-detalle d-none"><td></td><td colspan="8">' + ocRenderLineasRecepcion(r.lineas) + '</td></tr>'
+				);
+			});
+		}).fail(function () {
+			$tb.empty().append('<tr><td colspan="9" class="text-danger">No se pudo cargar el listado de recepciones.</td></tr>');
+		});
+	}
+
+	$('#oc-boton-recepciones').on('click', function () {
+		mostrarSolapa('#oc-solapa-recepciones');
+		ocMarcarTabActivo('oc-boton-recepciones');
+		ocCargarRecepciones();
+	});
+
+	$(document).on('click', '.oc-toggle-rec-detalle', function (e) {
+		e.preventDefault();
+		e.stopPropagation();
+		var $btn = $(this);
+		var target = $btn.data('target');
+		var $det = $(target);
+		var abierto = !$det.hasClass('d-none');
+		$det.toggleClass('d-none', abierto);
+		$btn.attr('aria-expanded', abierto ? 'false' : 'true');
+		$btn.find('i').toggleClass('fa-plus-square-o', abierto).toggleClass('fa-minus-square-o', !abierto);
+	});
+
+	$(document).on('click', '.oc-rec-fila-cabecera', function (e) {
+		if ($(e.target).closest('a, button').length) return;
+		$(this).find('.oc-toggle-rec-detalle').trigger('click');
+	});
+
+	$(document).on('click', '.oc-aplicar-precios-rec', function (e) {
+		e.preventDefault();
+		e.stopPropagation();
+		var recId = $(this).data('recepcion-id');
+		var ocId = $('#ordencompra_id_actual').val();
+		if (!ocId || !recId) return;
+		if (!confirm('¿Actualizar en la OC (y Anita) los precios de las líneas con diferencia según esta recepción?')) return;
+		var $btn = $(this).prop('disabled', true);
+		$.ajax({
+			url: carpetaBase + '/compras/ordencompra/' + ocId + '/aplicar-precios-recepcion/' + recId,
+			method: 'POST',
+			data: { _token: $('meta[name="csrf-token"]').attr('content') }
+		}).done(function (resp) {
+			alert((resp && resp.mensaje) ? resp.mensaje : 'Precios actualizados.');
+			ocCargarRecepciones();
+		}).fail(function (xhr) {
+			var msg = (xhr.responseJSON && xhr.responseJSON.mensaje) ? xhr.responseJSON.mensaje : 'Error al aplicar precios.';
+			alert(msg);
+		}).always(function () {
+			$btn.prop('disabled', false);
+		});
+	});
+
 	$('#oc-boton-arbol').on('click', function () {
 		mostrarSolapa('#oc-solapa-arbol');
 		ocMarcarTabActivo('oc-boton-arbol');

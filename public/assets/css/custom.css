@@ -149,3 +149,86 @@ body.modo-consulta .navbar-text.text-warning {
         margin: 0 0.25rem !important;
     }
 }
+
+/* Reportes: asignación dual empresas (listas compactas) */
+.reporte-empresas-dual .reporte-dual-listas-compact {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.5rem;
+    align-items: center;
+}
+.reporte-empresas-dual .reporte-dual-col-lista {
+    flex: 0 0 auto;
+    width: 13.5rem;
+    max-width: 13.5rem;
+}
+.reporte-empresas-dual .reporte-dual-col-acciones {
+    flex: 0 0 auto;
+    width: 2.5rem;
+}
+.reporte-empresas-dual .reporte-dual-col-consolidar {
+    flex: 0 0 auto;
+    width: 6.75rem;
+    max-width: 6.75rem;
+    align-self: center;
+}
+.reporte-empresas-dual .reporte-consolidar-ayuda {
+    font-size: 0.7rem;
+    line-height: 1.2;
+}
+.reporte-empresas-dual .reporte-dual-encabezados.reporte-dual-listas-compact {
+    gap: 0.5rem;
+}
+.reporte-empresas-dual .reporte-dual-list {
+    width: 13.5rem;
+    max-width: 13.5rem;
+    height: 7.25rem;
+    min-height: 7.25rem;
+    font-size: 0.85rem;
+}
+.reporte-empresas-dual .reporte-dual-listas {
+    min-height: 7.25rem;
+}
+.reporte-empresas-dual .reporte-dual-acciones {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 7.25rem;
+    padding-left: 0;
+    padding-right: 0;
+}
+.reporte-empresas-dual .reporte-dual-acciones .btn-group-vertical {
+    width: auto;
+}
+.reporte-empresas-dual .reporte-dual-acciones .btn {
+    min-width: 2.35rem;
+    padding: 0.2rem 0.35rem;
+}
+.reporte-empresas-dual .btn-toggle-consolidar-empresas .fa-check {
+    width: 0.9rem;
+}
+.reporte-empresas-dual .btn-outline-secondary.btn-toggle-consolidar-empresas .fa-check {
+    opacity: 0.35;
+}
+@media (max-width: 767.98px) {
+    .reporte-empresas-dual .reporte-dual-acciones {
+        min-height: auto;
+        padding: 0.4rem 0;
+    }
+    .reporte-empresas-dual .reporte-dual-acciones .btn-group-vertical {
+        flex-direction: row;
+    }
+    .reporte-empresas-dual .reporte-dual-acciones .btn {
+        margin: 0 0.2rem !important;
+    }
+}
+
+/* Mayor plano: código + nombre cuenta en una línea */
+.mpc-cuenta-inline .mpc-cuenta-codigo-input {
+    flex: 0 0 6.75rem;
+    width: 6.75rem;
+    max-width: 6.75rem;
+}
+.mpc-cuenta-inline .mpc-cuenta-nombre-input {
+    min-width: 0;
+}

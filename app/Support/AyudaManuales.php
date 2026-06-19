@@ -27,6 +27,13 @@ class AyudaManuales
                 'disponible' => true,
             ],
             [
+                'modulo' => 'Canjes Marketing',
+                'bajada' => 'Clientes VIP, facturador de canjes en sala y listado de entregas para Marketing.',
+                'url' => route('manual_canjes_marketing'),
+                'icono' => 'fa-gift',
+                'disponible' => true,
+            ],
+            [
                 'modulo' => 'Gastronomía',
                 'bajada' => 'Jornada, turnos, facturación en salón, cierres, restricciones de emisión y consultas gerenciales.',
                 'url' => route('manual_gastronomia'),

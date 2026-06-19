@@ -56,10 +56,46 @@ function abrirConsultaMozoModal() {
 }
 
 function empresaIdFacturacionGastronomia() {
-    if (typeof window.GASTRONOMIA !== 'undefined' && window.GASTRONOMIA.empresaId) {
-        return window.GASTRONOMIA.empresaId;
+    if (typeof window.GASTRONOMIA !== 'undefined') {
+        var id = parseInt(window.GASTRONOMIA.empresaId, 10);
+        if (id > 0) {
+            return id;
+        }
     }
-    return '';
+    return null;
+}
+
+function csrfTokenConsultaMozo() {
+    var meta = $('meta[name="csrf-token"]').attr('content');
+    if (meta) {
+        return meta;
+    }
+    if (typeof window.GASTRONOMIA !== 'undefined' && window.GASTRONOMIA.csrf) {
+        return window.GASTRONOMIA.csrf;
+    }
+    var inp = $('input[name="_token"]').first().val();
+    return inp || '';
+}
+
+function avisoErrorConsultaMozo(msg) {
+    if (window.toastr) {
+        window.toastr.error(msg, '', { timeOut: 10000, closeButton: true });
+    } else if (typeof alert === 'function') {
+        alert(msg);
+    }
+}
+
+function mensajeErrorAjaxConsultaMozo(xhr) {
+    if (xhr.status === 401 || xhr.status === 419) {
+        return 'Sesión expirada o token inválido. Cierre sesión, vuelva a entrar y recargue la página.';
+    }
+    if (xhr.status === 403) {
+        return 'Sin permiso para consultar mozos. Verifique el rol activo (Cambiar rol en el menú de usuario).';
+    }
+    if (xhr.responseJSON && (xhr.responseJSON.message || xhr.responseJSON.error)) {
+        return xhr.responseJSON.message || xhr.responseJSON.error;
+    }
+    return 'No se pudo cargar la lista de mozos (HTTP ' + xhr.status + ').';
 }
 
 function urlConsultaMozoCanjeMarketing() {
@@ -100,8 +136,22 @@ function esLoginMozoCanjeMarketing(ptrrenglon) {
 function buscar_datos_mozo(consulta) {
     var data = { consulta: consulta || '' };
     var urlCanje = urlConsultaMozoCanjeMarketing();
+    var empresaId = null;
     if (!urlCanje && typeof window.GASTRONOMIA !== 'undefined') {
-        data.empresa_id = empresaIdFacturacionGastronomia();
+        empresaId = empresaIdFacturacionGastronomia();
+        if (empresaId) {
+            data.empresa_id = empresaId;
+        } else if (window.GASTRONOMIA.tieneCfgPv === false) {
+            $('#datosmozo').html('<tr><td colspan="4">Sin configuración PV para esta terminal.</td></tr>');
+            avisoErrorConsultaMozo(
+                'Sin configuración de punto de venta gastronomía para esta PC. Recargue la página; si persiste, revise Config. PV gastronomía.',
+            );
+            return;
+        }
+    }
+    var token = csrfTokenConsultaMozo();
+    if (token) {
+        data._token = token;
     }
 
     $.ajax({
@@ -109,7 +159,8 @@ function buscar_datos_mozo(consulta) {
         type: 'POST',
         dataType: 'HTML',
         headers: {
-            'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content'),
+            'X-CSRF-TOKEN': token,
+            'X-Requested-With': 'XMLHttpRequest',
         },
         data: data,
     })
@@ -124,10 +175,16 @@ function buscar_datos_mozo(consulta) {
             } else if (respuesta && typeof respuesta.data === 'string') {
                 html = respuesta.data;
             }
-            $('#datosmozo').html(html);
+            if (!html && typeof respuesta === 'string' && /login|seguridad/i.test(respuesta)) {
+                avisoErrorConsultaMozo('Sesión expirada. Vuelva a iniciar sesión.');
+                html = '<tr><td colspan="4">Sesión expirada</td></tr>';
+            }
+            $('#datosmozo').html(html || '<tr><td colspan="4">Sin resultados</td></tr>');
         })
-        .fail(function () {
-            console.log('error consulta mozo');
+        .fail(function (xhr) {
+            console.warn('error consulta mozo', xhr.status, xhr.responseText);
+            avisoErrorConsultaMozo(mensajeErrorAjaxConsultaMozo(xhr));
+            $('#datosmozo').html('<tr><td colspan="4">Error al consultar mozos</td></tr>');
         });
 }
 

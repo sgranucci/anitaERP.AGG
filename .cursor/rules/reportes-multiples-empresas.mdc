@@ -1,0 +1,74 @@
+---
+description: Reportes con selección múltiple de empresas (dual list) y preferencias de usuario
+globs: resources/views/**/index.blade.php,app/Http/Controllers/**/*Reporte*Controller.php,app/Http/Controllers/Contable/Mayor*Controller.php,app/Support/Reportes/**,resources/views/includes/reportes/**,public/assets/pages/scripts/reportes/**
+alwaysApply: false
+---
+
+# Reportes con varias empresas
+
+Patrón para reportes de **consulta** que admiten **más de una empresa** en el mismo filtro. **No** aplicar en reportes de una sola empresa (`form-empresa-asignada` con `empresa_id`) ni en reportes de kilos El Bierzo (`repkilopedido`, `repkilocategoria`).
+
+Referencias canónicas:
+
+| Reporte | Clave preferencias | Partial |
+|---|---|---|
+| Mayor plano cuenta | `mayor_plano_cuenta` | `includes.reportes.asignacion_empresas_dual` |
+| Mayor concepto | `mayor_concepto` | `form-empresa-asignada` (una empresa) + preferencias |
+| CAPEX reporte | `capex_reporte` | `form-empresa-asignada` + preferencias |
+
+## UI obligatoria (multiempresa)
+
+| Elemento | Patrón |
+|---|---|
+| Partial | `@include('includes.reportes.asignacion_empresas_dual', …)` |
+| Fuente datos | `EmpresaRepository::allFiltrado()` → `$empresa_query` |
+| Una empresa asignada | Hidden + readonly (sin dual list) |
+| Listas | Compactas (`list_size` 5, CSS `.reporte-empresas-dual`) |
+| Scripts | `public/assets/pages/scripts/reportes/empresas_dual.js` |
+| POST/GET | `empresa_ids[]` vía hidden sincronizados desde lista derecha |
+| Consolidar | Botón con tilde `btn-toggle-consolidar-empresas` + hidden `consolidar_empresas` (1=consolidado, 0=por empresa) |
+
+## Consolidación vs reporte por empresa
+
+| `consolidar_empresas` | Pantalla | PDF |
+|---|---|---|
+| `1` (default) | Un listado con datos fusionados | Un PDF |
+| `0` + varias empresas | Bloques con fila `header_empresa` | `PDFMerger` — un PDF por empresa |
+
+Excel/CSV: un archivo con filas `header_empresa` entre bloques (no múltiples archivos).
+
+## Preferencias de usuario (obligatorio en reportes nuevos)
+
+Usar `App\Support\Reportes\ReportePreferenciasUsuario` (cache por usuario vía `generaKey`).
+
+| Acción | Cuándo |
+|---|---|
+| `leerEmpresaIds` / `leerEmpresaId` | Al abrir el formulario si el request no trae empresa |
+| `persistir` | Tras `consultar=1` exitoso |
+| `filtrarEmpresaIdsPermitidas` | Validar IDs contra `allFiltrado()` |
+
+**Excluir** preferencias en: `repkilopedido`, `repkilocategoria` y reportes documentados como una sola empresa.
+
+## Backend
+
+1. Filtros: `empresa_ids` (array) + `consolidar_empresas` (bool, default true).
+2. `paraQueryString`: incluir `consolidar_empresas=0` cuando no consolidado.
+3. `firma` de cache de resultado: incluir `consolidar_empresas`.
+4. Servicio: si no consolidado, generar por empresa y fusionar secciones con `empresa_id` en cada sección.
+
+## Prohibido
+
+- `form-empresa-asignada-multiple` con Select2 en reportes multiempresa nuevos.
+- Select2 múltiple como única UI de empresas en reportes de consulta.
+- Omitir persistencia de empresas en mayores, capex y reportes de consulta equivalentes.
+- Aplicar dual list en reportes que solo admiten `empresa_id` único.
+
+## Comprobación rápida
+
+```bash
+rg 'asignacion_empresas_dual' resources/views/{modulo}/
+rg 'empresas_dual.js' resources/views/{modulo}/
+rg 'ReportePreferenciasUsuario' app/Http/Controllers/
+rg 'consolidar_empresas' app/Support app/Services
+php artisan view:cache
+```

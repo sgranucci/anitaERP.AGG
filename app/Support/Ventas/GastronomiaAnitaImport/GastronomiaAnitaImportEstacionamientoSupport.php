@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Support\Ventas\GastronomiaAnitaImport;
 
 use App\ApiAnita;
-use App\Support\Ventas\GastronomiaAnitaImportEmpresaSupport;
 use stdClass;
 
 /**
@@ -54,15 +53,13 @@ final class GastronomiaAnitaImportEstacionamientoSupport
         }
 
         $api = new ApiAnita;
-        $empresaWhere = GastronomiaAnitaImportEmpresaSupport::whereEmpresa('resv', $empresaCodigo);
         $map = [];
 
         foreach (array_chunk($numeros, 200) as $lote) {
             $in = implode(',', $lote);
             $where = " WHERE resv_sucursal = '".$sucursal."'"
                 ." AND resv_letra = 'B' "
-                ." AND resv_nro IN (".$in.") "
-                .$empresaWhere;
+                ." AND resv_nro IN (".$in.") ";
 
             $parsed = ApiAnita::parsearRespuestaLista($api->apiCall([
                 'acc' => 'list',

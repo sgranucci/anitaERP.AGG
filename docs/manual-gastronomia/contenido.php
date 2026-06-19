@@ -18,6 +18,7 @@ return [
                 'Este manual describe el flujo mínimo para operar un día completo (jornada → habilitar turno → facturar → cierre parcial → cierre total → cierre de jornada), las restricciones que el sistema aplica al facturar, y las pantallas de consulta disponibles.',
                 'La configuración previa (mesas, mozos, puntos de venta gastronómicos, turnos maestros, descuentos, áreas de comanda, tótems Waitry) se administra en Ventas → Gastronomía → Tablas. Sin esa configuración, el proceso de facturación no podrá resolver la terminal ni los datos operativos.',
                 'En el despliegue AGG están activas las integraciones Waitry (kioscos/tótems, conciliación Informe Z al cierre de jornada) y Wigos (canjes de premios por cupón y canje diario de fidelidad por tarjeta). Ver capítulo dedicado.',
+                'Los canjes para clientes VIP (equipo Marketing) tienen manual propio: menú Canjes o enlace desde el índice de ayuda (Manual Canjes Marketing).',
             ],
         ],
         [

@@ -61,7 +61,11 @@
                 <article id="cap-{{ $i }}" class="mc-chapter">
                     <h2>{{ $sec['titulo'] }}</h2>
 
-                    @include('ventas.manual.partials.capturas-seccion', ['sec' => $sec])
+                    @include('manual.partials.capturas-seccion', [
+                        'sec' => $sec,
+                        'configKey' => 'manual_gastronomia',
+                        'imgPublicPrefix' => 'docs/manual-gastronomia/img',
+                    ])
 
                     @foreach ($sec['parrafos'] ?? [] as $p)
                         <p>{{ $p }}</p>

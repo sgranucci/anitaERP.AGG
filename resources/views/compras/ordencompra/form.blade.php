@@ -674,6 +674,29 @@
         </table>
     </div>
 
+    <div id="oc-solapa-recepciones" class="oc-solapa" style="display:none;">
+        <div id="oc-recepciones-resumen" class="alert alert-light border small mb-2 d-none"></div>
+        <div class="table-responsive">
+            <table class="table table-bordered table-sm table-hover" id="tabla-recepciones-oc">
+                <thead style="background-color:#85C1E9;color:#17202A;">
+                    <tr>
+                        <th style="width:2.5rem;" title="Expandir detalle de líneas">Det.</th>
+                        <th>Documento</th>
+                        <th>Fecha</th>
+                        <th>Estado</th>
+                        <th>Total</th>
+                        <th>Mon.</th>
+                        <th>Usuario</th>
+                        <th>Diferencias</th>
+                        <th style="min-width:14rem;">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <p id="oc-recepciones-vacio" class="text-muted small d-none mb-0">No hay recepciones ni devoluciones vinculadas a esta orden de compra.</p>
+    </div>
+
     <div id="oc-solapa-arbol" class="oc-solapa" style="display:none;">
         <div id="oc-aviso-arbol" class="alert alert-warning d-none"></div>
         <h5>Movimientos árbol de aprobación</h5>

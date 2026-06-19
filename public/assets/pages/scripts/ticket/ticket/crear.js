@@ -30,7 +30,6 @@
 
 		// Activa eventos de consulta
 		activa_eventos_consultacategoria_ticket();
-		activa_eventos_consultasubcategoria_ticket();
 	}
 
 	function agregaRenglonArchivo(){

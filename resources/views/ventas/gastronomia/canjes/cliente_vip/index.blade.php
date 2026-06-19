@@ -29,6 +29,7 @@
             <div class="card-header">
                 <h3 class="card-title">Clientes VIP gastronomía</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @include('includes.ventas.boton-manual-canjes')
                     @if (config('app.anita_sync_cliente_vip_gastronomia_index') && can('actualizar-cliente-vip-gastronomia', false))
                     <form action="{{ route('sincronizar_cliente_vip_gastronomia_anita') }}" method="POST" class="d-inline mr-1">
                         @csrf

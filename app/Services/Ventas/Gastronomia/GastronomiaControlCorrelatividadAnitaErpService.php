@@ -7,6 +7,7 @@ namespace App\Services\Ventas\Gastronomia;
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Venta;
 use App\Support\Ventas\GastronomiaAnitaImport\GastronomiaAnitaImportEstacionamientoSupport;
+use App\Support\Ventas\GastronomiaAnitaImport\GastronomiaAnitaImportResvtaSupport;
 use Illuminate\Support\Collection;
 
 /**
@@ -47,6 +48,7 @@ final class GastronomiaControlCorrelatividadAnitaErpService
             'solo_erp' => 0,
             'solo_anita' => 0,
             'excluido_estacionamiento' => 0,
+            'excluido_resvta_legacy' => 0,
             'dif_monto' => 0,
             'huecos_corr_erp' => 0,
             'erp_corte_inicio' => 0,
@@ -76,6 +78,11 @@ final class GastronomiaControlCorrelatividadAnitaErpService
                 $empresaCodigo,
                 $numeros,
             );
+            $numerosResvtaLegacy = GastronomiaAnitaImportResvtaSupport::numerosConResvtaEnSucursal(
+                $sucursal,
+                $empresaCodigo,
+                $numeros,
+            );
 
             $ordenadas = $ventasErp->sortBy(fn (Venta $v) => (string) $v->codigo)->values();
             $huecosPv = $this->detectarHuecosCorrelativos($ordenadas);
@@ -91,6 +98,7 @@ final class GastronomiaControlCorrelatividadAnitaErpService
                 'solo_erp' => 0,
                 'solo_anita' => 0,
                 'excluido_estacionamiento' => 0,
+                'excluido_resvta_legacy' => 0,
                 'dif_monto' => 0,
             ];
 
@@ -106,7 +114,7 @@ final class GastronomiaControlCorrelatividadAnitaErpService
                     $corteInicio,
                     $corteFin,
                     $huecosPv,
-                    $numerosEstacionamiento,
+                    $numerosResvtaLegacy,
                 );
                 $filas[] = $fila;
 
@@ -117,6 +125,11 @@ final class GastronomiaControlCorrelatividadAnitaErpService
                     $statsPv['solo_erp']++;
                 } elseif ($estado === 'solo_anita') {
                     $statsPv['solo_anita']++;
+                } elseif ($estado === 'excluido_resvta_legacy') {
+                    $statsPv['excluido_resvta_legacy']++;
+                    if (isset($numerosEstacionamiento[$numero])) {
+                        $statsPv['excluido_estacionamiento']++;
+                    }
                 } elseif ($estado === 'excluido_estacionamiento') {
                     $statsPv['excluido_estacionamiento']++;
                 } elseif ($estado === 'dif_monto') {
@@ -137,6 +150,7 @@ final class GastronomiaControlCorrelatividadAnitaErpService
             $resumen['solo_erp'] += $statsPv['solo_erp'];
             $resumen['solo_anita'] += $statsPv['solo_anita'];
             $resumen['excluido_estacionamiento'] += $statsPv['excluido_estacionamiento'];
+            $resumen['excluido_resvta_legacy'] += $statsPv['excluido_resvta_legacy'];
             $resumen['dif_monto'] += $statsPv['dif_monto'];
 
             $porPuntoventa[] = [
@@ -148,6 +162,7 @@ final class GastronomiaControlCorrelatividadAnitaErpService
                 'solo_erp' => $statsPv['solo_erp'],
                 'solo_anita' => $statsPv['solo_anita'],
                 'excluido_estacionamiento' => $statsPv['excluido_estacionamiento'],
+                'excluido_resvta_legacy' => $statsPv['excluido_resvta_legacy'],
                 'dif_monto' => $statsPv['dif_monto'],
                 'huecos_corr' => count($huecosPv),
                 'min_numero' => $numeros === [] ? null : min($numeros),
@@ -306,16 +321,16 @@ final class GastronomiaControlCorrelatividadAnitaErpService
         ?string $corteInicio,
         ?string $corteFin,
         array $huecosPv,
-        array $numerosEstacionamiento = [],
+        array $numerosResvtaLegacy = [],
     ): array {
         $estado = 'ok';
         $obs = [];
         $clave = $venta !== null ? $this->chequeoService->claveComprobanteDesdeVentaErp($venta) : null;
 
         if ($venta === null && $cab !== null) {
-            if (isset($numerosEstacionamiento[$numero])) {
-                $estado = 'excluido_estacionamiento';
-                $obs[] = 'Cabecera Anita de estacionamiento (resv_host); no se importa a gastronomía';
+            if (isset($numerosResvtaLegacy[$numero])) {
+                $estado = 'excluido_resvta_legacy';
+                $obs[] = 'Cabecera Anita legacy (resvta); no emitida por AnitaERP';
             } else {
                 $estado = 'solo_anita';
                 $obs[] = 'Cabecera Anita sin venta ERP en jornada';

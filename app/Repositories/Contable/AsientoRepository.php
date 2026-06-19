@@ -110,6 +110,25 @@ class AsientoRepository implements AsientoRepositoryInterface
 		return $asiento;
     }
 
+    /**
+     * Reemplaza ctamov en Anita para un asiento ya existente en el ERP.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public function sincronizarCtamovAnita(array $data): void
+    {
+        if (empty($data['numeroasiento'])) {
+            throw new \InvalidArgumentException('Falta numeroasiento para sincronizar ctamov en Anita.');
+        }
+
+        if (array_key_exists('path_sistema', $data)) {
+            $this->path_sistema = $data['path_sistema'];
+        }
+
+        $this->assertPeriodoContablePermitido($data);
+        $this->actualizarAnita($data);
+    }
+
     public function delete($id)
     {
     	$asiento = Asiento::find($id);

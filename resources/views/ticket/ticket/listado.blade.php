@@ -31,7 +31,8 @@
 					<th>Categoría</th>
 					<th>Subcategoría</th>
 					<th>Estado</th>
-					<th>Detalle</th>
+					<th>Título</th>
+					<th>Comentario</th>
 					<th class="width40" data-orderable="false"></th>
 				</tr>
 			</thead>
@@ -46,7 +47,8 @@
 					<td>{{$data->nombrecategoria_ticket ?? ''}}</td>
 					<td>{{$data->nombresubcategoria_ticket ?? ''}}</td>
 					<td>{{$data->estado}}</td>
-					<td>{{$data->detalle}}</td>
+					<td>{{$data->titulo}}</td>
+					<td>{{$data->comentario}}</td>
 				</tr>
 				@endforeach
 			</tbody>

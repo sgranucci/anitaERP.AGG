@@ -159,6 +159,9 @@
                     @if (isset($data) && $data)
                         <button type="button" id="oc-boton-historia-legajo" class="btn btn-info btn-sm mx-1 oc-tab-solapa">Historia legajo</button>
                         <button type="button" id="oc-boton-historia-estados" class="btn btn-info btn-sm mx-1 oc-tab-solapa">Historia estados</button>
+                        <button type="button" id="oc-boton-recepciones" class="btn btn-info btn-sm mx-1 oc-tab-solapa">
+                            <span class="fa fa-truck"></span> Recepciones
+                        </button>
                         <button type="button" id="oc-boton-arbol" class="btn btn-info btn-sm mx-1 oc-tab-solapa">Árbol aprobación</button>
                     @endif
                 </div>

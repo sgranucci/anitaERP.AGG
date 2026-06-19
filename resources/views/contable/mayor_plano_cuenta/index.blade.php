@@ -29,6 +29,7 @@
 })();
 </script>
 <meta name="csrf-token" content="{{ csrf_token() }}">
+<script src="{{ asset('assets/pages/scripts/reportes/empresas_dual.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/contable/mayor_plano_cuenta/filtro.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
 @endsection
@@ -53,12 +54,12 @@
                         Los links a orden de compra sincronizan desde Anita bridge si aún no están en AnitaERP.
                     </p>
 
-                    @include('includes.form-empresa-asignada-multiple', [
+                    @include('includes.reportes.asignacion_empresas_dual', [
                         'empresa_query' => $empresa_query,
                         'empresa_ids_seleccionados' => $filtros['empresa_ids'] ?? [],
-                        'label' => 'Empresas',
-                        'col_label' => 'col-lg-2',
-                        'col_input' => 'col-lg-8',
+                        'consolidar_empresas' => $filtros['consolidar_empresas'] ?? true,
+                        'reporte_clave' => 'mayor_plano_cuenta',
+                        'id_prefix' => 'mpc',
                     ])
 
                     <div class="form-group row">
@@ -133,38 +134,38 @@
                             <div class="row">
                                 <div class="col-md-6">
                                     <label class="small text-muted mb-1" for="cuenta_desde_codigo">Desde</label>
-                                    <div class="mpc-cuenta-campo" data-campo="desde">
-                                        <div class="input-group input-group-sm mb-1">
+                                    <div class="mpc-cuenta-campo mpc-cuenta-inline" data-campo="desde">
+                                        <div class="input-group input-group-sm">
                                             <input type="text" name="cuenta_desde" id="cuenta_desde_codigo"
-                                                class="form-control codigocuentacontable"
+                                                class="form-control codigocuentacontable mpc-cuenta-codigo-input"
                                                 placeholder="111010-001" autocomplete="off"
                                                 value="{{ $cuenta_desde_meta['codigo'] ?? '' }}">
+                                            <input type="text" class="form-control nombrecuentacontable mpc-cuenta-nombre-input" readonly
+                                                placeholder="Nombre cuenta" value="{{ $cuenta_desde_meta['nombre'] ?? '' }}">
                                             <div class="input-group-append">
                                                 <button type="button" title="Consulta cuentas" class="btn btn-outline-secondary consultacuentacontable tooltipsC">
                                                     <i class="fa fa-search"></i>
                                                 </button>
                                             </div>
                                         </div>
-                                        <input type="text" class="form-control form-control-sm nombrecuentacontable" readonly
-                                            placeholder="Nombre cuenta" value="{{ $cuenta_desde_meta['nombre'] ?? '' }}">
                                     </div>
                                 </div>
                                 <div class="col-md-6">
                                     <label class="small text-muted mb-1" for="cuenta_hasta_codigo">Hasta</label>
-                                    <div class="mpc-cuenta-campo" data-campo="hasta">
-                                        <div class="input-group input-group-sm mb-1">
+                                    <div class="mpc-cuenta-campo mpc-cuenta-inline" data-campo="hasta">
+                                        <div class="input-group input-group-sm">
                                             <input type="text" name="cuenta_hasta" id="cuenta_hasta_codigo"
-                                                class="form-control codigocuentacontable"
+                                                class="form-control codigocuentacontable mpc-cuenta-codigo-input"
                                                 placeholder="111010-999 (vacío = todas)" autocomplete="off"
                                                 value="{{ $cuenta_hasta_meta['codigo'] ?? '' }}">
+                                            <input type="text" class="form-control nombrecuentacontable mpc-cuenta-nombre-input" readonly
+                                                placeholder="Nombre cuenta" value="{{ $cuenta_hasta_meta['nombre'] ?? '' }}">
                                             <div class="input-group-append">
                                                 <button type="button" title="Consulta cuentas" class="btn btn-outline-secondary consultacuentacontable tooltipsC">
                                                     <i class="fa fa-search"></i>
                                                 </button>
                                             </div>
                                         </div>
-                                        <input type="text" class="form-control form-control-sm nombrecuentacontable" readonly
-                                            placeholder="Nombre cuenta" value="{{ $cuenta_hasta_meta['nombre'] ?? '' }}">
                                     </div>
                                 </div>
                             </div>
@@ -236,6 +237,14 @@
                     <div class="px-3 py-2 border-bottom bg-light">
                         <p class="mb-1 small">
                             <strong>Empresas:</strong> {{ $empresas_texto }}
+                            @if (count($filtros['empresa_ids'] ?? []) > 1)
+                                · <strong>Modo:</strong>
+                                @if ($filtros['consolidar_empresas'] ?? true)
+                                    consolidado
+                                @else
+                                    un reporte por empresa
+                                @endif
+                            @endif
                             · <strong>Período:</strong> {{ $periodo_texto }}
                             · <strong>Expresado en:</strong> {{ $moneda->nombre ?? '' }} ({{ $moneda->abreviatura ?? '' }})
                         </p>

@@ -22,6 +22,7 @@
             <div class="card-header">
                 <h3 class="card-title">Listado canjes marketing</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @include('includes.ventas.boton-manual-canjes')
                     <a href="{{ route('canje_marketing_listado') }}" class="btn btn-outline-secondary btn-sm ml-1" title="Limpiar filtros">
                         <i class="fa fa-eraser"></i> Limpiar
                     </a>

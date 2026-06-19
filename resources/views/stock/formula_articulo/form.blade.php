@@ -1,7 +1,36 @@
 @php
+    use App\Models\Stock\Articulo;
     use App\Support\Stock\FormulaArticuloGastronomia;
     use App\Support\Stock\FormulaArticuloNumero;
     $esEdicion = isset($data) && $data && ($data->id ?? null);
+    $articulosDisplayCache = [];
+    $resolverArticuloDisplay = static function ($articuloId) use (&$articulosDisplayCache) {
+        $id = (int) $articuloId;
+        if ($id <= 0) {
+            return ['sku' => '', 'desc' => ''];
+        }
+        if (! isset($articulosDisplayCache[$id])) {
+            $articulo = Articulo::query()->find($id, ['sku', 'descripcion']);
+            $articulosDisplayCache[$id] = [
+                'sku' => (string) ($articulo->sku ?? ''),
+                'desc' => (string) ($articulo->descripcion ?? ''),
+            ];
+        }
+
+        return $articulosDisplayCache[$id];
+    };
+    $cabeceraArticuloId = old('articulo_id', $data?->articulo_id ?? '');
+    $cabeceraSku = old('formula_cabecera_sku', $data?->articulos?->sku ?? '');
+    $cabeceraDesc = old('formula_cabecera_desc', $data?->articulos?->descripcion ?? '');
+    if ($cabeceraArticuloId && ($cabeceraSku === '' || $cabeceraDesc === '')) {
+        $cabDisp = $resolverArticuloDisplay($cabeceraArticuloId);
+        if ($cabeceraSku === '') {
+            $cabeceraSku = $cabDisp['sku'];
+        }
+        if ($cabeceraDesc === '') {
+            $cabeceraDesc = $cabDisp['desc'];
+        }
+    }
     if (old('articulo_ids') !== null && is_array(old('articulo_ids'))) {
         $filas = max(1, count(old('articulo_ids')));
     } elseif ($esEdicion && $data->formula_articulo_hijos) {
@@ -17,12 +46,12 @@
             <label class="col-lg-3 col-form-label" for="formula_cabecera_sku_show">Art&iacute;culo (cabecera)</label>
             <div class="col-lg-9">
                 <small class="d-block text-muted mb-1">Opcional. La misma f&oacute;rmula puede reutilizarse en varios art&iacute;culos (v&iacute;nculo desde cada art&iacute;culo).</small>
-                <input type="hidden" name="articulo_id" id="formula_cabecera_articulo_id" value="{{ old('articulo_id', $data->articulo_id ?? '') }}" />
-                <input type="hidden" id="formula_cabecera_sku" class="codigoarticulo" value="{{ old('formula_cabecera_sku', optional($data->articulos)->sku ?? '') }}" />
-                <input type="hidden" id="formula_cabecera_desc" class="descripcionarticulo" value="{{ old('formula_cabecera_desc', optional($data->articulos)->descripcion ?? '') }}" />
+                <input type="hidden" name="articulo_id" id="formula_cabecera_articulo_id" value="{{ $cabeceraArticuloId }}" />
+                <input type="hidden" name="formula_cabecera_sku" id="formula_cabecera_sku" class="codigoarticulo" value="{{ $cabeceraSku }}" />
+                <input type="hidden" name="formula_cabecera_desc" id="formula_cabecera_desc" class="descripcionarticulo" value="{{ $cabeceraDesc }}" />
                 <div class="d-flex flex-wrap align-items-stretch w-100" style="gap: 0.35rem;">
-                    <input type="text" readonly class="form-control form-control-sm text-monospace" id="formula_cabecera_sku_show" style="flex: 0 0 5.25rem; max-width: 20%; min-width: 4.25rem;" value="{{ old('formula_cabecera_sku_show', optional($data->articulos)->sku ?? '') }}" placeholder="SKU" title="SKU" />
-                    <input type="text" readonly class="form-control form-control-sm" id="formula_cabecera_desc_show" style="flex: 1 1 42%; max-width: 50%; min-width: 0;" value="{{ old('formula_cabecera_desc_show', optional($data->articulos)->descripcion ?? '') }}" placeholder="Descripci&oacute;n" title="Descripci&oacute;n" />
+                    <input type="text" readonly class="form-control form-control-sm text-monospace" id="formula_cabecera_sku_show" style="flex: 0 0 5.25rem; max-width: 20%; min-width: 4.25rem;" value="{{ $cabeceraArticuloId ? $cabeceraSku : '' }}" placeholder="SKU" title="SKU" />
+                    <input type="text" readonly class="form-control form-control-sm" id="formula_cabecera_desc_show" style="flex: 1 1 42%; max-width: 50%; min-width: 0;" value="{{ $cabeceraArticuloId ? $cabeceraDesc : '' }}" placeholder="Descripci&oacute;n" title="Descripci&oacute;n" />
                     <div class="d-flex align-items-stretch flex-shrink-0" style="gap: 0.25rem;">
                         <button type="button" class="btn btn-outline-secondary btn-sm js-consulta-articulo-cabecera" title="Buscar art&iacute;culo"><i class="fa fa-search"></i></button>
                         @if($esEdicion)
@@ -35,7 +64,7 @@
         <div class="form-group row">
             <label for="codigo" class="col-lg-3 col-form-label">C&oacute;digo f&oacute;rmula</label>
             <div class="col-lg-9">
-                <input type="text" name="codigo" id="codigo" class="form-control" maxlength="50" value="{{ old('codigo', $data->codigo ?? '') }}" placeholder="{{ $esEdicion ? 'Código de fórmula' : 'Número de fórmula en Anita (stkcm_formula)' }}" />
+                <input type="text" name="codigo" id="codigo" class="form-control" maxlength="50" value="{{ old('codigo', $data?->codigo ?? '') }}" placeholder="{{ $esEdicion ? 'Código de fórmula' : 'Número de fórmula en Anita (stkcm_formula)' }}" />
                 @if (! $esEdicion)
                 <small class="text-muted">Opcional. Si sincroniza desde Anita, se guarda el valor de <code>stkcm_formula</code>.</small>
                 @endif
@@ -44,13 +73,13 @@
         <div class="form-group row">
             <label for="cantidadunidad" class="col-lg-3 col-form-label requerido">Cantidad unidad</label>
             <div class="col-lg-3">
-                <input type="number" step="0.01" name="cantidadunidad" id="cantidadunidad" class="form-control" value="{{ old('cantidadunidad', $data->cantidadunidad ?? '1') }}" required />
+                <input type="number" step="0.01" name="cantidadunidad" id="cantidadunidad" class="form-control" value="{{ old('cantidadunidad', $data?->cantidadunidad ?? '1') }}" required />
             </div>
             <label for="estado" class="col-lg-2 col-form-label requerido">Estado</label>
             <div class="col-lg-4">
                 <select name="estado" id="estado" class="form-control" required>
                     @foreach($estado_enum as $est)
-                        <option value="{{ $est['nombre'] }}" @if(old('estado', $data->estado ?? ($estado_enum[0]['nombre'] ?? '')) == $est['nombre']) selected @endif>{{ $est['nombre'] }}</option>
+                        <option value="{{ $est['nombre'] }}" @if(old('estado', $data?->estado ?? ($estado_enum[0]['nombre'] ?? '')) == $est['nombre']) selected @endif>{{ $est['nombre'] }}</option>
                     @endforeach
                 </select>
             </div>
@@ -58,7 +87,7 @@
         <div class="form-group row">
             <label for="detalle" class="col-lg-3 col-form-label">Detalle</label>
             <div class="col-lg-9">
-                <textarea name="detalle" id="detalle" class="form-control" rows="2">{{ old('detalle', $data->detalle ?? '') }}</textarea>
+                <textarea name="detalle" id="detalle" class="form-control" rows="2">{{ old('detalle', $data?->detalle ?? '') }}</textarea>
             </div>
         </div>
 
@@ -134,7 +163,7 @@
                         <th>Subf&oacute;rmula</th>
                         @if ($formulaGastronomiaOpcional)
                         <th style="width:90px;">Opcional</th>
-                        <th style="width:100px;" title="Solo si opcional = S&iacute;">Orden opc.</th>
+                        <th style="width:100px;" title="Solo si opcional = S&iacute;. Mismo n&uacute;mero = alternativas en la misma ventana del POS.">Orden opc.</th>
                         @endif
                         <th style="width: 9.5rem; max-width: 10rem;">Dep&oacute;sito</th>
                         @if ($tieneRanura)
@@ -149,8 +178,17 @@
                             $h = ($esEdicion && isset($data->formula_articulo_hijos[$i])) ? $data->formula_articulo_hijos[$i] : null;
                             $oid = old("formula_articulo_hijo_ids.$i", $h->id ?? '');
                             $oaid = old("articulo_ids.$i", $h->articulo_id ?? '');
-                            $osku = old("articulo_skus.$i", $h->articulos->sku ?? '');
-                            $odesc = old("articulo_descs.$i", $h->articulos->descripcion ?? '');
+                            $osku = old("articulo_skus.$i", $h?->articulos?->sku ?? '');
+                            $odesc = old("articulo_descs.$i", $h?->articulos?->descripcion ?? '');
+                            if ($oaid && ($osku === '' || $odesc === '')) {
+                                $lineaDisp = $resolverArticuloDisplay($oaid);
+                                if ($osku === '') {
+                                    $osku = $lineaDisp['sku'];
+                                }
+                                if ($odesc === '') {
+                                    $odesc = $lineaDisp['desc'];
+                                }
+                            }
                             $fhid = old("formula_hija_ids.$i", $h->formula_hija_id ?? '');
                             $fhDefault = '';
                             if ($h && $h->formula_hija_id) {
@@ -175,7 +213,7 @@
                                 <input type="hidden" class="unidadmedida" value="" />
                                 <div class="d-flex flex-nowrap w-100 celda-articulo-formula-linea" style="gap: 3px;">
                                     @include('stock.formula_articulo.partials.link_sku_articulo_linea', ['articuloId' => $oaid, 'sku' => $osku])
-                                    <input type="text" readonly class="form-control form-control-sm descripcionarticulo text-truncate" value="{{ $odesc }}" placeholder="Descripci&oacute;n" title="{{ $odesc }}" />
+                                    <input type="text" readonly name="articulo_descs[]" class="form-control form-control-sm descripcionarticulo text-truncate" value="{{ $odesc }}" placeholder="Descripci&oacute;n" title="{{ $odesc }}" />
                                     <button type="button" title="Consulta art&iacute;culos" class="btn btn-sm btn-outline-secondary consultaarticulo tooltipsC flex-shrink-0"><i class="fa fa-search text-primary"></i></button>
                                 </div>
                             </td>
@@ -189,9 +227,9 @@
                             <td class="p-1 align-middle">
                                 <input type="hidden" name="formula_hija_ids[]" class="fh_formula_hija_id" value="{{ $fhid }}" />
                                 <div class="input-group input-group-sm">
-                                    <input type="text" readonly class="form-control fh_formula_hija_label" value="{{ $fhlab }}" placeholder="Opcional" title="{{ $fhlab }}" />
+                                    <input type="text" readonly name="formula_hija_labels[]" class="form-control fh_formula_hija_label" value="{{ $fhlab }}" placeholder="Opcional" title="{{ $fhlab }}" />
                                     <div class="input-group-append">
-                                        <button type="button" class="btn btn-sm btn-outline-secondary js-consulta-formula-linea" data-exclude="{{ $data->id ?? 0 }}" title="Buscar subf&oacute;rmula"><i class="fa fa-flask"></i></button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary js-consulta-formula-linea" data-exclude="{{ $data?->id ?? 0 }}" title="Buscar subf&oacute;rmula"><i class="fa fa-flask"></i></button>
                                         <button type="button" class="btn btn-sm btn-outline-info js-ver-subformula-linea{{ $fhid ? '' : ' sin-subformula' }}" title="Consultar subf&oacute;rmula" data-formula-id="{{ $fhid }}"><i class="fa fa-eye"></i></button>
                                     </div>
                                 </div>

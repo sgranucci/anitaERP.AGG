@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 120" font-family="DejaVu Sans, Arial, sans-serif">
+  <rect width="900" height="120" fill="#f8fafc"/>
+  <text x="450" y="22" text-anchor="middle" font-size="14" font-weight="bold" fill="#1F4E79">Circuito EL BIERZO: pedido � pesada � factura</text>
+  <g font-size="11" fill="#17202A">
+    <rect x="20" y="45" width="120" height="50" rx="6" fill="#cce5ff" stroke="#007bff"/>
+    <text x="80" y="68" text-anchor="middle" font-weight="bold">1. Pedido</text>
+    <text x="80" y="84" text-anchor="middle" font-size="10">Vendedor remoto</text>
+    <text x="155" y="72" font-size="18" fill="#2E75B6">�</text>
+    <rect x="170" y="45" width="120" height="50" rx="6" fill="#fff3cd" stroke="#ffc107"/>
+    <text x="230" y="68" text-anchor="middle" font-weight="bold">2. Listado</text>
+    <text x="230" y="84" text-anchor="middle" font-size="10">Planta imprime</text>
+    <text x="305" y="72" font-size="18" fill="#2E75B6">�</text>
+    <rect x="320" y="45" width="120" height="50" rx="6" fill="#d4edda" stroke="#28a745"/>
+    <text x="380" y="68" text-anchor="middle" font-weight="bold">3. Pesada QR</text>
+    <text x="380" y="84" text-anchor="middle" font-size="10">Kilos reales</text>
+    <text x="455" y="72" font-size="18" fill="#2E75B6">�</text>
+    <rect x="470" y="45" width="130" height="50" rx="6" fill="#f8d7da" stroke="#dc3545"/>
+    <text x="535" y="68" text-anchor="middle" font-weight="bold">4. Factura</text>
+    <text x="535" y="84" text-anchor="middle" font-size="10">Remito + ARCA</text>
+    <text x="615" y="72" font-size="18" fill="#2E75B6">�</text>
+    <rect x="630" y="45" width="120" height="50" rx="6" fill="#e2d5f1" stroke="#6f42c1"/>
+    <text x="690" y="68" text-anchor="middle" font-weight="bold">5. Entrega</text>
+    <text x="690" y="84" text-anchor="middle" font-size="10">Cliente</text>
+  </g>
+</svg>

@@ -242,7 +242,7 @@ class FormulaArticuloController extends Controller
             return redirect()->route('consultar_formula_articulo')->with('mensaje', 'Fórmula creada con éxito');
         }
 
-        return redirect()->back()->withInput()->with('mensaje', $ret['errores'] ?? 'Error al guardar');
+        return redirect()->back()->withInput()->with('errores', [$ret['errores'] ?? 'Error al guardar']);
     }
 
     public function editar(Request $request, int $id)
@@ -269,7 +269,7 @@ class FormulaArticuloController extends Controller
             return $this->redirectDespuesDeActualizarFormula($request, 'Fórmula actualizada con éxito', $id);
         }
 
-        return redirect()->back()->withInput()->with('mensaje', $ret['errores'] ?? 'Error al actualizar');
+        return redirect()->back()->withInput()->with('errores', [$ret['errores'] ?? 'Error al actualizar']);
     }
 
     public function eliminar(Request $request, int $id)

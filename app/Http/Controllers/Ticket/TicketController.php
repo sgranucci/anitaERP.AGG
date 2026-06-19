@@ -12,6 +12,7 @@ use App\Repositories\Ticket\AreadestinoRepositoryInterface;
 use App\Repositories\Ticket\Sector_TicketRepositoryInterface;
 use App\Repositories\Configuracion\SalaRepositoryInterface;
 use App\Services\Ticket\TicketService;
+use App\Services\Ticket\TicketTareaComentarioUsuarioService;
 use App\Models\Ticket\Ticket_Estado;
 use App\Queries\Ticket\TicketQueryInterface;
 use App\Exports\Ticket\TicketExport;
@@ -32,6 +33,7 @@ class TicketController extends Controller
     private $salaRepository;
     private $ticketQuery;
     private $ticketService;
+    private $ticketTareaComentarioUsuarioService;
 
 	public function __construct(Categoria_TicketRepositoryInterface $categoria_ticketrepository,
                                 Subcategoria_TicketRepositoryInterface $subcategoria_ticketrepository,
@@ -41,7 +43,8 @@ class TicketController extends Controller
                                 SalaRepositoryInterface $salarepository,
                                 Sector_TicketRepositoryInterface $sectorrepository,
                                 TicketService $ticketservice,
-                                TicketQueryInterface $ticketquery
+                                TicketQueryInterface $ticketquery,
+                                TicketTareaComentarioUsuarioService $ticketTareaComentarioUsuarioService
                                 )
     {
         $this->categoria_ticketRepository = $categoria_ticketrepository;
@@ -53,6 +56,7 @@ class TicketController extends Controller
         $this->salaRepository = $salarepository;
         $this->ticketService = $ticketservice;
         $this->ticketQuery = $ticketquery;
+        $this->ticketTareaComentarioUsuarioService = $ticketTareaComentarioUsuarioService;
     }
 
     /**
@@ -177,6 +181,46 @@ class TicketController extends Controller
         $this->ticketService->actualizaTicket($request, $id);
 
         return redirect('ticket/ticket')->with('mensaje', 'Ticket actualizado con éxito');
+    }
+
+    public function guardarComentarioTarea(Request $request, $ticketId, $ticketTareaId)
+    {
+        if (! can('editar-ticket', false)
+            && ! can('actualizar-ticket', false)
+            && ! can('usuario-ticket', false)) {
+            return response()->json([
+                'mensaje' => 'ng',
+                'error' => 'No tiene permiso para enviar el comentario.',
+            ], 403);
+        }
+
+        $request->validate([
+            'comentario' => 'required|string|max:2000',
+        ]);
+
+        try {
+            $registro = $this->ticketTareaComentarioUsuarioService->guardar(
+                (int) $ticketId,
+                (int) $ticketTareaId,
+                (string) $request->input('comentario')
+            );
+
+            return response()->json([
+                'mensaje' => 'ok',
+                'comentario' => [
+                    'id' => $registro->id,
+                    'comentario' => $registro->comentario,
+                    'usuario' => $registro->usuarios->nombre ?? '',
+                    'fecha' => $registro->created_at ? $registro->created_at->format('d/m/Y H:i') : '',
+                ],
+            ]);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['mensaje' => 'ng', 'error' => $e->getMessage()], 422);
+        } catch (\RuntimeException $e) {
+            return response()->json(['mensaje' => 'ng', 'error' => $e->getMessage()], 403);
+        } catch (Exception $e) {
+            return response()->json(['mensaje' => 'ng', 'error' => 'No se pudo guardar el comentario.'], 500);
+        }
     }
 
     /**

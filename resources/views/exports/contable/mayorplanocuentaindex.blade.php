@@ -28,7 +28,11 @@
     </tr>
     @foreach ($filas as $f)
         @php $fila = is_array($f) ? $f : (array) $f; $tipo = $fila['tipo_fila'] ?? 'detalle'; @endphp
-        @if ($tipo === 'header_cuenta')
+        @if ($tipo === 'header_empresa')
+            <tr>
+                <td colspan="16" style="font-weight: bold; background-color: #fff3cd;">Empresa: {{ $fila['nombreempresa'] ?? '' }}</td>
+            </tr>
+        @elseif ($tipo === 'header_cuenta')
             <tr>
                 <td colspan="16">Cuenta: {{ $fila['cuenta_codigo'] ?? '' }} {{ $fila['cuenta_nombre'] ?? '' }}</td>
             </tr>

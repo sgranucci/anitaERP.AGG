@@ -67,6 +67,7 @@ class GastronomiaChequearVentasAnitaErp extends Command
                 ['Con diferencia de importes', (string) ($res['conteo']['diferencia'] ?? 0)],
                 ['Solo en ERP', (string) ($res['conteo']['solo_erp'] ?? 0)],
                 ['Solo en Anita', (string) ($res['conteo']['solo_anita'] ?? 0)],
+                ['Excl. Anita legacy (resvta)', (string) ($res['conteo']['excluido_resvta_legacy'] ?? 0)],
                 ['Excl. estacionamiento', (string) ($res['conteo']['excluido_estacionamiento'] ?? 0)],
                 ['Filtro Anita', (string) ($res['filtro_anita'] ?? '')],
             ],

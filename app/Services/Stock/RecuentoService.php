@@ -3,6 +3,7 @@
 namespace App\Services\Stock;
 
 use App\Models\Stock\Articulo;
+use App\Support\Stock\ArticuloSeleccionOperativaSupport;
 use App\Models\Stock\Articulo_Movimiento;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\MovimientoStock;
@@ -322,7 +323,7 @@ class RecuentoService
             $articulo = Articulo::query()
                 ->with('unidadesdemedidas:id,abreviatura,nombre')
                 ->find((int) $articuloId);
-            if (! $articulo) {
+            if (! $articulo || ! ArticuloSeleccionOperativaSupport::esSeleccionable($articulo)) {
                 continue;
             }
             $saldo = $this->saldoRepository->saldo((int) $articulo->id, (int) $deposito->id);
@@ -350,8 +351,9 @@ class RecuentoService
      */
     private function articuloIdsParaRecuentoAleatorio(int $depositoId)
     {
-        $porDepositoEntrega = Articulo::query()
-            ->where('depositoentrega_id', $depositoId)
+        $porDepositoEntrega = ArticuloSeleccionOperativaSupport::aplicarSoloActivosTablaArticulo(
+            Articulo::query()->where('depositoentrega_id', $depositoId)
+        )
             ->pluck('id')
             ->map(fn ($id) => (int) $id);
 
@@ -371,7 +373,12 @@ class RecuentoService
             ->pluck('articulo_id')
             ->map(fn ($id) => (int) $id);
 
-        return $porSaldo->merge($porMovimiento)->filter(fn ($id) => $id > 0)->unique()->values();
+        return ArticuloSeleccionOperativaSupport::aplicarSoloActivosTablaArticulo(
+            Articulo::query()->whereIn('id', $porSaldo->merge($porMovimiento)->filter(fn ($id) => $id > 0)->unique()->values())
+        )
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->values();
     }
 
     /**
@@ -396,12 +403,13 @@ class RecuentoService
                 );
             }
             $skusVistos[$skuClave] = true;
-            $articulo = Articulo::query()
-                ->with('unidadesdemedidas:id,abreviatura,nombre')
-                ->where('sku', $sku)
-                ->first();
+            $articulo = ArticuloSeleccionOperativaSupport::aplicarSoloActivosTablaArticulo(
+                Articulo::query()
+                    ->with('unidadesdemedidas:id,abreviatura,nombre')
+                    ->where('sku', $sku)
+            )->first();
             if (! $articulo) {
-                throw new \RuntimeException("Artículo no encontrado con SKU: {$sku}");
+                throw new \RuntimeException("Artículo no encontrado o inactivo con SKU: {$sku}");
             }
             $lineas[] = [
                 'articulo_id' => $articulo->id,

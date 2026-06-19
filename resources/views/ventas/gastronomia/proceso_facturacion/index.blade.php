@@ -602,14 +602,19 @@
 
 @section('scripts')
 <script>
-    window.GASTRONOMIA = {
+    (function () {
+        var _gastroBase = typeof resolverCarpetaBaseApp === 'function'
+            ? resolverCarpetaBaseApp()
+            : (typeof carpetaBase !== 'undefined' ? carpetaBase : '');
+        _gastroBase = String(_gastroBase || '').replace(/\/$/, '');
+        window.GASTRONOMIA = {
         empresaId: {{ (int) $empresa_id }},
         prefijoSku: @json($prefijo_sku),
         skuCatalogoDigitosSufijo: {{ (int) $sku_catalogo_digitos_sufijo }},
         csrf: @json(csrf_token()),
         rutas: {
-            crearCobranzaBase: @json(url('caja/cobranza/crear')),
-            listaPdfFacturaBase: @json(url('ventas/listaunafactura')),
+            crearCobranzaBase: _gastroBase + '/caja/cobranza/crear',
+            listaPdfFacturaBase: _gastroBase + '/ventas/listaunafactura',
         },
         tieneCfgPv: @json($tiene_cfg_pv),
         usocuentacajaGastronomiaId: {{ (int) ($usocuentacaja_gastronomia_id ?? 0) }},
@@ -624,14 +629,14 @@
         mozoObligatorioAlAbrir: @json($mozo_obligatorio_al_abrir ?? true),
         jornadaObligatoria: @json($jornada_obligatoria ?? true),
         jornada: @json($jornada),
-        urlJornada: @json(route('gastronomia_jornada')),
+        urlJornada: _gastroBase + '/ventas/gastronomia/jornada',
         requiereHabilitacionTurno: @json($requiere_habilitacion_turno ?? true),
         turnoOperativo: @json($turno_operativo ?? null),
-        urlHabilitacionTurno: @json(route('gastronomia_habilitacion_turno')),
+        urlHabilitacionTurno: _gastroBase + '/ventas/gastronomia/habilitacion-turno',
         rutasTurno: {
-            estado: @json(url('ventas/gastronomia/api/turno-estado')),
-            cierreParcial: @json(url('ventas/gastronomia/api/cierre-parcial-turno')),
-            cerrar: @json(url('ventas/gastronomia/api/cerrar-turno')),
+            estado: _gastroBase + '/ventas/gastronomia/api/turno-estado',
+            cierreParcial: _gastroBase + '/ventas/gastronomia/api/cierre-parcial-turno',
+            cerrar: _gastroBase + '/ventas/gastronomia/api/cerrar-turno',
         },
         waitryHabilitado: @json($waitry_habilitado_terminal ?? false),
         waitryTrasRespuesta: @json(config('gastronomia.waitry_tras_respuesta', true)),
@@ -642,10 +647,11 @@
         listaprecioId: {{ (int) ($listaprecio_id ?? config('precio.listaprecio_default_id', 1)) }},
         listaprecioNombre: @json($listaprecio_nombre ?? null),
         rutasWaitry: {
-            ordenesPendientes: @json(url('ventas/gastronomia/api/waitry-ordenes-pendientes')),
-            importarOrden: @json(url('ventas/gastronomia/api/waitry-importar-orden')),
+            ordenesPendientes: _gastroBase + '/ventas/gastronomia/api/waitry-ordenes-pendientes',
+            importarOrden: _gastroBase + '/ventas/gastronomia/api/waitry-importar-orden',
         },
     };
+    })();
 </script>
 @php
     $gastroCuentasLibresHabilitadas = $cuentas_libres_habilitadas ?? true;

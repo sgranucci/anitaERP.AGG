@@ -5,8 +5,9 @@ Editar préstamo
 
 @section("scripts")
 <script src="{{ asset('assets/pages/scripts/admin/crear.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/depmae/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/prestamo/form.js') }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/stock/deposito-filtro-empresa.js') }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
@@ -77,4 +78,6 @@ Editar préstamo
     </div>
 </div>
 @endif
+@include('includes.stock.modalconsultaarticulo')
+@include('includes.stock.modalconsultadeposito')
 @endsection

@@ -27,6 +27,8 @@ use App\Services\Compras\OrdencompraAnitaSyncService;
 use App\Services\Compras\OrdencompraGestionService;
 use App\Services\Compras\OrdencompraListadoPdfService;
 use App\Services\Compras\OrdencompraOpcionesPrecioService;
+use App\Services\Compras\OrdencompraRecepcionesListadoService;
+use App\Services\Compras\OrdencompraRecepcionPrecioSyncService;
 use App\Services\Configuracion\ArbolaprobacionService;
 use App\Services\Configuracion\ImpuestoService;
 use App\Support\Compras\NotaOcPdfRecorteMargenIzquierdo;
@@ -36,6 +38,7 @@ use App\Support\Compras\OrdencompraPdfContextoRequisicion;
 use App\Support\Compras\OrdencompraTotalesCabecera;
 use App\Support\Compras\OrdencompraTotalesResumen;
 use App\Support\Compras\RequisicionTotalesCabecera;
+use App\Models\Stock\Recepcion_Proveedor;
 use Auth;
 use Illuminate\Http\Request;
 use Jurosh\PDFMerge\PDFMerger;
@@ -56,6 +59,8 @@ class OrdencompraController extends Controller
         private RequisicionQueryInterface $requisicionQuery,
         private OrdencompraAnitaSyncService $ordencompraAnitaSyncService,
         private OrdencompraListadoPdfService $ordencompraListadoPdfService,
+        private OrdencompraRecepcionesListadoService $ordencompraRecepcionesListadoService,
+        private OrdencompraRecepcionPrecioSyncService $ordencompraRecepcionPrecioSyncService,
     ) {}
 
     public function index(Request $request)
@@ -385,6 +390,39 @@ class OrdencompraController extends Controller
         return response()->json(
             $this->arbolaprobacionService->movimientosOrdencompraConAvisoGrabacion((int) $ordencompra_id)
         );
+    }
+
+    public function leerRecepciones($ordencompra_id)
+    {
+        can('editar-ordencompra');
+
+        return response()->json(
+            $this->ordencompraRecepcionesListadoService->listar((int) $ordencompra_id)
+        );
+    }
+
+    public function aplicarPreciosRecepcion($ordencompra_id, $recepcion_id)
+    {
+        can('editar-ordencompra');
+
+        $recepcion = Recepcion_Proveedor::query()
+            ->where('id', (int) $recepcion_id)
+            ->where('ordencompra_id', (int) $ordencompra_id)
+            ->firstOrFail();
+
+        try {
+            $actualizadas = $this->ordencompraRecepcionPrecioSyncService->actualizarPreciosDesdeRecepcion($recepcion);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'actualizadas' => $actualizadas,
+            'mensaje' => $actualizadas > 0
+                ? "Se actualizaron {$actualizadas} precio(s) en la OC y Anita."
+                : 'No había precios pendientes de aplicar.',
+        ]);
     }
 
     public function cambiarEstado(Request $request, $id)

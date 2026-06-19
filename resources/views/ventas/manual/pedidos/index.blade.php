@@ -60,6 +60,8 @@
                 <article id="cap-{{ $i }}" class="mc-chapter">
                     <h2>{{ $sec['titulo'] }}</h2>
 
+                    @include('ventas.manual.partials.capturas-seccion', ['sec' => $sec])
+
                     @foreach ($sec['parrafos'] ?? [] as $p)
                         <p>{{ $p }}</p>
                     @endforeach

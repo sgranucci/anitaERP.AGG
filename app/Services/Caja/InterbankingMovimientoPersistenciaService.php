@@ -2,7 +2,9 @@
 
 namespace App\Services\Caja;
 
+use App\Models\Caja\Cuentacaja;
 use App\Models\Caja\InterbankingMovimiento;
+use App\Support\Caja\InterbankingCuentacajaParametrosSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use Carbon\Carbon;
 use Throwable;
@@ -206,5 +208,132 @@ class InterbankingMovimientoPersistenciaService
             'paginas' => $paginas,
             'error' => null,
         ];
+    }
+
+    /**
+     * Sincroniza movimientos de todas las cuentas de caja con Interbanking configurado
+     * para cada empresa con `customer_id` en config.
+     *
+     * @return array{ok: bool, cuentas_procesadas: int, filas_guardadas: int, errores: array<string, string>}
+     */
+    public function sincronizarEmpresasConfiguradas(
+        InterbankingService $interbankingService,
+        int $diasVentana = 14
+    ): array {
+        $customerIds = config('interbanking.customer_id');
+        if (! is_array($customerIds) || $customerIds === []) {
+            return [
+                'ok' => false,
+                'cuentas_procesadas' => 0,
+                'filas_guardadas' => 0,
+                'errores' => ['0' => 'interbanking.customer_id no configurado.'],
+            ];
+        }
+
+        [$dateSince, $dateUntil] = $this->rangoFechasSincronizacion($diasVentana);
+
+        $cuentasProcesadas = 0;
+        $filasTotales = 0;
+        $errores = [];
+
+        foreach ($customerIds as $idx => $_customerId) {
+            $empresaId = (int) $idx + 1;
+
+            $cuentas = Cuentacaja::query()
+                ->paraEmpresa($empresaId)
+                ->whereNotNull('cuenta_interbanking')
+                ->where('cuenta_interbanking', '!=', '')
+                ->with(['bancos', 'monedas'])
+                ->get();
+
+            foreach ($cuentas as $cuenta) {
+                $accountNumber = trim((string) ($cuenta->cuenta_interbanking ?? ''));
+                if ($accountNumber === '') {
+                    continue;
+                }
+
+                $params = InterbankingCuentacajaParametrosSupport::parametrosApiDesdeCuentacaja($cuenta, $empresaId);
+                if ($params === null) {
+                    $errores[$empresaId.':'.$cuenta->codigo] = 'Sin código de banco para sincronizar movimientos.';
+
+                    continue;
+                }
+
+                $clave = $empresaId.':'.$cuenta->codigo;
+                $filasCuenta = 0;
+                $okAlguno = false;
+                $mensajesError = [];
+
+                $resultadoAnteriores = $this->sincronizarDesdeApi(
+                    $interbankingService,
+                    $empresaId,
+                    $accountNumber,
+                    $params['bank_number'],
+                    $params['account_type'],
+                    $params['currency'],
+                    'anteriores',
+                    $dateSince,
+                    $dateUntil,
+                    200,
+                    80,
+                    true
+                );
+
+                if (! empty($resultadoAnteriores['ok'])) {
+                    $okAlguno = true;
+                    $filasCuenta += (int) ($resultadoAnteriores['filas_guardadas'] ?? 0);
+                } else {
+                    $mensajesError[] = $resultadoAnteriores['error'] ?? 'Error al sincronizar movimientos anteriores.';
+                }
+
+                $resultadoDia = $this->sincronizarDesdeApi(
+                    $interbankingService,
+                    $empresaId,
+                    $accountNumber,
+                    $params['bank_number'],
+                    $params['account_type'],
+                    $params['currency'],
+                    'dia',
+                    null,
+                    null,
+                    200,
+                    80,
+                    true
+                );
+
+                if (! empty($resultadoDia['ok'])) {
+                    $okAlguno = true;
+                    $filasCuenta += (int) ($resultadoDia['filas_guardadas'] ?? 0);
+                } else {
+                    $mensajesError[] = $resultadoDia['error'] ?? 'Error al sincronizar movimientos del día.';
+                }
+
+                if ($okAlguno) {
+                    $cuentasProcesadas++;
+                    $filasTotales += $filasCuenta;
+                } else {
+                    $errores[$clave] = implode(' / ', array_filter($mensajesError));
+                }
+            }
+        }
+
+        return [
+            'ok' => $errores === [],
+            'cuentas_procesadas' => $cuentasProcesadas,
+            'filas_guardadas' => $filasTotales,
+            'errores' => $errores,
+        ];
+    }
+
+    /**
+     * @return array{0: string, 1: string}
+     */
+    public function rangoFechasSincronizacion(int $diasVentana): array
+    {
+        $diasVentana = max(1, min(60, $diasVentana));
+        $dateUntil = Carbon::today();
+        $dateSince = $dateUntil->copy()->subDays($diasVentana - 1);
+
+        return [$dateSince->toDateString(), $dateUntil->toDateString()];
     }
 }

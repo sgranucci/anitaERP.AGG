@@ -7,6 +7,9 @@ return [
     */
     'contabilidad_activa' => filter_var(env('RECEPCION_PROVEEDOR_CONTABILIDAD_ACTIVA', true), FILTER_VALIDATE_BOOLEAN),
 
+    // Al confirmar recepción: actualizar ordencompra_articulo.precio y pendmovp.penvp_precio si difiere de la OC.
+    'actualizar_precio_oc_al_confirmar' => filter_var(env('RECEPCION_PROVEEDOR_ACTUALIZAR_PRECIO_OC_AL_CONFIRMAR', true), FILTER_VALIDATE_BOOLEAN),
+
     'anita' => [
         'sistema_compras' => env('RECEPCION_PROVEEDOR_ANITA_SISTEMA', 'compras'),
         // stkmov vive en Informix ventas (mismo bridge que facturación), no en compras.
@@ -26,6 +29,7 @@ return [
             'recepcion_parte_unica' => 'recpunica',
             'articulo_parte_unica' => 'stk_parte_unica',
             'stock_movimiento' => 'stkmov',
+            'stock_maestro' => 'stkmae',
         ],
         'oc_tipo' => 'PEP',
         'oc_letra' => 'X',
