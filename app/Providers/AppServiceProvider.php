@@ -707,6 +707,21 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Compras\Comprobante_ProveedorRepositoryInterface',
+            'App\Repositories\Compras\Comprobante_ProveedorRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Compras\Comprobante_Proveedor_ConceptoRepositoryInterface',
+            'App\Repositories\Compras\Comprobante_Proveedor_ConceptoRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Compras\Comprobante_Proveedor_ArchivoRepositoryInterface',
+            'App\Repositories\Compras\Comprobante_Proveedor_ArchivoRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Ventas\FormapagoRepositoryInterface',
             'App\Repositories\Ventas\FormapagoRepository',
         );
@@ -1131,6 +1146,11 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             'App\Repositories\Contable\CentrocostoRepositoryInterface',
             'App\Repositories\Contable\CentrocostoRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Contable\BienUsoRepositoryInterface',
+            'App\Repositories\Contable\BienUsoRepository',
         );
 
         $this->app->bind(

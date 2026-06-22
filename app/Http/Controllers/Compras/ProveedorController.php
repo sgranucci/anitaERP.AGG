@@ -37,6 +37,9 @@ use App\Services\Compras\OrdencompraService;
 use App\Repositories\Configuracion\CondicionIIBBRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Compras\ProveedorRepositoryInterface;
+use App\Services\Arca\ConstanciaInscripcionService;
+use App\Support\Ventas\ArcaPadronImpuestosClienteValidacion;
+use Illuminate\Http\JsonResponse;
 use App\Repositories\Compras\Proveedor_ExclusionRepositoryInterface;
 use App\Repositories\Compras\Proveedor_ArchivoRepositoryInterface;
 use App\Repositories\Compras\Proveedor_FormapagoRepositoryInterface;
@@ -550,6 +553,70 @@ class ProveedorController extends Controller
     {
         return ($this->proveedorQuery->consultaProveedor($request->consulta));
 	}
+
+    /**
+     * Consulta ARCA en background desde el ABM; suspende el proveedor si los impuestos no son válidos (RI / Monotributo).
+     */
+    public function validarArcaPadron(Request $request, int $id): JsonResponse
+    {
+        can('editar-proveedor');
+
+        if (! filter_var(config('arca.padron_validacion_proveedor.habilitado', true), FILTER_VALIDATE_BOOLEAN)) {
+            return response()->json([
+                'ok' => true,
+                'skipped' => true,
+                'validacion' => null,
+            ]);
+        }
+
+        $proveedor = $this->proveedorRepository->find($id);
+        if (! $proveedor) {
+            return response()->json(['ok' => false, 'message' => 'Proveedor inexistente.'], 404);
+        }
+
+        $cuit = preg_replace('/\D+/', '', (string) $proveedor->nroinscripcion);
+        if (strlen($cuit) !== 11) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'El proveedor no tiene una CUIT válida (11 dígitos) para consultar ARCA.',
+            ], 422);
+        }
+
+        $condicionivaId = (int) $request->input('condicioniva_id', $proveedor->condicioniva_id);
+
+        try {
+            $data = app(ConstanciaInscripcionService::class)->getPersonaV2($cuit);
+            $validacion = ArcaPadronImpuestosClienteValidacion::validar(
+                $condicionivaId > 0 ? $condicionivaId : null,
+                $data
+            );
+            $suspendido = false;
+
+            if (($validacion['debe_suspender'] ?? false) && ($validacion['aplica'] ?? false)) {
+                Proveedor::query()->whereKey($id)->update(['estado' => 'Suspendido']);
+                $suspendido = true;
+            }
+
+            $httpOk = ! ($validacion['aplica'] ?? false) || ($validacion['ok'] ?? false);
+
+            return response()->json([
+                'ok' => $httpOk,
+                'message' => $validacion['mensaje'] ?? null,
+                'data' => $data,
+                'validacion' => $validacion,
+                'suspendido' => $suspendido,
+                'estado' => $suspendido ? 'Suspendido' : (string) $proveedor->estado,
+                'soap' => $data['soap'] ?? null,
+            ], $httpOk ? 200 : 422);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'ok' => false,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
 
     public function leeProveedor($proveedor_id)
     {

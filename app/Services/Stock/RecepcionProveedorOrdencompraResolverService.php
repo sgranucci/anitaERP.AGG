@@ -12,6 +12,7 @@ use App\Support\Stock\RecepcionProveedorDepositoSupport;
 use App\Support\Stock\RecepcionProveedorFormItemsSupport;
 use App\Support\Stock\RecepcionProveedorOcPendienteSupport;
 use App\Support\Stock\RecepcionProveedorParteUnicaSupport;
+use App\Support\Stock\RecepcionProveedorVisibilidadSupport;
 use Illuminate\Support\Carbon;
 
 class RecepcionProveedorOrdencompraResolverService
@@ -43,6 +44,10 @@ class RecepcionProveedorOrdencompraResolverService
             throw new \RuntimeException("Orden de compra {$numeroOc} inexistente en AnitaERP y en Anita.");
         }
 
+        if (! RecepcionProveedorVisibilidadSupport::ordencompraAccesible((int) $oc->id)) {
+            throw new \RuntimeException("Orden de compra {$numeroOc} no encontrada o sin acceso.");
+        }
+
         $this->ensurePenvpOrdenEnLineasOc($oc);
 
         return [
@@ -53,6 +58,10 @@ class RecepcionProveedorOrdencompraResolverService
 
     public function resolverPorId(int $ordencompraId): array
     {
+        if (! RecepcionProveedorVisibilidadSupport::ordencompraAccesible($ordencompraId)) {
+            throw new \RuntimeException('Orden de compra no encontrada o sin acceso.');
+        }
+
         $oc = $this->ordencompraRepository->find($ordencompraId);
         $this->ensurePenvpOrdenEnLineasOc($oc);
 

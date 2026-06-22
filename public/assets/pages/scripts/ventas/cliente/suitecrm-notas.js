@@ -370,9 +370,7 @@
             $modal.appendTo('body');
         }
 
-        $('#botonform9').on('click', function () {
-            $('.form1, .form2, .form3, .form4, .form5, .form6, .form7, .form8, .form9').hide();
-            $('.form9').show();
+        $('#tab-suitecrm-link').on('shown.bs.tab', function () {
             cargarSolapaCrm();
         });
 

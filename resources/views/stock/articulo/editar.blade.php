@@ -62,11 +62,12 @@ window.consultaFormulaArticuloConfig = {
                     @if (\App\Support\Stock\MovimientosArticuloDepositoSupport::puedeConsultar())
                     <button type="button"
                         class="btn btn-secondary btn-sm btn-movimientos-stock-articulo tooltipsC"
-                        title="Movimientos de stock por dep&oacute;sito"
+                        title="Kardex de stock por dep&oacute;sito"
                         data-articulo-id="{{ $producto->id }}"
                         data-articulo-sku="{{ $producto->sku ?? '' }}"
-                        data-articulo-descripcion="{{ $producto->descripcion ?? '' }}">
-                        <i class="fa fa-fw fa-exchange"></i> Movimientos stock
+                        data-articulo-descripcion="{{ $producto->descripcion ?? '' }}"
+                        data-deposito-id="{{ $producto->depositoentrega_id ?? '' }}">
+                        <i class="fa fa-fw fa-list-alt"></i> Kardex
                     </button>
                     @endif
                     @if (empty($ocultarVolver))
@@ -174,6 +175,7 @@ window.consultaFormulaArticuloConfig = {
 @include('includes.compras.modalconsultaproveedor')
 @endif
 @if (\App\Support\Stock\MovimientosArticuloDepositoSupport::puedeConsultar())
+@include('includes.stock.modal_kardex_deposito')
 <input type="hidden" id="recuento-movimientos-articulo-url" value="{{ route('recuento_movimientos_articulo') }}">
 @endif
 @endsection

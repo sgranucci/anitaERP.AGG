@@ -350,6 +350,9 @@ final class RendicionGastronomiaAnitaRendgastroSupport
 
     /**
      * Suma NC portadora de cabeceras PC (rendg_host IP) + post-cierre Waitry del día Anita.
+     *
+     * Excluye estacionamiento (mismo criterio que el bruto ERP del control día gastronomía).
+     * Hasta integrar estacionamiento en el ERP, mezclar NC estac. aquí generaba DIF falso vs neto salón.
      */
     public function sumaNcPortadorasPcMasPostCierre(int $empresaId, int $fechaEntera, int $jornadaId = 0): float
     {
@@ -359,6 +362,10 @@ final class RendicionGastronomiaAnitaRendgastroSupport
         /** @var array<string, list<object>> $porHost */
         $porHost = [];
         foreach ($cabeceras as $fila) {
+            if ($this->esCabeceraEstacionamiento($fila)) {
+                continue;
+            }
+
             $host = trim((string) ($fila->rendg_host ?? ''));
             if ($host === '' || $this->esCabeceraPostCierreWaitry($fila)) {
                 continue;

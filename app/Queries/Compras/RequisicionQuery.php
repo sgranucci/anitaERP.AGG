@@ -7,8 +7,8 @@ use App\Queries\Configuracion\CotizacionQueryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Compras\RequisicionListadoFiltros;
 use App\Support\Compras\RequisicionTotalesCabecera;
+use App\Support\Compras\RequisicionVisibilidadSupport;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -37,34 +37,7 @@ class RequisicionQuery implements RequisicionQueryInterface
 
     public function requisicionAccesiblePorUsuario(int $id): bool
     {
-        $empresas = $this->empresaRepository->traeEmpresasAsignadas();
-        $oficina_compra_id = config('requisicion.filtro_oficina_compras_activo', false)
-            ? Auth::user()->oficinacompra_id
-            : null;
-        $centrocosto_id = Auth::user()->centrocosto_id;
-        $centrocostoFiltro = null;
-
-        if (can('usuario-requisicion-compras', false)) {
-            $centrocostoFiltro = null;
-        }
-
-        if (can('usuario-requisicion-resto', false)) {
-            $centrocostoFiltro = $centrocosto_id;
-        }
-
-        $q = $this->model->newQuery()
-            ->where('requisicion.id', $id)
-            ->whereIn('requisicion.empresa_id', $empresas);
-
-        if ($oficina_compra_id) {
-            $q->where('requisicion.oficinacompra_id', $oficina_compra_id);
-        }
-
-        if ($centrocostoFiltro) {
-            $q->where('requisicion.centrocosto_id', $centrocostoFiltro);
-        }
-
-        return $q->exists();
+        return RequisicionVisibilidadSupport::requisicionAccesiblePorId($id);
     }
 
     public function puedeUsuarioGenerarMultiplesOcDesdeRequisicion(Requisicion $r): bool
@@ -97,22 +70,6 @@ class RequisicionQuery implements RequisicionQueryInterface
             ];
         } elseif (! is_array($filtros)) {
             $filtros = RequisicionListadoFiltros::filtrosVacios();
-        }
-
-        $empresas = $this->empresaRepository->traeEmpresasAsignadas();
-        $oficina_compra_id = config('requisicion.filtro_oficina_compras_activo', false)
-            ? Auth::user()->oficinacompra_id
-            : null;
-
-        $centrocosto_id = Auth::user()->centrocosto_id;
-        $centrocostoFiltro = null;
-
-        if (can('usuario-requisicion-compras', false)) {
-            $centrocostoFiltro = null;
-        }
-
-        if (can('usuario-requisicion-resto', false)) {
-            $centrocostoFiltro = $centrocosto_id;
         }
 
         $select = [
@@ -150,15 +107,7 @@ class RequisicionQuery implements RequisicionQueryInterface
             ->leftJoin('formapago', 'formapago.id', '=', 'requisicion.formapago_id')
             ->join('usuario', 'usuario.id', '=', 'requisicion.creousuario_id');
 
-        if ($oficina_compra_id) {
-            $q->where('requisicion.oficinacompra_id', $oficina_compra_id);
-        }
-
-        if ($centrocostoFiltro) {
-            $q->where('requisicion.centrocosto_id', $centrocostoFiltro);
-        }
-
-        $q->whereIn('requisicion.empresa_id', $empresas);
+        RequisicionVisibilidadSupport::aplicarFiltroListado($q);
 
         if (RequisicionListadoFiltros::tieneCriteriosAplicados($filtros)) {
             RequisicionListadoFiltros::aplicar($q, $filtros);

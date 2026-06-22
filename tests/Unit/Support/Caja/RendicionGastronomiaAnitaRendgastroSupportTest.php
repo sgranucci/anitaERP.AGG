@@ -55,4 +55,15 @@ final class RendicionGastronomiaAnitaRendgastroSupportTest extends TestCase
 
         self::assertSame(1072800.80, $total);
     }
+
+    public function test_es_cabecera_estacionamiento_host_legacy_rebisco(): void
+    {
+        $fila = (object) [
+            'rendg_host' => '192.168.40.151',
+            'rendg_sucursal' => 0,
+            'rendg_empresa' => 3,
+        ];
+
+        self::assertTrue($this->support->esCabeceraEstacionamiento($fila));
+    }
 }

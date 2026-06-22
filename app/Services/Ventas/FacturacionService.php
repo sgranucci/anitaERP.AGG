@@ -71,6 +71,7 @@ use App\Models\Ventas\Vendedor;
 use App\Models\Ventas\Condicionventa;
 use App\Models\Ventas\Condicionventacuota;
 use App\Models\Configuracion\Empresa;
+use App\Models\Seguridad\Usuario;
 use App\Models\Configuracion\Localidad;
 use App\Models\Configuracion\Moneda;
 use App\Services\Stock\PrecioService;
@@ -3399,6 +3400,39 @@ class FacturacionService
 		}
 	}
 
+	/**
+	 * ven_usuario / usuarioalta en Anita: sesión HTTP o usuario_id de la venta (cola, CLI).
+	 */
+	private function nombreUsuarioAnita(?int $usuarioId = null): string
+	{
+		$usuario = Auth::user();
+		if ($usuario !== null) {
+			$nombre = trim((string) ($usuario->nombre ?? ''));
+			if ($nombre !== '') {
+				return $nombre;
+			}
+		}
+
+		if ($usuarioId !== null && $usuarioId > 0) {
+			$nombre = trim((string) (Usuario::query()->whereKey($usuarioId)->value('nombre') ?? ''));
+			if ($nombre !== '') {
+				return $nombre;
+			}
+		}
+
+		return 'ERP';
+	}
+
+	/**
+	 * @param  array<string, mixed>  $venta
+	 */
+	private function nombreUsuarioAnitaParaGraba(array $venta): string
+	{
+		$usuarioId = isset($venta['usuario_id']) ? (int) $venta['usuario_id'] : null;
+
+		return $this->nombreUsuarioAnita($usuarioId > 0 ? $usuarioId : null);
+	}
+
 	// Graba factura en Anita
 	public function grabaAnita($puntoventa, $letra, $puntoventaremito, $numeroremito, $venta, 
 								$dataCAE, $conceptostotales, $cuentacorriente, $datatalle, $signo, 
@@ -3593,7 +3627,7 @@ class FacturacionService
 							'".$numerodocumento."',
 							'".$venCondIvaCli."',
 							'".$venCtaCte."',
-							'".Auth::user()->nombre."',
+							'".$this->nombreUsuarioAnitaParaGraba($venta)."',
 							'".'ERP'."',
 							'".date_format(Carbon::now(), 'Ymd')."',
 							'".' '."',
@@ -3670,7 +3704,7 @@ class FacturacionService
 							'".$numerodocumento."',
 							'".$venCondIvaCli."',
 							'".$venCtaCte."',
-							'".Auth::user()->nombre."',
+							'".$this->nombreUsuarioAnitaParaGraba($venta)."',
 							'".'ERP'."',
 							'".date_format(Carbon::now(), 'Ymd')."',
 							'".' '."',
@@ -4197,7 +4231,7 @@ class FacturacionService
 								'".'0'."',
 								'".($ifx_server == 'IFX_SERVER_LOCAL' ? $medida['medida'] : $medida['partida'])."',
 								'".substr((string) ($medida['pedido'] ?? '0'),-8)."',
-								'".Auth::user()->nombre."',
+								'".$this->nombreUsuarioAnitaParaGraba($venta)."',
 								'".'ERP'."',
 								'".date_format(Carbon::now(), 'Ymd')."',
 								'".'0'."',
@@ -5892,7 +5926,7 @@ class FacturacionService
 		$data['subzona'] = $cliente->subzona_id;
 		$data['oblea'] = '';
 		$data['cantidadmodificada'] = $totalKilo;
-		$data['usuarioalta'] = Auth::user()->nombre;
+		$data['usuarioalta'] = $this->nombreUsuarioAnita();
 
 		$this->movimientoStockService->guardaMovimientoStock($data, 'create');
 

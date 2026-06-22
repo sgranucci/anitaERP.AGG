@@ -113,7 +113,7 @@
         <td class="lbl">Turno operativo</td>
         <td>#{{ $d['turno_operativo_id'] ?? '—' }}</td>
     </tr>
-    @include('ventas.estacionamiento.cierres_turno.partials.observacion_habilitacion_comprobante', ['d' => $d])
+    @include('caja.estacionamiento.cierres_turno.partials.observacion_habilitacion_comprobante', ['d' => $d])
 </table>
 
 @php

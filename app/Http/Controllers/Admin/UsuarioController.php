@@ -12,8 +12,11 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\OficinacompraRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Ventas\VendedorRepositoryInterface;
+use App\Support\Http\EliminacionRegistroSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class UsuarioController extends Controller
 {
@@ -131,15 +134,37 @@ class UsuarioController extends Controller
 
     public function eliminar(Request $request, $id)
     {
-        if ($request->ajax()) {
-            $usuario = Usuario::findOrFail($id);
-            $usuario->auditDetach('roles');
-            $usuario->delete();
-            Storage::disk('public')->delete("imagenes/fotos_usuarios/$usuario->foto");
-
-            return response()->json(['mensaje' => 'ok']);
-        } else {
+        if (! $request->ajax()) {
             abort(404);
+        }
+
+        try {
+            $usuario = Usuario::findOrFail($id);
+
+            if ((int) $id === (int) session('usuario_id')) {
+                return EliminacionRegistroSupport::respuestaJsonError('No puede eliminar su propio usuario mientras tiene la sesión activa.');
+            }
+
+            $usuario->auditDetach('roles');
+            $usuario->auditDetach('usuario_empresas');
+            $usuario->auditDetach('depositosAutorizados');
+
+            $foto = $usuario->foto;
+            $usuario->delete();
+
+            if ($foto) {
+                Storage::disk('public')->delete("imagenes/fotos_usuarios/$foto");
+            }
+
+            return EliminacionRegistroSupport::respuestaJsonOk();
+        } catch (QueryException $e) {
+            return EliminacionRegistroSupport::respuestaJsonError(
+                EliminacionRegistroSupport::mensajeDesdeQueryException($e, 'el usuario')
+            );
+        } catch (\Throwable $e) {
+            return EliminacionRegistroSupport::respuestaJsonError(
+                EliminacionRegistroSupport::mensajeDesdeExcepcion($e, 'el usuario')
+            );
         }
     }
 

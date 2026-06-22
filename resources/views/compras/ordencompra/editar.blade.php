@@ -114,6 +114,11 @@
                             <i class="fas fa-file-pdf"></i> PDF apaisado
                         </a>
                     @endif
+                    @if (isset($data) && $data && can('crear-comprobante-proveedor', false))
+                        <a href="{{ route('crear_comprobante_proveedor', ['ordencompra_id' => $data->id]) }}" class="btn btn-outline-success btn-sm" title="Alta de comprobante de proveedor vinculado a esta OC">
+                            <i class="fa fa-file-text-o"></i> Facturar proveedor
+                        </a>
+                    @endif
                     @if (isset($data) && $data && empty($visualizar))
                         @if (can('actualizar-ordencompra', false))
                             <button type="button" class="btn btn-outline-light btn-sm" data-toggle="modal" data-target="#modalOcCambiarEstado">

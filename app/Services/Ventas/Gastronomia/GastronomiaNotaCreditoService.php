@@ -9,11 +9,13 @@ use App\Models\Ventas\CuentaGastronomia;
 use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\VentaGastronomiaEmision;
+use App\Support\Ventas\Gastronomia\GastronomiaAnitaColaSupport;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
 use App\Support\Ventas\GastronomiaEmisionProfiler;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
 use App\Support\Ventas\GastronomiaMovimientoStockSupport;
 use App\Support\Ventas\GastronomiaVentaDetalleSupport;
+use App\Support\Ventas\NcjetdirectSalidaSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -214,8 +216,7 @@ final class GastronomiaNotaCreditoService
             });
             $profiler?->marcar('despues_transaccion');
 
-            $this->completarAnitaPendienteTrasNotaCredito($resultadoTx);
-            $this->completarVencaeDiferidoTrasNotaCredito($resultadoTx);
+            $this->completarAnitaDiferidoTrasNotaCredito($resultadoTx, $cfg);
 
             $profiler?->marcar('nc_ticket_inicio');
             $resultadoFinal = $this->aplicarImpresionTicketTrasNotaCredito($resultadoTx, $cfg, $cuenta);
@@ -461,6 +462,7 @@ final class GastronomiaNotaCreditoService
 
         if (! empty($imp['ok'])) {
             $resultado['impresion_ticket'] = 'ok';
+            $resultado = NcjetdirectSalidaSupport::anexarAvisoWarnSinConfirmacionPapel($resultado, $imp);
 
             return $resultado;
         }
@@ -479,56 +481,46 @@ final class GastronomiaNotaCreditoService
     /**
      * @param  array<string, mixed>  $resultadoTx
      */
-    private function completarAnitaPendienteTrasNotaCredito(array $resultadoTx): void
+    private function completarAnitaDiferidoTrasNotaCredito(array $resultadoTx, ConfiguracionPuntoventaGastronomia $cfg): void
     {
-        $anitaPendiente = $resultadoTx['anita_pendiente'] ?? null;
-        if (! is_array($anitaPendiente) || $anitaPendiente === []) {
-            return;
-        }
-
-        if (! config('gastronomia.sincronizar_anita_al_facturar', true)) {
-            return;
-        }
-
         $ventaId = (int) ($resultadoTx['venta_id'] ?? 0);
-        $ejecutar = function () use ($anitaPendiente, $ventaId): void {
-            try {
-                $this->facturacionGastronomiaService->ejecutarAnitaPendienteGastronomia($anitaPendiente);
-            } catch (Throwable $e) {
-                Log::error('gastronomia.nota_credito.anita_defer.fallo', [
-                    'venta_id' => $ventaId,
-                    'msg' => $e->getMessage(),
-                ]);
-            }
-        };
-
-        if (filter_var(config('gastronomia.anita_tras_respuesta', true), FILTER_VALIDATE_BOOLEAN)) {
-            app()->terminating($ejecutar);
-        } else {
-            $ejecutar();
-        }
-    }
-
-    /**
-     * @param  array<string, mixed>  $resultadoTx
-     */
-    private function completarVencaeDiferidoTrasNotaCredito(array $resultadoTx): void
-    {
-        $vencaePendiente = $resultadoTx['vencae_pendiente'] ?? null;
-        if (! is_array($vencaePendiente) || $vencaePendiente === []) {
+        if ($ventaId <= 0) {
             return;
         }
 
-        $ventaId = (int) ($resultadoTx['venta_id'] ?? 0);
-        $ejecutar = function () use ($vencaePendiente, $ventaId): void {
-            try {
-                $this->facturacionGastronomiaService->ejecutarVencaePendienteGastronomia($vencaePendiente);
-            } catch (Throwable $e) {
-                Log::error('gastronomia.nota_credito.vencae_defer.fallo', [
-                    'venta_id' => $ventaId,
-                    'msg' => $e->getMessage(),
-                ]);
-            }
+        $anitaPendiente = (! empty($resultadoTx['anita_pendiente']) && is_array($resultadoTx['anita_pendiente']))
+            ? $resultadoTx['anita_pendiente']
+            : null;
+        $vencaePendiente = (! empty($resultadoTx['vencae_pendiente']) && is_array($resultadoTx['vencae_pendiente']))
+            ? $resultadoTx['vencae_pendiente']
+            : null;
+
+        if ($anitaPendiente === null && $vencaePendiente === null) {
+            return;
+        }
+
+        if (GastronomiaAnitaColaSupport::despacharReplicacionDiferida(
+            $ventaId,
+            $anitaPendiente,
+            $vencaePendiente,
+            (int) $cfg->id,
+            0.0,
+            false,
+            'nota_credito',
+        )) {
+            return;
+        }
+
+        $ejecutar = function () use ($anitaPendiente, $vencaePendiente, $ventaId, $cfg): void {
+            app(GastronomiaAnitaDeferEjecucionService::class)->ejecutar(
+                $ventaId,
+                $anitaPendiente,
+                $vencaePendiente,
+                (int) $cfg->id,
+                0.0,
+                false,
+                'nota_credito_terminating',
+            );
         };
 
         if (filter_var(config('gastronomia.anita_tras_respuesta', true), FILTER_VALIDATE_BOOLEAN)) {

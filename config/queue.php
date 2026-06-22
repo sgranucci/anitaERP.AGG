@@ -90,4 +90,20 @@ return [
         'table' => 'failed_jobs',
     ],
 
+    /*
+    | Verificación worker/cola en hora pico gastronomía (schedule + mail SMTP).
+    | Comando: php artisan queue:verificar-pico
+    */
+    'verificacion_pico' => [
+        'habilitada' => filter_var(env('QUEUE_VERIFICACION_PICO_HABILITADA', true), FILTER_VALIDATE_BOOLEAN),
+        'hora_desde' => (int) env('QUEUE_VERIFICACION_PICO_HORA_DESDE', 12),
+        'hora_hasta' => (int) env('QUEUE_VERIFICACION_PICO_HORA_HASTA', 1),
+        'email' => env(
+            'QUEUE_VERIFICACION_PICO_EMAIL',
+            env('GASTRONOMIA_AUDITORIA_ANITA_EMAIL', 'sergiogranucci@gmail.com'),
+        ),
+        'email_si_ok' => filter_var(env('QUEUE_VERIFICACION_PICO_EMAIL_SI_OK', false), FILTER_VALIDATE_BOOLEAN),
+        'email_throttle_minutos' => (int) env('QUEUE_VERIFICACION_PICO_EMAIL_THROTTLE', 15),
+    ],
+
 ];

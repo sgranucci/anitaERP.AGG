@@ -36,6 +36,21 @@ class ValidacionFormulaArticulo extends FormRequest
         $codigo = $this->input('codigo');
         $codigo = is_string($codigo) ? trim($codigo) : '';
 
+        $esopcional = $this->input('esopcional', []);
+        $ordenRaw = $this->input('ordenopcionales', []);
+        $ordenNormalizado = [];
+        if (is_array($esopcional)) {
+            foreach ($esopcional as $i => $flag) {
+                if ((string) $flag !== '1') {
+                    $ordenNormalizado[$i] = null;
+
+                    continue;
+                }
+                $v = is_array($ordenRaw) ? ($ordenRaw[$i] ?? null) : null;
+                $ordenNormalizado[$i] = ($v === '' || $v === null) ? null : (int) $v;
+            }
+        }
+
         $this->merge([
             'articulo_id' => $articuloCabecera,
             'codigo' => $codigo,
@@ -44,7 +59,7 @@ class ValidacionFormulaArticulo extends FormRequest
             'deposito_ids' => $limpia($this->input('deposito_ids', [])),
             'formula_articulo_hijo_ids' => $limpia($this->input('formula_articulo_hijo_ids', [])),
             'ranuras' => $limpia($this->input('ranuras', [])),
-            'ordenopcionales' => $limpia($this->input('ordenopcionales', [])),
+            'ordenopcionales' => $ordenNormalizado,
         ]);
     }
 

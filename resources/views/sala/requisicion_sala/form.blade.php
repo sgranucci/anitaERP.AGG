@@ -35,8 +35,8 @@
                 <div class="col-lg-6">
                     <input type="hidden" id="deposito_id" name="deposito_id" value="{{ old('deposito_id', (isset($data) && $data) ? $data->deposito_id : '') }}">
                     <div class="d-flex align-items-center">
-                        <input type="text" class="form-control codigodeposito mr-2" id="codigodeposito" style="width:6rem;" value="{{ old('codigodeposito', optional(optional($data)->depositos)->codigo ?? '') }}" {{ $soloLectura ? 'readonly' : '' }}>
-                        <input type="text" class="form-control" id="nombredeposito" readonly value="{{ old('nombredeposito', optional(optional($data)->depositos)->nombre ?? '') }}">
+                        <input type="text" class="form-control codigodeposito mr-2" id="codigodeposito" style="width:6rem;" value="{{ old('codigodeposito', (isset($data) && $data) ? optional($data->depositos)->codigo : '') }}" {{ $soloLectura ? 'readonly' : '' }}>
+                        <input type="text" class="form-control" id="nombredeposito" readonly value="{{ old('nombredeposito', (isset($data) && $data) ? optional($data->depositos)->nombre : '') }}">
                         @if(!$soloLectura)
                         <button type="button" class="btn-accion-tabla consultadeposito ml-2"><i class="fa fa-search text-primary"></i></button>
                         @endif

@@ -8,6 +8,8 @@
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/proveedor/domicilio.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/proveedor/arca-padron.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/arca-padron-validacion-async.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/proveedor/arca-validacion-abm.js') }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/proveedor/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/imprimirHtml.js")}}" type="text/javascript"></script>
 <script>
@@ -112,6 +114,7 @@
                     @include('compras.proveedor.form4')
                     @include('compras.proveedor.form5')
                     @include('compras.proveedor.suspensionmodal')
+                    @include('compras.proveedor.partials.arca_validacion_support', ['proveedorId' => $data->id])
                 </div>
                 <div class="card-footer" style="padding-top: 0">
                 	<div class="row">
@@ -122,6 +125,7 @@
             	</div>
             </form>
             @include('compras.proveedor.arca-cuit-entry-modal')
+            @include('includes.compras.arca_impuestos_validacion_modal')
         </div>
     </div>
 </div>

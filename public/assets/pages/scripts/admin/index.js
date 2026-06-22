@@ -165,7 +165,7 @@ function configuracionBotonesExportDataTable() {
 }
 
 $(document).ready(function () {
-    $("#tabla-data").on('submit', '.form-eliminar', function () {
+    $("#tabla-data").on('submit', '.form-eliminar', function (event) {
         event.preventDefault();
         const form = $(this);
         swal({
@@ -183,7 +183,7 @@ $(document).ready(function () {
         });
     });
 
-    $("#tabla-data-2").on('submit', '.form-eliminar', function () {
+    $("#tabla-data-2").on('submit', '.form-eliminar', function (event) {
         event.preventDefault();
         const form = $(this);
         swal({
@@ -201,7 +201,7 @@ $(document).ready(function () {
         });
     });
 
-    $("#tabla-data-3").on('submit', '.form-eliminar', function () {
+    $("#tabla-data-3").on('submit', '.form-eliminar', function (event) {
         event.preventDefault();
         const form = $(this);
         swal({
@@ -219,7 +219,7 @@ $(document).ready(function () {
         });
     });
 
-    $("#tabla-paginada").on('submit', '.form-eliminar', function () {
+    $("#tabla-paginada").on('submit', '.form-eliminar', function (event) {
         event.preventDefault();
         const form = $(this);
         swal({

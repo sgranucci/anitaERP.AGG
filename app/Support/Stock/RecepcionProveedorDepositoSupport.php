@@ -66,12 +66,26 @@ class RecepcionProveedorDepositoSupport
 
         $query = Articulo::query()->whereIn('sku', $candidatos);
         if ($empresaId !== null && $empresaId > 0) {
-            $query->where('empresa_id', $empresaId);
+            $query->where(function ($q) use ($empresaId): void {
+                $q->where('empresa_id', $empresaId)
+                    ->orWhereNull('empresa_id')
+                    ->orWhere('empresa_id', 0);
+            });
         }
+
+        ArticuloSeleccionOperativaSupport::aplicarSoloActivosTablaArticulo($query);
 
         $filas = $query->get(['id', 'sku', 'empresa_id']);
         $insumo = null;
         foreach ($candidatos as $sku) {
+            if ($empresaId !== null && $empresaId > 0) {
+                $insumo = $filas->first(static function (Articulo $row) use ($sku, $empresaId): bool {
+                    return (string) $row->sku === $sku && (int) ($row->empresa_id ?? 0) === $empresaId;
+                });
+                if ($insumo !== null) {
+                    break;
+                }
+            }
             $insumo = $filas->firstWhere('sku', $sku);
             if ($insumo !== null) {
                 break;
@@ -81,6 +95,34 @@ class RecepcionProveedorDepositoSupport
         self::$cacheInsumoPorArticuloCompra->put($cacheKey, $insumo);
 
         return $insumo;
+    }
+
+    /**
+     * Artículos de compra cuyo SKU alternativo apunta al insumo indicado.
+     *
+     * @return \Illuminate\Support\Collection<int, Articulo>
+     */
+    public static function resolverArticulosCompraDesdeInsumo(Articulo $insumo, ?int $empresaId = null): Collection
+    {
+        $skuInsumo = trim((string) ($insumo->sku ?? ''));
+        if ($skuInsumo === '') {
+            return collect();
+        }
+
+        $query = Articulo::query()
+            ->whereNotNull('skualternativo')
+            ->where('skualternativo', '!=', '')
+            ->where('skualternativo', '!=', '0');
+
+        if ($empresaId !== null && $empresaId > 0) {
+            $query->where('empresa_id', $empresaId);
+        }
+
+        return $query->get()->filter(function (Articulo $compra) use ($insumo, $empresaId): bool {
+            $resuelto = self::resolverArticuloInsumo($compra, $empresaId);
+
+            return $resuelto !== null && (int) $resuelto->id === (int) $insumo->id;
+        })->values();
     }
 
     public static function depositoPermitidoUsuario(int $depositoId, int $empresaId): bool

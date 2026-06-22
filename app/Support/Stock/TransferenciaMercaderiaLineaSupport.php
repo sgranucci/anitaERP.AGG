@@ -60,13 +60,36 @@ final class TransferenciaMercaderiaLineaSupport
         ];
     }
 
+    /**
+     * Línea para transferencia cuyo destino es un bien de uso (sin depósito destino).
+     *
+     * @return array<string, mixed>
+     */
+    public static function resolverLineaParaBienUso(Articulo $articuloOrigen, float $cantidadOrigen): array
+    {
+        $cantidadOrigen = max(0.0, $cantidadOrigen);
+        $precioOrigen = (float) ($articuloOrigen->costo ?? $articuloOrigen->precio ?? 0);
+
+        return [
+            'articulo_origen_id' => (int) $articuloOrigen->id,
+            'articulo_destino_id' => (int) $articuloOrigen->id,
+            'cantidad_origen' => $cantidadOrigen,
+            'cantidad_destino' => $cantidadOrigen,
+            'precio_costo_origen' => round($precioOrigen, 6),
+            'precio_costo_destino' => round($precioOrigen, 6),
+            'coeficienteconversion' => 1.0,
+            'fl_conversion_formula' => false,
+            'articulo_stock_sku' => $articuloOrigen->sku,
+        ];
+    }
+
+    /** @deprecated Use ArticuloPrecioTransferenciaContableSupport::usaPrecioPromedio() */
     public static function esSkuTito(string $sku): bool
     {
-        $sku = trim($sku);
-        if ($sku === '') {
-            return false;
-        }
+        $articulo = Articulo::query()->where('sku', trim($sku))->first();
 
-        return in_array($sku, config('stock.transferencia_skus_tito', []), true);
+        return $articulo
+            ? ArticuloPrecioTransferenciaContableSupport::usaPrecioPromedio($articulo)
+            : false;
     }
 }

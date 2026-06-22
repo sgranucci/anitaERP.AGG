@@ -87,6 +87,11 @@ class Kernel extends ConsoleKernel
         $schedule->command('contable:procesar-aperturas-periodo')
             ->cron('*/'.$intervaloMin.' * * * *')
             ->withoutOverlapping(10);
+
+        $schedule->command('queue:verificar-pico')
+            ->everyFiveMinutes()
+            ->withoutOverlapping(4)
+            ->when(fn () => (bool) config('queue.verificacion_pico.habilitada', true));
     }
 
     /**

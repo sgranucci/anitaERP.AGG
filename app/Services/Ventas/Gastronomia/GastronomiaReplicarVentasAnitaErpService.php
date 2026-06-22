@@ -454,6 +454,7 @@ final class GastronomiaReplicarVentasAnitaErpService
             'moneda_id' => (int) ($venta->moneda_id ?? 1),
             'cotizacion' => (float) ($venta->cotizacion ?: 1),
             'estado' => (string) ($venta->estado ?? ' '),
+            'usuario_id' => (int) ($venta->usuario_id ?? 0),
             'leyenda' => (string) ($venta->leyenda ?? ''),
             'descuento' => (float) ($venta->descuento ?? 0),
             'descuentointegrado' => (string) ($venta->descuentointegrado ?? ' '),

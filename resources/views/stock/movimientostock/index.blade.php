@@ -4,10 +4,13 @@ Movimientos de Stock
 @endsection
 
 @section("scripts")
-<script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/movimientostock/filtro.js') }}" type="text/javascript"></script>
 @endsection
 
-<?php use App\Helpers\biblioteca ?>
+<?php use App\Support\Stock\MovimientoStockFerliSupport;
+use App\Support\Stock\MovimientoStockListadoFiltros; ?>
 
 @section('contenido')
 <div class="row">
@@ -16,81 +19,64 @@ Movimientos de Stock
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Movimientos de Stock</h3>
-                <div class="card-tools">
-					<a href="{{route('crear_movimientostock')}}" class="btn btn-outline-secondary btn-sm">
-                       	@if (can('crear-movimientos-de-stock', false))
-                        	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
-						@endif
-                    </a>
+                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @include('includes.listado.filtros_toolbar', [
+                        'formId' => 'form-filtros-movimientostock',
+                        'filtroValor' => $filtros['valor'] ?? '',
+                        'tieneCriterios' => MovimientoStockListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
+                        'limpiarUrl' => route('movimientostock'),
+                        'placeholder' => 'Búsqueda rápida (movimientos y transferencias)…',
+                        'toggleTarget' => '#panel-filtros-movimientostock',
+                        'toggleId' => 'btn-toggle-filtros-movimientostock',
+                        'inputId' => 'filtro_valor',
+                        'nuevoRegistroUrl' => route('crear_movimientostock'),
+                        'nuevoRegistroCan' => 'crear-movimientos-de-stock',
+                    ])
                 </div>
             </div>
+            <form method="get" action="{{ route('movimientostock') }}" id="form-filtros-movimientostock" class="mb-0">
+                @include('stock.movimientostock.partials.filtros_listado', [
+                    'limpiarUrl' => route('movimientostock'),
+                ])
+            </form>
             <div class="card-body table-responsive p-0">
-                <table class="table table-striped table-bordered table-hover" id="tabla-data-2">
+                @include('includes.exportar-tabla-queryparams', [
+                    'ruta' => 'lista_movimientostock',
+                    'queryparams' => $filtrosQuery ?? [],
+                ])
+                <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead>
                         <tr>
                             <th class="width20">ID</th>
                             <th>Fecha</th>
-							<th>Tipo de transacción</th>
-                            <th>Número</th>
-							<th>Marca</th>
-							<th>Lote</th>
-                            <th>Pares</th>
-                            <th class="width80" data-orderable="false"></th>
+                            <th>Tipo de transacci&oacute;n</th>
+                            <th>N&uacute;mero</th>
+                            @if (MovimientoStockFerliSupport::esCalzadosFerli())
+                                <th>Marca</th>
+                            @endif
+                            <th>Lote</th>
+                            <th>Origen</th>
+                            <th>Destino</th>
+                            <th>Empresa</th>
+                            <th class="text-right">Cantidad</th>
+                            <th class="text-center">&Iacute;tems</th>
+                            <th>Estado</th>
+                            <th class="width120" data-orderable="false"></th>
                         </tr>
                     </thead>
                     <tbody>
-						@foreach($datas as $movimientostock)
-    						<tr data-entry-id="{{ $movimientostock['id'] }}">
-        						<td>
-            						{{ $movimientostock['id'] ?? '' }}
-        						</td>
-        						<td>
-            						{{date("d/m/Y", strtotime($movimientostock['fecha'] ?? ''))}} 
-        						</td>
-        						<td>
-            						<b>{{ $movimientostock['tipotransaccion_stock']['nombre'] ?? '' }}</b>
-        						</td>
-        						<td>
-                					<small> {{$movimientostock['codigo']}}</small>
-        						</td>
-								<td>
-                					<small> {{ $movimientostock['mventas']['nombre'] ?? ''}}</small>
-        						</td>
-								<td>
-                					<small> {{$movimientostock['articulos_movimiento'][0]['lote']}}</small>
-        						</td>
-        						<td>
-									@php $totalPares = 0; @endphp
-									@foreach ($movimientostock['articulos_movimiento'] as $item)
-										@php $totalPares += $item->cantidad; @endphp
-									@endforeach
-									{{ $totalPares }}
-								</td>
-        						<td>
-                       			@if (can('editar-movimientos-de-stock', false))
-                                	<a href="{{route('editar_movimientostock', ['id' => $movimientostock['id']])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
-                                   	<i class="fa fa-edit"></i>
-                                	</a>
-								@endif
-                       			@if (can('borrar-movimientos-de-stock', false))
-                                	<form action="{{route('eliminar_movimientostock', ['id' => $movimientostock['id']])}}" class="d-inline form-eliminar" method="POST">
-                                   		@csrf @method("delete")
-                                   		<button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">
-                                       	<i class="fa fa-times-circle text-danger"></i>
-                                   	</button>
-                                	</form>
-								@endif
-                       			@if (can('listar-movimientos-de-stock', false))
-                                	<a href="{{route('listar_movimientostock', ['id' => $movimientostock['id']])}}" class="btn-accion-tabla tooltipsC" title="Listar el Movimiento de Stock">
-                                   	<i class="fa fa-print"></i>
-                                	</a>
-								@endif
-                            	</td>
-                        	</tr>
-                        @endforeach
+                        @include('stock.movimientostock.partials.tabla_datos', [
+                            'datas' => $datas,
+                            'estado_enum' => $estado_enum,
+                        ])
                     </tbody>
                 </table>
             </div>
+            @if (method_exists($datas, 'links'))
+                <div class="card-footer clearfix">
+                    {{ $datas->appends($filtrosQuery ?? [])->links() }}
+                </div>
+            @endif
         </div>
     </div>
 </div>

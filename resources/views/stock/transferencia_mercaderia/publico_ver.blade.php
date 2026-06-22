@@ -20,8 +20,20 @@
     <div class="card">
         <h1>Transferencia {{ $transferencia->codigo }}</h1>
         <p>
-            <strong>Origen:</strong> {{ optional($transferencia->depositoOrigen)->nombre }}<br>
-            <strong>Destino:</strong> {{ optional($transferencia->depositoDestino)->nombre }}<br>
+            <strong>Origen:</strong>
+            @if ($transferencia->bien_uso_origen_id)
+                {{ \App\Support\Stock\TransferenciaBienUsoSupport::etiquetaBien($transferencia->bienUsoOrigen) }}
+            @else
+                {{ optional($transferencia->depositoOrigen)->nombre }}
+            @endif
+            <br>
+            <strong>Destino:</strong>
+            @if ($transferencia->bien_uso_destino_id)
+                {{ \App\Support\Stock\TransferenciaBienUsoSupport::etiquetaBien($transferencia->bienUsoDestino) }}
+            @else
+                {{ optional($transferencia->depositoDestino)->nombre }}
+            @endif
+            <br>
             <strong>Fecha:</strong> {{ $transferencia->fecha?->format('d/m/Y') }}
         </p>
         <table>

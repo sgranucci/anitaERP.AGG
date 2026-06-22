@@ -5,7 +5,9 @@ namespace App\Support\Stock;
 use App\Models\Seguridad\Usuario;
 use App\Models\Stock\Deposito_Administrador;
 use App\Models\Stock\Depmae;
+use App\Models\Stock\Transferencia_Mercaderia;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Resuelve el usuario destino de aprobación de transferencias.
@@ -98,5 +100,63 @@ final class TransferenciaMercaderiaDestinatarioSupport
             $depositoDestinoId,
             (int) (Depmae::query()->whereKey($depositoDestinoId)->value('empresa_id') ?? 0)
         ) && UsuarioDepositoAutorizado::depositoAutorizado($depositoDestinoId);
+    }
+
+    public static function resolverUsuarioDestinoBienUso(?int $usuarioDestinoId = null): ?Usuario
+    {
+        if ($usuarioDestinoId <= 0) {
+            return null;
+        }
+
+        $usuario = Usuario::query()->whereKey($usuarioDestinoId)->first();
+        if ($usuario === null || trim((string) $usuario->email) === '') {
+            return null;
+        }
+
+        return $usuario;
+    }
+
+    /** @return list<array{id: int, nombre: string, email: string, principal: bool}> */
+    public static function opcionesSelectorBienUso(): array
+    {
+        $permisoId = DB::table('permiso')->where('slug', 'aprobar-transferencia-mercaderia')->value('id');
+        if (! $permisoId) {
+            return [];
+        }
+
+        $rolIds = DB::table('permiso_rol')->where('permiso_id', $permisoId)->pluck('rol_id');
+        if ($rolIds->isEmpty()) {
+            return [];
+        }
+
+        $usuarioIds = DB::table('usuario_rol')->whereIn('rol_id', $rolIds)->distinct()->pluck('usuario_id');
+
+        return Usuario::query()
+            ->whereIn('id', $usuarioIds)
+            ->whereNotNull('email')
+            ->where('email', '!=', '')
+            ->orderBy('nombre')
+            ->get(['id', 'nombre', 'email'])
+            ->map(fn (Usuario $u) => [
+                'id' => (int) $u->id,
+                'nombre' => (string) $u->nombre,
+                'email' => (string) $u->email,
+                'principal' => false,
+            ])
+            ->values()
+            ->all();
+    }
+
+    public static function usuarioPuedeAprobarBienUso(Transferencia_Mercaderia $transferencia, Usuario $usuario): bool
+    {
+        if ((int) ($transferencia->usuario_destino_id ?? 0) === (int) $usuario->id) {
+            return true;
+        }
+
+        if (function_exists('can') && can('aprobar-transferencia-mercaderia', false)) {
+            return true;
+        }
+
+        return false;
     }
 }

@@ -4,6 +4,11 @@ namespace App\Services\Compras;
 
 use App\ApiAnita;
 use App\Models\Compras\Comprobante_Proveedor;
+use App\Support\Compras\AnitaSync\ComprobanteProveedor\CompraCabeceraAnitaMapper;
+use App\Support\Compras\AnitaSync\ComprobanteProveedor\ComprobanteProveedorAnitaContext;
+use App\Support\Compras\AnitaSync\ComprobanteProveedor\ComprobanteProveedorAnitaNroInternoSupport;
+use App\Support\Compras\AnitaSync\ComprobanteProveedor\ConcmovLineaAnitaMapper;
+use App\Support\Compras\AnitaSync\ComprobanteProveedor\PromovCuotaAnitaMapper;
 use App\Support\Compras\ComprobanteProveedorAnitaSyncEstado;
 use RuntimeException;
 
@@ -15,16 +20,30 @@ class ComprobanteProveedorAnitaSyncService
 {
     private const SISTEMA_COMPRAS = 'compras';
 
+    public function __construct(
+        private ComprobanteProveedorAnitaNroInternoSupport $nroInternoSupport,
+    ) {}
+
     public function syncCreate(Comprobante_Proveedor $comprobante): void
     {
         $comprobante->loadMissing([
             'comprobante_proveedor_conceptos.concepto_ivacompras',
-            'empresas', 'proveedores', 'tipotransaccion_compras',
+            'comprobante_proveedor_cuotas',
+            'empresas', 'proveedores', 'tipotransaccion_compras', 'monedas', 'ordencompras',
         ]);
 
-        $this->insertCompra($comprobante);
-        $this->syncConceptos($comprobante);
-        $this->insertPromov($comprobante);
+        if (! $comprobante->anita_nro_interno) {
+            $comprobante->forceFill([
+                'anita_nro_interno' => $this->nroInternoSupport->siguiente(),
+            ])->save();
+            $comprobante->refresh();
+        }
+
+        $ctx = new ComprobanteProveedorAnitaContext($comprobante, (int) $comprobante->anita_nro_interno);
+
+        $this->insertCompra($ctx);
+        $this->syncConceptos($ctx);
+        $this->syncPromov($ctx);
 
         $comprobante->forceFill([
             'anita_sync_estado' => ComprobanteProveedorAnitaSyncEstado::SYNC_OK,
@@ -37,7 +56,8 @@ class ComprobanteProveedorAnitaSyncService
     {
         $comprobante->loadMissing([
             'comprobante_proveedor_conceptos.concepto_ivacompras',
-            'empresas', 'proveedores', 'tipotransaccion_compras',
+            'comprobante_proveedor_cuotas',
+            'empresas', 'proveedores', 'tipotransaccion_compras', 'monedas', 'ordencompras',
         ]);
 
         if (! $comprobante->anita_nro_interno) {
@@ -46,10 +66,13 @@ class ComprobanteProveedorAnitaSyncService
             return;
         }
 
-        $this->updateCompra($comprobante);
-        $this->deleteConceptos($comprobante);
-        $this->syncConceptos($comprobante);
-        $this->updatePromov($comprobante);
+        $ctx = new ComprobanteProveedorAnitaContext($comprobante, (int) $comprobante->anita_nro_interno);
+
+        $this->updateCompra($ctx);
+        $this->deleteConceptos($ctx);
+        $this->syncConceptos($ctx);
+        $this->deletePromov($ctx);
+        $this->syncPromov($ctx);
 
         $comprobante->forceFill([
             'anita_sync_estado' => ComprobanteProveedorAnitaSyncEstado::SYNC_OK,
@@ -64,57 +87,76 @@ class ComprobanteProveedorAnitaSyncService
             return;
         }
 
-        $prov = str_pad((string) $comprobante->proveedores->codigo, 6, '0', STR_PAD_LEFT);
-        $tipo = $comprobante->tipotransaccion_compras->abreviatura;
+        $comprobante->loadMissing(['proveedores', 'tipotransaccion_compras']);
+        $ctx = new ComprobanteProveedorAnitaContext($comprobante, (int) $comprobante->anita_nro_interno);
 
-        $where = " WHERE com_proveedor = '{$prov}'
-            AND com_tipo = '{$tipo}'
-            AND com_letra = '{$comprobante->letra}'
-            AND com_sucursal = '{$comprobante->sucursal}'
-            AND com_nro = '{$comprobante->numerocomprobante}'
-            AND com_nro_interno = '{$comprobante->anita_nro_interno}' ";
-
-        $this->apiDelete('promov', $where.' AND prov_nro_interno = com_nro_interno');
-        $this->apiDelete('concmov', " WHERE concv_nro_interno = '{$comprobante->anita_nro_interno}' ");
-        $this->apiDelete('compra', $where);
+        $this->apiDelete('promov', $ctx->claveWherePromov());
+        $this->apiDelete('concmov', " WHERE concv_nro_interno = '{$ctx->nroInterno}' ");
+        $this->apiDelete('compra', $ctx->claveWhereCompra());
     }
 
-    private function insertCompra(Comprobante_Proveedor $cp): void
+    private function insertCompra(ComprobanteProveedorAnitaContext $ctx): void
     {
-        // Mapper detallado en fase de implementación UI (campos com_* ↔ ERP).
-        throw new RuntimeException('ComprobanteProveedorAnitaSyncService::insertCompra pendiente de mapper comercial.');
+        $api = new ApiAnita;
+        $api->apiCallEscritura([
+            'acc' => 'insert',
+            'tabla' => 'compra',
+            'sistema' => self::SISTEMA_COMPRAS,
+            'campos' => CompraCabeceraAnitaMapper::camposInsert(),
+            'valores' => CompraCabeceraAnitaMapper::valoresInsert($ctx),
+        ], 'compra insert comprobante proveedor');
     }
 
-    private function updateCompra(Comprobante_Proveedor $cp): void
+    private function updateCompra(ComprobanteProveedorAnitaContext $ctx): void
     {
-        throw new RuntimeException('ComprobanteProveedorAnitaSyncService::updateCompra pendiente de mapper comercial.');
+        $api = new ApiAnita;
+        $api->apiCallEscritura([
+            'acc' => 'update',
+            'tabla' => 'compra',
+            'sistema' => self::SISTEMA_COMPRAS,
+            'valores' => CompraCabeceraAnitaMapper::valoresUpdate($ctx),
+            'whereArmado' => $ctx->claveWhereCompra(),
+        ], 'compra update comprobante proveedor');
     }
 
-    private function insertPromov(Comprobante_Proveedor $cp): void
+    private function syncConceptos(ComprobanteProveedorAnitaContext $ctx): void
     {
-        throw new RuntimeException('ComprobanteProveedorAnitaSyncService::insertPromov pendiente de mapper comercial.');
-    }
-
-    private function updatePromov(Comprobante_Proveedor $cp): void
-    {
-        throw new RuntimeException('ComprobanteProveedorAnitaSyncService::updatePromov pendiente de mapper comercial.');
-    }
-
-    private function syncConceptos(Comprobante_Proveedor $cp): void
-    {
-        foreach ($cp->comprobante_proveedor_conceptos as $linea) {
-            // concmov insert vía bridge (concv_*).
-            unset($linea);
+        $api = new ApiAnita;
+        $orden = 1;
+        foreach ($ctx->comprobante->comprobante_proveedor_conceptos as $linea) {
+            $api->apiCallEscritura([
+                'acc' => 'insert',
+                'tabla' => 'concmov',
+                'sistema' => self::SISTEMA_COMPRAS,
+                'campos' => ConcmovLineaAnitaMapper::camposInsert(),
+                'valores' => ConcmovLineaAnitaMapper::valoresInsert($ctx, $linea, $orden),
+            ], 'concmov insert comprobante proveedor');
+            $orden++;
         }
     }
 
-    private function deleteConceptos(Comprobante_Proveedor $cp): void
+    private function deleteConceptos(ComprobanteProveedorAnitaContext $ctx): void
     {
-        if (! $cp->anita_nro_interno) {
-            return;
-        }
+        $this->apiDelete('concmov', " WHERE concv_nro_interno = '{$ctx->nroInterno}' ");
+    }
 
-        $this->apiDelete('concmov', " WHERE concv_nro_interno = '{$cp->anita_nro_interno}' ");
+    private function syncPromov(ComprobanteProveedorAnitaContext $ctx): void
+    {
+        $api = new ApiAnita;
+        foreach ($ctx->comprobante->comprobante_proveedor_cuotas as $cuota) {
+            $api->apiCallEscritura([
+                'acc' => 'insert',
+                'tabla' => 'promov',
+                'sistema' => self::SISTEMA_COMPRAS,
+                'campos' => PromovCuotaAnitaMapper::camposInsert(),
+                'valores' => PromovCuotaAnitaMapper::valoresInsert($ctx, $cuota),
+            ], 'promov insert comprobante proveedor');
+        }
+    }
+
+    private function deletePromov(ComprobanteProveedorAnitaContext $ctx): void
+    {
+        $this->apiDelete('promov', $ctx->claveWherePromov());
     }
 
     private function apiDelete(string $tabla, string $whereArmado): void

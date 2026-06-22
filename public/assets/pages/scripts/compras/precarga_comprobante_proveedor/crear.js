@@ -10,6 +10,13 @@
         actualizarTipoComprobante();
     });
 
+
+    $(function () {
+        if (typeof activa_eventos_consultaproveedor === 'function') {
+            activa_eventos_consultaproveedor();
+        }
+    });
+
     function actualizarCodigoEmpresa() {
         var codigo = $('#empresa_id').find('option:selected').data('codigo') || '';
         $('#codigoempresa').val(codigo);

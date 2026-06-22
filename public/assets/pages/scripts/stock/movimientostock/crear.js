@@ -62,8 +62,9 @@
 		var item = 0;
 		var flError = false;
 		
-		$("#tbody-tabla .articulo").each(function(index) {
-			var articulo = $(this).val();
+		$("#tbody-tabla tr.item-pedido").each(function(index) {
+			var $tr = $(this);
+			var articulo = msFilaArticuloId($tr);
 			item = item + 1;
 
 			if (articulo == '')
@@ -72,7 +73,9 @@
 				flError = true;
 			}
 
-			var cantidad = $(this).parents("tr").find(".cantidad").val();
+			var cantidad = $tr.find(".cantidad-stock").length
+				? $tr.find(".cantidad-stock").val()
+				: $tr.find(".cantidad").val();
 
 			if (cantidad == null)
 			{
@@ -85,13 +88,15 @@
 			$('#formgeneral').submit();
 	}
 
-    function completarCombinaciones(articulo, combinacion_id, flsinfiltro){
-        var comb_id;
-		var articulo_id = $(articulo).val();
-		var fl_todas_las_combinaciones = $(articulo).parents("tr").find('input:checkbox[class=checkCombinacion]:checked').val();
-		var fl_todos_los_articulos = $(articulo).parents("tr").find('input:checkbox[class=checkSinFiltro]:checked').val();
+    function completarCombinaciones(ctx, combinacion_id, flsinfiltro){
+        var $tr = $(ctx).closest('tr');
+        var articulo_id = msFilaArticuloId($tr);
+		if (!articulo_id) {
+			return;
+		}
+		var fl_todas_las_combinaciones = $tr.find('input:checkbox.checkCombinacion:checked').val();
+		var fl_todos_los_articulos = $tr.find('input:checkbox.checkSinFiltro:checked').val();
 
-		// Si marca boton de todas las combinaciones trae sin filtrar las activas o esta leyendo todos los articulos sin filtrar
 		if (fl_todas_las_combinaciones == 'on' || fl_todos_los_articulos == 'on' || flsinfiltro)
 			var url_comb = carpetaBase+'/stock/leercombinaciones/';
 		else
@@ -101,51 +106,43 @@
             var comb = $.map(data, function(value, index){
                 return [value];
             });
-            $(articulo).parents("tr").find('.combinacion').empty();
-            $(articulo).parents("tr").find('.combinacion').append('<option value=""></option>');
+            $tr.find('.combinacion').empty();
+            $tr.find('.combinacion').append('<option value=""></option>');
             $.each(comb, function(index,value){
 				if (value.id == combinacion_id)
-                	$(articulo).parents("tr").find('.combinacion').append('<option value="'+value.id+'" selected>'+value.codigo+'-'+value.nombre+'</option>');
+                	$tr.find('.combinacion').append('<option value="'+value.id+'" selected>'+value.codigo+'-'+value.nombre+'</option>');
 				else
-                	$(articulo).parents("tr").find('.combinacion').append('<option value="'+value.id+'">'+value.codigo+'-'+value.nombre+'</option>');
+                	$tr.find('.combinacion').append('<option value="'+value.id+'">'+value.codigo+'-'+value.nombre+'</option>');
             });
         });
-        setTimeout(() => {
-                var comb_id = $("#combinacion_id").val();
-                if (comb_id != undefined) {
-                    completarModulos(comb_id, 0);
-                }
-        }, 3000);
     }
 
-    function completarModulos(articulo, modulo_id){
-        var comb_id;
-		var eligioModulo = false;
-		var articulo_id = $(articulo).val();
+    function completarModulos(ctx, modulo_id){
+		var $tr = $(ctx).closest('tr');
+		var articulo_id = msFilaArticuloId($tr);
+		if (!articulo_id) {
+			return;
+		}
 		var flTieneModuloAbierto = false;
         $.get(carpetaBase+'/stock/leermodulos/'+articulo_id+'/'+modulo_id, function(data){
             var mod = $.map(data, function(value, index){
                 return [value];
             });
-            $(articulo).parents("tr").find('.modulo').empty();
-            $(articulo).parents("tr").find('.modulo').append('<option value=""></option>');
+            $tr.find('.modulo').empty();
+            $tr.find('.modulo').append('<option value=""></option>');
 			flTieneModuloAbierto = false;
             $.each(mod, function(index,value){
 			  	if (value.id == 30)
 				  	flTieneModuloAbierto = true;
 
 				if (value.id == modulo_id)
-				{
-                	$(articulo).parents("tr").find('.modulo').append('<option value="'+value.id+'" selected>'+value.nombre+'</option>');
-					eligioModulo = true;
-				}
+                	$tr.find('.modulo').append('<option value="'+value.id+'" selected>'+value.nombre+'</option>');
 				else
-                	$(articulo).parents("tr").find('.modulo').append('<option value="'+value.id+'">'+value.nombre+'</option>');
+                	$tr.find('.modulo').append('<option value="'+value.id+'">'+value.nombre+'</option>');
             });
 
-			// Agrega modulo abierto
 			if (!flTieneModuloAbierto)
-            	$(articulo).parents("tr").find('.modulo').append('<option value="'+'30'+'">'+'Abierto'+'</option>');
+            	$tr.find('.modulo').append('<option value="30">Abierto</option>');
         });
     }
 
@@ -220,7 +217,7 @@
 				preciosfactura_txt[offFactura] = precios_txt;
 				tallesidfactura_txt[offFactura] = tallesid_txt;
 
-				let descripcion_art = $(ptrcheck).parents("tr").find(".articulo option:selected").text();
+				let descripcion_art = msFilaDescripcion($(ptrcheck).closest('tr'));
 				let nombre_comb = $(ptrcheck).parents("tr").find(".desc_combinacion").val();
 				titulofactura_txt[offFactura] = descripcion_art+" "+nombre_comb;
 
@@ -275,20 +272,25 @@
 		var combinacion_id;
 		var modulo_id;
 
-		// Completa combinaciones y modulos al abrir pedido
-		$("#tbody-tabla .articulo").each(function(index) {
-			var articulo = $(this);
-			var combinacion = $(this).parents("tr").find(".combinacion").val();
-			var combinacion_id = $(this).parents("tr").find(".combinacion_id_previa").val();
-			var modulo_id = $(this).parents("tr").find(".modulo_id_previa").val();
+		// Completa combinaciones y modulos al abrir movimiento (solo Ferli)
+		if (window.movimientoStockModoFerli) {
+			$("#tbody-tabla tr.item-pedido").each(function() {
+				var $tr = $(this);
+				var combinacion_id = $tr.find(".combinacion_id_previa").val();
+				var modulo_id = $tr.find(".modulo_id_previa").val();
 
-        	completarCombinaciones(articulo, combinacion_id, true);
-        	completarModulos(articulo, modulo_id);
-		});
+	        	if (msFilaArticuloId($tr)) {
+					completarCombinaciones($tr, combinacion_id, true);
+					completarModulos($tr, modulo_id);
+				}
+			});
+		}
 
 		// Marca items como facturados, completa combinaciones y modulos al abrir pedido
 		activa_eventos(true);
-		TotalParesPedido();
+		if (window.movimientoStockModoFerli) {
+			TotalParesPedido();
+		}
 	});
 
 	function marcaItemFacturado()
@@ -320,13 +322,9 @@
 		// Si esta agregando items desactiva los eventos
 		if (!flInicio)
 		{
-			$('.articulo').off('click');
-			$('.articulo').off('change');
         	$(".modulo").off('change');
 			$(".checkImpresion").off('change');
         	$(".cantidad").off('click keydown');
-    		$('.consultaSKU').off('click');
-			$('#aceptaarticuloxskuModal').off('click');
 			$('#medidasModal').off('show.bs.modal');
 			$('#cierraModal').off('click');
 			$('#aceptaModal').off('click');
@@ -338,108 +336,69 @@
 			$(document).off('change', '.cantidadesportalles');
 		}
 
-		$('.articulo').on('click', function (event) {
+        if (window.movimientoStockModoFerli) {
+	        $(".modulo").on('change', function() {
+				modulo_id = $(this).parents("tr").find(".modulo").val();
+			  	moduloElegido_id = modulo_id;
+				
+				// Blanquea medidas
+				$(this).parents("tr").find(".medidas").val("");
+			});
 
-			armaSelectArticulo(this, this, 1);
+			// Con click sobre cantidad abre modal de medidas
+	        $(".cantidad").on('click keydown', function(e) {
+				if ($(this).hasClass('cantidad-stock')) {
+					return;
+				}
+				if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ') {
+					return;
+				}
+				cantidad = $(this);
+				var $tr = $(this).closest('tr');
 
-		});
+				articulo_id = msFilaArticuloId($tr);
+				descripcion_articulo = msFilaDescripcion($tr);
+				modulo_id = $tr.find(".modulo").val();
+				combinacion_id = $tr.find(".combinacion").val();
+				nombre_combinacion = $tr.find(".combinacion option:selected").text();
 
-		$('.articulo').on('change', function (event) {
-			event.preventDefault();
-			var articulo = $(this);
-			var articulo_ant = $(this).parents("tr").find(".articulo_id_previo").val();
-			var articulo_nuevo = articulo.val();
+				// Lee tabla de medidas
+				var val_medida = $(this).parents("tr").find(".medidas").val();
 
-			if (articulo_nuevo != articulo_ant)
-			{
-            	completarCombinaciones(articulo, 0, false);
-            	completarModulos(articulo, 0);
+				medidas=[];
+				cantidades=[];
+				precios=[];
 
-				//* Asigna nuevo articulo
-				$(this).parents("tr").find(".articulo_id_previo").val(articulo_nuevo);
-			}
-        });
+				if (val_medida != '')
+				{
+					var tbl_medidas = JSON.parse(val_medida);
 
-    	$('.consultaSKU').on('click', function (event) {
-        	articuloxsku = $(this).parents("tr").find(".articulo");
+	           		$.each(tbl_medidas, function(index,value){
+						medidas.push(value.talle_id);
+						cantidades.push(value.cantidad);
+						precios.push(value.precio);
+					});
+				}
 
-        	// Abre modal de consulta
-        	$("#articuloxskuModal").modal('show');
-	
-			var selectxsku = $("#articuloxsku_id");
-        	armaSelectArticulo(selectxsku, articuloxsku, 2);
-    	});
+				completarTalles(modulo_id, 0, medidas, cantidades, precios);
 
-    	$('#aceptaarticuloxskuModal').on('click', function () {
-        	var articulo_id = $('#articuloxsku_id').val();
+	        	setTimeout(() => {
+					$("#medidasModal").modal('show');
+				}, 300);
+	        });
 
-        	$(articuloxsku).val(articulo_id);
+			// Controla apertura modal de medidas
+			$('#medidasModal').on('show.bs.modal', function (event) {
+	  			var modal = $(this);
+				modalActivo = "medidasModal";
 
-        	armaSelectArticulo(articuloxsku, articuloxsku, 2);
-
-            completarCombinaciones(articuloxsku, 0, false);
-            completarModulos(articuloxsku, 0);
-
-			//* Asigna nuevo articulo
-			$(this).parents("tr").find(".articulo_id_previo").val($(articuloxsku).val());
-	
-        	$('#articuloxskuModal').modal('hide');
-    	});
-
-        $(".modulo").on('change', function() {
-			modulo_id = $(this).parents("tr").find(".modulo").val();
-		  	moduloElegido_id = modulo_id;
-			
-			// Blanquea medidas
-			$(this).parents("tr").find(".medidas").val("");
-		});
-
-		// Con click sobre cantidad abre modal de medidas
-        $(".cantidad").on('click keydown', function() {
-			cantidad = $(this);
-
-			articulo_id = $(this).parents("tr").find(".articulo").val();
-			descripcion_articulo = $(this).parents("tr").find(".articulo option:selected").text();
-			modulo_id = $(this).parents("tr").find(".modulo").val();
-			combinacion_id = $(this).parents("tr").find(".combinacion").val();
-			nombre_combinacion = $(this).parents("tr").find(".combinacion option:selected").text();
-
-			// Lee tabla de medidas
-			var val_medida = $(this).parents("tr").find(".medidas").val();
-
-			medidas=[];
-			cantidades=[];
-			precios=[];
-
-			if (val_medida != '')
-			{
-				var tbl_medidas = JSON.parse(val_medida);
-
-           		$.each(tbl_medidas, function(index,value){
-					medidas.push(value.talle_id);
-					cantidades.push(value.cantidad);
-					precios.push(value.precio);
-				});
-			}
-
-			completarTalles(modulo_id, 0, medidas, cantidades, precios);
-
-        	setTimeout(() => {
-				$("#medidasModal").modal('show');
-			}, 300);
-        });
-
-		// Controla apertura modal de medidas
-		$('#medidasModal').on('show.bs.modal', function (event) {
-  			var modal = $(this);
-			modalActivo = "medidasModal";
-
-  			modal.find('.modal-title').text('Medidas item '+descripcion_articulo+' Combinacion '+nombre_combinacion+' Modulo '+nombre_modulo);
-  			modal.find('#medidasModal').empty();
-  			modal.find('#medidasModal').append(talles_txt+medidas_txt+precios_txt+tallesid_txt);
-			sumaPares(modalActivo, 'cantidadesportalles');
-			muestraTotalPares();
-		});
+	  			modal.find('.modal-title').text('Medidas item '+descripcion_articulo+' Combinacion '+nombre_combinacion+' Modulo '+nombre_modulo);
+	  			modal.find('#medidasModal').empty();
+	  			modal.find('#medidasModal').append(talles_txt+medidas_txt+precios_txt+tallesid_txt);
+				sumaPares(modalActivo, 'cantidadesportalles');
+				muestraTotalPares();
+			});
+        }
 
 		// Autofocus en modal de medidas
 		$(document).on('shown.bs.modal', '.modal', function() {
@@ -597,7 +556,7 @@
             var leyenda = $("#leyendaot").val();
             var checkotstock = $("input:checkbox[class=checkboxotstock]:checked").val();
 			var ordentrabajo_stock_codigo = $("#ordentrabajo_stock_codigo").val();
-			var articulo_id = $(pedido_combinacion).parents('tr').find('.articulo').val();
+			var articulo_id = msFilaArticuloId($(pedido_combinacion).closest('tr'));
 			var combinacion_id = $(pedido_combinacion).parents('tr').find('.combinacion').val();
 			
 			if (ordentrabajo_stock_codigo == '')
@@ -782,11 +741,12 @@
 	// Arma medidas y cantidades para modal
 	function armaMedidas(item)
 	{
-		articulo_id = $(item).parents("tr").find(".articulo").val();
-		descripcion_articulo = $(item).parents("tr").find(".articulo option:selected").text();
-		modulo_id = $(item).parents("tr").find(".modulo").val();
-		combinacion_id = $(item).parents("tr").find(".combinacion").val();
-		nombre_combinacion = $(item).parents("tr").find(".combinacion option:selected").text();
+		var $tr = $(item).closest('tr');
+		articulo_id = msFilaArticuloId($tr);
+		descripcion_articulo = msFilaDescripcion($tr);
+		modulo_id = $tr.find(".modulo").val();
+		combinacion_id = $tr.find(".combinacion").val();
+		nombre_combinacion = $tr.find(".combinacion option:selected").text();
 
 		// Lee tabla de medidas
 		var val_medida = $(item).parents("tr").find(".medidas").val();
@@ -830,6 +790,9 @@
         actualizaRenglones();
 
 		activa_eventos(false);
+
+		var $nueva = $('#tbody-tabla tr.item-pedido').last();
+		$nueva.find('.codigoarticulo').trigger('focus');
     }
 
 	// Anula item 
@@ -940,7 +903,7 @@
         event.preventDefault();
 		ordentrabajo = $(this).parents('tr').find('.otcodigo').val();
 		loteStock = $(this).parents('tr').find('.loteids').val();
-		articulo_id = $(this).parents("tr").find(".articulo").val();
+		articulo_id = msFilaArticuloId($(this).closest('tr'));
 		combinacion_id = $(this).parents("tr").find(".combinacion").val();
 
 		// Busca si tiene factura asociada

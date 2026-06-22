@@ -14,6 +14,11 @@ interface AsientoRepositoryInterface extends RepositoryInterface
      */
     public function sincronizarCtamovAnita(array $data): void;
 
+    /**
+     * Elimina líneas ctamov en Anita por empresa + número de asiento (rollback compensatorio).
+     */
+    public function eliminarCtamovAnitaPorNumero(int $empresaId, string $numeroAsiento): void;
+
     public function leeAsientoPorClave($id, $clave);
 }
 

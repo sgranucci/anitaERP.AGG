@@ -38,7 +38,10 @@ class DepmaeController extends Controller
             || can('crear-prestamo', false)
             || can('editar-prestamo', false)
             || can('actualizar-prestamo', false)
-            || can('listar-prestamo', false);
+            || can('listar-prestamo', false)
+            || can('crear-movimientos-de-stock', false)
+            || can('editar-movimientos-de-stock', false)
+            || can('listar-movimientos-de-stock', false);
     }
 
     /**

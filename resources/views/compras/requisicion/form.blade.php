@@ -95,7 +95,7 @@
                         <input type="text" class="form-control codigoproveedor mr-2" id="codigoproveedor" name="codigoproveedor" value="{{ old('codigoproveedor', optional($reqProveedor)->codigo ?? '') }}" style="width: 6.5rem; max-width: 30%; flex-shrink: 0;" {{ $soloLectura ? 'readonly' : '' }}>
                         <input type="text" class="form-control mr-2" id="nombreproveedor" name="nombreproveedor" value="{{ old('nombreproveedor', optional($reqProveedor)->nombre ?? '') }}" readonly style="min-width: 8rem; flex: 1 1 8rem;">
                         @if(!$soloLectura)
-                        <button type="button" title="Consulta proveedores" class="btn-accion-tabla consultaproveedor tooltipsC mr-2 mr-md-3">
+                        <button type="button" title="Consulta proveedores (F1)" class="btn-accion-tabla consultaproveedor tooltipsC mr-2 mr-md-3 flex-shrink-0">
                             <i class="fa fa-search text-primary"></i>
                         </button>
                         @endif

@@ -11,6 +11,7 @@ use App\Models\Stock\Transferencia_Mercaderia_Token;
 use App\Repositories\Stock\Tipotransaccion_StockRepositoryInterface;
 use App\Services\Configuracion\ModuloAvisoService;
 use App\Support\Contable\PeriodoContableCierreSupport;
+use App\Support\Stock\TransferenciaBienUsoSupport;
 use App\Support\Stock\TransferenciaMercaderiaAprobacionSupport;
 use App\Support\Stock\TransferenciaMercaderiaDestinatarioSupport;
 use App\Support\Stock\TransferenciaMercaderiaEstados;
@@ -31,6 +32,10 @@ class TransferenciaMercaderiaService
 
     public const CACHE_DEPOSITO_ENTRADA = 'transferencia-deposito-entrada';
 
+    public const CACHE_BIEN_USO_DESTINO = 'transferencia-bien-uso-destino';
+
+    public const CACHE_BIEN_USO_ORIGEN = 'transferencia-bien-uso-origen';
+
     public const CACHE_TIPO_TRANSACCION = 'transferencia-tipotransaccion';
 
     public function __construct(
@@ -38,7 +43,6 @@ class TransferenciaMercaderiaService
         private Tipotransaccion_StockRepositoryInterface $tipotransaccionStockRepository,
         private StkdepSaldoAnitaService $stkdepSaldoAnitaService,
         private ModuloAvisoService $moduloAvisoService,
-        private TransferenciaMercaderiaAsientoService $asientoService,
     ) {}
 
     public function defaultsUsuario(): array
@@ -46,6 +50,8 @@ class TransferenciaMercaderiaService
         return [
             'deposito_salida_id' => cache()->get(generaKey(self::CACHE_DEPOSITO_SALIDA)),
             'deposito_entrada_id' => cache()->get(generaKey(self::CACHE_DEPOSITO_ENTRADA)),
+            'bien_uso_destino_id' => cache()->get(generaKey(self::CACHE_BIEN_USO_DESTINO)),
+            'bien_uso_origen_id' => cache()->get(generaKey(self::CACHE_BIEN_USO_ORIGEN)),
             'tipotransaccion_stock_id' => $this->resolverTipoTransaccionStockIdDefault(),
         ];
     }
@@ -57,6 +63,12 @@ class TransferenciaMercaderiaService
         }
         if (! empty($data['deposito_entrada_id'])) {
             Cache::forever(generaKey(self::CACHE_DEPOSITO_ENTRADA), (int) $data['deposito_entrada_id']);
+        }
+        if (! empty($data['bien_uso_destino_id'])) {
+            Cache::forever(generaKey(self::CACHE_BIEN_USO_DESTINO), (int) $data['bien_uso_destino_id']);
+        }
+        if (! empty($data['bien_uso_origen_id'])) {
+            Cache::forever(generaKey(self::CACHE_BIEN_USO_ORIGEN), (int) $data['bien_uso_origen_id']);
         }
         $tipoStockId = (int) ($data['tipotransaccion_stock_id'] ?? $data['tipotransaccion_id'] ?? 0);
         if ($tipoStockId > 0) {
@@ -74,11 +86,27 @@ class TransferenciaMercaderiaService
         return $this->stkdepSaldoAnitaService->inventarioPorDepositoId($depositoSalidaId);
     }
 
+    /**
+     * @return list<array{sku_anita: string, saldo: float, articulo_id: int|null, sku: string|null, descripcion: string|null}>
+     */
+    public function inventarioBienUsoOrigen(int $bienUsoOrigenId): array
+    {
+        TransferenciaBienUsoSupport::assertBienActivo($bienUsoOrigenId);
+
+        return array_map(static fn (array $fila) => [
+            'sku_anita' => (string) ($fila['sku'] ?? ''),
+            'saldo' => (float) $fila['cantidad'],
+            'articulo_id' => (int) $fila['articulo_id'],
+            'sku' => $fila['sku'] ?? null,
+            'descripcion' => $fila['descripcion'] ?? null,
+        ], \App\Support\Stock\BienUsoAsignacionSupport::inventarioActual($bienUsoOrigenId));
+    }
+
     /** @return list<Transferencia_Mercaderia> */
     public function listarPendientes(?int $depositoDestinoId = null): array
     {
         $query = Transferencia_Mercaderia::query()
-            ->with(['depositoOrigen', 'depositoDestino', 'usuarioOrigen', 'articulos.articuloOrigen', 'articulos.articuloDestino'])
+            ->with(['depositoOrigen', 'depositoDestino', 'bienUsoOrigen', 'bienUsoDestino', 'usuarioOrigen', 'usuarioDestino', 'articulos.articuloOrigen', 'articulos.articuloDestino'])
             ->where('estado', TransferenciaMercaderiaEstados::PENDIENTE_RECEPCION)
             ->orderByDesc('fecha')
             ->orderByDesc('id');
@@ -89,8 +117,16 @@ class TransferenciaMercaderiaService
 
         if (UsuarioDepositoAutorizado::tieneRestriccion()) {
             $ids = UsuarioDepositoAutorizado::idsRestringidos() ?? [];
-            if ($ids !== []) {
-                $query->whereIn('deposito_destino_id', $ids);
+            $usuarioId = (int) (Auth::id() ?? 0);
+            if ($ids !== [] || $usuarioId > 0) {
+                $query->where(function ($q) use ($ids, $usuarioId) {
+                    if ($ids !== []) {
+                        $q->whereIn('deposito_destino_id', $ids);
+                    }
+                    if ($usuarioId > 0) {
+                        $q->orWhere('usuario_destino_id', $usuarioId);
+                    }
+                });
             }
         }
 
@@ -103,6 +139,8 @@ class TransferenciaMercaderiaService
             ->with([
                 'depositoOrigen',
                 'depositoDestino',
+                'bienUsoOrigen',
+                'bienUsoDestino',
                 'tipotransaccion_stock',
                 'usuarioOrigen',
                 'usuarioDestino',
@@ -121,16 +159,12 @@ class TransferenciaMercaderiaService
     {
         $depositoSalidaId = (int) ($cabecera['deposito_salida_id'] ?? 0);
         $depositoEntradaId = (int) ($cabecera['deposito_entrada_id'] ?? 0);
+        $bienUsoDestinoId = (int) ($cabecera['bien_uso_destino_id'] ?? 0);
+        $bienUsoOrigenId = (int) ($cabecera['bien_uso_origen_id'] ?? 0);
         $tipotransaccionId = (int) ($cabecera['tipotransaccion_stock_id'] ?? $cabecera['tipotransaccion_id'] ?? 0);
         $empresaId = (int) ($cabecera['empresa_id'] ?? 0);
         $usuarioDestinoId = (int) ($cabecera['usuario_destino_id'] ?? 0) ?: null;
 
-        if ($depositoSalidaId <= 0 || $depositoEntradaId <= 0) {
-            return ['ok' => false, 'mensaje' => 'Debe indicar depósito de salida y de entrada.'];
-        }
-        if ($depositoSalidaId === $depositoEntradaId) {
-            return ['ok' => false, 'mensaje' => 'El depósito de salida y el de entrada deben ser distintos.'];
-        }
         if ($tipotransaccionId <= 0) {
             return ['ok' => false, 'mensaje' => 'Debe seleccionar un tipo de transacción.'];
         }
@@ -138,39 +172,109 @@ class TransferenciaMercaderiaService
             return ['ok' => false, 'mensaje' => 'Indique al menos un artículo con cantidad a transferir.'];
         }
 
-        $this->assertDepositoAutorizado($depositoSalidaId);
-        if (! Depmae::autorizadoParaUsuarioYEmpresa($depositoSalidaId, $empresaId)) {
-            return ['ok' => false, 'mensaje' => 'Depósito de salida no autorizado para su usuario o empresa.'];
+        $tipoTransferencia = $this->tipotransaccionStockRepository->find($tipotransaccionId);
+        try {
+            $this->validarTipoTransferencia($tipoTransferencia);
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'mensaje' => $e->getMessage()];
         }
-        if (! Depmae::autorizadoParaUsuarioYEmpresa($depositoEntradaId, $empresaId)) {
+
+        $destinoBienUso = TransferenciaBienUsoSupport::tipoDestinoBienUso($tipoTransferencia);
+        $origenBienUso = TransferenciaBienUsoSupport::tipoOrigenBienUso($tipoTransferencia);
+
+        if ($origenBienUso) {
+            if ($bienUsoOrigenId <= 0) {
+                return ['ok' => false, 'mensaje' => 'Debe seleccionar el bien de uso de origen.'];
+            }
+            if ($depositoSalidaId > 0) {
+                return ['ok' => false, 'mensaje' => 'Este tipo de transferencia no usa depósito de salida.'];
+            }
+            if ($depositoEntradaId <= 0) {
+                return ['ok' => false, 'mensaje' => 'Debe indicar depósito de entrada.'];
+            }
+            if ($bienUsoDestinoId > 0) {
+                return ['ok' => false, 'mensaje' => 'Este tipo de transferencia no admite bien de uso como destino.'];
+            }
+            try {
+                $bienOrigen = TransferenciaBienUsoSupport::assertBienActivo($bienUsoOrigenId);
+            } catch (\Throwable $e) {
+                return ['ok' => false, 'mensaje' => $e->getMessage()];
+            }
+            $bienDestino = null;
+        } elseif ($destinoBienUso) {
+            if ($depositoSalidaId <= 0) {
+                return ['ok' => false, 'mensaje' => 'Debe indicar depósito de salida.'];
+            }
+            if ($bienUsoDestinoId <= 0) {
+                return ['ok' => false, 'mensaje' => 'Debe seleccionar el bien de uso destino.'];
+            }
+            if ($depositoEntradaId > 0) {
+                return ['ok' => false, 'mensaje' => 'Este tipo de transferencia no usa depósito de entrada.'];
+            }
+            if ($bienUsoOrigenId > 0) {
+                return ['ok' => false, 'mensaje' => 'El tipo de transacción seleccionado no admite bien de uso como origen.'];
+            }
+            try {
+                $bienDestino = TransferenciaBienUsoSupport::assertBienActivo($bienUsoDestinoId);
+            } catch (\Throwable $e) {
+                return ['ok' => false, 'mensaje' => $e->getMessage()];
+            }
+            $bienOrigen = null;
+        } else {
+            $bienOrigen = null;
+            $bienDestino = null;
+            if ($depositoSalidaId <= 0) {
+                return ['ok' => false, 'mensaje' => 'Debe indicar depósito de salida.'];
+            }
+            if ($depositoEntradaId <= 0) {
+                return ['ok' => false, 'mensaje' => 'Debe indicar depósito de entrada.'];
+            }
+            if ($depositoSalidaId === $depositoEntradaId) {
+                return ['ok' => false, 'mensaje' => 'El depósito de salida y el de entrada deben ser distintos.'];
+            }
+            if ($bienUsoDestinoId > 0 || $bienUsoOrigenId > 0) {
+                return ['ok' => false, 'mensaje' => 'El tipo de transacción seleccionado no admite bienes de uso.'];
+            }
+        }
+
+        if (! $origenBienUso) {
+            $this->assertDepositoAutorizado($depositoSalidaId);
+            if (! Depmae::autorizadoParaUsuarioYEmpresa($depositoSalidaId, $empresaId)) {
+                return ['ok' => false, 'mensaje' => 'Depósito de salida no autorizado para su usuario o empresa.'];
+            }
+        }
+        if (! $destinoBienUso && ! Depmae::autorizadoParaUsuarioYEmpresa($depositoEntradaId, $empresaId)) {
             return ['ok' => false, 'mensaje' => 'Depósito de entrada no autorizado para la empresa seleccionada.'];
         }
 
-        $tipoTransferencia = $this->tipotransaccionStockRepository->find($tipotransaccionId);
-        $this->validarTipoTransferencia($tipoTransferencia);
-
-        $depositoSalida = Depmae::query()->findOrFail($depositoSalidaId);
-        $depositoEntrada = Depmae::query()->findOrFail($depositoEntradaId);
+        $depositoSalida = $origenBienUso ? null : Depmae::query()->findOrFail($depositoSalidaId);
+        $depositoEntrada = $destinoBienUso ? null : Depmae::query()->findOrFail($depositoEntradaId);
 
         $ahora = Carbon::now();
         $fecha = $ahora->format('Y-m-d');
 
         PeriodoContableCierreSupport::assertOperacionPermitida(
-            (int) ($depositoSalida->empresa_id ?? $empresaId),
+            (int) ($depositoSalida?->empresa_id ?? $depositoEntrada?->empresa_id ?? $empresaId),
             $fecha,
             PeriodoContableCierreSupport::ALCANCE_TRANSFERENCIA
         );
 
         $requiereAprobacion = TransferenciaMercaderiaAprobacionSupport::requiereAprobacion($tipoTransferencia);
-        $usuarioDestino = TransferenciaMercaderiaDestinatarioSupport::resolverUsuarioDestino(
-            $depositoEntradaId,
-            $usuarioDestinoId
-        );
+        $usuarioDestino = $destinoBienUso
+            ? TransferenciaMercaderiaDestinatarioSupport::resolverUsuarioDestinoBienUso($usuarioDestinoId)
+            : TransferenciaMercaderiaDestinatarioSupport::resolverUsuarioDestino(
+                $depositoEntradaId,
+                $usuarioDestinoId
+            );
 
         if ($requiereAprobacion && $usuarioDestino === null) {
+            $mensajeDestino = $destinoBienUso
+                ? 'La transferencia requiere aprobación: indique el usuario receptor del bien.'
+                : 'La transferencia requiere aprobación: indique un usuario destino o configure un encargado del depósito de entrada.';
+
             return [
                 'ok' => false,
-                'mensaje' => 'La transferencia requiere aprobación: indique un usuario destino o configure un encargado del depósito de entrada.',
+                'mensaje' => $mensajeDestino,
             ];
         }
 
@@ -180,11 +284,22 @@ class TransferenciaMercaderiaService
         $this->persistirPreferencias($cabecera);
 
         try {
-            $lineasResueltas = $this->resolverLineas($lineas, $depositoEntrada, $empresaId);
-            $this->validarCantidadesContraSaldo($depositoSalidaId, $lineasResueltas);
+            $lineasResueltas = $this->resolverLineas($lineas, $depositoEntrada, $empresaId, $destinoBienUso || $origenBienUso);
+            if ($origenBienUso) {
+                $this->validarCantidadesContraSaldoBien($bienUsoOrigenId, $lineasResueltas);
+            } else {
+                $this->validarCantidadesContraSaldo($depositoSalidaId, $lineasResueltas);
+            }
         } catch (\Throwable $e) {
             return ['ok' => false, 'mensaje' => $e->getMessage()];
         }
+
+        $etiquetaDestino = $destinoBienUso
+            ? TransferenciaBienUsoSupport::etiquetaBien($bienDestino)
+            : (string) $depositoEntrada->nombre;
+        $etiquetaOrigen = $origenBienUso
+            ? TransferenciaBienUsoSupport::etiquetaBien($bienOrigen)
+            : (string) $depositoSalida->nombre;
 
         try {
             return DB::transaction(function () use (
@@ -195,19 +310,27 @@ class TransferenciaMercaderiaService
                 $depositoEntrada,
                 $depositoSalidaId,
                 $depositoEntradaId,
+                $bienUsoDestinoId,
+                $bienUsoOrigenId,
+                $destinoBienUso,
+                $origenBienUso,
                 $empresaId,
                 $fecha,
                 $lote,
                 $codigoBase,
                 $requiereAprobacion,
-                $usuarioDestino
+                $usuarioDestino,
+                $etiquetaDestino,
+                $etiquetaOrigen
             ) {
                 $transferencia = Transferencia_Mercaderia::create([
                     'codigo' => $codigoBase,
                     'lote' => $lote,
-                    'empresa_id' => $empresaId > 0 ? $empresaId : (int) $depositoSalida->empresa_id,
-                    'deposito_origen_id' => $depositoSalidaId,
-                    'deposito_destino_id' => $depositoEntradaId,
+                    'empresa_id' => $empresaId > 0 ? $empresaId : (int) ($depositoSalida?->empresa_id ?? $depositoEntrada?->empresa_id ?? 0),
+                    'deposito_origen_id' => $origenBienUso ? null : $depositoSalidaId,
+                    'bien_uso_origen_id' => $origenBienUso ? $bienUsoOrigenId : null,
+                    'deposito_destino_id' => $destinoBienUso ? null : $depositoEntradaId,
+                    'bien_uso_destino_id' => $destinoBienUso ? $bienUsoDestinoId : null,
                     'tipotransaccion_stock_id' => $tipoTransferencia->id,
                     'estado' => $requiereAprobacion
                         ? TransferenciaMercaderiaEstados::PENDIENTE_RECEPCION
@@ -224,13 +347,17 @@ class TransferenciaMercaderiaService
                 $payloadSalida = $this->armarPayloadMovimiento($lineasResueltas, 'salida');
                 $salida = $this->grabarMovimiento(
                     $tipoTransferencia->id,
-                    $depositoSalidaId,
+                    $origenBienUso ? null : $depositoSalidaId,
                     $fecha,
                     $lote,
                     $codigoBase.'-S',
-                    'Transferencia a '.$depositoEntrada->nombre,
+                    $origenBienUso
+                        ? 'Desasignación hacia '.$etiquetaDestino
+                        : 'Transferencia a '.$etiquetaDestino,
                     $payloadSalida,
-                    esSalida: true
+                    esSalida: true,
+                    bienUsoId: $origenBienUso ? $bienUsoOrigenId : null,
+                    empresaId: $empresaId > 0 ? $empresaId : (int) ($depositoSalida?->empresa_id ?? $depositoEntrada?->empresa_id ?? 0)
                 );
                 $transferencia->movimientostock_salida_id = (int) $salida['id'];
                 $transferencia->save();
@@ -239,24 +366,18 @@ class TransferenciaMercaderiaService
                     $payloadEntrada = $this->armarPayloadMovimiento($lineasResueltas, 'entrada');
                     $entrada = $this->grabarMovimiento(
                         $tipoTransferencia->id,
-                        $depositoEntradaId,
+                        $destinoBienUso ? null : $depositoEntradaId,
                         $fecha,
                         $lote,
                         $codigoBase.'-E',
-                        'Transferencia desde '.$depositoSalida->nombre,
+                        'Transferencia desde '.$etiquetaOrigen,
                         $payloadEntrada,
-                        esSalida: false
+                        esSalida: false,
+                        bienUsoId: $destinoBienUso ? $bienUsoDestinoId : null,
+                        empresaId: $empresaId > 0 ? $empresaId : (int) ($depositoSalida?->empresa_id ?? $depositoEntrada?->empresa_id ?? 0)
                     );
                     $transferencia->movimientostock_entrada_id = (int) $entrada['id'];
                     $transferencia->save();
-
-                    if (TransferenciaMercaderiaAprobacionSupport::manejaContabilidad($tipoTransferencia)) {
-                        $asientoId = $this->asientoService->generarDesdeTransferencia($transferencia->fresh(['articulos']));
-                        if ($asientoId > 0) {
-                            $transferencia->asiento_id = $asientoId;
-                            $transferencia->save();
-                        }
-                    }
 
                     $this->moduloAvisoService->enviar('stock', 'transferencia_confirmada', (int) $transferencia->id);
                 } else {
@@ -290,7 +411,17 @@ class TransferenciaMercaderiaService
         }
 
         $usuarioAprobadorId = $usuarioAprobadorId ?? (int) Auth::id();
-        if (! UsuarioDepositoAutorizado::depositoAutorizado((int) $transferencia->deposito_destino_id)
+        $esDestinoBien = (int) ($transferencia->bien_uso_destino_id ?? 0) > 0;
+        $esOrigenBien = (int) ($transferencia->bien_uso_origen_id ?? 0) > 0;
+
+        if ($esDestinoBien) {
+            if (! TransferenciaMercaderiaDestinatarioSupport::usuarioPuedeAprobarBienUso(
+                $transferencia,
+                \App\Models\Seguridad\Usuario::query()->findOrFail($usuarioAprobadorId)
+            )) {
+                throw new \RuntimeException('No está autorizado para aprobar esta transferencia al bien de uso.');
+            }
+        } elseif (! UsuarioDepositoAutorizado::depositoAutorizado((int) $transferencia->deposito_destino_id)
             && ! TransferenciaMercaderiaDestinatarioSupport::usuarioPuedeRecibirAprobacion(
                 (int) $transferencia->deposito_destino_id,
                 \App\Models\Seguridad\Usuario::query()->findOrFail($usuarioAprobadorId)
@@ -305,20 +436,25 @@ class TransferenciaMercaderiaService
             $usuarioAprobadorId
         );
 
-        return DB::transaction(function () use ($transferencia, $usuarioAprobadorId, $observaciones) {
+        return DB::transaction(function () use ($transferencia, $usuarioAprobadorId, $observaciones, $esDestinoBien, $esOrigenBien) {
             $lineas = $transferencia->articulos->all();
             $payloadEntrada = $this->armarPayloadMovimientoDesdePersistidas($lineas, 'entrada');
             $tipo = $transferencia->tipotransaccion_stock;
+            $etiquetaOrigen = $esOrigenBien
+                ? TransferenciaBienUsoSupport::etiquetaBien($transferencia->bienUsoOrigen)
+                : (string) optional($transferencia->depositoOrigen)->nombre;
 
             $entrada = $this->grabarMovimiento(
                 (int) $transferencia->tipotransaccion_stock_id,
-                (int) $transferencia->deposito_destino_id,
+                $esDestinoBien ? null : (int) $transferencia->deposito_destino_id,
                 $transferencia->fecha?->format('Y-m-d') ?? now()->format('Y-m-d'),
                 (int) $transferencia->lote,
                 $transferencia->codigo.'-E',
-                'Transferencia desde '.optional($transferencia->depositoOrigen)->nombre,
+                'Transferencia desde '.$etiquetaOrigen,
                 $payloadEntrada,
-                esSalida: false
+                esSalida: false,
+                bienUsoId: $esDestinoBien ? (int) $transferencia->bien_uso_destino_id : null,
+                empresaId: (int) $transferencia->empresa_id
             );
 
             $transferencia->movimientostock_entrada_id = (int) $entrada['id'];
@@ -331,14 +467,6 @@ class TransferenciaMercaderiaService
             $transferencia->save();
 
             $this->invalidarTokens($transferencia);
-
-            if (TransferenciaMercaderiaAprobacionSupport::manejaContabilidad($tipo)) {
-                $asientoId = $this->asientoService->generarDesdeTransferencia($transferencia->fresh(['articulos']));
-                if ($asientoId > 0) {
-                    $transferencia->asiento_id = $asientoId;
-                    $transferencia->save();
-                }
-            }
 
             $this->moduloAvisoService->enviar('stock', 'transferencia_confirmada', (int) $transferencia->id);
 
@@ -358,16 +486,19 @@ class TransferenciaMercaderiaService
         return DB::transaction(function () use ($transferencia, $usuarioId, $motivo) {
             $lineas = $transferencia->articulos->all();
             $payloadReverso = $this->armarPayloadMovimientoDesdePersistidas($lineas, 'salida');
+            $esOrigenBien = (int) ($transferencia->bien_uso_origen_id ?? 0) > 0;
 
             $this->grabarMovimiento(
                 (int) $transferencia->tipotransaccion_stock_id,
-                (int) $transferencia->deposito_origen_id,
+                $esOrigenBien ? null : (int) $transferencia->deposito_origen_id,
                 now()->format('Y-m-d'),
                 (int) $transferencia->lote,
                 $transferencia->codigo.'-RV',
                 'Reverso transferencia rechazada',
                 $payloadReverso,
-                esSalida: false
+                esSalida: false,
+                bienUsoId: $esOrigenBien ? (int) $transferencia->bien_uso_origen_id : null,
+                empresaId: (int) $transferencia->empresa_id
             );
 
             $transferencia->usuario_aprobador_id = $usuarioId;
@@ -417,7 +548,7 @@ class TransferenciaMercaderiaService
      * @param  list<array{articulo_id: int, cantidad: float}>  $lineas
      * @return list<array<string, mixed>>
      */
-    private function resolverLineas(array $lineas, Depmae $depositoEntrada, int $empresaId): array
+    private function resolverLineas(array $lineas, ?Depmae $depositoEntrada, int $empresaId, bool $destinoBienUso = false): array
     {
         $resueltas = [];
         $item = 0;
@@ -430,12 +561,16 @@ class TransferenciaMercaderiaService
             }
 
             $articulo = Articulo::query()->findOrFail($articuloId);
-            $conv = TransferenciaMercaderiaLineaSupport::resolverLinea(
-                $articulo,
-                $depositoEntrada,
-                $cantidad,
-                $empresaId > 0 ? $empresaId : null
-            );
+            if ($destinoBienUso) {
+                $conv = TransferenciaMercaderiaLineaSupport::resolverLineaParaBienUso($articulo, $cantidad);
+            } else {
+                $conv = TransferenciaMercaderiaLineaSupport::resolverLinea(
+                    $articulo,
+                    $depositoEntrada,
+                    $cantidad,
+                    $empresaId > 0 ? $empresaId : null
+                );
+            }
             $item++;
             $resueltas[] = array_merge($conv, ['item' => $item]);
         }
@@ -465,6 +600,29 @@ class TransferenciaMercaderiaService
                 'coeficienteconversion' => (float) $linea['coeficienteconversion'],
                 'fl_conversion_formula' => (bool) $linea['fl_conversion_formula'],
             ]);
+        }
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $lineas
+     */
+    private function validarCantidadesContraSaldoBien(int $bienUsoOrigenId, array $lineas): void
+    {
+        $inventario = \App\Support\Stock\BienUsoAsignacionSupport::inventarioActual($bienUsoOrigenId);
+        $saldoPorArticulo = [];
+        foreach ($inventario as $fila) {
+            $saldoPorArticulo[(int) $fila['articulo_id']] = (float) $fila['cantidad'];
+        }
+
+        foreach ($lineas as $linea) {
+            $articuloId = (int) $linea['articulo_origen_id'];
+            $cantidad = (float) $linea['cantidad_origen'];
+            if (! isset($saldoPorArticulo[$articuloId])) {
+                throw new \InvalidArgumentException('Artículo sin saldo asignado al bien de uso.');
+            }
+            if ($cantidad > $saldoPorArticulo[$articuloId] + 0.000001) {
+                throw new \InvalidArgumentException('La cantidad supera el saldo asignado al bien.');
+            }
         }
     }
 
@@ -571,17 +729,26 @@ class TransferenciaMercaderiaService
         if ($tipo->estado !== 'A') {
             throw new \RuntimeException('El tipo de transacción de transferencia no está activo.');
         }
+        TransferenciaBienUsoSupport::validarFlagsTipo($tipo);
+        if ($tipo->destino_bien_uso && $tipo->operacion !== TransferenciaMercaderiaSignoSupport::OPERACION_TIPO) {
+            throw new \RuntimeException('El destino bien de uso solo aplica a tipos de operación Transferencia (T).');
+        }
+        if ($tipo->origen_bien_uso && $tipo->operacion !== TransferenciaMercaderiaSignoSupport::OPERACION_TIPO) {
+            throw new \RuntimeException('El origen bien de uso solo aplica a tipos de operación Transferencia (T).');
+        }
     }
 
     private function grabarMovimiento(
         int $tipotransaccionId,
-        int $depositoId,
+        ?int $depositoId,
         string $fecha,
         int $lote,
         string $codigo,
         string $leyenda,
         array $payloadLineas,
-        bool $esSalida
+        bool $esSalida,
+        ?int $bienUsoId = null,
+        ?int $empresaId = null
     ): array {
         $data = array_merge($payloadLineas, [
             'tipotransaccion_stock_id' => $tipotransaccionId,
@@ -589,6 +756,8 @@ class TransferenciaMercaderiaService
             'fecha' => $fecha,
             'fechajornada' => $fecha,
             'deposito_id' => $depositoId,
+            'bien_uso_id' => $bienUsoId,
+            'empresa_id' => $empresaId,
             'mventa_id' => null,
             'lote' => $lote,
             'leyenda' => $leyenda,

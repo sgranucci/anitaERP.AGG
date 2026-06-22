@@ -27,15 +27,12 @@
             <span class="input-group-text">#</span>                
             <input type="text" name="numerocomprobante" id="numerocomprobante" class="col-lg-2 form-control" placeholder="Numero de Comprobante" aria-label="Numero de Comprobante" value="{{$data->numerocomprobante ?? ''}}" readonly>
         </div>
-        <div class="form-group row" id="div-proveedor">
-            <label for="proveedor" class="col-lg-3 col-form-label">Proveedor</label>
-            <input type="text" class="col-lg-1 proveedor_id proveedor_id_local" id="proveedor_id" name="proveedor_id" value="{{$data->proveedor_id ?? ''}}" >
-            <input type="text" class="col-lg-6 nombreproveedor" id="nombreproveedor" name="nombreproveedor" value="{{$data->proveedores->nombre ?? ''}}" readonly>
-            <input type="hidden" class="codigoproveedor" id="codigoproveedor" name="codigoproveedor" value="{{$data->proveedores->codigo ?? ''}}" readonly>
-            <a href="{{route('editar_proveedor', ['id' => $data->proveedor_id ?? 0])}}" style="display: flex; align-items: center;" class="btn-accion-tabla tooltipsC editarproveedor" title="Editar este registro">
-                <i class="fa fa-edit"></i>
-            </a>                
-        </div>
+        @include('includes.compras.campo_proveedor_consulta', [
+            'proveedor_id' => ($data ?? null)?->proveedor_id,
+            'codigo_proveedor' => ($data ?? null)?->proveedores?->codigo,
+            'nombre_proveedor' => ($data ?? null)?->proveedores?->nombre,
+            'requerido' => true,
+        ])
     </div>
     <div class="col-sm-6">
     	<div class="form-group row">

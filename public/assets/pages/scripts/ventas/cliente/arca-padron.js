@@ -1,6 +1,6 @@
 /**
  * Consulta padrón ARCA (constancia de inscripción) para el alta/edición de clientes.
- * Requiere en la página: #tab2[data-arca-constancia-url], meta csrf o input _token.
+ * Requiere en la página: #cliente-arca-config[data-arca-constancia-url], meta csrf o input _token.
  */
 (function () {
 	function qs(sel) {
@@ -71,8 +71,8 @@
 	}
 
 	function getArcaEndpointUrl() {
-		const tab = byId('tab2');
-		let u = tab && tab.getAttribute('data-arca-constancia-url');
+		const cfg = byId('cliente-arca-config');
+		let u = cfg && cfg.getAttribute('data-arca-constancia-url');
 		if (!u) {
 			const any = document.querySelector('[data-arca-constancia-url]');
 			u = any && any.getAttribute('data-arca-constancia-url');
@@ -405,8 +405,8 @@
 	}
 
 	function arcaValidacionImpuestosHabilitada() {
-		const tab = byId('tab2');
-		return !!(tab && tab.getAttribute('data-arca-validar-impuestos') === '1');
+		const cfg = byId('cliente-arca-config');
+		return !!(cfg && cfg.getAttribute('data-arca-validar-impuestos') === '1');
 	}
 
 	function getCondicionivaIdForm() {
@@ -417,8 +417,8 @@
 	}
 
 	function condicionivaRequiereValidacionArca(condicionivaId) {
-		const tab = byId('tab2');
-		if (!tab || !condicionivaId) return false;
+		const cfg = byId('cliente-arca-config');
+		if (!cfg || !condicionivaId) return false;
 		const ri = parseInt(tab.getAttribute('data-condicioniva-ri-id') || '1', 10);
 		const mono = parseInt(tab.getAttribute('data-condicioniva-monotributo-id') || '4', 10);
 		return condicionivaId === ri || condicionivaId === mono;

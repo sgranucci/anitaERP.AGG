@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Stock;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionTransferenciaMercaderia;
+use App\Models\Contable\BienUso;
+use App\Models\Contable\Centrocosto;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Transferencia_Mercaderia_Token;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
@@ -36,17 +38,32 @@ class TransferenciaMercaderiaController extends Controller
 
         $depSalida = $this->resolverDepositoDefault($defaults['deposito_salida_id'] ?? null, $empresa_id);
         $depEntrada = $this->resolverDepositoDefault($defaults['deposito_entrada_id'] ?? null, $empresa_id);
+        $bienUsoDestino = $this->resolverBienUsoDefault($defaults['bien_uso_destino_id'] ?? null);
+        $bienUsoOrigen = $this->resolverBienUsoDefault($defaults['bien_uso_origen_id'] ?? null);
+        $bienesUsoActivos = BienUso::query()
+            ->with('centrocostos:id,codigo,nombre')
+            ->where('estado', 'A')
+            ->orderBy('hostname')
+            ->get(['id', 'codigo_inventario', 'hostname', 'modelo', 'tipo_bien', 'centrocosto_id']);
 
         $pendientesCount = count($this->transferenciaService->listarPendientes());
+
+        $centrocosto_query = Centrocosto::query()
+            ->orderBy('codigo')
+            ->get(['id', 'codigo', 'nombre']);
 
         return view('stock.transferencia_mercaderia.index', compact(
             'tipotransacciones',
             'defaults',
             'depSalida',
             'depEntrada',
+            'bienUsoDestino',
+            'bienUsoOrigen',
+            'bienesUsoActivos',
             'empresa_query',
             'empresa_id',
             'pendientesCount',
+            'centrocosto_query',
         ));
     }
 
@@ -65,6 +82,13 @@ class TransferenciaMercaderiaController extends Controller
     public function destinatarios(Request $request): JsonResponse
     {
         can('crear-transferencia-mercaderia');
+
+        if ($request->boolean('destino_bien_uso')) {
+            return response()->json([
+                'ok' => true,
+                'opciones' => TransferenciaMercaderiaDestinatarioSupport::opcionesSelectorBienUso(),
+            ]);
+        }
 
         $depositoId = (int) $request->input('deposito_entrada_id', 0);
         if ($depositoId <= 0) {
@@ -95,6 +119,16 @@ class TransferenciaMercaderiaController extends Controller
         return $query->first();
     }
 
+    private function resolverBienUsoDefault($id): ?BienUso
+    {
+        $id = (int) $id;
+        if ($id <= 0) {
+            return null;
+        }
+
+        return BienUso::query()->whereKey($id)->where('estado', 'A')->first();
+    }
+
     public function preferencias(Request $request): JsonResponse
     {
         can('crear-transferencia-mercaderia');
@@ -102,6 +136,8 @@ class TransferenciaMercaderiaController extends Controller
         $this->transferenciaService->persistirPreferencias($request->only([
             'deposito_salida_id',
             'deposito_entrada_id',
+            'bien_uso_destino_id',
+            'bien_uso_origen_id',
             'tipotransaccion_id',
             'tipotransaccion_stock_id',
         ]));
@@ -112,6 +148,21 @@ class TransferenciaMercaderiaController extends Controller
     public function inventario(Request $request): JsonResponse
     {
         can('crear-transferencia-mercaderia');
+
+        if ($request->boolean('origen_bien_uso')) {
+            $bienId = (int) $request->input('bien_uso_origen_id', 0);
+            if ($bienId <= 0) {
+                return response()->json(['ok' => false, 'mensaje' => 'Seleccione bien de uso de origen.'], 422);
+            }
+
+            try {
+                $filas = $this->transferenciaService->inventarioBienUsoOrigen($bienId);
+            } catch (\Throwable $e) {
+                return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+            }
+
+            return response()->json(['ok' => true, 'filas' => $filas]);
+        }
 
         $depositoId = (int) $request->input('deposito_salida_id', 0);
         if ($depositoId <= 0) {
@@ -147,6 +198,8 @@ class TransferenciaMercaderiaController extends Controller
                 'empresa_id',
                 'deposito_salida_id',
                 'deposito_entrada_id',
+                'bien_uso_destino_id',
+                'bien_uso_origen_id',
                 'tipotransaccion_id',
                 'tipotransaccion_stock_id',
                 'usuario_destino_id',

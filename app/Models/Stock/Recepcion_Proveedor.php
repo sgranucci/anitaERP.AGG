@@ -7,6 +7,7 @@ use App\Models\Compras\Proveedor;
 use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Moneda;
 use App\Models\Contable\Asiento;
+use App\Models\Contable\Centrocosto;
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
 
@@ -31,6 +32,7 @@ class Recepcion_Proveedor extends Model
         'fl_diferencia_cantidad', 'fl_articulo_extra', 'fl_faltante_oc', 'fl_laboratorio', 'fl_linea_rechazada',
         'resumen_diferencias', 'resumen_rechazos',
         'anita_tipo', 'anita_letra', 'anita_sucursal', 'anita_nro', 'origen_carga', 'stkmae_precio_anita_sync_at', 'creousuario_id',
+        'centrocosto_id',
     ];
 
     protected $casts = [
@@ -84,6 +86,11 @@ class Recepcion_Proveedor extends Model
     public function creousuarios()
     {
         return $this->belongsTo(Usuario::class, 'creousuario_id');
+    }
+
+    public function centrocostos()
+    {
+        return $this->belongsTo(Centrocosto::class, 'centrocosto_id');
     }
 
     public function recepcion_proveedor_articulos()

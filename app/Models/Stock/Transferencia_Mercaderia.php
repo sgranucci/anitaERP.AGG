@@ -19,7 +19,9 @@ class Transferencia_Mercaderia extends Model
         'lote',
         'empresa_id',
         'deposito_origen_id',
+        'bien_uso_origen_id',
         'deposito_destino_id',
+        'bien_uso_destino_id',
         'tipotransaccion_stock_id',
         'estado',
         'requiere_aprobacion',
@@ -33,6 +35,7 @@ class Transferencia_Mercaderia extends Model
         'fecha_aprobacion',
         'observacion',
         'motivo_rechazo',
+        'centrocosto_destino_id',
     ];
 
     protected $casts = [
@@ -57,9 +60,24 @@ class Transferencia_Mercaderia extends Model
         return $this->belongsTo(Depmae::class, 'deposito_origen_id');
     }
 
+    public function bienUsoOrigen()
+    {
+        return $this->belongsTo(\App\Models\Contable\BienUso::class, 'bien_uso_origen_id');
+    }
+
     public function depositoDestino()
     {
         return $this->belongsTo(Depmae::class, 'deposito_destino_id');
+    }
+
+    public function centrocostoDestino()
+    {
+        return $this->belongsTo(\App\Models\Contable\Centrocosto::class, 'centrocosto_destino_id');
+    }
+
+    public function bienUsoDestino()
+    {
+        return $this->belongsTo(\App\Models\Contable\BienUso::class, 'bien_uso_destino_id');
     }
 
     public function tipotransaccion_stock()

@@ -28,7 +28,21 @@
                         @endforeach
                     </select>
                     </div>
-              	</div>				
+              	</div>
+                <div class="form-group row">
+                    <div class="col-lg-4 col-form-label"></div>
+                    <div class="col-lg-8">
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" name="fl_precio_promedio_transferencia"
+                                id="fl_precio_promedio_transferencia" value="1"
+                                @if (old('fl_precio_promedio_transferencia', $producto->fl_precio_promedio_transferencia ?? false)) checked @endif>
+                            <label class="form-check-label" for="fl_precio_promedio_transferencia">
+                                Precio promedio (3 &uacute;lt. compras) en asiento de transferencia
+                            </label>
+                        </div>
+                        <small class="text-muted">Si no est&aacute; marcado, el asiento contable usa el precio de &uacute;ltima compra (stkmae).</small>
+                    </div>
+                </div>
             </div>
             <div class="col-sm-6">
 				<div class="form-group row">

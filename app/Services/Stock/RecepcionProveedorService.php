@@ -16,6 +16,7 @@ use App\Repositories\Stock\Recepcion_ProveedorRepositoryInterface;
 use App\Support\Compras\ArticuloProveedorPrecioListaSupport;
 use App\Support\Stock\RecepcionProveedorDiferenciaSupport;
 use App\Support\Stock\RecepcionProveedorDepositoSupport;
+use App\Support\Stock\RecepcionProveedorVisibilidadSupport;
 use App\Support\Stock\RecepcionProveedorAnitaColisionSupport;
 use App\Support\Stock\RecepcionProveedorAnitaOrdenLineaSupport;
 use App\Support\Stock\RecepcionProveedorArchivoSupport;
@@ -52,7 +53,13 @@ class RecepcionProveedorService
 
     public function buscar(int $id): Recepcion_Proveedor
     {
-        return $this->repository->find($id);
+        $recepcion = $this->repository->find($id);
+
+        if (! RecepcionProveedorVisibilidadSupport::recepcionAccesible($recepcion)) {
+            throw new \Illuminate\Database\Eloquent\ModelNotFoundException('Recepción de proveedor no encontrada');
+        }
+
+        return $recepcion;
     }
 
     /** @param array<string, mixed> $data */
@@ -99,6 +106,7 @@ class RecepcionProveedorService
                 'observacion' => $data['observacion'] ?? null,
                 'origen_carga' => $data['origen_carga'] ?? 'MANUAL',
                 'creousuario_id' => Auth::id(),
+                'centrocosto_id' => RecepcionProveedorVisibilidadSupport::resolverCentrocostoCarga(),
             ]);
 
             $this->reemplazarItems($recepcion, $items);
@@ -459,7 +467,8 @@ class RecepcionProveedorService
         $data['ordencompra_id'] = $origen->ordencompra_id;
         $data['empresa_id'] = $origen->empresa_id;
         $data['proveedor_id'] = $origen->proveedor_id;
-        $data['centrocosto_id'] = $origen->centrocosto_id;
+        $data['centrocosto_id'] = $origen->centrocosto_id
+            ?? RecepcionProveedorVisibilidadSupport::resolverCentrocostoCarga();
         $data['moneda_id'] = $origen->moneda_id;
         if (! isset($data['deposito_id']) && $origen->deposito_id) {
             $data['deposito_id'] = $origen->deposito_id;

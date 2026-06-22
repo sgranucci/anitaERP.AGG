@@ -7,6 +7,8 @@
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/domicilio.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/proveedor/arca-padron.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/arca-padron-validacion-async.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/proveedor/arca-validacion-abm.js') }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/proveedor/crear.js")}}" type="text/javascript"></script>
 @endsection
 
@@ -59,6 +61,7 @@
                     @include('compras.proveedor.form3')
                     @include('compras.proveedor.form4')
                     @include('compras.proveedor.form5')
+                    @include('compras.proveedor.partials.arca_validacion_support', ['proveedorId' => null])
                 </div>
                 <div class="card-footer">
                 	<div class="row">
@@ -71,6 +74,7 @@
             	</div>
             </form>
             @include('compras.proveedor.arca-cuit-entry-modal')
+            @include('includes.compras.arca_impuestos_validacion_modal')
         </div>
     </div>
 </div>

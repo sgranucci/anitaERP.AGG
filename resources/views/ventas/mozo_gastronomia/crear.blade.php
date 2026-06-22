@@ -5,6 +5,10 @@
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/mozo_gastronomia/form.js') }}" type="text/javascript"></script>
+<script type="text/javascript">
+    window.mozoGastronomiaProximoCodigoUrl = @json(route('proximo_codigo_mozo_gastronomia'));
+</script>
 @endsection
 
 @section('contenido')

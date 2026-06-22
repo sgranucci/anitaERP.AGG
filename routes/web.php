@@ -731,6 +731,9 @@ Route::get('configuracion/impuesto/{id}/editar', 'Configuracion\ImpuestoControll
 Route::put('configuracion/impuesto/{id}', 'Configuracion\ImpuestoController@actualizar')->name('actualizar_impuesto');
 Route::delete('configuracion/impuesto/{id}', 'Configuracion\ImpuestoController@eliminar')->name('eliminar_impuesto');
 
+Route::get('configuracion/libro-iva-digital', 'Configuracion\LibroIvaDigitalController@index')->name('libro_iva_digital');
+Route::get('configuracion/libro-iva-digital/exportar', 'Configuracion\LibroIvaDigitalController@exportar')->name('exportar_libro_iva_digital');
+
 /*
  * Empresas
  */
@@ -790,6 +793,14 @@ Route::get('contable/centrocosto/{id}/editar', 'Contable\CentrocostoController@e
 Route::put('contable/centrocosto/{id}', 'Contable\CentrocostoController@actualizar')->name('actualizar_centrocosto');
 Route::delete('contable/centrocosto/{id}', 'Contable\CentrocostoController@eliminar')->name('eliminar_centrocosto');
 
+Route::get('contable/bien-uso', 'Contable\BienUsoController@index')->name('bien_uso');
+Route::get('contable/listabienuso/{formato?}/{busqueda?}', 'Contable\BienUsoController@listar')->name('lista_bien_uso');
+Route::get('contable/bien-uso/crear', 'Contable\BienUsoController@crear')->name('crear_bien_uso');
+Route::post('contable/bien-uso', 'Contable\BienUsoController@guardar')->name('guardar_bien_uso');
+Route::get('contable/bien-uso/{id}/editar', 'Contable\BienUsoController@editar')->name('editar_bien_uso')->middleware('modo.consulta');
+Route::put('contable/bien-uso/{id}', 'Contable\BienUsoController@actualizar')->name('actualizar_bien_uso')->middleware('modo.consulta');
+Route::delete('contable/bien-uso/{id}', 'Contable\BienUsoController@eliminar')->name('eliminar_bien_uso');
+
 /*
  * Cuentas contables
  */
@@ -835,6 +846,9 @@ Route::post('contable/revertir_asiento', 'Contable\AsientoController@revertirAsi
 
 Route::get('contable/mayor-concepto', 'Contable\MayorConceptoController@index')->name('mayor_concepto');
 Route::get('contable/listar-mayor-concepto/{formato}', 'Contable\MayorConceptoController@exportar')->name('listar_mayor_concepto');
+
+Route::get('contable/efe-mensual', 'Contable\EfeMensualController@index')->name('efe_mensual');
+Route::get('contable/listar-efe-mensual/{formato}', 'Contable\EfeMensualController@exportar')->name('listar_efe_mensual');
 
 Route::get('contable/mayor-plano-cuenta', 'Contable\MayorPlanoCuentaController@index')->name('mayor_plano_cuenta');
 Route::get('contable/listar-mayor-plano-cuenta/{formato}', 'Contable\MayorPlanoCuentaController@exportar')->name('listar_mayor_plano_cuenta');
@@ -955,11 +969,17 @@ Route::get('stock/combinacion/product/{sku}', 'Stock\CombinacionController@creat
  */
 
 Route::get('stock/movimientostock', 'Stock\MovimientoStockController@index')->name('movimientostock');
+Route::get('stock/movimientostock/transferencia/{id}/consultar', 'Stock\MovimientoStockController@consultarTransferencia')->name('consultar_transferencia_movimientostock');
 Route::get('stock/movimientostock/crear', 'Stock\MovimientoStockController@crear')->name('crear_movimientostock');
 Route::post('stock/movimientostock', 'Stock\MovimientoStockController@guardar')->name('guardar_movimientostock');
 Route::get('stock/movimientostock/{id}/editar', 'Stock\MovimientoStockController@editar')->name('editar_movimientostock');
+Route::match(['get', 'post'], 'stock/movimientostock/preview-asiento', 'Stock\MovimientoStockController@previewAsientoContable')->name('preview_asiento_movimientostock_nuevo');
+Route::match(['get', 'post'], 'stock/movimientostock/preview-conversion-formula', 'Stock\MovimientoStockController@previewConversionFormula')->name('preview_conversion_formula_movimientostock');
+Route::get('stock/movimientostock/api/saldo-articulo', 'Stock\MovimientoStockController@saldoArticuloDeposito')->name('movimientostock_saldo_articulo');
+Route::match(['get', 'post'], 'stock/movimientostock/{id}/preview-asiento', 'Stock\MovimientoStockController@previewAsientoContable')->name('preview_asiento_movimientostock');
 Route::put('stock/movimientostock/{id}', 'Stock\MovimientoStockController@actualizar')->name('actualizar_movimientostock');
 Route::delete('stock/movimientostock/{id}', 'Stock\MovimientoStockController@eliminar')->name('eliminar_movimientostock');
+Route::get('stock/listamovimientostock/{formato?}/{busqueda?}', 'Stock\MovimientoStockController@listar')->name('lista_movimientostock');
 Route::get('stock/listarmovimientostock/{id}', 'Stock\MovimientoStockController@listarMovimientoStock')->name('listar_movimientostock');
 
 /*
@@ -987,6 +1007,10 @@ Route::post('stock/transferencia-mercaderia/{id}/rechazar', 'Stock\Transferencia
 Route::get('stock/transferencia-mercaderia/publico/{token}/aprobar', 'Stock\TransferenciaMercaderiaController@aprobarPublico')->name('transferencia_mercaderia_aprobar_publico');
 Route::match(['get', 'post'], 'stock/transferencia-mercaderia/publico/{token}/rechazar', 'Stock\TransferenciaMercaderiaController@rechazarPublico')->name('transferencia_mercaderia_rechazar_publico');
 Route::get('stock/transferencia-mercaderia/publico/{token}/ver', 'Stock\TransferenciaMercaderiaController@verPublico')->name('transferencia_mercaderia_ver_publico');
+Route::get('stock/reporte-movimientos-bien-uso', 'Stock\BienUsoMovimientoReporteController@index')->name('reporte_movimientos_bien_uso');
+Route::get('stock/listar-reporte-movimientos-bien-uso/{formato?}', 'Stock\BienUsoMovimientoReporteController@exportar')->name('listar_reporte_movimientos_bien_uso');
+Route::get('stock/reporte-transferencias-pendientes', 'Stock\TransferenciaPendienteReporteController@index')->name('reporte_transferencias_pendientes');
+Route::get('stock/listar-reporte-transferencias-pendientes/{formato?}', 'Stock\TransferenciaPendienteReporteController@exportar')->name('listar_reporte_transferencias_pendientes');
 
 /*
  * Préstamos de materiales
@@ -1099,6 +1123,8 @@ Route::get('ventas/listar-repkilopedido/{formato}', 'Ventas\PedidoController@lis
 Route::post('ventas/crearrepkilopedido', 'Ventas\PedidoController@crearReporteKiloPedido')->name('crear_rep_kilopedido');
 Route::get('ventas/repkilocategoria', 'Ventas\PedidoController@indexReporteKiloCategoria')->name('rep_kilocategoria');
 Route::get('ventas/listar-repkilocategoria/{formato}', 'Ventas\PedidoController@listarReporteKiloCategoria')->name('listar_rep_kilocategoria');
+Route::get('ventas/iva-ventas', 'Ventas\IvaVentasReporteController@index')->name('iva_ventas');
+Route::get('ventas/listar-iva-ventas/{formato}', 'Ventas\IvaVentasReporteController@exportar')->name('listar_iva_ventas');
 
 // Totales de Pedidos
 Route::get('ventas/reptotalpedido', 'Ventas\PedidoController@indexReporteTotalPedido')->name('rep_totalpedido');
@@ -1322,6 +1348,7 @@ Route::delete('ventas/totem-waitry-gastronomia/{id}', 'Ventas\TotemWaitryGastron
 
 Route::get('ventas/mozo-gastronomia', 'Ventas\MozoGastronomiaController@index')->name('consultar_mozo_gastronomia');
 Route::get('ventas/mozo-gastronomia/crear', 'Ventas\MozoGastronomiaController@crear')->name('crear_mozo_gastronomia');
+Route::get('ventas/mozo-gastronomia/proximo-codigo', 'Ventas\MozoGastronomiaController@proximoCodigo')->name('proximo_codigo_mozo_gastronomia');
 Route::post('ventas/mozo-gastronomia', 'Ventas\MozoGastronomiaController@guardar')->name('guardar_mozo_gastronomia');
 Route::post('ventas/mozo-gastronomia/consultamozo', 'Ventas\MozoGastronomiaController@consultaMozo')->name('consulta_mozo_gastronomia');
 Route::get('ventas/mozo-gastronomia/leer/{codigo}', 'Ventas\MozoGastronomiaController@leeUnMozoPorCodigo')->name('leer_mozo_gastronomia');
@@ -2288,6 +2315,7 @@ Route::get('compras/proveedor/crear/{tipoalta?}', 'Compras\ProveedorController@c
 Route::post('compras/proveedor', 'Compras\ProveedorController@guardar')->name('guardar_proveedor');
 Route::post('compras/proveedorprovisorio', 'Compras\ProveedorController@guardarClienteProvisorio')->name('guardar_proveedor_provisorio');
 Route::get('compras/proveedor/{id}/editar', 'Compras\ProveedorController@editar')->name('editar_proveedor');
+Route::post('compras/proveedor/{id}/validar-arca-padron', 'Compras\ProveedorController@validarArcaPadron')->name('validar_proveedor_arca_padron');
 Route::put('compras/proveedor/{id}', 'Compras\ProveedorController@actualizar')->name('actualizar_proveedor');
 Route::delete('compras/proveedor/{id}', 'Compras\ProveedorController@eliminar')->name('eliminar_proveedor');
 
@@ -2315,7 +2343,11 @@ Route::get('compras/proveedor/leercuentacorrienteaplicacion/{id}/{comprobante}/{
  */
 
 Route::get('compras/precarga_comprobante_proveedor', 'Compras\Precarga_Comprobante_ProveedorController@index')->name('precarga_comprobante_proveedor');
+Route::post('compras/precarga_comprobante_proveedor/pdf-ia/preview', 'Compras\Precarga_Comprobante_ProveedorController@previewPdfIa')->name('precarga_comprobante_proveedor_pdf_ia_preview');
+Route::post('compras/precarga_comprobante_proveedor/pdf-ia/resolver-oc', 'Compras\Precarga_Comprobante_ProveedorController@resolverOcPdfIa')->name('precarga_comprobante_proveedor_pdf_ia_resolver_oc');
+Route::post('compras/precarga_comprobante_proveedor/pdf-ia/confirmar', 'Compras\Precarga_Comprobante_ProveedorController@confirmarPdfIa')->name('precarga_comprobante_proveedor_pdf_ia_confirmar');
 Route::get('compras/precarga_comprobante_proveedor/{id}/factura-pdf', 'Compras\Precarga_Comprobante_ProveedorController@verFacturaPdf')->name('precarga_comprobante_proveedor_factura_pdf');
+Route::post('compras/precarga_comprobante_proveedor/{id}/generar-comprobante', 'Compras\Comprobante_ProveedorController@generarDesdePrecarga')->name('generar_comprobante_desde_precarga');
 Route::get('compras/precarga_comprobante_proveedor/crear', 'Compras\Precarga_Comprobante_ProveedorController@crear')->name('crear_precarga_comprobante_proveedor');
 Route::post('compras/precarga_comprobante_proveedor', 'Compras\Precarga_Comprobante_ProveedorController@guardar')->name('guardar_precarga_comprobante_proveedor');
 Route::get('compras/precarga_comprobante_proveedor/{id}/editar', 'Compras\Precarga_Comprobante_ProveedorController@editar')->name('editar_precarga_comprobante_proveedor');
@@ -2323,6 +2355,22 @@ Route::put('compras/precarga_comprobante_proveedor/{id}', 'Compras\Precarga_Comp
 Route::delete('compras/precarga_comprobante_proveedor/{id}', 'Compras\Precarga_Comprobante_ProveedorController@eliminar')->name('eliminar_precarga_comprobante_proveedor');
 
 Route::get('compras/lista_precarga_comprobante_proveedor/{formato?}/{busqueda?}', 'Compras\Precarga_Comprobante_ProveedorController@listar')->name('lista_precarga_comprobante_proveedor');
+
+Route::get('compras/comprobante-proveedor', 'Compras\Comprobante_ProveedorController@index')->name('comprobante_proveedor');
+Route::get('compras/comprobante-proveedor/opciones-carga', 'Compras\Comprobante_ProveedorController@opcionesCarga')->name('comprobante_proveedor_opciones_carga');
+Route::get('compras/comprobante-proveedor/resolver-oc', 'Compras\Comprobante_ProveedorController@resolverOrdencompraParaAlta')->name('comprobante_proveedor_resolver_oc');
+Route::get('compras/lista_comprobante_proveedor/{formato?}/{busqueda?}', 'Compras\Comprobante_ProveedorController@listar')->name('lista_comprobante_proveedor');
+Route::get('compras/comprobante-proveedor/crear', 'Compras\Comprobante_ProveedorController@crear')->name('crear_comprobante_proveedor');
+Route::post('compras/comprobante-proveedor', 'Compras\Comprobante_ProveedorController@guardar')->name('guardar_comprobante_proveedor');
+Route::get('compras/comprobante-proveedor/{id}/editar', 'Compras\Comprobante_ProveedorController@editar')->name('editar_comprobante_proveedor');
+Route::put('compras/comprobante-proveedor/{id}', 'Compras\Comprobante_ProveedorController@actualizar')->name('actualizar_comprobante_proveedor');
+Route::delete('compras/comprobante-proveedor/{id}', 'Compras\Comprobante_ProveedorController@eliminar')->name('eliminar_comprobante_proveedor');
+Route::match(['get', 'post'], 'compras/comprobante-proveedor/preview-asiento', 'Compras\Comprobante_ProveedorController@previewAsientoContable')->name('preview_asiento_comprobante_proveedor_nuevo');
+Route::match(['get', 'post'], 'compras/comprobante-proveedor/{id}/preview-asiento', 'Compras\Comprobante_ProveedorController@previewAsientoContable')->name('preview_asiento_comprobante_proveedor');
+Route::post('compras/comprobante-proveedor/{id}/contabilizar', 'Compras\Comprobante_ProveedorController@contabilizar')->name('contabilizar_comprobante_proveedor');
+Route::post('compras/comprobante-proveedor/validar-proveedor-arca', 'Compras\Comprobante_ProveedorController@validarProveedorArcaPadron')->name('comprobante_proveedor_validar_proveedor_arca');
+Route::get('compras/comprobante-proveedor/{id}/factura-pdf', 'Compras\Comprobante_ProveedorController@verFacturaPdf')->name('comprobante_proveedor_factura_pdf');
+Route::get('compras/comprobante-proveedor/{id}/archivo/{archivo}', 'Compras\Comprobante_ProveedorController@descargarArchivo')->name('comprobante_proveedor_archivo');
 
 /*
  * Tabla de encuestas

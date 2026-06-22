@@ -46,6 +46,7 @@ use App\Services\Stock\PrecioService;
 use App\Services\Stock\StkdepSaldoAnitaService;
 use App\Services\Stock\ArticuloParteUnicaService;
 use App\Support\Stock\ArticuloConsultaDesdeModal;
+use App\Support\Stock\MovimientosArticuloDepositoSupport;
 use App\Support\Stock\ArticuloEtiquetaNpuSupport;
 use App\Support\Stock\ArticuloListadoFiltros;
 use App\Support\Compras\ArticuloProveedorMatchSupport;
@@ -554,6 +555,7 @@ class ArticuloController extends Controller
         $mventa = Mventa::where('id', $request->mventa_id)->first();
         $linea = Linea::where('id', $request->linea_id)->first();
         $data = $request->all();
+        $data['fl_precio_promedio_transferencia'] = $request->boolean('fl_precio_promedio_transferencia');
 
         DB::beginTransaction();
         try {
@@ -696,6 +698,7 @@ class ArticuloController extends Controller
         }
 
         $data = $request->all();
+        $data['fl_precio_promedio_transferencia'] = $request->boolean('fl_precio_promedio_transferencia');
 
         DB::beginTransaction();
         try {
@@ -805,7 +808,8 @@ class ArticuloController extends Controller
 
         $query = Articulo::select('articulo.id as articulo_id', 'sku', 'descripcion', 'unidadmedida.abreviatura as unidadmedida',
             'categoria.nombre as nombrecategoria', 'articulo.unidadmedida_id as idunidadmedida',
-            'articulo.categoria_id as categoria_id', 'articulo.subcategoria_id as subcategoria_id')
+            'articulo.categoria_id as categoria_id', 'articulo.subcategoria_id as subcategoria_id',
+            'articulo.depositoentrega_id as depositoentrega_id')
             ->leftJoin('unidadmedida', 'articulo.unidadmedida_id', '=', 'unidadmedida.id')
             ->leftJoin('categoria', 'articulo.categoria_id', '=', 'categoria.id')
             ->leftJoin('linea', 'articulo.linea_id', '=', 'linea.id');
@@ -874,6 +878,7 @@ class ArticuloController extends Controller
         $output['listaprecio_nombre'] = $listaPrecio['nombre'];
         $output['mostrar_precio_lista'] = $listaPrecio['mostrar'];
         $puedeConsultarArticulo = ArticuloConsultaDesdeModal::puedeConsultar();
+        $puedeVerKardex = MovimientosArticuloDepositoSupport::puedeConsultar();
         if (count($query) > 0) {
             foreach ($query as $row) {
                 $output['data'] .= '<tr>';
@@ -896,11 +901,20 @@ class ArticuloController extends Controller
                     $urlConsulta = ArticuloConsultaDesdeModal::urlEditar((int) $row['articulo_id']);
                     $output['data'] .= ' <a class="btn btn-info btn-sm" href="'.e($urlConsulta).'" target="_blank" rel="noopener">Consultar</a>';
                 }
+                if ($puedeVerKardex) {
+                    $output['data'] .= ' <button type="button" class="btn btn-outline-info btn-sm btn-movimientos-stock-articulo btn-kardex-consulta-articulo"'
+                        .' data-articulo-id="'.(int) $row['articulo_id'].'"'
+                        .' data-articulo-sku="'.e((string) $row['sku']).'"'
+                        .' data-articulo-descripcion="'.e((string) $row['descripcion']).'"'
+                        .' data-deposito-id="'.(int) ($row['depositoentrega_id'] ?? 0).'"'
+                        .' title="Kardex de stock">'
+                        .'<i class="fa fa-list-alt"></i></button>';
+                }
                 $output['data'] .= ' <button type="button" class="btn btn-outline-secondary btn-sm btn-movimientos-articulo-deposito d-none"'
                     .' data-articulo-id="'.(int) $row['articulo_id'].'"'
                     .' data-articulo-sku="'.e((string) $row['sku']).'"'
                     .' data-articulo-descripcion="'.e((string) $row['descripcion']).'"'
-                    .' title="Movimientos de stock en el dep&oacute;sito del recuento">'
+                    .' title="Kardex en el dep&oacute;sito del recuento">'
                     .'<i class="fa fa-list"></i></button>';
                 $output['data'] .= '</td>';
                 $output['data'] .= '</tr>';

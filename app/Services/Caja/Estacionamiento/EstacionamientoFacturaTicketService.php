@@ -11,12 +11,11 @@ use App\Support\Caja\Estacionamiento\EstacionamientoFacturaPayloadSupport;
 use App\Support\Caja\Estacionamiento\EstacionamientoVentaDisplaySupport;
 use App\Support\Ventas\ArcaFacturaQrSupport;
 use App\Support\Ventas\EscPosTicketWriter;
+use App\Support\Ventas\NcjetdirectSalidaSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use RuntimeException;
-use Symfony\Component\Process\Exception\ProcessFailedException;
-use Symfony\Component\Process\Process;
 use Throwable;
 
 /**
@@ -310,11 +309,34 @@ final class EstacionamientoFacturaTicketService
             $bytes = $this->generarBytesTicket($venta, $cuenta);
             $this->guardarVistaPreviaTexto($ventaId);
             $ruta = $this->guardarArchivoTemporal($ventaId, $bytes);
+            $resultadoImpresion = null;
             try {
-                $this->ejecutarComandoSalida($comando, $ruta);
+                $resultadoImpresion = NcjetdirectSalidaSupport::ejecutar(
+                    $comando,
+                    $ruta,
+                    (int) config('estacionamiento.ticket_comando_timeout_segundos', 30),
+                );
             } finally {
                 @unlink($ruta);
             }
+
+            if ($resultadoImpresion !== null && ! $resultadoImpresion['ok']) {
+                Log::warning('estacionamiento.ticket_factura.fallo', array_merge([
+                    'venta_id' => $ventaId,
+                    'salida_id' => (int) $salida->id,
+                    'msg' => $resultadoImpresion['mensaje'],
+                ], NcjetdirectSalidaSupport::contextoLog($resultadoImpresion)));
+
+                return [
+                    'ok' => false,
+                    'mensaje' => 'No se pudo imprimir el ticket: '.$resultadoImpresion['mensaje'],
+                ];
+            }
+
+            Log::info('estacionamiento.ticket_factura.ok', array_merge([
+                'venta_id' => $ventaId,
+                'salida_id' => (int) $salida->id,
+            ], $resultadoImpresion !== null ? NcjetdirectSalidaSupport::contextoLog($resultadoImpresion) : []));
 
             return ['ok' => true];
         } catch (Throwable $e) {
@@ -396,26 +418,6 @@ final class EstacionamientoFacturaTicketService
         }
 
         return $ruta;
-    }
-
-    private function ejecutarComandoSalida(string $comandoPlantilla, string $rutaArchivo): void
-    {
-        if (! str_contains($comandoPlantilla, '%s')) {
-            throw new InvalidArgumentException('El comando de salida debe incluir el marcador %s.');
-        }
-
-        $comando = sprintf($comandoPlantilla, $rutaArchivo);
-        if (trim($comando) === '') {
-            throw new InvalidArgumentException('Comando de salida vacío.');
-        }
-
-        $process = Process::fromShellCommandline($comando);
-        $process->setTimeout((int) config('estacionamiento.ticket_comando_timeout_segundos', 30));
-        $process->run();
-
-        if (! $process->isSuccessful()) {
-            throw new ProcessFailedException($process);
-        }
     }
 
     private function formatearNumeroTicket(Venta $venta): string

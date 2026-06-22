@@ -6,6 +6,7 @@ use App\Models\Stock\Recepcion_Proveedor;
 use App\Support\Stock\RecepcionProveedorAnitaColisionSupport;
 use App\Support\Stock\RecepcionProveedorAnitaNumeracionSupport;
 use App\Support\Stock\RecepcionProveedorListadoFiltros;
+use App\Support\Stock\RecepcionProveedorVisibilidadSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -82,6 +83,8 @@ class Recepcion_ProveedorRepository implements Recepcion_ProveedorRepositoryInte
         if (is_string($filtros)) {
             $filtros = ['filtro_valor' => $filtros];
         }
+
+        RecepcionProveedorVisibilidadSupport::aplicarFiltroListado($query);
 
         if (is_array($filtros) && RecepcionProveedorListadoFiltros::tieneCriteriosAplicados($filtros)) {
             RecepcionProveedorListadoFiltros::aplicar($query, $filtros);

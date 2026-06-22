@@ -16,12 +16,14 @@ class ValidacionTipotransaccion_Stock extends FormRequest
     {
         return [
             'nombre' => 'required|max:255|unique:tipotransaccion_stock,nombre,'.$this->route('id'),
-            'abreviatura' => 'required|max:5|unique:tipotransaccion_stock,abreviatura,'.$this->route('id'),
+            'abreviatura' => 'required|max:15|unique:tipotransaccion_stock,abreviatura,'.$this->route('id'),
             'operacion' => ['required', Rule::in(array_keys(\App\Traits\Stock\Tipotransaccion_StockTrait::$enumOperacion))],
             'signo' => ['required', Rule::in(array_keys(\App\Traits\Stock\Tipotransaccion_StockTrait::$enumSigno))],
             'estado' => ['required', Rule::in(array_keys(\App\Traits\Stock\Tipotransaccion_StockTrait::$enumEstado))],
             'requiere_aprobacion' => 'sometimes|boolean',
             'maneja_contabilidad' => 'sometimes|boolean',
+            'destino_bien_uso' => 'sometimes|boolean',
+            'origen_bien_uso' => 'sometimes|boolean',
         ];
     }
 }

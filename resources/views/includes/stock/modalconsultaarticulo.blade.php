@@ -50,3 +50,9 @@
     </div>
   </div>
 </div>
+@if (\App\Support\Stock\MovimientosArticuloDepositoSupport::puedeConsultar())
+    @include('includes.stock.modal_kardex_deposito')
+    @once('anita-movimientos-articulo-js')
+        <script src="{{ asset('assets/pages/scripts/stock/recuento/movimientos_articulo.js') }}" type="text/javascript"></script>
+    @endonce
+@endif

@@ -1,7 +1,7 @@
 @php
     $tieneCliente = isset($data) && $data && ($data->id ?? null);
 @endphp
-<div id="tab5" class="card form5 tab-content" style="display: none">
+<div id="tab-archivos" class="tab-pane fade card form5" role="tabpanel">
     <div class="card-body">
         @if ($tieneCliente)
             <p class="text-muted small mb-2">Archivos actuales</p>

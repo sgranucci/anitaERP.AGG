@@ -552,4 +552,31 @@ final class WaitryInformeZConciliacionSupportTest extends TestCase
         $this->assertArrayNotHasKey('Mercado Pago', $porEtiqueta);
         $this->assertSame(300.0, $resumen['total_general']['total_ingreso']);
     }
+
+    public function test_resumen_sistema_desde_detalle_cierre_prefiere_persistido_sobre_snapshot(): void
+    {
+        $detalle = [
+            'resumen_informe_z' => [
+                'por_totem' => [],
+                'total_general' => [
+                    'cantidad_ordenes' => 71,
+                    'total_ingreso' => 1834900.0,
+                    'por_medio_pago' => [
+                        [
+                            'tipo' => WaitryMedioPagoCuentacajaSupport::CATEGORIA_POSNET_KIOSCO,
+                            'categoria' => WaitryMedioPagoCuentacajaSupport::CATEGORIA_POSNET_KIOSCO,
+                            'etiqueta' => 'Posnet Kiosco',
+                            'cantidad' => 71,
+                            'total' => 1166300.0,
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $resumen = WaitryInformeZConciliacionSupport::resumenSistemaDesdeDetalleCierre($detalle, 1, 50);
+
+        $this->assertSame(1834900.0, $resumen['total_general']['total_ingreso']);
+        $this->assertSame(1166300.0, $resumen['total_general']['por_medio_pago'][0]['total']);
+    }
 }

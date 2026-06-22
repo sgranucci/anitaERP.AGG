@@ -2,6 +2,9 @@
 
 namespace App\Support\Ventas\Waitry;
 
+use Carbon\Carbon;
+use Carbon\CarbonInterface;
+
 /**
  * Criterio de cobro en tótem Waitry (getOrdersPOS / getordersdetails), alineado con facturación gastronomía.
  */
@@ -119,6 +122,84 @@ final class WaitryOrdenCobroSupport
         }
 
         return 0.0;
+    }
+
+    /**
+     * Instantánea del cobro en Waitry (payment.payments[].createdAt o equivalentes).
+     *
+     * @param  array<string, mixed>  $orden  Orden Waitry cruda o línea ERP con bloque payment
+     */
+    public static function instanteCobroWaitry(array $orden): ?CarbonInterface
+    {
+        if (! empty($orden['cobro_waitry_en'])) {
+            try {
+                return Carbon::parse($orden['cobro_waitry_en']);
+            } catch (\Throwable) {
+                // continuar con payment
+            }
+        }
+
+        $payment = $orden['payment'] ?? null;
+        if (! is_array($payment)) {
+            return null;
+        }
+
+        $candidatos = [];
+        $payments = $payment['payments'] ?? null;
+        if (is_array($payments)) {
+            foreach ($payments as $pago) {
+                if (! is_array($pago)) {
+                    continue;
+                }
+                $instante = self::parseInstanteWaitry($pago['createdAt'] ?? $pago['paidAt'] ?? null);
+                if ($instante !== null) {
+                    $candidatos[] = $instante;
+                }
+            }
+        }
+
+        foreach (['createdAt', 'paidAt', 'updatedAt'] as $clave) {
+            $instante = self::parseInstanteWaitry($payment[$clave] ?? null);
+            if ($instante !== null) {
+                $candidatos[] = $instante;
+            }
+        }
+
+        if ($candidatos === []) {
+            return null;
+        }
+
+        usort($candidatos, static fn (CarbonInterface $a, CarbonInterface $b) => $a <=> $b);
+
+        return $candidatos[0];
+    }
+
+    /**
+     * @param  mixed  $valor  string ISO, array Waitry {date, timezone} o Carbon
+     */
+    private static function parseInstanteWaitry(mixed $valor): ?CarbonInterface
+    {
+        if ($valor instanceof CarbonInterface) {
+            return $valor;
+        }
+
+        if (is_array($valor) && isset($valor['date'])) {
+            try {
+                return Carbon::parse((string) $valor['date']);
+            } catch (\Throwable) {
+                return null;
+            }
+        }
+
+        if (is_string($valor) && trim($valor) !== '') {
+            try {
+                return Carbon::parse($valor);
+            } catch (\Throwable) {
+                return null;
+            }
+        }
+
+        return null;
     }
 
     /**

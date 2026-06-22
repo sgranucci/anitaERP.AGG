@@ -3,20 +3,23 @@
 namespace App\Repositories\Stock;
 
 use App\Models\Stock\MovimientoStock;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Stock\MovimientoStockListadoFiltros;
+use App\Support\Stock\MovimientoStockListadoFila;
+use App\Support\Stock\MovimientoStockListadoUnificadoSupport;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Collection;
 
 class MovimientoStockRepository implements MovimientoStockRepositoryInterface
 {
-    protected $model;
+    private MovimientoStockListadoUnificadoSupport $listadoUnificado;
 
-    /**
-     * PostRepository constructor.
-     *
-     * @param Post $post
-     */
-    public function __construct(MovimientoStock $movimientostock)
-    {
-        $this->model = $movimientostock;
+    public function __construct(
+        private readonly MovimientoStock $model,
+        private readonly EmpresaRepositoryInterface $empresaRepository,
+    ) {
+        $this->listadoUnificado = new MovimientoStockListadoUnificadoSupport($this->empresaRepository);
     }
 
     public function estadoEnum()
@@ -31,9 +34,38 @@ class MovimientoStockRepository implements MovimientoStockRepositoryInterface
 
     public function all()
     {
-        $ret = $this->model->with('articulos_movimiento')->with('tipotransaccion_stock')->with('mventas')->get();
+        return $this->leeMovimientoStock(MovimientoStockListadoFiltros::filtrosVacios(), false);
+    }
 
-        return $ret;
+    /**
+     * @param  array<string, mixed>|string|null  $filtros
+     * @return LengthAwarePaginator<int, MovimientoStockListadoFila>|Collection<int, MovimientoStockListadoFila>
+     */
+    public function leeMovimientoStock($filtros, bool $paginar = false)
+    {
+        if (is_string($filtros)) {
+            $texto = trim($filtros);
+            $filtros = [
+                'empresa_id' => 0,
+                'deposito_id' => 0,
+                'modo' => MovimientoStockListadoFiltros::MODO_TODOS,
+                'campo' => 'codigo',
+                'operador' => 'contiene',
+                'valor' => $texto,
+                'valor_hasta' => '',
+                'busqueda' => $texto,
+            ];
+        } elseif (! is_array($filtros)) {
+            $filtros = MovimientoStockListadoFiltros::filtrosVacios();
+        }
+
+        $resultado = $this->listadoUnificado->listar($filtros, $paginar);
+
+        if ($resultado instanceof LengthAwarePaginator) {
+            return $resultado->appends(MovimientoStockListadoFiltros::paraQueryString($filtros));
+        }
+
+        return $resultado;
     }
 
     public function find($id)
@@ -44,7 +76,7 @@ class MovimientoStockRepository implements MovimientoStockRepositoryInterface
 
         return $movimientostock;
     }
- 
+
     public function create(array $data)
     {
         return $this->model->create($data);
@@ -57,14 +89,13 @@ class MovimientoStockRepository implements MovimientoStockRepositoryInterface
 
     public function delete($id)
     {
-    	$movimientostock = $this->model->destroy($id);
+        $movimientostock = $this->model->destroy($id);
 
-		return $movimientostock;
+        return $movimientostock;
     }
 
     public function deletePorId($id)
     {
         return $this->model->where('id', $id)->delete();
     }
-
 }

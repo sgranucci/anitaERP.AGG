@@ -6,9 +6,8 @@ use App\Models\Configuracion\Salida;
 use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Venta;
+use App\Support\Ventas\NcjetdirectSalidaSupport;
 use InvalidArgumentException;
-use Symfony\Component\Process\Exception\ProcessFailedException;
-use Symfony\Component\Process\Process;
 use Throwable;
 
 /**
@@ -112,9 +111,13 @@ final class GastronomiaTicketDiagnosticoService
             $rutaTemporal = $this->guardarTemporal($ventaId, $bytes);
             $t0 = microtime(true);
             try {
-                $this->ejecutarComandoSalida($comando, $rutaTemporal);
+                $resultadoImpresion = NcjetdirectSalidaSupport::ejecutar($comando, $rutaTemporal);
                 $latencias['comando_impresion_ms'] = round((microtime(true) - $t0) * 1000, 2);
-                $latencias['impresion_ejecutada'] = true;
+                $latencias['impresion_ejecutada'] = $resultadoImpresion['ok'];
+                $latencias = array_merge($latencias, NcjetdirectSalidaSupport::contextoLog($resultadoImpresion));
+                if (! $resultadoImpresion['ok']) {
+                    $errores[] = 'Impresión: '.$resultadoImpresion['mensaje'];
+                }
             } catch (Throwable $e) {
                 $latencias['comando_impresion_ms'] = round((microtime(true) - $t0) * 1000, 2);
                 $latencias['impresion_ejecutada'] = false;
@@ -358,15 +361,4 @@ final class GastronomiaTicketDiagnosticoService
         return $ruta;
     }
 
-    private function ejecutarComandoSalida(string $comandoPlantilla, string $rutaArchivo): void
-    {
-        $comando = sprintf($comandoPlantilla, $rutaArchivo);
-        $process = Process::fromShellCommandline($comando);
-        $process->setTimeout((int) config('gastronomia.ticket_comando_timeout_segundos', 30));
-        $process->run();
-
-        if (! $process->isSuccessful()) {
-            throw new ProcessFailedException($process);
-        }
-    }
 }

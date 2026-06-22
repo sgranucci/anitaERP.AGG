@@ -1,4 +1,4 @@
-<div id="tab4" class="form4 tab-content" style="display: none">
+<div id="tab-leyendas" class="tab-pane fade form4" role="tabpanel">
 	<div class="row">
 		<div class="col-sm-6">
                	<!-- textarea -->

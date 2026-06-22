@@ -57,7 +57,10 @@ class ConstanciaInscripcionController extends Controller
      */
     private function validacionImpuestosCliente(Request $request, array $data): ?array
     {
-        if (! filter_var(config('arca.padron_validacion_cliente.habilitado', true), FILTER_VALIDATE_BOOLEAN)) {
+        $habilitadoCliente = filter_var(config('arca.padron_validacion_cliente.habilitado', true), FILTER_VALIDATE_BOOLEAN);
+        $habilitadoProveedor = filter_var(config('arca.padron_validacion_proveedor.habilitado', true), FILTER_VALIDATE_BOOLEAN);
+
+        if (! $habilitadoCliente && ! $habilitadoProveedor) {
             return null;
         }
 

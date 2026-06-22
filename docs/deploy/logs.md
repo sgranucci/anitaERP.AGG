@@ -6,6 +6,7 @@
 |-----|--------|
 | `storage/logs/schedule.log` | Cron `php artisan schedule:run` (usuario `www-data`) |
 | `storage/logs/queue-worker.log` | Supervisor `anitaERP-queue` |
+| `storage/logs/queue-verificar-pico.log` | Schedule `queue:verificar-pico` (hora pico) |
 
 ## Instalación logrotate
 

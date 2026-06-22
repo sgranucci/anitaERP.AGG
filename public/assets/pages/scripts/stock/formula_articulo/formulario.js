@@ -248,10 +248,34 @@ function formulaArticuloToggleOrdenOpcional($row) {
 		return;
 	}
 	if ($sel.val() === '1') {
-		$inp.prop('disabled', false);
+		$inp.prop('readonly', false);
 	} else {
-		$inp.prop('disabled', true).val('');
+		$inp.prop('readonly', true).val('');
 	}
+}
+
+var FORMULA_LINEA_CAMPOS = [
+	'formula_articulo_hijo_ids',
+	'articulo_ids',
+	'articulo_skus',
+	'articulo_descs',
+	'cantidades',
+	'factorcostos',
+	'formula_hija_ids',
+	'formula_hija_labels',
+	'esopcional',
+	'ordenopcionales',
+	'deposito_ids',
+	'ranuras'
+];
+
+function formulaArticuloReindexFilas() {
+	$('#tabla-formula-hijos tbody tr.fila-formula-hijo').each(function (idx) {
+		var $row = $(this);
+		FORMULA_LINEA_CAMPOS.forEach(function (campo) {
+			$row.find('[name^="' + campo + '"]').attr('name', campo + '[' + idx + ']');
+		});
+	});
 }
 
 function buscarFormulasAjax() {
@@ -412,6 +436,11 @@ $(document).ready(function () {
         actualizaBotonVerSubformula($row);
         actualizaLinkSkuArticuloLinea($row);
     });
+    formulaArticuloReindexFilas();
+
+    $('#form-general').on('submit.formulaArticuloReindex', function () {
+        formulaArticuloReindexFilas();
+    });
 
     $(document).on('change', 'select.js-esopcional-formula', function () {
         formulaArticuloToggleOrdenOpcional($(this).closest('tr'));
@@ -493,13 +522,14 @@ $(document).ready(function () {
         $r.find('input[type=number]').not('.js-ordenopcional-formula').val('');
         $r.find('.js-costo-ultima-compra').val('');
         $r.find('.fh_formula_hija_label').removeAttr('title');
-        $r.find('select[name="esopcional[]"]').prop('selectedIndex', 0);
-        $r.find('select[name="deposito_ids[]"]').prop('selectedIndex', 0);
+        $r.find('select.js-esopcional-formula').prop('selectedIndex', 0);
+        $r.find('select[name^="deposito_ids"]').prop('selectedIndex', 0);
         var $oo = $r.find('input.js-ordenopcional-formula');
         if ($oo.length) {
-            $oo.val('').prop('disabled', true);
+            $oo.val('').prop('readonly', true);
         }
         $('#tabla-formula-hijos tbody').append($r);
+        formulaArticuloReindexFilas();
         formulaArticuloToggleOrdenOpcional($r);
         actualizaBotonVerSubformula($r);
         actualizaLinkSkuArticuloLinea($r);
@@ -511,5 +541,6 @@ $(document).ready(function () {
             return;
         }
         $(this).closest('tr').remove();
+        formulaArticuloReindexFilas();
     });
 });

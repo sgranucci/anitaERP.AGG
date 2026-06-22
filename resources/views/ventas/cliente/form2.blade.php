@@ -1,9 +1,4 @@
-<div id="tab2" class="form2 tab-content" style="display: none"
-	data-arca-constancia-url="{{ route('arca_constancia_inscripcion') }}"
-	data-arca-validar-impuestos="{{ filter_var(config('arca.padron_validacion_cliente.habilitado', true), FILTER_VALIDATE_BOOLEAN) ? '1' : '0' }}"
-	data-condicioniva-ri-id="{{ (int) config('arca.padron_validacion_cliente.condicioniva_responsable_inscripto_id', 1) }}"
-	data-condicioniva-monotributo-id="{{ (int) config('arca.padron_validacion_cliente.condicioniva_monotributo_id', 4) }}"
->
+<div id="tab-datos-facturacion" class="tab-pane fade form2" role="tabpanel">
 	<div class="row">
 		<div class="col-sm-6">
 			<div class="form-group row">
@@ -339,4 +334,3 @@
 	</div>
 </div>
 @include('includes.ventas.modalconsultazonavta')
-@include('compras.proveedor.arca-padron-modals')

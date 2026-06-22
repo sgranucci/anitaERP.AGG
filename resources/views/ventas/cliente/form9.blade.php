@@ -1,4 +1,4 @@
-<div id="tab9" class="card form9 tab-content" style="display: none">
+<div id="tab-suitecrm" class="tab-pane fade card form9" role="tabpanel">
     <div class="card-body">
         <div id="suitecrm-alerta" class="alert alert-warning" style="display: none" role="alert"></div>
 

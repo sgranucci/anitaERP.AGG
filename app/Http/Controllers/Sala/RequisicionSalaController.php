@@ -90,7 +90,9 @@ class RequisicionSalaController extends Controller
     {
         can('crear-requisicion-sala');
 
-        return view('sala.requisicion_sala.crear', $this->datosFormulario(null));
+        return view('sala.requisicion_sala.crear', array_merge($this->datosFormulario(null), [
+            'data' => null,
+        ]));
     }
 
     public function guardar(ValidacionRequisicionSala $request)

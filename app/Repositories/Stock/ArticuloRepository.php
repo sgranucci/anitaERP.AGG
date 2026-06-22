@@ -66,6 +66,7 @@ class ArticuloRepository implements ArticuloRepositoryInterface
         $query = $this->model->where('sku', $codigo)
             ->with('categorias')
             ->with('unidadesdemedidas')
+            ->with('unidadesdemedidasalternativas')
             ->with('impuestos')
             ->with('subcategorias')
             ->with('lineas')

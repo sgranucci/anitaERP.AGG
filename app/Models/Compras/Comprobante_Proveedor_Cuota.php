@@ -13,7 +13,7 @@ class Comprobante_Proveedor_Cuota extends Model
     protected $fillable = [
         'comprobante_proveedor_id', 'numero_cuota', 'fechavencimiento', 'monto',
         'moneda_id', 'cotizacion', 'formapago_id', 'detalle',
-        'ordencompra_comprobante_cuota_id', 'total_pagado',
+        'ordencompra_comprobante_cuota_id', 'total_pagado', 'proveedor_cuentacorriente_id',
     ];
 
     protected $casts = [

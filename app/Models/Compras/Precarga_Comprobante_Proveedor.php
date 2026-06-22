@@ -17,7 +17,7 @@ class Precarga_Comprobante_Proveedor extends Model implements Auditable
     protected $fillable = ['empresa_id', 'proveedor_id', 'tipotransaccion_compra_id', 'letra', 'sucursal', 
                             'numerocomprobante', 'fechafactura', 'fecharecepcionemail', 'fecharecepcionemail', 
                             'fechavencimientocaicae', 'numerocae', 'numeroordencompra', 'rutaalmacenamiento',
-                            'pararevisar', 'subtotal', 'total', 'estado', 'moneda', 'moneda_id', 'cotizacion'];
+                            'pararevisar', 'subtotal', 'total', 'estado', 'origen_entrada', 'moneda', 'moneda_id', 'cotizacion'];
     protected $table = 'precarga_comprobante_proveedor';
 
 	public function precarga_comprobante_proveedor_conceptos()

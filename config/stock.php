@@ -13,10 +13,4 @@ return [
     /** Horas de validez de enlaces de aprobación/rechazo por correo. */
     'transferencia_horas_validez_token' => (int) env('STOCK_TRANSFERENCIA_HORAS_TOKEN', 168),
 
-    /** SKUs legacy TITO: precio promedio ponderado para asiento contable (Crown/Biyemas). */
-    'transferencia_skus_tito' => array_values(array_filter(array_map(
-        'trim',
-        explode(',', (string) env('STOCK_TRANSFERENCIA_SKUS_TITO', '0000000201421,000100000-006,0000000201266,0000000201265'))
-    ))),
-
 ];

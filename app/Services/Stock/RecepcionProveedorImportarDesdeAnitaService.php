@@ -13,6 +13,7 @@ use App\Models\Stock\Recepcion_Proveedor;
 use App\Models\Stock\Recepcion_Proveedor_Articulo;
 use App\Support\Stock\RecepcionProveedorAnitaImportSupport;
 use App\Support\Stock\RecepcionProveedorEstados;
+use App\Support\Stock\RecepcionProveedorVisibilidadSupport;
 use Illuminate\Support\Facades\DB;
 
 class RecepcionProveedorImportarDesdeAnitaService
@@ -138,6 +139,7 @@ class RecepcionProveedorImportarDesdeAnitaService
                         'anita_nro' => $nro,
                         'origen_carga' => 'ANITA_IMPORT',
                         'creousuario_id' => $usuarioId,
+                        'centrocosto_id' => RecepcionProveedorVisibilidadSupport::resolverCentrocostoCarga($usuarioId),
                     ]);
 
                     $orden = 1;

@@ -14,6 +14,10 @@ class Ordencompra_Comprobante_Cuota extends Model
         'ordencompra_comprobante_id', 'fechavencimiento', 'monto', 'moneda_id', 'cotizacion', 'formapago_id', 'detalle', 'creousuario_id',
     ];
 
+    protected $casts = [
+        'fechavencimiento' => 'date',
+    ];
+
     public function ordencompra_comprobantes()
     {
         return $this->belongsTo(Ordencompra_Comprobante::class, 'ordencompra_comprobante_id');

@@ -281,6 +281,9 @@ $(document).off('keydown.ocNoEnterSubmitArticulo', 'input').on('keydown.ocNoEnte
     if ($(this).closest('#tabla-items-recepcion').length && $(this).hasClass('codigoarticulo')) {
         return;
     }
+    if ($(this).closest('#tabla-items-movimientostock').length && $(this).hasClass('codigoarticulo')) {
+        return;
+    }
 	if ($(this).closest('.tm-deposito-campo').length && $(this).hasClass('codigodeposito')) {
 		return;
 	}

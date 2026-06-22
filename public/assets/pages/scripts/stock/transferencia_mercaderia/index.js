@@ -12,6 +12,78 @@
         return parseInt($('#deposito_entrada_id').val(), 10) || 0;
     }
 
+    function bienUsoDestinoId() {
+        return parseInt($('#bien_uso_destino_id').val(), 10) || 0;
+    }
+
+    function bienUsoOrigenId() {
+        return parseInt($('#bien_uso_origen_id').val(), 10) || 0;
+    }
+
+    function tipoDestinoBienUso() {
+        var $opt = $('#tipotransaccion_stock_id option:selected');
+        return $opt.data('destino-bien-uso') === 1 || $opt.data('destinoBienUso') === 1;
+    }
+
+    function tipoOrigenBienUso() {
+        var $opt = $('#tipotransaccion_stock_id option:selected');
+        return $opt.data('origen-bien-uso') === 1 || $opt.data('origenBienUso') === 1;
+    }
+
+    function tipoManejaContabilidad() {
+        var $opt = $('#tipotransaccion_stock_id option:selected');
+        return $opt.data('maneja-contabilidad') === 1 || $opt.data('manejaContabilidad') === 1;
+    }
+
+    function actualizarPanelCentrocosto() {
+        $('#tm_panel_centrocosto').toggle(tipoManejaContabilidad());
+    }
+
+    function actualizarPanelesDestino() {
+        var destinoBien = tipoDestinoBienUso();
+        var origenBien = tipoOrigenBienUso();
+        $('#tm_deposito_salida').toggle(!origenBien);
+        $('#tm_panel_bien_origen').toggle(origenBien);
+        $('#tm_deposito_entrada').toggle(!destinoBien);
+        $('#tm_panel_bien_destino').toggle(destinoBien);
+        if (destinoBien) {
+            $('#deposito_entrada_id').val('');
+            $('#deposito_entrada_codigo, #deposito_entrada_descripcion').val('');
+        } else {
+            $('#bien_uso_destino_id').val('');
+        }
+        if (origenBien) {
+            $('#deposito_salida_id').val('');
+            $('#deposito_salida_codigo, #deposito_salida_descripcion').val('');
+        } else {
+            $('#bien_uso_origen_id').val('');
+        }
+        $('#tm_btn_cargar').html(
+            origenBien
+                ? '<i class="fa fa-refresh"></i> Cargar stock asignado al bien'
+                : '<i class="fa fa-refresh"></i> Cargar stock (artículos con depósito de entrega = salida)'
+        );
+        actualizarPanelDestinatario();
+        actualizarPanelCentrocosto();
+    }
+
+    function notificarCambioOrigen() {
+        guardarPreferencias();
+        cargarDestinatarios();
+        if (tipoOrigenBienUso()) {
+            if (bienUsoOrigenId()) {
+                cargarInventario();
+            } else {
+                $('#tm_lista').empty();
+                $('#tm_panel_filtro').hide();
+                setEstado('');
+                actualizarBotonTransferir();
+            }
+        } else {
+            notificarCambioDeposito();
+        }
+    }
+
     function notificarCambioDeposito() {
         guardarPreferencias();
         cargarDestinatarios();
@@ -35,8 +107,18 @@
     }
 
     function actualizarPanelDestinatario() {
-        var show = tipoRequiereAprobacion() && depositoEntradaId() > 0;
+        var show = false;
+        if (tipoRequiereAprobacion()) {
+            show = tipoDestinoBienUso() || depositoEntradaId() > 0;
+        }
         $('#tm_panel_destinatario').toggle(show);
+        if (tipoDestinoBienUso()) {
+            $('#tm_destinatario_ayuda').text('Indique el usuario que debe confirmar la recepción en el bien de uso.');
+        } else if (tipoOrigenBienUso()) {
+            $('#tm_destinatario_ayuda').text('Indique el usuario que debe aprobar el ingreso en el depósito destino.');
+        } else {
+            $('#tm_destinatario_ayuda').text('Por defecto se usa el administrador principal del depósito de entrada.');
+        }
         if (show) {
             cargarDestinatarios();
         }
@@ -44,12 +126,16 @@
 
     function cargarDestinatarios() {
         var dep = depositoEntradaId();
+        var destinoBien = tipoDestinoBienUso();
         var $sel = $('#usuario_destino_id');
-        if (!dep || !window.TM_URLS.destinatarios) {
+        if ((!dep && !destinoBien) || !window.TM_URLS.destinatarios) {
             $sel.find('option:not(:first)').remove();
             return;
         }
-        $.get(window.TM_URLS.destinatarios, { deposito_entrada_id: dep })
+        $.get(window.TM_URLS.destinatarios, {
+            deposito_entrada_id: dep,
+            destino_bien_uso: destinoBien ? 1 : 0,
+        })
             .done(function (resp) {
                 $sel.find('option:not(:first)').remove();
                 (resp.opciones || []).forEach(function (o) {
@@ -68,8 +154,10 @@
         }
         $.post(window.TM_URLS.preferencias, {
             _token: $('meta[name="csrf-token"]').attr('content'),
-            deposito_salida_id: depositoSalidaId() || '',
-            deposito_entrada_id: depositoEntradaId() || '',
+            deposito_salida_id: tipoOrigenBienUso() ? '' : (depositoSalidaId() || ''),
+            deposito_entrada_id: tipoDestinoBienUso() ? '' : (depositoEntradaId() || ''),
+            bien_uso_destino_id: tipoDestinoBienUso() ? (bienUsoDestinoId() || '') : '',
+            bien_uso_origen_id: tipoOrigenBienUso() ? (bienUsoOrigenId() || '') : '',
             tipotransaccion_stock_id: tipotransaccionStockId() || '',
         });
     }
@@ -238,20 +326,30 @@
     }
 
     function cargarInventario() {
+        var origenBien = tipoOrigenBienUso();
         var dep = depositoSalidaId();
-        if (!dep) {
+        var bien = bienUsoOrigenId();
+
+        if (origenBien) {
+            if (!bien) {
+                setEstado('Seleccione bien de uso de origen.', true);
+                return;
+            }
+        } else if (!dep) {
             setEstado('Seleccione depósito de salida.', true);
             return;
         }
 
         cargando = true;
         $('#tm_btn_cargar').prop('disabled', true);
-        setEstado('Consultando stock en Anita…');
+        setEstado(origenBien ? 'Consultando stock asignado al bien…' : 'Consultando stock en Anita…');
 
         $.ajax({
             url: window.TM_URLS.inventario,
             method: 'GET',
-            data: { deposito_salida_id: dep },
+            data: origenBien
+                ? { origen_bien_uso: 1, bien_uso_origen_id: bien }
+                : { deposito_salida_id: dep },
             dataType: 'json',
         })
             .done(function (resp) {
@@ -262,7 +360,9 @@
                 }
                 setEstado(
                     resp.filas.length +
-                        ' artículo(s) con saldo (depósito de entrega = depósito de salida).'
+                        (origenBien
+                            ? ' artículo(s) asignados al bien de uso.'
+                            : ' artículo(s) con saldo (depósito de entrega = depósito de salida).')
                 );
                 renderLista(resp.filas);
             })
@@ -284,16 +384,40 @@
     function grabarTransferencia() {
         var depSal = depositoSalidaId();
         var depEnt = depositoEntradaId();
+        var bienDest = bienUsoDestinoId();
+        var bienOrig = bienUsoOrigenId();
+        var destinoBien = tipoDestinoBienUso();
+        var origenBien = tipoOrigenBienUso();
         var tipo = tipotransaccionStockId();
         var lineas = lineasConCantidad();
 
-        if (!depSal || !depEnt) {
-            alert('Seleccione depósito de salida y de entrada.');
-            return;
-        }
-        if (depSal === depEnt) {
-            alert('Los depósitos deben ser distintos.');
-            return;
+        if (origenBien) {
+            if (!bienOrig) {
+                alert('Seleccione el bien de uso de origen.');
+                return;
+            }
+            if (!depEnt) {
+                alert('Seleccione depósito de entrada.');
+                return;
+            }
+        } else {
+            if (!depSal) {
+                alert('Seleccione depósito de salida.');
+                return;
+            }
+            if (destinoBien) {
+                if (!bienDest) {
+                    alert('Seleccione el bien de uso destino.');
+                    return;
+                }
+            } else if (!depEnt) {
+                alert('Seleccione depósito de entrada.');
+                return;
+            }
+            if (!destinoBien && depSal === depEnt) {
+                alert('Los depósitos deben ser distintos.');
+                return;
+            }
         }
         if (!tipo) {
             alert('Seleccione tipo de transacción.');
@@ -321,6 +445,11 @@
             return;
         }
 
+        if (tipoManejaContabilidad() && !(parseInt($('#centrocosto_destino_id').val(), 10) > 0)) {
+            alert('Debe seleccionar centro de costo destino (transferencia con contabilidad).');
+            return;
+        }
+
         var msgConfirm = tipoRequiereAprobacion()
             ? '¿Confirma el envío de ' + lineas.length + ' artículo(s)? Quedará pendiente de aprobación.'
             : '¿Confirma la transferencia de ' + lineas.length + ' artículo(s)?';
@@ -338,9 +467,12 @@
             data: {
                 _token: $('meta[name="csrf-token"]').attr('content'),
                 empresa_id: parseInt($('#empresa_id').val(), 10) || '',
-                deposito_salida_id: depSal,
-                deposito_entrada_id: depEnt,
+                deposito_salida_id: origenBien ? '' : depSal,
+                deposito_entrada_id: destinoBien ? '' : depEnt,
+                bien_uso_destino_id: destinoBien ? bienDest : '',
+                bien_uso_origen_id: origenBien ? bienOrig : '',
                 tipotransaccion_stock_id: tipo,
+                centrocosto_destino_id: parseInt($('#centrocosto_destino_id').val(), 10) || '',
                 usuario_destino_id: parseInt($('#usuario_destino_id').val(), 10) || '',
                 lineas: lineas,
             },
@@ -382,8 +514,19 @@
 
         $('#tipotransaccion_stock_id').on('change', function () {
             guardarPreferencias();
-            actualizarPanelDestinatario();
+            actualizarPanelesDestino();
             actualizarBotonTransferir();
+        });
+
+        actualizarPanelCentrocosto();
+
+        $('#bien_uso_destino_id').on('change', function () {
+            guardarPreferencias();
+            actualizarPanelDestinatario();
+        });
+
+        $('#bien_uso_origen_id').on('change', function () {
+            notificarCambioOrigen();
         });
 
         $('#deposito_salida_id').on('change', function () {
@@ -431,9 +574,11 @@
             activa_eventos_consultadeposito();
         }
 
-        actualizarPanelDestinatario();
+        actualizarPanelesDestino();
 
-        if (depositoSalidaId()) {
+        if (tipoOrigenBienUso() && bienUsoOrigenId()) {
+            cargarInventario();
+        } else if (depositoSalidaId()) {
             cargarInventario();
         }
     });

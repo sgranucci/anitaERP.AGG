@@ -23,7 +23,7 @@ class Comprobante_Proveedor extends Model implements Auditable
         'ordencompra_comprobante_id', 'precarga_comprobante_proveedor_id', 'condicionpago_id',
         'letra', 'sucursal', 'numerocomprobante', 'fechacomprobante', 'fechaiva', 'fechavencimiento',
         'fecharecepcion', 'subtotal', 'total', 'moneda_id', 'cotizacion', 'numerocae',
-        'fechavencimientocae', 'es_fce', 'leyenda', 'modo_carga', 'estado', 'asiento_id',
+        'fechavencimientocae', 'es_fce', 'leyenda', 'modo_carga', 'origen_entrada', 'estado', 'asiento_id',
         'pararevisar', 'anita_nro_interno', 'anita_sync_estado', 'anita_sync_error',
         'anita_sync_at', 'creousuario_id',
     ];

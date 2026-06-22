@@ -4,6 +4,7 @@ namespace App\Services\Ventas\Gastronomia;
 
 use App\Models\Ventas\CierreTotemJornadaGastronomia;
 use App\Models\Ventas\JornadaGastronomia;
+use App\Support\Ventas\Waitry\WaitryCobrosPostCierreJornadaSupport;
 use App\Support\Ventas\Waitry\WaitryInformeZConciliacionSupport;
 use App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport;
 use Illuminate\Support\Facades\Auth;
@@ -11,6 +12,11 @@ use InvalidArgumentException;
 
 final class GastronomiaCierreTotemInformeZService
 {
+    public function __construct(
+        private readonly \App\Services\Ventas\Gastronomia\Waitry\WaitryOrdenesExternasService $ordenesExternasService,
+    ) {
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -39,6 +45,16 @@ final class GastronomiaCierreTotemInformeZService
             ? WaitryInformeZConciliacionSupport::conciliar($plantilla)
             : null;
 
+        $cobrosPostCierre = null;
+        $jornada = $cierre->jornada;
+        if ($jornada !== null && $jornada->cierre_en !== null) {
+            $cobrosPostCierre = WaitryCobrosPostCierreJornadaSupport::analizarDesdeCierre(
+                $jornada,
+                $cierre,
+                $this->ordenesExternasService,
+            );
+        }
+
         return [
             'jornada_id' => $jornadaId,
             'cierre_totem_id' => (int) $cierre->id,
@@ -48,6 +64,7 @@ final class GastronomiaCierreTotemInformeZService
             'usuario_informe_z' => $informeZ['usuario_nombre'] ?? null,
             'totems' => $plantilla,
             'conciliacion' => $conciliacion,
+            'cobros_post_cierre' => $cobrosPostCierre,
             'tolerancia' => WaitryInformeZConciliacionSupport::toleranciaMonto(),
         ];
     }

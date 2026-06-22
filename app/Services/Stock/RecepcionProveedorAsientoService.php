@@ -110,6 +110,19 @@ class RecepcionProveedorAsientoService
     }
 
     /**
+     * Líneas DEBE por cuenta de compra de artículos (agrupadas por cuenta + CC), coherente con el asiento COM.
+     *
+     * @return list<array{cuentacontable_id:int, importe:float, centrocosto_id?:int}>
+     */
+    public function lineasDebeArticulosAgrupadas(Recepcion_Proveedor $recepcion): array
+    {
+        $recepcion->loadMissing(['recepcion_proveedor_articulos.articulos']);
+        $cotizacionRecepcion = (float) ($recepcion->cotizacion ?: 1);
+
+        return $this->armarLineasDebeArticulos($recepcion, $cotizacionRecepcion);
+    }
+
+    /**
      * Regraba movimientos del asiento existente para cuadrar con Σ(cant × precio) de la recepción.
      */
     public function recuadrarAsientoExistente(Recepcion_Proveedor $recepcion): void

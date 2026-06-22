@@ -108,16 +108,18 @@ final class WaitryInformeZConciliacionSupport
      */
     public static function resumenSistemaDesdeDetalleCierre(array $detalle, int $empresaId = 0, ?int $jornadaId = null): array
     {
+        // Tras el cierre de jornada el Informe Z es histórico: no recalcular Sistema desde
+        // snapshot/proceso posterior (facturas lote post-cierre, relecturas Waitry, etc.).
+        $informeZ = $detalle['resumen_informe_z'] ?? null;
+        if (is_array($informeZ) && is_array($informeZ['por_totem'] ?? null)) {
+            return self::reconstruirResumenInformeZConDesglose($informeZ, $empresaId);
+        }
+
         if ($jornadaId !== null && $jornadaId > 0 && $empresaId > 0) {
             $desdeProceso = self::resumenInformeZDesdeProcesoSnapshot($jornadaId, $empresaId);
             if ($desdeProceso !== null && is_array($desdeProceso['por_totem'] ?? null)) {
                 return self::reconstruirResumenInformeZConDesglose($desdeProceso, $empresaId);
             }
-        }
-
-        $informeZ = $detalle['resumen_informe_z'] ?? null;
-        if (is_array($informeZ) && is_array($informeZ['por_totem'] ?? null)) {
-            return self::reconstruirResumenInformeZConDesglose($informeZ, $empresaId);
         }
 
         $filtrado = self::filtrarResumenSoloCreditCardPosnet(
@@ -239,7 +241,9 @@ final class WaitryInformeZConciliacionSupport
     }
 
     /**
-     * Resumen Informe Z desde snapshot del proceso Caja (misma base que el cuadro «Waitry pagado sin facturar»).
+     * Resumen Informe Z desde snapshot del proceso Caja (cuadro «Waitry pagado sin facturar»).
+     * Solo como fallback en {@see resumenSistemaDesdeDetalleCierre()} si aún no hay
+     * {@code detalle_json.resumen_informe_z} persistido al cierre de jornada.
      *
      * @return array{por_totem:list<array<string,mixed>>,total_general:array<string,mixed>}|null
      */

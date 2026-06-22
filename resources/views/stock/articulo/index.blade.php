@@ -162,12 +162,12 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
                        			@if (\App\Support\Stock\MovimientosArticuloDepositoSupport::puedeConsultar())
                                 	<button type="button"
                                 	    class="btn-accion-tabla btn-movimientos-stock-articulo tooltipsC"
-                                	    title="Movimientos de stock por dep&oacute;sito"
+                                	    title="Kardex de stock"
                                 	    data-articulo-id="{{ $articulo->id }}"
                                 	    data-articulo-sku="{{ $articulo->codigoarticulo ?? $articulo->sku ?? '' }}"
                                 	    data-articulo-descripcion="{{ $articulo->descripcion ?? '' }}"
                                 	    data-deposito-id="{{ $articulo->depositoentrega_id ?? '' }}">
-                                        <i class="fa fa-exchange text-primary"></i>
+                                        <i class="fa fa-list-alt text-info"></i>
                                 	</button>
 								@endif
                        			@if (can('borrar-articulos', false))
@@ -193,6 +193,7 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
 @include('includes.stock.modaletiquetanpuarticulo')
 @endif
 @if (\App\Support\Stock\MovimientosArticuloDepositoSupport::puedeConsultar())
+@include('includes.stock.modal_kardex_deposito')
 <input type="hidden" id="recuento-movimientos-articulo-url" value="{{ route('recuento_movimientos_articulo') }}">
 @endif
 @endsection

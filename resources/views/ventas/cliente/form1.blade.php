@@ -1,4 +1,4 @@
-<div id="tab1" class="form1 tab-content">
+<div id="tab-datos-principales" class="tab-pane fade show active form1" role="tabpanel">
 		<div class="row">
 			<div class="col-sm-6">
 				<div class="form-group row">

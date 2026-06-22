@@ -1,0 +1,1132 @@
+[
+  {
+    "codigo_inventario": 1078,
+    "hostname": "SALA05-KPC",
+    "ip": "192.168.20.131",
+    "modelo": "Gigabyte",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1019,
+    "hostname": "SALAVIP-RPC",
+    "ip": "192.168.40.206",
+    "modelo": "ECS",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 722,
+    "hostname": "EFLORES-NTBK",
+    "ip": "10.20.28.42",
+    "modelo": "Latitude 3520",
+    "numero_serie": "1CJ1JL3",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1264,
+    "hostname": "EDIAZ-NTBK",
+    "ip": "10.20.28.18",
+    "modelo": "HP 250 G10 Notebook",
+    "numero_serie": "1H84280NNB",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1277,
+    "hostname": "MRODRIGUEZ-NTBK",
+    "ip": "10.20.30.214",
+    "modelo": "HP 250 G10 Notebook",
+    "numero_serie": "1H85020G09",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1025,
+    "hostname": "VFERNANDEZ-NTBK",
+    "ip": "10.20.28.206",
+    "modelo": "HP 250 G10 Notebook",
+    "numero_serie": "1H85020G0B",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1256,
+    "hostname": "MMICALETTI-NTBK",
+    "ip": "10.20.28.44",
+    "modelo": "HP 250 G10 Notebook",
+    "numero_serie": "1H85020GOX",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1006,
+    "hostname": "OFALQUI-NTBK",
+    "ip": "10.20.30.215",
+    "modelo": "HP 250 G10 Notebook",
+    "numero_serie": "1H85020G12",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 949,
+    "hostname": "GMAGLIOLO-NTBK",
+    "ip": "10.20.29.92",
+    "modelo": "HP 250 G10 Notebook",
+    "numero_serie": "1H85020G1J",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1096,
+    "hostname": "CCARRIZO-NTBK",
+    "ip": "10.20.28.121",
+    "modelo": "HP 250 G10 Notebook",
+    "numero_serie": "1H85020G1R",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1169,
+    "hostname": "NTPEREZ-NTBK",
+    "ip": "10.20.28.201",
+    "modelo": "HP 250 G10 Notebook",
+    "numero_serie": "1H85020G1X",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1120,
+    "hostname": "APERDOMO-NTBK",
+    "ip": "10.20.28.115",
+    "modelo": "HP 250 G10 Notebook",
+    "numero_serie": "1H85020G2H",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 929,
+    "hostname": "FFERNANDEZ-NTBK",
+    "ip": "10.20.28.214",
+    "modelo": "HP 250 G10 Notebook",
+    "numero_serie": "1H85020G2Y",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 920,
+    "hostname": "FAVILA-NTBK",
+    "ip": "172.30.5.14",
+    "modelo": "Latitude 3520",
+    "numero_serie": "2KL6RG3",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1285,
+    "hostname": "SERVER-SCAN",
+    "ip": "10.20.30.37",
+    "modelo": "HPE ProLiant DL380 Gen11",
+    "numero_serie": "2M2D2103W4",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1202,
+    "hostname": "EGUEVARA-NTBK",
+    "ip": "10.20.28.35",
+    "modelo": "Latitude 3520",
+    "numero_serie": "336HL3",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1165,
+    "hostname": "PTRAPANI-NTBK",
+    "ip": "10.20.28.154",
+    "modelo": "Latitude 3520",
+    "numero_serie": "358MGS3",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1005,
+    "hostname": "GDOMINICK-NTBK",
+    "ip": "10.20.28.34",
+    "modelo": "Inspiron 3493",
+    "numero_serie": "3LXH703",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 918,
+    "hostname": "REBISCO-AD",
+    "ip": "192.168.40.251",
+    "modelo": "HPE ProLiant DL360 Gen11",
+    "numero_serie": "3M1D2010TS",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1253,
+    "hostname": "REIRIN-NTBK",
+    "ip": "10.20.28.160",
+    "modelo": "Latitude 3540",
+    "numero_serie": "3XTGND3",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1282,
+    "hostname": "CJARA-BPC",
+    "ip": "10.20.30.54",
+    "modelo": "HP Pro SFF 280 GS",
+    "numero_serie": "4CE41OBSN4",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1300,
+    "hostname": "SALAVIP-BPC",
+    "ip": "10.20.28.216",
+    "modelo": "HP Pro SFF 280 GS",
+    "numero_serie": "4CE41UBSPV",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 952,
+    "hostname": "CAJAO1BARRERAS",
+    "ip": "10.20.31.152",
+    "modelo": "HP Pro SFF 280 GS",
+    "numero_serie": "4CE410BSQY",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1265,
+    "hostname": "GASTPV10-BPC",
+    "ip": "10.20.30.94",
+    "modelo": "HP Pro SFF 280 GS",
+    "numero_serie": "4CE411C65V",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 954,
+    "hostname": "CAJA03_BARRERAS",
+    "ip": "10.20.31.153",
+    "modelo": "HP Pro SFF 280 GB",
+    "numero_serie": "4CE44082P6",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1131,
+    "hostname": "MAQUIO3-RPC",
+    "ip": "192.168.40.204",
+    "modelo": "HP Pro SFF 280 GS",
+    "numero_serie": "4CE44OB2PD",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1108,
+    "hostname": "GASTUZU-BPC",
+    "ip": "10.20.29.40",
+    "modelo": "HP Pro SFF 280 GS",
+    "numero_serie": "4CE44OB2PF",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1166,
+    "hostname": "SEGU03-RPC",
+    "ip": "192.168.40.160",
+    "modelo": "HP Pro SFF 280 GB",
+    "numero_serie": "4CE440B2PN",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1276,
+    "hostname": "AROSTAGNO-BPC",
+    "ip": "10.20.28.117",
+    "modelo": "HP Pro SFF 280 G9",
+    "numero_serie": "4CE44OB2PR",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1098,
+    "hostname": "GASTMITRE-BPC",
+    "ip": "10.20.29.90",
+    "modelo": "HP Pro SFF 280 G9",
+    "numero_serie": "4CE44OBZPY",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1270,
+    "hostname": "GASTPV31-RPC",
+    "ip": "192.168.40.222",
+    "modelo": "HP Pro SFF 280 G9",
+    "numero_serie": "4CE44OBZQS",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1176,
+    "hostname": "BING01-RPC",
+    "ip": "192.168.40.123",
+    "modelo": "HP Pro SFF 280 G9",
+    "numero_serie": "4CE44OB2QS",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 941,
+    "hostname": "BWIGOSCAJA-004",
+    "ip": "10.20.28.193",
+    "modelo": "HP Pro SFF 280 G9",
+    "numero_serie": "4CE44OBZQ7",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1263,
+    "hostname": "GASTROEGA-BPC",
+    "ip": "10.20.29.329",
+    "modelo": "HP Pro SFF 280 G9",
+    "numero_serie": "4CE44UB2QB",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1306,
+    "hostname": "JPEREYRA-BPC",
+    "ip": "10.20.30.222",
+    "modelo": "HP Pro SFF 280 G9",
+    "numero_serie": "4CE44052QC",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1135,
+    "hostname": "SEGU02-RPC",
+    "ip": "192.168.40.120",
+    "modelo": "HP Pro SFF 280 GS",
+    "numero_serie": "4CE44OB2QG",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1207,
+    "hostname": "MAQUIO1-RPC",
+    "ip": "192.168.40.131",
+    "modelo": "HP Pro SFF 280 G9",
+    "numero_serie": "4CE440B2QK",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1296,
+    "hostname": "FLORRODRIGUEZ-BPC",
+    "ip": "10.20.28.204",
+    "modelo": "HP Pro SFF 280 G9",
+    "numero_serie": "4CE44OBZQM",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1298,
+    "hostname": "RECEPCION-BPC",
+    "ip": "10.20.30.130",
+    "modelo": "HP Pro SFF 280 G9",
+    "numero_serie": "4CE44UBZQN",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1305,
+    "hostname": "TECNOLOGIAREB",
+    "ip": "192.168.40.13",
+    "modelo": "HP Pro SFF 280 G9",
+    "numero_serie": "4CE440B2QT",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1272,
+    "hostname": "GASTPV15-KPC",
+    "ip": "192.168.20.152",
+    "modelo": "HP Pro SFF 280 G9",
+    "numero_serie": "4CE44OB2RO",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 786,
+    "hostname": "INGENIELLO",
+    "ip": "192.168.0.206",
+    "modelo": "Latitude 3520",
+    "numero_serie": "54SMGS3",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 933,
+    "hostname": "PSCHELL-NTBK",
+    "ip": "10.20.28.219",
+    "modelo": "HP ProBook 450 G9",
+    "numero_serie": "5CD40543LC",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 905,
+    "hostname": "LSUAREZ-NTBK",
+    "ip": "10.20.28.210",
+    "modelo": "HP ProBook 450 GS",
+    "numero_serie": "5CD40543M3",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 840,
+    "hostname": "MMILESI-NTBK",
+    "ip": "10.20.28.141",
+    "modelo": "HP ProBook 450 G9",
+    "numero_serie": "5CD4081SSG",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 829,
+    "hostname": "AREDIVO-NTBK",
+    "ip": "10.20.28.25",
+    "modelo": "HP ProBook 450 G9",
+    "numero_serie": "5CD4081SSK",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1237,
+    "hostname": "YGONZALEZ-NTBK",
+    "ip": "10.20.28.92",
+    "modelo": "HP ProBook 450 G9",
+    "numero_serie": "5CD4081STL",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1246,
+    "hostname": "ARIVAS-NTBK",
+    "ip": "10.20.28.13",
+    "modelo": "HP 250 G10 Notebook",
+    "numero_serie": "5CD50979PK",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1289,
+    "hostname": "MASOSA-NTBK",
+    "ip": "10.20.30.242",
+    "modelo": "HP 250 G10 Notebook",
+    "numero_serie": "5CD53550TM",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 768,
+    "hostname": "RFOGLIATTI-NTBK",
+    "ip": "10.20.30.227",
+    "modelo": "Latitude 3520",
+    "numero_serie": "5LM2DS3",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 782,
+    "hostname": "RVELAZQUEZ-NTBK",
+    "ip": "10.20.28.155",
+    "modelo": "Latitude 3520",
+    "numero_serie": "64N2D83",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1311,
+    "hostname": "EQUIPO12",
+    "ip": "10.20.28.13",
+    "modelo": "Vostro 3480",
+    "numero_serie": "64YQTW2",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1214,
+    "hostname": "WGUZMAN-NTBK",
+    "ip": "10.20.29.26",
+    "modelo": "Latitude 3520",
+    "numero_serie": "726HL3",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1041,
+    "hostname": "LIGLESIAS-NTBK",
+    "ip": "10.20.28.39",
+    "modelo": "Latitude 3520",
+    "numero_serie": "8M6YVGS",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1290,
+    "hostname": "MICALETTI-NTBK",
+    "ip": "172.30.50.30",
+    "modelo": "Latitude 3520",
+    "numero_serie": "8WJ1JL3",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1304,
+    "hostname": "CAJA3-KPC",
+    "ip": "192.168.20.147",
+    "modelo": "BANGHO",
+    "numero_serie": "AR020001483200",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1007,
+    "hostname": "GSURACE-NTBK",
+    "ip": "192.168.1.4",
+    "modelo": "Latitude 3520",
+    "numero_serie": "BZGSHLS",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1307,
+    "hostname": "GSURACE-NTBK",
+    "ip": "10.20.28.51",
+    "modelo": "Latitude 3520",
+    "numero_serie": "B2GSHL3",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1195,
+    "hostname": "FRODRIGUEZ-NTBK",
+    "ip": "172.21.23.10",
+    "modelo": "Latitude 3520",
+    "numero_serie": "B4N2DS3",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1044,
+    "hostname": "ACHANDUVI-NTBK",
+    "ip": "10.20.28.175",
+    "modelo": "Latitude 3520",
+    "numero_serie": "BHM2DS3",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1150,
+    "hostname": "CADETES-BPC",
+    "ip": "10.20.28.46",
+    "modelo": "Gigabyte",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1275,
+    "hostname": "CAJAVIP-KPC",
+    "ip": "192.168.20.148",
+    "modelo": "Gigabyte",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1159,
+    "hostname": "GAST05-RPC",
+    "ip": "192.168.40.140",
+    "modelo": "1020.299",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1232,
+    "hostname": "GASTPV40-KPC",
+    "ip": "192.168.20.153",
+    "modelo": "MSI",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1280,
+    "hostname": "SALA03-KPC",
+    "ip": "192.168.20.139",
+    "modelo": "MSI",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1292,
+    "hostname": "SALA05-RPC",
+    "ip": "192.168.40.170",
+    "modelo": "GIGABYTE",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1040,
+    "hostname": "SALASUP-BPC",
+    "ip": "192.168.40.153",
+    "modelo": "GIGABYTE",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1268,
+    "hostname": "TECN01-RPC",
+    "ip": "192.168.40.142",
+    "modelo": "GIGABYTE",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1266,
+    "hostname": "FV32",
+    "ip": "10.20.28.38",
+    "modelo": "LATITUDE3520",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 924,
+    "hostname": "RCAJASWIGOS-005",
+    "ip": "10.20.28.17",
+    "modelo": "LATITUDE3520",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 957,
+    "hostname": "RCAJAWIGOS-003",
+    "ip": "10.20.28.17",
+    "modelo": "LATITUDE3520",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 958,
+    "hostname": "RGASPC001",
+    "ip": "192.168.20.220",
+    "modelo": "LATITUDE3520",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 901,
+    "hostname": "MGONZALEZ-NTBK",
+    "ip": "10.20.30.219",
+    "modelo": "VOSTRO3480",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1217,
+    "hostname": "PGODINO-NTBK",
+    "ip": "10.20.28.62",
+    "modelo": "LATITUDE3520",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1310,
+    "hostname": "PGODINO-NTBK",
+    "ip": "10.20.28.112",
+    "modelo": "LATITUDE3540",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1196,
+    "hostname": "FTOSCANO-NTBK",
+    "ip": null,
+    "modelo": "Gigabyte",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 925,
+    "hostname": "VURRUCHUA-NTBK",
+    "ip": null,
+    "modelo": "Gigabyte",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1239,
+    "hostname": "CKRAVETS-NTBK",
+    "ip": null,
+    "modelo": "Gigabyte",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1016,
+    "hostname": "LFIGUEROA-NTBK",
+    "ip": null,
+    "modelo": "Gigabyte",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1013,
+    "hostname": "DPICERNO-NTBK",
+    "ip": "10.20.28.161",
+    "modelo": "ASUS",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 866,
+    "hostname": "RBARRERA-NTBK",
+    "ip": "10.20.28.47",
+    "modelo": "ASUS",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 846,
+    "hostname": "MBMENDEZ-NTBK",
+    "ip": "10.20.30.230",
+    "modelo": "ASUS",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1241,
+    "hostname": "SERVER10",
+    "ip": "10.20.28.252",
+    "modelo": "ASUS",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1158,
+    "hostname": "JCPEREZDEMEZQUIA-BPC",
+    "ip": "10.20.30.158",
+    "modelo": "SYSTEMMFR",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1302,
+    "hostname": "BMANPC1",
+    "ip": "10.20.28.180",
+    "modelo": "SYSTEMMFR",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1287,
+    "hostname": "DESKTOP-BZITAOQ",
+    "ip": "10.20.30.78",
+    "modelo": null,
+    "numero_serie": "JD1SHL3",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1244,
+    "hostname": "LROMERONBK",
+    "ip": "10.20.28.91",
+    "modelo": null,
+    "numero_serie": "JT3SHL3",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1054,
+    "hostname": "ESANCHEZ-NTBK",
+    "ip": "10.20.28.65",
+    "modelo": "Latitude 3520",
+    "numero_serie": "MP27NT9J",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1014,
+    "hostname": "DSAMPLEBEN-NTBK",
+    "ip": null,
+    "modelo": "Latitude 3520",
+    "numero_serie": "MXQOOSOSKV",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1009,
+    "hostname": "ABLANCO-NTBK",
+    "ip": null,
+    "modelo": "20VE",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1284,
+    "hostname": "AMD-R3-3200",
+    "ip": null,
+    "modelo": "HP ProLiant DL180 G6",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 766,
+    "hostname": "GSOSA-NTBK",
+    "ip": null,
+    "modelo": "ASUS",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1212,
+    "hostname": "NPEREZ-NTBK",
+    "ip": null,
+    "modelo": "81W8",
+    "numero_serie": "PF23GE58",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1288,
+    "hostname": "NTBK",
+    "ip": null,
+    "modelo": "81W8",
+    "numero_serie": "PF23HHY5",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 693,
+    "hostname": "BMKTPC0010",
+    "ip": null,
+    "modelo": "81W8",
+    "numero_serie": "F'F23JBPY",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 666,
+    "hostname": "CT-BIYEMAS",
+    "ip": null,
+    "modelo": "ASUS",
+    "numero_serie": "R5NOGP000839215",
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1233,
+    "hostname": "ENIELLO10",
+    "ip": "192.168.0.41",
+    "modelo": "System mfr",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 913,
+    "hostname": "INGENIELLO",
+    "ip": "10.20.30.71",
+    "modelo": "System mfr",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1121,
+    "hostname": "TECNO02-RPC",
+    "ip": "192.168.40.129",
+    "modelo": "ASUS",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1303,
+    "hostname": "MANT1-BPC",
+    "ip": "10.20.28.180",
+    "modelo": "System mfr",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1084,
+    "hostname": "MANTEN-KPC",
+    "ip": "192.168.20.141",
+    "modelo": "System mfr",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1082,
+    "hostname": "ABARZOLA-BPC",
+    "ip": "10.20.29.28",
+    "modelo": "MSI",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1301,
+    "hostname": "ASCALI-BPC",
+    "ip": "10.20.28.120",
+    "modelo": "MSI",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1274,
+    "hostname": "CAJA01-KPC",
+    "ip": "192.168.20.149",
+    "modelo": "Gigabyte",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1225,
+    "hostname": "DOMOPANTALLA-BPC",
+    "ip": "10.20.29.18",
+    "modelo": "Gigabyte",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1226,
+    "hostname": "GASTRONOMIABKP2",
+    "ip": "10.20.29.41",
+    "modelo": "MSI",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1271,
+    "hostname": "SEGURIDAD01-KPC",
+    "ip": "192.168.20.120",
+    "modelo": "MSI",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1278,
+    "hostname": "TECNOLOGIA-BPC",
+    "ip": "10.20.32.63",
+    "modelo": "MSI",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 628,
+    "hostname": "PANTALLA_RESTO",
+    "ip": "10.20.28.103",
+    "modelo": "MSI",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1291,
+    "hostname": "PARKING-KPC",
+    "ip": "192.168.20.200",
+    "modelo": "MSI",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1309,
+    "hostname": "SUPGASTRO-BPC",
+    "ip": "10.20.29.38",
+    "modelo": "MSI",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 961,
+    "hostname": "RCAJASWIGOS-04",
+    "ip": "192.168.40.154",
+    "modelo": "MSI",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  },
+  {
+    "codigo_inventario": 1273,
+    "hostname": "MMOSKALUC-KPC",
+    "ip": "192.168.20.160",
+    "modelo": "MSI",
+    "numero_serie": null,
+    "estado": "A",
+    "centro_costo": "S",
+    "tipo_bien": "P"
+  }
+]

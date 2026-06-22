@@ -110,6 +110,10 @@ function notificarDepositoAplicado($ctx, data) {
     if (!$ctx || !$ctx.length) {
         return;
     }
+    if (data && data.tipodeposito !== undefined) {
+        $ctx.attr('data-tipodeposito', String(data.tipodeposito || ''));
+        $ctx.find('.deposito_id').attr('data-tipodeposito', String(data.tipodeposito || ''));
+    }
     $ctx.find('.deposito_id').trigger('change');
     if (typeof window.onDepositoAplicadoEnFormulario === 'function') {
         window.onDepositoAplicadoEnFormulario(data, $ctx);

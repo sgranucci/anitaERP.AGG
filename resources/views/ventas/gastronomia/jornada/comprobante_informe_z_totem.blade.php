@@ -173,6 +173,8 @@
             </div>
         @endforeach
     @endif
+
+    @include('ventas.gastronomia.jornada.partials.cobros_post_cierre', ['d' => $d])
 </body>
 </html>
 

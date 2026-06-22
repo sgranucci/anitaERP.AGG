@@ -70,8 +70,18 @@ class Articulo_MovimientoService
 			$dataMovimiento['precio'] = str_replace(',', '', $dataMovimiento['precio']);
 
 			//if (!array_key_exists('deposito_id', $dataMovimiento))
-			if ($dataMovimiento['deposito_id'] == 0)
+			$bienUsoId = (int) ($dataMovimiento['bien_uso_id'] ?? 0);
+			if ($bienUsoId > 0) {
+				$dataMovimiento['bien_uso_id'] = $bienUsoId;
+				if (! isset($dataMovimiento['deposito_id']) || (int) $dataMovimiento['deposito_id'] <= 0) {
+					$dataMovimiento['deposito_id'] = null;
+				}
+			} elseif (! isset($dataMovimiento['deposito_id']) || $dataMovimiento['deposito_id'] == 0) {
 				$dataMovimiento['deposito_id'] = 1;
+			}
+			if (isset($dataMovimiento['bien_uso_id']) && (int) $dataMovimiento['bien_uso_id'] <= 0) {
+				$dataMovimiento['bien_uso_id'] = null;
+			}
 			if ($dataMovimiento['listaprecio_id'] == 'NaN')
 				$dataMovimiento['listaprecio_id'] = null;
 			if (! isset($dataMovimiento['listaprecio_id'])

@@ -7,7 +7,7 @@
 <div class="form-group row">
     <label for="abreviatura" class="col-lg-3 col-form-label requerido">Abreviatura</label>
     <div class="col-lg-2">
-       <input type="text" name="abreviatura" id="abreviatura" class="form-control" value="{{old('abreviatura', $data->abreviatura ?? '')}}" required/>
+       <input type="text" name="abreviatura" id="abreviatura" class="form-control" maxlength="15" value="{{old('abreviatura', $data->abreviatura ?? '')}}" required/>
     </div>
 </div>
 <div class="form-group row">
@@ -62,8 +62,38 @@
                 @if (old('maneja_contabilidad', $data->maneja_contabilidad ?? false)) checked @endif>
             <label class="form-check-label" for="maneja_contabilidad">Genera asiento contable al confirmar</label>
         </div>
+        <div class="form-check">
+            <input type="checkbox" class="form-check-input" name="destino_bien_uso" id="destino_bien_uso" value="1"
+                @if (old('destino_bien_uso', $data->destino_bien_uso ?? false)) checked @endif>
+            <label class="form-check-label" for="destino_bien_uso">Destino es bien de uso (no dep&oacute;sito)</label>
+        </div>
+        <div class="form-check">
+            <input type="checkbox" class="form-check-input" name="origen_bien_uso" id="origen_bien_uso" value="1"
+                @if (old('origen_bien_uso', $data->origen_bien_uso ?? false)) checked @endif>
+            <label class="form-check-label" for="origen_bien_uso">Origen es bien de uso (no dep&oacute;sito de salida)</label>
+        </div>
         <small class="form-text text-muted">
-            La aprobaci&oacute;n aplica si <code>STOCK_TRANSFERENCIA_MODO_APROBACION=tipo_transaccion</code> en .env.
+            Origen y destino en bien de uso son excluyentes. La aprobaci&oacute;n aplica si <code>STOCK_TRANSFERENCIA_MODO_APROBACION=tipo_transaccion</code> en .env.
         </small>
     </div>
 </div>
+<script>
+    (function () {
+        var $origen = document.getElementById('origen_bien_uso');
+        var $destino = document.getElementById('destino_bien_uso');
+        if (!$origen || !$destino) {
+            return;
+        }
+        function syncFlags(changed) {
+            if ($origen.checked && $destino.checked) {
+                if (changed === 'origen') {
+                    $destino.checked = false;
+                } else {
+                    $origen.checked = false;
+                }
+            }
+        }
+        $origen.addEventListener('change', function () { syncFlags('origen'); });
+        $destino.addEventListener('change', function () { syncFlags('destino'); });
+    })();
+</script>

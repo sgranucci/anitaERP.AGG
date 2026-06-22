@@ -141,6 +141,16 @@ return [
     'anita_tras_respuesta' => filter_var(env('GASTRONOMIA_ANITA_TRAS_RESPUESTA', true), FILTER_VALIDATE_BOOLEAN),
 
     /**
+     * Replica Anita en cola Laravel (ReplicarAnitaGastronomiaJob) en lugar de terminating() en Apache.
+     * Requiere QUEUE_CONNECTION=database|redis y worker supervisor activo.
+     */
+    'anita_en_cola' => filter_var(env('GASTRONOMIA_ANITA_EN_COLA', true), FILTER_VALIDATE_BOOLEAN),
+    'anita_cola' => env('GASTRONOMIA_ANITA_COLA', 'default'),
+    'anita_job_tries' => max(1, (int) env('GASTRONOMIA_ANITA_JOB_TRIES', 3)),
+    'anita_job_backoff_segundos' => [60, 300, 900],
+    'anita_job_timeout' => max(60, (int) env('GASTRONOMIA_ANITA_JOB_TIMEOUT', 300)),
+
+    /**
      * Usa venta.fecha (calendario), no fechajornada. Replica faltantes vía bridge y alerta por mail.
      */
     'auditoria_anita_diaria' => [

@@ -97,6 +97,11 @@ class Tipotransaccion_StockController extends Controller
         $data = $request->validated();
         $data['requiere_aprobacion'] = $request->boolean('requiere_aprobacion');
         $data['maneja_contabilidad'] = $request->boolean('maneja_contabilidad');
+        $data['destino_bien_uso'] = $request->boolean('destino_bien_uso');
+        $data['origen_bien_uso'] = $request->boolean('origen_bien_uso');
+        if ($data['origen_bien_uso'] && $data['destino_bien_uso']) {
+            $data['destino_bien_uso'] = false;
+        }
 
         return $data;
     }

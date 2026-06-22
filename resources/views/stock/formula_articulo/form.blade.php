@@ -32,7 +32,14 @@
         }
     }
     if (old('articulo_ids') !== null && is_array(old('articulo_ids'))) {
-        $filas = max(1, count(old('articulo_ids')));
+        $filasDesdeOld = count(old('articulo_ids'));
+        foreach (['articulo_ids', 'esopcional', 'ordenopcionales', 'formula_hija_ids', 'cantidades'] as $campoOld) {
+            $vals = old($campoOld);
+            if (is_array($vals) && $vals !== []) {
+                $filasDesdeOld = max($filasDesdeOld, (int) max(array_keys($vals)) + 1);
+            }
+        }
+        $filas = max(1, $filasDesdeOld);
     } elseif ($esEdicion && $data->formula_articulo_hijos) {
         $filas = max(1, $data->formula_articulo_hijos->count());
     } else {
@@ -205,29 +212,29 @@
                         @endphp
                         <tr class="fila-formula-hijo">
                             <td class="p-1 align-middle">
-                                <input type="hidden" name="formula_articulo_hijo_ids[]" value="{{ $oid }}" />
-                                <input type="hidden" name="articulo_ids[]" class="articulo_id" value="{{ $oaid }}" />
+                                <input type="hidden" name="formula_articulo_hijo_ids[{{ $i }}]" value="{{ $oid }}" />
+                                <input type="hidden" name="articulo_ids[{{ $i }}]" class="articulo_id" value="{{ $oaid }}" />
                                 <input type="hidden" class="unidadmedida_id" value="" />
                                 <input type="hidden" class="categoria_id" value="" />
                                 <input type="hidden" class="subcategoria_id" value="" />
                                 <input type="hidden" class="unidadmedida" value="" />
                                 <div class="d-flex flex-nowrap w-100 celda-articulo-formula-linea" style="gap: 3px;">
-                                    @include('stock.formula_articulo.partials.link_sku_articulo_linea', ['articuloId' => $oaid, 'sku' => $osku])
-                                    <input type="text" readonly name="articulo_descs[]" class="form-control form-control-sm descripcionarticulo text-truncate" value="{{ $odesc }}" placeholder="Descripci&oacute;n" title="{{ $odesc }}" />
+                                    @include('stock.formula_articulo.partials.link_sku_articulo_linea', ['articuloId' => $oaid, 'sku' => $osku, 'lineaIndex' => $i])
+                                    <input type="text" readonly name="articulo_descs[{{ $i }}]" class="form-control form-control-sm descripcionarticulo text-truncate" value="{{ $odesc }}" placeholder="Descripci&oacute;n" title="{{ $odesc }}" />
                                     <button type="button" title="Consulta art&iacute;culos" class="btn btn-sm btn-outline-secondary consultaarticulo tooltipsC flex-shrink-0"><i class="fa fa-search text-primary"></i></button>
                                 </div>
                             </td>
-                            <td class="p-1 align-middle"><input type="number" step="0.01" name="cantidades[]" class="form-control form-control-sm" value="{{ old("cantidades.$i", $h->cantidad ?? '') }}" /></td>
-                            <td class="p-1 align-middle"><input type="number" step="0.01" name="factorcostos[]" class="form-control form-control-sm" style="min-width: 5.5rem;" value="{{ old("factorcostos.$i", $h->factorcosto ?? '1') }}" /></td>
+                            <td class="p-1 align-middle"><input type="number" step="0.01" name="cantidades[{{ $i }}]" class="form-control form-control-sm" value="{{ old("cantidades.$i", $h->cantidad ?? '') }}" /></td>
+                            <td class="p-1 align-middle"><input type="number" step="0.01" name="factorcostos[{{ $i }}]" class="form-control form-control-sm" style="min-width: 5.5rem;" value="{{ old("factorcostos.$i", $h->factorcosto ?? '1') }}" /></td>
                             <td class="p-1 align-middle">
                                 @include('stock.formula_articulo.partials.costo_ultima_compra_celda', [
                                     'costoUltimaCompra' => $h->costo_ultima_compra ?? null,
                                 ])
                             </td>
                             <td class="p-1 align-middle">
-                                <input type="hidden" name="formula_hija_ids[]" class="fh_formula_hija_id" value="{{ $fhid }}" />
+                                <input type="hidden" name="formula_hija_ids[{{ $i }}]" class="fh_formula_hija_id" value="{{ $fhid }}" />
                                 <div class="input-group input-group-sm">
-                                    <input type="text" readonly name="formula_hija_labels[]" class="form-control fh_formula_hija_label" value="{{ $fhlab }}" placeholder="Opcional" title="{{ $fhlab }}" />
+                                    <input type="text" readonly name="formula_hija_labels[{{ $i }}]" class="form-control fh_formula_hija_label" value="{{ $fhlab }}" placeholder="Opcional" title="{{ $fhlab }}" />
                                     <div class="input-group-append">
                                         <button type="button" class="btn btn-sm btn-outline-secondary js-consulta-formula-linea" data-exclude="{{ $data?->id ?? 0 }}" title="Buscar subf&oacute;rmula"><i class="fa fa-flask"></i></button>
                                         <button type="button" class="btn btn-sm btn-outline-info js-ver-subformula-linea{{ $fhid ? '' : ' sin-subformula' }}" title="Consultar subf&oacute;rmula" data-formula-id="{{ $fhid }}"><i class="fa fa-eye"></i></button>
@@ -236,7 +243,7 @@
                             </td>
                             @if ($formulaGastronomiaOpcional)
                             <td class="p-1 align-middle text-center">
-                                <select name="esopcional[]" class="form-control form-control-sm js-esopcional-formula">
+                                <select name="esopcional[{{ $i }}]" class="form-control form-control-sm js-esopcional-formula">
                                     <option value="0" @if((string) old("esopcional.$i", ($h && ($h->esopcional ?? false)) ? '1' : '0') !== '1') selected @endif>No</option>
                                     <option value="1" @if((string) old("esopcional.$i", ($h && ($h->esopcional ?? false)) ? '1' : '0') === '1') selected @endif>S&iacute;</option>
                                 </select>
@@ -246,11 +253,11 @@
                                     $esOpFila = (string) old("esopcional.$i", ($h && ($h->esopcional ?? false)) ? '1' : '0') === '1';
                                     $ooVal = old("ordenopcionales.$i", optional($h)->ordenopcional ?? '');
                                 @endphp
-                                <input type="number" name="ordenopcionales[]" min="1" max="65535" step="1" class="form-control form-control-sm js-ordenopcional-formula" value="{{ $ooVal !== '' && $ooVal !== null ? $ooVal : '' }}" placeholder="1…n" @if(! $esOpFila) disabled @endif />
+                                <input type="number" name="ordenopcionales[{{ $i }}]" min="1" max="65535" step="1" class="form-control form-control-sm js-ordenopcional-formula" value="{{ $ooVal !== '' && $ooVal !== null ? $ooVal : '' }}" placeholder="1…n" @if(! $esOpFila) readonly @endif />
                             </td>
                             @endif
                             <td class="p-1 align-middle">
-                                <select name="deposito_ids[]" class="form-control form-control-sm text-truncate" style="max-width: 10rem;">
+                                <select name="deposito_ids[{{ $i }}]" class="form-control form-control-sm text-truncate" style="max-width: 10rem;">
                                     <option value="">--</option>
                                     @foreach($deposito_query as $dep)
                                         <option value="{{ $dep->id }}" @if((int)old("deposito_ids.$i", $h->deposito_id ?? 0) === (int)$dep->id) selected @endif title="{{ $dep->codigo }} {{ $dep->nombre }}">{{ $dep->codigo }} {{ $dep->nombre }}</option>
@@ -258,7 +265,7 @@
                                 </select>
                             </td>
                             @if ($tieneRanura)
-                            <td class="p-1 align-middle"><input type="number" name="ranuras[]" class="form-control form-control-sm" value="{{ old("ranuras.$i", $h->ranura ?? '') }}" /></td>
+                            <td class="p-1 align-middle"><input type="number" name="ranuras[{{ $i }}]" class="form-control form-control-sm" value="{{ old("ranuras.$i", $h->ranura ?? '') }}" /></td>
                             @endif
                             <td class="p-1 align-middle text-center">
                                 <button type="button" class="btn btn-sm btn-outline-danger js-eliminar-fila-formula" title="Quitar línea">&times;</button>

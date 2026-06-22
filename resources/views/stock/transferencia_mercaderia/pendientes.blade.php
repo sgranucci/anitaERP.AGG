@@ -37,8 +37,20 @@
                                 <tr>
                                     <td><strong>{{ $t->codigo }}</strong></td>
                                     <td>{{ $t->fecha?->format('d/m/Y') }}</td>
-                                    <td>{{ optional($t->depositoOrigen)->nombre }}</td>
-                                    <td>{{ optional($t->depositoDestino)->nombre }}</td>
+                                    <td>
+                                        @if ($t->bien_uso_origen_id)
+                                            {{ \App\Support\Stock\TransferenciaBienUsoSupport::etiquetaBien($t->bienUsoOrigen) }}
+                                        @else
+                                            {{ optional($t->depositoOrigen)->nombre }}
+                                        @endif
+                                    </td>
+                                    <td>
+                                        @if ($t->bien_uso_destino_id)
+                                            {{ \App\Support\Stock\TransferenciaBienUsoSupport::etiquetaBien($t->bienUsoDestino) }}
+                                        @else
+                                            {{ optional($t->depositoDestino)->nombre }}
+                                        @endif
+                                    </td>
                                     <td>{{ $t->articulos->count() }}</td>
                                     <td>{{ optional($t->usuarioOrigen)->nombre ?? '—' }}</td>
                                     <td>{{ optional($t->usuarioDestino)->nombre ?? '—' }}</td>

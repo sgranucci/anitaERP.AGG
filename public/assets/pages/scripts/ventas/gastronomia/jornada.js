@@ -1618,6 +1618,62 @@
         renderResultadoConciliacionEn(resultadoInformeZ, conciliacion);
     }
 
+    function renderCobrosPostCierre(cobrosPostCierre) {
+        var contenedor = document.getElementById('informe-z-post-cierre');
+        if (!contenedor) {
+            return;
+        }
+        if (!cobrosPostCierre || !cobrosPostCierre.tiene_anomalias) {
+            contenedor.innerHTML = '';
+            return;
+        }
+
+        var html = '<div class="alert alert-warning mt-3 mb-0 cobros-post-cierre-panel">';
+        html += '<h6 class="alert-heading mb-2"><i class="fa fa-exclamation-triangle"></i> ';
+        html += 'Cobros en tótem posteriores al cierre (' + (cobrosPostCierre.cantidad_comandas || 0) + ')</h6>';
+        html += '<p class="small mb-2">Comandas dentro de la ventana cobradas en Waitry después del cierre ';
+        html += '(' + escHtml(cobrosPostCierre.cierre_jornada_en_fmt || '—') + '). ';
+        html += 'El Informe Z histórico no cambia; Tesorería debe sumar estos importes al total de facturación post-cierre.</p>';
+        html += '<div class="table-responsive"><table class="table table-sm table-bordered mb-2 bg-white">';
+        html += '<thead class="thead-light"><tr><th>Comanda</th><th>Medio</th><th class="text-right">Monto</th>';
+        html += '<th>Colocada</th><th>Cobrada Waitry</th><th>Factura proceso</th></tr></thead><tbody>';
+
+        (cobrosPostCierre.comandas || []).forEach(function (c) {
+            html += '<tr>';
+            html += '<td>' + escHtml(c.display_id || '—');
+            if (c.waitry_order_id) {
+                html += ' <span class="text-muted small">(#' + parseInt(c.waitry_order_id, 10) + ')</span>';
+            }
+            html += '</td>';
+            html += '<td>' + escHtml(c.medio_etiqueta || '—') + '</td>';
+            html += '<td class="text-right">$' + formatearMonto(c.total || 0) + '</td>';
+            html += '<td>' + escHtml(c.placed_at_fmt || '—') + '</td>';
+            html += '<td>' + escHtml(c.cobro_en_fmt || '—');
+            if (c.minutos_despues_cierre) {
+                html += ' <span class="text-muted small">(+' + parseInt(c.minutos_despues_cierre, 10) + ' min)</span>';
+            }
+            html += '</td><td class="small">';
+            if (c.facturada_proceso) {
+                html += escHtml(c.numero_comprobante || 'Sí');
+                if (c.cierre_jornada_proceso_lote) {
+                    html += ' <span class="text-muted">(lote ' + parseInt(c.cierre_jornada_proceso_lote, 10) + ')</span>';
+                }
+            } else {
+                html += '<span class="text-muted">Pendiente</span>';
+            }
+            html += '</td></tr>';
+        });
+
+        html += '</tbody></table></div>';
+        html += '<div class="row small font-weight-bold">';
+        html += '<div class="col-md-4">Informe Z al cierre:<span class="d-block">$' + formatearMonto(cobrosPostCierre.total_cierre_historico || 0) + '</span></div>';
+        html += '<div class="col-md-4">+ Post-cierre tótem:<span class="d-block text-warning">$' + formatearMonto(cobrosPostCierre.total_post_cierre || 0) + '</span></div>';
+        html += '<div class="col-md-4">= Total Tesorería:<span class="d-block" style="font-size:1.05rem;">$' + formatearMonto(cobrosPostCierre.total_tesoreria || 0) + '</span></div>';
+        html += '</div></div>';
+
+        contenedor.innerHTML = html;
+    }
+
     function renderTablasInformeZ(datos) {
         if (!contenedorInformeZ) {
             return;
@@ -1635,6 +1691,7 @@
 
         contenedorInformeZ.innerHTML = construirHtmlTablasInformeZ(totems, 'modal');
         actualizarDiferenciasEnContenedor(contenedorInformeZ);
+        renderCobrosPostCierre(datos.cobros_post_cierre || null);
 
         if (btnGuardarInformeZ) {
             btnGuardarInformeZ.disabled = false;
@@ -1667,6 +1724,10 @@
 
         if (contenedorInformeZ) {
             contenedorInformeZ.innerHTML = '<p class="text-muted">Cargando totales del sistema…</p>';
+        }
+        var contenedorPostCierre = document.getElementById('informe-z-post-cierre');
+        if (contenedorPostCierre) {
+            contenedorPostCierre.innerHTML = '';
         }
         if (resultadoInformeZ) {
             resultadoInformeZ.classList.add('d-none');

@@ -5,6 +5,7 @@ namespace App\Services\Compras;
 use App\Models\Compras\Comprobante_Proveedor_Cuota;
 use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Ordencompra_Comprobante;
+use Carbon\Carbon;
 
 /**
  * Arma el plan de cuotas del comprobante desde la OC (comprobante a venir + condición de pago ERP).
@@ -54,6 +55,8 @@ class ComprobanteProveedorCondicionPagoDesdeOcService
                 'condicionpago_id' => $ocComprobante?->condicionpago_id,
                 'ordencompra_comprobante_id' => $ocComprobante?->id,
                 'cuotas' => [],
+                'cuotas_escaladas' => false,
+                'permite_edicion_cuotas' => true,
             ];
         }
 
@@ -66,7 +69,7 @@ class ComprobanteProveedorCondicionPagoDesdeOcService
         foreach ($cuotasOc as $cuotaOc) {
             $cuotas[] = [
                 'numero_cuota' => $n,
-                'fechavencimiento' => $cuotaOc->fechavencimiento->format('Y-m-d'),
+                'fechavencimiento' => $this->formatearFecha($cuotaOc->fechavencimiento),
                 'monto' => round((float) $cuotaOc->monto * $factor, 4),
                 'moneda_id' => (int) $cuotaOc->moneda_id,
                 'cotizacion' => $cuotaOc->cotizacion !== null ? (float) $cuotaOc->cotizacion : null,
@@ -81,6 +84,8 @@ class ComprobanteProveedorCondicionPagoDesdeOcService
             'condicionpago_id' => $ocComprobante->condicionpago_id,
             'ordencompra_comprobante_id' => $ocComprobante->id,
             'cuotas' => $cuotas,
+            'cuotas_escaladas' => abs($factor - 1.0) > 0.0001,
+            'permite_edicion_cuotas' => true,
         ];
     }
 
@@ -109,5 +114,14 @@ class ComprobanteProveedorCondicionPagoDesdeOcService
                 'total_pagado' => 0,
             ]);
         }
+    }
+
+    private function formatearFecha(mixed $fecha): string
+    {
+        if ($fecha instanceof \DateTimeInterface) {
+            return $fecha->format('Y-m-d');
+        }
+
+        return Carbon::parse((string) $fecha)->format('Y-m-d');
     }
 }

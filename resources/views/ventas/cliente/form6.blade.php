@@ -1,4 +1,4 @@
-<div id="tab6" class="card form6 tab-content" style="display: none">
+<div id="tab-seguimiento" class="tab-pane fade card form6" role="tabpanel">
     <div class="card-body">
     	<table class="table" id="seguimiento-table">
     		<thead>

@@ -9,9 +9,12 @@ use App\Repositories\Ventas\PedidoRepositoryInterface;
 use App\Repositories\Ventas\Pedido_ArticuloRepositoryInterface;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Talle;
+use App\Models\Stock\MovimientoStock;
+use App\Models\Stock\Tipotransaccion_Stock;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use Auth;
 use DB;
+use Illuminate\Support\Facades\Log;
 
 class MovimientoStockService 
 {
@@ -22,14 +25,15 @@ class MovimientoStockService
 	protected $pedidoRepository;
 	protected $pedido_articuloRepository;
 
-    public function __construct(MovimientoStockRepositoryInterface $movimientostockrepository,
-								ArticuloRepositoryInterface $articulorepository,
-								Articulo_MovimientoService $articulo_movimientoservice,
-								Tipotransaccion_StockRepositoryInterface $tipotransaccionstockrepository,
-								PedidoRepositoryInterface $pedidoRepository,
-								Pedido_ArticuloRepositoryInterface $pedido_articuloRepository
-								)
-    {
+    public function __construct(
+        MovimientoStockRepositoryInterface $movimientostockrepository,
+        ArticuloRepositoryInterface $articulorepository,
+        Articulo_MovimientoService $articulo_movimientoservice,
+        Tipotransaccion_StockRepositoryInterface $tipotransaccionstockrepository,
+        PedidoRepositoryInterface $pedidoRepository,
+        Pedido_ArticuloRepositoryInterface $pedido_articuloRepository,
+        private MovimientoStockAsientoService $asientoService,
+    ) {
         $this->movimientostockRepository = $movimientostockrepository;
 		$this->articuloRepository = $articulorepository;
 		$this->articulo_movimientoService = $articulo_movimientoservice;
@@ -45,9 +49,15 @@ class MovimientoStockService
 
 	public function all()
 	{
-        $movimientostock = $this->movimientostockRepository->all();
+        return $this->movimientostockRepository->leeMovimientoStock(
+            \App\Support\Stock\MovimientoStockListadoFiltros::filtrosVacios(),
+            false
+        );
+	}
 
-        return $movimientostock;
+	public function leeMovimientoStockListado($filtros, bool $paginar = false)
+	{
+        return $this->movimientostockRepository->leeMovimientoStock($filtros, $paginar);
 	}
 
 	public function leeMovimientoStock($id)
@@ -68,6 +78,13 @@ class MovimientoStockService
 
 		if (!array_key_exists('leyenda',$data))
 			$data['leyenda'] = ' ';
+
+		$movimientostock_id = null;
+		$asientoIdNuevo = null;
+		$ctamovNuevo = null;
+		$ctamovSincronizadoEnEdicion = false;
+		$movimientoIdCtamovResync = null;
+
 		DB::beginTransaction();
 		try 
 		{
@@ -79,7 +96,14 @@ class MovimientoStockService
 			$tipotransaccion = $this->tipotransaccionStockRepository->find($tipotransaccionStockId);
 
 			if (!$tipotransaccion)
-				throw new Exception('No puede leer tipo de transacción de stock');
+				throw new \Exception('No puede leer tipo de transacción de stock');
+
+			$existente = null;
+			if ($funcion === 'update' && $id) {
+				$existente = $this->movimientostockRepository->find($id);
+			}
+
+			$this->asientoService->assertCuadreAntesDeGrabar($data, $tipotransaccion, $existente);
 
 			$signoCantidadMovimiento = $data['signo_cantidad'] ?? $tipotransaccion->signo;
 
@@ -135,11 +159,11 @@ class MovimientoStockService
 				if (isset($data['skus']))
 					$skus = $data['skus'];
 				$combinaciones = $data['combinaciones_id'] ?? [];
-				$modulos = $data['modulos_id'];
+				$modulos = $data['modulos_id'] ?? [];
 				$numeroitems = $data['items'];
 				$cantidades = $data['cantidades'];
-				$cajas = $data['cajas'];
-				$piezas = $data['piezas'];
+				$cajas = $data['cajas'] ?? array_fill(0, count($articulos), 0);
+				$piezas = $data['piezas'] ?? array_fill(0, count($articulos), 0);
 				$precios = $data['precios'];
 				$listaprecios = $data['listasprecios_id'];
 				$incluyeimpuestos = $data['incluyeimpuestos'];
@@ -172,7 +196,8 @@ class MovimientoStockService
 						'signo_cantidad' => $signoCantidadMovimiento,
 						'tipotransaccion_stock_id' => $tipotransaccionStockId,
 						'movimientostock_id' => $movimientostock_id,
-						'deposito_id' => $data['deposito_id'],
+						'deposito_id' => ! empty($data['deposito_id']) ? $data['deposito_id'] : null,
+						'bien_uso_id' => ! empty($data['bien_uso_id']) ? (int) $data['bien_uso_id'] : null,
 						'venta_id' => null,
 						'pedido_combinacion_id' => null,
 						'ordentrabajo_id' => null,
@@ -243,11 +268,63 @@ class MovimientoStockService
 	  			//					$monedas[$i], $descuentos[$i], '', $data['leyendafactura'], 'create');
 				//	}									
 				}
+
+				$resultadoAsiento = $this->sincronizarAsientoContable($movimientostock_id, $tipotransaccion, $data);
+				$asientoIdNuevo = $resultadoAsiento['asiento_id_nuevo'] ?? null;
+				$ctamovNuevo = $resultadoAsiento['ctamov_nuevo'] ?? null;
+				$ctamovSincronizadoEnEdicion = (bool) ($resultadoAsiento['ctamov_sincronizado_edicion'] ?? false);
+				$movimientoIdCtamovResync = $ctamovSincronizadoEnEdicion ? $movimientostock_id : null;
 			}
 			DB::commit();
-		} catch (\Exception $e) 
+
+			$asientoIdNuevo = null;
+			$ctamovNuevo = null;
+			$ctamovSincronizadoEnEdicion = false;
+			$movimientoIdCtamovResync = null;
+		} catch (\Throwable $e) 
 		{
-			DB::rollback();
+			if ($asientoIdNuevo > 0) {
+				try {
+					$stub = new MovimientoStock(['id' => $movimientostock_id ?? 0]);
+					$stub->asiento_id = $asientoIdNuevo;
+					$this->asientoService->anularAsiento($stub);
+				} catch (\Throwable $rollbackAsiento) {
+					report($rollbackAsiento);
+					if ($ctamovNuevo) {
+						try {
+							$this->asientoService->revertirCtamovAnita(
+								(int) $ctamovNuevo['empresa_id'],
+								(string) $ctamovNuevo['numeroasiento']
+							);
+						} catch (\Throwable $rollbackCtamov) {
+							report($rollbackCtamov);
+						}
+					}
+				}
+			}
+
+			DB::rollBack();
+
+			if ($ctamovSincronizadoEnEdicion && $movimientoIdCtamovResync) {
+				try {
+					$movResync = MovimientoStock::query()
+						->with([
+							'asientos',
+							'tipotransaccion_stock',
+							'articulos_movimiento.articulos.articulo_cuentacontables',
+						])
+						->find($movimientoIdCtamovResync);
+					if ($movResync && (int) ($movResync->asiento_id ?? 0) > 0) {
+						$this->asientoService->sincronizarCtamovAnitaMovimiento($movResync);
+					}
+				} catch (\Throwable $resyncCtamov) {
+					Log::warning('MovimientoStock: no se pudo resincronizar ctamov Anita tras rollback', [
+						'movimientostock_id' => $movimientoIdCtamovResync,
+						'mensaje' => $resyncCtamov->getMessage(),
+					]);
+				}
+			}
+
 			throw $e;
 		}
 		
@@ -269,11 +346,91 @@ class MovimientoStockService
 
 	public function borraMovimientoStock($id)
 	{
-		$movimientostock = $this->movimientostockRepository->deletePorId($id);
+		DB::beginTransaction();
+		try {
+			$movimiento = $this->movimientostockRepository->find($id);
+			if ((int) ($movimiento->asiento_id ?? 0) > 0) {
+				$this->asientoService->anularAsiento($movimiento);
+			}
 
-		$this->articulo_movimientoService->deletePorMovimientoStockId($id);
+			$this->articulo_movimientoService->deletePorMovimientoStockId($id);
+			$movimientostock = $this->movimientostockRepository->deletePorId($id);
 
-		return $movimientostock;
+			DB::commit();
+
+			return $movimientostock;
+		} catch (\Throwable $e) {
+			DB::rollBack();
+			throw $e;
+		}
+	}
+
+	/**
+	 * @return array{
+	 *   asiento_id_nuevo: int|null,
+	 *   ctamov_nuevo: array{empresa_id: int, numeroasiento: string}|null,
+	 *   ctamov_sincronizado_edicion: bool
+	 * }
+	 */
+	private function sincronizarAsientoContable(int $movimientostockId, Tipotransaccion_Stock $tipo, array $data): array
+	{
+		$resultado = [
+			'asiento_id_nuevo' => null,
+			'ctamov_nuevo' => null,
+			'ctamov_sincronizado_edicion' => false,
+		];
+
+		$movimiento = MovimientoStock::query()
+			->with([
+				'tipotransaccion_stock',
+				'articulos_movimiento.articulos.articulo_cuentacontables',
+			])
+			->findOrFail($movimientostockId);
+
+		$ccDestino = (int) ($data['centrocosto_destino_id'] ?? 0);
+		if ($ccDestino > 0) {
+			$movimiento->centrocosto_destino_id = $ccDestino;
+			$movimiento->save();
+		}
+
+		if (! $this->asientoService->debeGenerarAsiento($tipo)) {
+			if ((int) ($movimiento->asiento_id ?? 0) > 0) {
+				$this->asientoService->anularAsiento($movimiento);
+				$movimiento->update(['asiento_id' => null]);
+			}
+
+			return $resultado;
+		}
+
+		$this->asientoService->assertCuadreMovimiento($movimiento);
+
+		$asientoId = (int) ($movimiento->asiento_id ?? 0);
+		if ($asientoId > 0) {
+			$this->asientoService->recuadrarAsientoExistente($movimiento->fresh([
+				'asientos',
+				'tipotransaccion_stock',
+				'articulos_movimiento.articulos.articulo_cuentacontables',
+			]));
+			$resultado['ctamov_sincronizado_edicion'] = true;
+
+			return $resultado;
+		}
+
+		$nuevoAsientoId = $this->asientoService->generarAsiento($movimiento);
+		if ($nuevoAsientoId > 0) {
+			$movimiento->update(['asiento_id' => $nuevoAsientoId]);
+			$movimiento->loadMissing('asientos');
+			$asiento = $movimiento->asientos;
+			$resultado['asiento_id_nuevo'] = $nuevoAsientoId;
+			if ($asiento) {
+				$resultado['ctamov_nuevo'] = [
+					'empresa_id' => (int) $asiento->empresa_id,
+					'numeroasiento' => (string) $asiento->numeroasiento,
+				];
+			}
+		}
+
+		return $resultado;
 	}
 
 	private function assertPeriodoContableStock(array $data): void

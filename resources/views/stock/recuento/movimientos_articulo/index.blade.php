@@ -1,6 +1,6 @@
 @extends("theme.$theme.layout")
 @section('titulo')
-Movimientos de stock — {{ $contexto['articulo']['sku'] ?? '' }}
+Kardex — {{ $contexto['articulo']['sku'] ?? '' }}
 @endsection
 
 @section("scripts")
@@ -22,8 +22,8 @@ Movimientos de stock — {{ $contexto['articulo']['sku'] ?? '' }}
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">
-                    <i class="fa fa-exchange"></i>
-                    Movimientos de stock
+                    <i class="fa fa-list-alt"></i>
+                    Kardex de stock
                 </h3>
                 <div class="card-tools">
                     @if ($modoConsulta)

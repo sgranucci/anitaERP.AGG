@@ -15,4 +15,8 @@ interface MozoGastronomiaRepositoryInterface extends RepositoryInterface
     public function findPorCodigo(string $codigo, int $empresaId, bool $filtrarEmpresasAsignadas = false): ?MozoGastronomia;
 
     public function findPorId(int $id, int $empresaId): ?MozoGastronomia;
+
+    public function proximoCodigoLocal(int $empresaId): string;
+
+    public function codigoExisteEnEmpresa(int $empresaId, string $codigo, ?int $ignorarId = null): bool;
 }

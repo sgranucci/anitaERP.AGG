@@ -73,129 +73,38 @@
             $("#botonestado").html("<i class='fa fa-bell'></i>&nbsp;Estado "+descripcion);
         });
 
-        $("#botonform1").click(function(){
-            $(".form1").show();
-            $(".form2").hide();
-            $(".form3").hide();
-            $(".form4").hide();
-            $(".form5").hide();
-            $(".form6").hide();
-            $(".form7").hide();
-            $(".form8").hide();
-            $(".form9").hide();
-        });
+        $('#tabs-cliente a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
+            var target = $(e.target).attr('href');
 
-        $("#botonform2").click(function(){
-            $(".form1").hide();
-            $(".form2").show();
-            $(".form3").hide();
-            $(".form4").hide();
-            $(".form5").hide();
-            $(".form6").hide();
-            $(".form7").hide();
-            $(".form8").hide();
-            $(".form9").hide();
+            if (target === '#tab-lugares-entrega') {
+                activaEventoEntrega();
 
-			$("#titulo").html("");
-			$("#titulo").html("<span class='fa fa-cash-register'></span> Datos facturac&oacute;n");
-        });
+                $("#tbody-tabla .localidades").each(function(index) {
+                    var provincia = $(this).parents("tr").find(".provincias");
+                    var localidad = $(this).parents("tr").find(".localidades");
+                    completarLocalidadesEntrega(provincia);
 
-        $("#botonform3").click(function(){
-            $(".form1").hide();
-            $(".form2").hide();
-            $(".form3").show();
-            $(".form4").hide();
-            $(".form5").hide();
-            $(".form6").hide();
-            $(".form7").hide();
-            $(".form8").hide();
-            $(".form9").hide();            
+                    var localidad_id_previa = $(this).parents("tr").find(".localidad_id_previas").val();
+                    if (localidad_id_previa != "") {
+                        setTimeout(() => {
+                            $(localidad).val(localidad_id_previa);
+                            $("this option[value="+localidad_id_previa+"]").attr("selected",true);
+                        }, 1000);
+                    }
+                });
+            }
 
-			activaEventoEntrega();
+            if (target === '#tab-leyendas' || target === '#tab-seguimiento') {
+                $("#leyenda").focus();
+            }
 
-	        $("#tbody-tabla .localidades").each(function(index) {
-            	var provincia = $(this).parents("tr").find(".provincias");
-            	var localidad = $(this).parents("tr").find(".localidades");
-            	completarLocalidadesEntrega(provincia);
-	
-            	var localidad_id_previa = $(this).parents("tr").find(".localidad_id_previas").val();
-            	if (localidad_id_previa != "") {
-                	setTimeout(() => {
-                        $(localidad).val(localidad_id_previa);
-                        $("this option[value="+localidad_id_previa+"]").attr("selected",true);
-                	}, 1000);
-				}
-            });
-        });
+            if (target === '#tab-articulos-suspendidos') {
+                $('#articulo-suspendido-table').find('tr').last().find('.codigoarticulo').focus();
+            }
 
-        $("#botonform4").click(function(){
-            $(".form1").hide();
-            $(".form2").hide();
-            $(".form3").hide();
-            $(".form4").show();
-            $(".form5").hide();
-            $(".form6").hide();
-            $(".form7").hide();
-            $(".form8").hide();
-            $(".form9").hide();
-
-		 	// Hace foco en el campo de la leyenda
-			$("#leyenda").focus();
-        });
-
-        $("#botonform5").click(function(){
-            $(".form1").hide();
-            $(".form2").hide();
-            $(".form3").hide();
-            $(".form4").hide();
-            $(".form5").show();
-            $(".form6").hide();
-            $(".form7").hide();
-            $(".form8").hide();
-            $(".form9").hide();            
-        });
-
-        $("#botonform6").click(function(){
-            $(".form1").hide();
-            $(".form2").hide();
-            $(".form3").hide();
-            $(".form4").hide();
-            $(".form5").hide();
-            $(".form6").show();
-            $(".form7").hide();
-            $(".form8").hide();
-            $(".form9").hide();     
-            
-		 	// Hace foco en el campo de la leyenda
-			$("#leyenda").focus();            
-        });
-	       
-        $("#botonform7").click(function(){
-            $(".form1").hide();
-            $(".form2").hide();
-            $(".form3").hide();
-            $(".form4").hide();
-            $(".form5").hide();
-            $(".form6").hide();
-            $(".form7").show();
-            $(".form8").hide();
-            $(".form9").hide();      
-            
-            $('#articulo-suspendido-table').find('tr').last().find('.codigoarticulo').focus();
-        });
-	             
-        $("#botonform8").click(function(){
-            $(".form1").hide();
-            $(".form2").hide();
-            $(".form3").hide();
-            $(".form4").hide();
-            $(".form5").hide();
-            $(".form6").hide();
-            $(".form7").hide();
-            $(".form8").show();
-            $(".form9").hide();   
-            
-            $('#cm05-table').find('tr').last().find('.codigoprovincia').focus();
+            if (target === '#tab-cm05') {
+                $('#cm05-table').find('tr').last().find('.codigoprovincia').focus();
+            }
         });
 	                     
         muestraEmiteNotaDeCredito();

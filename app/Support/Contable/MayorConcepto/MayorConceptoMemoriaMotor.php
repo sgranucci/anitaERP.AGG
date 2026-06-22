@@ -35,6 +35,8 @@ class MayorConceptoMemoriaMotor
     public const TIPOS_FACTURA_APLICADA = [
         'FIA', 'FIB', 'FIC', 'FID', 'FIE', 'FIF', 'FIG', 'FIH',
         'NDC', 'NDB', 'REC', 'FAC', 'FAD', 'FAE', 'FIS', 'FGA', 'FNB',
+        /** Obra social / prepaga (FNS→COM, DIS/CIS→521060 sueldos). */
+        'FNS', 'DIS', 'CIS',
     ];
 
     /**

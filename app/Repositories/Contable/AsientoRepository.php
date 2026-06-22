@@ -129,6 +129,19 @@ class AsientoRepository implements AsientoRepositoryInterface
         $this->actualizarAnita($data);
     }
 
+    public function eliminarCtamovAnitaPorNumero(int $empresaId, string $numeroAsiento): void
+    {
+        $numeroAsiento = trim($numeroAsiento);
+        if ($empresaId <= 0 || $numeroAsiento === '') {
+            return;
+        }
+
+        $empresa = $this->empresaRepository->findPorId($empresaId);
+        $codigoEmpresa = $empresa ? $empresa->codigo : $empresaId;
+
+        $this->eliminarAnita($codigoEmpresa, $numeroAsiento);
+    }
+
     public function delete($id)
     {
     	$asiento = Asiento::find($id);

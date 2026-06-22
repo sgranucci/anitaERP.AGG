@@ -98,10 +98,11 @@ final class GastronomiaFacturacionService
 
     /**
      * Normaliza el total de la factura de cortesía a exactamente $0,01 cuando el cálculo
-     * de impuestos arrastró centavos por redondeo de neto por línea (`ImpuestoService::calculaNetoItem`
-     * rounds 0.005 → 0.01 por ítem; con dos o más ítems suma $0,02+). Patcha la venta, el
-     * concepto Exento de venta_impuesto y el data_cae pendiente, manteniendo la consistencia
-     * con ARCA (ImpTotal = ImpOpEx + ImpNeto + ImpTotConc + ImpIVA + ImpTrib).
+     * de impuestos no cierra en ese importe:
+     * - exceso: redondeo por línea (`ImpuestoService::calculaNetoItem` rounds 0.005 → 0.01 por ítem).
+     * - déficit ($0): netos exentos por renglón redondean a $0 con descuento ≈100 % aunque
+     *   Subtotal − Descuento de pie deje $0,01 (Total en conceptosTotales queda en cero).
+     * Patcha la venta, el concepto Exento de venta_impuesto y el data_cae pendiente.
      *
      * @param  array<string, mixed>  $resultado  Devuelto por `generaComprobanteGeneral`. Mutado in-place.
      */
@@ -118,18 +119,23 @@ final class GastronomiaFacturacionService
         }
 
         $totalActual = round((float) $venta->total, 2);
-        $exceso = round($totalActual - self::IMPORTE_MINIMO_FACTURA, 2);
-        if ($exceso <= 0.) {
+        if (abs($totalActual - self::IMPORTE_MINIMO_FACTURA) <= 0.001) {
             return;
         }
+
+        $delta = round(self::IMPORTE_MINIMO_FACTURA - $totalActual, 2);
+        $motivo = $delta > 0.
+            ? 'Netos exentos por renglón redondearon a $0 con descuento de pie ≈100 % '
+                .'(Total en ImpuestoService quedó en $0).'
+            : 'Redondeo por línea en ImpuestoService::calculaNetoItem '
+                .'(0,005 → 0,01 por ítem con descuento de pie 100%).';
 
         Log::warning('gastronomia.factura.cortesia_total_normalizado', [
             'venta_id' => $ventaId,
             'total_calculado' => $totalActual,
             'total_normalizado' => self::IMPORTE_MINIMO_FACTURA,
-            'exceso_centavos' => $exceso,
-            'motivo' => 'Redondeo por línea en ImpuestoService::calculaNetoItem '
-                .'(0,005 → 0,01 por ítem con descuento de pie 100%).',
+            'delta_centavos' => $delta,
+            'motivo' => $motivo,
         ]);
 
         $venta->total = self::IMPORTE_MINIMO_FACTURA;
@@ -140,16 +146,25 @@ final class GastronomiaFacturacionService
             ->where('concepto', 'Exento')
             ->first();
         if ($exento instanceof Venta_Impuesto) {
-            $importeExento = round(max(0., (float) $exento->importe - $exceso), 2);
-            $exento->importe = $importeExento;
+            $exento->importe = round(max(0., (float) $exento->importe + $delta), 2);
             $exento->save();
+        } else {
+            Venta_Impuesto::query()->create([
+                'venta_id' => $ventaId,
+                'concepto' => 'Exento',
+                'baseimponible' => 0.,
+                'tasa' => 0.,
+                'importe' => self::IMPORTE_MINIMO_FACTURA,
+                'provincia_id' => null,
+                'impuesto_id' => null,
+            ]);
         }
 
         if (isset($resultado['cae_pendiente']) && is_array($resultado['cae_pendiente'])) {
             $dataCae = $resultado['cae_pendiente']['data_cae'] ?? null;
             if (is_array($dataCae)) {
                 $dataCae['total'] = self::IMPORTE_MINIMO_FACTURA;
-                $dataCae['exento'] = round(max(0., (float) ($dataCae['exento'] ?? 0) - $exceso), 2);
+                $dataCae['exento'] = round(max(0., (float) ($dataCae['exento'] ?? 0) + $delta), 2);
                 $resultado['cae_pendiente']['data_cae'] = $dataCae;
             }
         }

@@ -11,7 +11,7 @@ $(document).ready(function () {
     //TOOLTIPS
     $('body').tooltip({
         trigger: 'hover',
-        selector: '.tooltipsC',
+        selector: '.tooltipsC:not(.consultaarticulo):not(.consultadeposito)',
         placement: 'top',
         html: true,
         container: 'body'

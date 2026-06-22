@@ -12,12 +12,11 @@ use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Support\Ventas\ArcaFacturaQrSupport;
 use App\Support\Ventas\EscPosTicketWriter;
 use App\Support\Ventas\GastronomiaVentaDisplaySupport;
+use App\Support\Ventas\NcjetdirectSalidaSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use RuntimeException;
-use Symfony\Component\Process\Exception\ProcessFailedException;
-use Symfony\Component\Process\Process;
 use Throwable;
 
 /**
@@ -164,16 +163,33 @@ final class GastronomiaFacturaTicketService
             $msGenerar = round((microtime(true) - $t0Gen) * 1000, 2);
             $this->guardarVistaPreviaTexto($ventaId);
             $ruta = $this->guardarArchivoTemporal($ventaId, $bytes);
+            $resultadoImpresion = null;
             $msImprimir = null;
             try {
                 $t0Imp = microtime(true);
-                $this->ejecutarComandoSalida($comando, $ruta);
+                $resultadoImpresion = NcjetdirectSalidaSupport::ejecutar($comando, $ruta);
                 $msImprimir = round((microtime(true) - $t0Imp) * 1000, 2);
             } finally {
                 @unlink($ruta);
             }
 
-            Log::info('gastronomia.ticket_factura.timing', [
+            if ($resultadoImpresion !== null && ! $resultadoImpresion['ok']) {
+                Log::warning('gastronomia.ticket_factura.fallo', array_merge([
+                    'venta_id' => $ventaId,
+                    'salida_id' => (int) $salida->id,
+                    'cfg_id' => (int) $cfg->id,
+                    'puntoventa_codigo' => $venta->puntoventas->codigo ?? null,
+                    'imprimir_ms' => $msImprimir,
+                    'msg' => $resultadoImpresion['mensaje'],
+                ], NcjetdirectSalidaSupport::contextoLog($resultadoImpresion)));
+
+                return [
+                    'ok' => false,
+                    'mensaje' => 'No se pudo imprimir el ticket: '.$resultadoImpresion['mensaje'],
+                ];
+            }
+
+            Log::info('gastronomia.ticket_factura.timing', array_merge([
                 'venta_id' => $ventaId,
                 'cfg_id' => (int) $cfg->id,
                 'salida_id' => (int) $salida->id,
@@ -182,9 +198,12 @@ final class GastronomiaFacturaTicketService
                 'imprimir_ms' => $msImprimir,
                 'total_ms' => round((microtime(true) - $t0Total) * 1000, 2),
                 'ticket_bytes' => strlen($bytes),
-            ]);
+            ], $resultadoImpresion !== null ? NcjetdirectSalidaSupport::contextoLog($resultadoImpresion) : []));
 
-            return ['ok' => true];
+            return [
+                'ok' => true,
+                'aviso_sin_confirmacion_papel' => NcjetdirectSalidaSupport::requiereAvisoSinConfirmacionPapel($resultadoImpresion),
+            ];
         } catch (Throwable $e) {
             Log::warning('gastronomia.ticket_factura.fallo', [
                 'venta_id' => $ventaId,
@@ -449,28 +468,6 @@ final class GastronomiaFacturaTicketService
         }
 
         return $ruta;
-    }
-
-    private function ejecutarComandoSalida(string $comandoPlantilla, string $rutaArchivo): void
-    {
-        if (! str_contains($comandoPlantilla, '%s')) {
-            throw new InvalidArgumentException('El comando de salida debe incluir el marcador %s.');
-        }
-
-        // Mismo patrón que ArticuloController / PedidoService: plantilla con "%s" y sprintf.
-        // No usar escapeshellarg aquí: con "%s" en la plantilla duplica comillas y el script no encuentra el archivo.
-        $comando = sprintf($comandoPlantilla, $rutaArchivo);
-        if (trim($comando) === '') {
-            throw new InvalidArgumentException('Comando de salida vacío.');
-        }
-
-        $process = Process::fromShellCommandline($comando);
-        $process->setTimeout((int) config('gastronomia.ticket_comando_timeout_segundos', 30));
-        $process->run();
-
-        if (! $process->isSuccessful()) {
-            throw new ProcessFailedException($process);
-        }
     }
 
     private function formatearNumeroTicket(Venta $venta): string

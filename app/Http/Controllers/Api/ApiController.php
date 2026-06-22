@@ -501,7 +501,8 @@ class ApiController extends Controller
             'moneda' => $request->moneda,
             'moneda_id' => $moneda_id,
             'cotizacion' => $request->cotizacion,
-            'estado' => 'PENDIENTE'
+            'estado' => 'PENDIENTE',
+            'origen_entrada' => \App\Support\Compras\PrecargaComprobanteOrigenEntrada::API,
         ];
 
         $duplicado = $this->precarga_comprobante_proveedorRepository->findDuplicadoPrecarga(

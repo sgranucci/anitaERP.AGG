@@ -81,6 +81,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Validación impuestos padrón — proveedores en comprobante (RI / Monotributo)
+    |--------------------------------------------------------------------------
+    */
+    'padron_validacion_proveedor' => [
+        'habilitado' => filter_var(env('ARCA_PADRON_VALIDAR_PROVEEDOR', env('ARCA_PADRON_VALIDAR_CLIENTE', true)), FILTER_VALIDATE_BOOLEAN),
+        'impuesto_iva_id' => 30,
+        'impuesto_monotributo_id' => 20,
+        'condicioniva_responsable_inscripto_id' => 1,
+        'condicioniva_monotributo_id' => 4,
+        'estado_impuesto_activo' => 'AC',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Alias legacy (solo padrón) — preferir arca.padron.*
     |--------------------------------------------------------------------------
     */

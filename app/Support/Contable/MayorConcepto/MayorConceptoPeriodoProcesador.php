@@ -30,6 +30,9 @@ class MayorConceptoPeriodoProcesador
     /** @var array<int, int> */
     private array $conceptoPorOcCache = [];
 
+    /** @var array<string, int> proveedor Anita → cuenta 521060 prepaga (OSDE, Galeno…) */
+    private array $cuentaPrepagaPorProveedor = [];
+
     private int $empresaActiva = 0;
 
     private readonly MayorConceptoMediopagoSupport $mediopagoSupport;
@@ -75,6 +78,7 @@ class MayorConceptoPeriodoProcesador
         }
 
         $statsPreload = $this->precargarCachesCompras($auxpagLista);
+        $this->precargarCuentaPrepagaPorProveedor($auxpagLista);
 
         $subdiarioPorAsiento = $this->indexarSubdiarioPorAsiento($subdiario);
         $ctamovPorAsiento = $this->indexarCtamovPorAsiento($ctamovLista);
@@ -223,6 +227,7 @@ class MayorConceptoPeriodoProcesador
         $this->planoContrapartidasDesdeDisp = [];
         $this->consultasBridgeIndividuales = 0;
         $this->conceptoPorOcCache = [];
+        $this->cuentaPrepagaPorProveedor = [];
     }
 
     private int $consultasBridgeIndividuales = 0;
@@ -1630,6 +1635,11 @@ class MayorConceptoPeriodoProcesador
             return true;
         }
 
+        // Anita imputa_ctav: líneas ctamov con cuenta > límite caja/banco (IVA débito gastro/estac., retenciones…).
+        if ($cuenta >= 214010000 && $cuenta < 215000000) {
+            return true;
+        }
+
         return false;
     }
 
@@ -1885,7 +1895,63 @@ class MayorConceptoPeriodoProcesador
             return $cuentaGaming;
         }
 
+        if ($cheque !== null) {
+            $prov = trim((string) ($cheque->axp_pro ?? ''));
+            if ($prov !== '' && isset($this->cuentaPrepagaPorProveedor[$prov])) {
+                return $this->cuentaPrepagaPorProveedor[$prov];
+            }
+        }
+
         return 117010001;
+    }
+
+    /**
+     * Cache proveedor → cuenta 521060 prepaga desde FNS/DIS/CIS del período (CHP OSDE/Galeno).
+     *
+     * @param  list<object>  $auxpagLista
+     */
+    private function precargarCuentaPrepagaPorProveedor(array $auxpagLista): void
+    {
+        foreach ($auxpagLista as $aplicacion) {
+            $tipoAp = strtoupper(trim((string) ($aplicacion->axp_tipo_ap ?? '')));
+            if (! in_array($tipoAp, ['FNS', 'DIS', 'CIS'], true)) {
+                continue;
+            }
+
+            $prov = trim((string) ($aplicacion->axp_pro ?? ''));
+            if ($prov === '') {
+                continue;
+            }
+
+            $cuenta = $this->resolverCuentaGastoDesdeAplicacionPrepaga($aplicacion);
+            if ($cuenta > 0) {
+                $this->cuentaPrepagaPorProveedor[$prov] = $cuenta;
+            }
+        }
+    }
+
+    private function resolverCuentaGastoDesdeAplicacionPrepaga(object $aplicacion): int
+    {
+        foreach ($this->filtrarComGasto($this->cargarComDesdeFactura($aplicacion)) as $lineaGasto) {
+            $cuenta = (int) ($lineaGasto->subd_cuenta ?? 0);
+            if ($this->esCuentaGastoPrepagaSueldos($cuenta)) {
+                return $cuenta;
+            }
+        }
+
+        foreach ($this->filtrarComGasto($this->cargarSubdiarioComprobanteAplicacion($aplicacion)) as $lineaGasto) {
+            $cuenta = (int) ($lineaGasto->subd_cuenta ?? 0);
+            if ($this->esCuentaGastoPrepagaSueldos($cuenta)) {
+                return $cuenta;
+            }
+        }
+
+        return 0;
+    }
+
+    private function esCuentaGastoPrepagaSueldos(int $cuenta): bool
+    {
+        return $cuenta >= 521060000 && $cuenta < 521070000;
     }
 
     /**

@@ -3,11 +3,16 @@
 return [
     /*
     |--------------------------------------------------------------------------
-    | Archivos del comprobante de proveedor (ERP)
+    | Archivos PDF de comprobantes (montaje compartido con precarga IA)
     |--------------------------------------------------------------------------
     |
-    | Adjuntos manuales bajo public/storage/archivos/comprobantes_proveedor/{id}/.
-    | Los PDF de IA siguen en PRECARGA_FACTURAS_SCAN_BASE/comprobantes (ver precarga_comprobante.php).
+    | Base: PRECARGA_FACTURAS_SCAN_BASE (ej. /data/facturas o /Facturas_scan).
+    | Estructura: {base}/comprobantes/{CUIT}/{Y-m}/{TIPO}-{letra}-{sucursal}-{nro}.pdf
+    | Ejemplo: /data/facturas/comprobantes/30-65781386-5/2026-02/FGA-A-00003-00946427.pdf
+    |
+    | - Precarga IA: rutaalmacenamiento → storage:/comprobantes/...
+    | - Alta manual sin precarga: mismo montaje vía ComprobanteProveedorArchivoPathSupport
+    | - Otros adjuntos (no PDF factura): public/storage/archivos/comprobantes_proveedor/{id}/
     |
     */
     'archivos_subdir' => env('COMPROBANTE_PROVEEDOR_ARCHIVOS_SUBDIR', 'archivos/comprobantes_proveedor'),
@@ -25,4 +30,6 @@ return [
     'anita_sistema_compras' => 'compras',
     'anita_sistema_contab' => 'contab',
     'anita_tabla_ctamov' => 'ctamov',
+
+    'tipoasiento_abreviatura' => env('COMPROBANTE_PROVEEDOR_TIPOASIENTO', 'COM'),
 ];

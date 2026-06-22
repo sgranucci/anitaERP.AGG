@@ -105,6 +105,8 @@ final class RecepcionProveedorOcPendienteSupport
             ->orderByDesc('oc.numeroordencompra')
             ->limit($limite);
 
+        RecepcionProveedorVisibilidadSupport::aplicarFiltroOrdencompra($query, 'oc');
+
         return self::mapearFilas($query->get());
     }
 

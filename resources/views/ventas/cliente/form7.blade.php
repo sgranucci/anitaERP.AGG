@@ -1,4 +1,4 @@
-<div id="tab7" class="card form7 tab-content" style="display: none">
+<div id="tab-articulos-suspendidos" class="tab-pane fade card form7" role="tabpanel">
     <div class="card-body">
     	<table class="table" id="articulo-suspendido-table">
     		<thead>

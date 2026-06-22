@@ -1,4 +1,4 @@
-<div id="tab8" class="card form8 tab-content" style="display: none">
+<div id="tab-cm05" class="tab-pane fade card form8" role="tabpanel">
     <div class="card-body">
     	<table class="table" id="cm05-table">
     		<thead>

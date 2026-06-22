@@ -57,44 +57,20 @@ $( "#botonform0" ).click(function() {
             @endif
                 @csrf
                 <input type="hidden" id="emitenotadecredito" name="emitenotadecredito" value="{{old('emitenotadecredito', $data->emitenotadecredito ?? '')}}" >
-                <div align="center" style="margin: 5px;">
-                    <button type="button" id="botonform1" class="btn btn-primary btn-sm">
-                        <i class="fa fa-user"></i> Datos principales
-                    </button>
-                    <button type="button" id="botonform2" class="btn btn-info btn-sm">
-                        <span class="fa fa-copy"></span> Datos facturaci&oacute;n
-                    </button>
-                    <button type="button" id="botonform3" class="btn btn-info btn-sm">
-                        <span class="fa fa-copy"></span> Lugares de entrega
-                    </button>
-                    <button type="button" id="botonform4" class="btn btn-info btn-sm">
-                        <span class="fa fa-copy"></span> Leyendas
-                    </button>
-                    <button type="button" id="botonform5" class="btn btn-info btn-sm">
-                        <span class="fa fa-copy"></span> Archivos asociados
-                    </button>
-                    <button type="button" id="botonform6" class="btn btn-info btn-sm">
-                        <span class="fa fa-copy"></span> Seguimiento
-                    </button>                    
-                    <button type="button" id="botonform7" class="btn btn-info btn-sm">
-                        <span class="fa fa-copy"></span> Articulos suspendidos
-                    </button>
-                    <button type="button" id="botonform8" class="btn btn-info btn-sm">
-                        <span class="fa fa-copy"></span> CM05
-                    </button>
-                    <button type="button" id="btn-consulta-arca-padron-crear" class="btn btn-outline-secondary btn-sm" title="Ingresá el CUIT y consultá el padrón ARCA">
-                        <i class="fa fa-search"></i> Consulta padrón ARCA
-                    </button>
-                </div>                
-                <div class="card-body" style="padding-bottom: 0; padding-top: 5px;">
-                    @include('ventas.cliente.form1')
-                    @include('ventas.cliente.form2')
-                    @include('ventas.cliente.form3')
-                    @include('ventas.cliente.form4')
-                    @include('ventas.cliente.form5')
-                    @include('ventas.cliente.form6')
-                    @include('ventas.cliente.form7')
-                    @include('ventas.cliente.form8')
+                <div class="card-body pt-0 pb-0">
+                    <input type="hidden" id="emitenotadecredito" name="emitenotadecredito" value="{{old('emitenotadecredito', $data->emitenotadecredito ?? '')}}" >
+                    @include('ventas.cliente.partials.tabs_header', ['mostrarSuitecrm' => false])
+                    <div class="tab-content pt-3 px-1">
+                        @include('ventas.cliente.form1')
+                        @include('ventas.cliente.form2')
+                        @include('ventas.cliente.form3')
+                        @include('ventas.cliente.form4')
+                        @include('ventas.cliente.form5')
+                        @include('ventas.cliente.form6')
+                        @include('ventas.cliente.form7')
+                        @include('ventas.cliente.form8')
+                    </div>
+                    @include('ventas.cliente.partials.arca_padron_support')
                 </div>
                 <div class="card-footer">
                 	<div class="row">

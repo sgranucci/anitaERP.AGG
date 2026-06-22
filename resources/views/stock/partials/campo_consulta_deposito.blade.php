@@ -25,6 +25,7 @@
     $layout = $layout ?? 'inline';
     $colLabel = $col_label ?? 'col-lg-4';
     $colInput = $col_input ?? 'col-lg-7';
+    $tipodeposito = $tipodeposito ?? '';
     $puedeAbrirAbmDeposito = can('editar-depositos', false) || can('listar-depositos', false);
     $editUrl = ((int) $depositoId > 0 && $puedeAbrirAbmDeposito)
         ? route('editar_depmae', ['id' => (int) $depositoId, 'origen' => 'modal_consulta', 'vista' => 'consulta'])
@@ -32,7 +33,7 @@
 @endphp
 
 @if ($layout === 'form_row')
-    <div class="form-group row tm-deposito-campo mb-2" id="tm_deposito_{{ $prefix }}">
+    <div class="form-group row tm-deposito-campo mb-2" id="tm_deposito_{{ $prefix }}" data-tipodeposito="{{ $tipodeposito }}">
         <label for="{{ $inputId }}_codigo" class="{{ $colLabel }} control-label text-right pr-2 {{ $required ? 'requerido' : '' }}">{{ $label }}@if(!empty($ayuda_tooltip)) <i class="fa fa-question-circle text-muted tooltipsC ml-1" title="{{ $ayuda_tooltip }}"></i>@endif</label>
         <div class="{{ $colInput }}">
             <div class="d-flex flex-nowrap align-items-center tm-deposito-campo-inputs w-100" style="gap: 4px;">
@@ -45,7 +46,7 @@
                         id="{{ $inputId }}_descripcion" value="{{ $descripcion }}" readonly
                         style="min-width: 0; flex: 1 1 auto;">
                 @else
-                    <button type="button" title="Consulta dep&oacute;sitos" class="btn-accion-tabla consultadeposito tooltipsC flex-shrink-0">
+                    <button type="button" title="Consulta dep&oacute;sitos (F1)" class="btn-accion-tabla consultadeposito flex-shrink-0">
                         <i class="fa fa-search text-primary"></i>
                     </button>
                     @if ($mostrarEditar && $puedeAbrirAbmDeposito)
@@ -67,14 +68,14 @@
         </div>
     </div>
 @else
-    <div class="form-group col-12 mb-2 tm-deposito-campo" id="tm_deposito_{{ $prefix }}">
+    <div class="form-group col-12 mb-2 tm-deposito-campo" id="tm_deposito_{{ $prefix }}" data-tipodeposito="{{ $tipodeposito }}">
         <label class="d-block">{{ $label }}</label>
         <div class="d-flex flex-nowrap align-items-center tm-deposito-campo-inputs w-100" style="gap: 6px;">
             <input type="hidden" class="deposito_id" id="{{ $inputId }}"
                 name="{{ $inputName }}" value="{{ $depositoId }}"
                 @if ($required && ! $soloLectura) required @endif>
             @if (! $soloLectura)
-                <button type="button" title="Consulta dep&oacute;sitos" class="btn btn-outline-secondary btn-sm consultadeposito flex-shrink-0">
+                <button type="button" title="Consulta dep&oacute;sitos (F1)" class="btn btn-outline-secondary btn-sm consultadeposito flex-shrink-0">
                     <i class="fa fa-search"></i>
                 </button>
                 @if ($mostrarEditar && $puedeAbrirAbmDeposito)

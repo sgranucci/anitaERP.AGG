@@ -17,7 +17,7 @@ class Articulo_Movimiento extends Model
                         'concepto', 'modulo_id', 'cantidad', 
                         'pieza', 'caja',
                         'precio', 'costo', 'listaprecio_id', 'incluyeimpuesto', 
-                        'moneda_id', 'descuento', 'descuentointegrado', 'deposito_id', 'loteimportacion_id',
+                        'moneda_id', 'descuento', 'descuentointegrado', 'deposito_id', 'bien_uso_id', 'loteimportacion_id',
                         'pedido_articulo_id'];
 
     protected $table = 'articulo_movimiento';
@@ -85,6 +85,11 @@ class Articulo_Movimiento extends Model
     public function depositos()
     {
         return $this->belongsTo(Depmae::class, 'deposito_id');
+    }
+
+    public function bienes_uso()
+    {
+        return $this->belongsTo(\App\Models\Contable\BienUso::class, 'bien_uso_id');
     }
 
 }

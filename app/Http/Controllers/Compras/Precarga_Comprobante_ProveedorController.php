@@ -11,6 +11,7 @@ use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Compras\PrecargaComprobanteAnitaSyncService;
+use App\Services\Compras\ComprobanteProveedorPdfIaService;
 use App\Support\Compras\PrecargaFacturaScanPathResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -28,6 +29,8 @@ class Precarga_Comprobante_ProveedorController extends Controller
 
     private PrecargaFacturaScanPathResolver $facturaScanPathResolver;
 
+    private ComprobanteProveedorPdfIaService $pdfIaService;
+
 	public function __construct(Precarga_Comprobante_ProveedorRepositoryInterface $precarga_comprobante_proveedorRepository,
                                 Precarga_Comprobante_Proveedor_ConceptoRepositoryInterface $precarga_comprobante_proveedor_conceptoRepository,
                                 EmpresaRepositoryInterface $empresaRepository,
@@ -35,6 +38,7 @@ class Precarga_Comprobante_ProveedorController extends Controller
                                 Concepto_IvacompraRepositoryInterface $concepto_ivacompraRepository,
                                 PrecargaComprobanteAnitaSyncService $precargaAnitaSync,
                                 PrecargaFacturaScanPathResolver $facturaScanPathResolver,
+                                ComprobanteProveedorPdfIaService $pdfIaService,
                                 )
     {
         $this->precarga_comprobante_proveedorRepository = $precarga_comprobante_proveedorRepository;
@@ -44,6 +48,7 @@ class Precarga_Comprobante_ProveedorController extends Controller
         $this->concepto_ivacompraRepository = $concepto_ivacompraRepository;
         $this->precargaAnitaSync = $precargaAnitaSync;
         $this->facturaScanPathResolver = $facturaScanPathResolver;
+        $this->pdfIaService = $pdfIaService;
     }
 
     /**
@@ -59,9 +64,105 @@ class Precarga_Comprobante_ProveedorController extends Controller
 
         $precarga = $this->precarga_comprobante_proveedorRepository->leePrecargaComprobanteProveedor($busqueda, true);
 
-        $datas = ['datas' => $precarga, 'busqueda' => $busqueda];
+        $datas = [
+            'datas' => $precarga,
+            'busqueda' => $busqueda,
+            'pdfIaHabilitado' => (bool) config('comprobante_proveedor_pdf_ia.habilitado'),
+        ];
 
         return view('compras.precarga_comprobante_proveedor.index', $datas);
+    }
+
+    public function previewPdfIa(Request $request)
+    {
+        can('crear-precarga-proveedores');
+
+        $request->validate([
+            'pdf' => 'required|file|mimes:pdf|max:20480',
+            'numero_oc' => 'nullable|string|max:12',
+        ]);
+
+        try {
+            $preview = $this->pdfIaService->preview(
+                $request->file('pdf'),
+                $request->input('numero_oc')
+            );
+
+            return response()->json($preview, ($preview['ok'] ?? false) ? 200 : 422);
+        } catch (RuntimeException $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json(['ok' => false, 'message' => 'Error al procesar PDF con IA.'], 500);
+        }
+    }
+
+    public function resolverOcPdfIa(Request $request)
+    {
+        can('crear-precarga-proveedores');
+
+        $request->validate([
+            'extraccion' => 'required|json',
+            'numero_oc' => 'required|string|max:12',
+        ]);
+
+        $extraccion = json_decode((string) $request->input('extraccion'), true);
+        if (! is_array($extraccion)) {
+            return response()->json(['ok' => false, 'message' => 'Extracción inválida.'], 422);
+        }
+
+        try {
+            $preview = $this->pdfIaService->resolverConOcManual(
+                $extraccion,
+                (string) $request->input('numero_oc')
+            );
+
+            return response()->json($preview);
+        } catch (RuntimeException $e) {
+            return response()->json([
+                'ok' => false,
+                'oc_requerida' => true,
+                'message' => $e->getMessage(),
+                'extraccion' => $extraccion,
+            ], 422);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json(['ok' => false, 'message' => 'Error al resolver con OC.'], 500);
+        }
+    }
+
+    public function confirmarPdfIa(Request $request)
+    {
+        can('crear-precarga-proveedores');
+
+        $request->validate([
+            'payload' => 'required|json',
+            'pdf' => 'required|file|mimes:pdf|max:20480',
+        ]);
+
+        $payload = json_decode((string) $request->input('payload'), true);
+        if (! is_array($payload)) {
+            return response()->json(['ok' => false, 'message' => 'Payload inválido.'], 422);
+        }
+
+        try {
+            $resultado = $this->pdfIaService->confirmar($payload, $request->file('pdf'));
+
+            return response()->json([
+                'ok' => true,
+                'precarga_id' => $resultado['precarga_id'],
+                'message' => $resultado['message'],
+                'redirect' => route('editar_precarga_comprobante_proveedor', ['id' => $resultado['precarga_id']]),
+            ]);
+        } catch (RuntimeException $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json(['ok' => false, 'message' => 'Error al grabar precarga desde PDF+IA.'], 500);
+        }
     }
 
     public function listar(Request $request, $formato = null, $busqueda = null)
@@ -158,6 +259,7 @@ class Precarga_Comprobante_ProveedorController extends Controller
         try {
             DB::transaction(function () use ($request) {
                 $payload = $this->precargaAnitaSync->enriquecerPayloadParaAnita($request->all());
+                $payload['origen_entrada'] = \App\Support\Compras\PrecargaComprobanteOrigenEntrada::MANUAL;
                 $precarga = $this->precarga_comprobante_proveedorRepository->create($payload);
 
                 $this->guardarConceptosPrecarga($request, (int) $precarga->id);

@@ -40,15 +40,51 @@ class MozoGastronomiaController extends Controller
         can('crear-mozo-gastronomia');
         $data = new MozoGastronomia();
         $empresa_query = $this->empresaRepository->allFiltrado();
+        $empresaIdSugerencia = $this->resolverEmpresaIdSugerenciaCodigo($empresa_query);
+
+        $data->codigo = $this->repository->proximoCodigoLocal($empresaIdSugerencia);
 
         return view('ventas.mozo_gastronomia.crear', compact('data', 'empresa_query'));
     }
 
     public function guardar(ValidacionMozoGastronomia $request)
     {
-        $this->repository->create($request->all());
+        $data = $request->all();
+        if (trim((string) ($data['codigo'] ?? '')) === '') {
+            $empresaId = (int) ($data['empresa_id'] ?? 0);
+            if ($empresaId <= 0) {
+                return redirect()->back()->withInput()->withErrors([
+                    'codigo' => 'Seleccione la empresa para calcular el próximo código.',
+                ]);
+            }
+            $data['codigo'] = $this->repository->proximoCodigoLocal($empresaId);
+        }
+
+        $empresaId = (int) ($data['empresa_id'] ?? 0);
+        $codigo = trim((string) ($data['codigo'] ?? ''));
+        if ($this->repository->codigoExisteEnEmpresa($empresaId, $codigo)) {
+            return redirect()->back()->withInput()->withErrors([
+                'codigo' => 'El código '.$codigo.' ya está en uso para esta empresa en el ERP.',
+            ]);
+        }
+
+        $this->repository->create($data);
 
         return redirect('ventas/mozo-gastronomia')->with('mensaje', 'Mozo creado con éxito');
+    }
+
+    public function proximoCodigo(Request $request)
+    {
+        can('crear-mozo-gastronomia');
+
+        $empresaId = (int) $request->get('empresa_id');
+        if ($empresaId <= 0 || ! $this->empresaRepository->empresaIdPermitida($empresaId)) {
+            return response()->json(['error' => 'Empresa inválida.'], 422);
+        }
+
+        return response()->json([
+            'codigo' => $this->repository->proximoCodigoLocal($empresaId),
+        ]);
     }
 
     public function editar($id)
@@ -63,7 +99,17 @@ class MozoGastronomiaController extends Controller
     public function actualizar(ValidacionMozoGastronomia $request, $id)
     {
         can('actualizar-mozo-gastronomia');
-        $this->repository->update($request->all(), $id);
+
+        $data = $request->all();
+        $empresaId = (int) ($data['empresa_id'] ?? 0);
+        $codigo = trim((string) ($data['codigo'] ?? ''));
+        if ($codigo !== '' && $this->repository->codigoExisteEnEmpresa($empresaId, $codigo, (int) $id)) {
+            return redirect()->back()->withInput()->withErrors([
+                'codigo' => 'El código '.$codigo.' ya está en uso para esta empresa en el ERP.',
+            ]);
+        }
+
+        $this->repository->update($data, $id);
 
         return redirect('ventas/mozo-gastronomia')->with('mensaje', 'Mozo actualizado con éxito');
     }
@@ -159,5 +205,17 @@ class MozoGastronomiaController extends Controller
                 'No se completó la sincronización desde Anita. Si el error fue por tiempo de espera (504), ejecute en el servidor: php artisan mozo-gastronomia:sincronizar-anita — Detalle: '.$e->getMessage(),
             ]);
         }
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, \App\Models\Configuracion\Empresa>  $empresaQuery
+     */
+    private function resolverEmpresaIdSugerenciaCodigo($empresaQuery): int
+    {
+        if ($empresaQuery->count() === 1) {
+            return (int) $empresaQuery->first()->id;
+        }
+
+        return (int) config('mozo_gastronomia_anita.empresa_default_id', config('cliente.EMPRESA_DEFAULT_ID', 1));
     }
 }

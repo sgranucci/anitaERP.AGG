@@ -6,6 +6,7 @@ interface MovimientoStockRepositoryInterface
 {
     public function estadoEnum();
     public function all();
+    public function leeMovimientoStock($filtros, bool $paginar = false);
     public function create(array $data);
     public function update(array $data, $id);
     public function delete($id);

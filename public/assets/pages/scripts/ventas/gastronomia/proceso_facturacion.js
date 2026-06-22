@@ -422,7 +422,7 @@
     function esAvisoInformativoPostEmision(msg) {
         const s = String(msg || '').trim();
         if (!s) return false;
-        return /modo caea|contingencia arca|no se consult[aó] el web service en línea/i.test(s);
+        return /modo caea|contingencia arca|no se consult[aó] el web service en línea|enviado a la impresora|reimprimir ticket/i.test(s);
     }
 
     /** Waitry: ítems con opcionales de fórmula — toast liviano; el modal de opcionales sigue el flujo normal. */

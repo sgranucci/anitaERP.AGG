@@ -7,6 +7,8 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 
 class MozoGastronomiaRepository implements MozoGastronomiaRepositoryInterface
 {
+    /** vend_codigo Anita: numérico, hasta 5 dígitos (excluye basura importada tipo legajo/DNI). */
+    private const LONGITUD_MAXIMA_CODIGO_NUMERICO = 5;
     protected $model;
 
     public function __construct(
@@ -148,5 +150,51 @@ class MozoGastronomiaRepository implements MozoGastronomiaRepositoryInterface
             ->where('id', $id)
             ->where('empresa_id', $empresaId)
             ->first();
+    }
+
+    public function proximoCodigoLocal(int $empresaId): string
+    {
+        if ($empresaId <= 0) {
+            return '1';
+        }
+
+        $max = (int) $this->queryCodigosNumericosMozo($empresaId)
+            ->selectRaw('MAX(CAST(codigo AS UNSIGNED)) as max_codigo')
+            ->value('max_codigo');
+
+        $proximo = (string) ($max + 1);
+
+        while ($this->codigoExisteEnEmpresa($empresaId, $proximo)) {
+            $max++;
+            $proximo = (string) ($max + 1);
+        }
+
+        return $proximo;
+    }
+
+    public function codigoExisteEnEmpresa(int $empresaId, string $codigo, ?int $ignorarId = null): bool
+    {
+        $codigo = trim($codigo);
+        if ($codigo === '' || $empresaId <= 0) {
+            return false;
+        }
+
+        $query = $this->model->newQuery()
+            ->where('empresa_id', $empresaId)
+            ->where('codigo', $codigo);
+
+        if ($ignorarId !== null && $ignorarId > 0) {
+            $query->where('id', '!=', $ignorarId);
+        }
+
+        return $query->exists();
+    }
+
+    private function queryCodigosNumericosMozo(int $empresaId)
+    {
+        return $this->model->newQuery()
+            ->where('empresa_id', $empresaId)
+            ->whereRaw('codigo REGEXP ?', ['^[0-9]+$'])
+            ->whereRaw('CHAR_LENGTH(codigo) <= ?', [self::LONGITUD_MAXIMA_CODIGO_NUMERICO]);
     }
 }
