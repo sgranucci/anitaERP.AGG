@@ -36,6 +36,8 @@ return [
         'oc_sucursal' => 0,
         'recepcion_tipo' => 'COM',
         'recepcion_letra' => 'X',
+        // false: opcional reservar vía numerador al calcular; siempre se actualiza num_clave 120 al asignar COM en ERP
+        'reservar_numerador_anita' => filter_var(env('RECEPCION_PROVEEDOR_RESERVAR_NUMERADOR_ANITA', false), FILTER_VALIDATE_BOOLEAN),
         'recepcion_estado_confirmada' => env('RECEPCION_PROVEEDOR_ANITA_ESTADO_CONFIRMADA', '2'),
         'recepcion_estado_anulada' => env('RECEPCION_PROVEEDOR_ANITA_ESTADO_ANULADA', '3'),
     ],
@@ -87,5 +89,17 @@ return [
 
     // Diferencia máxima (moneda recepción) entre total ítems y asiento debe/haber al confirmar
     'tolerancia_cuadre_contable' => (float) env('RECEPCION_PROVEEDOR_TOL_CUADRE_CONTABLE', 0.02),
+
+    /*
+    | Auditoría diaria asientos COM: ERP ↔ ctamov Anita (recepcion-proveedor:auditoria-asientos-com).
+    */
+    'auditoria_asientos_com_diaria' => [
+        'habilitada' => filter_var(env('RECEPCION_PROVEEDOR_AUDITORIA_ASIENTOS_HABILITADA', true), FILTER_VALIDATE_BOOLEAN),
+        'hora' => env('RECEPCION_PROVEEDOR_AUDITORIA_ASIENTOS_HORA', '07:45'),
+        'usuario_id' => (int) env('RECEPCION_PROVEEDOR_AUDITORIA_ASIENTOS_USUARIO_ID', 1),
+        'email' => env('RECEPCION_PROVEEDOR_AUDITORIA_ASIENTOS_EMAIL', 'sergiogranucci@gmail.com'),
+        'tolerancia' => (float) env('RECEPCION_PROVEEDOR_AUDITORIA_ASIENTOS_TOLERANCIA', 0.02),
+        'incluir_importadas_anita' => filter_var(env('RECEPCION_PROVEEDOR_AUDITORIA_ASIENTOS_INCLUIR_IMPORTADAS', false), FILTER_VALIDATE_BOOLEAN),
+    ],
 
 ];

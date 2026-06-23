@@ -7,6 +7,8 @@ use App\Support\Stock\UsuarioDepositoAutorizado;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use App\Services\Stock\DepmaeAnitaSyncService;
+use App\Support\Stock\DepmaeAnitaExclusionSupport;
 use App\Traits\Stock\DepmaeTrait;
 use App\ApiAnita;
 
@@ -86,70 +88,28 @@ class Depmae extends Model
         return $empresaId <= 1;
     }
 
-    public function sincronizarConAnita(){
-        $apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'list', 'sistema' => 'ventas', 'campos' => $this->keyField, 'tabla' => $this->table );
-        $dataAnita = json_decode($apiAnita->apiCall($data));
-
-        $datosLocal = Depmae::all();
-        $datosLocalArray = [];
-        foreach ($datosLocal as $value) {
-            $datosLocalArray[] = $value->{$this->keyField};
-        }
-        
-        foreach ($dataAnita as $value) {
-            if (!in_array($value->{$this->keyField}, $datosLocalArray)) {
-                $this->traerRegistroDeAnita($value->{$this->keyField});
-            }
-        }
+    /**
+     * @return array{
+     *     en_anita: int,
+     *     omitidos_maquina: int,
+     *     importados: int,
+     *     actualizados: int,
+     *     omitidos: int,
+     *     errores: list<string>
+     * }
+     */
+    public function sincronizarConAnita(): array
+    {
+        return app(DepmaeAnitaSyncService::class)->sincronizarConAnita();
     }
 
-	public function traerRegistroDeAnita($key)
-	{
-        $apiAnita = new ApiAnita();
-		if (config('app.empresa') == 'Calzados Ferli' ||
-	    	config('app.empresa') == 'EL BIERZO')
-        	$data = array( 
-            	'acc' => 'list', 'tabla' => $this->table, 
-            	'campos' => '
-                	depm_deposito,
-                	depm_desc,
-					depm_maneja_part,
-					depm_cta_contable
-            	' , 
-            	'whereArmado' => " WHERE ".$this->keyField." = '".$key."' " 
-        	);
-		else
-        	$data = array( 
-            	'acc' => 'list', 'tabla' => $this->table, 
-            	'campos' => '
-                	depm_deposito,
-                	depm_desc,
-					depm_maneja_part,
-					depm_tipo_deposito
-            	' , 
-            	'whereArmado' => " WHERE ".$this->keyField." = '".$key."' " 
-        	);
-
-        $dataAnita = json_decode($apiAnita->apiCall($data));
-
-		if (count($dataAnita) > 0) 
-		{
-            $data = $dataAnita[0];
-
-			if (config('app.empresa') == 'AGG')
-            	$tipoDeposito = array_search($data->depm_tipo_deposito, 
-                	array_column(Depmae::$enumTipoDeposito, 'valor', 'nombre'));
-	   		else 
-	    		$tipoDeposito = 'N';
-
-            Depmae::create([
-                'nombre' => $data->depm_desc,
-                'tipodeposito' => $tipoDeposito,
-                'codigo' => $key,
-                'empresa_id' => 1,
-            ]);
+    public function traerRegistroDeAnita($key, int $empresaId = 1): string
+    {
+        if (DepmaeAnitaExclusionSupport::debeOmitirCodigo((string) $key)) {
+            return 'omitido';
         }
+
+        return app(DepmaeAnitaSyncService::class)->traerRegistroDeAnita($empresaId, (string) $key);
     }
 
 	public function guardarAnita($request, $id) {

@@ -179,7 +179,7 @@ class RecepcionProveedorFormItemsSupport
         return $enriquecidos;
     }
 
-    /** @return array{numero_oc: ?int, proveedor_nombre: ?string, proveedor_id: ?int, empresa_id: ?int} */
+    /** @return array{numero_oc: ?int, proveedor_nombre: ?string, proveedor_id: ?int, empresa_id: ?int, empresa_nombre: ?string} */
     public static function datosCabeceraDesdeOrdencompra(
         ?int $ordencompraId,
         ?string $proveedorNombreOld = null,
@@ -191,14 +191,16 @@ class RecepcionProveedorFormItemsSupport
             : null;
         $proveedorId = null;
         $empresaId = null;
+        $empresaNombre = null;
 
         if ($ordencompraId !== null && $ordencompraId > 0) {
-            $oc = Ordencompra::query()->with('proveedores')->find($ordencompraId);
+            $oc = Ordencompra::query()->with(['proveedores', 'empresas'])->find($ordencompraId);
             if ($oc !== null) {
                 $numeroOc = $numeroOc ?? (int) $oc->numeroordencompra;
                 $proveedorNombre = $proveedorNombre ?? optional($oc->proveedores)->nombre;
                 $proveedorId = (int) $oc->proveedor_id;
                 $empresaId = (int) $oc->empresa_id;
+                $empresaNombre = optional($oc->empresas)->nombre;
             }
         }
 
@@ -207,6 +209,7 @@ class RecepcionProveedorFormItemsSupport
             'proveedor_nombre' => $proveedorNombre,
             'proveedor_id' => $proveedorId,
             'empresa_id' => $empresaId,
+            'empresa_nombre' => $empresaNombre,
         ];
     }
 
@@ -271,5 +274,94 @@ class RecepcionProveedorFormItemsSupport
             'um_compra' => $umCompra,
             'um_stock' => $umStock,
         ];
+    }
+
+    /**
+     * Grilla en edición: líneas OC pendientes + ítems ya guardados en la recepción.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function itemsGrillaDesdeRecepcion(
+        \App\Models\Stock\Recepcion_Proveedor $recepcion,
+        ?int $depositoCabeceraId = null
+    ): array {
+        $recepcion->loadMissing([
+            'recepcion_proveedor_articulos.articulos',
+            'recepcion_proveedor_articulos.articulo_stock',
+            'recepcion_proveedor_articulos.depositos',
+            'recepcion_proveedor_articulos.ordencompra_articulos',
+            'ordencompras',
+        ]);
+
+        $resolver = app(\App\Services\Stock\RecepcionProveedorOrdencompraResolverService::class);
+        $ocData = $resolver->resolverPorId((int) $recepcion->ordencompra_id);
+        $lineasOc = $ocData['lineas'];
+
+        $guardadasPorOcArt = [];
+        $extras = [];
+        foreach ($recepcion->recepcion_proveedor_articulos as $linea) {
+            $ocArtId = (int) ($linea->ordencompra_articulo_id ?? 0);
+            if ($ocArtId > 0 && (string) ($linea->tipo_linea ?? 'OC') !== RecepcionProveedorDiferenciaSupport::TIPO_EXTRA) {
+                $guardadasPorOcArt[$ocArtId] = $linea;
+            } else {
+                $extras[] = $linea;
+            }
+        }
+
+        $items = [];
+        foreach ($lineasOc as $lineaOc) {
+            $ocArtId = (int) ($lineaOc['ordencompra_articulo_id'] ?? 0);
+            if ($ocArtId > 0 && isset($guardadasPorOcArt[$ocArtId])) {
+                $items[] = self::mapearLineaRecepcionParaGrilla($guardadasPorOcArt[$ocArtId]);
+            } else {
+                $items[] = $lineaOc;
+            }
+        }
+
+        foreach ($extras as $linea) {
+            $items[] = self::mapearLineaRecepcionParaGrilla($linea);
+        }
+
+        return self::enriquecerItemsParaVista(
+            $items,
+            $depositoCabeceraId,
+            (int) ($recepcion->proveedor_id ?? 0) ?: null,
+            (int) ($recepcion->empresa_id ?? 0) ?: null
+        );
+    }
+
+    /** @return array<string, mixed> */
+    private static function mapearLineaRecepcionParaGrilla(\App\Models\Stock\Recepcion_Proveedor_Articulo $linea): array
+    {
+        $cantLinea = (float) ($linea->cantidad ?? 0) + (float) ($linea->cantidad_rechazada ?? 0);
+        if ($linea->fl_cerrar_linea_oc ?? false) {
+            $accion = RecepcionProveedorAccionLineaOc::CERRAR;
+        } elseif ($cantLinea <= 0.000001) {
+            $accion = RecepcionProveedorAccionLineaOc::PENDIENTE;
+        } else {
+            $accion = RecepcionProveedorAccionLineaOc::RECIBIR;
+        }
+
+        return array_merge($linea->toArray(), [
+            'moneda_id' => (int) ($linea->moneda_id ?: 1),
+            'cotizacion' => (float) ($linea->cotizacion ?: 1),
+            'sku' => optional($linea->articulos)->sku ?? '',
+            'descripcion' => optional($linea->articulos)->descripcion
+                ?? $linea->detalle
+                ?? optional($linea->ordencompra_articulos)->detalle
+                ?? '',
+            'deposito_nombre' => optional($linea->depositos)->nombre ?? '',
+            'depositoentrega_id' => optional($linea->articulos)->depositoentrega_id ?? null,
+            'coeficiente_articulo' => (float) (optional($linea->articulos)->coeficienteconversion ?? 1) ?: 1,
+            'coeficiente_proveedor' => (float) ($linea->coeficienteconversion ?? 1),
+            'es_deposito_formula' => optional($linea->depositos)->tipodeposito === 'Formulas',
+            'articulo_stock_id' => $linea->articulo_stock_id,
+            'articulo_stock_sku' => optional($linea->articulo_stock)->sku ?? '',
+            'skualternativo' => optional($linea->articulos)->skualternativo ?? '',
+            'maneja_parte_unica' => RecepcionProveedorParteUnicaSupport::articuloManejaParteUnica($linea->articulos),
+            'accion_linea_oc' => $accion,
+            'fl_cerrar_linea_oc' => (bool) ($linea->fl_cerrar_linea_oc ?? false),
+            'comentario_diferencia' => $linea->comentario_diferencia ?? '',
+        ]);
     }
 }

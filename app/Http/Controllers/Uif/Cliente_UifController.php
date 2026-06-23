@@ -7,8 +7,11 @@ use App\Http\Requests\ValidacionCliente_Uif;
 use App\Services\Uif\Cliente_UifService;
 use App\Services\Uif\ClienteUifSexoAprendizajeService;
 use App\Exports\Uif\Cliente_UifExport;
+use App\Exports\Uif\ClienteUifPremiosExport;
+use App\Exports\Uif\ClienteUifReportablesExport;
 use App\Models\Uif\Cliente_Uif;
 use App\Repositories\Uif\Cliente_UifRepositoryInterface;
+use App\Repositories\Uif\Cliente_Premio_UifRepository;
 use App\Repositories\Uif\Localidad_UifRepositoryInterface;
 use App\Repositories\Uif\Provincia_UifRepositoryInterface;
 use App\Repositories\Uif\Actividad_UifRepositoryInterface;
@@ -24,16 +27,20 @@ use App\Repositories\Uif\Pais_UifRepositoryInterface;
 use App\Repositories\Uif\Pep_UifRepositoryInterface;
 use App\Repositories\Uif\So_UifRepositoryInterface;
 use App\Services\Uif\ClienteUifFotoDocumento;
+use App\Support\Uif\ClienteUifInformeReportablesSupport;
 use App\Support\Uif\ClienteUifListadoFiltros;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Carbon\Carbon;
 use DB;
+use Illuminate\Support\Facades\File;
+use ZipArchive;
 
 class Cliente_UifController extends Controller
 {
     private $cliente_uifService;
     private $cliente_uifRepository;
+    private $clientePremioUifRepository;
     private $localidad_uifRepository;
     private $provincia_uifRepository;
     private $actividad_uifRepository;
@@ -53,6 +60,7 @@ class Cliente_UifController extends Controller
 	public function __construct(Cliente_UifService $cliente_uifservice,
                                 ClienteUifSexoAprendizajeService $clienteUifSexoAprendizajeService,
                                 Cliente_UifRepositoryInterface $cliente_uifrepository,
+                                Cliente_Premio_UifRepository $clientePremioUifRepository,
                                 Localidad_UifRepositoryInterface $localidad_uifrepository,
                                 Provincia_UifRepositoryInterface $provincia_uifrepository,
                                 Actividad_UifRepositoryInterface $actividad_uifRepository,
@@ -70,6 +78,7 @@ class Cliente_UifController extends Controller
     {
         $this->cliente_uifService = $cliente_uifservice;
         $this->cliente_uifRepository = $cliente_uifrepository;
+        $this->clientePremioUifRepository = $clientePremioUifRepository;
         $this->localidad_uifRepository = $localidad_uifrepository;
         $this->provincia_uifRepository = $provincia_uifrepository;
         $this->actividad_uifRepository = $actividad_uifRepository;
@@ -401,39 +410,332 @@ class Cliente_UifController extends Controller
         return $this->cliente_uifService->calculaRiesgo($cliente_uif_id, $periodo, $inusualidad_uif_id);
     }
 
+    /**
+     * Export PDF/Excel/CSV de premios del cliente (solapa Premios). Solo supervisor UIF.
+     */
+    public function listarPremiosCliente(Request $request, $id, $formato = null)
+    {
+        if (! esSupervisorUif()) {
+            abort(403);
+        }
+
+        $cliente_uif = $this->cliente_uifRepository->find($id);
+        if ($cliente_uif === null) {
+            abort(404);
+        }
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $premios = $this->clientePremioUifRepository->leePremiosPorClienteUif((int) $id);
+        $nombreBase = 'premios_cliente_uif_'.$id;
+
+        switch ($formato) {
+            case 'PDF':
+                $view = \View::make('uif.cliente_uif.premios_listado', compact('premios', 'cliente_uif'))->render();
+                $path = storage_path('pdf/listados');
+                if (! is_dir($path)) {
+                    @mkdir($path, 0775, true);
+                }
+                $nombrePdf = $nombreBase.'.pdf';
+
+                $pdf = \App::make('dompdf.wrapper');
+                $pdf->setPaper('legal', 'landscape');
+                $pdf->loadHTML($view, 'UTF-8')->save($path.'/'.$nombrePdf);
+
+                return response()->download($path.'/'.$nombrePdf);
+            case 'EXCEL':
+                return (new ClienteUifPremiosExport($this->clientePremioUifRepository))
+                    ->parametros((int) $id, $cliente_uif)
+                    ->download($nombreBase.'.xlsx');
+            case 'CSV':
+                return (new ClienteUifPremiosExport($this->clientePremioUifRepository))
+                    ->parametros((int) $id, $cliente_uif)
+                    ->download($nombreBase.'.csv', \Maatwebsite\Excel\Excel::CSV);
+        }
+
+        return redirect()->route('edita_cliente_uif', ['id' => $id, 'uif_tab' => 3]);
+    }
+
     public function crearExportaOperacion()
     {
-        return view('uif.exportaoperacion.crear');        
-    }    
+        can('exportar-operacion-uif');
 
-    // Genera exportacion operaciones UIF
+        $empresa_query = $this->empresaRepository->allFiltrado();
+
+        return view('uif.exportaoperacion.crear', compact('empresa_query'));
+    }
 
     public function generaExportaOperacion(Request $request)
     {
-        $cliente_premio_uifs = $this->cliente_uifService->generaExportaOperacion($request->periodo, $request->limiteinformeuif);
-        
-        $periodo = $request->periodo;
+        can('exportar-operacion-uif');
 
-        if (strpos($periodo, "/") !== false)
-            $periodo = preg_replace('/\//', '-', $periodo);
+        $parametros = $this->resolverParametrosExportacionUif(
+            $request->periodo,
+            $request->limiteinformeuif,
+            $request->empresa_id
+        );
 
-        $limiteinformeuif = $request->limiteinformeuif;
+        if ($parametros instanceof \Illuminate\Http\RedirectResponse) {
+            return $parametros;
+        }
 
-        return view('uif.exportaoperacion.index', compact('cliente_premio_uifs', 'periodo', 'limiteinformeuif'));
+        return redirect()->route('listado_exporta_operacion_uif', [
+            'periodo' => $parametros['periodo'],
+            'limiteinformeuif' => $parametros['limiteinformeuif'],
+            'empresa_id' => $parametros['empresa_id'],
+        ]);
     }
 
-    // Exporta operaciones UIF
-
-    public function exportaOperacion($periodo, $limiteinformeuif)
+    public function listadoExportaOperacion($periodo, $limiteinformeuif, $empresaId)
     {
-        $this->cliente_uifService->exportaOperacion($periodo, $limiteinformeuif);
+        can('exportar-operacion-uif');
 
-        $cliente_premio_uifs = $this->cliente_uifService->generaExportaOperacion($periodo, $limiteinformeuif);
+        $parametros = $this->resolverParametrosExportacionUif($periodo, $limiteinformeuif, $empresaId);
 
-        if (strpos($periodo, "/") !== false)
-            $periodo = preg_replace('/\//', '-', $periodo);
+        if ($parametros instanceof \Illuminate\Http\RedirectResponse) {
+            return $parametros;
+        }
 
-        return view('uif.exportaoperacion.index', compact('cliente_premio_uifs', 'periodo', 'limiteinformeuif'));
+        return $this->vistaExportaOperacionIndex($parametros);
+    }
+
+    public function exportaOperacion($periodo, $limiteinformeuif, $empresaId)
+    {
+        can('exportar-operacion-uif');
+
+        $parametros = $this->resolverParametrosExportacionUif($periodo, $limiteinformeuif, $empresaId);
+
+        if ($parametros instanceof \Illuminate\Http\RedirectResponse) {
+            return $parametros;
+        }
+
+        [
+            'periodo' => $periodo,
+            'limiteinformeuif' => $limiteinformeuif,
+            'empresa_id' => $empresaId,
+        ] = $parametros;
+
+        $cliente_premio_uifs = $this->cliente_uifService->generaExportaOperacion($periodo, $limiteinformeuif, $empresaId);
+
+        if ($cliente_premio_uifs->isEmpty()) {
+            return redirect()
+                ->route('crear_exporta_operacion')
+                ->with('mensaje_error', 'No hay premios reportables para la empresa, periodo y monto indicados.');
+        }
+
+        try {
+            $xmlExportacion = $this->cliente_uifService->exportaOperacion($periodo, $limiteinformeuif, $empresaId);
+        } catch (\Throwable $e) {
+            return redirect()
+                ->route('listado_exporta_operacion_uif', [
+                    'periodo' => $periodo,
+                    'limiteinformeuif' => $limiteinformeuif,
+                    'empresa_id' => $empresaId,
+                ])
+                ->with('mensaje_error', 'Error al generar XML UIF: '.$e->getMessage());
+        }
+
+        return redirect()->route('listado_exporta_operacion_uif', [
+            'periodo' => $periodo,
+            'limiteinformeuif' => $limiteinformeuif,
+            'empresa_id' => $empresaId,
+        ])
+            ->with('mensaje', 'Se generaron '.$xmlExportacion['cantidad'].' archivos XML. Se iniciara la descarga del ZIP a su PC.')
+            ->with('uif_xml_cantidad', $xmlExportacion['cantidad'])
+            ->with('uif_xml_directorio', $xmlExportacion['directorio'])
+            ->with('uif_auto_descargar_xml', 1);
+    }
+
+    public function exportaOperacionExcel($periodo, $limiteinformeuif, $empresaId)
+    {
+        can('exportar-operacion-uif');
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $parametros = $this->resolverParametrosExportacionUif($periodo, $limiteinformeuif, $empresaId);
+
+        if ($parametros instanceof \Illuminate\Http\RedirectResponse) {
+            return $parametros;
+        }
+
+        [
+            'periodo' => $periodo,
+            'limiteinformeuif' => $limiteinformeuif,
+            'empresa_id' => $empresaId,
+            'empresaInforme' => $empresaInforme,
+        ] = $parametros;
+
+        $premios = $this->cliente_uifService->generaExportaOperacion($periodo, $limiteinformeuif, $empresaId);
+
+        if ($premios->isEmpty()) {
+            return redirect()
+                ->route('listado_exporta_operacion_uif', [
+                    'periodo' => $periodo,
+                    'limiteinformeuif' => $limiteinformeuif,
+                    'empresa_id' => $empresaId,
+                ])
+                ->with('mensaje_error', 'No hay premios reportables para exportar a Excel.');
+        }
+
+        $nombreBase = ClienteUifInformeReportablesSupport::nombreArchivoReportables($periodo, $empresaInforme);
+
+        return (new ClienteUifReportablesExport)
+            ->parametros($periodo, $premios, $empresaInforme)
+            ->download($nombreBase.'.xlsx');
+    }
+
+    public function descargarXmlZip($periodo, $limiteinformeuif, $empresaId)
+    {
+        can('exportar-operacion-uif');
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $parametros = $this->resolverParametrosExportacionUif($periodo, $limiteinformeuif, $empresaId);
+
+        if ($parametros instanceof \Illuminate\Http\RedirectResponse) {
+            return $parametros;
+        }
+
+        [
+            'periodo' => $periodo,
+            'limiteinformeuif' => $limiteinformeuif,
+            'empresa_id' => $empresaId,
+        ] = $parametros;
+
+        $directorioRelativo = ClienteUifInformeReportablesSupport::directorioExportacionXml($periodo, $empresaId);
+        $disk = \Illuminate\Support\Facades\Storage::disk('local');
+
+        if (! $disk->exists($directorioRelativo) || count($disk->files($directorioRelativo)) === 0) {
+            $premios = $this->cliente_uifService->generaExportaOperacion($periodo, $limiteinformeuif, $empresaId);
+            if ($premios->isEmpty()) {
+                return redirect()
+                    ->route('listado_exporta_operacion_uif', [
+                        'periodo' => $periodo,
+                        'limiteinformeuif' => $limiteinformeuif,
+                        'empresa_id' => $empresaId,
+                    ])
+                    ->with('mensaje_error', 'No hay premios reportables para generar XML.');
+            }
+
+            try {
+                $this->cliente_uifService->exportaOperacion($periodo, $limiteinformeuif, $empresaId);
+            } catch (\Throwable $e) {
+                return redirect()
+                    ->route('listado_exporta_operacion_uif', [
+                        'periodo' => $periodo,
+                        'limiteinformeuif' => $limiteinformeuif,
+                        'empresa_id' => $empresaId,
+                    ])
+                    ->with('mensaje_error', 'Error al generar XML UIF: '.$e->getMessage());
+            }
+        }
+
+        return $this->respuestaZipExportacionUif($periodo, $empresaId);
+    }
+
+    private function respuestaZipExportacionUif(string $periodo, int $empresaId)
+    {
+        $directorioRelativo = ClienteUifInformeReportablesSupport::directorioExportacionXml($periodo, $empresaId);
+        $disk = \Illuminate\Support\Facades\Storage::disk('local');
+        $slug = ClienteUifInformeReportablesSupport::slugPeriodoExportacion($periodo);
+        $zipNombre = 'uif_operaciones_'.$empresaId.'_'.$slug.'.zip';
+        $zipPath = storage_path('app/tmp/'.$zipNombre);
+        File::ensureDirectoryExists(dirname($zipPath));
+
+        $zip = new ZipArchive;
+        if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+            return redirect()
+                ->route('listado_exporta_operacion_uif', [
+                    'periodo' => $periodo,
+                    'limiteinformeuif' => request()->route('limiteinformeuif'),
+                    'empresa_id' => $empresaId,
+                ])
+                ->with('mensaje_error', 'No se pudo crear el archivo ZIP de exportacion UIF.');
+        }
+
+        foreach ($disk->files($directorioRelativo) as $archivoRelativo) {
+            $zip->addFromString(basename($archivoRelativo), $disk->get($archivoRelativo));
+        }
+        $zip->close();
+
+        return response()->download($zipPath, $zipNombre)->deleteFileAfterSend(true);
+    }
+
+    /**
+     * @return array{periodo: string, limiteinformeuif: mixed, empresa_id: int, empresaInforme: string}|\Illuminate\Http\RedirectResponse
+     */
+    private function resolverParametrosExportacionUif($periodo, $limiteinformeuif, $empresaId)
+    {
+        $periodo = normalizarPeriodoParaUrl((string) $periodo);
+        $empresaId = (int) $empresaId;
+
+        if ($empresaId <= 0) {
+            return redirect()
+                ->route('crear_exporta_operacion')
+                ->with('mensaje_error', 'Debe seleccionar una empresa para exportar.');
+        }
+
+        if (! $this->empresaRepository->empresaIdPermitida($empresaId)) {
+            return redirect()
+                ->route('crear_exporta_operacion')
+                ->with('mensaje_error', 'La empresa seleccionada no esta autorizada para su usuario.');
+        }
+
+        $empresa = $this->empresaRepository->find($empresaId);
+        $empresaInforme = ClienteUifInformeReportablesSupport::nombreEmpresaInforme($empresa->nombre ?? null);
+
+        return [
+            'periodo' => $periodo,
+            'limiteinformeuif' => $limiteinformeuif,
+            'empresa_id' => $empresaId,
+            'empresaInforme' => $empresaInforme,
+        ];
+    }
+
+    /**
+     * @param  array{periodo: string, limiteinformeuif: mixed, empresa_id: int, empresaInforme: string}  $parametros
+     */
+    private function vistaExportaOperacionIndex(array $parametros)
+    {
+        $periodo = $parametros['periodo'];
+        $limiteinformeuif = $parametros['limiteinformeuif'];
+        $empresaId = $parametros['empresa_id'];
+        $empresaInforme = $parametros['empresaInforme'];
+
+        $cliente_premio_uifs = $this->cliente_uifService->generaExportaOperacion($periodo, $limiteinformeuif, $empresaId);
+        $resumen = $this->cliente_uifService->resumenExportaOperacion($cliente_premio_uifs);
+
+        $directorioXml = ClienteUifInformeReportablesSupport::directorioExportacionXml($periodo, $empresaId);
+        $disk = \Illuminate\Support\Facades\Storage::disk('local');
+        $archivosXml = $disk->exists($directorioXml) ? $disk->files($directorioXml) : [];
+        $xmlDisponible = count($archivosXml) > 0;
+        $xmlCantidad = count($archivosXml);
+
+        $xmlRecienGenerado = (bool) session('uif_xml_cantidad') || (bool) session('uif_auto_descargar_xml');
+        $autoDescargarXml = (bool) session('uif_auto_descargar_xml');
+        $urlDescargaXmlZip = route('descargar_cliente_uif_xml_zip', [
+            'periodo' => $periodo,
+            'limiteinformeuif' => $limiteinformeuif,
+            'empresa_id' => $empresaId,
+        ]);
+
+        return view('uif.exportaoperacion.index', compact(
+            'cliente_premio_uifs',
+            'periodo',
+            'limiteinformeuif',
+            'empresaId',
+            'resumen',
+            'empresaInforme',
+            'directorioXml',
+            'xmlDisponible',
+            'xmlCantidad',
+            'xmlRecienGenerado',
+            'autoDescargarXml',
+            'urlDescargaXmlZip'
+        ));
     }
 
 

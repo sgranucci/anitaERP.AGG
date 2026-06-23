@@ -14,7 +14,7 @@
         </td>
         <td class="align-middle col-insumo-dest-celda ms-col-conversion-formula">
             <input type="text"
-                   class="form-control form-control-sm ms-insumo-destino-sku text-monospace"
+                   class="form-control form-control-sm ms-insumo-destino-sku"
                    value="{{ $insumoDestinoSku ?? '' }}"
                    readonly
                    tabindex="-1"

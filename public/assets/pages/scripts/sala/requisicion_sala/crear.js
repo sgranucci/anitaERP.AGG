@@ -39,19 +39,49 @@
             var $row = $(tpl);
             $('#tabla-articulos-requisicion-sala tbody').append($row);
             bindLinea($row);
+            setTimeout(function () {
+                $row.find('.codigoarticulo').trigger('focus');
+            }, 0);
         });
 
-        $(document).on('click', '.eliminar-archivo-requisicion-sala', function () {
-            $(this).closest('.col-md-6').remove();
+        $(document).on('click', '#botonform0', function (e) {
+            e.preventDefault();
+            var $f = $('#form-general');
+            if ($f.length) {
+                $f.trigger('submit');
+            }
+        });
+
+        $('#botonform1').on('click', function () {
+            $('.form1').show();
+            $('.form4').hide();
         });
 
         $('#botonform4').on('click', function () {
             $('.form1').hide();
             $('.form4').show();
+            var sol = document.getElementById('requisicion-sala-solapa-archivos');
+            if (sol) {
+                sol.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
         });
-        $('#botonform1').on('click', function () {
-            $('.form4').hide();
-            $('.form1').show();
+
+        $(document).on('click', '.eliminar-archivo-requisicion-sala', function () {
+            $(this).closest('.requisicion-sala-archivo-item').remove();
+        });
+
+        $('#agrega_renglon_archivo_sala').on('click', function (e) {
+            e.preventDefault();
+            var tpl = $('#template-renglon-archivo-sala').html();
+            if (!tpl) {
+                return;
+            }
+            $('#tbody-tabla-archivo-sala').append(tpl);
+        });
+
+        $(document).on('click', '#tbody-tabla-archivo-sala .eliminararchivo-sala', function (e) {
+            e.preventDefault();
+            $(this).closest('tr.item-archivo-sala').remove();
         });
     });
 })();

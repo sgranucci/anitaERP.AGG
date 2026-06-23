@@ -13,6 +13,9 @@
             </div>
             <div class="modal-body py-3">
                 <p class="small mb-2" id="modal-kardex-articulo-info"></p>
+                <div id="modal-kardex-saldos-wrap" class="mb-3">
+                    @include('stock.partials.saldos_articulo_deposito_panel', ['panelId' => 'kardex'])
+                </div>
                 <div id="modal-kardex-opciones-wrap" class="mb-3 d-none">
                     <label class="d-block small font-weight-bold mb-1">Elija dep&oacute;sito</label>
                     <div id="modal-kardex-opciones" class="list-group"></div>
@@ -46,4 +49,5 @@
         </div>
     </div>
 </div>
+@include('includes.stock.modalconsultadeposito')
 @endonce

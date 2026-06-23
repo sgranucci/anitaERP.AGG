@@ -18,5 +18,4 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
 
-Route::get("empresas/{cuitProveedor}/orden-de-compra/{numeroOC}/tipo-comprobante/{tipo}/conceptos", [App\Http\Controllers\Api\ApiController::class, "listaConcepto"]);
-Route::post('comprobantes', [App\Http\Controllers\Api\ApiController::class, 'recibeComprobante']);
+require base_path('routes/precarga_proveedor_api.php');

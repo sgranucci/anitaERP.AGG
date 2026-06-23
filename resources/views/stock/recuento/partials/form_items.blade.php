@@ -91,7 +91,7 @@
                             <input type="hidden" class="saldo_sistema_input" name="saldos_sistema[]" value="{{ $saldo }}">
                             <div class="d-flex align-items-center flex-nowrap">
                                 @if (! $soloLectura)
-                                <button type="button" title="Consulta art&iacute;culos" class="btn-accion-tabla consultaarticulo tooltipsC flex-shrink-0">
+                                <button type="button" title="Consulta art&iacute;culos (F1)" class="btn-accion-tabla consultaarticulo tooltipsC flex-shrink-0">
                                     <i class="fa fa-search text-primary"></i>
                                 </button>
                                 @endif
@@ -152,7 +152,7 @@
             <input type="hidden" class="unidadmedida_id" name="unidadmedida_ids[]" value="">
             <input type="hidden" class="saldo_sistema_input" name="saldos_sistema[]" value="">
             <div class="d-flex align-items-center flex-nowrap">
-                <button type="button" title="Consulta art&iacute;culos" class="btn-accion-tabla consultaarticulo tooltipsC flex-shrink-0">
+                <button type="button" title="Consulta art&iacute;culos (F1)" class="btn-accion-tabla consultaarticulo tooltipsC flex-shrink-0">
                     <i class="fa fa-search text-primary"></i>
                 </button>
                 <input type="text" class="codigoarticulo form-control form-control-sm ml-1" style="width:150px; min-width:150px;">

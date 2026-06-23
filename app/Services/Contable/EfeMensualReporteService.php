@@ -4,8 +4,12 @@ namespace App\Services\Contable;
 
 use App\Support\Contable\Efe\EfeDatosBienesUsoSupport;
 use App\Support\Contable\Efe\EfeClasificacionConceptoSupport;
+use App\Support\Contable\Efe\EfeDatosGamingSuppliesSupport;
+use App\Support\Contable\Efe\EfeDatosGastronomiaSupport;
+use App\Support\Contable\Efe\EfeDatosMantenimientoEdificioSupport;
 use App\Support\Contable\Efe\EfeDatosPagosCobrosSupport;
 use App\Support\Contable\Efe\EfeDatosReimputaAnticipoSupport;
+use App\Support\Contable\Efe\EfeDatosVariosSupport;
 use App\Support\Contable\Efe\EfePosicionFinancieraSupport;
 use App\Support\Contable\Efe\EfeSumariasSupport;
 use App\Support\Contable\EfeMensualListadoFiltros;
@@ -15,6 +19,9 @@ use Illuminate\Support\Facades\DB;
 
 class EfeMensualReporteService
 {
+    /** Conceptos que Anita acumula en «Concepto: 8 IMPUESTOS VARIOS» (Resumen de pagos col B). */
+    private const CONCEPTOS_ROLLUP_IMPUESTOS = [58, 59, 61, 63];
+
     public function __construct(
         private readonly MayorConceptoReporteService $mayorConceptoService,
         private readonly EfeClasificacionConceptoSupport $clasificacionSupport,
@@ -23,6 +30,10 @@ class EfeMensualReporteService
         private readonly EfePosicionFinancieraSupport $posicionFinancieraSupport,
         private readonly EfeDatosBienesUsoSupport $bienesUsoSupport,
         private readonly EfeDatosReimputaAnticipoSupport $reimputaAnticipoSupport,
+        private readonly EfeDatosMantenimientoEdificioSupport $mantenimientoEdificioSupport,
+        private readonly EfeDatosGastronomiaSupport $gastronomiaSupport,
+        private readonly EfeDatosGamingSuppliesSupport $gamingSuppliesSupport,
+        private readonly EfeDatosVariosSupport $variosSupport,
     ) {
     }
 
@@ -95,6 +106,10 @@ class EfeMensualReporteService
                 continue;
             }
 
+            if ($conceptoIdEfe === 63 && $cuentaLinea === 114010002) {
+                $conceptoIdEfe = 0;
+            }
+
             $importes = $this->pagosCobrosSupport->resolver($ln);
             if ($importes === null) {
                 continue;
@@ -132,7 +147,15 @@ class EfeMensualReporteService
             ];
         }
 
+        $filas = $this->gamingSuppliesSupport->aplicar($filas, $filtros, $nombresConcepto);
+
+        $filas = $this->mantenimientoEdificioSupport->aplicar($filas, $filtros, $nombresConcepto);
+
+        $filas = $this->variosSupport->aplicar($filas, $filtros, $nombresConcepto);
+
         $filas = $this->reimputaAnticipoSupport->aplicar($filas, $nombresConcepto);
+
+        $filas = $this->gastronomiaSupport->aplicar($filas, $filtros, $nombresConcepto);
 
         if ($filtros !== []) {
             $filas = $this->bienesUsoSupport->aplicar($filas, $filtros);
@@ -186,6 +209,52 @@ class EfeMensualReporteService
         }
 
         usort($resumen, fn ($a, $b) => ($a['concepto_id'] <=> $b['concepto_id']));
+
+        return $this->aplicarRollupImpuestos($resumen);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $resumen
+     * @return list<array<string, mixed>>
+     */
+    private function aplicarRollupImpuestos(array $resumen): array
+    {
+        $rollupNeto = 0.0;
+        $rollupPagos = 0.0;
+        $rollupCobros = 0.0;
+        $rollupLineas = 0;
+        $filtrado = [];
+
+        foreach ($resumen as $row) {
+            $conceptoId = (int) ($row['concepto_id'] ?? 0);
+            if (in_array($conceptoId, self::CONCEPTOS_ROLLUP_IMPUESTOS, true)) {
+                $rollupNeto += (float) ($row['neto'] ?? 0);
+                $rollupPagos += (float) ($row['pagos'] ?? 0);
+                $rollupCobros += (float) ($row['cobros'] ?? 0);
+                $rollupLineas += (int) ($row['cantidad_lineas'] ?? 0);
+
+                continue;
+            }
+
+            $filtrado[] = $row;
+        }
+
+        if (abs($rollupNeto) < 0.005 && abs($rollupPagos) < 0.005 && abs($rollupCobros) < 0.005) {
+            return $resumen;
+        }
+
+        foreach ($filtrado as $indice => $row) {
+            if ((int) ($row['concepto_id'] ?? 0) !== 8) {
+                continue;
+            }
+
+            $filtrado[$indice]['neto'] = round((float) ($row['neto'] ?? 0) + $rollupNeto, 2);
+            $filtrado[$indice]['pagos'] = round((float) ($row['pagos'] ?? 0) + $rollupPagos, 2);
+            $filtrado[$indice]['cobros'] = round((float) ($row['cobros'] ?? 0) + $rollupCobros, 2);
+            $filtrado[$indice]['cantidad_lineas'] = (int) ($row['cantidad_lineas'] ?? 0) + $rollupLineas;
+
+            return $filtrado;
+        }
 
         return $resumen;
     }

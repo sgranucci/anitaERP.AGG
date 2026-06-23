@@ -8,35 +8,39 @@
         </div>
         <div class="form-group row">
             <label for="tipoarbol" class="col-lg-4 col-form-label requerido">Tipo de Arbol</label>
-            <select id="tipoarbol" name="tipoarbol" class="col-lg-4 form-control" required>
-                <option value="">-- Elija tipo de árbol --</option>
-                @foreach($tipoarbol_enum as $tipoarbol)
-                    @if ($tipoarbol['nombre'] == old('tipoarbol',$data->tipoarbol??''))
-                        <option value="{{ $tipoarbol['nombre'] }}" selected>{{ $tipoarbol['nombre'] }}</option>    
-                    @else
-                        <option value="{{ $tipoarbol['nombre'] }}">{{ $tipoarbol['nombre'] }}</option>
-                    @endif
-                @endforeach
-            </select>
+            <div class="col-lg-6">
+                <select id="tipoarbol" name="tipoarbol" class="form-control" required>
+                    <option value="">-- Elija tipo de árbol --</option>
+                    @foreach($tipoarbol_enum as $tipoarbol)
+                        @if ($tipoarbol['nombre'] == old('tipoarbol',$data->tipoarbol??''))
+                            <option value="{{ $tipoarbol['nombre'] }}" selected>{{ $tipoarbol['nombre'] }}</option>    
+                        @else
+                            <option value="{{ $tipoarbol['nombre'] }}">{{ $tipoarbol['nombre'] }}</option>
+                        @endif
+                    @endforeach
+                </select>
+            </div>
         </div>
         @include('includes.form-empresa-asignada', [
             'empresa_query' => $empresa_query,
             'empresa_id' => $data->empresa_id ?? session('empresa_id'),
             'col_label' => 'col-lg-4',
-            'col_input' => 'col-lg-5',
+            'col_input' => 'col-lg-6',
         ])
         <div class="form-group row">
             <label for="recordatorio" class="col-lg-4 col-form-label requerido">Recordatorio</label>
-            <select id="recordatorio" name="recordatorio" data-placeholder="Si envia mail recordatorio" class="col-lg-4 form-control" required>
-                <option value="">-- Elija recordatorio --</option>
-                @foreach($recordatorio_enum as $recordatorio)
-                    @if ($recordatorio['valor'] == old('recordatorio',$data->recordatorio??''))
-                        <option value="{{ $recordatorio['valor'] }}" selected>{{ $recordatorio['nombre'] }}</option>    
-                    @else
-                        <option value="{{ $recordatorio['valor'] }}">{{ $recordatorio['nombre'] }}</option>
-                    @endif
-                @endforeach
-            </select>
+            <div class="col-lg-6">
+                <select id="recordatorio" name="recordatorio" data-placeholder="Si envia mail recordatorio" class="form-control" required>
+                    <option value="">-- Elija recordatorio --</option>
+                    @foreach($recordatorio_enum as $recordatorio)
+                        @if ($recordatorio['valor'] == old('recordatorio',$data->recordatorio??''))
+                            <option value="{{ $recordatorio['valor'] }}" selected>{{ $recordatorio['nombre'] }}</option>    
+                        @else
+                            <option value="{{ $recordatorio['valor'] }}">{{ $recordatorio['nombre'] }}</option>
+                        @endif
+                    @endforeach
+                </select>
+            </div>
         </div>    
         <div class="form-group row div-diasinrespuesta" style="display: none">
             <label for="diasinrespuesta" class="col-lg-4 col-form-label requerido">Días sin respuesta</label>
@@ -52,27 +56,31 @@
         </div>     
         <div class="form-group row">
             <label for="estado" class="col-lg-4 col-form-label requerido">Estado</label>
-            <select id="estado" name="estado" data-placeholder="Estado del árbol" class="col-lg-4 form-control" required>
-                <option value="">-- Elija estado --</option>
-                @foreach($estado_enum as $estado)
-                    @if ($estado['nombre'] == old('estado',$data->estado??''))
-                        <option value="{{ $estado['nombre'] }}" selected>{{ $estado['nombre'] }}</option>    
-                    @else
-                        <option value="{{ $estado['nombre'] }}">{{ $estado['nombre'] }}</option>
-                    @endif
-                @endforeach
-            </select>
+            <div class="col-lg-6">
+                <select id="estado" name="estado" data-placeholder="Estado del árbol" class="form-control" required>
+                    <option value="">-- Elija estado --</option>
+                    @foreach($estado_enum as $estado)
+                        @if ($estado['nombre'] == old('estado',$data->estado??''))
+                            <option value="{{ $estado['nombre'] }}" selected>{{ $estado['nombre'] }}</option>    
+                        @else
+                            <option value="{{ $estado['nombre'] }}">{{ $estado['nombre'] }}</option>
+                        @endif
+                    @endforeach
+                </select>
+            </div>
         </div>                   
     </div>
     <div class="col-sm-6">
         <div class="form-group row">
-            <label for="filtro_centrocosto" class="col-lg-3 col-form-label">Filtra Centro de Costo</label>
-            <select id="filtro_centrocosto_id" data-placeholder="Filtra Centro de Costo" class="col-lg-4 form-control" data-fouc>
-                <option value="">-- Elija centro de costo --</option>
-                @foreach($centrocosto_query as $key => $value)
-                    <option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-                @endforeach
-            </select>
+            <label for="filtro_centrocosto" class="col-lg-4 col-form-label">Filtra Centro de Costo</label>
+            <div class="col-lg-6">
+                <select id="filtro_centrocosto_id" data-placeholder="Filtra Centro de Costo" class="form-control" data-fouc>
+                    <option value="">-- Elija centro de costo --</option>
+                    @foreach($centrocosto_query as $key => $value)
+                        <option value="{{ $value->id }}">{{ $value->nombre }}</option>    
+                    @endforeach
+                </select>
+            </div>
         </div>
     </div>
 </div>

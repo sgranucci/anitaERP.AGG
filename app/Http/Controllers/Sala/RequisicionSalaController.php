@@ -52,6 +52,7 @@ class RequisicionSalaController extends Controller
             'camposFiltro' => RequisicionSalaListadoFiltros::CAMPOS,
             'estado_enum' => RequisicionSalaEstado::$enumEstado,
             'estado_a_compras' => RequisicionSalaEstado::$enumEstado[array_search('5', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'],
+            'estado_pendiente' => RequisicionSalaEstado::$enumEstado[array_search('0', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'],
         ]);
     }
 

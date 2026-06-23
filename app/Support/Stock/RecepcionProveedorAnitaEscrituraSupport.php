@@ -281,6 +281,7 @@ final class RecepcionProveedorAnitaEscrituraSupport
      * Movimiento de stock Anita (stkmov) por línea COM. Patrón AGG.
      *
      * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $clave
+     * @param  int  $depositoAnita  Código Anita del depósito (depmae.codigo), no el id ERP.
      * @return array{campos: string, valores: string}
      */
     public static function stkmovInsert(
@@ -290,12 +291,13 @@ final class RecepcionProveedorAnitaEscrituraSupport
         string $codigoAgrupacion,
         int $ordenLinea,
         string $codigoProveedor,
-        int $depositoId,
+        int $depositoAnita,
         float $cantidad,
         float $precio,
         string $codigoMoneda,
         int $empresaCodigo,
         string $usuario,
+        int $empresaIdBridge = 1,
     ): array {
         $columnas = [
             'stkv_articulo' => self::textoSql($skuAnita13, 13),
@@ -308,8 +310,8 @@ final class RecepcionProveedorAnitaEscrituraSupport
             'stkv_ref_tipo' => self::charFijoSql(' ', 3),
             'stkv_ref_sucursal' => self::enteroSql(0),
             'stkv_ref_nro' => self::enteroSql(0),
-            'stkv_deposito' => self::enteroSql($depositoId),
-            'stkv_cantidad' => self::decimalSql($cantidad),
+            'stkv_deposito' => self::enteroSql($depositoAnita),
+            'stkv_cantidad' => self::decimalSql(AnitaStkmovClaveErpSupport::cantidadStkmov($cantidad)),
             'stkv_precio' => self::decimalSql($precio),
             'stkv_cod_mon' => self::textoSql($codigoMoneda, 1),
             'stkv_cod_impuesto' => self::enteroSql(0),
@@ -334,8 +336,8 @@ final class RecepcionProveedorAnitaEscrituraSupport
             'stkv_cod_umd_alter' => self::enteroSql(0),
         ];
 
-        if (strtoupper((string) config('app.empresa')) === 'AGG') {
-            $columnas['stkv_cant_unidad'] = self::decimalSql(abs($cantidad));
+        if (StockAnitaBridgeSupport::stkmovIncluyeColumnasAggMultiempresa($empresaIdBridge)) {
+            $columnas['stkv_cant_unidad'] = self::decimalSql(AnitaStkmovClaveErpSupport::cantidadStkmov($cantidad));
             $columnas['stkv_empresa'] = self::enteroSql($empresaCodigo);
         }
 
@@ -346,6 +348,15 @@ final class RecepcionProveedorAnitaEscrituraSupport
     {
         return self::updateSet([
             'penvp_cantentr' => self::decimalSql($nuevaCantidad),
+        ]);
+    }
+
+    /** Cierre administrativo de línea OC en Anita (penvp_partida = -1). */
+    public static function pendmovpCerrarLineaUpdateSet(float $cantidadOc): string
+    {
+        return self::updateSet([
+            'penvp_cantentr' => self::decimalSql($cantidadOc),
+            'penvp_partida' => '-1',
         ]);
     }
 

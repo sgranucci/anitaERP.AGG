@@ -9,6 +9,7 @@
     var cargandoOc = false;
     var ultimoNumeroOcCargado = null;
     var COLSPAN_TABLA_ITEMS = 12;
+    var recepcionProveedorSubmitPendiente = null;
 
     function umCompraLinea(item) {
         var um = String((item && (item.ocr_unidad_compra || item.um_compra)) || '').trim();
@@ -113,6 +114,11 @@
     function sincronizarEmpresaDesdeOc(data) {
         var empresaNueva = parseInt(data.empresa_id, 10) || 0;
         var empresaAnterior = empresaIdRecepcion();
+        if (data.empresa_nombre) {
+            $('#empresa_nombre_oc').val(data.empresa_nombre).attr('title', data.empresa_nombre);
+        } else if (empresaNueva <= 0) {
+            $('#empresa_nombre_oc').val('').attr('title', '');
+        }
         if (empresaNueva > 0) {
             window._omitirLimpiarDepositoAlCambiarEmpresa = true;
             $('#empresa_id').val(empresaNueva);
@@ -147,6 +153,68 @@
             return cab;
         }
         return parseInt(item.depositoentrega_id || item.deposito_id, 10) || 0;
+    }
+
+    function lineaAccionRequiereDeposito(item) {
+        if (!item || lineaRequiereDefinicionEnGuardado(item)) {
+            return false;
+        }
+        sincronizarAccionEnItem(item);
+
+        return accionLineaItem(item) !== 'PENDIENTE';
+    }
+
+    function marcarDepositoCabeceraInvalido(invalido) {
+        var $ctx = $('#tm_deposito_entrada');
+        if (!$ctx.length) {
+            return;
+        }
+        $ctx.toggleClass('border border-danger rounded px-2 py-1', !!invalido);
+        $ctx.find('.codigodeposito').toggleClass('border-danger', !!invalido);
+    }
+
+    function enfocarDepositoCabeceraRecepcion() {
+        if (typeof rpMostrarSolapa === 'function') {
+            rpMostrarSolapa('#rp-solapa-principal', 'rp-boton-principal');
+        }
+        var $codigo = $('#tm_deposito_entrada .codigodeposito');
+        if ($codigo.length) {
+            $codigo.trigger('focus');
+            return;
+        }
+        $('#tm_deposito_entrada .consultadeposito').trigger('focus');
+    }
+
+    function validarDepositoCabeceraRecepcion() {
+        if (depositoCabeceraActivo() > 0) {
+            marcarDepositoCabeceraInvalido(false);
+
+            return null;
+        }
+
+        var lineasSinDep = [];
+        itemsActuales.forEach(function (item, idx) {
+            if (!lineaAccionRequiereDeposito(item)) {
+                return;
+            }
+            if (depositoLinea(item) > 0) {
+                return;
+            }
+            lineasSinDep.push(idx + 1);
+        });
+
+        if (!lineasSinDep.length) {
+            marcarDepositoCabeceraInvalido(false);
+
+            return null;
+        }
+
+        marcarDepositoCabeceraInvalido(true);
+        var detalleLineas = lineasSinDep.length === 1
+            ? 'la línea ' + lineasSinDep[0]
+            : 'las líneas ' + lineasSinDep.join(', ');
+
+        return 'Indique depósito general de entrada: ' + detalleLineas + ' no tiene depósito configurado en el artículo.';
     }
 
     function depositoLineaTexto(item) {
@@ -240,6 +308,670 @@
         return html;
     }
 
+    function $comentarioDiferenciaPorIdx(idx) {
+        return $('#tbody-items-recepcion tr.item-recepcion-comentario-diferencia[data-idx="' + idx + '"]');
+    }
+
+    function accionLineaItem(item) {
+        var tipo = item && (item.tipo_linea || 'OC');
+        if (tipo === 'EXTRA') {
+            return 'RECIBIR';
+        }
+        if (item && item.fl_cerrar_linea_oc && mostrarOpcionCerrarSaldoOc(item)) {
+            return 'CERRAR';
+        }
+        if (cantidadTotalRecibida(item) > 0.000001) {
+            return 'RECIBIR';
+        }
+        var explicita = String((item && item.accion_linea_oc) || '').toUpperCase();
+        if (explicita === 'CERRAR') {
+            return 'CERRAR';
+        }
+        if (explicita === 'PENDIENTE') {
+            return 'PENDIENTE';
+        }
+
+        return 'PENDIENTE';
+    }
+
+    function mostrarSelectorAccionOcEnGrilla(item) {
+        if (!item || !lineaEsDeOc(item)) {
+            return false;
+        }
+
+        return cantidadTotalRecibida(item) <= 0.000001;
+    }
+
+    function htmlCeldaAccionOc(item, idx, soloLectura) {
+        if (!mostrarSelectorAccionOcEnGrilla(item)) {
+            if (cantidadTotalRecibida(item) > 0.000001) {
+                return '<span class="text-muted small" title="Recibir en este remito">Rec.</span>';
+            }
+
+            return '';
+        }
+        var accion = String(item.accion_linea_oc || '').toUpperCase();
+        var val = accion === 'CERRAR' ? 'CERRAR' : (accion === 'PENDIENTE' ? 'PENDIENTE' : '');
+        if (soloLectura) {
+            if (val === 'CERRAR') {
+                return '<span class="badge badge-secondary">Cierra</span>';
+            }
+            if (val === 'PENDIENTE') {
+                return '<span class="badge badge-light border">Pend.</span>';
+            }
+
+            return '<span class="text-muted">—</span>';
+        }
+        var html = '<select class="form-control form-control-sm item-accion-oc-select px-1" ';
+        html += 'title="Opcional: si no hay cantidad, puede marcar pendiente o cierre antes de guardar">';
+        html += '<option value=""' + (val === '' ? ' selected' : '') + '>—</option>';
+        html += '<option value="PENDIENTE"' + (val === 'PENDIENTE' ? ' selected' : '') + '>Pend.</option>';
+        html += '<option value="CERRAR"' + (val === 'CERRAR' ? ' selected' : '') + '>Cierra</option>';
+        html += '</select>';
+
+        return html;
+    }
+
+    function actualizarCeldaAccionOcFila(idx) {
+        var item = itemsActuales[idx];
+        var $tr = $lineaPorIdx(idx);
+        if (!item || !$tr.length) {
+            return;
+        }
+        $tr.find('td.col-acc-linea').html(htmlCeldaAccionOc(item, idx, !!window.recepcionProveedorSoloLectura));
+    }
+
+    function lineaRequiereDefinicionEnGuardado(item) {
+        if (!lineaEsDeOc(item)) {
+            return false;
+        }
+        if (cantidadTotalRecibida(item) > 0.000001) {
+            return false;
+        }
+        var explicita = String((item && item.accion_linea_oc) || '').toUpperCase();
+
+        return explicita !== 'PENDIENTE' && explicita !== 'CERRAR' && !(item && item.fl_cerrar_linea_oc);
+    }
+
+    function lineasQueRequierenDefinicionEnGuardado() {
+        var out = [];
+        itemsActuales.forEach(function (item, idx) {
+            if (lineaRequiereDefinicionEnGuardado(item)) {
+                out.push({ item: item, idx: idx });
+            }
+        });
+
+        return out;
+    }
+
+    function mostrarOpcionCerrarSaldoOc(item) {
+        if (!lineaEsDeOc(item)) {
+            return false;
+        }
+        var oc = parseFloat(item.cantidad_oc || 0);
+        var rec = cantidadTotalRecibida(item);
+
+        return oc > 0.000001 && rec > 0.000001 && rec < oc - 0.0001;
+    }
+
+    function lineaEsDeOc(item) {
+        return (item.tipo_linea || 'OC') !== 'EXTRA';
+    }
+
+    function sincronizarAccionEnItem(item) {
+        if (!item) {
+            return;
+        }
+        if (item.fl_cerrar_linea_oc && mostrarOpcionCerrarSaldoOc(item)) {
+            item.accion_linea_oc = 'CERRAR';
+
+            return;
+        }
+        if (cantidadTotalRecibida(item) > 0.000001) {
+            item.accion_linea_oc = 'RECIBIR';
+            item.fl_cerrar_linea_oc = false;
+
+            return;
+        }
+        var explicita = String(item.accion_linea_oc || '').toUpperCase();
+        if (explicita === 'PENDIENTE') {
+            item.fl_cerrar_linea_oc = false;
+
+            return;
+        }
+        if (explicita === 'CERRAR') {
+            item.fl_cerrar_linea_oc = true;
+
+            return;
+        }
+        if (lineaRequiereDefinicionEnGuardado(item)) {
+            item.accion_linea_oc = '';
+            item.fl_cerrar_linea_oc = false;
+
+            return;
+        }
+        item.accion_linea_oc = 'PENDIENTE';
+        item.fl_cerrar_linea_oc = false;
+    }
+
+    function hayDiscrepanciasEnRecepcion() {
+        var hay = false;
+        itemsActuales.forEach(function (item) {
+            sincronizarAccionEnItem(item);
+            var accion = accionLineaItem(item);
+            if (accion === 'CERRAR') {
+                hay = true;
+            }
+            if (lineaTieneDiferenciaCantidad(item)) {
+                hay = true;
+            }
+            var precioOc = precioOcItem(item);
+            if (lineaTieneDiferenciaPrecio(precioOc, parseFloat(item.precio || 0))) {
+                hay = true;
+            }
+            if ((parseFloat(item.cantidad_rechazada || 0) || 0) > 0.000001) {
+                hay = true;
+            }
+            var tipo = item.tipo_linea || 'OC';
+            if (tipo === 'EXTRA' || tipo === 'SUSTITUTO') {
+                hay = true;
+            }
+        });
+
+        return hay;
+    }
+
+    function lineaTieneDiferenciaCantidad(item) {
+        if (!item || !lineaEsDeOc(item)) {
+            return false;
+        }
+        if (accionLineaItem(item) !== 'RECIBIR') {
+            return false;
+        }
+        return item.cantidad_oc > 0
+            && Math.abs(cantidadTotalRecibida(item) - parseFloat(item.cantidad_oc)) >= 0.0001;
+    }
+
+    function lineaRequiereComentarioDiferencia(item) {
+        var accion = accionLineaItem(item);
+        if (accion === 'CERRAR') {
+            return true;
+        }
+
+        return lineaTieneDiferenciaCantidad(item);
+    }
+
+    function actualizarEstiloLineaPorAccion(idx) {
+        var item = itemsActuales[idx];
+        var $tr = $lineaPorIdx(idx);
+        if (!item || !$tr.length || !lineaEsDeOc(item)) {
+            return;
+        }
+        sincronizarAccionEnItem(item);
+        var accion = accionLineaItem(item);
+        $tr.find('.item-accion-linea-oc').val(item.accion_linea_oc || accion);
+        $tr.find('.item-fl-cerrar-linea-oc').val(accion === 'CERRAR' ? '1' : '0');
+        $tr.removeClass('table-secondary text-muted');
+        if (accion === 'CERRAR') {
+            $tr.addClass('table-secondary');
+        } else if (accion === 'PENDIENTE') {
+            $tr.addClass('text-muted');
+        }
+        actualizarComentarioDiferenciaFila(idx);
+        actualizarComentarioPrecioFila(idx);
+        actualizarCeldaAccionOcFila(idx);
+    }
+
+    function syncItemsDesdeDom() {
+        $('#tbody-items-recepcion tr.item-recepcion-linea').each(function () {
+            var idx = parseInt($(this).data('idx'), 10);
+            var item = itemsActuales[idx];
+            if (!item) {
+                return;
+            }
+            item.cantidad = parseFloat($(this).find('.item-cantidad').val()) || 0;
+            item.cantidad_rechazada = parseFloat($(this).find('.item-cant-rechazada').val()) || 0;
+            item.motivorechazo = $.trim($(this).closest('tbody').find('tr.item-recepcion-motivo-rechazo[data-idx="' + idx + '"] .item-motivo-rechazo').val() || '');
+            item.comentario_diferencia = $.trim($comentarioDiferenciaPorIdx(idx).find('.item-comentario-diferencia').val() || '');
+            item.comentario_precio = $.trim($comentarioPorIdx(idx).find('.item-comentario-precio').val() || '');
+            item.precio = parseFloat($(this).find('.item-precio').val()) || 0;
+            var $cerrarSaldo = $comentarioDiferenciaPorIdx(idx).find('.item-cerrar-saldo-oc');
+            if ($cerrarSaldo.length) {
+                item.fl_cerrar_linea_oc = $cerrarSaldo.is(':checked');
+            }
+            var $selAcc = $(this).find('.item-accion-oc-select');
+            if ($selAcc.length) {
+                var selVal = String($selAcc.val() || '');
+                if (selVal === 'CERRAR') {
+                    item.accion_linea_oc = 'CERRAR';
+                    item.fl_cerrar_linea_oc = true;
+                } else if (selVal === 'PENDIENTE') {
+                    item.accion_linea_oc = 'PENDIENTE';
+                    item.fl_cerrar_linea_oc = false;
+                } else {
+                    item.accion_linea_oc = '';
+                    item.fl_cerrar_linea_oc = false;
+                }
+            }
+            sincronizarAccionEnItem(item);
+        });
+    }
+
+    function accionModalDesdeItem(item) {
+        var v = String((item && item.accion_linea_oc) || '').toUpperCase();
+
+        return v === 'CERRAR' ? 'CERRAR' : 'PENDIENTE';
+    }
+
+    function $filaModalAccion($trOrFila) {
+        return $($trOrFila).closest('.modal-accion-linea-fila[data-modal-accion-idx]');
+    }
+
+    function leerAccionModalFila($fila) {
+        return String($fila.find('.modal-accion-linea-valor').val() || 'PENDIENTE');
+    }
+
+    function aplicarAccionModalFila($fila, accion) {
+        accion = accion === 'CERRAR' ? 'CERRAR' : 'PENDIENTE';
+        $fila.find('.modal-accion-linea-valor').val(accion);
+        $fila.find('.modal-accion-linea-opt').each(function () {
+            var esEste = String($(this).data('val')) === accion;
+            var esCerrar = accion === 'CERRAR';
+            $(this).toggleClass('active', esEste);
+            if (esCerrar) {
+                $(this).toggleClass('btn-danger', esEste);
+                $(this).toggleClass('btn-outline-danger', !esEste);
+                $(this).removeClass('btn-secondary btn-outline-secondary');
+            } else {
+                $(this).toggleClass('btn-secondary', esEste);
+                $(this).toggleClass('btn-outline-secondary', !esEste);
+                $(this).removeClass('btn-danger btn-outline-danger');
+            }
+        });
+    }
+
+    function habilitarComentarioModalFila($fila) {
+        var $coment = $fila.find('.modal-accion-linea-comentario');
+        $coment.removeAttr('readonly').removeAttr('disabled').removeAttr('aria-disabled');
+        $coment.prop('readonly', false).prop('disabled', false);
+        $coment.css('pointer-events', 'auto');
+    }
+
+    function construirModalAccionLineasSinCantidad(lineas) {
+        var html = '<div class="modal-accion-lineas-lista">';
+        lineas.forEach(function (row) {
+            var item = row.item;
+            var idx = row.idx;
+            var sku = escHtml(item.sku || ('Art.' + (item.articulo_id || '')));
+            var descripcion = escHtml(item.descripcion || '');
+            var accionInicial = accionModalDesdeItem(item);
+            html += '<div class="modal-accion-linea-fila border rounded p-2 mb-2" data-modal-accion-idx="' + idx + '">';
+            html += '<div class="d-flex flex-wrap align-items-start mb-2">';
+            html += '<div class="mr-3 mb-1"><strong>' + sku + '</strong></div>';
+            html += '<div class="flex-grow-1 small text-muted mb-1" title="' + descripcion + '">' + (descripcion || '&mdash;') + '</div>';
+            html += '<div class="mb-1 text-nowrap"><span class="badge badge-light">Cant. OC: ' + (item.cantidad_oc != null ? item.cantidad_oc : '&mdash;') + '</span></div>';
+            html += '</div>';
+            html += '<div class="d-flex flex-wrap align-items-center mb-2">';
+            html += '<span class="small text-muted mr-2 mb-1">Acci&oacute;n:</span>';
+            html += '<input type="hidden" class="modal-accion-linea-valor" value="' + accionInicial + '">';
+            html += '<div class="btn-group btn-group-sm mb-1" role="group">';
+            html += '<button type="button" class="btn modal-accion-linea-opt ' + (accionInicial === 'PENDIENTE' ? 'btn-secondary active' : 'btn-outline-secondary') + '" data-val="PENDIENTE">Pendiente</button>';
+            html += '<button type="button" class="btn modal-accion-linea-opt ' + (accionInicial === 'CERRAR' ? 'btn-danger active' : 'btn-outline-danger') + '" data-val="CERRAR">Cerrar OC</button>';
+            html += '</div></div>';
+            html += '<label class="small mb-1 d-block text-muted">Comentario (obligatorio si cierra la l&iacute;nea OC)</label>';
+            html += '<textarea class="form-control form-control-sm modal-accion-linea-comentario" data-idx="' + idx + '" rows="2" maxlength="500" tabindex="0" placeholder="Indique motivo si cierra la l&iacute;nea OC"></textarea>';
+            html += '</div>';
+        });
+        html += '</div>';
+
+        return html;
+    }
+
+    function poblarValoresModalAccionLineas(lineas) {
+        lineas.forEach(function (row) {
+            var $fila = $('#modal-accion-lineas-sin-cantidad-lista .modal-accion-linea-fila[data-modal-accion-idx="' + row.idx + '"]');
+            if (!$fila.length) {
+                return;
+            }
+            $fila.find('.modal-accion-linea-comentario').val(row.item.comentario_diferencia || '');
+            aplicarAccionModalFila($fila, accionModalDesdeItem(row.item));
+            habilitarComentarioModalFila($fila);
+        });
+    }
+
+    function sincronizarModalAccionLineasSinCantidad() {
+        $('#modal-accion-lineas-sin-cantidad-lista .modal-accion-linea-fila[data-modal-accion-idx]').each(function () {
+            var $fila = $(this);
+            var accion = leerAccionModalFila($fila);
+            var $coment = $fila.find('.modal-accion-linea-comentario');
+            habilitarComentarioModalFila($fila);
+            $coment.toggleClass('border-warning', accion === 'CERRAR');
+            if (accion === 'CERRAR' && $.trim($coment.val() || '') === '') {
+                $coment.attr('placeholder', 'Indique motivo del cierre (obligatorio)');
+            } else {
+                $coment.attr('placeholder', 'Indique motivo si cierra la l\u00ednea OC');
+            }
+        });
+    }
+
+    function mostrarModalAccionLineasSinCantidad() {
+        var $modal = $('#modalAccionLineasSinCantidad');
+        if (!$modal.length) {
+            return;
+        }
+        if (!$modal.parent().is('body')) {
+            $modal.appendTo('body');
+        }
+        $modal.modal({
+            backdrop: 'static',
+            focus: false,
+            keyboard: true,
+            show: true
+        });
+    }
+
+    function initModalAccionLineasSinCantidad() {
+        if (!$('#modalAccionLineasSinCantidad').length) {
+            return;
+        }
+        $(document).on('click', '#modalAccionLineasSinCantidad .modal-accion-linea-opt', function (e) {
+            e.preventDefault();
+            var $fila = $filaModalAccion(this);
+            var accion = String($(this).data('val') || 'PENDIENTE');
+            aplicarAccionModalFila($fila, accion);
+            sincronizarModalAccionLineasSinCantidad();
+            if (accion === 'CERRAR') {
+                var el = $fila.find('.modal-accion-linea-comentario').get(0);
+                if (el) {
+                    window.setTimeout(function () {
+                        el.focus();
+                        el.select();
+                    }, 50);
+                }
+            }
+        });
+        $(document).on('mousedown touchstart', '#modalAccionLineasSinCantidad .modal-accion-linea-comentario', function () {
+            habilitarComentarioModalFila($filaModalAccion(this));
+        });
+        $('#modalAccionLineasSinCantidad').on('shown.bs.modal', function () {
+            $(document).off('focusin.modal');
+            sincronizarModalAccionLineasSinCantidad();
+        });
+        $('#btn-modal-accion-lineas-aplicar').on('click', function () {
+            var errores = [];
+            $('#modal-accion-lineas-sin-cantidad-lista .modal-accion-linea-fila[data-modal-accion-idx]').each(function () {
+                var idx = parseInt($(this).data('modal-accion-idx'), 10);
+                var accion = leerAccionModalFila($(this));
+                var coment = $.trim($(this).find('.modal-accion-linea-comentario').val() || '');
+                var item = itemsActuales[idx];
+                if (!item) {
+                    return;
+                }
+                if (accion === 'CERRAR' && coment === '') {
+                    errores.push('Línea ' + (idx + 1) + ': indique comentario para cerrar la línea OC.');
+                    return;
+                }
+                item.accion_linea_oc = accion;
+                item.fl_cerrar_linea_oc = accion === 'CERRAR';
+                item.comentario_diferencia = accion === 'CERRAR' ? coment : '';
+                $comentarioDiferenciaPorIdx(idx).find('.item-comentario-diferencia').val(item.comentario_diferencia || '');
+                actualizarEstiloLineaPorAccion(idx);
+            });
+            if (errores.length) {
+                window.alert(errores.join('\n'));
+                return;
+            }
+            $('#modalAccionLineasSinCantidad').modal('hide');
+            if (recepcionProveedorSubmitPendiente) {
+                window.recepcionProveedorEnviandoTrasModalAccion = true;
+                recepcionProveedorSubmitPendiente.trigger('submit');
+                recepcionProveedorSubmitPendiente = null;
+            }
+        });
+    }
+
+    function intentarSubmitRecepcion($form, e) {
+        syncItemsDesdeDom();
+        if (window.recepcionProveedorEnviandoTrasModalAccion) {
+            window.recepcionProveedorEnviandoTrasModalAccion = false;
+            return true;
+        }
+        var pendientesDefinicion = lineasQueRequierenDefinicionEnGuardado();
+        if (pendientesDefinicion.length) {
+            e.preventDefault();
+            $('#modal-accion-lineas-sin-cantidad-lista').html(construirModalAccionLineasSinCantidad(pendientesDefinicion));
+            poblarValoresModalAccionLineas(pendientesDefinicion);
+            sincronizarModalAccionLineasSinCantidad();
+            recepcionProveedorSubmitPendiente = $form;
+            mostrarModalAccionLineasSinCantidad();
+            return false;
+        }
+        var errores = validarItemsRecepcionAntesEnvio();
+        if (errores.length) {
+            e.preventDefault();
+            window.alert(errores.join('\n'));
+            if (errores[0] && errores[0].indexOf('depósito general de entrada') !== -1) {
+                enfocarDepositoCabeceraRecepcion();
+            }
+            return false;
+        }
+
+        return true;
+    }
+
+    function htmlFilaComentarioDiferencia(item, idx, mostrar) {
+        var comentario = escHtml(item.comentario_diferencia || '');
+        var style = mostrar ? '' : ' style="display:none;"';
+        var mostrarCerrar = mostrarOpcionCerrarSaldoOc(item) || !!(item && item.fl_cerrar_linea_oc);
+        var html = '<tr class="item-recepcion-comentario-diferencia" data-idx="' + idx + '"' + style + '>';
+        html += '<td colspan="' + COLSPAN_TABLA_ITEMS + '" class="bg-transparent">';
+        html += '<div class="d-flex align-items-center flex-wrap pl-4">';
+        html += '<small class="text-warning mr-2 mb-1 font-weight-bold"><i class="fa fa-exclamation-triangle"></i> Comentario obligatorio (diferencia de cantidad):</small>';
+        if (window.recepcionProveedorSoloLectura) {
+            html += '<small class="text-body mb-1">' + (comentario || '—') + '</small>';
+            if (item && item.fl_cerrar_linea_oc) {
+                html += '<small class="text-danger ml-2 mb-1">Cierre de saldo OC</small>';
+            }
+        } else {
+            html += '<input type="text" class="form-control form-control-sm item-comentario-diferencia mb-1" name="items[' + idx + '][comentario_diferencia]" value="' + comentario + '" maxlength="500" placeholder="Motivo del faltante o diferencia de cantidad">';
+            html += '<label class="custom-control custom-checkbox ml-3 mb-1 align-self-center item-cerrar-saldo-wrap"' + (mostrarCerrar ? '' : ' style="display:none;"') + '>';
+            html += '<input type="checkbox" class="custom-control-input item-cerrar-saldo-oc"' + (item && item.fl_cerrar_linea_oc ? ' checked' : '') + '>';
+            html += '<span class="custom-control-label text-danger small">Cerrar saldo pendiente en OC</span></label>';
+        }
+        html += '</div></td></tr>';
+        return html;
+    }
+
+    function actualizarComentarioDiferenciaFila(idx) {
+        var item = itemsActuales[idx];
+        var $tr = $lineaPorIdx(idx);
+        var $sub = $comentarioDiferenciaPorIdx(idx);
+        if (!item || !$tr.length || !$sub.length) {
+            return;
+        }
+        sincronizarAccionEnItem(item);
+        var requiere = lineaRequiereComentarioDiferencia(item);
+        var $cerrarWrap = $sub.find('.item-cerrar-saldo-wrap');
+        if ($cerrarWrap.length) {
+            if (mostrarOpcionCerrarSaldoOc(item)) {
+                $cerrarWrap.show();
+            } else {
+                $cerrarWrap.hide();
+                $cerrarWrap.find('.item-cerrar-saldo-oc').prop('checked', false);
+                item.fl_cerrar_linea_oc = false;
+            }
+        }
+        if (requiere) {
+            $sub.show();
+            $tr.addClass('table-warning');
+        } else {
+            $sub.hide();
+            if (!$sub.find('.item-comentario-diferencia').prop('readonly')) {
+                $sub.find('.item-comentario-diferencia').val('');
+                item.comentario_diferencia = '';
+            }
+        }
+    }
+
+    function validarItemsRecepcionAntesEnvio() {
+        var errores = [];
+        var errDeposito = validarDepositoCabeceraRecepcion();
+        if (errDeposito) {
+            errores.push(errDeposito);
+        }
+        var tieneAccion = false;
+        itemsActuales.forEach(function (item, idx) {
+            if (lineaRequiereDefinicionEnGuardado(item)) {
+                return;
+            }
+            sincronizarAccionEnItem(item);
+            var accion = accionLineaItem(item);
+            if (accion !== 'PENDIENTE') {
+                tieneAccion = true;
+            }
+            if (accion === 'RECIBIR') {
+                var cant = parseFloat(item.cantidad || 0) || 0;
+                var rech = parseFloat(item.cantidad_rechazada || 0) || 0;
+                if (cant <= 0 && rech <= 0) {
+                    errores.push('Línea ' + (idx + 1) + ': indique cantidad recibida o rechazada.');
+                }
+                if (rech > 0 && $.trim(item.motivorechazo || '') === '') {
+                    errores.push('Línea ' + (idx + 1) + ': indique motivo de rechazo.');
+                }
+            }
+            if (lineaRequiereComentarioDiferencia(item) && $.trim(item.comentario_diferencia || '') === '') {
+                errores.push('Línea ' + (idx + 1) + ': indique comentario (diferencia de cantidad o cierre de línea OC).');
+            }
+            var precioOc = precioOcItem(item);
+            var precioRec = parseFloat(item.precio || 0);
+            if (lineaTieneDiferenciaPrecio(precioOc, precioRec) && $.trim(item.comentario_precio || '') === '') {
+                errores.push('Línea ' + (idx + 1) + ': indique comentario de diferencia de precio.');
+            }
+        });
+        if (!tieneAccion) {
+            errores.unshift('Indique al menos una línea a recibir, rechazar o cerrar en la OC.');
+        }
+
+        return errores;
+    }
+
+    function construirResumenConfirmarRecepcion() {
+        var filas = [];
+        itemsActuales.forEach(function (item) {
+            sincronizarAccionEnItem(item);
+            var accion = accionLineaItem(item);
+            var sku = item.sku || ('Art.' + (item.articulo_id || ''));
+            var tipo = item.tipo_linea || 'OC';
+            if (accion === 'CERRAR') {
+                filas.push({
+                    tipo: 'danger',
+                    texto: sku + ' — cierre de saldo OC'
+                        + (item.comentario_diferencia ? ': ' + item.comentario_diferencia : '')
+                });
+            }
+            if (lineaTieneDiferenciaCantidad(item)) {
+                filas.push({
+                    tipo: 'warning',
+                    texto: sku + ': cant. OC ' + item.cantidad_oc + ' vs rec. ' + cantidadTotalRecibida(item)
+                        + (item.comentario_diferencia ? ' — ' + item.comentario_diferencia : '')
+                });
+            }
+            var precioOc = precioOcItem(item);
+            if (lineaTieneDiferenciaPrecio(precioOc, parseFloat(item.precio || 0))) {
+                filas.push({
+                    tipo: 'warning',
+                    texto: sku + ': precio OC ' + precioOc + ' vs rec. ' + parseFloat(item.precio || 0)
+                        + (item.comentario_precio ? ' — ' + item.comentario_precio : '')
+                });
+            }
+            if ((parseFloat(item.cantidad_rechazada || 0) || 0) > 0) {
+                filas.push({
+                    tipo: 'danger',
+                    texto: sku + ': rechazada ' + item.cantidad_rechazada
+                        + (item.motivorechazo ? ' — ' + item.motivorechazo : '')
+                });
+            }
+            if (tipo === 'EXTRA') {
+                filas.push({ tipo: 'info', texto: sku + ' — artículo extra x ' + cantidadTotalRecibida(item) });
+            } else if (tipo === 'SUSTITUTO') {
+                filas.push({ tipo: 'info', texto: sku + ' — sustituto de línea OC' });
+            }
+        });
+
+        return { filas: filas };
+    }
+
+    function asegurarBannerConfirmandoRecepcion() {
+        if ($('#recepcion-proveedor-banner-confirmando').length) {
+            return;
+        }
+        var html = '<div id="recepcion-proveedor-banner-confirmando" class="recepcion-proveedor-confirmando-overlay" role="status" aria-live="polite" aria-busy="true">';
+        html += '<div class="alert alert-warning shadow recepcion-proveedor-confirmando-banner mb-0 px-4 py-3">';
+        html += '<i class="fa fa-spinner fa-spin fa-2x mb-2 d-block text-dark"></i>';
+        html += '<strong class="d-block mb-2 text-dark">Confirmando recepci&oacute;n&hellip;</strong>';
+        html += '<span class="small d-block text-dark">Generando movimiento de stock, asiento contable y registros Anita.<br>Por favor espere; puede tardar varios minutos.</span>';
+        html += '</div></div>';
+        $('body').append(html);
+    }
+
+    function mostrarBannerConfirmandoRecepcion() {
+        asegurarBannerConfirmandoRecepcion();
+        $('#recepcion-proveedor-banner-confirmando').addClass('is-visible');
+        $('#btn-confirmar-recepcion-proveedor, #btn-modal-confirmar-recepcion-aceptar')
+            .prop('disabled', true)
+            .addClass('disabled');
+    }
+
+    function enviarConfirmacionRecepcion($formConfirmar) {
+        if (!$formConfirmar || !$formConfirmar.length) {
+            return;
+        }
+        mostrarBannerConfirmandoRecepcion();
+        window.setTimeout(function () {
+            $formConfirmar.get(0).submit();
+        }, 50);
+    }
+
+    function initConfirmarRecepcionModal() {
+        var $formConfirmar = $('#form-recepcion-confirmar');
+        if (!$formConfirmar.length || window.recepcionProveedorSoloLectura) {
+            return;
+        }
+        $(document).on('click', '#btn-confirmar-recepcion-proveedor, button[form="form-recepcion-confirmar"]', function (e) {
+            e.preventDefault();
+            syncItemsDesdeDom();
+            var pendientesDefinicion = lineasQueRequierenDefinicionEnGuardado();
+            if (pendientesDefinicion.length) {
+                window.alert('Guarde la recepci\u00f3n: hay l\u00edneas sin cantidad que requieren indicar pendiente o cierre.');
+                return;
+            }
+            var errores = validarItemsRecepcionAntesEnvio();
+            if (errores.length) {
+                window.alert(errores.join('\n'));
+                return;
+            }
+            if (!hayDiscrepanciasEnRecepcion()) {
+                if (window.confirm('¿Confirmar recepción? Se generará movimiento de stock y asiento contable.')) {
+                    enviarConfirmacionRecepcion($formConfirmar);
+                }
+                return;
+            }
+            var resumen = construirResumenConfirmarRecepcion();
+            var html = '<ul class="list-unstyled mb-0">';
+            resumen.filas.forEach(function (f) {
+                var cls = f.tipo === 'danger' ? 'text-danger' : (f.tipo === 'warning' ? 'text-warning' : 'text-muted');
+                html += '<li class="mb-1 ' + cls + '"><i class="fa fa-circle fa-xs mr-1"></i> ' + escHtml(f.texto) + '</li>';
+            });
+            html += '</ul>';
+            $('#modal-confirmar-recepcion-resumen').html(html);
+            $('#modalConfirmarRecepcionDiferencias').modal('show');
+        });
+        $('#btn-modal-confirmar-recepcion-aceptar').on('click', function () {
+            $('#modalConfirmarRecepcionDiferencias').modal('hide');
+            enviarConfirmacionRecepcion($formConfirmar);
+        });
+    }
+
     function actualizarMotivoRechazoFila(idx) {
         var $tr = $lineaPorIdx(idx);
         var $sub = $motivoRechazoPorIdx(idx);
@@ -329,7 +1061,7 @@
             if ($tr.length) {
                 recalcularLinea($tr, item);
                 $tr.find('.item-deposito-texto').html(depositoLineaTexto(item));
-                $tr.find('[name*="[deposito_id]"]').val(depositoLinea(item));
+                $tr.find('[name*="[deposito_id]"]').val(depositoLinea(item) > 0 ? depositoLinea(item) : '');
             }
         });
     }
@@ -629,7 +1361,7 @@
         item.moneda_id = monedaIdItem(item, idx);
         item.cotizacion = cotizacionItem(item, idx);
         var html = '';
-        html += '<input type="hidden" name="items[' + idx + '][deposito_id]" value="' + depId + '">';
+        html += '<input type="hidden" name="items[' + idx + '][deposito_id]" value="' + (depId > 0 ? depId : '') + '">';
         html += '<input type="hidden" name="items[' + idx + '][tipo_linea]" value="' + escHtml(tipo) + '">';
         html += '<input type="hidden" name="items[' + idx + '][cantidad_oc]" value="' + (item.cantidad_oc != null ? item.cantidad_oc : '') + '">';
         html += '<input type="hidden" name="items[' + idx + '][ordencompra_articulo_id]" value="' + (item.ordencompra_articulo_id || '') + '">';
@@ -645,6 +1377,9 @@
         html += '<input type="hidden" name="items[' + idx + '][unidadmedida_id]" value="' + (parseInt(item.unidadmedida_id, 10) || '') + '">';
         html += '<input type="hidden" name="items[' + idx + '][coeficienteconversion]" value="' + coefEfectivo(item) + '">';
         html += '<input type="hidden" name="items[' + idx + '][precio_ordencompra]" value="' + (item.precio_ordencompra != null ? item.precio_ordencompra : '') + '">';
+        sincronizarAccionEnItem(item);
+        html += '<input type="hidden" class="item-accion-linea-oc" name="items[' + idx + '][accion_linea_oc]" value="' + escHtml(accionLineaItem(item)) + '">';
+        html += '<input type="hidden" class="item-fl-cerrar-linea-oc" name="items[' + idx + '][fl_cerrar_linea_oc]" value="' + (accionLineaItem(item) === 'CERRAR' ? '1' : '0') + '">';
 
         return html;
     }
@@ -672,10 +1407,17 @@
             var precioOc = parseFloat(item.precio_ordencompra != null ? item.precio_ordencompra : item.precio || 0);
             var precioRec = parseFloat(item.precio || 0);
             var precioDiff = lineaTieneDiferenciaPrecio(precioOc, precioRec);
-            var cantDiff = item.cantidad_oc > 0 && Math.abs(cantidadTotalRecibida(item) - parseFloat(item.cantidad_oc)) >= 0.0001;
+            var cantDiff = lineaTieneDiferenciaCantidad(item);
             var cantRech = parseFloat(item.cantidad_rechazada || 0) || 0;
+            var accion = accionLineaItem(item);
             var tipo = item.tipo_linea || 'OC';
             var rowClass = (precioDiff || cantDiff || tipo === 'EXTRA' || tipo === 'SUSTITUTO') ? 'table-warning' : '';
+            if (accion === 'CERRAR') {
+                rowClass = 'table-secondary';
+            }
+            if (accion === 'PENDIENTE' && lineaEsDeOc(item)) {
+                rowClass = 'text-muted';
+            }
             if (cantRech > 0.000001) {
                 rowClass = 'table-danger';
             }
@@ -696,15 +1438,19 @@
             html += '<td class="align-middle">' + htmlCeldaImporteLinea(item, idx, soloLectura) + '</td>';
             html += '<td class="align-middle">' + htmlMonedaCotizacion(item, idx) + '</td>';
             html += '<td class="align-middle"><span class="item-deposito-texto">' + depositoLineaTexto(item) + '</span></td>';
+            html += '<td class="align-middle text-center col-acc-linea">';
             if (!soloLectura && tipo === 'EXTRA') {
-                html += '<td class="align-middle text-center"><button type="button" class="btn btn-xs btn-danger btn-quitar-linea" data-idx="' + idx + '" title="Quitar línea"><i class="fa fa-trash"></i></button></td>';
+                html += '<button type="button" class="btn btn-xs btn-danger btn-quitar-linea" data-idx="' + idx + '" title="Quitar l&iacute;nea"><i class="fa fa-trash"></i></button>';
             } else {
-                html += '<td class="align-middle"></td>';
+                html += htmlCeldaAccionOc(item, idx, soloLectura);
             }
+            html += '</td>';
             html += '</tr>';
             html += htmlFilaComentarioPrecio(item, idx, precioDiff || !!item.comentario_precio);
+            html += htmlFilaComentarioDiferencia(item, idx, lineaRequiereComentarioDiferencia(item) || !!item.comentario_diferencia);
             html += htmlFilaMotivoRechazo(item, idx, cantRech > 0.000001 || !!item.motivorechazo);
             $tbody.append(html);
+            actualizarEstiloLineaPorAccion(idx);
         });
         actualizarLinksArticuloGrilla();
         actualizarTotalRecepcion();
@@ -823,7 +1569,7 @@
         item.sku = ($tr.find('.codigoarticulo').val() || '').trim();
         item.descripcion = $tr.find('.descripcionarticulo').val() || '';
         recalcularLinea($tr, item);
-        $tr.find('[name*="[deposito_id]"]').val(depositoLinea(item));
+        $tr.find('[name*="[deposito_id]"]').val(depositoLinea(item) > 0 ? depositoLinea(item) : '');
         $tr.find('.item-deposito-texto').html(depositoLineaTexto(item));
     }
 
@@ -839,6 +1585,9 @@
             descripcion: '',
             cantidad: 1,
             cantidad_rechazada: 0,
+            accion_linea_oc: '',
+            fl_cerrar_linea_oc: false,
+            comentario_diferencia: '',
             motivorechazo: '',
             cantidad_oc: null,
             precio: 0,
@@ -897,7 +1646,7 @@
         $tr.find('.codigoarticulo').val(item.sku);
         $tr.find('.descripcionarticulo').val(item.descripcion);
         recalcularLinea($tr, item);
-        $tr.find('[name*="[deposito_id]"]').val(depositoLinea(item));
+        $tr.find('[name*="[deposito_id]"]').val(depositoLinea(item) > 0 ? depositoLinea(item) : '');
         $tr.find('.item-deposito-texto').html(depositoLineaTexto(item));
         actualizarComentarioPrecioFila(idx);
     };
@@ -926,6 +1675,7 @@
         };
 
         $('#recepcion_deposito_id').on('change', function () {
+            marcarDepositoCabeceraInvalido(false);
             depositoCabeceraId = depositoCabeceraActivo();
             if (!depositoCabeceraId) {
                 depositoCabeceraEmpresaId = 0;
@@ -988,9 +1738,16 @@
             $formRecepcion.on('submit.recepcionFecha', function (e) {
                 if (!fechaRecepcionValida()) {
                     e.preventDefault();
+                    return;
+                }
+                if (!intentarSubmitRecepcion($formRecepcion, e)) {
+                    return;
                 }
             });
         }
+
+        initModalAccionLineasSinCantidad();
+        initConfirmarRecepcionModal();
 
         if ($formRecepcion.length && $formRecepcion.find('[name="tipo"]').val() === 'DEVOLUCION') {
             $formRecepcion.on('submit.recepcionDevolucionConfirm', function (e) {
@@ -1041,9 +1798,65 @@
             } else if ($(this).hasClass('item-precio')) {
                 item.precio = parseFloat($(this).val()) || 0;
             }
+            if (cantidadTotalRecibida(item) <= 0.000001 && lineaEsDeOc(item)) {
+                if (String(item.accion_linea_oc || '').toUpperCase() !== 'CERRAR') {
+                    item.fl_cerrar_linea_oc = false;
+                }
+            }
+            sincronizarAccionEnItem(item);
             recalcularLinea($tr, item);
+            actualizarEstiloLineaPorAccion(idx);
             actualizarComentarioPrecioFila(idx);
             actualizarTotalRecepcion();
+        });
+
+        $(document).on('change', '.item-accion-oc-select', function () {
+            var idx = parseInt($(this).closest('tr.item-recepcion-linea').data('idx'), 10);
+            var item = itemsActuales[idx];
+            if (!item) {
+                return;
+            }
+            var val = String($(this).val() || '');
+            if (val === 'CERRAR') {
+                item.accion_linea_oc = 'CERRAR';
+                item.fl_cerrar_linea_oc = true;
+            } else if (val === 'PENDIENTE') {
+                item.accion_linea_oc = 'PENDIENTE';
+                item.fl_cerrar_linea_oc = false;
+                item.comentario_diferencia = '';
+            } else {
+                item.accion_linea_oc = '';
+                item.fl_cerrar_linea_oc = false;
+                item.comentario_diferencia = '';
+            }
+            actualizarEstiloLineaPorAccion(idx);
+        });
+
+        $(document).on('change', '.item-cerrar-saldo-oc', function () {
+            var idx = parseInt($(this).closest('tr').data('idx'), 10);
+            var item = itemsActuales[idx];
+            if (!item) {
+                return;
+            }
+            item.fl_cerrar_linea_oc = $(this).is(':checked');
+            sincronizarAccionEnItem(item);
+            actualizarEstiloLineaPorAccion(idx);
+        });
+
+        $(document).on('input', '.item-comentario-diferencia', function () {
+            var idx = parseInt($(this).closest('tr').data('idx'), 10);
+            var item = itemsActuales[idx];
+            if (item) {
+                item.comentario_diferencia = $.trim($(this).val() || '');
+            }
+        });
+
+        $(document).on('input', '.item-comentario-precio', function () {
+            var idx = parseInt($(this).closest('tr').data('idx'), 10);
+            var item = itemsActuales[idx];
+            if (item) {
+                item.comentario_precio = $.trim($(this).val() || '');
+            }
         });
 
         $(document).on('input', '.item-importe-linea', function () {
@@ -1242,8 +2055,8 @@
             if (res.proveedor_id) {
                 $('#proveedor_id').val(res.proveedor_id);
             }
-            if (res.empresa_id) {
-                $('#empresa_id').val(res.empresa_id);
+            if (res.empresa_id || res.empresa_nombre) {
+                sincronizarEmpresaDesdeOc(res);
             }
             if (res.lineas && res.lineas.length) {
                 renderItems(res.lineas);

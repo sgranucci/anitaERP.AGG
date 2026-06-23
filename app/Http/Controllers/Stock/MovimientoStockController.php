@@ -8,7 +8,9 @@ use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionMovimientoStock;
 use App\Services\Stock\MovimientoStockAsientoService;
+use App\Services\Stock\MovimientoStockPdfService;
 use App\Services\Stock\MovimientoStockService;
+use App\Services\Stock\TransferenciaMercaderiaPdfService;
 use App\Services\Stock\TransferenciaMercaderiaService;
 use App\Models\Contable\BienUso;
 use App\Models\Stock\Tipotransaccion_Stock;
@@ -20,8 +22,11 @@ use App\Repositories\Stock\DepmaeRepositoryInterface;
 use App\Repositories\Stock\MovimientoStockRepositoryInterface;
 use App\Repositories\Stock\Tipotransaccion_StockRepository;
 use App\Repositories\Stock\LoteRepositoryInterface;
+use App\Support\Stock\MovimientoStockFormLineasSupport;
 use App\Support\Stock\MovimientoStockFormulaConversionSupport;
 use App\Support\Stock\MovimientoStockListadoFiltros;
+use App\Support\Stock\MovimientoStockPreferenciasUsuario;
+use App\Support\Stock\MovimientoStockVisibilidadSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Articulo;
@@ -43,6 +48,8 @@ class MovimientoStockController extends Controller
     private $asientoService;
     private TransferenciaMercaderiaService $transferenciaMercaderiaService;
     private Articulo_Saldo_DepositoRepositoryInterface $saldoDepositoRepository;
+    private MovimientoStockPdfService $pdfService;
+    private TransferenciaMercaderiaPdfService $transferenciaPdfService;
 	
     public function __construct(
         MovimientoStockService $movimientoStockservice,
@@ -55,6 +62,8 @@ class MovimientoStockController extends Controller
         MovimientoStockAsientoService $asientoService,
         TransferenciaMercaderiaService $transferenciaMercaderiaService,
         Articulo_Saldo_DepositoRepositoryInterface $saldoDepositoRepository,
+        MovimientoStockPdfService $pdfService,
+        TransferenciaMercaderiaPdfService $transferenciaPdfService,
     ) {
         $this->movimientoStockService = $movimientoStockservice;
         $this->tipotransaccionStockRepository = $tipotransaccionStockRepository;
@@ -66,6 +75,8 @@ class MovimientoStockController extends Controller
         $this->asientoService = $asientoService;
         $this->transferenciaMercaderiaService = $transferenciaMercaderiaService;
         $this->saldoDepositoRepository = $saldoDepositoRepository;
+        $this->pdfService = $pdfService;
+        $this->transferenciaPdfService = $transferenciaPdfService;
     }
 
     public function index(Request $request)
@@ -87,12 +98,15 @@ class MovimientoStockController extends Controller
             'empresa_query' => $empresa_query,
             'deposito_query' => $deposito_query,
             'mostrarFiltroDeposito' => $this->mostrarFiltroDeposito($deposito_query),
+            'alcance_centro_costo' => MovimientoStockVisibilidadSupport::etiquetaAlcanceActivo(),
         ]);
     }
 
     public function consultarTransferencia(int $id)
     {
         can('listar-movimientos-de-stock');
+
+        MovimientoStockVisibilidadSupport::abortSiNoAccesibleTransferencia($id);
 
         $transferencia = \App\Models\Stock\Transferencia_Mercaderia::query()
             ->with([
@@ -105,8 +119,8 @@ class MovimientoStockController extends Controller
                 'usuarioDestino:id,nombre',
                 'usuarioAprobador:id,nombre',
                 'empresas:id,nombre',
-                'articulos.articuloOrigen:id,sku,nombre',
-                'articulos.articuloDestino:id,sku,nombre',
+                'articulos.articuloOrigen:id,sku,descripcion',
+                'articulos.articuloDestino:id,sku,descripcion',
             ])
             ->findOrFail($id);
 
@@ -186,21 +200,32 @@ class MovimientoStockController extends Controller
 		$mensaje = '';
 		try
 		{
+            $tipoStockId = (int) ($request->input('tipotransaccion_stock_id') ?: $request->input('tipotransaccion_id'));
+
             if ($this->requestEsTransferenciaStock($request)) {
                 $resultado = $this->grabarTransferenciaDesdeMovimientoStock($request);
                 if (! ($resultado['ok'] ?? false)) {
                     throw new \Exception($resultado['mensaje'] ?? 'No se pudo registrar la transferencia.');
                 }
 
+                MovimientoStockPreferenciasUsuario::persistirTipoTransaccion($tipoStockId);
+
                 return redirect('stock/movimientostock')->with('mensaje', $resultado['mensaje'] ?? 'Transferencia registrada.');
             }
 
             $data = $this->movimientoStockService->guardaMovimientoStock($request->all(), 'create');
-			if (is_array($data))
+			if (is_array($data)) {
 				$mensaje = 'Movimiento de stock creado con éxito';
-			else
-				if ($data)
-					$mensaje = $data;
+                MovimientoStockPreferenciasUsuario::persistirTipoTransaccion($tipoStockId);
+
+                return redirect()
+                    ->route('editar_movimientostock', ['id' => $data['id']])
+                    ->with('mensaje', $mensaje);
+			}
+
+            if ($data) {
+                return redirect()->back()->withInput()->with('mensaje', $data);
+            }
 		} catch (\Exception $e)
 		{
 			return redirect()->back()->withInput()->with('mensaje', $e->getMessage());
@@ -261,6 +286,8 @@ class MovimientoStockController extends Controller
 
 		try {
 			$this->movimientoStockService->guardaMovimientoStock($request->all(), 'update', $id);
+            $tipoStockId = (int) ($request->input('tipotransaccion_stock_id') ?: $request->input('tipotransaccion_id'));
+            MovimientoStockPreferenciasUsuario::persistirTipoTransaccion($tipoStockId);
 		} catch (\Exception $e) {
 			return redirect()->back()->withInput()->with('mensaje', $e->getMessage());
 		}
@@ -360,9 +387,29 @@ class MovimientoStockController extends Controller
         ]);
     }
 
+    public function imprimirCom(Request $request, int $id)
+    {
+        can('listar-movimientos-de-stock');
+
+        MovimientoStockVisibilidadSupport::abortSiNoAccesibleMovimiento($id);
+
+        return $this->pdfService->descargarCom($id, $request->boolean('inline'));
+    }
+
+    public function imprimirTransferenciaCom(Request $request, int $id)
+    {
+        can('listar-movimientos-de-stock');
+
+        MovimientoStockVisibilidadSupport::abortSiNoAccesibleTransferencia($id);
+
+        return $this->transferenciaPdfService->descargarCom($id, $request->boolean('inline'));
+    }
+
     public function listarMovimientoStock($id)
     {
         can('listar-movimientos-de-stock');
+
+        MovimientoStockVisibilidadSupport::abortSiNoAccesibleMovimiento((int) $id);
 
         return redirect()->route('editar_movimientostock', ['id' => $id]);
     }
@@ -430,14 +477,7 @@ class MovimientoStockController extends Controller
 
     private function resolverTipotransaccionStockDefaultId(): ?int
     {
-        $cached = cache()->get(generaKey('tipotransaccion'));
-        if ($cached === null || $cached === '') {
-            return null;
-        }
-
-        $resolved = $this->tipotransaccionStockRepository->resolveIdFromLegacy((int) $cached);
-
-        return $resolved > 0 ? $resolved : null;
+        return MovimientoStockPreferenciasUsuario::resolverTipoTransaccionDefaultId();
     }
 
     private function mostrarFiltroDeposito($depositoQuery): bool

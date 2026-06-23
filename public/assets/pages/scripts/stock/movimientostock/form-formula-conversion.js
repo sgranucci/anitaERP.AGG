@@ -109,6 +109,30 @@
         return String(parseFloat(parseFloat(num).toFixed(6)));
     }
 
+    function truncarTexto(texto, max) {
+        var t = String(texto || '').trim();
+        if (!t || t.length <= max) {
+            return t;
+        }
+        return t.substring(0, Math.max(1, max - 1)) + '…';
+    }
+
+    function textoCompletoInsumoDestino(sku, desc) {
+        sku = String(sku || '').trim();
+        desc = String(desc || '').trim();
+        if (sku && desc) {
+            return sku + ' — ' + desc;
+        }
+        if (desc) {
+            return '— ' + desc;
+        }
+        return sku;
+    }
+
+    function textoVisibleInsumoDestino(sku, desc) {
+        return truncarTexto(textoCompletoInsumoDestino(sku, desc), 42);
+    }
+
     function conversionTransferenciaFormulaActiva() {
         if (operacionTipoSeleccionada() !== 'T') {
             return false;
@@ -138,11 +162,13 @@
         var desc = (data.articulo_convertido_descripcion || '').trim();
         var um = (data.um_convertida || '').trim();
         var cantConv = parseFloat(data.cantidad_convertida);
+        var visible = textoVisibleInsumoDestino(sku, desc);
+        var titleFull = textoCompletoInsumoDestino(sku, desc);
 
         $tr.find('.ms-insumo-destino-sku')
-            .val(sku)
-            .attr('title', desc || sku)
-            .attr('placeholder', sku ? '' : '—');
+            .val(visible)
+            .attr('title', titleFull || visible)
+            .attr('placeholder', visible ? '' : '—');
 
         $tr.find('.ms-um-destino').text(um);
 

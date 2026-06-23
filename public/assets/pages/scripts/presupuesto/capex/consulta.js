@@ -1,11 +1,61 @@
-/* Modal CAPEX en líneas de requisición (filtra por empresa, último presupuesto y CC destino de la línea). */
+/* Modal CAPEX en líneas de requisición (filtra por empresa, último presupuesto y CC destino). */
 var ptrCapexId;
 var ptrCodigoCapex;
 var ptrDetalleCapex;
-var ptrCentrocostoDestinoIdCapex;
+var ptrFilaCapex;
 
 function carpetaBaseCapex() {
 	return window.location.pathname.split('/public')[0] + '/public';
+}
+
+function centrocostoFiltroDesdeFilaCapex($row) {
+	var cc = '';
+	if ($row && $row.length) {
+		cc = $row.find('select[name="centrocostodestino_ids[]"]').val() || '';
+	}
+	if (!cc) {
+		cc = $('#centrocosto_id').val() || '';
+	}
+	if (!cc) {
+		cc = $('#wz_centrocosto_id').val() || '';
+	}
+	return cc;
+}
+
+function asegurarOpcionesCentrocostoModalCapex($modalSelect, $row, valor) {
+	if (!$modalSelect || !$modalSelect.length) {
+		return;
+	}
+	if ($modalSelect.find('option').length > 1) {
+		if (valor && $modalSelect.find('option[value="' + valor + '"]').length) {
+			$modalSelect.val(valor);
+		}
+		return;
+	}
+
+	var $src = ($row && $row.length) ? $row.find('select[name="centrocostodestino_ids[]"]') : $();
+	if (!$src.length) {
+		$src = $('select[name="centrocostodestino_ids[]"]').first();
+	}
+	if ($src.length) {
+		$src.find('option').each(function () {
+			var v = $(this).attr('value');
+			if (v === undefined || v === null || v === '') {
+				return;
+			}
+			$modalSelect.append($(this).clone());
+		});
+	}
+
+	if (valor && $modalSelect.find('option[value="' + valor + '"]').length) {
+		$modalSelect.val(valor);
+	} else {
+		$modalSelect.val('');
+	}
+}
+
+function centrocostoFiltroModalCapex() {
+	return $('#consultacapex_centrocosto_id').val() || '';
 }
 
 function buscar_datos_capex(consulta) {
@@ -20,7 +70,7 @@ function buscar_datos_capex(consulta) {
 		data: {
 			consulta: consulta || '',
 			empresa_id: empresaId,
-			centrocostodestino_id: ptrCentrocostoDestinoIdCapex || ''
+			centrocostodestino_id: centrocostoFiltroModalCapex()
 		},
 	})
 		.done(function (resp) {
@@ -38,7 +88,9 @@ function activa_eventos_consultacapex() {
 		ptrCapexId = $row.find('.capex_id');
 		ptrCodigoCapex = $row.find('.codigocapex');
 		ptrDetalleCapex = $row.find('.descripcioncapex');
-		ptrCentrocostoDestinoIdCapex = $row.find('select[name="centrocostodestino_ids[]"]').val() || '';
+		ptrFilaCapex = $row;
+		var ccInicial = centrocostoFiltroDesdeFilaCapex($row);
+		asegurarOpcionesCentrocostoModalCapex($('#consultacapex_centrocosto_id'), $row, ccInicial);
 		$('#consultacapexModal').modal('show');
 	});
 
@@ -59,6 +111,10 @@ function activa_eventos_consultacapex() {
 
 	$(document).off('keyup.consultaCapexReq', '#consultacapex').on('keyup.consultaCapexReq', '#consultacapex', function () {
 		buscar_datos_capex($(this).val() || '');
+	});
+
+	$(document).off('change.consultaCapexReq', '#consultacapex_centrocosto_id').on('change.consultaCapexReq', '#consultacapex_centrocosto_id', function () {
+		buscar_datos_capex($('#consultacapex').val() || '');
 	});
 
 	$(document).off('click.consultaCapexReq', '.eligeconsultacapex').on('click.consultaCapexReq', '.eligeconsultacapex', function (event) {
@@ -90,7 +146,7 @@ function activa_eventos_consultacapex() {
 		var $row = $inp.closest('tr.item-requisicion-articulo, tr.item-ordencompra-articulo');
 		var codigo = ($inp.val() || '').trim();
 		var empresaId = $('#empresa_id').val();
-		var ccDest = $row.find('select[name="centrocostodestino_ids[]"]').val() || '';
+		var ccDest = centrocostoFiltroDesdeFilaCapex($row);
 
 		if (!codigo) {
 			$row.find('.capex_id').val('');

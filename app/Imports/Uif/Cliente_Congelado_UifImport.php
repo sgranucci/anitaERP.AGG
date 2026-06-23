@@ -3,13 +3,13 @@
 namespace App\Imports\Uif;
 
 use App\Repositories\Uif\Cliente_Congelado_UifRepositoryInterface;
-use Maatwebsite\Excel\Concerns\OnEachRow;
-use Maatwebsite\Excel\Row;
-use Auth;
 use Carbon\Carbon;
-use DB;
+use Maatwebsite\Excel\Concerns\OnEachRow;
+use Maatwebsite\Excel\Concerns\WithStartRow;
+use Maatwebsite\Excel\Row;
+use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
 
-class Cliente_Congelado_UifImport implements OnEachRow
+class Cliente_Congelado_UifImport implements OnEachRow, WithStartRow
 {
     private $cliente_congelado_uifRepository;
 
@@ -18,36 +18,88 @@ class Cliente_Congelado_UifImport implements OnEachRow
         $this->cliente_congelado_uifRepository = $cliente_congelado_uifrepository;
     }
 
-    /**
-    * @param array $row
-    *
-    * @return \Illuminate\Database\Eloquent\Model|null
-    */
-    public function onRow(Row $row)
+    public function startRow(): int
+    {
+        return 4;
+    }
+
+    public function onRow(Row $row): void
     {
         $row = $row->toArray();
 
-        // Si el documento es un numero importa
-        if (substr($row[1],1,1) >= '0' and substr($row[1],1,1) <= '9')
-        {
-            $arrayClienteCongelado_Uif = [
-                'nombre' => $row[2].' '.$row[3].' '.$row[4].' '.$row[5].' '.$row[6],
-                'numerodocumento' => $row[1],
-                'resolucion' => $row[7],
-                'fechacaducidad' => $row[8]
-            ];
+        $numerodocumento = preg_replace('/\D/', '', trim((string) ($row[0] ?? '')));
+        if ($numerodocumento === '') {
+            return;
+        }
 
-            // Busca si existe el registro
-            $cliente_congelado_uif = $this->cliente_congelado_uifRepository
-                                            ->buscaCliente_Congelado_Uif($arrayClienteCongelado_Uif['nombre'], 
-                                                                            $arrayClienteCongelado_Uif['numerodocumento'], 
-                                                                            $arrayClienteCongelado_Uif['resolucion'], 
-                                                                            $arrayClienteCongelado_Uif['fechacaducidad']);
-            
-            if ($cliente_congelado_uif)
-                $this->cliente_congelado_uifRepository->update($arrayClienteCongelado_Uif);
-            else
-                $this->cliente_congelado_uifRepository->create($arrayClienteCongelado_Uif);
+        $partesNombre = [];
+        for ($i = 1; $i <= 5; $i++) {
+            $parte = trim((string) ($row[$i] ?? ''));
+            if ($parte !== '') {
+                $partesNombre[] = $parte;
+            }
+        }
+
+        $nombre = trim(implode(' ', $partesNombre));
+        if ($nombre === '') {
+            return;
+        }
+
+        $arrayClienteCongelado_Uif = [
+            'nombre' => $nombre,
+            'numerodocumento' => $numerodocumento,
+            'resolucion' => trim((string) ($row[6] ?? '')),
+            'fechacaducidad' => $this->parseFecha($row[7] ?? null),
+        ];
+
+        $cliente_congelado_uif = $this->cliente_congelado_uifRepository
+            ->buscaCliente_Congelado_Uif($numerodocumento);
+
+        if ($cliente_congelado_uif) {
+            $this->cliente_congelado_uifRepository->update($arrayClienteCongelado_Uif, $cliente_congelado_uif->id);
+        } else {
+            $this->cliente_congelado_uifRepository->create($arrayClienteCongelado_Uif);
+        }
+    }
+
+    private function parseFecha($value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if ($value instanceof \DateTimeInterface) {
+            return $value->format('Y-m-d');
+        }
+
+        if (is_numeric($value)) {
+            return Carbon::instance(ExcelDate::excelToDateTimeObject((float) $value))->format('Y-m-d');
+        }
+
+        $value = trim((string) $value);
+        if ($value === '') {
+            return null;
+        }
+
+        if (ctype_digit($value)) {
+            return Carbon::instance(ExcelDate::excelToDateTimeObject((float) $value))->format('Y-m-d');
+        }
+
+        foreach (['n/j/Y', 'm/d/Y', 'd/m/Y', 'Y-m-d'] as $formato) {
+            try {
+                $fecha = Carbon::createFromFormat($formato, $value);
+                if ($fecha !== false) {
+                    return $fecha->format('Y-m-d');
+                }
+            } catch (\Exception $exception) {
+                continue;
+            }
+        }
+
+        try {
+            return Carbon::parse($value)->format('Y-m-d');
+        } catch (\Exception $exception) {
+            return null;
         }
     }
 }

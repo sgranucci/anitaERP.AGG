@@ -14,7 +14,11 @@ $(document).ready(function () {
         selector: '.tooltipsC:not(.consultaarticulo):not(.consultadeposito)',
         placement: 'top',
         html: true,
-        container: 'body'
+        container: 'body',
+        boundary: 'window'
+    });
+    $('body').on('mousedown', '.btn-accion-tabla.tooltipsC', function () {
+        $(this).tooltip('hide');
     });
     var menuParents = $('ul.nav-sidebar').find('a.active').parents('li.has-treeview');
     menuParents.addClass('menu-open');

@@ -66,6 +66,9 @@
             $('#empresa_id').val(r.empresa_id);
             window.recepcionProveedorEmpresaDesdeOc = true;
         }
+        if (r.empresa_nombre) {
+            $('#empresa_nombre_oc').val(r.empresa_nombre).attr('title', r.empresa_nombre);
+        }
         $('#consultaocrecepcionModal').modal('hide');
 
         if (typeof window.recepcionProveedorCargarOc === 'function') {

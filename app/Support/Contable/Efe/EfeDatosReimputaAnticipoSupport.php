@@ -62,6 +62,26 @@ class EfeDatosReimputaAnticipoSupport
                     continue;
                 }
 
+                if ((int) ($filas[$indice]['concepto_id'] ?? 0)
+                    === EfeDatosMantenimientoEdificioSupport::CONCEPTO_MANTENIMIENTO_EDIFICIO) {
+                    continue;
+                }
+
+                if ((int) ($filas[$indice]['concepto_id'] ?? 0) === EfeDatosVariosSupport::CONCEPTO_VARIOS) {
+                    continue;
+                }
+
+                if ($conceptoDestino === EfeDatosMantenimientoEdificioSupport::CONCEPTO_MANTENIMIENTO_EDIFICIO) {
+                    $filas[$indice]['concepto_id'] = $conceptoDestino;
+                    $filas[$indice]['concepto_nombre'] = $nombreDestino;
+                    $filas[$indice]['clasificacion_efe'] = $this->clasificacionSupport->formatearClave(
+                        $conceptoDestino,
+                        $nombreDestino,
+                    );
+
+                    continue;
+                }
+
                 $filas[$indice]['cuenta'] = (int) ($filaDestino['cuenta'] ?? $cuenta);
                 $filas[$indice]['cuenta_codigo'] = (string) ($filaDestino['cuenta_codigo'] ?? '');
                 $filas[$indice]['cuenta_nombre'] = (string) ($filaDestino['cuenta_nombre'] ?? '');
@@ -83,6 +103,8 @@ class EfeDatosReimputaAnticipoSupport
      */
     private function resolverIndiceDestino(array $filas, array $indices): ?int
     {
+        $indiceMantEdificio = null;
+        $indiceConcepto24 = null;
         $indiceDestino = null;
         $maxMonto = 0.0;
 
@@ -98,6 +120,14 @@ class EfeDatosReimputaAnticipoSupport
                 continue;
             }
 
+            if ($this->esCuentaMantenimientoEdificio($cuenta)) {
+                $indiceMantEdificio = $indice;
+            }
+
+            if ((int) ($fila['concepto_id'] ?? 0) === EfeDatosMantenimientoEdificioSupport::CONCEPTO_MANTENIMIENTO_EDIFICIO) {
+                $indiceConcepto24 = $indice;
+            }
+
             $monto = max((float) ($fila['pagos'] ?? 0), (float) ($fila['cobros'] ?? 0));
             if ($monto > $maxMonto) {
                 $maxMonto = $monto;
@@ -105,7 +135,21 @@ class EfeDatosReimputaAnticipoSupport
             }
         }
 
+        if ($indiceMantEdificio !== null) {
+            return $indiceMantEdificio;
+        }
+
+        if ($indiceConcepto24 !== null) {
+            return $indiceConcepto24;
+        }
+
         return $indiceDestino;
+    }
+
+    private function esCuentaMantenimientoEdificio(int $cuenta): bool
+    {
+        return $cuenta === 521150003
+            || ($cuenta >= 521180000 && $cuenta < 521190000);
     }
 
     /**

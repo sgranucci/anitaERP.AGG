@@ -47,6 +47,7 @@
         $('#ms_panel_transferencia').toggle(esT);
 
         if (esT) {
+            $('#deposito_id').prop('required', false).removeAttr('name');
             var depSimple = String($('#deposito_id').val() || '').trim();
             if (depSimple && !String($('#deposito_salida_id').val() || '').trim() && !origenBien) {
                 $('#deposito_salida_id').val(depSimple);
@@ -58,6 +59,8 @@
                     $('#deposito_salida_id').attr('data-tipodeposito', tipoSimple);
                 }
             }
+        } else {
+            $('#deposito_id').attr('name', 'deposito_id');
         }
 
         $('#tm_deposito_salida').toggle(esT && !origenBien);

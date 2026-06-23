@@ -80,7 +80,7 @@ class ArticuloEtiquetaNpuSupport
                 $articulo,
                 $numeroparte,
                 null,
-                null,
+                '',
                 'erp',
             );
         }

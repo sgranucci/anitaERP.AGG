@@ -126,6 +126,138 @@ final class RecepcionProveedorAnitaNumeracionSupport
         }
     }
 
+    /**
+     * Máximo COM global: ERP + recepmae + numerador ventas (num_clave 120 vía t_comp COM).
+     */
+    public static function ultimoNumeroComGlobal(): int
+    {
+        $maxErp = (int) \Illuminate\Support\Facades\DB::table('recepcion_proveedor')->max('numerorecepcion');
+
+        $maxRecepmae = 0;
+        try {
+            $maxRecepmae = RecepcionProveedorAnitaColisionSupport::maxNumeroRecepmaeGlobal();
+        } catch (\Throwable $e) {
+            Log::warning('RecepcionProveedorAnitaNumeracion: no se pudo leer max recepmae', [
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        $maxNumerador = 0;
+        try {
+            $maxNumerador = self::leerUltimoNumero(self::resolverClaveNumeradorDesdeTComp());
+        } catch (\Throwable $e) {
+            Log::warning('RecepcionProveedorAnitaNumeracion: no se pudo leer numerador COM', [
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return max($maxErp, $maxRecepmae, $maxNumerador);
+    }
+
+    /**
+     * Alinea numerador 120 (último COM Anita desktop) con max(ERP, recepmae, numerador actual).
+     *
+     * @return array{antes: int, despues: int, num_clave: string, max_erp: int, max_recepmae: int}
+     */
+    public static function sincronizarNumeradorComGlobal(): array
+    {
+        $claveNumerador = self::resolverClaveNumeradorDesdeTComp();
+        $antes = self::leerUltimoNumero($claveNumerador);
+        $maxErp = (int) \Illuminate\Support\Facades\DB::table('recepcion_proveedor')->max('numerorecepcion');
+        $maxRecepmae = RecepcionProveedorAnitaColisionSupport::maxNumeroRecepmaeGlobal();
+        $despues = max($maxErp, $maxRecepmae, $antes);
+
+        if ($despues > $antes) {
+            self::actualizarNumerador($claveNumerador, $despues);
+        }
+
+        Log::info('RecepcionProveedorAnitaNumeracion: numerador COM sincronizado', [
+            'num_clave' => $claveNumerador,
+            'antes' => $antes,
+            'despues' => $despues,
+            'max_erp' => $maxErp,
+            'max_recepmae' => $maxRecepmae,
+        ]);
+
+        return [
+            'antes' => $antes,
+            'despues' => $despues,
+            'num_clave' => $claveNumerador,
+            'max_erp' => $maxErp,
+            'max_recepmae' => $maxRecepmae,
+        ];
+    }
+
+    /** Tras asignar numerorecepcion en ERP, deja numerador ≥ max(ERP, recepmae, número asignado). */
+    public static function registrarNumeroAsignadoEnNumerador(int $numero): void
+    {
+        if ($numero <= 0) {
+            return;
+        }
+
+        try {
+            $claveNumerador = self::resolverClaveNumeradorDesdeTComp();
+            $ultimoNumerador = self::leerUltimoNumero($claveNumerador);
+            $maxErp = (int) \Illuminate\Support\Facades\DB::table('recepcion_proveedor')->max('numerorecepcion');
+            $maxRecepmae = 0;
+            try {
+                $maxRecepmae = RecepcionProveedorAnitaColisionSupport::maxNumeroRecepmaeGlobal();
+            } catch (\Throwable $e) {
+                Log::warning('RecepcionProveedorAnitaNumeracion: no se pudo leer max recepmae al registrar COM', [
+                    'numero' => $numero,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+
+            $objetivo = max($numero, $ultimoNumerador, $maxErp, $maxRecepmae);
+            if ($objetivo > $ultimoNumerador) {
+                self::actualizarNumerador($claveNumerador, $objetivo);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('RecepcionProveedorAnitaNumeracion: no se pudo actualizar numerador tras asignar COM', [
+                'numero' => $numero,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Primer COM libre (ERP + recepmae) y avance del numerador Anita (num_clave COM).
+     *
+     * @param  int|null  $excluirRecepcionId  Al renumerar borrador, excluir la fila actual en ERP.
+     * @param  int|null  $pisoMinimo  Mínimo para max(base global, piso) antes de buscar hueco.
+     */
+    public static function asignarNumeroComGlobalLibre(?int $excluirRecepcionId = null, ?int $pisoMinimo = null): int
+    {
+        $base = self::ultimoNumeroComGlobal();
+        if ($pisoMinimo !== null && $pisoMinimo > $base) {
+            $base = $pisoMinimo;
+        }
+
+        $numero = RecepcionProveedorAnitaColisionSupport::primerNumeroComDisponible($base + 1, $excluirRecepcionId);
+
+        if (config('recepcion_proveedor.anita.reservar_numerador_anita', false)) {
+            try {
+                $numeroReservado = self::reservarSiguienteNumero($base > 0 ? $base : null);
+                if ($numeroReservado > $numero) {
+                    $numero = RecepcionProveedorAnitaColisionSupport::primerNumeroComDisponible(
+                        $numeroReservado,
+                        $excluirRecepcionId
+                    );
+                }
+            } catch (\Throwable $e) {
+                Log::warning('RecepcionProveedorAnitaNumeracion: reserva COM Anita no disponible', [
+                    'base' => $base,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        self::registrarNumeroAsignadoEnNumerador($numero);
+
+        return $numero;
+    }
+
     private static function escSqlLiteral(string $value): string
     {
         return str_replace("'", "''", trim($value));

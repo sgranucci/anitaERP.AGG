@@ -43,7 +43,7 @@ Recepción {{ $recepcion->numerorecepcion }}
                     ])
                     @if($recepcion->estado === 'BORRADOR' && can('confirmar-recepcion-proveedor', false))
                     <button type="submit" class="btn btn-success btn-sm mr-2" form="form-recepcion-confirmar"
-                            onclick="return confirm('¿Confirmar recepción? Generará movimiento de stock y asiento contable.');">
+                            id="btn-confirmar-recepcion-proveedor">
                         <i class="fa fa-check"></i> Confirmar
                     </button>
                     @endif
@@ -111,6 +111,9 @@ Recepción {{ $recepcion->numerorecepcion }}
         @include('stock.recepcion_proveedor.partials.partes_unicas')
     </div>
 </div>
+@if($recepcion->estado === 'BORRADOR')
+@include('stock.recepcion_proveedor.partials.modal_accion_lineas_sin_cantidad')
+@endif
 @include('includes.stock.modalconsultadeposito')
 @include('includes.stock.modalconsultaordencompra_recepcion')
 @endsection

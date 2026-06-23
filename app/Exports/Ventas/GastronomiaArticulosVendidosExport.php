@@ -16,7 +16,7 @@ class GastronomiaArticulosVendidosExport implements FromView, ShouldAutoSize, Wi
 {
     use Exportable;
 
-    private const ULTIMA_COL = 'H';
+    private const ULTIMA_COL = 'I';
 
     /**
      * @param  array<string, mixed>  $filtros
@@ -52,12 +52,13 @@ class GastronomiaArticulosVendidosExport implements FromView, ShouldAutoSize, Wi
         return [
             'A' => 14,
             'B' => 36,
-            'C' => 22,
+            'C' => 20,
             'D' => 22,
-            'E' => 14,
+            'E' => 22,
             'F' => 14,
-            'G' => 12,
+            'G' => 14,
             'H' => 12,
+            'I' => 12,
         ];
     }
 

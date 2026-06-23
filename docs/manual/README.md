@@ -8,6 +8,7 @@ Cada manual del ERP sigue el mismo patrón para incluir **capturas reales** de l
 |--------|--------|----------|-------------------|
 | Compras | `config/manual_compras.php` | `public/docs/manual-compras/img/` | `php artisan manual:capturar-compras-interno` |
 | Stock (recuento) | `config/manual_stock.php` | `public/docs/manual-stock/img/` | `php artisan manual:capturar-stock-interno` |
+| Stock (recepción + movimientos) | `config/manual_recepcion_movstock.php` | `public/docs/manual-recepcion-movstock/img/` | `php artisan manual:capturar-recepcion-movstock-interno` |
 | Gastronomía | `config/manual_gastronomia.php` | `public/docs/manual-gastronomia/img/` | `php artisan manual:capturar-gastronomia-interno` |
 | Ventas (pedidos) | `config/manual_ventas.php` | `public/docs/manual-ventas/img/` | `php artisan manual:capturar-ventas-interno` |
 | Canjes marketing | `config/manual_canjes_marketing.php` | `public/docs/manual-canjes-marketing/img/` | `php artisan manual:capturar-canjes-marketing-interno` |
@@ -46,6 +47,7 @@ php artisan manual:capturar-canjes-marketing-interno --usuario=admin
 # Regenerar PDF/Word del manual
 php docs/manual-gastronomia/generar.php
 php docs/manual-canjes-marketing/generar.php
+php docs/manual-recepcion-movstock/generar.php
 ```
 
 Alternativa Compras/Stock con navegador: `python3 docs/manual-compras/capturar_playwright.py` (requiere Chromium).

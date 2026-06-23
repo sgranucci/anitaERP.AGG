@@ -2,7 +2,7 @@
 
 namespace App\Support\Stock;
 
-use App\Support\CoincidenciaFlexibleTexto;
+use App\Support\Listado\CoincidenciaFlexibleTexto;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 
@@ -137,16 +137,24 @@ class RecepcionProveedorListadoFiltros
 
         $method = $or ? 'orWhere' : 'where';
 
-        if (($self::CAMPOS[$campo]['tipo'] ?? '') === 'entero') {
+        if ((self::CAMPOS[$campo]['tipo'] ?? '') === 'entero') {
             $query->{$method}($col, self::operadorSql($operador), (int) $valor);
 
             return;
         }
 
         if ($operador === 'contiene') {
-            $query->{$method}(function ($q) use ($col, $valor) {
-                $q->where($col, 'like', '%'.$valor.'%');
-                CoincidenciaFlexibleTexto::aplicar($q, $col, $valor, self::COLUMNAS_COINCIDENCIA_FLEXIBLE);
+            $query->{$method}(function ($q) use ($col, $campo, $valor) {
+                $q->where($col, 'like', '%'.CoincidenciaFlexibleTexto::escapeLike($valor).'%');
+                if (in_array($campo, self::COLUMNAS_COINCIDENCIA_FLEXIBLE, true)) {
+                    CoincidenciaFlexibleTexto::aplicar(
+                        $q,
+                        $col,
+                        $valor,
+                        false,
+                        CoincidenciaFlexibleTexto::LONGITUD_MINIMA_DEFAULT
+                    );
+                }
             });
 
             return;

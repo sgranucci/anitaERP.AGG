@@ -36,12 +36,15 @@ class RecepcionProveedorDiferenciaSupport
 
         $ocPorId = $oc->ordencompra_articulos->keyBy('id');
         $recibidosPorOcArt = [];
+        $pendientesPorOcArt = [];
+        $cerrarPorOcArt = [];
         $flPrecio = $flCant = $flExtra = $flLab = $flRechazo = false;
         $resumenes = [];
         $resumenesRechazo = [];
         $enriquecidos = [];
 
         foreach ($items as $idx => $item) {
+            $accionLinea = RecepcionProveedorAccionLineaOc::resolver($item);
             $articuloId = (int) ($item['articulo_id'] ?? 0);
             $articulo = Articulo::query()->find($articuloId);
             $sku = $articulo->sku ?? ('Art.'.$articuloId);
@@ -49,6 +52,18 @@ class RecepcionProveedorDiferenciaSupport
             $ocArtId = (int) ($item['ordencompra_articulo_id'] ?? 0);
             $sustituidoId = (int) ($item['ordencompra_articulo_sustituido_id'] ?? 0);
             $tipoLinea = (string) ($item['tipo_linea'] ?? self::TIPO_OC);
+
+            if ($accionLinea === RecepcionProveedorAccionLineaOc::PENDIENTE) {
+                if ($ocArtId > 0) {
+                    $pendientesPorOcArt[$ocArtId] = true;
+                }
+                $enriquecidos[] = array_merge($item, [
+                    'accion_linea_oc' => $accionLinea,
+                    'fl_cerrar_linea_oc' => false,
+                ]);
+
+                continue;
+            }
 
             if ($tipoLinea === self::TIPO_EXTRA || ($ocArtId <= 0 && $sustituidoId <= 0)) {
                 $tipoLinea = self::TIPO_EXTRA;
@@ -74,6 +89,16 @@ class RecepcionProveedorDiferenciaSupport
             if ($claveOc > 0 && $tipoLinea !== self::TIPO_EXTRA) {
                 $recibidosPorOcArt[$claveOc] = ($recibidosPorOcArt[$claveOc] ?? 0) + $cantRec;
             }
+            if ($accionLinea === RecepcionProveedorAccionLineaOc::CERRAR && $claveOc > 0) {
+                $cerrarPorOcArt[$claveOc] = true;
+                $comentCierre = trim((string) ($item['comentario_diferencia'] ?? ''));
+                if ($comentCierre === '') {
+                    throw new \RuntimeException(
+                        'Línea '.($idx + 1)." ({$sku}): indique comentario para cerrar la línea de OC."
+                    );
+                }
+                $resumenes[] = "Cierre línea OC: {$sku} — {$comentCierre}";
+            }
 
             if ($tipoLinea === self::TIPO_EXTRA) {
                 $flExtra = true;
@@ -86,7 +111,8 @@ class RecepcionProveedorDiferenciaSupport
             $ccLinea = (int) ($item['centrocosto_id'] ?? $ccOc);
             $tol = RecepcionProveedorToleranciaSupport::resolver($empresaId, $ccLinea);
 
-            $flCantDiff = $tipoLinea !== self::TIPO_EXTRA
+            $flCantDiff = $accionLinea === RecepcionProveedorAccionLineaOc::RECIBIR
+                && $tipoLinea !== self::TIPO_EXTRA
                 && $cantOc > 0
                 && ! RecepcionProveedorToleranciaSupport::cantidadDentroTolerancia($cantOc, $cantRec, $tol);
             $precioDistintoOc = $tipoLinea !== self::TIPO_EXTRA
@@ -98,6 +124,12 @@ class RecepcionProveedorDiferenciaSupport
             if ($flCantDiff) {
                 $flCant = true;
                 $resumenes[] = "{$sku}: cant. OC {$cantOc} vs rec. {$cantRec}";
+                $comentCant = trim((string) ($item['comentario_diferencia'] ?? ''));
+                if ($comentCant === '') {
+                    throw new \RuntimeException(
+                        'Línea '.($idx + 1)." ({$sku}): cantidad distinta a la OC. Indique comentario."
+                    );
+                }
             }
             if ($precioDistintoOc) {
                 $flPrecio = true;
@@ -128,6 +160,8 @@ class RecepcionProveedorDiferenciaSupport
 
             $enriquecidos[] = array_merge($item, [
                 'tipo_linea' => $tipoLinea,
+                'accion_linea_oc' => $accionLinea,
+                'fl_cerrar_linea_oc' => $accionLinea === RecepcionProveedorAccionLineaOc::CERRAR,
                 'ordencompra_articulo_id' => $ocArtId > 0 ? $ocArtId : null,
                 'ordencompra_articulo_sustituido_id' => $sustituidoId > 0 ? $sustituidoId : null,
                 'cantidad_oc' => $cantOc,
@@ -142,6 +176,12 @@ class RecepcionProveedorDiferenciaSupport
         $flFaltante = false;
         if (! $omitirFaltantes) {
             foreach ($oc->ordencompra_articulos as $ocArt) {
+                if ((string) ($ocArt->estado_linea_oc ?? '') === \App\Support\Compras\OrdencompraLineaEstados::CERRADA) {
+                    continue;
+                }
+                if (! empty($pendientesPorOcArt[$ocArt->id]) || ! empty($cerrarPorOcArt[$ocArt->id])) {
+                    continue;
+                }
             $rec = (float) ($recibidosPorOcArt[$ocArt->id] ?? 0);
             $ped = (float) $ocArt->cantidad;
             $sku = optional($ocArt->articulos)->sku ?? (string) $ocArt->articulo_id;

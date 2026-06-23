@@ -16,7 +16,7 @@ class Recepcion_Proveedor_Articulo extends Model
         'recepcion_proveedor_id', 'ordencompra_articulo_id', 'ordencompra_articulo_sustituido_id', 'tipo_linea',
         'orden', 'penvp_orden', 'penvp_nro_interno',
         'articulo_id', 'articulo_stock_id', 'cantidad', 'cantidad_oc', 'cantidad_stock', 'cantidad_rechazada', 'unidadmedida_id', 'coeficienteconversion',
-        'precio', 'precio_ordencompra', 'precio_stock', 'fl_precio_diferencia', 'fl_cantidad_diferencia', 'fl_articulo_distinto',
+        'precio', 'precio_ordencompra', 'precio_stock', 'fl_precio_diferencia', 'fl_cantidad_diferencia', 'fl_articulo_distinto', 'fl_cerrar_linea_oc',
         'comentario_precio', 'comentario_diferencia', 'precio_lista_proveedor',
         'moneda_id', 'cotizacion', 'descuento', 'deposito_id', 'detalle', 'motivorechazo', 'estado',
         'impuesto_id', 'incluyeimpuesto', 'centrocosto_id', 'lote_id', 'articulo_movimiento_id',
@@ -24,6 +24,7 @@ class Recepcion_Proveedor_Articulo extends Model
 
     protected $casts = [
         'fl_precio_diferencia' => 'boolean',
+        'fl_cerrar_linea_oc' => 'boolean',
     ];
 
     public function recepcion_proveedores()

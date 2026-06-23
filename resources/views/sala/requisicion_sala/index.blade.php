@@ -74,14 +74,25 @@ Requisiciones de sala
                                 @endforeach
                             </td>
                             <td class="text-nowrap">
+                                @if (can('listar-requisicion-sala', false) || can('editar-requisicion-sala', false))
                                 <a href="{{ route('imprimir_pdf_requisicion_sala', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="PDF emisión" target="_blank" rel="noopener noreferrer">
                                     <i class="fa fa-file-pdf-o text-danger"></i>
                                 </a>
-                                @can('editar-requisicion-sala')
+                                @endif
+                                @if (can('editar-requisicion-sala', false) || can('actualizar-requisicion-sala', false))
                                 <a href="{{ route('editar_requisicion_sala', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Editar">
                                     <i class="fa fa-edit"></i>
                                 </a>
-                                @endcan
+                                @endif
+                                @if (can('borrar-requisicion-sala', false) && ($data->estado ?? '') === ($estado_pendiente ?? 'PENDIENTE'))
+                                <form action="{{ route('eliminar_requisicion_sala', ['id' => $data->id]) }}" class="d-inline form-eliminar" method="POST">
+                                    @csrf
+                                    @method('delete')
+                                    <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar">
+                                        <i class="fa fa-times-circle text-danger"></i>
+                                    </button>
+                                </form>
+                                @endif
                             </td>
                         </tr>
                         @endforeach

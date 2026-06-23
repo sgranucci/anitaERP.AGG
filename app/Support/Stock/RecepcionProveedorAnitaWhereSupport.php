@@ -9,6 +9,26 @@ use App\Models\Stock\Recepcion_Proveedor;
  */
 class RecepcionProveedorAnitaWhereSupport
 {
+    public const TERMINAL_ERP = 'ERP';
+
+    /** Terminal Anita desktop / legacy (no tocar en bridge ERP). */
+    public const TERMINAL_REF = 'REF';
+
+    /**
+     * Cabeceras que no debe modificar ni borrar el bridge ERP (Anita desktop u otro origen).
+     */
+    public static function esTerminalProtegidoAnita(?string $terminal): bool
+    {
+        $t = trim((string) $terminal);
+
+        return $t === '' || $t === self::TERMINAL_REF || strcasecmp($t, self::TERMINAL_REF) === 0;
+    }
+
+    public static function esTerminalErp(?string $terminal): bool
+    {
+        return trim((string) $terminal) === self::TERMINAL_ERP;
+    }
+
     /** @param array{tipo: string, letra: string, sucursal: int, nro: int} $clave */
     public static function recepmae(string $codigoProveedor, array $clave): string
     {
@@ -25,6 +45,42 @@ class RecepcionProveedorAnitaWhereSupport
             ." AND recm_letra = '".addslashes($clave['letra'])."'"
             .' AND recm_sucursal = '.(int) $clave['sucursal']
             .' AND recm_nro = '.(int) $clave['nro'];
+    }
+
+    public static function filtroTerminalErp(string $columna): string
+    {
+        return ' AND '.$columna.' = '.self::terminalErpSql();
+    }
+
+    public static function terminalErpSql(): string
+    {
+        return "'".addslashes(self::TERMINAL_ERP)."'";
+    }
+
+    /** Cabecera COM grabada desde anitaERP (no tocar recepciones hechas en Anita). */
+    public static function recepmaeSoloErp(string $codigoProveedor, array $clave): string
+    {
+        return self::recepmae($codigoProveedor, $clave).self::filtroTerminalErp('recm_terminal');
+    }
+
+    public static function recepmaeDocumentoErp(int $documentoId): string
+    {
+        return ' WHERE recm_documentoid = '.(int) $documentoId.self::filtroTerminalErp('recm_terminal');
+    }
+
+    /** @param array{tipo: string, letra: string, sucursal: int, nro: int} $clave */
+    public static function recepmovProveedorCabecera(string $codigoProveedor, array $clave): string
+    {
+        $codigoProveedor = RecepcionProveedorAnitaReferenciaSupport::proveedorAnita6($codigoProveedor);
+
+        return self::recepmovCabecera($clave)
+            ." AND recv_proveedor = '".addslashes($codigoProveedor)."'";
+    }
+
+    /** @param array{tipo: string, letra: string, sucursal: int, nro: int} $claveCom */
+    public static function stkmovCabeceraSoloErp(array $claveCom): string
+    {
+        return self::stkmovCabecera($claveCom).self::filtroTerminalErp('stkv_terminal');
     }
 
     /** @param array{tipo: string, letra: string, sucursal: int, nro: int} $clave */

@@ -4,6 +4,24 @@
 return [
 	"LIMITE_INFORME_UIF" => 4700000,
 
+    /** Razón social fallback si el premio no tiene sala/empresa. */
+	'INFORME_RAZON_SOCIAL' => env('UIF_INFORME_RAZON_SOCIAL', 'Argentina Gaming Group S.A.'),
+
+	/** ID de pais_uif para Argentina (tipo documento en XML). */
+	'PAIS_ARGENTINA_ID' => (int) env('UIF_PAIS_ARGENTINA_ID', 5),
+
+	/** Carpeta relativa en storage/app (escritura php-fpm / www-data). XML UIF por empresa/periodo. */
+	'EXPORTACION_XML_PATH' => env('UIF_EXPORTACION_XML_PATH', 'tmp/exportacion_uif'),
+
+	/** Empresa_id por código sala para conciliación Wigos (BSA/KSA/RSA). */
+	'conciliacion_wigos' => [
+		'empresas' => [
+			'BSA' => 1,
+			'KSA' => 2,
+			'RSA' => 3,
+		],
+	],
+
 	/**
 	 * Fotos de DNI (montaje legacy). Las altas/edición graban SIEMPRE aquí salvo
 	 * FOTOS_CLIENTES_PERMITIR_FALLBACK_ESCRITURA=true (solo emergencia / desarrollo).

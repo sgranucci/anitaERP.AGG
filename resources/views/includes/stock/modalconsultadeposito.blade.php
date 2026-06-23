@@ -1,3 +1,4 @@
+@once('anita-modal-consulta-deposito')
 <div class="modal fade" id="consultadepositoModal" role="dialog" aria-labelledby="consultadepositoModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-xl" role="document">
     <div class="modal-content">
@@ -11,7 +12,7 @@
         {{-- Sin form anidado: si el partial va dentro de otro form, HTML cierra el padre y el submit falla. --}}
         <div class="form-group row">
           <label for="consultadeposito" class="col-form-label">Buscar:</label>
-          <input type="text" name="consultadeposito" id="consultadeposito" autofocus>
+          <input type="text" name="consultadeposito" id="consultadeposito" autocomplete="off">
         </div>
 
         <table class="table table-striped table-bordered table-hover" id="tabla-data-deposito">
@@ -32,3 +33,4 @@
     </div>
   </div>
 </div>
+@endonce

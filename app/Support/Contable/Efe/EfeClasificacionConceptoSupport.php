@@ -53,10 +53,10 @@ class EfeClasificacionConceptoSupport
 
     private const CUENTA_INTERCO_UT_BYSON = 116010005;
 
-    /** Ajuste interno Total Coin (duplicados premios) — no entra al EFE. */
+    /** Total Coin máquinas — ajuste duplicados premios (tipo 0) va a medios de pago (40). */
     private const CUENTA_AJUSTE_TOTAL_COIN = 113010011;
 
-    /** Ajuste duplicados premios en cuenta alquiler máquinas — no entra al EFE. */
+    /** Ajuste duplicados premios en cuenta alquiler máquinas — omitido vía filtro post-proceso si aplica. */
     private const CUENTA_AJUSTE_DUPLIC_ALQUILER = 521280004;
 
     /** Gastos bancarios 532040-xxx — Anita EFE col B concepto 36 = 0. */
@@ -116,12 +116,10 @@ class EfeClasificacionConceptoSupport
         }
 
         if ($cuenta === self::CUENTA_AJUSTE_TOTAL_COIN && in_array($tipoComp, ['0', ''], true)) {
-            return null;
-        }
+            if ($this->esAjusteDuplicPremiosTotalCoinEfe($descripcion)) {
+                return self::CONCEPTO_MEDIOS_DE_PAGO;
+            }
 
-        if ($cuenta === self::CUENTA_AJUSTE_DUPLIC_ALQUILER
-            && in_array($tipoComp, ['0', ''], true)
-            && stripos($descripcion, 'duplic') !== false) {
             return null;
         }
 
@@ -186,6 +184,14 @@ class EfeClasificacionConceptoSupport
         }
 
         return stripos($descripcion, 'venta maquinas') !== false;
+    }
+
+    /** Anita EFE: «Ajust por duplic x premios tc» en 113010-011 → concepto 40. */
+    public function esAjusteDuplicPremiosTotalCoinEfe(string $descripcion): bool
+    {
+        $texto = mb_strtolower(trim($descripcion));
+
+        return str_contains($texto, 'duplic') && str_contains($texto, 'premio');
     }
 
     /**

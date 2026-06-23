@@ -46,8 +46,11 @@ use App\Services\Stock\PrecioService;
 use App\Services\Stock\StkdepSaldoAnitaService;
 use App\Services\Stock\ArticuloParteUnicaService;
 use App\Support\Stock\ArticuloConsultaDesdeModal;
+use App\Support\Stock\ArticuloSaldosDepositoSupport;
 use App\Support\Stock\MovimientosArticuloDepositoSupport;
+use App\Support\Stock\ArticuloEtiquetaNpuRangoSupport;
 use App\Support\Stock\ArticuloEtiquetaNpuSupport;
+use App\Support\Stock\ArticuloEtiquetaZplSupport;
 use App\Support\Stock\ArticuloListadoFiltros;
 use App\Support\Compras\ArticuloProveedorMatchSupport;
 use App\Support\Compras\ArticuloProveedorPrecioListaSupport;
@@ -206,6 +209,26 @@ class ArticuloController extends Controller
             'camposFiltro' => ArticuloListadoFiltros::CAMPOS,
             'saldosStkdep' => $saldosStkdep,
         ]);
+    }
+
+    public function apiSaldosDeposito(Request $request): \Illuminate\Http\JsonResponse
+    {
+        if (! ArticuloSaldosDepositoSupport::puedeConsultar()) {
+            abort(403, 'No tiene permisos para consultar saldos de stock.');
+        }
+
+        $articuloId = (int) $request->query('articulo_id', 0);
+        if ($articuloId <= 0) {
+            return response()->json(['error' => 'Artículo inválido.'], 422);
+        }
+
+        try {
+            $datos = ArticuloSaldosDepositoSupport::listadoPorArticulo($articuloId);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
+
+        return response()->json($datos);
     }
 
     public function listar(Request $request, $formato = null, $busqueda = null)
@@ -389,24 +412,79 @@ class ArticuloController extends Controller
             return response()->json(['mensaje' => 'El artículo no lleva número de parte única.'], 422);
         }
 
-        $numeroparte = (int) $request->query('npu', 0);
-        if ($numeroparte <= 0) {
-            return response()->json(['mensaje' => 'Indique un NPU válido.'], 422);
-        }
+        [$npuDesde, $npuHasta] = $this->npuEtiquetaEntradaDesdeRequest($request);
+        $sinCriterio = trim($npuDesde) === '' && trim($npuHasta) === '';
 
         try {
-            $datos = ArticuloEtiquetaNpuSupport::resolver($id, $numeroparte);
+            if ($sinCriterio) {
+                $pagina = ArticuloEtiquetaNpuRangoSupport::consultaPaginada(
+                    $id,
+                    (int) $request->query('page', 1),
+                );
+                $npus = $pagina['npus'];
+                $cantidad = $pagina['total'];
+                $criterio = ArticuloEtiquetaNpuRangoSupport::formatearCriterio($npuDesde, $npuHasta);
+                $imprimirUrl = null;
+                $datos = null;
+
+                return response()->json([
+                    'ok' => true,
+                    'datos' => $datos,
+                    'cantidad' => $cantidad,
+                    'criterio' => $criterio,
+                    'npus' => $npus,
+                    'listado' => true,
+                    'page' => $pagina['page'],
+                    'last_page' => $pagina['last_page'],
+                    'per_page' => $pagina['per_page'],
+                    'imprimir_url' => $imprimirUrl,
+                ]);
+            }
+
+            $npus = ArticuloEtiquetaNpuRangoSupport::resolverCriterioConsulta($id, $npuDesde, $npuHasta);
         } catch (\Throwable $e) {
             return response()->json(['mensaje' => $e->getMessage()], 422);
+        }
+
+        $criterio = ArticuloEtiquetaNpuRangoSupport::formatearCriterio($npuDesde, $npuHasta);
+        $cantidad = count($npus);
+
+        $datos = null;
+        if ($cantidad === 1) {
+            try {
+                $datos = ArticuloEtiquetaNpuSupport::resolver($id, $npus[0]);
+            } catch (\Throwable $e) {
+                return response()->json(['mensaje' => $e->getMessage()], 422);
+            }
+        }
+
+        $imprimirUrl = null;
+        if ($cantidad > 0) {
+            try {
+                ArticuloEtiquetaNpuRangoSupport::resolverParaImpresion($id, $npuDesde, $npuHasta);
+                $imprimirUrl = $this->npuEtiquetaImprimirUrl($id, $npuDesde, $npuHasta);
+            } catch (\Throwable $e) {
+                return response()->json([
+                    'ok' => true,
+                    'datos' => $datos,
+                    'cantidad' => $cantidad,
+                    'criterio' => $criterio,
+                    'npus' => $npus,
+                    'listado' => false,
+                    'imprimir_url' => null,
+                    'mensaje_impresion' => $e->getMessage(),
+                ]);
+            }
         }
 
         return response()->json([
             'ok' => true,
             'datos' => $datos,
-            'imprimir_url' => route('listar_etiqueta_articulo', [
-                'id' => $id,
-                'npu' => $numeroparte,
-            ]),
+            'cantidad' => $cantidad,
+            'criterio' => $criterio,
+            'npus' => $npus,
+            'listado' => false,
+            'imprimir_url' => $imprimirUrl,
         ]);
     }
 
@@ -416,19 +494,29 @@ class ArticuloController extends Controller
 
         $articulo = Articulo::query()->findOrFail($id);
 
-        $datosNpu = null;
+        $npusEtiqueta = [];
+        $cantidadEtiquetas = 1;
+
         if (RecepcionProveedorParteUnicaSupport::articuloManejaParteUnica($articulo)) {
-            $numeroparte = (int) $request->query('npu', 0);
-            if ($numeroparte <= 0) {
-                return redirect()->back()->with('errores', [
-                    'Indique el número de parte única (NPU) a imprimir.',
+            [$npuDesde, $npuHasta] = $this->npuEtiquetaEntradaDesdeRequest($request);
+
+            if (trim($npuDesde) === '' && trim($npuHasta) === '') {
+                return $this->responderImpresionEtiquetaArticulo($request, false, '', [
+                    'Indique el NPU, lista o rango a imprimir.',
                 ]);
             }
 
             try {
-                $datosNpu = ArticuloEtiquetaNpuSupport::resolver((int) $id, $numeroparte);
+                $npusEtiqueta = ArticuloEtiquetaNpuRangoSupport::resolverParaImpresion((int) $id, $npuDesde, $npuHasta);
             } catch (\Throwable $e) {
-                return redirect()->back()->with('errores', [$e->getMessage()]);
+                return $this->responderImpresionEtiquetaArticulo($request, false, '', [$e->getMessage()]);
+            }
+        } else {
+            $cantidadEtiquetas = $this->cantidadEtiquetaDesdeRequest($request);
+            if ($cantidadEtiquetas === null) {
+                return $this->responderImpresionEtiquetaArticulo($request, false, '', [
+                    'Indique una cantidad válida de etiquetas (entero entre 1 y '.ArticuloEtiquetaNpuRangoSupport::MAX_ETIQUETAS.').',
+                ]);
             }
         }
 
@@ -442,14 +530,147 @@ class ArticuloController extends Controller
         );
 
         if (! $modeloetiqueta || ! $modeloetiqueta->modeloetiquetas) {
-            return redirect()->back()->with('errores', [
+            return $this->responderImpresionEtiquetaArticulo($request, false, '', [
                 'No hay modelo de etiqueta configurado. Use «Configura etiqueta» en el listado.',
             ]);
         }
 
-        $etiqueta = $modeloetiqueta->modeloetiquetas->codigoetiqueta;
+        $plantillaEtiqueta = $modeloetiqueta->modeloetiquetas->codigoetiqueta;
+        $etiqueta = '';
 
-        $etiqueta = Str::replace('@sku@', $articulo->sku, $etiqueta, caseSensitive: false);
+        if ($npusEtiqueta === []) {
+            for ($i = 0; $i < $cantidadEtiquetas; $i++) {
+                $etiqueta .= $this->armarCodigoEtiquetaArticulo($plantillaEtiqueta, $articulo, null);
+            }
+        } else {
+            foreach ($npusEtiqueta as $numeroparte) {
+                try {
+                    $datosNpu = ArticuloEtiquetaNpuSupport::resolver((int) $id, $numeroparte);
+                } catch (\Throwable $e) {
+                    return $this->responderImpresionEtiquetaArticulo($request, false, '', [$e->getMessage()]);
+                }
+
+                $etiqueta .= $this->armarCodigoEtiquetaArticulo($plantillaEtiqueta, $articulo, $datosNpu);
+            }
+        }
+
+        Storage::disk('local')->put($nombreEtiqueta, $etiqueta);
+        $path = Storage::path($nombreEtiqueta);
+
+        $seteosalida = $this->seteoSalidaRepository->buscaSeteo($usuario_id, SeteoSalidaProgramaSupport::STOCK_ARTICULO);
+        if (! $seteosalida || ! $seteosalida->salidas) {
+            Storage::disk('local')->delete($nombreEtiqueta);
+
+            return $this->responderImpresionEtiquetaArticulo($request, false, '', [
+                'No hay impresora configurada para artículos. Use «Configura salida» en el listado.',
+            ]);
+        }
+
+        $comando = trim((string) $seteosalida->salidas->comando);
+        if ($comando === '' || ! str_contains($comando, '%s')) {
+            Storage::disk('local')->delete($nombreEtiqueta);
+
+            return $this->responderImpresionEtiquetaArticulo($request, false, '', [
+                'El comando de la impresora configurada debe incluir %s (ruta del archivo de etiqueta).',
+            ]);
+        }
+
+        $exitCode = 0;
+        passthru(sprintf($comando, $path), $exitCode);
+
+        Storage::disk('local')->delete($nombreEtiqueta);
+
+        if ($exitCode !== 0) {
+            return $this->responderImpresionEtiquetaArticulo($request, false, '', [
+                'No se pudo enviar la etiqueta a la impresora. Verifique la cola CUPS y que el comando use impresión ZPL cruda (bin/imprimir-etiqueta-zebra.sh).',
+            ]);
+        }
+
+        $totalImpresas = $npusEtiqueta !== [] ? count($npusEtiqueta) : $cantidadEtiquetas;
+        $mensaje = $totalImpresas > 1
+            ? 'Se imprimieron '.$totalImpresas.' etiquetas con éxito.'
+            : 'El producto seleccionado se imprimió con éxito.';
+
+        return $this->responderImpresionEtiquetaArticulo($request, true, $mensaje);
+    }
+
+    /**
+     * Cantidad de etiquetas sin NPU (1–MAX_ETIQUETAS). null si el valor no es válido.
+     */
+    private function cantidadEtiquetaDesdeRequest(Request $request): ?int
+    {
+        $raw = trim((string) $request->query('cantidad', '1'));
+        if ($raw === '' || ! preg_match('/^\d+$/', $raw)) {
+            return null;
+        }
+
+        $cantidad = (int) $raw;
+        if ($cantidad < 1 || $cantidad > ArticuloEtiquetaNpuRangoSupport::MAX_ETIQUETAS) {
+            return null;
+        }
+
+        return $cantidad;
+    }
+
+    private function responderImpresionEtiquetaArticulo(Request $request, bool $ok, string $mensaje = '', array $errores = [])
+    {
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json([
+                'ok' => $ok,
+                'mensaje' => $mensaje,
+                'errores' => $errores,
+            ], $ok ? 200 : 422);
+        }
+
+        if (! $ok) {
+            return redirect()->back()->with('errores', $errores);
+        }
+
+        return redirect()->back()->with('mensaje', $mensaje);
+    }
+
+    /**
+     * @return array{0: string, 1: string}
+     */
+    private function npuEtiquetaEntradaDesdeRequest(Request $request): array
+    {
+        $desde = trim((string) $request->query('npu_desde', ''));
+        $hasta = trim((string) $request->query('npu_hasta', ''));
+
+        if ($desde === '' && $hasta === '') {
+            $legacy = trim((string) $request->query('npu', ''));
+            if ($legacy !== '') {
+                $desde = $legacy;
+            }
+        }
+
+        return ArticuloEtiquetaNpuRangoSupport::normalizarEntrada($desde, $hasta);
+    }
+
+    private function npuEtiquetaImprimirUrl(int $articuloId, string $desde, string $hasta): string
+    {
+        $query = array_filter([
+            'npu_desde' => $desde !== '' ? $desde : null,
+            'npu_hasta' => $hasta !== '' ? $hasta : null,
+        ], fn ($v) => $v !== null && $v !== '');
+
+        $path = 'stock/listar_etiqueta_articulo/'.$articuloId;
+        if ($query !== []) {
+            $path .= '?'.http_build_query($query);
+        }
+
+        return urlAppAbsoluta($path);
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $datosNpu
+     */
+    private function armarCodigoEtiquetaArticulo(string $plantilla, Articulo $articulo, ?array $datosNpu): string
+    {
+        $plantilla = ArticuloEtiquetaZplSupport::normalizarPlantilla($plantilla);
+
+        $etiqueta = Str::replace('@sku@', $articulo->sku, $plantilla, caseSensitive: false);
+
         if ($datosNpu !== null) {
             $etiqueta = Str::replace('@npu@', (string) $datosNpu['numeroparte'], $etiqueta, caseSensitive: false);
             $etiqueta = Str::replace('@codigoproveedor@', (string) $datosNpu['codigoproveedor'], $etiqueta, caseSensitive: false);
@@ -460,32 +681,7 @@ class ArticuloController extends Controller
             $etiqueta = Str::replace('@numerorecepcion@', ' ', $etiqueta, caseSensitive: false);
         }
 
-        Storage::disk('local')->put($nombreEtiqueta, $etiqueta);
-        $path = Storage::path($nombreEtiqueta);
-
-        $seteosalida = $this->seteoSalidaRepository->buscaSeteo($usuario_id, SeteoSalidaProgramaSupport::STOCK_ARTICULO);
-        if (! $seteosalida || ! $seteosalida->salidas) {
-            Storage::disk('local')->delete($nombreEtiqueta);
-
-            return redirect()->back()->with('errores', [
-                'No hay impresora configurada para artículos. Use «Configura salida» en el listado.',
-            ]);
-        }
-
-        $comando = trim((string) $seteosalida->salidas->comando);
-        if ($comando === '' || ! str_contains($comando, '%s')) {
-            Storage::disk('local')->delete($nombreEtiqueta);
-
-            return redirect()->back()->with('errores', [
-                'El comando de la impresora configurada debe incluir %s (ruta del archivo de etiqueta).',
-            ]);
-        }
-
-        system(sprintf($comando, $path));
-
-        Storage::disk('local')->delete($nombreEtiqueta);
-
-        return redirect()->back()->with('mensaje', 'El producto seleccionado se imprimió con éxito.');
+        return ArticuloEtiquetaZplSupport::normalizarCodigoFinal($etiqueta);
     }
 
     public function crear()

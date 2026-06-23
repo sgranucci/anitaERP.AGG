@@ -137,6 +137,9 @@ return [
     'http_timeout_segundos' => max(5, (int) env('WAITRY_HTTP_TIMEOUT', 30)),
     'http_reintentos' => max(1, min(5, (int) env('WAITRY_HTTP_REINTENTOS', 2))),
 
+    /** Log waitry.http.timing (ms por operación HTTP) en laravel.log */
+    'http_profile' => filter_var(env('WAITRY_HTTP_PROFILE', true), FILTER_VALIDATE_BOOLEAN),
+
     /**
      * placeId Waitry por empresa Anita (1 → Avellaneda, 2 y 3 según contrato).
      *

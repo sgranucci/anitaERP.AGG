@@ -132,6 +132,69 @@
 
             $hidden.val(debeUsarBusquedaRapida(submitter, activo) ? '1' : '');
         });
+
+        function enviarFormularioListado(submitter) {
+            var $hidden = $(opts.hiddenRapida);
+            if ($hidden.length) {
+                $hidden.val(debeUsarBusquedaRapida(submitter, document.activeElement) ? '1' : '');
+            }
+
+            if (typeof $form[0].requestSubmit === 'function') {
+                if (submitter) {
+                    $form[0].requestSubmit(submitter);
+                } else {
+                    $form[0].requestSubmit();
+                }
+            } else {
+                $form.trigger('submit');
+            }
+        }
+
+        function inputsBusquedaRapida() {
+            var formId = $form.attr('id');
+            var $inputs = $(opts.selectorInputRapida);
+            if (formId) {
+                $inputs = $inputs.add($('input[form="' + formId + '"]').filter(function () {
+                    var name = $(this).attr('name') || '';
+                    return name === 'filtro_valor' || $(this).is(opts.selectorInputRapida);
+                }));
+            }
+
+            return $inputs;
+        }
+
+        inputsBusquedaRapida().on('keydown.listadoFiltrosEnter', function (e) {
+            if (e.key !== 'Enter') {
+                return;
+            }
+            e.preventDefault();
+
+            var $btnRapida = $('button[form="' + $form.attr('id') + '"][data-busqueda-rapida]').first();
+            if (!$btnRapida.length) {
+                $btnRapida = $form.find(opts.selectorRapidaBtn).first();
+            }
+
+            if (panelAbierto()) {
+                var $btnAplicar = $form.find(opts.selectorAplicarBtn).first();
+                enviarFormularioListado($btnAplicar.length ? $btnAplicar[0] : null);
+            } else if ($btnRapida.length) {
+                enviarFormularioListado($btnRapida[0]);
+            } else {
+                enviarFormularioListado(null);
+            }
+        });
+
+        $form.find(opts.selectorInputRapida).add('#filtro_valor_panel').on('keydown.listadoFiltrosEnterPanel', function (e) {
+            if (e.key !== 'Enter') {
+                return;
+            }
+            if (!panelAbierto()) {
+                return;
+            }
+            e.preventDefault();
+            var $btnAplicar = $form.find(opts.selectorAplicarBtn).first();
+            enviarFormularioListado($btnAplicar.length ? $btnAplicar[0] : null);
+        });
     }
 
     window.ListadoFiltros = {

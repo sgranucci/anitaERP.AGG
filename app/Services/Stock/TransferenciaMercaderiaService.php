@@ -17,6 +17,7 @@ use App\Support\Stock\TransferenciaMercaderiaDestinatarioSupport;
 use App\Support\Stock\TransferenciaMercaderiaEstados;
 use App\Support\Stock\TransferenciaMercaderiaLineaSupport;
 use App\Support\Stock\TransferenciaMercaderiaSignoSupport;
+use App\Support\Stock\StkmaePrecioCompraAnitaBridgeSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
 use Auth;
 use Carbon\Carbon;
@@ -379,6 +380,8 @@ class TransferenciaMercaderiaService
                     $transferencia->movimientostock_entrada_id = (int) $entrada['id'];
                     $transferencia->save();
 
+                    $this->actualizarStkmaePrecioDestino($transferencia);
+
                     $this->moduloAvisoService->enviar('stock', 'transferencia_confirmada', (int) $transferencia->id);
                 } else {
                     $this->generarTokensYNotificarAprobacion($transferencia->fresh(['articulos', 'depositoOrigen', 'depositoDestino']));
@@ -467,6 +470,8 @@ class TransferenciaMercaderiaService
             $transferencia->save();
 
             $this->invalidarTokens($transferencia);
+
+            $this->actualizarStkmaePrecioDestino($transferencia);
 
             $this->moduloAvisoService->enviar('stock', 'transferencia_confirmada', (int) $transferencia->id);
 
@@ -753,6 +758,7 @@ class TransferenciaMercaderiaService
         $data = array_merge($payloadLineas, [
             'tipotransaccion_stock_id' => $tipotransaccionId,
             'signo_cantidad' => TransferenciaMercaderiaSignoSupport::signoCantidad($esSalida),
+            'anita_stkmov_tipo' => $esSalida ? 'TRS' : 'TRE',
             'fecha' => $fecha,
             'fechajornada' => $fecha,
             'deposito_id' => $depositoId,
@@ -819,6 +825,21 @@ class TransferenciaMercaderiaService
             ->where('transferencia_mercaderia_id', $transferencia->id)
             ->whereNull('usado_el')
             ->update(['usado_el' => now()]);
+    }
+
+    private function actualizarStkmaePrecioDestino(Transferencia_Mercaderia $transferencia): void
+    {
+        try {
+            StkmaePrecioCompraAnitaBridgeSupport::actualizarDesdeTransferencia(
+                $transferencia->fresh(['articulos.articuloDestino'])
+            );
+        } catch (\Throwable $e) {
+            Log::warning('TransferenciaMercaderia: error actualizando stkmae precio destino', [
+                'transferencia_id' => $transferencia->id,
+                'error' => $e->getMessage(),
+            ]);
+            throw $e;
+        }
     }
 
     private function resolverTipoTransaccionStockIdDefault(): ?int

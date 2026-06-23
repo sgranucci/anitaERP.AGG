@@ -275,8 +275,20 @@ class TransferenciaMercaderiaController extends Controller
         }
 
         $transferencia = $this->transferenciaService->buscar((int) $row->transferencia_mercaderia_id);
+        $tokensActivos = Transferencia_Mercaderia_Token::query()
+            ->where('transferencia_mercaderia_id', $transferencia->id)
+            ->whereNull('usado_el')
+            ->get()
+            ->keyBy('accion');
+        $tokenAprobar = $tokensActivos[Transferencia_Mercaderia_Token::ACCION_APROBAR]->token ?? null;
+        $tokenRechazar = $tokensActivos[Transferencia_Mercaderia_Token::ACCION_RECHAZAR]->token ?? null;
 
-        return view('stock.transferencia_mercaderia.publico_ver', compact('transferencia', 'token'));
+        return view('stock.transferencia_mercaderia.publico_ver', compact(
+            'transferencia',
+            'token',
+            'tokenAprobar',
+            'tokenRechazar',
+        ));
     }
 
     private function procesarAccionPublica(string $token, string $accion, ?string $motivo = null)

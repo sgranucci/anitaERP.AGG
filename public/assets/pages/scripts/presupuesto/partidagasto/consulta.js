@@ -1,11 +1,61 @@
-/* Modal partida de gasto en líneas de requisición (filtra por empresa, último presupuesto y CC destino de la línea). */
+/* Modal partida de gasto en líneas de requisición (filtra por empresa, último presupuesto y CC destino). */
 var ptrPartidagastoId;
 var ptrCodigoPartidagasto;
 var ptrDetallePartidagasto;
-var ptrCentrocostoDestinoId;
+var ptrFilaPartidagasto;
 
 function carpetaBasePartidagasto() {
 	return window.location.pathname.split('/public')[0] + '/public';
+}
+
+function centrocostoFiltroDesdeFila($row) {
+	var cc = '';
+	if ($row && $row.length) {
+		cc = $row.find('select[name="centrocostodestino_ids[]"]').val() || '';
+	}
+	if (!cc) {
+		cc = $('#centrocosto_id').val() || '';
+	}
+	if (!cc) {
+		cc = $('#wz_centrocosto_id').val() || '';
+	}
+	return cc;
+}
+
+function asegurarOpcionesCentrocostoModal($modalSelect, $row, valor) {
+	if (!$modalSelect || !$modalSelect.length) {
+		return;
+	}
+	if ($modalSelect.find('option').length > 1) {
+		if (valor && $modalSelect.find('option[value="' + valor + '"]').length) {
+			$modalSelect.val(valor);
+		}
+		return;
+	}
+
+	var $src = ($row && $row.length) ? $row.find('select[name="centrocostodestino_ids[]"]') : $();
+	if (!$src.length) {
+		$src = $('select[name="centrocostodestino_ids[]"]').first();
+	}
+	if ($src.length) {
+		$src.find('option').each(function () {
+			var v = $(this).attr('value');
+			if (v === undefined || v === null || v === '') {
+				return;
+			}
+			$modalSelect.append($(this).clone());
+		});
+	}
+
+	if (valor && $modalSelect.find('option[value="' + valor + '"]').length) {
+		$modalSelect.val(valor);
+	} else {
+		$modalSelect.val('');
+	}
+}
+
+function centrocostoFiltroModalPartidagasto() {
+	return $('#consultapartidagasto_centrocosto_id').val() || '';
 }
 
 function buscar_datos_partidagasto(consulta) {
@@ -20,7 +70,7 @@ function buscar_datos_partidagasto(consulta) {
 		data: {
 			consulta: consulta || '',
 			empresa_id: empresaId,
-			centrocostodestino_id: ptrCentrocostoDestinoId || ''
+			centrocostodestino_id: centrocostoFiltroModalPartidagasto()
 		},
 	})
 		.done(function (resp) {
@@ -38,7 +88,9 @@ function activa_eventos_consultapartidagasto() {
 		ptrPartidagastoId = $row.find('.partidagasto_id');
 		ptrCodigoPartidagasto = $row.find('.codigopartidagasto');
 		ptrDetallePartidagasto = $row.find('.descripcionpartidagasto');
-		ptrCentrocostoDestinoId = $row.find('select[name="centrocostodestino_ids[]"]').val() || '';
+		ptrFilaPartidagasto = $row;
+		var ccInicial = centrocostoFiltroDesdeFila($row);
+		asegurarOpcionesCentrocostoModal($('#consultapartidagasto_centrocosto_id'), $row, ccInicial);
 		$('#consultapartidagastoModal').modal('show');
 	});
 
@@ -59,6 +111,10 @@ function activa_eventos_consultapartidagasto() {
 
 	$(document).off('keyup.consultaPdgReq', '#consultapartidagasto').on('keyup.consultaPdgReq', '#consultapartidagasto', function () {
 		buscar_datos_partidagasto($(this).val() || '');
+	});
+
+	$(document).off('change.consultaPdgReq', '#consultapartidagasto_centrocosto_id').on('change.consultaPdgReq', '#consultapartidagasto_centrocosto_id', function () {
+		buscar_datos_partidagasto($('#consultapartidagasto').val() || '');
 	});
 
 	$(document).off('click.consultaPdgReq', '.eligeconsultapartidagasto').on('click.consultaPdgReq', '.eligeconsultapartidagasto', function (event) {
@@ -93,7 +149,7 @@ function activa_eventos_consultapartidagasto() {
 		var $row = $inp.closest('tr.item-requisicion-articulo, tr.item-ordencompra-articulo');
 		var codigo = ($inp.val() || '').trim();
 		var empresaId = $('#empresa_id').val();
-		var ccDest = $row.find('select[name="centrocostodestino_ids[]"]').val() || '';
+		var ccDest = centrocostoFiltroDesdeFila($row);
 
 		if (!codigo) {
 			$row.find('.partidagasto_id').val('');

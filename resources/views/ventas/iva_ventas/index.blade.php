@@ -29,10 +29,15 @@
                         Facturas de administración se muestran en apartado separado. Orden por fecha de movimiento o jornada y tipo de comprobante.
                     </p>
 
+                    @php
+                        $colLabel = 'col-lg-2 control-label text-right pr-2';
+                        $colInput = 'col-lg-4';
+                        $empresasDisponibles = collect($empresa_query ?? []);
+                    @endphp
+
                     <div class="form-group row">
-                        <label for="empresa_id" class="col-lg-2 control-label requerido">Empresa</label>
-                        <div class="col-lg-4">
-                            @php $empresasDisponibles = collect($empresa_query ?? []); @endphp
+                        <label for="empresa_id" class="{{ $colLabel }} requerido">Empresa</label>
+                        <div class="{{ $colInput }}">
                             @if ($empresasDisponibles->count() > 1)
                                 <select name="empresa_id" id="empresa_id" class="form-control" required>
                                     <option value="">Seleccione…</option>
@@ -49,8 +54,8 @@
                                 <p class="text-danger small mb-0">Sin empresas asignadas.</p>
                             @endif
                         </div>
-                        <label for="moneda_id" class="col-lg-2 control-label">Moneda reporte</label>
-                        <div class="col-lg-3">
+                        <label for="moneda_id" class="{{ $colLabel }}">Moneda reporte</label>
+                        <div class="{{ $colInput }}">
                             <select name="moneda_id" id="moneda_id" class="form-control">
                                 @foreach ($moneda_query ?? [] as $mon)
                                     <option value="{{ $mon->id }}" @selected((int) ($filtros['moneda_id'] ?? 1) === (int) $mon->id)>
@@ -62,29 +67,29 @@
                     </div>
 
                     <div class="form-group row">
-                        <label for="fecha_desde" class="col-lg-2 control-label requerido">Desde</label>
-                        <div class="col-lg-3">
+                        <label for="fecha_desde" class="{{ $colLabel }} requerido">Desde</label>
+                        <div class="{{ $colInput }}">
                             <input type="date" name="fecha_desde" id="fecha_desde" class="form-control"
                                 value="{{ $filtros['fecha_desde'] ?? date('Y-m-01') }}" required>
                         </div>
-                        <label for="fecha_hasta" class="col-lg-2 control-label requerido">Hasta</label>
-                        <div class="col-lg-3">
+                        <label for="fecha_hasta" class="{{ $colLabel }} requerido">Hasta</label>
+                        <div class="{{ $colInput }}">
                             <input type="date" name="fecha_hasta" id="fecha_hasta" class="form-control"
                                 value="{{ $filtros['fecha_hasta'] ?? date('Y-m-d') }}" required>
                         </div>
                     </div>
 
                     <div class="form-group row">
-                        <label for="orden_fecha" class="col-lg-2 control-label">Orden</label>
-                        <div class="col-lg-4">
+                        <label for="orden_fecha" class="{{ $colLabel }}">Orden</label>
+                        <div class="{{ $colInput }}">
                             <select name="orden_fecha" id="orden_fecha" class="form-control">
                                 @foreach ($orden_enum as $value => $label)
                                     <option value="{{ $value }}" @selected(($filtros['orden_fecha'] ?? '') === $value)>{{ $label }}</option>
                                 @endforeach
                             </select>
                         </div>
-                        <label for="subdiario" class="col-lg-2 control-label">Subdiario</label>
-                        <div class="col-lg-3">
+                        <label for="subdiario" class="{{ $colLabel }}">Subdiario</label>
+                        <div class="{{ $colInput }}">
                             <select name="subdiario" id="subdiario" class="form-control">
                                 @foreach ($subdiario_enum as $value => $label)
                                     <option value="{{ $value }}" @selected(($filtros['subdiario'] ?? '') === $value)>{{ $label }}</option>
@@ -94,8 +99,8 @@
                     </div>
 
                     <div class="form-group row">
-                        <div class="col-lg-2"></div>
-                        <div class="col-lg-9">
+                        <div class="{{ $colLabel }} d-none d-lg-block"></div>
+                        <div class="{{ $colInput }}">
                             <div class="form-check mb-1">
                                 <input class="form-check-input" type="checkbox" name="conciliar_contable" id="conciliar_contable" value="1"
                                     @checked($filtros['conciliar_contable'] ?? true)>
@@ -106,6 +111,9 @@
                                     @checked(! empty($filtros['clasificar_por_host']))>
                                 <label class="form-check-label" for="clasificar_por_host">Clasificar por host (PC de facturación)</label>
                             </div>
+                        </div>
+                        <div class="{{ $colLabel }} d-none d-lg-block"></div>
+                        <div class="{{ $colInput }}">
                             <div class="form-check">
                                 <input class="form-check-input" type="checkbox" name="solo_moneda_origen" id="solo_moneda_origen" value="1"
                                     @checked(! empty($filtros['solo_moneda_origen']))>
@@ -115,7 +123,7 @@
                     </div>
 
                     <div class="form-group row mb-0">
-                        <div class="col-lg-2"></div>
+                        <div class="{{ $colLabel }} d-none d-lg-block"></div>
                         <div class="col-lg-10">
                             <input type="hidden" name="consultar" value="1">
                             <button type="submit" class="btn btn-primary btn-sm" id="btn-consultar">

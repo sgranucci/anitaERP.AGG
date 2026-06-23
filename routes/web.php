@@ -918,6 +918,7 @@ Route::get('stock/leerunarticulo/{articulo_id}', 'Stock\ArticuloController@leeUn
 Route::get('stock/leerunarticuloporsku/{sku}', 'Stock\ArticuloController@leeUnArticuloPorSku')->name('leer_un_articulo_por_sku');
 
 Route::post('stock/articulo/consultaarticulo', 'Stock\ArticuloController@consultaArticulo')->name('consulta_articulo');
+Route::get('stock/articulo/api/saldos-deposito', 'Stock\ArticuloController@apiSaldosDeposito')->name('articulo_saldos_deposito');
 Route::get('stock/listaarticulo/{formato?}/{busqueda?}', 'Stock\ArticuloController@listar')->name('lista_articulo');
 
 Route::get('stock/formula-articulo', 'Stock\FormulaArticuloController@index')->name('consultar_formula_articulo');
@@ -970,8 +971,10 @@ Route::get('stock/combinacion/product/{sku}', 'Stock\CombinacionController@creat
 
 Route::get('stock/movimientostock', 'Stock\MovimientoStockController@index')->name('movimientostock');
 Route::get('stock/movimientostock/transferencia/{id}/consultar', 'Stock\MovimientoStockController@consultarTransferencia')->name('consultar_transferencia_movimientostock');
+Route::get('stock/movimientostock/transferencia/{id}/com-pdf', 'Stock\MovimientoStockController@imprimirTransferenciaCom')->name('transferencia_movimientostock_com_pdf');
 Route::get('stock/movimientostock/crear', 'Stock\MovimientoStockController@crear')->name('crear_movimientostock');
 Route::post('stock/movimientostock', 'Stock\MovimientoStockController@guardar')->name('guardar_movimientostock');
+Route::get('stock/movimientostock/{id}/com-pdf', 'Stock\MovimientoStockController@imprimirCom')->name('movimientostock_com_pdf');
 Route::get('stock/movimientostock/{id}/editar', 'Stock\MovimientoStockController@editar')->name('editar_movimientostock');
 Route::match(['get', 'post'], 'stock/movimientostock/preview-asiento', 'Stock\MovimientoStockController@previewAsientoContable')->name('preview_asiento_movimientostock_nuevo');
 Route::match(['get', 'post'], 'stock/movimientostock/preview-conversion-formula', 'Stock\MovimientoStockController@previewConversionFormula')->name('preview_conversion_formula_movimientostock');
@@ -2491,6 +2494,9 @@ Route::get('ventas/manual/descargar-word', 'Ventas\ManualVentasController@descar
 Route::get('stock/recuento/manual', 'Stock\ManualStockController@index')->name('manual_stock');
 Route::get('stock/recuento/manual/descargar-pdf', 'Stock\ManualStockController@descargarPdf')->name('manual_stock_pdf');
 Route::get('stock/recuento/manual/descargar-word', 'Stock\ManualStockController@descargarWord')->name('manual_stock_word');
+Route::get('stock/manual-recepcion-movstock', 'Stock\ManualRecepcionMovstockController@index')->name('manual_recepcion_movstock');
+Route::get('stock/manual-recepcion-movstock/descargar-pdf', 'Stock\ManualRecepcionMovstockController@descargarPdf')->name('manual_recepcion_movstock_pdf');
+Route::get('stock/manual-recepcion-movstock/descargar-word', 'Stock\ManualRecepcionMovstockController@descargarWord')->name('manual_recepcion_movstock_word');
 
 /* Modulo receptivo */
 
@@ -2735,6 +2741,20 @@ Route::get('sala/prioridad-sala/{id}/editar', 'Sala\PrioridadSalaController@edit
 Route::put('sala/prioridad-sala/{id}', 'Sala\PrioridadSalaController@actualizar')->name('actualizar_prioridad_sala');
 Route::delete('sala/prioridad-sala/{id}', 'Sala\PrioridadSalaController@eliminar')->name('eliminar_prioridad_sala');
 
+Route::get('sala/tecnico-laboratorio', 'Sala\TecnicoLaboratorioController@index')->name('consultar_tecnico_laboratorio');
+Route::get('sala/tecnico-laboratorio/crear', 'Sala\TecnicoLaboratorioController@crear')->name('crear_tecnico_laboratorio');
+Route::post('sala/tecnico-laboratorio', 'Sala\TecnicoLaboratorioController@guardar')->name('guardar_tecnico_laboratorio');
+Route::get('sala/tecnico-laboratorio/{id}/editar', 'Sala\TecnicoLaboratorioController@editar')->name('editar_tecnico_laboratorio');
+Route::put('sala/tecnico-laboratorio/{id}', 'Sala\TecnicoLaboratorioController@actualizar')->name('actualizar_tecnico_laboratorio');
+Route::delete('sala/tecnico-laboratorio/{id}', 'Sala\TecnicoLaboratorioController@eliminar')->name('eliminar_tecnico_laboratorio');
+
+Route::get('sala/cumplir-requisicion-sala', 'Sala\CumplirRequisicionSalaController@index')->name('cumplir_requisicion_sala');
+Route::get('sala/cumplir-requisicion-sala/consulta', 'Sala\CumplirRequisicionSalaController@consultaRequisicion')->name('consulta_requisicion_sala_cumple');
+Route::get('sala/cumplir-requisicion-sala/datos/{id}', 'Sala\CumplirRequisicionSalaController@datosRequisicion')->name('datos_requisicion_sala_cumple');
+Route::get('sala/cumplir-requisicion-sala/consulta-npu', 'Sala\CumplirRequisicionSalaController@consultaNpu')->name('consulta_npu_cumple_requisicion_sala');
+Route::get('sala/cumplir-requisicion-sala/pdf/{token?}', 'Sala\CumplirRequisicionSalaController@imprimirPdf')->name('pdf_cumplir_requisicion_sala');
+Route::post('sala/cumplir-requisicion-sala', 'Sala\CumplirRequisicionSalaController@grabar')->name('grabar_cumplir_requisicion_sala');
+
 Route::get('sala/requisicion-sala', 'Sala\RequisicionSalaController@index')->name('consultar_requisicion_sala');
 Route::get('sala/listarequisicionsala/{formato?}/{busqueda?}', 'Sala\RequisicionSalaController@listar')->name('listar_requisicion_sala');
 Route::get('sala/requisicion-sala/crear', 'Sala\RequisicionSalaController@crear')->name('crear_requisicion_sala');
@@ -2748,6 +2768,9 @@ Route::delete('sala/requisicion-sala/{id}', 'Sala\RequisicionSalaController@elim
 Route::get('sala/requisicion-sala/{id}/archivo/{archivo}', 'Sala\RequisicionSalaController@descargarArchivo')->name('requisicion_sala_archivo');
 Route::post('sala/requisicion-sala/{id}/enviar-arbol-aprobacion', 'Sala\RequisicionSalaController@enviarArbolAprobacion')->name('enviar_arbol_requisicion_sala');
 Route::get('sala/leer_historia_requisicion_sala/{id}', 'Sala\RequisicionSalaController@leerHistoria')->name('lee_historia_requisicion_sala');
+
+Route::get('sala/requisicion-sala-reporte', 'Sala\RequisicionSalaReporteController@index')->name('reporte_requisicion_sala');
+Route::get('sala/listar-requisicion-sala-reporte/{formato?}', 'Sala\RequisicionSalaReporteController@exportar')->name('listar_reporte_requisicion_sala');
 
 /* Modulo UIF */
 /*
@@ -2940,6 +2963,7 @@ Route::get('uif/cliente_uif', 'Uif\Cliente_UifController@index')->name('consulta
 Route::get('uif/cliente_uif/crear', 'Uif\Cliente_UifController@crear')->name('crea_cliente_uif');
 Route::post('uif/cliente_uif', 'Uif\Cliente_UifController@guardar')->name('guarda_cliente_uif');
 Route::get('uif/cliente_uif/{id}/editar', 'Uif\Cliente_UifController@editar')->name('edita_cliente_uif')->middleware('modo.consulta');
+Route::get('uif/cliente_uif/{id}/listar-premios/{formato?}', 'Uif\Cliente_UifController@listarPremiosCliente')->name('lista_premios_cliente_uif');
 Route::get('uif/cliente_uif/{id}/fotodocumento', 'Uif\Cliente_UifController@mostrarFotodocumento')->name('cliente_uif_fotodocumento');
 Route::delete('uif/cliente_uif/{id}/fotodocumento', 'Uif\Cliente_UifController@eliminarFotodocumento')->name('elimina_fotodocumento_cliente_uif');
 Route::put('uif/cliente_uif/{id}', 'Uif\Cliente_UifController@actualizar')->name('actualiza_cliente_uif')->middleware('modo.consulta');
@@ -2952,7 +2976,15 @@ Route::get('uif/calculariesgo_uif/{cliente_uif_id}/{periodo}/{inusualidad_uif_id
 
 Route::get('uif/crearexportaoperacion', 'Uif\Cliente_UifController@crearExportaOperacion')->name('crear_exporta_operacion');
 Route::post('uif/generaexportaoperacion', 'Uif\Cliente_UifController@generaExportaOperacion')->name('generar_exporta_operacion');
-Route::get('uif/exportaoperacion/{periodo}/{limiteinformeuif}', 'Uif\Cliente_UifController@exportaOperacion')->name('exporta_cliente_uif');
+Route::get('uif/exportaoperacion/{periodo}/{limiteinformeuif}/{empresa_id}', 'Uif\Cliente_UifController@listadoExportaOperacion')->name('listado_exporta_operacion_uif');
+Route::get('uif/exportaoperacion/{periodo}/{limiteinformeuif}/{empresa_id}/xml', 'Uif\Cliente_UifController@exportaOperacion')->name('exporta_cliente_uif');
+Route::get('uif/exportaoperacion/{periodo}/{limiteinformeuif}/{empresa_id}/excel', 'Uif\Cliente_UifController@exportaOperacionExcel')->name('exporta_cliente_uif_excel');
+Route::get('uif/exportaoperacion/{periodo}/{limiteinformeuif}/{empresa_id}/xml-zip', 'Uif\Cliente_UifController@descargarXmlZip')->name('descargar_cliente_uif_xml_zip');
+
+Route::get('uif/conciliacion-wigos', 'Uif\UifConciliacionWigosController@index')->name('conciliacion_wigos_uif');
+Route::post('uif/conciliacion-wigos/cargar', 'Uif\UifConciliacionWigosController@cargar')->name('cargar_conciliacion_wigos_uif');
+Route::post('uif/conciliacion-wigos/conciliar', 'Uif\UifConciliacionWigosController@conciliar')->name('conciliar_conciliacion_wigos_uif');
+Route::get('uif/listar-conciliacion-wigos/{formato}', 'Uif\UifConciliacionWigosController@exportar')->name('listar_conciliacion_wigos_uif');
 
 /*
  * Premios UIF
@@ -2984,7 +3016,7 @@ Route::delete('uif/cliente_congelado_uif/{id}', 'Uif\Cliente_Congelado_UifContro
 Route::post('uif/consultacliente_congelado_uif', 'Uif\Cliente_Congelado_UifController@consultaCliente_Congelado_Uif')->name('consultar_cliente_congelado_uif');
 Route::get('uif/leeruncliente_congelado_uif/{cliente_congelado_uif_id}', 'Uif\Cliente_Congelado_UifController@leeUnCliente_Congelado_Uif')->name('leer_un_cliente_congelado_uif');
 Route::get('uif/crea_importacion_cliente_congelado_uif', 'Uif\Cliente_Congelado_UifController@crearImportacionCliente_Congelado_Uif')->name('crear_importacion_cliente_congelado_uif');
-Route::get('uif/importa_cliente_congelado_uif', 'Uif\Cliente_Congelado_UifController@importaCliente_Congelado_Uif')->name('importar_cliente_congelado_uif');
+Route::post('uif/importa_cliente_congelado_uif', 'Uif\Cliente_Congelado_UifController@importarCliente_Congelado_Uif')->name('importar_cliente_congelado_uif');
 
 // Modulo de ordenes de venta
 /*

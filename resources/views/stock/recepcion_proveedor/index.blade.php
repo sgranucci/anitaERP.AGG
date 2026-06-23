@@ -19,6 +19,7 @@ Recepciones de proveedores
             <div class="card-header">
                 <h3 class="card-title"><i class="fa fa-truck"></i> Recepciones de proveedores</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @include('includes.stock.boton-manual-recepcion-movstock')
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-recepcion',
                         'filtroValor' => $filtros['filtro_valor'] ?? '',

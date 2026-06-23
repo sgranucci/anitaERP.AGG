@@ -41,7 +41,12 @@ class DepmaeController extends Controller
             || can('listar-prestamo', false)
             || can('crear-movimientos-de-stock', false)
             || can('editar-movimientos-de-stock', false)
-            || can('listar-movimientos-de-stock', false);
+            || can('listar-movimientos-de-stock', false)
+            || can('crear-requisicion-sala', false)
+            || can('editar-requisicion-sala', false)
+            || can('actualizar-requisicion-sala', false)
+            || can('listar-requisicion-sala', false)
+            || can('cumplir-requisicion-sala', false);
     }
 
     /**

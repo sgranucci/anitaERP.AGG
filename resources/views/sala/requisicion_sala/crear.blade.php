@@ -7,6 +7,7 @@ Requisición de sala
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/articulo/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/depmae/consulta.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/sala/requisicion_sala/deposito.js') }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/sala/requisicion_sala/crear.js")}}" type="text/javascript"></script>
 @endsection
 
@@ -38,6 +39,11 @@ Requisición de sala
                 <div class="card-body">
                     @include('sala.requisicion_sala.form')
                     <div class="form4" id="requisicion-sala-solapa-archivos" style="display:none;">
+                        <p class="text-muted small mb-2">Archivos actuales</p>
+                        @include('sala.requisicion_sala.partials.archivos_adjuntos', [
+                            'data' => null,
+                            'ocultarInputsConservar' => false,
+                        ])
                         @include('sala.requisicion_sala.partials.solapa_agregar_archivos', ['data' => null])
                     </div>
                 </div>
@@ -45,11 +51,9 @@ Requisición de sala
                     <div class="row">
                         <div class="col-lg-3"></div>
                         <div class="col-lg-6">
-                            @can('crear-requisicion-sala')
-                            <button type="submit" class="btn btn-success">
+                            <button type="button" id="botonform0" class="btn btn-success">
                                 <i class="fa fa-save"></i> Guardar
                             </button>
-                            @endcan
                         </div>
                     </div>
                 </div>

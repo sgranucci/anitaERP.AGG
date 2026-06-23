@@ -117,6 +117,11 @@ class RecepcionProveedorOrdencompraResolverService
             : collect();
 
         foreach ($articulosOc as $ocArt) {
+            if ((string) ($ocArt->estado_linea_oc ?? \App\Support\Compras\OrdencompraLineaEstados::ACTIVA)
+                === \App\Support\Compras\OrdencompraLineaEstados::CERRADA) {
+                continue;
+            }
+
             $articulo = $ocArt->articulos;
             $coefProveedor = RecepcionProveedorDepositoSupport::coeficienteProveedor(
                 (int) $ocArt->articulo_id,
@@ -174,6 +179,11 @@ class RecepcionProveedorOrdencompraResolverService
                 'cantidad_recibida' => $recibido,
                 'cantidad' => $cantidadPendiente,
                 'cantidad_rechazada' => 0,
+                'accion_linea_oc' => $cantidadPendiente > 0.000001
+                    ? \App\Support\Stock\RecepcionProveedorAccionLineaOc::RECIBIR
+                    : '',
+                'fl_cerrar_linea_oc' => false,
+                'comentario_diferencia' => '',
                 'motivorechazo' => '',
                 'cantidad_stock' => RecepcionProveedorConversionSupport::cantidadStock($cantidadPendiente, $coefEfectivo),
                 'coeficienteconversion' => $coefEfectivo,

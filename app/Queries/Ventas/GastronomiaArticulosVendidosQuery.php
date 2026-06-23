@@ -445,6 +445,7 @@ class GastronomiaArticulosVendidosQuery
             ->join('venta as v', 'v.id', '=', 've.venta_id')
             ->join('venta_gastronomia_emision as vge', 'vge.venta_id', '=', 'v.id')
             ->join('articulo as a', 'a.id', '=', 've.articulo_id')
+            ->leftJoin('subcategoria as sc', 'sc.id', '=', 'a.subcategoria_id')
             ->join('tipotransaccion as tt', 'tt.id', '=', 'v.tipotransaccion_id')
             ->leftJoin('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
             ->whereNull('v.deleted_at');
@@ -458,6 +459,7 @@ class GastronomiaArticulosVendidosQuery
                 've.articulo_id',
                 'a.sku',
                 'a.descripcion',
+                'sc.nombre as subcategoria_nombre',
             ])
             ->selectRaw(self::DEPOSITO_EXPR.' as deposito_id')
             ->addSelect([
@@ -477,6 +479,7 @@ class GastronomiaArticulosVendidosQuery
                 've.articulo_id',
                 'a.sku',
                 'a.descripcion',
+                'sc.nombre',
                 DB::raw(self::DEPOSITO_EXPR),
                 'd.codigo',
                 'd.nombre',

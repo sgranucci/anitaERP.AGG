@@ -20,6 +20,7 @@ use App\Support\Stock\MovimientoStockListadoFiltros; ?>
             <div class="card-header">
                 <h3 class="card-title">Movimientos de Stock</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @include('includes.stock.boton-manual-recepcion-movstock')
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-movimientostock',
                         'filtroValor' => $filtros['valor'] ?? '',
@@ -39,6 +40,12 @@ use App\Support\Stock\MovimientoStockListadoFiltros; ?>
                     'limpiarUrl' => route('movimientostock'),
                 ])
             </form>
+            @if(!empty($alcance_centro_costo))
+                <div class="px-3 py-2 border-bottom bg-white text-muted small">
+                    <i class="fa fa-filter"></i>
+                    Mostrando movimientos de su sector: <strong>{{ $alcance_centro_costo }}</strong>
+                </div>
+            @endif
             <div class="card-body table-responsive p-0">
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'lista_movimientostock',

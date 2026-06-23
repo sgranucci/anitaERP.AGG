@@ -5,7 +5,7 @@ Kardex — {{ $contexto['articulo']['sku'] ?? '' }}
 
 @section("scripts")
 <meta name="csrf-token" content="{{ csrf_token() }}">
-<script src="{{ asset('assets/pages/scripts/stock/depmae/consulta.js') }}" type="text/javascript"></script>
+@include('includes.stock.kardex_deposito_scripts')
 <script src="{{ asset('assets/pages/scripts/stock/recuento/movimientos_articulo.js') }}" type="text/javascript"></script>
 @endsection
 

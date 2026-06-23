@@ -19,6 +19,7 @@
 <script src="{{ asset('assets/pages/scripts/stock/articulo/partes_unicas.js') }}?v=20260608" type="text/javascript"></script>
 @endif
 @if (\App\Support\Stock\MovimientosArticuloDepositoSupport::puedeConsultar())
+@include('includes.stock.kardex_deposito_scripts')
 <script src="{{ asset('assets/pages/scripts/stock/recuento/movimientos_articulo.js') }}" type="text/javascript"></script>
 @endif
 @if (can('listar-formula-articulo', false) || can('listar-articulos', false))
@@ -60,6 +61,14 @@ window.consultaFormulaArticuloConfig = {
                     </button>
                     @endif
                     @if (\App\Support\Stock\MovimientosArticuloDepositoSupport::puedeConsultar())
+                    <button type="button"
+                        class="btn btn-secondary btn-sm btn-saldos-articulo tooltipsC"
+                        title="Saldos por dep&oacute;sito"
+                        data-articulo-id="{{ $producto->id }}"
+                        data-articulo-sku="{{ $producto->sku ?? '' }}"
+                        data-articulo-descripcion="{{ $producto->descripcion ?? '' }}">
+                        <i class="fa fa-fw fa-warehouse"></i> Saldos
+                    </button>
                     <button type="button"
                         class="btn btn-secondary btn-sm btn-movimientos-stock-articulo tooltipsC"
                         title="Kardex de stock por dep&oacute;sito"
@@ -176,6 +185,8 @@ window.consultaFormulaArticuloConfig = {
 @endif
 @if (\App\Support\Stock\MovimientosArticuloDepositoSupport::puedeConsultar())
 @include('includes.stock.modal_kardex_deposito')
+@include('includes.stock.modal_saldos_articulo')
 <input type="hidden" id="recuento-movimientos-articulo-url" value="{{ route('recuento_movimientos_articulo') }}">
+<input type="hidden" id="articulo-saldos-deposito-url" value="{{ route('articulo_saldos_deposito') }}">
 @endif
 @endsection

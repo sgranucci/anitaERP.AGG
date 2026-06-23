@@ -62,6 +62,9 @@ class IvaVentasReporteController extends Controller
         }
 
         $filtrosQuery = IvaVentasListadoFiltros::paraQueryString($filtros);
+        if ($consultado) {
+            $filtrosQuery['consultar'] = 1;
+        }
         if ($request->has('per_page')) {
             $filtrosQuery['per_page'] = max(10, min(500, (int) $request->input('per_page', 50)));
         }

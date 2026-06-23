@@ -157,7 +157,11 @@ class CapexRepository implements CapexRepositoryInterface
 
 		$data = $q->orderBy('codigo')->limit(200)->get();
 		if ($data->isEmpty()) {
-			$output['data'] .= '<tr><td colspan="5">Sin resultados para el último presupuesto y esta empresa.</td></tr>';
+			$msg = 'Sin resultados para el último presupuesto y esta empresa.';
+			if ($centrocostodestino_id > 0) {
+				$msg .= ' Revise el filtro de centro de costo.';
+			}
+			$output['data'] .= '<tr><td colspan="5">'.e($msg).'</td></tr>';
 
 			return $output;
 		}

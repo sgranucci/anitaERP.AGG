@@ -3,6 +3,7 @@
 namespace App\Services\Sala;
 
 use App\Mail\Configuracion\MailArbolAprobacion;
+use App\Mail\Sala\MailRequisicionSalaRechazoArbol;
 use App\Models\Configuracion\Arbolaprobacion;
 use App\Models\Configuracion\Arbolaprobacion_Movimiento;
 use App\Models\Sala\RequisicionSala;
@@ -87,9 +88,10 @@ class RequisicionSalaArbolIntegracionService
             $req = $this->requisicionSalaRepository->find($comprobanteId);
             $totales = RequisicionSalaTotalesCabecera::desdeModelo($req);
             $nombreAprobada = RequisicionSalaEstado::$enumEstado[array_search('A', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'];
+            $nombreRechazada = RequisicionSalaEstado::$enumEstado[array_search('Z', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'];
             $nombreCumplido = RequisicionSalaEstado::$enumEstado[array_search('3', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'];
             $nombreSuspendido = RequisicionSalaEstado::$enumEstado[array_search('4', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'];
-            if (in_array($req->estado, [$nombreAprobada, $nombreCumplido, $nombreSuspendido], true)) {
+            if (in_array($req->estado, [$nombreAprobada, $nombreRechazada, $nombreCumplido, $nombreSuspendido], true)) {
                 return 0;
             }
 
@@ -192,6 +194,7 @@ class RequisicionSalaArbolIntegracionService
         }
         $this->requisicionSalaEstadoRepository->creaEstado($id, Carbon::now()->toDateTimeString(), $estadoNombre, $usuarioId, $observacion);
         $this->requisicionSalaRepository->update(['estado' => $estadoNombre], $id);
+        $this->ejecutarTransferenciaLaboratorioSiAprobada($id, $estadoNombre, (int) $usuarioId);
     }
 
     public function finalizaTrasArbolCompleto(int $id, $usuarioId): void
@@ -205,19 +208,33 @@ class RequisicionSalaArbolIntegracionService
             'Árbol de aprobación completado'
         );
         $this->requisicionSalaRepository->update(['estado' => $aprobada], $id);
+        $this->ejecutarTransferenciaLaboratorioSiAprobada($id, $aprobada, (int) $usuarioId);
     }
 
-    public function suspendePorRechazo(int $id, $usuarioId, string $observacion): void
+    private function ejecutarTransferenciaLaboratorioSiAprobada(int $id, string $estadoNombre, int $usuarioId): void
     {
-        $estado = RequisicionSalaEstado::$enumEstado[array_search('4', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'];
+        $nombreAprobada = RequisicionSalaEstado::$enumEstado[array_search('A', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'];
+        if ($estadoNombre !== $nombreAprobada) {
+            return;
+        }
+        app(RequisicionSalaTransferenciaLaboratorioService::class)->ejecutarSiCorresponde($id, $usuarioId);
+    }
+
+    public function rechazaPorRechazo(int $id, $usuarioId, string $observacion): void
+    {
+        $estado = RequisicionSalaEstado::$enumEstado[array_search('Z', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'];
+        $obs = trim($observacion) !== ''
+            ? 'Requisición de sala rechazada en árbol: '.$observacion
+            : 'Requisición de sala rechazada en árbol de aprobación';
         $this->requisicionSalaEstadoRepository->creaEstado(
             $id,
             Carbon::now()->toDateTimeString(),
             $estado,
             $usuarioId,
-            'Requisición de sala suspendida / rechazada en árbol: '.$observacion
+            $obs
         );
         $this->requisicionSalaRepository->update(['estado' => $estado], $id);
+        $this->enviaCorreoRechazoAlSolicitante($id, (int) $usuarioId, $observacion);
     }
 
     public function findPorRequisicionSala(int $id)
@@ -294,6 +311,35 @@ class RequisicionSalaArbolIntegracionService
             $linkRechazo,
             $linkVisualizar,
             null
+        ));
+    }
+
+    private function enviaCorreoRechazoAlSolicitante(int $requisicionId, int $rechazadorId, string $observacion): void
+    {
+        $req = $this->requisicionSalaRepository->find($requisicionId);
+        if (! $req) {
+            return;
+        }
+
+        $solicitanteId = (int) ($req->creousuario_id ?: $req->usuario_id);
+        if ($solicitanteId <= 0) {
+            return;
+        }
+
+        $solicitante = $this->usuarioRepository->find($solicitanteId);
+        if (! $solicitante || ! filled($solicitante->email)) {
+            return;
+        }
+
+        $rechazador = $this->usuarioRepository->find($rechazadorId);
+        $linkEditar = url('sala/requisicion-sala/'.$requisicionId.'/editar');
+
+        Mail::to($solicitante->email)->send(new MailRequisicionSalaRechazoArbol(
+            $solicitante,
+            $req,
+            $rechazador,
+            trim($observacion),
+            $linkEditar
         ));
     }
 }

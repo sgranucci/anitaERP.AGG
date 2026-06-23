@@ -283,7 +283,10 @@ $(document).ready(function () {
             "language": idioma,
             "lengthMenu": [[10, 5, 50, -1], [10, 5, 50, "Mostrar Todo"]],
             dom: 'Bfrt<"col-md-6 inline"i> <"col-md-6 inline"p>',
-            buttons: configuracionBotonesExportDataTable()
+            buttons: configuracionBotonesExportDataTable(),
+            drawCallback: function () {
+                $('.tooltip').remove();
+            }
         });
     }
 

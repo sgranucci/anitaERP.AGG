@@ -314,7 +314,7 @@
     @endif
 </div>
 @include('includes.stock.modalconsultaarticulo')
-@include('includes.presupuesto.modalconsultapartidagasto')
-@include('includes.presupuesto.modalconsultacapex')
+@include('includes.presupuesto.modalconsultapartidagasto', ['centrocosto_query' => $centrocosto_query ?? null])
+@include('includes.presupuesto.modalconsultacapex', ['centrocosto_query' => $centrocosto_query ?? null])
 @include('includes.compras.modalconsultaproveedor')
 @include('includes.compras.modalconsultalistasprecio')

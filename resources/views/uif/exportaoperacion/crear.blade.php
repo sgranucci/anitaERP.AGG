@@ -7,34 +7,23 @@
 
 <script src="{{asset("assets/pages/scripts/configuracion/salida.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/configuracion/configurar_salida.js")}}" type="text/javascript"></script>
-<!-- Bootstrap Date-Picker Plugin -->
 <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.4.1/js/bootstrap-datepicker.min.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.4.1/css/bootstrap-datepicker3.css"/>
 <script>
-
 window.seteoSalidaPrograma = @json(\App\Support\Configuracion\SeteoSalidaProgramaSupport::UIF_EXPORTA_OPERACION);
 window.seteoSalidaConfigurarUrl = @json(route('configurar_salida', ['programa' => ':programa']));
 
-    $(function () {
-        $('.periodo').datepicker( {
-            changeMonth: true,
-            changeYear: true,
-            minViewMode: "months",
-        });   
-
-        $('.periodo').on('change', function (event) {
-			event.preventDefault();
-            let periodo = $(this).val();
-            let fecha = new Date($(this).val());
-            let mes = fecha.getMonth() + 1;
-            let anio = fecha.getFullYear();
-
-            if (mes >= 1)
-                $(this).val(mes+"/"+anio);
-		});
-        
+$(function () {
+    $('.periodo').datepicker({
+        format: 'yyyy-mm',
+        minViewMode: 'months',
+        autoclose: true,
+        changeMonth: true,
+        changeYear: true,
+        clearBtn: false,
+        todayHighlight: true,
     });
-
+});
 </script>
 
 @endsection

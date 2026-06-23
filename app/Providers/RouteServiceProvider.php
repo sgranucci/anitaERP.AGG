@@ -30,6 +30,11 @@ class RouteServiceProvider extends ServiceProvider
         $this->configureRateLimiting();
 
         $this->routes(function () {
+            // Alias sin /api (clientes legacy o base URL .../anitaERP/public/comprobantes).
+            Route::middleware('api')
+                ->namespace($this->namespace)
+                ->group(base_path('routes/precarga_proveedor_api.php'));
+
             Route::middleware('api')
                 ->prefix('api')
 				->namespace($this->namespace)

@@ -58,7 +58,7 @@ final class IvaVentasListadoFiltros
                 ? $request->boolean('conciliar_contable', true)
                 : true,
             'solo_moneda_origen' => $request->boolean('consultar')
-                ? $request->has('solo_moneda_origen')
+                ? $request->boolean('solo_moneda_origen')
                 : true,
             'moneda_id' => $monedaId > 0 ? $monedaId : 1,
         ];
@@ -88,12 +88,9 @@ final class IvaVentasListadoFiltros
         if (! empty($filtros['clasificar_por_host'])) {
             $out['clasificar_por_host'] = 1;
         }
-        if (empty($filtros['conciliar_contable'])) {
-            $out['conciliar_contable'] = 0;
-        }
-        if (empty($filtros['solo_moneda_origen'])) {
-            $out['solo_moneda_origen'] = 0;
-        }
+
+        $out['conciliar_contable'] = empty($filtros['conciliar_contable']) ? 0 : 1;
+        $out['solo_moneda_origen'] = empty($filtros['solo_moneda_origen']) ? 0 : 1;
 
         return $out;
     }

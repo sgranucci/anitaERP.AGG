@@ -21,6 +21,7 @@
 </head>
 <body>
 @php
+    use App\Models\Sala\RequisicionSalaArticulo;
     use App\Support\Configuracion\EmpresaLogoArchivo;
     $nombreEmpresaLogo = optional($data->empresas)->nombre;
     $logoEmpresaDat = EmpresaLogoArchivo::dataUriDesdeNombre($nombreEmpresaLogo);
@@ -94,10 +95,16 @@
             <th>UID</th>
             <th>Nº parte única</th>
             <th>Destino</th>
+            <th>Estado</th>
         </tr>
     </thead>
     <tbody>
         @forelse ($data->requisicion_sala_articulos as $linea)
+        @php
+            $destinoLinea = RequisicionSalaArticulo::destinoNombrePorValor(trim((string) ($linea->destino ?? '')));
+            $estadoLinea = RequisicionSalaArticulo::estadoLineaNombrePorValor(trim((string) ($linea->estado ?? ' ')) ?: ' ');
+            $motivoParcial = RequisicionSalaArticulo::estadoParcialNombrePorValor($linea->estadoparcial ?? null);
+        @endphp
         <tr>
             <td>{{ optional($linea->articulos)->sku ?? '—' }}</td>
             <td>{{ $linea->detalle ?: (optional($linea->articulos)->descripcion ?? '—') }}</td>
@@ -105,10 +112,16 @@
             <td class="cen">{{ $linea->fueradeservicio ? 'Sí' : 'No' }}</td>
             <td>{{ $linea->uid ?: '—' }}</td>
             <td>{{ $linea->numeroparte ?: '—' }}</td>
-            <td>{{ $linea->destino ?: '—' }}</td>
+            <td>{{ $destinoLinea !== '' ? $destinoLinea : '—' }}</td>
+            <td>
+                {{ $estadoLinea }}
+                @if ($motivoParcial !== '')
+                    <span class="muted"> — {{ $motivoParcial }}</span>
+                @endif
+            </td>
         </tr>
         @empty
-        <tr><td colspan="7">Sin ítems.</td></tr>
+        <tr><td colspan="8">Sin ítems.</td></tr>
         @endforelse
     </tbody>
 </table>

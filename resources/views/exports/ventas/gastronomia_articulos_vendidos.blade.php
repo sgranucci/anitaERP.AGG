@@ -1,13 +1,14 @@
 <table>
     <tbody>
         <tr>
-            <td colspan="8"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Artículos vendidos — gastronomía</h2></td>
+            <td colspan="9"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Artículos vendidos — gastronomía</h2></td>
         </tr>
     </tbody>
     <thead>
         <tr>
             <th>SKU</th>
             <th>Descripción</th>
+            <th>Subcategoría</th>
             <th>Punto de venta</th>
             <th>Depósito</th>
             <th>Cantidad</th>
@@ -21,6 +22,7 @@
             <tr>
                 <td>{{ $f->sku ?? '—' }}</td>
                 <td>{{ $f->descripcion ?? '—' }}</td>
+                <td>{{ trim((string) ($f->subcategoria_nombre ?? '')) !== '' ? $f->subcategoria_nombre : '—' }}</td>
                 <td>{{ $f->puntoventa_etiqueta !== '' ? $f->puntoventa_etiqueta : '—' }}</td>
                 <td>{{ $f->deposito_etiqueta !== '' ? $f->deposito_etiqueta : '—' }}</td>
                 <td>{{ number_format((float) ($f->cantidad_total ?? 0), 3, ',', '.') }}</td>

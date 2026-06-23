@@ -7,6 +7,10 @@
     window.__anitaKardexMovimientosArticuloInit = true;
 
     var pendingKardexArticuloId = 0;
+    var pendingKardexVolverUrl = '';
+    var pendingSaldosArticuloId = 0;
+    var pendingSaldosVolverUrl = '';
+    var kardexModalConfirmarConEnter = false;
 
     function carpetaBase() {
         return typeof window.carpetaBase !== 'undefined' ? window.carpetaBase : '';
@@ -31,6 +35,220 @@
     function urlIndexMovimientosArticulo() {
         var el = document.getElementById('recuento-movimientos-articulo-url');
         return el ? el.value : (carpetaBase() + '/stock/recuento/movimientos-articulo');
+    }
+
+    function urlApiSaldosArticulo() {
+        var el = document.getElementById('articulo-saldos-deposito-url');
+        return el ? el.value : (carpetaBase() + '/stock/articulo/api/saldos-deposito');
+    }
+
+    function textoInfoArticulo(sku, descripcion, articuloId) {
+        var info = (sku || '').trim();
+        if ((descripcion || '').trim()) {
+            info += (info ? ' — ' : '') + descripcion.trim();
+        }
+        return info || ('Artículo #' + (parseInt(articuloId, 10) || 0));
+    }
+
+    function limpiarModalesStockConsultaAlCargar() {
+        if (!window.jQuery) {
+            return;
+        }
+        window.__anitaPermitirShowModalSaldos = false;
+        window.__anitaPermitirShowModalKardex = false;
+        window.__anitaPermitirShowConsultadepositoModal = false;
+        var modales = ['#modalKardexDeposito', '#modalSaldosArticulo'];
+        if (esListadoArticulosIndexPagina()) {
+            modales.unshift('#consultadepositoModal');
+        }
+        modales.forEach(function (selector) {
+            var $m = $(selector);
+            if (!$m.length) {
+                return;
+            }
+            if ($m.hasClass('show')) {
+                $m.modal('hide');
+            }
+            $m.removeClass('show').attr('aria-hidden', 'true').attr('inert', 'inert').css('display', 'none');
+        });
+        $('body').removeClass('modal-open').css('padding-right', '');
+        $('.modal-backdrop').remove();
+    }
+
+    function esListadoArticulosIndexPagina() {
+        return !!document.getElementById('form-filtros-articulo')
+            && !document.getElementById('filtro-deposito-movimientos-articulo');
+    }
+
+    function registrarGuardModalStock($modal, flagName) {
+        if (!$modal || !$modal.length || $modal.data('anitaGuardStockRegistrado')) {
+            return;
+        }
+        $modal.data('anitaGuardStockRegistrado', true);
+        $modal.on('show.bs.modal.guardStockConsulta', function (e) {
+            if (window[flagName]) {
+                window[flagName] = false;
+                return;
+            }
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            return false;
+        });
+    }
+
+    function enfocarBusquedaListadoArticulos() {
+        if (!document.getElementById('form-filtros-articulo')) {
+            return;
+        }
+        var $input = $('#filtro_valor:visible').first();
+        if ($input.length && !$('.modal.show').length) {
+            setTimeout(function () {
+                $input.trigger('focus');
+            }, 0);
+        }
+    }
+
+    function focoCodigoDepositoKardexModal() {
+        var $cod = $('#kardex_pick_deposito_id_codigo');
+        if (!$cod.length) {
+            return;
+        }
+        setTimeout(function () {
+            $cod.trigger('focus').select();
+        }, 80);
+    }
+
+    function ejecutarAbrirKardexModal() {
+        var depId = depositoDesdePickerKardexModal();
+        if (depId <= 0) {
+            notificar('Kardex', 'Seleccione un depósito o use «Todos los depósitos».');
+            focoCodigoDepositoKardexModal();
+            return;
+        }
+        $('#modalKardexDeposito').modal('hide');
+        abrirUrlKardex(pendingKardexArticuloId, depId, pendingKardexVolverUrl);
+    }
+
+    function renderSaldosEnPanel($panel, data) {
+        if (!$panel || !$panel.length) {
+            return;
+        }
+
+        var $loading = $panel.find('.saldos-articulo-loading');
+        var $error = $panel.find('.saldos-articulo-error');
+        var $wrap = $panel.find('.saldos-articulo-tabla-wrap');
+        var $vacio = $panel.find('.saldos-articulo-vacio');
+        var $tbody = $panel.find('.saldos-articulo-tbody');
+        var $total = $panel.find('.saldos-articulo-total');
+
+        $loading.addClass('d-none');
+        $error.addClass('d-none').text('');
+
+        var filas = data && Array.isArray(data.filas) ? data.filas : [];
+        $tbody.empty();
+
+        if (filas.length === 0) {
+            $wrap.addClass('d-none');
+            $vacio.removeClass('d-none');
+            $total.text((data && data.total_fmt) ? data.total_fmt : '0');
+            return;
+        }
+
+        $vacio.addClass('d-none');
+        $wrap.removeClass('d-none');
+        $total.text((data && data.total_fmt) ? data.total_fmt : '0');
+
+        filas.forEach(function (fila) {
+            var depId = parseInt(fila.deposito_id, 10) || 0;
+            var $tr = $('<tr></tr>');
+            $tr.append($('<td class="text-monospace small"></td>').text(fila.codigo || ''));
+            $tr.append($('<td class="small"></td>').text(fila.nombre || ''));
+            $tr.append($('<td class="text-right text-monospace small"></td>').text(fila.saldo_fmt || ''));
+            var $btn = $('<button type="button" class="btn btn-outline-info btn-xs btn-sm py-0 px-1 btn-saldo-fila-kardex" title="Abrir kardex en este dep\u00f3sito"></button>');
+            $btn.attr('data-deposito-id', String(depId));
+            $btn.html('<i class="fa fa-list-alt"></i>');
+            $tr.append($('<td class="text-center"></td>').append($btn));
+            $tbody.append($tr);
+        });
+    }
+
+    function cargarSaldosArticulo(articuloId, panelSelector) {
+        articuloId = parseInt(articuloId, 10) || 0;
+        var $panel = $(panelSelector);
+        if (articuloId <= 0 || !$panel.length) {
+            return;
+        }
+
+        var $loading = $panel.find('.saldos-articulo-loading');
+        var $error = $panel.find('.saldos-articulo-error');
+        var $wrap = $panel.find('.saldos-articulo-tabla-wrap');
+        var $vacio = $panel.find('.saldos-articulo-vacio');
+
+        $loading.removeClass('d-none');
+        $error.addClass('d-none').text('');
+        $wrap.addClass('d-none');
+        $vacio.addClass('d-none');
+        $panel.find('.saldos-articulo-tbody').empty();
+
+        $.ajax({
+            url: urlApiSaldosArticulo(),
+            type: 'GET',
+            dataType: 'json',
+            data: { articulo_id: articuloId },
+            headers: {
+                'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content'),
+            },
+        })
+            .done(function (data) {
+                renderSaldosEnPanel($panel, data);
+            })
+            .fail(function (xhr) {
+                $loading.addClass('d-none');
+                $wrap.addClass('d-none');
+                $vacio.addClass('d-none');
+                var msg = (xhr.responseJSON && xhr.responseJSON.error)
+                    ? xhr.responseJSON.error
+                    : 'No se pudieron consultar los saldos.';
+                $error.removeClass('d-none').text(msg);
+            });
+    }
+
+    function abrirKardexDesdePanelSaldos(articuloId, depositoId, volverUrl) {
+        articuloId = parseInt(articuloId, 10) || 0;
+        depositoId = parseInt(depositoId, 10) || 0;
+        if (articuloId <= 0) {
+            return;
+        }
+        $('#modalSaldosArticulo, #modalKardexDeposito').modal('hide');
+        abrirUrlKardex(articuloId, depositoId, volverUrl || window.location.pathname + window.location.search);
+    }
+
+    function mostrarModalSaldosArticulo(config) {
+        config = config || {};
+        pendingSaldosArticuloId = parseInt(config.articuloId, 10) || 0;
+        pendingSaldosVolverUrl = config.volverUrl || (window.location.pathname + window.location.search);
+
+        $('#modal-saldos-articulo-info').text(
+            textoInfoArticulo(config.sku, config.descripcion, pendingSaldosArticuloId)
+        );
+
+        cargarSaldosArticulo(pendingSaldosArticuloId, '#saldos-articulo-panel-modal');
+        window.__anitaPermitirShowModalSaldos = true;
+        $('#modalSaldosArticulo').modal({ focus: false });
+        $('#modalSaldosArticulo').removeAttr('inert').modal('show');
+    }
+
+    function datosDesdeBotonArticulo(btn) {
+        if (!btn) {
+            return null;
+        }
+        return {
+            articuloId: parseInt(btn.getAttribute('data-articulo-id'), 10) || 0,
+            sku: btn.getAttribute('data-articulo-sku') || '',
+            descripcion: btn.getAttribute('data-articulo-descripcion') || '',
+            depositoId: parseInt(btn.getAttribute('data-deposito-id'), 10) || 0,
+            volverUrl: window.location.pathname + window.location.search,
+        };
     }
 
     function notificar(titulo, mensaje, tipo) {
@@ -86,14 +304,17 @@
     function mostrarModalKardexDeposito(config) {
         config = config || {};
         pendingKardexArticuloId = parseInt(config.articuloId, 10) || 0;
+        pendingKardexVolverUrl = config.volverUrl || (window.location.pathname + window.location.search);
+        kardexModalConfirmarConEnter = false;
+
+        if (pendingKardexArticuloId <= 0) {
+            notificar('Kardex', 'Seleccione un artículo válido.');
+            return;
+        }
 
         var sku = (config.sku || '').trim();
         var descripcion = (config.descripcion || '').trim();
-        var info = sku;
-        if (descripcion) {
-            info += ' — ' + descripcion;
-        }
-        $('#modal-kardex-articulo-info').text(info || 'Artículo #' + pendingKardexArticuloId);
+        $('#modal-kardex-articulo-info').text(textoInfoArticulo(sku, descripcion, pendingKardexArticuloId));
 
         var $wrapOpciones = $('#modal-kardex-opciones-wrap');
         var $lista = $('#modal-kardex-opciones').empty();
@@ -133,7 +354,10 @@
             $('#kardex_pick_deposito_id').val(depositoDefaultId);
         }
 
-        $('#modalKardexDeposito').modal('show');
+        cargarSaldosArticulo(pendingKardexArticuloId, '#saldos-articulo-panel-kardex');
+        window.__anitaPermitirShowModalKardex = true;
+        $('#modalKardexDeposito').modal({ focus: false });
+        $('#modalKardexDeposito').removeAttr('inert').modal('show');
     }
 
     /**
@@ -371,6 +595,14 @@
                 recargarPaginaMovimientos(data.id);
                 return;
             }
+            if ($ctx.closest('#modal-kardex-picker-wrap').length) {
+                if (kardexModalConfirmarConEnter && data && data.id) {
+                    kardexModalConfirmarConEnter = false;
+                    $('#modalKardexDeposito').modal('hide');
+                    abrirUrlKardex(pendingKardexArticuloId, data.id, pendingKardexVolverUrl);
+                }
+                return;
+            }
         }
 
         if (typeof onDepositoAplicadoAnterior === 'function') {
@@ -379,30 +611,115 @@
     };
 
     document.addEventListener('DOMContentLoaded', function () {
-        if (typeof activa_eventos_consultadeposito === 'function') {
+        limpiarModalesStockConsultaAlCargar();
+        registrarGuardModalStock($('#modalSaldosArticulo'), '__anitaPermitirShowModalSaldos');
+        registrarGuardModalStock($('#modalKardexDeposito'), '__anitaPermitirShowModalKardex');
+        enfocarBusquedaListadoArticulos();
+
+        window.addEventListener('pageshow', function () {
+            if (esListadoArticulosIndexPagina()) {
+                limpiarModalesStockConsultaAlCargar();
+                enfocarBusquedaListadoArticulos();
+            }
+        });
+
+        window.addEventListener('load', function () {
+            if (esListadoArticulosIndexPagina()) {
+                limpiarModalesStockConsultaAlCargar();
+                enfocarBusquedaListadoArticulos();
+            }
+        });
+
+        if (enPaginaMovimientosArticulo() && typeof activa_eventos_consultadeposito === 'function') {
             activa_eventos_consultadeposito();
         }
 
         if (modalKardexDisponible()) {
-            $('#modalKardexDeposito').on('shown.bs.modal', function () {
+            $('#modal-kardex-picker-wrap .codigodeposito, #modal-kardex-picker-wrap .consultadeposito')
+                .prop('tabindex', -1);
+
+            $('#modalKardexDeposito')
+                .on('hidden.bs.modal.kardexTab', function () {
+                    $('#modal-kardex-picker-wrap .codigodeposito, #modal-kardex-picker-wrap .consultadeposito')
+                        .prop('tabindex', -1);
+                    $(this).attr('inert', 'inert');
+                });
+
+            $('#modalKardexDeposito').on('shown.bs.modal.kardexFoco', function () {
+                $(this).removeAttr('inert');
+                $('#modal-kardex-picker-wrap .codigodeposito, #modal-kardex-picker-wrap .consultadeposito')
+                    .prop('tabindex', 0);
                 if (typeof activa_eventos_consultadeposito === 'function') {
                     activa_eventos_consultadeposito();
                 }
+                focoCodigoDepositoKardexModal();
             });
 
             $('#btn-kardex-abrir').on('click', function () {
-                var depId = depositoDesdePickerKardexModal();
-                if (depId <= 0) {
-                    notificar('Kardex', 'Seleccione un depósito o use «Todos los depósitos».');
-                    return;
-                }
-                $('#modalKardexDeposito').modal('hide');
-                abrirUrlKardex(pendingKardexArticuloId, depId);
+                ejecutarAbrirKardexModal();
             });
 
             $('#btn-kardex-todos-depositos').on('click', function () {
                 $('#modalKardexDeposito').modal('hide');
-                abrirUrlKardex(pendingKardexArticuloId, 0);
+                abrirUrlKardex(pendingKardexArticuloId, 0, pendingKardexVolverUrl);
+            });
+
+            $(document).on('keydown.kardexModalAbrir', '#modalKardexDeposito', function (e) {
+                if (e.key !== 'Enter' && e.which !== 13) {
+                    return;
+                }
+                if ($(e.target).closest('#consultadepositoModal.show, #consultadepositoModal[style*="display: block"]').length) {
+                    return;
+                }
+                if (e.target.classList.contains('codigodeposito')) {
+                    var depId = depositoDesdePickerKardexModal();
+                    if (depId > 0) {
+                        e.preventDefault();
+                        e.stopImmediatePropagation();
+                        ejecutarAbrirKardexModal();
+                    } else {
+                        kardexModalConfirmarConEnter = true;
+                    }
+                    return;
+                }
+                if ($(e.target).is('textarea')) {
+                    return;
+                }
+                if ($(e.target).is('button, a')) {
+                    return;
+                }
+                e.preventDefault();
+                ejecutarAbrirKardexModal();
+            });
+        }
+
+        if (document.getElementById('modalSaldosArticulo')) {
+            $('#modalSaldosArticulo')
+                .on('shown.bs.modal.saldosInert', function () {
+                    $(this).removeAttr('inert');
+                })
+                .on('hidden.bs.modal.saldosInert', function () {
+                    $(this).attr('inert', 'inert');
+                });
+
+            $('#btn-saldos-kardex-todos').on('click', function () {
+                abrirKardexDesdePanelSaldos(pendingSaldosArticuloId, 0, pendingSaldosVolverUrl);
+            });
+
+            $(document).on('click', '.btn-saldo-fila-kardex', function (e) {
+                e.preventDefault();
+                var depId = parseInt($(this).attr('data-deposito-id'), 10) || 0;
+                var $modalSaldos = $(this).closest('#modalSaldosArticulo');
+                var $modalKardex = $(this).closest('#modalKardexDeposito');
+                var articuloId = pendingSaldosArticuloId;
+                var volverUrl = pendingSaldosVolverUrl;
+                if ($modalKardex.length) {
+                    articuloId = pendingKardexArticuloId;
+                    volverUrl = pendingKardexVolverUrl;
+                } else if (!$modalSaldos.length) {
+                    articuloId = 0;
+                }
+                abrirKardexDesdePanelSaldos(articuloId, depId, volverUrl);
             });
         }
 
@@ -444,18 +761,19 @@
             if (btnArticulo) {
                 e.preventDefault();
                 e.stopPropagation();
+                var datosBtn = datosDesdeBotonArticulo(btnArticulo);
                 var extra = {
-                    sku: btnArticulo.getAttribute('data-articulo-sku') || '',
-                    descripcion: btnArticulo.getAttribute('data-articulo-descripcion') || '',
-                    volverUrl: window.location.pathname + window.location.search,
+                    sku: datosBtn.sku,
+                    descripcion: datosBtn.descripcion,
+                    volverUrl: datosBtn.volverUrl,
                 };
                 if (btnArticulo.closest('#consultaarticuloModal')
                     && typeof window.depositosKardexMovimientoStock === 'function') {
                     var opcionesConsulta = window.depositosKardexMovimientoStock();
                     if (opcionesConsulta.length > 0) {
                         abrirKardexArticulo(
-                            btnArticulo.getAttribute('data-articulo-id'),
-                            btnArticulo.getAttribute('data-deposito-id') || '',
+                            datosBtn.articuloId,
+                            datosBtn.depositoId || '',
                             opcionesConsulta,
                             extra
                         );
@@ -463,6 +781,15 @@
                     }
                 }
                 abrirKardexDesdeAbmArticulo(btnArticulo);
+                return;
+            }
+
+            var btnSaldos = e.target.closest('.btn-saldos-articulo');
+            if (btnSaldos) {
+                e.preventDefault();
+                e.stopPropagation();
+                var datosSaldo = datosDesdeBotonArticulo(btnSaldos);
+                mostrarModalSaldosArticulo(datosSaldo);
                 return;
             }
 
@@ -502,4 +829,12 @@
             document.querySelectorAll('#tabla-items-movimientostock tbody tr.item-pedido').forEach(actualizarBotonesKardexFilaMovStock);
         }
     });
+
+    if (window.jQuery) {
+        jQuery(function () {
+            limpiarModalesStockConsultaAlCargar();
+            registrarGuardModalStock(jQuery('#modalSaldosArticulo'), '__anitaPermitirShowModalSaldos');
+            registrarGuardModalStock(jQuery('#modalKardexDeposito'), '__anitaPermitirShowModalKardex');
+        });
+    }
 })();

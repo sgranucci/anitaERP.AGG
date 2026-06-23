@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 520" width="920" height="520">
+  <rect width="920" height="520" rx="12" fill="#f4f6f9"/>
+  <rect x="232" y="64" width="672" height="440" rx="8" fill="#fff" stroke="#ffc107"/>
+  <text x="248" y="96" fill="#856404" font-family="Segoe UI,sans-serif" font-size="16" font-weight="600">Transferencias pendientes de recepción</text>
+  <rect x="248" y="112" width="640" height="28" fill="#85C1E9"/>
+  <text x="260" y="130" fill="#17202A" font-family="Segoe UI,sans-serif" font-size="10">Código | Fecha | Origen | Destino | Ítems | Remitente | Acciones</text>
+  <rect x="248" y="140" width="640" height="40" fill="#fff"/>
+  <text x="260" y="158" fill="#212529" font-family="Segoe UI,sans-serif" font-size="10">TR-202606221500</text>
+  <text x="380" y="158" fill="#212529" font-family="Segoe UI,sans-serif" font-size="10">Galpón A ’ Farmacia B</text>
+  <rect x="780" y="148" width="60" height="22" rx="3" fill="#28a745"/>
+  <text x="810" y="162" text-anchor="middle" fill="#fff" font-size="9">Aprobar</text>
+  <rect x="848" y="148" width="32" height="22" rx="3" fill="#fff" stroke="#dc3545"/>
+  <text x="864" y="162" text-anchor="middle" fill="#dc3545" font-size="9">Rech.</text>
+</svg>

@@ -6,7 +6,7 @@ use App\Models\Stock\Recepcion_Proveedor;
 
 /**
  * Clave Anita COM para recepmae, recepmov y recpunica.
- * tipo=COM, letra=X, sucursal=código empresa Anita, nro=numerorecepcion ERP (por empresa).
+ * tipo=COM, letra=X, sucursal=código Anita de empresa, nro=numerorecepcion ERP (secuencia COM global).
  */
 class RecepcionProveedorAnitaClaveSupport
 {
@@ -18,10 +18,15 @@ class RecepcionProveedorAnitaClaveSupport
 
         return [
             'tipo' => (string) ($recepcion->anita_tipo ?? $cfg['recepcion_tipo']),
-            'letra' => (string) ($recepcion->anita_letra ?? $cfg['recepcion_letra']),
+            'letra' => self::letraCom(),
             'sucursal' => self::sucursalEmpresa($recepcion),
             'nro' => (int) $recepcion->numerorecepcion,
         ];
+    }
+
+    public static function letraCom(): string
+    {
+        return AnitaStkmovClaveErpSupport::letra();
     }
 
     public static function sucursalEmpresa(Recepcion_Proveedor $recepcion): int
@@ -29,7 +34,33 @@ class RecepcionProveedorAnitaClaveSupport
         $recepcion->loadMissing('empresas');
         $codigo = (int) ($recepcion->empresas->codigo ?? 0);
 
-        return $codigo > 0 ? $codigo : (int) $recepcion->empresa_id;
+        return self::sucursalDesdeEmpresaCodigo($codigo > 0 ? $codigo : (int) $recepcion->empresa_id);
+    }
+
+    public static function sucursalDesdeEmpresaCodigo(int $empresaCodigo): int
+    {
+        return $empresaCodigo > 0 ? $empresaCodigo : 0;
+    }
+
+    /**
+     * Sucursal virtual 99x usada por error en transferencias/COM (991, 992…).
+     */
+    public static function esSucursalVirtualLegacy(int $sucursal): bool
+    {
+        return $sucursal >= 90;
+    }
+
+    /** @return array{tipo: string, letra: string, sucursal: int, nro: int} */
+    public static function claveDesdeAtributosAlmacenados(Recepcion_Proveedor $recepcion): array
+    {
+        $cfg = config('recepcion_proveedor.anita');
+
+        return [
+            'tipo' => (string) ($recepcion->anita_tipo ?? $cfg['recepcion_tipo']),
+            'letra' => (string) ($recepcion->anita_letra ?? self::letraCom()),
+            'sucursal' => (int) ($recepcion->anita_sucursal ?? 0),
+            'nro' => (int) ($recepcion->anita_nro ?? $recepcion->numerorecepcion),
+        ];
     }
 
     /** @param array{tipo: string, letra: string, sucursal: int, nro: int} $clave */

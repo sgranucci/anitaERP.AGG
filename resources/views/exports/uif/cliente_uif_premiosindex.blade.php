@@ -1,0 +1,57 @@
+@php
+    $nombreCliente = $cliente_uif->nombre ?? '';
+    $docCliente = $cliente_uif->numerodocumento ?? '';
+    $subtitulo = trim($nombreCliente);
+    if ($docCliente !== '') {
+        $subtitulo .= ($subtitulo !== '' ? ' — ' : '').'Doc. '.$docCliente;
+    }
+@endphp
+<table>
+	@if (!empty($reservarFilaLogoExcel))
+		<tbody>
+			<tr>
+				<td colspan="8" style="height: 52px;">&#160;</td>
+			</tr>
+		</tbody>
+	@endif
+	<tbody>
+		<tr>
+			<td colspan="8">
+				<h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Premios del cliente UIF</h2>
+				@if ($subtitulo !== '')
+					<div style="font-size: 11pt; margin-top: 4px;">{{ $subtitulo }}</div>
+				@endif
+			</td>
+		</tr>
+	</tbody>
+	<thead>
+		<tr>
+			<th>ID</th>
+			<th>Fecha entrega</th>
+			<th>Sala</th>
+			<th>Juego</th>
+			<th>Nro. TITO</th>
+			<th>Monto</th>
+			<th>Posici&oacute;n</th>
+			<th>Forma de pago</th>
+		</tr>
+	</thead>
+	<tbody>
+		@foreach ($premios as $data)
+			<tr>
+				<td>{{ $data->id }}</td>
+				<td>
+					@if (!empty($data->fechaentrega))
+						{{ \Carbon\Carbon::parse($data->fechaentrega)->format('d/m/Y H:i') }}
+					@endif
+				</td>
+				<td>{{ $data->nombresala }}</td>
+				<td>{{ $data->nombrejuego }}</td>
+				<td>{{ $data->numerotito ?? '' }}</td>
+				<td>{{ number_format((float) ($data->monto ?? 0), 2, ',', '.') }}</td>
+				<td>{{ $data->posicion ?? '' }}</td>
+				<td>{{ $data->nombreformapago }}</td>
+			</tr>
+		@endforeach
+	</tbody>
+</table>

@@ -15,11 +15,12 @@ trait RequisicionSalaEstadoTrait
         ['id' => '8', 'valor' => 'E', 'nombre' => 'AUTORIZACION ESPECIAL'],
         ['id' => '9', 'valor' => 'R', 'nombre' => 'EN ARBOL APROBACION'],
         ['id' => '10', 'valor' => 'A', 'nombre' => 'APROBADA'],
+        ['id' => '11', 'valor' => 'Z', 'nombre' => 'RECHAZADA'],
     ];
 
     public static function estadosArbolConfigurables(): array
     {
-        $valores = ['0', '5', '6', 'E', 'R', 'A'];
+        $valores = ['0', '5', '6', 'E', 'R', 'A', 'Z'];
         $salida = [];
         foreach (self::$enumEstado as $row) {
             if (in_array($row['valor'], $valores, true)) {

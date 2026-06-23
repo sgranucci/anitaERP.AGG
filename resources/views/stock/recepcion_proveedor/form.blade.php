@@ -33,6 +33,12 @@
     if ($cabeceraOld['empresa_id'] ?? null) {
         $empresaIdOc = $cabeceraOld['empresa_id'];
     }
+    $empresaNombreOc = old(
+        'empresa_nombre_oc',
+        $cabeceraOld['empresa_nombre']
+            ?? optional(optional(optional($recepcion)->ordencompras)->empresas)->nombre
+            ?? ''
+    );
 
     $items = old('items');
     if (is_array($items) && $items !== []) {
@@ -54,6 +60,12 @@
             $empresaIdOc ? (int) $empresaIdOc : null
         );
     } elseif ($items === null && $recepcion) {
+        if (($recepcion->estado ?? '') === 'BORRADOR' && !($modoDevolucion ?? false)) {
+            $items = RecepcionProveedorFormItemsSupport::itemsGrillaDesdeRecepcion(
+                $recepcion,
+                $depositoCabeceraIdInt
+            );
+        } else {
         $items = $recepcion->recepcion_proveedor_articulos->map(function ($l) {
             return array_merge($l->toArray(), [
                 'moneda_id' => (int) ($l->moneda_id ?: 1),
@@ -80,6 +92,7 @@
             $recepcion->proveedor_id ?? ($proveedorIdForm ?? null),
             $empresaIdOc ? (int) $empresaIdOc : null
         );
+        }
     }
     $items = $items ?? [];
 
@@ -215,21 +228,33 @@
     </div>
 </div>
 
-@include('stock.partials.campo_consulta_deposito', [
-    'prefix' => 'entrada',
-    'layout' => 'form_row',
-    'label' => 'Depósito general entrada',
-    'ayuda_tooltip' => 'Opcional. Si no indica depósito general, cada artículo ingresa al depósito del maestro. En depósitos tipo Fórmulas la cantidad se convierte con el coeficiente del artículo.',
-    'inputId' => 'recepcion_deposito_id',
-    'inputName' => 'deposito_id',
-    'depositoId' => $depositoCabeceraId,
-    'codigo' => $depositoCabeceraCodigo,
-    'descripcion' => $depositoCabeceraNombre,
-    'required' => false,
-    'solo_lectura' => $soloLectura,
-    'col_label' => 'col-lg-2 col-form-label text-right',
-    'col_input' => 'col-lg-4',
-])
+<div class="form-group row mb-2 align-items-center">
+    @include('stock.partials.campo_consulta_deposito', [
+        'prefix' => 'entrada',
+        'layout' => 'form_row',
+        'wrap_row' => false,
+        'label' => 'Depósito general entrada',
+        'ayuda_tooltip' => 'Opcional si cada artículo tiene depósito de entrega en el maestro. Obligatorio cuando hay líneas a recibir, rechazar o cerrar sin depósito propio. En depósitos tipo Fórmulas la cantidad se convierte con el coeficiente del artículo.',
+        'inputId' => 'recepcion_deposito_id',
+        'inputName' => 'deposito_id',
+        'depositoId' => $depositoCabeceraId,
+        'codigo' => $depositoCabeceraCodigo,
+        'descripcion' => $depositoCabeceraNombre,
+        'required' => false,
+        'solo_lectura' => $soloLectura,
+        'col_label' => 'col-lg-2 col-form-label text-right',
+        'col_input' => 'col-lg-5',
+    ])
+    <label class="col-lg-2 col-form-label text-right pl-0 pr-1" for="empresa_nombre_oc">Empresa</label>
+    <div class="col-lg-3">
+        <input type="text" id="empresa_nombre_oc" name="empresa_nombre_oc"
+            class="form-control form-control-sm text-truncate recepcion-empresa-oc"
+            readonly
+            title="{{ $empresaNombreOc }}"
+            value="{{ $empresaNombreOc }}"
+            placeholder="De la OC">
+    </div>
+</div>
 
 @if(!$soloLectura)
 <div class="form-group row">
@@ -288,7 +313,7 @@
                 <th class="col-importe text-right" title="Cantidad recibida &times; precio recepci&oacute;n">Total l&iacute;nea</th>
                 <th class="col-mon" title="Moneda / cotizaci&oacute;n">Mon./Cot.</th>
                 <th class="col-dep" title="Dep&oacute;sito">Dep.</th>
-                <th class="col-acc"></th>
+                <th class="col-acc" title="Pendiente o cierre OC (opcional si la l&iacute;nea queda sin cantidad)">OC</th>
             </tr>
         </thead>
         <tbody id="tbody-items-recepcion">
@@ -307,6 +332,10 @@
     #tabla-items-recepcion.table-recepcion-items-compact {
         font-size: 0.8125rem;
     }
+    #empresa_nombre_oc.recepcion-empresa-oc {
+        max-width: 100%;
+        font-size: 0.8125rem;
+    }
     #tabla-items-recepcion .col-num { width: 2.25rem; }
     #tabla-items-recepcion .col-art { width: 11rem; min-width: 9rem; }
     #tabla-items-recepcion .col-desc { min-width: 8rem; }
@@ -316,7 +345,8 @@
     #tabla-items-recepcion .col-importe { width: 7.75rem; min-width: 7.25rem; }
     #tabla-items-recepcion .col-mon { width: 5rem; }
     #tabla-items-recepcion .col-dep { width: 6.5rem; max-width: 8rem; }
-    #tabla-items-recepcion .col-acc { width: 2rem; }
+    #tabla-items-recepcion .col-acc { width: 4.5rem; min-width: 4.25rem; }
+    #tabla-items-recepcion .item-accion-oc-select { font-size: 0.7rem; padding: 0.1rem 0.15rem; height: calc(1.5em + 0.35rem); }
     #tabla-items-recepcion .input-qty-recepcion,
     #tabla-items-recepcion .input-precio-recepcion,
     #tabla-items-recepcion .input-importe-linea-recepcion {
@@ -410,6 +440,35 @@
         max-width: 28rem;
         font-size: 0.8rem;
     }
+    #tabla-items-recepcion tr.item-recepcion-comentario-diferencia td {
+        border-top: none;
+        padding-top: 0;
+        padding-bottom: 0.35rem;
+    }
+    #tabla-items-recepcion tr.item-recepcion-comentario-diferencia .item-comentario-diferencia {
+        max-width: 28rem;
+        font-size: 0.8rem;
+    }
+    #recepcion-proveedor-banner-confirmando.recepcion-proveedor-confirmando-overlay {
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        z-index: 2000;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+        background: rgba(0, 0, 0, 0.2);
+    }
+    #recepcion-proveedor-banner-confirmando.recepcion-proveedor-confirmando-overlay.is-visible {
+        display: flex;
+    }
+    .recepcion-proveedor-confirmando-banner {
+        max-width: 32rem;
+        border: 2px solid #ffc107;
+    }
 </style>
 
 @if($recepcion && $recepcion->resumen_rechazos)
@@ -474,4 +533,7 @@
 @include('stock.recepcion_proveedor.partials.modal_articulo_proveedor')
 @endif
 @include('stock.recepcion_proveedor.partials.modal_linea_precio')
+@if($recepcion && ($recepcion->estado ?? '') === 'BORRADOR' && !($soloLectura ?? false))
+@include('stock.recepcion_proveedor.partials.modal_confirmar_diferencias')
+@endif
 @include('includes.stock.modalconsultaarticulo')

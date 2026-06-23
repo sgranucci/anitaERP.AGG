@@ -5927,6 +5927,7 @@ class FacturacionService
 		$data['oblea'] = '';
 		$data['cantidadmodificada'] = $totalKilo;
 		$data['usuarioalta'] = $this->nombreUsuarioAnita();
+		$data['omitir_stkmov_anita'] = true;
 
 		$this->movimientoStockService->guardaMovimientoStock($data, 'create');
 

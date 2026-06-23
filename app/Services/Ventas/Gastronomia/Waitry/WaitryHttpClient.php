@@ -30,6 +30,7 @@ final class WaitryHttpClient
                 usleep(250_000 * ($intento - 1));
             }
 
+            $t0 = microtime(true);
             $ctx = $this->authService->contextoAutenticado();
             if (! $ctx['ok']) {
                 return [
@@ -87,6 +88,8 @@ final class WaitryHttpClient
             }
 
             if ($httpCode < 200 || $httpCode >= 300) {
+                $this->logTiming($operacion, $t0, $httpCode, false);
+
                 return [
                     'ok' => false,
                     'http_code' => $httpCode,
@@ -94,6 +97,8 @@ final class WaitryHttpClient
                     'error' => $this->mensajeErrorHttp($data, $httpCode),
                 ];
             }
+
+            $this->logTiming($operacion, $t0, $httpCode, true);
 
             return [
                 'ok' => true,
@@ -125,6 +130,7 @@ final class WaitryHttpClient
                 usleep(250_000 * ($intento - 1));
             }
 
+            $t0 = microtime(true);
             $ctx = $this->authService->contextoAutenticado();
             if (! $ctx['ok']) {
                 return [
@@ -182,6 +188,8 @@ final class WaitryHttpClient
             }
 
             if ($httpCode < 200 || $httpCode >= 300) {
+                $this->logTiming($operacion, $t0, $httpCode, false);
+
                 return [
                     'ok' => false,
                     'http_code' => $httpCode,
@@ -189,6 +197,8 @@ final class WaitryHttpClient
                     'error' => $this->mensajeErrorHttp($data, $httpCode),
                 ];
             }
+
+            $this->logTiming($operacion, $t0, $httpCode, true);
 
             return [
                 'ok' => true,
@@ -228,5 +238,19 @@ final class WaitryHttpClient
         }
 
         return $msg;
+    }
+
+    private function logTiming(string $operacion, float $t0, int $httpCode, bool $ok): void
+    {
+        if (! filter_var(config('waitry.http_profile', true), FILTER_VALIDATE_BOOLEAN)) {
+            return;
+        }
+
+        Log::info('waitry.http.timing', [
+            'operacion' => $operacion,
+            'ms' => round((microtime(true) - $t0) * 1000, 2),
+            'http_code' => $httpCode,
+            'ok' => $ok,
+        ]);
     }
 }

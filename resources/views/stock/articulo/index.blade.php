@@ -13,9 +13,12 @@ Art&iacute;culos
 <script src="{{asset("assets/pages/scripts/configuracion/configurar_modeloetiqueta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/articulo/consulta-precios.js")}}" type="text/javascript"></script>
 @if (can('imprimir-articulos-qr', false))
+<script src="{{ asset('assets/pages/scripts/stock/articulo/etiqueta-imprimiendo.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/articulo/etiqueta-cantidad.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/articulo/etiqueta-npu.js') }}" type="text/javascript"></script>
 @endif
 @if (\App\Support\Stock\MovimientosArticuloDepositoSupport::puedeConsultar())
+@include('includes.stock.kardex_deposito_scripts')
 <script src="{{ asset('assets/pages/scripts/stock/recuento/movimientos_articulo.js') }}" type="text/javascript"></script>
 @endif
 
@@ -144,9 +147,15 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
                                         <i class="fa fa-qrcode"></i>
                                 	</button>
           							@else
-          							<a href="{{route('listar_etiqueta_articulo', ['id' => $articulo->id])}}" class="btn-accion-tabla tooltipsC" title="Imprimir QR">
-                                   		<i class="fa fa-qrcode"></i>
-									</a>
+                                	<button type="button"
+                                	    class="btn-accion-tabla btn-imprimir-etiqueta-cantidad tooltipsC"
+                                	    title="Imprimir etiqueta"
+                                	    data-articulo-id="{{ $articulo->id }}"
+                                	    data-articulo-sku="{{ $articulo->codigoarticulo ?? $articulo->sku ?? '' }}"
+                                	    data-articulo-descripcion="{{ $articulo->descripcion ?? '' }}"
+                                	    data-max-cantidad="{{ \App\Support\Stock\ArticuloEtiquetaNpuRangoSupport::MAX_ETIQUETAS }}">
+                                        <i class="fa fa-qrcode"></i>
+                                	</button>
           							@endif
 								@endif
                        			@if (can('listar-precios', false) || can('listar-articulos', false))
@@ -160,6 +169,14 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
                                 	</button>
 								@endif
                        			@if (\App\Support\Stock\MovimientosArticuloDepositoSupport::puedeConsultar())
+                                	<button type="button"
+                                	    class="btn-accion-tabla btn-saldos-articulo tooltipsC"
+                                	    title="Saldos por dep&oacute;sito"
+                                	    data-articulo-id="{{ $articulo->id }}"
+                                	    data-articulo-sku="{{ $articulo->codigoarticulo ?? $articulo->sku ?? '' }}"
+                                	    data-articulo-descripcion="{{ $articulo->descripcion ?? '' }}">
+                                        <i class="fa fa-warehouse text-secondary"></i>
+                                	</button>
                                 	<button type="button"
                                 	    class="btn-accion-tabla btn-movimientos-stock-articulo tooltipsC"
                                 	    title="Kardex de stock"
@@ -191,9 +208,19 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
 @include('includes.stock.modalconsultaprecioarticulo')
 @if (can('imprimir-articulos-qr', false))
 @include('includes.stock.modaletiquetanpuarticulo')
+@include('includes.stock.modaletiquetacantidadarticulo')
+@include('includes.proceso_overlay_aviso', [
+    'overlayId' => 'articulo-etiqueta-imprimiendo-overlay',
+    'tituloId' => 'articulo-etiqueta-imprimiendo-titulo',
+    'subtituloId' => 'articulo-etiqueta-imprimiendo-subtitulo',
+    'titulo' => 'Imprimiendo etiqueta…',
+    'subtitulo' => 'Por favor espere. Se está enviando la etiqueta a la impresora.',
+])
 @endif
 @if (\App\Support\Stock\MovimientosArticuloDepositoSupport::puedeConsultar())
 @include('includes.stock.modal_kardex_deposito')
+@include('includes.stock.modal_saldos_articulo')
 <input type="hidden" id="recuento-movimientos-articulo-url" value="{{ route('recuento_movimientos_articulo') }}">
+<input type="hidden" id="articulo-saldos-deposito-url" value="{{ route('articulo_saldos_deposito') }}">
 @endif
 @endsection

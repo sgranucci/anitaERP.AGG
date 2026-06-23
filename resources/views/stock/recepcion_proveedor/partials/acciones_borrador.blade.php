@@ -16,7 +16,7 @@
     @endif
     @if($puedeConfirmar)
     <button type="submit" class="btn btn-success mr-2 mb-2" form="form-recepcion-confirmar"
-            onclick="return confirm('¿Confirmar recepción? Generará movimiento de stock y asiento contable.');">
+            id="btn-confirmar-recepcion-proveedor">
         <i class="fa fa-check"></i> Confirmar recepción
     </button>
     @endif

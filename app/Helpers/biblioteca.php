@@ -335,17 +335,48 @@ function validarFormatoHora(string $hora): bool {
     return preg_match($patron, $hora) === 1;
 }
 
+function parsePeriodoMesAnio($periodo): array
+{
+    $periodo = trim((string) $periodo);
+    if ($periodo === '') {
+        throw new InvalidArgumentException('Período vacío');
+    }
+
+    if (strpos($periodo, '-') !== false) {
+        $per = explode('-', $periodo, 2);
+    } elseif (strpos($periodo, '/') !== false) {
+        $per = explode('/', $periodo, 2);
+    } else {
+        throw new InvalidArgumentException('Formato de período no válido: '.$periodo);
+    }
+
+    $a = (int) $per[0];
+    $b = (int) $per[1];
+
+    // YYYY-MM (input type=month / ISO)
+    if ($a > 12) {
+        return ['mes' => $b, 'anio' => $a];
+    }
+
+    // MM-YYYY o MM/YYYY (legacy datepicker)
+    return ['mes' => $a, 'anio' => $b];
+}
+
+function normalizarPeriodoParaUrl($periodo): string
+{
+    $partes = parsePeriodoMesAnio($periodo);
+
+    return sprintf('%04d-%02d', $partes['anio'], $partes['mes']);
+}
+
 function conviertePeriodoEnRangoFecha($periodo, $flHora = null)
 {
-    // En base al periodo arma rango de fechas
-    if (strpos($periodo, "-") !== false)
-        $per = explode('-', $periodo);
-    else
-        $per = explode('/', $periodo);
-    $anio = (int) $per[1];
-    $mes = (int) $per[0];
+    // En base al periodo arma rango de fechas (MM/YYYY, MM-YYYY o YYYY-MM)
+    $partes = parsePeriodoMesAnio($periodo);
+    $mes = $partes['mes'];
+    $anio = $partes['anio'];
     $dias = cal_days_in_month(CAL_GREGORIAN, $mes, $anio);
-    $fecha = $anio.'-'.$mes.'-01';
+    $fecha = sprintf('%04d-%02d-01', $anio, $mes);
     if ($flHora)
     {
         $hora_string = '00:00:00';
@@ -357,7 +388,7 @@ function conviertePeriodoEnRangoFecha($periodo, $flHora = null)
         $desdeFecha = $fechaFormateada->format('Y-m-d');
     }
 
-    $fecha = $anio.'-'.$mes.'-'.$dias;
+    $fecha = sprintf('%04d-%02d-%02d', $anio, $mes, $dias);
     if ($flHora)
     {
         $hora_string = '23:59:59';

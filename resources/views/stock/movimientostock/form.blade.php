@@ -1,12 +1,18 @@
 @php
     use App\Models\Stock\Depmae;
+    use App\Support\Stock\MovimientoStockFormLineasSupport;
     use App\Support\Stock\TransferenciaBienUsoSupport;
 
+    $lineasFormulario = MovimientoStockFormLineasSupport::lineasParaFormulario($movimientostock);
+    $tipoTransaccionSeleccionada = (int) old(
+        'tipotransaccion_stock_id',
+        $movimientostock->tipotransaccion_stock_id ?? ($tipotransacciondefault_id ?? 0)
+    );
     $ccDefault = old(
         'centrocosto_destino_id',
         $movimientostock->centrocosto_destino_id ?? auth()->user()->centrocosto_id ?? ''
     );
-    $tipoActualId = (int) old('tipotransaccion_stock_id', $movimientostock->tipotransaccion_stock_id ?? 0);
+    $tipoActualId = $tipoTransaccionSeleccionada;
     $tipoActual = $tipotransaccion_query->firstWhere('id', $tipoActualId);
     $tipoActualManejaCont = (bool) ($tipoActual?->maneja_contabilidad ?? false);
     $esTransferenciaActual = ($tipoActual?->operacion ?? '') === 'T';
@@ -67,7 +73,7 @@
                                     data-maneja-contabilidad="{{ $value->maneja_contabilidad ? '1' : '0' }}"
                                     data-origen-bien-uso="{{ $value->origen_bien_uso ? '1' : '0' }}"
                                     data-destino-bien-uso="{{ $value->destino_bien_uso ? '1' : '0' }}"
-                                    @if((int) $value->id === (int) old('tipotransaccion_stock_id', $movimientostock->tipotransaccion_stock_id ?? '')) selected @endif>
+                                    @if((int) $value->id === $tipoTransaccionSeleccionada) selected @endif>
                                     {{ $value->nombre }}@if($value->maneja_contabilidad) (contabilidad)@endif
                                 </option>
                             @endforeach
@@ -268,18 +274,17 @@
     			</tr>
     		</thead>
     		<tbody id="tbody-tabla">
-		 		@if ($movimientostock->articulos_movimiento[0] ?? '') 
-					@foreach ($movimientostock->articulos_movimiento as $pedidoitem)
+		 		@foreach ($lineasFormulario as $pedidoitem)
             			<tr class="item-pedido">
                 			<td class="align-middle">
 								<input type="text" name="items[]" class="form-control form-control-sm item text-center" value="{{ $loop->index+1 }}" readonly style="@if ($pedidoitem->estado ?? '' == 'A') background-color:red;font-weight:900; @endif">
-                				<input type="hidden" name="medidas[]" class="form-control medidas" readonly value="{{old('medidas', $pedidoitem->articulo_movimiento_talles??'')}}" />
-                				<input type="hidden" name="listasprecios_id[]" class="form-control listaprecio_id" readonly value="{{old('listaprecios_id', $pedidoitem->listaprecio_id??'')}}" />
-                				<input type="hidden" name="monedas_id[]" class="form-control moneda_id" readonly value="{{old('monedas_id', $pedidoitem->moneda_id??'')}}" />
-                				<input type="hidden" name="incluyeimpuestos[]" class="form-control incluyeimpuesto" readonly value="{{old('incluyeimpuestos', $pedidoitem->incluyeimpuesto??'')}}" />
-                				<input type="hidden" name="descuentos[]" class="form-control descuento" readonly value="{{old('descuentos', $pedidoitem->descuento??'')}}" />
-                				<input type="hidden" name="ids[]" class="form-control ids" value="{{$pedidoitem->id??''}}" />
-								<input type="hidden" name="loteids[]" class="form-control loteids" value="{{$pedidoitem->lote ?? 0}}" />
+                				<input type="hidden" name="medidas[]" class="form-control medidas" readonly value="{{ MovimientoStockFormLineasSupport::medidasHidden($loop->index, $pedidoitem) }}" />
+                				<input type="hidden" name="listasprecios_id[]" class="form-control listaprecio_id" readonly value="{{ MovimientoStockFormLineasSupport::valorLinea($loop->index, 'listasprecios_id', $pedidoitem->listaprecio_id ?? '') }}" />
+                				<input type="hidden" name="monedas_id[]" class="form-control moneda_id" readonly value="{{ MovimientoStockFormLineasSupport::valorLinea($loop->index, 'monedas_id', $pedidoitem->moneda_id ?? '') }}" />
+                				<input type="hidden" name="incluyeimpuestos[]" class="form-control incluyeimpuesto" readonly value="{{ MovimientoStockFormLineasSupport::valorLinea($loop->index, 'incluyeimpuestos', $pedidoitem->incluyeimpuesto ?? '') }}" />
+                				<input type="hidden" name="descuentos[]" class="form-control descuento" readonly value="{{ MovimientoStockFormLineasSupport::valorLinea($loop->index, 'descuentos', $pedidoitem->descuento ?? '') }}" />
+                				<input type="hidden" name="ids[]" class="form-control ids" value="{{ MovimientoStockFormLineasSupport::valorLinea($loop->index, 'ids', $pedidoitem->id ?? '') }}" />
+								<input type="hidden" name="loteids[]" class="form-control loteids" value="{{ MovimientoStockFormLineasSupport::valorLinea($loop->index, 'loteids', $pedidoitem->lote ?? 0) }}" />
                 				<input type="hidden" name="articulos_id[]" class="articulo_id" value="{{ old('articulos_id.' . $loop->index, $pedidoitem->articulo_id ?? '') }}">
                 				<input type="hidden" class="articulo_id_previo" name="articulo_id_previo[]" value="{{ $pedidoitem->articulo_id ?? '' }}">
                                 @unless($movimientoStockModoFerli)
@@ -300,12 +305,12 @@
                             @include('stock.movimientostock.partials.fila_saldo_origen')
                             @if($movimientoStockModoFerli)
                 			@include('stock.movimientostock.partials.fila_item_ferli', [
-                			    'combinacionIdPrev' => old('combinaciones_id', $pedidoitem->combinacion_id ?? ''),
-                			    'descCombinacion' => old('desc_combinacion', $pedidoitem->combinaciones->nombre ?? ''),
-                			    'moduloIdPrev' => old('modulo_id', $pedidoitem->modulo_id ?? ''),
-                			    'descModulo' => old('desc_modulo', $pedidoitem->desc_modulo ?? ''),
+                			    'combinacionIdPrev' => MovimientoStockFormLineasSupport::valorLinea($loop->index, 'combinaciones_id', $pedidoitem->combinacion_id ?? ''),
+                			    'descCombinacion' => MovimientoStockFormLineasSupport::valorLinea($loop->index, 'desc_combinacion', optional($pedidoitem->combinaciones)->nombre ?? ''),
+                			    'moduloIdPrev' => MovimientoStockFormLineasSupport::valorLinea($loop->index, 'modulos_id', $pedidoitem->modulo_id ?? ''),
+                			    'descModulo' => MovimientoStockFormLineasSupport::valorLinea($loop->index, 'desc_modulo', $pedidoitem->desc_modulo ?? ''),
                 			    'cantidad' => number_format(abs($pedidoitem->cantidad), 0, '.', ''),
-                			    'precio' => number_format(old('precios.'.$loop->index, optional($pedidoitem)->precio), 2),
+                			    'precio' => number_format((float) old('precios.'.$loop->index, optional($pedidoitem)->precio ?? 0), 2),
                 			])
                             @else
                             @php
@@ -323,7 +328,7 @@
                                 'unidadesxenvase' => $uxenv > 0 ? $uxenv : '',
                                 'cantidad' => $cantStock > 0 ? rtrim(rtrim(number_format($cantStock, 4, '.', ''), '0'), '.') : '',
                                 'cantUnidad' => $cantAlt > 0 ? rtrim(rtrim(number_format($cantAlt, 4, '.', ''), '0'), '.') : '',
-                                'precio' => number_format(old('precios.'.$loop->index, optional($pedidoitem)->precio), 2),
+                                'precio' => number_format((float) old('precios.'.$loop->index, optional($pedidoitem)->precio ?? 0), 2),
                             ])
                             @endif
                 			<td class="align-middle text-center">
@@ -333,7 +338,6 @@
                 			</td>
                 		</tr>
            			@endforeach
-				@endif
        		</tbody>
        	</table>
         </div>
@@ -418,7 +422,7 @@
     #tabla-items-movimientostock:not(.ms-tabla-conversion-formula) td.ms-col-conversion-formula {
         display: none;
     }
-    #tabla-items-movimientostock .col-insumo-dest { width: 6.5rem; min-width: 5.5rem; }
+    #tabla-items-movimientostock .col-insumo-dest { width: 11rem; min-width: 9rem; max-width: 14rem; }
     #tabla-items-movimientostock .col-qty-dest { width: 5rem; }
     #tabla-items-movimientostock .col-umd-dest { width: 3.25rem; }
     #tabla-items-movimientostock .col-precio { width: 5.5rem; }
@@ -427,6 +431,7 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        font-size: 0.75rem;
     }
     #tabla-items-movimientostock .col-flag { width: 1.75rem; }
     #tabla-items-movimientostock .col-acc { width: 2rem; }

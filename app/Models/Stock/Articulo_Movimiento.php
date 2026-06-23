@@ -15,7 +15,6 @@ class Articulo_Movimiento extends Model
     protected $fillable = ['fecha','fechajornada', 'tipotransaccion_id', 'tipotransaccion_stock_id', 'venta_id', 'venta_emision_id', 'movimientostock_id',
                         'pedido_combinacion_id', 'ordentrabajo_id', 'lote', 'articulo_id', 'combinacion_id', 
                         'concepto', 'modulo_id', 'cantidad', 
-                        'pieza', 'caja',
                         'precio', 'costo', 'listaprecio_id', 'incluyeimpuesto', 
                         'moneda_id', 'descuento', 'descuentointegrado', 'deposito_id', 'bien_uso_id', 'loteimportacion_id',
                         'pedido_articulo_id'];

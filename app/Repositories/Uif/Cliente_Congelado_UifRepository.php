@@ -121,9 +121,8 @@ class Cliente_Congelado_UifRepository implements Cliente_Congelado_UifRepository
 
     // Busca cliente congelado por nombre + numerodocumento + resolucion + fechacaducidad
 
-    public function buscaCliente_Congelado_Uif($nombre, $numerodocumento, $resolucion, $fechacaducidad)
+    public function buscaCliente_Congelado_Uif($numerodocumento)
     {
-        return $this->model->select('id')->where('nombre', $nombre)->where('numerodocumento', $numerodocumento)
-                        ->where('resolucion', $resolucion)->where('fechacaducidad', $fechacaducidad)->get();
+        return $this->model->where('numerodocumento', (string) $numerodocumento)->first();
     }
 }

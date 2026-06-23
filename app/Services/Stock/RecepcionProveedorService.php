@@ -13,11 +13,14 @@ use App\Models\Stock\Recepcion_Proveedor_Articulo;
 use App\Models\Stock\Recepcion_Proveedor_Estado;
 use App\Models\Stock\Tipotransaccion_Stock;
 use App\Repositories\Stock\Recepcion_ProveedorRepositoryInterface;
-use App\Support\Compras\ArticuloProveedorPrecioListaSupport;
+use App\Support\Compras\OrdencompraLineaEstados;
+use App\Support\Stock\ArticuloMovimientoCantidadSignoSupport;
 use App\Support\Stock\RecepcionProveedorDiferenciaSupport;
 use App\Support\Stock\RecepcionProveedorDepositoSupport;
 use App\Support\Stock\RecepcionProveedorVisibilidadSupport;
+use App\Support\Stock\RecepcionProveedorAccionLineaOc;
 use App\Support\Stock\RecepcionProveedorAnitaColisionSupport;
+use App\Support\Stock\RecepcionProveedorAnitaNumeracionSupport;
 use App\Support\Stock\RecepcionProveedorAnitaOrdenLineaSupport;
 use App\Support\Stock\RecepcionProveedorArchivoSupport;
 use App\Support\Stock\RecepcionProveedorArticuloProveedorSyncSupport;
@@ -188,15 +191,19 @@ class RecepcionProveedorService
             throw new \RuntimeException('La recepción no tiene ítems.');
         }
 
-        $tieneCantidad = $recepcion->recepcion_proveedor_articulos->contains(
+        $tieneAccion = $recepcion->recepcion_proveedor_articulos->contains(
             static fn ($linea) => (float) $linea->cantidad > 0.000001
                 || (float) ($linea->cantidad_rechazada ?? 0) > 0.000001
+                || (bool) ($linea->fl_cerrar_linea_oc ?? false)
         );
-        if (! $tieneCantidad) {
-            throw new \RuntimeException('Todas las líneas tienen cantidad cero.');
+        if (! $tieneAccion) {
+            throw new \RuntimeException('Indique cantidades recibidas/rechazadas o marque al menos una línea para cerrar.');
         }
 
-        return DB::transaction(function () use ($recepcion) {
+        return DB::transaction(function () use ($id, $recepcion) {
+            $this->repository->renumerarBorradorSiColisionaGlobal($id);
+            $recepcion = $this->repository->find($id);
+
             $this->assertPeriodoContableRecepcion(
                 (int) $recepcion->empresa_id,
                 (string) ($recepcion->fecha?->format('Y-m-d') ?? '')
@@ -230,6 +237,10 @@ class RecepcionProveedorService
                 ]);
 
                 $this->logEstado($recepcion, $estadoAnterior, RecepcionProveedorEstados::CONFIRMADA, 'Confirmación de recepción');
+
+                RecepcionProveedorAnitaNumeracionSupport::registrarNumeroAsignadoEnNumerador(
+                    (int) $recepcion->fresh()->numerorecepcion
+                );
             } catch (\Throwable $e) {
                 if ($movId) {
                     try {
@@ -310,6 +321,8 @@ class RecepcionProveedorService
             RecepcionProveedorArticuloProveedorSyncSupport::sincronizarDesdeRecepcion(
                 $recepcion->fresh(['recepcion_proveedor_articulos.articulos'])
             );
+
+            $this->aplicarCierreLineasOcEnErp($recepcionConfirmada);
 
             return $recepcion->fresh();
         });
@@ -548,10 +561,19 @@ class RecepcionProveedorService
             ->keyBy('id');
 
         foreach ($items as $idx => &$item) {
+            $accion = RecepcionProveedorAccionLineaOc::resolver($item);
+            $item['accion_linea_oc'] = $accion;
+            $item['fl_cerrar_linea_oc'] = $accion === RecepcionProveedorAccionLineaOc::CERRAR;
+
+            if ($accion === RecepcionProveedorAccionLineaOc::PENDIENTE) {
+                continue;
+            }
+
             $cantidad = (float) ($item['cantidad'] ?? 0);
             $cantRechazada = (float) ($item['cantidad_rechazada'] ?? 0);
 
-            if ($cantidad <= 0 && $cantRechazada <= 0) {
+            if ($accion === RecepcionProveedorAccionLineaOc::RECIBIR
+                && $cantidad <= 0 && $cantRechazada <= 0) {
                 throw new \RuntimeException('Línea '.($idx + 1).': indique cantidad recibida o rechazada.');
             }
             if ($cantRechazada > 0 && trim((string) ($item['motivorechazo'] ?? '')) === '') {
@@ -582,6 +604,21 @@ class RecepcionProveedorService
             }
 
             $coefProveedor = RecepcionProveedorDepositoSupport::coeficienteProveedor($articuloId, $proveedorId);
+
+            if ($accion === RecepcionProveedorAccionLineaOc::CERRAR
+                && $cantidad <= 0.000001
+                && $cantRechazada <= 0.000001) {
+                $item['deposito_id'] = $depositoLineaId;
+                $item['coeficiente_proveedor'] = $coefProveedor;
+                $item['coeficienteconversion'] = $coefProveedor;
+                $item['cantidad_stock'] = 0;
+                $item['precio_stock'] = (float) ($item['precio'] ?? 0);
+                $item['deposito_nombre'] = $deposito->nombre ?? '';
+                $item['unidadmedida_id'] = (int) ($item['unidadmedida_id'] ?? $articulo->unidadmedida_id ?? 1) ?: 1;
+
+                continue;
+            }
+
             $conversion = RecepcionProveedorDepositoSupport::calcularConversionStock(
                 $articulo,
                 $deposito,
@@ -604,6 +641,14 @@ class RecepcionProveedorService
             $item['unidadmedida_id'] = (int) ($item['unidadmedida_id'] ?? $articulo->unidadmedida_id ?? 1) ?: 1;
         }
         unset($item);
+
+        $accionables = array_values(array_filter(
+            $items,
+            static fn (array $item): bool => ! RecepcionProveedorAccionLineaOc::esPendiente($item)
+        ));
+        if ($accionables === []) {
+            throw new \RuntimeException('Indique al menos una línea a recibir, rechazar o cerrar en la OC.');
+        }
 
         $oc->loadMissing('ordencompra_articulos.articulos');
 
@@ -653,9 +698,24 @@ class RecepcionProveedorService
 
         $orden = 1;
         foreach ($items as $item) {
+            if (RecepcionProveedorAccionLineaOc::esPendiente($item)) {
+                $explicito = strtoupper(trim((string) ($item['accion_linea_oc'] ?? '')));
+                $ocArtId = (int) ($item['ordencompra_articulo_id'] ?? 0);
+                $tipoLinea = (string) ($item['tipo_linea'] ?? RecepcionProveedorDiferenciaSupport::TIPO_OC);
+                if ($explicito === RecepcionProveedorAccionLineaOc::PENDIENTE
+                    && $ocArtId > 0
+                    && $tipoLinea !== RecepcionProveedorDiferenciaSupport::TIPO_EXTRA) {
+                    $this->crearLineaMarcadorPendienteOc($recepcion, $item, $orden, $penvpPorOcArticulo);
+                    $orden++;
+                }
+
+                continue;
+            }
+
             $cantidad = (float) ($item['cantidad'] ?? 0);
             $cantRechazada = (float) ($item['cantidad_rechazada'] ?? 0);
-            if ($cantidad <= 0 && $cantRechazada <= 0) {
+            $cerrarLinea = ! empty($item['fl_cerrar_linea_oc']);
+            if ($cantidad <= 0 && $cantRechazada <= 0 && ! $cerrarLinea) {
                 continue;
             }
 
@@ -697,6 +757,7 @@ class RecepcionProveedorService
                 'fl_precio_diferencia' => ! empty($item['fl_precio_diferencia']),
                 'fl_cantidad_diferencia' => ! empty($item['fl_cantidad_diferencia']),
                 'fl_articulo_distinto' => ! empty($item['fl_articulo_distinto']),
+                'fl_cerrar_linea_oc' => ! empty($item['fl_cerrar_linea_oc']),
                 'comentario_precio' => $item['comentario_precio'] ?? null,
                 'comentario_diferencia' => $item['comentario_diferencia'] ?? null,
                 'precio_lista_proveedor' => $item['precio_lista_proveedor'] ?? null,
@@ -714,6 +775,74 @@ class RecepcionProveedorService
             ]);
             $orden++;
         }
+    }
+
+    /**
+     * Persiste en borrador que el usuario declaró la línea OC como pendiente (sin cantidad en este remito).
+     *
+     * @param  array<string, mixed>  $item
+     * @param  array<int, array{penvp_orden: int, penvp_nro_interno: int}>  $penvpPorOcArticulo
+     */
+    private function crearLineaMarcadorPendienteOc(
+        Recepcion_Proveedor $recepcion,
+        array $item,
+        int $orden,
+        array $penvpPorOcArticulo
+    ): void {
+        $ocArtId = (int) ($item['ordencompra_articulo_id'] ?? 0);
+        $datosOc = is_array($penvpPorOcArticulo[$ocArtId] ?? null)
+            ? $penvpPorOcArticulo[$ocArtId]
+            : ['penvp_orden' => (int) ($penvpPorOcArticulo[$ocArtId] ?? 0), 'penvp_nro_interno' => 0];
+        $penvpOrden = (int) ($item['penvp_orden'] ?? 0);
+        if ($penvpOrden <= 0 && $ocArtId > 0) {
+            $penvpOrden = (int) ($datosOc['penvp_orden'] ?? 0);
+        }
+        if ($penvpOrden <= 0) {
+            $penvpOrden = $orden;
+        }
+        $penvpNroInterno = (int) ($item['penvp_nro_interno'] ?? 0);
+        if ($penvpNroInterno <= 0 && $ocArtId > 0) {
+            $penvpNroInterno = (int) ($datosOc['penvp_nro_interno'] ?? 0);
+        }
+
+        Recepcion_Proveedor_Articulo::create([
+            'recepcion_proveedor_id' => $recepcion->id,
+            'ordencompra_articulo_id' => $ocArtId,
+            'ordencompra_articulo_sustituido_id' => null,
+            'tipo_linea' => RecepcionProveedorDiferenciaSupport::TIPO_OC,
+            'orden' => $orden,
+            'penvp_orden' => $penvpOrden,
+            'penvp_nro_interno' => $penvpNroInterno > 0 ? $penvpNroInterno : null,
+            'articulo_id' => (int) ($item['articulo_id'] ?? 0),
+            'articulo_stock_id' => $item['articulo_stock_id'] ?? null,
+            'cantidad' => 0,
+            'cantidad_oc' => $item['cantidad_oc'] ?? null,
+            'cantidad_stock' => 0,
+            'cantidad_rechazada' => 0,
+            'unidadmedida_id' => (int) ($item['unidadmedida_id'] ?? 1) ?: 1,
+            'coeficienteconversion' => (float) ($item['coeficienteconversion'] ?? 1) ?: 1,
+            'precio' => (float) ($item['precio'] ?? 0),
+            'precio_ordencompra' => $item['precio_ordencompra'] ?? ($item['precio'] ?? 0),
+            'precio_stock' => (float) ($item['precio'] ?? 0),
+            'fl_precio_diferencia' => false,
+            'fl_cantidad_diferencia' => false,
+            'fl_articulo_distinto' => false,
+            'fl_cerrar_linea_oc' => false,
+            'comentario_precio' => null,
+            'comentario_diferencia' => null,
+            'precio_lista_proveedor' => $item['precio_lista_proveedor'] ?? null,
+            'moneda_id' => (int) ($item['moneda_id'] ?? 1) ?: 1,
+            'cotizacion' => (float) ($item['cotizacion'] ?? 1) ?: 1,
+            'descuento' => (float) ($item['descuento'] ?? 0),
+            'deposito_id' => (int) ($item['deposito_id'] ?? 0),
+            'detalle' => $item['detalle'] ?? null,
+            'motivorechazo' => null,
+            'estado' => RecepcionProveedorLineaEstados::resolverDesdeCantidades($item),
+            'impuesto_id' => $item['impuesto_id'] ?? null,
+            'incluyeimpuesto' => 'N',
+            'centrocosto_id' => $item['centrocosto_id'] ?? null,
+            'lote_id' => null,
+        ]);
     }
 
     /**
@@ -757,7 +886,7 @@ class RecepcionProveedorService
             throw new \RuntimeException("Tipo transacción stock {$abrev} no configurado.");
         }
 
-        $signo = (int) $tipoStock->signo;
+        $signoDb = (int) $tipoStock->getRawOriginal('signo');
         $concepto = $recepcion->tipo === Recepcion_Proveedor::TIPO_DEVOLUCION
             ? 'Devolución a proveedor '.$recepcion->numerorecepcion
             : 'Recepción proveedor '.$recepcion->numerorecepcion;
@@ -779,7 +908,10 @@ class RecepcionProveedorService
             }
 
             $cantidadStock = (float) ($linea->cantidad_stock ?: $cantidad);
-            $cantidadFirmada = abs($cantidadStock) * $signo;
+            $cantidadFirmada = ArticuloMovimientoCantidadSignoSupport::cantidadFirmadaSignoStock(
+                $cantidadStock,
+                $signoDb
+            );
 
             $precioMovimiento = (float) ($linea->precio_stock ?? 0);
             if ($precioMovimiento <= 0) {
@@ -827,6 +959,29 @@ class RecepcionProveedorService
         }
 
         return false;
+    }
+
+    private function aplicarCierreLineasOcEnErp(Recepcion_Proveedor $recepcion): void
+    {
+        $recepcion->loadMissing('recepcion_proveedor_articulos');
+
+        foreach ($recepcion->recepcion_proveedor_articulos as $linea) {
+            if (! (bool) ($linea->fl_cerrar_linea_oc ?? false)) {
+                continue;
+            }
+
+            $ocArtId = (int) ($linea->ordencompra_articulo_id ?? 0);
+            if ($ocArtId <= 0) {
+                $ocArtId = (int) ($linea->ordencompra_articulo_sustituido_id ?? 0);
+            }
+            if ($ocArtId <= 0) {
+                continue;
+            }
+
+            Ordencompra_Articulo::query()
+                ->whereKey($ocArtId)
+                ->update(['estado_linea_oc' => OrdencompraLineaEstados::CERRADA]);
+        }
     }
 
     private function assertPeriodoContableRecepcion(int $empresaId, string $fecha): void

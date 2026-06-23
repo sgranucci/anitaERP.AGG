@@ -73,6 +73,10 @@ final class RecepcionProveedorOcPendienteSupport
             ->join('proveedor as p', 'p.id', '=', 'oc.proveedor_id')
             ->join('empresa as e', 'e.id', '=', 'oc.empresa_id')
             ->join('ordencompra_articulo as oa', 'oa.ordencompra_id', '=', 'oc.id')
+            ->where(function ($q) {
+                $q->whereNull('oa.estado_linea_oc')
+                    ->orWhere('oa.estado_linea_oc', '!=', \App\Support\Compras\OrdencompraLineaEstados::CERRADA);
+            })
             ->leftJoinSub($recibidoSub, 'rec', function ($join) {
                 $join->on('rec.linea_id', '=', 'oa.id');
             })

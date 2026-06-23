@@ -7,6 +7,7 @@ Requisición de sala
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/articulo/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/depmae/consulta.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/sala/requisicion_sala/deposito.js') }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/sala/requisicion_sala/crear.js")}}" type="text/javascript"></script>
 @endsection
 
@@ -39,27 +40,35 @@ Requisición de sala
                 </div>
                 <div class="card-body">
                     @include('sala.requisicion_sala.form')
-                    <div class="form4" style="display:none;">
-                        @include('sala.requisicion_sala.partials.solapa_agregar_archivos', ['data' => $data])
+                    <div class="form4" id="requisicion-sala-solapa-archivos" style="display:none;">
+                        <p class="text-muted small mb-2">Archivos actuales</p>
+                        @include('sala.requisicion_sala.partials.archivos_adjuntos', [
+                            'data' => $data,
+                            'ocultarInputsConservar' => ! empty($visualizar),
+                        ])
+                        @include('sala.requisicion_sala.partials.solapa_agregar_archivos', [
+                            'data' => $data,
+                            'visualizar' => $visualizar ?? null,
+                        ])
                     </div>
-                    @if(empty($visualizar) && ($data->estado ?? '') === ($estado_a_compras ?? ''))
-                        @can('enviar-arbol-requisicion-sala')
-                        <form action="{{ route('enviar_arbol_requisicion_sala', ['id' => $data->id]) }}" method="POST" class="d-inline mt-3"
-                              onsubmit="return confirm('¿Enviar al árbol de aprobación?');">
-                            @csrf
-                            <button type="submit" class="btn btn-warning btn-sm">Enviar al árbol de aprobación</button>
-                        </form>
-                        @endcan
-                    @endif
                 </div>
                 <div class="card-footer">
                     @if(empty($visualizar))
-                        @can('actualizar-requisicion-sala')
-                        <button type="submit" class="btn btn-success"><i class="fa fa-save"></i> Actualizar</button>
-                        @endcan
+                        @if (can('actualizar-requisicion-sala', false))
+                        <button type="button" id="botonform0" class="btn btn-success"><i class="fa fa-save"></i> Actualizar</button>
+                        @endif
                     @endif
                 </div>
             </form>
+            @if(empty($visualizar) && ($data->estado ?? '') === ($estado_a_compras ?? ''))
+                @if (can('enviar-arbol-requisicion-sala', false))
+                <form action="{{ route('enviar_arbol_requisicion_sala', ['id' => $data->id]) }}" method="POST" class="d-inline mt-3"
+                      onsubmit="return confirm('¿Enviar al árbol de aprobación?');">
+                    @csrf
+                    <button type="submit" class="btn btn-warning btn-sm">Enviar al árbol de aprobación</button>
+                </form>
+                @endif
+            @endif
         </div>
     </div>
 </div>

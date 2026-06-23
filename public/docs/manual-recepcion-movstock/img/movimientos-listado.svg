@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 520" width="920" height="520">
+  <rect width="920" height="520" rx="12" fill="#f4f6f9"/>
+  <rect x="232" y="64" width="672" height="440" rx="8" fill="#fff" stroke="#dee2e6"/>
+  <text x="248" y="96" fill="#17a2b8" font-family="Segoe UI,sans-serif" font-size="16" font-weight="600">Movimientos de Stock</text>
+  <rect x="248" y="112" width="640" height="28" fill="#85C1E9"/>
+  <text x="260" y="130" fill="#17202A" font-family="Segoe UI,sans-serif" font-size="10">ID | Fecha | Tipo | Número | Origen | Destino | Estado</text>
+  <rect x="248" y="140" width="640" height="32" fill="#fff"/>
+  <text x="260" y="160" fill="#212529" font-family="Segoe UI,sans-serif" font-size="10">4521 | 20/06 | Salida manual | MS-001 | Dep. Central |  | Activa</text>
+  <rect x="248" y="172" width="640" height="32" fill="#f8f9fa"/>
+  <text x="260" y="192" fill="#212529" font-family="Segoe UI,sans-serif" font-size="10">4522 | 21/06 | Transferencia | TR-202606211430 | Galpón A | Farmacia B | Confirmada</text>
+  <rect x="248" y="204" width="640" height="32" fill="#fff3cd"/>
+  <text x="260" y="224" fill="#212529" font-family="Segoe UI,sans-serif" font-size="10">4523 | 22/06 | Transferencia | TR-202606221500 | Dep. Sur | Dep. Norte | Pendiente recepción</text>
+</svg>

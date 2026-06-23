@@ -4,6 +4,8 @@ namespace App\Support\Stock;
 
 use App\ApiAnita;
 use App\Models\Stock\Recepcion_Proveedor;
+use App\Models\Stock\Transferencia_Mercaderia;
+use App\Support\Stock\TransferenciaMercaderiaEstados;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -94,10 +96,11 @@ final class StkmaePrecioCompraAnitaBridgeSupport
 
         $fechaAnita = (int) str_replace('-', '', $recepcion->fecha->format('Y-m-d'));
         $depositoAnita = (int) ($recepcion->deposito_id ?? 0);
+        $empresaId = max(1, (int) ($recepcion->empresa_id ?? 1));
 
         $codigos = array_values(array_unique(array_column($grupos, 'codigo_anita')));
-        $actualPorCodigo = self::leerStkmaePorCodigos($codigos);
-        $saldosDeposito = self::leerSaldosStkdep($codigos, $depositoAnita);
+        $actualPorCodigo = self::leerStkmaePorCodigos($codigos, $empresaId);
+        $saldosDeposito = self::leerSaldosStkdep($codigos, $depositoAnita, $empresaId);
 
         $cfg = config('recepcion_proveedor.anita');
         $sistema = (string) ($cfg['sistema_ventas'] ?? 'ventas');
@@ -119,15 +122,77 @@ final class StkmaePrecioCompraAnitaBridgeSupport
                 $saldosDeposito[$codigo] ?? 0.0,
             );
 
-            $api->apiCallEscritura([
+            $api->apiCallEscritura(self::payloadVentas([
                 'acc' => 'update',
                 'sistema' => $sistema,
                 'tabla' => self::TABLA_STKMAE,
                 'valores' => self::updateSetStkmae($nuevo),
                 'whereArmado' => self::whereArticulo($codigo),
-            ], 'recepcion stkmae precio compra '.$codigo);
+            ], $empresaId), 'recepcion stkmae precio compra '.$codigo);
 
-            self::actualizarStkmgastroSiExiste($api, $sistema, $codigo, $nuevo);
+            self::actualizarStkmgastroSiExiste($api, $sistema, $codigo, $nuevo, $empresaId);
+            $actualizados++;
+        }
+
+        return $actualizados;
+    }
+
+    /**
+     * Push stkm_pre_compra3 (y PPP) en artículos destino al confirmar transferencia de stock.
+     * Usa precio_costo_destino (última compra del origen, ÷ coef. si depósito Fórmulas).
+     */
+    public static function actualizarDesdeTransferencia(Transferencia_Mercaderia $transferencia): int
+    {
+        if ($transferencia->estado !== TransferenciaMercaderiaEstados::CONFIRMADA) {
+            return 0;
+        }
+        if ((int) ($transferencia->movimientostock_entrada_id ?? 0) <= 0) {
+            return 0;
+        }
+
+        $grupos = self::agruparLineasTransferencia($transferencia);
+        if ($grupos === []) {
+            return 0;
+        }
+
+        $fecha = $transferencia->fecha ?? now();
+        $fechaAnita = (int) str_replace('-', '', $fecha->format('Y-m-d'));
+        $depositoAnita = (int) ($transferencia->deposito_destino_id ?? 0);
+        $empresaId = max(1, (int) ($transferencia->empresa_id ?? 1));
+
+        $codigos = array_values(array_unique(array_column($grupos, 'codigo_anita')));
+        $actualPorCodigo = self::leerStkmaePorCodigos($codigos, $empresaId);
+        $saldosDeposito = self::leerSaldosStkdep($codigos, $depositoAnita, $empresaId);
+
+        $cfg = config('recepcion_proveedor.anita');
+        $sistema = (string) ($cfg['sistema_ventas'] ?? 'ventas');
+        $api = new ApiAnita;
+        $actualizados = 0;
+
+        foreach ($grupos as $grupo) {
+            $codigo = $grupo['codigo_anita'];
+            $actual = $actualPorCodigo[$codigo] ?? null;
+            if ($actual === null) {
+                continue;
+            }
+
+            $nuevo = self::calcularPushPrecioCompra(
+                $actual,
+                $grupo['precio_pesos'],
+                $grupo['cantidad'],
+                $fechaAnita,
+                $saldosDeposito[$codigo] ?? 0.0,
+            );
+
+            $api->apiCallEscritura(self::payloadVentas([
+                'acc' => 'update',
+                'sistema' => $sistema,
+                'tabla' => self::TABLA_STKMAE,
+                'valores' => self::updateSetStkmae($nuevo),
+                'whereArmado' => self::whereArticulo($codigo),
+            ], $empresaId), 'transferencia stkmae precio compra '.$codigo);
+
+            self::actualizarStkmgastroSiExiste($api, $sistema, $codigo, $nuevo, $empresaId);
             $actualizados++;
         }
 
@@ -195,10 +260,66 @@ final class StkmaePrecioCompraAnitaBridgeSupport
     }
 
     /**
+     * @return list<array{codigo_anita: string, precio_pesos: float, cantidad: float}>
+     */
+    public static function agruparLineasTransferencia(Transferencia_Mercaderia $transferencia): array
+    {
+        $transferencia->loadMissing(['articulos.articuloDestino']);
+
+        /** @var array<string, array{codigo_anita: string, precio_raw: float, precio_pesos: float, cantidad: float}> $acum */
+        $acum = [];
+
+        foreach ($transferencia->articulos as $linea) {
+            $articulo = $linea->articuloDestino;
+            if ($articulo === null) {
+                continue;
+            }
+
+            $sku = trim((string) ($articulo->sku ?? ''));
+            if ($sku === '') {
+                continue;
+            }
+
+            $cantidad = abs((float) $linea->cantidad_destino);
+            if ($cantidad <= 0.000001) {
+                continue;
+            }
+
+            $precioRaw = (float) $linea->precio_costo_destino;
+            if ($precioRaw <= 0.000001) {
+                continue;
+            }
+
+            $codigo = RecepcionProveedorAnitaEscrituraSupport::skuAnita13($sku);
+            $clave = $codigo.'|'.number_format($precioRaw, 4, '.', '');
+
+            if (! isset($acum[$clave])) {
+                $acum[$clave] = [
+                    'codigo_anita' => $codigo,
+                    'precio_raw' => $precioRaw,
+                    'precio_pesos' => $precioRaw,
+                    'cantidad' => 0.0,
+                ];
+            }
+
+            $acum[$clave]['cantidad'] += $cantidad;
+        }
+
+        return array_values(array_map(
+            static fn (array $row) => [
+                'codigo_anita' => $row['codigo_anita'],
+                'precio_pesos' => $row['precio_pesos'],
+                'cantidad' => $row['cantidad'],
+            ],
+            $acum
+        ));
+    }
+
+    /**
      * @param  list<string>  $codigosAnita
      * @return array<string, array<string, mixed>>
      */
-    public static function leerStkmaePorCodigos(array $codigosAnita): array
+    public static function leerStkmaePorCodigos(array $codigosAnita, int $empresaId = 1): array
     {
         if ($codigosAnita === []) {
             return [];
@@ -234,13 +355,13 @@ final class StkmaePrecioCompraAnitaBridgeSupport
             ));
 
             try {
-                $raw = $api->apiCall([
+                $raw = $api->apiCall(self::payloadVentas([
                     'acc' => 'list',
                     'sistema' => $sistema,
                     'tabla' => self::TABLA_STKMAE,
                     'campos' => $campos,
                     'whereArmado' => ' WHERE '.self::CAMPO_ARTICULO.' IN ('.$lista.') ',
-                ]);
+                ], $empresaId));
             } catch (\Throwable $e) {
                 Log::warning('StkmaePrecioCompraAnitaBridge: error lectura stkmae', ['exception' => $e]);
 
@@ -264,7 +385,7 @@ final class StkmaePrecioCompraAnitaBridgeSupport
      * @param  list<string>  $codigosAnita
      * @return array<string, float>
      */
-    private static function leerSaldosStkdep(array $codigosAnita, int $depositoAnita): array
+    private static function leerSaldosStkdep(array $codigosAnita, int $depositoAnita, int $empresaId = 1): array
     {
         if ($codigosAnita === [] || $depositoAnita <= 0) {
             return [];
@@ -282,13 +403,13 @@ final class StkmaePrecioCompraAnitaBridgeSupport
             ));
 
             try {
-                $raw = $api->apiCall([
+                $raw = $api->apiCall(self::payloadVentas([
                     'acc' => 'list',
                     'sistema' => $sistema,
                     'tabla' => 'stkdep',
                     'campos' => 'stkd_articulo, stkd_cantidad',
                     'whereArmado' => ' WHERE stkd_articulo IN ('.$lista.') AND stkd_deposito = '.$depositoAnita,
-                ]);
+                ], $empresaId));
             } catch (\Throwable $e) {
                 Log::warning('StkmaePrecioCompraAnitaBridge: error lectura stkdep', ['exception' => $e]);
 
@@ -335,16 +456,17 @@ final class StkmaePrecioCompraAnitaBridgeSupport
         string $sistema,
         string $codigoAnita,
         array $valoresStkmae,
+        int $empresaId = 1,
     ): void {
         try {
-            $raw = $api->apiCall([
+            $raw = $api->apiCall(self::payloadVentas([
                 'acc' => 'list',
                 'sistema' => $sistema,
                 'tabla' => self::TABLA_STKMGASTR,
                 'campos' => 'stkmg_articulo',
                 'whereArmado' => " WHERE stkmg_articulo = '".str_replace("'", "''", $codigoAnita)."' ",
                 'limit' => 'FIRST 1',
-            ]);
+            ], $empresaId));
         } catch (\Throwable $e) {
             return;
         }
@@ -382,13 +504,13 @@ final class StkmaePrecioCompraAnitaBridgeSupport
         }
 
         try {
-            $api->apiCallEscritura([
+            $api->apiCallEscritura(self::payloadVentas([
                 'acc' => 'update',
                 'sistema' => $sistema,
                 'tabla' => self::TABLA_STKMGASTR,
                 'valores' => RecepcionProveedorAnitaEscrituraSupport::updateSet($asignaciones),
                 'whereArmado' => " WHERE stkmg_articulo = '".str_replace("'", "''", $codigoAnita)."' ",
-            ], 'recepcion stkmgastro precio compra '.$codigoAnita);
+            ], $empresaId), 'recepcion stkmgastro precio compra '.$codigoAnita);
         } catch (\Throwable $e) {
             Log::warning('StkmaePrecioCompraAnitaBridge: stkmgastro no actualizado (stkmae sí)', [
                 'articulo' => $codigoAnita,
@@ -400,6 +522,15 @@ final class StkmaePrecioCompraAnitaBridgeSupport
     private static function whereArticulo(string $codigoAnita): string
     {
         return " WHERE ".self::CAMPO_ARTICULO." = '".str_replace("'", "''", $codigoAnita)."' ";
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private static function payloadVentas(array $payload, int $empresaId): array
+    {
+        return StockAnitaBridgeSupport::mergePayload($payload, $empresaId);
     }
 
     private static function codigoMonedaAnita(int $monedaId): string

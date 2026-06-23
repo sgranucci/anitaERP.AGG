@@ -35,6 +35,7 @@
                 <tr>
                     <th>SKU</th>
                     <th>Descripción</th>
+                    <th>Subcategoría</th>
                     <th>Punto de venta</th>
                     <th>Depósito</th>
                     <th class="text-right">Cantidad</th>
@@ -47,6 +48,7 @@
                     <tr>
                         <td>{{ $f->sku ?? '—' }}</td>
                         <td>{{ $f->descripcion ?? '—' }}</td>
+                        <td>{{ trim((string) ($f->subcategoria_nombre ?? '')) !== '' ? $f->subcategoria_nombre : '—' }}</td>
                         <td>{{ $f->puntoventa_etiqueta !== '' ? $f->puntoventa_etiqueta : '—' }}</td>
                         <td>{{ $f->deposito_etiqueta !== '' ? $f->deposito_etiqueta : '—' }}</td>
                         <td class="text-right">{{ number_format((float) ($f->cantidad_total ?? 0), 3, ',', '.') }}</td>
@@ -58,7 +60,7 @@
             @if (! empty($totales))
                 <tfoot>
                     <tr>
-                        <th colspan="4">Totales</th>
+                        <th colspan="5">Totales</th>
                         <th class="text-right">{{ number_format((float) ($totales['cantidad_total'] ?? 0), 3, ',', '.') }}</th>
                         <th class="text-right">{{ number_format((float) ($totales['importe_total'] ?? 0), 2, ',', '.') }}</th>
                         <th class="text-right">{{ (int) ($totales['cantidad_comprobantes'] ?? 0) }}</th>

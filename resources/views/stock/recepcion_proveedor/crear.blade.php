@@ -45,6 +45,9 @@ Nueva recepción de proveedor
         </div>
     </div>
 </div>
+@if(!($modoDevolucion ?? false))
+@include('stock.recepcion_proveedor.partials.modal_accion_lineas_sin_cantidad')
+@endif
 @include('includes.stock.modalconsultadeposito')
 @include('includes.stock.modalconsultaordencompra_recepcion')
 @endsection

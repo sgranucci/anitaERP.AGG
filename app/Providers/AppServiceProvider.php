@@ -1421,6 +1421,11 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Sala\TecnicoLaboratorioRepositoryInterface',
+            'App\Repositories\Sala\TecnicoLaboratorioRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Sala\RequisicionSalaRepositoryInterface',
             'App\Repositories\Sala\RequisicionSalaRepository',
         );

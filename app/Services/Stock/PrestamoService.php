@@ -39,6 +39,7 @@ class PrestamoService
         private readonly PrestamoRepositoryInterface $prestamoRepository,
         private readonly Articulo_Saldo_DepositoRepositoryInterface $saldoRepository,
         private readonly ModuloAvisoService $moduloAvisoService,
+        private readonly MovimientoStockStkmovAnitaService $stkmovAnitaService,
     ) {}
 
     public function listar()
@@ -546,6 +547,8 @@ class PrestamoService
                 'descuentointegrado' => ' ',
             ]);
         }
+
+        $this->stkmovAnitaService->sincronizar((int) $movimiento->id);
 
         return (int) $movimiento->id;
     }

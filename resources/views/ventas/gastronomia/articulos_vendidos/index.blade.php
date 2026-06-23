@@ -110,6 +110,7 @@
                             <tr>
                                 <th>SKU</th>
                                 <th>Descripción</th>
+                                <th>Subcategoría</th>
                                 <th>Punto de venta</th>
                                 <th>Depósito ítem</th>
                                 <th>Depósito insumos</th>
@@ -131,6 +132,7 @@
                                         ])
                                     </td>
                                     <td><small>{{ $f->descripcion ?? '—' }}</small></td>
+                                    <td><small>{{ trim((string) ($f->subcategoria_nombre ?? '')) !== '' ? $f->subcategoria_nombre : '—' }}</small></td>
                                     <td><small>{{ $f->puntoventa_etiqueta !== '' ? $f->puntoventa_etiqueta : '—' }}</small></td>
                                     <td><small>{{ ($f->deposito_venta_etiqueta ?? '') !== '' ? $f->deposito_venta_etiqueta : '—' }}</small></td>
                                     <td><small>{{ ($f->deposito_insumos_etiqueta ?? '') !== '' ? $f->deposito_insumos_etiqueta : '—' }}</small></td>
@@ -176,7 +178,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="9" class="text-center text-muted py-4">
+                                    <td colspan="10" class="text-center text-muted py-4">
                                         Sin ventas de gastronomía para los filtros indicados.
                                     </td>
                                 </tr>

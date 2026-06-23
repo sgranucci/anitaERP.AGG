@@ -9,6 +9,11 @@ use App\Support\Contable\MayorConcepto\MayorConceptoMemoriaMotor;
  */
 class EfeDatosPagosCobrosSupport
 {
+    public function __construct(
+        private readonly EfeClasificacionConceptoSupport $clasificacionSupport = new EfeClasificacionConceptoSupport(),
+    ) {
+    }
+
     /**
      * @param  array<string, mixed>  $linea
      * @return array{pagos: ?float, cobros: ?float}|null  null = omitir
@@ -28,7 +33,8 @@ class EfeDatosPagosCobrosSupport
 
         $cuenta = (int) ($linea['cuenta'] ?? 0);
         $cuentaDisp = (int) ($linea['cuenta_disponibilidad'] ?? 0);
-        $esCuentaDisponibilidad = $this->esCuentaDisponibilidadMostrada($cuenta, $cuentaDisp);
+        $origen = (string) ($linea['origen'] ?? '');
+        $esCuentaDisponibilidad = $this->esCuentaDisponibilidadMostrada($cuenta, $cuentaDisp, $origen);
 
         if ($esCuentaDisponibilidad) {
             $pagos = $haber > 0 ? round($haber, 2) : null;
@@ -55,10 +61,17 @@ class EfeDatosPagosCobrosSupport
         return $cuenta === 116010004;
     }
 
-    private function esCuentaDisponibilidadMostrada(int $cuenta, int $cuentaDisp): bool
+    /**
+     * Inversión O/P solo en traspasos compensables (concepto 53); IZV/OPP en caja usan debe→Pagos.
+     */
+    private function esCuentaDisponibilidadMostrada(int $cuenta, int $cuentaDisp, string $origen): bool
     {
-        if ($cuentaDisp > 0) {
-            return $cuenta === $cuentaDisp;
+        if (! $this->clasificacionSupport->esTraspasoCompensableEfe($origen)) {
+            return false;
+        }
+
+        if ($cuentaDisp > 0 && $cuenta === $cuentaDisp) {
+            return $cuenta > 0 && $cuenta <= MayorConceptoMemoriaMotor::LIMITE_DISPONIBILIDAD;
         }
 
         return $cuenta > 0 && $cuenta <= MayorConceptoMemoriaMotor::LIMITE_DISPONIBILIDAD;

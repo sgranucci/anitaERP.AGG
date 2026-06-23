@@ -79,6 +79,36 @@ class Cliente_Premio_UifRepository implements Cliente_Premio_UifRepositoryInterf
 		return $cliente_premio_uifs;
     }
 
+    /**
+     * Premios de un cliente UIF (export grilla solapa Premios).
+     */
+    public function leePremiosPorClienteUif(int $clienteUifId)
+    {
+        return $this->model->select(
+            'cliente_premio_uif.id as id',
+            'cliente_uif.nombre as nombrecliente',
+            'cliente_uif.numerodocumento as numerodocumento',
+            'sala.nombre as nombresala',
+            'juego_uif.nombre as nombrejuego',
+            'cliente_premio_uif.fechaentrega as fechaentrega',
+            'cliente_premio_uif.monto as monto',
+            'cliente_premio_uif.posicion as posicion',
+            'cliente_premio_uif.numerotito as numerotito',
+            'formapago.nombre as nombreformapago',
+            'empresa.nombre as nombreempresa'
+        )
+            ->join('cliente_uif', 'cliente_uif.id', '=', 'cliente_premio_uif.cliente_uif_id')
+            ->leftjoin('sala', 'sala.id', '=', 'cliente_premio_uif.sala_id')
+            ->leftjoin('empresa', 'empresa.id', '=', 'sala.empresa_id')
+            ->leftjoin('juego_uif', 'juego_uif.id', '=', 'cliente_premio_uif.juego_uif_id')
+            ->leftjoin('formapago', 'formapago.id', '=', 'cliente_premio_uif.formapago_id')
+            ->where('cliente_premio_uif.cliente_uif_id', $clienteUifId)
+            ->whereNull('cliente_uif.deleted_at')
+            ->orderBy('cliente_premio_uif.fechaentrega', 'DESC')
+            ->orderBy('cliente_premio_uif.id', 'DESC')
+            ->get();
+    }
+
     public function create(array $data, $id)
     {
 		return self::guardarCliente_Premio_Uif($data, 'create', $id);
@@ -247,7 +277,7 @@ class Cliente_Premio_UifRepository implements Cliente_Premio_UifRepositoryInterf
 		return $cliente_premio_uif;
 	}
 
-	public function listaPremioParaExportar($periodo, $limiteinformeuif)
+	public function listaPremioParaExportar($periodo, $limiteinformeuif, $empresaId = null)
 	{
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
@@ -255,13 +285,28 @@ class Cliente_Premio_UifRepository implements Cliente_Premio_UifRepositoryInterf
 		$fecha = conviertePeriodoEnRangoFecha($periodo, true);
 		$desdeFecha = $fecha['desdefecha'];
 		$hastaFecha = $fecha['hastafecha'];
+		$limite = (float) $limiteinformeuif;
 
-        $cliente_premio_uifs = $this->model->select('cliente_premio_uif.id as premioid',
+        $cliente_premio_uifs = $this->model->select(
+                                        'cliente_premio_uif.id as premioid',
 										'cliente_premio_uif.monto as monto',
 										'cliente_premio_uif.fechaentrega as fechaentrega',
+										'cliente_premio_uif.posicion as posicion',
+										'cliente_premio_uif.created_at as fechaalta',
 										'cliente_uif.id as clienteid',
+                                        'cliente_uif.inroclienteid as inroclienteid',
                                         'cliente_uif.nombre as nombrecliente',
+                                        'cliente_uif.cuit as cuit',
+                                        'cliente_uif.fechanacimiento as fechanacimiento',
+                                        'cliente_uif.sexo as sexo',
+                                        'cliente_uif.codigopostal as codigopostal',
+                                        'cliente_uif.estado as estado',
+                                        'cliente_uif.resideexterior as resideexterior',
+                                        'cliente_uif.resideparaisofiscal as resideparaisofiscal',
+                                        'cliente_uif.actividad_uif_id as actividad_uif_id',
+                                        'cliente_uif.pais_uif_id as pais_uif_id',
                                         'tipodocumento.abreviatura as abreviaturatipodocumento',
+                                        'tipodocumento.nombre as nombretipodocumento',
                                         'cliente_uif.numerodocumento as numerodocumento',
                                         'cliente_uif.domicilio as domicilio',
 										'cliente_uif.piso as piso',
@@ -269,19 +314,44 @@ class Cliente_Premio_UifRepository implements Cliente_Premio_UifRepositoryInterf
                                         'localidad_uif.nombre as nombrelocalidad',
                                         'provincia_uif.nombre as nombreprovincia',
 										'pais_uif.nombre as nombrepais',
+                                        'loc_nac.nombre as nombrelocalidadnacimiento',
+                                        'pais_nac.nombre as nombrepaisnacimiento',
+                                        'estadocivil_uif.nombre as nombreestadocivil',
+                                        'pep_uif.nombre as nombrepep',
+                                        'so_uif.nombre as nombreso',
+                                        'moneda.nombre as nombremoneda',
+                                        'juego_uif.nombre as nombrejuego',
+                                        'usuario_alta.nombre as nombreusuarioalta',
 										'cliente_uif.telefono as telefono',
                                         'cliente_uif.email as email',
-										'sala.nombre as nombresala')
+										'sala.nombre as nombresala',
+                                        'empresa.id as empresaid',
+                                        'empresa.nombre as nombreempresa')
 								->join('cliente_uif', 'cliente_uif.id', '=', 'cliente_premio_uif.cliente_uif_id')
 								->join('tipodocumento', 'tipodocumento.id', '=', 'cliente_uif.tipodocumento_id')
-                                ->leftjoin('localidad_uif', 'localidad_uif.id', '=', 'cliente_uif.localidad_uif_id')
-                                ->leftjoin('provincia_uif', 'provincia_uif.id', '=', 'cliente_uif.provincia_uif_id')
-								->leftjoin('pais_uif', 'pais_uif.id', '=', 'cliente_uif.pais_uif_id')
-                                ->leftjoin('sala', 'sala.id', '=', 'cliente_premio_uif.sala_id')
-                                ->leftjoin('juego_uif', 'juego_uif.id', '=', 'cliente_premio_uif.juego_uif_id')
-								->where('cliente_premio_uif.deleted_at', null)
+                                ->leftJoin('localidad_uif', 'localidad_uif.id', '=', 'cliente_uif.localidad_uif_id')
+                                ->leftJoin('provincia_uif', 'provincia_uif.id', '=', 'cliente_uif.provincia_uif_id')
+								->leftJoin('pais_uif', 'pais_uif.id', '=', 'cliente_uif.pais_uif_id')
+                                ->leftJoin('localidad_uif as loc_nac', 'loc_nac.id', '=', 'cliente_uif.localidadnacimiento_id')
+                                ->leftJoin('pais_uif as pais_nac', 'pais_nac.id', '=', 'cliente_uif.paisnacimiento_id')
+                                ->leftJoin('estadocivil_uif', 'estadocivil_uif.id', '=', 'cliente_uif.estadocivil_uif_id')
+                                ->leftJoin('pep_uif', 'pep_uif.id', '=', 'cliente_uif.pep_uif_id')
+                                ->leftJoin('so_uif', 'so_uif.id', '=', 'cliente_uif.so_uif_id')
+                                ->leftJoin('moneda', 'moneda.id', '=', 'cliente_premio_uif.moneda_id')
+                                ->leftJoin('juego_uif', 'juego_uif.id', '=', 'cliente_premio_uif.juego_uif_id')
+                                ->leftJoin('usuario as usuario_alta', 'usuario_alta.id', '=', 'cliente_premio_uif.creousuario_id')
+                                ->leftJoin('sala', 'sala.id', '=', 'cliente_premio_uif.sala_id')
+                                ->leftJoin('empresa', 'empresa.id', '=', 'sala.empresa_id')
+								->whereNull('cliente_premio_uif.deleted_at')
+								->whereNull('cliente_uif.deleted_at')
+								->where('cliente_premio_uif.monto', '>=', $limite)
+								->when($empresaId, function ($query, $empresaId) {
+                                    $query->where('empresa.id', (int) $empresaId);
+                                })
 								->whereBetween('cliente_premio_uif.fechaentrega', [$desdeFecha, $hastaFecha])
-                                ->orderby('cliente_premio_uif.fechaentrega', 'ASC')->get();
+                                ->orderBy('cliente_premio_uif.fechaentrega', 'ASC')
+                                ->orderBy('cliente_premio_uif.id', 'ASC')
+                                ->get();
                                 
 		return $cliente_premio_uifs;
 	}

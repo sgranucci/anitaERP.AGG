@@ -33,6 +33,7 @@ class MovimientoStockService
         PedidoRepositoryInterface $pedidoRepository,
         Pedido_ArticuloRepositoryInterface $pedido_articuloRepository,
         private MovimientoStockAsientoService $asientoService,
+        private MovimientoStockStkmovAnitaService $stkmovAnitaService,
     ) {
         $this->movimientostockRepository = $movimientostockrepository;
 		$this->articuloRepository = $articulorepository;
@@ -63,6 +64,10 @@ class MovimientoStockService
 	public function leeMovimientoStock($id)
 	{
         $movimientostock = $this->movimientostockRepository->find($id);
+
+        if (! \App\Support\Stock\MovimientoStockVisibilidadSupport::movimientoAccesible($movimientostock)) {
+            throw new \Illuminate\Database\Eloquent\ModelNotFoundException('Movimiento de stock no encontrado');
+        }
 
 		return $movimientostock;
 	}
@@ -100,7 +105,7 @@ class MovimientoStockService
 
 			$existente = null;
 			if ($funcion === 'update' && $id) {
-				$existente = $this->movimientostockRepository->find($id);
+				$existente = $this->leeMovimientoStock($id);
 			}
 
 			$this->asientoService->assertCuadreAntesDeGrabar($data, $tipotransaccion, $existente);
@@ -182,7 +187,7 @@ class MovimientoStockService
 					if ($articulo)
 					{
 						$sku = $articulo->sku;
-						$codigoCategoria = $articulo->categorias->codigo;
+						$codigoCategoria = optional($articulo->categorias)->codigo ?? '';
 					}
 					$combinacion = null;
 					if (isset($combinaciones[$i]))
@@ -221,20 +226,20 @@ class MovimientoStockService
 						'loteimportacion_id' => $data['loteimportacion_id'],
 						'categoria' => $codigoCategoria,
 						'codigo' => $data['codigo'],
-						'letra' => $data['letra'],
-						'puntoventa' => $data['puntoventa'],
-						'numerocomprobante' => $data['numerocomprobante'],
+						'letra' => $data['letra'] ?? '',
+						'puntoventa' => $data['puntoventa'] ?? '',
+						'numerocomprobante' => $data['numerocomprobante'] ?? '',
 						'item' => $i,
-						'codigocliente' => $data['codigocliente'],
-						'codigotransporte' => $data['codigotransporte'],
-						'codigovendedor' => $data['codigovendedor'],
-						'codigozonavta' => $data['codigozona'],
-						'codigoprovincia' => $data['codigoprovincia'],
+						'codigocliente' => $data['codigocliente'] ?? '',
+						'codigotransporte' => $data['codigotransporte'] ?? '',
+						'codigovendedor' => $data['codigovendedor'] ?? '',
+						'codigozonavta' => $data['codigozona'] ?? '',
+						'codigoprovincia' => $data['codigoprovincia'] ?? '',
 						'codigosubzona' => '',
 						'codigocombinacion' => '',
-						'pedido' => $data['pedido'],
+						'pedido' => $data['pedido'] ?? '',
 						'partida' => 0,
-						'empresa' => $data['empresa']
+						'empresa' => $data['empresa'] ?? config('app.empresa')
 					];
 
 					$dataTalle = [];
@@ -275,6 +280,12 @@ class MovimientoStockService
 				$ctamovSincronizadoEnEdicion = (bool) ($resultadoAsiento['ctamov_sincronizado_edicion'] ?? false);
 				$movimientoIdCtamovResync = $ctamovSincronizadoEnEdicion ? $movimientostock_id : null;
 			}
+
+			if ($funcion === 'create' && $movimientostock_id > 0 && empty($data['omitir_stkmov_anita'])) {
+				$tipoStkmov = isset($data['anita_stkmov_tipo']) ? (string) $data['anita_stkmov_tipo'] : null;
+				$this->stkmovAnitaService->sincronizar((int) $movimientostock_id, $tipoStkmov);
+			}
+
 			DB::commit();
 
 			$asientoIdNuevo = null;
@@ -348,7 +359,7 @@ class MovimientoStockService
 	{
 		DB::beginTransaction();
 		try {
-			$movimiento = $this->movimientostockRepository->find($id);
+			$movimiento = $this->leeMovimientoStock($id);
 			if ((int) ($movimiento->asiento_id ?? 0) > 0) {
 				$this->asientoService->anularAsiento($movimiento);
 			}

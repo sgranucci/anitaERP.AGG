@@ -310,7 +310,11 @@ class ApiController extends Controller
                 'errores' => $e->errors(),
                 'status' => 422,
             ]);
-            throw $e;
+
+            return response()->json([
+                'message' => 'Error de validación.',
+                'errors' => $e->errors(),
+            ], 422);
         }
 
         $log->info('recibe_comprobante.validacion_ok');

@@ -3,7 +3,10 @@
 namespace App\Http\Requests;
 
 use App\Models\Compras\Ordencompra;
+use App\Models\Stock\Articulo;
 use App\Models\Stock\Depmae;
+use App\Support\Stock\RecepcionProveedorAccionLineaOc;
+use App\Support\Stock\RecepcionProveedorDepositoSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
@@ -17,6 +20,11 @@ class ValidacionRecepcionProveedor extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $depositoCabecera = $this->input('deposito_id');
+        if ($depositoCabecera === '' || $depositoCabecera === null || (int) $depositoCabecera <= 0) {
+            $this->merge(['deposito_id' => null]);
+        }
+
         $items = $this->input('items', []);
         if (! is_array($items)) {
             return;
@@ -34,6 +42,9 @@ class ValidacionRecepcionProveedor extends FormRequest
             }
             if (! isset($item['cantidad_rechazada']) || $item['cantidad_rechazada'] === '' || $item['cantidad_rechazada'] === null) {
                 $items[$key]['cantidad_rechazada'] = 0;
+            }
+            if (! isset($item['deposito_id']) || $item['deposito_id'] === '' || (int) $item['deposito_id'] <= 0) {
+                $items[$key]['deposito_id'] = null;
             }
         }
 
@@ -69,6 +80,8 @@ class ValidacionRecepcionProveedor extends FormRequest
             'items.*.ordencompra_articulo_sustituido_id' => 'nullable|integer|exists:ordencompra_articulo,id',
             'items.*.comentario_diferencia' => 'nullable|string|max:500',
             'items.*.comentario_precio' => 'nullable|string|max:255',
+            'items.*.accion_linea_oc' => 'nullable|in:PENDIENTE,RECIBIR,CERRAR',
+            'items.*.fl_cerrar_linea_oc' => 'nullable|boolean',
             'items.*.unidadmedida_id' => 'nullable|integer|exists:unidadmedida,id',
             'items.*.ocr_codigo_proveedor' => 'nullable|string|max:100',
             'items.*.ocr_descripcion_proveedor' => 'nullable|string|max:255',
@@ -81,6 +94,7 @@ class ValidacionRecepcionProveedor extends FormRequest
     {
         return [
             'fecha.before_or_equal' => 'La fecha de recepción no puede ser posterior a hoy.',
+            'deposito_id.exists' => 'El depósito general de entrada seleccionado no existe.',
         ];
     }
 
@@ -92,13 +106,39 @@ class ValidacionRecepcionProveedor extends FormRequest
                 return;
             }
 
+            $tieneAccion = false;
+            foreach ($items as $item) {
+                if (is_array($item) && ! RecepcionProveedorAccionLineaOc::esPendiente($item)) {
+                    $tieneAccion = true;
+                    break;
+                }
+            }
+            if (! $tieneAccion) {
+                $validator->errors()->add('items', 'Indique al menos una línea a recibir, rechazar o cerrar en la OC.');
+            }
+
             foreach ($items as $idx => $item) {
                 if (! is_array($item)) {
                     continue;
                 }
+
+                if (RecepcionProveedorAccionLineaOc::requiereDefinicionEnGuardado($item)) {
+                    $validator->errors()->add(
+                        'items.'.$idx.'.cantidad',
+                        'Línea '.($idx + 1).': sin cantidad. Indique pendiente o cierre de línea OC.'
+                    );
+                    continue;
+                }
+
+                $accion = RecepcionProveedorAccionLineaOc::resolver($item);
+                if ($accion === RecepcionProveedorAccionLineaOc::PENDIENTE) {
+                    continue;
+                }
+
                 $cantidad = (float) ($item['cantidad'] ?? 0);
                 $rechazada = (float) ($item['cantidad_rechazada'] ?? 0);
-                if ($cantidad <= 0 && $rechazada <= 0) {
+                if ($accion === RecepcionProveedorAccionLineaOc::RECIBIR
+                    && $cantidad <= 0 && $rechazada <= 0) {
                     $validator->errors()->add(
                         'items.'.$idx.'.cantidad',
                         'Línea '.($idx + 1).': indique cantidad recibida o rechazada.'
@@ -123,6 +163,12 @@ class ValidacionRecepcionProveedor extends FormRequest
             $depositoCabeceraId = (int) $this->input('deposito_id', 0);
             if ($depositoCabeceraId > 0) {
                 $this->validarDepositoEnRequest($validator, 'deposito_id', $depositoCabeceraId, $empresaId, 'Depósito general de entrada');
+            } else {
+                $this->validarDepositoCabeceraCuandoLineasSinDeposito(
+                    $validator,
+                    $items,
+                    $empresaId
+                );
             }
 
             foreach ($items as $idx => $item) {
@@ -145,6 +191,74 @@ class ValidacionRecepcionProveedor extends FormRequest
                 );
             }
         });
+    }
+
+    /**
+     * @param  list<mixed>  $items
+     */
+    private function validarDepositoCabeceraCuandoLineasSinDeposito(
+        Validator $validator,
+        array $items,
+        int $empresaId
+    ): void {
+        $articuloIds = [];
+        foreach ($items as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+            if (RecepcionProveedorAccionLineaOc::resolver($item) === RecepcionProveedorAccionLineaOc::PENDIENTE) {
+                continue;
+            }
+            if ((int) ($item['deposito_id'] ?? 0) > 0) {
+                continue;
+            }
+            $articuloId = (int) ($item['articulo_id'] ?? 0);
+            if ($articuloId > 0) {
+                $articuloIds[] = $articuloId;
+            }
+        }
+
+        if ($articuloIds === []) {
+            return;
+        }
+
+        $depositosArticulo = Articulo::query()
+            ->whereIn('id', array_values(array_unique($articuloIds)))
+            ->pluck('depositoentrega_id', 'id');
+
+        $lineasSinDep = [];
+        foreach ($items as $idx => $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+            if (RecepcionProveedorAccionLineaOc::resolver($item) === RecepcionProveedorAccionLineaOc::PENDIENTE) {
+                continue;
+            }
+            if ((int) ($item['deposito_id'] ?? 0) > 0) {
+                continue;
+            }
+
+            $articuloId = (int) ($item['articulo_id'] ?? 0);
+            $depArt = (int) ($depositosArticulo[$articuloId] ?? 0);
+            if ($depArt > 0 && RecepcionProveedorDepositoSupport::depositoEntregaVisible($depArt, $empresaId) !== null) {
+                continue;
+            }
+
+            $lineasSinDep[] = $idx + 1;
+        }
+
+        if ($lineasSinDep === []) {
+            return;
+        }
+
+        $detalleLineas = count($lineasSinDep) === 1
+            ? 'la línea '.$lineasSinDep[0]
+            : 'las líneas '.implode(', ', $lineasSinDep);
+
+        $validator->errors()->add(
+            'deposito_id',
+            'Indique depósito general de entrada: '.$detalleLineas.' no tiene depósito configurado en el artículo.'
+        );
     }
 
     private function validarDepositoEnRequest(

@@ -30,7 +30,7 @@ final class TransferenciaMercaderiaLineaSupport
         ?int $empresaId = null
     ): array {
         $cantidadOrigen = max(0.0, $cantidadOrigen);
-        $precioOrigen = (float) ($articuloOrigen->costo ?? $articuloOrigen->precio ?? 0);
+        $precioOrigen = TransferenciaMercaderiaCostoSupport::resolverCostoUltimaCompra($articuloOrigen);
 
         $conversion = RecepcionProveedorDepositoSupport::calcularConversionStock(
             $articuloOrigen,
@@ -47,13 +47,15 @@ final class TransferenciaMercaderiaLineaSupport
             $articuloDestinoId = (int) $articuloOrigen->id;
         }
 
+        $precioDestino = TransferenciaMercaderiaCostoSupport::resolverCostoDestino($precioOrigen, $conversion);
+
         return [
             'articulo_origen_id' => (int) $articuloOrigen->id,
             'articulo_destino_id' => $articuloDestinoId,
             'cantidad_origen' => $cantidadOrigen,
             'cantidad_destino' => (float) $conversion['cantidad_stock'],
             'precio_costo_origen' => round($precioOrigen, 6),
-            'precio_costo_destino' => (float) $conversion['precio_stock'],
+            'precio_costo_destino' => $precioDestino,
             'coeficienteconversion' => (float) $conversion['coeficienteconversion'],
             'fl_conversion_formula' => (bool) $conversion['fl_conversion_formula'],
             'articulo_stock_sku' => $conversion['articulo_stock_sku'] ?? null,
@@ -68,7 +70,7 @@ final class TransferenciaMercaderiaLineaSupport
     public static function resolverLineaParaBienUso(Articulo $articuloOrigen, float $cantidadOrigen): array
     {
         $cantidadOrigen = max(0.0, $cantidadOrigen);
-        $precioOrigen = (float) ($articuloOrigen->costo ?? $articuloOrigen->precio ?? 0);
+        $precioOrigen = TransferenciaMercaderiaCostoSupport::resolverCostoUltimaCompra($articuloOrigen);
 
         return [
             'articulo_origen_id' => (int) $articuloOrigen->id,

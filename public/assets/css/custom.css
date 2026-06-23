@@ -9,6 +9,39 @@ label.requerido:after{
     padding: 0 0 0 5px;
     font-size: 14px !important;
     line-height: 1.5;
+    display: inline-block;
+    min-width: 1.75rem;
+    min-height: 1.75rem;
+    text-align: center;
+    vertical-align: middle;
+}
+
+/* Evita que el tooltip bloquee el clic sobre botones de acción (parpadeo al hover). */
+.tooltip {
+    pointer-events: none;
+}
+
+/* Columna de acciones visible sin scroll horizontal en tablas anchas. */
+.tabla-acciones-fijas th.col-acciones-tabla,
+.tabla-acciones-fijas td.col-acciones-tabla {
+    position: sticky;
+    right: 0;
+    z-index: 2;
+    white-space: nowrap;
+    box-shadow: -2px 0 4px rgba(0, 0, 0, 0.06);
+}
+.tabla-acciones-fijas thead th.col-acciones-tabla {
+    z-index: 3;
+    background-color: #fff;
+}
+.tabla-acciones-fijas.table-striped tbody tr:nth-of-type(odd) td.col-acciones-tabla {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+.tabla-acciones-fijas.table-striped tbody tr:nth-of-type(even) td.col-acciones-tabla {
+    background-color: #fff;
+}
+.tabla-acciones-fijas.table-hover tbody tr:hover td.col-acciones-tabla {
+    background-color: rgba(0, 0, 0, 0.075);
 }
 .d-inline{
     display: inline;

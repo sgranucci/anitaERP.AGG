@@ -27,6 +27,13 @@ class AyudaManuales
                 'disponible' => true,
             ],
             [
+                'modulo' => 'Stock — Recepción y movimientos',
+                'bajada' => 'Recepción de proveedores, movimientos de stock, transferencias entre depósitos, comprobantes PDF y aprobaciones.',
+                'url' => route('manual_recepcion_movstock'),
+                'icono' => 'fa-truck',
+                'disponible' => true,
+            ],
+            [
                 'modulo' => 'Canjes Marketing',
                 'bajada' => 'Clientes VIP, facturador de canjes en sala y listado de entregas para Marketing.',
                 'url' => route('manual_canjes_marketing'),

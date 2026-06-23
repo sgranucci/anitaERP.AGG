@@ -3,8 +3,15 @@
     $lineas = (isset($data) && $data && $data->requisicion_sala_articulos && $data->requisicion_sala_articulos->count())
         ? $data->requisicion_sala_articulos
         : collect([new \App\Models\Sala\RequisicionSalaArticulo()]);
+    $depositoId = old('deposito_id', (isset($data) && $data) ? $data->deposito_id : '');
+    $depositoModel = null;
+    if ((int) $depositoId > 0) {
+        $depositoModel = (isset($data) && $data && (int) ($data->deposito_id ?? 0) === (int) $depositoId)
+            ? $data->depositos
+            : \App\Models\Stock\Depmae::find((int) $depositoId);
+    }
 @endphp
-<div id="tab1" class="form1 tab-content">
+<div id="tab1" class="form1">
     <div class="row">
         <div class="col-sm-6">
             @include('includes.form-empresa-asignada', [
@@ -30,19 +37,19 @@
                 </div>
             </div>
 
-            <div class="form-group row align-items-center">
-                <label for="codigodeposito" class="col-lg-3 control-label requerido">Depósito</label>
-                <div class="col-lg-6">
-                    <input type="hidden" id="deposito_id" name="deposito_id" value="{{ old('deposito_id', (isset($data) && $data) ? $data->deposito_id : '') }}">
-                    <div class="d-flex align-items-center">
-                        <input type="text" class="form-control codigodeposito mr-2" id="codigodeposito" style="width:6rem;" value="{{ old('codigodeposito', (isset($data) && $data) ? optional($data->depositos)->codigo : '') }}" {{ $soloLectura ? 'readonly' : '' }}>
-                        <input type="text" class="form-control" id="nombredeposito" readonly value="{{ old('nombredeposito', (isset($data) && $data) ? optional($data->depositos)->nombre : '') }}">
-                        @if(!$soloLectura)
-                        <button type="button" class="btn-accion-tabla consultadeposito ml-2"><i class="fa fa-search text-primary"></i></button>
-                        @endif
-                    </div>
-                </div>
-            </div>
+            @include('stock.partials.campo_consulta_deposito', [
+                'prefix' => 'requisicion_sala',
+                'layout' => 'form_row',
+                'label' => 'Depósito',
+                'inputName' => 'deposito_id',
+                'inputId' => 'deposito_id',
+                'depositoId' => $depositoId,
+                'codigo' => old('deposito_codigo', optional($depositoModel)->codigo ?? ''),
+                'descripcion' => old('deposito_descripcion', optional($depositoModel)->nombre ?? ''),
+                'solo_lectura' => $soloLectura,
+                'col_label' => 'col-lg-3 control-label',
+                'col_input' => 'col-lg-6',
+            ])
 
             <div class="form-group row">
                 <label for="zona_sala_id" class="col-lg-3 control-label">Zona de sala</label>
@@ -128,11 +135,11 @@
     </div>
     <hr>
     <h5>Artículos</h5>
-    <table class="table table-sm" id="tabla-articulos-requisicion-sala">
-        <thead>
+    <table class="table table-sm table-bordered" id="tabla-articulos-requisicion-sala">
+        <thead class="thead-light">
             <tr>
-                <th>Artículo</th>
-                <th>Descripción</th>
+                <th style="min-width: 9rem;">Artículo</th>
+                <th class="col-desc-celda">Descripción</th>
                 <th>Cantidad</th>
                 <th>Fuera serv.</th>
                 <th>UID</th>
@@ -146,28 +153,28 @@
         <tbody>
             @foreach ($lineas as $idx => $linea)
             <tr class="item-requisicion-sala-articulo">
-                <td>
+                <td class="align-middle">
                     <input type="hidden" class="requisicion_sala_articulo_id" name="requisicion_sala_articulo_ids[]" value="{{ old('requisicion_sala_articulo_ids.'.$idx, $linea->id ?? '') }}">
                     <input type="hidden" class="articulo_id" name="articulo_ids[]" value="{{ old('articulo_ids.'.$idx, $linea->articulo_id ?? '') }}">
                     <input type="hidden" class="articulo_lleva_npu" value="{{ optional($linea->articulos)->numeroparte ?? '0' }}">
-                    <div class="d-flex align-items-center">
-                        @if(!$soloLectura)
-                        <button type="button" class="btn-accion-tabla consultaarticulo mr-1"><i class="fa fa-search text-primary"></i></button>
-                        @endif
-                        <input type="text" class="codigoarticulo form-control form-control-sm" style="width:7rem;" value="{{ optional($linea->articulos)->sku ?? '' }}" {{ $soloLectura ? 'readonly' : '' }}>
-                    </div>
+                    @include('sala.requisicion_sala.partials.celda_articulo_linea', [
+                        'sku' => optional($linea->articulos)->sku ?? '',
+                        'soloLectura' => $soloLectura,
+                    ])
                 </td>
-                <td><input type="text" class="descripcionarticulo form-control form-control-sm" readonly value="{{ optional($linea->articulos)->descripcion ?? '' }}"></td>
-                <td><input type="number" step="0.0001" name="cantidades[]" class="form-control form-control-sm" value="{{ old('cantidades.'.$idx, $linea->cantidad ?? '1') }}" {{ $soloLectura ? 'readonly' : '' }}></td>
-                <td>
+                <td class="col-desc-celda align-middle">
+                    <input type="text" class="descripcionarticulo form-control form-control-sm" readonly value="{{ optional($linea->articulos)->descripcion ?? '' }}" title="{{ optional($linea->articulos)->descripcion ?? '' }}">
+                </td>
+                <td class="align-middle"><input type="number" step="0.0001" name="cantidades[]" class="form-control form-control-sm cantidad-linea" value="{{ old('cantidades.'.$idx, $linea->cantidad ?? '1') }}" {{ $soloLectura ? 'readonly' : '' }}></td>
+                <td class="align-middle">
                     <select name="fueradeservicios[]" class="form-control form-control-sm" {{ $soloLectura ? 'disabled' : '' }}>
                         <option value="N" {{ old('fueradeservicios.'.$idx, $linea->fueradeservicio ?? 'N') === 'N' ? 'selected' : '' }}>N</option>
                         <option value="S" {{ old('fueradeservicios.'.$idx, $linea->fueradeservicio ?? 'N') === 'S' ? 'selected' : '' }}>S</option>
                     </select>
                 </td>
-                <td><input type="text" name="uids[]" class="form-control form-control-sm" value="{{ old('uids.'.$idx, $linea->uid ?? '') }}" {{ $soloLectura ? 'readonly' : '' }}></td>
-                <td><input type="text" name="numeropartes[]" class="form-control form-control-sm numeroparte-linea" value="{{ old('numeropartes.'.$idx, $linea->numeroparte ?? '') }}" {{ $soloLectura ? 'readonly' : '' }}></td>
-                <td>
+                <td class="align-middle"><input type="text" name="uids[]" class="form-control form-control-sm" value="{{ old('uids.'.$idx, $linea->uid ?? '') }}" {{ $soloLectura ? 'readonly' : '' }}></td>
+                <td class="align-middle"><input type="text" name="numeropartes[]" class="form-control form-control-sm numeroparte-linea" value="{{ old('numeropartes.'.$idx, $linea->numeroparte ?? '') }}" {{ $soloLectura ? 'readonly' : '' }}></td>
+                <td class="align-middle">
                     <select name="destinos[]" class="form-control form-control-sm" {{ $soloLectura ? 'disabled' : '' }}>
                         @foreach ($destino_enum as $d)
                             <option value="{{ $d['valor'] }}" {{ old('destinos.'.$idx, $linea->destino ?? 'S') === $d['valor'] ? 'selected' : '' }}>{{ $d['nombre'] }}</option>
@@ -175,7 +182,7 @@
                     </select>
                 </td>
                 @if(!$soloLectura)
-                <td><button type="button" class="btn-accion-tabla eliminar_linea_sala"><i class="fa fa-times-circle text-danger"></i></button></td>
+                <td class="align-middle text-center"><button type="button" class="btn-accion-tabla eliminar_linea_sala"><i class="fa fa-times-circle text-danger"></i></button></td>
                 @endif
             </tr>
             @endforeach
@@ -185,4 +192,9 @@
     <button type="button" class="btn btn-danger btn-sm" id="agrega_renglon_sala">+ Agrega renglón</button>
     @endif
 </div>
+<style>
+    #tabla-articulos-requisicion-sala td.align-middle { vertical-align: middle !important; }
+    #tabla-articulos-requisicion-sala .celda-articulo-ms .codigoarticulo { min-width: 5rem; max-width: 8rem; }
+    #tabla-articulos-requisicion-sala .col-desc-celda .descripcionarticulo { min-width: 0; width: 100%; }
+</style>
 @include('sala.requisicion_sala.partials.template_linea_articulo')

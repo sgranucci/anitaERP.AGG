@@ -123,7 +123,7 @@
         preferencias: @json(route('transferencia_mercaderia_preferencias')),
         guardar: @json(route('transferencia_mercaderia_guardar')),
         destinatarios: @json(route('transferencia_mercaderia_destinatarios')),
-        articuloConsultaUrl: @json(route('editar_articulo', ['id' => '__ID__', 'origen' => 'modal_consulta', 'vista' => 'consulta'])),
+        articuloConsultaUrl: {!! json_encode(route('editar_articulo', ['id' => '__ID__', 'origen' => 'modal_consulta', 'vista' => 'consulta'])) !!},
     };
 </script>
 <script src="{{ asset('assets/pages/scripts/stock/depmae/consulta.js') }}" type="text/javascript"></script>
@@ -150,6 +150,7 @@
                         @endif
                     </a>
                 @endif
+                @include('includes.stock.boton-manual-recepcion-movstock')
             </div>
             <div class="card-body py-2">
                 <div class="tm-cabecera">

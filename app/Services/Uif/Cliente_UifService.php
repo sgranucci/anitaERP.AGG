@@ -329,103 +329,25 @@ class Cliente_UifService
 		return ['riesgo' => $riesgo];
 	}
 
-	public function generaExportaOperacion($periodo, $limiteinformeuif)
+	public function generaExportaOperacion($periodo, $limiteinformeuif, $empresaId)
 	{
-		return $this->cliente_premio_uifRepository->listaPremioParaExportar($periodo, $limiteinformeuif);
+		return $this->cliente_premio_uifRepository->listaPremioParaExportar($periodo, $limiteinformeuif, $empresaId);
 	}
 
-	 function exportaOperacion($periodo, $limiteinformeuif)
+	public function resumenExportaOperacion($premios): array
 	{
-		$cliente_premio_uif = $this->cliente_premio_uifRepository->listaPremioParaExportar($periodo, $limiteinformeuif);
+		$coleccion = collect($premios);
 
-		system('rm -f '.base_path().'/public/storage/archivos/exporta_clientes_uif/*');
+		return [
+			'cantidad' => $coleccion->count(),
+			'total' => (float) $coleccion->sum('monto'),
+		];
+	}
 
-		$_id_archivo = 0;
-		$_total_importe = 0.;
-		foreach($cliente_premio_uif as $premio)
-		{
-			$_id_archivo++;
-			$_total_importe += $premio->monto;
-			$archivo_write = "/public/archivos/exporta_clientes_uif/".$_id_archivo . "_" . $premio->nombrecliente . ".xml";
-			$archivo     = $archivo_write;
-			$datosPremio = "";
+	public function exportaOperacion($periodo, $limiteinformeuif, $empresaId): array
+	{
+		$premios = $this->cliente_premio_uifRepository->listaPremioParaExportar($periodo, $limiteinformeuif, $empresaId);
 
-			$datosPremio .= "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n";
-
-			$datosPremio .= "<Operacion>\n";
-			$datosPremio .= "\t<Apostadores_cobranza_de_premios_mayores_a_50000 Version=\"1.1\">\n";
-
-			// Formatea apellido y nombre
-			$_nombre = $premio->nombrecliente;
-			$_array_nombre = explode(" ", $_nombre, 2);
-
-			$datosPremio .= "\t\t<Apellido>".$_array_nombre[0]."</Apellido>\n";
-			$datosPremio .= "\t\t<Nombre>".$_array_nombre[1]."</Nombre>\n";
-
-			$datosPremio .= "\t\t<Nacionalidad>".$premio->nombrepais."</Nacionalidad>\n";
-
-			$_tipo_documento = "";
-			switch($premio->abreviaturatipodocumento)
-			{
-				case 'DNI':
-					if ($premio->nombrepais != "Argentina")
-						$_tipo_documento = "Documento EXT";
-					else
-						$_tipo_documento = "Documento Nacional de Identidad";
-					break;
-
-				case "LE":
-					$_tipo_documento = "Libreta de Enrolamiento";
-					break;
-
-				case "LC":
-					$_tipo_documento = "Libreta C┬ívica";
-					break;
-
-				case "CDI":
-					$_tipo_documento = "Documento EXT";
-					break;
-
-				case "PAS":
-					if ($premio->nombrepais != "Argentina")
-						$_tipo_documento = "Pasaporte";
-					else
-						$_tipo_documento = "Pasaporte EXT";
-					break;
-			}
-
-			$datosPremio .= "\t\t<Tipo_Documento>".$_tipo_documento."</Tipo_Documento>\n";
-			$datosPremio .= "\t\t<N94mero_Documento>".$premio->numerodocumento."</N94mero_Documento>\n";
-			$datosPremio .= "\t\t<Calle>".$premio->domicilio."</Calle>\n";
-			$datosPremio .= "\t\t<Nro>0</Nro>\n";
-			$datosPremio .= "\t\t<Piso>".$premio->piso."</Piso>\n";
-			$datosPremio .= "\t\t<Departamento>".$premio->departamento."</Departamento>\n";
-			$datosPremio .= "\t\t<Localidad>".$premio->nombrelocalidad."</Localidad>\n";
-			$datosPremio .= "\t\t<Provincia>".$premio->nombreprovincia."</Provincia>\n";
-			$datosPremio .= "\t\t<Pa92s>".$premio->nombrepais."</Pa92s>\n";
-
-			$datosPremio .= "\t\t<Radicada_en_el_Exterior>false</Radicada_en_el_Exterior>\n";
-			$datosPremio .= "\t\t<Radicada_en_Para92so_Fiscal>false</Radicada_en_Para92so_Fiscal>\n";
-			$datosPremio .= "\t\t<Es_Peps>false</Es_Peps>\n";
-
-			$_fecha = $premio->fechaentrega;
-
-			$datosPremio .= "\t\t<Fecha_de_Operaci93n>".$_fecha."</Fecha_de_Operaci93n>\n";
-
-			$datosPremio .= "\t\t<Tipo_de_Moneda>Peso Argentino</Tipo_de_Moneda>\n";
-
-			$datosPremio .= "\t\t<Monto_Total>".floor($premio->monto)."</Monto_Total>\n";
-			$datosPremio .= "\t\t<Monto_Total_en_Pesos>".floor($premio->monto)."</Monto_Total_en_Pesos>\n";
-			$datosPremio .= "\t\t<Pago_en_favor_de_Terceros>false</Pago_en_favor_de_Terceros>\n";
-			$datosPremio .= "\t\t<Pago>\n";
-			$datosPremio .= "\t\t\t<Forma_de_Pago>Efectivo</Forma_de_Pago>\n";
-			$datosPremio .= "\t\t\t<Porcentaje_del_pago_total>100</Porcentaje_del_pago_total>\n";
-			$datosPremio .= "\t\t\t<Fecha_de_pago>".$_fecha."</Fecha_de_pago>\n";
-			$datosPremio .= "\t\t</Pago>\n";
-			$datosPremio .= "\t</Apostadores_cobranza_de_premios_mayores_a_50000>\n";
-			$datosPremio .= "</Operacion>\n";
-
-			Storage::disk('local')->put($archivo, $datosPremio);
-		}
+		return app(ClienteUifExportacionXmlService::class)->exportar($periodo, (int) $empresaId, $premios);
 	}
 }

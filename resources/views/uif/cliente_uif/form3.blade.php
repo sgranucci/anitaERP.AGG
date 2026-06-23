@@ -8,6 +8,19 @@
 <div class="form3"@if (! $mostrarForm3Directo) style="display: none"@endif>
     @include('uif.cliente_premio_uif.partials.foto_estilos')
     <div class="card-body">
+        @if (isset($data->id) && esSupervisorUif())
+        <div class="mb-2">
+            <a href="{{ route('lista_premios_cliente_uif', ['id' => $data->id, 'formato' => 'PDF']) }}" class="btn btn-app bg-danger" target="_blank" rel="noopener">
+                <i class="fas fa-file-pdf"></i> Pdf
+            </a>
+            <a href="{{ route('lista_premios_cliente_uif', ['id' => $data->id, 'formato' => 'EXCEL']) }}" class="btn btn-app bg-success" target="_blank" rel="noopener">
+                <i class="fas fa-file-excel"></i> Excel
+            </a>
+            <a href="{{ route('lista_premios_cliente_uif', ['id' => $data->id, 'formato' => 'CSV']) }}" class="btn btn-app bg-warning" target="_blank" rel="noopener">
+                <i class="fas fa-file-csv"></i> Csv
+            </a>
+        </div>
+        @endif
     	<table class="table" id="premio-table">
     		<thead>
     			<tr>

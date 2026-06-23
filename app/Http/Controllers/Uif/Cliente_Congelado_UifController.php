@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Uif;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
+use Maatwebsite\Excel\Facades\Excel;
+use App\Imports\Uif\Cliente_Congelado_UifImport;
 use App\Http\Requests\ValidacionCliente_Congelado_Uif;
 use App\Repositories\Uif\Cliente_Congelado_UifRepositoryInterface;
 
@@ -128,21 +130,20 @@ class Cliente_Congelado_UifController extends Controller
 
 	public function importarCliente_Congelado_Uif(Request $request)
     {
+        can('importar-cliente-congelado-uif');
+
         $this->validate(request(), [
-            'file' => 'required|mimetypes::'.
+            'file' => 'required|mimetypes:'.
                 'application/vnd.ms-office,'.
                 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,'.
                 'application/vnd.ms-excel',
         ]);
 
-        $rowEncabezado = 1;
-        $headings = (new HeadingRowImport($rowEncabezado))->toArray(request("file"));
-
         try {
             set_time_limit(0);
 
             DB::beginTransaction();
-            Excel::import(new Cliente_Congelado_UifImport($headings), request("file"));
+            Excel::import(new Cliente_Congelado_UifImport($this->repository), request('file'));
             DB::commit();
 
             return back()

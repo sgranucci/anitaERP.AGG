@@ -38,6 +38,10 @@
             <td class="text-nowrap">
                 @if ($fila->esTransferencia())
                     @if ($puedeListar)
+                        @include('stock.movimientostock.partials.boton_imprimir_transferencia_com_pdf', [
+                            'transferenciaId' => $fila->pkId,
+                            'modo' => 'tabla',
+                        ])
                         <a href="{{ route('consultar_transferencia_movimientostock', ['id' => $fila->pkId]) }}" class="btn-accion-tabla tooltipsC" title="Consultar transferencia" target="_blank" rel="noopener">
                             <i class="fa fa-eye"></i>
                         </a>
@@ -67,6 +71,10 @@
                         </form>
                     @endif
                     @if ($puedeListar && $fila->movimiento)
+                        @include('stock.movimientostock.partials.boton_imprimir_com_pdf', [
+                            'movimientoStockId' => $fila->movimiento->id,
+                            'modo' => 'tabla',
+                        ])
                         <a href="{{ route('editar_movimientostock', ['id' => $fila->movimiento->id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}" class="btn-accion-tabla tooltipsC" title="Consultar movimiento" target="_blank" rel="noopener">
                             <i class="fa fa-eye"></i>
                         </a>

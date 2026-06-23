@@ -174,14 +174,21 @@ function activa_eventos_consultadeposito() {
                 ptrDescripcionDeposito = $btn.parents('tr').find('.descripciondeposito');
             }
 
-            $('#consultadepositoModal').modal('show');
+            $('#consultadepositoModal')
+                .removeAttr('inert')
+                .css('display', '')
+                .modal('show');
         });
 
     $('#consultadepositoModal')
         .off('shown.bs.modal.consultaDeposito')
         .on('shown.bs.modal.consultaDeposito', function () {
-            $(this).find('[autofocus]').focus();
-            buscar_datos_deposito($('#consultadeposito').val());
+            $(this).removeAttr('inert');
+            var $input = $('#consultadeposito');
+            setTimeout(function () {
+                $input.trigger('focus').select();
+            }, 0);
+            buscar_datos_deposito($input.val());
         });
 
     $('#aceptaconsultadepositoModal')

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 520" width="920" height="520">
+  <rect width="920" height="520" rx="12" fill="#f4f6f9"/>
+  <rect x="0" y="0" width="920" height="48" fill="#343a40"/>
+  <text x="24" y="30" fill="#fff" font-family="Segoe UI,sans-serif" font-size="14">Anita ERP / Stock / Recepción proveedores</text>
+  <rect x="232" y="64" width="672" height="440" rx="8" fill="#fff" stroke="#dee2e6"/>
+  <text x="248" y="96" fill="#17a2b8" font-family="Segoe UI,sans-serif" font-size="16" font-weight="600">Recepciones de proveedores</text>
+  <rect x="790" y="80" width="100" height="28" rx="4" fill="#28a745"/>
+  <text x="840" y="98" text-anchor="middle" fill="#fff" font-family="Segoe UI,sans-serif" font-size="11">Nuevo registro</text>
+  <rect x="248" y="112" width="640" height="28" fill="#85C1E9"/>
+  <text x="260" y="130" fill="#17202A" font-family="Segoe UI,sans-serif" font-size="10" font-weight="600">Nº recepción</text>
+  <text x="360" y="130" fill="#17202A" font-family="Segoe UI,sans-serif" font-size="10" font-weight="600">Fecha</text>
+  <text x="440" y="130" fill="#17202A" font-family="Segoe UI,sans-serif" font-size="10" font-weight="600">OC</text>
+  <text x="520" y="130" fill="#17202A" font-family="Segoe UI,sans-serif" font-size="10" font-weight="600">Proveedor</text>
+  <text x="640" y="130" fill="#17202A" font-family="Segoe UI,sans-serif" font-size="10" font-weight="600">Estado</text>
+  <text x="720" y="130" fill="#17202A" font-family="Segoe UI,sans-serif" font-size="10" font-weight="600">Diferencias</text>
+  <rect x="248" y="140" width="640" height="32" fill="#fff3cd"/>
+  <text x="260" y="160" fill="#212529" font-family="Segoe UI,sans-serif" font-size="11">COM-1042</text>
+  <text x="360" y="160" fill="#212529" font-family="Segoe UI,sans-serif" font-size="11">15/06/2026</text>
+  <text x="440" y="160" fill="#007bff" font-family="Segoe UI,sans-serif" font-size="11">OC-8821</text>
+  <text x="520" y="160" fill="#212529" font-family="Segoe UI,sans-serif" font-size="11">Proveedor Demo</text>
+  <text x="640" y="160" fill="#28a745" font-family="Segoe UI,sans-serif" font-size="11">CONFIRMADA</text>
+  <rect x="720" y="148" width="18" height="16" rx="3" fill="#ffc107"/><text x="729" y="160" text-anchor="middle" fill="#212529" font-size="9">P</text>
+  <rect x="248" y="172" width="640" height="32" fill="#fff"/>
+  <text x="260" y="192" fill="#212529" font-family="Segoe UI,sans-serif" font-size="11">COM-1043</text>
+  <text x="640" y="192" fill="#6c757d" font-family="Segoe UI,sans-serif" font-size="11">BORRADOR</text>
+  <text x="248" y="480" fill="#6c757d" font-family="Segoe UI,sans-serif" font-size="10">Wireframe  reemplace con captura PNG real</text>
+</svg>

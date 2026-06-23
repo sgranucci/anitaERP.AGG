@@ -1169,7 +1169,7 @@ class ArbolaprobacionService
                     break;
                 case 'RS':
                     app(\App\Services\Sala\RequisicionSalaArbolIntegracionService::class)
-                        ->suspendePorRechazo($comprobante_id, $usuario_id, $observacion);
+                        ->rechazaPorRechazo($comprobante_id, $usuario_id, $observacion);
                     break;
                 case 'OC':
                     $estadoOc = OrdencompraEstados::SUSPENDIDA;

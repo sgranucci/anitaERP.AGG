@@ -11,7 +11,12 @@ use App\Support\Stock\RecepcionProveedorAnitaEscrituraSupport;
 use App\Support\Stock\RecepcionProveedorAnitaOrdenLineaSupport;
 use App\Support\Stock\RecepcionProveedorAnitaReferenciaSupport;
 use App\Support\Stock\RecepcionProveedorAnitaWhereSupport;
+use App\Support\Stock\RecepcionProveedorAnitaCorrespondenciaSupport;
+use App\Support\Stock\RecepcionProveedorEstados;
+use App\Support\Stock\AnitaStkmovClaveErpSupport;
 use App\Support\Stock\StkmaePrecioCompraAnitaBridgeSupport;
+use App\Support\Stock\StockAnitaBridgeSupport;
+use App\Support\Stock\DepmaeAnitaCodigoSupport;
 use App\Support\Stock\RecpunicaAnitaBridgeSupport;
 use App\Support\Stock\StkParteUnicaAnitaBridgeSupport;
 use Auth;
@@ -61,17 +66,19 @@ class RecepcionProveedorAnitaBridgeService
                 $this->ordencompraAnitaSync
             );
 
-            if ($this->existeRecepmae($codigoProveedor, $clave)) {
-                $this->actualizarRecepmae($recepcion, $codigoProveedor, $clave, $fechaAnita, $usuario, $empresaCodigo);
+            if ($this->existeRecepmaeErp($codigoProveedor, $clave)) {
+                $this->actualizarRecepmae($recepcion, $codigoProveedor, $clave, $fechaAnita, $usuario, $empresaCodigo, true);
+            } elseif (RecepcionProveedorAnitaCorrespondenciaSupport::correspondeConRecepcionErp($recepcion)) {
+                $this->actualizarRecepmae($recepcion, $codigoProveedor, $clave, $fechaAnita, $usuario, $empresaCodigo, false);
             } else {
                 $this->grabarRecepmae($recepcion, $codigoProveedor, $clave, $fechaAnita, $usuario, $empresaCodigo);
                 $estado['cabecera_nueva'] = true;
             }
 
-            // Siempre limpiar detalle antes de insertar (reintento, import Anita previo, rollback parcial).
-            $this->eliminarRecepmov($clave);
+            // Siempre limpiar detalle ERP antes de insertar (no tocar líneas Anita legacy).
+            $this->eliminarRecepmov($clave, $codigoProveedor);
             $this->eliminarAplicped($codigoProveedor, $clave);
-            $this->eliminarStkmov($clave);
+            $this->eliminarStkmov($clave, (int) $recepcion->empresa_id);
             $this->grabarRecepmov($recepcion, $codigoProveedor, $clave, $fechaAnita, $empresaCodigo, $ordenesAnita);
             $this->grabarAplicped($recepcion, $codigoProveedor, $clave, $ordenesAnita);
             StkmaePrecioCompraAnitaBridgeSupport::actualizarDesdeRecepcion($recepcion);
@@ -116,7 +123,7 @@ class RecepcionProveedorAnitaBridgeService
         }
 
         try {
-            $this->eliminarRecepmov($clave);
+            $this->eliminarRecepmov($clave, $codigoProveedor);
         } catch (\Throwable $e) {
             Log::warning('RecepcionProveedorAnitaBridge: rollback recepmov', [
                 'recepcion_id' => $recepcion->id,
@@ -134,7 +141,7 @@ class RecepcionProveedorAnitaBridgeService
         }
 
         try {
-            $this->eliminarStkmov($clave);
+            $this->eliminarStkmov($clave, (int) $recepcion->empresa_id);
         } catch (\Throwable $e) {
             Log::warning('RecepcionProveedorAnitaBridge: rollback stkmov', [
                 'recepcion_id' => $recepcion->id,
@@ -171,15 +178,78 @@ class RecepcionProveedorAnitaBridgeService
 
         $this->eliminarStkParteUnica($recepcion);
         $this->eliminarRecpunica($recepcion, $clave);
-        $this->eliminarStkmov($clave);
+        $this->eliminarStkmov($clave, (int) $recepcion->empresa_id);
         $this->eliminarAplicped($codigoProveedor, $clave);
-        $this->eliminarRecepmov($clave);
+        $this->eliminarRecepmov($clave, $codigoProveedor);
         $this->marcarRecepmaeAnulada($codigoProveedor, $clave);
         $this->actualizarPendmovp($recepcion, -1);
     }
 
+    /**
+     * @return array<int, object>
+     */
+    public function listarRecepmaeErpPorDocumento(int $documentoId): array
+    {
+        if ($documentoId <= 0) {
+            return [];
+        }
+
+        $api = new ApiAnita;
+        $raw = $api->apiCall([
+            'acc' => 'list',
+            'sistema' => config('recepcion_proveedor.anita.sistema_compras'),
+            'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_cabecera'),
+            'campos' => 'recm_proveedor, recm_tipo, recm_letra, recm_sucursal, recm_nro, recm_estado, recm_documentoid, recm_terminal',
+            'whereArmado' => RecepcionProveedorAnitaWhereSupport::recepmaeDocumentoErp($documentoId),
+            'limit' => 'FIRST 20',
+        ]);
+
+        return ApiAnita::decodificarListaFilas((string) $raw);
+    }
+
+    /**
+     * Elimina en Anita una clave COM concreta (p. ej. sucursal virtual 991) sin anular la recepción en ERP.
+     *
+     * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $clave
+     */
+    public function revertirClaveComEnAnita(
+        Recepcion_Proveedor $recepcion,
+        array $clave,
+        bool $revertirPendmovp = true
+    ): void {
+        if ((int) ($clave['nro'] ?? 0) <= 0 || (int) ($clave['sucursal'] ?? 0) <= 0) {
+            return;
+        }
+
+        $recepcion->loadMissing([
+            'proveedores', 'empresas', 'ordencompras',
+            'recepcion_proveedor_articulos.articulos',
+            'recepcion_proveedor_partes_unicas.recepcion_proveedor_articulos.articulos',
+        ]);
+
+        $codigoProveedor = RecepcionProveedorAnitaWhereSupport::codigoProveedorAnita($recepcion);
+
+        if (
+            $revertirPendmovp
+            && $recepcion->estado === RecepcionProveedorEstados::CONFIRMADA
+        ) {
+            $this->actualizarPendmovp($recepcion, -1);
+        }
+
+        if (! $this->existeRecepmaeErp($codigoProveedor, $clave)) {
+            return;
+        }
+
+        $this->eliminarStkParteUnica($recepcion);
+        $this->eliminarRecpunica($recepcion, $clave);
+        $this->eliminarStkmov($clave, (int) $recepcion->empresa_id);
+        $this->eliminarAplicped($codigoProveedor, $clave);
+        $this->eliminarRecepmov($clave, $codigoProveedor);
+        $this->marcarRecepmaeAnulada($codigoProveedor, $clave);
+    }
+
     /** @param array{tipo: string, letra: string, sucursal: int, nro: int} $clave */
-    private function existeRecepmae(string $codigoProveedor, array $clave): bool
+    private function existeRecepmaeErp(string $codigoProveedor, array $clave): bool
     {
         $api = new ApiAnita;
         $raw = $api->apiCall([
@@ -187,7 +257,7 @@ class RecepcionProveedorAnitaBridgeService
             'sistema' => config('recepcion_proveedor.anita.sistema_compras'),
             'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_cabecera'),
             'campos' => 'recm_nro',
-            'whereArmado' => RecepcionProveedorAnitaWhereSupport::recepmae($codigoProveedor, $clave),
+            'whereArmado' => RecepcionProveedorAnitaWhereSupport::recepmaeSoloErp($codigoProveedor, $clave),
             'limit' => 'FIRST 1',
         ]);
 
@@ -197,6 +267,10 @@ class RecepcionProveedorAnitaBridgeService
     /** @param array{tipo: string, letra: string, sucursal: int, nro: int} $clave */
     private function marcarRecepmaeAnulada(string $codigoProveedor, array $clave): void
     {
+        if (! $this->existeRecepmaeErp($codigoProveedor, $clave)) {
+            return;
+        }
+
         $estadoAnulada = (string) config('recepcion_proveedor.anita.recepcion_estado_anulada', '3');
         $api = new ApiAnita;
         $api->apiCallEscritura([
@@ -204,19 +278,25 @@ class RecepcionProveedorAnitaBridgeService
             'sistema' => config('recepcion_proveedor.anita.sistema_compras'),
             'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_cabecera'),
             'valores' => RecepcionProveedorAnitaEscrituraSupport::recepmaeAnularSet($estadoAnulada),
-            'whereArmado' => RecepcionProveedorAnitaWhereSupport::recepmae($codigoProveedor, $clave),
-        ], 'recepcion recepmae anular');
+            'whereArmado' => RecepcionProveedorAnitaWhereSupport::recepmaeSoloErp($codigoProveedor, $clave),
+        ], 'recepcion recepmae anular ERP');
     }
 
-    /** @param array{tipo: string, letra: string, sucursal: int, nro: int} $clave */
-    private function eliminarRecepmov(array $clave): void
+    /**
+     * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $clave
+     */
+    private function eliminarRecepmov(array $clave, ?string $codigoProveedor = null): void
     {
+        $where = $codigoProveedor !== null && $codigoProveedor !== ''
+            ? RecepcionProveedorAnitaWhereSupport::recepmovProveedorCabecera($codigoProveedor, $clave)
+            : RecepcionProveedorAnitaWhereSupport::recepmovCabecera($clave);
+
         $api = new ApiAnita;
         $api->apiCallEscritura([
             'acc' => 'delete',
             'sistema' => config('recepcion_proveedor.anita.sistema_compras'),
             'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_linea'),
-            'whereArmado' => RecepcionProveedorAnitaWhereSupport::recepmovCabecera($clave),
+            'whereArmado' => $where,
         ], 'recepcion recepmov delete');
     }
 
@@ -233,15 +313,18 @@ class RecepcionProveedorAnitaBridgeService
     }
 
     /** @param array{tipo: string, letra: string, sucursal: int, nro: int} $claveCom */
-    private function eliminarStkmov(array $claveCom): void
+    private function eliminarStkmov(array $claveCom, int $empresaId): void
     {
         $api = new ApiAnita;
-        $api->apiCallEscritura([
-            'acc' => 'delete',
-            'sistema' => config('recepcion_proveedor.anita.sistema_ventas'),
-            'tabla' => config('recepcion_proveedor.anita.tablas.stock_movimiento'),
-            'whereArmado' => RecepcionProveedorAnitaWhereSupport::stkmovCabecera($claveCom),
-        ], 'recepcion stkmov delete');
+        $api->apiCallEscritura(
+            StockAnitaBridgeSupport::mergePayload([
+                'acc' => 'delete',
+                'sistema' => config('recepcion_proveedor.anita.sistema_ventas'),
+                'tabla' => config('recepcion_proveedor.anita.tablas.stock_movimiento'),
+                'whereArmado' => RecepcionProveedorAnitaWhereSupport::stkmovCabeceraSoloErp($claveCom),
+            ], $empresaId),
+            'recepcion stkmov delete'
+        );
     }
 
     /**
@@ -298,13 +381,18 @@ class RecepcionProveedorAnitaBridgeService
         array $clave,
         int $fechaAnita,
         string $usuario,
-        int $empresaCodigo
+        int $empresaCodigo,
+        bool $soloTerminalErp = true,
     ): void {
         $obs = substr((string) ($recepcion->observacion ?? ''), 0, 40);
         $cfg = config('recepcion_proveedor.anita');
         $estadoConfirmada = (string) ($cfg['recepcion_estado_confirmada'] ?? '2');
         $ocFac = $this->claveOcFacDesdeRecepcion($recepcion);
         $refFac = RecepcionProveedorAnitaReferenciaSupport::referenciaFacturaRemitoDesdeRecepcion($recepcion);
+
+        $where = $soloTerminalErp
+            ? RecepcionProveedorAnitaWhereSupport::recepmaeSoloErp($codigoProveedor, $clave)
+            : RecepcionProveedorAnitaWhereSupport::recepmae($codigoProveedor, $clave);
 
         $api = new ApiAnita;
         $api->apiCallEscritura([
@@ -321,7 +409,7 @@ class RecepcionProveedorAnitaBridgeService
                 $refFac,
                 (int) $recepcion->id,
             ),
-            'whereArmado' => RecepcionProveedorAnitaWhereSupport::recepmae($codigoProveedor, $clave),
+            'whereArmado' => $where,
         ], 'recepcion recepmae update');
     }
 
@@ -493,8 +581,8 @@ class RecepcionProveedorAnitaBridgeService
         string $usuario
     ): void {
         $api = new ApiAnita;
-        $signo = $recepcion->tipo === Recepcion_Proveedor::TIPO_DEVOLUCION ? -1 : 1;
         $cfg = config('recepcion_proveedor.anita');
+        $empresaId = max(1, (int) ($recepcion->empresa_id ?? 1));
 
         foreach ($recepcion->recepcion_proveedor_articulos as $linea) {
             $linea->loadMissing(['articulos.categorias', 'articulo_stock.categorias']);
@@ -515,8 +603,19 @@ class RecepcionProveedorAnitaBridgeService
                 $codigoAgrupacion = '0';
             }
 
-            $cantidadStkmov = (float) ($linea->cantidad_stock ?: $linea->cantidad) * $signo;
+            $cantidadStkmov = AnitaStkmovClaveErpSupport::cantidadStkmov(
+                (float) ($linea->cantidad_stock ?: $linea->cantidad)
+            );
             $precioStkmov = (float) ($linea->precio_stock ?? $linea->precio);
+
+            $depositoAnita = DepmaeAnitaCodigoSupport::codigoDeposito(
+                (int) ($linea->deposito_id ?? $recepcion->deposito_id ?? 0)
+            );
+            if ($depositoAnita <= 0) {
+                throw new \RuntimeException(
+                    'Línea sin depósito Anita válido (artículo '.trim($sku).', recepción '.$recepcion->numerorecepcion.').'
+                );
+            }
 
             $insert = RecepcionProveedorAnitaEscrituraSupport::stkmovInsert(
                 $clave,
@@ -525,21 +624,25 @@ class RecepcionProveedorAnitaBridgeService
                 $codigoAgrupacion,
                 $orden,
                 $codigoProveedor,
-                (int) ($linea->deposito_id ?? 1),
+                $depositoAnita,
                 $cantidadStkmov,
                 $precioStkmov,
                 $this->codigoMonedaAnita((int) $linea->moneda_id),
                 $empresaCodigo,
                 $usuario,
+                $empresaId,
             );
 
-            $api->apiCallEscritura([
-                'acc' => 'insert',
-                'sistema' => $cfg['sistema_ventas'],
-                'tabla' => $cfg['tablas']['stock_movimiento'],
-                'campos' => $insert['campos'],
-                'valores' => $insert['valores'],
-            ], 'recepcion stkmov insert orden '.$orden);
+            $api->apiCallEscritura(
+                StockAnitaBridgeSupport::mergePayload([
+                    'acc' => 'insert',
+                    'sistema' => $cfg['sistema_ventas'],
+                    'tabla' => $cfg['tablas']['stock_movimiento'],
+                    'campos' => $insert['campos'],
+                    'valores' => $insert['valores'],
+                ], $empresaId),
+                'recepcion stkmov insert orden '.$orden
+            );
         }
     }
 
@@ -576,8 +679,6 @@ class RecepcionProveedorAnitaBridgeService
                 );
             }
 
-            $delta = ((float) $linea->cantidad + (float) ($linea->cantidad_rechazada ?? 0)) * $signo * $multiplicador;
-
             $where = RecepcionProveedorAnitaWhereSupport::pendmovpLinea(
                 $claveOc,
                 (int) $oc->numeroordencompra,
@@ -602,16 +703,29 @@ class RecepcionProveedorAnitaBridgeService
                 );
             }
 
+            $cantidadOc = (float) ($rows[0]->penvp_cantidad ?? 0);
+            $ref = $nroInterno > 0 ? 'nro_interno '.$nroInterno : 'orden '.$penvpOrden;
+
+            if ((bool) ($linea->fl_cerrar_linea_oc ?? false)) {
+                $plan[] = [
+                    'where' => $where,
+                    'cerrar_linea' => true,
+                    'cantidad_oc' => $cantidadOc,
+                    'ref' => $ref,
+                ];
+
+                continue;
+            }
+
+            $delta = ((float) $linea->cantidad + (float) ($linea->cantidad_rechazada ?? 0)) * $signo * $multiplicador;
+
             $actual = (float) ($rows[0]->penvp_cantentr ?? 0);
             $nuevaCant = $actual + $delta;
-            $cantidadOc = (float) ($rows[0]->penvp_cantidad ?? 0);
-            $estado = $nuevaCant >= $cantidadOc ? 'C' : ($nuevaCant > 0 ? 'P' : 'A');
 
             $plan[] = [
                 'where' => $where,
                 'nueva_cant' => $nuevaCant,
-                'estado_cabecera' => $estado,
-                'ref' => $nroInterno > 0 ? 'nro_interno '.$nroInterno : 'orden '.$penvpOrden,
+                'ref' => $ref,
             ];
         }
 
@@ -621,24 +735,22 @@ class RecepcionProveedorAnitaBridgeService
             penmp_sucursal={$cfg['oc_sucursal']} and
             penmp_nro=".(int) $oc->numeroordencompra;
 
-        $estadoCabecera = 'A';
         foreach ($plan as $paso) {
+            $valores = ! empty($paso['cerrar_linea'])
+                ? RecepcionProveedorAnitaEscrituraSupport::pendmovpCerrarLineaUpdateSet((float) $paso['cantidad_oc'])
+                : RecepcionProveedorAnitaEscrituraSupport::pendmovpCantentrUpdateSet($paso['nueva_cant']);
+
             $api->apiCallEscritura([
                 'acc' => 'update',
                 'sistema' => $cfg['sistema_compras'],
                 'tabla' => $cfg['tablas']['oc_linea'],
-                'valores' => RecepcionProveedorAnitaEscrituraSupport::pendmovpCantentrUpdateSet($paso['nueva_cant']),
+                'valores' => $valores,
                 'whereArmado' => $paso['where'],
             ], 'recepcion pendmovp update '.$paso['ref']);
-
-            if ($paso['estado_cabecera'] === 'C') {
-                $estadoCabecera = 'C';
-            } elseif ($paso['estado_cabecera'] === 'P' && $estadoCabecera !== 'C') {
-                $estadoCabecera = 'P';
-            }
         }
 
         if ($plan !== []) {
+            $estadoCabecera = $this->resolverEstadoCabeceraOcDesdePendmovp($api, $cfg, (int) $oc->numeroordencompra);
             $api->apiCallEscritura([
                 'acc' => 'update',
                 'sistema' => $cfg['sistema_compras'],
@@ -647,6 +759,54 @@ class RecepcionProveedorAnitaBridgeService
                 'whereArmado' => $whereCab,
             ], 'recepcion penmp estado OC '.(int) $oc->numeroordencompra);
         }
+    }
+
+    /**
+     * Cabecera C solo si todas las líneas pendmovp están completas o cerradas (partida -1).
+     */
+    private function resolverEstadoCabeceraOcDesdePendmovp(ApiAnita $api, array $cfg, int $numeroOc): string
+    {
+        $whereLineas = " WHERE
+            penvp_tipo='{$cfg['oc_tipo']}' and
+            penvp_letra='{$cfg['oc_letra']}' and
+            penvp_sucursal=".(int) $cfg['oc_sucursal']." and
+            penvp_nro={$numeroOc}";
+
+        $rows = json_decode($api->apiCall([
+            'acc' => 'list',
+            'sistema' => $cfg['sistema_compras'],
+            'tabla' => $cfg['tablas']['oc_linea'],
+            'campos' => 'penvp_cantentr, penvp_cantidad, penvp_partida',
+            'whereArmado' => $whereLineas,
+        ]));
+
+        if (! is_array($rows) || $rows === []) {
+            return 'A';
+        }
+
+        $algunaActividad = false;
+        $todasCompletas = true;
+
+        foreach ($rows as $row) {
+            $cantOc = (float) ($row->penvp_cantidad ?? 0);
+            $cantEntr = (float) ($row->penvp_cantentr ?? 0);
+            $partida = (int) ($row->penvp_partida ?? 0);
+            $cerrada = $partida === -1;
+            $completa = $cerrada || ($cantOc > 0.000001 && $cantEntr + 0.000001 >= $cantOc);
+
+            if (! $completa) {
+                $todasCompletas = false;
+            }
+            if ($cantEntr > 0.000001 || $cerrada) {
+                $algunaActividad = true;
+            }
+        }
+
+        if ($todasCompletas) {
+            return 'C';
+        }
+
+        return $algunaActividad ? 'P' : 'A';
     }
 
     private function codigoMonedaAnita(int $monedaId): string

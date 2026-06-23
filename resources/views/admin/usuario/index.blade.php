@@ -21,7 +21,7 @@ Usuarios
                 </div>
             </div>
             <div class="card-body table-responsive p-0">
-                <table class="table table-striped table-bordered table-hover" id="tabla-data">
+                <table class="table table-striped table-bordered table-hover tabla-acciones-fijas" id="tabla-data">
                     <thead>
                         <tr>
                             <th class="width20">ID</th>
@@ -33,7 +33,7 @@ Usuarios
                             <th>Empresas</th>
                             <th>Centro de costo</th>
                             <th>Sector legajo compras</th>
-                            <th class="width80"></th>
+                            <th class="width80 col-acciones-tabla"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -56,7 +56,7 @@ Usuarios
                             </td>
                             <td><small>{{ trim(($data->centrocostos->nombre ?? '').' ('.($data->centrocostos->codigo ?? '').')') }}</small></td>
                             <td><small>{{ $data->sectorLegajocompra?->nombre ?? '—' }}</small></td>
-                            <td>
+                            <td class="col-acciones-tabla">
                                 <a href="{{route('editar_usuario', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                     <i class="fa fa-edit"></i>
                                 </a>

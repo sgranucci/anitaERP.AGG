@@ -5,6 +5,8 @@ namespace App\Repositories\Stock;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Support\Stock\RecepcionProveedorAnitaColisionSupport;
 use App\Support\Stock\RecepcionProveedorAnitaNumeracionSupport;
+use App\Support\Stock\AnitaStkmovClaveErpSupport;
+use App\Support\Stock\RecepcionProveedorAnitaClaveSupport;
 use App\Support\Stock\RecepcionProveedorListadoFiltros;
 use App\Support\Stock\RecepcionProveedorVisibilidadSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -30,8 +32,8 @@ class Recepcion_ProveedorRepository implements Recepcion_ProveedorRepositoryInte
         }
 
         $data['anita_tipo'] = $data['anita_tipo'] ?? $cfg['recepcion_tipo'];
-        $data['anita_letra'] = $data['anita_letra'] ?? $cfg['recepcion_letra'];
-        $data['anita_sucursal'] = $data['anita_sucursal'] ?? $empresaCodigo;
+        $data['anita_letra'] = AnitaStkmovClaveErpSupport::letra();
+        $data['anita_sucursal'] = $data['anita_sucursal'] ?? RecepcionProveedorAnitaClaveSupport::sucursalDesdeEmpresaCodigo((int) $empresaCodigo);
         $data['anita_nro'] = $data['anita_nro'] ?? (int) $data['numerorecepcion'];
 
         return $this->model->create($data);
@@ -99,75 +101,37 @@ class Recepcion_ProveedorRepository implements Recepcion_ProveedorRepositoryInte
             throw new \InvalidArgumentException('empresa_id requerido para numerorecepcion.');
         }
 
-        $empresaCodigo = (int) (DB::table('empresa')->where('id', $empresaId)->value('codigo') ?: $empresaId);
-        $ultimoErp = (int) DB::table('recepcion_proveedor')
-            ->where('empresa_id', $empresaId)
-            ->max('numerorecepcion');
-
-        $ultimoAnita = 0;
-        try {
-            $ultimoAnita = RecepcionProveedorAnitaColisionSupport::maxNumeroRecepmaeSucursal($empresaCodigo);
-        } catch (\Throwable $e) {
-            Log::warning('RecepcionProveedor: no se pudo leer máximo COM en Anita', [
-                'empresa_id' => $empresaId,
-                'sucursal' => $empresaCodigo,
-                'error' => $e->getMessage(),
-            ]);
-        }
-
-        $baseErp = max($ultimoErp, $ultimoAnita);
-
-        try {
-            $numero = RecepcionProveedorAnitaNumeracionSupport::reservarSiguienteNumero(
-                $baseErp > 0 ? $baseErp : null
-            );
-        } catch (\Throwable $e) {
-            Log::warning('RecepcionProveedor: numeración Anita COM no disponible, se usa secuencial ERP', [
-                'empresa_id' => $empresaId,
-                'ultimo_erp' => $ultimoErp,
-                'ultimo_anita' => $ultimoAnita,
-                'error' => $e->getMessage(),
-            ]);
-
-            $numero = $baseErp + 1;
-        }
-
-        return $this->asegurarNumeroLibreEnAnita($empresaCodigo, $numero);
+        return RecepcionProveedorAnitaNumeracionSupport::asignarNumeroComGlobalLibre();
     }
 
-    private function asegurarNumeroLibreEnAnita(int $sucursal, int $numero): int
+    /**
+     * Renumera un borrador cuyo COM ya existe en Anita (otra empresa). Numerador único global.
+     */
+    public function renumerarBorradorSiColisionaGlobal(int $id): int
     {
-        $cfg = config('recepcion_proveedor.anita');
-        $clave = [
-            'tipo' => (string) $cfg['recepcion_tipo'],
-            'letra' => (string) $cfg['recepcion_letra'],
-            'sucursal' => $sucursal,
-            'nro' => $numero,
-        ];
-
-        $intentos = 0;
-        while (RecepcionProveedorAnitaColisionSupport::numeroOcupadoEnAnita($clave) && $intentos < 25) {
-            $numero++;
-            $clave['nro'] = $numero;
-            $intentos++;
-
-            try {
-                $claveNumerador = RecepcionProveedorAnitaNumeracionSupport::resolverClaveNumeradorDesdeTComp();
-                RecepcionProveedorAnitaNumeracionSupport::actualizarNumerador($claveNumerador, $numero);
-            } catch (\Throwable $e) {
-                Log::warning('RecepcionProveedor: no se pudo actualizar numerador Anita al evitar colisión', [
-                    'numero' => $numero,
-                    'error' => $e->getMessage(),
-                ]);
-            }
+        $recepcion = $this->model->findOrFail($id);
+        if ($recepcion->estado !== Recepcion_Proveedor::ESTADO_BORRADOR) {
+            return (int) $recepcion->numerorecepcion;
         }
 
-        if (RecepcionProveedorAnitaColisionSupport::numeroOcupadoEnAnita($clave)) {
-            throw new \RuntimeException(
-                'No se pudo asignar un número de recepción COM libre en Anita (último intento: '.$numero.').'
-            );
+        if (! RecepcionProveedorAnitaColisionSupport::colisionaNumeradorGlobalConAnita($recepcion)) {
+            return (int) $recepcion->numerorecepcion;
         }
 
-        return $numero;
+        $actual = (int) $recepcion->numerorecepcion;
+        $nuevo = RecepcionProveedorAnitaNumeracionSupport::asignarNumeroComGlobalLibre($id, $actual);
+
+        $recepcion->update([
+            'numerorecepcion' => $nuevo,
+            'anita_nro' => $nuevo,
+        ]);
+
+        Log::info('RecepcionProveedor: borrador renumerado (COM único global)', [
+            'recepcion_id' => $id,
+            'anterior' => $actual,
+            'nuevo' => $nuevo,
+        ]);
+
+        return $nuevo;
     }
 }

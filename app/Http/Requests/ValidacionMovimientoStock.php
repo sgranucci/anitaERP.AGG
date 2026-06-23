@@ -26,6 +26,18 @@ class ValidacionMovimientoStock extends FormRequest
      *
      * @return array
      */
+    protected function prepareForValidation(): void
+    {
+        if ($this->validarComoTransferenciaNueva()) {
+            return;
+        }
+
+        $depositoId = $this->input('deposito_id');
+        if ($depositoId === '' || $depositoId === '0' || $depositoId === 0 || $depositoId === null) {
+            $this->merge(['deposito_id' => null]);
+        }
+    }
+
     public function rules()
     {
         return [
@@ -34,6 +46,7 @@ class ValidacionMovimientoStock extends FormRequest
             'fecha' => 'required',
             'empresa_id' => 'required|integer|exists:empresa,id',
             'deposito_id' => [
+                Rule::excludeIf(fn () => $this->validarComoTransferenciaNueva()),
                 Rule::requiredIf(fn () => ! $this->validarComoTransferenciaNueva()),
                 'nullable',
                 'integer',
@@ -138,6 +151,15 @@ class ValidacionMovimientoStock extends FormRequest
                 $validator->errors()->add('articulos_id', 'Debe indicar al menos un artículo con cantidad para la transferencia.');
             }
         });
+    }
+
+    public function messages(): array
+    {
+        return [
+            'deposito_id.required' => 'Debe seleccionar un depósito.',
+            'deposito_id.exists' => 'El depósito seleccionado no existe o no es válido.',
+            'deposito_id.integer' => 'El depósito indicado no es válido.',
+        ];
     }
 
     private function validarComoTransferenciaNueva(): bool

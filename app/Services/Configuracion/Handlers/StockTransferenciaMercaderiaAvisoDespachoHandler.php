@@ -9,6 +9,7 @@ use App\Models\Stock\Transferencia_Mercaderia;
 use App\Models\Stock\Transferencia_Mercaderia_Token;
 use App\Services\Configuracion\ModuloAvisoService;
 use App\Support\Stock\TransferenciaMercaderiaDestinatarioSupport;
+use App\Support\Stock\TransferenciaMercaderiaEstados;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
@@ -45,7 +46,17 @@ class StockTransferenciaMercaderiaAvisoDespachoHandler implements ModuloAvisoDes
 
     public function linkConsulta(int $entityId): ?string
     {
-        return url('stock/transferencia-mercaderia/pendientes');
+        $transferencia = $this->cargar($entityId);
+        $linkPublico = trim($this->linksAprobacion($transferencia)['link_consulta'] ?? '');
+        if ($linkPublico !== '') {
+            return $linkPublico;
+        }
+
+        if ($transferencia->estado === TransferenciaMercaderiaEstados::PENDIENTE_RECEPCION) {
+            return urlAppAbsoluta('stock/transferencia-mercaderia/pendientes');
+        }
+
+        return urlAppAbsoluta('stock/transferencia-mercaderia');
     }
 
     public function generarPdf(int $entityId): ?array
@@ -84,8 +95,11 @@ class StockTransferenciaMercaderiaAvisoDespachoHandler implements ModuloAvisoDes
 
         $links = $this->linksAprobacion($transferencia);
         $placeholders = array_merge($placeholders, $links);
+        $linkConsulta = trim($links['link_consulta'] ?? '') !== ''
+            ? $links['link_consulta']
+            : $this->linkConsulta($entityId);
 
-        $this->enviarMasivo($tipo, $emails, $placeholders, $this->linkConsulta($entityId));
+        $this->enviarMasivo($tipo, $emails, $placeholders, $linkConsulta);
     }
 
     private function despacharGenerico(ModuloAvisoTipo $tipo, int $entityId, string $codigo, array $opciones = []): void
@@ -194,21 +208,24 @@ class StockTransferenciaMercaderiaAvisoDespachoHandler implements ModuloAvisoDes
 
         return [
             'link_aprobar' => isset($tokens[Transferencia_Mercaderia_Token::ACCION_APROBAR])
-                ? url('stock/transferencia-mercaderia/publico/'.$tokens[Transferencia_Mercaderia_Token::ACCION_APROBAR]->token.'/aprobar')
+                ? urlAppAbsoluta('stock/transferencia-mercaderia/publico/'.$tokens[Transferencia_Mercaderia_Token::ACCION_APROBAR]->token.'/aprobar')
                 : '',
             'link_rechazar' => isset($tokens[Transferencia_Mercaderia_Token::ACCION_RECHAZAR])
-                ? url('stock/transferencia-mercaderia/publico/'.$tokens[Transferencia_Mercaderia_Token::ACCION_RECHAZAR]->token.'/rechazar')
+                ? urlAppAbsoluta('stock/transferencia-mercaderia/publico/'.$tokens[Transferencia_Mercaderia_Token::ACCION_RECHAZAR]->token.'/rechazar')
                 : '',
             'link_consulta' => isset($tokens[Transferencia_Mercaderia_Token::ACCION_VISUALIZAR])
-                ? url('stock/transferencia-mercaderia/publico/'.$tokens[Transferencia_Mercaderia_Token::ACCION_VISUALIZAR]->token.'/ver')
-                : $this->linkConsulta((int) $transferencia->id) ?? '',
+                ? urlAppAbsoluta('stock/transferencia-mercaderia/publico/'.$tokens[Transferencia_Mercaderia_Token::ACCION_VISUALIZAR]->token.'/ver')
+                : '',
         ];
     }
 
     /** @param  array<string, string>  $placeholders */
     private function aplicarPlaceholders(string $plantilla, array $placeholders, ?string $linkConsulta): string
     {
-        $mapa = array_merge($placeholders, ['link_consulta' => $linkConsulta ?? '']);
+        $linkFinal = trim($placeholders['link_consulta'] ?? '') !== ''
+            ? $placeholders['link_consulta']
+            : ($linkConsulta ?? '');
+        $mapa = array_merge($placeholders, ['link_consulta' => $linkFinal]);
         $resultado = preg_replace_callback('/\{([a-z0-9_]+)\}/i', function (array $m) use ($mapa) {
             $clave = strtolower($m[1]);
 

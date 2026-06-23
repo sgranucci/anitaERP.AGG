@@ -18,4 +18,7 @@ interface Recepcion_ProveedorRepositoryInterface
     public function leeRecepciones(array|string|null $filtros, bool $paginar = true);
 
     public function siguienteNumero(int $empresaId): int;
+
+    /** Renumera borrador si el COM ya existe en Anita (otra empresa). Numerador único global. */
+    public function renumerarBorradorSiColisionaGlobal(int $id): int;
 }

@@ -71,11 +71,17 @@ class RequisicionSalaService
             return ['mensaje' => 'error', 'errores' => 'Requisición de sala no encontrada.'];
         }
         if (! $this->esEditable($existente->estado)) {
-            return ['mensaje' => 'error', 'errores' => 'Solo se puede editar en estado PENDIENTE o A COMPRAS.'];
+            return ['mensaje' => 'error', 'errores' => 'Solo se puede editar en estado PENDIENTE, A COMPRAS o RECHAZADA.'];
         }
 
         $data = $request->all();
         $pendiente = RequisicionSalaEstado::$enumEstado[array_search('0', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'];
+        $rechazada = RequisicionSalaEstado::$enumEstado[array_search('Z', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'];
+        $reenviarArbol = false;
+        if ($existente->estado === $rechazada) {
+            $data['estado'] = $pendiente;
+            $reenviarArbol = true;
+        }
         if (($data['estado'] ?? '') === $pendiente) {
             $data['requisicion_sala_id'] = $id;
             try {
@@ -93,7 +99,16 @@ class RequisicionSalaService
             $this->requisicionSalaRepository->update($cabecera, $id);
             $this->requisicionSalaArticuloRepository->syncFromRequest($data, $id);
             $this->requisicionSalaArchivoRepository->update($request, $id);
-            if (($data['estado'] ?? '') === $pendiente) {
+            if (($data['estado'] ?? '') === $pendiente && ($existente->estado === $pendiente || $reenviarArbol)) {
+                if ($reenviarArbol) {
+                    $this->requisicionSalaEstadoRepository->creaEstado(
+                        $id,
+                        Carbon::now()->toDateTimeString(),
+                        $pendiente,
+                        Auth::user()->id,
+                        'Requisición corregida tras rechazo; reenvío al árbol de aprobación'
+                    );
+                }
                 $this->arbolaprobacionService->procesaArbolaprobacion('RS', $id, 'insert');
             }
             DB::commit();
@@ -151,8 +166,9 @@ class RequisicionSalaService
     {
         $pendiente = RequisicionSalaEstado::$enumEstado[array_search('0', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'];
         $enCompras = RequisicionSalaEstado::$enumEstado[array_search('5', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'];
+        $rechazada = RequisicionSalaEstado::$enumEstado[array_search('Z', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'];
 
-        return in_array($estado, [$pendiente, $enCompras], true);
+        return in_array($estado, [$pendiente, $enCompras, $rechazada], true);
     }
 
     private static function armaCabecera(array $data): array

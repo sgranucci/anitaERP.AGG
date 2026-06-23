@@ -8,6 +8,7 @@
     - $solo_lectura, $required (default true), $mostrar_editar (default true)
     - $layout: inline (transferencia) | form_row (CRUD con label a la derecha)
     - $col_label, $col_input (solo form_row)
+    - $wrap_row: true envuelve label+campo en form-group row; false solo columnas (compartir renglon)
 
     Nota: textos visibles con entidades HTML (&oacute; etc.) para evitar corrupcion de encoding.
 --}}
@@ -25,6 +26,7 @@
     $layout = $layout ?? 'inline';
     $colLabel = $col_label ?? 'col-lg-4';
     $colInput = $col_input ?? 'col-lg-7';
+    $wrapRow = $wrap_row ?? true;
     $tipodeposito = $tipodeposito ?? '';
     $puedeAbrirAbmDeposito = can('editar-depositos', false) || can('listar-depositos', false);
     $editUrl = ((int) $depositoId > 0 && $puedeAbrirAbmDeposito)
@@ -33,9 +35,15 @@
 @endphp
 
 @if ($layout === 'form_row')
+    @if ($wrapRow)
     <div class="form-group row tm-deposito-campo mb-2" id="tm_deposito_{{ $prefix }}" data-tipodeposito="{{ $tipodeposito }}">
+    @endif
         <label for="{{ $inputId }}_codigo" class="{{ $colLabel }} control-label text-right pr-2 {{ $required ? 'requerido' : '' }}">{{ $label }}@if(!empty($ayuda_tooltip)) <i class="fa fa-question-circle text-muted tooltipsC ml-1" title="{{ $ayuda_tooltip }}"></i>@endif</label>
+        @if ($wrapRow)
         <div class="{{ $colInput }}">
+        @else
+        <div class="{{ $colInput }} tm-deposito-campo" id="tm_deposito_{{ $prefix }}" data-tipodeposito="{{ $tipodeposito }}">
+        @endif
             <div class="d-flex flex-nowrap align-items-center tm-deposito-campo-inputs w-100" style="gap: 4px;">
                 <input type="hidden" name="{{ $inputName }}" id="{{ $inputId }}" class="deposito_id"
                     value="{{ $depositoId }}" @if ($required && ! $soloLectura) required @endif>
@@ -66,7 +74,9 @@
                 @endif
             </div>
         </div>
+    @if ($wrapRow)
     </div>
+    @endif
 @else
     <div class="form-group col-12 mb-2 tm-deposito-campo" id="tm_deposito_{{ $prefix }}" data-tipodeposito="{{ $tipodeposito }}">
         <label class="d-block">{{ $label }}</label>

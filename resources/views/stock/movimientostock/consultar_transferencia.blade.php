@@ -19,6 +19,9 @@ Transferencia {{ $transferencia->codigo }}
             <div class="card-header">
                 <h3 class="card-title">Transferencia {{ $transferencia->codigo }}</h3>
                 <div class="card-tools">
+                    @include('stock.movimientostock.partials.boton_imprimir_transferencia_com_pdf', [
+                        'transferenciaId' => $transferencia->id,
+                    ])
                     @can('editar-movimientos-de-stock')
                         @if ($transferencia->movimientostock_salida_id)
                             <a href="{{ route('editar_movimientostock', ['id' => $transferencia->movimientostock_salida_id]) }}" class="btn btn-sm btn-warning">
@@ -66,9 +69,11 @@ Transferencia {{ $transferencia->codigo }}
                             <th>SKU origen</th>
                             <th>Art&iacute;culo origen</th>
                             <th class="text-right">Cant. origen</th>
+                            <th class="text-right">Costo orig.</th>
                             <th>SKU destino</th>
                             <th>Art&iacute;culo destino</th>
                             <th class="text-right">Cant. destino</th>
+                            <th class="text-right">Costo dest.</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -76,11 +81,13 @@ Transferencia {{ $transferencia->codigo }}
                             <tr>
                                 <td>{{ $item->item }}</td>
                                 <td>{{ $item->articuloOrigen->sku ?? '' }}</td>
-                                <td>{{ $item->articuloOrigen->nombre ?? '' }}</td>
+                                <td>{{ $item->articuloOrigen->descripcion ?? '' }}</td>
                                 <td class="text-right">{{ number_format((float) $item->cantidad_origen, 2, ',', '.') }}</td>
+                                <td class="text-right">{{ number_format((float) $item->precio_costo_origen, 4, ',', '.') }}</td>
                                 <td>{{ $item->articuloDestino->sku ?? '' }}</td>
-                                <td>{{ $item->articuloDestino->nombre ?? '' }}</td>
+                                <td>{{ $item->articuloDestino->descripcion ?? '' }}</td>
                                 <td class="text-right">{{ number_format((float) $item->cantidad_destino, 2, ',', '.') }}</td>
+                                <td class="text-right">{{ number_format((float) $item->precio_costo_destino, 4, ',', '.') }}</td>
                             </tr>
                         @endforeach
                     </tbody>

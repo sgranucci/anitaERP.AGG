@@ -2,8 +2,10 @@
 
 namespace App\Services\Compras;
 
-use App\Queries\Compras\ProveedorQueryInterface;
 use App\ApiAnita;
+use App\Queries\Compras\ProveedorQueryInterface;
+use App\Support\Compras\AnitaSync\Ordencompra\AnitaOcClave;
+use Illuminate\Support\Facades\Log;
 
 class OrdencompraService 
 {
@@ -16,79 +18,170 @@ class OrdencompraService
 
 	public function leeOrdenCompra($numeroOrdenCompra)
 	{
-		$claveOc = $this->resolverClaveOrdenCompra($numeroOrdenCompra);
-
-		$apiAnita = new ApiAnita();
-        $leeAnita = array( 
-            'acc' => 'list', 
-			'sistema' => 'compras',
-			'tabla' => 'pendmaep, promae', 
-            'campos' => '
-				penmp_proveedor,
-				penmp_ccosto_dest,
-				prom_cuit,
-				prom_letra,
-				penmp_tipo
-			',
-			'whereArmado' => " WHERE
-				penmp_tipo='PEP' and
-				penmp_letra='X' and
-				penmp_sucursal={$claveOc['sucursal']} and
-				penmp_nro={$claveOc['nro']} and
-				penmp_proveedor=prom_proveedor"
-        );
-        $raw = (string) $apiAnita->apiCallEscritura($leeAnita);
-        $filas = ApiAnita::decodificarListaFilas($raw);
-
-		if (count($filas) > 0) {
-			$ordenCompra = $filas[0];
-		} else {
+		$numeroOc = $this->resolverNumeroOrdenCompra($numeroOrdenCompra);
+		if ($numeroOc <= 0) {
 			return 'OC inexistente';
 		}
 
-		$apiAnita = new ApiAnita();
-        $leeAnita = array( 
-            'acc' => 'list', 
-			'sistema' => 'compras',
-			'tabla' => 'pendmovp,stkmae', 
-            'campos' => '
-				penvp_articulo,
-				penvp_cantidad,
-				stkm_tipo_articulo,
-				stkm_agrupacion
-			',
-			'whereArmado' => " WHERE
-				penvp_tipo='PEP' and
-				penvp_letra='X' and
-				penvp_sucursal={$claveOc['sucursal']} and
-				penvp_nro={$claveOc['nro']} and
-				penvp_articulo=stkm_articulo"
-        );
-        $itemOrdenCompra = ApiAnita::decodificarListaFilas((string) $apiAnita->apiCall($leeAnita));
+		$cabecera = $this->consultarPendmaepPorNumero($numeroOc);
+		if ($cabecera === null) {
+			return 'OC inexistente';
+		}
+
+		$claveOc = AnitaOcClave::desdePendmaep($cabecera);
+		$ordenCompra = $this->enriquecerCabeceraConPromae($cabecera);
+		$itemOrdenCompra = $this->consultarItemsOrdenCompra($claveOc);
 
 		return ['ordencompra' => $ordenCompra, 'item' => $itemOrdenCompra];
 	}
 
 	/**
-	 * Acepta número simple (214482) o formato sucursal-número (0000-00214482).
-	 *
-	 * @return array{sucursal: int, nro: int}
+	 * Busca pendmaep por penmp_nro (clave canónica en Anita), con reintento ante respuesta vacía del bridge.
 	 */
-	private function resolverClaveOrdenCompra($numeroOrdenCompra): array
+	private function consultarPendmaepPorNumero(int $numeroOc): ?object
 	{
-		$numeroOrdenCompra = trim((string) $numeroOrdenCompra);
+		$payload = [
+			'acc' => 'list',
+			'sistema' => 'compras',
+			'tabla' => 'pendmaep',
+			'campos' => implode(', ', [
+				'penmp_proveedor',
+				'penmp_ccosto_dest',
+				'penmp_tipo',
+				'penmp_letra',
+				'penmp_sucursal',
+				'penmp_nro',
+			]),
+			'whereArmado' => " WHERE penmp_nro={$numeroOc}",
+		];
 
-		if (preg_match('/^(\d+)-(\d+)$/', $numeroOrdenCompra, $matches)) {
-			return [
-				'sucursal' => (int) $matches[1],
-				'nro' => (int) $matches[2],
-			];
+		$filas = $this->listAnitaConReintento($payload, 'ordencompra.pendmaep', $numeroOc);
+
+		return $filas === [] ? null : $filas[0];
+	}
+
+	private function enriquecerCabeceraConPromae(object $cabecera): object
+	{
+		$codigoProveedor = trim((string) ($cabecera->penmp_proveedor ?? ''));
+		if ($codigoProveedor === '') {
+			$cabecera->prom_cuit = '';
+			$cabecera->prom_letra = '';
+
+			return $cabecera;
 		}
 
-		return [
-			'sucursal' => 0,
-			'nro' => (int) $numeroOrdenCompra,
+		$payload = [
+			'acc' => 'list',
+			'sistema' => 'compras',
+			'tabla' => 'promae',
+			'campos' => 'prom_cuit, prom_letra',
+			'whereArmado' => " WHERE prom_proveedor='".addslashes($codigoProveedor)."'",
 		];
+
+		$filas = $this->listAnitaConReintento($payload, 'ordencompra.promae', (int) ($cabecera->penmp_nro ?? 0));
+		if ($filas !== []) {
+			$cabecera->prom_cuit = $filas[0]->prom_cuit ?? '';
+			$cabecera->prom_letra = $filas[0]->prom_letra ?? '';
+		} else {
+			$cabecera->prom_cuit = '';
+			$cabecera->prom_letra = '';
+		}
+
+		return $cabecera;
+	}
+
+	/**
+	 * @return list<object>
+	 */
+	private function consultarItemsOrdenCompra(AnitaOcClave $claveOc): array
+	{
+		$payload = [
+			'acc' => 'list',
+			'sistema' => 'compras',
+			'tabla' => 'pendmovp,stkmae',
+			'campos' => '
+				penvp_articulo,
+				penvp_cantidad,
+				stkm_tipo_articulo,
+				stkm_agrupacion
+			',
+			'whereArmado' => $claveOc->wherePendmovp().' AND penvp_articulo=stkm_articulo',
+		];
+
+		return $this->listAnitaConReintento($payload, 'ordencompra.pendmovp', $claveOc->nro);
+	}
+
+	/**
+	 * @return list<object>
+	 */
+	private function listAnitaConReintento(array $payload, string $contexto, int $numeroOc): array
+	{
+		$maxIntentos = max(1, (int) config('precarga_comprobante.anita_list_reintentos', 3));
+		$esperaMs = max(0, (int) config('precarga_comprobante.anita_list_espera_ms', 250));
+		$apiAnita = new ApiAnita();
+		$ultimoError = null;
+
+		for ($intento = 1; $intento <= $maxIntentos; $intento++) {
+			$raw = (string) $apiAnita->apiCall($payload);
+			$parsed = ApiAnita::parsearRespuestaLista($raw);
+			$ultimoError = $parsed['error_lectura'];
+
+			if ($ultimoError !== null) {
+				$this->logConsultaAnita('warning', $contexto, $numeroOc, $intento, $maxIntentos, $ultimoError);
+			} elseif ($parsed['filas'] !== []) {
+				return $parsed['filas'];
+			} else {
+				$this->logConsultaAnita('warning', $contexto, $numeroOc, $intento, $maxIntentos, 'respuesta vacía del bridge Anita');
+			}
+
+			if ($intento < $maxIntentos && $esperaMs > 0) {
+				usleep($esperaMs * 1000);
+			}
+		}
+
+		return [];
+	}
+
+	private function logConsultaAnita(
+		string $nivel,
+		string $contexto,
+		int $numeroOc,
+		int $intento,
+		int $maxIntentos,
+		string $detalle,
+	): void {
+		$canal = (string) config('precarga_comprobante.log_channel', 'precarga_proveedor_api');
+		Log::channel($canal)->{$nivel}('ordencompra.anita_consulta', [
+			'contexto' => $contexto,
+			'numero_oc' => $numeroOc,
+			'intento' => $intento,
+			'max_intentos' => $maxIntentos,
+			'detalle' => $detalle,
+		]);
+	}
+
+	/**
+	 * Acepta número simple (219635), con ceros (00219635), sucursal-número (0000-00219635)
+	 * u otros textos con dígitos embebidos (OC 219635).
+	 */
+	private function resolverNumeroOrdenCompra($numeroOrdenCompra): int
+	{
+		$numeroOrdenCompra = trim((string) $numeroOrdenCompra);
+		if ($numeroOrdenCompra === '') {
+			return 0;
+		}
+
+		if (preg_match('/^(\d+)-(\d+)$/', $numeroOrdenCompra, $matches)) {
+			return (int) $matches[2];
+		}
+
+		if (preg_match('/^\d+$/', $numeroOrdenCompra)) {
+			return (int) $numeroOrdenCompra;
+		}
+
+		$digits = preg_replace('/\D/', '', $numeroOrdenCompra) ?? '';
+
+		return $digits === '' ? 0 : (int) $digits;
 	}
 
 	public function leeOrdenCompraPorCodigo($codigocapex)

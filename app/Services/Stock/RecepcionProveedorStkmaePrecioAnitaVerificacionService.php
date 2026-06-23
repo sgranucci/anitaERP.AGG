@@ -47,24 +47,42 @@ class RecepcionProveedorStkmaePrecioAnitaVerificacionService
 
         $recepciones = $query->get();
 
-        /** @var array<string, array{codigo_anita: string, precio_pesos: float, fecha_anita: int, recepcion_id: int, numerorecepcion: int}> $ultimoPorCodigo */
+        /** @var array<string, array{codigo_anita: string, precio_pesos: float, fecha_anita: int, recepcion_id: int, numerorecepcion: int, empresa_id: int}> $ultimoPorCodigo */
         $ultimoPorCodigo = [];
 
         foreach ($recepciones as $recepcion) {
+            $empresaId = max(1, (int) ($recepcion->empresa_id ?? 1));
             foreach (StkmaePrecioCompraAnitaBridgeSupport::agruparLineasRecepcion($recepcion) as $grupo) {
                 $codigo = $grupo['codigo_anita'];
-                $ultimoPorCodigo[$codigo] = [
+                $clave = $empresaId.'|'.$codigo;
+                $ultimoPorCodigo[$clave] = [
                     'codigo_anita' => $codigo,
                     'precio_pesos' => (float) $grupo['precio_pesos'],
                     'fecha_anita' => (int) str_replace('-', '', $recepcion->fecha->format('Y-m-d')),
                     'recepcion_id' => (int) $recepcion->id,
                     'numerorecepcion' => (int) $recepcion->numerorecepcion,
+                    'empresa_id' => $empresaId,
                 ];
             }
         }
 
-        $codigos = array_keys($ultimoPorCodigo);
-        $stkmaePorCodigo = StkmaePrecioCompraAnitaBridgeSupport::leerStkmaePorCodigos($codigos);
+        /** @var array<int, list<string>> $codigosPorEmpresa */
+        $codigosPorEmpresa = [];
+        foreach ($ultimoPorCodigo as $item) {
+            $codigosPorEmpresa[$item['empresa_id']][] = $item['codigo_anita'];
+        }
+
+        /** @var array<string, array<string, mixed>> $stkmaePorCodigo */
+        $stkmaePorCodigo = [];
+        foreach ($codigosPorEmpresa as $empresaId => $codigosEmpresa) {
+            $leidos = StkmaePrecioCompraAnitaBridgeSupport::leerStkmaePorCodigos(
+                array_values(array_unique($codigosEmpresa)),
+                $empresaId
+            );
+            foreach ($leidos as $codigo => $fila) {
+                $stkmaePorCodigo[$empresaId.'|'.$codigo] = $fila;
+            }
+        }
 
         $resultado = [
             'recepciones' => $recepciones->count(),
@@ -76,8 +94,8 @@ class RecepcionProveedorStkmaePrecioAnitaVerificacionService
             'diferencias_fecha' => [],
         ];
 
-        foreach ($ultimoPorCodigo as $codigo => $esperado) {
-            $fila = $stkmaePorCodigo[$codigo] ?? null;
+        foreach ($ultimoPorCodigo as $clave => $esperado) {
+            $fila = $stkmaePorCodigo[$clave] ?? null;
             if ($fila === null) {
                 $resultado['sin_stkmae'][] = $esperado;
 

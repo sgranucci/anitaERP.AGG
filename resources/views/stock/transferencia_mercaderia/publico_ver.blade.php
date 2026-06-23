@@ -71,14 +71,18 @@
             </tbody>
         </table>
         <div class="actions">
-            <form method="get" action="{{ url('stock/transferencia-mercaderia/publico/'.$token.'/aprobar') }}" style="display:inline">
+            @if (! empty($tokenAprobar))
+            <form method="get" action="{{ urlAppAbsoluta('stock/transferencia-mercaderia/publico/'.$tokenAprobar.'/aprobar') }}" style="display:inline">
                 <button type="submit" class="btn btn-ok">Aprobar recepción</button>
             </form>
-            <form method="post" action="{{ url('stock/transferencia-mercaderia/publico/'.$token.'/rechazar') }}" style="display:inline">
+            @endif
+            @if (! empty($tokenRechazar))
+            <form method="post" action="{{ urlAppAbsoluta('stock/transferencia-mercaderia/publico/'.$tokenRechazar.'/rechazar') }}" style="display:inline">
                 @csrf
                 <input type="hidden" name="motivo" value="Rechazado desde enlace público">
                 <button type="submit" class="btn btn-danger" onclick="return confirm('¿Rechazar esta transferencia?');">Rechazar</button>
             </form>
+            @endif
         </div>
     </div>
 </body>

@@ -14,6 +14,7 @@ use App\Queries\Stock\Articulo_MovimientoQueryInterface;
 use App\Models\Stock\Modulo;
 use App\Models\Stock\Talle;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
@@ -108,6 +109,8 @@ class Articulo_MovimientoService
 					$dataMovimiento[$fk] = null;
 				}
 			}
+
+			$dataMovimiento = $this->filtrarDatosParaTablaArticuloMovimiento($dataMovimiento);
 
 			$articulo_movimiento = $this->articulo_movimientoRepository->create($dataMovimiento);
 
@@ -466,6 +469,26 @@ class Articulo_MovimientoService
 	public function findPorPedidoArticuloId($pedido_articulo_id)
 	{
 		return $this->articulo_movimientoRepository->findPorPedidoArticuloId($pedido_articulo_id);
+	}
+
+	/**
+	 * Quita campos legacy (Anita / formulario) que no existen en articulo_movimiento.
+	 *
+	 * @param  array<string, mixed>  $data
+	 * @return array<string, mixed>
+	 */
+	private function filtrarDatosParaTablaArticuloMovimiento(array $data): array
+	{
+		static $columnasPermitidas = null;
+
+		if ($columnasPermitidas === null) {
+			$columnasPermitidas = array_flip(array_diff(
+				Schema::getColumnListing('articulo_movimiento'),
+				['id', 'created_at', 'updated_at', 'deleted_at']
+			));
+		}
+
+		return array_intersect_key($data, $columnasPermitidas);
 	}
 
 }

@@ -161,8 +161,10 @@ final class MovimientoStockListadoUnificadoSupport
 
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($movQuery, 'depmae.empresa_id');
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($tmQuery, 'tm.empresa_id');
-        $this->aplicarRestriccionDepositos($movQuery, 'am_agg.deposito_id');
-        $this->aplicarRestriccionDepositosTransferencia($tmQuery);
+        MovimientoStockVisibilidadSupport::aplicarFiltroCentrocostoMovimientoQuery($movQuery);
+        MovimientoStockVisibilidadSupport::aplicarFiltroCentrocostoTransferenciaQuery($tmQuery);
+        MovimientoStockVisibilidadSupport::aplicarFiltroDepositosMovimientoQuery($movQuery, 'am_agg.deposito_id');
+        MovimientoStockVisibilidadSupport::aplicarFiltroDepositosTransferenciaQuery($tmQuery);
         $this->aplicarFiltrosInteligentes($movQuery, $filtros, true);
         $this->aplicarFiltrosInteligentes($tmQuery, $filtros, false);
 
@@ -182,31 +184,6 @@ final class MovimientoStockListadoUnificadoSupport
         }
 
         return $movQuery->unionAll($tmQuery);
-    }
-
-    private function aplicarRestriccionDepositos(QueryBuilder $query, string $columnaDeposito): void
-    {
-        $depositoIds = UsuarioDepositoAutorizado::idsRestringidos();
-        if (is_array($depositoIds) && count($depositoIds) > 0) {
-            $query->whereIn($columnaDeposito, $depositoIds);
-        }
-    }
-
-    private function aplicarRestriccionDepositosTransferencia(QueryBuilder $query): void
-    {
-        $depositoIds = UsuarioDepositoAutorizado::idsRestringidos();
-        if (! is_array($depositoIds) || count($depositoIds) === 0) {
-            return;
-        }
-
-        $query->where(function ($q) use ($depositoIds) {
-            $q->whereIn('tm.deposito_origen_id', $depositoIds)
-                ->orWhereIn('tm.deposito_destino_id', $depositoIds)
-                ->orWhere(function ($w) {
-                    $w->whereNull('tm.deposito_origen_id')
-                        ->whereNull('tm.deposito_destino_id');
-                });
-        });
     }
 
     /**

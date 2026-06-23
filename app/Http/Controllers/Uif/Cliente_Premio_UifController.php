@@ -232,13 +232,26 @@ class Cliente_Premio_UifController extends Controller
         if (str_contains($request->referer, 'cliente_uif'))
             return redirect($request->referer)->with('mensaje', 'Premio actualizado con éxito');
 
-        if (str_contains($request->referer, 'generaexportaoperacion'))
+        if (str_contains($request->referer, 'exportaoperacion'))
         {
-            $periodo = substr($request->fechaentrega,5,2).'-'.substr($request->fechaentrega,0,4);
+            $periodo = normalizarPeriodoParaUrl(
+                substr($request->fechaentrega, 5, 2).'-'.substr($request->fechaentrega, 0, 4)
+            );
+            $limiteinformeuif = config('uif.LIMITE_INFORME_UIF');
+            $premioModel = $this->cliente_premio_uifRepository->find($id);
+            $empresaId = (int) optional($premioModel->salas)->empresa_id;
 
-            $cliente_premio_uifs = $this->cliente_uifService->generaExportaOperacion($periodo, config('uif.LIMITE_INFORME_UIF'));
+            if ($empresaId <= 0) {
+                return redirect()
+                    ->route('crear_exporta_operacion')
+                    ->with('mensaje-error', 'No se pudo determinar la empresa del premio para volver al listado UIF.');
+            }
 
-            return view('uif.exportaoperacion.index', compact('cliente_premio_uifs'));
+            return redirect()->route('listado_exporta_operacion_uif', [
+                'periodo' => $periodo,
+                'limiteinformeuif' => $limiteinformeuif,
+                'empresa_id' => $empresaId,
+            ])->with('mensaje', 'Premio actualizado con éxito');
         }
 
         return redirect('uif/premio_uif')->with('mensaje', 'Premio actualizado con éxito');
