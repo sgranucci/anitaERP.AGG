@@ -79,7 +79,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 
         $cliente = $this->model->create($data);
 
-		if ($syncAnita ?? config('app.anita_sync_cliente_write', true)) {
+		if ($syncAnita ?? config('app.anita_sync_cliente_write')) {
 			self::guardarAnita($data);
 		}
 
@@ -92,7 +92,7 @@ class ClienteRepository implements ClienteRepositoryInterface
             ->update($data);
 
 		$data['tiene_cm05'] = $this->model->find($id)?->cliente_cm05s()->exists() ?? false;
-		if ($syncAnita ?? config('app.anita_sync_cliente_write', true)) {
+		if ($syncAnita ?? config('app.anita_sync_cliente_write')) {
 			self::actualizarAnita($data, $data['codigo']);
 		}
 
@@ -990,10 +990,56 @@ class ClienteRepository implements ClienteRepositoryInterface
 	}
 
 	/**
+	 * Resuelve desc_localidad / desc_provincia desde los IDs del ERP (fuente de verdad para Anita).
+	 *
+	 * @param  array<string, mixed>  $request
+	 * @return array<string, mixed>
+	 */
+	private function prepararDatosAnitaCliente(array $request, ?Cliente $cliente = null): array
+	{
+		$prepared = $request;
+
+		if (! empty($prepared['localidad_id'])) {
+			$nombreLocalidad = Localidad::query()
+				->whereKey((int) $prepared['localidad_id'])
+				->value('nombre');
+			if ($nombreLocalidad !== null && trim($nombreLocalidad) !== '') {
+				$prepared['desc_localidad'] = trim($nombreLocalidad);
+			}
+		}
+
+		if (! empty($prepared['provincia_id'])) {
+			$nombreProvincia = Provincia::query()
+				->whereKey((int) $prepared['provincia_id'])
+				->value('nombre');
+			if ($nombreProvincia !== null && trim($nombreProvincia) !== '') {
+				$prepared['desc_provincia'] = trim($nombreProvincia);
+			}
+		}
+
+		if ($cliente !== null) {
+			$cliente->loadMissing(['localidades', 'provincias']);
+			if (empty($prepared['desc_localidad'])) {
+				$prepared['desc_localidad'] = trim((string) ($cliente->localidades?->nombre ?? ''));
+			}
+			if (empty($prepared['desc_provincia'])) {
+				$prepared['desc_provincia'] = trim((string) ($cliente->provincias?->nombre ?? ''));
+			}
+		}
+
+		$prepared['desc_localidad'] = trim((string) ($prepared['desc_localidad'] ?? ''));
+		$prepared['desc_provincia'] = trim((string) ($prepared['desc_provincia'] ?? ''));
+
+		return $prepared;
+	}
+
+	/**
 	 * Arma el payload HTTP (acc insert) para climae sin ejecutar el bridge.
 	 */
 	public function payloadInsertClimae(array $request): array
 	{
+		$request = $this->prepararDatosAnitaCliente($request);
+
 		$this->setCamposAnita($request, $cuentacontable, $condicioniva, $condicioniibb, $codigotransporte,
 			$codigolocalidad, $codigoprovincia, $codigopais, $codigozonavta, $codigovendedor,
 			$codigolistaprecio, $codigoabasto, $codigocoeficiente, $codigodistribuidor,
@@ -1070,7 +1116,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 				'".(($request['subzonavta_id'] ?? 0) > 0 ? $request['subzonavta_id'] : 0)."',
 				'".$codigoprovincia."',
 				'".$codigovendedor."',
-				'".$codigovendedor."',
+				'0',
 				'".$codigotransporte."',
 				'".$codigotipoempresa."',
 				' ',
@@ -1346,6 +1392,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 
 	private function actualizarAnita($request, $id) {
         $apiAnita = new ApiAnita();
+		$request = $this->prepararDatosAnitaCliente($request);
         $fecha = Carbon::now();
 		$fecha = $fecha->format('Ymd');
 

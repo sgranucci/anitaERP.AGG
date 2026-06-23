@@ -53,5 +53,13 @@
 			var desc = $(this).children("option:selected").text();
         	$("#desc_localidad").val(desc);
 		});
+
+		$(document).on('change', '#provincia_id', function(event) {
+			$('#desc_provincia').val($('#provincia_id option:selected').text());
+		});
+
+		if ($('#provincia_id').val() && !$('#desc_provincia').val()) {
+			$('#desc_provincia').val($('#provincia_id option:selected').text());
+		}
     });
 

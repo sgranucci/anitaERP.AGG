@@ -60,6 +60,23 @@ return new class extends Migration
         });
 
         if (Schema::hasColumn('lista_precio_estacionamiento', 'fecha_vigencia')) {
+            if ($this->indexExists('lista_precio_estacionamiento', 'uq_lista_precio_estacionamiento_empresa_cat_fecha')) {
+                if (! $this->indexExists('lista_precio_estacionamiento', 'idx_lista_precio_estacionamiento_empresa')) {
+                    Schema::table('lista_precio_estacionamiento', function (Blueprint $table) {
+                        $table->index('empresa_id', 'idx_lista_precio_estacionamiento_empresa');
+                    });
+                }
+                if (! $this->indexExists('lista_precio_estacionamiento', 'idx_lista_precio_estacionamiento_categoria')) {
+                    Schema::table('lista_precio_estacionamiento', function (Blueprint $table) {
+                        $table->index('categoria_automovil_id', 'idx_lista_precio_estacionamiento_categoria');
+                    });
+                }
+
+                Schema::table('lista_precio_estacionamiento', function (Blueprint $table) {
+                    $table->dropUnique('uq_lista_precio_estacionamiento_empresa_cat_fecha');
+                });
+            }
+
             DB::statement('ALTER TABLE lista_precio_estacionamiento DROP COLUMN fecha_vigencia');
         }
 

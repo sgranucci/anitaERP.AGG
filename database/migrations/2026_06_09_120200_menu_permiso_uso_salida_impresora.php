@@ -128,6 +128,9 @@ return new class extends Migration
 
         foreach ($rolIdsMenuRef as $rolId) {
             $rid = (int) $rolId;
+            if (! $this->rolExiste($rid)) {
+                continue;
+            }
             if ($parentMenuId > 0 && ! DB::table('menu_rol')->where('menu_id', $parentMenuId)->where('rol_id', $rid)->exists()) {
                 DB::table('menu_rol')->insert(['menu_id' => $parentMenuId, 'rol_id' => $rid]);
             }
@@ -157,6 +160,10 @@ return new class extends Migration
 
     private function vincularMenuPermisoRol(int $menuId, int $permisoId, int $rolId): void
     {
+        if (! $this->rolExiste($rolId)) {
+            return;
+        }
+
         if (! DB::table('menu_rol')->where('menu_id', $menuId)->where('rol_id', $rolId)->exists()) {
             DB::table('menu_rol')->insert(['menu_id' => $menuId, 'rol_id' => $rolId]);
         }
@@ -167,5 +174,10 @@ return new class extends Migration
                 'rol_id' => $rolId,
             ]);
         }
+    }
+
+    private function rolExiste(int $rolId): bool
+    {
+        return $rolId > 0 && DB::table('rol')->where('id', $rolId)->exists();
     }
 };
