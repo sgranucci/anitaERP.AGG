@@ -1,8 +1,78 @@
-function buscar_datos(consulta) {
-    let empresa_id = $("#consultaempresa_id").val();
+var cuentacontablexcodigo;
+var nombrexcodigo;
+var codigoxcodigo;
+var ptrCuentacontableContext;
 
-    if (empresa_id == 0 || empresa_id == null)
-        empresa_id = $("#empresa_id").val();
+function empresaIdParaConsultaCuentaContable($ctx) {
+    var empresaId = 0;
+
+    if ($ctx && $ctx.length) {
+        var $tr = $ctx.is('tr') ? $ctx : $ctx.closest('tr');
+        if ($tr.length && $tr.find('.empresa').length) {
+            empresaId = parseInt($tr.find('.empresa').val(), 10) || 0;
+        }
+    }
+
+    if (!empresaId) {
+        empresaId = parseInt($('#consultaempresa_id').val(), 10) || 0;
+    }
+    if (!empresaId) {
+        empresaId = parseInt($('#empresa_id').val(), 10) || 0;
+    }
+
+    return empresaId;
+}
+
+function actualizarLinkEditarCuentaContable($ctx, cuentaId) {
+    if (!$ctx || !$ctx.length) {
+        return;
+    }
+    var $link = $ctx.find('.btn-link-editar-cuentacontable');
+    if (!$link.length) {
+        return;
+    }
+    var id = parseInt(cuentaId, 10) || 0;
+    if (id > 0) {
+        $link.attr('href', carpetaBase + '/contable/cuentacontable/' + id + '/editar?origen=modal_consulta&vista=consulta').removeClass('d-none');
+    } else {
+        $link.attr('href', '#').addClass('d-none');
+    }
+}
+
+function aplicarCuentaContableEnContexto($ctx, data) {
+    if ($ctx && $ctx.length) {
+        $ctx.find('.cuentacontable_id').first().val(data.id);
+        $ctx.find('.codigocuentacontable').first().val(data.codigo);
+        $ctx.find('.nombrecuentacontable').first().val(data.nombre);
+        $ctx.find('.cuentacontable_id_previa').val(data.id);
+        $ctx.find('.codigo_previo').val(data.codigo);
+        actualizarLinkEditarCuentaContable($ctx, data.id);
+    }
+
+    $('#cuentacontable_id').val(data.id);
+    $('#codigocuentacontable').val(data.codigo);
+    $('#nombrecuentacontable').val(data.nombre);
+    actualizarLinkEditarCuentaContable($('.tm-cuentacontable-campo').first(), data.id);
+}
+
+function limpiarCuentaContableEnContexto($ctx) {
+    if ($ctx && $ctx.length) {
+        $ctx.find('.cuentacontable_id').first().val('');
+        $ctx.find('.codigocuentacontable').first().val('');
+        $ctx.find('.nombrecuentacontable').first().val('');
+        $ctx.find('.cuentacontable_id_previa').val('');
+        $ctx.find('.codigo_previo').val('');
+        actualizarLinkEditarCuentaContable($ctx, 0);
+    }
+
+    $('#cuentacontable_id').val('');
+    $('#codigocuentacontable').val('');
+    $('#nombrecuentacontable').val('');
+    actualizarLinkEditarCuentaContable($('.tm-cuentacontable-campo').first(), 0);
+}
+
+function buscar_datos(consulta) {
+    var empresa_id = empresaIdParaConsultaCuentaContable(ptrCuentacontableContext);
 
     $.ajax({
         url: carpetaBase+'/contable/cuentacontable/consultacuentacontable',
@@ -35,18 +105,54 @@ function buscar_datos(consulta) {
     });
 }
 
+function resolverPorCodigoCuentaContable(codigo, $ctx) {
+    var codigoNuevo = $.trim(codigo);
+    var empresaId = empresaIdParaConsultaCuentaContable($ctx);
+
+    if (!codigoNuevo) {
+        limpiarCuentaContableEnContexto($ctx);
+        return;
+    }
+
+    if (!empresaId) {
+        alert('Debe ingresar empresa');
+        return;
+    }
+
+    var urlCta = carpetaBase + '/contable/cuentacontable/leercuentacontableporcodigo/' + empresaId + '/' + encodeURIComponent(codigoNuevo);
+
+    $.get(urlCta, function(data) {
+        if (data && data.id > 0) {
+            aplicarCuentaContableEnContexto($ctx, data);
+
+            if ($ctx && $ctx.length && $ctx.is('tr') && $ctx.find('.cuentacontable_id_previa').length) {
+                var codigoAnt = $ctx.find('.codigo_previo').val();
+                if (codigoNuevo != codigoAnt && typeof leeCentroCosto === 'function') {
+                    leeCentroCosto($ctx.find('.codigocuentacontable').get(0));
+                }
+            }
+        } else {
+            alert('No existe la cuenta');
+
+            if ($ctx && $ctx.length && $ctx.is('tr') && $ctx.find('.cuentacontable_id_previa').length) {
+                $ctx.remove();
+            }
+
+            limpiarCuentaContableEnContexto($ctx);
+        }
+    }).fail(function() {
+        limpiarCuentaContableEnContexto($ctx);
+    });
+}
+
 // Si pulsamos tecla enter en un Input no envia formulario
 $("input").keydown(function (e){
-    // Capturamos qué telca ha sido
     var keyCode= e.which;
-    // Si la tecla es el Intro/Enter
     if (keyCode == 13){
-      // Evitamos que se ejecute eventos
       e.preventDefault();
-      // Devolvemos falso
       return false;
     }
-  });
+});
 
 $(document).on('keyup', '#consultacuentacontable', function () {
     var valor = $(this).val();
@@ -59,90 +165,86 @@ $(document).on('keyup', '#consultacuentacontable', function () {
 
 function activa_eventos_consulta_cuentacontable()
 {
-    $('.codigocuentacontable').on('change', function (event) {
-        event.preventDefault();
-        var codigo = $(this);
-        var codigo_ant = $(this).parents("tr").find(".codigo_previo").val();
-        var codigo_nuevo = codigo.val();
-        let empresa_id = $(this).parents("tr").find(".empresa").val();
+    $('.codigocuentacontable').off('change.consultacta blur.consultacta').on('change.consultacta blur.consultacta', function (event) {
+        var $input = $(this);
+        var $ctx = $input.closest('.tm-cuentacontable-campo');
+        if (!$ctx.length) {
+            $ctx = $input.closest('tr');
+        }
 
-        let url_cta = carpetaBase+'/contable/cuentacontable/leercuentacontableporcodigo/'+empresa_id+'/'+codigo_nuevo;
-
-        $.get(url_cta, function(data){
-            if (data.id > 0)
-            {
-                $(codigo).parents("tr").find('.cuentacontable_id').val(data.id);
-                $(codigo).parents("tr").find(".cuentacontable_id_previa").val(data.id);
-                $(codigo).parents("tr").find(".nombrecuentacontable").val(data.nombre);
-
-                $("#cuentacontable_id").val(data.id);
-                $("#nombrecuentacontable").val(data.nombre);
-            }
-            else
-            {
-                alert("No existe la cuenta");
-
-                // Borra el renglon
-                $(codigo).parents('tr').remove();
-
-                $("#cuentacontable_id").val('');
-                $("#nombrecuentacontable").val('');                
-                $("#codigocuentacontable").val('');                
+        if (event.type === 'blur') {
+            if (!$ctx.length || !$ctx.hasClass('tm-cuentacontable-campo')) {
                 return;
             }
-        });
+        } else if ($ctx.hasClass('tm-cuentacontable-campo')) {
+            return;
+        }
 
-        if (codigo_nuevo != codigo_ant && empresa_id)
-            leeCentroCosto(this);
+        event.preventDefault();
+        resolverPorCodigoCuentaContable($input.val(), $ctx.length ? $ctx : null);
     });
 
-    $('.consultacuentacontable').on('click', function (event) {
-        cuentacontablexcodigo = $(this).parents("tr").find(".cuentacontable_id");
-        nombrexcodigo = $(this).parents("tr").find(".nombrecuentacontable");
-        codigoxcodigo = $(this).parents("tr").find(".codigocuentacontable");
-        let empresa_id = $(this).parents("tr").find(".empresa").val();
+    $('.consultacuentacontable').off('click.consultacta').on('click.consultacta', function (event) {
+        event.preventDefault();
 
-        if (empresa_id == null)
-            empresa_id = $('#empresa_id').val();
-
-        // Abre modal de consulta
-        if (empresa_id > 0)
-        {
-            $("#consultacuentaModal").modal('show');
-            $("#consultaempresa_id").val(empresa_id);
+        var $ctx = $(this).closest('.tm-cuentacontable-campo');
+        if (!$ctx.length) {
+            $ctx = $(this).closest('tr');
         }
-        else	
+
+        ptrCuentacontableContext = $ctx.length ? $ctx : null;
+        cuentacontablexcodigo = $ctx.length ? $ctx.find('.cuentacontable_id').first() : $(this).parents('tr').find('.cuentacontable_id');
+        nombrexcodigo = $ctx.length ? $ctx.find('.nombrecuentacontable').first() : $(this).parents('tr').find('.nombrecuentacontable');
+        codigoxcodigo = $ctx.length ? $ctx.find('.codigocuentacontable').first() : $(this).parents('tr').find('.codigocuentacontable');
+
+        var empresaId = empresaIdParaConsultaCuentaContable($ctx);
+
+        if (empresaId > 0) {
+            $('#consultaempresa_id').val(empresaId);
+            $('#consultacuentaModal').modal('show');
+            buscar_datos('');
+        } else {
             alert('Debe ingresar empresa');
+        }
     });
 
-    $('#consultacuentaModal').on('shown.bs.modal', function () {
+    $('#consultacuentaModal').off('shown.bs.modal.consultacta').on('shown.bs.modal.consultacta', function () {
         $(this).find('[autofocus]').focus();
-    })
+    });
 
-    $('#aceptaconsultacuentaModal').on('click', function () {
+    $('#aceptaconsultacuentaModal').off('click.consultacta').on('click.consultacta', function () {
         $('#consultacuentaModal').modal('hide');
     });
 
-    $(document).on('click', '.eligeconsultacuentacontable', function () {
+    $(document).off('click.eligeconsultacuentacontable').on('click.eligeconsultacuentacontable', '.eligeconsultacuentacontable', function () {
         var $tr = $(this).closest('tr');
-        var seleccion = $tr.find('.cuentacontable_id').first().text().trim();
-        var codigo = $tr.find('.codigocuentacontable').first().text().trim();
-        var nombre = $tr.find('.nombrecuentacontable').first().text().trim();
+        var data = {
+            id: $.trim($tr.find('.cuentacontable_id').first().text()),
+            codigo: $.trim($tr.find('.codigocuentacontable').first().text()),
+            nombre: $.trim($tr.find('.nombrecuentacontable').first().text()),
+        };
 
-        // Asigna a grilla los valores devueltos por consulta
-        if (cuentacontablexcodigo && cuentacontablexcodigo.length) {
-            $(cuentacontablexcodigo).val(seleccion);
-            $(nombrexcodigo).val(nombre);
-            $(codigoxcodigo).val(codigo);
-            $(cuentacontablexcodigo).parents('tr').find('.cuentacontable_id_previa').val(seleccion);
-            $(cuentacontablexcodigo).parents('tr').find('.codigo_previo').val(codigo);
+        var $ctx = ptrCuentacontableContext;
+        if (!$ctx || !$ctx.length) {
+            $ctx = null;
         }
 
-        $('#cuentacontable_id').val(seleccion);
-        $('#nombrecuentacontable').val(nombre);
-        $('#codigocuentacontable').val(codigo);
+        if (cuentacontablexcodigo && cuentacontablexcodigo.length) {
+            cuentacontablexcodigo.val(data.id);
+            nombrexcodigo.val(data.nombre);
+            codigoxcodigo.val(data.codigo);
+            cuentacontablexcodigo.parents('tr').find('.cuentacontable_id_previa').val(data.id);
+            cuentacontablexcodigo.parents('tr').find('.codigo_previo').val(data.codigo);
+        }
+
+        if ($ctx && $ctx.length) {
+            aplicarCuentaContableEnContexto($ctx, data);
+        } else {
+            $('#cuentacontable_id').val(data.id);
+            $('#nombrecuentacontable').val(data.nombre);
+            $('#codigocuentacontable').val(data.codigo);
+        }
 
         $('#consultacuentaModal').modal('hide');
     });
-
 }

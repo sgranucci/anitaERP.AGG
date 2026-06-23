@@ -147,6 +147,9 @@
 
 		activa_eventos_consultacliente();
 		activa_eventos_consultaarticulo();
+		if ($('#codigotransporte').length && typeof activa_eventos_consultatransporte === 'function') {
+			activa_eventos_consultatransporte();
+		}
 
 		$(document).off('change.ocPedidoCodigoLocal', '.codigoarticulolocal').on('change.ocPedidoCodigoLocal', '.codigoarticulolocal', function (event) {
 			event.preventDefault();

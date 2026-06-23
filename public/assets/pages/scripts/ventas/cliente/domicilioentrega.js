@@ -49,4 +49,8 @@
 			$(localidad_id_previa).val(localidad_id);
            	completarCPEntrega(localidad_id, codigopostal);
        	});
+
+		if (typeof activa_eventos_consultazonavta === 'function') {
+			activa_eventos_consultazonavta();
+		}
 	}

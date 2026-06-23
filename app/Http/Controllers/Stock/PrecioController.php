@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Stock;
 use App\Exports\Stock\PrecioExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionPrecio;
+use App\Http\Requests\ValidacionPrecioActualizacionCategoria;
 use App\Imports\Stock\PrecioImport;
 use App\Models\Configuracion\Moneda;
 use App\Models\Stock\Articulo;
@@ -14,7 +15,10 @@ use App\Models\Stock\Talle;
 use App\Queries\Stock\PrecioQueryInterface;
 use App\Repositories\Stock\ArticuloRepositoryInterface;
 use App\Repositories\Ventas\ClienteRepositoryInterface;
+use App\Services\Stock\PrecioActualizacionCategoriaService;
 use App\Services\Stock\PrecioService;
+use App\Support\Stock\PrecioListadoFiltros;
+use App\Models\Stock\Categoria;
 use Auth;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -36,6 +40,7 @@ class PrecioController extends Controller
         ArticuloRepositoryInterface $articulorepository,
         ClienteRepositoryInterface $clienterepository,
         private PrecioQueryInterface $precioQuery,
+        private PrecioActualizacionCategoriaService $precioActualizacionCategoriaService,
     ) {
         $this->precioService = $precioservice;
         $this->articuloRepository = $articulorepository;
@@ -55,23 +60,16 @@ class PrecioController extends Controller
             (new Precio)->sincronizarConAnita();
         }
 
-        $f = $this->precioQuery->resolverFiltrosDesdeRequest($request);
+        $filtros = PrecioListadoFiltros::resolverDesdeRequest($request);
         $listasPrecio = $this->listasPrecioParaFiltro();
-        $datas = $this->precioQuery->leePrecios(
-            $f['fecha_vigencia'],
-            $f['listaprecio_id'],
-            $f['filtros'],
-            $f['busqueda'] !== '' ? $f['busqueda'] : null,
-            true
-        );
+        $datas = $this->precioQuery->leePrecios($filtros, true);
 
         return view('stock.precio.index', [
             'datas' => $datas,
-            'fechaVigenciaFiltro' => $f['fecha_vigencia'],
-            'listaprecioIdFiltro' => $f['listaprecio_id'],
             'listasPrecio' => $listasPrecio,
-            'filtrosParaVista' => $f['filtros'],
-            'busqueda' => $f['busqueda'],
+            'filtros' => $filtros,
+            'filtrosQuery' => PrecioListadoFiltros::paraQueryString($filtros),
+            'camposFiltro' => PrecioListadoFiltros::CAMPOS,
         ]);
     }
 
@@ -82,18 +80,12 @@ class PrecioController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $f = $this->precioQuery->resolverFiltrosDesdeRequest($request);
+        $filtros = PrecioListadoFiltros::resolverDesdeRequest($request);
 
         switch ($formato) {
             case 'PDF':
-                $precios = $this->precioQuery->leePrecios(
-                    $f['fecha_vigencia'],
-                    $f['listaprecio_id'],
-                    $f['filtros'],
-                    $f['busqueda'] !== '' ? $f['busqueda'] : null,
-                    false
-                );
-                $fechaReferencia = $f['fecha_vigencia'];
+                $precios = $this->precioQuery->leePrecios($filtros, false);
+                $fechaReferencia = $filtros['fecha_vigencia'];
                 $view = \View::make('stock.precio.listado', compact('precios', 'fechaReferencia'))->render();
                 $path = storage_path('pdf/listados');
                 if (! is_dir($path)) {
@@ -108,12 +100,12 @@ class PrecioController extends Controller
 
             case 'EXCEL':
                 return (new PrecioExport($this->precioQuery))
-                    ->parametros($f['fecha_vigencia'], $f['listaprecio_id'], $f['filtros'], $f['busqueda'])
+                    ->parametros($filtros)
                     ->download('precios.xlsx');
 
             case 'CSV':
                 return (new PrecioExport($this->precioQuery))
-                    ->parametros($f['fecha_vigencia'], $f['listaprecio_id'], $f['filtros'], $f['busqueda'])
+                    ->parametros($filtros)
                     ->download('precios.csv', ExcelFormat::CSV);
         }
 
@@ -122,21 +114,14 @@ class PrecioController extends Controller
         }
 
         $listasPrecio = $this->listasPrecioParaFiltro();
-        $datas = $this->precioQuery->leePrecios(
-            $f['fecha_vigencia'],
-            $f['listaprecio_id'],
-            $f['filtros'],
-            $f['busqueda'] !== '' ? $f['busqueda'] : null,
-            true
-        );
+        $datas = $this->precioQuery->leePrecios($filtros, true);
 
         return view('stock.precio.index', [
             'datas' => $datas,
-            'fechaVigenciaFiltro' => $f['fecha_vigencia'],
-            'listaprecioIdFiltro' => $f['listaprecio_id'],
             'listasPrecio' => $listasPrecio,
-            'filtrosParaVista' => $f['filtros'],
-            'busqueda' => $f['busqueda'],
+            'filtros' => $filtros,
+            'filtrosQuery' => PrecioListadoFiltros::paraQueryString($filtros),
+            'camposFiltro' => PrecioListadoFiltros::CAMPOS,
         ]);
     }
 
@@ -283,7 +268,11 @@ class PrecioController extends Controller
      */
     public function guardar(ValidacionPrecio $request)
     {
-        $precio = $this->precioService->crearDesdeFormulario($request);
+        try {
+            $precio = $this->precioService->crearDesdeFormulario($request);
+        } catch (\InvalidArgumentException $e) {
+            return redirect()->back()->withInput()->with('mensaje', $e->getMessage());
+        }
 
         // Lee nuevo precio con relaciones para interface Anita
         $precio = Precio::where('id', $precio->id)->with('articulos:id,descripcion,sku')->with('listaprecios')->with('monedas')->with('usuarios')->first();
@@ -326,7 +315,11 @@ class PrecioController extends Controller
     {
         can('actualizar-precios');
 
-        $resultado = $this->precioService->actualizarDesdeFormulario($request, (int) $id);
+        try {
+            $resultado = $this->precioService->actualizarDesdeFormulario($request, (int) $id);
+        } catch (\InvalidArgumentException $e) {
+            return redirect()->back()->withInput()->with('mensaje', $e->getMessage());
+        }
         $precio = $resultado['precio'];
 
         // Lee precio con relaciones para interface Anita
@@ -460,6 +453,74 @@ class PrecioController extends Controller
         session()->forget('filtrosPrecios');
 
         return json_encode(['ok']);
+    }
+
+    public function actualizarPorCategoria(Request $request)
+    {
+        can('actualizar-precios');
+
+        $categoria_query = Categoria::query()->orderBy('nombre')->get(['id', 'nombre']);
+        $listasPrecio = $this->listasPrecioParaFiltro();
+        $fechaReferencia = $request->filled('fecha_referencia')
+            ? Carbon::parse($request->fecha_referencia)->format('Y-m-d')
+            : Carbon::today()->format('Y-m-d');
+        $nuevaFechavigencia = $request->filled('nueva_fechavigencia')
+            ? Carbon::parse($request->nueva_fechavigencia)->format('Y-m-d')
+            : Carbon::today()->format('Y-m-d');
+
+        return view('stock.precio.actualizar_categoria', [
+            'categoria_query' => $categoria_query,
+            'listasPrecio' => $listasPrecio,
+            'fechaReferencia' => $fechaReferencia,
+            'nuevaFechavigencia' => $nuevaFechavigencia,
+            'categoriaId' => (int) $request->query('categoria_id', 0),
+            'listaprecioId' => $request->filled('listaprecio_id') ? (int) $request->listaprecio_id : null,
+            'porcentaje' => $request->query('porcentaje', ''),
+        ]);
+    }
+
+    public function previewActualizacionCategoria(ValidacionPrecioActualizacionCategoria $request)
+    {
+        can('actualizar-precios');
+
+        $listaprecioId = $request->filled('listaprecio_id') ? (int) $request->listaprecio_id : null;
+
+        $preview = $this->precioActualizacionCategoriaService->previsualizar(
+            (int) $request->categoria_id,
+            $listaprecioId,
+            $request->fecha_referencia,
+            $request->nueva_fechavigencia,
+            (float) $request->porcentaje
+        );
+
+        return response()->json($preview);
+    }
+
+    public function aplicarActualizacionCategoria(ValidacionPrecioActualizacionCategoria $request)
+    {
+        can('actualizar-precios');
+
+        $listaprecioId = $request->filled('listaprecio_id') ? (int) $request->listaprecio_id : null;
+
+        $resultado = $this->precioActualizacionCategoriaService->aplicar(
+            (int) $request->categoria_id,
+            $listaprecioId,
+            $request->fecha_referencia,
+            $request->nueva_fechavigencia,
+            (float) $request->porcentaje
+        );
+
+        $mensaje = 'Se registraron '.$resultado['creados'].' nuevos precios con la vigencia indicada.';
+        if ($resultado['omitidos'] > 0) {
+            $mensaje .= ' Se omitieron '.$resultado['omitidos'].' registros (sin cambio, precio inválido o vigencia ya existente).';
+        }
+
+        return redirect()
+            ->route('precio', [
+                'fecha_vigencia' => $request->nueva_fechavigencia,
+                'listaprecio_id' => $listaprecioId,
+            ])
+            ->with('mensaje', $mensaje);
     }
 
     /**

@@ -16,6 +16,7 @@ use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Events\AfterSheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
@@ -27,18 +28,29 @@ class KiloCategoriaListadoExport implements FromView, ShouldAutoSize, WithColumn
     /** @var array<string, mixed> */
     private array $filtros = [];
 
+    /** @var array<string, mixed> */
+    private array $totales = [];
+
+    private int $totalLineas = 0;
+
     private bool $hayFilaLogos = false;
 
-    private int $filaCabecerasExcel = 3;
+    private int $filasMetaEncabezado = 2;
 
-    private int $filaPrimeraDatosExcel = 4;
+    private int $filaInicioMeta = 1;
 
-    private int $filaTituloExcel = 2;
+    private int $filaCabecerasExcel = 2;
+
+    private int $filaPrimeraDatosExcel = 3;
+
+    private int $filaSubtituloExcel = 0;
 
     /** @var list<string> */
     private array $rutasLogosExcel = [];
 
     private string $colUltima = 'G';
+
+    private string $subtitulo = '';
 
     public function __construct(
         private readonly KiloCategoriaReporteService $reporteService,
@@ -59,18 +71,29 @@ class KiloCategoriaListadoExport implements FromView, ShouldAutoSize, WithColumn
     {
         $datos = $this->reporteService->generarDatos($this->filtros);
         $filas = $this->reporteService->aplanarFilas($datos, $this->filtros);
+        $this->totales = $this->reporteService->totalesGenerales($filas);
+        $this->totalLineas = (int) ($this->totales['cantidad_detalle'] ?? 0);
+
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion(collect());
         $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
-        $this->filaTituloExcel = $this->hayFilaLogos ? 2 : 1;
-        $this->filaCabecerasExcel = $this->hayFilaLogos ? 4 : 3;
+        $this->subtitulo = 'Reparto: '.KiloCategoriaListadoFiltros::formatearRepartoTexto($this->filtros)
+            .' · Período: '.KiloCategoriaListadoFiltros::formatearPeriodoTexto($this->filtros);
+        $this->filasMetaEncabezado = $this->contarFilasMetaEncabezado();
+        $offsetLogo = $this->hayFilaLogos ? 1 : 0;
+        $this->filaInicioMeta = $offsetLogo + 1;
+        $this->filaCabecerasExcel = $offsetLogo + $this->filasMetaEncabezado + 1;
         $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
+        $this->filaSubtituloExcel = trim($this->subtitulo) !== ''
+            ? $this->filaInicioMeta + 2
+            : 0;
 
         return view('exports.ventas.kilocategoriaindex', [
             'filas' => $filas,
             'filtros' => $this->filtros,
             'titulo' => 'Kilos por categoría',
-            'subtitulo' => 'Reparto: '.KiloCategoriaListadoFiltros::formatearRepartoTexto($this->filtros)
-                .' · Período: '.KiloCategoriaListadoFiltros::formatearPeriodoTexto($this->filtros),
+            'subtitulo' => $this->subtitulo,
+            'totales' => $this->totales,
+            'total_lineas' => $this->totalLineas,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
         ]);
     }
@@ -96,7 +119,7 @@ class KiloCategoriaListadoExport implements FromView, ShouldAutoSize, WithColumn
                     'name' => 'Arial',
                 ],
                 'fill' => [
-                    'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+                    'fillType' => Fill::FILL_SOLID,
                     'color' => ['rgb' => '85C1E9'],
                 ],
             ],
@@ -125,6 +148,8 @@ class KiloCategoriaListadoExport implements FromView, ShouldAutoSize, WithColumn
                             continue;
                         }
                         $drawing = new Drawing;
+                        $drawing->setName('Logo');
+                        $drawing->setDescription('Logo empresa');
                         $drawing->setPath($ruta);
                         $drawing->setResizeProportional(true);
                         $drawing->setHeight(46);
@@ -135,12 +160,64 @@ class KiloCategoriaListadoExport implements FromView, ShouldAutoSize, WithColumn
                     }
                 }
 
-                $filaTit = $this->filaTituloExcel;
-                $sheet->mergeCells('A'.$filaTit.':'.$colUltima.$filaTit);
+                $filaFinMeta = $this->filaInicioMeta + $this->filasMetaEncabezado - 1;
+                for ($fila = $this->filaInicioMeta; $fila <= $filaFinMeta; $fila++) {
+                    $sheet->mergeCells('A'.$fila.':'.$colUltima.$fila);
+                }
+
+                $filaTit = $this->filaInicioMeta;
+                $sheet->getRowDimension($filaTit)->setRowHeight(28);
                 $sheet->getStyle('A'.$filaTit.':'.$colUltima.$filaTit)->applyFromArray([
-                    'font' => ['bold' => true, 'size' => 14, 'name' => 'Arial', 'color' => ['rgb' => '17202A']],
-                    'alignment' => ['vertical' => Alignment::VERTICAL_CENTER],
+                    'font' => [
+                        'bold' => true,
+                        'size' => 16,
+                        'name' => 'Arial',
+                        'color' => ['rgb' => '17202A'],
+                    ],
+                    'alignment' => [
+                        'horizontal' => Alignment::HORIZONTAL_LEFT,
+                        'vertical' => Alignment::VERTICAL_CENTER,
+                    ],
                 ]);
+
+                for ($fila = $filaTit + 1; $fila <= $filaFinMeta; $fila++) {
+                    $altura = ($this->filaSubtituloExcel > 0 && $fila === $this->filaSubtituloExcel) ? 42 : 20;
+                    $sheet->getRowDimension($fila)->setRowHeight($altura);
+                    $sheet->getStyle('A'.$fila.':'.$colUltima.$fila)->applyFromArray([
+                        'font' => [
+                            'bold' => true,
+                            'size' => 10,
+                            'name' => 'Arial',
+                            'color' => ['rgb' => '444444'],
+                        ],
+                        'alignment' => [
+                            'horizontal' => Alignment::HORIZONTAL_LEFT,
+                            'vertical' => Alignment::VERTICAL_CENTER,
+                            'wrapText' => true,
+                        ],
+                    ]);
+                }
+
+                $filaCab = $this->filaCabecerasExcel;
+                $sheet->getStyle('A'.$filaCab.':'.$colUltima.$filaCab)->applyFromArray([
+                    'font' => [
+                        'bold' => true,
+                        'color' => ['rgb' => '17202A'],
+                        'size' => 11,
+                        'name' => 'Arial',
+                    ],
+                    'fill' => [
+                        'fillType' => Fill::FILL_SOLID,
+                        'color' => ['rgb' => '85C1E9'],
+                    ],
+                    'alignment' => [
+                        'vertical' => Alignment::VERTICAL_CENTER,
+                    ],
+                ]);
+
+                $sheet->getStyle('D'.$this->filaPrimeraDatosExcel.':D'.$sheet->getHighestRow())
+                    ->getAlignment()
+                    ->setWrapText(true);
 
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
             },
@@ -150,5 +227,24 @@ class KiloCategoriaListadoExport implements FromView, ShouldAutoSize, WithColumn
     public function title(): string
     {
         return 'Kilos por categoría';
+    }
+
+    private function contarFilasMetaEncabezado(): int
+    {
+        $filas = 2;
+
+        if (trim($this->subtitulo) !== '') {
+            $filas++;
+        }
+
+        if ($this->totales !== []) {
+            $filas++;
+        }
+
+        if ($this->totalLineas > 0) {
+            $filas++;
+        }
+
+        return $filas;
     }
 }

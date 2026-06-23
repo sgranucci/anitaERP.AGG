@@ -1,69 +1,139 @@
-            $(function () {
-                $('#btn_advanced_filter').click(function () {
-                    $('#advanced_filter_modal').modal('show');
-                })
+(function ($) {
+    'use strict';
 
-                $(".filter-combo").change(function () {
-                    var n = $(this).val();
-                    var p = $(this).parents('.row-filter-combo');
-                    var type_data = $(this).attr('data-type');
-                    var filter_value = p.find('.filter-value');
+    var MODO_CAMPO = 'campo';
+    var operadoresPorCampo = {};
+    var LF = window.ListadoFiltros;
 
-                    p.find('.between-group').hide();
-                    p.find('.between-group').find('input').prop('disabled', true);
-                    filter_value.val('').show().focus();
-                    switch (n) {
-                        default:
-                            filter_value.removeAttr('placeholder').val('').prop('disabled', true);
-                            p.find('.between-group').find('input').prop('disabled', true);
-                            break;
-                        case 'like':
-                        case 'not like':
-                            filter_value.attr('placeholder', 'Ej.: : Lorem ipsum').prop('disabled', false);
-                            break;
-                        case 'asc':
-                            filter_value.prop('disabled', true).attr('placeholder', 'Ordenar Ascendentemente');
-                            break;
-                        case 'desc':
-                            filter_value.prop('disabled', true).attr('placeholder', 'Ordenar Descendentemente');
-                            break;
-                        case '=':
-                            filter_value.prop('disabled', false).attr('placeholder', 'Ej.: : Lorem ipsum');
-                            break;
-                        case '>=':
-                            filter_value.prop('disabled', false).attr('placeholder', 'Ej.: : 1000');
-                            break;
-                        case '<=':
-                            filter_value.prop('disabled', false).attr('placeholder', 'Ej.: : 1000');
-                            break;
-                        case '>':
-                            filter_value.prop('disabled', false).attr('placeholder', 'Ej.: : 1000');
-                            break;
-                        case '<':
-                            filter_value.prop('disabled', false).attr('placeholder', 'Ej.: : 1000');
-                            break;
-                        case '!=':
-                            filter_value.prop('disabled', false).attr('placeholder', 'Ej.: : Lorem ipsum');
-                            break;
-                        case 'in':
-                            filter_value.prop('disabled', false).attr('placeholder', 'Ej.: :  Lorem, Ipsum, Dolor Sit');
-                            break;
-                        case 'not in':
-                            filter_value.prop('disabled', false).attr('placeholder', 'Ej.: :  Lorem, Ipsum, Dolor Sit');
-                            break;
-                        case 'between':
-                            filter_value.val('').hide();
-                            p.find('.between-group input').prop('disabled', false);
-                            p.find('.between-group').show().focus();
-                            p.find('.filter-value-between').prop('disabled', false);
-                            break;
-                    }
-                })
+    function $valorPrincipal() {
+        return $('#filtro_valor');
+    }
 
-                /* Remueve disabled cuando recarga la pagina y el valor es ingresado */
-                $(".filter-value").each(function () {
-                    var v = $(this).val();
-                    if (v != '') $(this).prop('disabled', false);
-                })
+    function $valorPanel() {
+        return $('#filtro_valor_panel');
+    }
 
-            })
+    function parseOperadores() {
+        var $sel = $('#filtro_operador');
+        if (!$sel.length) {
+            return;
+        }
+        try {
+            operadoresPorCampo = JSON.parse($sel.attr('data-operadores') || '{}');
+        } catch (e) {
+            operadoresPorCampo = {};
+        }
+    }
+
+    function tipoCampoActivo() {
+        var modo = $('#filtro_modo').val();
+        if (modo !== MODO_CAMPO) {
+            return 'texto';
+        }
+        var $opt = $('#filtro_campo option:selected');
+        return $opt.data('type') || 'texto';
+    }
+
+    function setPlaceholderValor(texto) {
+        $valorPrincipal().attr('placeholder', texto);
+        $valorPanel().attr('placeholder', texto);
+    }
+
+    function actualizarVisibilidad() {
+        var modo = $('#filtro_modo').val();
+        var operador = $('#filtro_operador').val();
+        var tipo = tipoCampoActivo();
+
+        if (modo === MODO_CAMPO) {
+            $('.filtro-campo-wrap').show();
+        } else {
+            $('.filtro-campo-wrap').hide();
+        }
+
+        var esFecha = tipo === 'fecha';
+        var esVacio = operador === 'vacio';
+
+        if (esVacio) {
+            $valorPrincipal().val('');
+            $valorPanel().val('');
+            $('.filtro-valor-hasta-wrap').hide();
+        } else if (esFecha && operador === 'entre') {
+            $('.filtro-valor-hasta-wrap').show();
+        } else {
+            $('.filtro-valor-hasta-wrap').hide();
+        }
+
+        if (esFecha) {
+            setPlaceholderValor('dd/mm/aaaa');
+        } else if (tipo === 'entero') {
+            setPlaceholderValor('Número entero');
+        } else if (tipo === 'decimal') {
+            setPlaceholderValor('Importe (ej. 1500 o 1500,50)');
+        } else {
+            setPlaceholderValor('Texto (tolera errores de tipeo)');
+        }
+    }
+
+    function actualizarOperadores(mantenerSeleccion) {
+        var modo = $('#filtro_modo').val();
+        var valorActual = mantenerSeleccion ? $('#filtro_operador').val() : null;
+        var mapa;
+        var $op = $('#filtro_operador');
+
+        if (modo === MODO_CAMPO) {
+            var campo = $('#filtro_campo').val();
+            mapa = operadoresPorCampo[campo] || LF.operadoresModoTodos();
+        } else {
+            mapa = LF.operadoresModoTodos();
+        }
+
+        LF.rellenarSelectOperadores($op, mapa, valorActual);
+        actualizarVisibilidad();
+    }
+
+    $(function () {
+        if (!$('#form-filtros-precio').length) {
+            return;
+        }
+
+        parseOperadores();
+
+        LF.sincronizarValorPrincipal('#filtro_valor', '#filtro_valor_panel');
+
+        function sincronizarValorAntesDeEnviar() {
+            var $panel = $('#panel-filtros-precio');
+            var panelAbierto = $panel.hasClass('show') || $panel.hasClass('in');
+            if (panelAbierto) {
+                $valorPrincipal().val($valorPanel().val());
+            } else {
+                $valorPanel().val($valorPrincipal().val());
+            }
+        }
+
+        $('#form-filtros-precio').on('click', '[data-aplicar-filtros-panel]', function () {
+            $valorPrincipal().val($valorPanel().val());
+        });
+
+        $('#form-filtros-precio').on('submit.listadoFiltrosSync', function () {
+            sincronizarValorAntesDeEnviar();
+        });
+
+        LF.initSubmitBusquedaRapida($('#form-filtros-precio'), {
+            selectorPanel: '#panel-filtros-precio'
+        });
+
+        $('#filtro_modo, #filtro_campo').on('change', function () {
+            actualizarOperadores(false);
+        });
+
+        $('#filtro_operador').on('change', function () {
+            if ($(this).val() === 'vacio') {
+                $valorPrincipal().val('');
+                $valorPanel().val('');
+            }
+            actualizarVisibilidad();
+        });
+
+        actualizarOperadores(true);
+    });
+})(jQuery);

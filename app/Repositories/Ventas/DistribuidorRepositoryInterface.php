@@ -11,6 +11,8 @@ interface DistribuidorRepositoryInterface extends RepositoryInterface
 	public function guardarAnita($request);
 	public function actualizarAnita($request, $id);
 	public function eliminarAnita($id);
+	public function consultaDistribuidor(string $consulta): string;
+	public function findPorCodigo(string $codigo);
 
 }
 

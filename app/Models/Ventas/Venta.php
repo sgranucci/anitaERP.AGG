@@ -125,6 +125,11 @@ class Venta extends Model implements Auditable
         return $this->hasOne(Puntoventa::class, 'id', 'puntoventa_id')->with('empresas');
     }
 
+    public function puntoventaremito()
+    {
+        return $this->hasOne(Puntoventa::class, 'id', 'puntoventaremito_id');
+    }
+
     public function clientes()
     {
         return $this->hasOne(Cliente::class, 'id', 'cliente_id')

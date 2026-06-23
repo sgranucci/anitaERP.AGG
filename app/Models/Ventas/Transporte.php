@@ -12,7 +12,7 @@ use App\Traits\Ventas\TransporteTrait;
 class Transporte extends Model
 {
     use TransporteTrait;
-    protected $fillable = ['nombre', 'codigo', 'domicilio', 'provincia_id', 'localidad_id', 'codigopostal', 'telefono', 'email', 'nroinscripcion', 'condicioniva_id', 'patentevehiculo', 'patenteacoplado', 'horarioentrega',
+    protected $fillable = ['nombre', 'codigo', 'domicilio', 'provincia_id', 'localidad_id', 'codigopostal', 'telefono', 'email', 'nroinscripcion', 'condicioniva_id', 'patentevehiculo', 'patenteacoplado', 'cuit_chofer', 'horarioentrega',
                             'tipoexpreso', 'copiaremito', 'copiapedido'];
 
     protected $table = 'transporte';

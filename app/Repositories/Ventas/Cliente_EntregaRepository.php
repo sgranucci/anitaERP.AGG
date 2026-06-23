@@ -106,11 +106,11 @@ class Cliente_EntregaRepository implements Cliente_EntregaRepositoryInterface
 			$provincias_id = $data['provincias_id'];
 			$codigospostales = $data['codigospostales'];
 			$transportes_id = $data['transportes_id'];
+			$zonavtas_id = $data['zonavtas_id'] ?? [];
 
 			$cliente = $this->modelCliente->find($id);
 			if ($cliente)
 			{
-				$zonavta_id = $cliente->zonavta_id;
 				$subzonavta_id = $cliente->subzonavta_id;
 				$vendedor_id = $cliente->vendedor_id;
 			}
@@ -149,7 +149,7 @@ class Cliente_EntregaRepository implements Cliente_EntregaRepositoryInterface
 									'provincia_id' => $provincias_id[$i],
 									'pais_id' => $pais_id,
 									'codigopostal' => $codigospostales[$i],
-									'zonavta_id' => $zonavta_id,
+									'zonavta_id' => ! empty($zonavtas_id[$i]) ? $zonavtas_id[$i] : null,
 									'subzonavta_id' => $subzonavta_id,
 									'vendedor_id' => $vendedor_id,
 									'transporte_id' => $transportes_id[$i],
@@ -185,7 +185,7 @@ class Cliente_EntregaRepository implements Cliente_EntregaRepositoryInterface
 									'provincia_id' => $provincias_id[$i_entrega],
 									'pais_id' => $pais_id,
 									'codigopostal' => $codigospostales[$i_entrega],
-									'zonavta_id' => $zonavta_id,
+									'zonavta_id' => ! empty($zonavtas_id[$i_entrega]) ? $zonavtas_id[$i_entrega] : null,
 									'subzonavta_id' => $subzonavta_id,
 									'vendedor_id' => $vendedor_id,
 									'transporte_id' => $transportes_id[$i_entrega],

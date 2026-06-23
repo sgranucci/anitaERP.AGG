@@ -8,9 +8,23 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Precio vigente por artículo y lista (última fechavigencia <= fecha de referencia).
+ * Si hay varias filas con la misma fechavigencia vigente, gana la de mayor id (última grabada).
  */
 class PrecioListaVigenteSupport
 {
+    /**
+     * Restringe el query a una sola fila vigente por articulo_id + listaprecio_id.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder  $query
+     */
+    public static function aplicarFiltroVigenteEnQuery($query, string $fechaReferencia, string $precioAlias = 'precio'): void
+    {
+        $query->whereRaw(
+            "{$precioAlias}.id = (SELECT MAX(p4.id) FROM precio AS p4 WHERE p4.articulo_id = {$precioAlias}.articulo_id AND p4.listaprecio_id = {$precioAlias}.listaprecio_id AND p4.fechavigencia <= ? AND p4.fechavigencia = (SELECT MAX(p5.fechavigencia) FROM precio AS p5 WHERE p5.articulo_id = {$precioAlias}.articulo_id AND p5.listaprecio_id = {$precioAlias}.listaprecio_id AND p5.fechavigencia <= ?))",
+            [$fechaReferencia, $fechaReferencia]
+        );
+    }
+
     /**
      * @param  int[]  $articuloIds
      * @return array<int, array{precio: float, moneda_id: int, moneda_abreviatura: ?string}>
@@ -28,11 +42,9 @@ class PrecioListaVigenteSupport
             ->select('precio.articulo_id', 'precio.precio', 'precio.moneda_id', 'moneda.abreviatura as moneda_abreviatura')
             ->leftJoin('moneda', 'moneda.id', '=', 'precio.moneda_id')
             ->whereIn('precio.articulo_id', $articuloIds)
-            ->where('precio.listaprecio_id', $listaprecioId)
-            ->whereDate('precio.fechavigencia', '<=', $fecha)
-            ->orderBy('precio.articulo_id')
-            ->orderBy('precio.fechavigencia')
-            ->get();
+            ->where('precio.listaprecio_id', $listaprecioId);
+        self::aplicarFiltroVigenteEnQuery($precios, $fecha);
+        $precios = $precios->get();
 
         $mapa = [];
         foreach ($precios as $precio) {

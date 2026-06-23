@@ -63,7 +63,7 @@ function kiloCategoriaBuscarTransportesModal(consulta) {
             $('#datostransporte').html(resp);
         })
         .fail(function () {
-            $('#datostransporte').html('<tr><td colspan="4">Error al consultar repartos</td></tr>');
+            $('#datostransporte').html('<tr><td colspan="8">Error al consultar repartos</td></tr>');
         });
 }
 

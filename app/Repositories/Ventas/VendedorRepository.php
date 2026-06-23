@@ -93,9 +93,22 @@ class VendedorRepository implements VendedorRepositoryInterface
 
     public function findPorCodigo($codigo)
     {
-        $vendedor = $this->model->with('vendedorasociados')->where('codigo', $codigo)->first();
+        $codigo = trim((string) $codigo);
+        if ($codigo === '') {
+            return null;
+        }
 
-        return $vendedor;
+        $vendedor = $this->model->with('vendedorasociados')->where('codigo', $codigo)->first();
+        if ($vendedor) {
+            return $vendedor;
+        }
+
+        $alt = ltrim($codigo, '0');
+        if ($alt !== '' && $alt !== $codigo) {
+            return $this->model->with('vendedorasociados')->where('codigo', $alt)->first();
+        }
+
+        return null;
     }
 
     public function findOrFail($id)
@@ -154,7 +167,11 @@ class VendedorRepository implements VendedorRepositoryInterface
                            			    $query->orWhere($columns[$i], "LIKE", '%'. $consulta . '%');
                                     }
                 })	
+				->orderBy('nombre')
+				->limit(200)
 				->get();	
+
+        $puedeAbrirAbm = can('editar-vendedores', false) || can('listar-vendedores', false);
 
         $output = [];
 		$output['data'] = '';	
@@ -167,9 +184,18 @@ class VendedorRepository implements VendedorRepositoryInterface
                 $flSinDatos = false;
                 $output['data'] .= '<tr>';
                 for ($i = 0; $i < $count; $i++)
-                    $output['data'] .= '<td class="'.$columnsOut[$i].'">' . $row->{$columnsOut[$i]} . '</td>';	
-                $output['data'] .= '<td><a class="btn btn-warning btn-sm eligeconsultavendedor">Elegir</a></td>';
-                $output['data'] .= '<td><a class="btn btn-warning btn-sm consultaunvendedor">Consultar</a></td>';
+                    $output['data'] .= '<td class="'.$columnsOut[$i].'">' . e($row->{$columnsOut[$i]}) . '</td>';	
+                $output['data'] .= '<td class="text-nowrap">';
+                $output['data'] .= '<a class="btn btn-warning btn-sm eligeconsultavendedor">Elegir</a>';
+                if ($puedeAbrirAbm) {
+                    $url = route('editar_vendedor', [
+                        'id' => $row->id,
+                        'origen' => 'modal_consulta',
+                        'vista' => 'consulta',
+                    ]);
+                    $output['data'] .= ' <a class="btn btn-info btn-sm" href="'.e($url).'" target="_blank" rel="noopener">Consultar</a>';
+                }
+                $output['data'] .= '</td>';
                 $output['data'] .= '</tr>';
 			}
 		}
@@ -177,7 +203,7 @@ class VendedorRepository implements VendedorRepositoryInterface
         if ($flSinDatos)
 		{
 			$output['data'] .= '<tr>';
-			$output['data'] .= '<td>Sin resultados</td>';
+			$output['data'] .= '<td colspan="4">Sin resultados</td>';
 			$output['data'] .= '</tr>';
 		}
 		return(json_encode($output, JSON_UNESCAPED_UNICODE));

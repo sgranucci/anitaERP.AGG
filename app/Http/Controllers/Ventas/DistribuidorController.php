@@ -106,4 +106,28 @@ class DistribuidorController extends Controller
         }
     }
 
+    public function consultaDistribuidor(Request $request)
+    {
+        if (! can('listar-distribuidor', false)
+            && ! can('listar-clientes', false)
+            && ! can('editar-clientes', false)
+            && ! can('crear-clientes', false)) {
+            abort(403);
+        }
+
+        return $this->repository->consultaDistribuidor((string) ($request->get('consulta') ?? ''));
+    }
+
+    public function leeUnDistribuidor(string $codigo)
+    {
+        if (! can('listar-distribuidor', false)
+            && ! can('listar-clientes', false)
+            && ! can('editar-clientes', false)
+            && ! can('crear-clientes', false)) {
+            abort(403);
+        }
+
+        return $this->repository->findPorCodigo($codigo);
+    }
+
 }

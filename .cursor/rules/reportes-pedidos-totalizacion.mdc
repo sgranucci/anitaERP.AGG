@@ -13,7 +13,7 @@ Patrón obligatorio para reportes de pedidos que agrupan y totalizan cantidades.
 | Kilos pedidos | `ventas/repkilopedido` | `KiloPedidoReporteService` | Por reparto (+ pedido o ítem) | Subtotal reparto |
 | Kilos por categoría | `ventas/repkilocategoria` | `KiloCategoriaReporteService` | Por categoría + artículo | Subtotal categoría |
 
-Ver también `reportes-consulta-paginado-export.mdc`.
+Ver también `reportes-consulta-paginado-export.mdc` y `export-excel-encabezado-reporte.mdc` (encabezado Excel con filas meta separadas).
 
 ## Filtros comunes
 

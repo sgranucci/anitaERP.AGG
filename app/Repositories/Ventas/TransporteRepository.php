@@ -224,6 +224,7 @@ class TransporteRepository implements TransporteRepositoryInterface
 					"condicioniva_id" => $condicioniva_id,
 					"patentevehiculo" => $data->expr_dom_camion,
 					"patenteacoplado" => $data->expr_dom_acoplado,
+					"cuit_chofer" => $data->expr_cuit_chofer ?? '',
 					"horarioentrega" => ' ',
 					"tipoexpreso" => $data->expr_tipo_expr,
 					"copiaremito" => $data->expr_copias_remito,
@@ -433,15 +434,22 @@ class TransporteRepository implements TransporteRepositoryInterface
 	
     public function leeTransporte($consulta)
     {
-		$columns = ['transporte.id', 'transporte.nombre', 'transporte.codigo', 'transporte.domicilio', 'localidad.nombre', 'provincia.nombre', 'transporte.telefono'];
-        $columnsOut = ['id', 'nombre', 'codigo', 'domicilio', 'nombrelocalidad', 'nombreprovincia', 'telefono'];
+		$ocultarId = config('app.empresa') == 'EL BIERZO';
+		$columns = $ocultarId
+			? ['transporte.codigo', 'transporte.nombre', 'transporte.domicilio', 'localidad.nombre', 'provincia.nombre', 'transporte.telefono']
+			: ['transporte.codigo', 'transporte.id', 'transporte.nombre', 'transporte.domicilio', 'localidad.nombre', 'provincia.nombre', 'transporte.telefono'];
+        $columnsOut = ['codigo', 'id', 'nombre', 'domicilio', 'nombrelocalidad', 'nombreprovincia', 'telefono'];
+		$columnasVisibles = $ocultarId
+			? ['codigo', 'nombre', 'domicilio', 'nombrelocalidad', 'nombreprovincia', 'telefono']
+			: $columnsOut;
+		$colspan = count($columnasVisibles) + 1;
 
-		$consulta = strtoupper($consulta);
+		$consulta = strtoupper((string) ($consulta ?? ''));
 
 		$count = count($columns);
-		$data = $this->model->select('transporte.id as id',
+		$data = $this->model->select('transporte.codigo as codigo',
+									'transporte.id as id',
 									'transporte.nombre as nombre',
-									'transporte.codigo as codigo',
 									'transporte.domicilio as domicilio',
 									'localidad.nombre as nombrelocalidad',
 									'provincia.nombre as nombreprovincia',
@@ -457,15 +465,18 @@ class TransporteRepository implements TransporteRepositoryInterface
         $output = [];
 		$output['data'] = '';	
         $flSinDatos = true;
-        $count = count($columns);
 		if (count($data) > 0)
 		{
 			foreach ($data as $row)
 			{
                 $flSinDatos = false;
                 $output['data'] .= '<tr>';
-                for ($i = 0; $i < $count; $i++)
-                    $output['data'] .= '<td class="'.$columnsOut[$i].'">' . $row->{$columnsOut[$i]} . '</td>';	
+				if ($ocultarId) {
+					$output['data'] .= '<td class="id d-none">' . $row->id . '</td>';
+				}
+				foreach ($columnasVisibles as $col) {
+					$output['data'] .= '<td class="'.$col.'">' . $row->{$col} . '</td>';
+				}
                 $output['data'] .= '<td><a class="btn btn-warning btn-sm eligeconsultatransporte">Elegir</a></td>';
                 $output['data'] .= '</tr>';
 			}
@@ -474,7 +485,7 @@ class TransporteRepository implements TransporteRepositoryInterface
         if ($flSinDatos)
 		{
 			$output['data'] .= '<tr>';
-			$output['data'] .= '<td>Sin resultados</td>';
+			$output['data'] .= '<td colspan="'.$colspan.'">Sin resultados</td>';
 			$output['data'] .= '</tr>';
 		}
 		return(json_encode($output, JSON_UNESCAPED_UNICODE));

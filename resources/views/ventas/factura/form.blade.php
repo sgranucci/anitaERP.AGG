@@ -76,7 +76,21 @@
         	</select>
 		</div>
 		<div class="form-group row">
-   			<label for="transporte" class="col-lg-3 col-form-label">Transporte</label>
+   			<label for="transporte" class="col-lg-3 col-form-label">@if (config('app.empresa') == 'EL BIERZO') Reparto @else Transporte @endif</label>
+			@if (config('app.empresa') == 'EL BIERZO')
+				@php
+					$transporteFactura = null;
+					if (! empty($data->transporte_id ?? null) && isset($transporte_query)) {
+						$transporteFactura = $transporte_query->firstWhere('id', (int) $data->transporte_id);
+					}
+				@endphp
+				<input type="hidden" class="col-form-label transporte_id" id="transporte_id" name="transporte_id" value="{{ old('transporte_id', $data->transporte_id ?? '') }}">
+				<input type="text" class="col-lg-2 codigotransporte" id="codigotransporte" name="codigotransporte" value="{{ old('codigotransporte', $transporteFactura->codigo ?? '') }}">
+				<input type="text" class="col-lg-5 form-control nombretransporte" id="nombretransporte" name="nombretransporte" value="{{ old('nombretransporte', $transporteFactura->nombre ?? '') }}" readonly>
+				<button type="button" title="Consulta repartos" style="padding:1;" class="btn-accion-tabla consultatransporte tooltipsC">
+					<i class="fa fa-search text-primary"></i>
+				</button>
+			@else
         	<select name="transporte_id" id="transporte_id" data-placeholder="Transporte" class="col-lg-8 form-control" data-fouc>
         		<option value="">-- Seleccionar transporte --</option>
         		@foreach($transporte_query as $key => $value)
@@ -87,6 +101,7 @@
         			@endif
         		@endforeach
         	</select>
+			@endif
 		</div>
 		<div class="form-group row" id="divlugar">
     		<label for="lugarentrega" class="col-lg-3 col-form-label">Lugar de Entrega</label>
@@ -353,3 +368,6 @@
 @include('ventas.factura.templatetotalfactura')
 @include('includes.stock.modalconsultaarticulo')
 @include('includes.ventas.modalconsultacliente')
+@if (config('app.empresa') == 'EL BIERZO')
+@include('includes.ventas.modalconsultatransporte')
+@endif

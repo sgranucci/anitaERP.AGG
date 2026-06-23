@@ -179,6 +179,70 @@ class DistribuidorRepository implements DistribuidorRepositoryInterface
 
 	// Devuelve ultimo codigo de distribuidors + 1 para agregar nuevos en Anita
 
+	public function findPorCodigo($codigo)
+    {
+        $codigo = trim((string) $codigo);
+        if ($codigo === '') {
+            return null;
+        }
+
+        $distribuidor = $this->model->newQuery()->where('codigo', $codigo)->first();
+        if ($distribuidor) {
+            return $distribuidor;
+        }
+
+        $alt = ltrim($codigo, '0');
+        if ($alt !== '' && $alt !== $codigo) {
+            return $this->model->newQuery()->where('codigo', $alt)->first();
+        }
+
+        return null;
+    }
+
+	public function consultaDistribuidor(string $consulta): string
+    {
+        ini_set('max_execution_time', '300');
+        ini_set('memory_limit', '512M');
+
+        $consulta = strtoupper(trim($consulta));
+        $query = $this->model->newQuery()->select('id', 'nombre', 'codigo');
+        if ($consulta !== '') {
+            $query->where(function ($q) use ($consulta) {
+                $q->where('id', 'LIKE', '%'.$consulta.'%')
+                    ->orWhere('nombre', 'LIKE', '%'.$consulta.'%')
+                    ->orWhere('codigo', 'LIKE', '%'.$consulta.'%');
+            });
+        }
+
+        $data = $query->orderBy('nombre')->orderBy('codigo')->limit(200)->get();
+        $puedeAbrirAbm = can('editar-distribuidor', false) || can('listar-distribuidor', false);
+
+        $output = ['data' => ''];
+        if ($data->isEmpty()) {
+            $output['data'] = '<tr><td colspan="4">Sin resultados</td></tr>';
+        } else {
+            foreach ($data as $row) {
+                $output['data'] .= '<tr>';
+                $output['data'] .= '<td class="id">'.e($row->id).'</td>';
+                $output['data'] .= '<td class="nombre">'.e($row->nombre).'</td>';
+                $output['data'] .= '<td class="codigo">'.e($row->codigo).'</td>';
+                $output['data'] .= '<td class="text-nowrap">';
+                $output['data'] .= '<a class="btn btn-warning btn-sm eligeconsultadistribuidor">Elegir</a>';
+                if ($puedeAbrirAbm) {
+                    $url = route('editar_distribuidor', [
+                        'id' => $row->id,
+                        'origen' => 'modal_consulta',
+                        'vista' => 'consulta',
+                    ]);
+                    $output['data'] .= ' <a class="btn btn-info btn-sm" href="'.e($url).'" target="_blank" rel="noopener">Consultar</a>';
+                }
+                $output['data'] .= '</td></tr>';
+            }
+        }
+
+        return json_encode($output, JSON_UNESCAPED_UNICODE);
+    }
+
 	private function ultimoCodigo(&$codigo) {
 		$apiAnita = new ApiAnita();
 		$data = array( 'acc' => 'list', 

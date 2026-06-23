@@ -54,6 +54,7 @@
                             <th>Número</th>
                             <th>Fecha</th>
                             <th>Tipo de asiento</th>
+                            <th>Estado</th>
                             <th>Observaciones</th>
                             <th>Monto</th>
                             <th>Movimientos</th>
@@ -68,6 +69,11 @@
                             <td>{{$data->numeroasiento}}</td>
                             <td>{{date("d/m/Y", strtotime($data->fecha ?? ''))}}</td>
                             <td>{{$data->nombretipoasiento}}</td>
+                            <td>
+                                @include('contable.asiento.partials.estado_aprobacion_badge', [
+                                    'estado' => $data->estado_aprobacion ?? 'confirmado',
+                                ])
+                            </td>
                             <td>{{$data->observacion ?? ''}}</td>
                             <td>
                                 @php $totalAsiento = 0; @endphp
@@ -84,12 +90,28 @@
                                 </ul>
                             </td>
                             <td>
-                       			@if (can('editar-asiento', false))
+                       			@if (($data->estado_aprobacion ?? 'confirmado') === 'pendiente')
+                                    @if (can('listar-aprobacion-asiento', false) || can('aprobar-asiento-pendiente', false))
+                                        <a href="{{ route('ver_aprobacion_asiento', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Revisar aprobación">
+                                            <i class="fa fa-search text-info"></i>
+                                        </a>
+                                    @endif
+                                    @if (can('aprobar-asiento-pendiente', false))
+                                        <form action="{{ route('aprobar_asiento_pendiente', ['id' => $data->id]) }}" class="d-inline" method="POST" onsubmit="return confirm('¿Aprobar y sincronizar este asiento con contabilidad?');">
+                                            @csrf
+                                            <input type="hidden" name="redirect" value="asiento">
+                                            <button type="submit" class="btn-accion-tabla tooltipsC" title="Aprobar asiento">
+                                                <i class="fa fa-check text-success"></i>
+                                            </button>
+                                        </form>
+                                    @endif
+                                @endif
+                       			@if (can('editar-asiento', false) && ($data->estado_aprobacion ?? 'confirmado') !== 'pendiente')
                                 	<a href="{{route('editar_asiento', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                     <i class="fa fa-edit"></i>
                                 	</a>
 								@endif
-                       			@if (can('borrar-asiento', false))
+                       			@if (can('borrar-asiento', false) && ($data->estado_aprobacion ?? 'confirmado') !== 'pendiente')
                                 <form action="{{route('eliminar_asiento', ['id' => $data->id])}}" class="d-inline form-eliminar" method="POST">
                                     @csrf @method("delete")
                                     <button type="submit" onclick="eliminarAsiento(event)" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">

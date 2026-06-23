@@ -10,6 +10,7 @@ use App\Models\Stock\Precio;
 use App\Models\Stock\Listaprecio;
 use App\Models\Stock\Talle;
 use App\Models\Stock\Linea;
+use App\Support\Stock\PrecioSoloFacturableSupport;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -288,6 +289,10 @@ class PrecioService
 	 */
 	public function crearDesdeFormulario(Request $request): Precio
 	{
+		if (! PrecioSoloFacturableSupport::articuloIdEsFacturable((int) $request->articulo_id)) {
+			throw new \InvalidArgumentException('Solo se pueden registrar precios de artículos facturables.');
+		}
+
 		$fechavigencia = Carbon::createFromFormat('d-m-Y', $request->fechavigencia);
 
 		return Precio::create([
@@ -309,6 +314,11 @@ class PrecioService
 	public function actualizarDesdeFormulario(Request $request, int $id): array
 	{
 		$precioRegistro = Precio::findOrFail($id);
+
+		if (! PrecioSoloFacturableSupport::articuloIdEsFacturable((int) $precioRegistro->articulo_id)) {
+			throw new \InvalidArgumentException('Solo se pueden actualizar precios de artículos facturables.');
+		}
+
 		$fechavigencia = Carbon::createFromFormat('d-m-Y', $request->fechavigencia);
 		$fechaOriginal = Carbon::parse($precioRegistro->fechavigencia)->format('Y-m-d');
 		$fechaNueva = $fechavigencia->format('Y-m-d');

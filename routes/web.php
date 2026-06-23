@@ -613,6 +613,9 @@ Route::get('stock/asignapreciocliente/{articulo_id}/{cliente_id}', 'Stock\Precio
 Route::get('stock/precio/crearimportacionprecio', 'Stock\PrecioController@crearImportacion')->name('crear_importacion_precio');
 Route::post('stock/importarprecio', 'Stock\PrecioController@importar')->name('importar_precio');
 Route::post('stock/precio/limpiafiltro', 'Stock\PrecioController@limpiafiltro')->name('precio.limpiafiltro');
+Route::get('stock/precio/actualizar-por-categoria', 'Stock\PrecioController@actualizarPorCategoria')->name('precio_actualizar_categoria');
+Route::post('stock/precio/actualizar-por-categoria/preview', 'Stock\PrecioController@previewActualizacionCategoria')->name('precio_actualizar_categoria_preview');
+Route::post('stock/precio/actualizar-por-categoria', 'Stock\PrecioController@aplicarActualizacionCategoria')->name('precio_actualizar_categoria_aplicar');
 Route::get('stock/precio/consulta-por-articulo', 'Stock\PrecioController@consultaPreciosArticulo')->name('consulta_precios_articulo');
 
 /*
@@ -868,6 +871,21 @@ Route::post('contable/apertura-periodo/{id}/aprobar', 'Contable\AperturaPeriodoC
 Route::get('contable/apertura-periodo/{id}/habilitar', 'Contable\AperturaPeriodoContableController@habilitarDesdeAviso')->name('habilitar_apertura_periodo_contable_desde_aviso');
 Route::post('contable/apertura-periodo/{id}/rechazar', 'Contable\AperturaPeriodoContableController@rechazar')->name('rechazar_apertura_periodo_contable');
 Route::post('contable/apertura-periodo/{id}/revocar', 'Contable\AperturaPeriodoContableController@revocar')->name('revocar_apertura_periodo_contable');
+
+/*
+* Aprobación de asientos contables (cuentas no autorizadas)
+*/
+Route::get('contable/aprobacion-asientos', 'Contable\AsientoAprobacionController@index')->name('aprobacion_asientos');
+Route::get('contable/aprobacion-asientos/{id}', 'Contable\AsientoAprobacionController@ver')->name('ver_aprobacion_asiento');
+Route::post('contable/aprobacion-asientos/{id}/aprobar', 'Contable\AsientoAprobacionController@aprobar')->name('aprobar_asiento_pendiente');
+Route::post('contable/aprobacion-asientos/{id}/rechazar', 'Contable\AsientoAprobacionController@rechazar')->name('rechazar_asiento_pendiente');
+Route::get('contable/configuracion-asiento', 'Contable\ConfiguracionAsientoContableController@index')->name('configuracion_asiento_contable');
+Route::put('contable/configuracion-asiento', 'Contable\ConfiguracionAsientoContableController@actualizar')->name('actualizar_configuracion_asiento_contable');
+Route::post('contable/asiento/validar-cuentas-usuario', 'Contable\AsientoController@validarCuentasUsuario')->name('validar_cuentas_asiento_usuario');
+
+Route::get('contable/asiento/publico/{token}/aprobar', 'Contable\AsientoAprobacionController@aprobarPublico')->name('asiento_aprobar_publico');
+Route::match(['get', 'post'], 'contable/asiento/publico/{token}/rechazar', 'Contable\AsientoAprobacionController@rechazarPublico')->name('asiento_rechazar_publico');
+Route::get('contable/asiento/publico/{token}/ver', 'Contable\AsientoAprobacionController@verPublico')->name('asiento_ver_publico');
 
 /*
 * Cuentas contables por usuario
@@ -1128,6 +1146,8 @@ Route::get('ventas/repkilocategoria', 'Ventas\PedidoController@indexReporteKiloC
 Route::get('ventas/listar-repkilocategoria/{formato}', 'Ventas\PedidoController@listarReporteKiloCategoria')->name('listar_rep_kilocategoria');
 Route::get('ventas/iva-ventas', 'Ventas\IvaVentasReporteController@index')->name('iva_ventas');
 Route::get('ventas/listar-iva-ventas/{formato}', 'Ventas\IvaVentasReporteController@exportar')->name('listar_iva_ventas');
+Route::get('ventas/cot-electronico', 'Ventas\CotElectronicoController@index')->name('cot_electronico');
+Route::post('ventas/cot-electronico/probar-conexion', 'Ventas\CotElectronicoController@probarConexion')->name('cot_electronico_probar_conexion');
 
 // Totales de Pedidos
 Route::get('ventas/reptotalpedido', 'Ventas\PedidoController@indexReporteTotalPedido')->name('rep_totalpedido');
@@ -3125,6 +3145,8 @@ Route::post('ventas/distribuidor', 'Ventas\DistribuidorController@guardar')->nam
 Route::get('ventas/distribuidor/{id}/editar', 'Ventas\DistribuidorController@editar')->name('editar_distribuidor');
 Route::put('ventas/distribuidor/{id}', 'Ventas\DistribuidorController@actualizar')->name('actualizar_distribuidor');
 Route::delete('ventas/distribuidor/{id}', 'Ventas\DistribuidorController@eliminar')->name('eliminar_distribuidor');
+Route::post('ventas/distribuidor/consultadistribuidor', 'Ventas\DistribuidorController@consultaDistribuidor')->name('consulta_distribuidor');
+Route::get('ventas/leerdistribuidor/{codigo}', 'Ventas\DistribuidorController@leeUnDistribuidor')->name('leer_distribuidor');
 
 /*
  * Descuento venta

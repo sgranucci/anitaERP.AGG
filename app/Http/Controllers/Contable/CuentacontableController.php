@@ -205,15 +205,17 @@ class CuentacontableController extends Controller
 		$output['data'] = '';	
         $flSinDatos = true;
         $puedeConsultar = can('listar-cuentas-contables', false) || can('editar-cuentas-contables', false);
+        $usuarioTieneRestriccion = \App\Support\Contable\AsientoCuentaUsuarioSupport::usuarioTieneRestriccionCuentas((int) auth()->id());
 		if (count($query) > 0)
 		{
 			foreach ($query as $row)
 			{
-                // Lee si tiene filtro por cuenta contable del usuario
                 $usuario_cuentacontable = $this->usuario_cuentacontableRepository
                                             ->leePorUsuarioCuenta(auth()->id(), $row['cuentacontable_id']);
 
-                if ($row['tipocuenta'] == '1' && $row['empresa_id'] == $empresaId && count($usuario_cuentacontable) == 0)
+                $cuentaPermitida = ! $usuarioTieneRestriccion || count($usuario_cuentacontable) > 0;
+
+                if ($row['tipocuenta'] == '1' && $row['empresa_id'] == $empresaId && $cuentaPermitida)
                 {
                     $flSinDatos = false;
                     $output['data'] .= '<tr>';

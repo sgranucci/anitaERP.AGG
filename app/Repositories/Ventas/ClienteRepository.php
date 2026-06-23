@@ -138,12 +138,13 @@ class ClienteRepository implements ClienteRepositoryInterface
 		// Filtra vendedores
 		$vendedores = $this->vendedorRepository->leeVendedoresAsociados();
 
-        $cliente = $this->model->with("cliente_entregas")->with("cliente_seguimientos")
+        $cliente = $this->model->with("cliente_entregas.zonavtas")->with("cliente_seguimientos")
 										->with("cliente_cm05s.provincias")
 										->with("cliente_articulo_suspendidos")->with("cliente_archivos")
 										->with("provincias")->with("localidades")->with("paises")
 										->with("tipossuspensioncliente")->with('zonavtas')
 										->with("abastos")->with("coeficientes")
+										->with("vendedores")->with("distribuidores")->with("cuentascontables")
 										->where('id', $id);
 
 		if (count($vendedores) > 0)
@@ -162,12 +163,13 @@ class ClienteRepository implements ClienteRepositoryInterface
 		// Filtra vendedores
 		$vendedores = $this->vendedorRepository->leeVendedoresAsociados();
 
-		$cliente = $this->model->with("cliente_entregas")->with("cliente_seguimientos")
+		$cliente = $this->model->with("cliente_entregas.zonavtas")->with("cliente_seguimientos")
 										->with("cliente_cm05s.provincias")
 										->with("cliente_articulo_suspendidos")->with("cliente_archivos")
 										->with("provincias")->with("localidades")->with("paises")
 										->with("tipossuspensioncliente")->with('zonavtas')
 										->with("abastos")->with("coeficientes")
+										->with("vendedores")->with("distribuidores")->with("cuentascontables")
 										->where('codigo', $codigo);
 
 		if (count($vendedores) > 0)
@@ -183,12 +185,13 @@ class ClienteRepository implements ClienteRepositoryInterface
 
 	public function findPorNumeroDocumento($numerodocumento)
     {
-		$cliente = $this->model->with("cliente_entregas")->with("cliente_seguimientos")
+		$cliente = $this->model->with("cliente_entregas.zonavtas")->with("cliente_seguimientos")
 										->with("cliente_cm05s.provincias")
 										->with("cliente_articulo_suspendidos")->with("cliente_archivos")
 										->with("provincias")->with("localidades")->with("paises")
 										->with("tipossuspensioncliente")->with('zonavtas')
 										->with("abastos")->with("coeficientes")
+										->with("vendedores")->with("distribuidores")->with("cuentascontables")
 										->where('numerodocumento', $numerodocumento);
 
 		$cliente = $cliente->first();
@@ -198,12 +201,13 @@ class ClienteRepository implements ClienteRepositoryInterface
 
     public function findOrFail($id)
     {
-        if (null == $cliente = $this->model->with("cliente_entregas")->with("cliente_seguimientos")
+        if (null == $cliente = $this->model->with("cliente_entregas.zonavtas")->with("cliente_seguimientos")
 											->with("cliente_cm05s.provincias")
 											->with("cliente_articulo_suspendidos")->with("cliente_archivos")
 											->with("provincias")->with("localidades")->with("paises")
 											->with("tipossuspensioncliente")->with('zonavtas')
 											->with("abastos")->with("coeficientes")
+										->with("vendedores")->with("distribuidores")->with("cuentascontables")
 											->findOrFail($id)) {
             throw new ModelNotFoundException("Registro no encontrado");
         }
@@ -276,6 +280,71 @@ class ClienteRepository implements ClienteRepositoryInterface
     public function sincronizarConAnita()
     {
         app(ClienteAnitaSyncService::class)->sincronizarConAnita();
+    }
+
+    /**
+     * Actualiza cliente.distribuidor_id en el ERP leyendo clim_distribuidor desde Anita (solo lectura bridge).
+     *
+     * @return array{en_anita:int, actualizados:int, omitidos:int, sin_cliente:int, errores:list<string>}
+     */
+    public function actualizarDistribuidorIdDesdeAnita(): array
+    {
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        if (config('app.empresa') !== 'EL BIERZO') {
+            throw new \RuntimeException('La sincronización de distribuidor en clientes solo aplica a EL BIERZO.');
+        }
+
+        $ret = ['en_anita' => 0, 'actualizados' => 0, 'omitidos' => 0, 'sin_cliente' => 0, 'errores' => []];
+
+        $api = new ApiAnita();
+        $payload = [
+            'acc' => 'list',
+            'tabla' => $this->tableAnita[0],
+            'campos' => 'clim_cliente, clim_distribuidor',
+            'sistema' => 'ventas',
+        ];
+        $parsed = ApiAnita::parsearRespuestaLista($api->apiCall($payload));
+        if ($parsed['error_lectura'] !== null) {
+            throw new \RuntimeException($parsed['error_lectura']);
+        }
+
+        foreach ($parsed['filas'] as $row) {
+            $ret['en_anita']++;
+            $codigo = trim((string) ($row->clim_cliente ?? ''));
+            if ($codigo === '') {
+                $ret['omitidos']++;
+
+                continue;
+            }
+
+            try {
+                $cliente = $this->queryClientePorCodigo($codigo)->first();
+                if ($cliente === null) {
+                    $ret['sin_cliente']++;
+
+                    continue;
+                }
+
+                $distribuidorId = Distribuidor::resolverIdPorCodigoAnita($row->clim_distribuidor ?? null);
+                $actual = $cliente->distribuidor_id !== null ? (int) $cliente->distribuidor_id : null;
+
+                if ($actual === $distribuidorId) {
+                    $ret['omitidos']++;
+
+                    continue;
+                }
+
+                $cliente->distribuidor_id = $distribuidorId;
+                $cliente->save();
+                $ret['actualizados']++;
+            } catch (\Throwable $e) {
+                $ret['errores'][] = "Cliente Anita clim_cliente={$codigo}: ".$e->getMessage();
+            }
+        }
+
+        return $ret;
     }
 
     /**
@@ -505,11 +574,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 				else
 					$coeficiente_id = NULL;
 								
-				$distribuidor = Distribuidor::select('id')->where('codigo' , $data->clim_distribuidor)->first();
-				if ($distribuidor)
-					$distribuidor_id = $distribuidor->id;
-				else
-					$distribuidor_id = NULL;
+				$distribuidor_id = Distribuidor::resolverIdPorCodigoAnita($data->clim_distribuidor ?? null);
 			}
 
 			$condicioniva_id = 1;
@@ -931,7 +996,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 	{
 		$this->setCamposAnita($request, $cuentacontable, $condicioniva, $condicioniibb, $codigotransporte,
 			$codigolocalidad, $codigoprovincia, $codigopais, $codigozonavta, $codigovendedor,
-			$codigolistaprecio, $codigoabasto, $codigocoeficiente,
+			$codigolistaprecio, $codigoabasto, $codigocoeficiente, $codigodistribuidor,
 			$emitecertificado, $emitenotadecredito, $agregabonificacion, $regimen, $codigotipoempresa);
 
 		$fecha = Carbon::now()->format('Ymd');
@@ -1043,7 +1108,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 				'FAX'".
 				(config('app.empresa') == 'EL BIERZO' ? ",
 				'".$codigoabasto."',
-				'0',
+				'".$codigodistribuidor."',
 				'".$codigocoeficiente."',
 				'".($request['porcentajelogistica'] ?? 0)."',
 				'".$emitecertificado."',
@@ -1138,6 +1203,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 			'modofacturacion' => $cliente->modofacturacion ?? 'N',
 			'abasto_id' => $cliente->abasto_id ?? 0,
 			'coeficiente_id' => $cliente->coeficiente_id ?? 0,
+			'distribuidor_id' => $cliente->distribuidor_id ?? null,
 			'desdefecha_exclusionpercepcioniva' => $cliente->desdefecha_exclusionpercepcioniva,
 			'hastafecha_exclusionpercepcioniva' => $cliente->hastafecha_exclusionpercepcioniva,
 			'articulo_suspendido_ids' => $cliente->cliente_articulo_suspendidos
@@ -1300,7 +1366,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 
 		$this->setCamposAnita($request, $cuentacontable, $condicioniva, $condicioniibb, $codigotransporte,
 								$codigolocalidad, $codigoprovincia, $codigopais, $codigozonavta, $codigovendedor,
-								$codigolistaprecio, $codigoabasto, $codigocoeficiente,
+								$codigolistaprecio, $codigoabasto, $codigocoeficiente, $codigodistribuidor,
 								$emitecertificado, $emitenotadecredito, $agregabonificacion, $regimen, $codigotipoempresa);
 
 		if (array_key_exists('localidad_id', $request))
@@ -1361,7 +1427,7 @@ class ClienteRepository implements ClienteRepositoryInterface
                 clim_e_mail 	                = '".substr($request['email'],0,40)."'".
 				(config("app.empresa") == "EL BIERZO" ? ",
 				clim_abasto                     = '".$codigoabasto."',
-				clim_distribuidor				= '".'0'."',
+				clim_distribuidor               = '".$codigodistribuidor."',
 				clim_coef                       = '".$codigocoeficiente."',
 				clim_logistica                  = '".$request['porcentajelogistica']."',
 				clim_emite_cert                 = '".$emitecertificado."',
@@ -1561,11 +1627,12 @@ class ClienteRepository implements ClienteRepositoryInterface
 
 	private function setCamposAnita($request, &$cuentacontable, &$condicioniva, &$condicioniibb, &$codigotransporte,
 									&$codigolocalidad, &$codigoprovincia, &$codigopais, &$codigozonavta, &$codigovendedor,
-									&$codigolistaprecio, &$codigoabasto, &$codigocoeficiente,
+									&$codigolistaprecio, &$codigoabasto, &$codigocoeficiente, &$codigodistribuidor,
 									&$emitecertificado, &$emitenotadecredito, &$agregabonificacion, &$regimen,
 									&$codigotipoempresa)
 	{
 		$regimen = '0';
+		$codigodistribuidor = 0;
 
        	$cuenta = Cuentacontable::select('id', 'codigo')->where('id' , $request['cuentacontable_id'])->first();
 		if ($cuenta)
@@ -1666,6 +1733,12 @@ class ClienteRepository implements ClienteRepositoryInterface
 				$codigocoeficiente = $coeficiente->codigo;
 			else
 				$codigocoeficiente = 0;
+
+			$codigodistribuidor = Distribuidor::codigoAnitaDesdeId(
+				isset($request['distribuidor_id']) && $request['distribuidor_id'] !== ''
+					? (int) $request['distribuidor_id']
+					: null
+			);
 		}
 
 		$tipoemp = TipoempresaCliente::select('id', 'codigo')->where('id', $request['tipoempresa_cliente_id'] ?? 0)->first();

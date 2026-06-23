@@ -21,12 +21,15 @@
         
         <table class="table table-striped table-bordered table-hover" id="tabla-data">
           <thead>
+              <th>C&oacute;d. Anita</th>
+              @if (config('app.empresa') != 'EL BIERZO')
               <th>ID</th>
+              @endif
               <th>Nombre</th>
-              <th>Condición de Iva</th>
               <th>Domicilio</th>
-              <th>Provincia</th>
               <th>Localidad</th>
+              <th>Provincia</th>
+              <th>Tel&eacute;fono</th>
               <th></th>
           </thead>
           <tbody id="datostransporte"></tbody>

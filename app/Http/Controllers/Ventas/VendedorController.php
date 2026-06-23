@@ -234,6 +234,13 @@ class VendedorController extends Controller
 
     public function consultaVendedor(Request $request)
     {
+        if (! can('listar-vendedores', false)
+            && ! can('listar-clientes', false)
+            && ! can('editar-clientes', false)
+            && ! can('crear-clientes', false)) {
+            abort(403);
+        }
+
         return ($this->vendedorRepository->consultaVendedor($request->consulta));
 	}
 

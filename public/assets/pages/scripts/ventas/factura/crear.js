@@ -189,11 +189,18 @@
             const condicionventa_id = datoscli[3];
             const descuento = datoscli[4];
 			const tiposuspension_id = datoscli[5];
+			const transporteCliente = datoscli[11] || null;
+			const codigotransporte = transporteCliente && transporteCliente.codigo ? transporteCliente.codigo : '';
+			const nombretransporte = transporteCliente && transporteCliente.nombre ? transporteCliente.nombre : '';
 
 			if (flCambioCliente)
 			{
 				$('#vendedor_id').val(vendedor_id);
 				$('#transporte_id').val(transporte_id);
+				if ($('#codigotransporte').length) {
+					$('#codigotransporte').val(codigotransporte);
+					$('#nombretransporte').val(nombretransporte);
+				}
 				$('#condicionventa_id').val(condicionventa_id);
 				$('#descuentopie').val(descuento);
 				descuentoCliente = $('#descuentopie').val();
@@ -632,6 +639,9 @@
 		// Activa eventos de consulta
 		activa_eventos_consultacliente();
 		activa_eventos_consultaarticulo();
+		if ($('#codigotransporte').length && typeof activa_eventos_consultatransporte === 'function') {
+			activa_eventos_consultatransporte();
+		}
 
 		$('.articulo').on('click', function (event) {
 

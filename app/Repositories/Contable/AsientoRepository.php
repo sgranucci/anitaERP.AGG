@@ -78,17 +78,56 @@ class AsientoRepository implements AsientoRepositoryInterface
 			$data['numeroasiento'] = self::ultimoAsientoAnita($data['empresa_id']);
 
 		$data['usuario_id'] = Auth()->id();
+
+		if (! isset($data['estado_aprobacion'])) {
+			$data['estado_aprobacion'] = Asiento::ESTADO_APROBACION_CONFIRMADO;
+		}
 		
 		$asiento = $this->model->create($data);
 
-		// Graba anita
-		$anita = self::guardarAnita($data);
-		
-		// Actualiza anita asi borra el asiento anterior por si ya existe
-		//$anita = self::actualizarAnita($data);
-
+		// Graba anita solo si el asiento queda confirmado (no pendiente de aprobación)
+		if (($data['estado_aprobacion'] ?? Asiento::ESTADO_APROBACION_CONFIRMADO) === Asiento::ESTADO_APROBACION_CONFIRMADO) {
+			self::guardarAnita($data);
+		}
 
 		return $asiento;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function armarPayloadAnitaDesdeModelo(Asiento $asiento): array
+    {
+        $asiento->loadMissing(['asiento_movimientos.monedas']);
+
+        $cuentacontableIds = [];
+        $centrocostoIds = [];
+        $monedaIds = [];
+        $debes = [];
+        $haberes = [];
+        $cotizaciones = [];
+        $observaciones = [];
+
+        foreach ($asiento->asiento_movimientos as $mov) {
+            $monto = (float) ($mov->monto ?? 0);
+            $cuentacontableIds[] = $mov->cuentacontable_id;
+            $centrocostoIds[] = $mov->centrocosto_id;
+            $monedaIds[] = optional($mov->monedas)->codigo ?? (string) ($mov->moneda_id ?? '1');
+            $debes[] = $monto > 0 ? $monto : '';
+            $haberes[] = $monto < 0 ? abs($monto) : '';
+            $cotizaciones[] = $mov->cotizacion ?? 0;
+            $observaciones[] = $mov->observacion ?? '';
+        }
+
+        return array_merge($asiento->toArray(), [
+            'cuentacontable_ids' => $cuentacontableIds,
+            'centrocosto_ids' => $centrocostoIds,
+            'moneda_ids' => $monedaIds,
+            'debes' => $debes,
+            'haberes' => $haberes,
+            'cotizaciones' => $cotizaciones,
+            'observaciones' => $observaciones,
+        ]);
     }
 
     public function update(array $data, $id)

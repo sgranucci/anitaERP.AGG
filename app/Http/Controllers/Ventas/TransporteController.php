@@ -120,7 +120,10 @@ class TransporteController extends Controller
 
     public function consultaTransporte(Request $request)
     {
-        return ($this->repository->leeTransporte($request->consulta));
+        $json = $this->repository->leeTransporte($request->input('consulta', ''));
+        $payload = json_decode($json, true);
+
+        return is_array($payload) ? ($payload['data'] ?? '') : '';
 	}
 
     public function leeTransporte($codigoTransporte)

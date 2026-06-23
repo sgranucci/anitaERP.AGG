@@ -6,6 +6,7 @@ use App\Models\Stock\Precio;
 use App\Models\Stock\Listaprecio;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Talle;
+use App\Support\Stock\PrecioSoloFacturableSupport;
 use Maatwebsite\Excel\Concerns\OnEachRow;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Maatwebsite\Excel\Row;
@@ -33,8 +34,12 @@ class PrecioImport implements OnEachRow, WithHeadingRow
     {
         $row = $row->toArray();
 
-        // Lee el articulo
-        $articulo = Articulo::select('id')->where('sku', $row['articulo'])->first();
+        // Lee el articulo (solo facturables)
+        $articulo = Articulo::select('id', 'nofactura')->where('sku', $row['articulo'])->first();
+
+        if (! $articulo || (string) $articulo->nofactura !== PrecioSoloFacturableSupport::NOFACTURA_FACTURABLE) {
+            return;
+        }
 
         $arrayPrecios = [];
         $fechavigencia = Carbon::createFromFormat('d-m-Y', $this->fechavigencia);

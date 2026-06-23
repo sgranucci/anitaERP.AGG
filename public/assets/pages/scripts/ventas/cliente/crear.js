@@ -204,6 +204,9 @@
         activa_eventos_consultalocalidad();
         activa_eventos_consultaprovincia();
         activa_eventos_consultazonavta();
+        activa_eventos_consultavendedor();
+        activa_eventos_consultadistribuidor();
+        activa_eventos_consulta_cuentacontable();
     }
 
     function muestraEmiteNotaDeCredito()

@@ -59,9 +59,10 @@ function activa_eventos_consultatransporte()
     });
 
     $(document).on('click', '.eligeconsultatransporte', function () {
-        let seleccion = $(this).parents("tr").children().html();
-        let nombre = $(this).parents("tr").find(".nombre").html();
-        let codigo = $(this).parents("tr").find(".codigo").html();
+        let $tr = $(this).parents("tr");
+        let seleccion = $tr.find(".id").html();
+        let nombre = $tr.find(".nombre").html();
+        let codigo = $tr.find(".codigo").html();
 
         $("#transporte_id").val(seleccion);
         $("#nombretransporte").val(nombre);

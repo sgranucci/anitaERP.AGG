@@ -9,13 +9,14 @@
     	<table class="table" id="cuotas-table">
     		<thead>
     			<tr>
-    				<th style="width: 7%;">Cod.</th>
-    				<th style="width: 25%;">Nombre</th>
-    				<th style="width: 20%;">Domicilio</th>
-    				<th style="width: 15%;">Provincia</th>
-    				<th style="width: 15%;">Localidad</th>
-    				<th>Cod.Postal</th>
-    				<th style="width: 15%;">Transporte</th>
+    				<th style="width: 5%;">Cod.</th>
+    				<th style="width: 18%;">Nombre</th>
+    				<th style="width: 16%;">Domicilio</th>
+    				<th style="width: 12%;">Provincia</th>
+    				<th style="width: 12%;">Localidad</th>
+    				<th style="width: 7%;">Cod.Postal</th>
+    				<th style="width: 14%;">Zona venta</th>
+    				<th style="width: 12%;">Transporte</th>
     				<th></th>
     			</tr>
     		</thead>
@@ -65,6 +66,11 @@
         							<input type="text" name="codigospostales[]" value="{{old('codigospostales.' . $loop->index, $entrega->codigopostal ?? '')}}" class="form-control codigospostales" placeholder="C&oacute;digo Postal">
         						</div>
                 			</td>
+							@include('ventas.cliente.partials.campo_zonavta_entrega', [
+								'zonavtaId' => old('zonavtas_id.' . $loop->index, optional($entrega)->zonavta_id ?? ''),
+								'zonavtaCodigo' => old('codigozonavtas.' . $loop->index, optional(optional($entrega)->zonavtas)->codigo ?? ''),
+								'zonavtaNombre' => old('nombrezonavtas.' . $loop->index, optional(optional($entrega)->zonavtas)->nombre ?? ''),
+							])
                 			<td>
         						<select name="transportes_id[]" id="transportes_id" data-placeholder="Transpore" class="col-lg-10 form-control" data-fouc>
         							<option value="">-- Seleccionar Transporte --</option>

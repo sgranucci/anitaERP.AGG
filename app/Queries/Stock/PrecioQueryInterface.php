@@ -2,31 +2,13 @@
 
 namespace App\Queries\Stock;
 
-use Illuminate\Http\Request;
-
 interface PrecioQueryInterface
 {
     /**
-     * @return array{
-     *     fecha_vigencia: string,
-     *     listaprecio_id: int|null,
-     *     filtros: array<string, mixed>,
-     *     busqueda: string
-     * }
-     */
-    public function resolverFiltrosDesdeRequest(Request $request): array;
-
-    /**
-     * @param  array<string, mixed>|string|null  $filtros
+     * @param  array<string, mixed>  $filtros
      * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator|\Illuminate\Support\Collection<int, object>
      */
-    public function leePrecios(
-        string $fechaReferencia,
-        ?int $listaprecioId,
-        $filtros,
-        ?string $busqueda,
-        bool $flPaginando
-    );
+    public function leePrecios(array $filtros, bool $flPaginando);
 
     /**
      * Historial de precios de venta de un artículo en todas las listas donde figura.

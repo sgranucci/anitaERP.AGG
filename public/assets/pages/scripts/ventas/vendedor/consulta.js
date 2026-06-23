@@ -2,6 +2,50 @@ var ptrVendedor_id;
 var ptrCodigoVendedor_id;
 var ptrNombreVendedor;
 
+function actualizarLinkEditarVendedor($ctx, vendedorId) {
+    if (!$ctx || !$ctx.length) {
+        return;
+    }
+    var $link = $ctx.find('.btn-link-editar-vendedor');
+    if (!$link.length) {
+        return;
+    }
+    var id = parseInt(vendedorId, 10) || 0;
+    if (id > 0) {
+        $link.attr('href', carpetaBase + '/ventas/vendedor/' + id + '/editar?origen=modal_consulta&vista=consulta').removeClass('d-none');
+    } else {
+        $link.attr('href', '#').addClass('d-none');
+    }
+}
+
+function aplicarVendedorEnContexto($ctx, data) {
+    if ($ctx && $ctx.length) {
+        $ctx.find('.vendedor_id').val(data.id);
+        $ctx.find('.codigovendedor').val(data.codigo);
+        $ctx.find('.nombrevendedor').val(data.nombre);
+        actualizarLinkEditarVendedor($ctx, data.id);
+    }
+
+    $('#vendedor_id').val(data.id);
+    $('#codigovendedor').val(data.codigo);
+    $('#nombrevendedor').val(data.nombre);
+    actualizarLinkEditarVendedor($('.tm-vendedor-campo').first(), data.id);
+}
+
+function limpiarVendedorEnContexto($ctx) {
+    if ($ctx && $ctx.length) {
+        $ctx.find('.vendedor_id').val('');
+        $ctx.find('.codigovendedor').val('');
+        $ctx.find('.nombrevendedor').val('');
+        actualizarLinkEditarVendedor($ctx, 0);
+    }
+
+    $('#vendedor_id').val('');
+    $('#codigovendedor').val('');
+    $('#nombrevendedor').val('');
+    actualizarLinkEditarVendedor($('.tm-vendedor-campo').first(), 0);
+}
+
 function buscar_datos_vendedor(consulta) {
     $.ajax({
         url: carpetaBase+'/ventas/vendedor/consultavendedor',
@@ -24,19 +68,6 @@ function buscar_datos_vendedor(consulta) {
     });
 }
 
-// Si pulsamos tecla enter en un Input no envia formulario
-$("input").keydown(function (e){
-    // Capturamos qué tecla ha sido
-    var keyCode= e.which;
-    // Si la tecla es el Intro/Enter
-    if (keyCode == 13){
-      // Evitamos que se ejecute eventos
-      e.preventDefault();
-      // Devolvemos falso
-      return false;
-    }
-  });
-
 $(document).on('keyup', '#consultavendedor', function () {
     var valor = $(this).val();
     if (valor != "") {
@@ -46,115 +77,73 @@ $(document).on('keyup', '#consultavendedor', function () {
     }
 });
 
+function resolverPorCodigoVendedor(codigo, $ctx) {
+    var urlRes = carpetaBase + '/ventas/leervendedor/' + encodeURIComponent(codigo);
+    $.get(urlRes, function(data) {
+        if (data && data.id) {
+            aplicarVendedorEnContexto($ctx, data);
+        } else {
+            limpiarVendedorEnContexto($ctx);
+        }
+    }).fail(function() {
+        limpiarVendedorEnContexto($ctx);
+    });
+}
+
 function activa_eventos_consultavendedor()
 {
-    // Consulta de zona de venta
-    $('.consultavendedor').on('click', function (event) {
-        
-        ptrVendedor_id = $(this).parents("tr").find(".vendedor_id");
-        ptrCodigoVendedor_id = $(this).parents("tr").find(".codigovendedor");
-		ptrNombreVendedor = $(this).parents("tr").find(".nombrevendedor");
+    $('.consultavendedor').off('click').on('click', function () {
+        var $ctx = $(this).closest('.tm-vendedor-campo');
+        ptrVendedor_id = $ctx.length ? $ctx.find('.vendedor_id') : null;
+        ptrCodigoVendedor_id = $ctx.length ? $ctx.find('.codigovendedor') : null;
+        ptrNombreVendedor = $ctx.length ? $ctx.find('.nombrevendedor') : null;
 
-        // Abre modal de consulta
         $("#consultavendedorModal").modal('show');
+        buscar_datos_vendedor('');
     });
 
-    $('#consultavendedorModal').on('shown.bs.modal', function () {
+    $('#consultavendedorModal').off('shown.bs.modal').on('shown.bs.modal', function () {
         $(this).find('[autofocus]').focus();
-    })
+    });
 
-    $('#aceptaconsultavendedorModal').on('click', function () {
+    $('#aceptaconsultavendedorModal').off('click').on('click', function () {
         $('#consultavendedorModal').modal('hide');
     });
 
-    $(document).on('click', '.eligeconsultavendedor', function () {
-        let seleccion = $(this).parents("tr").children().html();
-        let nombre = $(this).parents("tr").find(".nombre").html();
-        let codigo = $(this).parents("tr").find(".codigo").html();
+    $(document).off('click.eligeconsultavendedor').on('click.eligeconsultavendedor', '.eligeconsultavendedor', function () {
+        var $row = $(this).closest('tr');
+        var data = {
+            id: $.trim($row.find('.id').text()),
+            nombre: $.trim($row.find('.nombre').text()),
+            codigo: $.trim($row.find('.codigo').text()),
+        };
 
-        $(ptrVendedor_id).val(seleccion);
-        $(ptrCodigoVendedor_id).val(codigo);
-        $(ptrNombreVendedor).val(nombre);
-
-        $("#vendedor_id").val(seleccion);
-        $("#nombrevendedor").val(nombre);
-        $("#codigovendedor").val(codigo);
-
-        $('#consultavendedorModal').modal('hide');
-    });
-
-    $(document).on('click', '.consultaunvendedor', function () {
-        let id = $(this).parents("tr").children().html();
-
-        if (id > 0)
-        {
-            let urlConsultaZonavta = route('editar_vendedor_remoto', ':id');
-            let url = urlConsultaZonavta;
-            url = url.replace(':id', id);
-            document.location.href=url;
+        if (ptrVendedor_id && ptrVendedor_id.length) {
+            ptrVendedor_id.val(data.id);
+            ptrCodigoVendedor_id.val(data.codigo);
+            ptrNombreVendedor.val(data.nombre);
+            actualizarLinkEditarVendedor(ptrVendedor_id.closest('.tm-vendedor-campo'), data.id);
         }
+
+        aplicarVendedorEnContexto($('.tm-vendedor-campo').first(), data);
+        $('#consultavendedorModal').modal('hide');
     });
 
-    $('#codigovendedor').on('change', function (event) {
-        event.preventDefault();
-
-        // Lee servicio terrestre por codigo
-        let codigovendedor = $("#codigovendedor").val();
-        let url_res = carpetaBase+'/ventas/leervendedor/'+codigovendedor;
-
-        $.get(url_res, function(data){
-            if (data)
-            {
-                $("#vendedor_id").val(data.id);
-                $("#nombrevendedor").val(data.nombre);
-                $("#vendedor").val(data.nombre);
-                $("#codigovendedor").val(data.codigo);
-            }
-        });
+    $('.codigovendedor').off('change blur').on('change blur', function () {
+        var codigo = $.trim($(this).val());
+        var $ctx = $(this).closest('.tm-vendedor-campo');
+        if (codigo === '') {
+            limpiarVendedorEnContexto($ctx.length ? $ctx : null);
+            return;
+        }
+        resolverPorCodigoVendedor(codigo, $ctx.length ? $ctx : null);
     });
-
-    $('.codigovendedor').on('change', function (event) {
-        event.preventDefault();
-        var ptrrenglon = this;
-
-        let codigovendedor = $(this).val();
-        let url_res = carpetaBase+'/ventas/leervendedor/'+codigovendedor;
-
-        $(ptrrenglon).parents("tr").find(".vendedor_id").val("");
-        $(ptrrenglon).parents("tr").find(".codigovendedor").val("");
-		$(ptrrenglon).parents("tr").find(".nombrevendedor").val("");        
-
-        $("#vendedor_id").val("");
-        $("#nombrevendedor").val("");        
-
-        $.get(url_res, function(data){
-            if (data)
-            {
-                $(ptrrenglon).parents("tr").find(".vendedor_id").val(data.id);
-                $(ptrrenglon).parents("tr").find(".codigovendedor").val(data.codigo);
-                $(ptrrenglon).parents("tr").find(".nombrevendedor").val(data.nombre);
-
-                $("#vendedor_id").val(data.id);
-                $("#nombrevendedor").val(data.nombre);
-            }
-        });
-
-        setTimeout(() => {
-        }, 1000);
-
-    });    
 }
 
 function desactiva_eventos_consulta_vendedor()
 {
-    $('.consultavendedor').off('click')
-    $('#aceptaconsultavendedorModal').off('click')
-    $(document).off('click')
-    $(document).off('click')
-    $('#codigovendedor').off('change')
-    $('.codigovendedor').off('change')
+    $('.consultavendedor').off('click');
+    $('#aceptaconsultavendedorModal').off('click');
+    $(document).off('click.eligeconsultavendedor');
+    $('.codigovendedor').off('change blur');
 }
-
-
-
-

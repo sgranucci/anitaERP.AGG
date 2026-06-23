@@ -39,7 +39,7 @@
                     @endif
                 </div>
             </div>
-            <form action="{{route('guardar_precio')}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
+            <form action="{{route('guardar_precio')}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-articulo-solo-facturable="1">
                 @csrf
                 @if (!empty($retornoArticuloPrecios))
                     <input type="hidden" name="retorno_articulo_id" value="{{ $retornoArticuloPrecios['articulo_id'] }}">

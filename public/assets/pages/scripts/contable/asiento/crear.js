@@ -398,100 +398,78 @@ var codigoxcodigo;
 
 	$("#form-general").submit(function (e) {
 		e.preventDefault();
+		enviarFormularioAsiento(false);
+	});
+
+	function enviarFormularioAsiento(confirmarPendiente) {
 		let token = $("meta[name='csrf-token']").attr("content");
-		let empresa_id = $("#empresa_id").val();
-		let tipoasiento_id = $("#tipoasiento_id").val();
-		let fecha = $("#fecha").val();
-		let observacion = $("#observacion").val();
 		let id = $("#id").val();
-		let numeroasiento = $("#numeroasiento").val();
-	
-		let datosCuentas=[];
-		let datosHeader=[];
-		var cuentacontable_ids, centrocosto_ids, moneda_ids,  debes, haberes;
-		var cotizaciones, observaciones;
 		var url;
 
-		datosHeader.push({
-			empresa_id,
-			tipoasiento_id,
-			fecha,
-			observacion,
-			numeroasiento
-		});
-		datosHeader = JSON.stringify(datosHeader);
-
-		$("#cuenta-table .item-cuenta").each(function() {
-			cuentacontable_ids = $(this).find(".cuentacontable_id").val();
-			centrocosto_ids = $(this).find(".centrocosto").val();
-			moneda_ids = $(this).find(".moneda").val();
-			debes = $(this).find(".debe").val();
-			haberes = $(this).find(".haber").val();
-			cotizaciones = $(this).find(".cotizacion").val();
-			observaciones = $(this).find(".observacion").val();
-
-			datosCuentas.push({
-				cuentacontable_ids,
-				centrocosto_ids,
-				moneda_ids,
-				debes,
-				haberes,
-				cotizaciones,
-				observaciones
-			});
-		});
-		datosCuentas = JSON.stringify(datosCuentas);
-		
-		$.ajaxSetup({
-			beforeSend: BeforeSend,
-			complete: CompleteFunc,
-		});
-
-
-		//$.post(url,
-		//	{
-		//		_token: token,
-		//		header: datosHeader,
-		//		datos: datosCuentas,
-		//	},           
-		//	function(data, status){
-		//		alert(data);
-		//		window.location.href = '/contable/asiento';
-		//	});
-
-		//FormData es necesario para el envio de archivo,
-		//y de la siguiente manera capturamos todos los elementos del formulario
-		//var parametros=new FormData($(this)[0]);
-		var parametros=new FormData($(this)[0])
-
+		var parametros=new FormData($("#form-general")[0]);
 		parametros.append('_token', token);
-
-		//parametros.append('header', datosHeader);
-		//parametros.append('datos',datosCuentas);
+		if (confirmarPendiente) {
+			parametros.append('confirmar_pendiente_aprobacion', '1');
+		}
 
 		if (id != '')
 			url = carpetaBase+"/contable/actualizarasiento/"+id;
 		else
 			url = carpetaBase+"/contable/asiento";
 
-		//realizamos la petición ajax con la función de jquery
+		$.ajaxSetup({
+			beforeSend: BeforeSend,
+			complete: CompleteFunc,
+		});
+
 		$.ajax({
 			type: "POST",
 			url: url,
 			data: parametros,
-			contentType: false, //importante enviar este parametro en false
-			processData: false, //importante enviar este parametro en false
+			contentType: false,
+			processData: false,
+			dataType: 'json',
 			success: function (data) {
+				if (data.requiere_aprobacion) {
+					mostrarModalAprobacionCuentas(data.cuentas_detalle || []);
+					return;
+				}
+				if (data.mensaje === 'pendiente') {
+					alert("Asiento guardado en estado PENDIENTE (Nº "+data.numeroasiento+"). Contaduría fue notificada para su aprobación.");
+					window.location.href = carpetaBase+'/contable/asiento';
+					return;
+				}
 				if (data.mensaje == 'ok')
 					alert("Se grabó el asiento con éxito");
+				else if (data.errores)
+					alert("Error: "+data.errores);
 				else
 					alert("Error de grabacion");
-				window.location.href = carpetaBase+'/contable/asiento';
+				if (data.mensaje == 'ok')
+					window.location.href = carpetaBase+'/contable/asiento';
 			},
 			error: function (r) {
 				alert("Error del servidor");
 			}
 		});
+	}
+
+	function mostrarModalAprobacionCuentas(cuentas) {
+		var $lista = $('#lista-cuentas-no-autorizadas');
+		$lista.empty();
+		if (!cuentas.length) {
+			$lista.append('<li>Cuentas fuera de su lista autorizada</li>');
+		} else {
+			cuentas.forEach(function (c) {
+				$lista.append('<li><strong>'+c.codigo+'</strong> — '+c.nombre+'</li>');
+			});
+		}
+		$('#aprobacionCuentasModal').modal('show');
+	}
+
+	$('#acepta-aprobacion-cuentas').on('click', function () {
+		$('#aprobacionCuentasModal').modal('hide');
+		enviarFormularioAsiento(true);
 	});
 	
 	function BeforeSend()

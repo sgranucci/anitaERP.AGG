@@ -8,6 +8,9 @@
 <script src="{{asset("assets/pages/scripts/contable/asiento/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/contable/cuentacontable/consulta.js")}}" type="text/javascript"></script>
 <script>
+    window.usuarioTieneRestriccionCuentas = @json($usuarioTieneRestriccionCuentas ?? false);
+</script>
+<script>
 $( "#botonform0" ).click(function() {
     let flError = false;
 
@@ -93,4 +96,6 @@ $( "#botonform0" ).click(function() {
         </div>
     </div>
 </div>
+
+@include('contable.asiento.partials.modal_aprobacion_cuentas')
 @endsection

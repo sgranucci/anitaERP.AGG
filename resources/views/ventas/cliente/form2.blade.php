@@ -75,16 +75,21 @@
 			</div>
 			<div class="form-group row">
 				<label for="zonavta" class="col-lg-4 col-form-label">Zona de venta</label>
-				<div class="form-group row">
+				<div class="col-lg-8 tm-zonavta-campo">
 					<input type="hidden" id="zonavta_id_previa" name="zonavta_id_previa" value="{{old('zonavta_id', $data->zonavta_id ?? '')}}" >
 					<input type="hidden" id="desc_zonavta" name="desc_zonavta" value="{{old('desc_zonavta', $data->desc_zonavta ?? '')}}" >
-					<input type="hidden" class="col-form-label zonavta_id" id="zonavta_id" name="zonavta_id" value="{{$data->zonavta_id ?? ''}}" >
-					<input type="text" class="form-control col-lg-3 codigozonavta" id="codigozonavta" name="codigozonavta" value="{{$data->zonavtas->codigo ?? ''}}" >
-					<input type="text" class="form-control col-lg-8 nombrezonavta" id="nombrezonavta" name="nombrezonavta" value="{{$data->zonavtas->nombre ?? ''}}" readonly>
-					<button type="button" title="Consulta zonavtaes" style="padding:1;" class="btn-accion-tabla consultazonavta tooltipsC">
-						<i class="fa fa-search text-primary"></i>
-					</button>
-					<input type="hidden" name="nombrezonavta" id="nombrezonavta" class="form-control" value="{{old('nombrezonavta', $data->zonavtas->nombre ?? '')}}">
+					<div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
+						<input type="hidden" class="zonavta_id" id="zonavta_id" name="zonavta_id" value="{{ old('zonavta_id', $data->zonavta_id ?? '') }}">
+						<button type="button" title="Consulta zonas de venta" class="btn-accion-tabla consultazonavta tooltipsC flex-shrink-0">
+							<i class="fa fa-search text-primary"></i>
+						</button>
+						<input type="text" class="form-control codigozonavta flex-shrink-0" id="codigozonavta" name="codigozonavta"
+							value="{{ old('codigozonavta', $data->zonavtas->codigo ?? '') }}"
+							placeholder="C&oacute;d." autocomplete="off" style="width: 4rem;">
+						<input type="text" class="form-control nombrezonavta" id="nombrezonavta" name="nombrezonavta"
+							value="{{ old('nombrezonavta', $data->zonavtas->nombre ?? '') }}"
+							placeholder="Descripci&oacute;n" readonly style="min-width: 0; flex: 1 1 auto;">
+					</div>
 				</div>
 			</div>
 			@if (config('app.empresa') == 'EL BIERZO')
@@ -144,6 +149,32 @@
 						@endforeach
 					</select>
 				</div>
+				<div class="form-group row tm-distribuidor-campo">
+					<label for="distribuidor_id" class="col-lg-4 col-form-label">Distribuidor</label>
+					<div class="col-lg-8">
+						<div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
+							<input type="hidden" class="distribuidor_id" name="distribuidor_id" id="distribuidor_id"
+								value="{{ old('distribuidor_id', $data->distribuidor_id ?? '') }}">
+							<button type="button" title="Consulta distribuidores" class="btn-accion-tabla consultadistribuidor tooltipsC flex-shrink-0">
+								<i class="fa fa-search text-primary"></i>
+							</button>
+							@if (can('editar-distribuidor', false) || can('listar-distribuidor', false))
+								<a href="{{ ((int) ($data->distribuidor_id ?? 0) > 0) ? route('editar_distribuidor', ['id' => (int) $data->distribuidor_id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) : '#' }}"
+									target="_blank" rel="noopener"
+									class="btn-accion-tabla btn-link-editar-distribuidor tooltipsC flex-shrink-0 {{ ((int) ($data->distribuidor_id ?? 0) > 0) ? '' : 'd-none' }}"
+									title="Consultar distribuidor en ABM">
+									<i class="fa fa-edit"></i>
+								</a>
+							@endif
+							<input type="text" class="form-control codigodistribuidor flex-shrink-0" id="codigodistribuidor"
+								value="{{ old('codigodistribuidor', $data->distribuidores->codigo ?? '') }}"
+								placeholder="C&oacute;d." autocomplete="off" style="width: 5.5rem;">
+							<input type="text" class="form-control nombredistribuidor" id="nombredistribuidor"
+								value="{{ old('nombredistribuidor', $data->distribuidores->nombre ?? '') }}"
+								placeholder="Descripci&oacute;n" readonly style="min-width: 0; flex: 1 1 auto;">
+						</div>
+					</div>
+				</div>
 				<div class="form-group row">
 					<label for="desdefecha_exclusionpercepcioniva" class="col-lg-4 col-form-label">Desde Fecha Excl. Perc. Iva</label>
 					<div class="col-lg-3">
@@ -199,29 +230,31 @@
 					@endforeach
 				</select>
 			</div>
-			<div class="form-group row">
-				<label for="vendedor" class="col-lg-4 col-form-label">Vendedor</label>
-				<select name="vendedor_id" id="vendedor_id" data-placeholder="Vendedor" class="col-lg-3 form-control" data-fouc>
-					<option value="">-- Seleccionar Vendedor --</option>
-					@foreach($vendedor_query as $key => $value)
-						@if( (int) $value->id == (int) old('vendedor_id', $data->vendedor_id ?? ''))
-							<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-						@else
-							<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
+			<div class="form-group row tm-vendedor-campo">
+				<label for="vendedor_id" class="col-lg-4 col-form-label">Vendedor</label>
+				<div class="col-lg-8">
+					<div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
+						<input type="hidden" class="vendedor_id" name="vendedor_id" id="vendedor_id"
+							value="{{ old('vendedor_id', $data->vendedor_id ?? '') }}">
+						<button type="button" title="Consulta vendedores" class="btn-accion-tabla consultavendedor tooltipsC flex-shrink-0">
+							<i class="fa fa-search text-primary"></i>
+						</button>
+						@if (can('editar-vendedores', false) || can('listar-vendedores', false))
+							<a href="{{ ((int) ($data->vendedor_id ?? 0) > 0) ? route('editar_vendedor', ['id' => (int) $data->vendedor_id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) : '#' }}"
+								target="_blank" rel="noopener"
+								class="btn-accion-tabla btn-link-editar-vendedor tooltipsC flex-shrink-0 {{ ((int) ($data->vendedor_id ?? 0) > 0) ? '' : 'd-none' }}"
+								title="Consultar vendedor en ABM">
+								<i class="fa fa-edit"></i>
+							</a>
 						@endif
-					@endforeach
-				</select>
-				<label for="distribuidor" class="col-lg-2 col-form-label">Distribuidor</label>
-				<select name="distribuidor_id" id="distribuidor_id" data-placeholder="Distribuidor" class="col-lg-3 form-control" data-fouc>
-					<option value="">-- Seleccionar Distribuidor --</option>
-					@foreach($distribuidor_query as $key => $value)
-						@if( (int) $value->id == (int) old('distribuidor_id', $data->distribuidor_id ?? ''))
-							<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-						@else
-							<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-						@endif
-					@endforeach
-				</select>
+						<input type="text" class="form-control codigovendedor flex-shrink-0" id="codigovendedor"
+							value="{{ old('codigovendedor', $data->vendedores->codigo ?? '') }}"
+							placeholder="C&oacute;d." autocomplete="off" style="width: 5.5rem;">
+						<input type="text" class="form-control nombrevendedor" id="nombrevendedor"
+							value="{{ old('nombrevendedor', $data->vendedores->nombre ?? '') }}"
+							placeholder="Descripci&oacute;n" readonly style="min-width: 0; flex: 1 1 auto;">
+					</div>
+				</div>
 			</div>
 			<div class="form-group row">
 				<label for="transporte" class="col-lg-4 col-form-label">Reparto</label>
@@ -236,24 +269,52 @@
 					@endforeach
 				</select>
 			</div>
-			<div class="form-group row">
-				@if ($tipoalta != 'P') 
-					<label for="cuentacontable" class="col-lg-4 col-form-label requerido">Cuenta contable</label>
+			<div class="form-group row tm-cuentacontable-campo">
+				@if ($tipoalta != 'P')
+					<label for="cuentacontable_id" class="col-lg-4 col-form-label requerido">Cuenta contable</label>
 				@else
-					<label for="cuentacontable" class="col-lg-4 col-form-label">Cuenta contable</label>
+					<label for="cuentacontable_id" class="col-lg-4 col-form-label">Cuenta contable</label>
 				@endif
-				<select name="cuentacontable_id" id="cuentacontable_id" data-placeholder="Cuenta contable para imputaciones" class="col-lg-8 form-control" data-fouc @if ($tipoalta != 'P') required @endif>
-					<option value="">-- Seleccionar Cta. Contable --</option>
-					@foreach($cuentacontable_query as $key => $value)
-						@if (isset($data->cuentacontable_id) ? 
-							(int) $value->id == (int) old('cuentacontable_id', $data->cuentacontable_id ?? '') : 
-							config('cliente.DEUDORES_POR_VENTAS') == $value->codigo)
-							<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-						@else
-							<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
+				@php
+					$cuentaContableId = old('cuentacontable_id', $data->cuentacontable_id ?? '');
+					$cuentaContableCodigo = old('codigocuentacontable', optional($data->cuentascontables ?? null)->codigo ?? '');
+					$cuentaContableNombre = old('nombrecuentacontable', optional($data->cuentascontables ?? null)->nombre ?? '');
+					if ($cuentaContableId === '' && $cuentaContableCodigo === '') {
+						$cuentaDefault = \App\Models\Contable\Cuentacontable::where('empresa_id', config('cliente.EMPRESA_DEFAULT_ID'))
+							->where('codigo', (string) config('cliente.DEUDORES_POR_VENTAS'))
+							->first();
+						if ($cuentaDefault) {
+							$cuentaContableId = $cuentaDefault->id;
+							$cuentaContableCodigo = $cuentaDefault->codigo;
+							$cuentaContableNombre = $cuentaDefault->nombre;
+						}
+					}
+				@endphp
+				<div class="col-lg-8">
+					<input type="hidden" id="empresa_id" value="{{ config('cliente.EMPRESA_DEFAULT_ID') }}">
+					<div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
+						<input type="hidden" class="cuentacontable_id" name="cuentacontable_id" id="cuentacontable_id"
+							value="{{ $cuentaContableId }}" @if ($tipoalta != 'P') required @endif>
+						<button type="button" title="Consulta cuentas contables" class="btn-accion-tabla consultacuentacontable tooltipsC flex-shrink-0">
+							<i class="fa fa-search text-primary"></i>
+						</button>
+						@if (can('editar-cuentas-contables', false) || can('listar-cuentas-contables', false))
+							<a href="{{ ((int) $cuentaContableId > 0) ? route('editar_cuentacontable', ['id' => (int) $cuentaContableId, 'origen' => 'modal_consulta', 'vista' => 'consulta']) : '#' }}"
+								target="_blank" rel="noopener"
+								class="btn-accion-tabla btn-link-editar-cuentacontable tooltipsC flex-shrink-0 {{ ((int) $cuentaContableId > 0) ? '' : 'd-none' }}"
+								title="Consultar cuenta contable en ABM">
+								<i class="fa fa-edit"></i>
+							</a>
 						@endif
-					@endforeach
-				</select>
+						<input type="text" class="form-control codigocuentacontable flex-shrink-0" id="codigocuentacontable"
+							value="{{ $cuentaContableCodigo }}"
+							placeholder="C&oacute;d." autocomplete="off"
+							style="flex: 0 0 6.85rem; width: 6.85rem; min-width: 6.85rem; max-width: 6.85rem;">
+						<input type="text" class="form-control nombrecuentacontable" id="nombrecuentacontable"
+							value="{{ $cuentaContableNombre }}"
+							placeholder="Descripci&oacute;n" readonly style="min-width: 0; flex: 1 1 auto;">
+					</div>
+				</div>
 			</div>
 			@if (can('modificar-descuento-cliente', false))
 				<div class="form-group row">
@@ -334,3 +395,6 @@
 	</div>
 </div>
 @include('includes.ventas.modalconsultazonavta')
+@include('includes.ventas.modalconsultavendedor')
+@include('includes.ventas.modalconsultadistribuidor')
+@include('includes.contable.modalconsultacuentacontable')

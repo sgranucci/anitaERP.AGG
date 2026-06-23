@@ -14,6 +14,9 @@ use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Queries\Contable\AsientoQueryInterface;
 use App\Exports\Contable\AsientoExport;
+use App\Models\Contable\Asiento;
+use App\Services\Contable\AsientoAprobacionService;
+use App\Support\Contable\AsientoCuentaUsuarioSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
@@ -31,6 +34,7 @@ class AsientoController extends Controller
     private $monedaRepository;
     private $empresaRepository;
     private $asientoQuery;
+    private $asientoAprobacionService;
 
 	public function __construct(AsientoRepositoryInterface $asientorepository,
                                 Asiento_MovimientoRepositoryInterface $asiento_movimientorepository,
@@ -40,7 +44,8 @@ class AsientoController extends Controller
                                 CuentacontableRepositoryInterface $cuentacontablerepository,
                                 CentrocostoRepositoryInterface $centrocostorepository,
                                 EmpresaRepositoryInterface $empresarepository,
-                                AsientoQueryInterface $asientoquery
+                                AsientoQueryInterface $asientoquery,
+                                AsientoAprobacionService $asientoAprobacionService
                                 )
     {
         $this->asientoRepository = $asientorepository;
@@ -52,6 +57,7 @@ class AsientoController extends Controller
         $this->monedaRepository = $monedarepository;
         $this->empresaRepository = $empresarepository;
         $this->asientoQuery = $asientoquery;
+        $this->asientoAprobacionService = $asientoAprobacionService;
     }
 
     /**
@@ -151,10 +157,11 @@ class AsientoController extends Controller
         $empresa_query = $this->empresaRepository->allFiltrado();
         $cuentacontable_query = $this->cuentacontableRepository->all();
         $centrocosto_query = $this->centrocostoRepository->all();
+        $usuarioTieneRestriccionCuentas = AsientoCuentaUsuarioSupport::usuarioTieneRestriccionCuentas((int) auth()->id());
         
         return view('contable.asiento.crear', compact('tipoasiento_query', 'moneda_query', 
                                                 'empresa_query', 'cuentacontable_query',
-                                                'centrocosto_query'));
+                                                'centrocosto_query', 'usuarioTieneRestriccionCuentas'));
     }
 
     /**
@@ -168,10 +175,30 @@ class AsientoController extends Controller
         session(['empresa_id' => $request->empresa_id]);
         session(['tipoasiento_id' => $request->tipoasiento_id]);
 
+        $cuentacontableIds = $request->input('cuentacontable_ids', []);
+        $evaluacion = $this->asientoAprobacionService->evaluarCuentas(
+            (int) auth()->id(),
+            is_array($cuentacontableIds) ? $cuentacontableIds : []
+        );
+
+        if ($evaluacion['requiere_aprobacion'] && ! $request->boolean('confirmar_pendiente_aprobacion')) {
+            return response()->json([
+                'requiere_aprobacion' => true,
+                'cuentas_detalle' => $evaluacion['cuentas_detalle'],
+                'mensaje' => 'Hay cuentas fuera de su lista autorizada. Debe solicitar aprobación de contaduría.',
+            ]);
+        }
+
+        $data = $request->all();
+        if ($evaluacion['requiere_aprobacion']) {
+            $data['estado_aprobacion'] = Asiento::ESTADO_APROBACION_PENDIENTE;
+            $data['cuentas_no_autorizadas'] = json_encode($evaluacion['cuentas_no_autorizadas']);
+        }
+
         DB::beginTransaction();
         try
         {
-            $asiento = $this->asientoRepository->create($request->all());
+            $asiento = $this->asientoRepository->create($data);
 
             if ($asiento == 'Error')
                 throw new Exception('Error en grabacion anita.');
@@ -184,15 +211,39 @@ class AsientoController extends Controller
             }
 
             DB::commit();
+
+            if ($evaluacion['requiere_aprobacion']) {
+                $this->asientoAprobacionService->enviarMailAprobacion($asiento->fresh());
+            }
         } catch (\Exception $e) {
             DB::rollback();
 
-            // Borra el asiento creado
-
-            return ['errores' => $e->getMessage()];
+            return response()->json(['errores' => $e->getMessage()]);
         }
-        return ['mensaje' => 'ok'];
+
+        if ($evaluacion['requiere_aprobacion']) {
+            return response()->json([
+                'mensaje' => 'pendiente',
+                'asiento_id' => $asiento->id,
+                'numeroasiento' => $asiento->numeroasiento,
+            ]);
+        }
+
+        return response()->json(['mensaje' => 'ok']);
 	}
+
+    public function validarCuentasUsuario(Request $request)
+    {
+        can('crear-asiento');
+
+        $ids = $request->input('cuentacontable_ids', []);
+        $evaluacion = $this->asientoAprobacionService->evaluarCuentas(
+            (int) auth()->id(),
+            is_array($ids) ? $ids : []
+        );
+
+        return response()->json($evaluacion);
+    }
 
     /**
      * Show the form for editing the specified resource.

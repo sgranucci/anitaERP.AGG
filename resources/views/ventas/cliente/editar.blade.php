@@ -12,6 +12,9 @@
 <script src="{{asset("assets/pages/scripts/configuracion/localidad/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/configuracion/provincia/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/zonavta/consulta.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/ventas/vendedor/consulta.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/ventas/distribuidor/consulta.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/contable/cuentacontable/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/cliente/arca-padron.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/cliente/crear.js")}}" type="text/javascript"></script>
 @if (config('suitecrm.habilitado'))

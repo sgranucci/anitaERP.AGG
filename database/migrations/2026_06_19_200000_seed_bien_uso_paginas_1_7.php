@@ -2,11 +2,16 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
     public function up(): void
     {
+        if (strtoupper((string) config('app.empresa')) !== 'AGG') {
+            return;
+        }
+
         $path = database_path('data/bien_uso_paginas_1_7.json');
         if (! is_readable($path)) {
             return;
@@ -19,6 +24,7 @@ return new class extends Migration
 
         $now = now();
         $ccPorCodigo = DB::table('centrocosto')->pluck('id', 'codigo');
+        $usaCentrocostoId = Schema::hasColumn('bien_uso', 'centrocosto_id');
 
         foreach ($filas as $fila) {
             $codigo = (int) ($fila['codigo_inventario'] ?? 0);
@@ -27,10 +33,12 @@ return new class extends Migration
             }
 
             $ccCodigo = (string) ($fila['centrocosto_codigo'] ?? '92');
+            $centroCostoChar = 'S';
             if ($ccCodigo === 'S') {
                 $ccCodigo = '92';
             } elseif ($ccCodigo === 'M') {
                 $ccCodigo = '89';
+                $centroCostoChar = 'M';
             }
             $centrocostoId = (int) ($ccPorCodigo[$ccCodigo] ?? $ccPorCodigo['92'] ?? 0);
 
@@ -40,10 +48,15 @@ return new class extends Migration
                 'modelo' => $fila['modelo'] ?? null,
                 'numero_serie' => $fila['numero_serie'] ?? null,
                 'estado' => (string) ($fila['estado'] ?? 'A'),
-                'centrocosto_id' => $centrocostoId > 0 ? $centrocostoId : null,
                 'tipo_bien' => (string) ($fila['tipo_bien'] ?? 'P'),
                 'updated_at' => $now,
             ];
+
+            if ($usaCentrocostoId) {
+                $payload['centrocosto_id'] = $centrocostoId > 0 ? $centrocostoId : null;
+            } elseif (Schema::hasColumn('bien_uso', 'centro_costo')) {
+                $payload['centro_costo'] = $centroCostoChar;
+            }
 
             $existente = DB::table('bien_uso')->where('codigo_inventario', $codigo)->first();
             if ($existente) {

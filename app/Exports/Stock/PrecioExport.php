@@ -13,14 +13,8 @@ class PrecioExport implements FromView
 
     private PrecioQueryInterface $precioQuery;
 
-    private string $fechaReferencia;
-
-    private ?int $listaprecioId;
-
     /** @var array<string, mixed> */
     private array $filtros;
-
-    private string $busqueda;
 
     public function __construct(PrecioQueryInterface $precioQuery)
     {
@@ -30,33 +24,21 @@ class PrecioExport implements FromView
     /**
      * @param  array<string, mixed>  $filtros
      */
-    public function parametros(
-        string $fechaReferencia,
-        ?int $listaprecioId,
-        array $filtros,
-        string $busqueda = ''
-    ): self {
-        $this->fechaReferencia = $fechaReferencia;
-        $this->listaprecioId = $listaprecioId;
+    public function parametros(array $filtros): self
+    {
         $this->filtros = $filtros;
-        $this->busqueda = $busqueda;
 
         return $this;
     }
 
     public function view(): View
     {
-        $precios = $this->precioQuery->leePrecios(
-            $this->fechaReferencia,
-            $this->listaprecioId,
-            $this->filtros,
-            $this->busqueda !== '' ? $this->busqueda : null,
-            false
-        );
+        $precios = $this->precioQuery->leePrecios($this->filtros, false);
+        $fechaReferencia = (string) ($this->filtros['fecha_vigencia'] ?? date('Y-m-d'));
 
         return view('exports.stock.precioindex', [
             'precios' => $precios,
-            'fechaReferencia' => $this->fechaReferencia,
+            'fechaReferencia' => $fechaReferencia,
         ]);
     }
 }

@@ -63,6 +63,17 @@ class ClienteAnitaSyncService
     }
 
     /**
+     * @return array{en_anita:int, actualizados:int, omitidos:int, sin_cliente:int, errores:list<string>}
+     */
+    public function actualizarDistribuidorIdDesdeAnita(): array
+    {
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        return $this->clienteRepository->actualizarDistribuidorIdDesdeAnita();
+    }
+
+    /**
      * @return list<object>
      */
     public function listarDesdeAnita(): array

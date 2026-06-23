@@ -1,0 +1,64 @@
+---
+description: Encabezado Excel en reportes y listados exportados (FromView)
+globs: app/Exports/**/*.php,resources/views/exports/**/*.blade.php
+alwaysApply: false
+---
+
+# Encabezado Excel en reportes exportados
+
+Referencia canónica: **`RequisicionSalaReporteExport`** + **`exports/sala/requisicion_sala_reporteindex.blade.php`**.
+
+## Vista Excel (`exports/{modulo}/{recurso}index.blade.php`)
+
+| Bloque | Contenido |
+|---|---|
+| Fila logos (opcional) | `<td colspan="N" style="height: 52px;">` reservada; logos vía `Drawing` en `AfterSheet` |
+| Meta fila 1 | Título (`strong` 16pt) en **fila propia** |
+| Meta fila 2 | `Generado d/m/Y H:i` |
+| Meta fila 3+ | Subtítulo (filtros), totales resumen, contador líneas — **cada uno en su `<tr>`** |
+| `<thead>` | Cabecera de columnas (`#85C1E9` aplicada en Export) |
+| `<tbody>` | Datos |
+
+**Prohibido** mezclar título y subtítulo en la misma celda/fila HTML.
+
+## Clase Export (`FromView`)
+
+Calcular filas en `view()` **antes** de renderizar, contando las mismas filas meta que emite la vista:
+
+```php
+$filasMeta = 2; // título + generado
+if (trim($subtitulo) !== '') { $filasMeta++; }
+if ($totales !== []) { $filasMeta++; }
+if ($totalLineas > 0) { $filasMeta++; }
+
+$offsetLogo = $hayFilaLogos ? 1 : 0;
+$filaInicioMeta = $offsetLogo + 1;
+$filaCabecerasExcel = $offsetLogo + $filasMeta + 1;
+$filaPrimeraDatosExcel = $filaCabecerasExcel + 1;
+```
+
+| Propiedad | Uso |
+|---|---|
+| `filaCabecerasExcel` | Fill `#85C1E9` **solo** en thead |
+| `filaPrimeraDatosExcel` | `freezePane('A'.$filaPrimeraDatosExcel)` |
+
+## AfterSheet (obligatorio)
+
+1. Logos fila 1 (altura 54, `Drawing` offset X).
+2. Merge `A:filaInicioMeta` … `A:(filaInicioMeta + filasMeta - 1)` hasta `colUltima`.
+3. Título: Arial 16 bold `#17202A`, altura 28.
+4. Meta secundarias: Arial 10 bold `#444444`, wrap; subtítulo altura 42.
+5. Reaplicar estilo thead en `filaCabecerasExcel` (fill + font).
+6. `freezePane` bajo cabecera.
+
+## Error típico
+
+Asumir `filaCabecerasExcel = hayLogos ? 4 : 3` con una sola fila meta → pinta la **primera fila de datos** en lugar del thead.
+
+## Comprobación rápida
+
+```bash
+rg 'filasMetaEncabezado|filaCabecerasExcel|contarFilasMetaEncabezado' app/Exports/
+rg 'Generado {{ date' resources/views/exports/
+php artisan view:cache
+```

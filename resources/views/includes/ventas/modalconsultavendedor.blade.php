@@ -24,6 +24,7 @@
               <th>ID</th>
               <th>Nombre</th>
               <th>Código Anita</th>
+              <th>Acciones</th>
           </thead>
           <tbody id="datosvendedor"></tbody>
         </table>

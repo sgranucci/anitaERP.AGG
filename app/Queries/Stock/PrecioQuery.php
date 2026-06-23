@@ -2,63 +2,38 @@
 
 namespace App\Queries\Stock;
 
-use App\Models\Stock\Combinacion;
 use App\Models\Stock\Precio;
+use App\Support\Stock\PrecioListadoFiltros;
+use App\Support\Stock\PrecioListaVigenteSupport;
+use App\Support\Stock\PrecioSoloFacturableSupport;
 use Carbon\Carbon;
 use DB;
-use Illuminate\Http\Request;
 
 class PrecioQuery implements PrecioQueryInterface
 {
     public function __construct(protected Precio $model) {}
 
-    public function resolverFiltrosDesdeRequest(Request $request): array
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator|\Illuminate\Support\Collection<int, object>
+     */
+    public function leePrecios(array $filtros, bool $flPaginando)
     {
-        $filtros = [];
-        if ($request->url() != $request->fullUrl()) {
-            $url = urldecode($request->fullUrl());
-            $components = parse_url($url);
-            parse_str($components['query'] ?? '', $filtros);
-
-            session(['filtrosPrecios' => $filtros]);
-        } else {
-            $filtros = session('filtrosPrecios');
+        if (is_string($filtros)) {
+            $filtros = ['busqueda' => $filtros];
         }
 
-        $fechaVigenciaFiltro = $request->filled('fecha_vigencia')
-            ? Carbon::parse($request->fecha_vigencia)->format('Y-m-d')
-            : (is_array($filtros) && ! empty($filtros['fecha_vigencia'] ?? null)
-                ? Carbon::parse($filtros['fecha_vigencia'])->format('Y-m-d')
-                : Carbon::today()->format('Y-m-d'));
-
-        $listaprecioIdFiltro = $request->input('listaprecio_id');
-        if (($listaprecioIdFiltro === null || $listaprecioIdFiltro === '')
-            && is_array($filtros) && isset($filtros['listaprecio_id']) && $filtros['listaprecio_id'] !== null && $filtros['listaprecio_id'] !== '') {
-            $listaprecioIdFiltro = (int) $filtros['listaprecio_id'];
-        }
-        if ($listaprecioIdFiltro !== null && $listaprecioIdFiltro !== '') {
-            $listaprecioIdFiltro = (int) $listaprecioIdFiltro;
-        } else {
-            $listaprecioIdFiltro = null;
-        }
-
-        return [
-            'fecha_vigencia' => $fechaVigenciaFiltro,
-            'listaprecio_id' => $listaprecioIdFiltro,
-            'filtros' => is_array($filtros) ? $filtros : [],
-            'busqueda' => trim((string) $request->get('busqueda', '')),
-        ];
-    }
-
-    public function leePrecios(
-        string $fechaReferencia,
-        ?int $listaprecioId,
-        $filtros,
-        ?string $busqueda,
-        bool $flPaginando
-    ) {
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
+
+        $fechaReferencia = (string) ($filtros['fecha_vigencia'] ?? Carbon::today()->format('Y-m-d'));
+        $listaprecioId = $filtros['listaprecio_id'] ?? null;
+        if ($listaprecioId !== null && $listaprecioId !== '') {
+            $listaprecioId = (int) $listaprecioId;
+        } else {
+            $listaprecioId = null;
+        }
+        $ocultarPrecioCero = (bool) ($filtros['ocultar_precio_cero'] ?? true);
 
         $descripcionVisible = DB::raw(
             "COALESCE(NULLIF(TRIM(articulo.descripcion), ''), NULLIF(TRIM(articulo.detalle), ''), TRIM(articulo.sku)) as articulo_descripcion"
@@ -71,6 +46,7 @@ class PrecioQuery implements PrecioQueryInterface
             'precio.precioanterior',
             'articulo.sku',
             $descripcionVisible,
+            'categoria.nombre as categoria_nombre',
             'listaprecio.nombre as listaprecio_nombre',
             'moneda.nombre as moneda_nombre',
             'usuario.nombre as usuario_nombre',
@@ -79,34 +55,23 @@ class PrecioQuery implements PrecioQueryInterface
         $q = $this->model->newQuery()
             ->select($select)
             ->join('articulo', 'articulo.id', '=', 'precio.articulo_id')
+            ->leftJoin('categoria', 'categoria.id', '=', 'articulo.categoria_id')
             ->join('listaprecio', 'listaprecio.id', '=', 'precio.listaprecio_id')
             ->join('moneda', 'moneda.id', '=', 'precio.moneda_id')
-            ->leftJoin('usuario', 'usuario.id', '=', 'precio.usuarioultcambio_id')
-            ->whereRaw(
-                'precio.fechavigencia = (SELECT MAX(p3.fechavigencia) FROM precio AS p3 WHERE p3.articulo_id = precio.articulo_id AND p3.listaprecio_id = precio.listaprecio_id AND p3.fechavigencia <= ?)',
-                [$fechaReferencia]
-            );
+            ->leftJoin('usuario', 'usuario.id', '=', 'precio.usuarioultcambio_id');
+        PrecioListaVigenteSupport::aplicarFiltroVigenteEnQuery($q, $fechaReferencia);
 
         if ($listaprecioId !== null) {
             $q->where('precio.listaprecio_id', $listaprecioId);
         }
 
-        $q = $this->aplicarFiltrosEstado($q, $filtros);
-        $q = $this->aplicarFiltroCombinacion($q);
+        $q = PrecioSoloFacturableSupport::aplicarFiltroQuery($q);
 
-        if ($busqueda !== null && $busqueda !== '') {
-            $like = '%'.addcslashes($busqueda, '%_\\').'%';
-            $q->where(function ($w) use ($like, $busqueda) {
-                $w->where('articulo.sku', 'LIKE', $like)
-                    ->orWhere('articulo.descripcion', 'LIKE', $like)
-                    ->orWhere('articulo.detalle', 'LIKE', $like)
-                    ->orWhere('listaprecio.nombre', 'LIKE', $like)
-                    ->orWhere('moneda.nombre', 'LIKE', $like);
-                if (ctype_digit($busqueda)) {
-                    $w->orWhere('precio.id', (int) $busqueda);
-                }
-            });
+        if ($ocultarPrecioCero) {
+            $q->where('precio.precio', '>', 0);
         }
+
+        PrecioListadoFiltros::aplicar($q, $filtros);
 
         $q->orderByRaw(
             "CASE WHEN TRIM(COALESCE(articulo.descripcion, articulo.detalle, '')) = '' THEN 1 ELSE 0 END"
@@ -123,54 +88,6 @@ class PrecioQuery implements PrecioQueryInterface
         }
 
         return $q->get();
-    }
-
-    /**
-     * @param  \Illuminate\Database\Eloquent\Builder<\App\Models\Stock\Precio>  $builder
-     * @param  array<string, mixed>|string|null  $filtros
-     * @return \Illuminate\Database\Eloquent\Builder<\App\Models\Stock\Precio>
-     */
-    private function aplicarFiltrosEstado($builder, $filtros)
-    {
-        if ($filtros == '' || empty($filtros['filter_column'] ?? null) || ! is_array($filtros['filter_column'])) {
-            return $builder;
-        }
-
-        for ($ii = 0; $ii < count($filtros['filter_column']); $ii++) {
-            if (($filtros['filter_column'][$ii]['type'] ?? '') == '') {
-                continue;
-            }
-            if (($filtros['filter_column'][$ii]['column'] ?? '') == 'estado' &&
-                ($filtros['filter_column'][$ii]['type'] ?? '') == '=') {
-                switch ($filtros['filter_column'][$ii]['value'] ?? '') {
-                    case 'F':
-                        $builder->where('articulo.nofactura', '0');
-                        break;
-                    case 'N':
-                        $builder->where('articulo.nofactura', '1');
-                        break;
-                }
-            }
-        }
-
-        return $builder;
-    }
-
-    /**
-     * @param  \Illuminate\Database\Eloquent\Builder<\App\Models\Stock\Precio>  $builder
-     * @return \Illuminate\Database\Eloquent\Builder<\App\Models\Stock\Precio>
-     */
-    private function aplicarFiltroCombinacion($builder)
-    {
-        if (! Combinacion::query()->exists()) {
-            return $builder;
-        }
-
-        return $builder->whereExists(function ($query) {
-            $query->select(DB::raw(1))
-                ->from('combinacion')
-                ->whereRaw('combinacion.articulo_id = precio.articulo_id');
-        });
     }
 
     public function leeHistorialPreciosArticulo(int $articuloId, ?string $fechaReferencia = null, ?int $listaprecioId = null): array

@@ -32,6 +32,7 @@
     			<input type="text" name="codigospostales[]" value="" class="form-control codigospostales" placeholder="Codigo Postal">
     		</div>
     	</td>
+		@include('ventas.cliente.partials.campo_zonavta_entrega')
     	<td>
     		<select name="transportes_id[]" data-placeholder="Transpore" class="col-lg-10 form-control" data-fouc>
     			<option value="">-- Seleccionar Transporte --</option>

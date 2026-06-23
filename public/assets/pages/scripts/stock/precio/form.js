@@ -1,4 +1,6 @@
 $(function () {
+    $('#consultaarticuloModal').data('articuloSoloFacturable', 1);
+
     if (typeof activa_eventos_consultaarticulo === 'function') {
         activa_eventos_consultaarticulo();
     }
