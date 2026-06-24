@@ -51,6 +51,70 @@
             vertical-align: bottom;
             padding-right: 8px;
         }
+        table.factura-bloque-cliente-admin thead th,
+        table.factura-remito-caja-admin th {
+            border: none !important;
+        }
+        table.factura-bloque-cliente-admin thead th {
+            padding: 3px 4px;
+            vertical-align: top;
+        }
+        table.factura-bloque-cliente-admin p,
+        table.factura-bloque-cliente-admin strong {
+            margin: 0;
+            padding: 0;
+            line-height: 1.25;
+        }
+        table.factura-cabecera-admin tr.factura-cabecera-admin-linea th {
+            border: none !important;
+            border-bottom: 1px solid #000 !important;
+            padding: 0;
+            height: 0;
+            line-height: 0;
+            font-size: 0;
+        }
+        table.factura-linea-cliente-admin {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 0;
+        }
+        table.factura-linea-cliente-admin tr.factura-linea-cliente-admin-fila th {
+            border: none !important;
+            border-bottom: 1px solid #000 !important;
+            padding: 0;
+            height: 0;
+            line-height: 0;
+            font-size: 0;
+        }
+        table.factura-remito-caja-admin {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 0;
+            border-top: 1px solid #000;
+            border-bottom: 1px solid #000;
+        }
+        table.factura-remito-caja-admin th {
+            padding: 3px 4px;
+            font-weight: normal;
+            font-size: 16px;
+            line-height: 1.25;
+        }
+        table.tabla-items-factura.factura-items-debajo-remito {
+            margin-top: 6px !important;
+        }
+        table.tabla-items-factura.factura-items-debajo-cliente {
+            margin-top: 5px !important;
+        }
+        .factura-cuerpo-sin-gap {
+            margin: 0;
+            padding: 0;
+        }
+        .factura-cuerpo-sin-gap table.table {
+            margin-bottom: 0 !important;
+        }
+        table.factura-cabecera-admin thead th {
+            border: none !important;
+        }
 	</style>
 </head>
 <body>
@@ -62,11 +126,23 @@
 	$facturaPdfPieCentroTieneTexto = ($letra === 'B') || $facturaPdfEsElBierzo;
 	$logoEmpresaDat = EmpresaLogoArchivo::dataUriDesdeNombre($venta->puntoventas->empresas->nombre ?? null);
 	$logoEmpresaDataUri = $logoEmpresaDat['uri'] ?? null;
+	$facturaEsGastronomia = $venta->gastronomiaEmision !== null;
+	$facturaEsEstacionamiento = $venta->estacionamientoEmision !== null;
+	$facturaPdfRemitoDebajoCliente = ! $facturaEsGastronomia && ! $facturaEsEstacionamiento;
+	if ($facturaEsGastronomia) {
+		$lineaClienteFactura = \App\Support\Ventas\GastronomiaVentaDisplaySupport::nombreClientePie($venta);
+	} else {
+		$codigoClienteFactura = trim((string) ($venta->clientes->codigo ?? ''));
+		$nombreClienteFactura = trim((string) ($venta->clientes->nombre ?? ''));
+		$lineaClienteFactura = $codigoClienteFactura !== '' && $nombreClienteFactura !== ''
+			? $codigoClienteFactura.' - '.$nombreClienteFactura
+			: ($nombreClienteFactura !== '' ? $nombreClienteFactura : $codigoClienteFactura);
+	}
 @endphp
 <div id="area-pdf">
 	<div class="page">
-		<div class="row" id="area-pdf" style="height: 300px; padding: 1px; margin: 0px; border: none;">
-			<table style="width=4500px;" class="table borderless">
+		<div class="factura-cuerpo-sin-gap" id="area-pdf" style="margin: 0; padding: 0;">
+			<table style="width=4500px;" class="table borderless @if ($facturaPdfRemitoDebajoCliente) factura-cabecera-admin @endif">
 				<thead>
 				<tr style="height: 85px;">
 					<th style="width=150px; word-wrap: break-word; vertical-align: top;">
@@ -99,6 +175,12 @@
 						<p style="font-size: 16px">ORIGINAL</p>
 					</th>
 				</tr>
+				@if ($facturaPdfRemitoDebajoCliente)
+				<tr class="factura-cabecera-admin-linea">
+					<th colspan="3">&nbsp;</th>
+				</tr>
+				@endif
+				@if (! $facturaPdfRemitoDebajoCliente)
 				<tr>
 					<th style="font-size: 16px; text-align: left;">
 						Remito: {{$venta->numeroremito}}
@@ -111,16 +193,15 @@
 					<th style="font-size: 16px; text-align: right;">
 						Condicion de Venta: {{ $venta->clientes->condicionesventa->nombre ?? 'CONTADO' }}
 					</th>
-				</tr>		
+				</tr>
+				@endif
 				</thead>
 			</table>
-		</div>
-		<div style="height: 500px; margin: 0px; padding: 0px;">
-			<table class="table borderless" style="margin: 28px 0;">
+			<table class="table borderless factura-bloque-cliente-admin" style="margin: {{ $facturaPdfRemitoDebajoCliente ? '0' : '28px 0 0 0' }};">
 				<thead>
 					<tr>
 						<th style="width=150px; word-wrap: break-word; text-align: left;">
-							<strong>Cliente: {{ \App\Support\Ventas\GastronomiaVentaDisplaySupport::nombreClientePie($venta) }}</strong><br>
+							<strong>Cliente: {{ $lineaClienteFactura }}</strong><br>
 							<p style="font-size: 16px"> 
 								{{ \App\Support\Ventas\GastronomiaVentaDisplaySupport::domicilioReceptorFactura($venta) }}<br>
 								@if (! \App\Support\Ventas\GastronomiaVentaDisplaySupport::usaSnapshotReceptorEnVenta($venta))
@@ -139,17 +220,21 @@
 						<th style="width=150px; word-wrap: break-word; text-align: right;">
 							<p style="font-size: 16px">
 								@php $codCli = \App\Support\Ventas\GastronomiaVentaDisplaySupport::codigoClienteMaestro($venta); @endphp
-								@if ($codCli !== '')
+								@if ($facturaEsGastronomia && $codCli !== '')
 								Código: {{ $codCli }}<br>
 								@endif
 								@if (! \App\Support\Ventas\GastronomiaVentaDisplaySupport::usaSnapshotReceptorEnVenta($venta))
 								Teléfono: {{$venta->clientes->telefono}}<br>
 								@endif
 								I.V.A.: {{$venta->clientes->condicionivas->nombre}}<br>
-								@if (\App\Support\Ventas\GastronomiaVentaDisplaySupport::usaSnapshotReceptorEnVenta($venta))
-								Doc.: {{ \App\Support\Ventas\GastronomiaVentaDisplaySupport::documentoReceptorFactura($venta) }}<br>
-								@else
-								{{$venta->clientes->tipodocumentos->abreviatura}}: {{$venta->clientes->numerodocumento}}<br>
+								@php
+									$docReceptorFactura = \App\Support\Ventas\GastronomiaVentaDisplaySupport::documentoReceptorFactura($venta);
+									$etiqDocReceptorFactura = \App\Support\Ventas\GastronomiaVentaDisplaySupport::abreviaturaDocumentoReceptorFactura($venta);
+								@endphp
+								@if ($docReceptorFactura !== '')
+								{{ $etiqDocReceptorFactura }}: {{ $docReceptorFactura }}<br>
+								@endif
+								@if (! \App\Support\Ventas\GastronomiaVentaDisplaySupport::usaSnapshotReceptorEnVenta($venta))
 								Ingresos Brutos: {{$venta->clientes->condicioniibbs->nombre}} {{$venta->clientes->nroiibb}}<br>
 								@endif
 							</p>
@@ -157,7 +242,30 @@
 					</tr>
 				</thead>
 			</table>
-			<table class="table table-sm table-bordered table-striped tabla-items-factura" style="font-size: 16px; margin: 5px 0;">
+			@if ($facturaPdfRemitoDebajoCliente)
+			<table class="table borderless factura-remito-caja-admin">
+				<tr>
+					<th style="text-align: left;">
+						Remito: {{$venta->numeroremito}}
+					</th>
+					@if (isset($venta->transportes->codigo))
+						<th style="text-align: center;">Reparto: {{$venta->transportes->codigo??''}}</th>
+					@else
+						<th></th>
+					@endif
+					<th style="text-align: right;">
+						Condicion de Venta: {{ $venta->clientes->condicionesventa->nombre ?? 'CONTADO' }}
+					</th>
+				</tr>
+			</table>
+			@else
+			<table class="table borderless factura-linea-cliente-admin">
+				<tr class="factura-linea-cliente-admin-fila">
+					<th colspan="3">&nbsp;</th>
+				</tr>
+			</table>
+			@endif
+			<table class="table table-sm table-bordered table-striped tabla-items-factura @if ($facturaPdfRemitoDebajoCliente) factura-items-debajo-remito @else factura-items-debajo-cliente @endif" style="font-size: 16px; margin: {{ $facturaPdfRemitoDebajoCliente ? '0' : '5px 0' }};">
 				<thead>
 					<tr>
 						<th>Artículo</th>
@@ -358,7 +466,7 @@
 				<thead>
 					<tr>
 						<th style="width=150px; word-wrap: break-word; text-align: left;">
-							<strong>Cliente: {{ \App\Support\Ventas\GastronomiaVentaDisplaySupport::nombreClientePie($venta) }}</strong><br>
+							<strong>Cliente: {{ $lineaClienteFactura }}</strong><br>
 							<p style="font-size: 16px"> 
 								{{ \App\Support\Ventas\GastronomiaVentaDisplaySupport::domicilioReceptorFactura($venta) }}<br>
 								@if (! \App\Support\Ventas\GastronomiaVentaDisplaySupport::usaSnapshotReceptorEnVenta($venta))
@@ -377,23 +485,32 @@
 						<th style="width=150px; word-wrap: break-word; text-align: right;">
 							<p style="font-size: 16px">
 								@php $codCli = \App\Support\Ventas\GastronomiaVentaDisplaySupport::codigoClienteMaestro($venta); @endphp
-								@if ($codCli !== '')
+								@if ($facturaEsGastronomia && $codCli !== '')
 								Código: {{ $codCli }}<br>
 								@endif
 								@if (! \App\Support\Ventas\GastronomiaVentaDisplaySupport::usaSnapshotReceptorEnVenta($venta))
 								Teléfono: {{$venta->clientes->telefono}}<br>
 								@endif
 								I.V.A.: {{$venta->clientes->condicionivas->nombre}}<br>
-								@if (\App\Support\Ventas\GastronomiaVentaDisplaySupport::usaSnapshotReceptorEnVenta($venta))
-								Doc.: {{ \App\Support\Ventas\GastronomiaVentaDisplaySupport::documentoReceptorFactura($venta) }}<br>
-								@else
-								{{$venta->clientes->tipodocumentos->abreviatura}}: {{$venta->clientes->numerodocumento}}<br>
+								@php
+									$docReceptorFactura = \App\Support\Ventas\GastronomiaVentaDisplaySupport::documentoReceptorFactura($venta);
+									$etiqDocReceptorFactura = \App\Support\Ventas\GastronomiaVentaDisplaySupport::abreviaturaDocumentoReceptorFactura($venta);
+								@endphp
+								@if ($docReceptorFactura !== '')
+								{{ $etiqDocReceptorFactura }}: {{ $docReceptorFactura }}<br>
+								@endif
+								@if (! \App\Support\Ventas\GastronomiaVentaDisplaySupport::usaSnapshotReceptorEnVenta($venta))
 								Ingresos Brutos: {{$venta->clientes->condicioniibbs->nombre}} {{$venta->clientes->nroiibb}}<br>
 								@endif
 							</p>
 						</th>
 					</tr>
 				</thead>
+			</table>
+			<table class="table borderless factura-linea-cliente-admin">
+				<tr class="factura-linea-cliente-admin-fila">
+					<th colspan="3">&nbsp;</th>
+				</tr>
 			</table>
 			<table class="table table-sm table-bordered table-striped tabla-items-factura" style="font-size: 16px; margin: 5px 0;">
 				<thead>

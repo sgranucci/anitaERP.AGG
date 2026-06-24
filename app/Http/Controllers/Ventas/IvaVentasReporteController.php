@@ -45,17 +45,24 @@ class IvaVentasReporteController extends Controller
         $resultado = null;
         $filas = null;
         $filasVista = [];
+        $subdiarioAjustado = false;
 
         if ($request->boolean('consultar') && IvaVentasListadoFiltros::tieneCriteriosAplicados($filtros)) {
             ini_set('memory_limit', '-1');
             ini_set('max_execution_time', '0');
 
             $resultado = $this->reporteService->generarDesdeFiltros($filtros);
+            $resultado = $this->ampliarSubdiarioSiExcluyeTodo($filtros, $resultado, $subdiarioAjustado);
+
             $perPage = max(10, min(500, (int) $request->input('per_page', 50)));
+            $totalFilas = count($resultado['filas']);
+            $maxPage = max(1, (int) ceil($totalFilas / $perPage));
+            $page = max(1, min($maxPage, (int) $request->input('page', 1)));
+
             $filas = $this->reporteService->paginarFilas(
                 $resultado['filas'],
                 $perPage,
-                max(1, (int) $request->input('page', 1)),
+                $page,
             );
             $filasVista = $filas->items();
             $consultado = true;
@@ -86,11 +93,13 @@ class IvaVentasReporteController extends Controller
             'periodo_texto' => IvaVentasListadoFiltros::formatearPeriodoTexto($filtros),
             'orden_texto' => IvaVentasListadoFiltros::formatearOrdenTexto($filtros),
             'subdiario_texto' => IvaVentasListadoFiltros::formatearSubdiarioTexto($filtros),
+            'subdiario_ajustado' => $subdiarioAjustado,
             'puede_ver_venta' => can('editar-factura', false) || can('listar-factura', false),
             'puede_ver_cliente' => can('editar-clientes', false) || can('listar-clientes', false),
             'puede_ver_puntoventa' => can('editar-puntos-de-venta', false) || can('listar-puntos-de-venta', false),
             'puede_ver_tipotransaccion' => can('editar-tipos-transacciones', false) || can('listar-tipos-transacciones', false),
             'puede_ver_cuenta' => can('listar-cuentas-contables', false) || can('editar-cuentas-contables', false),
+            'puede_ver_asiento' => can('listar-asiento', false) || can('editar-asiento', false),
         ]);
     }
 
@@ -107,7 +116,9 @@ class IvaVentasReporteController extends Controller
             return redirect()->route('iva_ventas');
         }
 
+        $subdiarioAjustado = false;
         $resultado = $this->reporteService->generarDesdeFiltros($filtros);
+        $resultado = $this->ampliarSubdiarioSiExcluyeTodo($filtros, $resultado, $subdiarioAjustado);
         $filas = $resultado['filas'];
 
         switch (strtoupper($formato)) {
@@ -153,6 +164,31 @@ class IvaVentasReporteController extends Controller
         }
 
         return $filtros;
+    }
+
+    /**
+     * Si el subdiario elegido excluye todos los comprobantes del período, reintenta con A y B.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @param  array<string, mixed>  $resultado
+     * @return array<string, mixed>
+     */
+    private function ampliarSubdiarioSiExcluyeTodo(array &$filtros, array $resultado, bool &$subdiarioAjustado): array
+    {
+        $subdiarioAjustado = false;
+        $stats = $resultado['stats'] ?? [];
+        $ventas = (int) ($stats['ventas'] ?? 0);
+        $excluidasSubdiario = (int) ($stats['excluidas_subdiario'] ?? 0);
+        $subdiario = (string) ($filtros['subdiario'] ?? IvaVentasListadoFiltros::SUBDIARIO_VENTAS_A_B);
+
+        if ($ventas > 0 || $excluidasSubdiario <= 0 || $subdiario === IvaVentasListadoFiltros::SUBDIARIO_VENTAS_A_B) {
+            return $resultado;
+        }
+
+        $filtros['subdiario'] = IvaVentasListadoFiltros::SUBDIARIO_VENTAS_A_B;
+        $subdiarioAjustado = true;
+
+        return $this->reporteService->generarDesdeFiltros($filtros);
     }
 
     private function descargarPdfListado(string $view, string $nombreBase, string $paper, string $orientation)

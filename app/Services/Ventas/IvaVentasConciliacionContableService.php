@@ -6,6 +6,7 @@ namespace App\Services\Ventas;
 
 use App\Support\Ventas\IvaVentas\IvaVentasColumnasSupport;
 use App\Support\Ventas\IvaVentas\IvaVentasConciliacionCuentaSupport;
+use App\Support\Ventas\IvaVentas\IvaVentasConciliacionModoSupport;
 use App\Support\Ventas\IvaVentasListadoFiltros;
 use Illuminate\Support\Facades\DB;
 
@@ -35,7 +36,7 @@ final class IvaVentasConciliacionContableService
 
         $statsAsiento = $this->statsAsientoPorVenta($ventaIds);
         $contableEmpresa = $this->totalesContablesEmpresa($empresaId, $filtros, $cuentas);
-        $contableVinculadoPv = $this->totalesContablesVinculadosPorPv($empresaId, $cuentas, $ventaIds);
+        $contableVinculadoPv = $this->totalesContablesVinculadosPorPv($empresaId, $cuentas, $ventaIds, $filtros);
 
         $porPuntoventa = $this->armarFilasPorPuntoventa(
             $totalesPorPv,
@@ -45,13 +46,15 @@ final class IvaVentasConciliacionContableService
         );
 
         $resumenEmpresa = $this->armarResumenEmpresa($totalesErp, $contableEmpresa, $statsAsiento, count($filas));
+        $porFactura = $this->conciliarPorFacturaVinculada($empresaId, $filtros, $filas, $cuentas, $statsAsiento);
 
         return [
             'habilitada' => true,
             'cuentas' => $cuentas,
             'resumen_empresa' => $resumenEmpresa,
             'por_puntoventa' => $porPuntoventa,
-            'notas' => $this->notasConciliacion($statsAsiento, count($filas)),
+            'por_factura_vinculada' => $porFactura,
+            'notas' => $this->notasConciliacion($statsAsiento, count($filas), $porFactura),
         ];
     }
 
@@ -65,6 +68,7 @@ final class IvaVentasConciliacionContableService
             'cuentas' => [],
             'resumen_empresa' => [],
             'por_puntoventa' => [],
+            'por_factura_vinculada' => ['habilitada' => false, 'facturas' => [], 'stats' => []],
             'notas' => [],
         ];
     }
@@ -83,7 +87,10 @@ final class IvaVentasConciliacionContableService
             $cuentas['ventas_gravadas'] ?? [],
             $cuentas['ventas_kiosco'] ?? [],
         );
-        $idsIva = $cuentas['iva_debito'] ?? [];
+        $idsIva = array_merge(
+            $cuentas['iva_debito'] ?? [],
+            $cuentas['percepcion_iva'] ?? [],
+        );
         $idsTodos = array_values(array_unique(array_merge($idsVentas, $idsIva)));
 
         if ($idsTodos === []) {
@@ -133,7 +140,7 @@ final class IvaVentasConciliacionContableService
         }
 
         $rows = $query
-            ->selectRaw('cc.id as cuenta_id, SUM(-am.monto * COALESCE(NULLIF(am.cotizacion, 0), 1)) as importe')
+            ->selectRaw('cc.id as cuenta_id, SUM(-am.monto * ('.$this->sqlCoeficienteMonedaAsiento($filtros).')) as importe')
             ->groupBy('cc.id')
             ->get();
 
@@ -145,7 +152,7 @@ final class IvaVentasConciliacionContableService
             $importe = round((float) ($row->importe ?? 0), 2);
             $cuentaId = (int) ($row->cuenta_id ?? 0);
 
-            if (in_array($cuentaId, $idsIva, true)) {
+            if (in_array($cuentaId, $cuentas['iva_debito'] ?? [], true) || in_array($cuentaId, $cuentas['percepcion_iva'] ?? [], true)) {
                 $iva = round($iva + $importe, 2);
             } elseif (in_array($cuentaId, $cuentas['ventas_kiosco'] ?? [], true)) {
                 $ventasKiosco = round($ventasKiosco + $importe, 2);
@@ -165,9 +172,10 @@ final class IvaVentasConciliacionContableService
     /**
      * @param  array<string, mixed>  $cuentas
      * @param  list<int>  $ventaIds
+     * @param  array<string, mixed>  $filtros
      * @return array<int, array<string, float>>
      */
-    private function totalesContablesVinculadosPorPv(int $empresaId, array $cuentas, array $ventaIds): array
+    private function totalesContablesVinculadosPorPv(int $empresaId, array $cuentas, array $ventaIds, array $filtros): array
     {
         if ($ventaIds === []) {
             return [];
@@ -177,7 +185,10 @@ final class IvaVentasConciliacionContableService
             $cuentas['ventas_gravadas'] ?? [],
             $cuentas['ventas_kiosco'] ?? [],
         );
-        $idsIva = $cuentas['iva_debito'] ?? [];
+        $idsIva = array_merge(
+            $cuentas['iva_debito'] ?? [],
+            $cuentas['percepcion_iva'] ?? [],
+        );
         $idsTodos = array_values(array_unique(array_merge($idsVentas, $idsIva)));
 
         if ($idsTodos === []) {
@@ -194,7 +205,7 @@ final class IvaVentasConciliacionContableService
                 ->whereIn('a.venta_id', $chunk)
                 ->whereIn('cc.id', $idsTodos)
                 ->whereNull('v.deleted_at')
-                ->selectRaw('v.puntoventa_id, cc.id as cuenta_id, SUM(-am.monto * COALESCE(NULLIF(am.cotizacion, 0), 1)) as importe')
+                ->selectRaw('v.puntoventa_id, cc.id as cuenta_id, SUM(-am.monto * ('.$this->sqlCoeficienteMonedaAsiento($filtros).')) as importe')
                 ->groupBy('v.puntoventa_id', 'cc.id')
                 ->get();
 
@@ -216,7 +227,7 @@ final class IvaVentasConciliacionContableService
                 $importe = round((float) ($row->importe ?? 0), 2);
                 $cuentaId = (int) ($row->cuenta_id ?? 0);
 
-                if (in_array($cuentaId, $idsIva, true)) {
+                if (in_array($cuentaId, $cuentas['iva_debito'] ?? [], true) || in_array($cuentaId, $cuentas['percepcion_iva'] ?? [], true)) {
                     $out[$pvId]['iva'] = round($out[$pvId]['iva'] + $importe, 2);
                 } elseif (in_array($cuentaId, $cuentas['ventas_kiosco'] ?? [], true)) {
                     $out[$pvId]['ventas_kiosco'] = round($out[$pvId]['ventas_kiosco'] + $importe, 2);
@@ -380,14 +391,189 @@ final class IvaVentasConciliacionContableService
     }
 
     /**
+     * Conciliación comprobante a comprobante (solo ventas con asiento vinculado).
+     *
+     * @param  array<string, mixed>  $filtros
+     * @param  list<array<string, mixed>>  $filas
+     * @param  array<string, mixed>  $cuentas
      * @param  array<string, mixed>  $statsAsiento
+     * @return array<string, mixed>
+     */
+    private function conciliarPorFacturaVinculada(int $empresaId, array $filtros, array $filas, array $cuentas, array $statsAsiento): array
+    {
+        $ventasConAsiento = array_flip($statsAsiento['ventas_con_asiento'] ?? []);
+        $idsVentasGrav = $cuentas['ventas_gravadas'] ?? [];
+        $idsKiosco = $cuentas['ventas_kiosco'] ?? [];
+        $idsIva = array_merge($cuentas['iva_debito'] ?? [], $cuentas['percepcion_iva'] ?? []);
+        $idsTodos = array_values(array_unique(array_merge($idsVentasGrav, $idsKiosco, $idsIva)));
+
+        if ($idsTodos === []) {
+            return [
+                'habilitada' => false,
+                'facturas' => [],
+                'stats' => [
+                    'vinculadas' => 0,
+                    'cuadran' => 0,
+                    'con_diferencia' => 0,
+                    'sin_asiento' => count($filas),
+                    'cierre_agrupado' => 0,
+                ],
+            ];
+        }
+
+        $ventaIdsVinculadas = [];
+        foreach ($filas as $fila) {
+            $ventaId = (int) ($fila['venta_id'] ?? 0);
+            if ($ventaId > 0 && isset($ventasConAsiento[$ventaId])) {
+                $ventaIdsVinculadas[] = $ventaId;
+            }
+        }
+        $ventaIdsVinculadas = array_values(array_unique($ventaIdsVinculadas));
+
+        $asientoPorVenta = [];
+        $contablePorVenta = [];
+        foreach (array_chunk($ventaIdsVinculadas, 2000) as $chunk) {
+            $asientos = DB::table('asiento')
+                ->where('empresa_id', $empresaId)
+                ->whereIn('venta_id', $chunk)
+                ->select('id', 'venta_id')
+                ->get();
+            foreach ($asientos as $a) {
+                $asientoPorVenta[(int) $a->venta_id] = (int) $a->id;
+            }
+
+            $rows = DB::table('asiento as a')
+                ->join('asiento_movimiento as am', 'am.asiento_id', '=', 'a.id')
+                ->join('cuentacontable as cc', 'cc.id', '=', 'am.cuentacontable_id')
+                ->where('a.empresa_id', $empresaId)
+                ->whereIn('a.venta_id', $chunk)
+                ->whereIn('cc.id', $idsTodos)
+                ->selectRaw('a.venta_id, cc.id as cuenta_id, SUM(-am.monto * ('.$this->sqlCoeficienteMonedaAsiento($filtros).')) as importe')
+                ->groupBy('a.venta_id', 'cc.id')
+                ->get();
+
+            foreach ($rows as $row) {
+                $ventaId = (int) ($row->venta_id ?? 0);
+                if ($ventaId <= 0) {
+                    continue;
+                }
+                if (! isset($contablePorVenta[$ventaId])) {
+                    $contablePorVenta[$ventaId] = [
+                        'ventas_gravadas' => 0.0,
+                        'ventas_kiosco' => 0.0,
+                        'iva' => 0.0,
+                    ];
+                }
+                $importe = round((float) ($row->importe ?? 0), 2);
+                $cuentaId = (int) ($row->cuenta_id ?? 0);
+                if (in_array($cuentaId, $cuentas['iva_debito'] ?? [], true) || in_array($cuentaId, $cuentas['percepcion_iva'] ?? [], true)) {
+                    $contablePorVenta[$ventaId]['iva'] = round($contablePorVenta[$ventaId]['iva'] + $importe, 2);
+                } elseif (in_array($cuentaId, $idsKiosco, true)) {
+                    $contablePorVenta[$ventaId]['ventas_kiosco'] = round($contablePorVenta[$ventaId]['ventas_kiosco'] + $importe, 2);
+                } elseif (in_array($cuentaId, $idsVentasGrav, true)) {
+                    $contablePorVenta[$ventaId]['ventas_gravadas'] = round($contablePorVenta[$ventaId]['ventas_gravadas'] + $importe, 2);
+                }
+            }
+        }
+
+        $facturas = [];
+        $stats = [
+            'vinculadas' => 0,
+            'cuadran' => 0,
+            'con_diferencia' => 0,
+            'sin_asiento' => 0,
+            'cierre_agrupado' => 0,
+        ];
+
+        foreach ($filas as $fila) {
+            $ventaId = (int) ($fila['venta_id'] ?? 0);
+            $tieneAsiento = $ventaId > 0 && isset($ventasConAsiento[$ventaId]);
+            $modo = IvaVentasConciliacionModoSupport::modoDesdeFila($fila, $tieneAsiento);
+
+            if (! IvaVentasConciliacionModoSupport::conciliaPorFactura($modo)) {
+                if ($modo === IvaVentasConciliacionModoSupport::CIERRE_AGRUPADO) {
+                    $stats['cierre_agrupado']++;
+                } else {
+                    $stats['sin_asiento']++;
+                }
+                continue;
+            }
+
+            $erp = $fila['columnas'] ?? IvaVentasColumnasSupport::montosVacios();
+            $ctb = $contablePorVenta[$ventaId] ?? [
+                'ventas_gravadas' => 0.0,
+                'ventas_kiosco' => 0.0,
+                'iva' => 0.0,
+            ];
+
+            $difNeto = round((float) ($erp['neto_gravado'] ?? 0) - (float) ($ctb['ventas_gravadas'] ?? 0), 2);
+            $difImp = round((float) ($erp['imp_interno'] ?? 0) - (float) ($ctb['ventas_kiosco'] ?? 0), 2);
+            $difIva = round((float) ($erp['iva'] ?? 0) - (float) ($ctb['iva'] ?? 0), 2);
+
+            $cuadra = IvaVentasConciliacionCuentaSupport::cuadra((float) ($erp['neto_gravado'] ?? 0), (float) ($ctb['ventas_gravadas'] ?? 0))
+                && IvaVentasConciliacionCuentaSupport::cuadra((float) ($erp['imp_interno'] ?? 0), (float) ($ctb['ventas_kiosco'] ?? 0))
+                && IvaVentasConciliacionCuentaSupport::cuadra((float) ($erp['iva'] ?? 0), (float) ($ctb['iva'] ?? 0));
+
+            $stats['vinculadas']++;
+            if ($cuadra) {
+                $stats['cuadran']++;
+            } else {
+                $stats['con_diferencia']++;
+            }
+
+            $facturas[] = [
+                'venta_id' => $ventaId,
+                'asiento_id' => (int) ($asientoPorVenta[$ventaId] ?? 0),
+                'comprobante' => (string) ($fila['comprobante'] ?? ''),
+                'fecha_mov' => (string) ($fila['fecha_mov'] ?? ''),
+                'cliente_nombre' => (string) ($fila['cliente_nombre'] ?? ''),
+                'puntoventa_codigo' => (string) ($fila['puntoventa_codigo'] ?? ''),
+                'seccion' => (string) ($fila['seccion'] ?? ''),
+                'seccion_label' => (string) ($fila['seccion_label'] ?? ''),
+                'modo' => $modo,
+                'erp' => [
+                    'neto_gravado' => (float) ($erp['neto_gravado'] ?? 0),
+                    'imp_interno' => (float) ($erp['imp_interno'] ?? 0),
+                    'iva' => (float) ($erp['iva'] ?? 0),
+                    'total' => (float) ($erp['total'] ?? 0),
+                ],
+                'contable' => $ctb,
+                'diferencias' => [
+                    'neto_gravado' => $difNeto,
+                    'imp_interno' => $difImp,
+                    'iva' => $difIva,
+                ],
+                'cuadra' => $cuadra,
+            ];
+        }
+
+        usort($facturas, static function (array $a, array $b): int {
+            if (($a['cuadra'] ?? false) !== ($b['cuadra'] ?? false)) {
+                return ($a['cuadra'] ?? false) ? 1 : -1;
+            }
+
+            return strcmp((string) ($a['fecha_mov'] ?? ''), (string) ($b['fecha_mov'] ?? ''));
+        });
+
+        return [
+            'habilitada' => true,
+            'facturas' => $facturas,
+            'stats' => $stats,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $statsAsiento
+     * @param  array<string, mixed>  $porFactura
      * @return list<string>
      */
-    private function notasConciliacion(array $statsAsiento, int $totalComprobantes): array
+    private function notasConciliacion(array $statsAsiento, int $totalComprobantes, array $porFactura): array
     {
         $notas = [
-            'Contable empresa: suma movimientos en cuentas configuradas (cierre jornada / facturación) dentro del período.',
-            'Por punto de venta: contable vinculado solo cuando el asiento tiene venta_id (facturación unitaria).',
+            'Cuadre general: mayor contable del período (incluye cierres de jornada agrupados y facturas con asiento).',
+            'Cuadre por factura: solo comprobantes con asiento vinculado (venta_id). Gastronomía / estacionamiento sin asiento individual se validan contra el cuadre general.',
+            'Cuentas facturación: config/facturacion.php (CUENTACONTABLE_VENTA, CUENTACONTABLE_IVA, CUENTACONTABLE_PERCEPCION_IVA).',
+            'Cuentas cierre jornada: tabla gastronomia_cierre_jornada_config (Caja → cierre jornada Waitry / proceso).',
         ];
 
         $sinAsiento = (int) ($statsAsiento['sin_asiento'] ?? 0);
@@ -395,12 +581,43 @@ final class IvaVentasConciliacionContableService
             $notas[] = 'Ningún comprobante del período tiene asiento individual: la contabilización probablemente se agrupa en cierres de jornada (cuadre general).';
         } elseif ($sinAsiento > 0) {
             $notas[] = sprintf(
-                '%d de %d comprobantes sin asiento vinculado; use el cuadre general para validar contra el mayor.',
+                '%d de %d comprobantes sin asiento vinculado (cierre agrupado); use el cuadre general para gastronomía / estacionamiento.',
                 $sinAsiento,
                 $totalComprobantes,
             );
         }
 
+        $conDif = (int) ($porFactura['stats']['con_diferencia'] ?? 0);
+        if ($conDif > 0) {
+            $notas[] = sprintf(
+                '%d factura(s) con asiento vinculado presentan diferencias ERP vs contable — revise el detalle inferior.',
+                $conDif,
+            );
+        }
+
         return $notas;
+    }
+
+    /**
+     * Coeficiente a moneda del reporte (misma lógica que calculaCoeficienteMoneda en biblioteca.php).
+     *
+     * @param  array<string, mixed>  $filtros
+     */
+    private function sqlCoeficienteMonedaAsiento(array $filtros): string
+    {
+        $monedaReporteId = max(1, (int) ($filtros['moneda_id'] ?? 1));
+
+        if ($monedaReporteId === 1) {
+            return 'CASE WHEN COALESCE(am.moneda_id, 1) = 1 THEN 1 ELSE COALESCE(NULLIF(am.cotizacion, 0), 1) END';
+        }
+
+        return sprintf(
+            'CASE '
+            .'WHEN COALESCE(am.moneda_id, 1) = %1$d THEN 1 '
+            .'WHEN COALESCE(am.moneda_id, 1) = 1 THEN 1 / COALESCE(NULLIF(am.cotizacion, 0), 1) '
+            .'ELSE COALESCE(NULLIF(am.cotizacion, 0), 1) '
+            .'END',
+            $monedaReporteId,
+        );
     }
 }

@@ -31,7 +31,14 @@
 <div class="row">
 <div class="card-body">
     <div class="mt-5">
-		<strong>Cliente: {{ $pedido->clientes->nombre ?? ''}}</strong><br>
+		@php
+			$codigoClientePedido = trim((string) ($pedido->clientes->codigo ?? ''));
+			$nombreClientePedido = trim((string) ($pedido->clientes->nombre ?? ''));
+			$clientePedidoDisplay = $codigoClientePedido !== '' && $nombreClientePedido !== ''
+				? $codigoClientePedido.' - '.$nombreClientePedido
+				: ($nombreClientePedido !== '' ? $nombreClientePedido : $codigoClientePedido);
+		@endphp
+		<strong>Cliente: {{ $clientePedidoDisplay }}</strong><br>
 		<strong>Transporte: {{ $pedido->transportes->nombre ?? ''}}</strong><br>
 		<strong>Lugar de entrega: {{ $pedido->lugarentrega ?? ''}}</strong><br>
 	</div>

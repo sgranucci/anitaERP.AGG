@@ -4,10 +4,7 @@ namespace App\Repositories\Compras;
 
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
-use App\Queries\Compras\ProveedorQueryInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use App\ApiAnita;
-use Auth;
 
 class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRepositoryInterface
 {
@@ -41,9 +38,10 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
     public function find($id)
     {
         if (null == $proveedor_cuentacorriente = $this->model->with([
-            'comprobante_proveedores',
+            'comprobante_proveedores.tipotransaccion_compras',
             'monedas',
             'proveedores',
+            'empresas',
         ])->find($id)) {
             throw new ModelNotFoundException('Registro no encontrado');
         }
@@ -54,73 +52,150 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
     public function findOrFail($id)
     {
         return $this->model->with([
-            'comprobante_proveedores',
+            'comprobante_proveedores.tipotransaccion_compras',
             'monedas',
             'proveedores',
+            'empresas',
         ])->findOrFail($id);
     }
 
     public function findPorComprobanteProveedor(int $comprobanteProveedorId)
     {
         return $this->model->where('comprobante_proveedor_id', $comprobanteProveedorId)
-            ->with(['monedas', 'comprobante_proveedores'])
+            ->with(['monedas', 'comprobante_proveedores.tipotransaccion_compras'])
             ->get();
     }
 
-    public function listarCuentaCorriente($busqueda, $proveedor_id)
+    public function listarCuentaCorriente($busqueda, $proveedor_id, $paginar = true)
     {
-        $proveedor = $this->proveedorQuery->traeProveedorporId($proveedor_id);
+        $busqueda = trim((string) $busqueda);
 
-        $apiAnita = new ApiAnita();
-        $leeAnita = [
-            'acc' => 'list',
-            'sistema' => 'compras',
-            'tabla' => 'promov, promae, emprmae, t_comp',
-            'campos' => '
-                prov_tipo as tipo,
-                prov_letra as letra,
-                prov_sucursal as sucursal,
-                prov_nro as numero,
-                prov_fecha as fecha,
-                prov_fecha_vto as fechavencimiento,
-                prom_nombre as nombreproveedor,
-                prom_cuit as cuit,
-                prov_empresa as empresa_id,
-                empm_nombre as nombreempresa,
-                prov_cotizacion as cotizacion,
-                prov_cod_mon as codigomoneda,
-                prov_monto as total,
-                prov_t_pagado as totalpagado,
-                prov_nro_interno as numerointerno,
-                prov_nro_cuota as numerocuota,
-                tcomp_oper as signo,
-                0 as saldo
-            ',
-            'whereArmado' => " WHERE
-                prov_proveedor='".str_pad($proveedor->codigo, 6, '0', STR_PAD_LEFT)."' and
-                prov_proveedor=prom_proveedor and
-                prov_empresa=empm_empresa and
-                prov_tipo=tcomp_clave",
-            'orderBy' => 'prov_fecha, prov_tipo, prov_letra, prov_sucursal, prov_nro',
-        ];
-        $cuentacorriente = json_decode($apiAnita->apiCall($leeAnita));
+        $query = $this->model->query()
+            ->with([
+                'comprobante_proveedores.tipotransaccion_compras',
+                'monedas',
+                'empresas',
+            ])
+            ->where('proveedor_cuentacorriente.proveedor_id', $proveedor_id)
+            ->whereNull('proveedor_cuentacorriente.deleted_at');
 
-        $saldo = 0;
-        for ($i = 0; $i < count($cuentacorriente); $i++) {
-            $coeficiente = calculaCoeficienteMoneda(1, $cuentacorriente[$i]->codigomoneda, $cuentacorriente[$i]->cotizacion);
-
-            if ($cuentacorriente[$i]->signo == 'S') {
-                $saldo += ($cuentacorriente[$i]->total * $coeficiente);
-            }
-
-            if ($cuentacorriente[$i]->signo == 'R') {
-                $saldo -= ($cuentacorriente[$i]->total * $coeficiente);
-            }
-
-            $cuentacorriente[$i]->saldo = $saldo;
+        if ($busqueda !== '') {
+            $query->where(function ($q) use ($busqueda) {
+                $q->where('proveedor_cuentacorriente.fecha', 'like', "%{$busqueda}%")
+                    ->orWhere('proveedor_cuentacorriente.fechavencimiento', 'like', "%{$busqueda}%")
+                    ->orWhereHas('monedas', function ($monedaQuery) use ($busqueda) {
+                        $monedaQuery->where('abreviatura', 'like', "%{$busqueda}%");
+                    })
+                    ->orWhereHas('comprobante_proveedores', function ($comprobanteQuery) use ($busqueda) {
+                        $comprobanteQuery->where('letra', 'like', "%{$busqueda}%")
+                            ->orWhere('sucursal', 'like', "%{$busqueda}%")
+                            ->orWhere('numerocomprobante', 'like', "%{$busqueda}%");
+                    })
+                    ->orWhereHas('comprobante_proveedores.tipotransaccion_compras', function ($tipoQuery) use ($busqueda) {
+                        $tipoQuery->where('nombre', 'like', "%{$busqueda}%");
+                    });
+            });
         }
 
-        return $cuentacorriente;
+        $query->orderBy('proveedor_cuentacorriente.fecha', 'asc')
+            ->orderBy('proveedor_cuentacorriente.id', 'asc');
+
+        return $paginar ? $query->paginate(10) : $query->get();
+    }
+
+    public function listarDeudaProveedor($busqueda, $proveedor_id, $paginar = true)
+    {
+        $busqueda = trim((string) $busqueda);
+
+        $query = $this->model->query()
+            ->with([
+                'comprobante_proveedores.tipotransaccion_compras',
+                'monedas',
+                'empresas',
+            ])
+            ->select('proveedor_cuentacorriente.*')
+            ->addSelect([
+                'aplicado' => Proveedor_Cuentacorriente_Aplicacion::query()
+                    ->selectRaw('SUM(total)')
+                    ->whereColumn('proveedor_cuentacorriente_id', 'proveedor_cuentacorriente.id'),
+            ])
+            ->where('proveedor_cuentacorriente.proveedor_id', $proveedor_id)
+            ->whereNull('proveedor_cuentacorriente.deleted_at')
+            ->whereNotNull('proveedor_cuentacorriente.comprobante_proveedor_id')
+            ->havingRaw('abs(IFNULL(aplicado, 0)) < abs(proveedor_cuentacorriente.total)');
+
+        if ($busqueda !== '') {
+            $query->where(function ($q) use ($busqueda) {
+                $q->where('proveedor_cuentacorriente.fecha', 'like', "%{$busqueda}%")
+                    ->orWhere('proveedor_cuentacorriente.fechavencimiento', 'like', "%{$busqueda}%")
+                    ->orWhereHas('monedas', function ($monedaQuery) use ($busqueda) {
+                        $monedaQuery->where('abreviatura', 'like', "%{$busqueda}%");
+                    })
+                    ->orWhereHas('comprobante_proveedores', function ($comprobanteQuery) use ($busqueda) {
+                        $comprobanteQuery->where('letra', 'like', "%{$busqueda}%")
+                            ->orWhere('sucursal', 'like', "%{$busqueda}%")
+                            ->orWhere('numerocomprobante', 'like', "%{$busqueda}%");
+                    })
+                    ->orWhereHas('comprobante_proveedores.tipotransaccion_compras', function ($tipoQuery) use ($busqueda) {
+                        $tipoQuery->where('nombre', 'like', "%{$busqueda}%");
+                    });
+            });
+        }
+
+        $query->orderBy('proveedor_cuentacorriente.fecha', 'asc')
+            ->orderBy('proveedor_cuentacorriente.id', 'asc');
+
+        return $paginar ? $query->paginate(10) : $query->get();
+    }
+
+    public function calcularSaldoCuentaCorriente(int $proveedor_id): float
+    {
+        return (float) $this->model->query()
+            ->where('proveedor_id', $proveedor_id)
+            ->whereNull('deleted_at')
+            ->sum('total');
+    }
+
+    public function calcularTotalDeudaProveedor(int $proveedor_id): float
+    {
+        $filas = $this->model->query()
+            ->select('proveedor_cuentacorriente.total')
+            ->addSelect([
+                'aplicado' => Proveedor_Cuentacorriente_Aplicacion::query()
+                    ->selectRaw('SUM(total)')
+                    ->whereColumn('proveedor_cuentacorriente_id', 'proveedor_cuentacorriente.id'),
+            ])
+            ->where('proveedor_cuentacorriente.proveedor_id', $proveedor_id)
+            ->whereNull('proveedor_cuentacorriente.deleted_at')
+            ->whereNotNull('proveedor_cuentacorriente.comprobante_proveedor_id')
+            ->havingRaw('abs(IFNULL(aplicado, 0)) < abs(proveedor_cuentacorriente.total)')
+            ->get();
+
+        $total = 0.0;
+        foreach ($filas as $fila) {
+            $total += abs((float) $fila->total + (float) ($fila->aplicado ?? 0));
+        }
+
+        return $total;
+    }
+
+    public function saldoAnteriorPagina(int $proveedor_id, $primerRegistro): float
+    {
+        if ($primerRegistro === null) {
+            return 0.0;
+        }
+
+        return (float) $this->model->query()
+            ->where('proveedor_id', $proveedor_id)
+            ->whereNull('deleted_at')
+            ->where(function ($q) use ($primerRegistro) {
+                $q->where('fecha', '<', $primerRegistro->fecha)
+                    ->orWhere(function ($q2) use ($primerRegistro) {
+                        $q2->where('fecha', $primerRegistro->fecha)
+                            ->where('id', '<', $primerRegistro->id);
+                    });
+            })
+            ->sum('total');
     }
 
     public function consultarDeuda($proveedor_id, $empresa_id, $comprobante_proveedor_id = null)
@@ -165,59 +240,25 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
         return $cuentacorriente->orderBy('fecha', 'asc')->get();
     }
 
-    public function consultarAplicacion($proveedor_cuentacorriente_id, $comprobante, $codigoproveedor)
+    public function consultarAplicacion($proveedor_cuentacorriente_id, $comprobante = null, $codigoproveedor = null)
     {
-        $campos = explode(' ', $comprobante);
-        $tipo = $campos[0];
-        $letra = substr($campos[1], 0, 1);
+        if ((int) $proveedor_cuentacorriente_id <= 0) {
+            return collect();
+        }
 
-        $resto = substr($campos[1], 1);
-
-        $comprobante = explode('-', $resto);
-        $sucursal = $comprobante[0];
-        $numero = $comprobante[1];
-
-        $apiAnita = new ApiAnita();
-        $leeAnita = [
-            'acc' => 'list',
-            'sistema' => 'compras',
-            'tabla' => 'aplmovp, promae',
-            'campos' => '
-                aplvp_nro_interno as cuentacorriente_id,
-                0 as id,
-                aplvp_fecha as fechaaplicacion,'.
-                ($proveedor_cuentacorriente_id == 0 ?
-                '
-                aplvp_tipo as tipoaplicado,
-                aplvp_letra as letraaplicado,
-                aplvp_sucursal as sucursalaplicado,
-                aplvp_nro as numeroaplicado,'
-                :
-                '
-                aplvp_ref_tipo as tipoaplicado,
-                aplvp_ref_letra as letraaplicado,
-                aplvp_ref_sucursal as sucursalaplicado,
-                aplvp_ref_nro as numeroaplicado,').
-                '
-                aplvp_monto as total,
-                aplvp_cod_mon as moneda_id,
-                aplvp_cotizacion as cotizacion
-            ',
-            'whereArmado' => " WHERE
-                aplvp_proveedor=prom_proveedor and
-                aplvp_proveedor='".str_pad($codigoproveedor, 6, '0', STR_PAD_LEFT)."' and ".
-                ($proveedor_cuentacorriente_id == 0 ?
-                "aplvp_tipo_cob='".$tipo."' and
-                aplvp_letra_cob='".$letra."' and
-                aplvp_sucursal_cob='".$sucursal."' and
-                aplvp_nro_cob='".$numero."' "
-                :
-                "aplvp_tipo='".$tipo."' and
-                aplvp_letra='".$letra."' and
-                aplvp_sucursal='".$sucursal."' and
-                aplvp_nro='".$numero."' "),
-        ];
-
-        return json_decode($apiAnita->apiCall($leeAnita));
+        return Proveedor_Cuentacorriente_Aplicacion::query()
+            ->select(
+                'proveedor_cuentacorriente_aplicacion.id as id',
+                'proveedor_cuentacorriente_aplicacion.proveedor_cuentacorriente_id as cuentacorriente_id',
+                'proveedor_cuentacorriente_aplicacion.fecha as fechaaplicacion',
+                'proveedor_cuentacorriente_aplicacion.comprobanteaplicado as comprobante',
+                'proveedor_cuentacorriente_aplicacion.total as total',
+                'proveedor_cuentacorriente_aplicacion.moneda_id as moneda_id',
+                'proveedor_cuentacorriente_aplicacion.cotizacion as cotizacion',
+                'proveedor_cuentacorriente_aplicacion.proveedor_cuentacorriente_aplicado_id as aplicado_id',
+            )
+            ->where('proveedor_cuentacorriente_id', $proveedor_cuentacorriente_id)
+            ->orderBy('fecha')
+            ->get();
     }
 }

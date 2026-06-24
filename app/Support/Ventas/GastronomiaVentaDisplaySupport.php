@@ -50,10 +50,24 @@ final class GastronomiaVentaDisplaySupport
         }
 
         if (self::usaSnapshotReceptorEnVenta($venta)) {
-            return trim((string) ($venta->numerodocumento ?? ''));
+            $doc = trim((string) ($venta->getAttribute('numerodocumento') ?? ''));
+            if ($doc !== '') {
+                return $doc;
+            }
         }
 
         return trim((string) ($venta->clientes->numerodocumento ?? ''));
+    }
+
+    public static function abreviaturaDocumentoReceptorFactura(?Venta $venta): string
+    {
+        if (! $venta) {
+            return 'Doc.';
+        }
+
+        $abreviatura = trim((string) ($venta->clientes->tipodocumentos->abreviatura ?? ''));
+
+        return $abreviatura !== '' ? $abreviatura : 'Doc.';
     }
 
     public static function codigoClienteMaestro(?Venta $venta): string

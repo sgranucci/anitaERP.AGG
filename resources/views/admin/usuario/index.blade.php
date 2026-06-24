@@ -29,6 +29,7 @@ Usuarios
                             <th>Nombre</th>
                             <th>Foto</th>
                             <th>Email</th>
+                            <th class="text-center">Estado</th>
                             <th>Roles</th>
                             <th>Empresas</th>
                             <th>Centro de costo</th>
@@ -44,6 +45,13 @@ Usuarios
                             <td>{{$data->nombre}}</td>
                             <td><img width=50px src="{{ isset($data->foto) ? asset("storage/imagenes/fotos_usuarios/$data->foto") : '' }}"></td>
                             <td>{{$data->email}}</td>
+                            <td class="text-center">
+                                @if ($data->suspendido)
+                                    <span class="badge badge-danger">Suspendido</span>
+                                @else
+                                    <span class="badge badge-success">Activo</span>
+                                @endif
+                            </td>
                             <td>
                                 @foreach ($data->roles as $rol)
                                     {{$loop->last ? $rol->nombre : $rol->nombre . ', '}}

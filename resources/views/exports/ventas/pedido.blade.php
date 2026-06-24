@@ -122,7 +122,14 @@
 <table class="pedido-cliente-block">
 	<tr>
 		<td class="pedido-cliente">
-			<strong>Cliente: {{ $pedido->clientes->nombre ?? '' }}</strong><br>
+			@php
+				$codigoClientePedido = trim((string) ($pedido->clientes->codigo ?? ''));
+				$nombreClientePedido = trim((string) ($pedido->clientes->nombre ?? ''));
+				$clientePedidoDisplay = $codigoClientePedido !== '' && $nombreClientePedido !== ''
+					? $codigoClientePedido.' - '.$nombreClientePedido
+					: ($nombreClientePedido !== '' ? $nombreClientePedido : $codigoClientePedido);
+			@endphp
+			<strong>Cliente: {{ $clientePedidoDisplay }}</strong><br>
 			<strong>Zona de Vta.: {{ $pedido->zonavtas->nombre ?? '' }}</strong>
 		</td>
 		<td class="pedido-entrega">
@@ -140,7 +147,14 @@
 <table class="pedido-cliente-block">
 	<tr>
 		<td class="pedido-cliente">
-			<strong>Cliente: {{ $pedido->clientes->nombre ?? '' }}</strong><br>
+			@php
+				$codigoClientePedido = trim((string) ($pedido->clientes->codigo ?? ''));
+				$nombreClientePedido = trim((string) ($pedido->clientes->nombre ?? ''));
+				$clientePedidoDisplay = $codigoClientePedido !== '' && $nombreClientePedido !== ''
+					? $codigoClientePedido.' - '.$nombreClientePedido
+					: ($nombreClientePedido !== '' ? $nombreClientePedido : $codigoClientePedido);
+			@endphp
+			<strong>Cliente: {{ $clientePedidoDisplay }}</strong><br>
 			<strong>Zona de Vta.: {{ $pedido->zonavtas->nombre ?? '' }}</strong>
 		</td>
 		<td class="pedido-entrega">
@@ -186,7 +200,11 @@
 				<td>{{ $item->articulos->unidadesdemedidas->abreviatura }}</td>
 				<td>{{ number_format($item->caja, 2) }}</td>
 				<td>{{ number_format($item->precio, 2) }}</td>
-				<td>{{ number_format($pesadaNeta, 2) }}</td>
+				<td>
+					@if ($pesadaBruta > 0)
+						{{ number_format($pesadaNeta, 2) }}
+					@endif
+				</td>
 				<td>
 					@if ($bonificacion > 0)
 						{{ number_format($bonificacion, 1) }}
@@ -227,7 +245,11 @@
 			<td></td>
 			<td><strong>{{ number_format($cajas, 2) }}</strong></td>
 			<td></td>
-			<td><strong>{{ number_format($pesadaNetaTotal, 2) }}</strong></td>
+			<td>
+				@if ($pesadaNetaTotal > 0)
+					<strong>{{ number_format($pesadaNetaTotal, 2) }}</strong>
+				@endif
+			</td>
 			<td>
 				@if ($bonificacionTotal > 0)
 					<strong>{{ number_format($bonificacionTotal, 1) }}</strong>

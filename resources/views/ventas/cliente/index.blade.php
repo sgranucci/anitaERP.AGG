@@ -42,18 +42,19 @@ use App\Support\Ventas\ClienteListadoFiltros; ?>
                     'ruta' => 'lista_cliente',
                     'queryparams' => $filtrosQuery ?? [],
                 ])
-                <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
+                <table class="table table-striped table-bordered table-hover table-sm" id="tabla-paginada" style="font-size: 0.8125rem;">
                     <thead>
                         <tr>
                             <th class="width10">ID</th>
-                            <th>Nombre</th>
+                            <th style="min-width: 120px;">Nombre</th>
+                            <th style="min-width: 90px;">Vendedor</th>
                             @if (config('app.empresa') == 'EL BIERZO')
-                                <th>Reparto</th>
+                                <th style="min-width: 90px;">Reparto</th>
                             @endif
-                            <th>C.U.I.T.</th>
-                            <th>Domicilio</th>
-                            <th>Localidad</th>
-                            <th>Provincia</th>
+                            <th style="min-width: 95px;">C.U.I.T.</th>
+                            <th style="min-width: 120px;">Domicilio</th>
+                            <th style="min-width: 85px;">Localidad</th>
+                            <th style="min-width: 85px;">Provincia</th>
                             <th class="width10">C&oacute;d.</th>
                             <th class="width40" data-orderable="false"></th>
                         </tr>
@@ -66,14 +67,24 @@ use App\Support\Ventas\ClienteListadoFiltros; ?>
                         		<tr>
 							@endif
                             <td>{{$data->id}}</td>
-                            <td>{{$data->nombre}}</td>
+                            <td class="text-truncate" style="max-width: 160px;" title="{{ $data->nombre }}">{{$data->nombre}}</td>
+                            <td class="text-truncate" style="max-width: 110px;" title="{{ trim(($data->cvendedor ?? '').($data->nombrevendedor ? ' - '.$data->nombrevendedor : '')) }}">
+                                <small>
+                                    {{ $data->cvendedor ?? '' }}
+                                    @if (!empty($data->nombrevendedor))
+                                        -{{ $data->nombrevendedor }}
+                                    @endif
+                                </small>
+                            </td>
                             @if (config('app.empresa') == 'EL BIERZO')
-                                <td>{{$data->ctransporte}}-{{$data->nombretransporte}}</td>
+                                <td class="text-truncate" style="max-width: 110px;" title="{{ trim(($data->ctransporte ?? '').($data->nombretransporte ? '-'.$data->nombretransporte : '')) }}">
+                                    <small>{{$data->ctransporte}}-{{$data->nombretransporte}}</small>
+                                </td>
                             @endif
                             <td><small>{{$data->numerodocumento}}</small></td>
-                            <td><small>{{$data->domicilio}}</small></td>
-                            <td><small>{{$data->nombrelocalidad ?? ''}}</small></td>
-                            <td><small>{{$data->nombreprovincia ?? ''}}</small></td>
+                            <td class="text-truncate" style="max-width: 160px;" title="{{ $data->domicilio }}"><small>{{$data->domicilio}}</small></td>
+                            <td class="text-truncate" style="max-width: 110px;" title="{{ $data->nombrelocalidad ?? '' }}"><small>{{$data->nombrelocalidad ?? ''}}</small></td>
+                            <td class="text-truncate" style="max-width: 110px;" title="{{ $data->nombreprovincia ?? '' }}"><small>{{$data->nombreprovincia ?? ''}}</small></td>
                             <td><small>{{$data->codigo}}</small></td>
                             <td>
                        			@if (can('editar-clientes', false))

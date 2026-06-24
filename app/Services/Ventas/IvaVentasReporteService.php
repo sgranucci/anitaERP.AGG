@@ -41,14 +41,24 @@ final class IvaVentasReporteService
         $monedaReporteId = (int) ($filtros['moneda_id'] ?? 1);
         $soloMonedaOrigen = ! empty($filtros['solo_moneda_origen']);
         $clasificarHost = ! empty($filtros['clasificar_por_host']);
+        $excluidasPre = 0;
+        $excluidasSubdiario = 0;
+        $excluidasMoneda = 0;
 
         foreach ($ventas as $venta) {
-            if (! $this->pasaFiltrosNegocio($venta, $filtros)) {
+            $motivoExclusion = $this->motivoExclusionNegocio($venta, $filtros);
+            if ($motivoExclusion !== null) {
+                if ($motivoExclusion === 'pre') {
+                    $excluidasPre++;
+                } elseif ($motivoExclusion === 'subdiario') {
+                    $excluidasSubdiario++;
+                }
                 continue;
             }
 
             $coef = $this->coeficienteMoneda($venta, $monedaReporteId, $soloMonedaOrigen);
             if ($coef === null) {
+                $excluidasMoneda++;
                 continue;
             }
 
@@ -133,6 +143,10 @@ final class IvaVentasReporteService
             'stats' => [
                 'ventas' => count($filas),
                 'puntoventa' => count($totalesPorPvLista),
+                'excluidas_pre' => $excluidasPre,
+                'excluidas_subdiario' => $excluidasSubdiario,
+                'excluidas_moneda' => $excluidasMoneda,
+                'ventas_periodo' => $ventas->count(),
             ],
             'conciliacion_contable' => ! empty($filtros['conciliar_contable'])
                 ? $this->conciliacionContableService->conciliar($filtros, [
@@ -194,20 +208,20 @@ final class IvaVentasReporteService
             ->orderBy('numerocomprobante');
     }
 
-    private function pasaFiltrosNegocio(Venta $venta, array $filtros): bool
+    private function motivoExclusionNegocio(Venta $venta, array $filtros): ?string
     {
         $abrev = strtoupper(trim((string) ($venta->tipotransacciones->abreviatura ?? '')));
         if ($abrev === 'PRE') {
-            return false;
+            return 'pre';
         }
 
         $letra = IvaVentasDesgloseSupport::letra($venta);
-        $subdiario = (string) ($filtros['subdiario'] ?? IvaVentasListadoFiltros::SUBDIARIO_VENTAS_B);
+        $subdiario = (string) ($filtros['subdiario'] ?? IvaVentasListadoFiltros::SUBDIARIO_VENTAS_A_B);
         if (! IvaVentasListadoFiltros::pasaSubdiario($letra, $subdiario)) {
-            return false;
+            return 'subdiario';
         }
 
-        return true;
+        return null;
     }
 
     private function coeficienteMoneda(Venta $venta, int $monedaReporteId, bool $soloMonedaOrigen): ?float

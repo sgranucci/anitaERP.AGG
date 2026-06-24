@@ -4,6 +4,7 @@
         <tr>
             <th>ID</th>
             <th>Nombre</th>
+            <th>Vendedor</th>
             <th>C.U.I.T.</th>
             <th>Domicilio</th>
             <th>Localidad</th>
@@ -19,6 +20,7 @@
             <tr>
                 <td>{{ $cliente->id }}</td>
                 <td>{{ $cliente->nombre }}</td>
+                <td>{{ trim(($cliente->cvendedor ?? '').($cliente->nombrevendedor ? '-'.$cliente->nombrevendedor : '')) }}</td>
                 <td>{{ $cliente->numerodocumento }}</td>
                 <td>{{ $cliente->domicilio }}</td>
                 <td>{{ $cliente->nombrelocalidad ?? '' }}</td>

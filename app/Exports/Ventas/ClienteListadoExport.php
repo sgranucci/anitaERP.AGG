@@ -41,7 +41,7 @@ class ClienteListadoExport implements FromView, ShouldAutoSize, WithColumnFormat
     {
         return [
             'A' => NumberFormat::FORMAT_TEXT,
-            'H' => NumberFormat::FORMAT_TEXT,
+            'I' => NumberFormat::FORMAT_TEXT,
         ];
     }
 
@@ -55,13 +55,14 @@ class ClienteListadoExport implements FromView, ShouldAutoSize, WithColumnFormat
     public function columnWidths(): array
     {
         return [
-            'A' => 10,
-            'B' => 40,
+            'A' => 8,
+            'B' => 32,
             'C' => 18,
-            'D' => 35,
-            'E' => 22,
-            'F' => 22,
-            'G' => 12,
+            'D' => 16,
+            'E' => 28,
+            'F' => 18,
+            'G' => 18,
+            'H' => 10,
         ];
     }
 

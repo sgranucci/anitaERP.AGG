@@ -66,6 +66,15 @@ function leerFilaClienteConsulta($link) {
     };
 }
 
+function nombreClienteDisplayConCodigo(codigo, nombre) {
+    codigo = codigo != null ? String(codigo).trim() : '';
+    nombre = nombre != null ? String(nombre).trim() : '';
+    if ($('#codigopedido').length && codigo !== '' && nombre !== '') {
+        return codigo + ' - ' + nombre;
+    }
+    return nombre || codigo;
+}
+
 function esConsultaClienteInternoDescuento() {
     if ($('#consultaclienteModal').data('gastroConsultaDestino') === 'interno') {
         return true;
@@ -92,19 +101,22 @@ function aplicarSeleccionClienteFactura(fila) {
         ptrcliente_id.val(fila.id);
     }
     if (ptrnombrecliente && ptrnombrecliente.length) {
-        ptrnombrecliente.val(fila.nombre);
+        ptrnombrecliente.val(nombreClienteDisplayConCodigo(fila.codigo, fila.nombre));
     }
-    if (ptrcliente_id && ptrcliente_id.length) {
-        var $cod = ptrcliente_id.closest('.gastro-campo-consulta, tr').find('#codigocliente, .codigocliente').first();
+   	if (ptrcliente_id && ptrcliente_id.length) {
+        var $cod = ptrcliente_id.closest('.gastro-campo-consulta, tr, .form-group').find('#codigocliente, .codigocliente').first();
         if ($cod.length) {
             $cod.val(fila.codigo);
         }
     } else {
         $('#cliente_id').val(fila.id);
-        $('#nombrecliente').val(fila.nombre);
+        $('#nombrecliente').val(nombreClienteDisplayConCodigo(fila.codigo, fila.nombre));
         if ($('#codigocliente').length) {
             $('#codigocliente').val(fila.codigo);
         }
+    }
+    if ($('#codigocliente').length && fila.codigo) {
+        $('#codigocliente').val(fila.codigo);
     }
     if (typeof window.gastroOnClienteFacturaElegido === 'function') {
         window.gastroOnClienteFacturaElegido(fila);
@@ -270,10 +282,10 @@ function activa_eventos_consultacliente()
                 {
                     $(ptrrenglon).parents("tr").find(".cliente_id").val(data.id);
                     $(ptrrenglon).parents("tr").find(".codigocliente").val(data.codigo);
-                    $(ptrrenglon).parents("tr").find(".nombrecliente").val(data.nombre);
+                    $(ptrrenglon).parents("tr").find(".nombrecliente").val(nombreClienteDisplayConCodigo(data.codigo, data.nombre));
 
                     $("#cliente_id").val(data.id);
-                    $("#nombrecliente").val(data.nombre);
+                    $("#nombrecliente").val(nombreClienteDisplayConCodigo(data.codigo, data.nombre));
                 }
             }
         });
@@ -283,6 +295,33 @@ function activa_eventos_consultacliente()
 
     });
 
+}
+
+function invocarDatosClienteTrasSeleccion(clienteId, dataInmediato) {
+    if (dataInmediato && typeof window.aplicarVendedorDesdeCliente === 'function') {
+        window.aplicarVendedorDesdeCliente(dataInmediato);
+    } else if (dataInmediato && typeof window.aplicarVendedorPedidoDesdeCliente === 'function') {
+        window.aplicarVendedorPedidoDesdeCliente(dataInmediato);
+    }
+
+    if (typeof completaDatosCliente === 'function') {
+        completaDatosCliente();
+        return;
+    }
+
+    if (!clienteId || typeof asignaDatosCliente !== 'function') {
+        return;
+    }
+
+    if (typeof completarCliente_Entrega === 'function') {
+        completarCliente_Entrega(clienteId);
+    }
+    asignaDatosCliente(clienteId, true);
+    if (typeof muestraTipoSuspension === 'function') {
+        setTimeout(function () {
+            muestraTipoSuspension();
+        }, 1500);
+    }
 }
 
 function leeUnCliente(cliente_id, codigocliente)
@@ -308,7 +347,8 @@ function leeUnCliente(cliente_id, codigocliente)
                 {
                     $('#codigocliente').val(data.codigo);
                     $("#cliente_id").val(data.id);
-                    $("#nombrecliente").val(data.nombre);
+                    $("#nombrecliente").val(nombreClienteDisplayConCodigo(data.codigo, data.nombre));
+
                     $("#domicilio").val(data.domicilio);
                     $("#codigopostal").val(data.codigopostal);
                     $("#nroinscripcion").val(data.numerodocumento);
@@ -342,8 +382,7 @@ function leeUnCliente(cliente_id, codigocliente)
                     if (data.paises != null)
                         $("#desc_pais").val(data.paises['nombre']);
 
-                    if (typeof completaDatosCliente === 'function')
-                        completaDatosCliente();
+                    invocarDatosClienteTrasSeleccion(data.id, data);
                 }
             }
             else

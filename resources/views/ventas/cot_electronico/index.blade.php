@@ -18,19 +18,68 @@
                 @if (!empty($resultadoProceso['archivo']['nombre']))
                     <div class="small mt-1">Archivo: {{ $resultadoProceso['archivo']['nombre'] }}</div>
                 @endif
+                @if (!empty($resultadoProceso['sesion_id']))
+                    <div class="mt-1">
+                        <a href="{{ route('cot_electronico', ['sesion_id' => $resultadoProceso['sesion_id']]) }}#sesion-detalle" class="alert-link">
+                            Ver detalle de la sesi&oacute;n #{{ $resultadoProceso['sesion_id'] }}
+                        </a>
+                    </div>
+                @endif
             </div>
         @endif
 
         @if (!empty($resultadoPruebaConexion))
-            <div class="alert alert-{{ ($resultadoPruebaConexion['ok'] ?? false) ? 'success' : 'danger' }}">
-                <strong>Prueba de conexi&oacute;n ARBA:</strong>
-                {{ $resultadoPruebaConexion['mensaje'] ?? '' }}
-                @if (!empty($resultadoPruebaConexion['url']))
-                    <div class="small mt-1 mb-0">
-                        URL: {{ $resultadoPruebaConexion['url'] }}
-                        @if (!empty($resultadoPruebaConexion['http_status']))
-                            — HTTP {{ $resultadoPruebaConexion['http_status'] }}
+            @php
+                $pruebaOk = (bool) ($resultadoPruebaConexion['ok'] ?? false);
+                $httpStatus = $resultadoPruebaConexion['http_status'] ?? null;
+                $conectividadOk = array_key_exists('conectividad_ok', $resultadoPruebaConexion)
+                    ? (bool) $resultadoPruebaConexion['conectividad_ok']
+                    : ($httpStatus >= 200 && $httpStatus < 500);
+                $autenticacionOk = (bool) ($resultadoPruebaConexion['autenticacion_ok'] ?? $pruebaOk);
+            @endphp
+            <div class="alert alert-{{ $pruebaOk ? 'success' : 'danger' }}">
+                <strong>Prueba de conexi&oacute;n ARBA</strong>
+                @if ($pruebaOk)
+                    <span class="badge badge-success ml-1">Lista para enviar remitos</span>
+                @else
+                    <span class="badge badge-danger ml-1">Revisar credenciales</span>
+                @endif
+                <div class="mt-2 mb-1">{{ $resultadoPruebaConexion['mensaje'] ?? '' }}</div>
+                <ul class="small mb-0 pl-3">
+                    <li>
+                        <strong>Conectividad:</strong>
+                        @if ($conectividadOk)
+                            servidor ARBA alcanzable
+                            @if ($httpStatus)
+                                (HTTP {{ $httpStatus }})
+                            @endif
+                        @else
+                            no se pudo contactar al servidor
                         @endif
+                    </li>
+                    <li>
+                        <strong>Autenticaci&oacute;n CIT:</strong>
+                        @if ($autenticacionOk)
+                            usuario y clave aceptados
+                        @else
+                            rechazada
+                            @if (!empty($resultadoPruebaConexion['codigo_error']))
+                                (c&oacute;digo ARBA {{ $resultadoPruebaConexion['codigo_error'] }})
+                            @endif
+                        @endif
+                    </li>
+                    @if (!empty($resultadoPruebaConexion['url']))
+                        <li><strong>URL:</strong> {{ $resultadoPruebaConexion['url'] }}</li>
+                    @endif
+                    @if (!empty($resultadoPruebaConexion['ambiente']))
+                        <li><strong>Ambiente:</strong> {{ strtoupper($resultadoPruebaConexion['ambiente']) }}</li>
+                    @endif
+                </ul>
+                @if (! $autenticacionOk)
+                    <div class="small mt-2 mb-0">
+                        Verifique en <code>.env</code> las claves <code>ARBA_COT_USER</code> y <code>ARBA_COT_PASSWORD</code>
+                        (clave CIT de producci&oacute;n ARBA, distinta de homologaci&oacute;n). Luego ejecute
+                        <code>php artisan config:clear</code>.
                     </div>
                 @endif
             </div>
@@ -249,6 +298,9 @@
                 </div>
             </form>
         </div>
+
+        @include('ventas.cot_electronico.partials.sesiones_envio')
+        @include('ventas.cot_electronico.partials.sesion_detalle')
     </div>
 </div>
 

@@ -204,8 +204,52 @@
             + '</tr>';
     }
 
+    function repartoDuplicadoEnGrilla(transporteId, codigo, $filaActual) {
+        var idBuscado = parseInt(transporteId, 10) || 0;
+        var codigoClave = String(codigo || '').trim().toUpperCase();
+        var duplicado = false;
+
+        $tablaRepartos.find('tr.fila-reparto').each(function () {
+            if ($filaActual && $filaActual.length && $(this).is($filaActual)) {
+                return;
+            }
+
+            var id = parseInt($(this).find('.input-transporte-id').val(), 10) || 0;
+            var codigoFila = String($(this).find('.input-codigo-reparto').val() || '').trim().toUpperCase();
+
+            if (idBuscado > 0 && id === idBuscado) {
+                duplicado = true;
+                return false;
+            }
+
+            if (idBuscado < 1 && codigoClave !== '' && codigoFila === codigoClave) {
+                duplicado = true;
+                return false;
+            }
+        });
+
+        return duplicado;
+    }
+
+    function avisarRepartoDuplicado(codigo) {
+        alert('El reparto ' + (codigo || '') + ' ya está cargado en la grilla.');
+    }
+
     function aplicarTransporteEnFila($fila, data) {
         if (!data || !data.id) {
+            return;
+        }
+
+        if (repartoDuplicadoEnGrilla(data.id, data.codigo || '', $fila)) {
+            avisarRepartoDuplicado(data.codigo || data.id);
+            $fila.find('.input-transporte-id').val('');
+            $fila.find('.input-codigo-reparto').val('');
+            $fila.find('.input-nombre-reparto').val('');
+            $fila.find('.input-patente-reparto').val('');
+            $fila.find('.input-cuit-reparto').val('');
+            $fila.find('.input-titular-cuit').val('');
+            marcarEstadoCuit($fila, 'vacio');
+            focoCodigoReparto($fila);
             return;
         }
 
@@ -250,6 +294,35 @@
             .fail(function () {
                 console.log('error consulta transporte');
             });
+    }
+
+    function validarRepartosDuplicadosAntesEnviar() {
+        var vistos = {};
+        var duplicado = '';
+
+        $tablaRepartos.find('tr.fila-reparto').each(function () {
+            var $fila = $(this);
+            var transporteId = parseInt($fila.find('.input-transporte-id').val(), 10) || 0;
+            var codigo = ($fila.find('.input-codigo-reparto').val() || '').trim();
+
+            if (transporteId < 1 && codigo === '') {
+                return;
+            }
+
+            var clave = transporteId > 0 ? 'id:' + transporteId : 'cod:' + codigo.toUpperCase();
+            if (vistos[clave]) {
+                duplicado = codigo !== '' ? codigo : ('ID ' + transporteId);
+                return false;
+            }
+            vistos[clave] = true;
+        });
+
+        if (duplicado !== '') {
+            alert('Hay repartos repetidos en la grilla: ' + duplicado);
+            return false;
+        }
+
+        return true;
     }
 
     function validarCuitsRepartosAntesEnviar() {
@@ -397,6 +470,11 @@
     });
 
     $('#btn-consultar-remitos').on('click', function (e) {
+        if (!validarRepartosDuplicadosAntesEnviar()) {
+            e.preventDefault();
+            return false;
+        }
+
         if (!validarCuitsRepartosAntesEnviar()) {
             e.preventDefault();
             return false;
@@ -412,6 +490,11 @@
     });
 
     $('#btn-procesar-cot').on('click', function (e) {
+        if (!validarRepartosDuplicadosAntesEnviar()) {
+            e.preventDefault();
+            return false;
+        }
+
         if (!validarCuitsRepartosAntesEnviar()) {
             e.preventDefault();
             return false;

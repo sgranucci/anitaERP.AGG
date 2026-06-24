@@ -24,9 +24,9 @@ final class IvaVentasListadoFiltros
     public const SUBDIARIO_VENTAS_A_B = 'VENTAS_A_B';
 
     public const SUBDIARIOS = [
+        self::SUBDIARIO_VENTAS_A_B => 'Ventas A y B (recomendado)',
         self::SUBDIARIO_VENTAS_A => 'Ventas A (letra A y C)',
         self::SUBDIARIO_VENTAS_B => 'Ventas B (consumidor final)',
-        self::SUBDIARIO_VENTAS_A_B => 'Ventas A y B',
     ];
 
   /**
@@ -39,9 +39,9 @@ final class IvaVentasListadoFiltros
             $orden = self::ORDEN_FECHA_JORNADA;
         }
 
-        $subdiario = strtoupper(trim((string) $request->input('subdiario', self::SUBDIARIO_VENTAS_B)));
+        $subdiario = strtoupper(trim((string) $request->input('subdiario', self::SUBDIARIO_VENTAS_A_B)));
         if (! array_key_exists($subdiario, self::SUBDIARIOS)) {
-            $subdiario = self::SUBDIARIO_VENTAS_B;
+            $subdiario = self::SUBDIARIO_VENTAS_A_B;
         }
 
         $empresaId = (int) $request->input('empresa_id', 0);
@@ -81,7 +81,7 @@ final class IvaVentasListadoFiltros
             'fecha_desde' => $filtros['fecha_desde'] ?? '',
             'fecha_hasta' => $filtros['fecha_hasta'] ?? '',
             'orden_fecha' => $filtros['orden_fecha'] ?? self::ORDEN_FECHA_JORNADA,
-            'subdiario' => $filtros['subdiario'] ?? self::SUBDIARIO_VENTAS_B,
+            'subdiario' => $filtros['subdiario'] ?? self::SUBDIARIO_VENTAS_A_B,
             'moneda_id' => (int) ($filtros['moneda_id'] ?? 1),
         ];
 

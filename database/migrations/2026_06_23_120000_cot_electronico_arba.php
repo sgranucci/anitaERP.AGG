@@ -48,9 +48,6 @@ return new class extends Migration
             });
         }
 
-        $permisoId = $this->upsertPermiso();
-        $this->asignarPermisoRoles($permisoId);
-
         $padreId = $this->resolverMenuVentasId();
         if ($padreId === 0) {
             return;
@@ -58,6 +55,9 @@ return new class extends Migration
 
         $orden = (int) (DB::table('menu')->where('menu_id', $padreId)->max('orden') ?? 0) + 1;
         $menuId = $this->upsertMenu(self::MENU_URL, 'COT electrónico ARBA', $padreId, $orden, 'fa-truck');
+
+        $permisoId = $this->upsertPermiso($menuId);
+        $this->asignarPermisoRoles($permisoId);
 
         foreach ($this->resolverRolIds() as $rolId) {
             if (! DB::table('menu_rol')->where('menu_id', $menuId)->where('rol_id', $rolId)->exists()) {
@@ -68,12 +68,13 @@ return new class extends Migration
         SuitecrmPermiso::flushCachePermisos();
     }
 
-    private function upsertPermiso(): int
+    private function upsertPermiso(int $menuId): int
     {
         $id = (int) (DB::table('permiso')->where('slug', self::PERMISO_SLUG)->value('id') ?? 0);
         if ($id > 0) {
             DB::table('permiso')->where('id', $id)->update([
                 'nombre' => 'Procesar COT electrónico ARBA',
+                'menu_id' => $menuId,
                 'updated_at' => now(),
             ]);
 
@@ -83,6 +84,7 @@ return new class extends Migration
         return (int) DB::table('permiso')->insertGetId([
             'nombre' => 'Procesar COT electrónico ARBA',
             'slug' => self::PERMISO_SLUG,
+            'menu_id' => $menuId,
             'created_at' => now(),
             'updated_at' => now(),
         ]);

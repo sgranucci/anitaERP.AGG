@@ -165,6 +165,30 @@
                     </div>
 
                     @php
+                        $statsIva = $resultado['stats'] ?? [];
+                        $sinComprobantes = (int) ($statsIva['ventas'] ?? 0) === 0;
+                        $exclSubdiario = (int) ($statsIva['excluidas_subdiario'] ?? 0);
+                        $ventasPeriodo = (int) ($statsIva['ventas_periodo'] ?? 0);
+                    @endphp
+                    @if (! empty($subdiario_ajustado))
+                        <div class="alert alert-info mx-3 mt-3 mb-0">
+                            El subdiario se ampli&oacute; autom&aacute;ticamente a <strong>Ventas A y B</strong>
+                            porque el filtro anterior no inclu&iacute;a comprobantes del per&iacute;odo (p. ej. facturas letra A).
+                        </div>
+                    @elseif ($sinComprobantes && $exclSubdiario > 0 && $ventasPeriodo > 0)
+                        <div class="alert alert-warning mx-3 mt-3 mb-0">
+                            Hay {{ $exclSubdiario }} comprobante(s) en el per&iacute;odo excluido(s) por el subdiario
+                            <strong>{{ $subdiario_texto ?? '' }}</strong>.
+                            Pruebe con <strong>Ventas A y B</strong> si factura con letra A o C.
+                        </div>
+                    @elseif ($sinComprobantes && $ventasPeriodo === 0)
+                        <div class="alert alert-info mx-3 mt-3 mb-0">
+                            No hay ventas en el per&iacute;odo para la empresa seleccionada
+                            (orden: {{ $orden_texto ?? '' }}).
+                        </div>
+                    @endif
+
+                    @php
                         $empresaSel = collect($empresa_query ?? [])->firstWhere('id', (int) ($filtros['empresa_id'] ?? 0));
                         $logosVista = \App\Support\Configuracion\EmpresaLogoArchivo::logosCabeceraDesdeColeccion(
                             collect([['nombreempresa' => $empresaSel->nombre ?? '']])
@@ -178,28 +202,17 @@
                         </div>
                     @endif
 
-                    @include('ventas.iva_ventas.partials.conciliacion_contable', [
-                        'resultado' => $resultado,
-                        'puede_ver_puntoventa' => $puede_ver_puntoventa ?? false,
-                        'puede_ver_cuenta' => $puede_ver_cuenta ?? false,
-                    ])
-
-                    @include('ventas.iva_ventas.partials.totales_puntoventa', [
-                        'resultado' => $resultado,
-                        'puede_ver_puntoventa' => $puede_ver_puntoventa ?? false,
-                    ])
-
                     <style>
                         #tabla-paginada thead tr { background-color: #85C1E9; color: #17202A; }
                         #tabla-paginada thead th { font-weight: 600; border-color: #7fb3d5; }
                     </style>
-                    <div class="table-responsive">
+                    <div class="table-responsive border-top">
                         <table id="tabla-paginada" class="table table-striped table-bordered table-hover table-sm mb-0" style="font-size: 0.78rem;">
                             @include('ventas.iva_ventas.partials.tabla_datos', [
                                 'resultado' => $resultado,
                                 'filas' => $filasVista ?? [],
                                 'clasificar_por_host' => ! empty($filtros['clasificar_por_host']),
-                                'mostrar_secciones' => false,
+                                'mostrar_secciones' => true,
                                 'puede_ver_venta' => $puede_ver_venta ?? false,
                                 'puede_ver_cliente' => $puede_ver_cliente ?? false,
                                 'puede_ver_puntoventa' => $puede_ver_puntoventa ?? false,
@@ -209,17 +222,33 @@
                     </div>
 
                     @if ($filas instanceof \Illuminate\Contracts\Pagination\LengthAwarePaginator)
-                        <div class="card-footer clearfix d-flex flex-wrap align-items-center justify-content-between">
+                        <div class="card-footer clearfix d-flex flex-wrap align-items-center justify-content-between border-top-0">
                             <span class="small text-muted mb-2 mb-md-0">
                                 @if ($filas->total() > 0)
                                     Mostrando {{ $filas->firstItem() }}–{{ $filas->lastItem() }} de {{ $filas->total() }} comprobantes
                                 @else
-                                    Sin registros
+                                    Sin registros en esta p&aacute;gina
+                                    @if ((int) ($statsIva['ventas'] ?? 0) > 0)
+                                        (hay {{ (int) $statsIva['ventas'] }} en total; vaya a la p&aacute;gina 1)
+                                    @endif
                                 @endif
                             </span>
                             {{ $filas->appends($filtrosQuery ?? [])->links() }}
                         </div>
                     @endif
+
+                    @include('ventas.iva_ventas.partials.conciliacion_contable', [
+                        'resultado' => $resultado,
+                        'puede_ver_puntoventa' => $puede_ver_puntoventa ?? false,
+                        'puede_ver_cuenta' => $puede_ver_cuenta ?? false,
+                        'puede_ver_venta' => $puede_ver_venta ?? false,
+                        'puede_ver_asiento' => $puede_ver_asiento ?? false,
+                    ])
+
+                    @include('ventas.iva_ventas.partials.totales_puntoventa', [
+                        'resultado' => $resultado,
+                        'puede_ver_puntoventa' => $puede_ver_puntoventa ?? false,
+                    ])
                 </div>
             @endif
         </div>

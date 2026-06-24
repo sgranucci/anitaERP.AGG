@@ -8,9 +8,15 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    private const MENU_PADRE_ID = 180;
-
     private const MENU_URL = 'uif/conciliacion-wigos';
+
+    /** @var list<string> */
+    private const REFERENCIAS_UIF = [
+        'uif/crearexportaoperacion',
+        'uif/cliente_uif',
+        'uif/premio_uif',
+        'uif/cliente_congelado_uif',
+    ];
 
     /** @var list<array{nombre: string, slug: string}> */
     private const PERMISOS = [
@@ -105,8 +111,15 @@ return new class extends Migration
             });
         }
 
-        $orden = (int) (DB::table('menu')->where('menu_id', self::MENU_PADRE_ID)->max('orden') ?? 0) + 1;
-        $menuId = $this->upsertMenu(self::MENU_URL, 'Conciliación Wigos', self::MENU_PADRE_ID, $orden, 'fa-random');
+        $padreUifId = $this->resolverMenuPadreUifId();
+        if ($padreUifId === 0) {
+            SuitecrmPermiso::flushCachePermisos();
+
+            return;
+        }
+
+        $orden = (int) (DB::table('menu')->where('menu_id', $padreUifId)->max('orden') ?? 0) + 1;
+        $menuId = $this->upsertMenu(self::MENU_URL, 'Conciliación Wigos', $padreUifId, $orden, 'fa-random');
 
         foreach ($this->resolverRolIds() as $rolId) {
             if (! DB::table('menu_rol')->where('menu_id', $menuId)->where('rol_id', $rolId)->exists()) {
@@ -148,6 +161,22 @@ return new class extends Migration
         Schema::dropIfExists('uif_conciliacion_wigos_periodo');
 
         SuitecrmPermiso::flushCachePermisos();
+    }
+
+    private function resolverMenuPadreUifId(): int
+    {
+        foreach (self::REFERENCIAS_UIF as $url) {
+            $padreId = (int) (DB::table('menu')->where('url', $url)->value('menu_id') ?? 0);
+            if ($padreId > 0) {
+                return $padreId;
+            }
+        }
+
+        return (int) (DB::table('menu')
+            ->where('menu_id', 0)
+            ->where('nombre', 'like', '%UIF%')
+            ->orderBy('id')
+            ->value('id') ?? 0);
     }
 
     /** @return list<int> */

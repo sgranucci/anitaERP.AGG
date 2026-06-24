@@ -5,7 +5,7 @@
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
     <title>Clientes</title>
     <style>
-        body { font-family: DejaVu Sans, Helvetica, Arial, sans-serif; font-size: 9px; color: #1a1a1a; }
+        body { font-family: DejaVu Sans, Helvetica, Arial, sans-serif; font-size: 8px; color: #1a1a1a; }
         table.data {
             border-collapse: collapse;
             width: 100%;
@@ -29,15 +29,16 @@
     <table class="data">
         <thead>
             <tr>
-                <th style="width: 6%;">ID</th>
-                <th style="width: 22%;">Nombre</th>
-                <th style="width: 12%;">C.U.I.T.</th>
-                <th style="width: 22%;">Domicilio</th>
-                <th style="width: 12%;">Localidad</th>
-                <th style="width: 12%;">Provincia</th>
-                <th style="width: 8%;">C&oacute;d.</th>
+                <th style="width: 5%;">ID</th>
+                <th style="width: 18%;">Nombre</th>
+                <th style="width: 11%;">Vendedor</th>
+                <th style="width: 11%;">C.U.I.T.</th>
+                <th style="width: 18%;">Domicilio</th>
+                <th style="width: 10%;">Localidad</th>
+                <th style="width: 10%;">Provincia</th>
+                <th style="width: 6%;">C&oacute;d.</th>
                 @if (config('app.empresa') == 'EL BIERZO')
-                    <th style="width: 12%;">Reparto</th>
+                    <th style="width: 11%;">Reparto</th>
                 @endif
             </tr>
         </thead>
@@ -46,6 +47,7 @@
                 <tr>
                     <td>{{ $data->id }}</td>
                     <td>{{ $data->nombre }}</td>
+                    <td>{{ trim(($data->cvendedor ?? '').($data->nombrevendedor ? '-'.$data->nombrevendedor : '')) }}</td>
                     <td>{{ $data->numerodocumento }}</td>
                     <td>{{ $data->domicilio }}</td>
                     <td>{{ $data->nombrelocalidad ?? '' }}</td>

@@ -10,6 +10,7 @@ class CotRemitoEnvio extends Model
     protected $table = 'cot_remito_envio';
 
     protected $fillable = [
+        'cot_sesion_envio_id',
         'tipo',
         'letra',
         'sucursal',
@@ -18,6 +19,7 @@ class CotRemitoEnvio extends Model
         'venta_id',
         'transporte_id',
         'cliente_id',
+        'cliente_nombre',
         'procesado',
         'nro_unico',
         'cot',
@@ -32,6 +34,11 @@ class CotRemitoEnvio extends Model
         'numero_remito' => 'integer',
         'sucursal' => 'integer',
     ];
+
+    public function cotSesionEnvio()
+    {
+        return $this->belongsTo(CotSesionEnvio::class, 'cot_sesion_envio_id');
+    }
 
     public function ventas()
     {

@@ -50,6 +50,7 @@ switch(strtoupper(config('app.empresa')))
             "PUNTOVENTA_FACTURACION" => 5,
             "PUNTOVENTA_REMITO" => 1,
             "CUENTACONTABLE_PERCEPCION_IVA" => '211290000',
+            "CUENTACONTABLE_IVA" => '211170000',
             "CUENTACONTABLE_VENTA" => '301100000',
             "CUENTACONTABLE_LOGISTICA" => '301100000',
             "IMPUESTO_LOGISTICA_ID" => 3, // Asume que logistica es al 21%

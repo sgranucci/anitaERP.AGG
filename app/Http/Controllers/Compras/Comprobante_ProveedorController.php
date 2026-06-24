@@ -285,7 +285,11 @@ class Comprobante_ProveedorController extends Controller
 
     public function verFacturaPdf(Request $request, int $id): BinaryFileResponse
     {
-        can('editar-comprobante-proveedor');
+        if (! can('editar-comprobante-proveedor', false)
+            && ! can('listar-comprobante-proveedor', false)
+            && ! can('listar-cuentacorriente-proveedor', false)) {
+            abort(403);
+        }
 
         $comprobante = $this->comprobanteRepository->find($id);
         if (! $comprobante) {

@@ -22,19 +22,26 @@
 
         @if (count($cuentasDet) > 0)
             <p class="small text-muted mb-2">
-                Cuentas controladas:
+                Cuentas controladas
+                <span class="text-muted">(facturaci&oacute;n + cierre jornada)</span>:
                 @foreach ($cuentasDet as $c)
+                    @php
+                        $fuente = ($c['fuente'] ?? '') === 'cierre_jornada' ? 'cierre' : 'fact.';
+                    @endphp
                     @if ($puedeVerCuenta && (int) ($c['id'] ?? 0) > 0)
                         <a href="{{ route('editar_cuentacontable', array_merge(['id' => $c['id']], $queryConsulta)) }}"
-                           target="_blank" rel="noopener" class="badge badge-light border mr-1 text-primary">
+                           target="_blank" rel="noopener" class="badge badge-light border mr-1 text-primary"
+                           title="Fuente: {{ $fuente }}">
                             {{ $c['codigo'] ?? '' }} {{ $c['nombre'] ?? '' }}
                         </a>
                     @else
-                        <span class="badge badge-light border mr-1">{{ $c['codigo'] ?? '' }} {{ $c['nombre'] ?? '' }}</span>
+                        <span class="badge badge-light border mr-1" title="Fuente: {{ $fuente }}">{{ $c['codigo'] ?? '' }} {{ $c['nombre'] ?? '' }}</span>
                     @endif
                 @endforeach
             </p>
         @endif
+
+        <p class="small font-weight-bold text-muted mb-1">Cuadre general (incluye cierres agrupados)</p>
 
         <div class="table-responsive mb-3">
             <table class="table table-sm table-bordered mb-0" style="font-size: 0.78rem;">
@@ -165,4 +172,10 @@
             </div>
         @endif
     </div>
+
+    @include('ventas.iva_ventas.partials.conciliacion_facturas_vinculadas', [
+        'resultado' => $resultado,
+        'puede_ver_venta' => $puede_ver_venta ?? false,
+        'puede_ver_asiento' => $puede_ver_asiento ?? false,
+    ])
 @endif

@@ -78,6 +78,27 @@ class CotRemitoConsultaService
 
         $filas = [];
         $claves = [];
+        $pedidosOriginales = [];
+
+        foreach ($remitosStandalone as $venta) {
+            $numeroRemito = (int) $venta->numerocomprobante;
+            $clave = $this->claveRemito('REM', 'R', $this->sucursalRemito($venta), $numeroRemito);
+            if (isset($claves[$clave])) {
+                continue;
+            }
+
+            $pedidoId = (int) ($venta->pedido_id ?? 0);
+            if ($pedidoId > 0 && isset($pedidosOriginales[$pedidoId])) {
+                continue;
+            }
+
+            $claves[$clave] = true;
+            if ($pedidoId > 0) {
+                $pedidosOriginales[$pedidoId] = true;
+            }
+
+            $filas[] = $this->mapearFila($venta, $repartosPorId, $fecha, false, $numeroRemito);
+        }
 
         foreach ($facturas as $venta) {
             $numeroRemito = (int) $venta->numeroremito;
@@ -89,20 +110,18 @@ class CotRemitoConsultaService
             if (isset($claves[$clave])) {
                 continue;
             }
-            $claves[$clave] = true;
 
-            $filas[] = $this->mapearFila($venta, $repartosPorId, $fecha, true, $numeroRemito);
-        }
-
-        foreach ($remitosStandalone as $venta) {
-            $numeroRemito = (int) $venta->numerocomprobante;
-            $clave = $this->claveRemito('REM', 'R', $this->sucursalRemito($venta), $numeroRemito);
-            if (isset($claves[$clave])) {
+            $pedidoId = (int) ($venta->pedido_id ?? 0);
+            if ($pedidoId > 0 && isset($pedidosOriginales[$pedidoId])) {
                 continue;
             }
-            $claves[$clave] = true;
 
-            $filas[] = $this->mapearFila($venta, $repartosPorId, $fecha, false, $numeroRemito);
+            $claves[$clave] = true;
+            if ($pedidoId > 0) {
+                $pedidosOriginales[$pedidoId] = true;
+            }
+
+            $filas[] = $this->mapearFila($venta, $repartosPorId, $fecha, true, $numeroRemito);
         }
 
         usort($filas, fn ($a, $b) => ($a['numero_remito'] <=> $b['numero_remito']));
@@ -120,13 +139,7 @@ class CotRemitoConsultaService
         $transporteId = (int) ($venta->transporte_id ?? 0);
         $reparto = $repartosPorId->get($transporteId, []);
         $sucursal = $this->sucursalRemito($venta);
-        $envioPrevio = CotRemitoEnvio::query()
-            ->where('tipo', 'REM')
-            ->where('letra', 'R')
-            ->where('sucursal', $sucursal)
-            ->where('numero_remito', $numeroRemito)
-            ->whereDate('fecha_remito', $fechaFactura->toDateString())
-            ->first();
+        $envioPrevio = $this->buscarEnvioExitosoPrevio('REM', 'R', $sucursal, $numeroRemito, $fechaFactura);
 
         $cliente = $venta->clientes;
         $kilos = $this->calcularKilos($venta);
@@ -135,6 +148,7 @@ class CotRemitoConsultaService
         return [
             'clave' => $this->claveRemito('REM', 'R', $sucursal, $numeroRemito),
             'venta_id' => (int) $venta->id,
+            'cliente_id' => (int) ($cliente->id ?? 0) ?: null,
             'tipo' => 'REM',
             'letra' => 'R',
             'sucursal' => $sucursal,
@@ -144,7 +158,7 @@ class CotRemitoConsultaService
             'desde_factura' => $desdeFactura,
             'factura_codigo' => $desdeFactura ? (string) ($venta->codigo ?? '') : '',
             'cliente_codigo' => (string) ($cliente->codigo ?? ''),
-            'cliente_nombre' => (string) ($venta->nombre ?: ($cliente->nombre ?? '')),
+            'cliente_nombre' => trim((string) ($venta->nombre ?: ($cliente->nombre ?? ''))),
             'transporte_id' => $transporteId,
             'transporte_codigo' => (string) ($reparto['codigo'] ?? $venta->transportes->codigo ?? ''),
             'transporte_nombre' => (string) ($reparto['nombre'] ?? $venta->transportes->nombre ?? ''),
@@ -176,6 +190,29 @@ class CotRemitoConsultaService
     private function claveRemito(string $tipo, string $letra, int $sucursal, int $numero): string
     {
         return implode('|', [$tipo, $letra, $sucursal, $numero]);
+    }
+
+    private function buscarEnvioExitosoPrevio(
+        string $tipo,
+        string $letra,
+        int $sucursal,
+        int $numeroRemito,
+        Carbon $fechaFactura,
+    ): ?CotRemitoEnvio {
+        return CotRemitoEnvio::query()
+            ->where('tipo', $tipo)
+            ->where('letra', $letra)
+            ->where('sucursal', $sucursal)
+            ->where('numero_remito', $numeroRemito)
+            ->whereDate('fecha_remito', $fechaFactura->toDateString())
+            ->where(function ($q) {
+                $q->where('procesado', 'SI')
+                    ->orWhere(function ($sq) {
+                        $sq->whereNotNull('cot')->where('cot', '!=', '');
+                    });
+            })
+            ->orderByDesc('id')
+            ->first();
     }
 
     private function calcularKilos(Venta $venta): float

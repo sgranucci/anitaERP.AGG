@@ -124,6 +124,8 @@ class ArbaCotPresentacionService
         if ($codigo !== null && in_array($codigo, self::CODIGOS_ERROR_AUTENTICACION, true)) {
             return [
                 'ok' => false,
+                'conectividad_ok' => true,
+                'autenticacion_ok' => false,
                 'mensaje' => $this->mensajeAutenticacion($codigo, $mensajeArba),
                 'url' => $config['url'],
                 'ambiente' => $config['ambiente'],
@@ -136,6 +138,8 @@ class ArbaCotPresentacionService
         if ($codigo !== null && in_array($codigo, self::CODIGOS_PRUEBA_CONEXION_OK, true)) {
             return [
                 'ok' => true,
+                'conectividad_ok' => true,
+                'autenticacion_ok' => true,
                 'mensaje' => 'Conexión OK. Usuario y clave aceptados por ARBA (código '.$codigo.': '.$mensajeArba.').',
                 'url' => $config['url'],
                 'ambiente' => $config['ambiente'],
@@ -148,6 +152,8 @@ class ArbaCotPresentacionService
         if ($this->esErrorEsperadoSinArchivo($mensajeArba)) {
             return [
                 'ok' => true,
+                'conectividad_ok' => true,
+                'autenticacion_ok' => true,
                 'mensaje' => 'Conexión OK. Usuario y clave aceptados por ARBA ('.$mensajeArba.').',
                 'url' => $config['url'],
                 'ambiente' => $config['ambiente'],

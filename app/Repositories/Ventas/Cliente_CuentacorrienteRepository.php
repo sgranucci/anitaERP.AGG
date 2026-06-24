@@ -75,22 +75,123 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
                     ->where('cobranza_id', $cobranza_id)->with('ventas')->with('monedas')->get();
     }
 
-    public function listarCuentaCorriente($busqueda, $cliente_id)
+    public function listarCuentaCorriente($busqueda, $cliente_id, $paginar = true)
     {
-        $cuentacorriente = $this->model->with('ventas')->with("cobranzas")->with('monedas')->with('empresas')->where('cliente_id', $cliente_id)
-                                        ->where('cliente_cuentacorriente.deleted_at', null)
-                                        ->whereHas('monedas', function ($query) use ($busqueda) {
-                                            $query->orwhere('abreviatura', 'like', "%{$busqueda}%");
-                                        })
-                                        ->whereHas('ventas', function ($query) use ($busqueda) {
-                                            $query->orwhere('codigo', 'like', "%{$busqueda}%");
-                                        })
-                                        ->orwhere('fecha', $busqueda)
-                                        ->orwhere('fechavencimiento', $busqueda)
-                                        ->orderBy('fecha', 'asc')
-                                        ->paginate(10);								
+        $busqueda = trim((string) $busqueda);
 
-        return $cuentacorriente;
+        $query = $this->model->query()
+            ->with(['ventas', 'cobranzas', 'monedas', 'empresas'])
+            ->where('cliente_cuentacorriente.cliente_id', $cliente_id)
+            ->whereNull('cliente_cuentacorriente.deleted_at');
+
+        if ($busqueda !== '') {
+            $query->where(function ($q) use ($busqueda) {
+                $q->where('cliente_cuentacorriente.fecha', 'like', "%{$busqueda}%")
+                    ->orWhere('cliente_cuentacorriente.fechavencimiento', 'like', "%{$busqueda}%")
+                    ->orWhereHas('monedas', function ($monedaQuery) use ($busqueda) {
+                        $monedaQuery->where('abreviatura', 'like', "%{$busqueda}%");
+                    })
+                    ->orWhereHas('ventas', function ($ventaQuery) use ($busqueda) {
+                        $ventaQuery->where('codigo', 'like', "%{$busqueda}%");
+                    })
+                    ->orWhereHas('cobranzas', function ($cobranzaQuery) use ($busqueda) {
+                        $cobranzaQuery->where('detalle', 'like', "%{$busqueda}%");
+                    });
+            });
+        }
+
+        $query->orderBy('cliente_cuentacorriente.fecha', 'asc')
+            ->orderBy('cliente_cuentacorriente.id', 'asc');
+
+        return $paginar ? $query->paginate(10) : $query->get();
+    }
+
+    public function listarDeudaCliente($busqueda, $cliente_id, $paginar = true)
+    {
+        $busqueda = trim((string) $busqueda);
+
+        $query = $this->model->query()
+            ->with(['ventas', 'monedas', 'empresas'])
+            ->select('cliente_cuentacorriente.*')
+            ->addSelect([
+                'aplicado' => Cliente_Cuentacorriente_Aplicacion::query()
+                    ->selectRaw('SUM(total)')
+                    ->whereColumn('cliente_cuentacorriente_id', 'cliente_cuentacorriente.id'),
+            ])
+            ->where('cliente_cuentacorriente.cliente_id', $cliente_id)
+            ->whereNull('cliente_cuentacorriente.deleted_at')
+            ->whereNotNull('cliente_cuentacorriente.venta_id')
+            ->whereNull('cliente_cuentacorriente.cobranza_id')
+            ->havingRaw('abs(IFNULL(aplicado, 0)) < abs(cliente_cuentacorriente.total)');
+
+        if ($busqueda !== '') {
+            $query->where(function ($q) use ($busqueda) {
+                $q->where('cliente_cuentacorriente.fecha', 'like', "%{$busqueda}%")
+                    ->orWhere('cliente_cuentacorriente.fechavencimiento', 'like', "%{$busqueda}%")
+                    ->orWhereHas('monedas', function ($monedaQuery) use ($busqueda) {
+                        $monedaQuery->where('abreviatura', 'like', "%{$busqueda}%");
+                    })
+                    ->orWhereHas('ventas', function ($ventaQuery) use ($busqueda) {
+                        $ventaQuery->where('codigo', 'like', "%{$busqueda}%");
+                    });
+            });
+        }
+
+        $query->orderBy('cliente_cuentacorriente.fecha', 'asc')
+            ->orderBy('cliente_cuentacorriente.id', 'asc');
+
+        return $paginar ? $query->paginate(10) : $query->get();
+    }
+
+    public function calcularSaldoCuentaCorriente(int $cliente_id): float
+    {
+        return (float) $this->model->query()
+            ->where('cliente_id', $cliente_id)
+            ->whereNull('deleted_at')
+            ->sum('total');
+    }
+
+    public function calcularTotalDeudaCliente(int $cliente_id): float
+    {
+        $filas = $this->model->query()
+            ->select('cliente_cuentacorriente.total')
+            ->addSelect([
+                'aplicado' => Cliente_Cuentacorriente_Aplicacion::query()
+                    ->selectRaw('SUM(total)')
+                    ->whereColumn('cliente_cuentacorriente_id', 'cliente_cuentacorriente.id'),
+            ])
+            ->where('cliente_cuentacorriente.cliente_id', $cliente_id)
+            ->whereNull('cliente_cuentacorriente.deleted_at')
+            ->whereNotNull('cliente_cuentacorriente.venta_id')
+            ->whereNull('cliente_cuentacorriente.cobranza_id')
+            ->havingRaw('abs(IFNULL(aplicado, 0)) < abs(cliente_cuentacorriente.total)')
+            ->get();
+
+        $total = 0.0;
+        foreach ($filas as $fila) {
+            $total += abs((float) $fila->total + (float) ($fila->aplicado ?? 0));
+        }
+
+        return $total;
+    }
+
+    public function saldoAnteriorPagina(int $cliente_id, $primerRegistro): float
+    {
+        if ($primerRegistro === null) {
+            return 0.0;
+        }
+
+        return (float) $this->model->query()
+            ->where('cliente_id', $cliente_id)
+            ->whereNull('deleted_at')
+            ->where(function ($q) use ($primerRegistro) {
+                $q->where('fecha', '<', $primerRegistro->fecha)
+                    ->orWhere(function ($q2) use ($primerRegistro) {
+                        $q2->where('fecha', $primerRegistro->fecha)
+                            ->where('id', '<', $primerRegistro->id);
+                    });
+            })
+            ->sum('total');
     }
 
     public function consultarDeuda($cliente_id, $empresa_id, $venta_id = null)

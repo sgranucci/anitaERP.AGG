@@ -51,7 +51,9 @@ use App\Mail\Ventas\ClienteProvisorio;
 use App\Mail\Ventas\ClienteDefinitivo;
 use App\Exports\Ventas\ClienteExport;
 use App\Exports\Ventas\ClienteListadoExport;
+use App\Exports\Ventas\ClienteCuentacorrienteListadoExport;
 use App\Support\Ventas\ClienteListadoFiltros;
+use App\Support\Ventas\ClienteCuentacorrientePreferenciasUsuario;
 use App\Support\Ventas\ArcaPadronImpuestosClienteValidacion;
 use App\Services\Arca\ConstanciaInscripcionService;
 use Carbon\Carbon;
@@ -721,51 +723,89 @@ class ClienteController extends Controller
         ini_set('max_execution_time', '0');
 
         $formato = $request->formato;
-        $busqueda = $request->busqueda;
+        $busqueda = (string) ($request->busqueda ?? '');
+        $modoVista = ClienteCuentacorrientePreferenciasUsuario::resolverModoVista($request->input('modo_vista'));
+
+        if ($request->has('modo_vista')) {
+            ClienteCuentacorrientePreferenciasUsuario::persistirModoVista($modoVista);
+        }
+
         $cliente = Self::leeUnCliente($cliente_id);
 
         $urlOrigen = request()->headers->get('referer');
 
         $nombrecliente = '';
-        if ($cliente)
-            $nombrecliente= $cliente->nombre;
+        if ($cliente) {
+            $nombrecliente = $cliente->nombre;
+        }
 
-        switch($formato)
-        {
+        $saldoCuentaCorriente = $this->cliente_cuentacorrienteRepository->calcularSaldoCuentaCorriente((int) $cliente_id);
+        $totalDeuda = $this->cliente_cuentacorrienteRepository->calcularTotalDeudaCliente((int) $cliente_id);
+
+        switch ($formato) {
         case 'PDF':
-            $cuentacorriente = $this->cliente_cuentacorrienteRepository->listarCuentaCorriente($busqueda, $cliente_id);
+            if ($modoVista === ClienteCuentacorrientePreferenciasUsuario::MODO_DEUDA) {
+                $cuentacorriente = $this->cliente_cuentacorrienteRepository->listarDeudaCliente($busqueda, $cliente_id, false);
+            } else {
+                $cuentacorriente = $this->cliente_cuentacorrienteRepository->listarCuentaCorriente($busqueda, $cliente_id, false);
+            }
 
-            $view =  \View::make('ventas.cuentacorriente.listado', compact('cuentacorriente', 'nombrecliente'))
-                        ->render();
+            $view = \View::make('ventas.cuentacorriente.listado', compact(
+                'cuentacorriente',
+                'nombrecliente',
+                'modoVista',
+                'saldoCuentaCorriente',
+                'totalDeuda',
+            ))->render();
             $path = storage_path('pdf/listados');
             $nombre_pdf = 'listado_cuentacorriente';
 
             $pdf = \App::make('dompdf.wrapper');
-            $pdf->setPaper('legal','landscape');
+            $pdf->setPaper('legal', 'landscape');
             $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
 
             return response()->download($path.'/'.$nombre_pdf.'.pdf');
             break;
 
         case 'EXCEL':
-            return (new ClienteExport($this->cuentacorrienteRepository))
-                        ->parametros($busqueda)
-                        ->download('cuentacorriente.xlsx');
+            return (new ClienteCuentacorrienteListadoExport($this->cliente_cuentacorrienteRepository))
+                ->parametros($busqueda, (int) $cliente_id, $modoVista, $nombrecliente, $saldoCuentaCorriente, $totalDeuda)
+                ->download('cuentacorriente_cliente.xlsx');
             break;
 
         case 'CSV':
-            return (new ClienteExport($this->cuentacorrienteRepository))
-                        ->parametros($busqueda)
-                        ->download('cuentacorriente.csv', \Maatwebsite\Excel\Excel::CSV);
+            return (new ClienteCuentacorrienteListadoExport($this->cliente_cuentacorrienteRepository))
+                ->parametros($busqueda, (int) $cliente_id, $modoVista, $nombrecliente, $saldoCuentaCorriente, $totalDeuda)
+                ->download('cuentacorriente_cliente.csv', \Maatwebsite\Excel\Excel::CSV);
             break;
 
         default:
-            $cuentacorriente = $this->cliente_cuentacorrienteRepository->listarCuentaCorriente($busqueda, $cliente_id);
+            if ($modoVista === ClienteCuentacorrientePreferenciasUsuario::MODO_DEUDA) {
+                $cuentacorriente = $this->cliente_cuentacorrienteRepository->listarDeudaCliente($busqueda, $cliente_id);
+                $saldoAnterior = 0.0;
+            } else {
+                $cuentacorriente = $this->cliente_cuentacorrienteRepository->listarCuentaCorriente($busqueda, $cliente_id);
+                $primerRegistro = $cuentacorriente->first();
+                $saldoAnterior = $this->cliente_cuentacorrienteRepository->saldoAnteriorPagina(
+                    (int) $cliente_id,
+                    $primerRegistro,
+                );
+            }
+
             $moneda_query = $this->monedaRepository->all();
 
-            $datas = ['cuentacorriente' => $cuentacorriente, 'busqueda' => $busqueda, 
-                        'id' => $cliente_id, 'nombrecliente' => $nombrecliente, 'urlOrigen' => $urlOrigen,
-                        'moneda_query' => $moneda_query];
+            $datas = [
+                'cuentacorriente' => $cuentacorriente,
+                'busqueda' => $busqueda,
+                'id' => $cliente_id,
+                'nombrecliente' => $nombrecliente,
+                'urlOrigen' => $urlOrigen,
+                'moneda_query' => $moneda_query,
+                'modoVista' => $modoVista,
+                'saldoCuentaCorriente' => $saldoCuentaCorriente,
+                'totalDeuda' => $totalDeuda,
+                'saldoAnterior' => $saldoAnterior ?? 0.0,
+            ];
 
             return view('ventas.cuentacorriente.index', $datas);
         }

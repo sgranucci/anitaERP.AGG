@@ -2088,6 +2088,8 @@ class ClienteRepository implements ClienteRepositoryInterface
                                         'cliente.nombre as nombre',
 										'transporte.codigo as ctransporte',
 										'transporte.nombre as nombretransporte',
+										'vendedor.codigo as cvendedor',
+										'vendedor.nombre as nombrevendedor',
 										'cliente.numerodocumento as numerodocumento',
                                         'cliente.domicilio as domicilio',
 										'cliente.codigo as codigo',
@@ -2096,7 +2098,8 @@ class ClienteRepository implements ClienteRepositoryInterface
 										'provincia.nombre as nombreprovincia')
                                 ->leftjoin('localidad', 'localidad.id', 'cliente.localidad_id')
 								->leftjoin('provincia', 'provincia.id', 'cliente.provincia_id')
-								->leftjoin('transporte', 'transporte.id', 'cliente.transporte_id');
+								->leftjoin('transporte', 'transporte.id', 'cliente.transporte_id')
+								->leftjoin('vendedor', 'vendedor.id', 'cliente.vendedor_id');
 		
 		$vendedores = $this->vendedorRepository->leeVendedoresAsociados();
 

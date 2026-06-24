@@ -4,8 +4,6 @@ namespace App\Http\Controllers\Compras;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
-use Illuminate\Pagination\LengthAwarePaginator;
-use Illuminate\Pagination\Paginator;
 use App\Models\Compras\Proveedor;
 use App\Models\Compras\Proveedor_Exclusion;
 use App\Models\Configuracion\Pais;
@@ -51,7 +49,8 @@ use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Mail\Compras\ProveedorProvisorio;
 use App\Exports\Compras\ProveedorExport;
 use App\Support\Compras\ProveedorListadoFiltros;
-use App\Exports\Compras\Proveedor_CuentacorrienteExport;
+use App\Exports\Compras\ProveedorCuentacorrienteListadoExport;
+use App\Support\Compras\ProveedorCuentacorrientePreferenciasUsuario;
 use Carbon\Carbon;
 use Mail;
 use DB;
@@ -754,86 +753,122 @@ class ProveedorController extends Controller
     }    
 
     public function listarCuentaCorriente(Request $request, $proveedor_id)
-        {
+    {
         can('listar-cuentacorriente-proveedor');
 
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
         $formato = $request->formato;
-        $busqueda = $request->busqueda;
+        $busqueda = (string) ($request->busqueda ?? '');
+        $modoVista = ProveedorCuentacorrientePreferenciasUsuario::resolverModoVista($request->input('modo_vista'));
+
+        if ($request->has('modo_vista')) {
+            ProveedorCuentacorrientePreferenciasUsuario::persistirModoVista($modoVista);
+        }
+
         $proveedor = $this->proveedorRepository->find($proveedor_id);
 
         $urlOrigen = request()->headers->get('referer');
 
         $nombreproveedor = '';
         $codigoproveedor = '';
-        if ($proveedor)
-        {
+        if ($proveedor) {
             $nombreproveedor = $proveedor->nombre;
             $codigoproveedor = $proveedor->codigo;
         }
 
-        $moneda_query = $this->monedaRepository->all();
+        $saldoCuentaCorriente = $this->proveedor_cuentacorrienteRepository->calcularSaldoCuentaCorriente((int) $proveedor_id);
+        $totalDeuda = $this->proveedor_cuentacorrienteRepository->calcularTotalDeudaProveedor((int) $proveedor_id);
 
-        switch($formato)
-        {
+        switch ($formato) {
         case 'PDF':
-            $cuentacorriente = $this->proveedor_cuentacorrienteRepository->listarCuentaCorriente($busqueda, $proveedor_id);
+            if ($modoVista === ProveedorCuentacorrientePreferenciasUsuario::MODO_DEUDA) {
+                $cuentacorriente = $this->proveedor_cuentacorrienteRepository->listarDeudaProveedor($busqueda, $proveedor_id, false);
+            } else {
+                $cuentacorriente = $this->proveedor_cuentacorrienteRepository->listarCuentaCorriente($busqueda, $proveedor_id, false);
+            }
 
-            $view =  \View::make('compras.cuentacorriente.listado', compact('cuentacorriente', 'nombreproveedor', 'moneda_query', 'codigoproveedor'))
-                        ->render();
+            $view = \View::make('compras.cuentacorriente.listado', compact(
+                'cuentacorriente',
+                'nombreproveedor',
+                'modoVista',
+                'saldoCuentaCorriente',
+                'totalDeuda',
+            ))->render();
             $path = storage_path('pdf/listados');
             $nombre_pdf = 'listado_cuentacorriente_proveedor';
 
             $pdf = \App::make('dompdf.wrapper');
-            $pdf->setPaper('legal','landscape');
+            $pdf->setPaper('legal', 'landscape');
             $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
 
             return response()->download($path.'/'.$nombre_pdf.'.pdf');
             break;
 
         case 'EXCEL':
-            return (new Proveedor_CuentacorrienteExport($this->proveedor_cuentacorrienteRepository))
-                        ->parametros($busqueda, $moneda_query, $proveedor_id, $nombreproveedor, $codigoproveedor)
-                        ->download('cuentacorriente_proveedor.xlsx');
+            return (new ProveedorCuentacorrienteListadoExport($this->proveedor_cuentacorrienteRepository))
+                ->parametros($busqueda, (int) $proveedor_id, $modoVista, $nombreproveedor, $saldoCuentaCorriente, $totalDeuda)
+                ->download('cuentacorriente_proveedor.xlsx');
             break;
 
         case 'CSV':
-            return (new Proveedor_CuentacorrienteExport($this->proveedor_cuentacorrienteRepository))
-                        ->parametros($busqueda, $moneda_query, $proveedor_id, $nombreproveedor, $codigoproveedor)
-                        ->download('cuentacorriente_proveedor.csv', \Maatwebsite\Excel\Excel::CSV);
+            return (new ProveedorCuentacorrienteListadoExport($this->proveedor_cuentacorrienteRepository))
+                ->parametros($busqueda, (int) $proveedor_id, $modoVista, $nombreproveedor, $saldoCuentaCorriente, $totalDeuda)
+                ->download('cuentacorriente_proveedor.csv', \Maatwebsite\Excel\Excel::CSV);
             break;
 
         default:
-            $cuentacorriente = $this->proveedor_cuentacorrienteRepository->listarCuentaCorriente($busqueda, $proveedor_id);
+            if ($modoVista === ProveedorCuentacorrientePreferenciasUsuario::MODO_DEUDA) {
+                $cuentacorriente = $this->proveedor_cuentacorrienteRepository->listarDeudaProveedor($busqueda, $proveedor_id);
+                $saldoAnterior = 0.0;
+            } else {
+                $cuentacorriente = $this->proveedor_cuentacorrienteRepository->listarCuentaCorriente($busqueda, $proveedor_id);
+                $primerRegistro = $cuentacorriente->first();
+                $saldoAnterior = $this->proveedor_cuentacorrienteRepository->saldoAnteriorPagina(
+                    (int) $proveedor_id,
+                    $primerRegistro,
+                );
+            }
 
-            $coleccion = collect($cuentacorriente);
-            $data = $coleccion->sortBy('fecha'); 
-            $perPage = 10;
-            $currentPage = Paginator::resolveCurrentPage();
-            
-            $currentPageItems = $data->slice(($currentPage - 1) * $perPage, $perPage)->values();
-            
-            $paginatedItems = new LengthAwarePaginator(
-                $currentPageItems, 
-                $data->count(), 
-                $perPage, 
-                $currentPage, 
-                ['path' => Paginator::resolveCurrentPath()]
-            );
+            $moneda_query = $this->monedaRepository->all();
 
-            $datas = ['cuentacorriente' => $paginatedItems, 'busqueda' => $busqueda, 
-                        'id' => $proveedor_id, 'nombreproveedor' => $nombreproveedor, 'codigoproveedor' => $codigoproveedor,
-                        'urlOrigen' => $urlOrigen, 'moneda_query' => $moneda_query];
+            $datas = [
+                'cuentacorriente' => $cuentacorriente,
+                'busqueda' => $busqueda,
+                'id' => $proveedor_id,
+                'nombreproveedor' => $nombreproveedor,
+                'codigoproveedor' => $codigoproveedor,
+                'urlOrigen' => $urlOrigen,
+                'moneda_query' => $moneda_query,
+                'modoVista' => $modoVista,
+                'saldoCuentaCorriente' => $saldoCuentaCorriente,
+                'totalDeuda' => $totalDeuda,
+                'saldoAnterior' => $saldoAnterior ?? 0.0,
+            ];
 
             return view('compras.cuentacorriente.index', $datas);
         }
     }
 
-    public function leerCuentaCorrienteAplicacion($proveedor_cuentacorriente_id, $comprobante, $proveedor)
+    public function editarCuentaCorriente($cuentacorriente_id)
     {
-        return $this->proveedor_cuentacorrienteRepository->consultarAplicacion($proveedor_cuentacorriente_id, $comprobante, $proveedor);
+        can('listar-cuentacorriente-proveedor');
+
+        $cuentacorriente = $this->proveedor_cuentacorrienteRepository->find($cuentacorriente_id);
+
+        if ((int) ($cuentacorriente->comprobante_proveedor_id ?? 0) > 0) {
+            return redirect()->route('editar_comprobante_proveedor', [
+                'id' => $cuentacorriente->comprobante_proveedor_id,
+            ]);
+        }
+
+        return 'No encontro movimiento a editar';
+    }
+
+    public function leerCuentaCorrienteAplicacion($proveedor_cuentacorriente_id)
+    {
+        return $this->proveedor_cuentacorrienteRepository->consultarAplicacion($proveedor_cuentacorriente_id);
     }
 }
 

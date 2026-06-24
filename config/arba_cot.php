@@ -2,8 +2,9 @@
 
 return [
     /*
-    | test: http://cot.test.arba.gov.ar/...
-    | prod: https://cot.arba.gov.ar/...
+    | test: http://cot.test.arba.gov.ar/TransporteBienes/SeguridadCliente/presentarRemitos.do
+    | prod: https://cot.arba.gov.ar/TransporteBienes/SeguridadCliente/presentarRemitos.do
+    | Dejar ARBA_COT_URL vacío para usar la URL según ARBA_COT_AMBIENTE.
     */
     'ambiente' => env('ARBA_COT_AMBIENTE', 'test'),
 

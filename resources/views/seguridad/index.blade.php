@@ -45,8 +45,8 @@
                 <form action="{{route('login_post')}}" method="POST" autocomplete="off">
                     @csrf
                     <div class="input-group mb-3">
-                        <input type="text" name="usuario" class="form-control" value="{{old('usuario')}}"
-                            placeholder="Usuario">
+                        <input type="text" name="usuario" id="login-usuario" class="form-control" value="{{old('usuario')}}"
+                            placeholder="Usuario" autofocus autocomplete="username">
                         <div class="input-group-append">
                             <div class="input-group-text">
                                 <span class="fas fa-user"></span>
@@ -88,6 +88,15 @@
     <script src="{{asset("assets/$theme/plugins/bootstrap/js/bootstrap.bundle.min.js")}}"></script>
     <!-- AdminLTE App -->
     <script src="{{asset("assets/$theme/dist/js/adminlte.min.js")}}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var campoUsuario = document.getElementById('login-usuario');
+            if (campoUsuario) {
+                campoUsuario.focus();
+                campoUsuario.select();
+            }
+        });
+    </script>
 </body>
 
 </html>

@@ -1148,6 +1148,8 @@ Route::get('ventas/iva-ventas', 'Ventas\IvaVentasReporteController@index')->name
 Route::get('ventas/listar-iva-ventas/{formato}', 'Ventas\IvaVentasReporteController@exportar')->name('listar_iva_ventas');
 Route::get('ventas/cot-electronico', 'Ventas\CotElectronicoController@index')->name('cot_electronico');
 Route::post('ventas/cot-electronico/probar-conexion', 'Ventas\CotElectronicoController@probarConexion')->name('cot_electronico_probar_conexion');
+Route::get('ventas/listar-cot-electronico/{formato?}', 'Ventas\CotElectronicoController@exportar')->name('listar_cot_electronico');
+Route::get('ventas/listar-cot-electronico-sesion/{id}/{formato?}', 'Ventas\CotElectronicoController@exportarSesion')->name('listar_cot_electronico_sesion')->where('id', '[0-9]+');
 
 // Totales de Pedidos
 Route::get('ventas/reptotalpedido', 'Ventas\PedidoController@indexReporteTotalPedido')->name('rep_totalpedido');
@@ -2348,6 +2350,7 @@ Route::get('compras/leerproveedorporcodigo/{codigo}', 'Compras\ProveedorControll
 Route::get('compras/listaproveedor/{formato?}/{busqueda?}', 'Compras\ProveedorController@listar')->name('lista_proveedor');
 
 Route::get('compras/listarcuentacorrienteproveedor/{id}', 'Compras\ProveedorController@listarCuentaCorriente')->name('listar_cuentacorriente_proveedor');
+Route::get('compras/proveedor/editacuentacorriente/{id}', 'Compras\ProveedorController@editarCuentaCorriente')->name('editar_cuentacorriente_proveedor');
 Route::get('compras/listarencuestaproveedor/{id}', 'Compras\ProveedorController@listarEncuesta')->name('listar_encuesta_proveedor');
 Route::get('compras/listarrequisicionproveedor/{id}', 'Compras\ProveedorController@listarRequisicion')->name('listar_requisicion_proveedor');
 Route::get('compras/listar_ordencompra_proveedor/{id}', 'Compras\ProveedorController@listarOrdencompra')->name('listar_ordencompra_proveedor');
@@ -2359,7 +2362,7 @@ Route::post('compras/guardar_proveedor_encuesta', 'Compras\ProveedorController@g
  * Cuenta corriente de proveedores
  */
 
-Route::get('compras/proveedor/leercuentacorrienteaplicacion/{id}/{comprobante}/{proveedor}', 'Compras\ProveedorController@leerCuentaCorrienteAplicacion')->name('leer_cuentacorriente_aplicacion_proveedor');
+Route::get('compras/proveedor/leercuentacorrienteaplicacion/{id}', 'Compras\ProveedorController@leerCuentaCorrienteAplicacion')->name('leer_cuentacorriente_aplicacion_proveedor');
 
 /*
  * Precarga de comprobantes de proveedores

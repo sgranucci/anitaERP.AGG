@@ -1,76 +1,81 @@
+@php
+    use App\Support\Configuracion\EmpresaLogoArchivo;
+    use App\Support\Ventas\ClienteCuentacorrientePreferenciasUsuario;
+
+    foreach ($cuentacorriente as $row) {
+        $row->nombreempresa = $row->empresas->nombre ?? '';
+    }
+    $logosCabecera = EmpresaLogoArchivo::logosCabeceraDesdeColeccion($cuentacorriente);
+    $totalFilas = is_countable($cuentacorriente) ? count($cuentacorriente) : 0;
+    $modoDeuda = ($modoVista ?? ClienteCuentacorrientePreferenciasUsuario::MODO_CUENTA_CORRIENTE)
+        === ClienteCuentacorrientePreferenciasUsuario::MODO_DEUDA;
+    $tituloReporte = $modoDeuda
+        ? 'Deuda de clientes (facturas impagas)'
+        : 'Cuenta corriente de clientes';
+    $subtitulo = 'Cliente: '.($nombrecliente ?? '')
+        .' · Saldo cuenta corriente: '.number_format($saldoCuentaCorriente ?? 0, 2, ',', '.')
+        .' · Total deuda: '.number_format($totalDeuda ?? 0, 2, ',', '.');
+@endphp
 <!DOCTYPE html>
-<html>
-	<title>Cuenta Corriente de Clientes</title>
-	<head>
-		<style>
-			table {
-				font-family: arial, sans-serif;
-				border-collapse: collapse;
-				width: 100%;
-			}
-			td, th {
-				boder: 1px solid #dddddd;
-				text-align: left;
-				padding: 8px;
-			}
-			tr:nth-child(even) {
-				background-color: #dddddd;
-			}
-		</style>
-	</head>
-	<body>
-		<h2>Cuenta Corriente Cliente {{$nombrecliente}}</h2>
-		<table class="table table-striped table-bordered table-hover">
-			<thead>
-				<tr>
-					<th class="width20">ID</th>
-					<th>Fecha</th>
-					<th>Vencimiento</th>
-					<th>Comprobante</th>
-					<th>Moneda</th>
-					<th style="width: 12%; text-align: right;">Debe</th>
-					<th style="width: 12%; text-align: right;">Haber</th>
-					<th style="width: 12%; text-align: right;">Saldo</th>
-				</tr>
-			</thead>
-			<tbody>
-				@php $saldo = 0; @endphp
-				@foreach ($cuentacorriente as $data)
-					@php $saldo += $data->total; @endphp
-				<tr>
-					<td>{{$data->id}}</td>
-					<td>{{date("d/m/Y", strtotime($data->fecha ?? ''))}}</td>
-					<td>{{date("d/m/Y", strtotime($data->fechavencimiento ?? ''))}}</td>
-					<td>
-						{{$data->ventas->codigo}}
-						@if (!empty($data->ventas->lugarentrega))
-							<br><small>Entrega: {{ $data->ventas->lugarentrega }}</small>
-						@endif
-					</td>
-					<td>{{$data->monedas->abreviatura}}</td>
-					<td style="text-align: right;">
-						@if ($data->total >= 0)
-							{{number_format($data->total, 2)}}
-						@endif
-					</td>
-					<td style="text-align: right;">
-						@if ($data->total < 0)
-							{{number_format(abs($data->total), 2)}}
-						@endif
-					</td>
-					<td style="text-align: right;">
-						{{number_format($saldo, 2)}}
-					</td>
-					<td>
-						@if (can('editar-coeficiente', false))
-							<a href="{{route('editar_coeficiente', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
-							<i class="fa fa-edit"></i>
-							</a>
-						@endif
-					</td>
-				</tr>
-				@endforeach
-			</tbody>
-		</table>
-	</body>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+    <title>{{ $tituloReporte }}</title>
+    <style>
+        body { font-family: DejaVu Sans, Helvetica, Arial, sans-serif; font-size: 8px; color: #1a1a1a; line-height: 1.35; }
+        table.data {
+            border-collapse: collapse;
+            width: 100%;
+            table-layout: fixed;
+        }
+        table.data td, table.data th {
+            border: 1px solid #cccccc;
+            text-align: left;
+            padding: 4px;
+            vertical-align: top;
+            word-wrap: break-word;
+        }
+        table.data tbody tr:nth-child(even) { background-color: #f5f5f5; }
+        table.data thead tr { background-color: #85C1E9; }
+        table.data th {
+            font-size: 7px;
+            font-weight: bold;
+            color: #17202A;
+        }
+        .text-right { text-align: right; white-space: nowrap; }
+        .listado-header { width: 100%; margin-bottom: 10px; border-bottom: 2px solid #333; padding-bottom: 6px; }
+        .listado-header td { vertical-align: middle; border: none; }
+        .meta { font-size: 8px; color: #444; margin-top: 4px; }
+    </style>
+</head>
+<body>
+    <table class="listado-header">
+        <tr>
+            <td style="width: 32%;">
+                @foreach ($logosCabecera as $logo)
+                    <img src="{{ $logo['uri'] }}" alt="{{ $logo['nombre'] }}" style="max-height: 52px; max-width: 160px; margin-right: 8px; vertical-align: middle;">
+                @endforeach
+            </td>
+            <td style="width: 46%; text-align: center;">
+                <h2 style="margin: 0; font-size: 18px; font-weight: bold;">{{ $tituloReporte }}</h2>
+                <div class="meta">Generado {{ date('d/m/Y H:i') }}</div>
+                <div class="meta">{{ $subtitulo }}</div>
+            </td>
+            <td style="width: 22%; text-align: right; font-size: 8px;">
+                @if ($totalFilas > 0)
+                    Registros: {{ $totalFilas }}
+                @endif
+            </td>
+        </tr>
+    </table>
+    <table class="data">
+        @include('ventas.cuentacorriente.partials.tabla_datos', [
+            'filas' => $cuentacorriente,
+            'modoVista' => $modoVista ?? ClienteCuentacorrientePreferenciasUsuario::MODO_CUENTA_CORRIENTE,
+            'saldoAnterior' => 0,
+            'para_pdf' => true,
+        ])
+    </table>
+</body>
 </html>

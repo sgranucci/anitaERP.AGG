@@ -27,6 +27,8 @@ class ClienteListadoFiltros
         'provincia' => ['column' => 'provincia.nombre', 'type' => 'texto', 'label' => 'Provincia'],
         'transporte_codigo' => ['column' => 'transporte.codigo', 'type' => 'texto', 'label' => 'Reparto (código)'],
         'transporte_nombre' => ['column' => 'transporte.nombre', 'type' => 'texto', 'label' => 'Reparto (nombre)'],
+        'vendedor_codigo' => ['column' => 'vendedor.codigo', 'type' => 'texto', 'label' => 'Vendedor (código)'],
+        'vendedor_nombre' => ['column' => 'vendedor.nombre', 'type' => 'texto', 'label' => 'Vendedor (nombre)'],
     ];
 
     /**
@@ -41,6 +43,7 @@ class ClienteListadoFiltros
         'localidad.nombre',
         'provincia.nombre',
         'transporte.nombre',
+        'vendedor.nombre',
     ];
 
     /** @var array<string, string> */
@@ -223,6 +226,8 @@ class ClienteListadoFiltros
                 'provincia.nombre',
                 'transporte.codigo',
                 'transporte.nombre',
+                'vendedor.codigo',
+                'vendedor.nombre',
             ];
             foreach ($textCols as $col) {
                 $q->orWhere($col, 'like', $like);

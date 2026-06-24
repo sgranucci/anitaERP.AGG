@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Seguridad;
 
 use App\Http\Controllers\Controller;
+use App\Models\Seguridad\Usuario;
 use Illuminate\Foundation\Auth\AuthenticatesUsers;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class LoginController extends Controller
 {
@@ -20,6 +22,22 @@ class LoginController extends Controller
     public function index()
     {
         return view('seguridad.index');
+    }
+
+    protected function attemptLogin(Request $request)
+    {
+        $usuario = Usuario::where($this->username(), $request->{$this->username()})->first();
+
+        if ($usuario !== null && $usuario->suspendido) {
+            throw ValidationException::withMessages([
+                $this->username() => ['Su cuenta está suspendida. Contacte al administrador del sistema.'],
+            ]);
+        }
+
+        return $this->guard()->attempt(
+            $this->credentials($request),
+            $request->boolean('remember')
+        );
     }
 
     protected function authenticated(Request $request, $user)

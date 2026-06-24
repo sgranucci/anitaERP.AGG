@@ -5341,6 +5341,16 @@ class FacturacionService
 		//$pdfMerger = PDFMerger::init();
 
 		$venta = $this->ventaRepository->find($id);
+		$venta->loadMissing([
+			'gastronomiaEmision',
+			'clientes.tipodocumentos',
+			'clientes.condicioniibbs',
+			'clientes.condicionventas',
+			'clientes.localidades',
+			'clientes.provincias',
+			'clientes.paises',
+			'transportes',
+		]);
 
 		$codigoTipoTransaccion = intval($venta->tipotransacciones->codigo);
 		

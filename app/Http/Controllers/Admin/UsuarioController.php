@@ -16,7 +16,6 @@ use App\Support\Http\EliminacionRegistroSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 
 class UsuarioController extends Controller
 {
@@ -103,8 +102,12 @@ class UsuarioController extends Controller
     public function actualizar(ValidacionUsuario $request, $id)
     {
         $usuario = Usuario::findOrFail($id);
-        if ($foto = Usuario::setFoto($request, $usuario->foto)) {
-            $request->request->add(['foto' => $foto]);
+
+        if ((int) $id === (int) session('usuario_id') && $request->boolean('suspendido')) {
+            return redirect()
+                ->back()
+                ->withInput()
+                ->withErrors(['suspendido' => 'No puede suspender su propio usuario mientras tiene la sesión activa.']);
         }
 
         $data = array_filter($request->all());
@@ -121,7 +124,23 @@ class UsuarioController extends Controller
             ? (int) $request->input('sector_legajocompra_id')
             : null;
 
+        $data['suspendido'] = $request->boolean('suspendido');
+
+        if ($request->hasFile('foto_up')) {
+            if ($foto = Usuario::setFoto($request, $usuario->foto)) {
+                $data['foto'] = $foto;
+            }
+        } elseif ($request->boolean('quitar_foto')) {
+            Usuario::eliminarFoto($usuario->foto);
+            $data['foto'] = null;
+        }
+
         $usuario->update($data);
+
+        if ((int) $id === (int) session('usuario_id')) {
+            session(['foto_usuario' => $usuario->fresh()->foto]);
+        }
+
         $usuario->auditSync('roles', $request->rol_id);
 
         // Actualiza las empresas
@@ -149,12 +168,8 @@ class UsuarioController extends Controller
             $usuario->auditDetach('usuario_empresas');
             $usuario->auditDetach('depositosAutorizados');
 
-            $foto = $usuario->foto;
+            Usuario::eliminarFoto($usuario->foto);
             $usuario->delete();
-
-            if ($foto) {
-                Storage::disk('public')->delete("imagenes/fotos_usuarios/$foto");
-            }
 
             return EliminacionRegistroSupport::respuestaJsonOk();
         } catch (QueryException $e) {

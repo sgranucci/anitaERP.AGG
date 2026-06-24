@@ -41,10 +41,88 @@
         <div class="form-group row mb-0">
             <label for="foto" class="col-lg-3 col-form-label">Foto</label>
             <div class="col-lg-8">
-                <input type="file" name="foto_up" id="foto" data-initial-preview="{{ isset($data->foto) ? asset("storage/imagenes/fotos_usuarios/$data->foto") : asset("assets/$theme/dist/img/user2-160x160.jpg") }}" accept="image/*" />
-                <small class="form-text text-muted">Imagen cuadrada recomendada; se redimensiona al guardar.</small>
+                @isset($data)
+                    <input type="hidden" name="quitar_foto" id="quitar_foto" value="{{ old('quitar_foto', '0') }}">
+                @endisset
+                <input type="file" name="foto_up" id="foto"
+                    data-tiene-foto="{{ ! empty($data->foto ?? null) ? '1' : '0' }}"
+                    data-initial-preview="{{ ! empty($data->foto ?? null) ? asset('storage/imagenes/fotos_usuarios/'.$data->foto) : '' }}"
+                    accept="image/*" />
+                <small class="form-text text-muted">Imagen cuadrada recomendada; se redimensiona al guardar.@isset($data) Use el bot&oacute;n de quitar para volver al avatar predeterminado.@endisset</small>
             </div>
         </div>
+        @isset($data)
+            @php
+                $suspendidoActual = (bool) old('suspendido', $data->suspendido ?? false);
+                $esPropioUsuario = (int) $data->id === (int) session('usuario_id');
+            @endphp
+            <div class="form-group row mb-0 mt-3 align-items-center">
+                <label class="col-lg-3 col-form-label mb-lg-0" for="estado_usuario_activo">Estado</label>
+                <div class="col-lg-8">
+                    <div class="d-flex flex-wrap align-items-center">
+                        <div class="mr-4 mb-2 mb-md-0" id="grp-estado-usuario" role="radiogroup" aria-label="Estado del usuario">
+                            <div class="custom-control custom-radio custom-control-inline">
+                                <input type="radio" name="suspendido" id="estado_usuario_activo" class="custom-control-input estado-usuario-radio" value="0"
+                                    {{ ! $suspendidoActual ? 'checked' : '' }}
+                                    @if ($esPropioUsuario) disabled @endif>
+                                <label class="custom-control-label font-weight-bold text-success" for="estado_usuario_activo">
+                                    Activo
+                                </label>
+                            </div>
+                            <div class="custom-control custom-radio custom-control-inline ml-md-3">
+                                <input type="radio" name="suspendido" id="estado_usuario_suspendido" class="custom-control-input estado-usuario-radio" value="1"
+                                    {{ $suspendidoActual ? 'checked' : '' }}
+                                    @if ($esPropioUsuario) disabled @endif>
+                                <label class="custom-control-label font-weight-bold text-dark" for="estado_usuario_suspendido">
+                                    Suspendido
+                                </label>
+                            </div>
+                        </div>
+                        <span id="estado-usuario-mensaje" class="badge mb-2 mb-md-0 {{ $suspendidoActual ? 'badge-danger' : 'badge-success' }}">
+                            @if ($suspendidoActual)
+                                <i class="fas fa-ban mr-1"></i> No puede iniciar sesi&oacute;n
+                            @else
+                                <i class="fas fa-sign-in-alt mr-1"></i> Puede iniciar sesi&oacute;n
+                            @endif
+                        </span>
+                    </div>
+                    @if ($esPropioUsuario)
+                        <small class="form-text text-muted mt-2 mb-0">
+                            No puede cambiar su propio estado mientras tiene la sesi&oacute;n activa.
+                        </small>
+                    @else
+                        <small class="form-text text-muted mt-2 mb-0">
+                            Un usuario suspendido no podr&aacute; ingresar al sistema hasta reactivarlo.
+                        </small>
+                    @endif
+                    @error('suspendido')
+                        <div class="text-danger small mt-1">{{ $message }}</div>
+                    @enderror
+                </div>
+            </div>
+            <script>
+                document.addEventListener('DOMContentLoaded', function () {
+                    var mensaje = document.getElementById('estado-usuario-mensaje');
+                    var radios = document.querySelectorAll('.estado-usuario-radio');
+                    if (!mensaje || !radios.length) {
+                        return;
+                    }
+                    radios.forEach(function (radio) {
+                        radio.addEventListener('change', function () {
+                            var suspendido = document.getElementById('estado_usuario_suspendido').checked;
+                            mensaje.classList.remove('badge-success', 'badge-danger');
+                            if (suspendido) {
+                                mensaje.classList.add('badge-danger');
+                                mensaje.innerHTML = '<i class="fas fa-ban mr-1"></i> No puede iniciar sesi&oacute;n';
+                            } else {
+                                mensaje.classList.add('badge-success');
+                                mensaje.innerHTML = '<i class="fas fa-sign-in-alt mr-1"></i> Puede iniciar sesi&oacute;n';
+                            }
+                        });
+                    });
+                });
+            </script>
+        @endisset
     </div>
 </div>
 

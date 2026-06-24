@@ -1540,19 +1540,30 @@
 	}
 
    	function asignaDatosCliente(cliente_id, flCambioCliente){
+		if (!cliente_id || !$.isNumeric(cliente_id) || parseInt(cliente_id, 10) <= 0) {
+			return;
+		}
+
         $.get(carpetaBase+'/ventas/leercliente/'+cliente_id, function(data){
-            var datoscli = $.map(data, function(value, index){
-                return [value];
-            });
-            const vendedor_id = datoscli[1];
-            const transporte_id = datoscli[2];
-            const condicionventa_id = datoscli[3];
-            const descuento = datoscli[4];
-			const tiposuspension_id = datoscli[5];
+            const transporte_id = data.transporte_id == null ? 0 : data.transporte_id;
+            const condicionventa_id = data.condicionventa_id;
+            const descuento = data.descuento;
+			const tiposuspension_id = data.tiposuspension_id;
 
 			if (flCambioCliente)
 			{
-				$('#vendedor_id').val(vendedor_id);
+				if (typeof window.aplicarVendedorPedidoDesdeCliente === 'function') {
+					window.aplicarVendedorPedidoDesdeCliente(data);
+				} else {
+					var vendedorId = data.vendedor_id;
+					if ((vendedorId == null || vendedorId === '') && data.vendedores && data.vendedores.id != null) {
+						vendedorId = data.vendedores.id;
+					}
+					if (vendedorId == null || vendedorId === '') {
+						vendedorId = 1;
+					}
+					$('#vendedor_id').val(String(vendedorId));
+				}
 				$('#transporte_id').val(transporte_id);
 				$('#condicionventa_id').val(condicionventa_id);
 				$('#descuento').val(descuento);

@@ -29,7 +29,11 @@ class Usuario extends Authenticatable implements Auditable
 
     protected $table = 'usuario';
 
-    protected $fillable = ['usuario', 'nombre', 'email', 'password', 'foto', 'centrocosto_id', 'vendedor_id', 'oficinacompra_id', 'sector_legajocompra_id'];
+    protected $fillable = ['usuario', 'nombre', 'email', 'password', 'foto', 'suspendido', 'centrocosto_id', 'vendedor_id', 'oficinacompra_id', 'sector_legajocompra_id'];
+
+    protected $casts = [
+        'suspendido' => 'boolean',
+    ];
 
     public function roles()
     {
@@ -102,6 +106,13 @@ class Usuario extends Authenticatable implements Auditable
         }
         Session::put('usuario_empresas', $empresas);
         UsuarioDepositoAutorizado::cargarEnSession($this);
+    }
+
+    public static function eliminarFoto(?string $actual): void
+    {
+        if ($actual) {
+            Storage::disk('public')->delete("imagenes/fotos_usuarios/$actual");
+        }
     }
 
     public static function setFoto($request, $actual = false)
