@@ -5,6 +5,7 @@ namespace App\Services\Stock;
 use App\ApiAnita;
 use App\Models\Compras\Ordencompra;
 use App\Models\Contable\Tipoasiento;
+use App\Models\Stock\Articulo;
 use App\Models\Stock\Configuracion_RecepcionProveedor;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Repositories\Contable\AsientoRepositoryInterface;
@@ -116,7 +117,7 @@ class RecepcionProveedorAsientoService
      */
     public function lineasDebeArticulosAgrupadas(Recepcion_Proveedor $recepcion): array
     {
-        $recepcion->loadMissing(['recepcion_proveedor_articulos.articulos']);
+        $recepcion->loadMissing(['recepcion_proveedor_articulos.articulos.articulo_cuentacontables']);
         $cotizacionRecepcion = (float) ($recepcion->cotizacion ?: 1);
 
         return $this->armarLineasDebeArticulos($recepcion, $cotizacionRecepcion);
@@ -303,7 +304,10 @@ class RecepcionProveedorAsientoService
             throw new \RuntimeException('Falta configurar cuenta de provisión de facturas a recibir para la empresa.');
         }
 
-        $recepcion->loadMissing(['recepcion_proveedor_articulos.articulos', 'ordencompras']);
+        $recepcion->loadMissing([
+            'recepcion_proveedor_articulos.articulos.articulo_cuentacontables',
+            'ordencompras',
+        ]);
         $tipoAsiento = $this->resolverTipoAsientoCompras();
 
         $claveAnita = RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
@@ -476,9 +480,11 @@ class RecepcionProveedorAsientoService
     ): array {
         $agrupado = [];
 
+        $empresaId = (int) $recepcion->empresa_id;
+
         foreach ($recepcion->recepcion_proveedor_articulos as $linea) {
             $articulo = $linea->articulos;
-            $ctaId = (int) ($articulo->cuentacontablecompra_id ?? 0);
+            $ctaId = $this->resolverCuentaCompraId($articulo, $empresaId);
             if ($ctaId <= 0) {
                 throw new \RuntimeException('Artículo '.($articulo->sku ?? $linea->articulo_id).' sin cuenta contable de compra.');
             }
@@ -507,6 +513,23 @@ class RecepcionProveedorAsientoService
         }
 
         return array_values($agrupado);
+    }
+
+    private function resolverCuentaCompraId(?Articulo $articulo, int $empresaId): int
+    {
+        if (! $articulo) {
+            return 0;
+        }
+
+        $cuentaGrid = $articulo->articulo_cuentacontables
+            ?->first(fn ($row) => (int) $row->empresa_id === $empresaId
+                && strtoupper((string) $row->tipoimputacion) === 'COMPRAS');
+
+        if ($cuentaGrid && (int) $cuentaGrid->cuentacontable_id > 0) {
+            return (int) $cuentaGrid->cuentacontable_id;
+        }
+
+        return (int) ($articulo->cuentacontablecompra_id ?? 0);
     }
 
     /**
