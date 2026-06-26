@@ -23,9 +23,15 @@ class CategoriaController extends Controller
 
 		if ($datas->isEmpty())
 		{
-			$Categoria = new Categoria();
-        	$Categoria->sincronizarConAnita();
-	
+			try {
+				$Categoria = new Categoria();
+				$Categoria->sincronizarConAnita();
+			} catch (\Throwable $e) {
+				return redirect()->route('categoria')->with('errores', [
+					'No se pudo importar categorías desde Anita (stkagr): '.$e->getMessage(),
+				]);
+			}
+
         	$datas = Categoria::with('tipoarticulo:id,nombre')->get();
 		}
 

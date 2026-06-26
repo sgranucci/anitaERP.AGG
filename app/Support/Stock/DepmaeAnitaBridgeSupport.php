@@ -109,11 +109,21 @@ final class DepmaeAnitaBridgeSupport
 
     private static function camposListado(): string
     {
+        $camposEnv = trim((string) config('stock.depmae_anita_campos_listado', ''));
+        if ($camposEnv !== '') {
+            return $camposEnv;
+        }
+
         if (config('app.empresa') === 'Calzados Ferli'
             || config('app.empresa') === 'EL BIERZO') {
             return 'depm_deposito,depm_desc,depm_maneja_part,depm_cta_contable';
         }
 
-        return 'depm_deposito,depm_desc,depm_maneja_part,depm_tipo_deposito';
+        if (config('app.empresa') === 'AGG') {
+            return 'depm_deposito,depm_desc,depm_maneja_part,depm_tipo_deposito';
+        }
+
+        // INTERFORMING y otros: Informix sin depm_tipo_deposito ni depm_cta_contable.
+        return 'depm_deposito,depm_desc,depm_maneja_part';
     }
 }

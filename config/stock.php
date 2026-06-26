@@ -22,10 +22,25 @@ return [
     | Sync depmae desde Anita por empresa (depmae:sincronizar-anita).
     | Omite codigos numericos > depmae_anita_codigo_maximo (maquinas/tragamonedas).
     */
+    /** Campos stkagr list Anita (override). Vacío = stka_agrupacion. No incluir stka_rubro. */
+    'categoria_anita_campos_listado' => env('STOCK_CATEGORIA_ANITA_CAMPOS_LISTADO', ''),
+
+    /** Campos stkagr detalle Anita (override). Vacío = según EMPRESA. */
+    'categoria_anita_campos_detalle' => env('STOCK_CATEGORIA_ANITA_CAMPOS_DETALLE', ''),
+
+    /** Campos stkmae detalle Anita (override). Vacío = según config app.empresa. */
+    'articulo_anita_campos_detalle' => env('STOCK_ARTICULO_ANITA_CAMPOS_DETALLE', ''),
+
     'depmae_anita_codigo_maximo' => (int) env('STOCK_DEPMAE_ANITA_CODIGO_MAXIMO', 100000),
 
-    /** @var list<int> Orden Biyemas → Kandiko → Rebisco; bridge por empresa_id. */
-    'depmae_anita_empresas_sync' => [1, 2, 3],
+    /** Campos depmae en Anita (override por instalación). Vacío = según config app.empresa. */
+    'depmae_anita_campos_listado' => env('STOCK_DEPMAE_ANITA_CAMPOS_LISTADO', ''),
+
+    /** @var list<int> Orden de sync por empresa_id (ej. AGG: 1,2,3; INTERFORMING: 1). */
+    'depmae_anita_empresas_sync' => array_values(array_filter(array_map(
+        'intval',
+        explode(',', (string) env('STOCK_DEPMAE_ANITA_EMPRESAS_SYNC', '1,2,3'))
+    ), fn (int $id) => $id > 0)),
 
     'anita_stkmov' => [
         'habilitado' => filter_var(env('STOCK_ANITA_STKMOV_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),

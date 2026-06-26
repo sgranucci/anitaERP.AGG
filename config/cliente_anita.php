@@ -3,7 +3,7 @@
 /**
  * Importación Anita (Informix) → cliente del ERP.
  * Dirección: Anita es la fuente de verdad; el comando cliente:sincronizar-anita actualiza anitaERP.
- * No escribe en Anita (ver ANITA_SYNC_CLIENTE_WRITE=false para el ABM).
+ * Escritura ERP → Anita: ANITA_SYNC_CLIENTE_WRITE en .env (config app.anita_sync_cliente_write).
  *
  * Tabla origen: climae (sistema ventas).
  */

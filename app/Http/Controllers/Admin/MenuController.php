@@ -6,6 +6,9 @@ use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Models\Admin\Menu;
 use App\Http\Requests\ValidacionMenu;
+use App\Support\Admin\MenuEliminacionSupport;
+use App\Support\Http\EliminacionRegistroSupport;
+use Illuminate\Database\QueryException;
 
 class MenuController extends Controller
 {
@@ -74,8 +77,21 @@ class MenuController extends Controller
      */
     public function eliminar($id)
     {
-        Menu::destroy($id);
-        return redirect('admin/menu')->with('mensaje', 'Menú eliminado con exito');
+        try {
+            MenuEliminacionSupport::eliminar((int) $id);
+
+            return redirect('admin/menu')->with('mensaje', 'Menú eliminado con exito');
+        } catch (\RuntimeException $e) {
+            return redirect('admin/menu')->with('errores', [$e->getMessage()]);
+        } catch (QueryException $e) {
+            return redirect('admin/menu')->with('errores', [
+                EliminacionRegistroSupport::mensajeDesdeQueryException($e, 'el menú'),
+            ]);
+        } catch (\Throwable $e) {
+            return redirect('admin/menu')->with('errores', [
+                EliminacionRegistroSupport::mensajeDesdeExcepcion($e, 'el menú'),
+            ]);
+        }
     }
 
     public function guardarOrden(Request $request)

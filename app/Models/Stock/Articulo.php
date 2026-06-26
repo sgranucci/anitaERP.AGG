@@ -4,6 +4,8 @@ namespace App\Models\Stock;
 
 use App\ApiAnita;
 use App\Models\Configuracion\Empresa;
+use App\Support\Stock\ArticuloStkmaeAnitaBridgeSupport;
+use App\Support\Stock\InterformingArticuloAnitaMapperSupport;
 use App\Models\Configuracion\Impuesto;
 use App\Models\Contable\Centrocosto;
 use App\Models\Contable\Cuentacontable;
@@ -74,6 +76,7 @@ class Articulo extends Model implements Auditable
                 'diasproceso', 'vencimientoendia', 'diaenfriado', 'codigosenasa_id', 'salaproduccion_id', 'tipoproduccion_id',
                 'sectorsellado_id', 'tipoarticulo_id', 'coeficienteconversion', 'depositoentrega_id', 'numeroparte', 'ubicacionparte',
                 'oficinacompra_id', 'periodicidadcompra_id', 'condicionentrega_id', 'estado',
+                'subrubro', 'lineamaterial', 'grupoproducto',
             ];
         }
     }
@@ -449,6 +452,12 @@ class Articulo extends Model implements Auditable
 				stkm_fecha_pvta   ',
                 'whereArmado' => ' WHERE '.$this->keyFieldAnita." = '".$key."' ",
             ];
+        } elseif (config('app.empresa') === 'INTERFORMING') {
+            $data = [
+                'acc' => 'list', 'tabla' => $this->tableAnita,
+                'campos' => ArticuloStkmaeAnitaBridgeSupport::camposDetalle(),
+                'whereArmado' => ' WHERE '.$this->keyFieldAnita." = '".$key."' ",
+            ];
         } else {
             $data = [
                 'acc' => 'list', 'tabla' => $this->tableAnita,
@@ -547,6 +556,7 @@ class Articulo extends Model implements Auditable
             // Valores por defecto: los switch de AGG/FRASLE no cubren todos los códigos posibles de Anita.
             $estado = 'ACTIVO';
             $noFactura = '0';
+            $cuentaContableGasto_id = null;
 
             $categoria = Categoria::select('id', 'codigo')->where('codigo', ltrim($data->stkm_agrupacion, '0'))->first();
             if ($categoria) {
@@ -1018,6 +1028,34 @@ class Articulo extends Model implements Auditable
                     ];
                     break;
 
+                case 'INTERFORMING':
+                    $arrayCampos = InterformingArticuloAnitaMapperSupport::mapearArrayCampos($data, [
+                        'descripcion' => $data->stkm_desc,
+                        'sku' => ltrim($data->stkm_articulo, '0'),
+                        'empresa_id' => 1,
+                        'unidadesxenvase' => $data->stkm_unidad_xenv,
+                        'skualternativo' => $data->stkm_articulo_prod,
+                        'categoria_id' => $categoria_id > 0 ? $categoria_id : null,
+                        'subcategoria_id' => $subcategoria_id > 0 ? $subcategoria_id : null,
+                        'linea_id' => $linea_id,
+                        'mventa_id' => $mventa_id,
+                        'peso' => $data->stkm_peso_aprox,
+                        'impuesto_id' => $impuesto_id,
+                        'formula' => $formulaErpId,
+                        'nomenclador' => $codigoNomenclador,
+                        'foto' => $data->stkm_nombre_foto,
+                        'unidadmedida_id' => $unidadmedida_id > 0 ? $unidadmedida_id : null,
+                        'unidadmedidaalternativa_id' => $unidadmedidaalternativa_id > 0 ? $unidadmedidaalternativa_id : null,
+                        'cuentacontableventa_id' => $cuentacontableventa_id > 0 ? $cuentacontableventa_id : null,
+                        'cuentacontablecompra_id' => $cuentacontablecompra_id > 0 ? $cuentacontablecompra_id : null,
+                        'cuentacontableimpinterno_id' => $cuentacontableimpinterno_id > 0 ? $cuentacontableimpinterno_id : null,
+                        'ppp' => $data->stkm_ppp,
+                        'usuario_id' => $usuario_id,
+                        'fechaultimacompra' => $fechaultimacompra,
+                        'usoarticulo_id' => $usoarticulo_id > 0 ? $usoarticulo_id : null,
+                    ]);
+                    break;
+
                 default:
                     $arrayCampos = [
                         'descripcion' => $data->stkm_desc,
@@ -1090,11 +1128,18 @@ class Articulo extends Model implements Auditable
 
             // Agrega cuentas contables
             $this->articulo_cuentacontableRepository = App::make(\App\Repositories\Stock\Articulo_CuentacontableRepositoryInterface::class);
-            for ($i = 1; $i <= 3; $i++) {
+            $empresasSync = array_values(array_filter(
+                array_map('intval', (array) config('stock.depmae_anita_empresas_sync', [1])),
+                fn (int $id) => $id > 0
+            ));
+            if ($empresasSync === []) {
+                $empresasSync = [1];
+            }
+            foreach ($empresasSync as $empresaId) {
                 if ($cuentacontableventa_id > 0) {
                     $this->articulo_cuentacontableRepository->createUnique([
                         'articulo_id' => $articulo->id,
-                        'empresa_id' => $i,
+                        'empresa_id' => $empresaId,
                         'tipoimputacion' => 'VENTAS',
                         'cuentacontable_id' => $cuentacontableventa_id,
                         'creousuario_id' => Auth::user()->id,
@@ -1104,7 +1149,7 @@ class Articulo extends Model implements Auditable
                 if ($cuentacontablecompra_id > 0) {
                     $this->articulo_cuentacontableRepository->createUnique([
                         'articulo_id' => $articulo->id,
-                        'empresa_id' => $i,
+                        'empresa_id' => $empresaId,
                         'tipoimputacion' => 'COMPRAS',
                         'cuentacontable_id' => $cuentacontablecompra_id,
                         'creousuario_id' => Auth::user()->id,
@@ -1114,7 +1159,7 @@ class Articulo extends Model implements Auditable
                 if ($cuentacontableimpinterno_id > 0) {
                     $this->articulo_cuentacontableRepository->createUnique([
                         'articulo_id' => $articulo->id,
-                        'empresa_id' => $i,
+                        'empresa_id' => $empresaId,
                         'tipoimputacion' => 'GASTOS',
                         'cuentacontable_id' => $cuentacontableimpinterno_id,
                         'creousuario_id' => Auth::user()->id,
@@ -1124,7 +1169,7 @@ class Articulo extends Model implements Auditable
                 if ($cuentaContableGasto_id > 0) {
                     $this->articulo_cuentacontableRepository->createUnique([
                         'articulo_id' => $articulo->id,
-                        'empresa_id' => $i,
+                        'empresa_id' => $empresaId,
                         'tipoimputacion' => 'IMPUESTOS INTERNOS',
                         'cuentacontable_id' => $cuentaContableGasto_id,
                         'creousuario_id' => Auth::user()->id,

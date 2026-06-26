@@ -34,6 +34,9 @@ class ValidacionArticulo extends FormRequest
             'capacidad_id' => 'nullable|numeric|exists:capacidad,id',
             'color_id' => 'nullable|numeric|exists:color,id',
             'tipoliquidofreno_id' => 'nullable|numeric|exists:tipoliquidofreno,id',
+            'subrubro' => 'nullable|max:50',
+            'lineamaterial' => 'nullable|max:50',
+            'grupoproducto' => 'nullable|max:50',
         ];
     }
 }

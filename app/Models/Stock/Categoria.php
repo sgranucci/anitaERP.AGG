@@ -7,8 +7,8 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use App\ApiAnita;
 use App\Models\Stock\Tipoarticulo;
-use App\Models\Stock\Linea;
-use App\Models\Ventas\Puntoventa;
+use App\Support\Stock\CategoriaAnitaBridgeSupport;
+use App\Support\Stock\TipoarticuloDefaultSupport;
 
 class Categoria extends Model
 {
@@ -26,106 +26,43 @@ class Categoria extends Model
     }
 
     public function sincronizarConAnita(){
-        $apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'list', 'campos' => $this->keyFieldAnita, 'tabla' => $this->tableAnita );
-        $dataAnita = json_decode($apiAnita->apiCall($data));
+        $tipoarticuloId = TipoarticuloDefaultSupport::idParaImportacionAnita();
+        $key = CategoriaAnitaBridgeSupport::keyField();
+        $dataAnita = CategoriaAnitaBridgeSupport::listar();
 
-        $datosLocal = Categoria::all();
-        $datosLocalArray = [];
-        foreach ($datosLocal as $value) {
-            $datosLocalArray[] = $value->{$this->keyField};
-        }
-        
+        $datosLocalArray = Categoria::query()->pluck('codigo')->map(
+            fn (string $codigo) => CategoriaAnitaBridgeSupport::normalizarCodigo($codigo)
+        )->all();
+
         foreach ($dataAnita as $value) {
-            if (!in_array(ltrim($value->{$this->keyFieldAnita}, '0'), $datosLocalArray)) {
-                $this->traerRegistroDeAnita($value->{$this->keyFieldAnita});
+            $codigoAnita = CategoriaAnitaBridgeSupport::normalizarCodigo((string) ($value->{$key} ?? ''));
+            if ($codigoAnita === '0' || in_array($codigoAnita, $datosLocalArray, true)) {
+                continue;
             }
+
+            $this->traerRegistroDeAnita((string) ($value->{$key} ?? ''), $tipoarticuloId);
+            $datosLocalArray[] = $codigoAnita;
         }
     }
 
-    public function traerRegistroDeAnita($key){
-        $apiAnita = new ApiAnita();
+    public function traerRegistroDeAnita($key, ?int $tipoarticuloId = null){
+        $tipoarticuloId ??= TipoarticuloDefaultSupport::idParaImportacionAnita();
+        $keyField = CategoriaAnitaBridgeSupport::keyField();
+        $filas = CategoriaAnitaBridgeSupport::listarDetalle(
+            " WHERE {$keyField} = '".addslashes((string) $key)."' "
+        );
 
-        switch(config('app.empresa'))
-        {
-            case 'FRASLE':
-                $data = array( 
-                    'acc' => 'list', 'tabla' => $this->tableAnita, 
-                    'campos' => '
-                        stka_agrupacion,
-                        stka_desc,
-                        stka_division,
-                        stka_estado,
-                        stka_grupocom,
-                        stka_linea,
-                        stka_deposito,
-                        stka_sucursal,
-                        stka_excel
-                    ' , 
-                    'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
-                );
-                break;
-
-            default:
-                $data = array( 
-                    'acc' => 'list', 'tabla' => $this->tableAnita, 
-                    'campos' => '
-                        stka_agrupacion,
-                        stka_desc
-                    ' , 
-                    'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
-                );
-                break;
+        if ($filas === []) {
+            return;
         }
-        $dataAnita = json_decode($apiAnita->apiCall($data));
 
-        if (count($dataAnita) > 0) {
-            $data = $dataAnita[0];
+        $payload = CategoriaAnitaBridgeSupport::mapPayloadErp($filas[0], $tipoarticuloId);
 
-			$codigo = ltrim($data->stka_agrupacion, '0');
-
-            if (config('app.empresa') != 'FRASLE')
-                Categoria::create([
-                    "nombre" => $data->stka_desc,
-                    "codigo" => $codigo,
-                    "copiaot" => '',
-                    "tipoarticulo_id" => 1
-                ]);
-            else
-            {
-                $linea = Linea::select('id')->where('codigo', ltrim($data->stka_linea, '0'))->first();
-
-                $linea_id = null;
-                if ($linea)
-                    $linea_id = $linea->id;
-
-                $deposito = Depmae::select('id')->where('codigo', $data->stka_deposito)->first();
-
-                $deposito_id = null;
-                if ($deposito)
-                    $deposito_id = $deposito->id;
-
-                $puntoventa = Puntoventa::select('id')->where('codigo', $data->stka_sucursal)->first();
-
-                $puntoventa_id = null;
-                if ($puntoventa)
-                    $puntoventa_id = $puntoventa->id;
-
-                Categoria::create([
-                    "nombre" => $data->stka_desc,
-                    "codigo" => $codigo,
-                    "copiaot" => '',
-                    "tipoarticulo_id" => 1,
-                    "division" => $data->stka_division,
-                    "estado" => $data->stka_estado,
-                    "grupocompra" => $data->stka_grupocom,
-                    "linea_id" => $linea_id,
-                    "deposito_id" => $deposito_id,
-                    "puntoventa_id" => $puntoventa_id,
-                    "excel" => $data->stka_excel
-                ]);
-            }
+        if (Categoria::query()->where('codigo', $payload['codigo'])->exists()) {
+            return;
         }
+
+        Categoria::create($payload);
     }
 
 	public function guardarAnita($request, $id) {

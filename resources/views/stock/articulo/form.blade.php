@@ -35,6 +35,29 @@
                     </select>
     				</div>
               	</div>
+                @if (config('app.empresa') == 'INTERFORMING')
+                    <div class="form-group row">
+                        <label for="subrubro" class="col-lg-4 col-form-label">Subrubro</label>
+                        <div class="col-lg-5">
+                            <input type="text" name="subrubro" id="subrubro" class="form-control" maxlength="50"
+                                value="{{ old('subrubro', $producto->subrubro ?? '') }}"/>
+                        </div>
+                    </div>
+                    <div class="form-group row">
+                        <label for="lineamaterial" class="col-lg-4 col-form-label">L&iacute;nea material</label>
+                        <div class="col-lg-5">
+                            <input type="text" name="lineamaterial" id="lineamaterial" class="form-control" maxlength="50"
+                                value="{{ old('lineamaterial', $producto->lineamaterial ?? '') }}"/>
+                        </div>
+                    </div>
+                    <div class="form-group row">
+                        <label for="grupoproducto" class="col-lg-4 col-form-label">Grupo producto</label>
+                        <div class="col-lg-5">
+                            <input type="text" name="grupoproducto" id="grupoproducto" class="form-control" maxlength="50"
+                                value="{{ old('grupoproducto', $producto->grupoproducto ?? '') }}"/>
+                        </div>
+                    </div>
+                @endif
 				<div class="form-group row">
     				<label for="categoria_id" class="col-lg-4 col-form-label requerido">Categor&iacute;a</label>
 					<div class="col-lg-8">
