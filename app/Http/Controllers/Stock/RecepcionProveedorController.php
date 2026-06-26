@@ -176,6 +176,7 @@ class RecepcionProveedorController extends Controller
             'ordencompra_id' => $oc->id,
             'numeroordencompra' => $oc->numeroordencompra,
             'empresa_id' => $oc->empresa_id,
+            'centrocosto_id' => $oc->centrocosto_id,
             'proveedor_id' => $oc->proveedor_id,
             'proveedor_nombre' => optional($oc->proveedores)->nombre,
             'empresa_nombre' => optional($oc->empresas)->nombre,

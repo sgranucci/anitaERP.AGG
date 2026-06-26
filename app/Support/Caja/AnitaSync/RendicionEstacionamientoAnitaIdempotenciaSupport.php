@@ -8,7 +8,8 @@ use App\Models\Caja\RendicionEstacionamientoCaja;
 /**
  * Evita rendgastro / rendvalor huérfanos en Informix por reintentos de rendición del mismo turno.
  *
- * Clave de negocio en Anita: rendg_nro_rend_vta = turno_operativo_estacionamiento_id.
+ * Clave en Anita: rendg_nro_rend_vta = turno_operativo_estacionamiento_id + rendg_host (PC del turno).
+ * Gastronomía comparte rendgastro pero otro módulo; el host evita colisiones de ID numérico.
  */
 final class RendicionEstacionamientoAnitaIdempotenciaSupport
 {
@@ -22,14 +23,21 @@ final class RendicionEstacionamientoAnitaIdempotenciaSupport
         string $tipoOper,
         string $tablaCabecera,
         string $sistema,
+        ?string $rendgHost = null,
     ): array {
         if ($turnoOperativoId <= 0 || $empresaId <= 0) {
             return [];
         }
 
-        $where = " WHERE rendg_nro_rend_vta = '".$turnoOperativoId."'"
-            ." AND rendg_empresa = '".$empresaId."'"
-            ." AND rendg_tipo_oper = '".RendicionEstacionamientoCabeceraAnitaMapper::texto($tipoOper, 1)."' ";
+        $where = RendicionAnitaIdempotenciaWhereSupport::whereTurnoOperativo(
+            $turnoOperativoId,
+            $empresaId,
+            $tipoOper,
+            $rendgHost,
+        );
+        if ($where === '') {
+            return [];
+        }
 
         $rows = ApiAnita::decodificarListaFilas($api->apiCall([
             'acc' => 'list',
@@ -64,8 +72,9 @@ final class RendicionEstacionamientoAnitaIdempotenciaSupport
         string $tablaValor,
         string $sistema,
         string $logEvento,
+        ?string $rendgHost = null,
     ): void {
-        foreach (self::listarNroOperPorTurno($api, $turnoOperativoId, $empresaId, $tipoOper, $tablaCabecera, $sistema) as $nroOper) {
+        foreach (self::listarNroOperPorTurno($api, $turnoOperativoId, $empresaId, $tipoOper, $tablaCabecera, $sistema, $rendgHost) as $nroOper) {
             if ($nroOper === $nroOperCanonico) {
                 continue;
             }
@@ -102,12 +111,13 @@ final class RendicionEstacionamientoAnitaIdempotenciaSupport
     ): int {
         $turnoId = (int) ($rendicion->turno_operativo_estacionamiento_id ?? 0);
         $empresaId = (int) ($rendicion->empresa_id ?? 0);
+        $rendgHost = self::hostDesdeRendicion($rendicion);
         if ($turnoId <= 0 || $empresaId <= 0) {
             return (int) ($rendicion->nro_oper_anita
                 ?? RendicionEstacionamientoCabeceraAnitaMapper::nroOperDesdeCodigo($rendicion->codigo));
         }
 
-        $enAnita = self::listarNroOperPorTurno($api, $turnoId, $empresaId, $tipoOper, $tablaCabecera, $sistema);
+        $enAnita = self::listarNroOperPorTurno($api, $turnoId, $empresaId, $tipoOper, $tablaCabecera, $sistema, $rendgHost);
         $desdeErp = (int) ($rendicion->nro_oper_anita
             ?? RendicionEstacionamientoCabeceraAnitaMapper::nroOperDesdeCodigo($rendicion->codigo));
 
@@ -124,6 +134,7 @@ final class RendicionEstacionamientoAnitaIdempotenciaSupport
                 $tablaValor,
                 $sistema,
                 $logEvento,
+                $rendgHost,
             );
         }
 
@@ -148,6 +159,13 @@ final class RendicionEstacionamientoAnitaIdempotenciaSupport
         }
 
         return min($enAnita);
+    }
+
+    public static function hostDesdeRendicion(RendicionEstacionamientoCaja $rendicion): string
+    {
+        $rendicion->loadMissing('turnoOperativo');
+
+        return trim((string) ($rendicion->turnoOperativo?->identificador_pc ?? ''));
     }
 
     private static function alinearRendicionErp(RendicionEstacionamientoCaja $rendicion, int $nroOper): void

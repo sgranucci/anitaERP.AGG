@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionTipotransaccion_Stock;
 use App\Models\Stock\Tipotransaccion_Stock;
 use App\Repositories\Stock\Tipotransaccion_StockRepositoryInterface;
+use App\Support\Stock\UsuarioTipotransaccionStockAutorizado;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -80,6 +81,141 @@ class Tipotransaccion_StockController extends Controller
     public function leer($id)
     {
         return $this->repository->find($id);
+    }
+
+    public function consultaTipotransaccionStock(Request $request)
+    {
+        if (! $this->puedeConsultarTipotransaccionStock()) {
+            abort(403);
+        }
+
+        $consulta = strtoupper(trim((string) ($request->get('consulta') ?? '')));
+        $omitirFiltroUsuario = $request->boolean('omitir_filtro_usuario');
+        $operaciones = collect($request->input('operaciones', ['E', 'S', 'T']))
+            ->map(fn ($op) => strtoupper(trim((string) $op)))
+            ->filter(fn ($op) => in_array($op, ['E', 'S', 'T'], true))
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($operaciones === []) {
+            $operaciones = ['E', 'S', 'T'];
+        }
+
+        $query = Tipotransaccion_Stock::query()
+            ->select('id', 'abreviatura', 'nombre', 'operacion', 'maneja_contabilidad', 'origen_bien_uso', 'destino_bien_uso')
+            ->where('estado', 'A')
+            ->whereIn('operacion', $operaciones);
+
+        if (! $omitirFiltroUsuario) {
+            UsuarioTipotransaccionStockAutorizado::aplicarFiltroQuery($query);
+        }
+
+        if ($consulta !== '') {
+            $query->where(function ($q) use ($consulta) {
+                $q->where('abreviatura', 'LIKE', '%'.$consulta.'%')
+                    ->orWhere('nombre', 'LIKE', '%'.$consulta.'%')
+                    ->orWhere('operacion', 'LIKE', '%'.$consulta.'%');
+            });
+        }
+
+        $data = $query->orderBy('nombre')->limit(200)->get();
+        $operacionEnum = Tipotransaccion_Stock::$enumOperacion;
+        $puedeAbrirAbm = can('editar-tipos-transaccion-stock', false) || can('listar-tipos-transaccion-stock', false);
+
+        $output = ['data' => ''];
+        if ($data->isEmpty()) {
+            $output['data'] = '<tr><td colspan="5">Sin resultados</td></tr>';
+        } else {
+            foreach ($data as $row) {
+                $operacionEtiqueta = $operacionEnum[$row->operacion] ?? $row->operacion;
+                $output['data'] .= '<tr>';
+                $output['data'] .= '<td class="id">'.e($row->id).'</td>';
+                $output['data'] .= '<td class="abreviatura">'.e($row->abreviatura).'</td>';
+                $output['data'] .= '<td class="nombre">'.e($row->nombre).'</td>';
+                $output['data'] .= '<td class="operacion">'.e($operacionEtiqueta).'</td>';
+                $output['data'] .= '<td class="maneja-contabilidad d-none">'.e($row->maneja_contabilidad ? '1' : '0').'</td>';
+                $output['data'] .= '<td class="operacion-codigo d-none">'.e($row->operacion).'</td>';
+                $output['data'] .= '<td class="origen-bien-uso d-none">'.e($row->origen_bien_uso ? '1' : '0').'</td>';
+                $output['data'] .= '<td class="destino-bien-uso d-none">'.e($row->destino_bien_uso ? '1' : '0').'</td>';
+                $output['data'] .= '<td class="text-nowrap">';
+                $output['data'] .= '<a class="btn btn-warning btn-sm eligeconsultatipotransaccionstock">Elegir</a>';
+                if ($puedeAbrirAbm) {
+                    $urlConsulta = route('editar_tipotransaccion_stock', [
+                        'id' => $row->id,
+                        'origen' => 'modal_consulta',
+                        'vista' => 'consulta',
+                    ]);
+                    $output['data'] .= ' <a class="btn btn-info btn-sm" href="'.e($urlConsulta).'" target="_blank" rel="noopener">Consultar</a>';
+                }
+                $output['data'] .= '</td>';
+                $output['data'] .= '</tr>';
+            }
+        }
+
+        return json_encode($output, JSON_UNESCAPED_UNICODE);
+    }
+
+    public function leeUnTipotransaccionPorAbreviatura(Request $request, string $abreviatura)
+    {
+        if (! $this->puedeConsultarTipotransaccionStock()) {
+            abort(403);
+        }
+
+        $omitirFiltroUsuario = $request->boolean('omitir_filtro_usuario');
+        $operaciones = collect($request->input('operaciones', ['E', 'S', 'T']))
+            ->map(fn ($op) => strtoupper(trim((string) $op)))
+            ->filter(fn ($op) => in_array($op, ['E', 'S', 'T'], true))
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($operaciones === []) {
+            $operaciones = ['E', 'S', 'T'];
+        }
+
+        $query = Tipotransaccion_Stock::query()
+            ->where('abreviatura', trim($abreviatura))
+            ->where('estado', 'A')
+            ->whereIn('operacion', $operaciones);
+
+        if (! $omitirFiltroUsuario) {
+            UsuarioTipotransaccionStockAutorizado::aplicarFiltroQuery($query);
+        }
+
+        $tipo = $query->first();
+
+        if (! $tipo) {
+            return response()->json(['error' => 'Tipo de transacción no encontrado'], 404);
+        }
+
+        return response()->json([
+            'id' => $tipo->id,
+            'abreviatura' => $tipo->abreviatura,
+            'nombre' => $tipo->nombre,
+            'descripcion' => $tipo->nombre,
+            'operacion' => $tipo->operacion,
+            'operacion_etiqueta' => Tipotransaccion_Stock::$enumOperacion[$tipo->operacion] ?? $tipo->operacion,
+            'maneja_contabilidad' => (bool) $tipo->maneja_contabilidad,
+            'origen_bien_uso' => (bool) $tipo->origen_bien_uso,
+            'destino_bien_uso' => (bool) $tipo->destino_bien_uso,
+        ]);
+    }
+
+    private function puedeConsultarTipotransaccionStock(): bool
+    {
+        return can('listar-tipos-transaccion-stock', false)
+            || can('editar-tipos-transaccion-stock', false)
+            || can('crear-tipos-transaccion-stock', false)
+            || can('actualizar-tipos-transaccion-stock', false)
+            || can('editar-usuarios', false)
+            || can('crear-usuarios', false)
+            || can('actualizar-usuarios', false)
+            || can('crear-movimientos-de-stock', false)
+            || can('editar-movimientos-de-stock', false)
+            || can('listar-movimientos-de-stock', false)
+            || can('crear-transferencia-mercaderia', false)
+            || can('listar-transferencias-pendientes', false);
     }
 
     private function datosFormulario(): array

@@ -15,7 +15,11 @@ final class KandikoAnitaVentaTipoSupport
 {
     public const TIPO_VENTA_BRIDGE = 'FAK';
 
+    public const TIPO_NC_BRIDGE = 'NCK';
+
     public const TIPO_NUMERADOR = 'FAC';
+
+    public const TIPO_NC_ERP = 'NCD';
 
     public const EMPRESA_CODIGO = '2';
 
@@ -67,11 +71,17 @@ final class KandikoAnitaVentaTipoSupport
         string|int|null $empresaCodigo,
         ?string $modoFacturacionPuntoventa = null,
     ): string {
-        if (self::debeUsarTipoVentaAlterno($tipoErp, $puntoventaCodigo, $empresaCodigo, $modoFacturacionPuntoventa)) {
-            return self::TIPO_VENTA_BRIDGE;
+        $tipoErp = strtoupper(trim($tipoErp));
+
+        if (! self::esPvCaeaKandiko($puntoventaCodigo, $empresaCodigo, $modoFacturacionPuntoventa)) {
+            return $tipoErp;
         }
 
-        return trim($tipoErp);
+        return match ($tipoErp) {
+            self::TIPO_NUMERADOR => self::TIPO_VENTA_BRIDGE,
+            self::TIPO_NC_ERP, 'NCE' => self::TIPO_NC_BRIDGE,
+            default => $tipoErp,
+        };
     }
 
     public static function esPvCaeaKandiko(

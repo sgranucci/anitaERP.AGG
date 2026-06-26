@@ -16,6 +16,7 @@ class ValidacionMozoGastronomia extends FormRequest
     {
         $id = $this->route('id');
         $empresaId = (int) $this->input('empresa_id');
+        $esAlta = ! $id;
 
         return [
             'nombre' => 'required|max:255',
@@ -27,7 +28,7 @@ class ValidacionMozoGastronomia extends FormRequest
                     ->where(fn ($q) => $q->where('empresa_id', $empresaId)),
             ],
             'empresa_id' => 'required|exists:empresa,id',
-            'clave' => 'nullable|string|min:4|max:60',
+            'clave' => ($esAlta ? 'required' : 'nullable').'|string|min:4|max:60',
         ];
     }
 
@@ -35,6 +36,7 @@ class ValidacionMozoGastronomia extends FormRequest
     {
         return [
             'codigo.unique' => 'El código ya está en uso para esta empresa.',
+            'clave.required' => 'Indique la clave POS para el facturador de canjes marketing.',
         ];
     }
 }

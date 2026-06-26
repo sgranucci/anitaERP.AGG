@@ -18,6 +18,7 @@ class ComprobanteProveedorPrefillService
 {
     public function __construct(
         private ComprobanteProveedorCondicionPagoDesdeOcService $condicionPagoDesdeOc,
+        private ComprobanteProveedorComLegajoResolucionService $comLegajoResolucion,
     ) {}
 
   /**
@@ -59,6 +60,7 @@ class ComprobanteProveedorPrefillService
             'total' => 0,
             'cotizacion' => 1,
             'moneda_id' => 1,
+            'es_fce' => false,
             'pararevisar' => false,
         ]);
 
@@ -120,6 +122,7 @@ class ComprobanteProveedorPrefillService
             'cotizacion' => $precarga->cotizacion ?: 1,
             'modo_carga' => $modoCarga,
             'estado' => ComprobanteProveedorEstados::BORRADOR,
+            'es_fce' => false,
             'pararevisar' => (bool) $precarga->pararevisar,
         ]);
 
@@ -160,7 +163,7 @@ class ComprobanteProveedorPrefillService
             $data->ordencompra_comprobante_id = $cuotasMeta['ordencompra_comprobante_id'];
         }
 
-        return [
+        $prefill = [
             'data' => $data,
             'origen_entrada' => PrecargaComprobanteOrigenEntrada::origenComprobanteDesdePrecarga(
                 $precarga->origen_entrada
@@ -171,6 +174,28 @@ class ComprobanteProveedorPrefillService
             'permite_edicion_cuotas' => (bool) ($cuotasMeta['permite_edicion_cuotas'] ?? true),
             'ruta_factura_pdf' => $precarga->rutaalmacenamiento,
         ];
+
+        $prefill = $this->comLegajoResolucion->aplicarAlPrefill($prefill, $precarga, $ordencompra);
+
+        $ordencompraFinal = $prefill['data']->ordencompras ?? $ordencompra;
+        if ($ordencompraFinal && (int) ($prefill['data']->ordencompra_id ?? 0) !== (int) ($ordencompra?->id ?? 0)) {
+            $cuotasMeta = $this->condicionPagoDesdeOc->resolverDesdeOrdencompra(
+                $ordencompraFinal,
+                null,
+                (float) $precarga->total,
+                $fechacomprobante,
+            );
+            if ($cuotasMeta['condicionpago_id']) {
+                $prefill['data']->condicionpago_id = $cuotasMeta['condicionpago_id'];
+            }
+            if ($cuotasMeta['ordencompra_comprobante_id']) {
+                $prefill['data']->ordencompra_comprobante_id = $cuotasMeta['ordencompra_comprobante_id'];
+            }
+            $prefill['cuotas'] = $cuotasMeta['cuotas'];
+            $prefill['cuotas_escaladas'] = (bool) ($cuotasMeta['cuotas_escaladas'] ?? false);
+        }
+
+        return $prefill;
     }
 
     /** @return array<string, mixed> */
@@ -196,6 +221,7 @@ class ComprobanteProveedorPrefillService
             'total' => 0,
             'moneda_id' => 1,
             'cotizacion' => 1,
+            'es_fce' => false,
             'pararevisar' => false,
         ]);
 

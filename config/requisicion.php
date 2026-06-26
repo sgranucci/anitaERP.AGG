@@ -15,4 +15,26 @@ return [
         env('REQUISICION_FILTRO_OFICINA_COMPRAS_ACTIVO', false),
         FILTER_VALIDATE_BOOLEAN
     ),
+
+    /*
+    | Numeración Anita: shared numabm código 21 (a-reqmae.c / compras / referencia 1).
+    | Misma lógica que recepción COM: max(ERP, reqmae, numabm) + hueco libre.
+    */
+    'anita' => [
+        'sistema_compras' => env('REQUISICION_ANITA_SISTEMA', 'compras'),
+        'sistema_shared' => env('REQUISICION_ANITA_SISTEMA_SHARED', 'shared'),
+        'tabla_cabecera' => 'reqmae',
+        'numerador' => [
+            'tabla' => 'numabm',
+            'codigo' => (int) env('REQUISICION_ANITA_NUMA_CODIGO', 21),
+            'programa' => env('REQUISICION_ANITA_NUMA_PROGRAMA', 'a-reqmae.c'),
+            'sistema_abm' => env('REQUISICION_ANITA_NUMA_SISTEMA', 'compras'),
+            'referencia' => env('REQUISICION_ANITA_NUMA_REFERENCIA', '1'),
+        ],
+        // false: solo actualizar numabm al asignar número en ERP (como COM por defecto)
+        'reservar_numerador_anita' => filter_var(
+            env('REQUISICION_ANITA_RESERVAR_NUMERADOR', false),
+            FILTER_VALIDATE_BOOLEAN
+        ),
+    ],
 ];

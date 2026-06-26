@@ -13,7 +13,15 @@ PENDING_WARN="${PENDING_WARN:-5}"
 PENDING_CRITICAL="${PENDING_CRITICAL:-20}"
 RESERVED_STUCK_SEC="${RESERVED_STUCK_SEC:-180}"
 FAILED_24H_WARN="${FAILED_24H_WARN:-1}"
-WORKERS_EXPECTED="${WORKERS_EXPECTED:-1}"
+WORKERS_EXPECTED="${WORKERS_EXPECTED:-}"
+if [[ -z "$WORKERS_EXPECTED" ]]; then
+    WORKERS_EXPECTED="$(php -r "
+require 'vendor/autoload.php';
+\$app = require 'bootstrap/app.php';
+\$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+echo (int) config('queue.workers_numprocs', 3);
+" 2>/dev/null || echo 3)"
+fi
 OUTPUT_JSON=false
 STRICT=false
 

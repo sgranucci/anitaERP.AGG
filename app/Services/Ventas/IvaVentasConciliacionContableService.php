@@ -47,6 +47,7 @@ final class IvaVentasConciliacionContableService
 
         $resumenEmpresa = $this->armarResumenEmpresa($totalesErp, $contableEmpresa, $statsAsiento, count($filas));
         $porFactura = $this->conciliarPorFacturaVinculada($empresaId, $filtros, $filas, $cuentas, $statsAsiento);
+        $auditoriaDiaria = $this->auditoriaDiaria($empresaId, $filtros, $filas, $cuentas);
 
         return [
             'habilitada' => true,
@@ -54,6 +55,7 @@ final class IvaVentasConciliacionContableService
             'resumen_empresa' => $resumenEmpresa,
             'por_puntoventa' => $porPuntoventa,
             'por_factura_vinculada' => $porFactura,
+            'auditoria_diaria' => $auditoriaDiaria,
             'notas' => $this->notasConciliacion($statsAsiento, count($filas), $porFactura),
         ];
     }
@@ -69,8 +71,241 @@ final class IvaVentasConciliacionContableService
             'resumen_empresa' => [],
             'por_puntoventa' => [],
             'por_factura_vinculada' => ['habilitada' => false, 'facturas' => [], 'stats' => []],
+            'auditoria_diaria' => ['habilitada' => false, 'dias' => [], 'stats' => []],
             'notas' => [],
         ];
+    }
+
+    /**
+     * Cuadre día por día entre IVA ventas (ERP) y mayor contable.
+     * Tolerancia diaria más amplia que el cuadre global (redondeos y cierres parciales).
+     *
+     * @param  list<array<string, mixed>>  $filas
+     * @param  array<string, mixed>  $cuentas
+     * @return array<string, mixed>
+     */
+    private function auditoriaDiaria(int $empresaId, array $filtros, array $filas, array $cuentas): array
+    {
+        $desde = (string) ($filtros['fecha_desde'] ?? '');
+        $hasta = (string) ($filtros['fecha_hasta'] ?? '');
+        if ($desde === '' || $hasta === '') {
+            return ['habilitada' => false, 'dias' => [], 'stats' => []];
+        }
+
+        $erpPorDia = [];
+        foreach ($filas as $fila) {
+            $dia = (string) ($fila['fecha_orden'] ?? '');
+            if ($dia === '') {
+                continue;
+            }
+
+            if (! isset($erpPorDia[$dia])) {
+                $erpPorDia[$dia] = [
+                    'comprobantes' => 0,
+                    'neto_gravado' => 0.0,
+                    'imp_interno' => 0.0,
+                    'iva' => 0.0,
+                    'total' => 0.0,
+                ];
+            }
+
+            $col = $fila['columnas'] ?? [];
+            $erpPorDia[$dia]['comprobantes']++;
+            $erpPorDia[$dia]['neto_gravado'] = round($erpPorDia[$dia]['neto_gravado'] + (float) ($col['neto_gravado'] ?? 0), 2);
+            $erpPorDia[$dia]['imp_interno'] = round($erpPorDia[$dia]['imp_interno'] + (float) ($col['imp_interno'] ?? 0), 2);
+            $erpPorDia[$dia]['iva'] = round($erpPorDia[$dia]['iva'] + (float) ($col['iva'] ?? 0), 2);
+            $erpPorDia[$dia]['total'] = round($erpPorDia[$dia]['total'] + (float) ($col['total'] ?? 0), 2);
+        }
+
+        $contablePorDia = $this->totalesContablesPorDia($empresaId, $filtros, $cuentas);
+
+        $dias = [];
+        $stats = [
+            'total_dias' => 0,
+            'dias_con_movimiento' => 0,
+            'dias_cuadran' => 0,
+            'dias_con_diferencia' => 0,
+        ];
+
+        $cursor = strtotime($desde);
+        $fin = strtotime($hasta);
+        while ($cursor !== false && $cursor <= $fin) {
+            $dia = date('Y-m-d', $cursor);
+            $erp = $erpPorDia[$dia] ?? [
+                'comprobantes' => 0,
+                'neto_gravado' => 0.0,
+                'imp_interno' => 0.0,
+                'iva' => 0.0,
+                'total' => 0.0,
+            ];
+            $ctb = $contablePorDia[$dia] ?? [
+                'ventas_gravadas' => 0.0,
+                'ventas_kiosco' => 0.0,
+                'iva' => 0.0,
+                'ventas_total' => 0.0,
+            ];
+
+            $difNeto = round((float) $erp['neto_gravado'] - (float) ($ctb['ventas_gravadas'] ?? 0), 2);
+            $difImp = round((float) $erp['imp_interno'] - (float) ($ctb['ventas_kiosco'] ?? 0), 2);
+            $difIva = round((float) $erp['iva'] - (float) ($ctb['iva'] ?? 0), 2);
+
+            $cuadra = IvaVentasConciliacionCuentaSupport::cuadra((float) $erp['neto_gravado'], (float) ($ctb['ventas_gravadas'] ?? 0), IvaVentasConciliacionCuentaSupport::TOLERANCIA_DIARIA)
+                && IvaVentasConciliacionCuentaSupport::cuadra((float) $erp['imp_interno'], (float) ($ctb['ventas_kiosco'] ?? 0), IvaVentasConciliacionCuentaSupport::TOLERANCIA_DIARIA)
+                && IvaVentasConciliacionCuentaSupport::cuadra((float) $erp['iva'], (float) ($ctb['iva'] ?? 0), IvaVentasConciliacionCuentaSupport::TOLERANCIA_DIARIA);
+
+            $tieneMovimiento = (int) $erp['comprobantes'] > 0
+                || abs((float) ($ctb['ventas_total'] ?? 0)) > IvaVentasConciliacionCuentaSupport::TOLERANCIA_DIARIA
+                || abs((float) ($ctb['iva'] ?? 0)) > IvaVentasConciliacionCuentaSupport::TOLERANCIA_DIARIA;
+
+            $stats['total_dias']++;
+            if ($tieneMovimiento) {
+                $stats['dias_con_movimiento']++;
+            }
+            if ($cuadra) {
+                $stats['dias_cuadran']++;
+            } elseif ($tieneMovimiento) {
+                $stats['dias_con_diferencia']++;
+            }
+
+            $dias[] = [
+                'dia' => $dia,
+                'dia_texto' => date('d/m/Y', strtotime($dia)),
+                'comprobantes' => (int) $erp['comprobantes'],
+                'erp' => [
+                    'neto_gravado' => (float) $erp['neto_gravado'],
+                    'imp_interno' => (float) $erp['imp_interno'],
+                    'iva' => (float) $erp['iva'],
+                    'total' => (float) $erp['total'],
+                ],
+                'contable' => [
+                    'ventas_gravadas' => (float) ($ctb['ventas_gravadas'] ?? 0),
+                    'ventas_kiosco' => (float) ($ctb['ventas_kiosco'] ?? 0),
+                    'iva' => (float) ($ctb['iva'] ?? 0),
+                    'ventas_total' => (float) ($ctb['ventas_total'] ?? 0),
+                ],
+                'diferencias' => [
+                    'neto_gravado' => $difNeto,
+                    'imp_interno' => $difImp,
+                    'iva' => $difIva,
+                ],
+                'cuadra' => $cuadra,
+                'tiene_movimiento' => $tieneMovimiento,
+            ];
+
+            $cursor = strtotime('+1 day', $cursor);
+        }
+
+        return [
+            'habilitada' => true,
+            'tolerancia' => IvaVentasConciliacionCuentaSupport::TOLERANCIA_DIARIA,
+            'dias' => $dias,
+            'stats' => $stats,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @param  array<string, mixed>  $cuentas
+     * @return array<string, array<string, float>>
+     */
+    private function totalesContablesPorDia(int $empresaId, array $filtros, array $cuentas): array
+    {
+        $fechaDesde = (string) ($filtros['fecha_desde'] ?? '');
+        $fechaHasta = (string) ($filtros['fecha_hasta'] ?? '');
+        $ordenFecha = (string) ($filtros['orden_fecha'] ?? IvaVentasListadoFiltros::ORDEN_FECHA_JORNADA);
+
+        $idsVentas = array_merge(
+            $cuentas['ventas_gravadas'] ?? [],
+            $cuentas['ventas_kiosco'] ?? [],
+        );
+        $idsIva = array_merge(
+            $cuentas['iva_debito'] ?? [],
+            $cuentas['percepcion_iva'] ?? [],
+        );
+        $idsTodos = array_values(array_unique(array_merge($idsVentas, $idsIva)));
+
+        if ($idsTodos === []) {
+            return [];
+        }
+
+        $diaExpr = $ordenFecha === IvaVentasListadoFiltros::ORDEN_FECHA_JORNADA
+            ? 'CASE '
+                .'WHEN a.venta_id IS NOT NULL THEN DATE(v.fechajornada) '
+                .'WHEN a.observacion LIKE "%jornada%" THEN STR_TO_DATE(SUBSTRING(a.observacion, LOCATE("jornada", a.observacion) + 8, 10), "%Y-%m-%d") '
+                .'ELSE DATE(a.fecha) '
+                .'END'
+            : 'DATE(a.fecha)';
+
+        $query = DB::table('asiento as a')
+            ->join('asiento_movimiento as am', 'am.asiento_id', '=', 'a.id')
+            ->join('cuentacontable as cc', 'cc.id', '=', 'am.cuentacontable_id')
+            ->leftJoin('venta as v', function ($join) {
+                $join->on('v.id', '=', 'a.venta_id')->whereNull('v.deleted_at');
+            })
+            ->where('a.empresa_id', $empresaId)
+            ->whereIn('cc.id', $idsTodos);
+
+        if ($ordenFecha === IvaVentasListadoFiltros::ORDEN_FECHA_JORNADA) {
+            $query->where(function ($q) use ($fechaDesde, $fechaHasta) {
+                $q->where(function ($q2) use ($fechaDesde, $fechaHasta) {
+                    $q2->whereNull('a.venta_id')
+                        ->where('a.observacion', 'like', '%jornada%')
+                        ->whereRaw(
+                            'SUBSTRING(a.observacion, LOCATE("jornada", a.observacion) + 8, 10) BETWEEN ? AND ?',
+                            [$fechaDesde, $fechaHasta],
+                        );
+                })->orWhere(function ($q2) use ($fechaDesde, $fechaHasta) {
+                    $q2->whereNotNull('a.venta_id')
+                        ->whereDate('v.fechajornada', '>=', $fechaDesde)
+                        ->whereDate('v.fechajornada', '<=', $fechaHasta);
+                })->orWhere(function ($q2) use ($fechaDesde, $fechaHasta) {
+                    $q2->whereNull('a.venta_id')
+                        ->where('a.observacion', 'not like', '%jornada%')
+                        ->whereDate('a.fecha', '>=', $fechaDesde)
+                        ->whereDate('a.fecha', '<=', $fechaHasta);
+                });
+            });
+        } else {
+            $query->whereDate('a.fecha', '>=', $fechaDesde)
+                ->whereDate('a.fecha', '<=', $fechaHasta);
+        }
+
+        $rows = $query
+            ->selectRaw($diaExpr.' as dia, cc.id as cuenta_id, SUM(-am.monto * ('.$this->sqlCoeficienteMonedaAsiento($filtros).')) as importe')
+            ->groupByRaw($diaExpr.', cc.id')
+            ->get();
+
+        $out = [];
+        foreach ($rows as $row) {
+            $dia = (string) ($row->dia ?? '');
+            if ($dia === '') {
+                continue;
+            }
+
+            if (! isset($out[$dia])) {
+                $out[$dia] = [
+                    'ventas_gravadas' => 0.0,
+                    'ventas_kiosco' => 0.0,
+                    'iva' => 0.0,
+                    'ventas_total' => 0.0,
+                ];
+            }
+
+            $importe = round((float) ($row->importe ?? 0), 2);
+            $cuentaId = (int) ($row->cuenta_id ?? 0);
+
+            if (in_array($cuentaId, $cuentas['iva_debito'] ?? [], true) || in_array($cuentaId, $cuentas['percepcion_iva'] ?? [], true)) {
+                $out[$dia]['iva'] = round($out[$dia]['iva'] + $importe, 2);
+            } elseif (in_array($cuentaId, $cuentas['ventas_kiosco'] ?? [], true)) {
+                $out[$dia]['ventas_kiosco'] = round($out[$dia]['ventas_kiosco'] + $importe, 2);
+            } elseif (in_array($cuentaId, $cuentas['ventas_gravadas'] ?? [], true)) {
+                $out[$dia]['ventas_gravadas'] = round($out[$dia]['ventas_gravadas'] + $importe, 2);
+            }
+
+            $out[$dia]['ventas_total'] = round($out[$dia]['ventas_gravadas'] + $out[$dia]['ventas_kiosco'], 2);
+        }
+
+        return $out;
     }
 
     /**

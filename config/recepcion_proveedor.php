@@ -100,6 +100,8 @@ return [
         'email' => env('RECEPCION_PROVEEDOR_AUDITORIA_ASIENTOS_EMAIL', 'sergiogranucci@gmail.com'),
         'tolerancia' => (float) env('RECEPCION_PROVEEDOR_AUDITORIA_ASIENTOS_TOLERANCIA', 0.02),
         'incluir_importadas_anita' => filter_var(env('RECEPCION_PROVEEDOR_AUDITORIA_ASIENTOS_INCLUIR_IMPORTADAS', false), FILTER_VALIDATE_BOOLEAN),
+        // Días calendario inclusive hasta hoy que audita el cron diario (--desde / --hasta).
+        'ventana_dias' => max(1, (int) env('RECEPCION_PROVEEDOR_AUDITORIA_ASIENTOS_VENTANA_DIAS', 7)),
     ],
 
 ];

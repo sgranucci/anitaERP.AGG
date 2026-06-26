@@ -15,6 +15,7 @@ use App\Repositories\Stock\Articulo_Saldo_DepositoRepositoryInterface;
 use App\Repositories\Stock\Recuento_ArchivoRepositoryInterface;
 use App\Repositories\Stock\Recuento_ItemRepositoryInterface;
 use App\Repositories\Stock\RecuentoRepositoryInterface;
+use App\Support\Stock\ArticuloEmpresaAsignacionSupport;
 use App\Support\Stock\RecuentoModoCierreSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
 use Auth;
@@ -589,19 +590,26 @@ class RecuentoService
                 $cantidad = abs($delta) * ((int) $tipo->signo === -1 ? -1 : 1);
             }
 
+            $articuloId = (int) $ajuste['articulo_id'];
+
             Articulo_Movimiento::create([
                 'fecha' => $fecha,
                 'fechajornada' => $fecha,
                 'tipotransaccion_stock_id' => $tipo->id,
                 'movimientostock_id' => $movimiento->id,
                 'lote' => 0,
-                'articulo_id' => (int) $ajuste['articulo_id'],
+                'articulo_id' => $articuloId,
                 'concepto' => $ajuste['concepto'] ?? $tipo->nombre,
                 'cantidad' => $cantidad,
                 'precio' => 0,
                 'costo' => 0,
                 'deposito_id' => (int) $recuento->deposito_id,
             ]);
+
+            ArticuloEmpresaAsignacionSupport::asignarSiVacia(
+                $articuloId,
+                (int) $recuento->empresa_id,
+            );
         }
 
         $this->stkmovAnitaService->sincronizar((int) $movimiento->id);

@@ -25,6 +25,10 @@
     </div>
     @endif
 </div>
+@elseif(! empty($preview['sin_asiento']))
+<div class="alert alert-secondary mb-3">
+    {{ $preview['mensaje'] ?? 'Recepción sin importe contable: no se generará asiento COM.' }}
+</div>
 @else
 @if(! empty($preview['es_preview']))
 <div class="alert alert-info py-2">

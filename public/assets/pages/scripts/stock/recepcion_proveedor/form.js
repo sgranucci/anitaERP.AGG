@@ -8,6 +8,7 @@
     var depositoCabeceraTipo = window.recepcionProveedorDepositoCabeceraTipo || '';
     var cargandoOc = false;
     var ultimoNumeroOcCargado = null;
+    var centrocostoOcActivo = null;
     var COLSPAN_TABLA_ITEMS = 12;
     var recepcionProveedorSubmitPendiente = null;
 
@@ -901,35 +902,15 @@
         return { filas: filas };
     }
 
-    function asegurarBannerConfirmandoRecepcion() {
-        if ($('#recepcion-proveedor-banner-confirmando').length) {
+    function enviarConfirmacionRecepcion($formConfirmar) {
+        if (window.RecepcionProveedorConfirmar && typeof window.RecepcionProveedorConfirmar.enviarConfirmacionRecepcion === 'function') {
+            window.RecepcionProveedorConfirmar.enviarConfirmacionRecepcion($formConfirmar);
             return;
         }
-        var html = '<div id="recepcion-proveedor-banner-confirmando" class="recepcion-proveedor-confirmando-overlay" role="status" aria-live="polite" aria-busy="true">';
-        html += '<div class="alert alert-warning shadow recepcion-proveedor-confirmando-banner mb-0 px-4 py-3">';
-        html += '<i class="fa fa-spinner fa-spin fa-2x mb-2 d-block text-dark"></i>';
-        html += '<strong class="d-block mb-2 text-dark">Confirmando recepci&oacute;n&hellip;</strong>';
-        html += '<span class="small d-block text-dark">Generando movimiento de stock, asiento contable y registros Anita.<br>Por favor espere; puede tardar varios minutos.</span>';
-        html += '</div></div>';
-        $('body').append(html);
-    }
-
-    function mostrarBannerConfirmandoRecepcion() {
-        asegurarBannerConfirmandoRecepcion();
-        $('#recepcion-proveedor-banner-confirmando').addClass('is-visible');
-        $('#btn-confirmar-recepcion-proveedor, #btn-modal-confirmar-recepcion-aceptar')
-            .prop('disabled', true)
-            .addClass('disabled');
-    }
-
-    function enviarConfirmacionRecepcion($formConfirmar) {
         if (!$formConfirmar || !$formConfirmar.length) {
             return;
         }
-        mostrarBannerConfirmandoRecepcion();
-        window.setTimeout(function () {
-            $formConfirmar.get(0).submit();
-        }, 50);
+        $formConfirmar.get(0).submit();
     }
 
     function initConfirmarRecepcionModal() {
@@ -1483,11 +1464,16 @@
                 $('#numero_oc_buscar').val(data.numeroordencompra || numeroOc);
                 $('#proveedor_id').val(data.proveedor_id || '');
                 $('#proveedor_nombre').val(data.proveedor_nombre);
+                centrocostoOcActivo = parseInt(data.centrocosto_id, 10) || null;
+                if (!centrocostoOcActivo && data.lineas && data.lineas.length) {
+                    centrocostoOcActivo = parseInt(data.lineas[0].centrocosto_id, 10) || null;
+                }
                 sincronizarEmpresaDesdeOc(data);
                 renderItems(data.lineas);
             })
             .fail(function (xhr) {
                 ultimoNumeroOcCargado = null;
+                centrocostoOcActivo = null;
                 alert(xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'Error al cargar OC');
             })
             .always(function () {
@@ -1602,6 +1588,7 @@
             es_deposito_formula: false,
             moneda_id: monedaIdItem(itemsActuales[0] || {}, 0),
             cotizacion: cotizacionItem(itemsActuales[0] || {}, 0),
+            centrocosto_id: centrocostoOcActivo,
             comentario_precio: '',
             maneja_parte_unica: false,
         });

@@ -6,6 +6,7 @@ use App\Models\Compras\Ordencompra;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Depmae;
 use App\Support\Stock\RecepcionProveedorAccionLineaOc;
+use App\Support\Stock\RecepcionProveedorCentrocostoLineaSupport;
 use App\Support\Stock\RecepcionProveedorDepositoSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
 use Illuminate\Foundation\Http\FormRequest;
@@ -153,10 +154,43 @@ class ValidacionRecepcionProveedor extends FormRequest
             }
 
             $empresaId = (int) $this->input('empresa_id', 0);
+            $ordencompra = null;
             if ($empresaId <= 0) {
                 $ordencompraId = (int) $this->input('ordencompra_id', 0);
                 if ($ordencompraId > 0) {
-                    $empresaId = (int) (Ordencompra::query()->whereKey($ordencompraId)->value('empresa_id') ?? 0);
+                    $ordencompra = Ordencompra::query()
+                        ->with('ordencompra_articulos')
+                        ->find($ordencompraId);
+                    $empresaId = (int) ($ordencompra->empresa_id ?? 0);
+                }
+            } elseif ((int) $this->input('ordencompra_id', 0) > 0) {
+                $ordencompra = Ordencompra::query()
+                    ->with('ordencompra_articulos')
+                    ->find((int) $this->input('ordencompra_id'));
+            }
+
+            if ($ordencompra !== null) {
+                try {
+                    RecepcionProveedorCentrocostoLineaSupport::assertOcRecepcionable($ordencompra);
+                } catch (\RuntimeException $e) {
+                    $validator->errors()->add('ordencompra_id', $e->getMessage());
+                }
+
+                foreach ($items as $idx => $item) {
+                    if (! is_array($item)) {
+                        continue;
+                    }
+                    if (RecepcionProveedorAccionLineaOc::resolver($item) === RecepcionProveedorAccionLineaOc::PENDIENTE) {
+                        continue;
+                    }
+
+                    $ccLinea = RecepcionProveedorCentrocostoLineaSupport::resolverDesdeOcYItem($ordencompra, $item);
+                    if ($ccLinea === null) {
+                        $validator->errors()->add(
+                            'items.'.$idx.'.centrocosto_id',
+                            'Línea '.($idx + 1).': falta centro de costo destino.'
+                        );
+                    }
                 }
             }
 

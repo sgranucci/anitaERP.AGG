@@ -20,6 +20,13 @@ class KandikoAnitaVentaTipoSupportTest extends TestCase
         $this->assertSame('FAK', KandikoAnitaVentaTipoSupport::tipoVentaAnitaBridge('FAC', '31', 2, 'A'));
     }
 
+    public function test_kandiko_caea_pv_31_ncd_usa_nck_en_venta(): void
+    {
+        $this->assertSame('NCK', KandikoAnitaVentaTipoSupport::tipoVentaAnitaBridge('NCD', '00031', '2', 'A'));
+        $this->assertSame('NCD', KandikoAnitaVentaTipoSupport::tipoVentaAnitaBridge('NCD', '00031', '3', 'C'));
+        $this->assertSame('NCD', KandikoAnitaVentaTipoSupport::tipoVentaAnitaBridge('NCD', '00014', '2', 'A'));
+    }
+
     public function test_kandiko_pv_31_sin_modo_caea_mantiene_fac(): void
     {
         $this->assertFalse(KandikoAnitaVentaTipoSupport::debeUsarTipoVentaAlterno('FAC', '00031', '2', 'C'));

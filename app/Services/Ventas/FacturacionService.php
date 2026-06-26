@@ -879,7 +879,7 @@ class FacturacionService
 							'fechacomprobante' => date('Ymd', strtotime($fechaFactura)),
 							'total' => $totalComprobante,
 							'nogravado' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'No Gravado', 'importe'),
-							'gravado' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Gravado al', 'importe'),
+							'gravado' => \App\Support\Ventas\Gastronomia\GastronomiaAnitaVenGravadoSupport::gravadoDesdeConceptosTotales($conceptosTotales, abs((float) $totalComprobante)),
 							'exento' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Exento', 'importe'),
 							'iva' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Iva ', 'importe'),
 							'tributo' => $totalTributo,
@@ -1401,7 +1401,7 @@ class FacturacionService
 							'fechacomprobante' => date('Ymd', strtotime($fechaFactura)),
 							'total' => $totalComprobante,
 							'nogravado' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'No Gravado', 'importe'),
-							'gravado' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Gravado al', 'importe'),
+							'gravado' => \App\Support\Ventas\Gastronomia\GastronomiaAnitaVenGravadoSupport::gravadoDesdeConceptosTotales($conceptosTotales, abs((float) $totalComprobante)),
 							'exento' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Exento', 'importe'),
 							'iva' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Iva ', 'importe'),
 							'tributo' => $totalTributo,
@@ -2172,7 +2172,7 @@ class FacturacionService
 							'fechacomprobante' => date('Ymd', strtotime($fechaFactura)),
 							'total' => $totalComprobante,
 							'nogravado' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'No Gravado', 'importe'),
-							'gravado' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Gravado al', 'importe'),
+							'gravado' => \App\Support\Ventas\Gastronomia\GastronomiaAnitaVenGravadoSupport::gravadoDesdeConceptosTotales($conceptosTotales, abs((float) $totalComprobante)),
 							'exento' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Exento', 'importe'),
 							'iva' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Iva ', 'importe'),
 							'tributo' => $totalTributo,
@@ -2581,7 +2581,7 @@ class FacturacionService
 							'fechacomprobante' => date('Ymd', strtotime($fechaFactura)),
 							'total' => $totalComprobante,
 							'nogravado' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'No Gravado', 'importe'),
-							'gravado' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Gravado al', 'importe'),
+							'gravado' => \App\Support\Ventas\Gastronomia\GastronomiaAnitaVenGravadoSupport::gravadoDesdeConceptosTotales($conceptosTotales, abs((float) $totalComprobante)),
 							'exento' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Exento', 'importe'),
 							'iva' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Iva ', 'importe'),
 							'tributo' => $totalTributo,
@@ -3358,6 +3358,201 @@ class FacturacionService
 			false,
 			$puntoventa->modofacturacion ?? null,
 		);
+	}
+
+	/**
+	 * Valores en orden de columnas Informix para LOAD FROM (modo mínimo gastronomía / AGG).
+	 * Misma semántica que grabaAnita() para venta + vengrav + vencae.
+	 *
+	 * @param  array<string, mixed>  $venta
+	 * @param  array<string, mixed>  $dataCAE
+	 * @param  list<array<string, mixed>>  $conceptostotales
+	 * @return array{
+	 *   venta: list<int|float|string>,
+	 *   vengrav: list<list<int|float|string>>,
+	 *   vencae: ?list<int|float|string>
+	 * }
+	 */
+	public function construirFilasUnlGastronomiaModoMinimo(
+		$puntoventaCodigo,
+		string $letra,
+		array $venta,
+		array $dataCAE,
+		array $conceptostotales,
+		string $codigoTipoTransaccion,
+		string $empresaCodigo,
+		?string $modoFacturacionPuntoventa = null,
+		bool $sinCuentaCorrienteAnita = true,
+		?string $cae = null,
+		?string $fechavencimientocae = null,
+	): array {
+		$cliente = $this->clienteQuery->traeClienteporId($venta['cliente_id']);
+		$codigoCliente = '';
+		$zonavta_id = $provincia_id = $subzonavta_id = 0;
+		$codigopostal = '';
+		$numerodocumento = '';
+		$nombre = '';
+		$domicilio = '';
+		if ($cliente) {
+			$codigoCliente = $cliente->codigo;
+			$zonavta_id = $cliente->zonavta_id;
+			$provincia_id = $cliente->provincia_id;
+			$subzonavta_id = $cliente->subzonavta_id;
+			$codigopostal = $cliente->codigopostal;
+			$numerodocumento = $cliente->numerodocumento;
+			$nombre = $cliente->nombre;
+			$domicilio = $cliente->domicilio;
+		} else {
+			if (isset($venta['nombrecliente'])) {
+				$nombre = $venta['nombrecliente'];
+			}
+			if (isset($venta['documentocliente'])) {
+				$domicilio = $numerodocumento = $venta['documentocliente'];
+			}
+		}
+
+		$totalIngBruto2 = $totalIngBruto1 = $totalPercepcionIva = 0;
+		$totalDescuento = $porcentajeDescuento = 0;
+		$totalImpuestoInterno = 0;
+		foreach ($conceptostotales as $concepto) {
+			if (array_key_exists('jurisdiccion', $concepto) && $concepto['jurisdiccion'] != null) {
+				if ($concepto['jurisdiccion'] == '902') {
+					$totalIngBruto1 += $concepto['importe'];
+				} else {
+					$totalIngBruto2 += $concepto['importe'];
+				}
+			}
+			if (strpos($concepto['concepto'], 'Percepcion IVA') !== false) {
+				$totalPercepcionIva += $concepto['importe'];
+			}
+			if (strpos($concepto['concepto'], 'Descuento Gral') !== false) {
+				$totalDescuento += $concepto['importe'];
+				$porcentajeDescuento = $concepto['tasa'];
+			}
+			if (strpos($concepto['concepto'], 'Impuesto Interno') !== false) {
+				$totalImpuestoInterno += $concepto['importe'];
+			}
+		}
+
+		$vendedor = 1;
+		$empresa = $dataCAE['codigoempresa'];
+		$tipoErpVenta = substr((string) ($venta['codigo'] ?? ''), 0, 3);
+		$tipoVentaAnita = KandikoAnitaVentaTipoSupport::tipoVentaAnitaBridge(
+			$tipoErpVenta,
+			(string) $puntoventaCodigo,
+			$empresa,
+			$modoFacturacionPuntoventa,
+		);
+		$exento = $dataCAE['exento'] + $dataCAE['nogravado'];
+
+		$nombreLocalidad = isset($cliente->localidades->nombre) ? $cliente->localidades->nombre : '';
+		$nombreProvincia = isset($cliente->provincias->nombre) ? $cliente->provincias->nombre : '';
+
+		$condicionventa = $venta['condicionventa_id'] != '' ? $venta['condicionventa_id'] : 0;
+
+		$condicionivaId = null;
+		if (! empty($venta['condicioniva_id'])) {
+			$condicionivaId = (int) $venta['condicioniva_id'];
+		} elseif ($cliente && isset($cliente->condicioniva_id)) {
+			$condicionivaId = (int) $cliente->condicioniva_id;
+		}
+		$venCondIvaCli = $this->codigoCondicionIvaAnitaDesdeErpId($condicionivaId, $letra);
+		$venCtaCte = $sinCuentaCorrienteAnita ? 'N' : 'S';
+
+		$filaVenta = [
+			str_pad($codigoCliente, 6, '0', STR_PAD_LEFT),
+			$tipoVentaAnita,
+			$letra,
+			$puntoventaCodigo,
+			$venta['numerocomprobante'],
+			date('Ymd', strtotime($venta['fecha'])),
+			date('Ymd', strtotime($venta['fechajornada'])),
+			$exento,
+			$dataCAE['gravado'],
+			0,
+			0,
+			$totalImpuestoInterno,
+			0,
+			$totalIngBruto2,
+			0,
+			0,
+			$dataCAE['iva'],
+			$totalPercepcionIva,
+			abs($venta['total']),
+			abs($totalDescuento),
+			$porcentajeDescuento,
+			0,
+			$venta['moneda_id'],
+			$venta['cotizacion'],
+			0,
+			0,
+			0,
+			$zonavta_id == null ? 0 : $cliente->zonavta_id,
+			$provincia_id == null ? 0 : $cliente->provincia_id,
+			$subzonavta_id == null ? 0 : $cliente->subzonavta_id,
+			$vendedor,
+			0,
+			$condicionventa,
+			0,
+			$nombre,
+			$domicilio,
+			$nombreLocalidad,
+			$nombreProvincia,
+			$codigopostal,
+			$numerodocumento,
+			$venCondIvaCli,
+			$venCtaCte,
+			$this->nombreUsuarioAnitaParaGraba($venta),
+			'ERP',
+			date_format(Carbon::now(), 'Ymd'),
+			' ',
+			0,
+			0,
+			0,
+			$totalIngBruto1,
+			0,
+		];
+
+		if (config('app.empresa') == 'AGG') {
+			$filaVenta[] = $empresaCodigo;
+		}
+
+		$filasVengrav = [];
+		foreach ($conceptostotales as $concepto) {
+			if (strpos($concepto['concepto'], 'Iva') === false) {
+				continue;
+			}
+			$filasVengrav[] = [
+				$tipoVentaAnita,
+				$letra,
+				$puntoventaCodigo,
+				$venta['numerocomprobante'],
+				$concepto['codigo'],
+				$concepto['baseimponible'],
+				$concepto['importe'],
+				0,
+				$concepto['tasa'],
+			];
+		}
+
+		$filaVencae = null;
+		$caeTrim = trim((string) ($cae ?? ''));
+		if ($caeTrim !== '' && $fechavencimientocae !== null && trim((string) $fechavencimientocae) !== '') {
+			$filaVencae = [
+				$tipoVentaAnita,
+				$letra,
+				$puntoventaCodigo,
+				$venta['numerocomprobante'],
+				$caeTrim,
+				date('Ymd', strtotime((string) $fechavencimientocae)),
+			];
+		}
+
+		return [
+			'venta' => $filaVenta,
+			'vengrav' => $filasVengrav,
+			'vencae' => $filaVencae,
+		];
 	}
 
 	/**

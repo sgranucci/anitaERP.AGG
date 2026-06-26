@@ -2,6 +2,7 @@
 
 namespace App\Models\Contable;
 
+use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
 
 class Usuario_Cuentacontable extends Model

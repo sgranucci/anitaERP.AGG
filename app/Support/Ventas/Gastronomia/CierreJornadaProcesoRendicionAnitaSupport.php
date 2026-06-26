@@ -6,6 +6,7 @@ use App\Models\Caja\Cuentacaja;
 use App\Models\Ventas\JornadaGastronomia;
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Venta;
+use App\Support\Caja\AnitaSync\RendicionAnitaFechaAlfaSupport;
 use App\Support\Ventas\GastronomiaVentaDetalleSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -18,6 +19,9 @@ final class CierreJornadaProcesoRendicionAnitaSupport
     public const TURNO_LETRA = 'N';
 
     public const HOST = 'CIERRE-WAITRY';
+
+    /** Cabecera rendgastro para fc CAEA migradas de otra jornada (sin PC salón). */
+    public const HOST_AGREGADOS_CAEA = '00030-AGREGADOS';
 
     /**
      * @param  list<int>  $ventaIds
@@ -122,7 +126,9 @@ final class CierreJornadaProcesoRendicionAnitaSupport
             'fecha_rendicion' => $fechaRend,
             'fecha_jornada' => $fechaJornada,
             'fecha_entera' => (int) $fechaJornadaCarbon->format('Ymd'),
-            'fecha_alfa' => $fechaJornadaCarbon->format('Ymd'),
+            'fecha_alfa' => RendicionAnitaFechaAlfaSupport::desdeFechaEntera(
+                (int) $fechaJornadaCarbon->format('Ymd'),
+            ),
             'hora' => $fechaRend->format('H:i:s'),
             'hora_carga' => now()->format('H:i:s'),
             'fecha_carga' => (int) now()->format('Ymd'),

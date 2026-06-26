@@ -3,6 +3,7 @@
 namespace App\Support\Caja\AnitaSync;
 
 use App\ApiAnita;
+use App\Models\Caja\Estacionamiento\ConfiguracionPuntoventaEstacionamiento;
 use App\Models\Caja\Estacionamiento\TurnoOperativoEstacionamiento;
 
 /**
@@ -15,6 +16,17 @@ final class RendicionEstacionamientoAnitaRendgastroSupport
 
     /** @var array<int, string> */
     private array $letraTurnoPorTurnoOperativo = [];
+
+    /** @var array<int, list<string>> */
+    private array $hostsEstacionamientoPorEmpresaCache = [];
+
+    /** Sucursal rendgastro de máquina vending (Maquina N); no modificar desde estacionamiento. */
+    public const SUCURSAL_VENDING_MINIMA = 1001;
+
+    public function esSucursalMaquinaVending(int $sucursal): bool
+    {
+        return $sucursal >= self::SUCURSAL_VENDING_MINIMA;
+    }
 
     public static function letraTurnoDesdeNombre(?string $nombreTurno): string
     {
@@ -47,7 +59,7 @@ final class RendicionEstacionamientoAnitaRendgastroSupport
             'acc' => 'list',
             'sistema' => (string) config('rendicion_estacionamiento_anita.sistema', 'caja'),
             'tabla' => (string) config('rendicion_estacionamiento_anita.tabla_cabecera', 'rendgastro'),
-            'campos' => 'rendg_nro_oper, rendg_sucursal, rendg_nro_rend_vta, rendg_turno, rendg_total_x, rendg_total_z, rendg_tot_nc, rendg_hora, rendg_fecha_alfa',
+            'campos' => 'rendg_nro_oper, rendg_sucursal, rendg_nro_rend_vta, rendg_turno, rendg_total_x, rendg_total_z, rendg_tot_nc, rendg_hora, rendg_fecha_alfa, rendg_host, rendg_estado',
             'whereArmado' => $where,
         ]));
     }
@@ -150,6 +162,120 @@ final class RendicionEstacionamientoAnitaRendgastroSupport
         }
 
         return (int) preg_replace('/\D+/', '', $codigo);
+    }
+
+    public function listarCabeceraPorNroOper(int $nroOper): ?object
+    {
+        if ($nroOper <= 0) {
+            return null;
+        }
+
+        $where = " WHERE rendg_nro_oper = '".$nroOper."' ";
+        $api = new ApiAnita;
+        $filas = ApiAnita::decodificarListaFilas($api->apiCall([
+            'acc' => 'list',
+            'sistema' => (string) config('rendicion_estacionamiento_anita.sistema', 'caja'),
+            'tabla' => (string) config('rendicion_estacionamiento_anita.tabla_cabecera', 'rendgastro'),
+            'campos' => 'rendg_nro_oper, rendg_sucursal, rendg_host, rendg_estado',
+            'whereArmado' => $where,
+        ]));
+
+        return $filas[0] ?? null;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function hostsEstacionamientoEmpresa(int $empresaId): array
+    {
+        if ($empresaId <= 0) {
+            return [];
+        }
+
+        if (isset($this->hostsEstacionamientoPorEmpresaCache[$empresaId])) {
+            return $this->hostsEstacionamientoPorEmpresaCache[$empresaId];
+        }
+
+        $hosts = ConfiguracionPuntoventaEstacionamiento::query()
+            ->where('empresa_id', $empresaId)
+            ->pluck('identificador_pc')
+            ->map(static fn ($pc): string => trim((string) $pc))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        return $this->hostsEstacionamientoPorEmpresaCache[$empresaId] = $hosts;
+    }
+
+    public function esCabeceraPostCierreWaitry(object $fila): bool
+    {
+        $host = mb_strtoupper(trim((string) ($fila->rendg_host ?? '')));
+
+        return $host === 'CIERRE-WAITRY'
+            || str_contains($host, 'CIERRE-JORNADA-WAITRY')
+            || str_contains($host, 'WAITRY');
+    }
+
+    /**
+     * Cabecera rendgastro de rendición estacionamiento (no salón / Waitry en PV compartido).
+     *
+     * @param  list<int>  $nroOperErp
+     * @param  list<int>  $turnoOperativoIds
+     */
+    public function esCabeceraRendicionEstacionamiento(
+        object $fila,
+        int $empresaId,
+        array $nroOperErp = [],
+        array $turnoOperativoIds = [],
+    ): bool {
+        if ($this->esSucursalMaquinaVending((int) ($fila->rendg_sucursal ?? 0))) {
+            return false;
+        }
+
+        if ($this->esCabeceraPostCierreWaitry($fila)) {
+            return false;
+        }
+
+        $nroOper = (int) ($fila->rendg_nro_oper ?? 0);
+        if ($nroOper > 0 && in_array($nroOper, $nroOperErp, true)) {
+            return true;
+        }
+
+        $turnoOperId = (int) ($fila->rendg_nro_rend_vta ?? 0);
+        if ($turnoOperId > 0 && in_array($turnoOperId, $turnoOperativoIds, true)) {
+            return true;
+        }
+
+        $host = trim((string) ($fila->rendg_host ?? ''));
+        if ($host !== '' && in_array($host, $this->hostsEstacionamientoEmpresa($empresaId), true)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  list<object>  $cabeceras
+     * @param  list<int>  $nroOperErp
+     * @param  list<int>  $turnoOperativoIds
+     * @return list<object>
+     */
+    public function filtrarCabecerasSoloEstacionamiento(
+        array $cabeceras,
+        int $empresaId,
+        array $nroOperErp = [],
+        array $turnoOperativoIds = [],
+    ): array {
+        return array_values(array_filter(
+            $cabeceras,
+            fn (object $fila): bool => $this->esCabeceraRendicionEstacionamiento(
+                $fila,
+                $empresaId,
+                $nroOperErp,
+                $turnoOperativoIds,
+            ),
+        ));
     }
 
     /**

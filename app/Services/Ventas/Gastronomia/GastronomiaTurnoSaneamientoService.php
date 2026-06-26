@@ -107,6 +107,8 @@ final class GastronomiaTurnoSaneamientoService
         ?float $redondeoInvitaciones = null,
         ?float $redondeoTurno = null,
         ?float $sobranteFaltante = null,
+        mixed $mediosContado = null,
+        bool $usarAjustesAutomaticos = false,
     ): array {
         if (! GastronomiaTurnoOperativoService::requiereHabilitacionTurno()) {
             throw new InvalidArgumentException('La habilitación de turno no está activa en configuración.');
@@ -139,17 +141,27 @@ final class GastronomiaTurnoSaneamientoService
             $turno->habilitacion_en,
         );
 
-        $ajustes = GastronomiaTurnoOperativoTotalesSupport::resolverAjustesCierreConSobranteFaltanteResidual(
-            $totalesPreview,
-            $redondeoInvitaciones,
-            $redondeoTurno,
-        );
+        $ajustes = $usarAjustesAutomaticos
+            ? GastronomiaTurnoOperativoTotalesSupport::resolverAjustesCierreConSobranteFaltanteResidual(
+                $totalesPreview,
+                $redondeoInvitaciones,
+                $redondeoTurno,
+            )
+            : [
+                'redondeo_invitaciones' => $redondeoInvitaciones !== null
+                    ? round($redondeoInvitaciones, 2)
+                    : round((float) ($totalesPreview['redondeo_invitaciones_sugerido'] ?? 0), 2),
+                'redondeo_turno' => round($redondeoTurno ?? 0.0, 2),
+                'sobrante_faltante' => round($sobranteFaltante ?? 0.0, 2),
+                'sobrante_faltante_auto' => false,
+            ];
 
         $datosCierre = [
             'redondeo_invitaciones' => $ajustes['redondeo_invitaciones'],
             'redondeo_turno' => $ajustes['redondeo_turno'],
             'sobrante_faltante' => $ajustes['sobrante_faltante'],
             'observacion_cierre' => $observacion,
+            'medios_contado' => $mediosContado,
         ];
 
         $cerrado = $this->turnoOperativoService->cerrar(

@@ -7,6 +7,7 @@ use App\Models\Caja\RendicionEstacionamientoCaja;
 use App\Models\Caja\RendicionEstacionamientoSecuenciaEmpresa;
 use App\Support\Caja\AnitaSync\RendicionEstacionamientoAnitaContextBuilder;
 use App\Support\Caja\AnitaSync\RendicionEstacionamientoAnitaIdempotenciaSupport;
+use App\Support\Caja\AnitaSync\RendicionEstacionamientoAnitaRendgastroSupport;
 use App\Support\Caja\AnitaSync\RendicionEstacionamientoAnitaTotalZPorPcService;
 use App\Support\Caja\AnitaSync\RendicionEstacionamientoCabeceraAnitaMapper;
 use App\Support\Caja\AnitaSync\RendicionEstacionamientoValorAnitaMapper;
@@ -19,6 +20,11 @@ use Illuminate\Support\Facades\Log;
 class RendicionEstacionamientoAnitaSyncService
 {
     private const LOG_EVENTO = 'rendicion_estacionamiento.anita_bridge.fallo';
+
+    public function __construct(
+        private readonly RendicionEstacionamientoAnitaRendgastroSupport $rendgastroSupport,
+    ) {
+    }
 
     public function sincronizacionHabilitada(): bool
     {
@@ -48,10 +54,19 @@ class RendicionEstacionamientoAnitaSyncService
             throw new \RuntimeException('RENDICION_ESTACIONAMIENTO_SINCRONIZAR_ANITA está deshabilitado.');
         }
 
+        if ($this->omitirSiSucursalVendingDesdeRendicion($rendicion)) {
+            throw new \InvalidArgumentException(
+                'La rendición apunta a sucursal vending (≥'
+                .RendicionEstacionamientoAnitaRendgastroSupport::SUCURSAL_VENDING_MINIMA
+                .'); no se modifica rendgastro desde estacionamiento.',
+            );
+        }
+
         $rendicion->load(['movimientos.cuentacaja', 'puntoventaCae', 'puntoventaCaea', 'turnoOperativo.turno', 'turnoOperativo.jornada']);
 
         $turnoId = (int) ($rendicion->turno_operativo_estacionamiento_id ?? 0);
         $empresaId = (int) ($rendicion->empresa_id ?? 0);
+        $rendgHost = RendicionEstacionamientoAnitaIdempotenciaSupport::hostDesdeRendicion($rendicion);
         $api = new ApiAnita;
         $tipoOper = $this->tipoOper();
 
@@ -62,6 +77,7 @@ class RendicionEstacionamientoAnitaSyncService
             $tipoOper,
             $this->tablaCabecera(),
             $this->sistema(),
+            $rendgHost,
         );
 
         $canonico = RendicionEstacionamientoAnitaIdempotenciaSupport::resolverYAlinearNroOper(
@@ -81,6 +97,7 @@ class RendicionEstacionamientoAnitaSyncService
             $tipoOper,
             $this->tablaCabecera(),
             $this->sistema(),
+            $rendgHost,
         );
 
         $eliminados = array_values(array_diff($antes, $despues));
@@ -122,6 +139,15 @@ class RendicionEstacionamientoAnitaSyncService
             $this->actualizarEnAnita($rendicion);
         } else {
             $this->insertarEnAnita($rendicion);
+        }
+
+        if (! $this->existsCabeceraEnAnita($rendicion)) {
+            $nroOper = (int) ($rendicion->nro_oper_anita
+                ?? RendicionEstacionamientoCabeceraAnitaMapper::nroOperDesdeCodigo($rendicion->codigo));
+            throw new \RuntimeException(
+                'Cabecera rendgastro no verificada tras sincronizar rendición estacionamiento #'.$rendicion->id
+                .' (nro_oper '.$nroOper.'). Revise bridge Anita / logs.'
+            );
         }
 
         $rendicion->update(['anita_sincronizado_en' => now()]);
@@ -311,6 +337,10 @@ class RendicionEstacionamientoAnitaSyncService
             return;
         }
 
+        if ($this->omitirSiSucursalVendingDesdeRendicion($rendicion)) {
+            return;
+        }
+
         $rendicion->load(['movimientos.cuentacaja', 'puntoventaCae', 'puntoventaCaea', 'turnoOperativo.turno', 'turnoOperativo.jornada']);
 
         if (! $this->existsCabeceraEnAnita($rendicion)) {
@@ -346,6 +376,10 @@ class RendicionEstacionamientoAnitaSyncService
 
         if ($nroOper <= 0) {
             throw new \InvalidArgumentException('nro_oper inválido para actualizar Anita.');
+        }
+
+        if ($this->omitirSiSucursalVendingNroOper($nroOper)) {
+            return;
         }
 
         $api = new ApiAnita;
@@ -393,6 +427,10 @@ class RendicionEstacionamientoAnitaSyncService
 
     public function eliminarEnAnita(int $nroOper, string $tipoOper): void
     {
+        if ($this->omitirSiSucursalVendingNroOper($nroOper)) {
+            return;
+        }
+
         $api = new ApiAnita;
         $this->eliminarValores($api, $nroOper, $tipoOper);
 
@@ -649,5 +687,23 @@ class RendicionEstacionamientoAnitaSyncService
     private function tipoOper(): string
     {
         return substr((string) config('rendicion_estacionamiento_anita.tipo_oper', 'F'), 0, 1);
+    }
+
+    private function omitirSiSucursalVendingDesdeRendicion(RendicionEstacionamientoCaja $rendicion): bool
+    {
+        $rendicion->loadMissing('puntoventaCae');
+        $sucursal = $this->rendgastroSupport->codigoPuntoventaEntero($rendicion->puntoventaCae?->codigo);
+
+        return $this->rendgastroSupport->esSucursalMaquinaVending($sucursal);
+    }
+
+    private function omitirSiSucursalVendingNroOper(int $nroOper): bool
+    {
+        $cabecera = $this->rendgastroSupport->listarCabeceraPorNroOper($nroOper);
+        if ($cabecera === null) {
+            return false;
+        }
+
+        return $this->rendgastroSupport->esSucursalMaquinaVending((int) ($cabecera->rendg_sucursal ?? 0));
     }
 }

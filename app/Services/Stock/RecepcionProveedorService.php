@@ -182,16 +182,12 @@ class RecepcionProveedorService
 
     public function confirmar(int $id): Recepcion_Proveedor
     {
-        $recepcion = $this->repository->find($id);
-        if ($recepcion->estado !== RecepcionProveedorEstados::BORRADOR) {
-            throw new \RuntimeException('Solo se puede confirmar una recepción en BORRADOR.');
-        }
-
-        if ($recepcion->recepcion_proveedor_articulos->isEmpty()) {
+        $pre = $this->repository->find($id);
+        if ($pre->recepcion_proveedor_articulos->isEmpty()) {
             throw new \RuntimeException('La recepción no tiene ítems.');
         }
 
-        $tieneAccion = $recepcion->recepcion_proveedor_articulos->contains(
+        $tieneAccion = $pre->recepcion_proveedor_articulos->contains(
             static fn ($linea) => (float) $linea->cantidad > 0.000001
                 || (float) ($linea->cantidad_rechazada ?? 0) > 0.000001
                 || (bool) ($linea->fl_cerrar_linea_oc ?? false)
@@ -200,7 +196,17 @@ class RecepcionProveedorService
             throw new \RuntimeException('Indique cantidades recibidas/rechazadas o marque al menos una línea para cerrar.');
         }
 
-        return DB::transaction(function () use ($id, $recepcion) {
+        return DB::transaction(function () use ($id) {
+            $recepcion = Recepcion_Proveedor::query()
+                ->with(['recepcion_proveedor_articulos'])
+                ->whereKey($id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($recepcion->estado !== RecepcionProveedorEstados::BORRADOR) {
+                throw new \RuntimeException('Solo se puede confirmar una recepción en BORRADOR.');
+            }
+
             $this->repository->renumerarBorradorSiColisionaGlobal($id);
             $recepcion = $this->repository->find($id);
 
@@ -236,6 +242,10 @@ class RecepcionProveedorService
                     'asiento_id' => $asientoId,
                 ]);
 
+                if ($asientoId !== null && (int) $asientoId > 0) {
+                    $this->asientoService->eliminarAsientosHuerfanosDeRecepcion((int) $recepcion->id, (int) $asientoId);
+                }
+
                 $this->logEstado($recepcion, $estadoAnterior, RecepcionProveedorEstados::CONFIRMADA, 'Confirmación de recepción');
 
                 RecepcionProveedorAnitaNumeracionSupport::registrarNumeroAsignadoEnNumerador(
@@ -250,13 +260,10 @@ class RecepcionProveedorService
                     }
                 }
 
-                if ($asientoId) {
-                    try {
-                        $recepcion->asiento_id = $asientoId;
-                        $this->asientoService->anularAsiento($recepcion);
-                    } catch (\Throwable $rollbackAsiento) {
-                        report($rollbackAsiento);
-                    }
+                try {
+                    $this->asientoService->revertirTodosAsientosDeRecepcion($recepcion->fresh($relacionesAnita));
+                } catch (\Throwable $rollbackAsiento) {
+                    report($rollbackAsiento);
                 }
 
                 try {
@@ -735,6 +742,8 @@ class RecepcionProveedorService
                 $penvpNroInterno = (int) ($datosOc['penvp_nro_interno'] ?? 0);
             }
 
+            $ccId = $this->centrocostoIdItemOError($item, $orden);
+
             Recepcion_Proveedor_Articulo::create([
                 'recepcion_proveedor_id' => $recepcion->id,
                 'ordencompra_articulo_id' => $item['ordencompra_articulo_id'] ?? null,
@@ -770,11 +779,24 @@ class RecepcionProveedorService
                 'estado' => RecepcionProveedorLineaEstados::resolverDesdeCantidades($item),
                 'impuesto_id' => $item['impuesto_id'] ?? null,
                 'incluyeimpuesto' => 'N',
-                'centrocosto_id' => $item['centrocosto_id'],
+                'centrocosto_id' => $ccId,
                 'lote_id' => $item['lote_id'] ?? null,
             ]);
             $orden++;
         }
+    }
+
+    /** @param array<string, mixed> $item */
+    private function centrocostoIdItemOError(array $item, int $orden): int
+    {
+        $ccId = (int) ($item['centrocosto_id'] ?? 0);
+        if ($ccId <= 0) {
+            throw new \RuntimeException(
+                'Línea '.$orden.': falta centro de costo destino. Vuelva a cargar la orden de compra.'
+            );
+        }
+
+        return $ccId;
     }
 
     /**
@@ -840,7 +862,7 @@ class RecepcionProveedorService
             'estado' => RecepcionProveedorLineaEstados::resolverDesdeCantidades($item),
             'impuesto_id' => $item['impuesto_id'] ?? null,
             'incluyeimpuesto' => 'N',
-            'centrocosto_id' => $item['centrocosto_id'] ?? null,
+            'centrocosto_id' => $this->centrocostoIdItemOError($item, $orden),
             'lote_id' => null,
         ]);
     }

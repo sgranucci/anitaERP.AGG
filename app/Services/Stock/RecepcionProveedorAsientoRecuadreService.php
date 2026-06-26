@@ -150,6 +150,16 @@ class RecepcionProveedorAsientoRecuadreService
             ];
         }
 
+        if ($this->asientoService->recepcionSinImporteContable($recepcion)) {
+            return [
+                'recepcion_id' => (int) $recepcion->id,
+                'numerorecepcion' => (int) $recepcion->numerorecepcion,
+                'asiento_id' => (int) ($recepcion->asiento_id ?? 0),
+                'estado' => 'omitida',
+                'mensaje' => 'Recepción sin importe contable: no requiere asiento COM.',
+            ];
+        }
+
         $asientoId = (int) ($recepcion->asiento_id ?? 0);
         $preview = $this->asientoService->previewAsientoContable($recepcion);
         $debeNuevo = round((float) ($preview['total_debe'] ?? 0), 2);

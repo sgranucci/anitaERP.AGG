@@ -128,7 +128,7 @@ final class RendicionGastronomiaCabeceraAnitaMapper
             ['columna' => 'rendg_sucursal_fac', 'tipo' => 'entero', 'fijo_entero' => 0],
             ['columna' => 'rendg_nro_fac', 'tipo' => 'entero', 'fijo_entero' => 0],
             ['columna' => 'rendg_fecha_fac', 'tipo' => 'entero', 'fijo_entero' => 0],
-            ['columna' => 'rendg_estado', 'tipo' => 'texto', 'fijo_texto' => ' ', 'max_len' => 1],
+            ['columna' => 'rendg_estado', 'tipo' => 'texto', 'fijo_texto' => 'F', 'max_len' => 1, 'incluir_en_update' => true],
             ['columna' => 'rendg_fecha_alfa', 'tipo' => 'texto', 'ctx' => 'fecha_alfa', 'max_len' => 8],
             ['columna' => 'rendg_turno', 'tipo' => 'texto', 'ctx' => 'turno_letra', 'max_len' => 1],
             ['columna' => 'rendg_sucursal', 'tipo' => 'entero', 'ctx' => 'sucursal_cae'],
@@ -152,7 +152,7 @@ final class RendicionGastronomiaCabeceraAnitaMapper
     }
 
     /**
-     * Solo mapeo ERP (ctx) + columnas explícitas en config para forzar 0 en update.
+     * Mapeo ERP (ctx) + fijos opt-in (incluir_en_update) + numéricas en config.
      *
      * @return list<array<string, mixed>>
      */
@@ -163,7 +163,7 @@ final class RendicionGastronomiaCabeceraAnitaMapper
             if ($col['clave'] ?? false) {
                 continue;
             }
-            if (isset($col['ctx'])) {
+            if (isset($col['ctx']) || ($col['incluir_en_update'] ?? false)) {
                 $columnas[] = $col;
             }
         }

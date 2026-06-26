@@ -57,6 +57,11 @@ class RecepcionProveedorAnitaWhereSupport
         return "'".addslashes(self::TERMINAL_ERP)."'";
     }
 
+    public static function terminalRefSql(): string
+    {
+        return "'".addslashes(self::TERMINAL_REF)."'";
+    }
+
     /** Cabecera COM grabada desde anitaERP (no tocar recepciones hechas en Anita). */
     public static function recepmaeSoloErp(string $codigoProveedor, array $clave): string
     {
@@ -66,6 +71,18 @@ class RecepcionProveedorAnitaWhereSupport
     public static function recepmaeDocumentoErp(int $documentoId): string
     {
         return ' WHERE recm_documentoid = '.(int) $documentoId.self::filtroTerminalErp('recm_terminal');
+    }
+
+    /**
+     * Cabeceras vinculadas al documento ERP (auditoría): terminal ERP, REF o vacío (Anita desktop).
+     */
+    public static function recepmaeDocumentoErpORef(int $documentoId): string
+    {
+        return ' WHERE recm_documentoid = '.(int) $documentoId
+            .' AND (recm_terminal = '.self::terminalErpSql()
+            .' OR recm_terminal = '.self::terminalRefSql()
+            ." OR TRIM(recm_terminal) = ''"
+            .' OR recm_terminal IS NULL)';
     }
 
     /** @param array{tipo: string, letra: string, sucursal: int, nro: int} $clave */

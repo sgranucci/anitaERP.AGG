@@ -70,8 +70,13 @@
         <tr>
             <td class="lbl">Fecha</td>
             <td>{{ $data->fecha ? date('d/m/Y', strtotime($data->fecha)) : '—' }}</td>
+            <td class="lbl">Generado por</td>
+            <td>{{ optional($data->usuarios)->nombre ?? optional($data->usuarios)->usuario ?? '—' }}</td>
+        </tr>
+        <tr>
             <td class="lbl">ID interno</td>
             <td>{{ $data->id }}</td>
+            <td colspan="2"></td>
         </tr>
         <tr>
             <td class="lbl">Observaciones</td>

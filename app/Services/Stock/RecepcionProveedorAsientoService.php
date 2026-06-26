@@ -7,6 +7,7 @@ use App\Models\Compras\Ordencompra;
 use App\Models\Contable\Tipoasiento;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Configuracion_RecepcionProveedor;
+use App\Models\Contable\Asiento;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Repositories\Contable\AsientoRepositoryInterface;
 use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
@@ -15,8 +16,10 @@ use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Stock\RecepcionProveedorAnitaClaveSupport;
+use App\Support\Stock\RecepcionProveedorAsientoDescripcionSupport;
 use App\Support\Stock\RecepcionProveedorConversionSupport;
 use App\Support\Stock\RecepcionProveedorCuadreContableSupport;
+use Illuminate\Support\Facades\Log;
 
 class RecepcionProveedorAsientoService
 {
@@ -42,11 +45,28 @@ class RecepcionProveedorAsientoService
     }
 
     /**
+     * Recepción solo administrativa (cierre OC, etc.): Σ(cant × precio) ≈ 0 → sin asiento COM.
+     */
+    public function recepcionSinImporteContable(Recepcion_Proveedor $recepcion): bool
+    {
+        $recepcion->loadMissing(['recepcion_proveedor_articulos']);
+        $cotizacionRecepcion = (float) ($recepcion->cotizacion ?: 1);
+
+        return RecepcionProveedorCuadreContableSupport::importeContableEsCero(
+            $this->totalRecepcionContable($recepcion, $cotizacionRecepcion)
+        );
+    }
+
+    /**
      * Valida el cuadre recepción ↔ contabilidad sin grabar (falla rápido antes de stock/asiento).
      */
     public function assertCuadreRecepcion(Recepcion_Proveedor $recepcion): void
     {
         if (! $this->debeGenerarAsiento((int) $recepcion->empresa_id)) {
+            return;
+        }
+
+        if ($this->recepcionSinImporteContable($recepcion)) {
             return;
         }
 
@@ -62,6 +82,12 @@ class RecepcionProveedorAsientoService
         if (! $this->debeGenerarAsiento((int) $recepcion->empresa_id)) {
             return null;
         }
+
+        if ($this->recepcionSinImporteContable($recepcion)) {
+            return null;
+        }
+
+        $this->prepararContabilidadAntesDeGenerar($recepcion);
 
         $preview = $this->armarPreviewAsiento($recepcion);
         RecepcionProveedorCuadreContableSupport::assertPreview($preview);
@@ -86,12 +112,101 @@ class RecepcionProveedorAsientoService
 
     public function anularAsiento(Recepcion_Proveedor $recepcion): void
     {
-        $asientoId = (int) ($recepcion->asiento_id ?? 0);
-        if ($asientoId <= 0) {
-            return;
+        $this->revertirTodosAsientosDeRecepcion($recepcion);
+    }
+
+    /**
+     * Antes de grabar: sin ctamov COM previo ni asientos ERP huérfanos de intentos fallidos.
+     */
+    public function prepararContabilidadAntesDeGenerar(Recepcion_Proveedor $recepcion): void
+    {
+        $this->eliminarCtamovAnitaPorComRecepcion($recepcion);
+        $this->eliminarAsientosHuerfanosDeRecepcion((int) $recepcion->id, null);
+    }
+
+    /**
+     * Rollback de confirmación: borra todos los asientos ERP (y ctamov por nro) de la recepción.
+     */
+    public function revertirTodosAsientosDeRecepcion(Recepcion_Proveedor $recepcion): void
+    {
+        $this->eliminarCtamovAnitaPorComRecepcion($recepcion);
+
+        $asientos = Asiento::query()
+            ->where('recepcionproveedor_id', (int) $recepcion->id)
+            ->orderBy('id')
+            ->get(['id', 'numeroasiento']);
+
+        foreach ($asientos as $asiento) {
+            try {
+                $this->asientoRepository->delete((int) $asiento->id);
+            } catch (\Throwable $e) {
+                Log::warning('RecepcionProveedorAsiento: no se pudo eliminar asiento en rollback', [
+                    'recepcion_id' => (int) $recepcion->id,
+                    'asiento_id' => (int) $asiento->id,
+                    'numeroasiento' => (string) ($asiento->numeroasiento ?? ''),
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Tras confirmación OK: conservar solo el asiento vigente.
+     *
+     * @return list<int> ids eliminados
+     */
+    public function eliminarAsientosHuerfanosDeRecepcion(int $recepcionId, ?int $conservarAsientoId = null): array
+    {
+        if ($recepcionId <= 0) {
+            return [];
         }
 
-        $this->asientoRepository->delete($asientoId);
+        $query = Asiento::query()
+            ->where('recepcionproveedor_id', $recepcionId)
+            ->orderBy('id');
+
+        if ($conservarAsientoId !== null && $conservarAsientoId > 0) {
+            $query->where('id', '!=', $conservarAsientoId);
+        }
+
+        $eliminados = [];
+        foreach ($query->get(['id', 'numeroasiento']) as $asiento) {
+            try {
+                $this->asientoRepository->delete((int) $asiento->id);
+                $eliminados[] = (int) $asiento->id;
+            } catch (\Throwable $e) {
+                Log::warning('RecepcionProveedorAsiento: no se pudo eliminar asiento huérfano', [
+                    'recepcion_id' => $recepcionId,
+                    'asiento_id' => (int) $asiento->id,
+                    'conservar_asiento_id' => $conservarAsientoId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        if ($eliminados !== []) {
+            Log::info('RecepcionProveedorAsiento: asientos huérfanos eliminados', [
+                'recepcion_id' => $recepcionId,
+                'conservar_asiento_id' => $conservarAsientoId,
+                'asiento_ids' => $eliminados,
+            ]);
+        }
+
+        return $eliminados;
+    }
+
+    private function eliminarCtamovAnitaPorComRecepcion(Recepcion_Proveedor $recepcion): void
+    {
+        $recepcion->loadMissing('empresas');
+        $clave = RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
+
+        $this->asientoRepository->eliminarCtamovAnitaPorComprobante(
+            (int) $recepcion->empresa_id,
+            (string) $clave['tipo'],
+            (string) $clave['letra'],
+            (int) $clave['sucursal'],
+            (int) $clave['nro'],
+        );
     }
 
     /**
@@ -137,6 +252,12 @@ class RecepcionProveedorAsientoService
             return;
         }
 
+        if ($this->recepcionSinImporteContable($recepcion)) {
+            throw new \RuntimeException(
+                'La recepción no tiene importe contable; no corresponde recuadrar un asiento COM.'
+            );
+        }
+
         $preview = $this->armarPreviewAsiento($recepcion);
         RecepcionProveedorCuadreContableSupport::assertPreview($preview);
 
@@ -159,6 +280,10 @@ class RecepcionProveedorAsientoService
     public function sincronizarCtamovAnitaRecepcion(Recepcion_Proveedor $recepcion, ?array $preview = null): void
     {
         if (! $this->debeGenerarAsiento((int) $recepcion->empresa_id)) {
+            return;
+        }
+
+        if ($this->recepcionSinImporteContable($recepcion)) {
             return;
         }
 
@@ -190,6 +315,7 @@ class RecepcionProveedorAsientoService
             'fecha' => $fechaAsiento,
         ]);
 
+        $this->eliminarCtamovAnitaPorComRecepcion($recepcion);
         $this->asientoRepository->sincronizarCtamovAnita($dataAnita);
     }
 
@@ -210,6 +336,20 @@ class RecepcionProveedorAsientoService
     {
         if (! $this->debeGenerarAsiento((int) $recepcion->empresa_id)) {
             return ['activo' => false];
+        }
+
+        if ($this->recepcionSinImporteContable($recepcion)) {
+            return [
+                'activo' => true,
+                'error' => null,
+                'sin_asiento' => true,
+                'mensaje' => 'Recepción sin importe contable (p. ej. solo cierre de líneas OC): no se generará asiento COM.',
+                'es_preview' => true,
+                'total_recepcion' => 0.0,
+                'total_debe' => 0.0,
+                'total_haber' => 0.0,
+                'lineas' => [],
+            ];
         }
 
         if ((int) ($recepcion->asiento_id ?? 0) > 0) {
@@ -305,9 +445,13 @@ class RecepcionProveedorAsientoService
         }
 
         $recepcion->loadMissing([
+            'proveedores',
             'recepcion_proveedor_articulos.articulos.articulo_cuentacontables',
             'ordencompras',
         ]);
+
+        $descripcionAsiento = RecepcionProveedorAsientoDescripcionSupport::descripcionAsientoErp($recepcion);
+        $descripcionCtamov = RecepcionProveedorAsientoDescripcionSupport::descripcionCtamovAnita($recepcion);
         $tipoAsiento = $this->resolverTipoAsientoCompras();
 
         $claveAnita = RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
@@ -335,10 +479,10 @@ class RecepcionProveedorAsientoService
         $totalHaber = round(array_sum(array_column($lineasHaber, 'importe')), 2);
         $diferencia = round($totalDebe - $totalHaber, 2);
 
-        if (abs($diferencia) >= 0.01 && $esAnticipada) {
+        if (abs($diferencia) >= 0.01 && $esAnticipada && $diferencia > 0) {
             $lineasHaber[] = [
                 'cuentacontable_id' => (int) $cfg->cuentacontable_provision_facturas_id,
-                'importe' => max(0, $diferencia),
+                'importe' => $diferencia,
             ];
             $totalHaber = round(array_sum(array_column($lineasHaber, 'importe')), 2);
         }
@@ -350,7 +494,7 @@ class RecepcionProveedorAsientoService
             'fecha' => $recepcion->fecha->format('Y-m-d'),
             'recepcionproveedor_id' => $recepcion->id,
             'ordencompra_id' => $recepcion->ordencompra_id,
-            'observacion' => 'Recepción proveedor '.$recepcion->numerorecepcion,
+            'observacion' => $descripcionAsiento,
             'tipo' => $claveAnita['tipo'],
             'letra' => $claveAnita['letra'],
             'sucursal' => $claveAnita['sucursal'],
@@ -373,23 +517,33 @@ class RecepcionProveedorAsientoService
         }
 
         foreach ($lineasDebeAsiento as $linea) {
+            if ((float) ($linea['importe'] ?? 0) <= 0) {
+                continue;
+            }
             $payloadAsiento['cuentacontable_ids'][] = $linea['cuentacontable_id'];
             $payloadAsiento['moneda_ids'][] = $recepcion->moneda_id;
             $payloadAsiento['centrocosto_ids'][] = $linea['centrocosto_id'] ?? $ccDefault;
             $payloadAsiento['debes'][] = $linea['importe'];
             $payloadAsiento['haberes'][] = 0;
             $payloadAsiento['cotizaciones'][] = $cotizacionRecepcion;
-            $payloadAsiento['observaciones'][] = $linea['observacion'] ?? '';
+            $payloadAsiento['observaciones'][] = trim((string) ($linea['observacion'] ?? '')) !== ''
+                ? (string) $linea['observacion']
+                : $descripcionCtamov;
         }
 
         foreach ($lineasHaberAsiento as $linea) {
+            if ((float) ($linea['importe'] ?? 0) <= 0) {
+                continue;
+            }
             $payloadAsiento['cuentacontable_ids'][] = $linea['cuentacontable_id'];
             $payloadAsiento['moneda_ids'][] = $recepcion->moneda_id;
             $payloadAsiento['centrocosto_ids'][] = $ccDefault;
             $payloadAsiento['debes'][] = 0;
             $payloadAsiento['haberes'][] = $linea['importe'];
             $payloadAsiento['cotizaciones'][] = $cotizacionRecepcion;
-            $payloadAsiento['observaciones'][] = $linea['observacion'] ?? '';
+            $payloadAsiento['observaciones'][] = trim((string) ($linea['observacion'] ?? '')) !== ''
+                ? (string) $linea['observacion']
+                : $descripcionCtamov;
         }
 
         return [

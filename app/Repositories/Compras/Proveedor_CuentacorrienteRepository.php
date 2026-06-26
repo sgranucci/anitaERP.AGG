@@ -4,6 +4,7 @@ namespace App\Repositories\Compras;
 
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
+use App\Queries\Compras\ProveedorQueryInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRepositoryInterface

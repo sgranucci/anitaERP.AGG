@@ -28,6 +28,17 @@ interface AsientoRepositoryInterface extends RepositoryInterface
      */
     public function eliminarCtamovAnitaPorNumero(int $empresaId, string $numeroAsiento): void;
 
+    /**
+     * Elimina todas las líneas ctamov en Anita de un comprobante (tipo/letra/sucursal/nro).
+     */
+    public function eliminarCtamovAnitaPorComprobante(
+        int $empresaId,
+        string $tipo,
+        string $letra,
+        int $sucursal,
+        int $nro,
+    ): void;
+
     public function leeAsientoPorClave($id, $clave);
 }
 

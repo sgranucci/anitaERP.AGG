@@ -4,12 +4,15 @@ namespace App\Services\Stock;
 
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Support\Stock\RecepcionProveedorAnitaClaveSupport;
+use App\Support\Stock\RecepcionProveedorAnitaWhereSupport;
 use App\Support\Stock\RecepcionProveedorEstados;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Re-sincroniza en Anita solo cabeceras COM con recm_terminal=ERP (origen anitaERP).
- * No toca recepciones hechas en Anita (`recm_terminal` vacío, REF u otro valor distinto de ERP).
+ * Re-sincroniza en Anita COM originadas en anitaERP (excluye ANITA_IMPORT).
+ * Cubre cabecera recepmae faltante, claves fuera de sucursal y borradores con huérfanos ERP.
  */
 class RecepcionProveedorAnitaResincronizacionErpService
 {
@@ -20,29 +23,41 @@ class RecepcionProveedorAnitaResincronizacionErpService
 
     public function __construct(
         private readonly RecepcionProveedorAnitaBridgeService $anitaBridge,
+        private readonly RecepcionProveedorAsientoService $asientoService,
     ) {
     }
 
-    public function contar(?int $id = null): int
+    public function contar(?int $id = null, bool $soloReparacionDetalleRef = false): int
     {
-        return $this->query($id)->count();
+        return $soloReparacionDetalleRef
+            ? $this->candidatasReparacionDetalleRef($id)->count()
+            : $this->candidatas($id)->count();
     }
 
     /**
-     * @return array{procesadas: int, erp_claves_corregidas: int, resincronizadas: int, borrador_limpiadas: int, omitidas: int, errores: int}
+     * @return array{procesadas: int, erp_claves_corregidas: int, resincronizadas: int, borrador_limpiadas: int, reparadas_detalle_ref: int, omitidas: int, errores: int}
      */
     public function ejecutar(bool $dryRun = false, ?int $id = null, ?callable $onError = null): array
+    {
+        return $this->ejecutarResincronizacionCompleta($dryRun, $id, $onError);
+    }
+
+    /**
+     * @return array{procesadas: int, erp_claves_corregidas: int, resincronizadas: int, borrador_limpiadas: int, reparadas_detalle_ref: int, omitidas: int, errores: int}
+     */
+    public function ejecutarResincronizacionCompleta(bool $dryRun = false, ?int $id = null, ?callable $onError = null): array
     {
         $stats = [
             'procesadas' => 0,
             'erp_claves_corregidas' => 0,
             'resincronizadas' => 0,
             'borrador_limpiadas' => 0,
+            'reparadas_detalle_ref' => 0,
             'omitidas' => 0,
             'errores' => 0,
         ];
 
-        foreach ($this->query($id)->get() as $recepcion) {
+        foreach ($this->candidatas($id) as $recepcion) {
             $stats['procesadas']++;
             try {
                 $resultado = $this->procesarUna($recepcion, $dryRun);
@@ -61,6 +76,7 @@ class RecepcionProveedorAnitaResincronizacionErpService
                 $stats['errores']++;
                 Log::error('RecepcionProveedorAnitaResincronizacionErp: fallo', [
                     'recepcion_id' => $recepcion->id,
+                    'numerorecepcion' => $recepcion->numerorecepcion,
                     'mensaje' => $e->getMessage(),
                 ]);
                 if ($onError !== null) {
@@ -70,6 +86,155 @@ class RecepcionProveedorAnitaResincronizacionErpService
         }
 
         return $stats;
+    }
+
+    /**
+     * @return array{procesadas: int, erp_claves_corregidas: int, resincronizadas: int, borrador_limpiadas: int, reparadas_detalle_ref: int, omitidas: int, errores: int}
+     */
+    public function ejecutarReparacionDetalleRef(bool $dryRun = false, ?int $id = null, ?callable $onError = null): array
+    {
+        $stats = [
+            'procesadas' => 0,
+            'erp_claves_corregidas' => 0,
+            'resincronizadas' => 0,
+            'borrador_limpiadas' => 0,
+            'reparadas_detalle_ref' => 0,
+            'omitidas' => 0,
+            'errores' => 0,
+        ];
+
+        foreach ($this->candidatasReparacionDetalleRef($id) as $recepcion) {
+            $stats['procesadas']++;
+            try {
+                if ($dryRun) {
+                    $stats['reparadas_detalle_ref']++;
+
+                    continue;
+                }
+
+                $this->anitaBridge->repararDetallePreservandoCabecera($recepcion->fresh([
+                    'proveedores', 'empresas', 'ordencompras',
+                    'recepcion_proveedor_articulos.articulos.categorias',
+                    'recepcion_proveedor_articulos.articulos.impuestos',
+                    'recepcion_proveedor_articulos.centrocostos',
+                ]));
+                $stats['reparadas_detalle_ref']++;
+            } catch (\Throwable $e) {
+                $stats['errores']++;
+                Log::error('RecepcionProveedorAnitaResincronizacionErp: fallo reparación detalle REF', [
+                    'recepcion_id' => $recepcion->id,
+                    'numerorecepcion' => $recepcion->numerorecepcion,
+                    'mensaje' => $e->getMessage(),
+                ]);
+                if ($onError !== null) {
+                    $onError($recepcion, $e);
+                }
+            }
+        }
+
+        return $stats;
+    }
+
+    /**
+     * @return Collection<int, Recepcion_Proveedor>
+     */
+    private function candidatasReparacionDetalleRef(?int $id = null): Collection
+    {
+        $candidatas = collect();
+
+        foreach ($this->queryBase($id)->orderBy('id')->cursor() as $recepcion) {
+            if ($this->requiereReparacionDetalleRef($recepcion)) {
+                $candidatas->push($recepcion);
+            }
+        }
+
+        return $candidatas;
+    }
+
+    public function requiereReparacionDetalleRef(Recepcion_Proveedor $recepcion): bool
+    {
+        if ($recepcion->origen_carga === 'ANITA_IMPORT') {
+            return false;
+        }
+
+        if ($recepcion->estado !== RecepcionProveedorEstados::CONFIRMADA) {
+            return false;
+        }
+
+        if ((int) $recepcion->numerorecepcion <= 0) {
+            return false;
+        }
+
+        $cabecera = $this->anitaBridge->cabeceraRecepmaeVinculadaDocumento($recepcion);
+        if ($cabecera === null) {
+            return false;
+        }
+
+        if (! RecepcionProveedorAnitaWhereSupport::esTerminalProtegidoAnita(
+            trim((string) ($cabecera->recm_terminal ?? ''))
+        )) {
+            return false;
+        }
+
+        return $this->anitaBridge->detalleComIncompletoEnAnita($recepcion);
+    }
+
+    /**
+     * @return Collection<int, Recepcion_Proveedor>
+     */
+    private function candidatas(?int $id = null): Collection
+    {
+        $candidatas = collect();
+
+        foreach ($this->queryBase($id)->orderBy('id')->cursor() as $recepcion) {
+            if ($this->requiereResincronizacion($recepcion)) {
+                $candidatas->push($recepcion);
+            }
+        }
+
+        return $candidatas;
+    }
+
+    public function requiereResincronizacion(Recepcion_Proveedor $recepcion): bool
+    {
+        $recepcion->loadMissing('empresas');
+
+        if ($recepcion->origen_carga === 'ANITA_IMPORT') {
+            return false;
+        }
+
+        $cabecerasErp = $this->anitaBridge->listarRecepmaeErpPorDocumento((int) $recepcion->id);
+
+        if ($recepcion->estado === RecepcionProveedorEstados::BORRADOR) {
+            return $cabecerasErp !== [];
+        }
+
+        if ($recepcion->estado !== RecepcionProveedorEstados::CONFIRMADA) {
+            return false;
+        }
+
+        if ((int) $recepcion->numerorecepcion <= 0) {
+            return false;
+        }
+
+        $cabeceraVinculada = $this->anitaBridge->cabeceraRecepmaeVinculadaDocumento($recepcion);
+        if (
+            $cabeceraVinculada !== null
+            && RecepcionProveedorAnitaWhereSupport::esTerminalProtegidoAnita(
+                trim((string) ($cabeceraVinculada->recm_terminal ?? ''))
+            )
+        ) {
+            // REF / vacío con documentoid ERP: Anita ya tocó referencias; no re-sync completo.
+            return false;
+        }
+
+        if ($cabecerasErp === []) {
+            return true;
+        }
+
+        $claveCorrecta = RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
+
+        return $this->cabecerasFueraDeSucursal($cabecerasErp, $claveCorrecta) !== [];
     }
 
     /**
@@ -120,12 +285,31 @@ class RecepcionProveedorAnitaResincronizacionErpService
             $clavesCorregidas++;
         }
 
+        if ($cabecerasErp === [] && $this->anitaBridge->tieneDetalleComEnAnita($recepcion)) {
+            $this->anitaBridge->ajustarPendmovpRecepcion($recepcion->fresh([
+                'ordencompras',
+                'recepcion_proveedor_articulos.articulos',
+            ]), -1);
+        }
+
         $this->anitaBridge->sincronizarRecepcion($recepcion->fresh([
             'proveedores', 'empresas', 'ordencompras',
             'recepcion_proveedor_articulos.articulos.categorias',
             'recepcion_proveedor_articulos.articulos.impuestos',
             'recepcion_proveedor_articulos.centrocostos',
         ]));
+
+        if ((int) $recepcion->asiento_id > 0) {
+            $this->asientoService->sincronizarCtamovAnitaRecepcion($recepcion->fresh([
+                'asientos',
+                'empresas',
+                'proveedores',
+                'ordencompras',
+                'recepcion_proveedor_articulos.articulos.categorias',
+                'recepcion_proveedor_articulos.articulos.impuestos',
+                'recepcion_proveedor_articulos.centrocostos',
+            ]));
+        }
 
         return [
             'claves_corregidas' => $clavesCorregidas,
@@ -151,7 +335,7 @@ class RecepcionProveedorAnitaResincronizacionErpService
         return $fuera;
     }
 
-  /** @return array{tipo: string, letra: string, sucursal: int, nro: int} */
+    /** @return array{tipo: string, letra: string, sucursal: int, nro: int} */
     private function claveDesdeCabeceraAnita(object $cabecera): array
     {
         $cfg = config('recepcion_proveedor.anita');
@@ -164,16 +348,27 @@ class RecepcionProveedorAnitaResincronizacionErpService
         ];
     }
 
-    private function query(?int $id = null)
+    /** @return Builder<Recepcion_Proveedor> */
+    private function queryBase(?int $id = null): Builder
     {
         $query = Recepcion_Proveedor::query()
             ->with('empresas')
-            ->whereIn('id', self::IDS_INCIDENTE);
+            ->where('origen_carga', '!=', 'ANITA_IMPORT')
+            ->where(function (Builder $q): void {
+                $q->whereIn('id', self::IDS_INCIDENTE)
+                    ->orWhere(function (Builder $q2): void {
+                        $q2->where('estado', RecepcionProveedorEstados::CONFIRMADA)
+                            ->where('numerorecepcion', '>', 0);
+                    })
+                    ->orWhere(function (Builder $q3): void {
+                        $q3->where('estado', RecepcionProveedorEstados::BORRADOR);
+                    });
+            });
 
         if ($id !== null && $id > 0) {
             $query->whereKey($id);
         }
 
-        return $query->orderBy('id');
+        return $query;
     }
 }

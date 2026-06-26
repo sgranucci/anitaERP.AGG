@@ -18,6 +18,7 @@ class GastronomiaReplicarVentasAnitaErp extends Command
                             {--usuario= : usuario_id para ven_usuario en Anita (default: primer usuario)}
                             {--limite=0 : Máximo de ventas a replicar (0 = sin límite)}
                             {--sin-insumos : No replicar stkmov de insumos por fórmula}
+                            {--sin-stkmov : Solo cabecera venta + vencae (sin stkmov/compaux por ítem)}
                             {--dry-run : Simula sin escribir en Anita}';
 
     protected $description = 'Replica en Anita las ventas gastronomía del ERP sin cabecera en Informix (backfill por fecha de jornada)';
@@ -39,15 +40,18 @@ class GastronomiaReplicarVentasAnitaErp extends Command
         $pv = is_string($pv) && trim($pv) !== '' ? trim($pv) : null;
         $dryRun = (bool) $this->option('dry-run');
         $limite = max(0, (int) $this->option('limite'));
-        $replicarInsumos = ! (bool) $this->option('sin-insumos');
+        $omitirStkmov = (bool) $this->option('sin-stkmov')
+            || filter_var(config('gastronomia.anita_omitir_stkmov', true), FILTER_VALIDATE_BOOLEAN);
+        $replicarInsumos = ! (bool) $this->option('sin-insumos') && ! $omitirStkmov;
 
         $this->line('Bridge: '.ApiAnita::urlBridge());
         $this->line(sprintf(
-            'Empresa %d | jornada %s%s | PV %s%s%s',
+            'Empresa %d | jornada %s%s | PV %s%s%s%s',
             $empresaId,
             $fechaDesde,
             $fechaHasta !== null ? ' → '.$fechaHasta : ' → hoy',
             $pv ?? 'todos',
+            $omitirStkmov ? ' | solo venta+vencae' : '',
             $dryRun ? ' | MODO SIMULACIÓN' : '',
             $limite > 0 ? ' | límite '.$limite : '',
         ));
@@ -61,6 +65,7 @@ class GastronomiaReplicarVentasAnitaErp extends Command
                 $dryRun,
                 $limite,
                 $replicarInsumos,
+                $omitirStkmov,
             );
         } catch (\Throwable $e) {
             $this->error($e->getMessage());

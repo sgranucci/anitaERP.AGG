@@ -38,7 +38,7 @@ Recuento {{ $recuento->codigo }}
                             <dt class="col-sm-5">Fecha</dt>
                             <dd class="col-sm-7">{{ optional($recuento->fecha)->format('d/m/Y') }}</dd>
                             <dt class="col-sm-5">Depósito</dt>
-                            <dd class="col-sm-7">{{ optional($recuento->deposito)->nombre }}</dd>
+                            <dd class="col-sm-7">{{ optional($recuento->deposito)->etiqueta() }}</dd>
                             <dt class="col-sm-5">Empresa</dt>
                             <dd class="col-sm-7">{{ optional($recuento->empresa)->nombre }}</dd>
                             <dt class="col-sm-5">Usuario</dt>

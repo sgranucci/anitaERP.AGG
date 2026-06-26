@@ -5,6 +5,10 @@
         return e.key === 'F1' || e.code === 'F1' || e.keyCode === 112;
     }
 
+    function esTeclaF2(e) {
+        return e.key === 'F2' || e.code === 'F2' || e.keyCode === 113;
+    }
+
     function modalAbierto(selector) {
         var $m = $(selector);
         return $m.length && $m.hasClass('show');
@@ -25,7 +29,7 @@
     }
 
     document.addEventListener('keydown', function (e) {
-        if (!esTeclaF1(e)) {
+        if (!esTeclaF1(e) && !esTeclaF2(e)) {
             return;
         }
 
@@ -39,7 +43,7 @@
             return;
         }
 
-        if (target.classList.contains('codigoarticulo')) {
+        if (esTeclaF1(e) && target.classList.contains('codigoarticulo')) {
             var trArt = target.closest('#tabla-items-movimientostock tr');
             if (!trArt) {
                 return;
@@ -53,7 +57,7 @@
             return;
         }
 
-        if (target.classList.contains('codigodeposito') && !target.readOnly) {
+        if (esTeclaF1(e) && target.classList.contains('codigodeposito') && !target.readOnly) {
             var ctxDep = target.closest('.tm-deposito-campo');
             if (!ctxDep) {
                 return;
@@ -64,6 +68,23 @@
             e.preventDefault();
             e.stopPropagation();
             abrirConsultaDepositoCampo($(ctxDep));
+            return;
+        }
+
+        if (esTeclaF2(e) && target.classList.contains('abreviaturatipotransaccionstock') && !target.readOnly) {
+            var ctxTipo = target.closest('.tm-tipotransaccion-stock-campo');
+            if (!ctxTipo) {
+                return;
+            }
+            if (modalAbierto('#consultatipotransaccionstockModal')) {
+                return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            var $btn = $(ctxTipo).find('.consultatipotransaccionstock').first();
+            if ($btn.length) {
+                $btn.trigger('click');
+            }
         }
     }, true);
 }(jQuery));

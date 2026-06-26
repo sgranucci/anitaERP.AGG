@@ -11,8 +11,11 @@ use App\Models\Ventas\Venta;
 use App\Models\Ventas\Venta_Impuesto;
 use App\Support\Ventas\GastronomiaAnitaImport\GastronomiaAnitaImportEstacionamientoSupport;
 use App\Support\Ventas\GastronomiaAnitaImport\GastronomiaAnitaImportResvtaSupport;
+use App\Support\Ventas\Gastronomia\GastronomiaAnitaComprobantePkSupport;
+use App\Support\Ventas\Gastronomia\GastronomiaAnitaVenGravadoSupport;
 use App\Support\Ventas\GastronomiaAnitaImportEmpresaSupport;
 use App\Support\Ventas\KandikoAnitaVentaTipoSupport;
+use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 
@@ -194,31 +197,54 @@ final class GastronomiaChequeoVentasAnitaErpService
             $where .= GastronomiaAnitaImportEmpresaSupport::whereEmpresa('ven', $empresaCodigo);
         }
 
-        $parsed = ApiAnita::parsearRespuestaLista($api->apiCall([
-            'acc' => 'list',
-            'tabla' => 'venta',
-            'campos' => implode(',', [
-                'ven_tipo', 'ven_letra', 'ven_sucursal', 'ven_nro', 'ven_empresa',
-                'ven_fecha', 'ven_fecha_vto',
-                'ven_monto', 'ven_gravado', 'ven_exento', 'ven_impuesto1', 'ven_monto_desc',
-            ]),
-            'whereArmado' => $where,
-            'orderBy' => 'ven_tipo, ven_nro',
-        ]));
+        $maxIntentos = max(1, (int) config('gastronomia.conciliacion_diaria_reporte.anita_reintentos_bridge', 3));
+        $lista = [];
+        $ultimoError = null;
 
-        if ($parsed['error_lectura'] !== null) {
-            Log::warning('gastronomia.chequeo_anita.lista_jornada_fallo', [
-                'sucursal' => $sucursal,
-                'fecha_jornada' => $fechaEntera,
-                'msg' => $parsed['error_lectura'],
-            ]);
+        for ($intento = 1; $intento <= $maxIntentos; $intento++) {
+            $parsed = ApiAnita::parsearRespuestaLista($api->apiCall([
+                'acc' => 'list',
+                'tabla' => 'venta',
+                'campos' => implode(',', [
+                    'ven_tipo', 'ven_letra', 'ven_sucursal', 'ven_nro', 'ven_empresa',
+                    'ven_fecha', 'ven_fecha_vto',
+                    'ven_monto', 'ven_gravado', 'ven_exento', 'ven_impuesto1', 'ven_monto_desc',
+                ]),
+                'whereArmado' => $where,
+                'orderBy' => 'ven_tipo, ven_nro',
+            ]));
 
-            throw new \RuntimeException(
-                'No se pudo listar cabeceras Anita para la jornada: '.$parsed['error_lectura']
-            );
+            if ($parsed['error_lectura'] !== null) {
+                $ultimoError = $parsed['error_lectura'];
+                Log::warning('gastronomia.chequeo_anita.lista_jornada_fallo', [
+                    'sucursal' => $sucursal,
+                    'fecha_jornada' => $fechaEntera,
+                    'intento' => $intento,
+                    'msg' => $ultimoError,
+                ]);
+                if ($intento < $maxIntentos) {
+                    usleep(250_000 * $intento);
+                    continue;
+                }
+
+                throw new \RuntimeException(
+                    'No se pudo listar cabeceras Anita para la jornada: '.$ultimoError
+                );
+            }
+
+            if ($parsed['filas'] === [] && $intento < $maxIntentos) {
+                Log::warning('gastronomia.chequeo_anita.lista_jornada_vacia_reintento', [
+                    'sucursal' => $sucursal,
+                    'fecha_jornada' => $fechaEntera,
+                    'intento' => $intento,
+                ]);
+                usleep(250_000 * $intento);
+                continue;
+            }
+
+            $lista = $parsed['filas'];
+            break;
         }
-
-        $lista = $parsed['filas'];
         $empresaCodigo = $puntoventa !== null
             ? Empresa::query()->whereKey($puntoventa->empresa_id)->value('codigo')
             : null;
@@ -485,16 +511,156 @@ final class GastronomiaChequeoVentasAnitaErpService
     {
         $puntoventa = Puntoventa::query()->findOrFail($puntoventaId);
         $sucursal = $this->sucursalDesdeCodigoPuntoventa((string) $puntoventa->codigo);
-        $fechaEntera = (int) str_replace('-', '', $fechaJornada);
-
-        $anitaPorClave = $this->listarCabecerasAnitaPorJornada($sucursal, $fechaEntera, $puntoventa);
         $ventasErp = $this->listarVentasErpPorJornada($puntoventaId, $fechaJornada);
 
-        return $ventasErp->filter(function (Venta $venta) use ($anitaPorClave): bool {
+        return $ventasErp->filter(function (Venta $venta) use ($sucursal, $puntoventa): bool {
             $clave = $this->claveComprobanteDesdeVenta($venta);
+            if ($clave === null) {
+                return false;
+            }
 
-            return $clave !== null && ! isset($anitaPorClave[$clave]);
+            [$tipo, $nroStr] = explode('-', $clave, 2);
+            $tipoAnita = $this->tipoAnitaConsultaDesdeErp($tipo, $puntoventa);
+            $consulta = $this->consultarCabeceraAnitaPorComprobante($sucursal, $tipoAnita, (int) $nroStr);
+            if ($consulta['error_lectura'] !== null) {
+                Log::warning('gastronomia.chequeo_anita.omitir_faltante_lectura_fallida', [
+                    'venta_id' => $venta->id,
+                    'codigo' => $venta->codigo,
+                    'msg' => $consulta['error_lectura'],
+                ]);
+
+                return false;
+            }
+
+            return $consulta['cabecera'] === null;
         })->values();
+    }
+
+    /**
+     * Indica si ya existe cabecera venta en Informix (incluye equivalencia FAK/FAC en PV CAEA).
+     */
+    public function existeCabeceraEnAnita(
+        string $tipoAnita,
+        string $letra,
+        int $sucursal,
+        int $numero,
+    ): bool {
+        if ($sucursal <= 0 || $numero <= 0) {
+            return false;
+        }
+
+        foreach (GastronomiaAnitaImportEmpresaSupport::tiposDetalleAnita($tipoAnita) as $tipo) {
+            $consulta = $this->consultarCabeceraAnitaPorComprobante($sucursal, $tipo, $numero, $letra);
+            if ($consulta['error_lectura'] !== null) {
+                Log::warning('gastronomia.chequeo_anita.cabecera_lectura_fallo', [
+                    'tipo' => $tipo,
+                    'sucursal' => $sucursal,
+                    'numero' => $numero,
+                    'msg' => $consulta['error_lectura'],
+                ]);
+
+                continue;
+            }
+
+            if ($consulta['cabecera'] !== null) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Indica si ya existe una fila vengrav en Informix (incluye equivalencia FAK/FAC en PV CAEA).
+     */
+    public function existeVengravLineaAnita(
+        string $tipoAnita,
+        string $letra,
+        int $sucursal,
+        int $numero,
+        string $codigoTasa,
+    ): bool {
+        if ($sucursal <= 0 || $numero <= 0 || trim($codigoTasa) === '') {
+            return false;
+        }
+
+        foreach (GastronomiaAnitaImportEmpresaSupport::tiposDetalleAnita($tipoAnita) as $tipo) {
+            $where = " WHERE veng_sucursal = '".$sucursal."'"
+                ." AND veng_tipo = '".addslashes($tipo)."'"
+                ." AND veng_nro = '".$numero."'"
+                ." AND veng_letra = '".addslashes($letra)."'"
+                ." AND veng_codigo_tasa = '".addslashes($codigoTasa)."'";
+
+            $parsed = ApiAnita::parsearRespuestaLista((new ApiAnita)->apiCall([
+                'acc' => 'list',
+                'tabla' => 'vengrav',
+                'campos' => 'veng_tipo',
+                'whereArmado' => $where,
+            ]));
+
+            if ($parsed['error_lectura'] !== null) {
+                Log::warning('gastronomia.chequeo_anita.vengrav_lectura_fallo', [
+                    'tipo' => $tipo,
+                    'sucursal' => $sucursal,
+                    'numero' => $numero,
+                    'codigo_tasa' => $codigoTasa,
+                    'msg' => $parsed['error_lectura'],
+                ]);
+
+                continue;
+            }
+
+            if ($parsed['filas'] !== []) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Indica si ya existe vencae en Informix para el comprobante.
+     */
+    public function existeVencaeEnAnita(
+        string $tipoAnita,
+        string $letra,
+        int $sucursal,
+        int $numero,
+    ): bool {
+        if ($sucursal <= 0 || $numero <= 0) {
+            return false;
+        }
+
+        foreach (GastronomiaAnitaImportEmpresaSupport::tiposDetalleAnita($tipoAnita) as $tipo) {
+            $where = " WHERE venc_sucursal = '".$sucursal."'"
+                ." AND venc_tipo = '".addslashes($tipo)."'"
+                ." AND venc_nro = '".$numero."'"
+                ." AND venc_letra = '".addslashes($letra)."'";
+
+            $parsed = ApiAnita::parsearRespuestaLista((new ApiAnita)->apiCall([
+                'acc' => 'list',
+                'tabla' => 'vencae',
+                'campos' => 'venc_tipo',
+                'whereArmado' => $where,
+            ]));
+
+            if ($parsed['error_lectura'] !== null) {
+                Log::warning('gastronomia.chequeo_anita.vencae_lectura_fallo', [
+                    'tipo' => $tipo,
+                    'sucursal' => $sucursal,
+                    'numero' => $numero,
+                    'msg' => $parsed['error_lectura'],
+                ]);
+
+                continue;
+            }
+
+            if ($parsed['filas'] !== []) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -738,21 +904,18 @@ final class GastronomiaChequeoVentasAnitaErpService
     /**
      * Montos ERP alineados con Anita (ven_gravado / ven_exento / ven_impuesto1).
      *
-     * Gastronomía suele grabar el neto en «Subtotal» sin renglón «Gravado al …»;
-     * las cortesías $0,01 llevan exento y Subtotal = bruto pre-descuento (no es gravado).
+     * Gravado ERP = neto gravado (base IVA o Subtotal); debe coincidir con ven_gravado Anita.
      *
      * @return array{total: float, gravado: float, iva: float, exento: float}
      */
-    private function montosDesdeVentaErp(Venta $venta): array
+    public function montosDesdeVentaErp(Venta $venta): array
     {
         $impuestos = Venta_Impuesto::query()
             ->where('venta_id', (int) $venta->id)
             ->get(['concepto', 'importe', 'baseimponible']);
 
-        $gravadoAl = 0.0;
-        $subtotalConcepto = 0.0;
+        $conceptos = [];
         $iva = 0.0;
-        $baseIva = 0.0;
         $exento = 0.0;
 
         foreach ($impuestos as $row) {
@@ -760,37 +923,25 @@ final class GastronomiaChequeoVentasAnitaErpService
             $importe = round((float) ($row->importe ?? 0), 2);
             $base = round((float) ($row->baseimponible ?? 0), 2);
 
-            if (preg_match('/^Gravado/i', $concepto)) {
-                $gravadoAl += $importe;
-            } elseif ($concepto === 'Subtotal') {
-                $subtotalConcepto += $importe;
-            } elseif (preg_match('/^Iva/i', $concepto)) {
+            $conceptos[] = [
+                'concepto' => $concepto,
+                'importe' => $importe,
+                'baseimponible' => $base,
+            ];
+
+            if (preg_match('/^Iva/i', $concepto)) {
                 $iva += $importe;
-                $baseIva += $base;
             } elseif (stripos($concepto, 'exento') !== false) {
                 $exento += $importe;
             }
         }
 
         $total = round((float) $venta->total, 2);
-        $esCortesiaMinima = abs(abs($total) - 0.01) <= 0.02;
-
-        if ($gravadoAl > 0.) {
-            $gravado = $gravadoAl;
-        } elseif ($esCortesiaMinima) {
-            $gravado = 0.0;
-        } elseif ($baseIva > 0.) {
-            $gravado = $baseIva;
-        } elseif ($subtotalConcepto > 0. && $iva > 0.) {
-            // Neto gravado gastronomía (equivale a ven_gravado cuando no hay «Gravado al»).
-            $gravado = $subtotalConcepto;
-        } else {
-            $gravado = 0.0;
-        }
+        $gravado = GastronomiaAnitaVenGravadoSupport::gravadoDesdeConceptosTotales($conceptos, $total);
 
         return [
             'total' => $total,
-            'gravado' => round($gravado, 2),
+            'gravado' => $gravado,
             'iva' => round($iva, 2),
             'exento' => round($exento, 2),
         ];
@@ -984,27 +1135,34 @@ final class GastronomiaChequeoVentasAnitaErpService
 
     /**
      * Suma ven_monto Anita de facturas ERP (sin NC) emparejadas por clave comprobante.
+     * Solo ventas con emisión gastronomía; opcionalmente excluye claves ajenas al circuito gastro.
      *
      * @param  list<int>  $ventaIds
      * @param  array<int, array<string, object>>  $cacheCabecerasPorPv
+     * @param  list<string>  $clavesExcluir
      */
     public function totalFacturacionBrutaAnitaParaVentasIds(
         array $ventaIds,
         string $fechaJornada,
         array &$cacheCabecerasPorPv = [],
+        array $clavesExcluir = [],
+        ?array $indiceAnitaBulk = null,
     ): float {
         if ($ventaIds === []) {
             return 0.0;
         }
 
+        $clavesExcluirSet = array_fill_keys($clavesExcluir, true);
+
         $ventas = Venta::query()
             ->whereIn('id', $ventaIds)
+            ->whereHas('gastronomiaEmision', fn ($q) => $q->whereNull('venta_factura_origen_id'))
             ->get(['id', 'codigo', 'numerocomprobante', 'puntoventa_id']);
 
         $total = 0.0;
         foreach ($ventas as $venta) {
             $clave = $this->claveComprobanteDesdeVenta($venta);
-            if ($clave === null) {
+            if ($clave === null || isset($clavesExcluirSet[$clave])) {
                 continue;
             }
 
@@ -1014,7 +1172,12 @@ final class GastronomiaChequeoVentasAnitaErpService
             }
 
             if (! isset($cacheCabecerasPorPv[$pvId])) {
-                $cacheCabecerasPorPv[$pvId] = $this->cabecerasAnitaMapPorPuntoventa($pvId, $fechaJornada);
+                $cacheCabecerasPorPv[$pvId] = $this->cabecerasAnitaMapPorPuntoventa(
+                    $pvId,
+                    $fechaJornada,
+                    $clavesExcluir,
+                    $indiceAnitaBulk,
+                );
             }
 
             $cab = $cacheCabecerasPorPv[$pvId][$clave] ?? null;
@@ -1029,10 +1192,19 @@ final class GastronomiaChequeoVentasAnitaErpService
     }
 
     /**
+     * @param  list<string>  $clavesExcluir
      * @return array<string, object>
      */
-    public function cabecerasAnitaMapPorPuntoventa(int $puntoventaId, string $fechaJornada): array
-    {
+    public function cabecerasAnitaMapPorPuntoventa(
+        int $puntoventaId,
+        string $fechaJornada,
+        array $clavesExcluir = [],
+        ?array $indiceAnitaBulk = null,
+    ): array {
+        if ($indiceAnitaBulk !== null) {
+            return $this->cabecerasAnitaMapDesdeIndiceBulk($puntoventaId, $fechaJornada, $clavesExcluir, $indiceAnitaBulk);
+        }
+
         $puntoventa = Puntoventa::query()->with('empresas')->find($puntoventaId);
         if ($puntoventa === null) {
             return [];
@@ -1044,7 +1216,46 @@ final class GastronomiaChequeoVentasAnitaErpService
             return [];
         }
 
-        return $this->listarCabecerasAnitaPorJornada($sucursal, $fechaEntera, $puntoventa);
+        $map = $this->listarCabecerasAnitaPorJornada($sucursal, $fechaEntera, $puntoventa);
+
+        if ($clavesExcluir === []) {
+            return $map;
+        }
+
+        foreach ($clavesExcluir as $clave) {
+            unset($map[$clave]);
+        }
+
+        return $map;
+    }
+
+    /**
+     * @param  array<int, array<string, array<string, object>>>  $indiceAnitaBulk
+     * @return array<string, object>
+     */
+    private function cabecerasAnitaMapDesdeIndiceBulk(
+        int $puntoventaId,
+        string $fechaJornada,
+        array $clavesExcluir,
+        array $indiceAnitaBulk,
+    ): array {
+        $puntoventa = Puntoventa::query()->find($puntoventaId);
+        if ($puntoventa === null) {
+            return [];
+        }
+
+        $sucursal = $this->sucursalDesdeCodigoPuntoventa((string) $puntoventa->codigo);
+        $map = $indiceAnitaBulk[$sucursal][$fechaJornada] ?? [];
+
+        if ($clavesExcluir === []) {
+            return $map;
+        }
+
+        foreach ($clavesExcluir as $clave) {
+            unset($map[$clave]);
+        }
+
+        return $map;
     }
 
     private function esNotaCreditoAnita(object $cab): bool
@@ -1059,8 +1270,323 @@ final class GastronomiaChequeoVentasAnitaErpService
         return number_format($valor, 2, '.', '');
     }
 
-    private function sucursalDesdeCodigoPuntoventa(string $codigo): int
+    public function sucursalDesdeCodigoPuntoventa(string $codigo): int
     {
         return (int) preg_replace('/\D+/', '', trim($codigo));
+    }
+
+    /**
+     * Actualiza ven_gravado en Anita para ventas ERP ya emparejadas con cabecera.
+     *
+     * @param  iterable<int, Venta>  $ventas
+     * @return array{revisadas:int, actualizadas:int, errores:list<array<string, mixed>>}
+     */
+    public function repararVenGravadoEnAnitaPorVentasErp(iterable $ventas, float $tolerancia = 0.02): array
+    {
+        return GastronomiaAnitaVenGravadoSupport::repararGravadoDesdeVentasErp(
+            $ventas,
+            fn (Venta $venta): array => $this->montosDesdeVentaErp($venta),
+            function (Venta $venta): ?object {
+                $consulta = $this->consultarCabeceraAnitaDesdeVenta($venta);
+
+                return $consulta['cabecera'];
+            },
+            $tolerancia,
+        );
+    }
+
+    /**
+     * @return Collection<int, Venta>
+     */
+    public function listarVentasGastronomiaEmpresaRangoJornada(
+        int $empresaId,
+        string $fechaDesde,
+        string $fechaHasta,
+    ): Collection {
+        return Venta::query()
+            ->with(['puntoventas.empresas'])
+            ->whereHas('gastronomiaEmision')
+            ->whereHas('puntoventas', function ($q) use ($empresaId): void {
+                $q->where('empresa_id', $empresaId)
+                    ->where('modofacturacion', '!=', 'M');
+            })
+            ->whereDate('fechajornada', '>=', $fechaDesde)
+            ->whereDate('fechajornada', '<=', $fechaHasta)
+            ->orderBy('fechajornada')
+            ->orderBy('numerocomprobante')
+            ->get();
+    }
+
+    /**
+     * Índice sucursal → jornada → clave ERP (FAC-n) desde filas venta Anita (cache bulk).
+     *
+     * @param  list<object>  $filasAnita
+     * @param  iterable<int, Puntoventa>  $puntoventas
+     * @return array<int, array<string, array<string, object>>>
+     */
+    public function indexarCabecerasAnitaDesdeFilas(array $filasAnita, iterable $puntoventas): array
+    {
+        /** @var array<int, Puntoventa> $pvPorSucursal */
+        $pvPorSucursal = [];
+        foreach ($puntoventas as $pv) {
+            $suc = $this->sucursalDesdeCodigoPuntoventa((string) $pv->codigo);
+            if ($suc > 0) {
+                $pvPorSucursal[$suc] = $pv;
+            }
+        }
+
+        $map = [];
+
+        foreach ($filasAnita as $fila) {
+            $sucursal = (int) preg_replace('/\D+/', '', (string) ($fila->ven_sucursal ?? ''));
+            $pv = $pvPorSucursal[$sucursal] ?? null;
+            if ($pv === null) {
+                continue;
+            }
+
+            $tipo = strtoupper(trim((string) ($fila->ven_tipo ?? '')));
+            $nro = (int) ($fila->ven_nro ?? 0);
+            if ($tipo === '' || $nro <= 0) {
+                continue;
+            }
+
+            $empresaCodigo = $pv->empresas?->codigo ?? $pv->empresa_id;
+            if (! GastronomiaAnitaImportEmpresaSupport::cabeceraCorrespondeAlPv(
+                $fila,
+                $pv,
+                $empresaCodigo,
+            )) {
+                continue;
+            }
+
+            $fechaJornada = $this->fechaJornadaDesdeAnitaEntera((string) ($fila->ven_fecha_vto ?? ''));
+            if ($fechaJornada === null) {
+                continue;
+            }
+
+            $esKandikoCaea = KandikoAnitaVentaTipoSupport::esPvCaeaKandiko(
+                (string) $pv->codigo,
+                $empresaCodigo,
+                $pv->modofacturacion ?? null,
+            );
+
+            if ($esKandikoCaea && in_array($tipo, KandikoAnitaVentaTipoSupport::tiposAnitaEquivalentesFacErp(), true)) {
+                $clave = KandikoAnitaVentaTipoSupport::claveConciliacionDesdeNumero($nro);
+                $existente = $map[$sucursal][$fechaJornada][$clave] ?? null;
+                $tipoExistente = $existente !== null
+                    ? strtoupper(trim((string) ($existente->ven_tipo ?? '')))
+                    : '';
+                if ($existente === null || ($tipo === KandikoAnitaVentaTipoSupport::TIPO_VENTA_BRIDGE && $tipoExistente !== KandikoAnitaVentaTipoSupport::TIPO_VENTA_BRIDGE)) {
+                    $map[$sucursal][$fechaJornada][$clave] = $fila;
+                }
+
+                continue;
+            }
+
+            $map[$sucursal][$fechaJornada][$tipo.'-'.$nro] = $fila;
+        }
+
+        return $map;
+    }
+
+    /**
+     * @param  list<object>  $filasVengrav
+     * @return array<string, true>
+     */
+    public function indexarVengravDesdeFilas(array $filasVengrav): array
+    {
+        $map = [];
+        foreach ($filasVengrav as $fila) {
+            $tipo = strtoupper(trim((string) ($fila->veng_tipo ?? '')));
+            $sucursal = (int) preg_replace('/\D+/', '', (string) ($fila->veng_sucursal ?? ''));
+            $nro = (int) ($fila->veng_nro ?? 0);
+            $letra = strtoupper(trim((string) ($fila->veng_letra ?? 'B')));
+            $codigoTasa = trim((string) ($fila->veng_codigo_tasa ?? ''));
+            if ($tipo === '' || $sucursal <= 0 || $nro <= 0 || $codigoTasa === '') {
+                continue;
+            }
+
+            $map[$this->claveVengravIndice($tipo, $sucursal, $letra, $nro, $codigoTasa)] = true;
+        }
+
+        return $map;
+    }
+
+    /**
+     * @param  list<object>  $filasVencae
+     * @return array<string, true>
+     */
+    public function indexarVencaeDesdeFilas(array $filasVencae): array
+    {
+        $map = [];
+
+        foreach ($filasVencae as $fila) {
+            $tipo = strtoupper(trim((string) ($fila->venc_tipo ?? '')));
+            $sucursal = (int) preg_replace('/\D+/', '', (string) ($fila->venc_sucursal ?? ''));
+            $nro = (int) ($fila->venc_nro ?? 0);
+            $letra = strtoupper(trim((string) ($fila->venc_letra ?? 'B')));
+            if ($tipo === '' || $sucursal <= 0 || $nro <= 0) {
+                continue;
+            }
+
+            $map[$this->claveVencaeIndice($tipo, $sucursal, $letra, $nro)] = true;
+        }
+
+        return $map;
+    }
+
+    public function cabeceraExisteEnIndiceAnita(
+        array $anitaPorPvJornada,
+        Puntoventa $puntoventa,
+        string $fechaJornada,
+        string $claveErp,
+    ): bool {
+        $sucursal = $this->sucursalDesdeCodigoPuntoventa((string) $puntoventa->codigo);
+
+        return ($anitaPorPvJornada[$sucursal][$fechaJornada][$claveErp] ?? null) !== null;
+    }
+
+    /**
+     * Cabecera Anita en cualquier jornada del PV (mismo comprobante).
+     */
+    public function cabeceraExisteEnIndiceAnitaPorComprobante(
+        array $anitaPorPvJornada,
+        Puntoventa $puntoventa,
+        string $claveErp,
+    ): bool {
+        $sucursal = $this->sucursalDesdeCodigoPuntoventa((string) $puntoventa->codigo);
+        if (! isset($anitaPorPvJornada[$sucursal])) {
+            return false;
+        }
+
+        foreach ($anitaPorPvJornada[$sucursal] as $cabeceras) {
+            if (isset($cabeceras[$claveErp])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function existeVengravEnIndiceAnita(
+        array $vengravIndice,
+        string $tipoAnita,
+        int $sucursal,
+        string $letra,
+        int $numero,
+        string $codigoTasa,
+    ): bool {
+        if ($sucursal <= 0 || $numero <= 0 || trim($codigoTasa) === '') {
+            return false;
+        }
+
+        foreach (GastronomiaAnitaImportEmpresaSupport::tiposDetalleAnita($tipoAnita) as $tipo) {
+            if (isset($vengravIndice[$this->claveVengravIndice($tipo, $sucursal, $letra, $numero, $codigoTasa)])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function existeVencaeEnIndiceAnita(
+        array $vencaeIndice,
+        string $tipoAnita,
+        int $sucursal,
+        string $letra,
+        int $numero,
+    ): bool {
+        if ($sucursal <= 0 || $numero <= 0) {
+            return false;
+        }
+
+        foreach (GastronomiaAnitaImportEmpresaSupport::tiposDetalleAnita($tipoAnita) as $tipo) {
+            if (isset($vencaeIndice[$this->claveVencaeIndice($tipo, $sucursal, $letra, $numero)])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * PK Informix (tipo|letra|sucursal|nro) tal como se graba en venta.unl.
+     */
+    public function pkComprobanteDesdeVentaErp(Venta $venta, string $letra = 'B'): ?string
+    {
+        $venta->loadMissing('puntoventas.empresas');
+        $puntoventa = $venta->puntoventas;
+        if ($puntoventa === null) {
+            return null;
+        }
+
+        $clave = $this->claveComprobanteDesdeVenta($venta);
+        if ($clave === null) {
+            return null;
+        }
+
+        [$tipoErp] = explode('-', $clave, 2);
+        $empresaCodigo = $puntoventa->empresas?->codigo ?? $puntoventa->empresa_id;
+        $tipoAnita = KandikoAnitaVentaTipoSupport::tipoVentaAnitaBridge(
+            $tipoErp,
+            (string) $puntoventa->codigo,
+            $empresaCodigo,
+            $puntoventa->modofacturacion ?? null,
+        );
+        $sucursal = $this->sucursalDesdeCodigoPuntoventa((string) $puntoventa->codigo);
+        $numero = (int) ($venta->numerocomprobante ?? 0);
+
+        return GastronomiaAnitaComprobantePkSupport::claveVenta($tipoAnita, $letra, $sucursal, $numero);
+    }
+
+    /**
+     * Ventas ERP sin cabecera en Anita (PK tipo|letra|sucursal|nro).
+     *
+     * @param  array<string, true>  $ventaPkIndice
+     * @return Collection<int, Venta>
+     */
+    public function listarVentasErpSinCabeceraAnitaEnRango(
+        int $empresaId,
+        string $fechaDesde,
+        ?string $fechaHasta,
+        ?string $codigoPv,
+        array $ventaPkIndice,
+    ): Collection {
+        $hasta = $fechaHasta !== null && $fechaHasta !== '' ? $fechaHasta : $fechaDesde;
+        $ventas = $this->listarVentasGastronomiaEmpresaRangoJornada($empresaId, $fechaDesde, $hasta);
+
+        if ($codigoPv !== null && trim($codigoPv) !== '') {
+            $codigoPv = trim($codigoPv);
+            $ventas = $ventas->filter(
+                static fn (Venta $venta): bool => $venta->puntoventas !== null
+                    && (string) $venta->puntoventas->codigo === $codigoPv,
+            );
+        }
+
+        return $ventas->filter(function (Venta $venta) use ($ventaPkIndice): bool {
+            $pk = $this->pkComprobanteDesdeVentaErp($venta);
+
+            return $pk !== null && ! isset($ventaPkIndice[$pk]);
+        })->values();
+    }
+
+    private function claveVengravIndice(string $tipo, int $sucursal, string $letra, int $numero, string $codigoTasa): string
+    {
+        return strtoupper(trim($tipo)).'|'.$sucursal.'|'.strtoupper(trim($letra)).'|'.$numero.'|'.trim($codigoTasa);
+    }
+
+    private function claveVencaeIndice(string $tipo, int $sucursal, string $letra, int $numero): string
+    {
+        return strtoupper(trim($tipo)).'|'.$sucursal.'|'.strtoupper(trim($letra)).'|'.$numero;
+    }
+
+    private function fechaJornadaDesdeAnitaEntera(string $fechaEntera): ?string
+    {
+        $fechaEntera = preg_replace('/\D+/', '', $fechaEntera);
+        if ($fechaEntera === null || strlen($fechaEntera) !== 8) {
+            return null;
+        }
+
+        return substr($fechaEntera, 0, 4).'-'.substr($fechaEntera, 4, 2).'-'.substr($fechaEntera, 6, 2);
     }
 }

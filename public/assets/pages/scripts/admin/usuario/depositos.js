@@ -9,8 +9,10 @@ $(function () {
     $('#botonform1').on('click', function () {
         $('.form1').show();
         $('.form2').hide();
+        $('.form3').hide();
         $(this).removeClass('btn-info').addClass('btn-primary');
         $('#botonform2').removeClass('btn-primary').addClass('btn-info');
+        $('#botonform3').removeClass('btn-primary').addClass('btn-info');
     });
 
     $('#botonform2').on('click', function () {
@@ -20,8 +22,10 @@ $(function () {
         }
         $('.form1').hide();
         $('.form2').show();
+        $('.form3').hide();
         $(this).removeClass('btn-info').addClass('btn-primary');
         $('#botonform1').removeClass('btn-primary').addClass('btn-info');
+        $('#botonform3').removeClass('btn-primary').addClass('btn-info');
     });
 
     if (typeof activa_eventos_consultadeposito === 'function') {

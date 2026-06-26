@@ -12,6 +12,7 @@ use App\Models\Stock\Talle;
 use App\Models\Stock\MovimientoStock;
 use App\Models\Stock\Tipotransaccion_Stock;
 use App\Support\Contable\PeriodoContableCierreSupport;
+use App\Support\Stock\ArticuloEmpresaAsignacionSupport;
 use Auth;
 use DB;
 use Illuminate\Support\Facades\Log;
@@ -263,6 +264,14 @@ class MovimientoStockService
 					$articulo_movimiento = $this->articulo_movimientoService->
 									guardaArticuloMovimiento('create',
 									$dataArticuloMovimiento, $dataTalle);
+
+					$empresaIdArticulo = (int) ($data['empresa_id'] ?? 0);
+					if ($empresaIdArticulo <= 0 && ! empty($data['deposito_id'])) {
+						$empresaIdArticulo = (int) (Depmae::query()->whereKey((int) $data['deposito_id'])->value('empresa_id') ?? 0);
+					}
+					if ($empresaIdArticulo > 0) {
+						ArticuloEmpresaAsignacionSupport::asignarSiVacia((int) $articulos[$i], $empresaIdArticulo);
+					}
 
 					// Guarda remito en pendmae Anita
 					//if (strtoupper(config('app.empresa') == 'EL BIERZO') && substr($data['codigo'],0,3) == 'REM')

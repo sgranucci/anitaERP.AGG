@@ -17,7 +17,10 @@ class GastronomiaConciliacionDiariaReporte extends Command
                             {--csv= : Ruta opcional para exportar CSV}
                             {--enviar-mail : Envía el CSV por correo}
                             {--sin-mail : No envía correo (solo consola/CSV)}
-                            {--requiere-jornada-cerrada : Solo empresas con jornada cerrada en el rango (schedule diario)}';
+                            {--requiere-jornada-cerrada : Solo empresas con jornada cerrada en el rango (schedule diario)}
+                            {--forzar-cache-anita : Alias explícito de refresco (default: sí)}
+                            {--reutilizar-cache-anita : No re-descargar; usa cache local si existe}
+                            {--sin-cache-anita : Consulta Anita en vivo por PV (menos confiable bajo carga)}';
 
     protected $description = 'Auditoría día a día: ERP/Anita/rendgastro por PC, PV (CAE/CAEA), post-cierre y total general';
 
@@ -83,8 +86,27 @@ class GastronomiaConciliacionDiariaReporte extends Command
         ));
         $this->comment('Detalle: PV CAE + PV CAEA (salón) → total PC vs rendg Z → post-cierre → control día empresa.');
 
+        $usarCacheAnita = (bool) $this->option('sin-cache-anita') ? false : null;
+        $reutilizarCacheAnita = (bool) $this->option('reutilizar-cache-anita');
+        $refrescarCacheConfig = (bool) ($config['refrescar_cache_anita'] ?? true);
+        $forzarCacheAnita = ! $reutilizarCacheAnita && ($refrescarCacheConfig || (bool) $this->option('forzar-cache-anita'));
+        if ($usarCacheAnita !== false) {
+            $this->comment($forzarCacheAnita
+                ? 'Anita: cache bulk con refresco al inicio (1 descarga por empresa/rango). --reutilizar-cache-anita omite bridge.'
+                : 'Anita: cache bulk existente (--reutilizar-cache-anita). Use --sin-cache-anita para consulta live.');
+        } else {
+            $this->warn('Anita: consulta live por PV (puede marcar DIF falsos si el bridge responde vacío).');
+        }
+
         try {
-            $informe = $service->generar($fechaDesde, $fechaHasta, $empresas, $tolerancia);
+            $informe = $service->generar(
+                $fechaDesde,
+                $fechaHasta,
+                $empresas,
+                $tolerancia,
+                $forzarCacheAnita,
+                $usarCacheAnita,
+            );
         } catch (\Throwable $e) {
             $this->error($e->getMessage());
 
@@ -101,6 +123,14 @@ class GastronomiaConciliacionDiariaReporte extends Command
                 $empresa['empresa_id'],
                 $empresa['empresa_nombre'],
             ));
+            $cacheInfo = $empresa['anita_cache'] ?? null;
+            if (is_array($cacheInfo)) {
+                $this->comment(sprintf(
+                    '  Cache Anita: %d cabeceras | generado %s',
+                    (int) (($cacheInfo['counts']['venta'] ?? 0)),
+                    (string) ($cacheInfo['generado_at'] ?? '—'),
+                ));
+            }
 
             foreach ($empresa['dias'] as $dia) {
                 if (($dia['filas'] ?? []) === []) {
@@ -149,7 +179,7 @@ class GastronomiaConciliacionDiariaReporte extends Command
                     if ($tipo === 'total_salon' || $tipo === 'total_dia') {
                         $this->line('');
                         $etiqueta = $tipo === 'total_dia'
-                            ? '<comment>TOTAL DÍA</comment> (salón + post-cierre CAEA)'
+                            ? '<comment>TOTAL DÍA</comment> (salón + vending + post-cierre + agregados CAEA)'
                             : '<comment>TOTAL SALÓN</comment> (todas las PCs, sin post-cierre)';
                         $this->line(sprintf(
                             '  %s: ERP $ %s | Anita $ %s | Rendg ΣZ $ %s | Δ $ %s | %s',
@@ -171,6 +201,40 @@ class GastronomiaConciliacionDiariaReporte extends Command
                             $this->fmt($fila['ventas_anita'] ?? 0),
                             $this->fmt($fila['rendgastro_z'] ?? null),
                             (int) ($fila['cantidad_facturas_erp'] ?? 0),
+                            $fila['estado'] ?? '—',
+                        ));
+                        continue;
+                    }
+
+                    if ($tipo === 'caea_agregados_migrados') {
+                        $this->line(sprintf(
+                            '  Agregados CAEA migrados (PV %s): ERP $ %s | Anita $ %s | Rendg %s $ %s | %d fc | %s',
+                            $fila['pv_caea'] ?? '—',
+                            $this->fmt($fila['ventas_erp'] ?? 0),
+                            $this->fmt($fila['ventas_anita'] ?? 0),
+                            $fila['identificador_pc'] ?? '—',
+                            $this->fmt($fila['rendgastro_z'] ?? null),
+                            (int) ($fila['cantidad_facturas_erp'] ?? 0),
+                            $fila['estado'] ?? '—',
+                        ));
+                        continue;
+                    }
+
+                    if ($tipo === 'vending_rendg') {
+                        $this->line(sprintf(
+                            '  Vending (PV %s): Rendg Z $ %s | nro_oper %s | %s',
+                            $fila['pv_codigo'] ?? '—',
+                            $this->fmt($fila['rendgastro_z'] ?? null),
+                            (string) ($fila['rendgastro_nro_oper'] ?? '—'),
+                            $fila['estado'] ?? '—',
+                        ));
+                        continue;
+                    }
+
+                    if ($tipo === 'total_vending') {
+                        $this->line(sprintf(
+                            '  <comment>TOTAL VENDING</comment> (rendgastro): Z $ %s | %s',
+                            $this->fmt($fila['rendgastro_z'] ?? null),
                             $fila['estado'] ?? '—',
                         ));
                     }
@@ -196,6 +260,32 @@ class GastronomiaConciliacionDiariaReporte extends Command
                         $lineaCtrl .= sprintf(' | <error>fc_caea dup $ %s</error>', $this->fmt($ctrl['fc_caea_duplicado']));
                     }
                     $this->line($lineaCtrl);
+                }
+
+                $ctrlAsientos = $dia['control_rendg_asientos'] ?? null;
+                if (is_array($ctrlAsientos)) {
+                    $totemAs = (float) ($ctrlAsientos['asientos_totem'] ?? 0);
+                    $totemPuenteAs = (float) ($ctrlAsientos['asientos_totem_puente'] ?? 0);
+                    $this->line(sprintf(
+                        '  <comment>CONTROL RENDG ↔ ASIENTOS</comment>: rendg $ %s (salón neto $ %s + post-cierre $ %s%s) | asientos $ %s (factura día $ %s + post-cierre $ %s%s%s) | Δ $ %s | %s',
+                        $this->fmt($ctrlAsientos['rendg_total'] ?? null),
+                        $this->fmt($ctrlAsientos['rendg_salon'] ?? null),
+                        $this->fmt($ctrlAsientos['rendg_post_cierre'] ?? null),
+                        ($ctrlAsientos['rendg_agregados_caea'] ?? null) !== null
+                            ? ' + agregados $ '.$this->fmt($ctrlAsientos['rendg_agregados_caea'])
+                            : '',
+                        $this->fmt($ctrlAsientos['asientos_total'] ?? null),
+                        $this->fmt($ctrlAsientos['asientos_factura_dia'] ?? null),
+                        $this->fmt($ctrlAsientos['asientos_post_cierre'] ?? null),
+                        ($ctrlAsientos['asientos_agregados_caea'] ?? null) !== null && (float) ($ctrlAsientos['asientos_agregados_caea'] ?? 0) > 0.02
+                            ? ' + agregados $ '.$this->fmt($ctrlAsientos['asientos_agregados_caea'])
+                            : '',
+                        $totemAs > 0.02
+                            ? ' + TOTEM $ '.$this->fmt($totemAs).($totemPuenteAs > 0.02 ? ' (puente $ '.$this->fmt($totemPuenteAs).')' : '')
+                            : '',
+                        $this->fmtDiff($ctrlAsientos['diff_rendg_asientos'] ?? null),
+                        $ctrlAsientos['estado'] ?? '—',
+                    ));
                 }
             }
         }

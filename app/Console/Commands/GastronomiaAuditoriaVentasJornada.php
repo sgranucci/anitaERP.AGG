@@ -17,7 +17,7 @@ class GastronomiaAuditoriaVentasJornada extends Command
                             {--tolerancia=0.02 : Tolerancia en pesos}
                             {--detalle : Lista comprobantes con diferencias}';
 
-    protected $description = 'Audita ventas gastronomía ERP vs Anita por fecha de jornada (fechajornada) y PV';
+    protected $description = 'Audita ventas gastronomía ERP vs Anita por fecha de jornada (total, gravado, IVA, exento) y PV';
 
     public function handle(GastronomiaChequeoVentasAnitaErpService $service): int
     {
@@ -66,10 +66,12 @@ class GastronomiaAuditoriaVentasJornada extends Command
             $res = $resultado['resumen'];
             $conteo = $res['conteo'] ?? [];
             $delta = $res['delta_totales']['total'] ?? 0;
+            $deltaGravado = $res['delta_totales']['gravado'] ?? 0;
             $problema = ($conteo['solo_erp'] ?? 0) > 0
                 || ($conteo['diferencia'] ?? 0) > 0
                 || ($conteo['solo_anita'] ?? 0) > 0
-                || abs((float) $delta) > $tolerancia;
+                || abs((float) $delta) > $tolerancia
+                || abs((float) $deltaGravado) > $tolerancia;
 
             if ($problema) {
                 $hayProblemas = true;
@@ -84,6 +86,7 @@ class GastronomiaAuditoriaVentasJornada extends Command
                 (string) ($conteo['solo_erp'] ?? 0),
                 (string) ($conteo['diferencia'] ?? 0),
                 number_format((float) $delta, 2, '.', ''),
+                number_format((float) $deltaGravado, 2, '.', ''),
                 $problema ? 'ALERTA' : 'OK',
             ];
 
@@ -105,7 +108,7 @@ class GastronomiaAuditoriaVentasJornada extends Command
 
         $this->newLine();
         $this->table(
-            ['Jornada', 'PV', 'Fac ERP', 'Cab Anita', 'OK', 'Solo ERP', 'Dif imp.', 'Δ total', 'Estado'],
+            ['Jornada', 'PV', 'Fac ERP', 'Cab Anita', 'OK', 'Solo ERP', 'Dif imp.', 'Δ total', 'Δ gravado', 'Estado'],
             $resumenFilas,
         );
 

@@ -100,7 +100,7 @@ class ComprobanteProveedorPersistenciaService
         $prefill = $this->prefillService->desdePrecarga($precargaId);
         $data = $prefill['data'];
 
-        $payload = $data->only($data->getFillable());
+        $payload = $this->payloadCabeceraDesdeModelo($data);
         $payload['origen_entrada'] = $this->origenComprobanteDesdePrecarga($precargaId);
         $payload['creousuario_id'] = Auth::id();
         $payload['estado'] = ComprobanteProveedorEstados::BORRADOR;
@@ -117,10 +117,64 @@ class ComprobanteProveedorPersistenciaService
         }
 
         $this->persistirCuotasDesdeArray($comprobante, $prefill['cuotas']);
+        $this->vincularRecepcionesDesdePrefill($comprobante, $prefill);
         $this->registrarEstadoInicial($comprobante);
         $this->vincularArchivoPrecarga($comprobante);
 
-        return $comprobante->fresh();
+        return $comprobante->fresh([
+            'comprobante_proveedor_recepciones',
+            'comprobante_proveedor_conceptos',
+        ]);
+    }
+
+    /** @param array<string, mixed> $prefill */
+    private function vincularRecepcionesDesdePrefill(Comprobante_Proveedor $comprobante, array $prefill): void
+    {
+        $seleccionadas = $prefill['recepciones_seleccionadas'] ?? [];
+        if ($seleccionadas === [] || $comprobante->modo_carga !== ComprobanteProveedorModoCarga::ASIGNA_RECEPCION) {
+            return;
+        }
+
+        $ordencompraId = (int) ($comprobante->ordencompra_id ?? 0);
+        if ($ordencompraId <= 0) {
+            return;
+        }
+
+        $this->recepcionesSupport->sincronizar(
+            (int) $comprobante->id,
+            $ordencompraId,
+            $seleccionadas,
+            $this->contextoLegajoDesdeComprobante($comprobante),
+        );
+    }
+
+    /** @return array{proveedor_id: int, empresa_id: int, sector_legajocompra_id: int|null}|null */
+    private function contextoLegajoDesdeComprobante(Comprobante_Proveedor $comprobante): ?array
+    {
+        $proveedorId = (int) ($comprobante->proveedor_id ?? 0);
+        $empresaId = (int) ($comprobante->empresa_id ?? 0);
+        if ($proveedorId <= 0 || $empresaId <= 0) {
+            return null;
+        }
+
+        $comprobante->loadMissing('ordencompras');
+        $sectorId = $comprobante->ordencompras?->sector_legajocompra_id;
+
+        return [
+            'proveedor_id' => $proveedorId,
+            'empresa_id' => $empresaId,
+            'sector_legajocompra_id' => $sectorId ? (int) $sectorId : null,
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function payloadCabeceraDesdeModelo(Comprobante_Proveedor $data): array
+    {
+        $payload = $data->only($data->getFillable());
+        $payload['es_fce'] = (bool) ($payload['es_fce'] ?? false);
+        $payload['pararevisar'] = (bool) ($payload['pararevisar'] ?? false);
+
+        return $payload;
     }
 
     /** @return array<string, mixed> */
@@ -288,6 +342,7 @@ class ComprobanteProveedorPersistenciaService
             (int) $comprobante->id,
             $ordencompraId,
             $request->input('recepcion_proveedor_ids', []),
+            $this->contextoLegajoDesdeComprobante($comprobante),
         );
     }
 

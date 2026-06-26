@@ -19,13 +19,17 @@
     }
 
     function operacionTipo() {
-        return String($('#tipotransaccion_stock_id option:selected').attr('data-operacion') || '').trim();
+        return typeof window.msOperacionTipoTransaccion === 'function'
+            ? window.msOperacionTipoTransaccion()
+            : '';
     }
 
     function depositoOrigenId() {
         var op = operacionTipo();
         if (op === 'T') {
-            var origenBien = String($('#tipotransaccion_stock_id option:selected').attr('data-origen-bien-uso') || '') === '1';
+            var origenBien = typeof window.msTipoTransaccionMeta === 'function'
+                ? window.msTipoTransaccionMeta().origenBienUso
+                : false;
             if (origenBien || !$('#tm_deposito_salida').is(':visible')) {
                 return 0;
             }

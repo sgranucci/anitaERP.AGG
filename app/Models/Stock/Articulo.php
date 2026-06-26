@@ -3,6 +3,7 @@
 namespace App\Models\Stock;
 
 use App\ApiAnita;
+use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Impuesto;
 use App\Models\Contable\Centrocosto;
 use App\Models\Contable\Cuentacontable;

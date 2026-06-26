@@ -189,6 +189,15 @@ final class RecepcionProveedorAnitaColisionSupport
         return self::leerRecepmaeErpPorClave($codigoProveedor, $clave) !== null;
     }
 
+    /**
+     * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $clave
+     */
+    public static function tieneRecepmovOStkmov(string $codigoProveedor, array $clave): bool
+    {
+        return self::existeRecepmovProveedor($codigoProveedor, $clave)
+            || self::existeStkmovErp($clave);
+    }
+
     private static function existeRecepmovProveedor(string $codigoProveedor, array $clave): bool
     {
         $api = new ApiAnita;

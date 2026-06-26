@@ -18,6 +18,7 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 
 class RendicionEstacionamientoCajaService
@@ -923,7 +924,14 @@ class RendicionEstacionamientoCajaService
         $this->persistirMovimientos($rendicion, $movimientos);
 
         DB::afterCommit(function () use ($jornadaId) {
-            $this->anitaSyncService->reaplicarTotalZPorPcEnJornada($jornadaId);
+            try {
+                $this->anitaSyncService->reaplicarTotalZPorPcEnJornada($jornadaId);
+            } catch (\Throwable $e) {
+                Log::error('rendicion_estacionamiento.anita_total_z_tras_presentacion.fallo', [
+                    'jornada_estacionamiento_id' => $jornadaId,
+                    'mensaje' => $e->getMessage(),
+                ]);
+            }
         });
 
         return $rendicion->fresh(['movimientos.cuentacaja', 'jornada']);
@@ -981,7 +989,14 @@ class RendicionEstacionamientoCajaService
             if ($tipo === RendicionEstacionamientoCaja::TIPO_JORNADA) {
                 $jornadaId = (int) ($cabecera['jornada_estacionamiento_id'] ?? $rendicion->jornada_estacionamiento_id ?? 0);
                 DB::afterCommit(function () use ($jornadaId) {
-                    $this->anitaSyncService->reaplicarTotalZPorPcEnJornada($jornadaId);
+                    try {
+                        $this->anitaSyncService->reaplicarTotalZPorPcEnJornada($jornadaId);
+                    } catch (\Throwable $e) {
+                        Log::error('rendicion_estacionamiento.anita_total_z_tras_presentacion.fallo', [
+                            'jornada_estacionamiento_id' => $jornadaId,
+                            'mensaje' => $e->getMessage(),
+                        ]);
+                    }
                 });
             } else {
                 $this->encolarSincronizacionAnitaTrasCommit($rendicion->id);
@@ -1049,7 +1064,14 @@ class RendicionEstacionamientoCajaService
                 return;
             }
 
-            $this->anitaSyncService->sincronizarDespuesDeGuardar($rendicion);
+            try {
+                $this->anitaSyncService->sincronizarDespuesDeGuardar($rendicion);
+            } catch (\Throwable $e) {
+                Log::error('rendicion_estacionamiento.anita_sync_tras_commit.fallo', [
+                    'rendicion_id' => $rendicionId,
+                    'mensaje' => $e->getMessage(),
+                ]);
+            }
         });
     }
 

@@ -6,6 +6,7 @@ use App\Models\Stock\Depmae;
 use App\Models\Stock\Tipotransaccion_Stock;
 use App\Support\Stock\TransferenciaBienUsoSupport;
 use App\Support\Stock\TransferenciaMercaderiaAprobacionSupport;
+use App\Support\Stock\UsuarioTipotransaccionStockAutorizado;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 
@@ -48,6 +49,13 @@ class ValidacionTransferenciaMercaderia extends FormRequest
             $tipo = $tipoId > 0 ? Tipotransaccion_Stock::query()->find($tipoId) : null;
             $destinoBien = TransferenciaBienUsoSupport::tipoDestinoBienUso($tipo);
             $origenBien = TransferenciaBienUsoSupport::tipoOrigenBienUso($tipo);
+
+            if ($tipoId > 0 && ! UsuarioTipotransaccionStockAutorizado::tipotransaccionAutorizada($tipoId)) {
+                $validator->errors()->add(
+                    'tipotransaccion_stock_id',
+                    'El tipo de transacción seleccionado no está autorizado para su usuario.'
+                );
+            }
 
             if ($origenBien) {
                 if ($bienUsoOrigId <= 0) {

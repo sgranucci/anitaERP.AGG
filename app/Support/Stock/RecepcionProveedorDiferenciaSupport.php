@@ -57,9 +57,11 @@ class RecepcionProveedorDiferenciaSupport
                 if ($ocArtId > 0) {
                     $pendientesPorOcArt[$ocArtId] = true;
                 }
+                $ccPendiente = self::resolverCentrocostoLinea($oc, $item, $ccOc);
                 $enriquecidos[] = array_merge($item, [
                     'accion_linea_oc' => $accionLinea,
                     'fl_cerrar_linea_oc' => false,
+                    'centrocosto_id' => $ccPendiente,
                 ]);
 
                 continue;
@@ -108,7 +110,12 @@ class RecepcionProveedorDiferenciaSupport
                 $resumenes[] = "Sustituto: {$sku} por línea OC #{$sustituidoId}";
             }
 
-            $ccLinea = (int) ($item['centrocosto_id'] ?? $ccOc);
+            $ccLinea = self::resolverCentrocostoLinea($oc, $item, $ccOc);
+            if ($ccLinea === null) {
+                throw new \RuntimeException(
+                    'Línea '.($idx + 1)." ({$sku}): falta centro de costo destino. Corrija la OC o indique el centro de costo."
+                );
+            }
             $tol = RecepcionProveedorToleranciaSupport::resolver($empresaId, $ccLinea);
 
             $flCantDiff = $accionLinea === RecepcionProveedorAccionLineaOc::RECIBIR
@@ -166,6 +173,7 @@ class RecepcionProveedorDiferenciaSupport
                 'ordencompra_articulo_sustituido_id' => $sustituidoId > 0 ? $sustituidoId : null,
                 'cantidad_oc' => $cantOc,
                 'precio_ordencompra' => $precioOc,
+                'centrocosto_id' => $ccLinea,
                 'fl_cantidad_diferencia' => $flCantDiff,
                 'fl_precio_diferencia' => $precioDistintoOc,
                 'fl_articulo_distinto' => in_array($tipoLinea, [self::TIPO_EXTRA, self::TIPO_SUSTITUTO], true),
@@ -213,6 +221,12 @@ class RecepcionProveedorDiferenciaSupport
             'resumen_rechazos' => implode("\n", array_unique($resumenesRechazo)),
             'faltantes' => $faltantes,
         ];
+    }
+
+    private static function resolverCentrocostoLinea(Ordencompra $oc, array $item, int $ccOc): ?int
+    {
+        return RecepcionProveedorCentrocostoLineaSupport::resolverDesdeOcYItem($oc, $item)
+            ?? ($ccOc > 0 ? $ccOc : null);
     }
 
     private static function articuloDistintoDeOc(?object $ocArt, int $articuloId): bool

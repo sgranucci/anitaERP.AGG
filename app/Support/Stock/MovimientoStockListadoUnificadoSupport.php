@@ -165,6 +165,8 @@ final class MovimientoStockListadoUnificadoSupport
         MovimientoStockVisibilidadSupport::aplicarFiltroCentrocostoTransferenciaQuery($tmQuery);
         MovimientoStockVisibilidadSupport::aplicarFiltroDepositosMovimientoQuery($movQuery, 'am_agg.deposito_id');
         MovimientoStockVisibilidadSupport::aplicarFiltroDepositosTransferenciaQuery($tmQuery);
+        MovimientoStockVisibilidadSupport::aplicarFiltroTipotransaccionesMovimientoQuery($movQuery);
+        MovimientoStockVisibilidadSupport::aplicarFiltroTipotransaccionesTransferenciaQuery($tmQuery);
         $this->aplicarFiltrosInteligentes($movQuery, $filtros, true);
         $this->aplicarFiltrosInteligentes($tmQuery, $filtros, false);
 

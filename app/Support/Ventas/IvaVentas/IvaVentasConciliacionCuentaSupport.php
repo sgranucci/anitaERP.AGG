@@ -18,6 +18,9 @@ final class IvaVentasConciliacionCuentaSupport
 {
     public const TOLERANCIA_DEFAULT = 0.05;
 
+    /** Tolerancia diaria auditoría IVA ventas (redondeos y cierres parciales). */
+    public const TOLERANCIA_DIARIA = 1.0;
+
     public const FUENTE_CIERRE_JORNADA = 'cierre_jornada';
 
     public const FUENTE_FACTURACION = 'facturacion';

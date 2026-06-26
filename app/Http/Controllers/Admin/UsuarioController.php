@@ -14,6 +14,7 @@ use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Ventas\VendedorRepositoryInterface;
 use App\Support\Http\EliminacionRegistroSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
+use App\Support\Stock\UsuarioTipotransaccionStockAutorizado;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 
@@ -82,6 +83,7 @@ class UsuarioController extends Controller
         $usuario->auditSync('usuario_empresas', $request->empresa_ids);
 
         $this->sincronizarDepositosAutorizados($usuario, $request);
+        $this->sincronizarTipotransaccionesStockAutorizadas($usuario, $request);
 
         return redirect('admin/usuario')->with('mensaje', 'Usuario creado con éxito');
     }
@@ -89,7 +91,7 @@ class UsuarioController extends Controller
     public function editar($id)
     {
         $rols = Rol::orderBy('id')->pluck('nombre', 'id')->toArray();
-        $data = Usuario::with(['roles', 'usuario_empresas', 'depositosAutorizados.empresas'])->findOrFail($id);
+        $data = Usuario::with(['roles', 'usuario_empresas', 'depositosAutorizados.empresas', 'tipotransaccionesStockAutorizadas'])->findOrFail($id);
         $empresa_query = $this->empresaRepository->all()->pluck('nombre', 'id')->toArray();
         $centrocosto_query = $this->centrocostoRepository->all()->toArray();
         $vendedor_query = $this->vendedorRepository->all()->pluck('nombre', 'id')->toArray();
@@ -147,6 +149,7 @@ class UsuarioController extends Controller
         $usuario->auditSync('usuario_empresas', $request->empresa_ids);
 
         $this->sincronizarDepositosAutorizados($usuario, $request);
+        $this->sincronizarTipotransaccionesStockAutorizadas($usuario, $request);
 
         return redirect('admin/usuario')->with('mensaje', 'Usuario actualizado con exito');
     }
@@ -167,6 +170,7 @@ class UsuarioController extends Controller
             $usuario->auditDetach('roles');
             $usuario->auditDetach('usuario_empresas');
             $usuario->auditDetach('depositosAutorizados');
+            $usuario->auditDetach('tipotransaccionesStockAutorizadas');
 
             Usuario::eliminarFoto($usuario->foto);
             $usuario->delete();
@@ -283,5 +287,23 @@ class UsuarioController extends Controller
         $validIds = UsuarioDepositoAutorizado::idsValidosParaEmpresas($depositoIds, $empresaIds);
 
         $usuario->auditSync('depositosAutorizados', $validIds);
+    }
+
+    private function sincronizarTipotransaccionesStockAutorizadas(Usuario $usuario, Request $request): void
+    {
+        $tipoIds = array_values(array_unique(array_filter(array_map(
+            'intval',
+            $request->input('tipotransaccion_stock_ids', [])
+        ))));
+
+        if ($tipoIds === []) {
+            $usuario->auditSync('tipotransaccionesStockAutorizadas', []);
+
+            return;
+        }
+
+        $validIds = UsuarioTipotransaccionStockAutorizado::idsValidos($tipoIds);
+
+        $usuario->auditSync('tipotransaccionesStockAutorizadas', $validIds);
     }
 }

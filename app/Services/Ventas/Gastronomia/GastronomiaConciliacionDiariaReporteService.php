@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 namespace App\Services\Ventas\Gastronomia;
 
+use App\Exports\Ventas\GastronomiaConciliacionDiariaReporteExport;
 use App\Mail\Ventas\GastronomiaConciliacionDiariaReporte;
 use App\Models\Configuracion\Empresa;
 use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
 use App\Models\Ventas\JornadaGastronomia;
+use App\Support\Ventas\Gastronomia\GastronomiaAnitaMesCacheSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionPorPcSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionPostCierreCaeaSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionGastroTotalDiaSupport;
+use App\Support\Ventas\Gastronomia\GastronomiaConciliacionRendgAsientosDiaSupport;
 use App\Support\Caja\AnitaSync\RendicionGastronomiaAnitaRendgastroSupport;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
@@ -26,7 +29,9 @@ final class GastronomiaConciliacionDiariaReporteService
         private readonly GastronomiaConciliacionPorPcSupport $conciliacionPorPcSupport,
         private readonly GastronomiaConciliacionPostCierreCaeaSupport $postCierreCaeaSupport,
         private readonly GastronomiaConciliacionGastroTotalDiaSupport $gastroTotalDiaSupport,
+        private readonly GastronomiaConciliacionRendgAsientosDiaSupport $rendgAsientosDiaSupport,
         private readonly RendicionGastronomiaAnitaRendgastroSupport $rendgastroSupport,
+        private readonly GastronomiaAnitaMesCacheSupport $anitaMesCacheSupport,
     ) {
     }
 
@@ -89,12 +94,16 @@ final class GastronomiaConciliacionDiariaReporteService
         string $fechaHasta,
         array $empresasIds,
         float $tolerancia = 0.02,
+        bool $forzarCacheAnita = true,
+        ?bool $usarCacheAnita = null,
     ): array {
         $desde = Carbon::parse($fechaDesde)->toDateString();
         $hasta = Carbon::parse($fechaHasta)->toDateString();
         if ($desde > $hasta) {
             throw new \InvalidArgumentException('fecha-desde no puede ser posterior a fecha-hasta.');
         }
+
+        $usarCache = $usarCacheAnita ?? (bool) config('gastronomia.conciliacion_diaria_reporte.usar_cache_anita', true);
 
         $empresas = [];
         foreach ($empresasIds as $empresaId) {
@@ -104,6 +113,19 @@ final class GastronomiaConciliacionDiariaReporteService
             }
 
             $empresa = Empresa::query()->find($empresaId);
+            $indiceAnitaBulk = null;
+            $cacheManifest = null;
+
+            if ($usarCache) {
+                $cacheManifest = $this->resolverIndiceAnitaBulk(
+                    $empresaId,
+                    $desde,
+                    $hasta,
+                    $forzarCacheAnita,
+                    $indiceAnitaBulk,
+                );
+            }
+
             $dias = [];
 
             foreach (CarbonPeriod::create($desde, $hasta) as $dia) {
@@ -111,13 +133,14 @@ final class GastronomiaConciliacionDiariaReporteService
                 if ($this->esJornadaPreMigracion($empresaId, $fechaJornada)) {
                     continue;
                 }
-                $dias[] = $this->armarDia($empresaId, $fechaJornada, $tolerancia);
+                $dias[] = $this->armarDia($empresaId, $fechaJornada, $tolerancia, $indiceAnitaBulk);
             }
 
             $empresas[] = [
                 'empresa_id' => $empresaId,
                 'empresa_nombre' => (string) ($empresa->nombre ?? 'Empresa '.$empresaId),
                 'dias' => $dias,
+                'anita_cache' => $cacheManifest,
             ];
         }
 
@@ -125,6 +148,7 @@ final class GastronomiaConciliacionDiariaReporteService
             'fecha_desde' => $desde,
             'fecha_hasta' => $hasta,
             'tolerancia' => $tolerancia,
+            'usar_cache_anita' => $usarCache,
             'empresas' => $empresas,
             'hay_diferencias' => $this->hayDiferencias(['empresas' => $empresas]),
         ];
@@ -144,6 +168,9 @@ final class GastronomiaConciliacionDiariaReporteService
                 }
                 if (! empty($dia['control_gastro_total'])) {
                     $filas[] = $this->filaCsvDesdeReporte($empresa, $dia, $dia['control_gastro_total']);
+                }
+                if (! empty($dia['control_rendg_asientos'])) {
+                    $filas[] = $this->filaCsvDesdeReporte($empresa, $dia, $dia['control_rendg_asientos']);
                 }
             }
         }
@@ -169,6 +196,7 @@ final class GastronomiaConciliacionDiariaReporteService
             'rendgastro_z_portadora', 'rendgastro_caea_campo', 'rendgastro_total',
             'diff_erp_anita', 'diff_erp_rendg', 'estado', 'cant_facturas',
             'nc_erp', 'nc_rendg', 'rendg_neto', 'rendg_legacy_z', 'fc_caea_duplicado',
+            'asiento_factura_dia', 'asiento_post_cierre', 'asientos_total', 'diff_rendg_asientos',
         ], ';');
         foreach ($filasCsv as $fila) {
             fputcsv($handle, $fila, ';');
@@ -197,7 +225,10 @@ final class GastronomiaConciliacionDiariaReporteService
         foreach ($informe['empresas'] ?? [] as $empresa) {
             foreach ($empresa['dias'] ?? [] as $dia) {
                 foreach ($dia['filas'] ?? [] as $fila) {
-                    if (in_array($fila['tipo_fila'] ?? '', ['pv_cae', 'pv_caea'], true)) {
+                    if (in_array($fila['tipo_fila'] ?? '', ['pv_cae', 'pv_caea', 'vending_rendg', 'total_vending'], true)) {
+                        continue;
+                    }
+                    if (($fila['estado'] ?? '') === 'RENDG') {
                         continue;
                     }
                     if (in_array($fila['estado'] ?? '', ['DIF', 'SIN RENDG'], true)) {
@@ -206,6 +237,10 @@ final class GastronomiaConciliacionDiariaReporteService
                 }
                 $ctrl = $dia['control_gastro_total'] ?? null;
                 if (is_array($ctrl) && ($ctrl['estado'] ?? '') === 'DIF') {
+                    return true;
+                }
+                $ctrlAsientos = $dia['control_rendg_asientos'] ?? null;
+                if (is_array($ctrlAsientos) && ($ctrlAsientos['estado'] ?? '') === 'DIF') {
                     return true;
                 }
             }
@@ -218,7 +253,17 @@ final class GastronomiaConciliacionDiariaReporteService
      * @param  array<string, mixed>  $informe
      * @return array{enviado: bool, destino?: string, error?: string}
      */
-    public function enviarCorreo(array $informe): array
+    public function construirContenidoExcel(array $informe): string
+    {
+        return GastronomiaConciliacionDiariaReporteExport::contenidoBinario($informe);
+    }
+
+    public function nombreArchivoExcel(array $informe): string
+    {
+        return GastronomiaConciliacionDiariaReporteExport::nombreArchivo($informe);
+    }
+
+    public function enviarCorreo(array $informe, bool $adjuntarExcel = true): array
     {
         $config = config('gastronomia.conciliacion_diaria_reporte', []);
         $destino = trim((string) ($config['email'] ?? ''));
@@ -233,10 +278,18 @@ final class GastronomiaConciliacionDiariaReporteService
 
         $informe['hay_diferencias'] = $this->hayDiferencias($informe);
         $csv = $this->construirContenidoCsv($filasCsv);
-        $nombre = $this->nombreArchivoCsv($informe);
+        $nombreCsv = $this->nombreArchivoCsv($informe);
+        $excel = $adjuntarExcel ? $this->construirContenidoExcel($informe) : null;
+        $nombreExcel = $adjuntarExcel ? $this->nombreArchivoExcel($informe) : null;
 
         try {
-            Mail::to($destino)->send(new GastronomiaConciliacionDiariaReporte($informe, $csv, $nombre));
+            Mail::to($destino)->send(new GastronomiaConciliacionDiariaReporte(
+                $informe,
+                $csv,
+                $nombreCsv,
+                $excel,
+                $nombreExcel,
+            ));
             Log::info('gastronomia.conciliacion_diaria_reporte.mail_ok', [
                 'destino' => $destino,
                 'fecha_desde' => $informe['fecha_desde'] ?? null,
@@ -270,86 +323,58 @@ final class GastronomiaConciliacionDiariaReporteService
      *   totales: array<string, float|null>
      * }
      */
-    private function armarDia(int $empresaId, string $fechaJornada, float $tolerancia): array
-    {
+    private function armarDia(
+        int $empresaId,
+        string $fechaJornada,
+        float $tolerancia,
+        ?array $indiceAnitaBulk = null,
+    ): array {
         $jornadaAbierta = $this->jornadaAbierta($empresaId, $fechaJornada);
-        $filasPc = $this->conciliacionPorPcSupport->filasDiaPorPc(
+        $conciliacion = $this->conciliacionPorPcSupport->conciliacionDiaCompleta(
             $empresaId,
             $fechaJornada,
             $tolerancia,
             $jornadaAbierta,
+            $indiceAnitaBulk,
         );
+        $filasPc = $conciliacion['filas_pc'];
         $filas = $this->conciliacionPorPcSupport->expandirFilasAuditoria($filasPc, $tolerancia);
 
-        $totales = [
-            'ventas_erp_cae' => 0.0,
-            'ventas_erp_caea' => 0.0,
-            'ventas_erp' => 0.0,
-            'ventas_anita_cae' => 0.0,
-            'ventas_anita_caea' => 0.0,
-            'ventas_anita' => 0.0,
-            'rendgastro_z' => 0.0,
-        ];
-        $algunaPcSinRendg = false;
+        $totales = $conciliacion['totales_salon'];
 
-        foreach ($filasPc as $fila) {
-            $totales['ventas_erp_cae'] += (float) ($fila['ventas_erp_cae'] ?? 0);
-            $totales['ventas_erp_caea'] += (float) ($fila['ventas_erp_caea'] ?? 0);
-            $totales['ventas_erp'] += (float) ($fila['ventas_erp'] ?? 0);
-            $totales['ventas_anita_cae'] += (float) ($fila['ventas_anita_cae'] ?? 0);
-            $totales['ventas_anita_caea'] += (float) ($fila['ventas_anita_caea'] ?? 0);
-            $totales['ventas_anita'] += (float) ($fila['ventas_anita'] ?? 0);
-            if (($fila['rendgastro_z'] ?? null) !== null) {
-                $totales['rendgastro_z'] += (float) $fila['rendgastro_z'];
-            } elseif (! $jornadaAbierta && (float) ($fila['ventas_erp'] ?? 0) > $tolerancia) {
-                $algunaPcSinRendg = true;
+        if ($filasPc !== []) {
+            $totalSalon = null;
+            foreach ($conciliacion['filas_totales'] as $filaTotal) {
+                if (($filaTotal['tipo_fila'] ?? '') === 'total_salon') {
+                    $totalSalon = $filaTotal;
+                    break;
+                }
+            }
+            if ($totalSalon !== null) {
+                $filas[] = $totalSalon;
             }
         }
 
-        foreach ($totales as $k => $v) {
-            $totales[$k] = round((float) $v, 2);
-        }
-
-        $totales['diff_erp_anita'] = round($totales['ventas_erp'] - $totales['ventas_anita'], 2);
-        $totales['diff_erp_rendg'] = ($jornadaAbierta || $algunaPcSinRendg)
-            ? null
-            : round($totales['ventas_erp'] - $totales['rendgastro_z'], 2);
-
-        if ($filasPc !== []) {
-            $filas[] = [
-                'tipo_fila' => 'total_salon',
-                'identificador_pc' => 'TOTAL-SALON',
-                'tipo_pv' => 'TOTAL',
-                'pv_codigo' => '—',
-                'descripcion_pc' => 'Total salón (suma PCs, sin post-cierre)',
-                'pv_cae' => '',
-                'pv_caea' => '',
-                'ventas_erp_cae' => $totales['ventas_erp_cae'],
-                'ventas_erp_caea' => $totales['ventas_erp_caea'],
-                'ventas_erp' => $totales['ventas_erp'],
-                'ventas_anita_cae' => $totales['ventas_anita_cae'],
-                'ventas_anita_caea' => $totales['ventas_anita_caea'],
-                'ventas_anita' => $totales['ventas_anita'],
-                'rendgastro_z' => ($jornadaAbierta || $algunaPcSinRendg) ? null : $totales['rendgastro_z'],
-                'diff_erp_anita' => $totales['diff_erp_anita'],
-                'diff_erp_rendg' => $totales['diff_erp_rendg'],
-                'estado' => $this->resolverEstado(
-                    (float) $totales['diff_erp_anita'],
-                    $totales['diff_erp_rendg'],
-                    $tolerancia,
-                ),
-                'jornada_abierta' => $jornadaAbierta,
-                'es_total' => true,
-            ];
-        }
-
-        $postCierre = $this->postCierreCaeaSupport->filaReporte($empresaId, $fechaJornada, $tolerancia);
+        $postCierre = $conciliacion['post_cierre'];
+        $agregados = $conciliacion['agregados_caea'] ?? [];
         $tienePostCierre = (int) ($postCierre['cantidad_facturas_erp'] ?? 0) > 0
             || (float) ($postCierre['ventas_erp'] ?? 0) > $tolerancia;
+        $tieneAgregados = (int) ($agregados['cantidad_facturas_erp'] ?? 0) > 0
+            || (float) ($agregados['ventas_erp'] ?? 0) > $tolerancia;
+        $tieneVending = (float) (($conciliacion['vending']['totales']['rendgastro_z'] ?? 0)) > $tolerancia;
 
-        if ($tienePostCierre) {
-            $filas[] = $postCierre;
-            $filas[] = $this->armarFilaTotalDia($totales, $postCierre, $jornadaAbierta, $tolerancia, $algunaPcSinRendg);
+        if ($tienePostCierre || $tieneAgregados || $tieneVending) {
+            foreach ($conciliacion['filas_totales'] as $filaTotal) {
+                if (in_array($filaTotal['tipo_fila'] ?? '', [
+                    'post_cierre_caea',
+                    'caea_agregados_migrados',
+                    'vending_rendg',
+                    'total_vending',
+                    'total_dia',
+                ], true)) {
+                    $filas[] = $filaTotal;
+                }
+            }
         }
 
         $controlGastro = $this->armarControlGastroTotal(
@@ -357,8 +382,20 @@ final class GastronomiaConciliacionDiariaReporteService
             $fechaJornada,
             $totales,
             $postCierre,
+            $agregados,
             $jornadaAbierta,
             $tolerancia,
+        );
+
+        $controlRendgAsientos = $this->rendgAsientosDiaSupport->armarControl(
+            $empresaId,
+            $fechaJornada,
+            $totales,
+            $postCierre,
+            $agregados,
+            $jornadaAbierta,
+            $tolerancia,
+            (float) ($controlGastro['notas_credito_rendg'] ?? 0),
         );
 
         return [
@@ -367,65 +404,16 @@ final class GastronomiaConciliacionDiariaReporteService
             'filas' => $filas,
             'totales' => $totales,
             'post_cierre_caea' => $postCierre,
+            'agregados_caea' => $agregados,
             'control_gastro_total' => $controlGastro,
-        ];
-    }
-
-    /**
-     * Total día = salón (PCs) + post-cierre CAEA (PV compartido, ej. Kandiko 00031).
-     *
-     * @param  array<string, float|null>  $totalesSalon
-     * @param  array<string, mixed>  $postCierre
-     * @return array<string, mixed>
-     */
-    private function armarFilaTotalDia(
-        array $totalesSalon,
-        array $postCierre,
-        bool $jornadaAbierta,
-        float $tolerancia,
-        bool $algunaPcSinRendg,
-    ): array {
-        $erpTotal = round((float) ($totalesSalon['ventas_erp'] ?? 0) + (float) ($postCierre['ventas_erp'] ?? 0), 2);
-        $anitaTotal = round((float) ($totalesSalon['ventas_anita'] ?? 0) + (float) ($postCierre['ventas_anita'] ?? 0), 2);
-        $rendgPost = $postCierre['rendgastro_z'] ?? null;
-        $rendgTotal = ($jornadaAbierta || $algunaPcSinRendg || $rendgPost === null)
-            ? null
-            : round((float) ($totalesSalon['rendgastro_z'] ?? 0) + (float) $rendgPost, 2);
-        $diffErpAnita = round($erpTotal - $anitaTotal, 2);
-        $diffErpRendg = $rendgTotal !== null ? round($erpTotal - $rendgTotal, 2) : null;
-
-        return [
-            'tipo_fila' => 'total_dia',
-            'identificador_pc' => 'TOTAL-DIA',
-            'tipo_pv' => 'TOTAL',
-            'pv_codigo' => '—',
-            'descripcion_pc' => 'Total día (salón + post-cierre CAEA)',
-            'pv_cae' => '',
-            'pv_caea' => (string) ($postCierre['pv_caea'] ?? '—'),
-            'ventas_erp_cae' => (float) ($totalesSalon['ventas_erp_cae'] ?? 0),
-            'ventas_erp_caea' => round(
-                (float) ($totalesSalon['ventas_erp_caea'] ?? 0) + (float) ($postCierre['ventas_erp'] ?? 0),
-                2,
-            ),
-            'ventas_erp' => $erpTotal,
-            'ventas_anita_cae' => (float) ($totalesSalon['ventas_anita_cae'] ?? 0),
-            'ventas_anita_caea' => round(
-                (float) ($totalesSalon['ventas_anita_caea'] ?? 0) + (float) ($postCierre['ventas_anita'] ?? 0),
-                2,
-            ),
-            'ventas_anita' => $anitaTotal,
-            'rendgastro_z' => $rendgTotal,
-            'diff_erp_anita' => $diffErpAnita,
-            'diff_erp_rendg' => $diffErpRendg,
-            'estado' => $this->resolverEstado($diffErpAnita, $diffErpRendg, $tolerancia),
-            'jornada_abierta' => $jornadaAbierta,
-            'es_total' => true,
+            'control_rendg_asientos' => $controlRendgAsientos,
         ];
     }
 
     /**
      * @param  array<string, float|null>  $totalesDia
      * @param  array<string, mixed>  $postCierre
+     * @param  array<string, mixed>  $agregados
      * @return array<string, mixed>
      */
     private function armarControlGastroTotal(
@@ -433,6 +421,7 @@ final class GastronomiaConciliacionDiariaReporteService
         string $fechaJornada,
         array $totalesDia,
         array $postCierre,
+        array $agregados,
         bool $jornadaAbierta,
         float $tolerancia,
     ): array {
@@ -445,9 +434,13 @@ final class GastronomiaConciliacionDiariaReporteService
             ? (float) ($totalesDia['rendgastro_z'] ?? 0)
             : null;
         $rendgPost = $postCierre['rendgastro_z'] ?? null;
+        $rendgAgregados = $agregados['rendgastro_z'] ?? null;
         $rendgBruto = $jornadaAbierta || $rendgPc === null
             ? null
-            : round($rendgPc + (float) ($rendgPost ?? 0), 2);
+            : round(
+                $rendgPc + (float) ($rendgPost ?? 0) + (float) ($rendgAgregados ?? 0),
+                2,
+            );
 
         $ncRendg = null;
         $rendgNeto = null;
@@ -544,6 +537,27 @@ final class GastronomiaConciliacionDiariaReporteService
             $tipo = 'post_cierre_caea';
         } elseif ($tipo === 'pc' && ! empty($fila['es_control_gastro_total'])) {
             $tipo = 'control_gastro_total';
+        } elseif (! empty($fila['es_control_rendg_asientos'])) {
+            $tipo = 'control_rendg_asientos';
+        }
+
+        $asientoFacturaDia = '';
+        $asientoPostCierre = '';
+        $asientosTotal = '';
+        $diffRendgAsientos = '';
+        $rendgZPortadora = $fila['rendgastro_z_cae'] ?? '';
+        $rendgCaea = $fila['rendgastro_caea'] ?? '';
+        $rendgTotal = $fila['rendgastro_z'] ?? '';
+        $rendgNeto = $fila['rendgastro_neto'] ?? '';
+        if (! empty($fila['es_control_rendg_asientos'])) {
+            $asientoFacturaDia = $fila['asientos_factura_dia'] ?? '';
+            $asientoPostCierre = $fila['asientos_post_cierre'] ?? '';
+            $asientosTotal = $fila['asientos_total'] ?? '';
+            $diffRendgAsientos = $fila['diff_rendg_asientos'] ?? '';
+            $rendgZPortadora = $fila['rendg_salon'] ?? '';
+            $rendgCaea = $fila['rendg_post_cierre'] ?? '';
+            $rendgTotal = $fila['rendg_total'] ?? '';
+            $rendgNeto = $fila['rendg_total'] ?? '';
         }
 
         return [
@@ -562,27 +576,23 @@ final class GastronomiaConciliacionDiariaReporteService
             $fila['ventas_anita_cae'] ?? 0,
             $fila['ventas_anita_caea'] ?? 0,
             $fila['ventas_anita'] ?? 0,
-            $fila['rendgastro_z_cae'] ?? '',
-            $fila['rendgastro_caea'] ?? '',
-            $fila['rendgastro_z'] ?? '',
+            $rendgZPortadora,
+            $rendgCaea,
+            $rendgTotal,
             $fila['diff_erp_anita'] ?? '',
             $fila['diff_erp_rendg'] ?? '',
             $fila['estado'] ?? '',
-            $fila['cantidad_facturas_erp'] ?? '',
+            $fila['cantidad_facturas_erp'] ?? ($fila['asientos_cantidad'] ?? ''),
             $fila['notas_credito_erp'] ?? '',
             $fila['notas_credito_rendg'] ?? '',
-            $fila['rendgastro_neto'] ?? '',
+            $rendgNeto,
             $fila['rendg_legacy_z'] ?? '',
             $fila['fc_caea_duplicado'] ?? '',
+            $asientoFacturaDia,
+            $asientoPostCierre,
+            $asientosTotal,
+            $diffRendgAsientos,
         ];
-    }
-
-    private function resolverEstado(float $diffErpAnita, ?float $diffErpRendg, float $tolerancia): string
-    {
-        $okAnita = abs($diffErpAnita) <= $tolerancia;
-        $okRendg = $diffErpRendg === null || abs($diffErpRendg) <= $tolerancia;
-
-        return ($okAnita && $okRendg) ? 'OK' : 'DIF';
     }
 
     private function esJornadaPreMigracion(int $empresaId, string $fechaJornada): bool
@@ -614,5 +624,40 @@ final class GastronomiaConciliacionDiariaReporteService
         }
 
         return (string) ($jornada->estado ?? '') === JornadaGastronomia::ESTADO_CERRADA;
+    }
+
+    /**
+     * @param  array<int, array<string, array<string, object>>>|null  $indiceAnitaBulk
+     * @return array<string, mixed>|null
+     */
+    private function resolverIndiceAnitaBulk(
+        int $empresaId,
+        string $fechaDesde,
+        string $fechaHasta,
+        bool $forzarDescarga,
+        ?array &$indiceAnitaBulk,
+    ): ?array {
+        $cache = $this->anitaMesCacheSupport->resolverVentaCache(
+            $empresaId,
+            $fechaDesde,
+            $fechaHasta,
+            $forzarDescarga,
+        );
+        $pvPorSucursal = $this->anitaMesCacheSupport->puntoventasPorSucursalEmpresa($empresaId);
+        $indiceAnitaBulk = $this->anitaMesCacheSupport->indexarCabecerasPorSucursalJornada(
+            $cache['venta'],
+            $pvPorSucursal,
+        );
+
+        Log::info('gastronomia.conciliacion_diaria_reporte.cache_anita', [
+            'empresa_id' => $empresaId,
+            'fecha_desde' => $fechaDesde,
+            'fecha_hasta' => $fechaHasta,
+            'cabeceras' => count($cache['venta']),
+            'directorio' => $cache['manifest']['directorio'] ?? null,
+            'generado_at' => $cache['manifest']['generado_at'] ?? null,
+        ]);
+
+        return $cache['manifest'];
     }
 }

@@ -185,12 +185,11 @@ final class RecuentoMovimientosArticuloSupport
 
     public static function etiquetaDeposito(array $deposito): string
     {
-        $partes = array_filter([
-            $deposito['codigo'] ?? '',
-            $deposito['nombre'] ?? '',
-        ], fn ($v) => trim((string) $v) !== '');
-
-        return $partes !== [] ? implode(' — ', $partes) : ('ID '.($deposito['id'] ?? ''));
+        return Depmae::etiquetaDesdePartes(
+            (string) ($deposito['codigo'] ?? ''),
+            (string) ($deposito['nombre'] ?? ''),
+            (int) ($deposito['id'] ?? 0)
+        );
     }
 
     private static function queryBase(int $articuloId): Builder

@@ -11,6 +11,7 @@ use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Ventas\Venta;
 use App\Models\Stock\MovimientoStock;
 use App\Models\Caja\Cobranza;
+use App\Models\Seguridad\Usuario;
 use Auth;
 
 class Asiento extends Model implements Auditable

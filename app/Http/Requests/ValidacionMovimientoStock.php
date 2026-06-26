@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Tipotransaccion_Stock;
 use App\Support\Stock\TransferenciaBienUsoSupport;
+use App\Support\Stock\UsuarioTipotransaccionStockAutorizado;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -72,6 +73,13 @@ class ValidacionMovimientoStock extends FormRequest
 
             $tipoId = (int) ($this->input('tipotransaccion_stock_id') ?: $this->input('tipotransaccion_id'));
             $tipo = $tipoId > 0 ? Tipotransaccion_Stock::query()->find($tipoId) : null;
+
+            if ($tipoId > 0 && ! UsuarioTipotransaccionStockAutorizado::tipotransaccionAutorizada($tipoId)) {
+                $validator->errors()->add(
+                    'tipotransaccion_stock_id',
+                    'El tipo de transacción seleccionado no está autorizado para su usuario.'
+                );
+            }
 
             if ($tipo && (bool) $tipo->maneja_contabilidad && ! $this->validarComoTransferenciaNueva()) {
                 $ccDestino = (int) $this->input('centrocosto_destino_id', 0);

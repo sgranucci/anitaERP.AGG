@@ -3,6 +3,7 @@
 namespace App\Repositories\Compras;
 
 use App\Models\Compras\Requisicion;
+use App\Support\Compras\RequisicionAnitaNumeracionSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class RequisicionRepository implements RequisicionRepositoryInterface
@@ -17,7 +18,7 @@ class RequisicionRepository implements RequisicionRepositoryInterface
     public function create(array $data)
     {
         $data = self::limpiaPayloadCabecera($data);
-        $data['numerorequisicion'] = self::ultimaRequisicion($data['empresa_id']);
+        $data['numerorequisicion'] = RequisicionAnitaNumeracionSupport::asignarNumeroGlobalLibre();
 
         return $this->model->create($data);
     }
@@ -90,11 +91,4 @@ class RequisicionRepository implements RequisicionRepositoryInterface
         return $this->find($id);
     }
 
-    private function ultimaRequisicion($empresa_id)
-    {
-        $ultimo = $this->model->select('numerorequisicion')->where('empresa_id', $empresa_id)
-            ->orderBy('numerorequisicion', 'desc')->first();
-
-        return $ultimo ? ((int) $ultimo->numerorequisicion + 1) : 1;
-    }
 }

@@ -45,7 +45,7 @@
             <td class="lbl">Estado</td><td>{{ \App\Models\Stock\Recuento::etiquetaEstado($recuento->estado) }}</td>
         </tr>
         <tr>
-            <td class="lbl">Depósito</td><td>{{ optional($recuento->deposito)->nombre }}</td>
+            <td class="lbl">Depósito</td><td>{{ optional($recuento->deposito)->etiqueta() }}</td>
             <td class="lbl">Usuario</td><td>{{ optional($recuento->usuario)->nombre }}</td>
         </tr>
         <tr>

@@ -1013,6 +1013,8 @@ Route::get('stock/tipotransaccion_stock/{id}/editar', 'Stock\Tipotransaccion_Sto
 Route::put('stock/tipotransaccion_stock/{id}', 'Stock\Tipotransaccion_StockController@actualizar')->name('actualizar_tipotransaccion_stock');
 Route::delete('stock/tipotransaccion_stock/{id}', 'Stock\Tipotransaccion_StockController@eliminar')->name('eliminar_tipotransaccion_stock');
 Route::get('stock/leertipotransaccion_stock/{id}', 'Stock\Tipotransaccion_StockController@leer')->name('leer_tipotransaccion_stock');
+Route::post('stock/tipotransaccion_stock/consultatipotransaccion', 'Stock\Tipotransaccion_StockController@consultaTipotransaccionStock')->name('consulta_tipotransaccion_stock');
+Route::get('stock/tipotransaccion_stock/leer/{abreviatura}', 'Stock\Tipotransaccion_StockController@leeUnTipotransaccionPorAbreviatura')->name('leer_tipotransaccion_stock_abreviatura');
 
 /*
  * Transferencia ágil de mercadería (móvil / tablet)
@@ -1032,6 +1034,8 @@ Route::get('stock/reporte-movimientos-bien-uso', 'Stock\BienUsoMovimientoReporte
 Route::get('stock/listar-reporte-movimientos-bien-uso/{formato?}', 'Stock\BienUsoMovimientoReporteController@exportar')->name('listar_reporte_movimientos_bien_uso');
 Route::get('stock/reporte-transferencias-pendientes', 'Stock\TransferenciaPendienteReporteController@index')->name('reporte_transferencias_pendientes');
 Route::get('stock/listar-reporte-transferencias-pendientes/{formato?}', 'Stock\TransferenciaPendienteReporteController@exportar')->name('listar_reporte_transferencias_pendientes');
+Route::get('stock/informes-de-stock/existencias-por-deposito', 'Stock\ExistenciasDepositoReporteController@index')->name('reporte_existencias_deposito');
+Route::get('stock/listar-reporte-existencias-deposito/{formato?}', 'Stock\ExistenciasDepositoReporteController@exportar')->name('listar_reporte_existencias_deposito');
 
 /*
  * Préstamos de materiales
@@ -1522,6 +1526,15 @@ Route::post('ventas/gastronomia/saneamiento-turno/api/cerrar-turno-remoto', 'Ven
 Route::post('ventas/gastronomia/saneamiento-turno/api/recalcular-totales', 'Ventas\GastronomiaSaneamientoTurnoController@apiRecalcularTotales')->name('gastronomia_saneamiento_turno_api_recalcular_totales');
 Route::post('ventas/gastronomia/saneamiento-turno/api/cerrar-cuentas-pendientes', 'Ventas\GastronomiaSaneamientoTurnoController@apiCerrarCuentasPendientes')->name('gastronomia_saneamiento_turno_api_cerrar_cuentas');
 Route::get('ventas/gastronomia/saneamiento-turno/informe-pdf', 'Ventas\GastronomiaSaneamientoTurnoController@informePdf')->name('gastronomia_saneamiento_turno_informe_pdf');
+
+Route::get('ventas/gastronomia/cierre-turno-central', 'Ventas\CierreTurnoCentralGastronomiaController@index')->name('gastronomia_cierre_turno_central')->middleware('modo.consulta');
+Route::get('ventas/gastronomia/cierre-turno-central/api/turnos', 'Ventas\CierreTurnoCentralGastronomiaController@apiListarTurnos')->name('gastronomia_cierre_turno_central_api_turnos');
+Route::get('ventas/gastronomia/cierre-turno-central/api/estado-turno', 'Ventas\CierreTurnoCentralGastronomiaController@apiEstadoTurno')->name('gastronomia_cierre_turno_central_api_estado_turno');
+Route::get('ventas/gastronomia/cierre-turno-central/api/conciliacion-turno', 'Ventas\CierreTurnoCentralGastronomiaController@apiConciliacionTurno')->name('gastronomia_cierre_turno_central_api_conciliacion_turno');
+Route::get('ventas/gastronomia/cierre-turno-central/api/conciliacion-medio', 'Ventas\CierreTurnoCentralGastronomiaController@apiConciliacionMedio')->name('gastronomia_cierre_turno_central_api_conciliacion_medio');
+Route::get('ventas/gastronomia/cierre-turno-central/api/conciliacion-notas-credito', 'Ventas\CierreTurnoCentralGastronomiaController@apiConciliacionNotasCredito')->name('gastronomia_cierre_turno_central_api_conciliacion_notas_credito');
+Route::get('ventas/gastronomia/cierre-turno-central/api/conciliacion-invitaciones', 'Ventas\CierreTurnoCentralGastronomiaController@apiConciliacionInvitaciones')->name('gastronomia_cierre_turno_central_api_conciliacion_invitaciones');
+Route::post('ventas/gastronomia/cierre-turno-central/api/cerrar', 'Ventas\CierreTurnoCentralGastronomiaController@apiCerrar')->name('gastronomia_cierre_turno_central_api_cerrar');
 
 Route::get('ventas/gastronomia/facturas-dia', 'Ventas\GastronomiaFacturasDiaController@index')->name('gastronomia_facturas_dia')->middleware('modo.consulta');
 Route::get('ventas/lista-gastronomia-facturas-dia/{formato}', 'Ventas\GastronomiaFacturasDiaController@exportar')->name('listar_gastronomia_facturas_dia');

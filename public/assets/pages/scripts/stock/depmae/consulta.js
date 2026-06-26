@@ -127,6 +127,9 @@ $('input').keydown(function (e) {
     if ($(this).is('.codigodeposito, #consultadeposito')) {
         return;
     }
+    if ($(this).is('#filtro_valor, #filtro_valor_panel') || $(this).attr('name') === 'filtro_valor') {
+        return;
+    }
     if ($(this).closest('#tabla-recuento-items').length) {
         return;
     }

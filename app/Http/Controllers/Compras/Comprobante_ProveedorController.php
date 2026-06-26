@@ -14,6 +14,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Compras\ComprobanteProveedorPersistenciaService;
 use App\Services\Compras\ComprobanteProveedorPrefillService;
 use App\Services\Compras\ComprobanteProveedorRecepcionesSupport;
+use App\Services\Compras\ComprobanteProveedorComLegajoResolucionService;
 use App\Services\Compras\ComprobanteProveedorContabilizarService;
 use App\Services\Compras\ComprobanteProveedorAsientoService;
 use App\Support\Compras\ComprobanteProveedorArchivoPathSupport;
@@ -24,6 +25,7 @@ use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorAsientoPreviewSupport;
 use App\Support\Compras\PrecargaFacturaScanPathResolver;
 use App\Models\Compras\Ordencompra;
+use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorNumeroOcSupport;
 use App\Services\Arca\ConstanciaInscripcionService;
 use App\Support\Ventas\ArcaPadronImpuestosClienteValidacion;
@@ -47,6 +49,7 @@ class Comprobante_ProveedorController extends Controller
         private ComprobanteProveedorAsientoService $asientoService,
         private ComprobanteProveedorAsientoPreviewSupport $asientoPreviewSupport,
         private PrecargaProveedorNumeroOcSupport $numeroOcSupport,
+        private ComprobanteProveedorComLegajoResolucionService $comLegajoResolucion,
     ) {}
 
     public function index(Request $request)
@@ -261,9 +264,15 @@ class Comprobante_ProveedorController extends Controller
                 ->with('errores', ['No se pudo generar el comprobante: '.$e->getMessage()]);
         }
 
+        $mensaje = 'Comprobante generado desde precarga. Revise datos y conceptos.';
+        if ($comprobante->modo_carga === ComprobanteProveedorModoCarga::ASIGNA_RECEPCION
+            && $comprobante->comprobante_proveedor_recepciones->isEmpty()) {
+            $mensaje = 'Comprobante generado desde precarga. Hay COM sin facturar en el legajo: seleccione la recepción correcta antes de contabilizar.';
+        }
+
         return redirect()
             ->route('editar_comprobante_proveedor', ['id' => $comprobante->id])
-            ->with('mensaje', 'Comprobante generado desde precarga. Revise datos y conceptos.');
+            ->with('mensaje', $mensaje);
     }
 
     public function contabilizar(int $id)
@@ -428,11 +437,19 @@ class Comprobante_ProveedorController extends Controller
         $ordencompraId = (int) ($data->ordencompra_id ?? 0);
         $comprobanteId = $data->id ?? null;
 
-        $recepcionesDisponibles = $ordencompraId > 0
-            ? $this->recepcionesSupport->listarDisponibles($ordencompraId, $comprobanteId)
-            : collect();
+        $recepcionesDisponibles = $this->resolverRecepcionesDisponiblesFormulario($data, $ordencompraId, $comprobanteId);
 
-        $recepcionesSeleccionadas = [];
+        if (($prefill['recepciones_disponibles'] ?? null) instanceof \Illuminate\Support\Collection
+            && $prefill['recepciones_disponibles']->isNotEmpty()) {
+            $recepcionesDisponibles = $prefill['recepciones_disponibles']
+                ->merge($recepcionesDisponibles)
+                ->unique('id')
+                ->values();
+        }
+
+        $recepcionesDisponibles = $this->recepcionesSupport->enriquecerConImporteProvision($recepcionesDisponibles);
+
+        $recepcionesSeleccionadas = $prefill['recepciones_seleccionadas'] ?? [];
         $contabilizado = ($data->estado ?? '') === ComprobanteProveedorEstados::CONTABILIZADO;
         $asientoPreview = ['activo' => ! $contabilizado, 'es_preview' => true, 'lineas' => []];
 
@@ -463,11 +480,81 @@ class Comprobante_ProveedorController extends Controller
             'estados' => ComprobanteProveedorEstados::todos(),
             'recepciones_disponibles' => $recepcionesDisponibles,
             'recepciones_seleccionadas' => $recepcionesSeleccionadas,
+            'com_resolucion' => $prefill['com_resolucion'] ?? $this->resolverComResolucionFormulario($data, $recepcionesSeleccionadas),
             'asientoPreview' => $asientoPreview,
             'mostrarSolapaAsiento' => ! $contabilizado,
             'conceptos_cuenta_meta' => $this->asientoPreviewSupport->metaConceptosParaCliente(
                 $this->conceptoIvacompraRepository->all()
             ),
         ]);
+    }
+
+    private function resolverRecepcionesDisponiblesFormulario(
+        mixed $data,
+        int $ordencompraId,
+        mixed $comprobanteId,
+    ): \Illuminate\Support\Collection {
+        $coleccion = collect();
+
+        if ($ordencompraId > 0) {
+            $coleccion = $this->recepcionesSupport->listarDisponibles($ordencompraId, $comprobanteId);
+        }
+
+        $proveedorId = (int) ($data->proveedor_id ?? 0);
+        $empresaId = (int) ($data->empresa_id ?? 0);
+        if ($proveedorId <= 0 || $empresaId <= 0) {
+            return $coleccion;
+        }
+
+        $data?->loadMissing('ordencompras');
+        $sectorId = $data?->ordencompras?->sector_legajocompra_id;
+        if (! $sectorId && $ordencompraId > 0) {
+            $sectorId = Ordencompra::query()->whereKey($ordencompraId)->value('sector_legajocompra_id');
+        }
+
+        $legajo = $this->recepcionesSupport->listarSinFacturarEnLegajo(
+            $proveedorId,
+            $empresaId,
+            $sectorId ? (int) $sectorId : null,
+            $comprobanteId,
+        );
+
+        return $legajo->merge($coleccion)->unique('id')->values();
+    }
+
+    /** @param list<int> $recepcionesSeleccionadas */
+    private function resolverComResolucionFormulario(mixed $data, array $recepcionesSeleccionadas): ?array
+    {
+        if (! $data || ($data->modo_carga ?? '') !== ComprobanteProveedorModoCarga::ASIGNA_RECEPCION) {
+            return null;
+        }
+
+        $precargaId = (int) ($data->precarga_comprobante_proveedor_id ?? 0);
+        if ($precargaId <= 0) {
+            return null;
+        }
+
+        $precarga = Precarga_Comprobante_Proveedor::query()
+            ->with(['proveedores', 'precarga_comprobante_proveedor_conceptos'])
+            ->find($precargaId);
+
+        if (! $precarga) {
+            return null;
+        }
+
+        $data->loadMissing('ordencompras');
+        $resolucion = $this->comLegajoResolucion->resolverDesdePrecarga($precarga, $data->ordencompras);
+
+        if ($recepcionesSeleccionadas !== []) {
+            return [
+                'ambigua' => false,
+                'mensaje' => null,
+                'importe_comparacion' => $resolucion['com_resolucion']['importe_comparacion'],
+                'importe_comparacion_etiqueta' => $resolucion['com_resolucion']['importe_comparacion_etiqueta'],
+                'ordencompra_id' => (int) ($data->ordencompra_id ?? 0) ?: null,
+            ];
+        }
+
+        return $resolucion['com_resolucion'];
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Models\Stock;
 
+use App\Support\Stock\UsuarioTipotransaccionStockAutorizado;
 use App\Traits\Stock\Tipotransaccion_StockTrait;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -21,6 +22,20 @@ class Tipotransaccion_Stock extends Model
     ];
 
     protected $table = 'tipotransaccion_stock';
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder<self>  $query
+     * @return \Illuminate\Database\Eloquent\Builder<self>
+     */
+    public function scopeParaUsuarioAutorizado($query)
+    {
+        return UsuarioTipotransaccionStockAutorizado::aplicarFiltroQuery($query);
+    }
+
+    public static function autorizadoParaUsuario(int $tipotransaccionStockId): bool
+    {
+        return UsuarioTipotransaccionStockAutorizado::tipotransaccionAutorizada($tipotransaccionStockId);
+    }
 
     public function setSignoAttribute($signo)
     {

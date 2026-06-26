@@ -8,10 +8,12 @@ use App\Models\Caja\RendicionGastronomiaSecuenciaEmpresa;
 use App\Support\Caja\AnitaSync\RendicionGastronomiaAnitaContextBuilder;
 use App\Support\Caja\AnitaSync\RendicionGastronomiaAnitaIdempotenciaSupport;
 use App\Support\Caja\AnitaSync\RendicionGastronomiaAnitaTotalZPorPcService;
+use App\Support\Caja\AnitaSync\RendicionGastronomiaAnitaRendgastroSupport;
 use App\Support\Caja\AnitaSync\RendicionGastronomiaCabeceraAnitaMapper;
 use App\Support\Caja\AnitaSync\RendicionGastronomiaValorAnitaMapper;
 use App\Support\Caja\RendicionGastronomiaNroOperPisoSupport;
 use App\Support\Caja\RendicionGastronomiaSecuenciaSupport;
+use App\Support\Ventas\Gastronomia\CierreJornadaProcesoRendicionAnitaSupport;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -53,6 +55,7 @@ class RendicionGastronomiaAnitaSyncService
 
         $turnoId = (int) ($rendicion->turno_operativo_gastronomia_id ?? 0);
         $empresaId = (int) ($rendicion->empresa_id ?? 0);
+        $rendgHost = RendicionGastronomiaAnitaIdempotenciaSupport::hostDesdeRendicion($rendicion);
         $api = new ApiAnita;
         $tipoOper = $this->tipoOper();
 
@@ -63,6 +66,7 @@ class RendicionGastronomiaAnitaSyncService
             $tipoOper,
             $this->tablaCabecera(),
             $this->sistema(),
+            $rendgHost,
         );
 
         $canonico = RendicionGastronomiaAnitaIdempotenciaSupport::resolverYAlinearNroOper(
@@ -82,6 +86,7 @@ class RendicionGastronomiaAnitaSyncService
             $tipoOper,
             $this->tablaCabecera(),
             $this->sistema(),
+            $rendgHost,
         );
 
         $eliminados = array_values(array_diff($antes, $despues));
@@ -189,6 +194,7 @@ class RendicionGastronomiaAnitaSyncService
 
         try {
             if ($cabeceraPreexistente) {
+                $this->assertPuedeActualizarCabeceraDesdeContexto($ctx);
                 if ($rendicion !== null) {
                     $this->actualizarEnAnitaConTotalZ($rendicion, $ctx['total_z'] ?? null);
                 } else {
@@ -209,6 +215,7 @@ class RendicionGastronomiaAnitaSyncService
                 $cabeceraInsertadaEnEsteIntento = true;
             } catch (\RuntimeException $e) {
                 if ($this->esErrorDuplicadoInformix($e)) {
+                    $this->assertPuedeActualizarCabeceraDesdeContexto($ctx);
                     if ($rendicion !== null) {
                         $this->actualizarEnAnitaConTotalZ($rendicion, $ctx['total_z'] ?? null);
                     } else {
@@ -268,6 +275,50 @@ class RendicionGastronomiaAnitaSyncService
         $this->insertarValores($api, $ctx);
     }
 
+    /**
+     * Post-cierre Waitry: no pisar cabecera de otra jornada (evita mover rendg_fecha / nro_rend_vta).
+     *
+     * @param  array<string, mixed>  $ctx
+     */
+    private function assertPuedeActualizarCabeceraDesdeContexto(array $ctx): void
+    {
+        if (! $this->esContextoPostCierreWaitry($ctx)) {
+            return;
+        }
+
+        $nroOper = (int) ($ctx['nro_oper'] ?? 0);
+        $jornadaId = (int) ($ctx['nro_rend_vta'] ?? 0);
+        $empresaId = (int) ($ctx['empresa_id'] ?? 0);
+        if ($nroOper <= 0 || $jornadaId <= 0 || $empresaId <= 0) {
+            return;
+        }
+
+        $cab = app(RendicionGastronomiaAnitaRendgastroSupport::class)->listarCabeceraPorNroOper(
+            $empresaId,
+            $nroOper,
+            (string) ($ctx['tipo_oper'] ?? $this->tipoOper()),
+        );
+        if ($cab === null) {
+            return;
+        }
+
+        $cabJornadaId = (int) ($cab->rendg_nro_rend_vta ?? 0);
+        if ($cabJornadaId > 0 && $cabJornadaId !== $jornadaId) {
+            throw new \RuntimeException(
+                'nro_oper '.$nroOper.' ya pertenece a la jornada #'.$cabJornadaId
+                .'; no se puede grabar post-cierre de la jornada #'.$jornadaId.'.',
+            );
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $ctx
+     */
+    private function esContextoPostCierreWaitry(array $ctx): bool
+    {
+        return strtoupper(trim((string) ($ctx['host'] ?? ''))) === CierreJornadaProcesoRendicionAnitaSupport::HOST;
+    }
+
     public function existsCabeceraEnAnitaPorNroOper(int $nroOper, ?string $tipoOper = null): bool
     {
         if ($nroOper <= 0) {
@@ -300,6 +351,35 @@ class RendicionGastronomiaAnitaSyncService
     public function resetTotalZPorPcEnJornada(int $jornadaId): void
     {
         app(RendicionGastronomiaAnitaTotalZPorPcService::class)->resetTotalZEnJornada($jornadaId);
+    }
+
+    /**
+     * Marca rendg_estado = 'F' en cabecera rendgastro (p. ej. CIERRE-WAITRY post-cierre).
+     */
+    public function marcarEstadoFinalPorNroOper(int $nroOper, ?string $tipoOper = null): void
+    {
+        if (! $this->sincronizacionHabilitada()) {
+            return;
+        }
+
+        if ($nroOper <= 0) {
+            throw new \InvalidArgumentException('nro_oper inválido para marcar estado F.');
+        }
+
+        $tipoOper = $tipoOper ?? $this->tipoOper();
+        $api = new ApiAnita;
+        $respuesta = $api->apiCallEscritura([
+            'acc' => 'update',
+            'tabla' => $this->tablaCabecera(),
+            'sistema' => $this->sistema(),
+            'valores' => " rendg_estado = 'F' ",
+            'whereArmado' => RendicionGastronomiaCabeceraAnitaMapper::whereClave($nroOper, $tipoOper),
+        ], 'rendgastro estado F', self::LOG_EVENTO);
+
+        if (! ApiAnita::respuestaBridgeEscrituraExitosa($respuesta)) {
+            $err = ApiAnita::extraerMensajeError($respuesta) ?? trim((string) $respuesta);
+            throw new \RuntimeException('No se pudo marcar rendg_estado=F en #'.$nroOper.': '.$err);
+        }
     }
 
     /**

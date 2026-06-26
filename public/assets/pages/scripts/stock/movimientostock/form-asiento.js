@@ -10,8 +10,9 @@ $(function () {
     var previewXhr = null;
 
     function tipoManejaContabilidad() {
-        var $opt = $('#tipotransaccion_stock_id option:selected');
-        return $opt.data('maneja-contabilidad') === 1 || $opt.data('manejaContabilidad') === 1;
+        return typeof window.msTipoTransaccionMeta === 'function'
+            ? window.msTipoTransaccionMeta().manejaContabilidad
+            : false;
     }
 
     function mostrarSolapa(sel) {

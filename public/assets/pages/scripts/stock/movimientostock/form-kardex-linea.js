@@ -2,7 +2,15 @@
     'use strict';
 
     function operacionTipo() {
-        return String($('#tipotransaccion_stock_id option:selected').attr('data-operacion') || '').trim();
+        return typeof window.msOperacionTipoTransaccion === 'function'
+            ? window.msOperacionTipoTransaccion()
+            : '';
+    }
+
+    function metaTipo() {
+        return typeof window.msTipoTransaccionMeta === 'function'
+            ? window.msTipoTransaccionMeta()
+            : { origenBienUso: false, destinoBienUso: false };
     }
 
     function opcionDeposito(id, codigo, nombre, prefijo) {
@@ -32,8 +40,8 @@
         var opciones = [];
 
         if (op === 'T') {
-            var origenBien = String($('#tipotransaccion_stock_id option:selected').attr('data-origen-bien-uso') || '') === '1';
-            var destinoBien = String($('#tipotransaccion_stock_id option:selected').attr('data-destino-bien-uso') || '') === '1';
+            var origenBien = metaTipo().origenBienUso;
+            var destinoBien = metaTipo().destinoBienUso;
 
             if (!origenBien && $('#tm_deposito_salida').is(':visible')) {
                 var o = opcionDeposito(

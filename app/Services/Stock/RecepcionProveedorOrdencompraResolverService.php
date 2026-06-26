@@ -6,6 +6,7 @@ use App\Models\Compras\Ordencompra;
 use App\Repositories\Compras\OrdencompraRepositoryInterface;
 use App\Services\Compras\OrdencompraAnitaSyncService;
 use App\Support\Compras\ArticuloProveedorPrecioListaSupport;
+use App\Support\Stock\RecepcionProveedorCentrocostoLineaSupport;
 use App\Support\Stock\RecepcionProveedorDiferenciaSupport;
 use App\Support\Stock\RecepcionProveedorConversionSupport;
 use App\Support\Stock\RecepcionProveedorDepositoSupport;
@@ -49,6 +50,7 @@ class RecepcionProveedorOrdencompraResolverService
         }
 
         $this->ensurePenvpOrdenEnLineasOc($oc);
+        RecepcionProveedorCentrocostoLineaSupport::assertOcRecepcionable($oc);
 
         return [
             'cabecera' => $oc,
@@ -64,6 +66,7 @@ class RecepcionProveedorOrdencompraResolverService
 
         $oc = $this->ordencompraRepository->find($ordencompraId);
         $this->ensurePenvpOrdenEnLineasOc($oc);
+        RecepcionProveedorCentrocostoLineaSupport::assertOcRecepcionable($oc);
 
         return [
             'cabecera' => $oc,

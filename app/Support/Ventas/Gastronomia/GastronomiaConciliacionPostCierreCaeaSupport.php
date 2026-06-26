@@ -22,6 +22,7 @@ final class GastronomiaConciliacionPostCierreCaeaSupport
     public function __construct(
         private readonly GastronomiaChequeoVentasAnitaErpService $chequeoVentasService,
         private readonly RendicionGastronomiaAnitaRendgastroSupport $rendgastroSupport,
+        private readonly GastronomiaConciliacionExclusionEmisionSupport $exclusionEmisionSupport,
     ) {
     }
 
@@ -39,7 +40,7 @@ final class GastronomiaConciliacionPostCierreCaeaSupport
      *   jornada_id: int|null
      * }
      */
-    public function totalesDia(int $empresaId, string $fechaJornada): array
+    public function totalesDia(int $empresaId, string $fechaJornada, ?array $indiceAnitaBulk = null): array
     {
         $pvCaea = $this->puntoventaCaeaEmpresa($empresaId);
         $pvCaeaCodigo = (string) ($pvCaea?->codigo ?? '—');
@@ -81,10 +82,17 @@ final class GastronomiaConciliacionPostCierreCaeaSupport
         }
 
         $cacheCabeceras = [];
+        $clavesExcluir = $this->exclusionEmisionSupport->clavesExcluirConciliacion(
+            $empresaId,
+            $fechaJornada,
+            $indiceAnitaBulk,
+        );
         $anitaTotal = $this->chequeoVentasService->totalFacturacionBrutaAnitaParaVentasIds(
             $ventaIds,
             $fechaJornada,
             $cacheCabeceras,
+            $clavesExcluir,
+            $indiceAnitaBulk,
         );
 
         $nroOperSnapshot = $this->nroOperSnapshotJornada((int) $jornada->id);
@@ -120,9 +128,13 @@ final class GastronomiaConciliacionPostCierreCaeaSupport
     /**
      * @return array<string, mixed>
      */
-    public function filaReporte(int $empresaId, string $fechaJornada, float $tolerancia): array
-    {
-        $totales = $this->totalesDia($empresaId, $fechaJornada);
+    public function filaReporte(
+        int $empresaId,
+        string $fechaJornada,
+        float $tolerancia,
+        ?array $indiceAnitaBulk = null,
+    ): array {
+        $totales = $this->totalesDia($empresaId, $fechaJornada, $indiceAnitaBulk);
         $diffErpAnita = round($totales['ventas_erp'] - $totales['ventas_anita'], 2);
         $rendgZ = $totales['rendgastro_z'];
         $diffErpRendg = $rendgZ !== null

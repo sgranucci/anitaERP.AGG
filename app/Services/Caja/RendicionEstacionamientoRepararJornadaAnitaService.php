@@ -119,6 +119,18 @@ final class RendicionEstacionamientoRepararJornadaAnitaService
             ];
         }
 
+        if ($this->rendgastroSupport->esSucursalMaquinaVending($sucursal)) {
+            return [
+                'puntoventa' => $pv->codigo,
+                'sucursal' => $sucursal,
+                'estado' => 'vending_omitido',
+                'total_z' => null,
+                'tot_nc' => null,
+                'portadora_nro_oper' => null,
+                'cabeceras' => 0,
+            ];
+        }
+
         $cabeceras = $this->rendgastroSupport->listarCabecerasPorSucursal($empresaId, $fechaEntera, $sucursal);
         if ($cabeceras === []) {
             return [

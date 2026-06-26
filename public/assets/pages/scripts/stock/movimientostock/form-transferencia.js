@@ -1,22 +1,22 @@
 (function ($) {
     'use strict';
 
-    function $optTipo() {
-        return $('#tipotransaccion_stock_id option:selected');
+    function meta() {
+        return typeof window.msTipoTransaccionMeta === 'function'
+            ? window.msTipoTransaccionMeta()
+            : { operacion: '', manejaContabilidad: false, origenBienUso: false, destinoBienUso: false, nombre: '' };
     }
 
     function esTransferencia() {
-        return String($optTipo().data('operacion') || '') === 'T';
+        return meta().operacion === 'T';
     }
 
     function tipoDestinoBienUso() {
-        var $opt = $optTipo();
-        return $opt.data('destino-bien-uso') === 1 || $opt.data('destinoBienUso') === 1;
+        return meta().destinoBienUso;
     }
 
     function tipoOrigenBienUso() {
-        var $opt = $optTipo();
-        return $opt.data('origen-bien-uso') === 1 || $opt.data('origenBienUso') === 1;
+        return meta().origenBienUso;
     }
 
     function actualizarRequiredDepositoSimple(activo) {

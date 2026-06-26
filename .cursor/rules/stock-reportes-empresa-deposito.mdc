@@ -1,0 +1,55 @@
+---
+description: Reportes de stock por depósito — filtrar empresa por depmae.empresa_id, no por articulo.empresa_id
+globs: app/Services/Stock/**/*Reporte*.php,app/Services/Stock/**/*Listado*.php,app/Support/Stock/*Deposito*Filtros.php,app/Support/Stock/*Existencias*.php,app/Http/Controllers/Stock/*Reporte*Controller.php,app/Http/Controllers/Stock/*Listado*Controller.php,resources/views/stock/**/*reporte*/**,resources/views/stock/**/*existencias*/**,app/Exports/Stock/**/*Deposito*.php,app/Exports/Stock/**/*Existencias*.php
+alwaysApply: false
+---
+
+# Reportes de stock: empresa del depósito, no del artículo
+
+En reportes donde las **columnas son depósitos** o el saldo se calcula por `deposito_id` (existencias por depósito, transferencias pendientes por depósito, etc.), el filtro **Empresa** del formulario acota **depósitos**, no el maestro de artículos.
+
+Referencia canónica: `ExistenciasDepositoReporteService::depositosAutorizados()` + `ExistenciasDepositoReporteService::aplicarFiltrosArticuloQuery()`.
+
+## Regla principal
+
+| Filtro empresa | Columna correcta | Incorrecto |
+|---|---|---|
+| Restringir depósitos visibles | `depmae.empresa_id` (`Depmae::paraEmpresa`, `EmpresaRepository::aplicarFiltroEmpresasAsignadas` sobre depósitos) | `articulo.empresa_id` |
+| Listar artículos con saldo | Solo depósitos ya filtrados por empresa + rangos artículo/categoría/uso/tipo | Excluir artículos con `empresa_id` null/legacy |
+
+Muchos ítems legacy (ej. farmacia) tienen `articulo.empresa_id` vacío pero stock en depósitos de una empresa concreta. Filtrar por `articulo.empresa_id` **oculta existencia real**.
+
+## Backend
+
+1. **Depósitos**: `Depmae::query()->paraUsuarioAutorizado()` + filtro `empresa_id` sobre `depmae.empresa_id`.
+2. **Saldos / movimientos**: `whereIn('deposito_id', $depositoIdsFiltrados)` — la empresa ya quedó aplicada al set de depósitos.
+3. **Filtros de artículo** (`aplicarFiltrosArticuloQuery` o equivalente): rango ID, categoría, uso, tipo. **Sin** `where('a.empresa_id', …)`.
+4. **`articulo_movimiento`**: no tiene columna `empresa_id`; la empresa operativa del stock en un depósito es la del depósito (`depmae.empresa_id`).
+
+## Pantalla y export
+
+- Texto de ayuda: aclarar que empresa filtra **depósitos**, no artículos.
+- Filtro **Depósitos** (código `depmae.codigo`): lista con comas (`965,100`) o rango con barra (`100/200`). Ver `ExistenciasDepositoFiltroDepositosSupport`.
+- Logos PDF/Excel: empresa del filtro o del depósito visible (`$depositos->first()->empresas`), no `articulo.empresas`.
+
+## Recuento / movimientos (contexto)
+
+Asignar `articulo.empresa_id` al cerrar recuento puede ser útil para el **maestro** del artículo, pero **no sustituye** el filtro por depósito en reportes de existencias.
+
+## Prohibido
+
+- `where('articulo.empresa_id', $empresaId)` o `aplicarFiltroEmpresasAsignadas($query, 'articulo.empresa_id')` en reportes por depósito.
+- Columna “Empresa” del artículo como criterio de inclusión en existencias por depósito.
+- Asumir que sin `articulo.empresa_id` el artículo no pertenece a la empresa del reporte.
+
+## Comprobación rápida
+
+```bash
+rg "a\.empresa_id|articulo\.empresa_id" app/Services/Stock/*Deposito* app/Services/Stock/*Existencias* app/Support/Stock/*Deposito* app/Support/Stock/*Existencias*
+# No debe filtrar artículos por empresa en reportes por depósito
+
+rg "depmae\.empresa_id|paraEmpresa|depositosAutorizados" app/Services/Stock/*Deposito* app/Services/Stock/*Existencias*
+# Debe existir filtro empresa sobre depósitos
+
+php artisan view:cache
+```

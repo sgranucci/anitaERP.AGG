@@ -65,9 +65,10 @@ class GastronomiaAuditoriaAnitaDiaria extends Command
                 ['Concepto', 'Antes', 'Después'],
                 [
                     ['Sin cabecera Anita', (string) ($pre['conteo']['solo_erp'] ?? 0), (string) ($post['conteo']['solo_erp'] ?? 0)],
-                    ['Diferencia importes', (string) ($pre['conteo']['diferencia'] ?? 0), (string) ($post['conteo']['diferencia'] ?? 0)],
+                    ['Diferencia importes (total/gravado/IVA/exento)', (string) ($pre['conteo']['diferencia'] ?? 0), (string) ($post['conteo']['diferencia'] ?? 0)],
                     ['Replicadas', '—', (string) ($rep['replicadas'] ?? 0)],
                     ['Delta total ERP−Anita', (string) ($pre['delta_totales']['total'] ?? 0), (string) ($post['delta_totales']['total'] ?? 0)],
+                    ['Delta gravado ERP−Anita', (string) ($pre['delta_totales']['gravado'] ?? 0), (string) ($post['delta_totales']['gravado'] ?? 0)],
                 ],
             );
 

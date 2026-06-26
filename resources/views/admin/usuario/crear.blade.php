@@ -5,8 +5,10 @@
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/stock/depmae/consulta.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/stock/tipotransaccion_stock/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/usuario/empresas_roles.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/usuario/depositos.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/admin/usuario/tipotransacciones_stock.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/usuario/crear.js")}}" type="text/javascript"></script>
 @endsection
 
@@ -33,10 +35,14 @@
                     <button type="button" id="botonform2" class="btn btn-info btn-sm">
                         <i class="fas fa-warehouse"></i> Depósitos autorizados
                     </button>
+                    <button type="button" id="botonform3" class="btn btn-info btn-sm">
+                        <i class="fas fa-exchange-alt"></i> Tipos trans. stock
+                    </button>
                 </div>
                 <div class="card-body">
                     @include('admin.usuario.form')
                     @include('admin.usuario.form2')
+                    @include('admin.usuario.form3')
                 </div>
                 <div class="card-footer">
                     <div class="row">
@@ -51,4 +57,5 @@
     </div>
 </div>
 @include('includes.stock.modalconsultadeposito')
+@include('includes.stock.modalconsultatipotransaccionstock')
 @endsection

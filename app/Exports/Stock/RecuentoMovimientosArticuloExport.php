@@ -81,12 +81,24 @@ class RecuentoMovimientosArticuloExport implements FromView, ShouldAutoSize, Wit
 
     public function columnFormats(): array
     {
-        $cols = [];
+        $formats = [];
         foreach (range('A', $this->colUltima) as $c) {
-            $cols[$c] = NumberFormat::FORMAT_TEXT;
+            $formats[$c] = NumberFormat::FORMAT_TEXT;
         }
 
-        return $cols;
+        foreach ($this->columnasCantidad() as $c) {
+            $formats[$c] = '#,##0.######';
+        }
+
+        return $formats;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function columnasCantidad(): array
+    {
+        return $this->modoTodosDepositos ? ['D', 'E'] : ['C', 'D'];
     }
 
     public function styles(Worksheet $sheet)
@@ -181,10 +193,21 @@ class RecuentoMovimientosArticuloExport implements FromView, ShouldAutoSize, Wit
 
                 $ultimaCol = $this->colUltima;
                 $primera = $this->filaPrimeraDatosExcel;
-                $sheet->getStyle($ultimaCol.$primera.':'.$ultimaCol.$sheet->getHighestRow())
-                    ->getAlignment()
-                    ->setWrapText(true)
-                    ->setVertical(Alignment::VERTICAL_TOP);
+                $filaCab = $this->filaCabecerasExcel;
+                $ultimaFila = $sheet->getHighestRow();
+
+                if ($ultimaFila >= $filaCab) {
+                    $sheet->getStyle('A'.$filaCab.':'.$ultimaCol.$ultimaFila)
+                        ->getAlignment()
+                        ->setHorizontal(Alignment::HORIZONTAL_RIGHT)
+                        ->setVertical(Alignment::VERTICAL_TOP);
+                }
+
+                if ($ultimaFila >= $primera) {
+                    $sheet->getStyle($ultimaCol.$primera.':'.$ultimaCol.$ultimaFila)
+                        ->getAlignment()
+                        ->setWrapText(true);
+                }
             },
         ];
     }

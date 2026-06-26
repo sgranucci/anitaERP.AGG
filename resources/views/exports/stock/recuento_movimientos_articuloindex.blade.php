@@ -56,8 +56,8 @@
                 <td>{{ $m->deposito_etiqueta ?? '' }}</td>
                 @endif
                 <td>{{ $m->tipo ?? '' }}</td>
-                <td>{{ $m->entrada_fmt ?? '' }}</td>
-                <td>{{ $m->salida_fmt ?? '' }}</td>
+                <td>@if ($m->entrada !== null){{ $m->entrada }}@endif</td>
+                <td>@if ($m->salida !== null){{ $m->salida }}@endif</td>
                 <td>{{ $m->concepto_display ?? $m->concepto ?? '' }}</td>
                 <td>{{ $m->movimiento_codigo ?: ($m->movimientostock_id ?? '') }}</td>
                 <td>{{ $m->movimiento_leyenda ?? '' }}</td>

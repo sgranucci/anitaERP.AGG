@@ -160,6 +160,13 @@
                                 <strong>{{ (int) ($resultado['stats']['ventas'] ?? 0) }}</strong>
                                 · Puntos de venta <strong>{{ (int) ($resultado['stats']['puntoventa'] ?? 0) }}</strong>
                                 · Total <strong>{{ number_format((float) ($resultado['totales_general']['total'] ?? 0), 2, ',', '.') }}</strong>
+                                @php $corrStats = $resultado['auditoria_correlatividad'] ?? []; @endphp
+                                @if (! empty($corrStats['habilitada']) && (int) ($corrStats['total_saltos'] ?? 0) > 0)
+                                    · <span class="text-danger" title="Saltos de numeración detectados">
+                                        <i class="fa fa-exclamation-triangle"></i>
+                                        {{ (int) ($corrStats['total_faltantes'] ?? 0) }} número(s) con salto
+                                    </span>
+                                @endif
                             </div>
                         @endif
                     </div>
@@ -243,6 +250,16 @@
                         'puede_ver_cuenta' => $puede_ver_cuenta ?? false,
                         'puede_ver_venta' => $puede_ver_venta ?? false,
                         'puede_ver_asiento' => $puede_ver_asiento ?? false,
+                    ])
+
+                    @include('ventas.iva_ventas.partials.auditoria_diaria', [
+                        'resultado' => $resultado,
+                    ])
+
+                    @include('ventas.iva_ventas.partials.auditoria_correlatividad', [
+                        'resultado' => $resultado,
+                        'puede_ver_puntoventa' => $puede_ver_puntoventa ?? false,
+                        'puede_ver_venta' => $puede_ver_venta ?? false,
                     ])
 
                     @include('ventas.iva_ventas.partials.totales_puntoventa', [

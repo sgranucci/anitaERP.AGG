@@ -148,10 +148,24 @@ final class GastronomiaAnitaAuditoriaDiariaService
             return true;
         }
 
+        foreach (['gravado', 'iva', 'exento'] as $campo) {
+            $deltaCampo = (float) ($post['resumen_global']['delta_totales'][$campo] ?? 0);
+            if (abs($deltaCampo) > $tolerancia) {
+                return true;
+            }
+        }
+
         foreach ($post['por_puntoventa'] ?? [] as $pv) {
             $deltaPv = (float) ($pv['resumen']['delta_totales']['total'] ?? 0);
             if (abs($deltaPv) > $tolerancia) {
                 return true;
+            }
+
+            foreach (['gravado', 'iva', 'exento'] as $campo) {
+                $deltaCampoPv = (float) ($pv['resumen']['delta_totales'][$campo] ?? 0);
+                if (abs($deltaCampoPv) > $tolerancia) {
+                    return true;
+                }
             }
         }
 

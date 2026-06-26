@@ -7,6 +7,8 @@ Recepciones de proveedores
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/recepcion_proveedor/filtro.js') }}" type="text/javascript"></script>
+@include('stock.recepcion_proveedor.partials.banner_confirmando_styles')
+<script src="{{ asset('assets/pages/scripts/stock/recepcion_proveedor/confirmar.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/recepcion_proveedor/confirmar.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
 <?php use App\Support\Stock\RecepcionProveedorListadoFiltros; ?>
@@ -102,8 +104,8 @@ Recepciones de proveedores
                                 </a>
                                 @endif
                                 @if($row->estado === 'BORRADOR' && can('confirmar-recepcion-proveedor', false))
-                                <form action="{{ route('confirmar_recepcion_proveedor', $row->id) }}" class="d-inline form-confirmar" method="POST"
-                                      onsubmit="return confirm('¿Confirmar recepción {{ $row->numerorecepcion }}? Generará movimiento de stock y asiento contable.');">
+                                <form action="{{ route('confirmar_recepcion_proveedor', $row->id) }}" class="d-inline form-confirmar-recepcion" method="POST"
+                                      data-confirm-msg="¿Confirmar recepción {{ $row->numerorecepcion }}? Generará movimiento de stock y asiento contable.">
                                     @csrf
                                     <button type="submit" class="btn-accion-tabla tooltipsC" title="Confirmar recepción">
                                         <i class="fa fa-check text-success"></i>

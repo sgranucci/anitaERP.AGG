@@ -27,6 +27,10 @@ final class MovimientoStockPreferenciasUsuario
 
         $resolved = app(Tipotransaccion_StockRepository::class)->resolveIdFromLegacy((int) $cached);
 
-        return $resolved > 0 ? $resolved : null;
+        if ($resolved <= 0 || ! UsuarioTipotransaccionStockAutorizado::tipotransaccionAutorizada($resolved)) {
+            return null;
+        }
+
+        return $resolved;
     }
 }

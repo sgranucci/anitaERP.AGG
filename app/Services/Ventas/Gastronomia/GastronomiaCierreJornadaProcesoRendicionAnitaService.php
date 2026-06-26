@@ -85,27 +85,13 @@ final class GastronomiaCierreJornadaProcesoRendicionAnitaService
         }
 
         $empresaId = (int) $jornada->empresa_id;
-        $numeracion = $this->anitaSyncService->proponerSiguienteNroOper($empresaId);
-        $nroOper = (int) ($numeracion['nro_oper'] ?? 0);
-        if ($nroOper <= 0) {
-            throw new RuntimeException('No se pudo obtener numeración rendgastro para Anita.');
-        }
-
-        $this->assertNroOperEnRangoEmpresa($empresaId, $nroOper);
+        $jornadaId = (int) $jornada->id;
 
         [$cajaId] = $this->resolverCajaId();
 
-        $ctx = CierreJornadaProcesoRendicionAnitaSupport::armarContextoAnita(
-            $jornada,
-            $puntoventaId,
-            $nroOper,
-            $ventaIds,
-            $cajaId,
-            (int) (Auth::id() ?? 0),
-        );
-
-        $totalFacturado = round((float) ($ctx['total_x'] ?? 0), 2);
+        $totalFacturado = 0.0;
         if ($ventaIds !== []) {
+            $totalFacturado = round(CierreJornadaProcesoRendicionAnitaSupport::totalFacturasProceso($ventaIds), 2);
             $totalCobrado = CierreJornadaProcesoRendicionAnitaSupport::totalCobradoProceso($ventaIds);
             if (abs($totalFacturado - $totalCobrado) > 0.05) {
                 throw new InvalidArgumentException(
@@ -115,17 +101,22 @@ final class GastronomiaCierreJornadaProcesoRendicionAnitaService
             }
         }
 
-        try {
-            $this->anitaSyncService->insertarDesdeContexto($ctx);
-        } catch (Throwable $e) {
-            throw new RuntimeException(
-                'Error al grabar rendgastro/rendvalor en Anita: '.$e->getMessage(),
-                0,
-                $e,
-            );
-        }
+        [$nroOper, $numeracion, $ctx] = $this->insertarPostCierreConNroOperDisponible(
+            $jornada,
+            $puntoventaId,
+            $ventaIds,
+            $cajaId,
+            (int) (Auth::id() ?? 0),
+        );
 
-        $this->assertCabeceraPostCierreInsertada($empresaId, (int) $jornada->id, $nroOper, $totalFacturado);
+        $fechaEnteraJornada = (int) ($ctx['fecha_entera'] ?? 0);
+        $this->assertCabeceraPostCierreInsertada(
+            $empresaId,
+            $jornadaId,
+            $nroOper,
+            $totalFacturado,
+            $fechaEnteraJornada,
+        );
 
         // Z en CIERRE-WAITRY = post-cierre únicamente (mismo importe que total_x / tot_fc_caea).
         try {
@@ -269,6 +260,7 @@ final class GastronomiaCierreJornadaProcesoRendicionAnitaService
         int $jornadaId,
         int $nroOper,
         float $totalEsperado,
+        int $fechaEnteraJornada,
     ): void {
         $cab = $this->rendgastroSupport->listarCabeceraPorNroOper($empresaId, $nroOper);
         if ($cab === null || ! $this->rendgastroSupport->esCabeceraPostCierreWaitry($cab)) {
@@ -283,12 +275,100 @@ final class GastronomiaCierreJornadaProcesoRendicionAnitaService
             );
         }
 
+        if ($fechaEnteraJornada > 0 && (int) ($cab->rendg_fecha ?? 0) !== $fechaEnteraJornada) {
+            throw new RuntimeException(
+                'Cabecera CIERRE-WAITRY #'.$nroOper.' rendg_fecha '.((int) ($cab->rendg_fecha ?? 0))
+                .' ≠ fecha de jornada '.$fechaEnteraJornada.'.',
+            );
+        }
+
         $totalX = round((float) ($cab->rendg_total_x ?? 0), 2);
         if ($totalEsperado > 0 && abs($totalX - $totalEsperado) > 0.05) {
             throw new RuntimeException(
                 'Cabecera CIERRE-WAITRY #'.$nroOper.' total_x '.$totalX.' ≠ esperado '.$totalEsperado.'.',
             );
         }
+    }
+
+    /**
+     * @param  list<int>  $ventaIds
+     * @return array{0:int,1:array<string,mixed>,2:array<string,mixed>}
+     */
+    private function insertarPostCierreConNroOperDisponible(
+        JornadaGastronomia $jornada,
+        int $puntoventaId,
+        array $ventaIds,
+        int $cajaId,
+        int $usuarioId,
+    ): array {
+        $empresaId = (int) $jornada->empresa_id;
+        $jornadaId = (int) $jornada->id;
+        $ultimoError = null;
+
+        for ($intento = 0; $intento < 10; $intento++) {
+            $numeracion = $this->anitaSyncService->proponerSiguienteNroOper($empresaId);
+            $nroOper = (int) ($numeracion['nro_oper'] ?? 0);
+            if ($nroOper <= 0) {
+                continue;
+            }
+
+            $this->assertNroOperEnRangoEmpresa($empresaId, $nroOper);
+            if (! $this->nroOperDisponibleParaPostCierreJornada($empresaId, $nroOper, $jornadaId)) {
+                continue;
+            }
+
+            $ctx = CierreJornadaProcesoRendicionAnitaSupport::armarContextoAnita(
+                $jornada,
+                $puntoventaId,
+                $nroOper,
+                $ventaIds,
+                $cajaId,
+                $usuarioId,
+            );
+
+            try {
+                $this->anitaSyncService->insertarDesdeContexto($ctx);
+
+                return [$nroOper, $numeracion, $ctx];
+            } catch (Throwable $e) {
+                if ($this->esErrorNroOperOcupadoPorOtraJornada($e)) {
+                    $ultimoError = $e;
+                    continue;
+                }
+
+                throw new RuntimeException(
+                    'Error al grabar rendgastro/rendvalor en Anita: '.$e->getMessage(),
+                    0,
+                    $e,
+                );
+            }
+        }
+
+        $mensaje = 'No se pudo obtener nro_oper libre para post-cierre de la jornada #'.$jornadaId.'.';
+        if ($ultimoError !== null) {
+            $mensaje .= ' Último intento: '.$ultimoError->getMessage();
+        }
+
+        throw new RuntimeException($mensaje);
+    }
+
+    private function nroOperDisponibleParaPostCierreJornada(int $empresaId, int $nroOper, int $jornadaId): bool
+    {
+        $cab = $this->rendgastroSupport->listarCabeceraPorNroOper($empresaId, $nroOper);
+        if ($cab === null) {
+            return true;
+        }
+
+        if (! $this->rendgastroSupport->esCabeceraPostCierreWaitry($cab)) {
+            return false;
+        }
+
+        return (int) ($cab->rendg_nro_rend_vta ?? 0) === $jornadaId;
+    }
+
+    private function esErrorNroOperOcupadoPorOtraJornada(Throwable $e): bool
+    {
+        return str_contains($e->getMessage(), 'ya pertenece a la jornada #');
     }
 
     /**

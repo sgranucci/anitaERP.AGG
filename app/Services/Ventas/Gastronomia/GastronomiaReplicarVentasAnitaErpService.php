@@ -15,7 +15,9 @@ use App\Models\Ventas\Venta;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Services\Configuracion\ImpuestoService;
 use App\Services\Ventas\FacturacionService;
+use App\Support\Ventas\Gastronomia\GastronomiaAnitaComprobantePkSupport;
 use App\Support\Ventas\GastronomiaVentaDetalleSupport;
+use App\Support\Ventas\InformixUnlSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 
@@ -50,7 +52,10 @@ final class GastronomiaReplicarVentasAnitaErpService
         bool $dryRun = false,
         int $limite = 0,
         bool $replicarInsumos = true,
+        ?bool $omitirStkmovAnita = null,
     ): array {
+        $omitirStkmovAnita = $this->resolverOmitirStkmovAnita($omitirStkmovAnita);
+
         $combinaciones = $this->chequeoService->listarCombinacionesPvJornada(
             $fechaDesde,
             $fechaHasta,
@@ -106,7 +111,7 @@ final class GastronomiaReplicarVentasAnitaErpService
                 }
 
                 try {
-                    $this->replicarVenta($venta, $replicarInsumos);
+                    $this->replicarVenta($venta, $replicarInsumos, $omitirStkmovAnita);
                     $fila['estado'] = 'ok';
                     $resultado['replicadas']++;
                 } catch (\Throwable $e) {
@@ -147,7 +152,10 @@ final class GastronomiaReplicarVentasAnitaErpService
         bool $dryRun = false,
         int $limite = 0,
         bool $replicarInsumos = true,
+        ?bool $omitirStkmovAnita = null,
     ): array {
+        $omitirStkmovAnita = $this->resolverOmitirStkmovAnita($omitirStkmovAnita);
+
         $combinaciones = $this->chequeoService->listarCombinacionesPvFechaCalendario(
             $fechaCalendario,
             $empresaId,
@@ -204,7 +212,7 @@ final class GastronomiaReplicarVentasAnitaErpService
                 }
 
                 try {
-                    $this->replicarVenta($venta, $replicarInsumos);
+                    $this->replicarVenta($venta, $replicarInsumos, $omitirStkmovAnita);
                     $fila['estado'] = 'ok';
                     $resultado['replicadas']++;
                 } catch (\Throwable $e) {
@@ -227,8 +235,10 @@ final class GastronomiaReplicarVentasAnitaErpService
         return $resultado;
     }
 
-    public function replicarVenta(Venta $venta, bool $replicarInsumos = true): void
+    public function replicarVenta(Venta $venta, bool $replicarInsumos = true, ?bool $omitirStkmovAnita = null): void
     {
+        $omitirStkmovAnita = $this->resolverOmitirStkmovAnita($omitirStkmovAnita);
+
         $venta = $this->cargarVentaCompleta((int) $venta->id);
 
         $puntoventa = $venta->puntoventas;
@@ -251,7 +261,7 @@ final class GastronomiaReplicarVentasAnitaErpService
 
         $signo = ($tipotransaccion->signo ?? 'S') === 'S' ? 1. : -1.;
         $conceptosTotales = $this->armarConceptosTotales($venta);
-        $dataFactura = $this->armarDataFactura($venta);
+        $dataFactura = $this->armarDataFactura($venta, $omitirStkmovAnita);
         $ventaArray = $this->armarVentaArray($venta);
         $dataCAE = $this->armarDataCae($venta, $empresa, $conceptosTotales, $dataFactura);
 
@@ -269,6 +279,7 @@ final class GastronomiaReplicarVentasAnitaErpService
             (float) ($venta->descuento ?? 0),
             $modoMinimo,
             true,
+            $omitirStkmovAnita,
         );
 
         if (is_array($anita) && isset($anita['error'])) {
@@ -302,6 +313,15 @@ final class GastronomiaReplicarVentasAnitaErpService
      * antes de re-grabar desde el ERP. Evita duplicate key en stkmov al backfillear ventas
      * parcialmente sincronizadas o falsamente detectadas como faltantes.
      */
+    private function resolverOmitirStkmovAnita(?bool $explicito): bool
+    {
+        if ($explicito !== null) {
+            return $explicito;
+        }
+
+        return filter_var(config('gastronomia.anita_omitir_stkmov', true), FILTER_VALIDATE_BOOLEAN);
+    }
+
     private function liberarCabeceraAnitaSiExiste(Venta $venta, string $letra): void
     {
         $consulta = $this->chequeoService->consultarCabeceraAnitaDesdeVenta($venta, $letra);
@@ -381,7 +401,7 @@ final class GastronomiaReplicarVentasAnitaErpService
     /**
      * @return list<array<string, mixed>>
      */
-    private function armarDataFactura(Venta $venta): array
+    private function armarDataFactura(Venta $venta, bool $omitirStkmovAnita = false): array
     {
         $movItems = GastronomiaVentaDetalleSupport::movimientosItemsFacturados((int) $venta->id)
             ->keyBy('venta_emision_id');
@@ -391,9 +411,10 @@ final class GastronomiaReplicarVentasAnitaErpService
             $articulo = $em->articulos;
             $articuloId = (int) ($em->articulo_id ?? 0);
             $precio = (float) $em->precio;
-            $omitirStkmov = $articuloId > 0
-                && ! $movItems->has((int) $em->id)
-                && abs($precio) < 0.00001;
+            $omitirStkmov = $omitirStkmovAnita
+                || ($articuloId > 0
+                    && ! $movItems->has((int) $em->id)
+                    && abs($precio) < 0.00001);
 
             if ($articuloId > 0 && $articulo) {
                 $items[] = [
@@ -505,7 +526,10 @@ final class GastronomiaReplicarVentasAnitaErpService
             'fechacomprobante' => date('Ymd', strtotime((string) $venta->fecha)),
             'total' => abs((float) $venta->total),
             'nogravado' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'No Gravado', 'importe'),
-            'gravado' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Gravado al', 'importe'),
+            'gravado' => \App\Support\Ventas\Gastronomia\GastronomiaAnitaVenGravadoSupport::gravadoDesdeConceptosTotales(
+                $conceptosTotales,
+                abs((float) $venta->total),
+            ),
             'exento' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Exento', 'importe'),
             'iva' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Iva ', 'importe'),
             'tributo' => 0,
@@ -561,5 +585,257 @@ final class GastronomiaReplicarVentasAnitaErpService
             ->where('empresa_id', (int) ($venta->puntoventas->empresa_id ?? 0))
             ->orderByDesc('id')
             ->first();
+    }
+
+    /**
+     * Genera venta.unl, vengrav.unl y vencae.unl (pipe) para ventas ERP sin cabecera en Informix.
+     *
+     * @return array{
+     *   faltantes:int,
+     *   venta_lineas:int,
+     *   vengrav_lineas:int,
+     *   vencae_lineas:int,
+     *   omitidas_sin_cae:int,
+     *   omitidas_venta_ya_existe:int,
+     *   omitidas_vengrav_ya_existe:int,
+     *   omitidas_vencae_ya_existe:int,
+     *   errores:list<array<string, mixed>>,
+     *   archivos: array{venta:string, vengrav:string, vencae:string}
+     * }
+     */
+    public function exportarFaltantesUnl(
+        string $fechaDesde,
+        ?string $fechaHasta,
+        int $empresaId,
+        string $directorioSalida,
+        ?string $codigoPv = null,
+        ?array $cacheAnita = null,
+    ): array {
+        if (! is_dir($directorioSalida) && ! mkdir($directorioSalida, 0775, true) && ! is_dir($directorioSalida)) {
+            throw new \RuntimeException('No se pudo crear el directorio: '.$directorioSalida);
+        }
+
+        $lineasVenta = [];
+        $lineasVengrav = [];
+        $lineasVencae = [];
+        $resultado = [
+            'faltantes' => 0,
+            'venta_lineas' => 0,
+            'vengrav_lineas' => 0,
+            'vencae_lineas' => 0,
+            'omitidas_sin_cae' => 0,
+            'omitidas_venta_ya_existe' => 0,
+            'omitidas_vengrav_ya_existe' => 0,
+            'omitidas_vencae_ya_existe' => 0,
+            'errores' => [],
+            'archivos' => [
+                'venta' => rtrim($directorioSalida, '/').'/venta.unl',
+                'vengrav' => rtrim($directorioSalida, '/').'/vengrav.unl',
+                'vencae' => rtrim($directorioSalida, '/').'/vencae.unl',
+            ],
+        ];
+
+        $usarCache = $cacheAnita !== null && isset($cacheAnita['venta']) && is_array($cacheAnita['venta']);
+        $ventaPkIndice = null;
+        $vengravPkIndice = null;
+        $vencaePkIndice = null;
+
+        if ($usarCache) {
+            $ventaPkIndice = GastronomiaAnitaComprobantePkSupport::indexarVenta($cacheAnita['venta']);
+            $vengravPkIndice = GastronomiaAnitaComprobantePkSupport::indexarVengrav($cacheAnita['vengrav'] ?? []);
+            $vencaePkIndice = GastronomiaAnitaComprobantePkSupport::indexarVencae($cacheAnita['vencae'] ?? []);
+
+            $faltantes = $this->chequeoService->listarVentasErpSinCabeceraAnitaEnRango(
+                $empresaId,
+                $fechaDesde,
+                $fechaHasta,
+                $codigoPv,
+                $ventaPkIndice,
+            );
+            $resultado['faltantes'] = $faltantes->count();
+            $this->procesarFaltantesUnl(
+                $faltantes,
+                $empresaId,
+                $resultado,
+                $lineasVenta,
+                $lineasVengrav,
+                $lineasVencae,
+                true,
+                $ventaPkIndice,
+                $vengravPkIndice,
+                $vencaePkIndice,
+            );
+        } else {
+            $combinaciones = $this->chequeoService->listarCombinacionesPvJornada(
+                $fechaDesde,
+                $fechaHasta,
+                $empresaId,
+                $codigoPv,
+            );
+
+            foreach ($combinaciones as $combo) {
+                $faltantes = $this->chequeoService->listarVentasErpSinCabeceraAnita(
+                    (int) $combo['puntoventa_id'],
+                    (string) $combo['fecha_jornada'],
+                );
+
+                if ($faltantes->isEmpty()) {
+                    continue;
+                }
+
+                $resultado['faltantes'] += $faltantes->count();
+                $this->procesarFaltantesUnl(
+                    $faltantes,
+                    $empresaId,
+                    $resultado,
+                    $lineasVenta,
+                    $lineasVengrav,
+                    $lineasVencae,
+                    false,
+                    null,
+                    null,
+                    null,
+                );
+            }
+        }
+
+        file_put_contents($resultado['archivos']['venta'], implode("\n", $lineasVenta).($lineasVenta !== [] ? "\n" : ''));
+        file_put_contents($resultado['archivos']['vengrav'], implode("\n", $lineasVengrav).($lineasVengrav !== [] ? "\n" : ''));
+        file_put_contents($resultado['archivos']['vencae'], implode("\n", $lineasVencae).($lineasVencae !== [] ? "\n" : ''));
+
+        $resultado['venta_lineas'] = count($lineasVenta);
+        $resultado['vengrav_lineas'] = count($lineasVengrav);
+        $resultado['vencae_lineas'] = count($lineasVencae);
+
+        return $resultado;
+    }
+
+    /**
+     * @param  Collection<int, Venta>  $faltantes
+     * @param  array<string, true>|null  $ventaPkIndice
+     * @param  array<string, true>|null  $vengravPkIndice
+     * @param  array<string, true>|null  $vencaePkIndice
+     */
+    private function procesarFaltantesUnl(
+        $faltantes,
+        int $empresaId,
+        array &$resultado,
+        array &$lineasVenta,
+        array &$lineasVengrav,
+        array &$lineasVencae,
+        bool $usarCache,
+        ?array $ventaPkIndice,
+        ?array $vengravPkIndice,
+        ?array $vencaePkIndice,
+    ): void {
+        foreach ($faltantes as $ventaResumen) {
+            try {
+                $venta = $this->cargarVentaCompleta((int) $ventaResumen->id);
+                $puntoventa = $venta->puntoventas;
+                if (! $puntoventa || ($puntoventa->modofacturacion ?? '') === 'M') {
+                    continue;
+                }
+
+                if ((int) $puntoventa->empresa_id !== $empresaId) {
+                    continue;
+                }
+
+                $empresa = Empresa::query()->find($puntoventa->empresa_id);
+                if (! $empresa) {
+                    throw new \RuntimeException('Empresa no encontrada para PV '.$puntoventa->codigo.'.');
+                }
+
+                $tipotransaccion = $venta->tipotransacciones;
+                if (! $tipotransaccion) {
+                    throw new \RuntimeException('Tipo de transacción no encontrado.');
+                }
+
+                $letra = $this->resolverLetra($venta);
+                $conceptosTotales = $this->armarConceptosTotales($venta);
+                $dataFactura = $this->armarDataFactura($venta, true);
+                $ventaArray = $this->armarVentaArray($venta);
+                $dataCAE = $this->armarDataCae($venta, $empresa, $conceptosTotales, $dataFactura);
+
+                $filas = $this->facturacionService->construirFilasUnlGastronomiaModoMinimo(
+                    $puntoventa->codigo,
+                    $letra,
+                    $ventaArray,
+                    $dataCAE,
+                    $conceptosTotales,
+                    (string) $tipotransaccion->codigo,
+                    (string) $empresa->codigo,
+                    $puntoventa->modofacturacion ?? null,
+                    true,
+                    $venta->cae,
+                    $venta->fechavencimientocae,
+                );
+
+                $tipoAnita = (string) ($filas['venta'][1] ?? '');
+                $sucursalAnita = $this->chequeoService->sucursalDesdeCodigoPuntoventa((string) $puntoventa->codigo);
+                $numeroAnita = (int) ($venta->numerocomprobante ?? 0);
+                $pkVenta = GastronomiaAnitaComprobantePkSupport::claveVenta($tipoAnita, $letra, $sucursalAnita, $numeroAnita);
+
+                $cabeceraYaExiste = $usarCache && $ventaPkIndice !== null && $pkVenta !== null
+                    ? isset($ventaPkIndice[$pkVenta])
+                    : $this->chequeoService->existeCabeceraEnAnita($tipoAnita, $letra, $sucursalAnita, $numeroAnita);
+
+                if ($cabeceraYaExiste) {
+                    $resultado['omitidas_venta_ya_existe']++;
+                } else {
+                    $lineasVenta[] = InformixUnlSupport::linea($filas['venta']);
+                }
+
+                foreach ($filas['vengrav'] as $filaVengrav) {
+                    $tipoVengrav = (string) ($filaVengrav[0] ?? $tipoAnita);
+                    $letraVengrav = (string) ($filaVengrav[1] ?? $letra);
+                    $sucVengrav = GastronomiaAnitaComprobantePkSupport::sucursalEntera((string) ($filaVengrav[2] ?? $puntoventa->codigo));
+                    $nroVengrav = (int) ($filaVengrav[3] ?? $numeroAnita);
+                    $codigoTasa = (string) ($filaVengrav[4] ?? '');
+                    $pkVengrav = GastronomiaAnitaComprobantePkSupport::claveVengrav(
+                        $tipoVengrav,
+                        $letraVengrav,
+                        $sucVengrav,
+                        $nroVengrav,
+                        $codigoTasa,
+                    );
+                    $vengravYaExiste = $usarCache && $vengravPkIndice !== null && $pkVengrav !== null
+                        ? isset($vengravPkIndice[$pkVengrav])
+                        : $this->chequeoService->existeVengravLineaAnita($tipoAnita, $letra, $sucursalAnita, $numeroAnita, $codigoTasa);
+
+                    if ($vengravYaExiste) {
+                        $resultado['omitidas_vengrav_ya_existe']++;
+
+                        continue;
+                    }
+
+                    $lineasVengrav[] = InformixUnlSupport::linea($filaVengrav);
+                }
+
+                if ($filas['vencae'] !== null) {
+                    $tipoVencae = (string) ($filas['vencae'][0] ?? $tipoAnita);
+                    $letraVencae = (string) ($filas['vencae'][1] ?? $letra);
+                    $sucVencae = GastronomiaAnitaComprobantePkSupport::sucursalEntera((string) ($filas['vencae'][2] ?? $puntoventa->codigo));
+                    $nroVencae = (int) ($filas['vencae'][3] ?? $numeroAnita);
+                    $pkVencae = GastronomiaAnitaComprobantePkSupport::claveVencae($tipoVencae, $letraVencae, $sucVencae, $nroVencae);
+                    $vencaeYaExiste = $usarCache && $vencaePkIndice !== null && $pkVencae !== null
+                        ? isset($vencaePkIndice[$pkVencae])
+                        : $this->chequeoService->existeVencaeEnAnita($tipoAnita, $letra, $sucursalAnita, $numeroAnita);
+
+                    if ($vencaeYaExiste) {
+                        $resultado['omitidas_vencae_ya_existe']++;
+                    } else {
+                        $lineasVencae[] = InformixUnlSupport::linea($filas['vencae']);
+                    }
+                } else {
+                    $resultado['omitidas_sin_cae']++;
+                }
+            } catch (\Throwable $e) {
+                $resultado['errores'][] = [
+                    'venta_id' => (int) $ventaResumen->id,
+                    'codigo' => (string) ($ventaResumen->codigo ?? ''),
+                    'mensaje' => $e->getMessage(),
+                ];
+            }
+        }
     }
 }

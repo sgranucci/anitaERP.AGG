@@ -43,4 +43,11 @@ class RecepcionProveedorCuadreContableSupportTest extends TestCase
         $this->assertSame(1000.0, $totales['debe']);
         $this->assertSame(1000.0, $totales['haber']);
     }
+
+    public function test_importe_contable_cero_dentro_tolerancia(): void
+    {
+        $this->assertTrue(RecepcionProveedorCuadreContableSupport::importeContableEsCero(0.0));
+        $this->assertTrue(RecepcionProveedorCuadreContableSupport::importeContableEsCero(0.01));
+        $this->assertFalse(RecepcionProveedorCuadreContableSupport::importeContableEsCero(100.0));
+    }
 }

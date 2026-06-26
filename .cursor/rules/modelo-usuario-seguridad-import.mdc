@@ -1,0 +1,52 @@
+---
+description: Importar Usuario desde Seguridad al usar relaciones Eloquent (evita Class not found)
+alwaysApply: true
+---
+
+# Modelo Usuario: import obligatorio
+
+En anitaERP el usuario del sistema es **único**:
+
+| Correcto | Incorrecto (no existe) |
+|----------|------------------------|
+| `App\Models\Seguridad\Usuario` | `App\Models\Contable\Usuario` |
+| | `App\Models\Stock\Usuario` |
+| | `Usuario` sin `use` fuera de `Seguridad` |
+
+PHP resuelve `Usuario::class` **relativo al namespace del archivo**. En `App\Models\Contable\Asiento` sin import → busca `App\Models\Contable\Usuario` y falla al hacer `->with('usuarios')`, `$asiento->usuarios`, etc.
+
+## Obligatorio al tocar relaciones con usuario
+
+1. **`use App\Models\Seguridad\Usuario;`** en el archivo PHP del namespace distinto a Seguridad.
+2. En `belongsTo` / `hasMany` / `belongsToMany`: `Usuario::class` solo **después** del import (o FQCN explícito).
+3. Si agregás `->with('usuarios')` (u otra relación a Usuario) en repository/query, verificar que el **modelo** tenga el import.
+
+Referencia canónica: `App\Models\Stock\Recepcion_Proveedor` (`use App\Models\Seguridad\Usuario`).
+
+## Prohibido
+
+```php
+// ❌ En App\Models\Contable\Asiento (sin use)
+return $this->belongsTo(Usuario::class, 'usuario_id');
+```
+
+## Correcto
+
+```php
+use App\Models\Seguridad\Usuario;
+
+return $this->belongsTo(Usuario::class, 'usuario_id');
+// o: belongsTo(\App\Models\Seguridad\Usuario::class, 'usuario_id')
+```
+
+## Comprobación rápida (agente)
+
+Tras agregar relación o eager load a usuario:
+
+```bash
+rg "belongsTo\(Usuario::class" app/Models/Contable app/Models/Stock app/Models/Ventas -l \
+  | while read f; do grep -q "use App\\\\Models\\\\Seguridad\\\\Usuario" "$f" || echo "FALTA IMPORT: $f"; done
+php artisan view:cache
+```
+
+Si el error en runtime es `Class "App\Models\{Modulo}\Usuario" not found`, corregir el import en el **modelo** de la relación, no solo en el controller/repository.

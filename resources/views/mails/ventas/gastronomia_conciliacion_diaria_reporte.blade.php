@@ -28,7 +28,8 @@
 @endif
 
 <p style="margin:16px 0 8px 0;">
-    Adjunto CSV con detalle por <strong>tipo_fila</strong>: pv_cae, pv_caea, pc_total, total_salon, post_cierre_caea, total_dia, control_gastro_total.
+    Adjunto Excel (y CSV) agrupado por <strong>PC</strong> (<code>identificador_pc</code> / <code>rendg_host</code>) y <strong>PV</strong> (CAE / CAEA):
+    pv_cae, pv_caea, pc_total vs rendgastro Z, total_salon, post_cierre_caea, total_dia, control_gastro_total.
 </p>
 
 @foreach ($informe['empresas'] ?? [] as $empresa)
@@ -70,6 +71,8 @@
                         'pc_total' => 'Total PC',
                         'total_salon' => 'TOTAL SALÓN',
                         'post_cierre_caea' => 'Post-cierre CAEA',
+                        'vending_rendg' => 'Vending rendg',
+                        'total_vending' => 'TOTAL VENDING',
                         'total_dia' => 'TOTAL DÍA',
                         'control_gastro_total' => 'Control día (neto)',
                         default => (string) ($fila['tipo_pv'] ?? $fila['tipo_fila'] ?? '—'),
@@ -87,6 +90,8 @@
                         'pc_total' => '#f9f9f9',
                         'total_salon' => '#eef6fb',
                         'post_cierre_caea' => '#fff8e6',
+                        'vending_rendg' => '#f3e5f5',
+                        'total_vending' => '#ede7f6',
                         'total_dia' => '#e8f5e9',
                         'control_gastro_total' => '#fdebd0',
                         default => '#fff',

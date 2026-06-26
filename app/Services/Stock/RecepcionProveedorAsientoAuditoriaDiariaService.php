@@ -22,6 +22,7 @@ final class RecepcionProveedorAsientoAuditoriaDiariaService
 {
     public function __construct(
         private readonly RecepcionProveedorAsientoService $asientoService,
+        private readonly RecepcionProveedorAnitaBridgeService $anitaBridge,
     ) {
     }
 
@@ -32,6 +33,9 @@ final class RecepcionProveedorAsientoAuditoriaDiariaService
         ?string $fechaCalendario = null,
         bool $enviarMail = true,
         ?int $empresaId = null,
+        ?string $fechaDesde = null,
+        ?string $fechaHasta = null,
+        bool $todas = false,
     ): array {
         $config = config('recepcion_proveedor.auditoria_asientos_com_diaria', []);
         $fecha = $fechaCalendario ?? Carbon::yesterday()->toDateString();
@@ -42,9 +46,22 @@ final class RecepcionProveedorAsientoAuditoriaDiariaService
 
         $query = Recepcion_Proveedor::query()
             ->where('estado', RecepcionProveedorEstados::CONFIRMADA)
-            ->whereDate('fecha', $fecha)
             ->orderBy('empresa_id')
             ->orderBy('numerorecepcion');
+
+        if ($todas) {
+            $fecha = 'todas';
+        } elseif ($fechaDesde !== null || $fechaHasta !== null) {
+            if ($fechaDesde !== null && $fechaDesde !== '') {
+                $query->whereDate('fecha', '>=', $fechaDesde);
+            }
+            if ($fechaHasta !== null && $fechaHasta !== '') {
+                $query->whereDate('fecha', '<=', $fechaHasta);
+            }
+            $fecha = trim(($fechaDesde ?? '…').' → '.($fechaHasta ?? '…'));
+        } else {
+            $query->whereDate('fecha', $fecha);
+        }
 
         if ($empresaId !== null && $empresaId > 0) {
             $query->where('empresa_id', $empresaId);
@@ -65,6 +82,7 @@ final class RecepcionProveedorAsientoAuditoriaDiariaService
             'omitidas' => 0,
             'discrepancias' => [],
             'errores_lectura' => [],
+            'filas' => [],
         ];
 
         foreach ($recepciones as $recepcion) {
@@ -82,17 +100,20 @@ final class RecepcionProveedorAsientoAuditoriaDiariaService
 
             if (($resultado['estado'] ?? '') === 'omitida') {
                 $informe['omitidas']++;
+                $informe['filas'][] = $resultado;
 
                 continue;
             }
 
             if (($resultado['estado'] ?? '') === 'ok') {
                 $informe['ok']++;
+                $informe['filas'][] = $resultado;
 
                 continue;
             }
 
             $informe['discrepancias'][] = $resultado;
+            $informe['filas'][] = $resultado;
         }
 
         $informe['requiere_alerta'] = $informe['discrepancias'] !== [] || $informe['errores_lectura'] !== [];
@@ -155,6 +176,13 @@ final class RecepcionProveedorAsientoAuditoriaDiariaService
             return array_merge($base, ['estado' => 'omitida']);
         }
 
+        if ($this->asientoService->recepcionSinImporteContable($recepcion)) {
+            return array_merge($base, [
+                'estado' => 'omitida',
+                'problemas' => ['Recepción sin importe contable: no requiere asiento COM.'],
+            ]);
+        }
+
         $asientoId = (int) ($recepcion->asiento_id ?? 0);
         if ($asientoId <= 0) {
             return array_merge($base, [
@@ -179,6 +207,12 @@ final class RecepcionProveedorAsientoAuditoriaDiariaService
         $base['numero_asiento'] = $numeroAsiento;
         $base['fecha_asiento'] = $fechaAsiento;
 
+        $cabecerasRecepmae = $this->anitaBridge->listarRecepmaePorDocumentoAuditoria((int) $recepcion->id);
+        $base['recepmae_anita'] = count($cabecerasRecepmae);
+        if ($cabecerasRecepmae === []) {
+            $base['problemas'][] = 'Falta cabecera recepmae en Anita (COM ERP no replicada en compras).';
+        }
+
         $movimientos = $asiento->asiento_movimientos ?? collect();
         if ($movimientos->isEmpty()) {
             $base['problemas'][] = 'El asiento ERP no tiene movimientos contables.';
@@ -199,6 +233,8 @@ final class RecepcionProveedorAsientoAuditoriaDiariaService
         try {
             $preview = $this->asientoService->previewAsientoContable($recepcion);
             $debeEsperado = round((float) ($preview['total_debe'] ?? 0), 2);
+            $totalRecepcion = round((float) ($preview['total_recepcion'] ?? $debeEsperado), 2);
+            $base['total_recepcion'] = $totalRecepcion;
             $base['debe_esperado'] = $debeEsperado;
 
             if (abs($debeEsperado - $totalesErp['debe']) >= $tol) {

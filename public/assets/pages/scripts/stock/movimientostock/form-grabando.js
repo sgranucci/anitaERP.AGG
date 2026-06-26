@@ -1,20 +1,18 @@
 (function ($) {
     'use strict';
 
+    function meta() {
+        return typeof window.msTipoTransaccionMeta === 'function'
+            ? window.msTipoTransaccionMeta()
+            : { nombre: '', operacion: '' };
+    }
+
     function nombreTipoSeleccionado() {
-        var $opt = $('#tipotransaccion_stock_id option:selected');
-        var text = ($opt.text() || '').trim();
-
-        if (!text || text.indexOf('-- Seleccionar') === 0) {
-            return '';
-        }
-
-        return text;
+        return meta().nombre || '';
     }
 
     function tituloGrabando() {
-        var $opt = $('#tipotransaccion_stock_id option:selected');
-        var operacion = String($opt.data('operacion') || '');
+        var operacion = meta().operacion || '';
         var nombre = nombreTipoSeleccionado();
 
         if (operacion === 'T') {

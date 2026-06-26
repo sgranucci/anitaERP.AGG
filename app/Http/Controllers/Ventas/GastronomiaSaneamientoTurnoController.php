@@ -142,6 +142,8 @@ class GastronomiaSaneamientoTurnoController extends Controller
                 $request->has('sobrante_faltante')
                     ? (float) $request->input('sobrante_faltante')
                     : null,
+                null,
+                true,
             );
 
             return response()->json(['ok' => true, ...$resultado]);

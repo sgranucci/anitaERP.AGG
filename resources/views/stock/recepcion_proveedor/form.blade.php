@@ -449,27 +449,8 @@
         max-width: 28rem;
         font-size: 0.8rem;
     }
-    #recepcion-proveedor-banner-confirmando.recepcion-proveedor-confirmando-overlay {
-        position: fixed;
-        top: 0;
-        right: 0;
-        bottom: 0;
-        left: 0;
-        z-index: 2000;
-        display: none;
-        align-items: center;
-        justify-content: center;
-        padding: 1rem;
-        background: rgba(0, 0, 0, 0.2);
-    }
-    #recepcion-proveedor-banner-confirmando.recepcion-proveedor-confirmando-overlay.is-visible {
-        display: flex;
-    }
-    .recepcion-proveedor-confirmando-banner {
-        max-width: 32rem;
-        border: 2px solid #ffc107;
-    }
 </style>
+@include('stock.recepcion_proveedor.partials.banner_confirmando_styles')
 
 @if($recepcion && $recepcion->resumen_rechazos)
 <div class="alert alert-danger">

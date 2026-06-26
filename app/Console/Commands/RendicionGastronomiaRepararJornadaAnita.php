@@ -56,7 +56,7 @@ class RendicionGastronomiaRepararJornadaAnita extends Command
         $filasResumen = [];
         foreach ($resultados as $r) {
             $filasResumen[] = [
-                $r['puntoventa'],
+                $r['puntoventa'] ?? $r['identificador_pc'] ?? '—',
                 $r['estado'],
                 $r['cabeceras'],
                 $r['portadora_turno'] ?? '—',

@@ -10,13 +10,13 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Asigna rendg_total_z en Anita por PC al cierre de jornada (facturación bruta del día, sin NC).
+ * Asigna rendg_total_z en Anita al presentar la jornada (facturación bruta del día por PV CAE, sin NC).
+ *
+ * Agrupa por puntoventa_cae_id de la rendición (rendg_sucursal), no solo por PC: una misma terminal
+ * puede facturar con varios PV ARCA y el Z del día debe coincidir con cada sucursal en rendgastro.
  *
  * Mientras la jornada no fue presentada en caja, las rendiciones de turno van con Z=0 en Anita.
- * El recálculo (facturación bruta del día por PC → Z solo en la última rendición de esa PC
- * por fecharendicion) se dispara al presentar o corregir la rendición tipo jornada en Caja,
- * o al anular esa presentación / borrar una rendición de turno si la jornada ya fue presentada.
- * No se dispara al rendir turnos ni al cerrar la jornada en Ventas → Estacionamiento.
+ * El recálculo se dispara al presentar o corregir la rendición tipo jornada en Caja.
  */
 final class RendicionEstacionamientoAnitaTotalZPorPcService
 {
@@ -24,6 +24,7 @@ final class RendicionEstacionamientoAnitaTotalZPorPcService
 
     public function __construct(
         private readonly RendicionEstacionamientoAnitaSyncService $anitaSyncService,
+        private readonly RendicionEstacionamientoAnitaRendgastroSupport $rendgastroSupport,
     ) {
     }
 
@@ -97,29 +98,33 @@ final class RendicionEstacionamientoAnitaTotalZPorPcService
             return;
         }
 
-        /** @var Collection<string, Collection<int, RendicionEstacionamientoCaja>> $porPc */
-        $porPc = $rendiciones->groupBy(
-            fn (RendicionEstacionamientoCaja $r) => trim((string) ($r->turnoOperativo?->identificador_pc ?? '')),
+        /** @var Collection<int, Collection<int, RendicionEstacionamientoCaja>> $porPuntoventa */
+        $porPuntoventa = $rendiciones->groupBy(
+            fn (RendicionEstacionamientoCaja $r) => (int) ($r->puntoventa_cae_id ?? 0),
         );
 
-        foreach ($porPc as $identificadorPc => $grupoPc) {
-            if ($identificadorPc === '') {
+        foreach ($porPuntoventa as $puntoventaId => $grupoPv) {
+            if ((int) $puntoventaId <= 0) {
                 continue;
             }
 
-            $totalDiaPc = EstacionamientoTurnoOperativoTotalesSupport::totalFacturasSinNotasCredito(
-                $identificadorPc,
+            $pvCodigo = $grupoPv->first()?->puntoventaCae?->codigo;
+            $sucursal = $this->rendgastroSupport->codigoPuntoventaEntero($pvCodigo);
+            if ($this->rendgastroSupport->esSucursalMaquinaVending($sucursal)) {
+                continue;
+            }
+
+            $totalDiaPv = EstacionamientoTurnoOperativoTotalesSupport::totalFacturasSinNotasCreditoPorPuntoventa(
+                (int) $puntoventaId,
                 $empresaId,
                 $fechaJornada,
-                null,
-                null,
             );
 
-            $portadora = $this->resolverRendicionPortadoraZ($grupoPc);
+            $portadora = $this->resolverRendicionPortadoraZ($grupoPv);
 
-            foreach ($grupoPc as $rendicion) {
+            foreach ($grupoPv as $rendicion) {
                 $totalZ = ($portadora !== null && (int) $rendicion->id === (int) $portadora->id)
-                    ? $totalDiaPc
+                    ? $totalDiaPv
                     : 0.0;
 
                 try {
@@ -128,7 +133,7 @@ final class RendicionEstacionamientoAnitaTotalZPorPcService
                     Log::warning(self::LOG_EVENTO.'.fallo', [
                         'jornada_id' => $jornada->id,
                         'rendicion_id' => $rendicion->id,
-                        'pc' => $identificadorPc,
+                        'puntoventa_cae_id' => (int) $puntoventaId,
                         'total_z' => $totalZ,
                         'error' => $e->getMessage(),
                     ]);
@@ -138,14 +143,14 @@ final class RendicionEstacionamientoAnitaTotalZPorPcService
     }
 
     /**
-     * Portadora del Z del día en la PC: turno N → T → M (misma regla que rendgastro / reparación).
+     * Portadora del Z del día en el PV: turno N → T → M (misma regla que rendgastro / reparación).
      * Si hay varias rendiciones del mismo turno, la de mayor fecharendicion.
      */
-    private function resolverRendicionPortadoraZ(Collection $grupoPc): ?RendicionEstacionamientoCaja
+    private function resolverRendicionPortadoraZ(Collection $grupoPv): ?RendicionEstacionamientoCaja
     {
         /** @var array<string, Collection<int, RendicionEstacionamientoCaja>> $porLetra */
         $porLetra = [];
-        foreach ($grupoPc as $rendicion) {
+        foreach ($grupoPv as $rendicion) {
             $letra = RendicionEstacionamientoAnitaRendgastroSupport::letraTurnoDesdeNombre(
                 $rendicion->turnoOperativo?->turno?->nombre,
             );
@@ -161,7 +166,7 @@ final class RendicionEstacionamientoAnitaTotalZPorPcService
             }
         }
 
-        return $this->elegirUltimaRendicionPorFecharendicion($grupoPc);
+        return $this->elegirUltimaRendicionPorFecharendicion($grupoPv);
     }
 
     private function elegirUltimaRendicionPorFecharendicion(Collection $grupo): ?RendicionEstacionamientoCaja

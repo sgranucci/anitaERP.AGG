@@ -24,7 +24,7 @@ final class ArticuloSaldosDepositoSupport
     public static function listadoPorArticulo(int $articuloId): array
     {
         $articulo = Articulo::query()
-            ->select('id', 'sku', 'codigoarticulo', 'descripcion')
+            ->select('id', 'sku', 'descripcion')
             ->findOrFail($articuloId);
 
         $depQuery = Depmae::query()
@@ -69,7 +69,7 @@ final class ArticuloSaldosDepositoSupport
             return strcmp($a['codigo'], $b['codigo']);
         });
 
-        $sku = trim((string) ($articulo->codigoarticulo ?? $articulo->sku ?? ''));
+        $sku = trim((string) ($articulo->sku ?? ''));
 
         return [
             'articulo' => [

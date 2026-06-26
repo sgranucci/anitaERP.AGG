@@ -60,26 +60,20 @@
 <div class="card card-outline card-secondary mb-3 ms-form-cabecera">
     <div class="card-body py-3">
         <input type="hidden" id="codigomovimientostock" value="{{ old('codigomovimientostock', $movimientostock->codigo ?? '') }}" />
-        <div class="row" id="datosmovimientostock" data-tipotransaccion="{{ $tipotransaccion_query }}">
+        <div class="row" id="datosmovimientostock">
             <div class="col-md-6">
-                <div class="form-group row mb-2" id="tipotransaccion">
-                    <label for="tipotransaccion_stock_id" class="col-lg-4 col-form-label requerido">Tipo de transacci&oacute;n</label>
-                    <div class="col-lg-8">
-                        <select name="tipotransaccion_stock_id" id="tipotransaccion_stock_id" data-placeholder="Tipo de transacci&oacute;n" class="form-control" data-fouc required>
-                            <option value="">-- Seleccionar transacci&oacute;n --</option>
-                            @foreach($tipotransaccion_query as $key => $value)
-                                <option value="{{ $value->id }}"
-                                    data-operacion="{{ $value->operacion }}"
-                                    data-maneja-contabilidad="{{ $value->maneja_contabilidad ? '1' : '0' }}"
-                                    data-origen-bien-uso="{{ $value->origen_bien_uso ? '1' : '0' }}"
-                                    data-destino-bien-uso="{{ $value->destino_bien_uso ? '1' : '0' }}"
-                                    @if((int) $value->id === $tipoTransaccionSeleccionada) selected @endif>
-                                    {{ $value->nombre }}@if($value->maneja_contabilidad) (contabilidad)@endif
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-                </div>
+                @include('stock.partials.campo_consulta_tipotransaccion_stock', [
+                    'prefix' => 'movimientostock',
+                    'tipoId' => $tipoTransaccionSeleccionada,
+                    'abreviatura' => old('tipotransaccion_abreviatura', $tipoActual->abreviatura ?? ''),
+                    'nombre' => old('tipotransaccion_nombre', $tipoActual->nombre ?? ''),
+                    'operacion' => $tipoActual->operacion ?? '',
+                    'maneja_contabilidad' => (bool) ($tipoActual?->maneja_contabilidad ?? false),
+                    'origen_bien_uso' => (bool) ($tipoActual?->origen_bien_uso ?? false),
+                    'destino_bien_uso' => (bool) ($tipoActual?->destino_bien_uso ?? false),
+                    'col_label' => 'col-lg-4 col-form-label',
+                    'col_input' => 'col-lg-8',
+                ])
                 <div class="form-group row mb-2">
                     <label for="fecha" class="col-lg-4 col-form-label requerido">Fecha</label>
                     <div class="col-lg-8">
@@ -374,6 +368,7 @@
 
 @include('includes.stock.modalconsultaarticulo')
 @include('includes.stock.modalconsultadeposito')
+@include('includes.stock.modalconsultatipotransaccionstock')
 @if(\App\Support\Stock\MovimientosArticuloDepositoSupport::puedeConsultar())
 @include('includes.stock.modal_kardex_deposito')
 <input type="hidden" id="recuento-movimientos-articulo-url" value="{{ route('recuento_movimientos_articulo') }}">

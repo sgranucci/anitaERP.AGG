@@ -128,6 +128,25 @@ final class RendicionEstacionamientoAuditoriaAnitaService
             ];
         }
 
+        if ($this->rendgastroSupport->esSucursalMaquinaVending($sucursal)) {
+            return [
+                'puntoventa' => $pv->codigo,
+                'sucursal' => $sucursal,
+                'estado' => 'vending_omitido',
+                'erp_z' => $erpZ,
+                'erp_nc' => $erpNc,
+                'anita_z' => null,
+                'anita_nc' => null,
+                'diff_z' => null,
+                'diff_nc' => null,
+                'cantidad_facturas_erp' => $cantFacturas,
+                'cantidad_nc_erp' => $cantNc,
+                'mensaje' => 'Máquina vending (sucursal ≥ '
+                    .RendicionEstacionamientoAnitaRendgastroSupport::SUCURSAL_VENDING_MINIMA
+                    .'); no audita rendgastro desde estacionamiento',
+            ];
+        }
+
         $cabeceras = $this->rendgastroSupport->listarCabecerasPorSucursal($empresaId, $fechaEntera, $sucursal);
 
         if ($cabeceras === []) {
@@ -260,7 +279,7 @@ final class RendicionEstacionamientoAuditoriaAnitaService
         $fechaEntera = (int) Carbon::parse($fechaJornada)->format('Ymd');
         foreach ($this->rendgastroSupport->listarCabecerasEmpresaFecha($empresaId, $fechaEntera) as $fila) {
             $sucursal = (int) ($fila->rendg_sucursal ?? 0);
-            if ($sucursal <= 0) {
+            if ($sucursal <= 0 || $this->rendgastroSupport->esSucursalMaquinaVending($sucursal)) {
                 continue;
             }
             $pv = $this->puntoventaPorSucursal($empresaId, $sucursal, $codigoFiltro);

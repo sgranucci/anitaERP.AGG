@@ -18,7 +18,9 @@
     }
 
     function operacionTipoSeleccionada() {
-        return String($('#tipotransaccion_stock_id option:selected').attr('data-operacion') || '').trim();
+        return typeof window.msOperacionTipoTransaccion === 'function'
+            ? window.msOperacionTipoTransaccion()
+            : '';
     }
 
     function tipodepositoCampo($ctx, $depId) {

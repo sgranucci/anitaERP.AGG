@@ -132,6 +132,63 @@
         return G.csrfToken || $('meta[name="csrf-token"]').attr('content') || '';
     }
 
+    function aplicarCsrfToken(token) {
+        const t = String(token || '').trim();
+        if (!t) {
+            return;
+        }
+        G.csrfToken = t;
+        const meta = document.querySelector('meta[name="csrf-token"]');
+        if (meta) {
+            meta.setAttribute('content', t);
+        }
+        if (typeof window.GASTRONOMIA !== 'undefined') {
+            window.GASTRONOMIA.csrf = t;
+        }
+    }
+
+    function urlRefrescoCsrf() {
+        if (G.rutas && G.rutas.csrfRefresh) {
+            return String(G.rutas.csrfRefresh);
+        }
+        const base = (typeof carpetaBase !== 'undefined' && carpetaBase) ? String(carpetaBase).replace(/\/$/, '') : '';
+        return base + '/csrf-token';
+    }
+
+    async function refrescarCsrf() {
+        const res = await fetch(urlRefrescoCsrf(), {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        });
+        const data = await res.json().catch(function () { return {}; });
+        if (!res.ok || !data.token) {
+            return false;
+        }
+        aplicarCsrfToken(data.token);
+        return true;
+    }
+
+    function mensajeErrorApiSesion(res, data) {
+        if (res.status === 401 || res.status === 419) {
+            return 'Sesión o token de seguridad vencido. Recargue la página (Ctrl+F5) e intente de nuevo.';
+        }
+        if (res.status === 403) {
+            return (
+                (data && (data.message || data.error)) ||
+                'Sin permiso para esta operación.'
+            );
+        }
+        return (
+            (data && (data.error || data.mensaje || data.message)) ||
+            (data && data.errors ? JSON.stringify(data.errors) : '') ||
+            ('Error HTTP ' + res.status)
+        );
+    }
+
     function toast(msg, tipo) {
         if (typeof toastr !== 'undefined') {
             const t = tipo || 'info';
@@ -150,27 +207,66 @@
         }
     }
 
-    async function api(method, path, body) {
-        const opts = {
-            method: method,
-            headers: {
-                'Accept': 'application/json',
-                'X-CSRF-TOKEN': csrf(),
-                'X-Requested-With': 'XMLHttpRequest',
-            },
-        };
-        if (body !== undefined) {
-            opts.headers['Content-Type'] = 'application/json';
-            opts.body = JSON.stringify(body);
+    async function api(method, path, body, opciones) {
+        const optsExtra = opciones || {};
+        const reintentoCsrf = optsExtra.reintentoCsrf === true;
+
+        async function ejecutar() {
+            const token = csrf();
+            const payload = body !== undefined
+                ? Object.assign({}, body, token ? { _token: token } : {})
+                : undefined;
+            const opts = {
+                method: method,
+                credentials: 'same-origin',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': token,
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+            };
+            if (payload !== undefined) {
+                opts.headers['Content-Type'] = 'application/json';
+                opts.body = JSON.stringify(payload);
+            }
+            const res = await fetch(apiBase + path, opts);
+            const contentType = (res.headers.get('content-type') || '').toLowerCase();
+            let data = {};
+            if (contentType.includes('application/json')) {
+                data = await res.json().catch(function () { return {}; });
+            } else {
+                const raw = await res.text().catch(function () { return ''; });
+                if (/login|seguridad|csrf|page expired/i.test(raw) || (res.redirected && !contentType.includes('json'))) {
+                    const err = new Error(mensajeErrorApiSesion(res, {}));
+                    err.httpStatus = res.status;
+                    throw err;
+                }
+                try {
+                    data = raw ? JSON.parse(raw) : {};
+                } catch (e) {
+                    data = {};
+                }
+            }
+            if (!res.ok) {
+                const err = new Error(mensajeErrorApiSesion(res, data));
+                err.payload = data;
+                err.httpStatus = res.status;
+                throw err;
+            }
+            return data;
         }
-        const res = await fetch(apiBase + path, opts);
-        const data = await res.json().catch(function () { return {}; });
-        if (!res.ok) {
-            const err = new Error(data.error || data.mensaje || ('Error HTTP ' + res.status));
-            err.payload = data;
-            throw err;
+
+        try {
+            return await ejecutar();
+        } catch (e) {
+            if (!reintentoCsrf && (e.httpStatus === 419 || e.httpStatus === 401)) {
+                const ok = await refrescarCsrf();
+                if (ok) {
+                    return api(method, path, body, { reintentoCsrf: true });
+                }
+            }
+            throw e;
         }
-        return data;
     }
 
     const CM_MODAL_Z_BASE = 1050;

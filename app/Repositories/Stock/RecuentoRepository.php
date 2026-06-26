@@ -41,7 +41,7 @@ class RecuentoRepository implements RecuentoRepositoryInterface
             ->join('empresa', 'empresa.id', '=', 'recuento.empresa_id')
             ->join('usuario', 'usuario.id', '=', 'recuento.usuario_id')
             ->with([
-                'deposito:id,nombre,empresa_id',
+                'deposito:id,codigo,nombre,empresa_id',
                 'empresa:id,nombre',
                 'usuario:id,nombre',
             ])

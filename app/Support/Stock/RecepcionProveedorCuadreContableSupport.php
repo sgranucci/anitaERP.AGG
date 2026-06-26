@@ -17,6 +17,11 @@ final class RecepcionProveedorCuadreContableSupport
         return $tol > 0 ? $tol : 0.02;
     }
 
+    public static function importeContableEsCero(float $total): bool
+    {
+        return abs($total) < self::tolerancia();
+    }
+
     /**
      * @param  array{
      *   total_recepcion: float,

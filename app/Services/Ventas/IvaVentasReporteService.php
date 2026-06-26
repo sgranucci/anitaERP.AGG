@@ -6,6 +6,7 @@ namespace App\Services\Ventas;
 
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Venta;
+use App\Support\Ventas\IvaVentas\IvaVentasAuditoriaCorrelatividadSupport;
 use App\Support\Ventas\IvaVentas\IvaVentasColumnasSupport;
 use App\Support\Ventas\IvaVentas\IvaVentasDesgloseSupport;
 use App\Support\Ventas\IvaVentasListadoFiltros;
@@ -95,6 +96,7 @@ final class IvaVentasReporteService
                 'tipo_orden' => $tipo,
                 'tipotransaccion_id' => (int) ($venta->tipotransaccion_id ?? 0),
                 'comprobante' => $this->formatearComprobante($venta),
+                'numerocomprobante' => (int) $venta->numerocomprobante,
                 'columnas' => $columnas,
                 'venta_id' => (int) $venta->id,
                 'anulada' => IvaVentasDesgloseSupport::esAnulada($venta),
@@ -155,6 +157,7 @@ final class IvaVentasReporteService
                     'filas' => $filas,
                 ])
                 : ['habilitada' => false],
+            'auditoria_correlatividad' => IvaVentasAuditoriaCorrelatividadSupport::auditar($filas, $filtros),
         ];
     }
 

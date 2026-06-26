@@ -9,6 +9,7 @@ use App\Models\Ventas\JornadaGastronomia;
 use App\Models\Ventas\TurnoGastronomia;
 use App\Models\Ventas\TurnoOperativoGastronomia;
 use App\Models\Ventas\CierreParcialTurnoGastronomia;
+use App\Support\Ventas\GastronomiaCierreTurnoReporteSupport;
 use App\Support\Ventas\GastronomiaCuentacajaEfectivo;
 use App\Support\Ventas\GastronomiaTurnoMediosContadoCierreSupport;
 use App\Support\Ventas\GastronomiaTurnoNumeracionComprobanteSupport;
@@ -173,6 +174,42 @@ final class GastronomiaTurnoOperativoService
             'url_saneamiento_turno' => route('gastronomia_saneamiento_turno', ['empresa_id' => $empresaId]),
             'cuentacaja_efectivo_id' => (int) (GastronomiaCuentacajaEfectivo::idParaEmpresa($empresaId) ?? 0),
         ];
+    }
+
+    /**
+     * Estado de cierre para un turno habilitado concreto (cierre centralizado desde otra PC).
+     *
+     * @return array<string, mixed>
+     */
+    public function estadoParaTurnoOperativo(TurnoOperativoGastronomia $turno): array
+    {
+        if ($turno->estado !== TurnoOperativoGastronomia::ESTADO_HABILITADO) {
+            throw new InvalidArgumentException('El turno no está habilitado.');
+        }
+
+        $turno->loadMissing([
+            'turno',
+            'jornada',
+            'usuarioHabilitado',
+            'configuracionPuntoventa.puntoventaCae',
+            'configuracionPuntoventa.puntoventaCaea',
+        ]);
+
+        $cfg = $turno->configuracionPuntoventa;
+        if ($cfg === null) {
+            throw new InvalidArgumentException('El turno no tiene configuración de punto de venta.');
+        }
+
+        $pc = (string) $turno->identificador_pc;
+        $empresaId = (int) $turno->empresa_id;
+        $estado = $this->estadoParaTerminal($cfg, $pc);
+
+        $estado['modo_cierre_central'] = true;
+        $estado['identificador_pc_turno'] = $pc;
+        $estado['puntoventa_etiqueta'] = GastronomiaCierreTurnoReporteSupport::etiquetaPuntoventaDesdeConfiguracion($cfg);
+        $estado['configuracion_descripcion'] = (string) ($cfg->descripcion ?? '');
+
+        return $estado;
     }
 
     /**
@@ -1671,6 +1708,74 @@ final class GastronomiaTurnoOperativoService
             ])
             ->values()
             ->all();
+    }
+
+    /**
+     * Turnos habilitados en la jornada con totales para la grilla de cierre centralizado.
+     *
+     * @return list<array{
+     *   turno_operativo_id:int,
+     *   identificador_pc:string,
+     *   turno_nombre:string,
+     *   habilitacion_en:string,
+     *   con_actividad:bool,
+     *   es_ultimo_turno_dia:bool,
+     *   puntoventa_etiqueta:string,
+     *   configuracion_descripcion:string,
+     *   total_ventas:float,
+     *   cantidad_comprobantes:int,
+     *   conciliacion_ok:bool,
+     *   usuario_habilitado:?string
+     * }>
+     */
+    public function listarTurnosParaCierreCentral(int $empresaId, ?JornadaGastronomia $jornada = null): array
+    {
+        $base = $this->listarTurnosHabilitadosParaCierreRemoto($empresaId, $jornada);
+        if ($base === []) {
+            return [];
+        }
+
+        $turnoIds = array_column($base, 'turno_operativo_id');
+        $turnos = TurnoOperativoGastronomia::query()
+            ->with([
+                'turno',
+                'jornada',
+                'usuarioHabilitado',
+                'configuracionPuntoventa.puntoventaCae',
+                'configuracionPuntoventa.puntoventaCaea',
+            ])
+            ->whereIn('id', $turnoIds)
+            ->get()
+            ->keyBy('id');
+
+        $out = [];
+        foreach ($base as $row) {
+            $turno = $turnos->get((int) $row['turno_operativo_id']);
+            if ($turno === null) {
+                continue;
+            }
+
+            $fechaJornada = $turno->jornada?->fecha_jornada?->format('Y-m-d')
+                ?? Carbon::today()->format('Y-m-d');
+            $totales = GastronomiaTurnoOperativoTotalesSupport::calcular(
+                (string) $turno->identificador_pc,
+                $empresaId,
+                $fechaJornada,
+                $turno->habilitacion_en,
+            );
+
+            $cfg = $turno->configuracionPuntoventa;
+            $out[] = array_merge($row, [
+                'puntoventa_etiqueta' => GastronomiaCierreTurnoReporteSupport::etiquetaPuntoventaDesdeConfiguracion($cfg),
+                'configuracion_descripcion' => (string) ($cfg?->descripcion ?? ''),
+                'total_ventas' => round((float) ($totales['total_ventas'] ?? 0), 2),
+                'cantidad_comprobantes' => (int) ($totales['cantidad_comprobantes'] ?? 0),
+                'conciliacion_ok' => ! empty($totales['conciliacion_ok']),
+                'usuario_habilitado' => $turno->usuarioHabilitado?->nombre,
+            ]);
+        }
+
+        return $out;
     }
 
     private function componerObservacionCierreTurno(

@@ -51,8 +51,11 @@ final class CanjeMarketingCuentaService
         }
 
         $claveAlmacenada = (string) ($mozo->clave ?? '');
+        if ($claveAlmacenada === '') {
+            throw new InvalidArgumentException('El mozo no tiene clave configurada. Defínala en Ventas → Mozos gastronomía.');
+        }
         $claveOk = false;
-        if ($claveAlmacenada !== '' && str_starts_with($claveAlmacenada, '$2y$')) {
+        if (str_starts_with($claveAlmacenada, '$2y$')) {
             $claveOk = Hash::check($clave, $claveAlmacenada);
         } else {
             $claveOk = hash_equals($claveAlmacenada, $clave);

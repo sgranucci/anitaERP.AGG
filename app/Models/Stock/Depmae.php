@@ -83,6 +83,29 @@ class Depmae extends Model
         return (int) $this->empresa_id === $empresaId;
     }
 
+    public function etiqueta(): string
+    {
+        return self::etiquetaDesdePartes(
+            (string) ($this->codigo ?? ''),
+            (string) ($this->nombre ?? ''),
+            (int) $this->id
+        );
+    }
+
+    public static function etiquetaDesdePartes(string $codigo, string $nombre, int $id = 0): string
+    {
+        $partes = array_filter([
+            trim($codigo),
+            trim($nombre),
+        ], fn (string $v) => $v !== '');
+
+        if ($partes !== []) {
+            return implode(' — ', $partes);
+        }
+
+        return $id > 0 ? 'ID '.$id : '—';
+    }
+
     private function replicaEnAnita(int $empresaId): bool
     {
         return $empresaId <= 1;

@@ -66,7 +66,11 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping(120)
             ->when(fn () => (bool) config('rendicion_gastronomia_anita.auditoria_diaria.habilitada', true));
 
-        $schedule->command('recepcion-proveedor:auditoria-asientos-com')
+        $ventanaAuditoriaCom = max(1, (int) config('recepcion_proveedor.auditoria_asientos_com_diaria.ventana_dias', 7));
+        $schedule->command('recepcion-proveedor:auditoria-asientos-com', [
+            '--desde' => Carbon::today()->subDays($ventanaAuditoriaCom - 1)->toDateString(),
+            '--hasta' => Carbon::today()->toDateString(),
+        ])
             ->dailyAt((string) config('recepcion_proveedor.auditoria_asientos_com_diaria.hora', '07:45'))
             ->runInBackground()
             ->withoutOverlapping(120)

@@ -211,9 +211,13 @@
                                                         </li>
                                                     @endforeach
                                                 </ul>
+                                                <a href="{{ route('gastronomia_cierre_turno_central', ['empresa_id' => $empresa_id]) }}"
+                                                   class="btn btn-outline-danger btn-sm mr-1">
+                                                    <i class="fa fa-desktop"></i> Cierre centralizado de turnos
+                                                </a>
                                                 <a href="{{ $url_saneamiento_turno ?? url('ventas/gastronomia/saneamiento-turno') }}?empresa_id={{ $empresa_id }}"
                                                    class="btn btn-outline-warning btn-sm" target="_blank" rel="noopener">
-                                                    Cierre remoto de turnos
+                                                    Saneamiento / cierre remoto rápido
                                                 </a>
                                             </div>
                                         @endif

@@ -18,7 +18,7 @@ class RendicionGastronomiaAuditoriaAnita extends Command
                             {--tolerancia= : Override tolerancia en pesos (default config)}
                             {--detalle : Muestra cabeceras rendgastro por PV con diferencias}';
 
-    protected $description = 'Audita rendg_total_z y rendg_tot_nc (rendgastro) vs facturación ERP por PV y fecha de jornada';
+    protected $description = 'Audita rendg_total_z (rendgastro) vs facturación ERP por PC (CAE+CAEA) y total día';
 
     public function handle(RendicionGastronomiaAuditoriaAnitaService $service): int
     {
@@ -45,7 +45,6 @@ class RendicionGastronomiaAuditoriaAnita extends Command
 
         $pvFiltro = $this->option('puntoventa');
         $pvFiltro = is_string($pvFiltro) && trim($pvFiltro) !== '' ? trim($pvFiltro) : null;
-        $mostrarDetalle = (bool) $this->option('detalle');
 
         $this->line('Bridge: '.ApiAnita::urlBridge());
         $this->line(sprintf(
@@ -75,85 +74,68 @@ class RendicionGastronomiaAuditoriaAnita extends Command
 
                 $this->newLine();
                 $this->info('Empresa '.$empresaId.' — fecha jornada '.$fecha);
-            $conteo = $informe['resumen']['conteo'] ?? [];
-            $this->table(
-                ['Estado', 'Cantidad'],
-                [
-                    ['OK', (string) ($conteo['ok'] ?? 0)],
-                    ['Diferencia Z/NC', (string) ($conteo['diferencia'] ?? 0)],
-                    ['Sin rendgastro (con ventas ERP)', (string) ($conteo['sin_anita'] ?? 0)],
-                    ['Sin ventas ni rendgastro', (string) ($conteo['sin_ventas_erp'] ?? 0)],
-                    ['Estacionamiento (solo Anita)', (string) ($conteo['excluido_estacionamiento'] ?? 0)],
-                ],
-            );
-
-            $filasTabla = [];
-            foreach ($informe['filas'] as $fila) {
-                if (in_array($fila['estado'] ?? '', ['sin_ventas_erp', 'excluido_estacionamiento'], true)) {
-                    continue;
-                }
-                $filasTabla[] = [
-                    $fila['puntoventa'],
-                    $fila['estado'],
-                    $fila['cantidad_facturas_erp'] ?? 0,
-                    $fila['cantidad_nc_erp'] ?? 0,
-                    $this->fmt($fila['erp_z'] ?? null),
-                    $this->fmt($fila['anita_z'] ?? null),
-                    $this->fmtDiff($fila['diff_z'] ?? null),
-                    $this->fmt($fila['erp_nc'] ?? null),
-                    $this->fmt($fila['anita_nc'] ?? null),
-                    $this->fmtDiff($fila['diff_nc'] ?? null),
-                ];
-
-                if ($mostrarDetalle && in_array($fila['estado'] ?? '', ['diferencia', 'sin_anita'], true)) {
-                    $this->comment('PV '.$fila['puntoventa'].' — '.($fila['mensaje'] ?? ''));
-                    if (! empty($fila['detalle'])) {
-                        $this->table(
-                            ['nro_oper', 'turno', 'hora', 'Z Anita', 'NC Anita', 'portadora'],
-                            array_map(fn (array $d) => [
-                                $d['nro_oper'],
-                                $d['turno'],
-                                $d['hora'],
-                                $this->fmt($d['z']),
-                                $this->fmt($d['tot_nc']),
-                                ! empty($d['portadora']) ? 'sí' : 'no',
-                            ], $fila['detalle']),
-                        );
-                    }
-                    if (! empty($fila['cabeceras_huerfanas'])) {
-                        foreach ($fila['cabeceras_huerfanas'] as $msg) {
-                            $this->warn($msg);
-                        }
-                    }
-                }
-            }
-
-            if ($filasTabla !== []) {
+                $conteo = $informe['resumen']['conteo'] ?? [];
                 $this->table(
-                    ['PV', 'Estado', 'Fac ERP', 'NC ERP', 'Z ERP', 'Z Anita', 'Δ Z', 'NC ERP', 'NC Anita', 'Δ NC'],
-                    $filasTabla,
+                    ['Estado', 'Cantidad'],
+                    [
+                        ['OK', (string) ($conteo['ok'] ?? 0)],
+                        ['Diferencia', (string) ($conteo['diferencia'] ?? 0)],
+                        ['Sin rendgastro', (string) ($conteo['sin_anita'] ?? 0)],
+                    ],
                 );
-            } else {
-                $this->comment('Sin puntos de venta con actividad en esta fecha.');
-            }
 
-            if (! empty($informe['resumen']['requiere_alerta'])) {
-                $hayProblemas = true;
-                $jornada = $service->resolverJornada($empresaId, $fecha);
-                if ($jornada !== null) {
-                    $this->line('Reparación sugerida: php artisan rendicion-gastronomia:reparar-jornada-anita --jornada='.$jornada->id.' --dry-run');
-                } else {
-                    $this->line('Reparación sugerida: php artisan rendicion-gastronomia:reparar-jornada-anita --fecha='.$fecha.' --empresa='.$empresaId.' --dry-run');
+                $totalDia = $informe['total_dia'] ?? null;
+                if ($totalDia !== null) {
+                    $this->line(sprintf(
+                        'Total día: ERP $ %s | rendg $ %s | Δ $ %s | %s',
+                        $this->fmt($totalDia['erp_z'] ?? null),
+                        $this->fmt($totalDia['anita_z'] ?? null),
+                        $this->fmtDiff($totalDia['diff_z'] ?? null),
+                        $totalDia['estado'] ?? '—',
+                    ));
                 }
-            } else {
-                $this->info('Consistente para '.$fecha.'.');
-            }
 
-            Log::info('rendicion_gastronomia.auditoria_anita', [
-                'fecha_jornada' => $fecha,
-                'empresa_id' => $empresaId,
-                'resumen' => $informe['resumen'],
-            ]);
+                $filasTabla = [];
+                foreach ($informe['filas'] as $fila) {
+                    $filasTabla[] = [
+                        $fila['tipo_fila'] ?? '—',
+                        $fila['puntoventa'],
+                        $fila['estado'],
+                        $fila['cantidad_facturas_erp'] ?? 0,
+                        $this->fmt($fila['erp_cae'] ?? null),
+                        $this->fmt($fila['erp_caea'] ?? null),
+                        $this->fmt($fila['erp_z'] ?? null),
+                        $this->fmt($fila['anita_z'] ?? null),
+                        $this->fmtDiff($fila['diff_z'] ?? null),
+                    ];
+                }
+
+                if ($filasTabla !== []) {
+                    $this->table(
+                        ['Tipo', 'Clave', 'Estado', 'Fac', 'ERP CAE', 'ERP CAEA', 'ERP total', 'Rendg Z', 'Δ Z'],
+                        $filasTabla,
+                    );
+                } else {
+                    $this->comment('Sin actividad en esta fecha.');
+                }
+
+                if (! empty($informe['resumen']['requiere_alerta'])) {
+                    $hayProblemas = true;
+                    $jornada = $service->resolverJornada($empresaId, $fecha);
+                    if ($jornada !== null) {
+                        $this->line('Reparación sugerida: php artisan rendicion-gastronomia:reparar-jornada-anita --jornada='.$jornada->id.' --dry-run');
+                    } else {
+                        $this->line('Reparación sugerida: php artisan rendicion-gastronomia:reparar-jornada-anita --fecha='.$fecha.' --empresa='.$empresaId.' --dry-run');
+                    }
+                } else {
+                    $this->info('Consistente para '.$fecha.'.');
+                }
+
+                Log::info('rendicion_gastronomia.auditoria_anita', [
+                    'fecha_jornada' => $fecha,
+                    'empresa_id' => $empresaId,
+                    'resumen' => $informe['resumen'],
+                ]);
             }
         }
 

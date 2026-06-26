@@ -3,6 +3,7 @@
 namespace App\Repositories\Stock;
 
 use App\Models\Stock\Tipotransaccion_Stock;
+use App\Support\Stock\UsuarioTipotransaccionStockAutorizado;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -27,6 +28,8 @@ class Tipotransaccion_StockRepository implements Tipotransaccion_StockRepository
         if ($estado) {
             $query->whereIn('estado', (array) $estado);
         }
+
+        UsuarioTipotransaccionStockAutorizado::aplicarFiltroQuery($query);
 
         return $query->orderBy('nombre')->get();
     }

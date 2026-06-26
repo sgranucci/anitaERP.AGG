@@ -181,6 +181,43 @@ class AsientoRepository implements AsientoRepositoryInterface
         $this->eliminarAnita($codigoEmpresa, $numeroAsiento);
     }
 
+    public function eliminarCtamovAnitaPorComprobante(
+        int $empresaId,
+        string $tipo,
+        string $letra,
+        int $sucursal,
+        int $nro,
+    ): void {
+        if ($empresaId <= 0 || $nro <= 0) {
+            return;
+        }
+
+        $tipo = trim($tipo);
+        $letra = trim($letra);
+        if ($tipo === '') {
+            return;
+        }
+
+        $empresa = $this->empresaRepository->findPorId($empresaId);
+        $codigoEmpresa = $empresa ? $empresa->codigo : $empresaId;
+
+        $apiAnita = new ApiAnita();
+        $data = [
+            'acc' => 'delete',
+            'tabla' => $this->tableAnita[0],
+            'sistema' => 'contab',
+            'whereArmado' => " WHERE ctav_empresa = '".str_replace("'", "''", (string) $codigoEmpresa)."'"
+                ." AND ctav_tipo = '".str_replace("'", "''", $tipo)."'"
+                ." AND ctav_letra = '".str_replace("'", "''", $letra)."'"
+                .' AND ctav_sucursal = '.(int) $sucursal
+                .' AND ctav_nro = '.(int) $nro,
+        ];
+        if (isset($this->path_sistema)) {
+            $data['path_sistema'] = $this->path_sistema;
+        }
+        $apiAnita->apiCallEscritura($data);
+    }
+
     public function delete($id)
     {
     	$asiento = Asiento::find($id);
@@ -213,6 +250,7 @@ class AsientoRepository implements AsientoRepositoryInterface
 									->with("asiento_archivos")
 									->with("tipoasientos")
 									->with("empresas")
+									->with("usuarios")
 									->find($id)) {
             throw new ModelNotFoundException("Registro no encontrado");
         }
@@ -226,6 +264,7 @@ class AsientoRepository implements AsientoRepositoryInterface
 											->with("asiento_archivos")
 											->with("tipoasientos")
 											->with("empresas")
+											->with("usuarios")
 											->findOrFail($id))
 			{
             throw new ModelNotFoundException("Registro no encontrado");
@@ -240,6 +279,7 @@ class AsientoRepository implements AsientoRepositoryInterface
 							->with("asiento_archivos")
 							->with("tipoasientos")
 							->with("empresas")
+							->with("usuarios")
 							->get();
 	}
 
@@ -616,6 +656,9 @@ class AsientoRepository implements AsientoRepositoryInterface
 			{
 				$observacion = preg_replace('([^A-Za-z0-9 ])', '', $observaciones[$i_movimiento]);
 
+				$d_h = null;
+				$monto = 0;
+
 				if ($debes[$i_movimiento] > 0 && $debes[$i_movimiento] != '')
 				{
 					$d_h = 'D';
@@ -626,6 +669,11 @@ class AsientoRepository implements AsientoRepositoryInterface
 				{
 					$d_h = 'H';
 					$monto = abs(floatval($haberes[$i_movimiento])+floatval($debes[$i_movimiento]));
+				}
+
+				// Línea sin importe: no grabar ctamov (evita ctav_d_h indefinido; no altera líneas con debe/haber válidos).
+				if ($d_h === null) {
+					continue;
 				}
 
 				$cuenta = $this->cuentacontableRepository->findPorId($cuentacontables[$i_movimiento]);

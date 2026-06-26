@@ -66,11 +66,21 @@ class RecepcionProveedorAnitaBridgeService
                 $this->ordencompraAnitaSync
             );
 
+            $cabeceraAnita = RecepcionProveedorAnitaColisionSupport::leerRecepmaeProveedorClave($codigoProveedor, $clave);
+
             if ($this->existeRecepmaeErp($codigoProveedor, $clave)) {
                 $this->actualizarRecepmae($recepcion, $codigoProveedor, $clave, $fechaAnita, $usuario, $empresaCodigo, true);
-            } elseif (RecepcionProveedorAnitaCorrespondenciaSupport::correspondeConRecepcionErp($recepcion)) {
+            } elseif (
+                $cabeceraAnita !== null
+                && RecepcionProveedorAnitaWhereSupport::esTerminalProtegidoAnita(
+                    trim((string) ($cabeceraAnita->recm_terminal ?? ''))
+                )
+                && RecepcionProveedorAnitaCorrespondenciaSupport::correspondeConRecepcionErp($recepcion, $cabeceraAnita)
+            ) {
+                // Cabecera REF / terminal vacío (actualización referencia Anita): adoptar vía UPDATE.
                 $this->actualizarRecepmae($recepcion, $codigoProveedor, $clave, $fechaAnita, $usuario, $empresaCodigo, false);
             } else {
+                // Sin recepmae (confirmación nueva o detalle huérfano): INSERT obligatorio.
                 $this->grabarRecepmae($recepcion, $codigoProveedor, $clave, $fechaAnita, $usuario, $empresaCodigo);
                 $estado['cabecera_nueva'] = true;
             }
@@ -190,6 +200,24 @@ class RecepcionProveedorAnitaBridgeService
      */
     public function listarRecepmaeErpPorDocumento(int $documentoId): array
     {
+        return $this->listarRecepmaePorDocumento($documentoId, soloErp: true);
+    }
+
+    /**
+     * Auditoría COM: incluye recepmae ERP, REF o terminal vacío vinculado al documento.
+     *
+     * @return array<int, object>
+     */
+    public function listarRecepmaePorDocumentoAuditoria(int $documentoId): array
+    {
+        return $this->listarRecepmaePorDocumento($documentoId, soloErp: false);
+    }
+
+    /**
+     * @return array<int, object>
+     */
+    private function listarRecepmaePorDocumento(int $documentoId, bool $soloErp): array
+    {
         if ($documentoId <= 0) {
             return [];
         }
@@ -200,11 +228,221 @@ class RecepcionProveedorAnitaBridgeService
             'sistema' => config('recepcion_proveedor.anita.sistema_compras'),
             'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_cabecera'),
             'campos' => 'recm_proveedor, recm_tipo, recm_letra, recm_sucursal, recm_nro, recm_estado, recm_documentoid, recm_terminal',
-            'whereArmado' => RecepcionProveedorAnitaWhereSupport::recepmaeDocumentoErp($documentoId),
+            'whereArmado' => $soloErp
+                ? RecepcionProveedorAnitaWhereSupport::recepmaeDocumentoErp($documentoId)
+                : RecepcionProveedorAnitaWhereSupport::recepmaeDocumentoErpORef($documentoId),
             'limit' => 'FIRST 20',
         ]);
 
         return ApiAnita::decodificarListaFilas((string) $raw);
+    }
+
+    /**
+     * Ajuste explícito de pendmovp (p. ej. -1 antes de re-sincronizar detalle ya aplicado).
+     */
+    public function ajustarPendmovpRecepcion(Recepcion_Proveedor $recepcion, int $multiplicador): void
+    {
+        if ($multiplicador === 0) {
+            return;
+        }
+
+        $recepcion->loadMissing([
+            'ordencompras',
+            'recepcion_proveedor_articulos.articulos',
+        ]);
+
+        $this->actualizarPendmovp($recepcion, $multiplicador);
+    }
+
+    public function tieneDetalleComEnAnita(Recepcion_Proveedor $recepcion): bool
+    {
+        $recepcion->loadMissing(['proveedores', 'empresas']);
+
+        $clave = RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
+        if ((int) ($clave['nro'] ?? 0) <= 0) {
+            return false;
+        }
+
+        $codigoProveedor = RecepcionProveedorAnitaWhereSupport::codigoProveedorAnita($recepcion);
+
+        return RecepcionProveedorAnitaColisionSupport::tieneRecepmovOStkmov($codigoProveedor, $clave);
+    }
+
+    /**
+     * recepmae existente en Anita vinculada a esta recepción ERP (p. ej. REF tras cambio de referencia).
+     */
+    public function cabeceraRecepmaeVinculadaDocumento(Recepcion_Proveedor $recepcion): ?object
+    {
+        $recepcion->loadMissing(['proveedores', 'empresas']);
+
+        $clave = RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
+        if ((int) ($clave['nro'] ?? 0) <= 0) {
+            return null;
+        }
+
+        $codigoProveedor = RecepcionProveedorAnitaWhereSupport::codigoProveedorAnita($recepcion);
+        $cabecera = RecepcionProveedorAnitaColisionSupport::leerRecepmaeProveedorClave($codigoProveedor, $clave);
+        if ($cabecera === null) {
+            return null;
+        }
+
+        if ((int) ($cabecera->recm_documentoid ?? 0) !== (int) $recepcion->id) {
+            return null;
+        }
+
+        return $cabecera;
+    }
+
+    public function contarRecepmovPorClave(array $clave): int
+    {
+        $api = new ApiAnita;
+        $raw = $api->apiCall([
+            'acc' => 'list',
+            'sistema' => config('recepcion_proveedor.anita.sistema_compras'),
+            'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_linea'),
+            'campos' => 'recv_nro',
+            'whereArmado' => RecepcionProveedorAnitaWhereSupport::recepmovCabecera($clave),
+        ]);
+
+        return count(ApiAnita::decodificarListaFilas((string) $raw));
+    }
+
+    public function contarStkmovPorClave(array $clave, int $empresaId): int
+    {
+        $api = new ApiAnita;
+        $raw = $api->apiCall(
+            StockAnitaBridgeSupport::mergePayload([
+                'acc' => 'list',
+                'sistema' => config('recepcion_proveedor.anita.sistema_ventas'),
+                'tabla' => config('recepcion_proveedor.anita.tablas.stock_movimiento'),
+                'campos' => 'stkv_nro',
+                'whereArmado' => RecepcionProveedorAnitaWhereSupport::stkmovCabecera($clave),
+            ], $empresaId)
+        );
+
+        return count(ApiAnita::decodificarListaFilas((string) $raw));
+    }
+
+    /**
+     * Detalle Anita (recepmov/stkmov) con menos líneas que la recepción ERP confirmada.
+     */
+    public function detalleComIncompletoEnAnita(Recepcion_Proveedor $recepcion): bool
+    {
+        $recepcion->loadMissing(['empresas', 'recepcion_proveedor_articulos']);
+
+        $lineasErp = $recepcion->recepcion_proveedor_articulos->count();
+        if ($lineasErp <= 0) {
+            return false;
+        }
+
+        $clave = RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
+        if ((int) ($clave['nro'] ?? 0) <= 0) {
+            return true;
+        }
+
+        $recepmov = $this->contarRecepmovPorClave($clave);
+        $stkmov = $this->contarStkmovPorClave($clave, (int) $recepcion->empresa_id);
+
+        return $recepmov < $lineasErp || $stkmov < $lineasErp;
+    }
+
+    /**
+     * Re-graba recepmov/aplicped/stkmov sin tocar recepmae (cabecera REF u otra ya vinculada).
+     */
+    public function repararDetallePreservandoCabecera(Recepcion_Proveedor $recepcion): void
+    {
+        if ((int) $recepcion->numerorecepcion <= 0) {
+            throw new \RuntimeException('La recepción debe tener numerorecepcion asignado.');
+        }
+
+        $cabecera = $this->cabeceraRecepmaeVinculadaDocumento($recepcion);
+        if ($cabecera === null) {
+            throw new \RuntimeException(
+                'Reparación detalle: no hay recepmae Anita vinculada al documento ERP '.$recepcion->id.'.'
+            );
+        }
+
+        $recepcion->loadMissing([
+            'proveedores', 'empresas', 'ordencompras',
+            'recepcion_proveedor_articulos.articulos.categorias',
+            'recepcion_proveedor_articulos.articulos.impuestos',
+            'recepcion_proveedor_articulos.centrocostos',
+        ]);
+
+        $clave = RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
+        RecepcionProveedorAnitaClaveSupport::asignarEnRecepcion($recepcion, $clave);
+
+        $codigoProveedor = RecepcionProveedorAnitaWhereSupport::codigoProveedorAnita($recepcion);
+        $fechaAnita = (int) str_replace('-', '', $recepcion->fecha->format('Y-m-d'));
+        $usuario = substr((string) (Auth::user()->usuario ?? Auth::user()->name ?? 'ERP'), 0, 8);
+        $empresaCodigo = (int) ($recepcion->empresas->codigo ?? $recepcion->empresa_id);
+        $empresaId = (int) $recepcion->empresa_id;
+
+        $pendmovpReaplicado = false;
+
+        try {
+            $ordenesAnita = RecepcionProveedorAnitaOrdenLineaSupport::prepararOrdenesAntesDeSincronizarAnita(
+                $recepcion,
+                $this->ordencompraAnitaSync
+            );
+
+            try {
+                $this->actualizarPendmovp($recepcion, -1);
+            } catch (\Throwable $e) {
+                Log::warning('RecepcionProveedorAnitaBridge: reparar detalle pendmovp -1 omitido', [
+                    'recepcion_id' => $recepcion->id,
+                    'mensaje' => $e->getMessage(),
+                ]);
+            }
+
+            $this->eliminarDetalleComPorClaveCompleto($clave, $codigoProveedor, $empresaId);
+
+            $this->grabarRecepmov($recepcion, $codigoProveedor, $clave, $fechaAnita, $empresaCodigo, $ordenesAnita);
+            $this->grabarAplicped($recepcion, $codigoProveedor, $clave, $ordenesAnita);
+            StkmaePrecioCompraAnitaBridgeSupport::actualizarDesdeRecepcion($recepcion);
+            $recepcion->forceFill(['stkmae_precio_anita_sync_at' => now()])->save();
+            $this->grabarStkmov($recepcion, $codigoProveedor, $clave, $fechaAnita, $empresaCodigo, $ordenesAnita, $usuario);
+            $this->actualizarPendmovp($recepcion, 1);
+            $pendmovpReaplicado = true;
+        } catch (\Throwable $e) {
+            if ($pendmovpReaplicado) {
+                try {
+                    $this->actualizarPendmovp($recepcion, -1);
+                } catch (\Throwable $rollbackPendmovp) {
+                    Log::warning('RecepcionProveedorAnitaBridge: rollback pendmovp reparación detalle', [
+                        'recepcion_id' => $recepcion->id,
+                        'mensaje' => $rollbackPendmovp->getMessage(),
+                    ]);
+                }
+            }
+
+            throw $e;
+        }
+    }
+
+    /**
+     * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $clave
+     */
+    private function eliminarDetalleComPorClaveCompleto(array $clave, string $codigoProveedor, int $empresaId): void
+    {
+        $this->eliminarRecepmov($clave, null);
+        $this->eliminarAplicped($codigoProveedor, $clave);
+        $this->eliminarStkmovPorClaveCompleto($clave, $empresaId);
+    }
+
+    /** @param array{tipo: string, letra: string, sucursal: int, nro: int} $claveCom */
+    private function eliminarStkmovPorClaveCompleto(array $claveCom, int $empresaId): void
+    {
+        $api = new ApiAnita;
+        $api->apiCallEscritura(
+            StockAnitaBridgeSupport::mergePayload([
+                'acc' => 'delete',
+                'sistema' => config('recepcion_proveedor.anita.sistema_ventas'),
+                'tabla' => config('recepcion_proveedor.anita.tablas.stock_movimiento'),
+                'whereArmado' => RecepcionProveedorAnitaWhereSupport::stkmovCabecera($claveCom),
+            ], $empresaId),
+            'recepcion stkmov delete completo'
+        );
     }
 
     /**

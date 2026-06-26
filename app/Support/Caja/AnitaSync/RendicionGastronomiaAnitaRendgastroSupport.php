@@ -3,9 +3,11 @@
 namespace App\Support\Caja\AnitaSync;
 
 use App\ApiAnita;
+use App\Models\Caja\Estacionamiento\ConfiguracionPuntoventaEstacionamiento;
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\TurnoOperativoGastronomia;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoRendicionAnitaSupport;
+use App\Support\Ventas\Gastronomia\GastronomiaConciliacionVendingRendgSupport;
 
 /**
  * Lectura y reglas de portadora Z/NC en Informix rendgastro (bridge Anita).
@@ -15,13 +17,16 @@ final class RendicionGastronomiaAnitaRendgastroSupport
     /** @var list<string> */
     public const SECUENCIA_TURNO_PORTADORA = ['N', 'T', 'M'];
 
-    private const CAMPOS_CABECERA_DETALLE = 'rendg_nro_oper, rendg_sucursal, rendg_nro_rend_vta, rendg_turno, rendg_total_x, rendg_total_z, rendg_tot_nc, rendg_hora, rendg_fecha_alfa, rendg_host, rendg_suc_caea, rendg_tot_fc_caea, rendg_tot_nc_caea';
+    private const CAMPOS_CABECERA_DETALLE = 'rendg_nro_oper, rendg_sucursal, rendg_nro_rend_vta, rendg_turno, rendg_total_x, rendg_total_z, rendg_tot_nc, rendg_hora, rendg_fecha, rendg_fecha_alfa, rendg_host, rendg_suc_caea, rendg_tot_fc_caea, rendg_tot_nc_caea';
 
     /** @var array<int, string> */
     private array $letraTurnoPorTurnoOperativo = [];
 
     /** @var array<string, bool> */
     private array $sucursalEsEstacionamientoCache = [];
+
+    /** @var array<int, list<string>> */
+    private array $hostsEstacionamientoPorEmpresaCache = [];
 
     public static function letraTurnoDesdeNombre(?string $nombreTurno): string
     {
@@ -150,6 +155,11 @@ final class RendicionGastronomiaAnitaRendgastroSupport
         if ($nroOperSnapshot !== null && $nroOperSnapshot > 0) {
             $cab = $this->listarCabeceraPorNroOper($empresaId, $nroOperSnapshot);
             if ($cab !== null && $this->esCabeceraPostCierreWaitry($cab)) {
+                $cabJornadaId = (int) ($cab->rendg_nro_rend_vta ?? 0);
+                if ($jornadaId > 0 && $cabJornadaId > 0 && $cabJornadaId !== $jornadaId) {
+                    return $this->importePostCierreDesdeSnapshot($nroOperSnapshot, $totalXSnapshot);
+                }
+
                 return $this->mapImportePostCierreCabecera($cab);
             }
         }
@@ -161,6 +171,14 @@ final class RendicionGastronomiaAnitaRendgastroSupport
         ));
 
         if ($waitry === []) {
+            $desdeSnapshot = $this->importePostCierreDesdeSnapshot($nroOperSnapshot, $totalXSnapshot);
+            if (($desdeSnapshot['total'] ?? null) !== null) {
+                return array_merge($desdeSnapshot, [
+                    'snapshot_total_x' => $desdeSnapshot['total_x'],
+                    'snapshot_nro_oper' => $nroOperSnapshot,
+                ]);
+            }
+
             return array_merge($this->importePostCierreVacio(), [
                 'snapshot_total_x' => ($totalXSnapshot !== null && $totalXSnapshot > 0)
                     ? round($totalXSnapshot, 2)
@@ -214,6 +232,11 @@ final class RendicionGastronomiaAnitaRendgastroSupport
         return trim((string) ($fila->rendg_host ?? '')) === CierreJornadaProcesoRendicionAnitaSupport::HOST;
     }
 
+    public function esCabeceraAgregadosCaea(object $fila): bool
+    {
+        return trim((string) ($fila->rendg_host ?? '')) === CierreJornadaProcesoRendicionAnitaSupport::HOST_AGREGADOS_CAEA;
+    }
+
     /**
      * Cabecera rendgastro de estacionamiento (tabla compartida con gastronomía).
      * No debe modificarse desde reparación / limpieza legacy de gastronomía.
@@ -233,6 +256,10 @@ final class RendicionGastronomiaAnitaRendgastroSupport
         $host = mb_strtolower(trim((string) ($fila->rendg_host ?? '')));
         if ($host === '') {
             return false;
+        }
+
+        if ($this->esHostEstacionamiento($host, $empresaId)) {
+            return true;
         }
 
         if (str_starts_with($host, 'estac')) {
@@ -271,6 +298,54 @@ final class RendicionGastronomiaAnitaRendgastroSupport
 
         return $this->sucursalEsEstacionamientoCache[$key] = str_contains($nombre, 'estacionamiento')
             || str_contains($nombre, 'estac.');
+    }
+
+    private function esHostEstacionamiento(string $host, int $empresaId): bool
+    {
+        $host = trim($host);
+        if ($host === '') {
+            return false;
+        }
+
+        if ($empresaId <= 0) {
+            return false;
+        }
+
+        $hosts = $this->hostsEstacionamientoPorEmpresa($empresaId);
+
+        return in_array($host, $hosts, true);
+    }
+
+    private function esSucursalVendingRendg(int $empresaId, int $sucursal): bool
+    {
+        if ($sucursal <= 0 || $empresaId <= 0) {
+            return false;
+        }
+
+        $map = app(GastronomiaConciliacionVendingRendgSupport::class)->puntoventasVendingPorSucursal($empresaId);
+
+        return isset($map[$sucursal]);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function hostsEstacionamientoPorEmpresa(int $empresaId): array
+    {
+        if (isset($this->hostsEstacionamientoPorEmpresaCache[$empresaId])) {
+            return $this->hostsEstacionamientoPorEmpresaCache[$empresaId];
+        }
+
+        $hosts = ConfiguracionPuntoventaEstacionamiento::query()
+            ->where('empresa_id', $empresaId)
+            ->pluck('identificador_pc')
+            ->map(static fn ($pc): string => trim((string) $pc))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        return $this->hostsEstacionamientoPorEmpresaCache[$empresaId] = $hosts;
     }
 
     private function puntoventaPorSucursal(int $empresaId, int $sucursal): ?Puntoventa
@@ -440,8 +515,16 @@ final class RendicionGastronomiaAnitaRendgastroSupport
                 continue;
             }
 
+            if ($this->esCabeceraAgregadosCaea($fila)) {
+                continue;
+            }
+
             $host = trim((string) ($fila->rendg_host ?? ''));
             if ($host === '') {
+                if ($this->esSucursalVendingRendg($empresaId, (int) ($fila->rendg_sucursal ?? 0))) {
+                    continue;
+                }
+
                 continue;
             }
 
@@ -677,6 +760,30 @@ final class RendicionGastronomiaAnitaRendgastroSupport
             'tot_fc_caea' => null,
             'nro_oper' => null,
             'host' => null,
+        ];
+    }
+
+    /**
+     * Cuando nro_oper del snapshot fue reutilizado por otra jornada, usar total del snapshot ERP.
+     *
+     * @return array{total: float|null, total_x: float|null, tot_fc_caea: float|null, nro_oper: int|null, host: string|null}
+     */
+    private function importePostCierreDesdeSnapshot(?int $nroOperSnapshot, ?float $totalXSnapshot): array
+    {
+        $total = $totalXSnapshot !== null && $totalXSnapshot > 0
+            ? round($totalXSnapshot, 2)
+            : null;
+
+        if ($total === null) {
+            return $this->importePostCierreVacio();
+        }
+
+        return [
+            'total' => $total,
+            'total_x' => $total,
+            'tot_fc_caea' => $total,
+            'nro_oper' => ($nroOperSnapshot !== null && $nroOperSnapshot > 0) ? $nroOperSnapshot : null,
+            'host' => CierreJornadaProcesoRendicionAnitaSupport::HOST,
         ];
     }
 

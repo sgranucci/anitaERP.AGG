@@ -11,6 +11,7 @@ use App\Models\Contable\Usuario_Cuentacontable;
 use App\Models\Stock\Depmae;
 use App\Models\Ventas\Vendedor;
 use App\Support\Stock\UsuarioDepositoAutorizado;
+use App\Support\Stock\UsuarioTipotransaccionStockAutorizado;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Hash;
@@ -75,6 +76,16 @@ class Usuario extends Authenticatable implements Auditable
         return $this->belongsToMany(Depmae::class, 'usuario_deposito', 'usuario_id', 'deposito_id');
     }
 
+    public function tipotransaccionesStockAutorizadas()
+    {
+        return $this->belongsToMany(
+            \App\Models\Stock\Tipotransaccion_Stock::class,
+            'usuario_tipotransaccion_stock',
+            'usuario_id',
+            'tipotransaccion_stock_id'
+        );
+    }
+
     public function setSession($roles, $empresas)
     {
         $centro = $this->relationLoaded('centrocostos') ? $this->centrocostos : $this->centrocostos()->first();
@@ -106,6 +117,7 @@ class Usuario extends Authenticatable implements Auditable
         }
         Session::put('usuario_empresas', $empresas);
         UsuarioDepositoAutorizado::cargarEnSession($this);
+        UsuarioTipotransaccionStockAutorizado::cargarEnSession($this);
     }
 
     public static function eliminarFoto(?string $actual): void

@@ -5,6 +5,7 @@ namespace App\Support\Stock;
 use App\Models\Contable\Centrocosto;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\MovimientoStock;
+use App\Models\Stock\Tipotransaccion_Stock;
 use App\Models\Stock\Transferencia_Mercaderia;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
@@ -40,6 +41,12 @@ final class MovimientoStockVisibilidadSupport
         return UsuarioDepositoAutorizado::idsRestringidos();
     }
 
+    /** @return list<int>|null */
+    public static function tipotransaccionStockIdsRestringidos(): ?array
+    {
+        return UsuarioTipotransaccionStockAutorizado::idsRestringidos();
+    }
+
     public static function tieneRestriccionPorCentrocosto(): bool
     {
         return self::centrocostoFiltroUsuario() !== null;
@@ -50,9 +57,16 @@ final class MovimientoStockVisibilidadSupport
         return UsuarioDepositoAutorizado::tieneRestriccion();
     }
 
+    public static function tieneRestriccionPorTipotransaccionStock(): bool
+    {
+        return UsuarioTipotransaccionStockAutorizado::tieneRestriccion();
+    }
+
     public static function tieneAlgunaRestriccion(): bool
     {
-        return self::tieneRestriccionPorCentrocosto() || self::tieneRestriccionPorDeposito();
+        return self::tieneRestriccionPorCentrocosto()
+            || self::tieneRestriccionPorDeposito()
+            || self::tieneRestriccionPorTipotransaccionStock();
     }
 
     public static function etiquetaAlcanceActivo(): ?string
@@ -67,6 +81,11 @@ final class MovimientoStockVisibilidadSupport
         $depositos = self::etiquetaDepositosActivo();
         if ($depositos !== null) {
             $partes[] = 'Depósitos: '.$depositos;
+        }
+
+        $tipos = self::etiquetaTipotransaccionesStockActivo();
+        if ($tipos !== null) {
+            $partes[] = 'Tipos trans.: '.$tipos;
         }
 
         return $partes === [] ? null : implode(' · ', $partes);
@@ -104,6 +123,51 @@ final class MovimientoStockVisibilidadSupport
             ->all();
 
         return $nombres === [] ? null : implode(', ', $nombres);
+    }
+
+    public static function etiquetaTipotransaccionesStockActivo(): ?string
+    {
+        $tipoIds = self::tipotransaccionStockIdsRestringidos();
+        if (! is_array($tipoIds) || $tipoIds === []) {
+            return null;
+        }
+
+        $nombres = Tipotransaccion_Stock::query()
+            ->whereIn('id', $tipoIds)
+            ->orderBy('nombre')
+            ->pluck('nombre')
+            ->map(fn ($nombre) => trim((string) $nombre))
+            ->filter(fn (string $nombre) => $nombre !== '')
+            ->values()
+            ->all();
+
+        return $nombres === [] ? null : implode(', ', $nombres);
+    }
+
+    /**
+     * @param  QueryBuilder  $query
+     */
+    public static function aplicarFiltroTipotransaccionesMovimientoQuery(QueryBuilder $query, string $aliasMov = 'ms'): void
+    {
+        $tipoIds = self::tipotransaccionStockIdsRestringidos();
+        if (! is_array($tipoIds) || $tipoIds === []) {
+            return;
+        }
+
+        $query->whereIn("{$aliasMov}.tipotransaccion_stock_id", $tipoIds);
+    }
+
+    /**
+     * @param  QueryBuilder  $query
+     */
+    public static function aplicarFiltroTipotransaccionesTransferenciaQuery(QueryBuilder $query, string $aliasTm = 'tm'): void
+    {
+        $tipoIds = self::tipotransaccionStockIdsRestringidos();
+        if (! is_array($tipoIds) || $tipoIds === []) {
+            return;
+        }
+
+        $query->whereIn("{$aliasTm}.tipotransaccion_stock_id", $tipoIds);
     }
 
     /**
@@ -243,6 +307,32 @@ final class MovimientoStockVisibilidadSupport
     }
 
     /**
+     * @param  Builder<\App\Models\Stock\MovimientoStock>  $query
+     */
+    private static function aplicarFiltroTipotransaccionesMovimientoEloquent(Builder $query): void
+    {
+        $tipoIds = self::tipotransaccionStockIdsRestringidos();
+        if (! is_array($tipoIds) || $tipoIds === []) {
+            return;
+        }
+
+        $query->whereIn('movimientostock.tipotransaccion_stock_id', $tipoIds);
+    }
+
+    /**
+     * @param  Builder<\App\Models\Stock\Transferencia_Mercaderia>  $query
+     */
+    private static function aplicarFiltroTipotransaccionesTransferenciaEloquent(Builder $query): void
+    {
+        $tipoIds = self::tipotransaccionStockIdsRestringidos();
+        if (! is_array($tipoIds) || $tipoIds === []) {
+            return;
+        }
+
+        $query->whereIn('transferencia_mercaderia.tipotransaccion_stock_id', $tipoIds);
+    }
+
+    /**
      * @param  Builder<\App\Models\Stock\Transferencia_Mercaderia>  $query
      */
     private static function aplicarFiltroDepositosTransferenciaEloquent(Builder $query): void
@@ -264,13 +354,14 @@ final class MovimientoStockVisibilidadSupport
             return false;
         }
 
-        if (self::puedeVerTodos() && ! self::tieneRestriccionPorDeposito()) {
+        if (self::puedeVerTodos() && ! self::tieneRestriccionPorDeposito() && ! self::tieneRestriccionPorTipotransaccionStock()) {
             return MovimientoStock::query()->whereKey($movimientoId)->exists();
         }
 
         $query = MovimientoStock::query()->where('movimientostock.id', $movimientoId);
         self::aplicarFiltroCentrocostoMovimientoEloquent($query);
         self::aplicarFiltroDepositosMovimientoEloquent($query);
+        self::aplicarFiltroTipotransaccionesMovimientoEloquent($query);
 
         return $query->exists();
     }
@@ -286,13 +377,14 @@ final class MovimientoStockVisibilidadSupport
             return false;
         }
 
-        if (self::puedeVerTodos() && ! self::tieneRestriccionPorDeposito()) {
+        if (self::puedeVerTodos() && ! self::tieneRestriccionPorDeposito() && ! self::tieneRestriccionPorTipotransaccionStock()) {
             return Transferencia_Mercaderia::query()->whereKey($transferenciaId)->exists();
         }
 
         $query = Transferencia_Mercaderia::query()->where('transferencia_mercaderia.id', $transferenciaId);
         self::aplicarFiltroCentrocostoTransferenciaEloquent($query);
         self::aplicarFiltroDepositosTransferenciaEloquent($query);
+        self::aplicarFiltroTipotransaccionesTransferenciaEloquent($query);
 
         return $query->exists();
     }

@@ -65,7 +65,7 @@ Recuento de inventario
                                 <td>{{ $r->id }}</td>
                                 <td><strong>{{ $r->codigo }}</strong></td>
                                 <td>{{ optional($r->fecha)->format('d/m/Y') }}</td>
-                                <td>{{ optional($r->deposito)->nombre }}</td>
+                                <td>{{ optional($r->deposito)->etiqueta() }}</td>
                                 <td>{{ optional($r->empresa)->nombre }}</td>
                                 <td>{{ optional($r->usuario)->nombre }}</td>
                                 <td>{{ $r->tipo }}</td>

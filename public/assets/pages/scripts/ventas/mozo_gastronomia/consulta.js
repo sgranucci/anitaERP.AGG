@@ -70,6 +70,9 @@ function csrfTokenConsultaMozo() {
     if (meta) {
         return meta;
     }
+    if (typeof window.CANJE_MARKETING !== 'undefined' && window.CANJE_MARKETING.csrfToken) {
+        return window.CANJE_MARKETING.csrfToken;
+    }
     if (typeof window.GASTRONOMIA !== 'undefined' && window.GASTRONOMIA.csrf) {
         return window.GASTRONOMIA.csrf;
     }

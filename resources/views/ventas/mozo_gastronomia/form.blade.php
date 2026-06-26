@@ -17,9 +17,9 @@
     </div>
 </div>
 <div class="form-group row">
-    <label for="clave" class="col-lg-3 col-form-label">Clave POS</label>
+    <label for="clave" class="col-lg-3 col-form-label @empty($data->id) requerido @endempty">Clave POS</label>
     <div class="col-lg-8">
-        <input type="password" name="clave" id="clave" class="form-control" value="" maxlength="60" autocomplete="new-password"/>
-        <small class="form-text text-muted">Clave para ingresar al facturador de canjes marketing. Dejar vacío al editar para no cambiar.</small>
+        <input type="password" name="clave" id="clave" class="form-control" value="" maxlength="60" autocomplete="new-password" @empty($data->id) required minlength="4" @endempty/>
+        <small class="form-text text-muted">Clave para ingresar al facturador de canjes marketing.@if ($data->id) Dejar vacío al editar para no cambiar.@else Obligatoria (mínimo 4 caracteres).@endif</small>
     </div>
 </div>

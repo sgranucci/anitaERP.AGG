@@ -58,6 +58,7 @@ final class RendicionGastronomiaRepararJornadaAnitaService
             if ($cabeceras === []) {
                 $resultados[] = [
                     'identificador_pc' => $identificadorPc,
+                    'puntoventa' => $identificadorPc,
                     'estado' => 'sin_registros_anita',
                     'total_z' => null,
                     'tot_nc' => null,
@@ -196,6 +197,10 @@ final class RendicionGastronomiaRepararJornadaAnitaService
             }
 
             if ($this->rendgastroSupport->esCabeceraEstacionamiento($fila)) {
+                continue;
+            }
+
+            if ($this->rendgastroSupport->esCabeceraAgregadosCaea($fila)) {
                 continue;
             }
 

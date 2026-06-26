@@ -783,6 +783,7 @@ window.GASTRONOMIA = {
     empresaId: {{ (int) ($empresa_id ?? 0) }},
     listaprecioId: {{ (int) ($listaprecio_id ?? config('precio.listaprecio_default_id', 1)) }},
     listaprecioNombre: @json($listaprecio_nombre ?? ''),
+    csrf: @json(csrf_token()),
 };
 window.CANJE_MARKETING = {
     rutasSalir: {
@@ -790,6 +791,7 @@ window.CANJE_MARKETING = {
     },
     rutas: {
         apiBase: @json(url('ventas/gastronomia/canjes/api')),
+        csrfRefresh: @json(route('csrf_token_refresh')),
     },
     descuentoCodigo: @json($descuento_codigo),
     monedaFacturaId: @json($moneda_factura_id ?? 1),

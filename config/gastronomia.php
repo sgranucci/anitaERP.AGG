@@ -115,11 +115,17 @@ return [
     'sincronizar_anita_al_facturar' => filter_var(env('GASTRONOMIA_SINCRONIZAR_ANITA', true), FILTER_VALIDATE_BOOLEAN),
 
     /**
-     * Gastronomía: en Anita venta + vengrav + stkmov (platos) + vencae; omite comprob, compaux, venibr, climov.
-     * Facturación normal desde Ventas no usa esta opción (grabaAnita completo).
-     * Los insumos por fórmula en stkmov Informix dependen de anita_replicar_insumos_al_facturar.
+     * Gastronomía: en Anita venta + vengrav + vencae; omite comprob, compaux, venibr, climov.
+     * stkmov por plato: anita_omitir_stkmov (solo gastronomía; Ventas/administración no usa esta clave).
+     * Insumos por fórmula: anita_replicar_insumos_al_facturar.
      */
     'anita_modo_minimo' => filter_var(env('GASTRONOMIA_ANITA_MODO_MINIMO', true), FILTER_VALIDATE_BOOLEAN),
+
+    /**
+     * Gastronomía: no grabar stkmov por ítem/plato en Informix al replicar Anita (cola, backfill, auditoría).
+     * false = comportamiento legacy con stkmov por línea. No afecta facturación Ventas/administración.
+     */
+    'anita_omitir_stkmov' => filter_var(env('GASTRONOMIA_ANITA_OMITIR_STKMOV', true), FILTER_VALIDATE_BOOLEAN),
 
     /**
      * Al facturar (y NC gastronomía): replica en Informix vía bridge cada stkmov de insumo de fórmula
@@ -169,6 +175,13 @@ return [
     ],
 
     /**
+     * Reporte mensual solo Anita (venta/vengrav/ctamov/rendg) — CSV por mail.
+     */
+    'auditoria_mes_totales_anita' => [
+        'email' => env('GASTRONOMIA_AUDITORIA_MES_ANITA_EMAIL', env('GASTRONOMIA_AUDITORIA_ANITA_EMAIL', 'sergiogranucci@gmail.com')),
+    ],
+
+    /**
      * Reporte conciliación jornada: ventas ERP vs Anita vs rendgastro Z por PV (CSV por mail).
      * Schedule después de auditorías nocturnas (@ GASTRONOMIA_CONCILIACION_DIARIA_HORA).
      */
@@ -183,11 +196,19 @@ return [
         'tolerancia' => (float) env('GASTRONOMIA_CONCILIACION_DIARIA_TOLERANCIA', 0.02),
         /**
          * Jornada mínima por empresa_id (Y-m-d). Anterior = pre-migración ERP; no conciliar ni alertar.
-         * Rebisco gastronomía ERP desde 2026-06-10.
+         * Biyemas gastronomía ERP desde 2026-06-01; Kandiko desde 2026-06-08; Rebisco desde 2026-06-10.
          */
         'fecha_jornada_desde_por_empresa' => [
+            1 => env('GASTRONOMIA_CONCILIACION_BIYEMAS_JORNADA_DESDE', '2026-06-01'),
+            2 => env('GASTRONOMIA_CONCILIACION_KANDIKO_JORNADA_DESDE', '2026-06-08'),
             3 => env('GASTRONOMIA_CONCILIACION_REBISCO_JORNADA_DESDE', '2026-06-10'),
         ],
+        /** Cache Anita bulk (storage/app/anita_audit_cache) en lugar de N consultas live por PV×día. */
+        'usar_cache_anita' => filter_var(env('GASTRONOMIA_CONCILIACION_USAR_CACHE_ANITA', true), FILTER_VALIDATE_BOOLEAN),
+        /** Re-descarga cache Anita al generar el reporte (1 bulk por empresa/rango; evita cache stale). */
+        'refrescar_cache_anita' => filter_var(env('GASTRONOMIA_CONCILIACION_REFRESCAR_CACHE_ANITA', true), FILTER_VALIDATE_BOOLEAN),
+        /** Reintentos bridge cuando usar_cache_anita=false o fallback live. */
+        'anita_reintentos_bridge' => max(1, (int) env('GASTRONOMIA_CONCILIACION_ANITA_REINTENTOS_BRIDGE', 3)),
     ],
 
     /**
