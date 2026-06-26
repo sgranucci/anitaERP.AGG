@@ -8,9 +8,9 @@ use App\Models\Ventas\GastronomiaCierreJornadaProcesoSnapshot;
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
-use App\Repositories\Ventas\VentaRepository;
-use App\Support\Ventas\Gastronomia\GastronomiaEmisionNumeracionCaeaSupport;
+use App\Support\Ventas\CaeaEmisionNumeracionSupport;
 use App\Support\Ventas\KandikoAnitaVentaTipoSupport;
+use App\Support\Ventas\TipotransaccionCodigoAfipSupport;
 use App\Support\Ventas\VentaNumeracionEmpresaSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -19,15 +19,11 @@ use InvalidArgumentException;
 /**
  * Corrige ventas CAEA cuyo numerocomprobante ERP quedó desfasado (p. ej. serie Rebisco en sucursal 00031).
  *
- * Prioriza el número embebido en codigo (compemis al emitir) y asigna correlativos compemis para el resto.
+ * Prioriza el número embebido en codigo y asigna correlativos ERP libres para el resto.
+ * Opcionalmente sincroniza ven_nro en Anita (réplica) cuando el número grabado allí difiere.
  */
 final class GastronomiaCaeaCorregirNumeracionDesfasadaService
 {
-    public function __construct(
-        private readonly VentaRepository $ventaRepository,
-    ) {
-    }
-
     /**
      * @return array<string, mixed>
      */
@@ -89,19 +85,38 @@ final class GastronomiaCaeaCorregirNumeracionDesfasadaService
         }
 
         $empresa = Empresa::query()->findOrFail($empresaId);
-        $tipoAnita = GastronomiaEmisionNumeracionCaeaSupport::tipoAnitaDesdeTipotransaccion($tipo);
+        $tipoAnita = CaeaEmisionNumeracionSupport::tipoAnitaDesdeTipotransaccion($tipo);
         $letra = 'B';
         $sucursal = (string) $pv->codigo;
 
-        $ultimoCompemis = $this->ventaRepository->leerUltimoNumeradorCompemis($tipoAnita, $letra, $sucursal);
+        $maxNumeracionErp = VentaNumeracionEmpresaSupport::maxNumerocomprobanteErpDesdeTipotransaccion(
+            (int) $pv->id,
+            (int) ($tipo->codigo ?? 0),
+            $letra,
+            $empresaId,
+        );
+
+        $codigoAfipObjetivo = TipotransaccionCodigoAfipSupport::codigoAfipParaEmision(
+            (int) ($tipo->codigo ?? 0),
+            $letra,
+        );
 
         $ventas = Venta::query()
-            ->where('puntoventa_id', $pv->id)
-            ->where('tipotransaccion_id', $tipotransaccionId)
+            ->join('tipotransaccion as tt', 'tt.id', '=', 'venta.tipotransaccion_id')
+            ->where('venta.puntoventa_id', $pv->id)
             ->whereHas('puntoventas', static fn ($q) => $q->where('empresa_id', $empresaId))
-            ->orderBy('fecha')
-            ->orderBy('id')
-            ->get();
+            ->whereNull('venta.deleted_at')
+            ->select(['venta.*', 'tt.codigo as tt_codigo'])
+            ->orderBy('venta.fecha')
+            ->orderBy('venta.id')
+            ->get()
+            ->filter(static function (Venta $venta) use ($codigoAfipObjetivo): bool {
+                return TipotransaccionCodigoAfipSupport::codigoAfipDesdeVentaGrabada(
+                    (int) ($venta->tt_codigo ?? 0),
+                    (string) ($venta->codigo ?? ''),
+                ) === $codigoAfipObjetivo;
+            })
+            ->values();
 
         $ocupados = [];
         foreach ($ventas as $venta) {
@@ -112,7 +127,7 @@ final class GastronomiaCaeaCorregirNumeracionDesfasadaService
             ->filter(static fn (Venta $v) => (int) $v->numerocomprobante < $umbralDesfasaje)
             ->max('numerocomprobante');
 
-        $siguienteLibre = max($maxCorrelativoValido, $ultimoCompemis);
+        $siguienteLibre = $maxCorrelativoValido;
         $correcciones = [];
 
         foreach ($ventas as $venta) {
@@ -179,7 +194,8 @@ final class GastronomiaCaeaCorregirNumeracionDesfasadaService
                 'letra' => $letra,
                 'modofacturacion' => (string) ($pv->modofacturacion ?? ''),
             ],
-            'ultimo_compemis' => $ultimoCompemis,
+            'max_numeracion_erp' => $maxNumeracionErp,
+            'ultimo_compemis' => $maxNumeracionErp,
             'max_correlativo_valido' => $maxCorrelativoValido,
             'cantidad_ventas' => $ventas->count(),
             'correcciones' => $correcciones,

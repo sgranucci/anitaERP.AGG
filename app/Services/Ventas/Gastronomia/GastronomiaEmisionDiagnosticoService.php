@@ -9,6 +9,7 @@ use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
+use App\Support\Ventas\VentaNumeracionEmpresaSupport;
 use InvalidArgumentException;
 
 /**
@@ -92,10 +93,11 @@ final class GastronomiaEmisionDiagnosticoService
             : 0;
 
         $t0Erp = microtime(true);
-        $ultimoErp = (int) (Venta::query()
-            ->where('puntoventa_id', $puntoventaId)
-            ->where('tipotransaccion_id', $tipoFacturaId)
-            ->max('numerocomprobante') ?? 0);
+        $ultimoErp = VentaNumeracionEmpresaSupport::maxNumerocomprobanteErpDesdeTipotransaccion(
+            $puntoventaId,
+            (int) ($tt->codigo ?? 0),
+            $letra,
+        );
         $erpMaxMs = round((microtime(true) - $t0Erp) * 1000, 2);
 
         $anitaPing = $this->medirConsultaAnita([
@@ -138,7 +140,7 @@ final class GastronomiaEmisionDiagnosticoService
                 'host' => config('anita.ip'),
                 'tipo' => config('anita_bridge_type', config('gastronomia.anita_bridge_type', 'HTTP')),
             ],
-            'nota' => 'CAEA usa buscaUltimoNumeroComprobante (2 consultas Anita). ERP local suele ser mucho más rápido.',
+            'nota' => 'CAEA numera en ERP (max venta.numerocomprobante + lock por PV).',
         ];
     }
 

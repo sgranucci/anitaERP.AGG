@@ -7,6 +7,7 @@ use App\Http\Requests\ValidacionDescuentoGastronomia;
 use App\Models\Ventas\DescuentoGastronomia;
 use App\Repositories\Ventas\DescuentoGastronomiaRepositoryInterface;
 use App\Services\Ventas\DescuentoGastronomiaAnitaSyncService;
+use App\Support\Ventas\GastronomiaDescuentoConsultaAccesoSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -30,8 +31,9 @@ class DescuentoGastronomiaController extends Controller
         $datas = $this->repository->all();
         $sinDescuentosCargados = $datas->isEmpty();
         $tiposValor = DescuentoGastronomia::tiposValor();
+        $tiposConsumo = DescuentoGastronomia::tiposConsumo();
 
-        return view('ventas.descuento_gastronomia.index', compact('datas', 'sinDescuentosCargados', 'tiposValor'));
+        return view('ventas.descuento_gastronomia.index', compact('datas', 'sinDescuentosCargados', 'tiposValor', 'tiposConsumo'));
     }
 
     public function crear()
@@ -39,8 +41,9 @@ class DescuentoGastronomiaController extends Controller
         can('crear-descuento-gastronomia');
         $data = new DescuentoGastronomia();
         $tiposValor = DescuentoGastronomia::tiposValor();
+        $tiposConsumo = DescuentoGastronomia::tiposConsumo();
 
-        return view('ventas.descuento_gastronomia.crear', compact('data', 'tiposValor'));
+        return view('ventas.descuento_gastronomia.crear', compact('data', 'tiposValor', 'tiposConsumo'));
     }
 
     public function guardar(ValidacionDescuentoGastronomia $request)
@@ -55,8 +58,9 @@ class DescuentoGastronomiaController extends Controller
         can('editar-descuento-gastronomia');
         $data = DescuentoGastronomia::query()->with('cliente')->findOrFail($id);
         $tiposValor = DescuentoGastronomia::tiposValor();
+        $tiposConsumo = DescuentoGastronomia::tiposConsumo();
 
-        return view('ventas.descuento_gastronomia.editar', compact('data', 'tiposValor'));
+        return view('ventas.descuento_gastronomia.editar', compact('data', 'tiposValor', 'tiposConsumo'));
     }
 
     public function actualizar(ValidacionDescuentoGastronomia $request, $id)
@@ -84,14 +88,14 @@ class DescuentoGastronomiaController extends Controller
 
     public function consultaDescuento(Request $request)
     {
-        can('usar-proceso-facturacion-gastronomia');
+        GastronomiaDescuentoConsultaAccesoSupport::assert();
 
         return $this->repository->consultaDescuento((string) ($request->get('consulta') ?? ''));
     }
 
     public function leeUnDescuentoPorCodigo(string $codigo)
     {
-        can('usar-proceso-facturacion-gastronomia');
+        GastronomiaDescuentoConsultaAccesoSupport::assert();
 
         $descuento = $this->repository->findPorCodigo($codigo);
         if (! $descuento) {

@@ -124,7 +124,7 @@ class GastronomiaProcesoFacturacionController extends Controller
 
         if ($anitaTotal > 500 && $erp < 50) {
             return 'La consulta del último número en Anita ('.$anitaTotal.' ms) es mucho más lenta que ERP local ('.$erp.' ms). '
-                .'Candidato principal: buscaUltimoNumeroComprobante (2 round-trips al bridge).';
+                .'CAEA: numeración ERP con lock por PV (CaeaEmisionNumeracionSupport).';
         }
 
         if ($anitaTotal < 200) {

@@ -41,6 +41,7 @@
                             <th>Código Anita</th>
                             <th>Tipo valor</th>
                             <th class="text-right">Valor</th>
+                            <th>Tipo consumo</th>
                             <th>Cliente consumo interno</th>
                             <th class="width80" data-orderable="false"></th>
                         </tr>
@@ -53,6 +54,7 @@
                             <td>{{ $data->codigo }}</td>
                             <td>{{ $tiposValor[$data->tipovalor] ?? $data->tipovalor }} ({{ $data->tipovalor }})</td>
                             <td class="text-right">{{ number_format((float) $data->valor, 4, ',', '.') }}</td>
+                            <td>{{ $tiposConsumo[$data->tipo_consumo] ?? $data->tipo_consumo }}</td>
                             <td>
                                 @if ($data->cliente)
                                     {{ $data->cliente->codigo }} — {{ $data->cliente->nombre }}

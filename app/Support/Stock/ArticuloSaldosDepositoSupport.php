@@ -15,8 +15,9 @@ final class ArticuloSaldosDepositoSupport
 
     /**
      * @return array{
-     *     articulo: array{id: int, sku: string, descripcion: string},
-     *     filas: list<array{deposito_id: int, codigo: string, nombre: string, saldo: float, saldo_fmt: string}>,
+     *     articulo: array{id: int, sku: string, descripcion: string, unidad_medida: string, unidad_medida_abreviatura: string, unidad_medida_nombre: string},
+     *     filas: list<array{deposito_id: int, codigo: string, nombre: string, empresa_id: int, empresa_nombre: string, saldo: float, saldo_fmt: string}>,
+     *     mostrar_empresa: bool,
      *     total: float,
      *     total_fmt: string
      * }
@@ -24,13 +25,17 @@ final class ArticuloSaldosDepositoSupport
     public static function listadoPorArticulo(int $articuloId): array
     {
         $articulo = Articulo::query()
-            ->select('id', 'sku', 'descripcion')
+            ->select('id', 'sku', 'descripcion', 'unidadmedida_id')
+            ->with('unidadesdemedidas:id,nombre,abreviatura')
             ->findOrFail($articuloId);
 
+        $mostrarEmpresa = MovimientosArticuloDepositoSupport::mostrarEmpresaEnListados();
+
         $depQuery = Depmae::query()
-            ->select('id', 'codigo', 'nombre')
+            ->select('id', 'codigo', 'nombre', 'empresa_id')
+            ->with('empresas:id,nombre')
             ->orderBy('codigo');
-        UsuarioDepositoAutorizado::aplicarFiltroQuery($depQuery);
+        MovimientosArticuloDepositoSupport::aplicarFiltroConsultaDeposito($depQuery);
         $depositos = $depQuery->get();
 
         $depositoIds = $depositos->pluck('id')->map(fn ($id) => (int) $id)->all();
@@ -55,6 +60,8 @@ final class ArticuloSaldosDepositoSupport
                 'deposito_id' => $depId,
                 'codigo' => (string) ($dep->codigo ?? ''),
                 'nombre' => (string) ($dep->nombre ?? ''),
+                'empresa_id' => (int) ($dep->empresa_id ?? 0),
+                'empresa_nombre' => (string) (optional($dep->empresas)->nombre ?? ''),
                 'saldo' => $saldo,
                 'saldo_fmt' => self::formatSaldo($saldo),
             ];
@@ -66,18 +73,18 @@ final class ArticuloSaldosDepositoSupport
                 return $cmp;
             }
 
+            $cmpEmp = strcmp($a['empresa_nombre'], $b['empresa_nombre']);
+            if ($cmpEmp !== 0) {
+                return $cmpEmp;
+            }
+
             return strcmp($a['codigo'], $b['codigo']);
         });
 
-        $sku = trim((string) ($articulo->sku ?? ''));
-
         return [
-            'articulo' => [
-                'id' => (int) $articulo->id,
-                'sku' => $sku,
-                'descripcion' => (string) ($articulo->descripcion ?? ''),
-            ],
+            'articulo' => MovimientosArticuloDepositoSupport::articuloResumen($articulo),
             'filas' => $filas,
+            'mostrar_empresa' => $mostrarEmpresa,
             'total' => $total,
             'total_fmt' => self::formatSaldo($total),
         ];

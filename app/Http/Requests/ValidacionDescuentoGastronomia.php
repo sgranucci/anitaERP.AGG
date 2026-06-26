@@ -26,6 +26,10 @@ class ValidacionDescuentoGastronomia extends FormRequest
                 DescuentoGastronomia::TIPO_APLICA,
             ])],
             'valor' => 'required|numeric',
+            'tipo_consumo' => ['required', Rule::in([
+                DescuentoGastronomia::TIPO_CONSUMO_STAFF,
+                DescuentoGastronomia::TIPO_CONSUMO_INVITACION,
+            ])],
             'cliente_id' => 'nullable|integer|exists:cliente,id',
         ];
     }

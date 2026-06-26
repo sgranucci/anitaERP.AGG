@@ -16,7 +16,11 @@ class DescuentoGastronomia extends Model implements Auditable
 
     public const TIPO_APLICA = 'A';
 
-    protected $fillable = ['nombre', 'codigo', 'tipovalor', 'valor', 'cliente_id'];
+    public const TIPO_CONSUMO_STAFF = 'staff';
+
+    public const TIPO_CONSUMO_INVITACION = 'invitacion';
+
+    protected $fillable = ['nombre', 'codigo', 'tipovalor', 'valor', 'tipo_consumo', 'cliente_id'];
 
     protected $table = 'descuento_gastronomia';
 
@@ -30,6 +34,22 @@ class DescuentoGastronomia extends Model implements Auditable
             self::TIPO_IMPORTE => 'Importe',
             self::TIPO_APLICA => 'Aplica',
         ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function tiposConsumo(): array
+    {
+        return [
+            self::TIPO_CONSUMO_STAFF => 'Staff',
+            self::TIPO_CONSUMO_INVITACION => 'Invitación',
+        ];
+    }
+
+    public function etiquetaTipoConsumo(): string
+    {
+        return self::tiposConsumo()[$this->tipo_consumo] ?? (string) $this->tipo_consumo;
     }
 
     public function etiquetaTipoValor(): string

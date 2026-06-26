@@ -15,6 +15,14 @@ Kardex — {{ $contexto['articulo']['sku'] ?? '' }}
     $dep = $contexto['deposito'] ?? [];
     $modoTodosDepositos = $modoTodosDepositos ?? ($contexto['modo_todos_depositos'] ?? false);
     $modoConsulta = request()->input('vista') === 'consulta';
+    $mostrarEmpresa = $mostrarEmpresa ?? \App\Support\Stock\MovimientosArticuloDepositoSupport::mostrarEmpresaEnListados();
+    $depositoDescripcion = $modoTodosDepositos
+        ? ''
+        : \App\Support\Stock\RecuentoMovimientosArticuloSupport::etiquetaDepositoConEmpresa($dep, $dep['empresa_nombre'] ?? '');
+    $tituloColumnaDeposito = $mostrarEmpresa ? 'Dep&oacute;sito / Empresa' : 'Dep&oacute;sito';
+    $claseBtnTodosDepositos = 'btn btn-outline-primary btn-sm'
+        .($modoTodosDepositos ? ' active font-weight-bold' : '');
+    $sufijoUm = \App\Support\Stock\MovimientosArticuloDepositoSupport::sufijoColumnaCantidad($art['unidad_medida'] ?? '');
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -46,6 +54,8 @@ Kardex — {{ $contexto['articulo']['sku'] ?? '' }}
                             — {{ $art['descripcion'] }}
                         @endif
                     </dd>
+                    <dt class="col-sm-2">Unidad de medida</dt>
+                    <dd class="col-sm-10">{{ ! empty($art['unidad_medida']) ? $art['unidad_medida'] : '—' }}</dd>
                     <dt class="col-sm-2">
                         @if ($modoTodosDepositos)
                             Saldo total
@@ -53,7 +63,9 @@ Kardex — {{ $contexto['articulo']['sku'] ?? '' }}
                             Saldo actual
                         @endif
                     </dt>
-                    <dd class="col-sm-10 text-monospace">{{ $contexto['saldo_fmt'] ?? '0' }}</dd>
+                    <dd class="col-sm-10 text-monospace">
+                        {{ $contexto['saldo_fmt'] ?? '0' }}{{ $sufijoUm }}
+                    </dd>
                 </dl>
                 <div id="filtro-deposito-movimientos-articulo" class="border-top pt-3">
                     <div class="row align-items-start">
@@ -65,7 +77,7 @@ Kardex — {{ $contexto['articulo']['sku'] ?? '' }}
                                 'inputId' => 'mov_filtro_deposito_id',
                                 'depositoId' => $modoTodosDepositos ? '' : ($dep['id'] ?? ''),
                                 'codigo' => $modoTodosDepositos ? '' : ($dep['codigo'] ?? ''),
-                                'descripcion' => $modoTodosDepositos ? '' : ($dep['nombre'] ?? ''),
+                                'descripcion' => $depositoDescripcion,
                                 'required' => false,
                                 'solo_lectura' => false,
                                 'col_label' => 'col-sm-3 control-label text-right pr-2',
@@ -75,7 +87,7 @@ Kardex — {{ $contexto['articulo']['sku'] ?? '' }}
                         <div class="col-lg-4 pt-2">
                             <button type="button"
                                 id="btn-movimientos-todos-depositos"
-                                class="btn btn-outline-primary btn-sm @if ($modoTodosDepositos) active font-weight-bold @endif"
+                                class="{{ $claseBtnTodosDepositos }}"
                                 title="Ver saldo y movimientos de todos los depósitos autorizados">
                                 <i class="fa fa-warehouse"></i> Todos los depósitos
                             </button>
@@ -96,11 +108,11 @@ Kardex — {{ $contexto['articulo']['sku'] ?? '' }}
                         <tr>
                             <th style="width:8%">Fecha</th>
                             @if ($modoTodosDepositos)
-                            <th style="width:12%">Depósito</th>
+                            <th style="width:18%">{!! $tituloColumnaDeposito !!}</th>
                             @endif
                             <th style="width:7%">Tipo</th>
-                            <th class="text-right" style="width:8%">Entrada</th>
-                            <th class="text-right" style="width:8%">Salida</th>
+                            <th class="text-right" style="width:8%">Entrada{!! $sufijoUm !!}</th>
+                            <th class="text-right" style="width:8%">Salida{!! $sufijoUm !!}</th>
                             <th style="width:22%">Concepto</th>
                             <th style="width:9%">Mov. stock</th>
                             <th style="width:26%">Leyenda mov.</th>

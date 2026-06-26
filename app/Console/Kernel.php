@@ -102,6 +102,12 @@ class Kernel extends ConsoleKernel
             ->everyFiveMinutes()
             ->withoutOverlapping(4)
             ->when(fn () => (bool) config('queue.verificacion_pico.habilitada', true));
+
+        $schedule->command('gastronomia:actualizar-costo-mensual-catalogo')
+            ->lastDayOfMonth((string) config('gastronomia.costo_mensual_catalogo.hora', '23:30'))
+            ->runInBackground()
+            ->withoutOverlapping(240)
+            ->when(fn () => (bool) config('gastronomia.costo_mensual_catalogo.habilitado', true));
     }
 
     /**

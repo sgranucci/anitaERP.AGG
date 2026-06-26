@@ -42,12 +42,48 @@
         return el ? el.value : (carpetaBase() + '/stock/articulo/api/saldos-deposito');
     }
 
-    function textoInfoArticulo(sku, descripcion, articuloId) {
+    function textoInfoArticulo(sku, descripcion, articuloId, unidadMedida) {
         var info = (sku || '').trim();
         if ((descripcion || '').trim()) {
             info += (info ? ' — ' : '') + descripcion.trim();
         }
+        var um = (unidadMedida || '').trim();
+        if (um) {
+            info += (info ? ' · ' : '') + 'UM: ' + um;
+        }
         return info || ('Artículo #' + (parseInt(articuloId, 10) || 0));
+    }
+
+    function actualizarEtiquetasUnidadMedidaSaldos($panel, data) {
+        if (!$panel || !$panel.length) {
+            return;
+        }
+
+        var um = data && data.articulo ? String(data.articulo.unidad_medida || '').trim() : '';
+        var $hint = $panel.find('.saldos-articulo-um-hint');
+        var $thSaldo = $panel.find('.saldos-th-saldo');
+
+        if (um) {
+            $hint.text('(' + um + ')').removeClass('d-none');
+            $thSaldo.text('Saldo (' + um + ')');
+        } else {
+            $hint.text('').addClass('d-none');
+            $thSaldo.text('Saldo');
+        }
+
+        if (!data || !data.articulo) {
+            return;
+        }
+
+        var art = data.articulo;
+        var info = textoInfoArticulo(art.sku, art.descripcion, art.id, um);
+
+        if ($panel.closest('#modalSaldosArticulo').length) {
+            $('#modal-saldos-articulo-info').text(info);
+        }
+        if ($panel.closest('#modalKardexDeposito').length) {
+            $('#modal-kardex-articulo-info').text(info);
+        }
     }
 
     function limpiarModalesStockConsultaAlCargar() {
@@ -140,6 +176,9 @@
         var $vacio = $panel.find('.saldos-articulo-vacio');
         var $tbody = $panel.find('.saldos-articulo-tbody');
         var $total = $panel.find('.saldos-articulo-total');
+        var mostrarEmpresa = !!(data && data.mostrar_empresa);
+
+        $panel.find('.saldos-col-empresa, .saldos-footer-empresa').toggleClass('d-none', !mostrarEmpresa);
 
         $loading.addClass('d-none');
         $error.addClass('d-none').text('');
@@ -151,6 +190,7 @@
             $wrap.addClass('d-none');
             $vacio.removeClass('d-none');
             $total.text((data && data.total_fmt) ? data.total_fmt : '0');
+            actualizarEtiquetasUnidadMedidaSaldos($panel, data);
             return;
         }
 
@@ -163,6 +203,9 @@
             var $tr = $('<tr></tr>');
             $tr.append($('<td class="text-monospace small"></td>').text(fila.codigo || ''));
             $tr.append($('<td class="small"></td>').text(fila.nombre || ''));
+            if (mostrarEmpresa) {
+                $tr.append($('<td class="small saldos-col-empresa"></td>').text(fila.empresa_nombre || ''));
+            }
             $tr.append($('<td class="text-right text-monospace small"></td>').text(fila.saldo_fmt || ''));
             var $btn = $('<button type="button" class="btn btn-outline-info btn-xs btn-sm py-0 px-1 btn-saldo-fila-kardex" title="Abrir kardex en este dep\u00f3sito"></button>');
             $btn.attr('data-deposito-id', String(depId));
@@ -170,6 +213,8 @@
             $tr.append($('<td class="text-center"></td>').append($btn));
             $tbody.append($tr);
         });
+
+        actualizarEtiquetasUnidadMedidaSaldos($panel, data);
     }
 
     function cargarSaldosArticulo(articuloId, panelSelector) {
@@ -289,9 +334,13 @@
             return;
         }
         var $ctx = $('#tm_deposito_kardex_pick');
+        var descripcion = deposito.descripcion || deposito.nombre || '';
+        if (deposito.empresa_nombre) {
+            descripcion = descripcion + ' (' + deposito.empresa_nombre + ')';
+        }
         $ctx.find('.deposito_id').val(deposito.id);
         $ctx.find('.codigodeposito').val(deposito.codigo || '');
-        $ctx.find('.descripciondeposito').val(deposito.descripcion || deposito.nombre || '');
+        $ctx.find('.descripciondeposito').val(descripcion);
         if (deposito.tipodeposito !== undefined) {
             $ctx.attr('data-tipodeposito', deposito.tipodeposito);
         }

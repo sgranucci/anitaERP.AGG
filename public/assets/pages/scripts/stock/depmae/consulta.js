@@ -6,15 +6,62 @@ function esFormularioDepmaeAbm() {
     return $('#form-general').length && $('#codigo[name="codigo"]').length;
 }
 
+function descripcionDepositoConEmpresa(descripcion, empresaNombre) {
+    var desc = (descripcion || '').trim();
+    var emp = (empresaNombre || '').trim();
+    if ($('#consultadeposito-mostrar-empresa').val() === '1' && emp) {
+        return desc + ' (' + emp + ')';
+    }
+    return desc;
+}
+
+function empresaSelectParaConsultaDeposito() {
+    if (esFormularioDepmaeAbm()) {
+        return $();
+    }
+
+    var $emp = $();
+    if (ptrDeposito_id && ptrDeposito_id.length) {
+        var $form = ptrDeposito_id.closest('form');
+        if ($form.length) {
+            $emp = $form.find('#empresa_id').first();
+        }
+        if (!$emp.length) {
+            $emp = ptrDeposito_id.closest('.card, .modal-content, .row, body').find('#empresa_id').first();
+        }
+    }
+    if (!$emp.length) {
+        $emp = $('#empresa_id').first();
+    }
+
+    return $emp;
+}
+
 function empresaIdParaConsultaDeposito() {
     if (esFormularioDepmaeAbm()) {
         return '';
     }
-    var $emp = $('#empresa_id');
+    var $emp = empresaSelectParaConsultaDeposito();
     if (!$emp.length) {
         return '';
     }
     return String($emp.val() || '').trim();
+}
+
+function empresaRequeridaPendienteEnFormulario() {
+    var $emp = empresaSelectParaConsultaDeposito();
+    if (!$emp.length || !$emp.is('select')) {
+        return false;
+    }
+
+    return $emp.prop('required') && String($emp.val() || '').trim() === '';
+}
+
+function enfocarEmpresaFormularioDeposito() {
+    var $emp = empresaSelectParaConsultaDeposito();
+    if ($emp.length) {
+        $emp.trigger('focus');
+    }
 }
 
 function actualizarLinkEditarDeposito($ctx, depositoId) {
@@ -146,6 +193,11 @@ $(document)
         if (esFormularioDepmaeAbm()) {
             return;
         }
+        if (empresaRequeridaPendienteEnFormulario()) {
+            alert('Seleccione la empresa del formulario antes de consultar dep\u00f3sitos.');
+            enfocarEmpresaFormularioDeposito();
+            return;
+        }
         e.preventDefault();
         e.stopPropagation();
         leerDepositoPorCodigo($(this).val(), this);
@@ -159,6 +211,11 @@ function activa_eventos_consultadeposito() {
     $('.consultadeposito')
         .off('click.consultaDeposito')
         .on('click.consultaDeposito', function () {
+            if (empresaRequeridaPendienteEnFormulario()) {
+                alert('Seleccione la empresa del formulario antes de consultar dep\u00f3sitos.');
+                enfocarEmpresaFormularioDeposito();
+                return;
+            }
             var $btn = $(this);
             var $ctx = $btn.closest('.tm-deposito-campo, .depmae-campo-consulta, tr');
 
@@ -209,6 +266,8 @@ function activa_eventos_consultadeposito() {
             var descripcion = $tr.find('.descripcion').html();
             var tipodeposito = $tr.find('.tipodeposito').html() || '';
             var empresaIdDep = $tr.find('.empresa-id').html() || '';
+            var empresaNombreDep = $tr.find('.empresa-nombre').html() || '';
+            descripcion = descripcionDepositoConEmpresa(descripcion, empresaNombreDep);
 
             if ($('#form-general').length && $('#codigo[name="codigo"]').length
                 && typeof window.aplicarDepositoEnFormularioAbm === 'function') {
@@ -279,11 +338,19 @@ function activa_eventos_consultadeposito() {
     $(document)
         .off('change.leerDepositoCod', '.codigodeposito')
         .on('change.leerDepositoCod', '.codigodeposito', function (e) {
-            if (esFormularioDepmaeAbm()) {
-                return;
+        if (esFormularioDepmaeAbm()) {
+            return;
+        }
+        if (empresaRequeridaPendienteEnFormulario()) {
+            alert('Seleccione la empresa del formulario antes de consultar dep\u00f3sitos.');
+            enfocarEmpresaFormularioDeposito();
+            if (typeof onDone === 'function') {
+                onDone(null);
             }
-            e.preventDefault();
-            leerDepositoPorCodigo($(this).val(), this);
+            return;
+        }
+        e.preventDefault();
+        leerDepositoPorCodigo($(this).val(), this);
         });
 }
 
@@ -346,7 +413,9 @@ function leerDepositoPorCodigo(codigo, ptrrenglon, onDone) {
             if ($ctx.length) {
                 $ctx.find('.deposito_id').val(data.id);
                 $ctx.find('.codigodeposito').val(data.codigo);
-                $ctx.find('.descripciondeposito').val(data.descripcion);
+                $ctx.find('.descripciondeposito').val(
+                    descripcionDepositoConEmpresa(data.descripcion, data.empresa_nombre)
+                );
                 actualizarLinkEditarDeposito($ctx, data.id);
                 aplicarEmpresaDesdeDeposito(data.empresa_id);
                 if ($ctx.closest('#tbody-usuario-deposito-table').length) {

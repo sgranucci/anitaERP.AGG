@@ -350,6 +350,8 @@ final class GastronomiaFacturacionService
         if (! empty($payload['_omitir_numera_anita_fin'])) {
             $opciones['omitir_numera_anita_fin'] = true;
             unset($payload['_omitir_numera_anita_fin']);
+        } elseif (! empty($payload['numerocomprobante_forzado'])) {
+            $opciones['omitir_numera_anita_fin'] = true;
         }
         $payload['opciones_emision'] = $opciones;
 
@@ -370,31 +372,6 @@ final class GastronomiaFacturacionService
         }
 
         return $resultado;
-    }
-
-    /**
-     * Piso de numeración Anita para PV CAEA (mod A) en emisión multi-lote del cierre Waitry.
-     */
-    public function ultimoNumerocomprobanteAnitaCaeaParaProceso(object $puntoventa, int $tipotransaccionId): int
-    {
-        if (($puntoventa->modofacturacion ?? '') !== 'A') {
-            return 0;
-        }
-
-        $tipo = Tipotransaccion::query()->find($tipotransaccionId);
-        if ($tipo === null) {
-            return 0;
-        }
-
-        $receptor = app(GastronomiaReceptorFacturacionService::class)->datosVentaReceptorConsumidorFinal();
-        $clienteId = (int) ($receptor['cliente_id'] ?? config('facturacion.CLIENTE_CONSUMIDOR_FINAL_ID', 1));
-        $letra = 'B';
-        $cliente = Cliente::query()->find($clienteId);
-        if ($cliente !== null && $cliente->condicioniva_id) {
-            $letra = (string) (Condicioniva::query()->whereKey($cliente->condicioniva_id)->value('letra') ?? 'B');
-        }
-
-        return $this->facturacionService->ultimoNumerocomprobanteAnitaCaea($puntoventa, $tipo, $letra);
     }
 
     /**

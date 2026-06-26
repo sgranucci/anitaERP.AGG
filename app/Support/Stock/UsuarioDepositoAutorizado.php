@@ -28,6 +28,28 @@ final class UsuarioDepositoAutorizado
         return array_values(array_unique(array_map('intval', $ids)));
     }
 
+    /**
+     * Códigos de depósito derivados de los depósitos asignados al usuario (multiempresa).
+     *
+     * @return list<string>|null null = sin restricción
+     */
+    public static function codigosAutorizados(): ?array
+    {
+        $ids = self::idsRestringidos();
+        if ($ids === null) {
+            return null;
+        }
+
+        return Depmae::query()
+            ->whereIn('id', $ids)
+            ->pluck('codigo')
+            ->map(fn ($codigo) => trim((string) $codigo))
+            ->filter(fn (string $codigo) => $codigo !== '')
+            ->unique()
+            ->values()
+            ->all();
+    }
+
     public static function tieneRestriccion(): bool
     {
         $ids = self::idsRestringidos();
@@ -46,21 +68,61 @@ final class UsuarioDepositoAutorizado
             return true;
         }
 
-        return in_array($depositoId, $ids, true);
+        if (in_array($depositoId, $ids, true)) {
+            return true;
+        }
+
+        $codigos = self::codigosAutorizados();
+        if ($codigos === []) {
+            return false;
+        }
+
+        $deposito = Depmae::query()->select('id', 'codigo', 'empresa_id')->find($depositoId);
+        if (! $deposito) {
+            return false;
+        }
+
+        $codigo = trim((string) ($deposito->codigo ?? ''));
+        if ($codigo === '' || ! in_array($codigo, $codigos, true)) {
+            return false;
+        }
+
+        $empresaId = (int) ($deposito->empresa_id ?? 0);
+        $empresasAsignadas = collect(Session::get('usuario_empresas', []))
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($empresasAsignadas !== []) {
+            return in_array($empresaId, $empresasAsignadas, true);
+        }
+
+        return true;
     }
 
     /**
      * @param  Builder<Depmae>  $query
      * @return Builder<Depmae>
      */
-    public static function aplicarFiltroQuery(Builder $query): Builder
+    public static function aplicarFiltroQuery(Builder $query, ?int $empresaIdFija = null): Builder
     {
-        $ids = self::idsRestringidos();
-        if ($ids === null) {
+        $codigos = self::codigosAutorizados();
+        if ($codigos === null) {
             return $query;
         }
 
-        return $query->whereIn($query->getModel()->getTable().'.id', $ids);
+        $table = $query->getModel()->getTable();
+
+        if ($empresaIdFija > 0) {
+            return $query
+                ->where($table.'.empresa_id', $empresaIdFija)
+                ->whereIn($table.'.codigo', $codigos);
+        }
+
+        return $query->whereIn($table.'.codigo', $codigos);
     }
 
     public static function cargarEnSession(Usuario $usuario): void
@@ -88,9 +150,22 @@ final class UsuarioDepositoAutorizado
             return [];
         }
 
-        return Depmae::query()
+        $codigos = Depmae::query()
             ->whereIn('id', $depositoIds)
+            ->pluck('codigo')
+            ->map(fn ($codigo) => trim((string) $codigo))
+            ->filter(fn (string $codigo) => $codigo !== '')
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($codigos === []) {
+            return [];
+        }
+
+        return Depmae::query()
             ->whereIn('empresa_id', $empresaIds)
+            ->whereIn('codigo', $codigos)
             ->pluck('id')
             ->map(fn ($id) => (int) $id)
             ->all();

@@ -6,6 +6,7 @@ use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Compras\PrecargaComprobanteAnitaSyncService;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\DB;
 use Auth;
 
 class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_ProveedorRepositoryInterface
@@ -50,8 +51,11 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
 
         $precarga_comprobante_proveedor = $this->model->create($data);
 
+        $precargaId = (int) $precarga_comprobante_proveedor->id;
         $payloadAnita = $this->anitaSync->enriquecerPayloadParaAnita($data);
-        $this->anitaSync->insertCabecera($precarga_comprobante_proveedor->id, $payloadAnita);
+        DB::afterCommit(function () use ($precargaId, $payloadAnita) {
+            $this->anitaSync->insertCabecera($precargaId, $payloadAnita);
+        });
 
         return $precarga_comprobante_proveedor;
     }
@@ -79,19 +83,25 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
         $precarga_comprobante_proveedor = $this->model->findOrFail($id)
             ->update($data);
 
+        $precargaId = (int) $id;
         $payloadAnita = $this->anitaSync->enriquecerPayloadParaAnita($data);
-        $this->anitaSync->syncCabecera((int) $id, $payloadAnita);
+        DB::afterCommit(function () use ($precargaId, $payloadAnita) {
+            $this->anitaSync->syncCabecera($precargaId, $payloadAnita);
+        });
 
         return $precarga_comprobante_proveedor;
     }
 
     public function delete($id)
     {
-        $precarga_comprobante_proveedor = Precarga_Comprobante_Proveedor::find($id);
-
-        $this->anitaSync->deleteCabecera((int) $id);
+        $precargaId = (int) $id;
+        Precarga_Comprobante_Proveedor::find($id);
 
         $precarga_comprobante_proveedor = $this->model->destroy($id);
+
+        DB::afterCommit(function () use ($precargaId) {
+            $this->anitaSync->deleteCabecera($precargaId);
+        });
 
         return $precarga_comprobante_proveedor;
     }

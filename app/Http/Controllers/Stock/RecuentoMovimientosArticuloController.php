@@ -41,6 +41,7 @@ class RecuentoMovimientosArticuloController extends Controller
             'contexto' => $contexto,
             'queryParams' => $queryParams,
             'modoTodosDepositos' => $modoTodosDepositos,
+            'mostrarEmpresa' => MovimientosArticuloDepositoSupport::mostrarEmpresaEnListados(),
             'volverUrl' => $this->resolverUrlVolver($request),
         ]);
     }

@@ -28,8 +28,8 @@ final class RecuentoMovimientosArticuloSupport
 
     /**
      * @return array{
-     *     articulo: array{id:int, sku:string, descripcion:string},
-     *     deposito: array{id:int, codigo:string, nombre:string},
+     *     articulo: array{id:int, sku:string, descripcion:string, unidad_medida:string, unidad_medida_abreviatura:string, unidad_medida_nombre:string},
+     *     deposito: array{id:int, codigo:string, nombre:string, empresa_nombre?:string},
      *     modo_todos_depositos: bool,
      *     saldo: float,
      *     saldo_fmt: string
@@ -41,20 +41,21 @@ final class RecuentoMovimientosArticuloSupport
             throw new \InvalidArgumentException('Artículo requerido.');
         }
 
-        $articulo = Articulo::query()->select('id', 'sku', 'descripcion')->find($articuloId);
+        $articulo = Articulo::query()
+            ->select('id', 'sku', 'descripcion', 'unidadmedida_id')
+            ->with('unidadesdemedidas:id,nombre,abreviatura')
+            ->find($articuloId);
         if (! $articulo) {
             throw new \RuntimeException('Artículo no encontrado.');
         }
+
+        $articuloResumen = MovimientosArticuloDepositoSupport::articuloResumen($articulo);
 
         $modoTodos = self::esModoTodosDepositos($depositoId);
 
         if ($modoTodos) {
             return [
-                'articulo' => [
-                    'id' => (int) $articulo->id,
-                    'sku' => (string) $articulo->sku,
-                    'descripcion' => (string) $articulo->descripcion,
-                ],
+                'articulo' => $articuloResumen,
                 'deposito' => [
                     'id' => 0,
                     'codigo' => '',
@@ -66,30 +67,27 @@ final class RecuentoMovimientosArticuloSupport
             ];
         }
 
-        $deposito = Depmae::query()->select('id', 'codigo', 'nombre', 'empresa_id')->find($depositoId);
+        $deposito = Depmae::query()
+            ->select('id', 'codigo', 'nombre', 'empresa_id')
+            ->with('empresas:id,nombre')
+            ->find($depositoId);
         if (! $deposito) {
             throw new \RuntimeException('Depósito no encontrado.');
         }
-        if (! Depmae::autorizadoParaUsuarioYEmpresa((int) $deposito->id, (int) $deposito->empresa_id)) {
+        if (! MovimientosArticuloDepositoSupport::depositoConsultable((int) $deposito->id)) {
             throw new \RuntimeException('Depósito no autorizado para su usuario o empresa.');
-        }
-        if (! UsuarioDepositoAutorizado::depositoAutorizado((int) $deposito->id)) {
-            throw new \RuntimeException('No tiene permiso para operar sobre este depósito.');
         }
 
         $saldoRepo = app(\App\Repositories\Stock\Articulo_Saldo_DepositoRepositoryInterface::class);
         $saldo = $saldoRepo->saldo($articuloId, $depositoId);
 
         return [
-            'articulo' => [
-                'id' => (int) $articulo->id,
-                'sku' => (string) $articulo->sku,
-                'descripcion' => (string) $articulo->descripcion,
-            ],
+            'articulo' => $articuloResumen,
             'deposito' => [
                 'id' => (int) $deposito->id,
                 'codigo' => (string) ($deposito->codigo ?? ''),
                 'nombre' => (string) ($deposito->nombre ?? ''),
+                'empresa_nombre' => (string) (optional($deposito->empresas)->nombre ?? ''),
             ],
             'modo_todos_depositos' => false,
             'saldo' => $saldo,
@@ -140,11 +138,11 @@ final class RecuentoMovimientosArticuloSupport
         $row->nombreempresa = trim((string) ($row->empresa_nombre ?? ''));
 
         if ($incluirDeposito) {
-            $row->deposito_etiqueta = self::etiquetaDeposito([
+            $row->deposito_etiqueta = self::etiquetaDepositoConEmpresa([
                 'id' => (int) ($row->deposito_id ?? 0),
                 'codigo' => (string) ($row->deposito_codigo ?? ''),
                 'nombre' => (string) ($row->deposito_nombre ?? ''),
-            ]);
+            ], (string) ($row->empresa_nombre ?? ''));
         }
 
         return $row;
@@ -192,6 +190,21 @@ final class RecuentoMovimientosArticuloSupport
         );
     }
 
+    public static function etiquetaDepositoConEmpresa(array $deposito, ?string $empresaNombre = null): string
+    {
+        $etiqueta = self::etiquetaDeposito($deposito);
+        if (! MovimientosArticuloDepositoSupport::mostrarEmpresaEnListados()) {
+            return $etiqueta;
+        }
+
+        $empresa = trim((string) ($empresaNombre ?? $deposito['empresa_nombre'] ?? ''));
+        if ($empresa === '') {
+            return $etiqueta;
+        }
+
+        return $etiqueta.' ('.$empresa.')';
+    }
+
     private static function queryBase(int $articuloId): Builder
     {
         return Articulo_Movimiento::query()
@@ -226,24 +239,36 @@ final class RecuentoMovimientosArticuloSupport
 
     private static function aplicarFiltroDepositosAutorizados(Builder $query): void
     {
-        $ids = UsuarioDepositoAutorizado::idsRestringidos();
-        if ($ids !== null) {
-            $query->whereIn('am.deposito_id', $ids);
+        $ids = MovimientosArticuloDepositoSupport::idsDepositosConsultables();
+        if ($ids === null) {
+            return;
         }
+
+        if ($ids === []) {
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        $query->whereIn('am.deposito_id', $ids);
     }
 
     private static function saldoTodosDepositos(int $articuloId): float
     {
         $saldoRepo = app(\App\Repositories\Stock\Articulo_Saldo_DepositoRepositoryInterface::class);
-        $idsAutorizados = UsuarioDepositoAutorizado::idsRestringidos();
+        $idsConsultables = MovimientosArticuloDepositoSupport::idsDepositosConsultables();
 
-        if ($idsAutorizados === null) {
+        if ($idsConsultables === null) {
             return (float) Articulo_Saldo_Deposito::query()
                 ->where('articulo_id', $articuloId)
                 ->sum('cantidad');
         }
 
-        $saldos = $saldoRepo->saldosArticuloPorDeposito($articuloId, $idsAutorizados);
+        if ($idsConsultables === []) {
+            return 0.0;
+        }
+
+        $saldos = $saldoRepo->saldosArticuloPorDeposito($articuloId, $idsConsultables);
 
         return (float) array_sum($saldos);
     }

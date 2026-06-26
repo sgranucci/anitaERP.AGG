@@ -25,7 +25,7 @@ use App\Support\Ventas\Gastronomia\CierreJornadaProcesoFacturaRecuperacionSuppor
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoInsumoAjusteSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoJornadaSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoPuntoventaSupport;
-use App\Support\Ventas\Gastronomia\GastronomiaEmisionNumeracionCaeaSupport;
+use App\Support\Ventas\CaeaEmisionNumeracionSupport;
 use App\Support\Ventas\GastronomiaDepositoConfigSupport;
 use App\Support\Ventas\GastronomiaMovimientoStockSupport;
 use App\Support\Ventas\GastronomiaPuntoventaEmisionLock;
@@ -210,15 +210,12 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
                 $anitaPendientes = [];
                 $vencaePendientes = [];
                 $secuenciaNumeracion = null;
-                if (! $emisionCaea && count($lotes) > 1 && $tipo !== null) {
-                    $pisoNumeracionAnita = $this->facturacionGastronomiaService->ultimoNumerocomprobanteAnitaCaeaParaProceso(
-                        $puntoventaModel,
-                        $tipoFacturaId,
-                    );
+                if (count($lotes) > 1 && $tipo !== null) {
                     $secuenciaNumeracion = new CierreJornadaProcesoFacturaNumeracionSupport(
                         $puntoventaEmisionId,
-                        $tipoFacturaId,
-                        $pisoNumeracionAnita,
+                        (int) ($tipo->codigo ?? 0),
+                        $letraComprobante,
+                        0,
                         (int) $jornada->empresa_id,
                     );
                 }
@@ -273,19 +270,14 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
                         'descripcionarticulos' => $items['descripciones'],
                         'omitir_percepciones' => true,
                     ];
-                    if ($emisionCaea && $tipo !== null) {
-                        $errorNumeracion = GastronomiaEmisionNumeracionCaeaSupport::aplicarReservaNumeracionAlPayload(
-                            $payload,
-                            $puntoventaModel,
-                            $tipo,
-                            $letraComprobante,
-                        );
-                        if ($errorNumeracion !== null) {
-                            throw new InvalidArgumentException($errorNumeracion);
-                        }
-                    } elseif ($secuenciaNumeracion !== null) {
-                        $payload['numerocomprobante_forzado'] = $secuenciaNumeracion->siguiente();
-                    }
+                    $this->aplicarNumeracionAlPayloadProcesoCierre(
+                        $payload,
+                        $secuenciaNumeracion,
+                        $emisionCaea,
+                        $puntoventaModel,
+                        $tipo,
+                        $letraComprobante,
+                    );
                     $this->receptorFacturacionService->aplicarReceptorAlPayloadFacturacion($payload, $receptor);
 
                     $resultadoFactura = $this->facturacionGastronomiaService->emitirComprobanteProcesoCierre($payload);
@@ -616,17 +608,14 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
                         'omitir_percepciones' => true,
                         'numerocomprobante_forzado' => $numeroForzado,
                     ];
-                    if ($emisionCaea && $tipo !== null) {
-                        $errorNumeracion = GastronomiaEmisionNumeracionCaeaSupport::aplicarReservaNumeracionAlPayload(
-                            $payload,
-                            $puntoventaModel,
-                            $tipo,
-                            $letraComprobante,
-                        );
-                        if ($errorNumeracion !== null) {
-                            throw new InvalidArgumentException($errorNumeracion);
-                        }
-                    }
+                    $this->aplicarNumeracionAlPayloadProcesoCierre(
+                        $payload,
+                        null,
+                        $emisionCaea,
+                        $puntoventaModel,
+                        $tipo,
+                        $letraComprobante,
+                    );
                     $this->receptorFacturacionService->aplicarReceptorAlPayloadFacturacion($payload, $receptor);
 
                     $resultadoFactura = $this->facturacionGastronomiaService->emitirComprobanteProcesoCierre($payload);
@@ -1157,6 +1146,51 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
             ->first();
 
         return CierreJornadaProcesoJornadaSupport::contexto($jornada, $snapshot);
+    }
+
+    /**
+     * Numeración ERP para facturas del cierre Waitry (CAEA o CAE multi-lote).
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function aplicarNumeracionAlPayloadProcesoCierre(
+        array &$payload,
+        ?CierreJornadaProcesoFacturaNumeracionSupport $secuenciaNumeracion,
+        bool $emisionCaea,
+        Puntoventa $puntoventaModel,
+        ?Tipotransaccion $tipo,
+        string $letraComprobante,
+    ): void {
+        if (! empty($payload['numerocomprobante_forzado'])) {
+            CaeaEmisionNumeracionSupport::marcarNumerocomprobanteForzadoEnPayload(
+                $payload,
+                (int) $payload['numerocomprobante_forzado'],
+            );
+
+            return;
+        }
+
+        if ($secuenciaNumeracion !== null) {
+            CaeaEmisionNumeracionSupport::marcarNumerocomprobanteForzadoEnPayload(
+                $payload,
+                $secuenciaNumeracion->siguiente(),
+            );
+
+            return;
+        }
+
+        if ($emisionCaea && $tipo !== null) {
+            $errorNumeracion = CaeaEmisionNumeracionSupport::aplicarReservaNumeracionAlPayload(
+                $payload,
+                $puntoventaModel,
+                $tipo,
+                $letraComprobante,
+                true,
+            );
+            if ($errorNumeracion !== null) {
+                throw new InvalidArgumentException($errorNumeracion);
+            }
+        }
     }
 
     /**

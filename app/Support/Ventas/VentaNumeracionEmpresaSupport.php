@@ -2,13 +2,21 @@
 
 namespace App\Support\Ventas;
 
+use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Numeración de ventas acotada por empresa (PV comparte sucursal Anita entre empresas).
+ *
+ * La secuencia CAEA/fiscal es por tipo AFIP efectivo (tipotransaccion.codigo + letra + FCE),
+ * no por tipotransaccion_id.
  */
 final class VentaNumeracionEmpresaSupport
 {
+    /**
+     * @deprecated Use maxNumerocomprobanteErpPorCodigoAfip or maxNumerocomprobanteErpDesdeTipotransaccion.
+     */
     public static function maxNumerocomprobanteErp(
         int $puntoventaId,
         int $tipotransaccionId,
@@ -18,9 +26,31 @@ final class VentaNumeracionEmpresaSupport
             return 0;
         }
 
+        $codigoAlmacenado = (int) (Tipotransaccion::query()->whereKey($tipotransaccionId)->value('codigo') ?? 0);
+
+        return self::maxNumerocomprobanteErpDesdeTipotransaccion(
+            $puntoventaId,
+            $codigoAlmacenado,
+            'B',
+            $empresaId,
+        );
+    }
+
+    public static function maxNumerocomprobanteErpPorCodigoAfip(
+        int $puntoventaId,
+        int $codigoAfipObjetivo,
+        ?int $empresaId = null,
+        ?string $letraEmision = null,
+    ): int {
+        if ($puntoventaId <= 0 || $codigoAfipObjetivo <= 0) {
+            return 0;
+        }
+
         $query = Venta::query()
-            ->where('puntoventa_id', $puntoventaId)
-            ->where('tipotransaccion_id', $tipotransaccionId);
+            ->join('tipotransaccion as tt', 'tt.id', '=', 'venta.tipotransaccion_id')
+            ->where('venta.puntoventa_id', $puntoventaId)
+            ->whereNull('venta.deleted_at')
+            ->whereNull('tt.deleted_at');
 
         if ($empresaId !== null && $empresaId > 0) {
             $query->whereHas('puntoventas', static function ($q) use ($empresaId): void {
@@ -28,7 +58,42 @@ final class VentaNumeracionEmpresaSupport
             });
         }
 
-        return (int) ($query->max('numerocomprobante') ?? 0);
+        if ($letraEmision !== null && $letraEmision !== '') {
+            $letra = strtoupper(trim($letraEmision));
+            $bases = TipotransaccionCodigoAfipSupport::codigosBaseAlmacenadosPosibles($codigoAfipObjetivo, $letra);
+            if ($bases !== []) {
+                $query->whereIn(DB::raw('CAST(tt.codigo AS UNSIGNED)'), $bases);
+            }
+            $query->where(static function ($q) use ($letra): void {
+                $q->where('venta.codigo', 'like', '% '.$letra.'-%')
+                    ->orWhere('venta.codigo', 'like', '% '.$letra.' %');
+            });
+        }
+
+        return (int) ($query->max('venta.numerocomprobante') ?? 0);
+    }
+
+    public static function maxNumerocomprobanteErpDesdeTipotransaccion(
+        int $puntoventaId,
+        int|string $codigoAlmacenadoTipotransaccion,
+        string $letra,
+        ?int $empresaId = null,
+        ?string $modoFacturacionCliente = null,
+        ?float $totalComprobante = null,
+    ): int {
+        $codigoAfip = TipotransaccionCodigoAfipSupport::codigoAfipParaEmision(
+            $codigoAlmacenadoTipotransaccion,
+            $letra,
+            $modoFacturacionCliente,
+            $totalComprobante,
+        );
+
+        return self::maxNumerocomprobanteErpPorCodigoAfip(
+            $puntoventaId,
+            $codigoAfip,
+            $empresaId,
+            $letra,
+        );
     }
 
     public static function numeroDesdeCodigoVenta(?string $codigo): int

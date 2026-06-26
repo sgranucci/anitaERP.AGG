@@ -529,6 +529,23 @@ return [
      */
     'informe_gerente_costo_lista_base' => (int) env('GASTRONOMIA_INFORME_GERENTE_COSTO_LISTA_BASE', 5000),
 
+    /**
+     * Reporte ventas de artículos: lista de precios de venta (P.Vta.). 0 = LISTAPRECIO_DEFAULT_ID (lista 1).
+     */
+    'ventas_articulos_listaprecio_venta_id' => (int) env('GASTRONOMIA_VENTAS_ARTICULOS_LISTAPRECIO_VENTA_ID', 0),
+
+    /**
+     * Costo mensual catálogo V…: fórmula + última compra Anita → lista 5000+mes (solo ERP precio; stkpre opcional).
+     * Comando: php artisan gastronomia:actualizar-costo-mensual-catalogo
+     */
+    'costo_mensual_catalogo' => [
+        'habilitado' => filter_var(env('GASTRONOMIA_COSTO_MENSUAL_CATALOGO_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+        'hora' => env('GASTRONOMIA_COSTO_MENSUAL_CATALOGO_HORA', '23:30'),
+        'usuario_id' => (int) env('GASTRONOMIA_COSTO_MENSUAL_CATALOGO_USUARIO_ID', 1),
+        'moneda_id' => (int) env('GASTRONOMIA_COSTO_MENSUAL_CATALOGO_MONEDA_ID', 1),
+        'sincronizar_anita' => filter_var(env('GASTRONOMIA_COSTO_MENSUAL_SINCRONIZAR_ANITA', false), FILTER_VALIDATE_BOOLEAN),
+    ],
+
     'cuentacaja_efectivo_por_empresa' => (static function (): array {
         $raw = env('GASTRONOMIA_CUENTACAJA_EFECTIVO_POR_EMPRESA');
         if ($raw === null || $raw === '') {

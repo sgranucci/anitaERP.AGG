@@ -7,10 +7,14 @@
     $modoTodos = (bool) ($contexto['modo_todos_depositos'] ?? false);
     $depEtiqueta = $modoTodos
         ? 'Todos los depósitos'
-        : RecuentoMovimientosArticuloSupport::etiquetaDeposito($dep);
+        : RecuentoMovimientosArticuloSupport::etiquetaDepositoConEmpresa($dep, $dep['empresa_nombre'] ?? '');
     $logosCabecera = EmpresaLogoArchivo::logosCabeceraDesdeColeccion($movimientos);
     $totalFilas = is_countable($movimientos) ? count($movimientos) : 0;
     $tituloArticulo = trim(($art['sku'] ?? '').' '.($art['descripcion'] ?? ''));
+    $tituloColumnaDeposito = \App\Support\Stock\MovimientosArticuloDepositoSupport::mostrarEmpresaEnListados()
+        ? 'Depósito / Empresa'
+        : 'Depósito';
+    $sufijoUm = \App\Support\Stock\MovimientosArticuloDepositoSupport::sufijoColumnaCantidad($art['unidad_medida'] ?? '');
 @endphp
 <!DOCTYPE html>
 <html lang="es">
@@ -68,18 +72,19 @@
     <div class="meta" style="margin-bottom: 8px;">
         <strong>Artículo:</strong> {{ $tituloArticulo }}<br>
         <strong>Depósito:</strong> {{ $depEtiqueta }}<br>
-        <strong>{{ $modoTodos ? 'Saldo total' : 'Saldo actual' }}:</strong> {{ $contexto['saldo_fmt'] ?? '0' }}
+        <strong>Unidad de medida:</strong> {{ ! empty($art['unidad_medida']) ? $art['unidad_medida'] : '—' }}<br>
+        <strong>{{ $modoTodos ? 'Saldo total' : 'Saldo actual' }}:</strong> {{ $contexto['saldo_fmt'] ?? '0' }}{{ $sufijoUm }}
     </div>
     <table class="data">
         <thead>
             <tr>
                 <th style="width: 9%;">Fecha</th>
                 @if ($modoTodos)
-                <th style="width: 12%;">Depósito</th>
+                <th style="width: 18%;">{{ $tituloColumnaDeposito }}</th>
                 @endif
                 <th style="width: 7%;">Tipo</th>
-                <th class="num" style="width: 8%;">Entrada</th>
-                <th class="num" style="width: 8%;">Salida</th>
+                <th class="num" style="width: 8%;">Entrada{{ $sufijoUm }}</th>
+                <th class="num" style="width: 8%;">Salida{{ $sufijoUm }}</th>
                 <th style="width: 22%;">Concepto</th>
                 <th style="width: 9%;">Mov. stock</th>
                 <th style="width: {{ $modoTodos ? '25%' : '37%' }};">Leyenda mov.</th>

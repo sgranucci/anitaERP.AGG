@@ -17,7 +17,7 @@ use App\Support\Ventas\GastronomiaEmisionProfiler;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
 use App\Support\Ventas\GastronomiaMovimientoStockSupport;
-use App\Support\Ventas\Gastronomia\GastronomiaEmisionNumeracionCaeaSupport;
+use App\Support\Ventas\CaeaEmisionNumeracionSupport;
 use App\Support\Ventas\GastronomiaPuntoventaEmisionLock;
 use App\Support\Ventas\NcjetdirectSalidaSupport;
 use App\Services\Ventas\Gastronomia\GastronomiaTicketTarjetaCanjeService;
@@ -526,7 +526,7 @@ final class GastronomiaFacturaEmisionService
     }
 
     /**
-     * CAEA: candado corto solo para reservar número en Anita (numerador); el resto de la emisión sigue sin lock.
+     * CAEA: reserva número en ERP bajo lock; el resto de la emisión sigue sin lock de PV completo.
      */
     private function reservarNumerocomprobanteCaeaRapido(
         array &$payload,
@@ -534,37 +534,21 @@ final class GastronomiaFacturaEmisionService
         Puntoventa $puntoventa,
         ?GastronomiaEmisionProfiler $profiler = null,
     ): ?string {
-        $lockPv = null;
-
-        try {
-            $profiler?->marcar('antes_lock_pv_numeracion');
-            $lockPv = GastronomiaPuntoventaEmisionLock::adquirir((int) $puntoventa->id);
-            $profiler?->marcar('despues_lock_pv_numeracion');
-
-            $tipo = Tipotransaccion::query()->find($tipoFacturaId);
-            if ($tipo === null) {
-                return 'Tipo de transacción de factura inexistente.';
-            }
-
-            $errorReserva = GastronomiaEmisionNumeracionCaeaSupport::aplicarReservaNumeracionAlPayload(
-                $payload,
-                $puntoventa,
-                $tipo,
-                $this->letraComprobanteDesdePayload($payload),
-            );
-            if ($errorReserva !== null) {
-                return $errorReserva;
-            }
-
-            $profiler?->marcar('numeracion_caea_reservada');
-
-            return null;
-        } catch (InvalidArgumentException $e) {
-            return $e->getMessage();
-        } finally {
-            GastronomiaPuntoventaEmisionLock::liberar($lockPv);
-            $profiler?->marcar('lock_pv_numeracion_liberado');
+        $tipo = Tipotransaccion::query()->find($tipoFacturaId);
+        if ($tipo === null) {
+            return 'Tipo de transacción de factura inexistente.';
         }
+
+        $profiler?->marcar('antes_lock_pv_numeracion');
+        $errorReserva = CaeaEmisionNumeracionSupport::aplicarReservaNumeracionAlPayload(
+            $payload,
+            $puntoventa,
+            $tipo,
+            $this->letraComprobanteDesdePayload($payload),
+        );
+        $profiler?->marcar('numeracion_caea_reservada');
+
+        return $errorReserva;
     }
 
     private function letraComprobanteDesdePayload(array $payload): string

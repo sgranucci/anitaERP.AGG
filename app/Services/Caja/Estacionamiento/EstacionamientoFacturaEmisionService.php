@@ -8,9 +8,12 @@ use App\Models\Caja\Estacionamiento\TicketEstacionamiento;
 use App\Models\Caja\Estacionamiento\VentaEstacionamientoEmision;
 use App\Models\Configuracion\Actividad_Arca;
 use App\Models\Ventas\Venta;
+use App\Models\Ventas\Puntoventa;
+use App\Models\Ventas\Tipotransaccion;
 use App\Support\Caja\Estacionamiento\EstacionamientoFacturaPayloadSupport;
 use App\Support\Caja\Estacionamiento\EstacionamientoIdentificadorPc;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
+use App\Support\Ventas\CaeaEmisionNumeracionSupport;
 use App\Support\Ventas\GastronomiaPuntoventaEmisionLock;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -170,8 +173,38 @@ final class EstacionamientoFacturaEmisionService
             return ['error' => $e->getMessage()];
         }
 
+        $puntoventa = Puntoventa::query()->find($puntoventaId);
+        $emisionCaea = $puntoventa !== null && ($puntoventa->modofacturacion ?? '') === 'A';
+        if ($emisionCaea && empty($payload['numerocomprobante_forzado'])) {
+            $tipo = Tipotransaccion::query()->find((int) ($payload['tipotransaccion_id'] ?? 0));
+            if ($tipo === null) {
+                return ['error' => 'Tipo de transacción de factura inexistente.'];
+            }
+            $letra = 'B';
+            $clienteId = (int) ($payload['cliente_id'] ?? 0);
+            if ($clienteId > 0) {
+                $cliente = \App\Models\Ventas\Cliente::query()->find($clienteId);
+                if ($cliente !== null && $cliente->condicioniva_id) {
+                    $letra = (string) (\App\Models\Configuracion\Condicioniva::query()
+                        ->whereKey($cliente->condicioniva_id)
+                        ->value('letra') ?? 'B');
+                }
+            }
+            $errorReserva = CaeaEmisionNumeracionSupport::aplicarReservaNumeracionAlPayload(
+                $payload,
+                $puntoventa,
+                $tipo,
+                trim($letra) !== '' ? $letra : 'B',
+            );
+            if ($errorReserva !== null) {
+                return ['error' => $errorReserva];
+            }
+        }
+
         $lockPv = null;
-        if (! $bloqueoPvYaAdquirido) {
+        $mantenerLockEmisionCompleta = ! $emisionCaea && ! $bloqueoPvYaAdquirido;
+
+        if ($mantenerLockEmisionCompleta) {
             try {
                 $lockPv = GastronomiaPuntoventaEmisionLock::adquirir($puntoventaId);
             } catch (InvalidArgumentException $e) {
@@ -228,7 +261,7 @@ final class EstacionamientoFacturaEmisionService
                 return ['error' => $e->getMessage()];
             }
         } finally {
-            if (! $bloqueoPvYaAdquirido) {
+            if ($mantenerLockEmisionCompleta) {
                 GastronomiaPuntoventaEmisionLock::liberar($lockPv);
             }
         }

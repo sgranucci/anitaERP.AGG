@@ -36,5 +36,16 @@ return [
             env('REQUISICION_ANITA_RESERVAR_NUMERADOR', false),
             FILTER_VALIDATE_BOOLEAN
         ),
+        // numabm shared referencia 2: reqv_nro_interno (a-reqmae.c lee_numabm 2L)
+        'numerador_linea_interno' => [
+            'referencia' => env('REQUISICION_ANITA_NUMA_REF_LINEA', '2'),
+            'programa' => env('REQUISICION_ANITA_NUMA_PROGRAMA', 'a-reqmae.c'),
+            'sistema_abm' => env('REQUISICION_ANITA_NUMA_SISTEMA', 'compras'),
+        ],
+        // Si false, no escribe reqmae/reqmov/reqmref al grabar (solo ERP)
+        'sync_activo' => filter_var(
+            env('REQUISICION_ANITA_SYNC_ACTIVO', true),
+            FILTER_VALIDATE_BOOLEAN
+        ),
     ],
 ];

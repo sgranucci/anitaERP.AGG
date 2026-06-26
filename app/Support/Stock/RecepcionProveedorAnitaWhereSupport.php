@@ -153,9 +153,11 @@ class RecepcionProveedorAnitaWhereSupport
             return $base." and penvp_nro_interno={$nroInterno}";
         }
 
+        $skuAnita = RecepcionProveedorAnitaEscrituraSupport::skuAnita13($sku);
+
         return $base." and
             penvp_orden={$penvpOrden} and
-            penvp_articulo='".addslashes($sku)."'";
+            penvp_articulo='".addslashes($skuAnita)."'";
     }
 
     /** @param array{tipo: string, letra: string, sucursal: int, nro: int} $clave */

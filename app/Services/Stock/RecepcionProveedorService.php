@@ -196,7 +196,7 @@ class RecepcionProveedorService
             throw new \RuntimeException('Indique cantidades recibidas/rechazadas o marque al menos una línea para cerrar.');
         }
 
-        return DB::transaction(function () use ($id) {
+        $recepcion = DB::transaction(function () use ($id) {
             $recepcion = Recepcion_Proveedor::query()
                 ->with(['recepcion_proveedor_articulos'])
                 ->whereKey($id)
@@ -217,6 +217,7 @@ class RecepcionProveedorService
 
             $movId = null;
             $asientoId = null;
+            $anitaIntentada = false;
             $estadoAnita = ['cabecera_nueva' => false, 'pendmov_aplicado' => false];
             $relacionesAnita = [
                 'proveedores', 'empresas', 'ordencompras',
@@ -232,6 +233,14 @@ class RecepcionProveedorService
                 $asientoId = $this->asientoService->generarAsiento($recepcion);
 
                 $recepcionAnita = $recepcion->fresh($relacionesAnita);
+                if ($asientoId !== null && (int) $asientoId > 0) {
+                    $recepcionAnita->asiento_id = (int) $asientoId;
+                    $recepcionAnita->load('asientos');
+                    $this->asientoService->sincronizarCtamovAnitaRecepcion($recepcionAnita);
+                }
+
+                $anitaIntentada = true;
+                $recepcionAnita = $recepcionAnita->fresh($relacionesAnita);
                 $estadoAnita = $this->anitaBridge->sincronizarRecepcion($recepcionAnita);
                 $this->parteUnicaService->generarYSincronizar($recepcionAnita->fresh($relacionesAnita));
 
@@ -251,6 +260,28 @@ class RecepcionProveedorService
                 RecepcionProveedorAnitaNumeracionSupport::registrarNumeroAsignadoEnNumerador(
                     (int) $recepcion->fresh()->numerorecepcion
                 );
+
+                $recepcionConfirmada = $recepcion->fresh(['recepcion_proveedor_articulos', 'ordencompras']);
+
+                try {
+                    $this->ordencompraRecepcionPrecioSyncService->actualizarPreciosDesdeRecepcion(
+                        $recepcionConfirmada,
+                        soloPendientes: false
+                    );
+                } catch (\Throwable $syncPrecioOc) {
+                    Log::warning('RecepcionProveedor: no se actualizaron precios OC desde recepción', [
+                        'recepcion_id' => $recepcionConfirmada->id,
+                        'exception' => $syncPrecioOc->getMessage(),
+                    ]);
+                }
+
+                RecepcionProveedorArticuloProveedorSyncSupport::sincronizarDesdeRecepcion(
+                    $recepcionConfirmada->fresh(['recepcion_proveedor_articulos.articulos'])
+                );
+
+                $this->aplicarCierreLineasOcEnErp($recepcionConfirmada);
+
+                return $recepcion->fresh();
             } catch (\Throwable $e) {
                 if ($movId) {
                     try {
@@ -272,67 +303,24 @@ class RecepcionProveedorService
                     report($rollbackNpu);
                 }
 
-                try {
-                    $this->anitaBridge->revertirSincronizacionConfirmacion(
-                        $recepcion->fresh($relacionesAnita),
-                        $estadoAnita
-                    );
-                } catch (\Throwable $rollbackAnita) {
-                    report($rollbackAnita);
+                if ($anitaIntentada) {
+                    try {
+                        $this->anitaBridge->revertirSincronizacionConfirmacion(
+                            $recepcion->fresh($relacionesAnita),
+                            $estadoAnita
+                        );
+                    } catch (\Throwable $rollbackAnita) {
+                        report($rollbackAnita);
+                    }
                 }
 
                 throw $e;
             }
-
-            $recepcionConfirmada = $recepcion->fresh(['recepcion_proveedor_articulos', 'ordencompras']);
-
-            try {
-                $this->ordencompraRecepcionPrecioSyncService->actualizarPreciosDesdeRecepcion(
-                    $recepcionConfirmada,
-                    soloPendientes: false
-                );
-            } catch (\Throwable $syncPrecioOc) {
-                Log::warning('RecepcionProveedor: no se actualizaron precios OC desde recepción', [
-                    'recepcion_id' => $recepcionConfirmada->id,
-                    'exception' => $syncPrecioOc->getMessage(),
-                ]);
-            }
-
-            if ($recepcionConfirmada->fl_precio_diferencia
-                || RecepcionProveedorDiferenciaSupport::recepcionTieneDiferenciaPrecioEstricta($recepcionConfirmada)) {
-                $this->moduloAvisoService->enviar('stock', 'recepcion_proveedor_precio_diferencia', $recepcionConfirmada->id);
-            }
-            if ($recepcion->fl_diferencia_cantidad) {
-                $this->moduloAvisoService->enviar('stock', 'recepcion_proveedor_cantidad_diferencia', $recepcion->id);
-            }
-            if ($recepcion->fl_articulo_extra) {
-                $this->moduloAvisoService->enviar('stock', 'recepcion_proveedor_articulo_extra', $recepcion->id);
-            }
-            if ($recepcion->fl_faltante_oc) {
-                $this->moduloAvisoService->enviar('stock', 'recepcion_proveedor_faltante_oc', $recepcion->id);
-            }
-            if ($recepcion->fl_laboratorio) {
-                $this->moduloAvisoService->enviar('stock', 'recepcion_proveedor_laboratorio', $recepcion->id);
-            }
-            if ($recepcion->fl_linea_rechazada) {
-                $this->moduloAvisoService->enviar('stock', 'recepcion_proveedor_linea_rechazada', $recepcion->id);
-            }
-            if ($this->recepcionTienePartesUnicas($recepcion)) {
-                $this->moduloAvisoService->enviar('stock', 'recepcion_proveedor_parte_unica', $recepcion->id);
-            }
-            if ($recepcion->tipo === Recepcion_Proveedor::TIPO_RECEPCION) {
-                $this->moduloAvisoService->enviar('stock', 'recepcion_proveedor_ingresada', $recepcion->id);
-                $this->moduloAvisoService->enviar('stock', 'recepcion_proveedor_encuesta', $recepcion->id);
-            }
-
-            RecepcionProveedorArticuloProveedorSyncSupport::sincronizarDesdeRecepcion(
-                $recepcion->fresh(['recepcion_proveedor_articulos.articulos'])
-            );
-
-            $this->aplicarCierreLineasOcEnErp($recepcionConfirmada);
-
-            return $recepcion->fresh();
         });
+
+        $this->enviarAvisosConfirmacion($recepcion);
+
+        return $recepcion;
     }
 
     /**
@@ -1003,6 +991,39 @@ class RecepcionProveedorService
             Ordencompra_Articulo::query()
                 ->whereKey($ocArtId)
                 ->update(['estado_linea_oc' => OrdencompraLineaEstados::CERRADA]);
+        }
+    }
+
+    /** Avisos por email/módulo: post-commit; no deben revertir confirmación si fallan. */
+    private function enviarAvisosConfirmacion(Recepcion_Proveedor $recepcion): void
+    {
+        $recepcion->loadMissing(['recepcion_proveedor_articulos', 'ordencompras']);
+
+        if ($recepcion->fl_precio_diferencia
+            || RecepcionProveedorDiferenciaSupport::recepcionTieneDiferenciaPrecioEstricta($recepcion)) {
+            $this->moduloAvisoService->enviar('stock', 'recepcion_proveedor_precio_diferencia', $recepcion->id);
+        }
+        if ($recepcion->fl_diferencia_cantidad) {
+            $this->moduloAvisoService->enviar('stock', 'recepcion_proveedor_cantidad_diferencia', $recepcion->id);
+        }
+        if ($recepcion->fl_articulo_extra) {
+            $this->moduloAvisoService->enviar('stock', 'recepcion_proveedor_articulo_extra', $recepcion->id);
+        }
+        if ($recepcion->fl_faltante_oc) {
+            $this->moduloAvisoService->enviar('stock', 'recepcion_proveedor_faltante_oc', $recepcion->id);
+        }
+        if ($recepcion->fl_laboratorio) {
+            $this->moduloAvisoService->enviar('stock', 'recepcion_proveedor_laboratorio', $recepcion->id);
+        }
+        if ($recepcion->fl_linea_rechazada) {
+            $this->moduloAvisoService->enviar('stock', 'recepcion_proveedor_linea_rechazada', $recepcion->id);
+        }
+        if ($this->recepcionTienePartesUnicas($recepcion)) {
+            $this->moduloAvisoService->enviar('stock', 'recepcion_proveedor_parte_unica', $recepcion->id);
+        }
+        if ($recepcion->tipo === Recepcion_Proveedor::TIPO_RECEPCION) {
+            $this->moduloAvisoService->enviar('stock', 'recepcion_proveedor_ingresada', $recepcion->id);
+            $this->moduloAvisoService->enviar('stock', 'recepcion_proveedor_encuesta', $recepcion->id);
         }
     }
 

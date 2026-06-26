@@ -16,7 +16,7 @@ class GastronomiaCorregirNumeracionCaeaKandiko extends Command
                             {--force : Ejecutar cambios (sin esto solo preview)}
                             {--yes : Sin confirmación interactiva}';
 
-    protected $description = 'Renumera ventas CAEA desfasadas al correlativo compemis (Kandiko PV 00031 por defecto)';
+    protected $description = 'Renumera ventas CAEA desfasadas al correlativo ERP (Kandiko PV 00031 por defecto)';
 
     public function handle(GastronomiaCaeaCorregirNumeracionDesfasadaService $service): int
     {
@@ -41,10 +41,10 @@ class GastronomiaCorregirNumeracionCaeaKandiko extends Command
         }
 
         $this->info(sprintf(
-            'PV %d · empresa %d · compemis=%d · max válido=%d · ventas=%d',
+            'PV %d · empresa %d · max ERP=%d · max válido=%d · ventas=%d',
             $resultado['contexto']['puntoventa_id'] ?? $puntoventaId,
             $resultado['contexto']['empresa_id'] ?? $empresaId,
-            $resultado['ultimo_compemis'] ?? 0,
+            $resultado['max_numeracion_erp'] ?? $resultado['ultimo_compemis'] ?? 0,
             $resultado['max_correlativo_valido'] ?? 0,
             $resultado['cantidad_ventas'] ?? 0,
         ));

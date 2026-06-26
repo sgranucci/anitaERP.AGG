@@ -31,6 +31,20 @@
     </div>
 </div>
 <div class="form-group row">
+    <label for="tipo_consumo" class="col-lg-3 col-form-label requerido">Tipo consumo interno</label>
+    <div class="col-lg-8">
+        <select name="tipo_consumo" id="tipo_consumo" class="form-control" required>
+            <option value="">Seleccione…</option>
+            @foreach ($tiposConsumo as $clave => $etiqueta)
+                <option value="{{ $clave }}" {{ old('tipo_consumo', $data->tipo_consumo ?? \App\Models\Ventas\DescuentoGastronomia::TIPO_CONSUMO_INVITACION) === $clave ? 'selected' : '' }}>
+                    {{ $etiqueta }}
+                </option>
+            @endforeach
+        </select>
+        <small class="form-text text-muted">Clasifica ventas internas en reportes (staff vs invitaci&oacute;n).</small>
+    </div>
+</div>
+<div class="form-group row">
     <label for="cliente_id" class="col-lg-3 col-form-label">Cliente consumo interno</label>
     <div class="col-lg-8 d-flex align-items-center flex-wrap">
         <input type="text" class="form-control col-lg-2 mb-1 mb-lg-0" id="cliente_id" name="cliente_id" value="{{ old('cliente_id', $data->cliente_id ?? '') }}" placeholder="ID">

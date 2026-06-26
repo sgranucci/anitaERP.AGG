@@ -6,9 +6,13 @@
     $modoTodos = (bool) ($modoTodosDepositos ?? ($contexto['modo_todos_depositos'] ?? false));
     $depEtiqueta = $modoTodos
         ? 'Todos los depósitos'
-        : RecuentoMovimientosArticuloSupport::etiquetaDeposito($dep);
+        : RecuentoMovimientosArticuloSupport::etiquetaDepositoConEmpresa($dep, $dep['empresa_nombre'] ?? '');
     $colspan = $modoTodos ? 8 : 7;
     $tituloArticulo = trim(($art['sku'] ?? '').' '.($art['descripcion'] ?? ''));
+    $tituloColumnaDeposito = \App\Support\Stock\MovimientosArticuloDepositoSupport::mostrarEmpresaEnListados()
+        ? 'Depósito / Empresa'
+        : 'Depósito';
+    $sufijoUm = \App\Support\Stock\MovimientosArticuloDepositoSupport::sufijoColumnaCantidad($art['unidad_medida'] ?? '');
 @endphp
 <table>
     @if (!empty($reservarFilaLogoExcel))
@@ -28,7 +32,8 @@
             <td colspan="{{ $colspan }}">
                 Artículo: {{ $tituloArticulo }}
                 | Depósito: {{ $depEtiqueta }}
-                | {{ $modoTodos ? 'Saldo total' : 'Saldo actual' }}: {{ $contexto['saldo_fmt'] ?? '0' }}
+                | UM: {{ ! empty($art['unidad_medida']) ? $art['unidad_medida'] : '—' }}
+                | {{ $modoTodos ? 'Saldo total' : 'Saldo actual' }}: {{ $contexto['saldo_fmt'] ?? '0' }}{{ $sufijoUm }}
                 | Generado: {{ date('d/m/Y H:i') }}
                 | Registros: {{ $movimientos->count() }}
             </td>
@@ -38,11 +43,11 @@
         <tr>
             <th>Fecha</th>
             @if ($modoTodos)
-            <th>Depósito</th>
+            <th>{{ $tituloColumnaDeposito }}</th>
             @endif
             <th>Tipo</th>
-            <th>Entrada</th>
-            <th>Salida</th>
+            <th>Entrada{{ $sufijoUm }}</th>
+            <th>Salida{{ $sufijoUm }}</th>
             <th>Concepto</th>
             <th>Mov. stock</th>
             <th>Leyenda mov.</th>

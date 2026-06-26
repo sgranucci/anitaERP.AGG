@@ -53,6 +53,10 @@ final class EstacionamientoFacturacionService
 
         $opciones = $this->opcionesEmisionEstacionamiento();
         $opciones['fechajornada'] = $payload['fechajornada'];
+        if (! empty($payload['_omitir_numera_anita_fin'])) {
+            $opciones['omitir_numera_anita_fin'] = true;
+            unset($payload['_omitir_numera_anita_fin']);
+        }
         $payload['opciones_emision'] = $opciones;
         $payload = $this->asegurarVentaReceptorSinClienteMaestro($payload, $cuenta);
         $payload = $this->aplicarReglasImpuestoConsumidorFinal($payload, $cuenta);

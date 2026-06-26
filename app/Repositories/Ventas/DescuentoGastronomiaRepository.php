@@ -65,7 +65,11 @@ class DescuentoGastronomiaRepository implements DescuentoGastronomiaRepositoryIn
             });
         }
 
-        $data = $query->orderBy('nombre')->limit(200)->get();
+        $data = $query
+            ->orderByRaw('CAST(descuento_gastronomia.codigo AS UNSIGNED) ASC')
+            ->orderBy('descuento_gastronomia.codigo')
+            ->limit(200)
+            ->get();
 
         $output = ['data' => ''];
         if ($data->isEmpty()) {

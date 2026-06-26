@@ -1552,6 +1552,11 @@ Route::get('ventas/gastronomia/informe-gerente', 'Ventas\GastronomiaInformeGeren
 Route::get('ventas/gastronomia/articulos-vendidos', 'Ventas\GastronomiaArticulosVendidosController@index')->name('gastronomia_articulos_vendidos')->middleware('modo.consulta');
 Route::get('ventas/gastronomia/insumos-tipoarticulo-reporte', 'Ventas\GastronomiaInsumosTipoarticuloReporteController@index')->name('gastronomia_insumos_tipoarticulo_reporte')->middleware('modo.consulta');
 Route::get('ventas/listar-gastronomia-insumos-tipoarticulo/{formato}', 'Ventas\GastronomiaInsumosTipoarticuloReporteController@exportar')->name('listar_gastronomia_insumos_tipoarticulo');
+Route::get('ventas/gastronomia/descuento-reporte', 'Ventas\GastronomiaDescuentoReporteController@index')->name('gastronomia_descuento_reporte')->middleware('modo.consulta');
+Route::post('ventas/gastronomia/descuento-reporte/consulta-facturas', 'Ventas\GastronomiaDescuentoReporteController@consultaFacturasBloque')->name('gastronomia_descuento_reporte_consulta_facturas');
+Route::get('ventas/listar-gastronomia-descuento-reporte/{formato}', 'Ventas\GastronomiaDescuentoReporteController@exportar')->name('listar_gastronomia_descuento_reporte');
+Route::get('ventas/gastronomia/ventas-articulos-reporte', 'Ventas\GastronomiaVentasArticulosReporteController@index')->name('gastronomia_ventas_articulos_reporte')->middleware('modo.consulta');
+Route::get('ventas/listar-gastronomia-ventas-articulos-reporte/{formato}', 'Ventas\GastronomiaVentasArticulosReporteController@exportar')->name('listar_gastronomia_ventas_articulos_reporte');
 Route::get('ventas/lista-gastronomia-articulos-vendidos/{formato}', 'Ventas\GastronomiaArticulosVendidosController@exportar')->name('listar_gastronomia_articulos_vendidos');
 Route::get('ventas/gastronomia/articulos-vendidos/api/{articuloId}/facturas', 'Ventas\GastronomiaArticulosVendidosController@apiFacturas')->name('gastronomia_articulos_vendidos_api_facturas');
 Route::get('ventas/gastronomia/articulos-vendidos/api/{articuloId}/movimientos', 'Ventas\GastronomiaArticulosVendidosController@apiMovimientos')->name('gastronomia_articulos_vendidos_api_movimientos');

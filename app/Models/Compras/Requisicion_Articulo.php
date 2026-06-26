@@ -18,6 +18,7 @@ class Requisicion_Articulo extends Model implements Auditable
         'requisicion_id', 'fechaentrega', 'articulo_id', 'cantidad', 'precio', 'moneda_id', 'cantidadalternativa',
         'detalle', 'centrocostodestino_id', 'preciooriginal', 'motivoahorro', 'partidagasto_id', 'capex_id',
         'precio_origen_etiqueta',
+        'anita_nro_interno', 'anita_nro_orden',
     ];
 
     protected $table = 'requisicion_articulo';

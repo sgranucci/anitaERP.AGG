@@ -16,10 +16,13 @@ use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Presupuesto\CapexRepositoryInterface;
 use App\Repositories\Presupuesto\PartidagastoRepositoryInterface;
 use App\Services\Configuracion\ArbolaprobacionService;
+use App\Support\Compras\RequisicionAnitaColisionSupport;
+use App\Support\Compras\RequisicionAnitaSyncEstado;
 use App\Support\Compras\ValidacionPresupuestoPartidaCapexLineas;
 use Auth;
 use Carbon\Carbon;
 use DB;
+use Illuminate\Support\Facades\Log;
 
 class RequisicionService
 {
@@ -45,6 +48,8 @@ class RequisicionService
 
     private $monedaRepository;
 
+    private $requisicionAnitaSyncService;
+
     public function __construct(
         ProveedorQueryInterface $proveedorQuery,
         RequisicionRepositoryInterface $requisicionRepository,
@@ -56,7 +61,8 @@ class RequisicionService
         CapexRepositoryInterface $capexRepository,
         CentrocostoRepositoryInterface $centrocostoRepository,
         ArticuloQueryInterface $articuloQuery,
-        MonedaRepositoryInterface $monedaRepository
+        MonedaRepositoryInterface $monedaRepository,
+        RequisicionAnitaSyncService $requisicionAnitaSyncService,
     ) {
         $this->proveedorQuery = $proveedorQuery;
         $this->requisicionRepository = $requisicionRepository;
@@ -69,6 +75,7 @@ class RequisicionService
         $this->centrocostoRepository = $centrocostoRepository;
         $this->articuloQuery = $articuloQuery;
         $this->monedaRepository = $monedaRepository;
+        $this->requisicionAnitaSyncService = $requisicionAnitaSyncService;
     }
 
     public function guardaRequisicion($request)
@@ -100,10 +107,15 @@ class RequisicionService
         }
 
         $cabecera = self::armaCabecera($data);
+        $syncAnitaActivo = config('requisicion.anita.sync_activo', true);
 
         DB::beginTransaction();
+        $anitaIntentada = false;
+        $numerorequisicion = null;
+
         try {
             $requisicion = $this->requisicionRepository->create($cabecera);
+            $numerorequisicion = (int) $requisicion->numerorequisicion;
 
             $this->requisicion_estadoRepository->create($data, $requisicion->id);
 
@@ -114,11 +126,25 @@ class RequisicionService
 
             $this->arbolaprobacionService->procesaArbolaprobacion('RE', $requisicion->id, 'insert');
 
-            DB::commit();
-        } catch (\Exception $e) {
-            DB::rollback();
+            if ($syncAnitaActivo) {
+                $anitaIntentada = true;
+                $requisicion = $this->requisicionRepository->find($requisicion->id);
+                if (! $requisicion) {
+                    throw new \RuntimeException('No se pudo recargar la requisición para sincronizar con Anita.');
+                }
+                $this->requisicionAnitaSyncService->escribirCreacion($requisicion);
+                $this->requisicionAnitaSyncService->marcarSyncOk($requisicion);
+            }
 
-            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            if ($anitaIntentada && $numerorequisicion > 0) {
+                $this->compensarRollbackAnitaCreacion($numerorequisicion);
+            }
+
+            return ['mensaje' => 'error', 'errores' => $this->mensajeErrorTransaccion($e, $anitaIntentada)];
         }
 
         return ['mensaje' => 'ok'];
@@ -268,7 +294,14 @@ class RequisicionService
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         }
 
+        $syncAnitaActivo = config('requisicion.anita.sync_activo', true);
+        $habiaEnAnita = $syncAnitaActivo
+            && RequisicionAnitaColisionSupport::existeNroEnReqmae((int) $existente->numerorequisicion);
+        $numerorequisicion = (int) $existente->numerorequisicion;
+
         DB::beginTransaction();
+        $anitaIntentada = false;
+
         try {
             $cabecera = self::armaCabecera($data);
             $cabecera['estado'] = $data['estado'] ?? null;
@@ -285,11 +318,25 @@ class RequisicionService
                 $this->arbolaprobacionService->procesaArbolaprobacion('RE', $id, 'insert');
             }
 
-            DB::commit();
-        } catch (\Exception $e) {
-            DB::rollback();
+            if ($syncAnitaActivo) {
+                $anitaIntentada = true;
+                $requisicion = $this->requisicionRepository->find($id);
+                if (! $requisicion) {
+                    throw new \RuntimeException('No se pudo recargar la requisición para sincronizar con Anita.');
+                }
+                $this->requisicionAnitaSyncService->escribirActualizacion($requisicion);
+                $this->requisicionAnitaSyncService->marcarSyncOk($requisicion);
+            }
 
-            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            if ($anitaIntentada) {
+                $this->compensarRollbackAnitaActualizacion((int) $id, $numerorequisicion, $habiaEnAnita);
+            }
+
+            return ['mensaje' => 'error', 'errores' => $this->mensajeErrorTransaccion($e, $anitaIntentada)];
         }
 
         return ['mensaje' => 'ok'];
@@ -766,5 +813,64 @@ class RequisicionService
 
             $requisicion_estado = $this->requisicion_estadoRepository->create($data, $requisicion->id);
         }
+    }
+
+    private function compensarRollbackAnitaCreacion(int $numerorequisicion): void
+    {
+        try {
+            $this->requisicionAnitaSyncService->rollbackAnita($numerorequisicion);
+        } catch (\Throwable $rollbackError) {
+            Log::error('RequisicionService: rollback Anita tras fallo ERP incompleto (posible huérfano en Anita)', [
+                'numerorequisicion' => $numerorequisicion,
+                'error' => $rollbackError->getMessage(),
+            ]);
+        }
+    }
+
+    private function compensarRollbackAnitaActualizacion(int $requisicionId, int $numerorequisicion, bool $habiaEnAnita): void
+    {
+        try {
+            $requisicion = $this->requisicionRepository->find($requisicionId);
+            if ($requisicion === null) {
+                $this->requisicionAnitaSyncService->rollbackAnita($numerorequisicion);
+
+                return;
+            }
+
+            if ($habiaEnAnita) {
+                $this->requisicionAnitaSyncService->restaurarDesdeErp($requisicion);
+                $this->requisicionAnitaSyncService->marcarSyncOk($requisicion);
+            } else {
+                $this->requisicionAnitaSyncService->rollbackAnita($numerorequisicion);
+                $requisicion->forceFill([
+                    'anita_sync_estado' => RequisicionAnitaSyncEstado::SYNC_OK,
+                    'anita_sync_error' => null,
+                    'anita_sync_at' => now(),
+                ])->save();
+            }
+        } catch (\Throwable $rollbackError) {
+            Log::error('RequisicionService: compensación Anita tras fallo ERP en edición (revisar coherencia)', [
+                'requisicion_id' => $requisicionId,
+                'numerorequisicion' => $numerorequisicion,
+                'habia_en_anita' => $habiaEnAnita,
+                'error' => $rollbackError->getMessage(),
+            ]);
+
+            $requisicion = $this->requisicionRepository->find($requisicionId);
+            if ($requisicion) {
+                $this->requisicionAnitaSyncService->marcarSyncError($requisicion, $rollbackError);
+            }
+        }
+    }
+
+    private function mensajeErrorTransaccion(\Throwable $e, bool $anitaInvolucrada): string
+    {
+        $mensaje = $e->getMessage();
+        if ($anitaInvolucrada) {
+            $mensaje .= ' Se intentó compensar los datos en Anita; si el problema persiste ejecute '
+                .'php artisan requisicion:reintentar-sync-anita.';
+        }
+
+        return $mensaje;
     }
 }

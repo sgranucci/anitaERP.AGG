@@ -10,6 +10,7 @@ use App\Repositories\Stock\DepmaeRepositoryInterface;
 use App\Exports\Stock\DepmaeListadoExport;
 use App\Http\Requests\ValidacionDepmae;
 use App\Support\Stock\DepmaeListadoFiltros;
+use App\Support\Stock\MovimientosArticuloDepositoSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
 
 class DepmaeController extends Controller
@@ -213,23 +214,34 @@ class DepmaeController extends Controller
         }
 
         if (! $omitirFiltroUsuario) {
-            UsuarioDepositoAutorizado::aplicarFiltroQuery($query);
+            UsuarioDepositoAutorizado::aplicarFiltroQuery($query, $empresaId > 0 ? $empresaId : null);
         }
 
         if ($consulta !== '') {
             $query->where(function ($q) use ($consulta) {
                 $q->where('codigo', 'LIKE', '%'.$consulta.'%')
                     ->orWhere('nombre', 'LIKE', '%'.$consulta.'%')
-                    ->orWhere('tipodeposito', 'LIKE', '%'.$consulta.'%');
+                    ->orWhere('tipodeposito', 'LIKE', '%'.$consulta.'%')
+                    ->orWhereHas('empresas', function ($eq) use ($consulta) {
+                        $eq->where('nombre', 'LIKE', '%'.$consulta.'%');
+                    });
             });
         }
 
-        $data = $query->orderBy('nombre')->limit(200)->get();
-        $puedeAbrirAbmDeposito = can('editar-depositos', false) || can('listar-depositos', false);
+        if ($empresaIds !== [] || $empresaId > 0) {
+            $query->orderByRaw('CAST(codigo AS UNSIGNED) ASC')->orderBy('nombre');
+        } else {
+            $query->orderBy('nombre');
+        }
 
-        $output = ['data' => ''];
+        $data = $query->limit(200)->get();
+        $puedeAbrirAbmDeposito = can('editar-depositos', false) || can('listar-depositos', false);
+        $mostrarEmpresa = MovimientosArticuloDepositoSupport::mostrarEmpresaEnListados();
+        $colspanVacio = $mostrarEmpresa ? 6 : 5;
+
+        $output = ['data' => '', 'mostrar_empresa' => $mostrarEmpresa];
         if ($data->isEmpty()) {
-            $output['data'] = '<tr><td colspan="5">Sin resultados</td></tr>';
+            $output['data'] = '<tr><td colspan="'.$colspanVacio.'">Sin resultados</td></tr>';
         } else {
             foreach ($data as $row) {
                 $output['data'] .= '<tr>';
@@ -237,8 +249,13 @@ class DepmaeController extends Controller
                 $output['data'] .= '<td class="codigo">'.e($row->codigo).'</td>';
                 $output['data'] .= '<td class="descripcion">'.e($row->nombre).'</td>';
                 $output['data'] .= '<td class="tipodeposito">'.e($row->tipodeposito).'</td>';
+                if ($mostrarEmpresa) {
+                    $output['data'] .= '<td class="empresa-nombre">'.e(optional($row->empresas)->nombre ?? '').'</td>';
+                }
                 $output['data'] .= '<td class="empresa-id d-none">'.e($row->empresa_id).'</td>';
-                $output['data'] .= '<td class="empresa-nombre d-none">'.e(optional($row->empresas)->nombre ?? '').'</td>';
+                if (! $mostrarEmpresa) {
+                    $output['data'] .= '<td class="empresa-nombre d-none">'.e(optional($row->empresas)->nombre ?? '').'</td>';
+                }
                 $output['data'] .= '<td class="text-nowrap">';
                 $output['data'] .= '<a class="btn btn-warning btn-sm eligeconsultadeposito">Elegir</a>';
                 if ($puedeAbrirAbmDeposito) {
@@ -279,7 +296,7 @@ class DepmaeController extends Controller
         }
 
         if (! $omitirFiltroUsuario) {
-            UsuarioDepositoAutorizado::aplicarFiltroQuery($query);
+            UsuarioDepositoAutorizado::aplicarFiltroQuery($query, $empresaId > 0 ? $empresaId : null);
         }
 
         $deposito = $query->first();

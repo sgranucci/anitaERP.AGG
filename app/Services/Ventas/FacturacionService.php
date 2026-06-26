@@ -91,9 +91,11 @@ use App;
 use Auth;
 use DB;
 use App\ApiAnita;
+use App\Support\Ventas\CaeaEmisionNumeracionSupport;
 use App\Support\Ventas\GastronomiaEmisionProfiler;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Ventas\KandikoAnitaVentaTipoSupport;
+use App\Support\Ventas\VentaNumeracionEmpresaSupport;
 use Exception;
 use PDF;
 
@@ -782,7 +784,16 @@ class FacturacionService
 															$puntoventa);
 				break;
 			case 'A':
-				$numero = Self::buscaUltimoNumeroComprobante($tipoAnita, $letra, $puntoventa);
+				$numero = $this->ultimoNumeroBaseModoCaea(
+					$data,
+					$puntoventa,
+					$tipotransaccion,
+					$tipoTransaccion_id,
+					$letra,
+				);
+				if (is_array($numero)) {
+					return $numero;
+				}
 				break;
 			case 'M':
 				$venta = $this->ventaRepository->traeUltimoComprobanteVenta(
@@ -1345,7 +1356,16 @@ class FacturacionService
 																$puntoventa);
 					break;
 				case 'A':
-					$numero = Self::buscaUltimoNumeroComprobante($tipoAnita, $letra, $puntoventa);
+					$numero = $this->ultimoNumeroBaseModoCaea(
+						$data,
+						$puntoventa,
+						$tipotransaccion,
+						$tipoTransaccion_id,
+						$letra,
+					);
+					if (is_array($numero)) {
+						return $numero;
+					}
 					
 					break;
 				case 'M':
@@ -2032,6 +2052,12 @@ class FacturacionService
 			else
 				$tipoAnita = $tipotransaccion->abreviatura;
 
+			$reservaCaeaErr = $this->aplicarReservaNumeracionCaeaEnData($data, $puntoventa, $tipotransaccion, $letra);
+			if ($reservaCaeaErr !== null) {
+				return $reservaCaeaErr;
+			}
+			$this->propagarOmitirNumeraAnitaFinEnOpcionesEmision($data);
+
 			$numeroForzado = (int) ($data['numerocomprobante_forzado'] ?? 0);
 			$opcionesEmisionNumeracion = is_array($data['opciones_emision'] ?? null) ? $data['opciones_emision'] : [];
 			switch($puntoventa->modofacturacion)
@@ -2058,19 +2084,15 @@ class FacturacionService
 				case 'A':
 					if ($numeroForzado > 0) {
 						$numero = $numeroForzado - 1;
-					} elseif (! empty($opcionesEmisionNumeracion['anita_modo_minimo'])) {
-						GastronomiaEmisionProfiler::activo()?->marcar('erp_ultimo_numero_inicio');
-						$ultimaVenta = $this->ventaRepository->traeUltimoComprobanteVenta(
-							$tipoTransaccion_id,
-							$puntoventa_id,
-							(int) ($puntoventa->empresa_id ?? 0) ?: null,
-						);
-						$numero = $ultimaVenta ? (int) $ultimaVenta->numerocomprobante : 0;
-						GastronomiaEmisionProfiler::activo()?->marcar('erp_ultimo_numero_fin');
 					} else {
-						GastronomiaEmisionProfiler::activo()?->marcar('anita_ultimo_numero_inicio');
-						$numero = Self::buscaUltimoNumeroComprobante($tipoAnita, $letra, $puntoventa);
-						GastronomiaEmisionProfiler::activo()?->marcar('anita_ultimo_numero_fin');
+						$numero = VentaNumeracionEmpresaSupport::maxNumerocomprobanteErpDesdeTipotransaccion(
+							$puntoventa_id,
+							$tipotransaccion->codigo,
+							$letra,
+							(int) ($puntoventa->empresa_id ?? 0) ?: null,
+							$cliente->modoFacturacion ?? null,
+							$totalComprobante,
+						);
 					}
 					break;
 				case 'M':
@@ -2863,10 +2885,10 @@ class FacturacionService
 		$omitirSincronizacionAnita = is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_sincronizacion_anita']);
 		$omitirStkmovAnita = is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_stkmov_anita']);
 		$omitirNumeraAnitaFin = is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_numera_anita_fin']);
-		// CAE (PV C/E): el número fiscal lo asigna ARCA; la réplica Anita no debe avanzar compemis/numerador al cierre.
+		// CAE/CAEA (PV C/E/A): el número fiscal lo asigna ARCA o ERP; Anita no debe avanzar compemis al cierre.
 		if (
 			! $omitirNumeraAnitaFin
-			&& in_array((string) ($puntoventa->modofacturacion ?? ''), ['C', 'E'], true)
+			&& in_array((string) ($puntoventa->modofacturacion ?? ''), ['C', 'E', 'A'], true)
 		) {
 			$omitirNumeraAnitaFin = true;
 		}
@@ -4563,10 +4585,10 @@ class FacturacionService
 			}
 		}
 
-		// Omitido: reserva CAEA gastronomía, o PV electrónico (C/E) con numeración ARCA/CAE.
+		// Omitido: numeración CAEA en ERP, reserva POS, o PV electrónico (C/E) con numeración ARCA/CAE.
 		if (
 			! $omitirNumeraAnitaFin
-			&& in_array((string) ($modoFacturacionPuntoventa ?? ''), ['C', 'E'], true)
+			&& in_array((string) ($modoFacturacionPuntoventa ?? ''), ['A', 'C', 'E'], true)
 		) {
 			$omitirNumeraAnitaFin = true;
 		}
@@ -4849,7 +4871,85 @@ class FacturacionService
 	}
 
 	/**
-	 * Último número de comprobante en Anita (PV mod A / CAEA) para numeración multi-lote.
+	 * Reserva numeración CAEA en ERP (con lock) si el PV es mod A y aún no hay número forzado.
+	 *
+	 * @param  array<string, mixed>  $data
+	 * @return array{error:string}|null
+	 */
+	private function aplicarReservaNumeracionCaeaEnData(array &$data, object $puntoventa, object $tipotransaccion, string $letra): ?array
+	{
+		if (($puntoventa->modofacturacion ?? '') !== 'A') {
+			return null;
+		}
+
+		if (! empty($data['numerocomprobante_forzado'])) {
+			return null;
+		}
+
+		$error = CaeaEmisionNumeracionSupport::aplicarReservaNumeracionAlPayload(
+			$data,
+			$puntoventa,
+			$tipotransaccion,
+			$letra,
+		);
+
+		if ($error !== null) {
+			return ['error' => $error];
+		}
+
+		return null;
+	}
+
+	/**
+	 * @param  array<string, mixed>  $data
+	 */
+	private function propagarOmitirNumeraAnitaFinEnOpcionesEmision(array &$data): void
+	{
+		if (empty($data['_omitir_numera_anita_fin'])) {
+			return;
+		}
+
+		if (! is_array($data['opciones_emision'] ?? null)) {
+			$data['opciones_emision'] = [];
+		}
+
+		$data['opciones_emision']['omitir_numera_anita_fin'] = true;
+		unset($data['_omitir_numera_anita_fin']);
+	}
+
+	/**
+	 * @param  array<string, mixed>  $data
+	 * @return int|array{error:string}
+	 */
+	private function ultimoNumeroBaseModoCaea(
+		array &$data,
+		object $puntoventa,
+		object $tipotransaccion,
+		int $tipoTransaccionId,
+		string $letra,
+	) {
+		$reservaErr = $this->aplicarReservaNumeracionCaeaEnData($data, $puntoventa, $tipotransaccion, $letra);
+		if ($reservaErr !== null) {
+			return $reservaErr;
+		}
+
+		$numeroForzado = (int) ($data['numerocomprobante_forzado'] ?? 0);
+		if ($numeroForzado > 0) {
+			return $numeroForzado - 1;
+		}
+
+		return VentaNumeracionEmpresaSupport::maxNumerocomprobanteErpDesdeTipotransaccion(
+			(int) ($puntoventa->id ?? 0),
+			$tipotransaccion->codigo ?? 0,
+			$letra,
+			(int) ($puntoventa->empresa_id ?? 0) ?: null,
+			$data['modofacturacion_cliente'] ?? null,
+			isset($data['total_comprobante']) ? (float) $data['total_comprobante'] : null,
+		);
+	}
+
+	/**
+	 * Último número CAEA en ERP (sin consultar Anita).
 	 */
 	public function ultimoNumerocomprobanteAnitaCaea(object $puntoventa, object $tipotransaccion, string $letraComprobante): int
 	{
@@ -4857,16 +4957,12 @@ class FacturacionService
 			return 0;
 		}
 
-		$codigoTipoTransaccion = (string) ($tipotransaccion->codigo ?? '');
-		if ($codigoTipoTransaccion >= '200') {
-			$tipoAnita = substr((string) ($tipotransaccion->abreviatura ?? ''), 0, 1).'CE';
-		} else {
-			$tipoAnita = (string) ($tipotransaccion->abreviatura ?? '');
-		}
-
-		$letra = trim($letraComprobante) !== '' ? $letraComprobante : 'B';
-
-		return max(0, (int) $this->buscaUltimoNumeroComprobante($tipoAnita, $letra, $puntoventa));
+		return VentaNumeracionEmpresaSupport::maxNumerocomprobanteErpDesdeTipotransaccion(
+			(int) ($puntoventa->id ?? 0),
+			$tipotransaccion->codigo ?? 0,
+			$letraComprobante,
+			(int) ($puntoventa->empresa_id ?? 0) ?: null,
+		);
 	}
 
 	// Busca el ultimo numero de comprobante (Anita venta, acotado por tipo bridge de la empresa).

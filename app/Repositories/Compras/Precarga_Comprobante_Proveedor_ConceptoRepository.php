@@ -5,6 +5,7 @@ namespace App\Repositories\Compras;
 use App\Models\Compras\Precarga_Comprobante_Proveedor_Concepto;
 use App\Services\Compras\PrecargaComprobanteAnitaSyncService;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\DB;
 
 class Precarga_Comprobante_Proveedor_ConceptoRepository implements Precarga_Comprobante_Proveedor_ConceptoRepositoryInterface
 {
@@ -28,7 +29,10 @@ class Precarga_Comprobante_Proveedor_ConceptoRepository implements Precarga_Comp
     {
         $precarga_comprobante_proveedor_concepto = $this->model->create($data);
 
-        $this->anitaSync->insertConcepto($precarga_comprobante_proveedor_concepto, $data);
+        $linea = $precarga_comprobante_proveedor_concepto;
+        DB::afterCommit(function () use ($linea, $data) {
+            $this->anitaSync->insertConcepto($linea, $data);
+        });
 
         return $precarga_comprobante_proveedor_concepto;
     }
@@ -38,29 +42,38 @@ class Precarga_Comprobante_Proveedor_ConceptoRepository implements Precarga_Comp
         $linea = $this->model->findOrFail($id);
         $linea->update($data);
 
-        $this->anitaSync->updateConcepto(
-            (int) $id,
-            (int) $linea->precarga_comprobante_proveedor_id,
-            array_merge($data, ['concepto_ivacompra_id' => $linea->concepto_ivacompra_id])
-        );
+        $preccId = (int) $id;
+        $precargaId = (int) $linea->precarga_comprobante_proveedor_id;
+        $payloadAnita = array_merge($data, ['concepto_ivacompra_id' => $linea->concepto_ivacompra_id]);
+        DB::afterCommit(function () use ($preccId, $precargaId, $payloadAnita) {
+            $this->anitaSync->updateConcepto($preccId, $precargaId, $payloadAnita);
+        });
 
         return $linea;
     }
 
     public function delete($id)
     {
-        $precarga_comprobante_proveedor_concepto = Precarga_Comprobante_Proveedor_Concepto::find($id);
+        Precarga_Comprobante_Proveedor_Concepto::find($id);
 
-        $this->anitaSync->deleteConcepto((int) $id);
+        $preccId = (int) $id;
+        $destroyed = $this->model->destroy($id);
 
-        return $this->model->destroy($id);
+        DB::afterCommit(function () use ($preccId) {
+            $this->anitaSync->deleteConcepto($preccId);
+        });
+
+        return $destroyed;
     }
 
     public function deletePorPrecargaComprobanteProveedor($id)
     {
+        $precargaId = (int) $id;
         Precarga_Comprobante_Proveedor_Concepto::where('precarga_comprobante_proveedor_id', $id)->delete();
 
-        $this->anitaSync->deleteConceptosPorPrecarga((int) $id);
+        DB::afterCommit(function () use ($precargaId) {
+            $this->anitaSync->deleteConceptosPorPrecarga($precargaId);
+        });
     }
 
     public function find($id)
